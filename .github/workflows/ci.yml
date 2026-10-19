@@ -121,21 +121,79 @@ jobs:
         with:
           persist-credentials: false
 
-      - id: workspace
-        run: echo "present=$([ -f Cargo.toml ] && echo yes || echo no)" >> "$GITHUB_OUTPUT"
-
       # v2.9.2
-      - if: steps.workspace.outputs.present == 'yes'
-        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
+
+      # v2.87.29
+      - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283
+        with:
+          tool: cargo-nextest@0.9.148
 
       - name: Format
-        if: steps.workspace.outputs.present == 'yes'
         run: cargo fmt --all --check
 
       - name: Clippy
-        if: steps.workspace.outputs.present == 'yes'
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
 
-      - name: Test
-        if: steps.workspace.outputs.present == 'yes'
-        run: cargo test --workspace --locked
+      - name: Tests
+        run: cargo nextest run --workspace --locked --no-tests=pass
+
+      - name: Doctests
+        run: cargo test --doc --workspace --locked
+
+  docs:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      # v2.9.2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
+
+      - name: Documentation
+        env:
+          RUSTDOCFLAGS: -D warnings
+        run: cargo doc --workspace --no-deps --locked
+
+  features:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      # v2.9.2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
+
+      # v2.87.29
+      - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283
+        with:
+          tool: cargo-hack@0.6.45,cargo-machete@0.9.2
+
+      - name: Every feature
+        run: cargo hack check --workspace --each-feature --no-dev-deps --locked
+
+      - name: Unused dependencies
+        run: cargo machete
+
+  miri:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      MIRIFLAGS: -Zmiri-strict-provenance
+    steps:
+      # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Toolchain
+        run: rustup toolchain install nightly-2026-10-19 --profile minimal --component miri
+
+      - name: Miri
+        run: cargo +nightly-2026-10-19 miri test --workspace --lib --locked
