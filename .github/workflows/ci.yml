@@ -1,18 +1,25 @@
-# The checks of docs/conventions/repository.md, on every push and pull request.
+# The checks of docs/conventions/repository.md, on every pull request. Branch
+# protection merges only branches up to date with their base, so the shared
+# branches need no second run after a merge.
 name: ci
 
 on:
-  push:
-    branches: [master]
   pull_request:
+    branches: [master, develop]
+    types: [opened, edited, synchronize, reopened]
+  workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  repository:
+  checks:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
     steps:
       # v7.0.1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -28,24 +35,33 @@ jobs:
       - name: Install
         run: bun install --frozen-lockfile --ignore-scripts
 
-      - name: Commit messages
+      - name: Pull request title
+        if: github.event_name == 'pull_request'
         env:
-          BEFORE: ${{ github.event.before }}
-          HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
-          BASE: ${{ github.event.pull_request.base.sha }}
+          TITLE: ${{ github.event.pull_request.title }}
+          BODY: ${{ github.event.pull_request.body }}
         run: |
-          from="${BASE:-$BEFORE}"
-          # A new branch, or a previous head no longer in the history: check every commit.
-          if [ -z "$from" ] || ! git merge-base --is-ancestor "$from" "$HEAD" 2>/dev/null; then
-            range="$HEAD"
-          else
-            range="$from..$HEAD"
-          fi
-          bun tools/check-commit-message.ts --range "$range"
+          printf '%s\n\n%s\n' "$TITLE" "$BODY" > "$RUNNER_TEMP/message"
+          bun tools/check-commit-message.ts "$RUNNER_TEMP/message"
 
-      - name: Attribution
-        if: ${{ !cancelled() }}
-        run: git ls-files -z | xargs -0 bun tools/check-attribution.ts
+      - name: Branch
+        if: github.event_name == 'pull_request'
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          case "$BASE_REF:$HEAD_REF" in
+            develop:feature/*|develop:fix/*|develop:chore/*|develop:hotfix/*|develop:master) ;;
+            master:develop|master:hotfix/*|master:release-please--*) ;;
+            *) echo "a pull request from '$HEAD_REF' into '$BASE_REF' does not follow git flow (docs/conventions/repository.md, Git)"; exit 1 ;;
+          esac
+
+      - name: Commit messages
+        if: github.event_name == 'pull_request'
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: bun tools/check-commit-message.ts --range "$BASE..$HEAD"
 
       - name: Markdown
         if: ${{ !cancelled() }}
@@ -56,25 +72,54 @@ jobs:
         if: ${{ !cancelled() }}
         uses: crate-ci/typos@7f9d0819ca1c008ade73f4b41fa9d258d48f605b
 
-  supply-chain:
+      # v2.1.1
+      - name: Supply chain
+        if: ${{ !cancelled() }}
+        uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25
+
+  linux:
+    # An edited title or description needs only the checks above.
+    if: github.event.action != 'edited'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
+    env:
+      MIRIFLAGS: -Zmiri-strict-provenance
     steps:
       # v7.0.1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
 
-      # v2.1.1
-      - if: ${{ hashFiles('Cargo.lock') != '' }}
-        uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25
+      # v2.9.2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
+
+      # v2.87.29
+      - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283
+        with:
+          tool: cargo-hack@0.6.45,cargo-machete@0.9.2
+
+      - name: Documentation
+        env:
+          RUSTDOCFLAGS: -D warnings
+        run: cargo doc --workspace --no-deps --locked
+
+      - name: Every feature
+        if: ${{ !cancelled() }}
+        run: cargo hack check --workspace --each-feature --no-dev-deps
+
+      - name: Unused dependencies
+        if: ${{ !cancelled() }}
+        run: cargo machete
+
+      - name: Miri
+        if: ${{ !cancelled() }}
+        run: |
+          rustup toolchain install nightly-2026-10-19 --profile minimal --component miri
+          cargo +nightly-2026-10-19 miri test --workspace --lib --locked
 
   rust:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [windows-latest, ubuntu-latest]
-    runs-on: ${{ matrix.os }}
+    if: github.event.action != 'edited'
+    runs-on: windows-latest
     timeout-minutes: 30
     defaults:
       run:
@@ -85,21 +130,22 @@ jobs:
         with:
           persist-credentials: false
 
-      - id: workspace
-        run: echo "present=$([ -f Cargo.toml ] && echo yes || echo no)" >> "$GITHUB_OUTPUT"
-
       # v2.9.2
-      - if: steps.workspace.outputs.present == 'yes'
-        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
+
+      # v2.87.29
+      - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283
+        with:
+          tool: cargo-nextest@0.9.148
 
       - name: Format
-        if: steps.workspace.outputs.present == 'yes'
         run: cargo fmt --all --check
 
       - name: Clippy
-        if: steps.workspace.outputs.present == 'yes'
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
 
-      - name: Test
-        if: steps.workspace.outputs.present == 'yes'
-        run: cargo test --workspace --locked
+      - name: Tests
+        run: cargo nextest run --workspace --locked --no-tests=pass
+
+      - name: Doctests
+        run: cargo test --doc --workspace --locked

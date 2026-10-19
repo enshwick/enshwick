@@ -5,20 +5,29 @@
 
 ## Layout
 
-| Path                 | Contents                                                                    |
-| -------------------- | --------------------------------------------------------------------------- |
-| `docs/`              | conventions, decisions, specs, plans ([documentation.md](documentation.md)) |
-| `tools/`             | repository scripts: commit and attribution checks                           |
-| `.github/workflows/` | CI and releases                                                             |
+| Path                                 | Contents                                                                    |
+| ------------------------------------ | --------------------------------------------------------------------------- |
+| `docs/`                              | conventions, decisions, specs, plans ([documentation.md](documentation.md)) |
+| `crates/enshwick-api/`               | the modding API: the ABI with the loader and the safe layer mods use        |
+| `crates/enshwick-geometry/`          | altar zones as integer boxes: clusters, uniform growth, the zones service   |
+| `crates/enshwick-loader/`            | the loader, `mods/enshwick/enshwick.dll`: game build, mods, hooks, log      |
+| `crates/enshwick-stub/`              | the `powrprof.dll` stub that starts the loader                              |
+| `crates/enshwick-reflect/`           | reads the engine's reflection data and system records from a game image     |
+| `mods/enshwick-flame-altar-count/`   | the altars allowed per Flame level                                          |
+| `mods/enshwick-flame-altar-zones/`   | altar clusters, uniform growth, building across seams                       |
+| `mods/enshwick-survivors-per-altar/` | a copy of each survivor at every altar, with beds of its own altar          |
+| `tools/`                             | repository scripts: the commit message check                                |
+| `.github/workflows/`                 | CI and releases                                                             |
 
 A folder appears with its first file, never ahead of it. A new crate is born
-with its row in this table, its entry in the release configuration and, if it
-brings a new layer, its row in the stack table, in the same commit.
+with its row in this table, its entry in the release configuration when it
+ships, and, if it brings a new layer, its row in the stack table, in the same
+commit.
 
-Crates that run or ship (the loader, each mod) live under `crates/` and
-`mods/<id>/`; a mod's folder name is its id, `[a-z0-9-]`, which also names its
-DLL and its config file. Code moves into a shared crate the first time a second
-crate needs it, and not before.
+Every crate is named `enshwick-<name>`: the loader, the API and shared code live
+under `crates/`, each mod under `mods/enshwick-<id>/`, where `<id>`,
+`[a-z0-9-]`, is the id in its manifest and names its settings file. Code moves
+into a shared crate the first time a second crate needs it, and not before.
 
 `research/` holds local reverse-engineering material and is ignored by git:
 Keen's code and data never enter the repository.
@@ -57,16 +66,18 @@ From the root:
 
 `bun install` installs the lefthook git hooks:
 
-| Hook         | Runs                                                                   |
-| ------------ | ---------------------------------------------------------------------- |
-| `pre-commit` | rustfmt, markdownlint, typos and the attribution check on staged files |
-| `commit-msg` | `tools/check-commit-message.ts`: conventional form, no attribution     |
-| `pre-push`   | clippy, nextest, doctests and cargo-deny when Rust files changed       |
+| Hook         | Runs                                                             |
+| ------------ | ---------------------------------------------------------------- |
+| `pre-commit` | rustfmt, markdownlint and typos on staged files                  |
+| `commit-msg` | `tools/check-commit-message.ts`: the conventional form           |
+| `pre-push`   | clippy, nextest, doctests and cargo-deny when Rust files changed |
 
-CI runs the same checks on every push and pull request, on Windows for
-everything that builds the DLLs and on Linux for the rest, and checks each
-pushed commit message. A broken `master` is fixed by the next commit, before
-other work.
+CI runs the same checks on every pull request, in three jobs to keep runner
+minutes low: repository checks and Linux checks on Linux, clippy and tests on
+Windows, where the DLLs build. It checks each commit message, the pull request
+title and the branch name. Branch protection merges only branches up to date
+with their base, so a merge needs no second run. A broken `develop` or `master`
+is fixed by the next pull request, before other work.
 
 Actions in workflows are pinned by commit, with the tag in a comment.
 
@@ -82,19 +93,41 @@ runs them before and after. Pure logic also runs under Miri in CI.
 
 ## Git
 
-- One branch, `master`. Commits go straight to it and are never force-pushed;
-  release-please's release pull requests are the one kind of pull request.
-- A commit is one coherent change, written as a conventional commit:
-  `<type>(<scope>): <subject>`, where the type is one of `feat`, `fix`, `perf`,
-  `refactor`, `docs`, `test`, `build`, `ci`, `chore` or `revert`, and the scope
-  is the crate or mod id, or an area such as `conventions` or `ci`. A breaking
-  change carries `!` after the scope. The subject is imperative, lower case
-  after the colon, without a final period, at most 72 characters.
+Work follows git flow, and every change reaches a shared branch through a pull
+request; nothing is pushed to `develop` or `master` directly.
+
+| Branch           | From      | Into                | Holds                                                        |
+| ---------------- | --------- | ------------------- | ------------------------------------------------------------ |
+| `master`         |           |                     | released code; every commit on it is released or about to be |
+| `develop`        |           |                     | the next release; the default branch                         |
+| `feature/<slug>` | `develop` | `develop`           | a feature                                                    |
+| `fix/<slug>`     | `develop` | `develop`           | a fix for unreleased or released code                        |
+| `chore/<slug>`   | `develop` | `develop`           | docs, CI, build, refactoring, tests                          |
+| `hotfix/<slug>`  | `master`  | `master`, `develop` | an urgent fix for a release                                  |
+
+- Both shared branches are protected for everyone, administrators included: a
+  pull request with every CI check green on a branch up to date with its base,
+  every review conversation resolved, a linear history, no force pushes, no
+  deletion.
+- Commits and tags are signed (SSH or GPG) with a key registered on GitHub.
+- A pull request into `develop` is squash-merged. Its title becomes the commit,
+  so it is a conventional commit, `<type>(<scope>): <subject>`, checked by CI;
+  its description says what changes and how it was tested. One pull request is
+  one coherent change.
+- A release is a pull request from `develop` into `master`, rebase-merged, so
+  each conventional commit reaches release-please. After a release, `master` is
+  merged back into `develop` by pull request.
+- Commits on a branch follow the same form, checked by the `commit-msg` hook:
+  the type is one of `feat`, `fix`, `perf`, `refactor`, `docs`, `test`, `build`,
+  `ci`, `chore` or `revert`, the scope is the crate or mod id, or an area such
+  as `conventions` or `ci`, and the subject is imperative, lower case after the
+  colon, without a final period, at most 72 characters.
 - `feat`, `fix`, `perf` and `revert` reach the changelog of the crate whose
   files they touch; `feat` and `fix` drive its version. A breaking change to a
   library crate carries `!` and a `BREAKING CHANGE:` footer with the migration.
-- Commits carry no tool attribution and no co-author trailer
-  ([code-style.md](code-style.md#attribution)).
+- The repository holds only what a contributor or player needs: source,
+  configuration, the documents of [documentation.md](documentation.md). Local
+  notes, scratch files, build output and editor settings stay out.
 
 ## Releases
 
@@ -106,7 +139,7 @@ it, so before 1.0 a breaking change bumps the minor version; cargo-semver-checks
 compares the API crate with its last release. The loader's ABI version is
 separate from its crate version and is described with the ABI.
 
-`rust-version` equals the pinned toolchain and moves with it. `enshwick`, the
-API crate, is the one crate meant for crates.io and carries its metadata and
+`rust-version` equals the pinned toolchain and moves with it. `enshwick-api`,
+the API crate, is the one crate meant for crates.io and carries its metadata and
 docs.rs settings; every other crate has `publish = false`. A path dependency
 carries its version.

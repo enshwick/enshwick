@@ -9,7 +9,10 @@ The baseline is how the Rust community writes Rust: the
 [rustdoc book](https://doc.rust-lang.org/rustdoc/how-to-write-documentation.html),
 the [Rust Style Guide](https://doc.rust-lang.org/style-guide/) and clippy. These
 rules follow it and are stricter: where the community recommends, this
-repository requires, and where it leaves a choice, the faster form wins.
+repository requires, and where it leaves a choice, the faster form wins. Across
+code, tests, tooling and process, where practices differ the strictest one
+applies, and a check that can be automated is automated rather than left to
+review.
 
 These rules bind all code in the workspace. Where a tool can check a rule,
 `[workspace.lints]` in the root `Cargo.toml`, `rustfmt.toml`, `deny.toml` and
@@ -154,12 +157,8 @@ checks the structure of documents, typos reads the spelling. A review that
 spends time on whitespace means one of them is missing from the loop; the
 commands are in [repository.md](repository.md#checks).
 
-## Documents and attribution
+## Documents
 
 Documentation appears on explicit request, stays short, plain and direct, and
 prefers prose wherever a sentence does the job;
 [documentation.md](documentation.md) governs the rest.
-
-Everything here reads as human work. Attribution to any tool, generated-with
-links and co-author trailers stay out of commits, pull requests, code and
-documentation; the hooks and CI refuse them.

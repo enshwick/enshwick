@@ -13,8 +13,6 @@ pre-commit:
       run: bunx markdownlint-cli2 --no-globs {staged_files}
     typos:
       run: typos --force-exclude {staged_files}
-    attribution:
-      run: bun tools/check-attribution.ts {staged_files}
 
 commit-msg:
   commands:
