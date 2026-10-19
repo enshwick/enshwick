@@ -176,7 +176,7 @@ jobs:
           tool: cargo-hack@0.6.45,cargo-machete@0.9.2
 
       - name: Every feature
-        run: cargo hack check --workspace --each-feature --no-dev-deps --locked
+        run: cargo hack check --workspace --each-feature --no-dev-deps
 
       - name: Unused dependencies
         run: cargo machete
