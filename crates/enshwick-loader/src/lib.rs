@@ -5,10 +5,12 @@
 //! them, arms their hook chains and answers their calls through the API table.
 //! A game build it does not know leaves the game vanilla.
 
+pub mod advertise;
 pub mod builds;
 pub mod chains;
 #[cfg(windows)]
 mod host;
+pub mod join;
 pub mod log;
 pub mod manifest;
 #[cfg(windows)]

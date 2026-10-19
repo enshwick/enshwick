@@ -98,10 +98,56 @@ pub(crate) fn start(stub_abi: u32, missing_forwards: u32) {
     let order: Vec<&Library> = plan.order.iter().map(|&i| &libraries[i]).collect();
     initialise(loader, &order);
     if side == Side::CLIENT {
+        link_join(loader);
         std::thread::sleep(CLIENT_ARM_DELAY);
     }
     arm(loader, frame);
     ready(loader, &order);
+    if side == Side::SERVER
+        && let Some(game_dir) = loader.mods_dir.parent()
+    {
+        crate::advertise::start(game_dir, &joined(loader));
+    }
+}
+
+/// Links the loader's join check on the client's server change.
+fn link_join(loader: &Loader) {
+    let Some(rva) = loader.build.symbol("net.server_change") else {
+        return;
+    };
+    let mods = joined(loader);
+    crate::join::set_ours(
+        crate::advertise::fingerprint(env!("CARGO_PKG_VERSION"), &mods),
+        crate::advertise::mod_list(&mods),
+    );
+    let link = crate::chains::Link {
+        owner: crate::chains::LOADER,
+        detour: (crate::join::detour as *const ()).addr(),
+        next: &crate::join::NEXT,
+        priority: i32::MIN,
+        flags: enshwick_api::abi::HookFlags::NONE,
+    };
+    if let Ok(mut chains) = loader.chains.lock() {
+        let status = chains.add(loader.base + rva, link);
+        if !status.is_ok() {
+            crate::log!(WARN, "join check off: its hook was refused ({})", status.0);
+        }
+    }
+}
+
+/// The running mods that count in the join check, as `(id, version)`.
+fn joined(loader: &Loader) -> Vec<(String, String)> {
+    loader
+        .mods
+        .iter()
+        .filter(|m| !m.off.load(Ordering::Acquire))
+        .filter(|m| {
+            m.manifest
+                .flags
+                .contains(enshwick_api::abi::ManifestFlags::JOIN)
+        })
+        .map(|m| (m.id.clone(), m.version.clone()))
+        .collect()
 }
 
 /// Creates `mods/` and opens the log; `None` when the folder cannot be made.
@@ -224,10 +270,11 @@ fn initialise(loader: &Loader, order: &[&Library]) {
 /// the mods linked on it.
 fn arm(loader: &Loader, frame: Option<FrameSlot>) {
     let off = |owner: usize| {
-        loader
-            .mods
-            .get(owner)
-            .is_none_or(|m| m.off.load(Ordering::Acquire))
+        owner != crate::chains::LOADER
+            && loader
+                .mods
+                .get(owner)
+                .is_none_or(|m| m.off.load(Ordering::Acquire))
     };
     let Ok(mut chains) = loader.chains.lock() else {
         return;
