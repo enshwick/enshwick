@@ -28,7 +28,7 @@ macro_rules! manifest {
         $(, after: [$($after:literal),* $(,)?])?
         $(,)?
     ) => {{
-        const _: () = assert!($crate::__private::valid_id($id), "a mod id is [a-z0-9-]+");
+        const _: () = assert!($crate::abi::is_valid_id($id), "a mod id is [a-z0-9-]+");
         static DEPENDENCIES: &[$crate::abi::Dependency] = &[
             $($($crate::abi::Dependency {
                 id: $crate::abi::Str::new($req),
