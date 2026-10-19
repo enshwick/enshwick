@@ -13,7 +13,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "enshwick"
+name = "enshwick-api"
 version = "0.1.0"
 dependencies = [
  "serde",
@@ -22,15 +22,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "enshwick-flame-altar-count"
+version = "0.1.0"
+dependencies = [
+ "enshwick-api",
+ "serde",
+ "toml",
+]
+
+[[package]]
 name = "enshwick-loader"
 version = "0.1.0"
 dependencies = [
- "enshwick",
- "keen-reflect",
+ "enshwick-api",
+ "enshwick-reflect",
  "minhook",
  "rustc-hash",
  "semver",
  "windows-sys",
+]
+
+[[package]]
+name = "enshwick-reflect"
+version = "0.1.0"
+dependencies = [
+ "rustc-hash",
+ "thiserror",
 ]
 
 [[package]]
@@ -53,15 +70,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1c66915cc5391097de7a2b0b972e8505aa33c0df401fd3a6811dbdb32881ba48"
 
 [[package]]
-name = "flame-altar-count"
-version = "0.1.0"
-dependencies = [
- "enshwick",
- "serde",
- "toml",
-]
-
-[[package]]
 name = "hashbrown"
 version = "0.17.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -75,14 +83,6 @@ checksum = "cc4e190f5d26ca7051642629da2c52fc03bde85a03197c99408dcd291734c855"
 dependencies = [
  "equivalent",
  "hashbrown",
-]
-
-[[package]]
-name = "keen-reflect"
-version = "0.1.0"
-dependencies = [
- "rustc-hash",
- "thiserror",
 ]
 
 [[package]]

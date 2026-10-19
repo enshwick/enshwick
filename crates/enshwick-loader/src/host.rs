@@ -4,10 +4,10 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 
-use api::abi::{
+use enshwick_api::abi::{
     BuildInfo, Header, HookSpec, HostApi, Level, Manifest, ModHandle, Side, Status, Str,
 };
-use keen_reflect::{Fingerprint, Reflection};
+use enshwick_reflect::{Fingerprint, Reflection};
 use rustc_hash::FxHashMap;
 
 use crate::builds::KnownBuild;
@@ -166,7 +166,7 @@ extern "system" fn build(out: *mut BuildInfo) {
             header: Header::of::<BuildInfo>(),
             side: loader.side,
             base: loader.base,
-            fingerprint: api::abi::Fingerprint {
+            fingerprint: enshwick_api::abi::Fingerprint {
                 guid: loader.fingerprint.guid(),
                 age: loader.fingerprint.age(),
             },
@@ -186,9 +186,9 @@ extern "system" fn symbol(me: ModHandle, name: Str, out: *mut u64) -> Status {
         .map_or(Status::MISSING, |address| put(out, address))
 }
 
-fn lookup(error: &keen_reflect::LookupError) -> Status {
+fn lookup(error: &enshwick_reflect::LookupError) -> Status {
     match error {
-        keen_reflect::LookupError::Ambiguous(_) => Status::AMBIGUOUS,
+        enshwick_reflect::LookupError::Ambiguous(_) => Status::AMBIGUOUS,
         _ => Status::MISSING,
     }
 }

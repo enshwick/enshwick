@@ -5,7 +5,7 @@
 //! an altar past the limit and the client's interface both ask it, so the hook
 //! answers from the settings table instead.
 
-use enshwick::{Load, Mod, Next, Off};
+use enshwick_api::{Load, Mod, Next, Off};
 
 /// Vanilla `altarsPerFlameLevel` for Flame levels 0 to 11; later levels repeat
 /// the last entry.
@@ -60,7 +60,7 @@ impl AltarCount {
     }
 }
 
-enshwick::detour! {
+enshwick_api::detour! {
     static MAX_ALTARS: unsafe extern "system" fn(balancing: u64, flame_level: u32) -> u8 = max_altars;
 }
 
@@ -77,8 +77,8 @@ fn max_altars(
 }
 
 impl Mod for AltarCount {
-    fn manifest() -> &'static enshwick::abi::Manifest {
-        enshwick::manifest!(id: "flame-altar-count", side: BOTH, join = true)
+    fn manifest() -> &'static enshwick_api::abi::Manifest {
+        enshwick_api::manifest!(id: "flame-altar-count", side: BOTH, join = true)
     }
 
     fn init(load: &mut Load<'_>) -> Result<Self, Off> {
@@ -88,18 +88,18 @@ impl Mod for AltarCount {
             .iter()
             .any(|&n| n > u16::from(CAP))
         {
-            enshwick::warn!(
+            enshwick_api::warn!(
                 "altars above {CAP} lowered to {CAP}: the game groups only {CAP} zones into bases"
             );
         }
         let count = Self::new(&settings.altars_per_flame_level);
         load.hook(&MAX_ALTARS, load.symbol("building.max_altars")?)?;
-        enshwick::info!("altars per Flame level: {:?}", count.table);
+        enshwick_api::info!("altars per Flame level: {:?}", count.table);
         Ok(count)
     }
 }
 
-enshwick::declare_mod!(AltarCount);
+enshwick_api::declare_mod!(AltarCount);
 
 #[cfg(test)]
 mod tests {

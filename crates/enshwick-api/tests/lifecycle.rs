@@ -6,7 +6,7 @@ mod tests {
     use std::sync::Mutex;
     use std::sync::atomic::{AtomicU32, Ordering};
 
-    use enshwick::abi::{
+    use enshwick_api::abi::{
         BuildInfo, Header, HookSpec, HostApi, Level, ModHandle, Side, Status, Str,
     };
 
@@ -132,11 +132,11 @@ mod tests {
         value + 1
     }
 
-    enshwick::detour! {
+    enshwick_api::detour! {
         static DOUBLE: extern "system" fn(value: u32) -> u32 = double, priority = -5;
     }
 
-    fn double(next: enshwick::Next<extern "system" fn(u32) -> u32>, value: u32) -> u32 {
+    fn double(next: enshwick_api::Next<extern "system" fn(u32) -> u32>, value: u32) -> u32 {
         assert_ne!(value, 13, "unlucky");
         next.get()(value) * 2
     }
@@ -150,24 +150,24 @@ mod tests {
         limit: u32,
     }
 
-    impl enshwick::Mod for Test {
-        fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "test-mod", side: BOTH, join = true, requires: ["other" => "^1"])
+    impl enshwick_api::Mod for Test {
+        fn manifest() -> &'static enshwick_api::abi::Manifest {
+            enshwick_api::manifest!(id: "test-mod", side: BOTH, join = true, requires: ["other" => "^1"])
         }
 
-        fn init(load: &mut enshwick::Load<'_>) -> Result<Self, enshwick::Off> {
+        fn init(load: &mut enshwick_api::Load<'_>) -> Result<Self, enshwick_api::Off> {
             let settings: Settings = load.settings("limit = 1\n")?;
             assert_eq!(load.symbol("npc.lookup")?, 0x1_4020_2e80);
             assert!(load.symbol("nope").is_err());
             load.hook(&DOUBLE, load.system("anything")?)?;
-            enshwick::info!("limit {}", settings.limit);
+            enshwick_api::info!("limit {}", settings.limit);
             Ok(Self {
                 limit: settings.limit,
             })
         }
     }
 
-    enshwick::declare_mod!(Test);
+    enshwick_api::declare_mod!(Test);
 
     #[test]
     fn a_mod_lives_its_whole_life() {
@@ -183,7 +183,10 @@ mod tests {
         let status = unsafe { enshwick_mod_init(&raw const API, ModHandle(1)) };
         assert_eq!(status, Status::OK);
         assert_eq!(Test::instance().map(|t| t.limit), Some(7));
-        assert_eq!(enshwick::host().map(|h| h.build().side), Some(Side::SERVER));
+        assert_eq!(
+            enshwick_api::host().map(|h| h.build().side),
+            Some(Side::SERVER)
+        );
         assert_eq!(HOOKS.lock().unwrap()[0].0, 0x1_4009_0a60);
         assert_eq!(HOOKS.lock().unwrap()[0].2, -5);
         assert!(LOGS.lock().unwrap().contains(&"limit 7".to_owned()));

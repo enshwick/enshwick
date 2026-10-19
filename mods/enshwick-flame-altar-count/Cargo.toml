@@ -1,5 +1,5 @@
 [package]
-name = "flame-altar-count"
+name = "enshwick-flame-altar-count"
 version = "0.1.0"
 description = "How many Flame Altars each Flame level allows, from a table in the settings"
 keywords = ["enshrouded", "mod", "altar"]
@@ -15,7 +15,7 @@ publish.workspace = true
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-enshwick.workspace = true
+enshwick-api.workspace = true
 serde.workspace = true
 
 [lints]

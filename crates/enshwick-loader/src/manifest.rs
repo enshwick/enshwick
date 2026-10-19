@@ -1,6 +1,6 @@
 //! Reading a mod's manifest into a resolver candidate.
 
-use api::abi::{ABI_MAJOR, Dependency, Manifest, Relation, Side};
+use enshwick_api::abi::{ABI_MAJOR, Dependency, Manifest, Relation, Side};
 use semver::{Version, VersionReq};
 
 use crate::resolve::{self, Candidate};
@@ -26,7 +26,7 @@ pub unsafe fn parse(manifest: &Manifest) -> Result<Candidate, String> {
     }
     // SAFETY: the caller keeps the manifest's strings alive for the call.
     let id = unsafe { manifest.id.as_str() }.ok_or("the id is not UTF-8")?;
-    if !api::abi::is_valid_id(id) {
+    if !enshwick_api::abi::is_valid_id(id) {
         return Err(format!("the id {id:?} is not [a-z0-9-]+"));
     }
     // SAFETY: as above.
@@ -88,7 +88,7 @@ unsafe fn dependency(raw: &Dependency) -> Result<resolve::Dependency, String> {
 
 #[cfg(test)]
 mod tests {
-    use api::abi::{Header, ManifestFlags, Str};
+    use enshwick_api::abi::{Header, ManifestFlags, Str};
 
     use super::*;
 

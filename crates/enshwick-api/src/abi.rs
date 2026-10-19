@@ -23,7 +23,7 @@ pub const ABI_MINOR: u16 = 0;
 /// # Examples
 ///
 /// ```
-/// use enshwick::abi::is_valid_id;
+/// use enshwick_api::abi::is_valid_id;
 ///
 /// assert!(is_valid_id("flame-altar-zones"));
 /// assert!(!is_valid_id("Flame Altar Zones"));
@@ -51,10 +51,10 @@ pub const fn is_valid_id(id: &str) -> bool {
 /// # Examples
 ///
 /// ```
-/// use enshwick::abi::{Header, Manifest};
+/// use enshwick_api::abi::{Header, Manifest};
 ///
 /// let header = Header::of::<Manifest>();
-/// assert_eq!(header.abi_major, enshwick::abi::ABI_MAJOR);
+/// assert_eq!(header.abi_major, enshwick_api::abi::ABI_MAJOR);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -98,7 +98,7 @@ impl Header {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::abi::{Header, Manifest};
+    /// use enshwick_api::abi::{Header, Manifest};
     ///
     /// let header = Header::of::<Manifest>();
     /// assert!(header.covers(size_of::<Manifest>()));
@@ -116,7 +116,7 @@ impl Header {
 /// # Examples
 ///
 /// ```
-/// use enshwick::abi::Str;
+/// use enshwick_api::abi::Str;
 ///
 /// let id = Str::new("flame-altar-zones");
 /// // SAFETY: `id` borrows a `'static` string.
@@ -157,7 +157,7 @@ impl Str {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::abi::Str;
+    /// use enshwick_api::abi::Str;
     ///
     /// assert_eq!(Str::new("abc").len(), 3);
     /// ```
@@ -171,7 +171,7 @@ impl Str {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::abi::Str;
+    /// use enshwick_api::abi::Str;
     ///
     /// assert!(Str::EMPTY.is_empty());
     /// ```
@@ -206,7 +206,7 @@ impl Str {
 /// # Examples
 ///
 /// ```
-/// use enshwick::abi::Status;
+/// use enshwick_api::abi::Status;
 ///
 /// assert!(Status::OK.is_ok());
 /// assert!(!Status::MISSING.is_ok());
@@ -248,7 +248,7 @@ impl Status {
 /// # Examples
 ///
 /// ```
-/// use enshwick::abi::Side;
+/// use enshwick_api::abi::Side;
 ///
 /// assert!(Side::BOTH.includes(Side::CLIENT));
 /// assert!(!Side::SERVER.includes(Side::CLIENT));
@@ -281,7 +281,7 @@ impl Side {
 /// # Examples
 ///
 /// ```
-/// use enshwick::abi::Level;
+/// use enshwick_api::abi::Level;
 ///
 /// assert!(Level::ERROR.0 < Level::DEBUG.0);
 /// ```
@@ -305,7 +305,7 @@ impl Level {
 /// # Examples
 ///
 /// ```
-/// use enshwick::abi::Fingerprint;
+/// use enshwick_api::abi::Fingerprint;
 ///
 /// let build = Fingerprint { guid: [0x1c; 16], age: 387 };
 /// assert_eq!(build.age, 387);
@@ -324,7 +324,7 @@ pub struct Fingerprint {
 /// # Examples
 ///
 /// ```
-/// use enshwick::abi::{BuildInfo, Fingerprint, Header, Side};
+/// use enshwick_api::abi::{BuildInfo, Fingerprint, Header, Side};
 ///
 /// let build = BuildInfo {
 ///     header: Header::of::<BuildInfo>(),
@@ -353,7 +353,7 @@ pub struct BuildInfo {
 /// # Examples
 ///
 /// ```
-/// use enshwick::abi::{Str, Symbol};
+/// use enshwick_api::abi::{Str, Symbol};
 ///
 /// let symbol = Symbol { name: Str::new("npc.lookup"), rva: 0x20_2e80 };
 /// assert_eq!(symbol.rva, 0x20_2e80);
@@ -373,7 +373,7 @@ pub struct Symbol {
 /// # Examples
 ///
 /// ```
-/// use enshwick::abi::{BuildRow, Fingerprint, Side, Str, Symbol};
+/// use enshwick_api::abi::{BuildRow, Fingerprint, Side, Str, Symbol};
 ///
 /// static SYMBOLS: [Symbol; 1] = [Symbol { name: Str::new("npc.update"), rva: 0x20_55f0 }];
 /// let row = BuildRow {
@@ -402,7 +402,7 @@ pub struct BuildRow {
 /// # Examples
 ///
 /// ```
-/// use enshwick::abi::Relation;
+/// use enshwick_api::abi::Relation;
 ///
 /// assert_ne!(Relation::REQUIRES, Relation::CONFLICTS);
 /// ```
@@ -424,7 +424,7 @@ impl Relation {
 /// # Examples
 ///
 /// ```
-/// use enshwick::abi::{Dependency, Relation, Str};
+/// use enshwick_api::abi::{Dependency, Relation, Str};
 ///
 /// let zones = Dependency {
 ///     id: Str::new("flame-altar-zones"),
@@ -449,7 +449,7 @@ pub struct Dependency {
 /// # Examples
 ///
 /// ```
-/// use enshwick::abi::ManifestFlags;
+/// use enshwick_api::abi::ManifestFlags;
 ///
 /// assert!(ManifestFlags::JOIN.contains(ManifestFlags::JOIN));
 /// ```
@@ -482,7 +482,7 @@ impl ManifestFlags {
 /// # Examples
 ///
 /// ```
-/// use enshwick::abi::{Header, Manifest, ManifestFlags, Side, Str};
+/// use enshwick_api::abi::{Header, Manifest, ManifestFlags, Side, Str};
 ///
 /// let manifest = Manifest {
 ///     header: Header::of::<Manifest>(),
@@ -528,7 +528,7 @@ unsafe impl Sync for Manifest {}
 /// # Examples
 ///
 /// ```
-/// use enshwick::abi::HookFlags;
+/// use enshwick_api::abi::HookFlags;
 ///
 /// let flags = HookFlags(HookFlags::EXCLUSIVE.0 | HookFlags::CALLER_FRAME.0);
 /// assert!(flags.contains(HookFlags::CALLER_FRAME));
@@ -567,7 +567,7 @@ impl HookFlags {
 ///
 /// ```
 /// use core::sync::atomic::AtomicUsize;
-/// use enshwick::abi::{HookFlags, HookSpec};
+/// use enshwick_api::abi::{HookFlags, HookSpec};
 ///
 /// static NEXT: AtomicUsize = AtomicUsize::new(0);
 /// extern "system" fn detour() {}
@@ -602,7 +602,7 @@ pub struct HookSpec {
 /// # Examples
 ///
 /// ```
-/// use enshwick::abi::ModHandle;
+/// use enshwick_api::abi::ModHandle;
 ///
 /// assert_eq!(ModHandle::NONE, ModHandle(0));
 /// ```
@@ -672,7 +672,7 @@ pub struct HostApi {
 /// # Examples
 ///
 /// ```
-/// assert_eq!(enshwick::abi::exports::INIT, "enshwick_mod_init");
+/// assert_eq!(enshwick_api::abi::exports::INIT, "enshwick_mod_init");
 /// ```
 pub mod exports {
     /// `extern "system" fn() -> u32`: the [`ABI_MAJOR`](super::ABI_MAJOR) the mod

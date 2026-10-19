@@ -22,21 +22,21 @@
 //!     settings: Settings,
 //! }
 //!
-//! enshwick::detour! {
+//! enshwick_api::detour! {
 //!     static UPGRADE: unsafe extern "system" fn(ctx: *mut u64) = upgrade;
 //! }
 //!
-//! fn upgrade(next: enshwick::Next<unsafe extern "system" fn(*mut u64)>, ctx: *mut u64) {
+//! fn upgrade(next: enshwick_api::Next<unsafe extern "system" fn(*mut u64)>, ctx: *mut u64) {
 //!     // SAFETY: the original takes the same context.
 //!     unsafe { next.get()(ctx) }
 //! }
 //!
-//! impl enshwick::Mod for Hello {
-//!     fn manifest() -> &'static enshwick::abi::Manifest {
-//!         enshwick::manifest!(id: "hello", side: SERVER)
+//! impl enshwick_api::Mod for Hello {
+//!     fn manifest() -> &'static enshwick_api::abi::Manifest {
+//!         enshwick_api::manifest!(id: "hello", side: SERVER)
 //!     }
 //!
-//!     fn init(load: &mut enshwick::Load<'_>) -> Result<Self, enshwick::Off> {
+//!     fn init(load: &mut enshwick_api::Load<'_>) -> Result<Self, enshwick_api::Off> {
 //!         let settings: Settings = load.settings("enabled = true\n")?;
 //!         if settings.enabled {
 //!             let target = load.system("upgrade_building_range")?;
@@ -46,7 +46,7 @@
 //!     }
 //! }
 //!
-//! enshwick::declare_mod!(Hello);
+//! enshwick_api::declare_mod!(Hello);
 //! ```
 
 pub mod abi;

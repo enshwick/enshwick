@@ -14,8 +14,8 @@ static HOST: OnceLock<Host> = OnceLock::new();
 /// # Examples
 ///
 /// ```
-/// if let Some(host) = enshwick::host() {
-///     host.log(enshwick::abi::Level::INFO, "ready");
+/// if let Some(host) = enshwick_api::host() {
+///     host.log(enshwick_api::abi::Level::INFO, "ready");
 /// }
 /// ```
 #[derive(Clone, Copy, Debug)]
@@ -57,8 +57,8 @@ impl Host {
     /// # Examples
     ///
     /// ```
-    /// if let Some(host) = enshwick::host() {
-    ///     assert_eq!(host.api().header.abi_major, enshwick::abi::ABI_MAJOR);
+    /// if let Some(host) = enshwick_api::host() {
+    ///     assert_eq!(host.api().header.abi_major, enshwick_api::abi::ABI_MAJOR);
     /// }
     /// ```
     #[must_use]
@@ -71,8 +71,8 @@ impl Host {
     /// # Examples
     ///
     /// ```
-    /// if let Some(host) = enshwick::host() {
-    ///     assert_ne!(host.handle(), enshwick::abi::ModHandle::NONE);
+    /// if let Some(host) = enshwick_api::host() {
+    ///     assert_ne!(host.handle(), enshwick_api::abi::ModHandle::NONE);
     /// }
     /// ```
     #[must_use]
@@ -85,7 +85,7 @@ impl Host {
     /// # Examples
     ///
     /// ```
-    /// if let Some(host) = enshwick::host() {
+    /// if let Some(host) = enshwick_api::host() {
     ///     let build = host.build();
     ///     assert_ne!(build.base, 0);
     /// }
@@ -122,7 +122,7 @@ impl Host {
     /// # Examples
     ///
     /// ```
-    /// if let Some(host) = enshwick::host() {
+    /// if let Some(host) = enshwick_api::host() {
     ///     host.fault("the altar table is corrupt");
     /// }
     /// ```
@@ -138,7 +138,7 @@ impl Host {
     /// # Examples
     ///
     /// ```
-    /// if let Some(host) = enshwick::host() {
+    /// if let Some(host) = enshwick_api::host() {
     ///     let frame = host.caller_frame();
     ///     let _ = frame;
     /// }

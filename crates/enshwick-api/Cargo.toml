@@ -1,5 +1,5 @@
 [package]
-name = "enshwick"
+name = "enshwick-api"
 version = "0.1.0"
 description = "Modding API for Enshrouded: the ABI and the safe layer mods are written against"
 keywords = ["enshrouded", "modding", "game", "ffi", "hooks"]
