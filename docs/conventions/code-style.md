@@ -9,7 +9,10 @@ The baseline is how the Rust community writes Rust: the
 [rustdoc book](https://doc.rust-lang.org/rustdoc/how-to-write-documentation.html),
 the [Rust Style Guide](https://doc.rust-lang.org/style-guide/) and clippy. These
 rules follow it and are stricter: where the community recommends, this
-repository requires, and where it leaves a choice, the faster form wins.
+repository requires, and where it leaves a choice, the faster form wins. Across
+code, tests, tooling and process, where practices differ the strictest one
+applies, and a check that can be automated is automated rather than left to
+review.
 
 These rules bind all code in the workspace. Where a tool can check a rule,
 `[workspace.lints]` in the root `Cargo.toml`, `rustfmt.toml`, `deny.toml` and
