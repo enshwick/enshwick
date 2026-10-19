@@ -15,6 +15,7 @@
 | `crates/enshwick-reflect/`           | reads the engine's reflection data and system records from a game image     |
 | `mods/enshwick-flame-altar-count/`   | the altars allowed per Flame level                                          |
 | `mods/enshwick-flame-altar-zones/`   | altar clusters, uniform growth, building across seams                       |
+| `mods/enshwick-furniture-comfort/`   | more comfort from furniture inside bases                                    |
 | `mods/enshwick-survivors-per-altar/` | a copy of each survivor at every altar, with beds of its own altar          |
 | `tools/`                             | repository scripts: the commit message check                                |
 | `.github/workflows/`                 | CI and releases                                                             |
