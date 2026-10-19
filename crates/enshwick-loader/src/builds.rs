@@ -103,6 +103,7 @@ pub static BUILDS: &[KnownBuild] = &[
             ("npc.move", 0x1e_ca40),
             ("npc.update", 0x20_55f0),
             ("npc.bed_check", 0x1e_e250),
+            ("comfort.base_register", 0x1f_f520),
         ],
         constants: &[
             ("ecs.context_row", 8),
