@@ -5,4 +5,4 @@ allow-print-in-tests = true
 # Before 1.0 the API may change; cargo-semver-checks guards releases.
 avoid-breaking-exported-api = false
 upper-case-acronyms-aggressive = true
-doc-valid-idents = ["Enshrouded", "Enshwick", "MinHook", "CodeView", "UE4SS", "SKSE", ".."]
+doc-valid-idents = ["Enshrouded", "Enshwick", "MinHook", "CodeView", "SemVer", "UE4SS", "SKSE", ".."]

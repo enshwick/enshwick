@@ -8,6 +8,7 @@
 | Path                   | Contents                                                                    |
 | ---------------------- | --------------------------------------------------------------------------- |
 | `docs/`                | conventions, decisions, specs, plans ([documentation.md](documentation.md)) |
+| `crates/enshwick/`     | the modding API: the ABI with the loader and the safe layer mods use        |
 | `crates/keen-reflect/` | reads the engine's reflection data and system records from a game image     |
 | `tools/`               | repository scripts: commit and attribution checks                           |
 | `.github/workflows/`   | CI and releases                                                             |
