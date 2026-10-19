@@ -83,9 +83,11 @@ impl Loader {
         crate::log::write(Level::ERROR, &record.id, &format!("off: {reason}"));
         if let Ok(chains) = self.chains.lock() {
             chains.rewire(|owner| {
-                self.mods
-                    .get(owner)
-                    .is_none_or(|m| m.off.load(Ordering::Acquire))
+                owner != crate::chains::LOADER
+                    && self
+                        .mods
+                        .get(owner)
+                        .is_none_or(|m| m.off.load(Ordering::Acquire))
             });
         }
     }
