@@ -3,13 +3,49 @@ name: ci
 
 on:
   push:
-    branches: [master]
+    branches: [master, develop]
   pull_request:
+    branches: [master, develop]
+    types: [opened, edited, synchronize, reopened]
 
 permissions:
   contents: read
 
 jobs:
+  pull-request:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      # v2.2.0
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version: 1.4.3
+
+      - name: Title
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+          BODY: ${{ github.event.pull_request.body }}
+        run: |
+          printf '%s\n\n%s\n' "$TITLE" "$BODY" > "$RUNNER_TEMP/message"
+          bun tools/check-commit-message.ts "$RUNNER_TEMP/message"
+
+      - name: Branch
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          case "$BASE_REF:$HEAD_REF" in
+            develop:feature/*|develop:fix/*|develop:chore/*|develop:hotfix/*|develop:master) ;;
+            master:develop|master:hotfix/*|master:release-please--*) ;;
+            *) echo "a pull request from '$HEAD_REF' into '$BASE_REF' does not follow git flow (docs/conventions/repository.md, Git)"; exit 1 ;;
+          esac
+
   repository:
     runs-on: ubuntu-latest
     timeout-minutes: 15
