@@ -35,7 +35,8 @@ jobs:
           BASE: ${{ github.event.pull_request.base.sha }}
         run: |
           from="${BASE:-$BEFORE}"
-          if [ -z "$from" ] || [ "$from" = "0000000000000000000000000000000000000000" ]; then
+          # A new branch, or a previous head no longer in the history: check every commit.
+          if [ -z "$from" ] || ! git merge-base --is-ancestor "$from" "$HEAD" 2>/dev/null; then
             range="$HEAD"
           else
             range="$from..$HEAD"
