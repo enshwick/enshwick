@@ -10,7 +10,6 @@
 | `README.md`                   | for players first: what Enshwick is, the mods, how to install                  |
 | `docs/mods/<id>.md`           | one page per mod: what it changes, its settings, how it behaves                |
 | `docs/modding/`               | for mod authors: the API, the manifest, building a mod                         |
-| `docs/research/`              | studies with sources, and the owner's decisions taken on them                  |
 | `docs/decisions/`             | decision records ([decisions.md](decisions.md))                                |
 | `docs/specs/`, `docs/plans/`  | `YYYY-MM-DD-<topic>.md`: a design before it is built, and the plan to build it |
 | `docs/conventions/`           | the rules for code, repository, documents and decisions                        |

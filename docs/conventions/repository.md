@@ -5,11 +5,11 @@
 
 ## Layout
 
-| Path                 | Contents                                                                              |
-| -------------------- | ------------------------------------------------------------------------------------- |
-| `docs/`              | conventions, decisions, research, specs, plans ([documentation.md](documentation.md)) |
-| `tools/`             | repository scripts: commit and attribution checks                                     |
-| `.github/workflows/` | CI and releases                                                                       |
+| Path                 | Contents                                                                    |
+| -------------------- | --------------------------------------------------------------------------- |
+| `docs/`              | conventions, decisions, specs, plans ([documentation.md](documentation.md)) |
+| `tools/`             | repository scripts: commit and attribution checks                           |
+| `.github/workflows/` | CI and releases                                                             |
 
 A folder appears with its first file, never ahead of it. A new crate is born
 with its row in this table, its entry in the release configuration and, if it
@@ -87,9 +87,9 @@ runs them before and after. Pure logic also runs under Miri in CI.
 - A commit is one coherent change, written as a conventional commit:
   `<type>(<scope>): <subject>`, where the type is one of `feat`, `fix`, `perf`,
   `refactor`, `docs`, `test`, `build`, `ci`, `chore` or `revert`, and the scope
-  is the crate or mod id, or an area such as `conventions`, `ci` or `research`.
-  A breaking change carries `!` after the scope. The subject is imperative,
-  lower case after the colon, without a final period, at most 72 characters.
+  is the crate or mod id, or an area such as `conventions` or `ci`. A breaking
+  change carries `!` after the scope. The subject is imperative, lower case
+  after the colon, without a final period, at most 72 characters.
 - `feat`, `fix`, `perf` and `revert` reach the changelog of the crate whose
   files they touch; `feat` and `fix` drive its version. A breaking change to a
   library crate carries `!` and a `BREAKING CHANGE:` footer with the migration.

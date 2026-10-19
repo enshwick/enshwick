@@ -14,7 +14,7 @@ repository requires, and where it leaves a choice, the faster form wins.
 These rules bind all code in the workspace. Where a tool can check a rule,
 `[workspace.lints]` in the root `Cargo.toml`, `rustfmt.toml`, `deny.toml` and
 `_typos.toml` enforce it. Settings for the build profiles and the lint set are
-argued in [research](../research/) and recorded as [decisions](../decisions/).
+recorded as [decisions](../decisions/).
 
 Code that contradicts these rules is corrected in a change of its own, or keeps
 its reason beside it (see Exceptions).
