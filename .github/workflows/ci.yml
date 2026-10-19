@@ -1,54 +1,25 @@
-# The checks of docs/conventions/repository.md, on every push and pull request.
+# The checks of docs/conventions/repository.md, on every pull request. Branch
+# protection merges only branches up to date with their base, so the shared
+# branches need no second run after a merge.
 name: ci
 
 on:
-  push:
-    branches: [master, develop]
   pull_request:
     branches: [master, develop]
     types: [opened, edited, synchronize, reopened]
+  workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  pull-request:
-    if: github.event_name == 'pull_request'
+  checks:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      # v7.0.1
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          persist-credentials: false
-
-      # v2.2.0
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
-        with:
-          bun-version: 1.4.3
-
-      - name: Title
-        env:
-          TITLE: ${{ github.event.pull_request.title }}
-          BODY: ${{ github.event.pull_request.body }}
-        run: |
-          printf '%s\n\n%s\n' "$TITLE" "$BODY" > "$RUNNER_TEMP/message"
-          bun tools/check-commit-message.ts "$RUNNER_TEMP/message"
-
-      - name: Branch
-        env:
-          HEAD_REF: ${{ github.head_ref }}
-          BASE_REF: ${{ github.base_ref }}
-        run: |
-          case "$BASE_REF:$HEAD_REF" in
-            develop:feature/*|develop:fix/*|develop:chore/*|develop:hotfix/*|develop:master) ;;
-            master:develop|master:hotfix/*|master:release-please--*) ;;
-            *) echo "a pull request from '$HEAD_REF' into '$BASE_REF' does not follow git flow (docs/conventions/repository.md, Git)"; exit 1 ;;
-          esac
-
-  repository:
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
     steps:
       # v7.0.1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -64,20 +35,33 @@ jobs:
       - name: Install
         run: bun install --frozen-lockfile --ignore-scripts
 
-      - name: Commit messages
+      - name: Pull request title
+        if: github.event_name == 'pull_request'
         env:
-          BEFORE: ${{ github.event.before }}
-          HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
-          BASE: ${{ github.event.pull_request.base.sha }}
+          TITLE: ${{ github.event.pull_request.title }}
+          BODY: ${{ github.event.pull_request.body }}
         run: |
-          from="${BASE:-$BEFORE}"
-          # A new branch, or a previous head no longer in the history: check every commit.
-          if [ -z "$from" ] || ! git merge-base --is-ancestor "$from" "$HEAD" 2>/dev/null; then
-            range="$HEAD"
-          else
-            range="$from..$HEAD"
-          fi
-          bun tools/check-commit-message.ts --range "$range"
+          printf '%s\n\n%s\n' "$TITLE" "$BODY" > "$RUNNER_TEMP/message"
+          bun tools/check-commit-message.ts "$RUNNER_TEMP/message"
+
+      - name: Branch
+        if: github.event_name == 'pull_request'
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          case "$BASE_REF:$HEAD_REF" in
+            develop:feature/*|develop:fix/*|develop:chore/*|develop:hotfix/*|develop:master) ;;
+            master:develop|master:hotfix/*|master:release-please--*) ;;
+            *) echo "a pull request from '$HEAD_REF' into '$BASE_REF' does not follow git flow (docs/conventions/repository.md, Git)"; exit 1 ;;
+          esac
+
+      - name: Commit messages
+        if: github.event_name == 'pull_request'
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: bun tools/check-commit-message.ts --range "$BASE..$HEAD"
 
       - name: Markdown
         if: ${{ !cancelled() }}
@@ -88,25 +72,51 @@ jobs:
         if: ${{ !cancelled() }}
         uses: crate-ci/typos@7f9d0819ca1c008ade73f4b41fa9d258d48f605b
 
-  supply-chain:
+      # v2.1.1
+      - name: Supply chain
+        if: ${{ !cancelled() }}
+        uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25
+
+  linux:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
+    env:
+      MIRIFLAGS: -Zmiri-strict-provenance
     steps:
       # v7.0.1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
 
-      # v2.1.1
-      - if: ${{ hashFiles('Cargo.lock') != '' }}
-        uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25
+      # v2.9.2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
+
+      # v2.87.29
+      - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283
+        with:
+          tool: cargo-hack@0.6.45,cargo-machete@0.9.2
+
+      - name: Documentation
+        env:
+          RUSTDOCFLAGS: -D warnings
+        run: cargo doc --workspace --no-deps --locked
+
+      - name: Every feature
+        if: ${{ !cancelled() }}
+        run: cargo hack check --workspace --each-feature --no-dev-deps
+
+      - name: Unused dependencies
+        if: ${{ !cancelled() }}
+        run: cargo machete
+
+      - name: Miri
+        if: ${{ !cancelled() }}
+        run: |
+          rustup toolchain install nightly-2026-10-19 --profile minimal --component miri
+          cargo +nightly-2026-10-19 miri test --workspace --lib --locked
 
   rust:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [windows-latest, ubuntu-latest]
-    runs-on: ${{ matrix.os }}
+    runs-on: windows-latest
     timeout-minutes: 30
     defaults:
       run:
@@ -136,60 +146,3 @@ jobs:
 
       - name: Doctests
         run: cargo test --doc --workspace --locked
-
-  docs:
-    runs-on: windows-latest
-    timeout-minutes: 20
-    steps:
-      # v7.0.1
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          persist-credentials: false
-
-      # v2.9.2
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
-
-      - name: Documentation
-        env:
-          RUSTDOCFLAGS: -D warnings
-        run: cargo doc --workspace --no-deps --locked
-
-  features:
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      # v7.0.1
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          persist-credentials: false
-
-      # v2.9.2
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
-
-      # v2.87.29
-      - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283
-        with:
-          tool: cargo-hack@0.6.45,cargo-machete@0.9.2
-
-      - name: Every feature
-        run: cargo hack check --workspace --each-feature --no-dev-deps
-
-      - name: Unused dependencies
-        run: cargo machete
-
-  miri:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    env:
-      MIRIFLAGS: -Zmiri-strict-provenance
-    steps:
-      # v7.0.1
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          persist-credentials: false
-
-      - name: Toolchain
-        run: rustup toolchain install nightly-2026-10-19 --profile minimal --component miri
-
-      - name: Miri
-        run: cargo +nightly-2026-10-19 miri test --workspace --lib --locked
