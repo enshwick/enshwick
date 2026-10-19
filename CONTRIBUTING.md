@@ -5,8 +5,9 @@ pinned version through rustup), [Bun](https://bun.sh) for the repository tools,
 and on Windows the MSVC build tools.
 
 ```bash
-bun install        # repository tools and the git hooks
-cargo test --workspace
+bun install                                 # repository tools and the git hooks
+cargo install --locked cargo-nextest@0.9.148
+cargo nextest run --workspace
 ```
 
 The hooks check formatting, spelling, Markdown and commit messages before a

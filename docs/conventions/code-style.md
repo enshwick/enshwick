@@ -55,6 +55,14 @@ rustdoc comment. They are short and to the point, never a wall of text:
   `clippy::missing_safety_doc` and `rustdoc::broken_intra_doc_links` are denied,
   so a missing section fails the build.
 
+Examples use `?`, never `unwrap`. Types follow the checklist of the Rust API
+Guidelines: common traits derived where they apply, `Debug` on every public
+type, private fields, sealed traits for traits mods must not implement, and
+`#[non_exhaustive]` on public enums and option structs from the day they appear.
+ABI types are the exception: they keep public `repr(C)` fields and grow only by
+appending. `missing_debug_implementations`, `unreachable_pub` and every stable
+`rustdoc::` lint are denied as well.
+
 Internals stay private to their crate, and the public surface is re-exported
 from the crate root.
 
@@ -81,10 +89,13 @@ frame, so every cycle they take is a cycle the game loses:
 
 Hooking a game is unsafe by nature, so unsafe code is kept small and named:
 
+- A crate that needs no unsafe code starts with `#![forbid(unsafe_code)]`.
 - `unsafe_op_in_unsafe_fn` is denied: each unsafe operation sits in its own
   `unsafe` block, however small.
 - Every `unsafe` block carries a `// SAFETY:` comment naming the invariant it
-  relies on, such as an engine fact with the game build it was found on.
+  relies on, such as an engine fact with the game build it was found on, and so
+  does every `unsafe impl`. `undocumented_unsafe_blocks`,
+  `multiple_unsafe_ops_per_block` and `unnecessary_safety_comment` check it.
 - Raw reads of game memory go through a few typed helpers, never through
   scattered pointer arithmetic; offsets are named constants beside the type they
   describe.
@@ -94,10 +105,14 @@ Hooking a game is unsafe by nature, so unsafe code is kept small and named:
 
 ## Errors and logging
 
-Errors are values: library code returns `Result` with a typed error, and the
-loader decides at the top what a failure disables. `unwrap` and `expect` appear
-only where the invariant is proven beside them. Logging is for the player's and
-the developer's log file, once per event worth knowing, never per frame.
+Errors are values: library code returns `Result` with an error type built with
+`thiserror` that implements `Error + Send + Sync + 'static`, named `Error`
+inside its module or `VerbObjectError`, with lowercase messages and no final
+period. `anyhow` and `Box<dyn Error>` stay out of hot paths and the public API.
+The loader decides at the top what a failure disables. `unwrap`, `expect`,
+`panic!`, `todo!`, `exit` and printing are denied; a proven site carries
+`#[expect]` with its reason. Logging is for the player's and the developer's log
+file, once per event worth knowing, never per frame.
 
 ## Exceptions
 
@@ -113,11 +128,24 @@ its contract that names what it runs on, so `MinHookEngine` implements
 `HookEngine`. A role rides as a suffix, such as `Error`, `Builder` or `Guard`,
 and the module states the role of its items.
 
+Conversions say their cost: `as_` borrows for free, `to_` costs, `into_`
+consumes. Getters have no `get_` prefix. Iterator methods are `iter`, `iter_mut`
+and `into_iter`, and their types share the name. Constructors are `new`,
+`with_*` and `from_*`. Acronyms are one word (`Rpc`, not `RPC`), engine names
+included. Features name what they add, without `use-` or `with-`, and are
+additive.
+
 Beyond that, names follow the Rust API guidelines: `snake_case` functions,
 modules and files, `CamelCase` types and traits, `SCREAMING_SNAKE_CASE`
 constants. Names say what a thing is in the game's terms (`Altar`, `Survivor`,
 `BuildZone`), not how it is stored, and engine items are named after the
 engine's own names where reflection gives them.
+
+## Modules
+
+`foo.rs` sits beside `foo/`, never `foo/mod.rs`. The public surface is
+re-exported from the crate root; there is no prelude until a decision record
+introduces one. Macro support items live in a `#[doc(hidden)] __private` module.
 
 ## Formatting
 

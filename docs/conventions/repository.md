@@ -27,29 +27,33 @@ Keen's code and data never enter the repository.
 
 Versions live here and nowhere else; a decision record never carries one.
 
-| Layer            | Choice                                                                      |
-| ---------------- | --------------------------------------------------------------------------- |
-| Language         | Rust 1.98.1, edition 2024; `rust-toolchain.toml` pins it                    |
-| Target           | `x86_64-pc-windows-msvc`; Linux players run it under Proton                 |
-| Hooks            | MinHook through the `minhook` crate                                         |
-| Lint, format     | clippy with `[workspace.lints]`, rustfmt (`rustfmt.toml`)                   |
-| Supply chain     | cargo-deny (`deny.toml`)                                                    |
-| Spelling         | typos (`_typos.toml`)                                                       |
-| Repository tools | Bun 1.4: lefthook for git hooks, markdownlint-cli2, the scripts in `tools/` |
-| Releases         | release-please, per crate, with the `cargo-workspace` plugin                |
+| Layer            | Choice                                                                          |
+| ---------------- | ------------------------------------------------------------------------------- |
+| Language         | Rust 1.98.1, edition 2024; `rust-toolchain.toml` pins it                        |
+| Target           | `x86_64-pc-windows-msvc`; Linux players run it under Proton                     |
+| Hooks            | MinHook through the `minhook` crate                                             |
+| Tests            | cargo-nextest; divan for benchmarks; Miri on a pinned nightly for pure logic    |
+| CI tools         | cargo-hack, cargo-machete, cargo-semver-checks through `taiki-e/install-action` |
+| Lint, format     | clippy with `[workspace.lints]`, rustfmt (`rustfmt.toml`)                       |
+| Supply chain     | cargo-deny (`deny.toml`)                                                        |
+| Spelling         | typos (`_typos.toml`)                                                           |
+| Repository tools | Bun 1.4: lefthook for git hooks, markdownlint-cli2, the scripts in `tools/`     |
+| Releases         | release-please, per crate, with the `cargo-workspace` plugin                    |
 
 ## Checks
 
 From the root:
 
-| Command                                                 | Checks                               |
-| ------------------------------------------------------- | ------------------------------------ |
-| `cargo fmt --all --check`                               | layout                               |
-| `cargo clippy --workspace --all-targets -- -D warnings` | the lints of `[workspace.lints]`     |
-| `cargo test --workspace`                                | unit, property and integration tests |
-| `cargo deny check`                                      | licenses, advisories, bans, sources  |
-| `typos`                                                 | spelling in code and documents       |
-| `bun run lint:md`                                       | markdownlint over documents          |
+| Command                                                      | Checks                                |
+| ------------------------------------------------------------ | ------------------------------------- |
+| `cargo fmt --all --check`                                    | layout                                |
+| `cargo clippy --workspace --all-targets -- -D warnings`      | the lints of `[workspace.lints]`      |
+| `cargo nextest run --workspace`                              | unit, property and integration tests  |
+| `cargo test --doc --workspace`                               | doctests                              |
+| `RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps` | the public documentation builds clean |
+| `cargo deny check`                                           | licenses, advisories, bans, sources   |
+| `typos`                                                      | spelling in code and documents        |
+| `bun run lint:md`                                            | markdownlint over documents           |
 
 `bun install` installs the lefthook git hooks:
 
@@ -57,7 +61,7 @@ From the root:
 | ------------ | ---------------------------------------------------------------------- |
 | `pre-commit` | rustfmt, markdownlint, typos and the attribution check on staged files |
 | `commit-msg` | `tools/check-commit-message.ts`: conventional form, no attribution     |
-| `pre-push`   | clippy, tests and cargo-deny when Rust files changed                   |
+| `pre-push`   | clippy, nextest, doctests and cargo-deny when Rust files changed       |
 
 CI runs the same checks on every push and pull request, on Windows for
 everything that builds the DLLs and on Linux for the rest, and checks each
@@ -72,7 +76,9 @@ Unit tests sit in the module they test (`#[cfg(test)] mod tests`); tests across
 a crate's public surface go in its `tests/` folder. Pure logic, such as zone
 geometry or the copy bookkeeping of survivors, lives apart from the game so it
 can be tested without it. Tests that need the game's binaries read their paths
-from environment variables and are skipped without them.
+from environment variables and are skipped without them. Benchmarks sit in
+`benches/` with `harness = false`, written with divan; a change on a hot path
+runs them before and after. Pure logic also runs under Miri in CI.
 
 ## Git
 
@@ -84,8 +90,9 @@ from environment variables and are skipped without them.
   is the crate or mod id, or an area such as `conventions`, `ci` or `research`.
   A breaking change carries `!` after the scope. The subject is imperative,
   lower case after the colon, without a final period, at most 72 characters.
-- `feat` and `fix` reach the changelog and bump the version of the crate whose
-  files they touch; the others do not.
+- `feat`, `fix`, `perf` and `revert` reach the changelog of the crate whose
+  files they touch; `feat` and `fix` drive its version. A breaking change to a
+  library crate carries `!` and a `BREAKING CHANGE:` footer with the migration.
 - Commits carry no tool attribution and no co-author trailer
   ([code-style.md](code-style.md#attribution)).
 
@@ -94,5 +101,12 @@ from environment variables and are skipped without them.
 release-please keeps a release pull request open per changed crate on `master`,
 built from conventional commits. Merging it tags the crate as
 `<crate>-v<version>` and creates its GitHub release; the release workflow then
-builds the DLL on Windows and attaches it. Versions follow SemVer; the loader's
-ABI version is separate from its crate version and is described with the ABI.
+builds the DLL on Windows and attaches it. Versions follow SemVer as Cargo reads
+it, so before 1.0 a breaking change bumps the minor version; cargo-semver-checks
+compares the API crate with its last release. The loader's ABI version is
+separate from its crate version and is described with the ABI.
+
+`rust-version` equals the pinned toolchain and moves with it. `enshwick`, the
+API crate, is the one crate meant for crates.io and carries its metadata and
+docs.rs settings; every other crate has `publish = false`. A path dependency
+carries its version.
