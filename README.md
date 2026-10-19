@@ -1,4 +1,4 @@
-# Wick
+# Enshwick
 
 A mod loader and modding API for [Enshrouded](https://enshrouded.com), in one
 project, with the mods built on it. The loader sits next to the game or the
@@ -12,5 +12,5 @@ How the repository is laid out, checked and released:
 
 ## License
 
-[MIT](LICENSE). Enshrouded is a game by Keen Games; Wick is not affiliated with
-them, and Keen's code and data are not part of this repository.
+[MIT](LICENSE). Enshrouded is a game by Keen Games; Enshwick is not affiliated
+with them, and Keen's code and data are not part of this repository.
