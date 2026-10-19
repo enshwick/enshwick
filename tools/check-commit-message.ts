@@ -1,7 +1,6 @@
-// Checks a commit message: conventional form and no tool attribution.
+// Checks that a commit message is a conventional commit.
 // Usage: bun tools/check-commit-message.ts <message-file>
 //        bun tools/check-commit-message.ts --range <from>..<to>
-import { attributionLines } from './attribution.ts';
 
 const TYPES = ['feat', 'fix', 'perf', 'refactor', 'docs', 'test', 'build', 'ci', 'chore', 'revert'];
 const HEADER = new RegExp(`^(${TYPES.join('|')})(\\([a-z0-9-]+\\))?!?: [^A-Z\\s](.*[^.])?$`, 'u');
@@ -31,9 +30,6 @@ const problems = (message: string): string[] => {
     }
   }
 
-  for (const { line, text: content } of attributionLines(text)) {
-    found.push(`line ${line} carries tool attribution: "${content.trim()}"`);
-  }
 
   return found;
 };

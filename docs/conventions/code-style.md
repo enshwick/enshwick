@@ -157,12 +157,8 @@ checks the structure of documents, typos reads the spelling. A review that
 spends time on whitespace means one of them is missing from the loop; the
 commands are in [repository.md](repository.md#checks).
 
-## Documents and attribution
+## Documents
 
 Documentation appears on explicit request, stays short, plain and direct, and
 prefers prose wherever a sentence does the job;
 [documentation.md](documentation.md) governs the rest.
-
-Everything here reads as human work. Attribution to any tool, generated-with
-links and co-author trailers stay out of commits, pull requests, code and
-documentation; the hooks and CI refuse them.

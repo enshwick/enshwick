@@ -18,8 +18,7 @@ and the ones they cannot, are in [docs/conventions/](docs/conventions/):
   open a pull request into `develop`; its title is a conventional commit,
   `<type>(<scope>): <subject>`, and becomes the squashed commit;
 - code follows [code-style.md](docs/conventions/code-style.md), unsafe code
-  included;
-- nothing carries tool attribution.
+  included.
 
 Never add game code or data: no decompiled code, no dumps, no binaries. Engine
 facts go in documents as addresses and names, with the game build they were

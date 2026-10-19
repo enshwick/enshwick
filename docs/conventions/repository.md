@@ -13,7 +13,7 @@
 | `crates/enshwick-stub/`   | the `powrprof.dll` stub that starts the loader                              |
 | `crates/keen-reflect/`    | reads the engine's reflection data and system records from a game image     |
 | `mods/flame-altar-count/` | the altars allowed per Flame level                                          |
-| `tools/`                  | repository scripts: commit and attribution checks                           |
+| `tools/`                  | repository scripts: the commit message check                                |
 | `.github/workflows/`      | CI and releases                                                             |
 
 A folder appears with its first file, never ahead of it. A new crate is born
@@ -63,11 +63,11 @@ From the root:
 
 `bun install` installs the lefthook git hooks:
 
-| Hook         | Runs                                                                   |
-| ------------ | ---------------------------------------------------------------------- |
-| `pre-commit` | rustfmt, markdownlint, typos and the attribution check on staged files |
-| `commit-msg` | `tools/check-commit-message.ts`: conventional form, no attribution     |
-| `pre-push`   | clippy, nextest, doctests and cargo-deny when Rust files changed       |
+| Hook         | Runs                                                             |
+| ------------ | ---------------------------------------------------------------- |
+| `pre-commit` | rustfmt, markdownlint and typos on staged files                  |
+| `commit-msg` | `tools/check-commit-message.ts`: the conventional form           |
+| `pre-push`   | clippy, nextest, doctests and cargo-deny when Rust files changed |
 
 CI runs the same checks on every pull request and on every push to `develop` and
 `master`, on Windows for everything that builds the DLLs and on Linux for the
@@ -124,8 +124,6 @@ request; nothing is pushed to `develop` or `master` directly.
 - The repository holds only what a contributor or player needs: source,
   configuration, the documents of [documentation.md](documentation.md). Local
   notes, scratch files, build output and editor settings stay out.
-- Commits and pull requests carry no tool attribution and no co-author trailer
-  ([code-style.md](code-style.md#attribution)).
 
 ## Releases
 
