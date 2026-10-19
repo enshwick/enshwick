@@ -5,6 +5,8 @@
 const TYPES = ['feat', 'fix', 'perf', 'refactor', 'docs', 'test', 'build', 'ci', 'chore', 'revert'];
 const HEADER = new RegExp(`^(${TYPES.join('|')})(\\([a-z0-9-]+\\))?!?: [^A-Z\\s](.*[^.])?$`, 'u');
 const MAX_HEADER = 72;
+// GitHub appends ` (#<number>)` to a squashed pull request's title.
+const SQUASH_SUFFIX = / \(#\d+\)$/u;
 // Messages git writes itself.
 const GENERATED = /^(Merge |Revert "|fixup! |squash! |amend! )/u;
 
@@ -25,8 +27,9 @@ const problems = (message: string): string[] => {
       );
     }
 
-    if (header.length > MAX_HEADER) {
-      found.push(`the header is ${header.length} characters, at most ${MAX_HEADER}`);
+    const length = header.replace(SQUASH_SUFFIX, '').length;
+    if (length > MAX_HEADER) {
+      found.push(`the header is ${length} characters, at most ${MAX_HEADER}`);
     }
   }
 
