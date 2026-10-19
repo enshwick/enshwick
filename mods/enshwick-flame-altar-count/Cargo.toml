@@ -1,0 +1,25 @@
+[package]
+name = "enshwick-flame-altar-count"
+version = "0.1.0"
+description = "How many Flame Altars each Flame level allows, from a table in the settings"
+keywords = ["enshrouded", "mod", "altar"]
+categories = ["game-development"]
+readme = "README.md"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+enshwick-api.workspace = true
+serde.workspace = true
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+toml.workspace = true

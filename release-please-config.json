@@ -3,7 +3,7 @@
   "release-type": "rust",
   "include-component-in-tag": true,
   "tag-separator": "-",
-  "separate-pull-requests": true,
+  "separate-pull-requests": false,
   "plugins": [
     {
       "type": "cargo-workspace",
@@ -60,5 +60,30 @@
       "hidden": true
     }
   ],
-  "packages": {}
+  "packages": {
+    "crates/enshwick-api": {
+      "package-name": "enshwick-api",
+      "component": "enshwick-api"
+    },
+    "crates/enshwick-loader": {
+      "package-name": "enshwick-loader",
+      "component": "enshwick-loader"
+    },
+    "crates/enshwick-stub": {
+      "package-name": "enshwick-stub",
+      "component": "enshwick-stub"
+    },
+    "mods/enshwick-flame-altar-count": {
+      "package-name": "enshwick-flame-altar-count",
+      "component": "enshwick-flame-altar-count"
+    },
+    "mods/enshwick-flame-altar-zones": {
+      "package-name": "enshwick-flame-altar-zones",
+      "component": "enshwick-flame-altar-zones"
+    },
+    "mods/enshwick-survivors-per-altar": {
+      "package-name": "enshwick-survivors-per-altar",
+      "component": "enshwick-survivors-per-altar"
+    }
+  }
 }

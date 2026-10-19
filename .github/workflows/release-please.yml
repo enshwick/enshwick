@@ -1,4 +1,6 @@
 # Release pull requests and releases per crate (docs/conventions/repository.md, Releases).
+# Every release run attaches one player bundle: the stub, the loader and every mod,
+# laid out as they go next to the game.
 name: release-please
 
 on:
@@ -13,9 +15,52 @@ jobs:
   release-please:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    outputs:
+      created: ${{ steps.release.outputs.releases_created }}
+      all: ${{ toJSON(steps.release.outputs) }}
     steps:
       # v5.0.0
-      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7
+      - id: release
+        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7
         with:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+
+  bundle:
+    needs: release-please
+    if: needs.release-please.outputs.created == 'true'
+    runs-on: windows-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    steps:
+      # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Build
+        run: cargo build --release --workspace --locked
+
+      - name: Bundle
+        run: |
+          mkdir -p bundle/mods/enshwick
+          cp target/release/powrprof.dll bundle/
+          cp target/release/enshwick.dll bundle/mods/enshwick/
+          for dll in target/release/enshwick_*.dll; do
+            name=$(basename "$dll" .dll)
+            cp "$dll" "bundle/mods/$(echo "$name" | tr '_' '-').dll"
+          done
+          cp LICENSE bundle/
+          (cd bundle && 7z a -tzip ../enshwick.zip . > /dev/null)
+
+      - name: Attach
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OUTPUTS: ${{ needs.release-please.outputs.all }}
+        run: |
+          echo "$OUTPUTS" | jq -r 'to_entries[] | select(.key | endswith("--tag_name")) | .value' |
+            while read -r tag; do
+              gh release upload "$tag" enshwick.zip --clobber --repo "$GITHUB_REPOSITORY"
+            done

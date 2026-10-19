@@ -14,10 +14,11 @@ The hooks check formatting, spelling, Markdown and commit messages before a
 commit, and clippy, tests and cargo-deny before a push. The rules they enforce,
 and the ones they cannot, are in [docs/conventions/](docs/conventions/):
 
-- commits are conventional commits, `<type>(<scope>): <subject>`;
+- branch from `develop` as `feature/<slug>`, `fix/<slug>` or `chore/<slug>` and
+  open a pull request into `develop`; its title is a conventional commit,
+  `<type>(<scope>): <subject>`, and becomes the squashed commit;
 - code follows [code-style.md](docs/conventions/code-style.md), unsafe code
-  included;
-- nothing carries tool attribution.
+  included.
 
 Never add game code or data: no decompiled code, no dumps, no binaries. Engine
 facts go in documents as addresses and names, with the game build they were
