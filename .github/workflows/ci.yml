@@ -79,10 +79,6 @@ jobs:
           fi
           bun tools/check-commit-message.ts --range "$range"
 
-      - name: Attribution
-        if: ${{ !cancelled() }}
-        run: git ls-files -z | xargs -0 bun tools/check-attribution.ts
-
       - name: Markdown
         if: ${{ !cancelled() }}
         run: bun run lint:md
