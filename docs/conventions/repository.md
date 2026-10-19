@@ -96,8 +96,10 @@ request; nothing is pushed to `develop` or `master` directly.
 | `hotfix/<slug>`  | `master`  | `master`, `develop` | an urgent fix for a release                                  |
 
 - Both shared branches are protected for everyone, administrators included: a
-  pull request with every CI check green, a linear history, no force pushes, no
+  pull request with every CI check green on a branch up to date with its base,
+  every review conversation resolved, a linear history, no force pushes, no
   deletion.
+- Commits and tags are signed (SSH or GPG) with a key registered on GitHub.
 - A pull request into `develop` is squash-merged. Its title becomes the commit,
   so it is a conventional commit, `<type>(<scope>): <subject>`, checked by CI;
   its description says what changes and how it was tested. One pull request is
