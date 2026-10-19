@@ -78,6 +78,8 @@ jobs:
         uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25
 
   linux:
+    # An edited title or description needs only the checks above.
+    if: github.event.action != 'edited'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -116,6 +118,7 @@ jobs:
           cargo +nightly-2026-10-19 miri test --workspace --lib --locked
 
   rust:
+    if: github.event.action != 'edited'
     runs-on: windows-latest
     timeout-minutes: 30
     defaults:
