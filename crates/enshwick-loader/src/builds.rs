@@ -24,9 +24,21 @@ pub struct KnownBuild {
     pub checks: &'static [(&'static str, u64)],
     /// Symbolic id and address relative to the image base.
     pub symbols: &'static [(&'static str, u64)],
+    /// Engine constants by symbolic id: offsets and sizes reflection does not
+    /// describe.
+    pub constants: &'static [(&'static str, u64)],
 }
 
 impl KnownBuild {
+    /// The engine constant `name` on this build.
+    #[must_use]
+    pub fn constant(&self, name: &str) -> Option<u64> {
+        self.constants
+            .iter()
+            .find(|(id, _)| *id == name)
+            .map(|&(_, value)| value)
+    }
+
     /// The address of `name` on this build, relative to the image base.
     #[must_use]
     pub fn symbol(&self, name: &str) -> Option<u64> {
@@ -92,6 +104,11 @@ pub static BUILDS: &[KnownBuild] = &[
             ("npc.update", 0x20_55f0),
             ("npc.bed_check", 0x1e_e250),
         ],
+        constants: &[
+            ("ecs.context_row", 8),
+            ("ecs.descriptor_entity_records", 0x828),
+            ("ecs.entity_record_size", 0x10),
+        ],
     },
     KnownBuild {
         name: "1.0 client (1269579)",
@@ -110,6 +127,7 @@ pub static BUILDS: &[KnownBuild] = &[
             ("net.server_change", 0x107_d200),
             ("npc.lookup_cursor", 0x46_9860),
         ],
+        constants: &[],
     },
 ];
 

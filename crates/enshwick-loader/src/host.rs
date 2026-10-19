@@ -137,6 +137,7 @@ pub(crate) static API: HostApi = HostApi {
     settings,
     publish,
     service,
+    constant,
 };
 
 /// Reads a borrowed string, or `None` when it is not UTF-8.
@@ -356,6 +357,19 @@ extern "system" fn service(
         return Status::MISSING;
     }
     put(out, core::ptr::with_exposed_provenance(table))
+}
+
+extern "system" fn constant(me: ModHandle, name: Str, out: *mut u64) -> Status {
+    let (Some(loader), Some(name)) = (loader(), text(name)) else {
+        return Status::BAD_ARGS;
+    };
+    if loader.record(me).is_none() {
+        return Status::BAD_ARGS;
+    }
+    loader
+        .build
+        .constant(name)
+        .map_or(Status::MISSING, |value| put(out, value))
 }
 
 /// Mod handles start at 1; 0 is no mod.

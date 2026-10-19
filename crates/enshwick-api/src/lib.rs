@@ -51,6 +51,7 @@
 
 pub mod abi;
 mod declare;
+pub mod ecs;
 mod hook;
 mod host;
 mod load;
