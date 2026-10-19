@@ -9,10 +9,12 @@
 | ---------------------------------- | --------------------------------------------------------------------------- |
 | `docs/`                            | conventions, decisions, specs, plans ([documentation.md](documentation.md)) |
 | `crates/enshwick-api/`             | the modding API: the ABI with the loader and the safe layer mods use        |
+| `crates/enshwick-geometry/`        | altar zones as integer boxes: clusters, uniform growth, the zones service   |
 | `crates/enshwick-loader/`          | the loader, `mods/enshwick/enshwick.dll`: game build, mods, hooks, log      |
 | `crates/enshwick-stub/`            | the `powrprof.dll` stub that starts the loader                              |
 | `crates/enshwick-reflect/`         | reads the engine's reflection data and system records from a game image     |
 | `mods/enshwick-flame-altar-count/` | the altars allowed per Flame level                                          |
+| `mods/enshwick-flame-altar-zones/` | altar clusters, uniform growth, building across seams                       |
 | `tools/`                           | repository scripts: the commit message check                                |
 | `.github/workflows/`               | CI and releases                                                             |
 
