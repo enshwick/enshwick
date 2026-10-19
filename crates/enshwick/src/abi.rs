@@ -16,6 +16,35 @@ pub const ABI_MAJOR: u16 = 1;
 /// The minor version of this interface. A newer minor only appends fields.
 pub const ABI_MINOR: u16 = 0;
 
+/// Whether `id` is a valid mod id: 1 to 64 characters of `[a-z0-9-]`.
+///
+/// The id names the mod's DLL and settings file, so it stays portable.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::abi::is_valid_id;
+///
+/// assert!(is_valid_id("flame-altar-zones"));
+/// assert!(!is_valid_id("Flame Altar Zones"));
+/// ```
+#[must_use]
+pub const fn is_valid_id(id: &str) -> bool {
+    let bytes = id.as_bytes();
+    if bytes.is_empty() || bytes.len() > 64 {
+        return false;
+    }
+    let mut i = 0;
+    while i < bytes.len() {
+        let b = bytes[i];
+        if !(b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-') {
+            return false;
+        }
+        i += 1;
+    }
+    true
+}
+
 /// The start of every struct the other side may know an older or newer
 /// version of.
 ///

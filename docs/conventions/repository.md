@@ -5,13 +5,16 @@
 
 ## Layout
 
-| Path                   | Contents                                                                    |
-| ---------------------- | --------------------------------------------------------------------------- |
-| `docs/`                | conventions, decisions, specs, plans ([documentation.md](documentation.md)) |
-| `crates/enshwick/`     | the modding API: the ABI with the loader and the safe layer mods use        |
-| `crates/keen-reflect/` | reads the engine's reflection data and system records from a game image     |
-| `tools/`               | repository scripts: commit and attribution checks                           |
-| `.github/workflows/`   | CI and releases                                                             |
+| Path                      | Contents                                                                    |
+| ------------------------- | --------------------------------------------------------------------------- |
+| `docs/`                   | conventions, decisions, specs, plans ([documentation.md](documentation.md)) |
+| `crates/enshwick/`        | the modding API: the ABI with the loader and the safe layer mods use        |
+| `crates/enshwick-loader/` | the loader, `mods/enshwick/enshwick.dll`: game build, mods, hooks, log      |
+| `crates/enshwick-stub/`   | the `powrprof.dll` stub that starts the loader                              |
+| `crates/keen-reflect/`    | reads the engine's reflection data and system records from a game image     |
+| `mods/flame-altar-count/` | the altars allowed per Flame level                                          |
+| `tools/`                  | repository scripts: commit and attribution checks                           |
+| `.github/workflows/`      | CI and releases                                                             |
 
 A folder appears with its first file, never ahead of it. A new crate is born
 with its row in this table, its entry in the release configuration when it

@@ -64,6 +64,18 @@
     "crates/enshwick": {
       "package-name": "enshwick",
       "component": "enshwick"
+    },
+    "crates/enshwick-loader": {
+      "package-name": "enshwick-loader",
+      "component": "enshwick-loader"
+    },
+    "crates/enshwick-stub": {
+      "package-name": "enshwick-stub",
+      "component": "enshwick-stub"
+    },
+    "mods/flame-altar-count": {
+      "package-name": "flame-altar-count",
+      "component": "flame-altar-count"
     }
   }
 }
