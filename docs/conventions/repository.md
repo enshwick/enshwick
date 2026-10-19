@@ -71,11 +71,12 @@ From the root:
 | `commit-msg` | `tools/check-commit-message.ts`: the conventional form           |
 | `pre-push`   | clippy, nextest, doctests and cargo-deny when Rust files changed |
 
-CI runs the same checks on every pull request and on every push to `develop` and
-`master`, on Windows for everything that builds the DLLs and on Linux for the
-rest, and checks each commit message, the pull request title and the branch
-name. A broken `develop` or `master` is fixed by the next pull request, before
-other work.
+CI runs the same checks on every pull request, in three jobs to keep runner
+minutes low: repository checks and Linux checks on Linux, clippy and tests on
+Windows, where the DLLs build. It checks each commit message, the pull request
+title and the branch name. Branch protection merges only branches up to date
+with their base, so a merge needs no second run. A broken `develop` or `master`
+is fixed by the next pull request, before other work.
 
 Actions in workflows are pinned by commit, with the tag in a comment.
 
