@@ -4,6 +4,61 @@
   "include-component-in-tag": true,
   "tag-separator": "-",
   "separate-pull-requests": true,
-  "plugins": [{ "type": "cargo-workspace", "merge": false }],
+  "plugins": [
+    {
+      "type": "cargo-workspace",
+      "merge": false
+    }
+  ],
+  "bump-minor-pre-major": true,
+  "bump-patch-for-minor-pre-major": true,
+  "changelog-sections": [
+    {
+      "type": "feat",
+      "section": "Features"
+    },
+    {
+      "type": "fix",
+      "section": "Bug Fixes"
+    },
+    {
+      "type": "perf",
+      "section": "Performance"
+    },
+    {
+      "type": "revert",
+      "section": "Reverts"
+    },
+    {
+      "type": "refactor",
+      "section": "Other",
+      "hidden": true
+    },
+    {
+      "type": "docs",
+      "section": "Other",
+      "hidden": true
+    },
+    {
+      "type": "test",
+      "section": "Other",
+      "hidden": true
+    },
+    {
+      "type": "build",
+      "section": "Other",
+      "hidden": true
+    },
+    {
+      "type": "ci",
+      "section": "Other",
+      "hidden": true
+    },
+    {
+      "type": "chore",
+      "section": "Other",
+      "hidden": true
+    }
+  ],
   "packages": {}
 }
