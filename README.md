@@ -32,10 +32,10 @@ game's launch options.
 
 ## For mod authors
 
-Mods are written in Rust against [`enshwick-api`](crates/enshwick-api). How the
-repository is laid out, checked and released:
-[docs/conventions/](docs/conventions/). Contributions follow
-[CONTRIBUTING.md](CONTRIBUTING.md).
+Mods are written in Rust against [`enshwick-api`](crates/enshwick-api); start
+with [the modding guide](docs/modding/guide.md). How the repository is laid out,
+checked and released: [docs/conventions/](docs/conventions/). Contributions
+follow [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
