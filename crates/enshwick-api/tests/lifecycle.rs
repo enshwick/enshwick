@@ -110,6 +110,12 @@ mod tests {
         Status::MISSING
     }
 
+    extern "system" fn constant(_me: ModHandle, _name: Str, out: *mut u64) -> Status {
+        // SAFETY: the safe layer passes a valid out pointer.
+        unsafe { *out = 8 };
+        Status::OK
+    }
+
     static API: HostApi = HostApi {
         header: Header::of::<HostApi>(),
         host_version: Str::new("0.0.0-test"),
@@ -125,6 +131,7 @@ mod tests {
         settings,
         publish,
         service,
+        constant,
     };
 
     extern "system" fn original(value: u32) -> u32 {

@@ -665,6 +665,9 @@ pub struct HostApi {
         version: u32,
         out: *mut *const c_void,
     ) -> Status,
+    /// Resolves an engine constant of the running build, such as a field
+    /// offset reflection does not describe, by its symbolic id.
+    pub constant: extern "system" fn(me: ModHandle, name: Str, out: *mut u64) -> Status,
 }
 
 /// The exports a mod DLL provides, by name.
@@ -707,5 +710,6 @@ const _: () = {
     assert!(core::mem::offset_of!(HostApi, host_version) == 8);
     assert!(core::mem::offset_of!(HostApi, build) == 24);
     assert!(core::mem::offset_of!(HostApi, service) == 24 + 11 * 8);
-    assert!(size_of::<HostApi>() == 24 + 12 * 8);
+    assert!(core::mem::offset_of!(HostApi, constant) == 24 + 12 * 8);
+    assert!(size_of::<HostApi>() == 24 + 13 * 8);
 };

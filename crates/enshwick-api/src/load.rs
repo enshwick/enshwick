@@ -146,6 +146,28 @@ impl Load<'_> {
         ok(status, out, || format!("symbol {name}"))
     }
 
+    /// An engine constant of the running build, such as a field offset that
+    /// reflection does not describe.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] when the loader does not pin the constant for this build.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// fn init(load: &mut enshwick_api::Load<'_>) -> Result<(), enshwick_api::Off> {
+    ///     let row = load.constant("ecs.context_row")?;
+    ///     assert_eq!(row, 8);
+    ///     Ok(())
+    /// }
+    /// ```
+    pub fn constant(&self, name: &str) -> Result<u64, Off> {
+        let mut out = 0;
+        let status = (self.api().constant)(self.host.handle(), Str::new(name), &raw mut out);
+        ok(status, out, || format!("constant {name}"))
+    }
+
     /// The update function of an ECS system, found by its reflected name, so it
     /// survives game updates.
     ///
