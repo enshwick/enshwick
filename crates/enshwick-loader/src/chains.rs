@@ -11,6 +11,9 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use enshwick_api::abi::{HookFlags, Status};
 use rustc_hash::FxHashMap;
 
+/// The owner of the loader's own links, which never turn off.
+pub const LOADER: usize = usize::MAX;
+
 /// One mod's link on a target.
 #[derive(Debug)]
 pub struct Link {
