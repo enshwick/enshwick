@@ -63,9 +63,10 @@ From the root:
 | `commit-msg` | `tools/check-commit-message.ts`: conventional form, no attribution     |
 | `pre-push`   | clippy, nextest, doctests and cargo-deny when Rust files changed       |
 
-CI runs the same checks on every push and pull request, on Windows for
-everything that builds the DLLs and on Linux for the rest, and checks each
-pushed commit message. A broken `master` is fixed by the next commit, before
+CI runs the same checks on every pull request and on every push to `develop` and
+`master`, on Windows for everything that builds the DLLs and on Linux for the
+rest, and checks each commit message, the pull request title and the branch
+name. A broken `develop` or `master` is fixed by the next pull request, before
 other work.
 
 Actions in workflows are pinned by commit, with the tag in a comment.
@@ -82,18 +83,40 @@ runs them before and after. Pure logic also runs under Miri in CI.
 
 ## Git
 
-- One branch, `master`. Commits go straight to it and are never force-pushed;
-  release-please's release pull requests are the one kind of pull request.
-- A commit is one coherent change, written as a conventional commit:
-  `<type>(<scope>): <subject>`, where the type is one of `feat`, `fix`, `perf`,
-  `refactor`, `docs`, `test`, `build`, `ci`, `chore` or `revert`, and the scope
-  is the crate or mod id, or an area such as `conventions` or `ci`. A breaking
-  change carries `!` after the scope. The subject is imperative, lower case
-  after the colon, without a final period, at most 72 characters.
+Work follows git flow, and every change reaches a shared branch through a pull
+request; nothing is pushed to `develop` or `master` directly.
+
+| Branch           | From      | Into                | Holds                                                        |
+| ---------------- | --------- | ------------------- | ------------------------------------------------------------ |
+| `master`         |           |                     | released code; every commit on it is released or about to be |
+| `develop`        |           |                     | the next release; the default branch                         |
+| `feature/<slug>` | `develop` | `develop`           | a feature                                                    |
+| `fix/<slug>`     | `develop` | `develop`           | a fix for unreleased or released code                        |
+| `chore/<slug>`   | `develop` | `develop`           | docs, CI, build, refactoring, tests                          |
+| `hotfix/<slug>`  | `master`  | `master`, `develop` | an urgent fix for a release                                  |
+
+- Both shared branches are protected for everyone, administrators included: a
+  pull request with every CI check green, a linear history, no force pushes, no
+  deletion.
+- A pull request into `develop` is squash-merged. Its title becomes the commit,
+  so it is a conventional commit, `<type>(<scope>): <subject>`, checked by CI;
+  its description says what changes and how it was tested. One pull request is
+  one coherent change.
+- A release is a pull request from `develop` into `master`, rebase-merged, so
+  each conventional commit reaches release-please. After a release, `master` is
+  merged back into `develop` by pull request.
+- Commits on a branch follow the same form, checked by the `commit-msg` hook:
+  the type is one of `feat`, `fix`, `perf`, `refactor`, `docs`, `test`, `build`,
+  `ci`, `chore` or `revert`, the scope is the crate or mod id, or an area such
+  as `conventions` or `ci`, and the subject is imperative, lower case after the
+  colon, without a final period, at most 72 characters.
 - `feat`, `fix`, `perf` and `revert` reach the changelog of the crate whose
   files they touch; `feat` and `fix` drive its version. A breaking change to a
   library crate carries `!` and a `BREAKING CHANGE:` footer with the migration.
-- Commits carry no tool attribution and no co-author trailer
+- The repository holds only what a contributor or player needs: source,
+  configuration, the documents of [documentation.md](documentation.md). Local
+  notes, scratch files, build output and editor settings stay out.
+- Commits and pull requests carry no tool attribution and no co-author trailer
   ([code-style.md](code-style.md#attribution)).
 
 ## Releases
