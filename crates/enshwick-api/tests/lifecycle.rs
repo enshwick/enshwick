@@ -65,8 +65,9 @@ mod tests {
         Status::OK
     }
 
-    extern "system" fn caller_frame() -> usize {
-        0
+    extern "system" fn caller_frame(out: *mut enshwick_api::abi::CallerFrame) {
+        // SAFETY: the safe layer passes a valid out pointer.
+        unsafe { *out = enshwick_api::abi::CallerFrame::default() };
     }
 
     extern "system" fn fault(_me: ModHandle, reason: Str) {

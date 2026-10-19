@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 
+use enshwick_api::abi as api_frame;
 use enshwick_api::abi::{
     BuildInfo, Header, HookSpec, HostApi, Level, Manifest, ModHandle, Side, Status, Str,
 };
@@ -50,7 +51,7 @@ pub(crate) struct Loader {
     /// Published services: `(name, version)` to `(owner, table)`.
     pub(crate) services: Mutex<FxHashMap<(String, u32), (usize, usize)>>,
     /// Reads the caller frame of the running chain.
-    pub(crate) caller_frame: fn() -> usize,
+    pub(crate) caller_frame: fn() -> api_frame::CallerFrame,
 }
 
 static LOADER: OnceLock<Loader> = OnceLock::new();
@@ -257,8 +258,11 @@ extern "system" fn hook(me: ModHandle, spec: *const HookSpec) -> Status {
     }
 }
 
-extern "system" fn caller_frame() -> usize {
-    loader().map_or(0, |loader| (loader.caller_frame)())
+extern "system" fn caller_frame(out: *mut api_frame::CallerFrame) {
+    let frame = loader()
+        .map(|loader| (loader.caller_frame)())
+        .unwrap_or_default();
+    let _written = put(out, frame);
 }
 
 extern "system" fn fault(me: ModHandle, reason: Str) {

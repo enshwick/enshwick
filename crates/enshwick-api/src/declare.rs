@@ -4,8 +4,10 @@
 ///
 /// `id` is `[a-z0-9-]+` and names the DLL and the settings file; `side` is
 /// `SERVER`, `CLIENT` or `BOTH`. Optional, in this order: `join = true` (the
-/// mod counts in the join check), `requires: ["id" => "range", ...]` and
-/// `after: ["id", ...]`. The version is the crate's.
+/// mod counts in the join check), `requires: ["id" => "range", ...]`,
+/// `after: ["id", ...]` and `builds: [{ side, guid, age, symbols: ["id" => rva] }]`,
+/// symbols the mod pins itself for those game builds. The version is the
+/// crate's.
 ///
 /// # Examples
 ///
@@ -15,8 +17,15 @@
 ///     side: BOTH,
 ///     join = true,
 ///     requires: ["flame-altar-zones" => "^0.1"],
+///     builds: [{
+///         side: SERVER,
+///         guid: "1c129660cd6efc4f9f0b21652d5ff2bf",
+///         age: 387,
+///         symbols: ["survivors.spawn_return" => 0x4_05cb],
+///     }],
 /// );
 /// assert_eq!(manifest.dependency_count, 1);
+/// assert_eq!(manifest.build_count, 1);
 /// ```
 #[macro_export]
 macro_rules! manifest {
@@ -26,6 +35,12 @@ macro_rules! manifest {
         $(, join = $join:expr)?
         $(, requires: [$($req:literal => $range:literal),* $(,)?])?
         $(, after: [$($after:literal),* $(,)?])?
+        $(, builds: [$({
+            side: $bside:ident,
+            guid: $guid:literal,
+            age: $age:literal,
+            symbols: [$($sym:literal => $rva:expr),* $(,)?] $(,)?
+        }),* $(,)?])?
         $(,)?
     ) => {{
         const _: () = assert!($crate::abi::is_valid_id($id), "a mod id is [a-z0-9-]+");
@@ -41,6 +56,16 @@ macro_rules! manifest {
                 relation: $crate::abi::Relation::AFTER,
             },)*)?
         ];
+        static BUILDS: &[$crate::abi::BuildRow] = &[
+            $($($crate::abi::BuildRow {
+                side: $crate::abi::Side::$bside,
+                fingerprint: $crate::abi::Fingerprint { guid: $crate::abi::guid($guid), age: $age },
+                symbols: (&[$($crate::abi::Symbol { name: $crate::abi::Str::new($sym), rva: $rva }),*]
+                    as &[$crate::abi::Symbol]).as_ptr(),
+                symbol_count: (&[$($crate::abi::Symbol { name: $crate::abi::Str::new($sym), rva: $rva }),*]
+                    as &[$crate::abi::Symbol]).len(),
+            },)*)?
+        ];
         static MANIFEST: $crate::abi::Manifest = $crate::abi::Manifest {
             header: $crate::abi::Header::of::<$crate::abi::Manifest>(),
             id: $crate::abi::Str::new($id),
@@ -49,8 +74,8 @@ macro_rules! manifest {
             flags: $crate::__private::join_flag(&[$($join)?]),
             dependencies: DEPENDENCIES.as_ptr(),
             dependency_count: DEPENDENCIES.len(),
-            builds: ::core::ptr::null(),
-            build_count: 0,
+            builds: BUILDS.as_ptr(),
+            build_count: BUILDS.len(),
         };
         &MANIFEST
     }};

@@ -18,30 +18,63 @@ use windows_sys::Win32::System::Threading::{GetCurrentProcess, TlsAlloc, TlsGetV
 use crate::chains::Chains;
 
 const PAGE: usize = 4096;
-const THUNK: usize = 32;
+const THUNK: usize = 96;
 /// `TEB.TlsSlots` on x64; the first 64 TLS indices live there.
 const TEB_TLS_SLOTS: u32 = 0x1480;
 const TLS_INLINE_SLOTS: u32 = 64;
 const TLS_OUT_OF_INDEXES: u32 = u32::MAX;
 
-/// The TLS index that holds the caller frame, if one could be had.
+/// The registers a frame thunk saves, in `CallerFrame` order, with the REX
+/// prefix and `ModRM` byte of `mov gs:[disp32], reg`.
+const SAVED: [(u8, u8); 9] = [
+    (0x48, 0x24), // rsp
+    (0x48, 0x1c), // rbx
+    (0x48, 0x2c), // rbp
+    (0x48, 0x3c), // rdi
+    (0x48, 0x34), // rsi
+    (0x4c, 0x24), // r12
+    (0x4c, 0x2c), // r13
+    (0x4c, 0x34), // r14
+    (0x4c, 0x3c), // r15
+];
+
+/// The TLS indices that hold the caller frame, if they could be had.
 #[derive(Clone, Copy, Debug)]
-pub(crate) struct FrameSlot(u32);
+pub(crate) struct FrameSlot([u32; 9]);
 
 impl FrameSlot {
-    /// Allocates the index; `None` when no index the thunk can address is free.
+    /// Allocates the indices; `None` when not all of them are ones the thunk
+    /// can address.
     #[must_use]
     pub(crate) fn allocate() -> Option<Self> {
-        // SAFETY: no preconditions.
-        let index = unsafe { TlsAlloc() };
-        (index != TLS_OUT_OF_INDEXES && index < TLS_INLINE_SLOTS).then_some(Self(index))
+        let mut indices = [0u32; 9];
+        for index in &mut indices {
+            // SAFETY: no preconditions.
+            let allocated = unsafe { TlsAlloc() };
+            if allocated == TLS_OUT_OF_INDEXES || allocated >= TLS_INLINE_SLOTS {
+                return None;
+            }
+            *index = allocated;
+        }
+        Some(Self(indices))
     }
 
     /// The caller frame the thunk stored on this thread.
     #[must_use]
-    pub(crate) fn read(self) -> usize {
-        // SAFETY: the index was allocated by `allocate`.
-        unsafe { TlsGetValue(self.0) }.addr()
+    pub(crate) fn read(self) -> enshwick_api::abi::CallerFrame {
+        // SAFETY: each index was allocated by `allocate`.
+        let value = |i: usize| unsafe { TlsGetValue(self.0[i]) }.addr() as u64;
+        enshwick_api::abi::CallerFrame {
+            rsp: value(0),
+            rbx: value(1),
+            rbp: value(2),
+            rdi: value(3),
+            rsi: value(4),
+            r12: value(5),
+            r13: value(6),
+            r14: value(7),
+            r15: value(8),
+        }
     }
 }
 
@@ -173,19 +206,22 @@ pub(crate) fn arm(
     failures
 }
 
-/// Writes `[mov gs:[TlsSlots + index * 8], rsp]` and `jmp [rip + slot]`.
+/// Writes `mov gs:[TlsSlots + index * 8], reg` for each saved register, then
+/// `jmp [rip + slot]`.
 ///
 /// # Safety
 ///
 /// `code` has `THUNK` writable bytes and `slot` lies within ±2 GiB of it.
-unsafe fn write_thunk(code: *mut u8, slot: &AtomicUsize, frame_index: Option<u32>) {
+unsafe fn write_thunk(code: *mut u8, slot: &AtomicUsize, frame: Option<[u32; 9]>) {
     let mut bytes = [0xcc_u8; THUNK];
     let mut at = 0;
-    if let Some(index) = frame_index {
-        let displacement = TEB_TLS_SLOTS + index * 8;
-        bytes[..5].copy_from_slice(&[0x65, 0x48, 0x89, 0x24, 0x25]);
-        bytes[5..9].copy_from_slice(&displacement.to_le_bytes());
-        at = 9;
+    if let Some(indices) = frame {
+        for (&(rex, modrm), index) in SAVED.iter().zip(indices) {
+            let displacement = TEB_TLS_SLOTS + index * 8;
+            bytes[at..at + 5].copy_from_slice(&[0x65, rex, 0x89, modrm, 0x25]);
+            bytes[at + 5..at + 9].copy_from_slice(&displacement.to_le_bytes());
+            at += 9;
+        }
     }
     bytes[at..at + 2].copy_from_slice(&[0xff, 0x25]);
     let next_instruction = code.addr() + at + 6;
@@ -222,12 +258,24 @@ mod tests {
         let slot = AtomicUsize::new(0);
         let mut code = [0u8; THUNK];
         // SAFETY: as above.
-        unsafe { write_thunk(code.as_mut_ptr(), &slot, Some(3)) };
+        unsafe {
+            write_thunk(
+                code.as_mut_ptr(),
+                &slot,
+                Some([3, 4, 5, 6, 7, 8, 9, 10, 11]),
+            );
+        }
         assert_eq!(code[..5], [0x65, 0x48, 0x89, 0x24, 0x25]);
         assert_eq!(
             u32::from_le_bytes(code[5..9].try_into().unwrap()),
             0x1480 + 24
         );
-        assert_eq!(code[9..11], [0xff, 0x25]);
+        // r14, the eighth register, into slot 10.
+        assert_eq!(code[63..68], [0x65, 0x4c, 0x89, 0x34, 0x25]);
+        assert_eq!(
+            u32::from_le_bytes(code[68..72].try_into().unwrap()),
+            0x1480 + 80
+        );
+        assert_eq!(code[81..83], [0xff, 0x25]);
     }
 }
