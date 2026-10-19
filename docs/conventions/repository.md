@@ -5,26 +5,26 @@
 
 ## Layout
 
-| Path                      | Contents                                                                    |
-| ------------------------- | --------------------------------------------------------------------------- |
-| `docs/`                   | conventions, decisions, specs, plans ([documentation.md](documentation.md)) |
-| `crates/enshwick/`        | the modding API: the ABI with the loader and the safe layer mods use        |
-| `crates/enshwick-loader/` | the loader, `mods/enshwick/enshwick.dll`: game build, mods, hooks, log      |
-| `crates/enshwick-stub/`   | the `powrprof.dll` stub that starts the loader                              |
-| `crates/keen-reflect/`    | reads the engine's reflection data and system records from a game image     |
-| `mods/flame-altar-count/` | the altars allowed per Flame level                                          |
-| `tools/`                  | repository scripts: the commit message check                                |
-| `.github/workflows/`      | CI and releases                                                             |
+| Path                               | Contents                                                                    |
+| ---------------------------------- | --------------------------------------------------------------------------- |
+| `docs/`                            | conventions, decisions, specs, plans ([documentation.md](documentation.md)) |
+| `crates/enshwick-api/`             | the modding API: the ABI with the loader and the safe layer mods use        |
+| `crates/enshwick-loader/`          | the loader, `mods/enshwick/enshwick.dll`: game build, mods, hooks, log      |
+| `crates/enshwick-stub/`            | the `powrprof.dll` stub that starts the loader                              |
+| `crates/enshwick-reflect/`         | reads the engine's reflection data and system records from a game image     |
+| `mods/enshwick-flame-altar-count/` | the altars allowed per Flame level                                          |
+| `tools/`                           | repository scripts: the commit message check                                |
+| `.github/workflows/`               | CI and releases                                                             |
 
 A folder appears with its first file, never ahead of it. A new crate is born
 with its row in this table, its entry in the release configuration when it
 ships, and, if it brings a new layer, its row in the stack table, in the same
 commit.
 
-Crates that run or ship (the loader, each mod) live under `crates/` and
-`mods/<id>/`; a mod's folder name is its id, `[a-z0-9-]`, which also names its
-DLL and its config file. Code moves into a shared crate the first time a second
-crate needs it, and not before.
+Every crate is named `enshwick-<name>`: the loader, the API and shared code live
+under `crates/`, each mod under `mods/enshwick-<id>/`, where `<id>`,
+`[a-z0-9-]`, is the id in its manifest and names its settings file. Code moves
+into a shared crate the first time a second crate needs it, and not before.
 
 `research/` holds local reverse-engineering material and is ignored by git:
 Keen's code and data never enter the repository.
@@ -135,7 +135,7 @@ it, so before 1.0 a breaking change bumps the minor version; cargo-semver-checks
 compares the API crate with its last release. The loader's ABI version is
 separate from its crate version and is described with the ABI.
 
-`rust-version` equals the pinned toolchain and moves with it. `enshwick`, the
-API crate, is the one crate meant for crates.io and carries its metadata and
+`rust-version` equals the pinned toolchain and moves with it. `enshwick-api`,
+the API crate, is the one crate meant for crates.io and carries its metadata and
 docs.rs settings; every other crate has `publish = false`. A path dependency
 carries its version.

@@ -20,7 +20,7 @@ mod sealed {
 /// # Examples
 ///
 /// ```
-/// fn takes<F: enshwick::FnPtr>() {}
+/// fn takes<F: enshwick_api::FnPtr>() {}
 /// takes::<unsafe extern "system" fn(*mut u64) -> u32>();
 /// ```
 pub unsafe trait FnPtr: Copy + Send + Sync + 'static + sealed::Sealed {}
@@ -64,12 +64,12 @@ const _: () = assert!(size_of::<extern "system" fn()>() == size_of::<usize>());
 /// # Examples
 ///
 /// ```
-/// enshwick::detour! {
+/// enshwick_api::detour! {
 ///     /// Counts upgrades.
 ///     static UPGRADE: unsafe extern "system" fn(ctx: *mut u64) = upgrade;
 /// }
 ///
-/// fn upgrade(next: enshwick::Next<unsafe extern "system" fn(*mut u64)>, ctx: *mut u64) {
+/// fn upgrade(next: enshwick_api::Next<unsafe extern "system" fn(*mut u64)>, ctx: *mut u64) {
 ///     // SAFETY: the original takes the same context.
 ///     unsafe { next.get()(ctx) }
 /// }
@@ -185,14 +185,14 @@ impl<F: FnPtr> Next<F> {
 /// # Examples
 ///
 /// ```
-/// enshwick::detour! {
+/// enshwick_api::detour! {
 ///     /// The lookup every survivor caller goes through.
 ///     pub static LOOKUP: unsafe extern "system" fn(bases: *mut u8, npc: *const u32) -> u32 =
-///         lookup, priority = -10, flags = enshwick::abi::HookFlags::CALLER_FRAME;
+///         lookup, priority = -10, flags = enshwick_api::abi::HookFlags::CALLER_FRAME;
 /// }
 ///
 /// fn lookup(
-///     next: enshwick::Next<unsafe extern "system" fn(*mut u8, *const u32) -> u32>,
+///     next: enshwick_api::Next<unsafe extern "system" fn(*mut u8, *const u32) -> u32>,
 ///     bases: *mut u8,
 ///     npc: *const u32,
 /// ) -> u32 {

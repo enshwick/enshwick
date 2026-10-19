@@ -10,7 +10,7 @@
 /// # Examples
 ///
 /// ```
-/// let manifest = enshwick::manifest!(
+/// let manifest = enshwick_api::manifest!(
 ///     id: "survivors-per-altar",
 ///     side: BOTH,
 ///     join = true,
@@ -66,17 +66,17 @@ macro_rules! manifest {
 /// ```
 /// struct Quiet;
 ///
-/// impl enshwick::Mod for Quiet {
-///     fn manifest() -> &'static enshwick::abi::Manifest {
-///         enshwick::manifest!(id: "quiet", side: SERVER)
+/// impl enshwick_api::Mod for Quiet {
+///     fn manifest() -> &'static enshwick_api::abi::Manifest {
+///         enshwick_api::manifest!(id: "quiet", side: SERVER)
 ///     }
 ///
-///     fn init(_load: &mut enshwick::Load<'_>) -> Result<Self, enshwick::Off> {
+///     fn init(_load: &mut enshwick_api::Load<'_>) -> Result<Self, enshwick_api::Off> {
 ///         Ok(Self)
 ///     }
 /// }
 ///
-/// enshwick::declare_mod!(Quiet);
+/// enshwick_api::declare_mod!(Quiet);
 ///
 /// assert!(Quiet::instance().is_none());
 /// ```
@@ -140,7 +140,7 @@ macro_rules! declare_mod {
 /// # Examples
 ///
 /// ```
-/// enshwick::info!("{} altars merged", 3);
+/// enshwick_api::info!("{} altars merged", 3);
 /// ```
 #[macro_export]
 macro_rules! info {
@@ -152,7 +152,7 @@ macro_rules! info {
 /// # Examples
 ///
 /// ```
-/// enshwick::warn!("unexpected bed {}", 1210);
+/// enshwick_api::warn!("unexpected bed {}", 1210);
 /// ```
 #[macro_export]
 macro_rules! warn {
@@ -164,7 +164,7 @@ macro_rules! warn {
 /// # Examples
 ///
 /// ```
-/// enshwick::error!("solver failed: {}", "no zones");
+/// enshwick_api::error!("solver failed: {}", "no zones");
 /// ```
 #[macro_export]
 macro_rules! error {

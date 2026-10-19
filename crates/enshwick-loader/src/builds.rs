@@ -8,8 +8,8 @@
 //! Addresses specific to one mod, such as the call sites it tells apart, live
 //! in that mod's own rows.
 
-use api::abi::Side;
-use keen_reflect::Fingerprint;
+use enshwick_api::abi::Side;
+use enshwick_reflect::Fingerprint;
 
 /// One known game build.
 #[derive(Debug)]

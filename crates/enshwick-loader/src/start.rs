@@ -5,8 +5,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 
-use api::abi::{ABI_MAJOR, HostApi, Manifest, ModHandle, Side, Status, exports};
-use keen_reflect::{Image, Layout, Reflection};
+use enshwick_api::abi::{ABI_MAJOR, HostApi, Manifest, ModHandle, Side, Status, exports};
+use enshwick_reflect::{Image, Layout, Reflection};
 use windows_sys::Win32::Foundation::{FreeLibrary, HMODULE};
 use windows_sys::Win32::System::LibraryLoader::{
     GetModuleFileNameW, GetModuleHandleW, GetProcAddress, LOAD_WITH_ALTERED_SEARCH_PATH,
@@ -44,7 +44,7 @@ struct Library {
 struct Game {
     side: Side,
     base: u64,
-    fingerprint: keen_reflect::Fingerprint,
+    fingerprint: enshwick_reflect::Fingerprint,
     build: &'static builds::KnownBuild,
     reflection: Reflection<'static>,
 }
@@ -166,7 +166,7 @@ fn game() -> Option<Game> {
     for &(name, rva) in build.checks {
         let entry = reflection
             .system(name)
-            .map_or(0, keen_reflect::System::entry);
+            .map_or(0, enshwick_reflect::System::entry);
         if entry != base + rva {
             crate::log!(
                 ERROR,
@@ -399,7 +399,7 @@ fn exports_of(module: HMODULE, file: &str) -> Option<Library> {
         crate::log!(WARN, "{file} is not an Enshwick mod");
         return None;
     };
-    // SAFETY: each export has the signature `enshwick::abi::exports` documents.
+    // SAFETY: each export has the signature `enshwick_api::abi::exports` documents.
     let abi = unsafe { core::mem::transmute::<Export, AbiFn>(abi) };
     // SAFETY: as above.
     let query = unsafe { core::mem::transmute::<Export, QueryFn>(query) };

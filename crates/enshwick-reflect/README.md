@@ -1,11 +1,11 @@
-# keen-reflect
+# enshwick-reflect
 
 Reads the reflection data and ECS system records of Keen's Holistic engine from
 an Enshrouded server or client image, so the Enshwick loader finds types, fields
 and systems by name instead of by address.
 
 ```rust,no_run
-use keen_reflect::{Image, Layout, Reflection};
+use enshwick_reflect::{Image, Layout, Reflection};
 
 # fn main() -> Result<(), Box<dyn std::error::Error>> {
 let bytes = std::fs::read("enshrouded_server.exe")?;

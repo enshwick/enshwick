@@ -1,5 +1,5 @@
 [package]
-name = "keen-reflect"
+name = "enshwick-reflect"
 version = "0.1.0"
 description = "Reads the reflection data and ECS system records of Keen's Holistic engine from a PE image"
 keywords = ["enshrouded", "reflection", "pe", "modding"]
