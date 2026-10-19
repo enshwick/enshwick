@@ -1,6 +1,6 @@
 # Contributing
 
-Wick is a Rust workspace. You need Rust (`rust-toolchain.toml` installs the
+Enshwick is a Rust workspace. You need Rust (`rust-toolchain.toml` installs the
 pinned version through rustup), [Bun](https://bun.sh) for the repository tools,
 and on Windows the MSVC build tools.
 
