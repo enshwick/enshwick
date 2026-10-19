@@ -5,8 +5,9 @@
 /// `id` is `[a-z0-9-]+` and names the DLL and the settings file; `side` is
 /// `SERVER`, `CLIENT` or `BOTH`. Optional, in this order: `join = true` (the
 /// mod counts in the join check), `requires: ["id" => "range", ...]`,
-/// `after: ["id", ...]` and `builds: [{ side, guid, age, symbols: ["id" => rva] }]`,
-/// symbols the mod pins itself for those game builds. The version is the
+/// `after: ["id", ...]` and
+/// `builds: [{ side, guid, age, symbols: ["id" => rva], constants: ["id" => value] }]`,
+/// symbols and constants the mod pins itself for those game builds. The version is the
 /// crate's.
 ///
 /// # Examples
@@ -22,6 +23,7 @@
 ///         guid: "1c129660cd6efc4f9f0b21652d5ff2bf",
 ///         age: 387,
 ///         symbols: ["survivors.spawn_return" => 0x4_05cb],
+///         constants: ["survivors.bed_id" => 0x48],
 ///     }],
 /// );
 /// assert_eq!(manifest.dependency_count, 1);
@@ -39,7 +41,8 @@ macro_rules! manifest {
             side: $bside:ident,
             guid: $guid:literal,
             age: $age:literal,
-            symbols: [$($sym:literal => $rva:expr),* $(,)?] $(,)?
+            symbols: [$($sym:literal => $rva:expr),* $(,)?]
+            $(, constants: [$($constant:literal => $value:expr),* $(,)?])? $(,)?
         }),* $(,)?])?
         $(,)?
     ) => {{
@@ -63,6 +66,10 @@ macro_rules! manifest {
                 symbols: (&[$($crate::abi::Symbol { name: $crate::abi::Str::new($sym), rva: $rva }),*]
                     as &[$crate::abi::Symbol]).as_ptr(),
                 symbol_count: (&[$($crate::abi::Symbol { name: $crate::abi::Str::new($sym), rva: $rva }),*]
+                    as &[$crate::abi::Symbol]).len(),
+                constants: (&[$($($crate::abi::Symbol { name: $crate::abi::Str::new($constant), rva: $value }),*)?]
+                    as &[$crate::abi::Symbol]).as_ptr(),
+                constant_count: (&[$($($crate::abi::Symbol { name: $crate::abi::Str::new($constant), rva: $value }),*)?]
                     as &[$crate::abi::Symbol]).len(),
             },)*)?
         ];

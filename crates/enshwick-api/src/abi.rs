@@ -421,6 +421,8 @@ const fn digit(c: u8) -> u8 {
 ///     fingerprint: Fingerprint { guid: [0; 16], age: 0 },
 ///     symbols: SYMBOLS.as_ptr(),
 ///     symbol_count: SYMBOLS.len(),
+///     constants: core::ptr::null(),
+///     constant_count: 0,
 /// };
 /// assert_eq!(row.symbol_count, 1);
 /// ```
@@ -435,6 +437,11 @@ pub struct BuildRow {
     pub symbols: *const Symbol,
     /// How many symbols `symbols` points at.
     pub symbol_count: usize,
+    /// Engine constants the mod pins for the build, such as offsets in the
+    /// caller frames it reads; the `rva` field holds the value.
+    pub constants: *const Symbol,
+    /// How many constants `constants` points at.
+    pub constant_count: usize,
 }
 
 // SAFETY: a build row is immutable static data pointing at static symbols.

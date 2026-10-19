@@ -90,35 +90,47 @@ impl Loader {
         }
     }
 
-    fn resolve_symbol(&self, index: usize, name: &str) -> Option<u64> {
-        let manifest = self.mods.get(index)?.manifest;
-        let rows = if manifest
-            .header
-            .covers(core::mem::offset_of!(Manifest, build_count) + 8)
-            && !manifest.builds.is_null()
-        {
-            // SAFETY: the manifest points at `build_count` static rows.
-            unsafe { core::slice::from_raw_parts(manifest.builds, manifest.build_count) }
-        } else {
-            &[]
+    /// The mod's own build rows that match the running build.
+    fn own_rows(
+        &self,
+        index: usize,
+    ) -> impl Iterator<Item = &'static enshwick_api::abi::BuildRow> + '_ {
+        let manifest = self.mods.get(index).map(|record| record.manifest);
+        let rows: &'static [enshwick_api::abi::BuildRow] = match manifest {
+            Some(m)
+                if m.header
+                    .covers(core::mem::offset_of!(Manifest, build_count) + 8)
+                    && !m.builds.is_null() =>
+            {
+                // SAFETY: the manifest points at `build_count` static rows.
+                unsafe { core::slice::from_raw_parts(m.builds, m.build_count) }
+            }
+            _ => &[],
         };
-        let own = rows
-            .iter()
-            .filter(|row| {
-                row.side == self.side
-                    && row.fingerprint.guid == self.fingerprint.guid()
-                    && row.fingerprint.age == self.fingerprint.age()
-            })
-            .find_map(|row| {
-                // SAFETY: the row points at `symbol_count` static symbols.
-                let symbols = unsafe { core::slice::from_raw_parts(row.symbols, row.symbol_count) };
-                symbols.iter().find_map(|symbol| {
-                    // SAFETY: symbol names are static strings.
-                    (unsafe { symbol.name.as_str() } == Some(name)).then_some(symbol.rva)
-                })
-            });
+        rows.iter().filter(|row| {
+            row.side == self.side
+                && row.fingerprint.guid == self.fingerprint.guid()
+                && row.fingerprint.age == self.fingerprint.age()
+        })
+    }
+
+    fn resolve_symbol(&self, index: usize, name: &str) -> Option<u64> {
+        let own = self.own_rows(index).find_map(|row| {
+            // SAFETY: the row points at `symbol_count` static symbols.
+            let symbols = unsafe { slice(row.symbols, row.symbol_count) };
+            find(symbols, name)
+        });
         own.or_else(|| self.build.symbol(name))
             .map(|rva| self.base + rva)
+    }
+
+    fn resolve_constant(&self, index: usize, name: &str) -> Option<u64> {
+        let own = self.own_rows(index).find_map(|row| {
+            // SAFETY: the row points at `constant_count` static constants.
+            let constants = unsafe { slice(row.constants, row.constant_count) };
+            find(constants, name)
+        });
+        own.or_else(|| self.build.constant(name))
     }
 }
 
@@ -140,6 +152,26 @@ pub(crate) static API: HostApi = HostApi {
     service,
     constant,
 };
+
+/// A static slice from a pointer and a count, empty for a null pointer.
+///
+/// # Safety
+///
+/// A non-null `ptr` points at `count` static values.
+unsafe fn slice<T>(ptr: *const T, count: usize) -> &'static [T] {
+    if ptr.is_null() || count == 0 {
+        return &[];
+    }
+    // SAFETY: forwarded from the caller.
+    unsafe { core::slice::from_raw_parts(ptr, count) }
+}
+
+/// The value of the symbol named `name`.
+fn find(symbols: &[enshwick_api::abi::Symbol], name: &str) -> Option<u64> {
+    symbols
+        .iter()
+        .find_map(|symbol| (text(symbol.name) == Some(name)).then_some(symbol.rva))
+}
 
 /// Reads a borrowed string, or `None` when it is not UTF-8.
 fn text<'a>(value: Str) -> Option<&'a str> {
@@ -367,12 +399,11 @@ extern "system" fn constant(me: ModHandle, name: Str, out: *mut u64) -> Status {
     let (Some(loader), Some(name)) = (loader(), text(name)) else {
         return Status::BAD_ARGS;
     };
-    if loader.record(me).is_none() {
+    let Some((index, _)) = loader.record(me) else {
         return Status::BAD_ARGS;
-    }
+    };
     loader
-        .build
-        .constant(name)
+        .resolve_constant(index, name)
         .map_or(Status::MISSING, |value| put(out, value))
 }
 
