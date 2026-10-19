@@ -282,8 +282,13 @@ fn ready(loader: &Loader, order: &[&Library]) {
     );
 }
 
-fn read_frame() -> usize {
-    FRAME.get().copied().flatten().map_or(0, FrameSlot::read)
+fn read_frame() -> enshwick_api::abi::CallerFrame {
+    FRAME
+        .get()
+        .copied()
+        .flatten()
+        .map(FrameSlot::read)
+        .unwrap_or_default()
 }
 
 fn hex(bytes: &[u8]) -> String {
