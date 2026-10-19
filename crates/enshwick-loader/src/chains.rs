@@ -8,7 +8,7 @@
 
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use api::abi::{HookFlags, Status};
+use enshwick_api::abi::{HookFlags, Status};
 use rustc_hash::FxHashMap;
 
 /// One mod's link on a target.

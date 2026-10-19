@@ -8,7 +8,7 @@
 //! # Examples
 //!
 //! ```no_run
-//! use keen_reflect::{Image, Layout, Reflection};
+//! use enshwick_reflect::{Image, Layout, Reflection};
 //!
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
 //! let bytes = std::fs::read("enshrouded_server.exe")?;
@@ -33,7 +33,7 @@ pub use pe::{Fingerprint, Image, ImageError, Layout, Section};
 /// # Examples
 ///
 /// ```no_run
-/// use keen_reflect::{Image, Layout, Reflection};
+/// use enshwick_reflect::{Image, Layout, Reflection};
 ///
 /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// let bytes = std::fs::read("enshrouded_server.exe")?;
@@ -110,7 +110,7 @@ impl<'a> TypeInfo<'a> {
 /// # Examples
 ///
 /// ```no_run
-/// use keen_reflect::{Image, Layout, Reflection};
+/// use enshwick_reflect::{Image, Layout, Reflection};
 ///
 /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// let bytes = std::fs::read("enshrouded_server.exe")?;
@@ -167,7 +167,7 @@ impl<'a> Field<'a> {
 /// # Examples
 ///
 /// ```no_run
-/// use keen_reflect::{Image, Layout, Reflection};
+/// use enshwick_reflect::{Image, Layout, Reflection};
 ///
 /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// let bytes = std::fs::read("enshrouded_server.exe")?;
@@ -245,7 +245,7 @@ impl<'a> System<'a> {
 /// # Examples
 ///
 /// ```no_run
-/// use keen_reflect::{Image, Layout, LookupError, Reflection};
+/// use enshwick_reflect::{Image, Layout, LookupError, Reflection};
 ///
 /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// let bytes = std::fs::read("enshrouded_server.exe")?;
@@ -292,7 +292,7 @@ const MAX_LIST: u64 = 64;
 /// # Examples
 ///
 /// ```
-/// use keen_reflect::fnv1a32;
+/// use enshwick_reflect::fnv1a32;
 ///
 /// assert_eq!(fnv1a32(b""), 0x811c_9dc5);
 /// assert_eq!(fnv1a32(b"foobar"), 0xbf9c_f968);
@@ -407,7 +407,7 @@ impl<'a> Reflection<'a> {
     /// # Examples
     ///
     /// ```no_run
-    /// use keen_reflect::{Image, Layout, Reflection};
+    /// use enshwick_reflect::{Image, Layout, Reflection};
     ///
     /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// let bytes = std::fs::read("enshrouded_server.exe")?;

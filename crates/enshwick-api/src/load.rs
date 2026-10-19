@@ -12,7 +12,7 @@ use crate::host::Host;
 /// # Examples
 ///
 /// ```
-/// let off = enshwick::Off::new("this game build is not supported");
+/// let off = enshwick_api::Off::new("this game build is not supported");
 /// assert_eq!(off.to_string(), "this game build is not supported");
 /// ```
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
@@ -58,12 +58,12 @@ impl Off {
 /// ```
 /// struct Quiet;
 ///
-/// impl enshwick::Mod for Quiet {
-///     fn manifest() -> &'static enshwick::abi::Manifest {
-///         enshwick::manifest!(id: "quiet", side: SERVER)
+/// impl enshwick_api::Mod for Quiet {
+///     fn manifest() -> &'static enshwick_api::abi::Manifest {
+///         enshwick_api::manifest!(id: "quiet", side: SERVER)
 ///     }
 ///
-///     fn init(_load: &mut enshwick::Load<'_>) -> Result<Self, enshwick::Off> {
+///     fn init(_load: &mut enshwick_api::Load<'_>) -> Result<Self, enshwick_api::Off> {
 ///         Ok(Self)
 ///     }
 /// }
@@ -110,7 +110,7 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// fn init(load: &mut enshwick::Load<'_>) {
+    /// fn init(load: &mut enshwick_api::Load<'_>) {
     ///     let side = load.host().build().side;
     ///     let _ = side;
     /// }
@@ -134,7 +134,7 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    /// fn init(load: &mut enshwick_api::Load<'_>) -> Result<(), enshwick_api::Off> {
     ///     let lookup = load.symbol("npc.lookup")?;
     ///     assert_ne!(lookup, 0);
     ///     Ok(())
@@ -156,7 +156,7 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    /// fn init(load: &mut enshwick_api::Load<'_>) -> Result<(), enshwick_api::Off> {
     ///     let system = load.system("add_buildzones_server")?;
     ///     assert_ne!(system, 0);
     ///     Ok(())
@@ -177,7 +177,7 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    /// fn init(load: &mut enshwick_api::Load<'_>) -> Result<(), enshwick_api::Off> {
     ///     let x = load.field_offset("keen::ecs::TriggerShape", "rangeX")?;
     ///     assert_eq!(x, 4);
     ///     Ok(())
@@ -198,7 +198,7 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    /// fn init(load: &mut enshwick_api::Load<'_>) -> Result<(), enshwick_api::Off> {
     ///     let size = load.type_size("keen::ecs::TriggerShape")?;
     ///     assert!(size >= 16);
     ///     Ok(())
@@ -220,16 +220,16 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// enshwick::detour! {
+    /// enshwick_api::detour! {
     ///     static UPGRADE: unsafe extern "system" fn(ctx: *mut u64) = upgrade;
     /// }
     ///
-    /// fn upgrade(next: enshwick::Next<unsafe extern "system" fn(*mut u64)>, ctx: *mut u64) {
+    /// fn upgrade(next: enshwick_api::Next<unsafe extern "system" fn(*mut u64)>, ctx: *mut u64) {
     ///     // SAFETY: the original takes the same context.
     ///     unsafe { next.get()(ctx) }
     /// }
     ///
-    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    /// fn init(load: &mut enshwick_api::Load<'_>) -> Result<(), enshwick_api::Off> {
     ///     let target = load.system("upgrade_building_range")?;
     ///     load.hook(&UPGRADE, target)
     /// }
@@ -260,7 +260,7 @@ impl Load<'_> {
     ///
     /// const DEFAULTS: &str = "# Altars per Flame level.\naltars_per_flame_level = [2, 4, 8]\n";
     ///
-    /// fn init(load: &mut enshwick::Load<'_>) -> Result<Settings, enshwick::Off> {
+    /// fn init(load: &mut enshwick_api::Load<'_>) -> Result<Settings, enshwick_api::Off> {
     ///     load.settings(DEFAULTS)
     /// }
     /// ```
@@ -297,7 +297,7 @@ impl Load<'_> {
     ///
     /// static ZONES: Zones = Zones { count };
     ///
-    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    /// fn init(load: &mut enshwick_api::Load<'_>) -> Result<(), enshwick_api::Off> {
     ///     load.publish("flame-altar-zones.zones", 1, &ZONES)
     /// }
     /// ```
@@ -336,7 +336,7 @@ impl Load<'_> {
     ///     count: extern "system" fn() -> u32,
     /// }
     ///
-    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    /// fn init(load: &mut enshwick_api::Load<'_>) -> Result<(), enshwick_api::Off> {
     ///     // SAFETY: `Zones` is the table `flame-altar-zones` publishes as v1.
     ///     let zones: &'static Zones = unsafe { load.service("flame-altar-zones.zones", 1)? };
     ///     let _ = (zones.count)();

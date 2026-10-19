@@ -10,7 +10,7 @@ use std::sync::OnceLock;
 use std::sync::mpsc::{Sender, channel};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use api::abi::Level;
+use enshwick_api::abi::Level;
 
 static LINES: OnceLock<Sender<String>> = OnceLock::new();
 
@@ -72,7 +72,7 @@ fn format_line(millis: u64, level: Level, source: &str, message: &str) -> String
 #[macro_export]
 macro_rules! log {
     ($level:ident, $($arg:tt)+) => {
-        $crate::log::write(::api::abi::Level::$level, "enshwick", &::std::format!($($arg)+))
+        $crate::log::write(::enshwick_api::abi::Level::$level, "enshwick", &::std::format!($($arg)+))
     };
 }
 
