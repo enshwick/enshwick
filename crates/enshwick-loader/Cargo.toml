@@ -14,6 +14,8 @@ publish.workspace = true
 [lib]
 name = "enshwick"
 crate-type = ["cdylib", "rlib"]
+# The loader is no library for users, and its name is the API crate's.
+doc = false
 
 [dependencies]
 api = { package = "enshwick", path = "../enshwick", version = "0.1.0" }

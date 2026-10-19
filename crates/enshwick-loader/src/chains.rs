@@ -156,8 +156,11 @@ impl Chains {
 mod tests {
     use super::*;
 
+    static SLOTS: [AtomicUsize; 32] = [const { AtomicUsize::new(0) }; 32];
+    static NEXT_SLOT: AtomicUsize = AtomicUsize::new(0);
+
     fn slot() -> &'static AtomicUsize {
-        Box::leak(Box::new(AtomicUsize::new(0)))
+        &SLOTS[NEXT_SLOT.fetch_add(1, Ordering::Relaxed)]
     }
 
     fn link(owner: usize, detour: usize, priority: i32, flags: HookFlags) -> Link {
