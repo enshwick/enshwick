@@ -60,5 +60,10 @@
       "hidden": true
     }
   ],
-  "packages": {}
+  "packages": {
+    "crates/enshwick": {
+      "package-name": "enshwick",
+      "component": "enshwick"
+    }
+  }
 }
