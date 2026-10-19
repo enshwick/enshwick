@@ -2,7 +2,9 @@
 
 use std::sync::OnceLock;
 
-use crate::abi::{BuildInfo, Fingerprint, Header, HostApi, Level, ModHandle, Side, Str};
+use crate::abi::{
+    BuildInfo, CallerFrame, Fingerprint, Header, HostApi, Level, ModHandle, Side, Str,
+};
 
 static HOST: OnceLock<Host> = OnceLock::new();
 
@@ -130,8 +132,8 @@ impl Host {
         (self.api.fault)(self.me, Str::new(reason));
     }
 
-    /// The game caller's stack pointer at entry of the running hook chain, for
-    /// hooks declared with `caller_frame`.
+    /// The game caller's context at entry of the running hook chain, for hooks
+    /// declared with [`HookFlags::CALLER_FRAME`](crate::abi::HookFlags).
     ///
     /// Valid until the hook calls anything hooked.
     ///
@@ -140,11 +142,13 @@ impl Host {
     /// ```
     /// if let Some(host) = enshwick_api::host() {
     ///     let frame = host.caller_frame();
-    ///     let _ = frame;
+    ///     let _ = frame.stack();
     /// }
     /// ```
     #[must_use]
-    pub fn caller_frame(&self) -> usize {
-        (self.api.caller_frame)()
+    pub fn caller_frame(&self) -> CallerFrame {
+        let mut frame = CallerFrame::default();
+        (self.api.caller_frame)(&raw mut frame);
+        frame
     }
 }

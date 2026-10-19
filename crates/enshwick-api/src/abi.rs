@@ -367,6 +367,46 @@ pub struct Symbol {
     pub rva: u64,
 }
 
+/// A build fingerprint's GUID from its 32 lowercase hex digits, for build rows
+/// written in source.
+///
+/// # Panics
+///
+/// When `hex` is not 32 lowercase hex digits; in a `const` or `static` that
+/// fails the build.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_api::abi::guid;
+///
+/// assert_eq!(guid("1c129660cd6efc4f9f0b21652d5ff2bf")[0], 0x1c);
+/// ```
+#[must_use]
+pub const fn guid(hex: &str) -> [u8; 16] {
+    let bytes = hex.as_bytes();
+    assert!(bytes.len() == 32, "a GUID is 32 hex digits");
+    let mut out = [0u8; 16];
+    let mut i = 0;
+    while i < 16 {
+        out[i] = (digit(bytes[2 * i]) << 4) | digit(bytes[2 * i + 1]);
+        i += 1;
+    }
+    out
+}
+
+#[expect(
+    clippy::panic,
+    reason = "used in const evaluation, where a bad literal fails the build"
+)]
+const fn digit(c: u8) -> u8 {
+    match c {
+        b'0'..=b'9' => c - b'0',
+        b'a'..=b'f' => c - b'a' + 10,
+        _ => panic!("a GUID is lowercase hex"),
+    }
+}
+
 /// The symbols a mod pins itself for one game build, beside the loader's own
 /// table.
 ///
@@ -381,6 +421,8 @@ pub struct Symbol {
 ///     fingerprint: Fingerprint { guid: [0; 16], age: 0 },
 ///     symbols: SYMBOLS.as_ptr(),
 ///     symbol_count: SYMBOLS.len(),
+///     constants: core::ptr::null(),
+///     constant_count: 0,
 /// };
 /// assert_eq!(row.symbol_count, 1);
 /// ```
@@ -395,7 +437,15 @@ pub struct BuildRow {
     pub symbols: *const Symbol,
     /// How many symbols `symbols` points at.
     pub symbol_count: usize,
+    /// Engine constants the mod pins for the build, such as offsets in the
+    /// caller frames it reads; the `rva` field holds the value.
+    pub constants: *const Symbol,
+    /// How many constants `constants` points at.
+    pub constant_count: usize,
 }
+
+// SAFETY: a build row is immutable static data pointing at static symbols.
+unsafe impl Sync for BuildRow {}
 
 /// How a mod relates to another mod it names.
 ///
@@ -596,6 +646,75 @@ pub struct HookSpec {
     pub flags: HookFlags,
 }
 
+/// The game caller's context at entry of a hook chain: its stack pointer and
+/// callee-saved registers, for links that tell callers apart.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_api::abi::CallerFrame;
+///
+/// let frame = CallerFrame { rsp: 0x1000, ..CallerFrame::default() };
+/// assert_eq!(frame.stack(), 0x1008);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct CallerFrame {
+    /// The stack pointer at entry; it points at the return address.
+    pub rsp: u64,
+    /// `rbx` at entry.
+    pub rbx: u64,
+    /// `rbp` at entry.
+    pub rbp: u64,
+    /// `rdi` at entry.
+    pub rdi: u64,
+    /// `rsi` at entry.
+    pub rsi: u64,
+    /// `r12` at entry.
+    pub r12: u64,
+    /// `r13` at entry.
+    pub r13: u64,
+    /// `r14` at entry.
+    pub r14: u64,
+    /// `r15` at entry.
+    pub r15: u64,
+}
+
+impl CallerFrame {
+    /// The caller's stack above the return address, where it keeps its locals.
+    ///
+    /// # Examples
+    ///
+    /// See [`CallerFrame`].
+    #[must_use]
+    pub const fn stack(&self) -> u64 {
+        self.rsp + 8
+    }
+
+    /// The address the hooked function returns to, which names its caller.
+    ///
+    /// # Safety
+    ///
+    /// The frame was taken in the running chain, so `rsp` points at a live
+    /// return address.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_api::abi::CallerFrame;
+    ///
+    /// let stack = [0x1_4004_05cb_u64, 0];
+    /// let frame = CallerFrame { rsp: stack.as_ptr() as u64, ..CallerFrame::default() };
+    /// // SAFETY: `rsp` points at a readable `u64`.
+    /// assert_eq!(unsafe { frame.return_address() }, 0x1_4004_05cb);
+    /// ```
+    #[must_use]
+    pub unsafe fn return_address(&self) -> u64 {
+        // SAFETY: the caller guarantees `rsp` points at the return address.
+        unsafe { (self.rsp as *const u64).read_unaligned() }
+    }
+}
+
 /// An opaque handle the loader gives each mod; every call names its caller
 /// with it.
 ///
@@ -643,10 +762,10 @@ pub struct HostApi {
     pub type_size: extern "system" fn(type_name: Str, out: *mut u32) -> Status,
     /// Links a detour; allowed during `enshwick_mod_init` only.
     pub hook: extern "system" fn(me: ModHandle, spec: *const HookSpec) -> Status,
-    /// The game caller's stack pointer at entry of the current chain, for links
-    /// with [`HookFlags::CALLER_FRAME`]; valid until the link calls anything
-    /// hooked.
-    pub caller_frame: extern "system" fn() -> usize,
+    /// Writes the game caller's context at entry of the current chain, for
+    /// links with [`HookFlags::CALLER_FRAME`]; valid until the link calls
+    /// anything hooked.
+    pub caller_frame: extern "system" fn(out: *mut CallerFrame),
     /// Reports that the mod failed at run time; the loader unlinks every link
     /// of the mod and turns it off.
     pub fault: extern "system" fn(me: ModHandle, reason: Str),
