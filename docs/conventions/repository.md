@@ -114,9 +114,11 @@ request; nothing is pushed to `develop` or `master` directly.
   so it is a conventional commit, `<type>(<scope>): <subject>`, checked by CI;
   its description says what changes and how it was tested. One pull request is
   one coherent change.
-- A release is a pull request from `develop` into `master`, rebase-merged, so
-  each conventional commit reaches release-please. After a release, `master` is
-  merged back into `develop` by pull request.
+- A release is a pull request from `develop` into `master`, merged with a merge
+  commit, as git flow does, so each conventional commit reaches release-please
+  and the merge is signed. `master` alone allows merge commits; `develop` stays
+  linear. After a release, `master` is merged back into `develop` by pull
+  request.
 - Commits on a branch follow the same form, checked by the `commit-msg` hook:
   the type is one of `feat`, `fix`, `perf`, `refactor`, `docs`, `test`, `build`,
   `ci`, `chore` or `revert`, the scope is the crate or mod id, or an area such
