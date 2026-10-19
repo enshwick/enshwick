@@ -1,0 +1,10 @@
+[files]
+extend-exclude = ["CHANGELOG.md", "*.lock", "bun.lock"]
+
+[default.extend-words]
+# Engine and game names.
+Keen = "Keen"
+# Unreal Engine, as in UE4SS.
+UE = "UE"
+# Structured exception handling on Windows.
+SEH = "SEH"

@@ -1,0 +1,48 @@
+pre-commit:
+  parallel: true
+  commands:
+    rustfmt:
+      glob:
+        - '*.rs'
+        - '**/*.rs'
+      run: cargo fmt --all --check
+    markdown:
+      glob: '*.md'
+      exclude:
+        - '**/CHANGELOG.md'
+      run: bunx markdownlint-cli2 --no-globs {staged_files}
+    typos:
+      run: typos --force-exclude {staged_files}
+    attribution:
+      run: bun tools/check-attribution.ts {staged_files}
+
+commit-msg:
+  commands:
+    conventional:
+      run: bun tools/check-commit-message.ts {1}
+
+pre-push:
+  parallel: false
+  commands:
+    clippy:
+      glob:
+        - '*.rs'
+        - '**/*.rs'
+        - 'Cargo.toml'
+        - '**/Cargo.toml'
+        - 'Cargo.lock'
+      run: cargo clippy --workspace --all-targets -- -D warnings
+    test:
+      glob:
+        - '*.rs'
+        - '**/*.rs'
+        - 'Cargo.toml'
+        - '**/Cargo.toml'
+        - 'Cargo.lock'
+      run: cargo test --workspace
+    deny:
+      glob:
+        - 'Cargo.toml'
+        - '**/Cargo.toml'
+        - 'Cargo.lock'
+      run: cargo deny check

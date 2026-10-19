@@ -1,0 +1,19 @@
+# Local reverse-engineering material: the game's binaries, Ghidra projects,
+# decompiled code and data dumps. Keen's code and data never enter the repository.
+/research/
+
+# Build output
+/target/
+
+# Rebuilt from manifests and lockfiles
+node_modules/
+
+# Local settings and scratch
+.cache/
+.idea/
+.vscode/
+.DS_Store
+
+# Secrets
+.env
+.env.*
