@@ -1,0 +1,26 @@
+[package]
+name = "enshwick-survivors-per-altar"
+version = "0.1.0"
+description = "A copy of each survivor at every Flame Altar, each with the bed of its own altar"
+keywords = ["enshrouded", "mod", "survivors", "altar"]
+categories = ["game-development"]
+readme = "README.md"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+enshwick-api.workspace = true
+enshwick-geometry.workspace = true
+serde.workspace = true
+
+[dev-dependencies]
+toml.workspace = true
+
+[lints]
+workspace = true
