@@ -1,3 +1,6 @@
 {
-  "crates/enshwick": "0.1.0"
+  "crates/enshwick": "0.1.0",
+  "crates/enshwick-loader": "0.1.0",
+  "crates/enshwick-stub": "0.1.0",
+  "mods/flame-altar-count": "0.1.0"
 }

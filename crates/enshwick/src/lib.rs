@@ -67,23 +67,6 @@ pub mod __private {
     use crate::{Host, Load, Mod};
 
     #[must_use]
-    pub const fn valid_id(id: &str) -> bool {
-        let bytes = id.as_bytes();
-        if bytes.is_empty() || bytes.len() > 64 {
-            return false;
-        }
-        let mut i = 0;
-        while i < bytes.len() {
-            let b = bytes[i];
-            if !(b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-') {
-                return false;
-            }
-            i += 1;
-        }
-        true
-    }
-
-    #[must_use]
     pub const fn join_flag(join: &[bool]) -> ManifestFlags {
         match join {
             [true] => ManifestFlags::JOIN,
