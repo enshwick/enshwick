@@ -108,6 +108,16 @@ pub static BUILDS: &[KnownBuild] = &[
             ("ecs.context_row", 8),
             ("ecs.descriptor_entity_records", 0x828),
             ("ecs.entity_record_size", 0x10),
+            ("ecs.level_data_offset", 4),
+            ("ecs.level_flags", 6),
+            ("ecs.attribute_slot", 0xc),
+            ("altar.level_attribute", 0x724b_f568),
+            ("building.zone_list_entries", 0x10),
+            ("building.zone_list_count", 0x18),
+            ("building.zone_entry_size", 0x48),
+            ("building.zone_entry_shape", 0x44),
+            ("building.zone_entry_ignored", 0x46),
+            ("building.corner_size", 0x18),
         ],
     },
     KnownBuild {
@@ -127,7 +137,14 @@ pub static BUILDS: &[KnownBuild] = &[
             ("net.server_change", 0x107_d200),
             ("npc.lookup_cursor", 0x46_9860),
         ],
-        constants: &[],
+        constants: &[
+            ("building.zone_list_entries", 0x10),
+            ("building.zone_list_count", 0x18),
+            ("building.zone_entry_size", 0x48),
+            ("building.zone_entry_shape", 0x44),
+            ("building.zone_entry_ignored", 0x46),
+            ("building.corner_size", 0x18),
+        ],
     },
 ];
 
