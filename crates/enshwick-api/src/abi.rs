@@ -110,6 +110,99 @@ impl Header {
     }
 }
 
+/// Copies a struct that starts with a [`Header`] from the other side, which
+/// may know an older or a newer version of it.
+///
+/// Reads only the bytes the writer's header covers; the fields it does not
+/// know stay zero. `None` when `raw` is null or the writer's struct ends
+/// before byte `required`, the end of the fields every version has. The copy
+/// keeps the writer's header, so check [`Header::covers`] before trusting a
+/// field newer than `required` that zero does not default well.
+///
+/// # Safety
+///
+/// `raw` is null or points at a struct that starts with a [`Header`] and is
+/// readable for the header's size; `T` is `repr(C)`, starts with a
+/// [`Header`], and an all-zero `T` is a valid value.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_api::abi::{Header, TickData, read_headed};
+///
+/// let mut old = TickData { header: Header::of::<TickData>(), step: 7 };
+/// old.header.size = 8;
+/// // SAFETY: a valid tick; an all-zero tick is valid.
+/// let tick = unsafe { read_headed(&raw const old, 8) }.unwrap();
+/// assert_eq!(tick.step, 0);
+/// ```
+#[must_use]
+pub unsafe fn read_headed<T: Copy>(raw: *const T, required: usize) -> Option<T> {
+    if raw.is_null() {
+        return None;
+    }
+    // SAFETY: the caller's struct starts with a header.
+    let header = unsafe { raw.cast::<Header>().read_unaligned() };
+    if !header.covers(required.max(size_of::<Header>())) {
+        return None;
+    }
+    let known = (header.size as usize).min(size_of::<T>());
+    let mut out = core::mem::MaybeUninit::<T>::zeroed();
+    // SAFETY: the writer's struct is readable for its header's size and `out`
+    // for `size_of::<T>()`; `known` is at most both.
+    unsafe { core::ptr::copy_nonoverlapping(raw.cast::<u8>(), out.as_mut_ptr().cast(), known) };
+    // SAFETY: an all-zero `T` is valid and the copied bytes are a `T`'s.
+    Some(unsafe { out.assume_init() })
+}
+
+/// Writes `value`, a struct that starts with a [`Header`], to the other side,
+/// which may know an older or a newer version of it.
+///
+/// Writes only the bytes both sides know, and in the written header the
+/// size of what it wrote. `false`, writing nothing, when `out` is null or its
+/// header is shorter than a [`Header`].
+///
+/// # Safety
+///
+/// `out` is null or points at a struct that starts with a [`Header`] whose
+/// size is that of the struct, writable for that many bytes; `T` is
+/// `repr(C)` and starts with a [`Header`].
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_api::abi::{Header, TickData, write_headed};
+///
+/// let mut old = TickData { header: Header::of::<TickData>(), step: 0 };
+/// old.header.size = 8;
+/// let new = TickData { header: Header::of::<TickData>(), step: 7 };
+/// // SAFETY: a valid tick of the size its header says.
+/// assert!(unsafe { write_headed(&raw mut old, new) });
+/// assert_eq!((old.header.size, old.step), (8, 0));
+/// ```
+#[must_use]
+pub unsafe fn write_headed<T: Copy>(out: *mut T, value: T) -> bool {
+    if out.is_null() {
+        return false;
+    }
+    // SAFETY: the caller's struct starts with a header.
+    let room = unsafe { out.cast::<Header>().read_unaligned() }.size as usize;
+    if room < size_of::<Header>() {
+        return false;
+    }
+    let known = room.min(size_of::<T>());
+    // SAFETY: the caller's struct is writable for `room` bytes and `value`
+    // readable for `size_of::<T>()`; `known` is at most both.
+    unsafe {
+        core::ptr::copy_nonoverlapping((&raw const value).cast::<u8>(), out.cast(), known);
+    };
+    // `known` is at most `room`, a `u32`.
+    let size = u32::try_from(known).unwrap_or(u32::MAX);
+    // SAFETY: the header's size is the struct's first field.
+    unsafe { out.cast::<u32>().write_unaligned(size) };
+    true
+}
+
 /// A UTF-8 string borrowed for the duration of a call, or for as long as its
 /// owner documents.
 ///
@@ -1617,7 +1710,8 @@ pub struct HostApi {
     pub header: Header,
     /// The loader's own version.
     pub host_version: Str,
-    /// Writes the running game's identity.
+    /// Writes the running game's identity, as far as the [`Header`] `out`
+    /// starts with says the caller's struct reaches.
     pub build: extern "system" fn(out: *mut BuildInfo),
     /// Resolves a symbolic id for the running build: the mod's own rows first,
     /// then the loader's table.
@@ -1808,9 +1902,10 @@ pub struct HostApi {
     /// lacks a piece of them. Requests run in the game server: the dedicated
     /// server, or the client while it hosts. Since minor 12.
     pub inventory_open: extern "system" fn(me: ModHandle) -> Status,
-    /// Writes the static data of the item `item`; [`Status::MISSING`] for an
-    /// unknown item, or before the game first ran its inventories. Any
-    /// thread. Since minor 12.
+    /// Writes the static data of the item `item`, as far as the [`Header`]
+    /// `out` starts with says the caller's struct reaches;
+    /// [`Status::MISSING`] for an unknown item, or before the game first ran
+    /// its inventories. Any thread. Since minor 12.
     pub item_info: extern "system" fn(me: ModHandle, item: u32, out: *mut ItemData) -> Status,
     /// Queues `request`, from any thread, for the game's inventory system,
     /// which runs it as one transaction: all or nothing. `done` gets the

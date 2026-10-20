@@ -12,7 +12,7 @@
 use core::ffi::c_void;
 use std::cell::RefCell;
 
-use crate::abi::{CommandCall, HostApi, RenameCall, Status, Str};
+use crate::abi::{CommandCall, HostApi, RenameCall, Status, Str, read_headed};
 use crate::ecs::Entity;
 use crate::world::Player;
 use crate::{Load, Off};
@@ -259,8 +259,10 @@ unsafe extern "system" fn run_command<F>(call: *const CommandCall, user: *mut c_
 where
     F: Fn(&CommandContext, &[&str]) -> Reply,
 {
-    // SAFETY: the loader passes a valid call for the duration of this one.
-    let Some(call) = (unsafe { call.as_ref() }) else {
+    // SAFETY: the loader passes a valid call for the duration of this one; an
+    // all-zero call is valid. Every field is there since the minor that added
+    // commands.
+    let Some(call) = (unsafe { read_headed(call, size_of::<CommandCall>()) }) else {
         return;
     };
     // SAFETY: `user` is the leaked `F` this function was registered with.
@@ -292,8 +294,10 @@ unsafe extern "system" fn run_filter<F>(call: *const RenameCall, user: *mut c_vo
 where
     F: Fn(&Rename) -> bool,
 {
-    // SAFETY: the loader passes a valid call for the duration of this one.
-    let Some(call) = (unsafe { call.as_ref() }) else {
+    // SAFETY: the loader passes a valid call for the duration of this one; an
+    // all-zero call is valid. Every field is there since the minor that added
+    // rename filters.
+    let Some(call) = (unsafe { read_headed(call, size_of::<RenameCall>()) }) else {
         return 1;
     };
     // SAFETY: `user` is the leaked `F` this function was registered with.

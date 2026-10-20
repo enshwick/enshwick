@@ -678,7 +678,13 @@ fn exports_of(module: HMODULE, file: &str) -> Option<Library> {
         return None;
     }
     // SAFETY: the manifest is static data inside the DLL, which stays loaded.
-    let manifest = unsafe { query().as_ref::<'static>() }?;
+    let manifest = match unsafe { crate::manifest::read(query()) } {
+        Ok(manifest) => manifest,
+        Err(reason) => {
+            crate::log!(WARN, "{file} skipped: {reason}");
+            return None;
+        }
+    };
     Some(Library {
         file: file.to_owned(),
         range: crate::crash::range_of(module),

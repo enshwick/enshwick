@@ -1,11 +1,35 @@
 //! Reading a mod's manifest into a resolver candidate.
 
 use enshwick_api::abi::{
-    ABI_MAJOR, Dependency, Manifest, Relation, Side, UpdateKind, UpdateSource,
+    ABI_MAJOR, Dependency, Manifest, Relation, Side, UpdateKind, UpdateSource, read_headed,
 };
 use semver::{Version, VersionReq};
 
 use crate::resolve::{self, Candidate};
+
+/// Where the fields every manifest has end: an older minor lacks `builds`
+/// and `updates`, which default to none.
+const REQUIRED: usize = core::mem::offset_of!(Manifest, builds);
+
+/// Copies the manifest a mod's `enshwick_mod_query` returned, for the
+/// process; the fields of a newer minor than the mod's stay empty.
+///
+/// # Safety
+///
+/// `raw` is null or points at the mod's manifest, readable for the size its
+/// header says.
+///
+/// # Errors
+///
+/// A reason for the log when `raw` is null or shorter than every manifest.
+pub unsafe fn read(raw: *const Manifest) -> Result<&'static Manifest, String> {
+    if raw.is_null() {
+        return Err("the manifest is missing".into());
+    }
+    // SAFETY: forwarded from the caller; an all-zero manifest is valid.
+    let manifest = unsafe { read_headed(raw, REQUIRED) }.ok_or("the manifest is truncated")?;
+    Ok(Box::leak(Box::new(manifest)))
+}
 
 /// Validates `manifest` and turns it into a candidate.
 ///
@@ -23,7 +47,7 @@ pub unsafe fn parse(manifest: &Manifest) -> Result<Candidate, String> {
             manifest.header.abi_major
         ));
     }
-    if !manifest.header.covers(size_of::<Manifest>()) {
+    if !manifest.header.covers(REQUIRED) {
         return Err("the manifest is truncated".into());
     }
     // SAFETY: the caller keeps the manifest's strings alive for the call.
@@ -76,11 +100,11 @@ pub unsafe fn updates(manifest: &Manifest) -> Result<UpdateSource, String> {
     if !manifest.header.covers(end) || manifest.updates.is_null() {
         return Ok(UpdateSource::NONE);
     }
-    // SAFETY: the caller keeps the manifest's pointers valid for the call.
-    let source = unsafe { &*manifest.updates };
-    if source.header.abi_major != ABI_MAJOR || !source.header.covers(size_of::<UpdateSource>()) {
-        return Err("the update source is from another ABI".into());
-    }
+    // SAFETY: the caller keeps the manifest's pointers valid for the call; an
+    // all-zero source is valid. Every field of a source is there since minor 5.
+    let source = unsafe { read_headed(manifest.updates, size_of::<UpdateSource>()) }
+        .filter(|source| source.header.abi_major == ABI_MAJOR)
+        .ok_or("the update source is from another ABI")?;
     // SAFETY: as above, for the source's strings.
     let location = unsafe { source.location.as_str() }.ok_or("the update location is not UTF-8")?;
     // SAFETY: as above.
@@ -97,7 +121,7 @@ pub unsafe fn updates(manifest: &Manifest) -> Result<UpdateSource, String> {
         UpdateKind::URL if !location.starts_with("https://") || location.len() <= 8 => {
             Err(format!("the update URL {location:?} is not https://"))
         }
-        UpdateKind::GITHUB | UpdateKind::URL => Ok(*source),
+        UpdateKind::GITHUB | UpdateKind::URL => Ok(source),
         kind => Err(format!("unknown update source kind {}", kind.0)),
     }
 }
@@ -213,6 +237,116 @@ mod tests {
         // SAFETY: static data.
         let source = unsafe { updates(&old) }.unwrap();
         assert_eq!(source.kind, UpdateKind::NONE);
+    }
+
+    /// A manifest of minor 4: no update source yet.
+    #[repr(C)]
+    struct Minor4 {
+        header: Header,
+        id: Str,
+        version: Str,
+        side: Side,
+        flags: ManifestFlags,
+        dependencies: *const Dependency,
+        dependency_count: usize,
+        builds: *const enshwick_api::abi::BuildRow,
+        build_count: usize,
+    }
+
+    /// A manifest with only the fields every minor has.
+    #[repr(C)]
+    struct Oldest {
+        header: Header,
+        id: Str,
+        version: Str,
+        side: Side,
+        flags: ManifestFlags,
+        dependencies: *const Dependency,
+        dependency_count: usize,
+    }
+
+    fn header_of<T>() -> Header {
+        Header {
+            size: u32::try_from(size_of::<T>()).unwrap(),
+            abi_minor: 4,
+            ..Header::of::<Manifest>()
+        }
+    }
+
+    #[test]
+    fn a_manifest_of_an_older_minor_loads_with_defaults() {
+        let old = Minor4 {
+            header: header_of::<Minor4>(),
+            id: Str::new("safes"),
+            version: Str::new("0.1.0"),
+            side: Side::BOTH,
+            flags: ManifestFlags::JOIN,
+            dependencies: DEPENDENCIES.as_ptr(),
+            dependency_count: DEPENDENCIES.len(),
+            builds: core::ptr::null(),
+            build_count: 0,
+        };
+        // SAFETY: a valid manifest as long as its header says.
+        let manifest = unsafe { read((&raw const old).cast()) }.unwrap();
+        assert!(manifest.updates.is_null());
+        // SAFETY: static data.
+        let candidate = unsafe { parse(manifest) }.unwrap();
+        assert_eq!(candidate.id, "safes");
+        assert_eq!(candidate.dependencies.len(), 1);
+        // SAFETY: static data.
+        assert_eq!(unsafe { updates(manifest) }.unwrap().kind, UpdateKind::NONE);
+    }
+
+    #[test]
+    fn a_manifest_without_builds_loads_with_none() {
+        let old = Oldest {
+            header: header_of::<Oldest>(),
+            id: Str::new("safes"),
+            version: Str::new("0.1.0"),
+            side: Side::SERVER,
+            flags: ManifestFlags::NONE,
+            dependencies: core::ptr::null(),
+            dependency_count: 0,
+        };
+        // SAFETY: a valid manifest as long as its header says.
+        let manifest = unsafe { read((&raw const old).cast()) }.unwrap();
+        assert!(manifest.builds.is_null());
+        assert_eq!(manifest.build_count, 0);
+        // SAFETY: static data.
+        let candidate = unsafe { parse(manifest) }.unwrap();
+        assert_eq!(candidate.side, Side::SERVER);
+        assert!(candidate.dependencies.is_empty());
+    }
+
+    #[test]
+    fn a_manifest_shorter_than_every_minor_is_refused() {
+        let mut short = manifest("safes", "0.1.0");
+        short.header.size =
+            u32::try_from(core::mem::offset_of!(Manifest, dependency_count)).unwrap();
+        // SAFETY: a valid manifest.
+        let reason = unsafe { read(&raw const short) }.unwrap_err();
+        assert!(reason.contains("truncated"), "{reason}");
+        // SAFETY: null is refused.
+        assert!(unsafe { read(core::ptr::null()) }.is_err());
+    }
+
+    #[test]
+    fn a_manifest_of_a_newer_minor_loads() {
+        #[repr(C)]
+        struct Newer {
+            manifest: Manifest,
+            appended: u64,
+        }
+        let mut newer = Newer {
+            manifest: manifest("safes", "0.1.0"),
+            appended: 1,
+        };
+        newer.manifest.header.size = u32::try_from(size_of::<Newer>()).unwrap();
+        // SAFETY: a valid manifest as long as its header says.
+        let manifest = unsafe { read((&raw const newer).cast()) }.unwrap();
+        // SAFETY: static data.
+        assert_eq!(unsafe { parse(manifest) }.unwrap().id, "safes");
+        assert_eq!(newer.appended, 1);
     }
 
     #[test]

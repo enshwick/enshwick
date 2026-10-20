@@ -443,6 +443,18 @@ fn find(symbols: &[enshwick_api::abi::Symbol], name: &str) -> Option<u64> {
         .find_map(|symbol| (text(symbol.name) == Some(name)).then_some(symbol.rva))
 }
 
+/// Writes `value`, a struct that starts with a [`Header`], through `out`, as
+/// far as the mod's header says its struct reaches.
+fn put_headed<T: Copy>(out: *mut T, value: T) -> Status {
+    // SAFETY: a non-null out pointer from a mod points at its own version of
+    // the struct, its header saying how far it reaches.
+    if unsafe { enshwick_api::abi::write_headed(out, value) } {
+        Status::OK
+    } else {
+        Status::BAD_ARGS
+    }
+}
+
 /// Reads a borrowed string, or `None` when it is not UTF-8.
 fn text<'a>(value: Str) -> Option<&'a str> {
     // SAFETY: every `Str` a mod passes is borrowed for the call, which outlives
@@ -464,7 +476,7 @@ extern "system" fn build(out: *mut BuildInfo) {
     let Some(loader) = loader() else {
         return;
     };
-    let _written = put(
+    let _written = put_headed(
         out,
         BuildInfo {
             header: Header::of::<BuildInfo>(),
@@ -941,7 +953,7 @@ extern "system" fn inventory_open(me: ModHandle) -> Status {
 
 extern "system" fn item_info(me: ModHandle, item: u32, out: *mut api_frame::ItemData) -> Status {
     match caller(me).and_then(|loader| crate::inventory::item_info(loader, item)) {
-        Ok(data) => put(out, data),
+        Ok(data) => put_headed(out, data),
         Err(status) => status,
     }
 }
@@ -959,18 +971,13 @@ extern "system" fn inventory_submit(
     let Some((index, _)) = loader.record(me) else {
         return Status::BAD_ARGS;
     };
+    let required = core::mem::offset_of!(api_frame::InventoryRequest, op_count) + 4;
     // SAFETY: a non-null request from a mod points at a valid request for the
-    // call.
-    let Some(request) = (unsafe { request.as_ref() }) else {
+    // call; an all-zero request is valid.
+    let Some(request) = (unsafe { enshwick_api::abi::read_headed(request, required) }) else {
         return Status::BAD_ARGS;
     };
-    if !request
-        .header
-        .covers(core::mem::offset_of!(api_frame::InventoryRequest, op_count) + 4)
-    {
-        return Status::BAD_ARGS;
-    }
-    crate::inventory::submit(loader, index, request, done, user)
+    crate::inventory::submit(loader, index, &request, done, user)
 }
 
 /// The listing entry of the loader itself.
