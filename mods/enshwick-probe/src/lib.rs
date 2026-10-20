@@ -12,6 +12,7 @@
 mod census;
 mod checks;
 mod clock;
+mod damage;
 mod settings;
 
 use std::ops::ControlFlow;
@@ -24,6 +25,7 @@ use enshwick_loader_api::game_events::{
     AltarUsed, Built, CraftRequested, Crafted, Died, EquipmentChanged, ExperienceGained, Hit,
     Interacted, Kind, LevelGained, LootOpened, PickedUp, Revived, TornDown,
 };
+use enshwick_loader_api::schedule::Scheduler;
 use enshwick_loader_api::{Load, Mod, Off};
 
 use crate::census::Census;
@@ -37,6 +39,10 @@ const CHECK_DELAY: Duration = Duration::from_secs(10);
 /// Probe settings, read at start.
 #[derive(Debug, Default, serde::Deserialize, serde::Serialize, enshwick_loader_api::Config)]
 #[serde(default, deny_unknown_fields)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "independent switches of a development mod's settings file"
+)]
 struct Settings {
     /// Exercise the platform API and log what it sees; development only.
     enabled: bool,
@@ -44,6 +50,25 @@ struct Settings {
     refuse_crafting: bool,
     /// Refuse every placement, to see the build filter in game.
     refuse_building: bool,
+    /// Halve every damage, to see the damage filter in game.
+    soften_damage: bool,
+}
+
+/// A check of a single feature, run after the general ones.
+type Check = Box<dyn Fn() + Send + Sync>;
+
+/// The checks of single features whose part of the API this build has.
+fn extras(load: &mut Load<'_>, scheduler: Scheduler) -> Vec<Check> {
+    let mut extras: Vec<Check> = Vec::new();
+    match clock::ClockChecks::new(load, scheduler) {
+        Ok(clock) => extras.push(Box::new(move || clock.run())),
+        Err(off) => enshwick_loader_api::warn!("FAIL clock: {off}"),
+    }
+    match settings::SettingsChecks::new(load) {
+        Ok(settings) => extras.push(Box::new(move || settings.run())),
+        Err(off) => enshwick_loader_api::warn!("FAIL game settings: {off}"),
+    }
+    extras
 }
 
 /// The probe.
@@ -129,24 +154,27 @@ impl Mod for Probe {
         let pinged = Arc::clone(&checks);
         load.on_raw_game_event(ping, move |event| pinged.pinged(event))?;
         let scheduler = load.scheduler()?;
+        let damage = match damage::DamageSeen::register(load, settings.soften_damage) {
+            Ok(seen) => {
+                enshwick_loader_api::info!("PASS damage filter registered");
+                Some(seen)
+            }
+            Err(off) => {
+                enshwick_loader_api::warn!("FAIL damage filter: {off}");
+                None
+            }
+        };
         let logged = Arc::clone(&census);
         scheduler.every(CENSUS_PERIOD, move || {
             for line in logged.lines() {
                 enshwick_loader_api::info!("census: {line}");
             }
+            if let Some(damage) = &damage {
+                enshwick_loader_api::info!("{}", damage.line());
+            }
             ControlFlow::Continue(())
         });
-        // Checks of single features, each run after the general ones.
-        let mut extras: Vec<Box<dyn Fn() + Send + Sync>> = Vec::new();
-        match clock::ClockChecks::new(load, scheduler) {
-            Ok(clock) => extras.push(Box::new(move || clock.run())),
-            Err(off) => enshwick_loader_api::warn!("FAIL clock: {off}"),
-        }
-        match settings::SettingsChecks::new(load) {
-            Ok(settings) => extras.push(Box::new(move || settings.run())),
-            Err(off) => enshwick_loader_api::warn!("FAIL game settings: {off}"),
-        }
-        let extras: Arc<[Box<dyn Fn() + Send + Sync>]> = extras.into();
+        let extras: Arc<[Check]> = extras(load, scheduler).into();
         let run_all = {
             let checks = Arc::clone(&checks);
             move || {

@@ -181,6 +181,10 @@ pub static BUILDS: &[KnownBuild] = &[
             ("building.cursor_check", 0x9_b040),
             ("daytime.set_time", 0x94_cf50),
             ("daytime.set_speed", 0x94_ec80),
+            ("damage.hit", 0x17_8760),
+            ("damage.fall", 0x8_5d6d),
+            ("damage.shroud", 0xb_d83b),
+            ("damage.shroud_death", 0xb_d781),
         ],
         constants: &[
             ("ecs.context_row", 8),
@@ -376,6 +380,11 @@ pub static BUILDS: &[KnownBuild] = &[
             ("daytime.night_length", 0x40),
             ("daytime.clock", 0x48),
             ("daytime.is_day", 0x58),
+            // At the hit site in `ApplyDamage`: the damage vector below
+            // `rbp`, the target and the source above it.
+            ("damage.hit_vector", 0x10),
+            ("damage.hit_target", 0x158),
+            ("damage.hit_source", 0x15c),
         ],
     },
     KnownBuild {
@@ -488,6 +497,10 @@ pub static BUILDS: &[KnownBuild] = &[
             ("building.cursor_check", 0x29_7370),
             ("daytime.set_time", 0xe9_8630),
             ("daytime.set_speed", 0xe9_9ab0),
+            ("damage.hit", 0x3d_6970),
+            ("damage.fall", 0x27_433d),
+            ("damage.shroud", 0x2d_125b),
+            ("damage.shroud_death", 0x2d_11a1),
             ("chat.receive_return_a", 0x84_0b59),
             ("chat.receive_return_b", 0x86_9b1b),
             ("chat.client_send", 0x86_64d0),
@@ -696,6 +709,11 @@ pub static BUILDS: &[KnownBuild] = &[
             ("daytime.night_length", 0x40),
             ("daytime.clock", 0x48),
             ("daytime.is_day", 0x58),
+            // At the hit site in `ApplyDamage`: the damage vector below
+            // `rbp`, the target and the source above it.
+            ("damage.hit_vector", 0x10),
+            ("damage.hit_target", 0x158),
+            ("damage.hit_source", 0x15c),
             // The client's own chat: the game client holds it here.
             ("chat.client_store", 0xf8),
         ],

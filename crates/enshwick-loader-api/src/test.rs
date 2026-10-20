@@ -1547,6 +1547,36 @@ impl Installed {
         table::with(None, |s| s.game_settings.clone())
     }
 
+    /// Runs the mod's damage filters on `check` as the loader does before
+    /// the game applies damage; returns what they left.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_loader_api::abi::{DamageCheck, Header};
+    ///
+    /// let loader = enshwick_loader_api::test::FakeHost::new().install();
+    /// let fall = DamageCheck {
+    ///     header: Header::of::<DamageCheck>(),
+    ///     cause: DamageCheck::FALL,
+    ///     target: 2,
+    ///     source: 0,
+    ///     reserved: 0,
+    ///     amounts: [0.0; 13],
+    ///     total: 40.0,
+    /// };
+    /// assert_eq!(loader.damage(fall), fall, "no filters, no change");
+    /// ```
+    #[must_use]
+    pub fn damage(&self, mut check: crate::abi::DamageCheck) -> crate::abi::DamageCheck {
+        let filters = table::with(Vec::new(), |s| s.damage_filters.clone());
+        for (callback, user) in filters {
+            // SAFETY: the filter the mod registered, with its pointer.
+            unsafe { callback(&raw mut check, core::ptr::with_exposed_provenance_mut(user)) };
+        }
+        check
+    }
+
     /// Whether the mod opened altars, and whether it controls their zones.
     ///
     /// # Examples

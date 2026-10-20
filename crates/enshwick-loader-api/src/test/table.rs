@@ -6,12 +6,12 @@ use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use crate::abi::{
     AltarInfo, AltarLimitFn, AltarZoneSize, BedCheckFn, BuildCheckFn, BuildInfo, CallerFrame,
-    ComfortFn, CommandCallFn, CraftCheckFn, DaytimeInfo, EntityPlace, Event, EventFn,
-    ExperiencePassFn, GameEventFn, Header, HookSpec, HostApi, InteractionFn, InventoryRequest,
-    InventoryResultFn, ItemData, Level, MidHookFn, MidHookSpec, ModHandle, ModInfo, NetMessageFn,
-    PlayerInfo, RenameCallFn, ResourceKey, ResourcePatchFn, Side, SkillCheckFn, SpawnRequest,
-    Status, StatusFn, Str, SummonFn, SurvivorLookupFn, SurvivorStatusFn, TeleportRequest,
-    ZoneCheckFn,
+    ComfortFn, CommandCallFn, CraftCheckFn, DamageFilterFn, DaytimeInfo, EntityPlace, Event,
+    EventFn, ExperiencePassFn, GameEventFn, Header, HookSpec, HostApi, InteractionFn,
+    InventoryRequest, InventoryResultFn, ItemData, Level, MidHookFn, MidHookSpec, ModHandle,
+    ModInfo, NetMessageFn, PlayerInfo, RenameCallFn, ResourceKey, ResourcePatchFn, Side,
+    SkillCheckFn, SpawnRequest, Status, StatusFn, Str, SummonFn, SurvivorLookupFn,
+    SurvivorStatusFn, TeleportRequest, ZoneCheckFn,
 };
 
 use super::{FakeHost, LinkedHook, ServedResource, SubmittedRequest};
@@ -74,6 +74,7 @@ pub(crate) struct State {
     pub(crate) clock_speed: Option<f32>,
     /// The game settings' bytes and preset, settable while installed.
     pub(crate) game_settings: Option<(Vec<u8>, u32)>,
+    pub(crate) damage_filters: Vec<(DamageFilterFn, usize)>,
     /// The world key last handed out, alive until the next one.
     world_key: Option<Box<str>>,
     /// The altars `altars` lists, settable while installed.
@@ -148,6 +149,7 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         daytime: None,
         clock_speed: None,
         game_settings: None,
+        damage_filters: Vec::new(),
         channels: Vec::new(),
         net_sent: Vec::new(),
         notices: Vec::new(),
@@ -1197,6 +1199,17 @@ extern "system" fn set_game_settings(_me: ModHandle, data: *const u8, size: u32)
     })
 }
 
+extern "system" fn damage_filter(
+    _me: ModHandle,
+    callback: DamageFilterFn,
+    user: *mut c_void,
+) -> Status {
+    with(Status::MISSING, |s| {
+        s.damage_filters.push((callback, user.expose_provenance()));
+        Status::OK
+    })
+}
+
 /// table it sees for the process, so it is one static.
 pub(crate) static TABLE: HostApi = HostApi {
     header: Header::of::<HostApi>(),
@@ -1280,4 +1293,5 @@ pub(crate) static TABLE: HostApi = HostApi {
     set_time_speed,
     game_settings,
     set_game_settings,
+    damage_filter,
 };

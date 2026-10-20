@@ -567,6 +567,7 @@ pub(crate) static API: HostApi = HostApi {
     set_time_speed,
     game_settings,
     set_game_settings,
+    damage_filter,
 };
 
 /// A static slice from a pointer and a count, empty for a null pointer.
@@ -2000,6 +2001,17 @@ extern "system" fn set_game_settings(me: ModHandle, data: *const u8, size: u32) 
             Ok(()) => Status::OK,
             Err(status) => status,
         }
+    })
+}
+
+extern "system" fn damage_filter(
+    me: ModHandle,
+    callback: enshwick_loader_api::abi::DamageFilterFn,
+    user: *mut core::ffi::c_void,
+) -> Status {
+    entry("damage_filter", || match caller_index(me) {
+        Ok((loader, index)) => crate::damage::register(loader, index, callback, user),
+        Err(status) => status,
     })
 }
 
