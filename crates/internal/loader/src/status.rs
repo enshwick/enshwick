@@ -159,6 +159,7 @@ pub(crate) fn summary(loader: &Loader) -> Summary {
         uptime: STARTED.get().map_or(Duration::ZERO, Instant::elapsed),
         at: crate::diag::now(),
         mods,
+        disabled: crate::modlist::disabled().to_vec(),
         turned_off: crate::diag::history(),
         served: crate::content::summary(),
         patches: crate::diag::patches(),

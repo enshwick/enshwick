@@ -18,7 +18,7 @@ use crate::chains::Chains;
 use crate::host::{self, Loader, ModRecord};
 use crate::patch::{self, FrameSlot};
 use crate::resolve::{self, Candidate};
-use crate::{builds, log};
+use crate::{builds, log, modlist};
 
 /// The client starts under Steam's DRM wrapper, which may check the game's code
 /// before it runs. The game opens its window only once its own code runs, so
@@ -39,6 +39,8 @@ type Export = unsafe extern "system" fn() -> isize;
 /// A mod DLL with its exports.
 struct Library {
     file: String,
+    /// The loaded DLL, freed again when the mod list turns its id off.
+    module: HMODULE,
     /// Where the DLL is mapped, for crash attribution.
     range: Option<(usize, usize)>,
     manifest: &'static Manifest,
@@ -92,6 +94,11 @@ pub(crate) fn start(stub_abi: u32, missing_forwards: u32) {
         return;
     };
     let (libraries, candidates) = libraries(&mods_dir);
+    let lock_files: Vec<(String, String)> = libraries
+        .iter()
+        .zip(&candidates)
+        .map(|(library, candidate)| (candidate.id.clone(), library.file.clone()))
+        .collect();
     let plan = resolve::resolve(&candidates, game.side);
     for (index, reason) in &plan.skipped {
         crate::log!(WARN, "{} skipped: {reason}", libraries[*index].file);
@@ -142,6 +149,7 @@ pub(crate) fn start(stub_abi: u32, missing_forwards: u32) {
         .collect();
     crate::holds::enforce(&loader.data_dir, &running, false);
     ready(loader, &order);
+    write_lock(loader, lock_files);
     crate::watch::start(loader);
     crate::status::start(loader);
     if side == Side::SERVER
@@ -441,21 +449,113 @@ fn game(data_dir: &Path) -> Option<Game> {
     })
 }
 
-/// The mods in `mods/` with readable manifests, and their manifests.
+/// The mods in `mods/` with readable manifests that the mod list leaves on,
+/// and their manifests; the list gains the mods it lacked.
 fn libraries(mods_dir: &Path) -> (Vec<Library>, Vec<Candidate>) {
+    let list_file = mods_dir
+        .join(crate::settings::LOADER_ID)
+        .join(modlist::LIST_FILE);
+    let (mut list, writable) = match std::fs::read_to_string(&list_file) {
+        Ok(text) => match modlist::ModList::parse(&text) {
+            Ok(list) => (list, true),
+            Err(reason) => {
+                crate::log!(
+                    WARN,
+                    "{} is not read, every mod is on: {reason}",
+                    modlist::LIST_PATH
+                );
+                (modlist::ModList::default(), false)
+            }
+        },
+        Err(_) => (modlist::ModList::default(), true),
+    };
+    let mut changed = !list_file.exists();
     let mut libraries = Vec::new();
     let mut candidates = Vec::new();
-    for library in discover(mods_dir) {
+    for library in discover(mods_dir, &list) {
         // SAFETY: the manifest is static data inside its loaded DLL.
         match unsafe { crate::manifest::parse(library.manifest) } {
             Ok(candidate) => {
+                changed |= list.note(&candidate.id, &library.file);
+                if list.is_off(&candidate.id) {
+                    crate::log!(
+                        INFO,
+                        "{} skipped: {} is off in {}",
+                        library.file,
+                        candidate.id,
+                        modlist::LIST_PATH
+                    );
+                    // SAFETY: loaded by `discover`; none of its code is in use.
+                    unsafe { FreeLibrary(library.module) };
+                    continue;
+                }
                 candidates.push(candidate);
                 libraries.push(library);
             }
             Err(reason) => crate::log!(WARN, "{} skipped: {reason}", library.file),
         }
     }
+    modlist::set_disabled(list.off());
+    if changed
+        && writable
+        && let Err(e) = std::fs::write(&list_file, list.render())
+    {
+        crate::log!(WARN, "{} not written: {e}", modlist::LIST_PATH);
+    }
     (libraries, candidates)
+}
+
+/// Writes `enshwick.lock` on a thread of its own: the loader and the mods
+/// that run, `files` naming each mod's DLL by id; logs what changed since
+/// the last start.
+fn write_lock(loader: &'static Loader, files: Vec<(String, String)>) {
+    let spawned = std::thread::Builder::new()
+        .name("enshwick-lock".into())
+        .spawn(move || {
+            let dir = loader.mods_dir.join(crate::settings::LOADER_ID);
+            let hash = |path: &Path| {
+                std::fs::read(path)
+                    .map(|bytes| modlist::sha256(&bytes))
+                    .unwrap_or_default()
+            };
+            let mods = loader
+                .mods
+                .iter()
+                .filter(|m| !m.off.load(Ordering::Acquire))
+                .filter_map(|m| {
+                    let (_, file) = files.iter().find(|(id, _)| *id == m.id)?;
+                    Some(modlist::Locked {
+                        id: m.id.clone(),
+                        version: m.version.clone(),
+                        file: file.clone(),
+                        sha256: hash(&loader.mods_dir.join(file)),
+                    })
+                })
+                .collect();
+            let lock = modlist::Lock {
+                loader: env!("CARGO_PKG_VERSION").to_owned(),
+                loader_sha256: hash(&dir.join(format!("{}.dll", crate::settings::LOADER_ID))),
+                game: loader.build.name.to_owned(),
+                mods,
+            };
+            let path = dir.join(modlist::LOCK_FILE);
+            let old = std::fs::read_to_string(&path)
+                .ok()
+                .and_then(|text| modlist::Lock::parse(&text));
+            if let Some(old) = &old {
+                for change in lock.changes(old) {
+                    crate::log!(INFO, "since the last start: {change}");
+                }
+            }
+            if old.as_ref() != Some(&lock)
+                && let Err(e) = std::fs::write(&path, lock.render())
+            {
+                crate::log!(WARN, "{} not written: {e}", modlist::LOCK_FILE);
+            }
+        });
+    if let Err(e) = spawned {
+        crate::log!(WARN, "{} not written: {e}", modlist::LOCK_FILE);
+    }
 }
 
 /// The update source a library declares; none, logged, when it is malformed.
@@ -690,7 +790,7 @@ fn identify() -> Option<(Side, u64, usize)> {
 }
 
 /// Loads every `mods/*.dll` that exports the Enshwick interface.
-fn discover(mods_dir: &Path) -> Vec<Library> {
+fn discover(mods_dir: &Path, list: &modlist::ModList) -> Vec<Library> {
     let Ok(entries) = std::fs::read_dir(mods_dir) else {
         return Vec::new();
     };
@@ -700,7 +800,21 @@ fn discover(mods_dir: &Path) -> Vec<Library> {
         .filter(|p| p.extension().is_some_and(|e| e.eq_ignore_ascii_case("dll")))
         .collect();
     files.sort();
-    files.iter().filter_map(|path| load(path)).collect()
+    files
+        .iter()
+        .filter(|path| {
+            let file = path
+                .file_name()
+                .map(|f| f.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            let off = list.is_file_off(&file);
+            if off {
+                crate::log!(INFO, "{file} skipped: off in {}", modlist::LIST_PATH);
+            }
+            !off
+        })
+        .filter_map(|path| load(path))
+        .collect()
 }
 
 fn load(path: &Path) -> Option<Library> {
@@ -772,6 +886,7 @@ fn exports_of(module: HMODULE, file: &str) -> Option<Library> {
     };
     Some(Library {
         file: file.to_owned(),
+        module,
         range: crate::crash::range_of(module),
         manifest,
         init,

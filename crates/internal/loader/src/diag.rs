@@ -225,6 +225,8 @@ pub struct Summary {
     pub at: u64,
     /// Every loaded mod, in load order.
     pub mods: Vec<ModStatus>,
+    /// Mods turned off in the mod list, by id.
+    pub disabled: Vec<String>,
     /// Mods turned off, oldest first.
     pub turned_off: Vec<TurnedOff>,
     /// What mods serve.
@@ -278,6 +280,14 @@ impl Summary {
             for line in &m.lines {
                 let _w = writeln!(out, "    {line}");
             }
+        }
+        if !self.disabled.is_empty() {
+            let _w = writeln!(
+                out,
+                "  off in {}: {}",
+                crate::modlist::LIST_PATH,
+                self.disabled.join(", ")
+            );
         }
         if !self.turned_off.is_empty() {
             let _w = writeln!(out, "\nturned off:");
@@ -439,6 +449,7 @@ mod tests {
                     lines: Vec::new(),
                 },
             ],
+            disabled: vec!["probe".into()],
             turned_off: vec![TurnedOff {
                 id: "safes".into(),
                 reason: "panic in a command handler".into(),
@@ -487,7 +498,7 @@ mod tests {
             "  Flame Altar Zones (flame-altar-zones) 0.1.4\n    by themaiby; MIT\n    \
              note: recommends flame-altar-count, which is not loaded\n    3 zones merged\n"
         ));
-        assert!(text.contains("  safes 0.1.1 (off)\n"));
+        assert!(text.contains("  safes 0.1.1 (off)\n  off in mods/enshwick/mods.toml: probe\n"));
         assert!(text.contains("12:13:20Z safes: panic in a command handler"));
         assert!(text.contains("4 resources served (4 built, 0 failed), 12 texts"));
         assert!(text.contains("one in 256 timed"));

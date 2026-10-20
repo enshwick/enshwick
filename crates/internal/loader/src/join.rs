@@ -161,6 +161,25 @@ pub fn wanted(server: &str, ours: &str) -> Vec<(String, String)> {
         .collect()
 }
 
+/// The note on the server's mods, of `wanted`, that the player turned off in
+/// the mod list; `None` when there are none.
+#[must_use]
+pub fn off_note(wanted: &[(String, String)], disabled: &[String]) -> Option<String> {
+    let off: Vec<&str> = wanted
+        .iter()
+        .map(|(id, _)| id.as_str())
+        .filter(|id| disabled.iter().any(|d| d == id))
+        .collect();
+    (!off.is_empty()).then(|| {
+        format!(
+            "You turned off {} in {}. Turn {} on there and restart the game to join.",
+            off.join(", "),
+            crate::modlist::LIST_PATH,
+            if off.len() == 1 { "it" } else { "them" }
+        )
+    })
+}
+
 /// The update source a server advertises for mod `id`; `None` when it
 /// advertises none or one this loader cannot read.
 #[must_use]
@@ -387,11 +406,21 @@ mod runtime {
             return true;
         };
         if blocking {
-            show(&text);
+            let disabled = crate::modlist::disabled();
+            let wanted = server
+                .as_ref()
+                .map(|(_, server_mods)| super::wanted(server_mods, &ours_mods))
+                .unwrap_or_default();
+            match super::off_note(&wanted, disabled) {
+                Some(note) => show(&format!("{text}\n\n{note}")),
+                None => show(&text),
+            }
             // Told after the note closes, so an updater's offer follows it.
-            if let Some((_, server_mods)) = &server {
-                let missing: Vec<crate::host::Wanted> = super::wanted(server_mods, &ours_mods)
+            // Mods the player turned off are theirs to turn on, not offered.
+            if server.is_some() {
+                let missing: Vec<crate::host::Wanted> = wanted
                     .into_iter()
+                    .filter(|(id, _)| !disabled.contains(id))
                     .map(|(id, version)| crate::host::Wanted {
                         name: super::name(&reply, &id),
                         source: super::source(&reply, &id),
@@ -460,6 +489,20 @@ mod tests {
             "{text}"
         );
         assert!(plan("ab", "a@1", Some(("cd", "a@1")), &names).other_loader);
+    }
+
+    #[test]
+    fn mods_turned_off_by_the_player_are_named() {
+        let wanted = [
+            ("safes".to_owned(), "0.3.0".to_owned()),
+            ("count".to_owned(), "0.2.0".to_owned()),
+        ];
+        assert_eq!(off_note(&wanted, &[]), None);
+        assert_eq!(off_note(&wanted, &["other".to_owned()]), None);
+        assert_eq!(
+            off_note(&wanted, &["safes".to_owned()]).unwrap(),
+            "You turned off safes in mods/enshwick/mods.toml. Turn it on there and restart the game to join."
+        );
     }
 
     #[test]

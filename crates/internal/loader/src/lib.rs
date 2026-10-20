@@ -61,6 +61,7 @@ pub mod log;
 pub mod manifest;
 #[cfg(windows)]
 mod mid;
+pub mod modlist;
 #[cfg(windows)]
 mod net;
 #[cfg(windows)]
