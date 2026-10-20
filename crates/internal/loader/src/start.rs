@@ -64,6 +64,7 @@ static STARTED: AtomicBool = AtomicBool::new(false);
 /// Seals what mods asked for and links the loader's own features; the
 /// client links the server's too, for the games it hosts.
 fn link_features(loader: &'static Loader) {
+    crate::crash::link(loader);
     crate::events::link(loader);
     crate::vetoes::link(loader);
     crate::daytime::link(loader);
@@ -260,10 +261,13 @@ fn wait_for_window(limit: Duration) -> Duration {
 
 /// Names the mod or the loader in `crash.log` when a fault involves its code.
 fn attribute_crashes(loader: &Loader, order: &[&Library]) {
-    let mut modules: Vec<(String, usize, usize)> = order
+    let mut modules: Vec<(usize, String, usize, usize)> = order
         .iter()
         .zip(&loader.mods)
-        .filter_map(|(library, record)| library.range.map(|(s, e)| (record.id.clone(), s, e)))
+        .enumerate()
+        .filter_map(|(index, (library, record))| {
+            library.range.map(|(s, e)| (index, record.id.clone(), s, e))
+        })
         .collect();
     let mut own: HMODULE = core::ptr::null_mut();
     // SAFETY: an address inside this DLL; the handle is not counted.
@@ -277,15 +281,18 @@ fn attribute_crashes(loader: &Loader, order: &[&Library]) {
     if found != 0
         && let Some((start, end)) = crate::crash::range_of(own)
     {
-        modules.push((crate::settings::LOADER_ID.to_owned(), start, end));
+        modules.push((
+            crate::crash::LOADER,
+            crate::settings::LOADER_ID.to_owned(),
+            start,
+            end,
+        ));
     }
     if let Some(game_dir) = loader.mods_dir.parent() {
         crate::crash::install(
-            modules,
-            game_dir
-                .join("logs")
-                .join(crate::settings::LOADER_ID)
-                .join("crash.log"),
+            &modules,
+            &game_dir.join("logs").join(crate::settings::LOADER_ID),
+            &loader.data_dir,
         );
     }
 }

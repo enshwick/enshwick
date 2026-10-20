@@ -157,6 +157,7 @@ pub(crate) fn summary(loader: &Loader) -> Summary {
         game: loader.build.name.to_owned(),
         hosting: loader.side == Side::SERVER || crate::world::hosting(),
         uptime: STARTED.get().map_or(Duration::ZERO, Instant::elapsed),
+        last_crash: crate::crash::last().map(str::to_owned),
         at: crate::diag::now(),
         mods,
         disabled: crate::modlist::disabled().to_vec(),
@@ -192,6 +193,7 @@ pub(crate) fn start(loader: &'static Loader) {
             let mut next = Instant::now() + FIRST;
             loop {
                 std::thread::sleep(POLL);
+                crate::crash::reassert();
                 let minutes = crate::diag::status_minutes();
                 let due = minutes > 0 && Instant::now() >= next;
                 if REQUESTED.swap(false, Ordering::AcqRel) || due {

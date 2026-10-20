@@ -222,6 +222,8 @@ pub struct Summary {
     pub hosting: bool,
     /// Since the loader started.
     pub uptime: Duration,
+    /// How the session before ended, when it crashed: the crash line.
+    pub last_crash: Option<String>,
     /// When the summary was taken, in seconds since the Unix epoch.
     pub at: u64,
     /// Every loaded mod, in load order.
@@ -272,6 +274,9 @@ impl Summary {
             },
             duration(self.uptime)
         );
+        if let Some(crash) = &self.last_crash {
+            let _w = writeln!(out, "the last session crashed: {crash}");
+        }
         let running = self.mods.iter().filter(|m| m.running).count();
         let _w = writeln!(out, "\nmods: {running} of {} running", self.mods.len());
         for m in &self.mods {
@@ -476,6 +481,7 @@ mod tests {
             game: "1.0 server".into(),
             hosting: true,
             uptime: Duration::from_mins(123),
+            last_crash: Some("fault 0xc0000005, blamed on safes: in its code".into()),
             at: 45_000,
             mods: vec![
                 ModStatus {
@@ -547,6 +553,9 @@ mod tests {
         let text = summary().render();
         assert!(text.starts_with("Enshwick 0.1.5 status at 12:30:00Z\n"));
         assert!(text.contains("up 2h 03m"));
+        assert!(text.contains(
+            "\nthe last session crashed: fault 0xc0000005, blamed on safes: in its code\n"
+        ));
         assert!(text.contains("mods: 1 of 2 running"));
         assert!(text.contains(
             "  Flame Altar Zones (flame-altar-zones) 0.1.4\n    by themaiby; MIT\n    \
