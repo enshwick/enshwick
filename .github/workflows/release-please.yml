@@ -70,7 +70,7 @@ jobs:
           OUTPUTS: ${{ needs.release-please.outputs.all }}
         run: |
           # jq on Windows ends lines with CRLF; the tags must not keep the CR.
-          echo "$OUTPUTS" | jq -r 'to_entries[] | select(.key | endswith("--tag_name")) | .value' | tr -d '' |
+          echo "$OUTPUTS" | jq -r 'to_entries[] | select(.key | endswith("--tag_name")) | .value' | tr -d '\r' |
             while read -r tag; do
               component=${tag%-v*}
               case "$component" in
