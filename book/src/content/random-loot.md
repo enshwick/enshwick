@@ -46,10 +46,16 @@ holds the items, the chance, the count and the source:
 - `Drop::one_of(items, chance, from)` gives one of several items, each as
   likely; `chance` is that of any of them;
 - `.count(min, max)` gives `min` to `max` items per hit, each count in
-  between as likely; one by default.
+  between as likely; one by default;
+- `.meter(min, max, of)` starts each dropped item's
+  [meter](items.md#meters) at `min` to `max` of `of`, each count as likely:
+  charges rolled as the item drops. Without it the item starts as its
+  template says. A single-item roll, the `DESTROYED` kind, keeps the
+  template's start.
 
 `add_loot` turns the mod off when the drop is not valid: no item, an item id
-of 0, a chance outside 0 to 1, or a count with `min` of 0 or above `max`. It
+of 0, a chance outside 0 to 1, a count with `min` of 0 or above `max`, or a
+meter with `min` above `max`, `max` above `of` or an `of` of 0. It
 also does so when the running build lacks a piece the drops need, such as the
 pinned `loot.roll` symbol, or `loot.roll_one` for a `DESTROYED` drop.
 

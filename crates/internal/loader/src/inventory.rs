@@ -554,7 +554,11 @@ fn valid(op: &InventoryOp) -> bool {
     let entity = |v: u64| u32::try_from(v).is_ok_and(|v| v != 0);
     match op.kind {
         InventoryOp::GIVE | InventoryOp::TAKE => {
-            entity(op.target) && op.item != 0 && op.count != 0 && i32::try_from(op.count).is_ok()
+            entity(op.target)
+                && op.item != 0
+                && op.count != 0
+                && i32::try_from(op.count).is_ok()
+                && (op.kind == InventoryOp::TAKE || fill(op).is_some())
         }
         InventoryOp::DESTROY_SLOT => op.target & 0xffff_ffff != 0,
         InventoryOp::MOVE_SLOT => {
@@ -563,6 +567,22 @@ fn valid(op: &InventoryOp) -> bool {
         InventoryOp::MOVE_ALL => entity(op.target) && entity(op.other) && op.target != op.other,
         _ => false,
     }
+}
+
+/// The game's optional fill of a give: the fill as `f32`, then a byte that
+/// says it is there; all zero for none. `None` for a fill outside 0 to 1.
+fn fill(op: &InventoryOp) -> Option<[u8; 16]> {
+    let mut option = [0u8; 16];
+    if op.flags & InventoryOp::FILLED == 0 {
+        return Some(option);
+    }
+    let fill = f32::from_bits(u32::try_from(op.other).ok()?);
+    if !(0.0..=1.0).contains(&fill) {
+        return None;
+    }
+    option[..4].copy_from_slice(&fill.to_le_bytes());
+    option[4] = 1;
+    Some(option)
 }
 
 /// The static data of `item`, once the inventory system has run.
@@ -875,7 +895,11 @@ unsafe fn apply(executor: &Executor, txn: *mut u8, op: &InventoryOp) -> Inventor
     let absent = [0u8; 16];
     match op.kind {
         InventoryOp::GIVE => {
-            // SAFETY: the game's add with no level, rarity or extra.
+            // `valid` refused a fill out of range.
+            let fill = fill(op).unwrap_or(absent);
+            // SAFETY: the game's add with no level or rarity; its last
+            // option is the new items' fuel fill, which it puts on each new
+            // item's entity.
             unsafe {
                 (executor.give)(
                     out,
@@ -886,7 +910,7 @@ unsafe fn apply(executor: &Executor, txn: *mut u8, op: &InventoryOp) -> Inventor
                     op.count.cast_signed(),
                     &raw const absent,
                     &raw const absent,
-                    &raw const absent,
+                    &raw const fill,
                 )
             };
         }
@@ -1089,6 +1113,24 @@ mod tests {
             ..give
         }));
         assert!(!valid(&InventoryOp { kind: 99, ..give }));
+        let filled = InventoryOp {
+            flags: InventoryOp::FILLED,
+            other: u64::from(0.5f32.to_bits()),
+            ..give
+        };
+        assert!(valid(&filled));
+        assert_eq!(
+            fill(&filled).map(|f| (f[..4].to_vec(), f[4])),
+            Some((0.5f32.to_le_bytes().to_vec(), 1))
+        );
+        assert!(!valid(&InventoryOp {
+            other: u64::from(1.5f32.to_bits()),
+            ..filled
+        }));
+        assert!(!valid(&InventoryOp {
+            other: u64::from(f32::NAN.to_bits()),
+            ..filled
+        }));
         let all = InventoryOp {
             kind: InventoryOp::MOVE_ALL,
             target: 40,

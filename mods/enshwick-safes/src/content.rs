@@ -23,11 +23,9 @@ pub const TEXTS: &str = include_str!("texts.toml");
 #[must_use]
 pub fn item() -> NewItem {
     NewItem {
-        guid: SAFE,
-        like: CHEST,
         name: Some(SAFE_NAME),
         description: Some(SAFE_DESCRIPTION),
-        debug_name: "Safe".into(),
+        ..NewItem::new(SAFE, CHEST, "Safe")
     }
 }
 

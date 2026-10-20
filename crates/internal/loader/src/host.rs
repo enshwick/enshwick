@@ -612,6 +612,7 @@ pub(crate) static API: HostApi = HostApi {
     terrain_materials,
     terrain_edit,
     config_schema,
+    summoned,
 };
 
 /// A static slice from a pointer and a count, empty for a null pointer.
@@ -1665,6 +1666,17 @@ extern "system" fn summon_filter(
 ) -> Status {
     entry("summon_filter", || match caller_index(me) {
         Ok((loader, index)) => crate::survivors::register_summon(loader, index, callback, user),
+        Err(status) => status,
+    })
+}
+
+extern "system" fn summoned(
+    me: ModHandle,
+    callback: api_frame::SummonFn,
+    user: *mut core::ffi::c_void,
+) -> Status {
+    entry("summoned", || match caller_index(me) {
+        Ok((loader, index)) => crate::survivors::register_summoned(loader, index, callback, user),
         Err(status) => status,
     })
 }

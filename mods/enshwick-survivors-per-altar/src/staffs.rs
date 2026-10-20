@@ -109,11 +109,13 @@ pub(crate) fn add(load: &mut Load<'_>, texts: &Texts) -> Result<(), Off> {
             }
         }
         load.add_item(NewItem {
-            guid: staff.copy,
-            like: vanilla,
             name: Some(staff.name),
             description: Some(staff.description),
-            debug_name: format!("SurvivorsPerAltar_CopyStaff_{}", staff.key),
+            ..NewItem::new(
+                staff.copy,
+                vanilla,
+                format!("SurvivorsPerAltar_CopyStaff_{}", staff.key),
+            )
         })?;
     }
     Ok(())

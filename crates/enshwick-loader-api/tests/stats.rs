@@ -1,4 +1,5 @@
-//! Health, stamina, mana, level and experience from attribute sets.
+//! Health, stamina, mana, level and experience from attribute sets, and an
+//! item entity's meter read and written.
 
 #[cfg(test)]
 mod tests {
@@ -54,6 +55,7 @@ mod tests {
         let level = set(40, [12, 50, 0, 0, 0, 0, 0, 0]);
         let experience = set(50, [300, 4, 900, 0, 0, 0, 0, 0]);
         let wrong = set(99, [1; 8]);
+        let mut fuel = set(60, [2, 3, 0, 0, 0, 0, 0, 0]);
         let loader = enshwick_loader_api::test::FakeHost::new()
             .type_hash("keen::ecs::CurrentTransform", 100)
             .type_hash("keen::ecs::UsedItem", 101)
@@ -74,6 +76,10 @@ mod tests {
             .constant("attribute.level", 40)
             .constant("attribute.experience", 50)
             .constant("attribute.experience_needed_slot", 2)
+            .type_hash("keen::ecs::Fuel", 6)
+            .constant("attribute.fuel", 60)
+            .constant("attribute.fuel_max_slot", 1)
+            .component(900, 6, core::ptr::from_mut(&mut fuel).cast_const().cast())
             .component(7, 1, core::ptr::from_ref(&health).cast())
             .component(7, 2, core::ptr::from_ref(&stamina).cast())
             .component(7, 4, core::ptr::from_ref(&level).cast())
@@ -112,5 +118,21 @@ mod tests {
         );
         assert!(world.vitals(Entity(8)).is_none());
         assert!(world.vitals(Entity(9)).is_none());
+
+        let charges = |current| Meter { current, max: 3 };
+        assert_eq!(world.item_meter(Entity(900)), Some(charges(2)));
+        assert_eq!(world.item_meter(Entity(7)), None);
+        assert_eq!(
+            world.change_item_meter(Entity(900), |c| c - 1),
+            Ok(charges(1))
+        );
+        assert_eq!(
+            world.change_item_meter(Entity(900), |c| c - 5),
+            Ok(charges(0))
+        );
+        assert_eq!(world.change_item_meter(Entity(900), |_| 9), Ok(charges(3)));
+        assert_eq!(world.item_meter(Entity(900)), Some(charges(3)));
+        assert!(world.change_item_meter(Entity(7), |c| c).is_err());
+        assert_eq!(loader.writes(), [(900, 6), (900, 6), (900, 6)]);
     }
 }
