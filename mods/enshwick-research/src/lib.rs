@@ -3,13 +3,15 @@
 //!
 //! Off until `enabled = true` in `mod-configs/research.toml`; read at start.
 //! On a client it looks at the item tooltip (which argument names the
-//! hovered item) and at join attempts (what a refused join leaves behind).
+//! hovered item), at the interface (scroll areas, tab bars, text input) and
+//! at join attempts (what a refused join leaves behind).
 //! `/research mark` starts a new section of the log while the client hosts
 //! a game.
 
 mod join;
 mod memory;
 mod tooltip;
+mod ui;
 
 use enshwick_loader_api::abi::Side;
 use enshwick_loader_api::{Load, Mod, Off};
@@ -29,6 +31,10 @@ const fn max_dumps() -> u32 {
 /// Research settings, read at start.
 #[derive(Debug, serde::Deserialize, serde::Serialize, enshwick_loader_api::Config)]
 #[serde(deny_unknown_fields)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "independent switches of a development mod's settings file"
+)]
 struct Settings {
     /// Log what the client does where the platform needs engine facts;
     /// development only.
@@ -39,6 +45,10 @@ struct Settings {
     #[serde(default = "yes")]
     #[config(client)]
     tooltip: bool,
+    /// Look at the interface: scroll areas, tab bars and text input.
+    #[serde(default = "yes")]
+    #[config(client)]
+    ui: bool,
     /// Look at join attempts and the menus after them.
     #[serde(default = "yes")]
     #[config(client)]
@@ -59,6 +69,7 @@ impl Default for Settings {
         Self {
             enabled: false,
             tooltip: yes(),
+            ui: yes(),
             join: yes(),
             dump_interval_ms: interval_ms(),
             max_dumps: max_dumps(),
@@ -91,6 +102,11 @@ impl Mod for Research {
                     "research.viewer_bebb60" => 0xbe_bb60,
                     "research.viewer_c3da50" => 0xc3_da50,
                     "research.viewer_b55140" => 0xb5_5140,
+                    "research.scroll_begin" => 0xa2_fb10,
+                    "research.scroll_end" => 0xa3_1c50,
+                    "research.tabs" => 0xcc_a5a0,
+                    "research.text_dialog" => 0xcc_8e30,
+                    "research.text_field" => 0xb1_2120,
                 ],
             }],
         )
@@ -108,6 +124,16 @@ impl Mod for Research {
                         enshwick_loader_api::info!("R1 {hooked} tooltip functions looked at");
                     }
                     Err(off) => enshwick_loader_api::warn!("R1 off: {off}"),
+                }
+            }
+            if settings.ui {
+                match ui::link(load) {
+                    Ok(hooked) => {
+                        enshwick_loader_api::info!(
+                            "R2 R3 R5 {hooked} interface functions looked at"
+                        );
+                    }
+                    Err(off) => enshwick_loader_api::warn!("R2 R3 R5 off: {off}"),
                 }
             }
             if settings.join {

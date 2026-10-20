@@ -471,7 +471,7 @@ fn follow(text: &mut String, region: &Region, base: usize, looked_for: &[u32]) {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
 
     #[test]
@@ -536,7 +536,7 @@ mod tests {
     }
 
     /// The client rows the manifest pins, by symbol.
-    fn pinned() -> Vec<(String, u64, enshwick_loader_api::abi::Fingerprint)> {
+    pub(crate) fn pinned() -> Vec<(String, u64, enshwick_loader_api::abi::Fingerprint)> {
         use enshwick_loader_api::Mod as _;
 
         let manifest = crate::Research::manifest();
@@ -565,7 +565,11 @@ mod tests {
                 site.name
             );
         }
-        assert_eq!(pinned.len(), SITES.len());
+        let ours = pinned
+            .iter()
+            .filter(|(name, _, _)| SITES.iter().any(|s| s.symbol == name))
+            .count();
+        assert_eq!(ours, SITES.len());
     }
 
     /// The bytes each site expects are the client's that `ENSH_CLIENT_EXE`
@@ -590,9 +594,11 @@ mod tests {
             let expected =
                 enshwick_loader_reflect::Fingerprint::new(fingerprint.guid, fingerprint.age);
             assert_eq!(image.fingerprint(), Some(expected));
-            let site = SITES.iter().find(|s| s.symbol == name);
+            let Some(site) = SITES.iter().find(|s| s.symbol == name) else {
+                continue;
+            };
             let found = image.read(image.base() + rva, 16);
-            assert_eq!(found, site.map(|s| &s.expected[..]), "{name}");
+            assert_eq!(found, Some(&site.expected[..]), "{name}");
         }
     }
 }
