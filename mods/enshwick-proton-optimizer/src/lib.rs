@@ -167,6 +167,7 @@ impl Mod for ProtonOptimizer {
             id: "proton-optimizer",
             side: BOTH,
             updates: github("themaiby/enshwick", "enshwick-proton-optimizer"),
+            signed_by: ["RWTjqgtfpy3lSOLC4uaUXuvvKSLQKOFf6nUnEytoiFjSzxMEhLnoAdJF"],
         )
     }
 
