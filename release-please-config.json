@@ -9,6 +9,20 @@
     {
       "type": "cargo-workspace",
       "merge": false
+    },
+    {
+      "type": "linked-versions",
+      "groupName": "enshwick",
+      "components": [
+        "enshwick-loader",
+        "enshwick-stub",
+        "enshwick-api",
+        "enshwick-macros",
+        "enshwick-reflect",
+        "enshwick-test",
+        "cargo-enshwick"
+      ],
+      "merge": false
     }
   ],
   "bump-minor-pre-major": true,
@@ -64,19 +78,23 @@
   "packages": {
     "crates/cargo-enshwick": {
       "package-name": "cargo-enshwick",
-      "component": "cargo-enshwick"
+      "component": "cargo-enshwick",
+      "release-as": "0.2.0"
     },
     "crates/enshwick-api": {
       "package-name": "enshwick-api",
-      "component": "enshwick-api"
+      "component": "enshwick-api",
+      "release-as": "0.2.0"
     },
     "crates/enshwick-loader": {
       "package-name": "enshwick-loader",
-      "component": "enshwick-loader"
+      "component": "enshwick-loader",
+      "release-as": "0.2.0"
     },
     "crates/enshwick-stub": {
       "package-name": "enshwick-stub",
-      "component": "enshwick-stub"
+      "component": "enshwick-stub",
+      "release-as": "0.2.0"
     },
     "mods/enshwick-flame-altar-count": {
       "package-name": "enshwick-flame-altar-count",
@@ -96,7 +114,13 @@
     },
     "crates/enshwick-macros": {
       "package-name": "enshwick-macros",
-      "component": "enshwick-macros"
+      "component": "enshwick-macros",
+      "release-as": "0.2.0"
+    },
+    "crates/enshwick-reflect": {
+      "package-name": "enshwick-reflect",
+      "component": "enshwick-reflect",
+      "release-as": "0.2.0"
     },
     "mods/enshwick-safes": {
       "package-name": "enshwick-safes",
@@ -112,7 +136,8 @@
     },
     "crates/enshwick-test": {
       "package-name": "enshwick-test",
-      "component": "enshwick-test"
+      "component": "enshwick-test",
+      "release-as": "0.2.0"
     },
     "mods/enshwick-updater": {
       "package-name": "enshwick-updater",

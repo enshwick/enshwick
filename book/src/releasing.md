@@ -6,6 +6,21 @@ how an updater installs them, and how releases are signed.
 
 ## Versions
 
+Enshwick itself has one version, such as Enshwick 0.2.0: the loader, the
+`powrprof.dll` stub, `enshwick-api` with its macros, `enshwick-reflect`,
+`enshwick-test` and `cargo-enshwick` always carry the same number and are
+released together. Mods have versions of their own, released apart from the
+platform and from each other.
+
+Which loader a mod runs under is not read from that version but from the ABI
+version `enshwick-api` was built with (see
+[ABI reference](abi-reference.md#versions)). A mod built against
+`enshwick-api` X.Y needs a loader of the same ABI major, and for each feature
+it uses, a loader whose ABI minor is at least the one that feature lists; under
+an older loader such a feature turns itself off with a note such as
+`mid-function hooks need a newer loader (ABI minor 11)`. Any loader of the
+same ABI major loads a mod built against an older `enshwick-api`.
+
 A mod's version is [SemVer](https://semver.org). Leave `version` out of
 [`manifest!`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/declare.rs)
 and the manifest takes the crate's version (`CARGO_PKG_VERSION`), so the
@@ -40,6 +55,16 @@ Mods in this repository follow
   released crate `<component>-v<semver>`, the component being the crate name:
   `enshwick-safes-v0.2.0`.
 
+The platform crates are linked (the `linked-versions` plugin, group
+`enshwick`): a change to any of them releases all of them at one version,
+each with its own tag, `enshwick-loader-v0.2.0`, `enshwick-api-v0.2.0` and so
+on. The tags keep what relies on them working: `cargo enshwick new` pins
+`enshwick-api-v<version>`, and the updater looks for `enshwick-loader-v*`
+releases. The loader's release is the platform release, titled
+`Enshwick <version>` and kept as the repository's latest release. A platform
+release also bumps the patch version of every mod, since they all depend on
+`enshwick-api`.
+
 Before 1.0, a `feat` bumps the patch version and a breaking change the minor
 (see
 [release-please-config.json](https://github.com/themaiby/enshwick/blob/main/release-please-config.json)).
@@ -53,9 +78,9 @@ then builds the workspace and attaches to each mod's release:
 | `<crate>.zip`         | `mods/<crate>.dll` and `LICENSE`      |
 | `<crate>.zip.minisig` | The minisign signature of the archive |
 
-The loader's and the stub's releases carry `enshwick-loader.zip` (the stub and
-the loader) and `enshwick.zip` (everything that goes next to the game), each
-with its `.minisig`. Before it signs anything, the workflow checks with
+The platform release carries `enshwick-loader.zip` (the stub and the loader)
+and `enshwick.zip` (everything that goes next to the game), each with its
+`.minisig`. Before it signs anything, the workflow checks with
 `cargo enshwick manifest --expect-version` that every released mod's DLL
 reports the version of its tag.
 

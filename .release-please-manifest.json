@@ -8,6 +8,7 @@
   "mods/enshwick-survivors-per-altar": "0.1.5",
   "mods/enshwick-furniture-comfort": "0.1.5",
   "crates/enshwick-macros": "0.1.2",
+  "crates/enshwick-reflect": "0.1.0",
   "mods/enshwick-safes": "0.1.2",
   "mods/enshwick-building-materials": "0.1.0",
   "crates/enshwick-test": "0.1.1",

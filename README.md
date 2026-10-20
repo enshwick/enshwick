@@ -24,7 +24,9 @@ every mod is a DLL in the `mods/` folder beside it.
 ## Install
 
 1. Download `enshwick.zip` from the
-   [latest release](https://github.com/themaiby/enshwick/releases).
+   [latest release](https://github.com/themaiby/enshwick/releases/latest),
+   titled `Enshwick <version>`: the loader with every mod of this repository.
+   The loader and the API share that one version; each mod has its own.
 2. Extract it into the folder that holds `enshrouded.exe` (players) or
    `enshrouded_server.exe` (servers). You get `powrprof.dll` there and a `mods`
    folder beside it.
