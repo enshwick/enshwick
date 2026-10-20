@@ -338,7 +338,7 @@ pub fn derive_recipes_in(
     }
     if skipped > 0 {
         crate::warn!(
-            "{skipped} derived recipes skipped: a workshop takes {WORKSHOP_RECIPES} recipes at most, {RESERVED_FOR_SINGLE} kept for single ones"
+            "{skipped} derived recipes skipped: a workshop takes {WORKSHOP_RECIPES} recipes at most, {RESERVED_FOR_SINGLE} kept for single ones; many recipes belong at a workshop or NPC of the mod's own"
         );
     }
     if picked.is_empty() {

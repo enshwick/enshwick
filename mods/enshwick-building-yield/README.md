@@ -7,7 +7,8 @@ devices) get none.
 
 The game takes at most 512 recipes at one workshop, so where a workshop would
 overflow, some decor recipes are left out; the log says how many. Blocks,
-roofs and overgrowth come first.
+roofs and overgrowth come first. Once the API can add workshops, the bulk
+recipes move to a bulk workbench of their own and none are left out.
 
 ## Settings
 

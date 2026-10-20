@@ -213,7 +213,9 @@ load.add_recipe(NewRecipe { guid: SAFE_RECIPE, like: CHEST, output: SAFE, output
   recipe (debug name, output) and adds a scaled copy of the ones it picks.
   Several mods can add items and recipes; their changes compose. The game
   takes at most 512 recipes per workshop: derived copies stop 16 short of it,
-  leaving room for single recipes, and the log names what was left out.
+  leaving room for single recipes, and the log names what was left out. A mod
+  that adds many recipes should give them a workshop or an NPC of its own
+  rather than crowd the vanilla ones, which other mods share.
 - Texts live in one TOML file per mod, a table per language code (`en`, `uk`,
   `de`, ... see `i18n::Language`), `en` being the fallback. A server owner
   overrides or adds texts in `mod-configs/<id>.texts.toml`.
