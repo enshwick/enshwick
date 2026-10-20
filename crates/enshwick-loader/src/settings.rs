@@ -84,6 +84,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore = "Miri isolates the file system")]
     fn a_missing_file_is_written_and_read_back() {
         let dir = std::env::temp_dir().join(format!("enshwick-settings-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
