@@ -407,8 +407,11 @@ iterator on a stack buffer, `entity(ctx)` names the current row's entity,
 component. Such hooks run on worker threads; `ecs::Components::resolve(load)`
 reads any entity's component from the system's context
 (`component(ctx, entity, hash)`, the hash from `World::component_type`) and
-finds the inventory an item slot belongs to (`slot_root`). On a hosting
-client, `ecs::Worlds` tells the server's systems from the client's.
+finds the inventory an item slot belongs to (`slot_root`).
+`ecs::Attributes` reads and writes attribute sets such as `Level` or
+`Experience` by attribute hash (`value`, `set`); mark the component changed
+before writing it. On a hosting client, `ecs::Worlds` tells the server's
+systems from the client's.
 
 ## Services between mods
 
