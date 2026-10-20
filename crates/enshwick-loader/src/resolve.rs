@@ -42,13 +42,21 @@ pub struct Plan {
     pub skipped: Vec<(usize, String)>,
 }
 
+/// Whether a mod for `mod_side` loads in the game binary `process`. The
+/// dedicated server loads server mods; the client loads every mod, since it
+/// runs the server's code while it hosts a game, solo play included.
+#[must_use]
+pub fn loads(mod_side: Side, process: Side) -> bool {
+    mod_side.includes(process) || (process == Side::CLIENT && mod_side.includes(Side::SERVER))
+}
+
 /// Decides which `candidates` load on `side` and in what order.
 #[must_use]
 pub fn resolve(candidates: &[Candidate], side: Side) -> Plan {
     let mut skipped: BTreeMap<usize, String> = BTreeMap::new();
     let mut by_id: BTreeMap<&str, usize> = BTreeMap::new();
     for (i, candidate) in candidates.iter().enumerate() {
-        if !candidate.side.includes(side) {
+        if !loads(candidate.side, side) {
             skipped.insert(i, "not for this side of the game".into());
         } else if let Some(&first) = by_id.get(candidate.id.as_str()) {
             skipped.insert(
@@ -234,6 +242,20 @@ mod tests {
         assert_eq!(plan.order, [1]);
         let reasons: Vec<usize> = plan.skipped.iter().map(|(i, _)| *i).collect();
         assert_eq!(reasons, [0, 2, 3]);
+    }
+
+    #[test]
+    fn the_client_loads_server_mods_for_the_games_it_hosts() {
+        assert!(loads(Side::SERVER, Side::CLIENT));
+        assert!(loads(Side::CLIENT, Side::CLIENT));
+        assert!(loads(Side::BOTH, Side::SERVER));
+        assert!(!loads(Side::CLIENT, Side::SERVER));
+        let mods = [
+            candidate("comfort", "1.0.0", Side::SERVER, &[]),
+            candidate("ui", "1.0.0", Side::CLIENT, &[]),
+        ];
+        assert_eq!(resolve(&mods, Side::CLIENT).order, [0, 1]);
+        assert_eq!(resolve(&mods, Side::SERVER).order, [0]);
     }
 
     #[test]

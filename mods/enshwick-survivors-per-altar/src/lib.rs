@@ -8,6 +8,7 @@
 
 mod client;
 mod copies;
+mod cursor;
 mod server;
 
 use enshwick_api::abi::Side;
@@ -74,11 +75,43 @@ impl Mod for SurvivorsPerAltar {
                     ],
                 },
                 {
+                    // The built-in server's twins: the same code, so the
+                    // server constants hold. `cursor_return` is
+                    // `cursor_return_a`.
                     side: CLIENT,
                     guid: "69f0e9573b32c24a8838d3fff550824c",
                     age: 410,
-                    symbols: ["survivors.cursor_return" => 0x29_63a8],
+                    symbols: [
+                        "survivors.cursor_return" => 0x29_63a8,
+                        "survivors.spawn_return" => 0x22_368b,
+                        "survivors.unique_return_a" => 0x45_b299,
+                        "survivors.unique_return_b" => 0x45_b30d,
+                        "survivors.bed_return" => 0x45_744f,
+                        "survivors.bed_init_return" => 0x45_77c6,
+                        "survivors.cursor_return_a" => 0x29_63a8,
+                        "survivors.cursor_return_b" => 0x29_63b3,
+                        "survivors.assign_return_a" => 0x2d_2f61,
+                        "survivors.assign_return_b" => 0x2d_3004,
+                        "survivors.roaming_return" => 0x45_6f48,
+                    ],
                     constants: [
+                        "survivors.unique_context" => 0x38,
+                        "survivors.unique_saved_state" => 0x40,
+                        "survivors.unique_transform" => 0x48,
+                        "survivors.bed_context" => 0x40,
+                        "survivors.bed_transform" => 0x48,
+                        "survivors.bed_npc_common_type" => 0xa0,
+                        "survivors.npc_common_bed" => 0x48,
+                        "survivors.assign_context" => 0x30,
+                        "survivors.assign_targets" => 0x40,
+                        "survivors.assign_bed" => 0x85c,
+                        "survivors.roaming_context" => 0x40,
+                        "survivors.spawn_target" => 0x18,
+                        "survivors.move_survivor" => 0x450,
+                        "survivors.npc_transform" => 0x168,
+                        "survivors.npc_saved_state" => 0x1e0,
+                        "survivors.npc_common" => 0x300,
+                        "survivors.npc_state" => 0x450,
                         "survivors.state_status" => 0x14,
                         "survivors.ui_map_bits" => 0x46_3e98,
                         "survivors.ui_map_capacity" => 0x46_3ea0,
@@ -101,7 +134,23 @@ impl Mod for SurvivorsPerAltar {
         if load.host().build().side == Side::SERVER {
             server::link(load)?;
         } else {
-            client::link(load)?;
+            // The server half acts in the games this client hosts.
+            let merged = match server::link(load) {
+                Ok(()) => true,
+                Err(off) => {
+                    enshwick_api::warn!("copies stay off in hosted games: {off}");
+                    false
+                }
+            };
+            client::link(load, !merged)?;
+            enshwick_api::info!(
+                "client half linked; server half {}",
+                if merged {
+                    "acts while this client hosts"
+                } else {
+                    "off"
+                }
+            );
         }
         Ok(Self)
     }

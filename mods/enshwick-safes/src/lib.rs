@@ -5,6 +5,9 @@
 //! an ordinary chest with every item still in it. The placed chest keeps the
 //! Safe's item id in the save, which tells the mod which chests are Safes;
 //! owners are kept in `mod-data/safes/owners.toml` by position.
+//!
+//! The refusals run on the dedicated server and, on a client, in the built-in
+//! server while it hosts a game; the client's own world is left alone.
 
 pub mod access;
 pub mod content;
@@ -16,8 +19,10 @@ use std::sync::atomic::Ordering;
 use std::time::Duration;
 
 use enshwick_api::abi::Side;
-use enshwick_api::ecs::{Components, Ecs, Entity};
-use enshwick_api::events::{BuildingPlaced, BuildingRemoved, PlayerJoined, PlayerLeft, WorldSaved};
+use enshwick_api::ecs::{Components, Ecs, Entity, Worlds};
+use enshwick_api::events::{
+    BuildingPlaced, BuildingRemoved, PlayerJoined, PlayerLeft, Shutdown, WorldSaved,
+};
 use enshwick_api::state::Store;
 use enshwick_api::world::World;
 use enshwick_api::{Load, Mod, Off};
@@ -123,36 +128,72 @@ impl Mod for Safes {
             side: BOTH,
             join = true,
             updates: github("themaiby/enshwick", "enshwick-safes"),
-            builds: [{
-                side: SERVER,
-                guid: "1c129660cd6efc4f9f0b21652d5ff2bf",
-                age: 387,
-                symbols: [
-                    "safes.offer_test" => 0x9_e270,
-                    "safes.transfer" => 0x19_81f0,
-                    "safes.sort" => 0x19_8cf0,
-                    "safes.base_stock" => 0x20_1800,
-                    "safes.dismantle_method" => 0x9_67f0,
-                    "safes.inventory_actions" => 0x19_f540,
-                ],
-                constants: [
-                    "safes.state_input" => 0x10,
-                    "safes.state_owner_index" => 0x178,
-                    "safes.transfer_source" => 0x0c,
-                    "safes.transfer_target" => 0x10,
-                    "safes.transfer_source_slot" => 0x14,
-                    "safes.transfer_target_slot" => 0x1c,
-                    "safes.sort_target" => 0x74,
-                    "safes.object_id" => 0x10,
-                    "safes.object_kind" => 0x18,
-                    "safes.deposit_target" => 0x100,
-                    "safes.deposit_version" => 0x108,
-                    "safes.consumed_deposit" => 0x48,
-                    "safes.upgrade_target" => 0x10c,
-                    "safes.upgrade_version" => 0x144,
-                    "safes.consumed_upgrade" => 0x4c,
-                ],
-            }],
+            builds: [
+                {
+                    side: SERVER,
+                    guid: "1c129660cd6efc4f9f0b21652d5ff2bf",
+                    age: 387,
+                    symbols: [
+                        "safes.offer_test" => 0x9_e270,
+                        "safes.transfer" => 0x19_81f0,
+                        "safes.sort" => 0x19_8cf0,
+                        "safes.base_stock" => 0x20_1800,
+                        "safes.dismantle_method" => 0x9_67f0,
+                        "safes.inventory_actions" => 0x19_f540,
+                    ],
+                    constants: [
+                        "safes.state_input" => 0x10,
+                        "safes.state_owner_index" => 0x178,
+                        "safes.transfer_source" => 0x0c,
+                        "safes.transfer_target" => 0x10,
+                        "safes.transfer_source_slot" => 0x14,
+                        "safes.transfer_target_slot" => 0x1c,
+                        "safes.sort_target" => 0x74,
+                        "safes.object_id" => 0x10,
+                        "safes.object_kind" => 0x18,
+                        "safes.deposit_target" => 0x100,
+                        "safes.deposit_version" => 0x108,
+                        "safes.consumed_deposit" => 0x48,
+                        "safes.upgrade_target" => 0x10c,
+                        "safes.upgrade_version" => 0x144,
+                        "safes.consumed_upgrade" => 0x4c,
+                    ],
+                },
+                {
+                    // The built-in server's twins. The client's cursor context
+                    // is 0x10 larger, but the dismantle hook reads only the
+                    // object and the context's first word, which hold.
+                    side: CLIENT,
+                    guid: "69f0e9573b32c24a8838d3fff550824c",
+                    age: 410,
+                    symbols: [
+                        "safes.offer_test" => 0x2a_0850,
+                        "safes.transfer" => 0x3f_62e0,
+                        "safes.sort" => 0x3f_6de0,
+                        "safes.base_stock" => 0x46_82e0,
+                        "safes.base_stock_ui_return" => 0x2b_884b,
+                        "safes.dismantle_method" => 0x28_a170,
+                        "safes.inventory_actions" => 0x3f_d610,
+                    ],
+                    constants: [
+                        "safes.state_input" => 0x10,
+                        "safes.state_owner_index" => 0x178,
+                        "safes.transfer_source" => 0x0c,
+                        "safes.transfer_target" => 0x10,
+                        "safes.transfer_source_slot" => 0x14,
+                        "safes.transfer_target_slot" => 0x1c,
+                        "safes.sort_target" => 0x74,
+                        "safes.object_id" => 0x10,
+                        "safes.object_kind" => 0x18,
+                        "safes.deposit_target" => 0x100,
+                        "safes.deposit_version" => 0x108,
+                        "safes.consumed_deposit" => 0x48,
+                        "safes.upgrade_target" => 0x10c,
+                        "safes.upgrade_version" => 0x144,
+                        "safes.consumed_upgrade" => 0x4c,
+                    ],
+                },
+            ],
         )
     }
 
@@ -169,12 +210,10 @@ impl Mod for Safes {
         )?;
         load.add_item(content::item())?;
         load.add_recipe(content::recipe(cost))?;
-        if load.host().build().side == Side::SERVER {
-            ACCESS
-                .admins_open
-                .store(settings.admins_can_open, Ordering::Relaxed);
-            guard(load)?;
-        }
+        ACCESS
+            .admins_open
+            .store(settings.admins_can_open, Ordering::Relaxed);
+        guard(load)?;
         enshwick_api::info!(
             "the Safe costs the wooden chest x{cost}; administrators may open Safes: {}",
             settings.admins_can_open
@@ -186,9 +225,11 @@ impl Mod for Safes {
 /// The server half: owners, players and the refusals.
 fn guard(load: &mut Load<'_>) -> Result<(), Off> {
     let world = load.world()?;
+    let client = load.host().build().side == Side::CLIENT;
     let reads = Reads {
         ecs: Ecs::resolve(load)?,
         components: Components::resolve(load)?,
+        worlds: Worlds::resolve(load)?,
         used_item: world.component_type(load, "keen::ecs::UsedItem")?.hash(),
         transform: world
             .component_type(load, "keen::ecs::CurrentTransform")?
@@ -215,6 +256,12 @@ fn guard(load: &mut Load<'_>) -> Result<(), Off> {
         upgrade_target: constant("safes.upgrade_target")?,
         upgrade_version: constant("safes.upgrade_version")?,
         consumed_upgrade: constant("safes.consumed_upgrade")?,
+        // The client's own interface asks for base stock directly from here.
+        stock_ui_return: if client {
+            load.symbol("safes.base_stock_ui_return")?
+        } else {
+            0
+        },
         player_input: world.component_type(load, "keen::ecs::PlayerInput")?.hash(),
         consumed_input: world
             .component_type(load, "keen::ecs::ServerConsumedPlayerInput")?
@@ -259,6 +306,11 @@ fn guard(load: &mut Load<'_>) -> Result<(), Off> {
         }
     })?;
     load.on::<WorldSaved>(move |()| save(store))?;
+    if client {
+        // Entities and players belong to one hosted game; owners stay.
+        load.on::<Shutdown>(|()| ACCESS.forget_session())?;
+        enshwick_api::info!("the Safe's checks act while this client hosts a game");
+    }
     load.on_config_change(|settings: Settings| {
         ACCESS
             .admins_open

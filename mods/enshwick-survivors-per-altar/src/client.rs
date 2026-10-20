@@ -2,7 +2,9 @@
 //!
 //! - The cursor check measures from the first copy of a survivor the client
 //!   knows, often one at another altar, and refuses a bed with "too far"; it is
-//!   told that no copy exists, as the server is.
+//!   told that no copy exists, as the server is. When the server half is
+//!   linked too, its lookup answers the cursor instead (see `cursor`), so the
+//!   function keeps one hook of this mod.
 //! - The client keeps one UI record per survivor and every copy writes its
 //!   status bits into it in turn. After vanilla's pass the record keeps the
 //!   bits every copy has, the worst status, so a copy without a bed shows "no
@@ -62,8 +64,8 @@ unsafe fn function<F: Copy>(address: u64) -> F {
     unsafe { core::mem::transmute_copy(&address) }
 }
 
-/// Links the client hooks.
-pub(crate) fn link(load: &mut Load<'_>) -> Result<(), Off> {
+/// Links the client hooks; the cursor's own when `cursor`.
+pub(crate) fn link(load: &mut Load<'_>, cursor: bool) -> Result<(), Off> {
     let size = |name| {
         load.constant(name)
             .map(|v| usize::try_from(v).unwrap_or(usize::MAX))
@@ -91,7 +93,9 @@ pub(crate) fn link(load: &mut Load<'_>) -> Result<(), Off> {
         record_status: size("survivors.ui_record_status")?,
     };
     let _first = ENGINE.set(engine);
-    load.hook(&CURSOR_LOOKUP, load.symbol("npc.lookup_cursor")?)?;
+    if cursor {
+        load.hook(&CURSOR_LOOKUP, load.symbol("npc.lookup_cursor")?)?;
+    }
     load.hook(&UI_STATUS, load.system("ui_npc_status")?)
 }
 

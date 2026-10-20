@@ -3,6 +3,10 @@
 //! dismantling, and the upgrade and Quick Stash switches. Each refusal takes
 //! the game's own path for a refused action, so nothing moves and nothing is
 //! lost.
+//!
+//! On a client that hosts a game, the cursor's dismantle check and base stock
+//! also serve the client's own world, whose entities are not the server's:
+//! there the hooks keep out of the way.
 
 use std::cell::RefCell;
 use std::sync::OnceLock;
@@ -30,6 +34,8 @@ pub(crate) struct Layout {
     pub(crate) upgrade_target: usize,
     pub(crate) upgrade_version: usize,
     pub(crate) consumed_upgrade: usize,
+    /// Where base stock returns to in the client's interface; 0 for none.
+    pub(crate) stock_ui_return: u64,
     pub(crate) player_input: u32,
     pub(crate) consumed_input: u32,
 }
@@ -209,6 +215,24 @@ enshwick_api::detour! {
         out: *mut u8, lists: *mut [u64; 4], server: *mut u8, client: *mut u8, position: *const f32, player: u32,
     ) -> *mut u8 = base_stock;
 }
+enshwick_api::detour! {
+    static BASE_STOCK_FRAMED: unsafe extern "system" fn(
+        out: *mut u8, lists: *mut [u64; 4], server: *mut u8, client: *mut u8, position: *const f32, player: u32,
+    ) -> *mut u8 = base_stock, flags = enshwick_api::abi::HookFlags::CALLER_FRAME;
+}
+
+/// Whether base stock was asked for by the client's own interface, which
+/// sees the client's world; read before the chain calls on.
+fn for_client_ui(layout: &Layout) -> bool {
+    if layout.stock_ui_return == 0 {
+        return false;
+    }
+    enshwick_api::host().is_some_and(|host| {
+        // SAFETY: the frame was taken at entry of this chain.
+        let caller = unsafe { host.caller_frame().return_address() };
+        caller == layout.stock_ui_return
+    })
+}
 
 type StockFn =
     unsafe extern "system" fn(*mut u8, *mut [u64; 4], *mut u8, *mut u8, *const f32, u32) -> *mut u8;
@@ -227,8 +251,12 @@ fn base_stock(
     position: *const f32,
     player: u32,
 ) -> *mut u8 {
+    let ui = READS.get().is_some_and(|(_, layout)| for_client_ui(layout));
     // SAFETY: forwarded unchanged.
     let result = unsafe { next.get()(out, lists, server, client, position, player) };
+    if ui {
+        return result;
+    }
     // SAFETY: the first byte is the game's error code, 0 for success.
     if out.is_null() || lists.is_null() || unsafe { out.read() } != 0 {
         return result;
@@ -303,6 +331,10 @@ fn dismantle(
     }
     // SAFETY: the cursor context starts with the system context.
     let system: *mut u64 = unsafe { read(ctx, 0) };
+    // SAFETY: the cursor runs inside its system, on its thread.
+    if !unsafe { reads.worlds.is_server(system) } {
+        return method;
+    }
     // SAFETY: the cursor runs inside its system, on its thread.
     let player = unsafe { reads.ecs.entity(system) };
     #[expect(
@@ -391,7 +423,7 @@ unsafe fn refuse_pending(
     }
 }
 
-/// Links every refusal; called on the server only.
+/// Links every refusal.
 ///
 /// # Errors
 ///
@@ -403,7 +435,12 @@ pub(crate) fn link(load: &mut Load<'_>, reads: Reads, layout: Layout) -> Result<
     load.hook(&OFFER, load.symbol("safes.offer_test")?)?;
     load.hook(&TRANSFER, load.symbol("safes.transfer")?)?;
     load.hook(&SORT, load.symbol("safes.sort")?)?;
-    load.hook(&BASE_STOCK, load.symbol("safes.base_stock")?)?;
+    let stock = load.symbol("safes.base_stock")?;
+    if layout.stock_ui_return == 0 {
+        load.hook(&BASE_STOCK, stock)?;
+    } else {
+        load.hook(&BASE_STOCK_FRAMED, stock)?;
+    }
     load.hook(&DISMANTLE, load.symbol("safes.dismantle_method")?)?;
     load.hook(&INVENTORY_ACTIONS, load.symbol("safes.inventory_actions")?)?;
     Ok(())

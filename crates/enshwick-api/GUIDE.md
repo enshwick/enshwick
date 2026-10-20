@@ -84,7 +84,8 @@ mod in full.
    the symbols the mod pins itself.
 2. **Resolve.** Mods for the other side, duplicates, mods whose requirements are
    missing or too old, and the later of two conflicting mods are skipped with a
-   reason in the log. The rest load in dependency order.
+   reason in the log. The rest load in dependency order. The client loads
+   `SERVER` mods too: see [Hosting](#hosting).
 3. **Init.** `Mod::init` runs once. It links hooks, reads settings, finds game
    functions and services. Nothing takes effect yet; returning `Err(Off)` turns
    the mod off and leaves the game vanilla.
@@ -177,13 +178,14 @@ for an event only when some mod subscribed to it.
 | `LoaderSettingsChanged` | none | `mod-configs/enshwick.toml` changed |
 
 Game events come from the server only, and from its game thread: keep handlers
-short. `key` is the same for the same player account in every session.
+short. On a client they come from the built-in server while it hosts a game. `key` is the same for the same player account in every session.
 `load.subscribe(Event, |raw| ...)` is the untyped form.
 
 ## The world
 
-`load.world()?` on the server reads the world from the game thread (a game event
-or a scheduled task; elsewhere the reads return `None`):
+`load.world()?` reads the server's world from its game thread (a game event
+or a scheduled task; elsewhere the reads return `None`), on a client the
+built-in server's while it hosts:
 
 - `position(entity)` in metres, `template(entity)` as a GUID, and
   `used_item(entity)`, the item a placed prop came from, which it keeps across
@@ -195,11 +197,35 @@ or a scheduled task; elsewhere the reads return `None`):
 
 ## Scheduling
 
-`load.scheduler()?` on the server returns a `Copy` handle that puts work on the
-game thread after a simulation step: `next_tick(f)`, `after(delay, f)` and
+`load.scheduler()?` returns a `Copy` handle that puts work on the server's
+game thread after a simulation step, on a client while it hosts: `next_tick(f)`, `after(delay, f)` and
 `every(period, f)`, where `f` returns `ControlFlow::Continue(())` to keep
 repeating. Call it from any thread; tasks run where the game's server code runs,
 so they may call into the game. An idle step costs one atomic load.
+
+## Hosting
+
+A client that hosts a game, solo play included, runs the whole server on a
+thread of its own, `GameServer`, beside its own world. Every mod must work
+there as on a dedicated server, so the client loads `SERVER` mods as well,
+and the server's features act whenever the client hosts:
+
+- game events, the world reads and the scheduler serve the built-in server
+  from its first step until the game stops. Each hosted game starts with
+  `WorldLoaded` and ends with `Shutdown`; reset state tied to one game, such
+  as entity ids, on `Shutdown` (the next game has a new server and new
+  entities);
+- `host.hosting()` tells whether this process runs a server now: always on
+  the dedicated server, on the client while it hosts;
+- server systems run only in the server's world, but some functions serve
+  both worlds of the host, such as cursor checks and base stock. A hook on
+  one of them acts for the server only: `ecs::Worlds::resolve(load)` gives
+  `is_server(ctx)`, true for a system context of the server's world (always
+  on the dedicated server). Entity ids of the two worlds are unrelated;
+- a mod pins its server symbols for the client too, in a `CLIENT` build row:
+  the client binary holds twins of the server's functions. When a mod's
+  server and client halves hook one function, it links one detour there that
+  answers for both.
 
 ## Content: items, recipes and texts
 
@@ -331,7 +357,8 @@ iterator on a stack buffer, `entity(ctx)` names the current row's entity,
 component. Such hooks run on worker threads; `ecs::Components::resolve(load)`
 reads any entity's component from the system's context
 (`component(ctx, entity, hash)`, the hash from `World::component_type`) and
-finds the inventory an item slot belongs to (`slot_root`).
+finds the inventory an item slot belongs to (`slot_root`). On a hosting
+client, `ecs::Worlds` tells the server's systems from the client's.
 
 ## Services between mods
 

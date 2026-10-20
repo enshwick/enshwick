@@ -1,8 +1,14 @@
 //! Game events on the server, raised from the loader's own links: tick, world
 //! loaded and saved, player joined and left, shutdown, building placed and
-//! removed. The post-step link is always made on the server, since it also
-//! tells the world reads which thread is the game's; the others only when a
-//! mod subscribed to one of their events.
+//! removed. The post-step link is always made, since it also tells the world
+//! reads which thread is the game's; the others only when a mod subscribed to
+//! one of their events.
+//!
+//! A client runs the same server code on its `GameServer` thread while it
+//! hosts a game, solo play included, and only then: the links fire for that
+//! built-in server as they do on the dedicated one. Each hosted game has its
+//! own server and thread; the client follows them as a [`Session`] and, when a
+//! game stops, forgets its server, so the next one starts clean.
 //!
 //! Building happens inside ECS systems on worker threads, so those links only
 //! queue what happened; the post-step link raises it on the game thread.
@@ -11,7 +17,7 @@ use core::ffi::c_void;
 use std::sync::atomic::{AtomicU32, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Mutex, OnceLock, PoisonError};
 
-use enshwick_api::abi::{BuildingData, Event, Header, HookFlags, PlayerData, TickData};
+use enshwick_api::abi::{BuildingData, Event, Header, HookFlags, PlayerData, Side, TickData};
 
 use crate::chains::{LOADER, Link};
 use crate::host::Loader;
@@ -36,7 +42,55 @@ struct Offsets {
     slot_key: usize,
     ctx_player: usize,
     ctx_replay: usize,
+    server_world: usize,
+    entities: usize,
 }
+
+/// The server session the post-step link follows: the server and its thread.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct Session {
+    server: usize,
+    thread: u32,
+    /// Set when the session stopped; its last steps no longer count.
+    ended: bool,
+}
+
+/// What a step means for the session.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Step {
+    /// The session seen so far goes on.
+    Same,
+    /// Another server or thread: a new session.
+    New,
+    /// A step of a session that already stopped.
+    Ended,
+}
+
+impl Session {
+    /// Follows a step of `server` on `thread`.
+    pub(crate) fn step(&mut self, server: usize, thread: u32) -> Step {
+        if (server, thread) == (self.server, self.thread) {
+            return if self.ended { Step::Ended } else { Step::Same };
+        }
+        *self = Self {
+            server,
+            thread,
+            ended: false,
+        };
+        Step::New
+    }
+
+    /// Marks the session stopped.
+    pub(crate) fn stop(&mut self) {
+        self.ended = true;
+    }
+}
+
+static SESSION: Mutex<Session> = Mutex::new(Session {
+    server: 0,
+    thread: 0,
+    ended: false,
+});
 
 static LOADED: OnceLock<(&'static Loader, Offsets)> = OnceLock::new();
 static STEP_NEXT: AtomicUsize = AtomicUsize::new(0);
@@ -87,6 +141,8 @@ pub(crate) fn link(loader: &'static Loader) {
             slot_key: constant("server.player_slot_key")?,
             ctx_player: constant("building.ctx_player")?,
             ctx_replay: constant("building.ctx_replay")?,
+            server_world: constant("server.world")?,
+            entities: constant("world.entities")?,
         })
     })();
     let Some(offsets) = offsets else {
@@ -129,8 +185,11 @@ pub(crate) fn link(loader: &'static Loader) {
             &PICKUP_NEXT,
         ),
     ];
+    // A client follows every hosted game's start and stop.
+    let client = loader.side == Side::CLIENT;
     for (events, symbol, detour, next) in links {
-        if !events.is_empty() && !wants(events) {
+        let session = client && symbol == "server.set_state";
+        if !events.is_empty() && !wants(events) && !session {
             continue;
         }
         let Some(rva) = loader.build.symbol(symbol) else {
@@ -191,10 +250,29 @@ unsafe extern "system" fn step(server: *mut u8) {
     let Some((loader, offsets)) = LOADED.get() else {
         return;
     };
-    crate::world::SERVER.store(server.addr(), Ordering::Release);
     // SAFETY: no preconditions.
     let thread = unsafe { windows_sys::Win32::System::Threading::GetCurrentThreadId() };
-    crate::world::GAME_THREAD.store(thread, Ordering::Release);
+    let seen = SESSION
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .step(server.addr(), thread);
+    match seen {
+        Step::Ended => return,
+        Step::New if loader.side == Side::CLIENT => {
+            forget_joined();
+            crate::log!(
+                INFO,
+                "this client hosts a game on thread {thread}: server mods act"
+            );
+        }
+        Step::New | Step::Same => {}
+    }
+    crate::world::capture(
+        server.addr(),
+        thread,
+        offsets.server_world,
+        offsets.entities,
+    );
     let built = std::mem::take(&mut *BUILDING.lock().unwrap_or_else(PoisonError::into_inner));
     for data in &built {
         let event = if data.kind == BuildingData::PLACED {
@@ -233,6 +311,30 @@ unsafe extern "system" fn step(server: *mut u8) {
     }
 }
 
+fn forget_joined() {
+    for joined in &JOINED {
+        joined.store(0, Ordering::Relaxed);
+    }
+}
+
+/// Ends a hosted game on the client: its server goes away with it.
+fn end_session() {
+    SESSION
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .stop();
+    crate::world::release();
+    forget_joined();
+    BUILDING
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .clear();
+    crate::log!(
+        INFO,
+        "the hosted game stopped; server mods rest until the next"
+    );
+}
+
 unsafe extern "system" fn set_state(entry: *mut u8, state: u8) {
     let old = LOADED
         .get()
@@ -248,6 +350,9 @@ unsafe extern "system" fn set_state(entry: *mut u8, state: u8) {
         STATE_RUN if old != STATE_RUN => loader.emit(Event::WORLD_LOADED, None, core::ptr::null()),
         STATE_SHUTDOWN if old != STATE_SHUTDOWN => {
             loader.emit(Event::SHUTDOWN, None, core::ptr::null());
+            if loader.side == Side::CLIENT {
+                end_session();
+            }
         }
         _ => {}
     }
@@ -367,4 +472,24 @@ unsafe extern "system" fn pickup(context: *mut u8, target: *const u8, tool: u32)
         });
     }
     done
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_session_follows_its_server_and_thread() {
+        let mut session = Session::default();
+        assert_eq!(session.step(0x1000, 7), Step::New);
+        assert_eq!(session.step(0x1000, 7), Step::Same);
+        session.stop();
+        assert_eq!(session.step(0x1000, 7), Step::Ended);
+        // The next hosted game: a new server on a new thread.
+        assert_eq!(session.step(0x2000, 9), Step::New);
+        assert_eq!(session.step(0x2000, 9), Step::Same);
+        // The same address again, on another thread, is another game.
+        session.stop();
+        assert_eq!(session.step(0x2000, 11), Step::New);
+    }
 }

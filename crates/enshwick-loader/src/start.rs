@@ -115,9 +115,8 @@ pub(crate) fn start(stub_abi: u32, missing_forwards: u32) {
     initialise(loader, &order);
     loader.seal_subscriptions();
     crate::content::seal_and_link(loader);
-    if side == Side::SERVER {
-        crate::events::link(loader);
-    }
+    // The client runs the server's code while it hosts a game.
+    crate::events::link(loader);
     if side == Side::CLIENT {
         link_join(loader);
         let waited = wait_for_window(CLIENT_ARM_DELAY);

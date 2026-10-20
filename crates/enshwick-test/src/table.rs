@@ -399,6 +399,16 @@ extern "system" fn workshop_recipes() -> u32 {
     with(512, |s| s.host.workshop_recipes)
 }
 
+extern "system" fn hosting() -> u8 {
+    with(0, |s| {
+        u8::from(s.host.side == enshwick_api::abi::Side::SERVER || s.host.hosting)
+    })
+}
+
+extern "system" fn server_world() -> u64 {
+    with(0, |s| s.host.server_world)
+}
+
 /// The table every installed fake answers through; a mod keeps the first
 /// table it sees for the process, so it is one static.
 pub(crate) static TABLE: HostApi = HostApi {
@@ -432,4 +442,6 @@ pub(crate) static TABLE: HostApi = HostApi {
     code_range,
     patch_code,
     workshop_recipes,
+    hosting,
+    server_world,
 };

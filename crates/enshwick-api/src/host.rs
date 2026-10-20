@@ -110,6 +110,39 @@ impl Host {
         out
     }
 
+    /// Whether this process runs a game server now: always on the dedicated
+    /// server; on the client while it hosts a game, solo play included, from
+    /// the built-in server's first step until the game stops. Under a loader
+    /// older than ABI minor 8, whether this is the dedicated server.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// if let Some(host) = enshwick_api::host() {
+    ///     let acts = host.hosting();
+    /// }
+    /// ```
+    #[must_use]
+    pub fn hosting(&self) -> bool {
+        let end = core::mem::offset_of!(HostApi, hosting) + size_of::<usize>();
+        if self.api.header.covers(end) {
+            (self.api.hosting)() != 0
+        } else {
+            self.build().side == Side::SERVER
+        }
+    }
+
+    /// The entity world of the game server this process runs, 0 while none
+    /// runs, before its first step, or under a loader older than ABI minor 8.
+    pub(crate) fn server_world(&self) -> u64 {
+        let end = core::mem::offset_of!(HostApi, server_world) + size_of::<usize>();
+        if self.api.header.covers(end) {
+            (self.api.server_world)()
+        } else {
+            0
+        }
+    }
+
     /// Writes `message` to the log under this mod's id.
     ///
     /// Not for hot paths: a hook logs once per event worth knowing.
