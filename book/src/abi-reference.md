@@ -12,7 +12,7 @@ raw table. The exact types and signatures are in the
 | Constant                                                                                            | Value | Meaning                                         |
 | --------------------------------------------------------------------------------------------------- | ----- | ----------------------------------------------- |
 | [`ABI_MAJOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 1     | A loader refuses a mod built for another major. |
-| [`ABI_MINOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 46    | A newer minor only appends.                     |
+| [`ABI_MINOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 47    | A newer minor only appends.                     |
 
 The ABI version is apart from Enshwick Loader's version (such as 0.2.0, see
 [Releasing and updates](releasing.md#versions)): a platform release raises
@@ -173,8 +173,8 @@ marked "init only" are allowed during `enshwick_mod_init` only.
 | `fault`               | Reports a run-time failure; the loader unlinks the mod and turns it off                         | 0           |
 | `log`                 | Writes a line to the log under the mod's id                                                     | 0           |
 | `settings`            | The text of the mod's settings file, written from the defaults when missing                     | 0           |
-| `publish`             | Publishes a versioned table of functions for other mods                                         | 0           |
-| `service`             | Finds a table another mod published                                                             | 0           |
+| `publish`             | Publishes a service table with its layout for other mods; init only                             | 47          |
+| `service`             | Finds a published service and checks its layout starts with the wanted one                      | 47          |
 | `constant`            | Resolves an engine constant of the running build by its symbolic id                             | 0           |
 | `data_dir`            | The mod's data folder, `mod-data/<id>`, created on first use                                    | 0           |
 | `log_level`           | The most detailed level kept for the mod's lines                                                | 1           |
@@ -278,6 +278,9 @@ marked "init only" are allowed during `enshwick_mod_init` only.
 | `stats_changed`       | Calls a handler for every stat value that changed; init only                                    | 45          |
 | `stat_sources`        | The modifiers that count toward an entity's stat; server game thread only                       | 45          |
 | `stat_watch`          | Watches an entity for its worn items and buffs; any thread                                      | 45          |
+| `define_event`        | Defines a mod event named after the mod, with its layout; init only                             | 47          |
+| `subscribe_event`     | Calls a handler on every mod event of a name whose layout serves the handler's; init only       | 47          |
+| `send_event`          | Hands a mod event the mod defined to its subscribers on this thread; any thread                 | 47          |
 
 ## Under an older loader
 
@@ -340,6 +343,7 @@ the mod off with a reason, which the mod's log shows as `off: <reason>`:
 | 45          | `Load::stats` and stat kinds    | Off: `stats: needs a newer loader`                        |
 | 45          | `Damage::attacker`              | The hit's source                                          |
 | 46          | world settings                  | Startup values stay until a restart                       |
+| 47          | services, mod events            | Off: `services and mod events: needs a newer loader`      |
 
 A mod that can do without a feature catches the `Off` and goes on without it
 instead of returning it from `init`.

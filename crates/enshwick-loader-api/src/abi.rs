@@ -14,7 +14,7 @@ use core::sync::atomic::AtomicUsize;
 pub const ABI_MAJOR: u16 = 1;
 
 /// The minor version of this interface. A newer minor only appends fields.
-pub const ABI_MINOR: u16 = 46;
+pub const ABI_MINOR: u16 = 47;
 
 /// Whether `id` is a valid mod id: 1 to 64 characters of `[a-z0-9-]`.
 ///
@@ -3739,15 +3739,18 @@ pub struct HostApi {
     /// it is missing; the text stays valid until the mod's next call to
     /// `settings`.
     pub settings: extern "system" fn(me: ModHandle, defaults: Str, out: *mut Str) -> Status,
-    /// Publishes a service: a versioned table of functions other mods may use.
-    pub publish:
-        extern "system" fn(me: ModHandle, name: Str, version: u32, table: *const c_void) -> Status,
-    /// Finds a service another mod published, of a compatible version.
+    /// Publishes the service `spec` describes, table and layout, for other
+    /// mods; [`Status::REFUSED`] when another mod publishes its name and
+    /// major. Allowed during `enshwick_mod_init` only. Since minor 47.
+    pub publish: extern "system" fn(me: ModHandle, spec: *const ServiceSpec) -> Status,
+    /// Finds the service `wanted` describes, its table null, and checks
+    /// that the published layout starts with the wanted one; writes the
+    /// table and its publisher to `out`, and on [`Status::MISSING`] or
+    /// [`Status::REFUSED`] the reason. Since minor 47.
     pub service: extern "system" fn(
         me: ModHandle,
-        name: Str,
-        version: u32,
-        out: *mut *const c_void,
+        wanted: *const ServiceSpec,
+        out: *mut ServiceFound,
     ) -> Status,
     /// Resolves an engine constant of the running build, such as a field
     /// offset reflection does not describe, by its symbolic id.
@@ -4469,7 +4472,170 @@ pub struct HostApi {
     /// stops for `watch` 0: players are always watched, and so is every
     /// entity a mod keeps a modifier on. Any thread. Since minor 45.
     pub stat_watch: extern "system" fn(me: ModHandle, entity: u32, watch: u8) -> Status,
+    /// Defines the mod event `spec` describes, named `<id>.<name>` after
+    /// the defining mod, and writes the id [`HostApi::send_event`] takes;
+    /// [`Status::REFUSED`] for a name outside the mod's id or defined
+    /// twice. Allowed during `enshwick_mod_init` only. Since minor 47.
+    pub define_event:
+        extern "system" fn(me: ModHandle, spec: *const EventSpec, out: *mut u32) -> Status,
+    /// Calls `callback` with `user` and the event's data on every mod event
+    /// `spec` names, once its definition, checked against `spec`'s layout
+    /// when every mod is initialised, matches. Allowed during
+    /// `enshwick_mod_init` only. Since minor 47.
+    pub subscribe_event: extern "system" fn(
+        me: ModHandle,
+        spec: *const EventSpec,
+        callback: ModEventFn,
+        user: *mut c_void,
+    ) -> Status,
+    /// Hands `data` to every subscriber of the mod's own event `event`, on
+    /// this thread, before it returns; reaches no one before every mod is
+    /// initialised. [`Status::REFUSED`] for an event another mod defined.
+    /// Any thread. Since minor 47.
+    pub send_event: extern "system" fn(me: ModHandle, event: u32, data: *const c_void) -> Status,
 }
+
+/// One field of a service table or mod event, as its layout hash sees it.
+///
+/// Frozen: written as an array.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::abi::{LayoutField, Str};
+///
+/// let field = LayoutField { name: Str::new("price"), hash: 7 };
+/// assert_eq!(field.hash, 7);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct LayoutField {
+    /// The field's name.
+    pub name: Str,
+    /// The hash of the field's name, its type as written, size, alignment
+    /// and offset.
+    pub hash: u64,
+}
+
+/// The layout of a service table or mod event, field by field.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::abi::Layout;
+///
+/// let layout = Layout { fields: core::ptr::null(), count: 0, size: 0 };
+/// assert_eq!(layout.count, 0);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct Layout {
+    /// The fields, in declaration order.
+    pub fields: *const LayoutField,
+    /// How many `fields` points at.
+    pub count: u32,
+    /// The size of the whole type.
+    pub size: u32,
+}
+
+/// A service a mod publishes, or the one it asks for.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::abi::{Header, Layout, ServiceSpec, Str};
+///
+/// let spec = ServiceSpec {
+///     header: Header::of::<ServiceSpec>(),
+///     name: Str::new("trading-post.prices"),
+///     major: 1,
+///     layout: Layout { fields: core::ptr::null(), count: 0, size: 0 },
+///     table: core::ptr::null(),
+/// };
+/// assert_eq!(spec.major, 1);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct ServiceSpec {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// The service's name, `<publisher id>.<what>`.
+    pub name: Str,
+    /// The incompatible version: tables of two majors share nothing.
+    pub major: u32,
+    /// The table's fields; tables grow by appending.
+    pub layout: Layout,
+    /// The `'static` table; null when asking.
+    pub table: *const c_void,
+}
+
+/// What [`HostApi::service`] found.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::abi::ServiceFound;
+///
+/// let found = ServiceFound::EMPTY;
+/// assert!(found.table.is_null());
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct ServiceFound {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// The publisher's table, valid for the process.
+    pub table: *const c_void,
+    /// How many fields the publisher's table has.
+    pub fields: u32,
+    /// The publisher's mod id, valid for the process.
+    pub owner: Str,
+    /// The publisher's version, valid for the process.
+    pub owner_version: Str,
+    /// Why nothing was found, valid for the process; empty on success.
+    pub reason: Str,
+}
+
+impl ServiceFound {
+    /// Nothing found yet, for the loader to fill.
+    pub const EMPTY: Self = Self {
+        header: Header::of::<Self>(),
+        table: core::ptr::null(),
+        fields: 0,
+        owner: Str::EMPTY,
+        owner_version: Str::EMPTY,
+        reason: Str::EMPTY,
+    };
+}
+
+/// A mod event a mod defines, or the one it subscribes to.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::abi::{EventSpec, Header, Layout, Str};
+///
+/// let spec = EventSpec {
+///     header: Header::of::<EventSpec>(),
+///     name: Str::new("trading-post.sold"),
+///     layout: Layout { fields: core::ptr::null(), count: 0, size: 0 },
+/// };
+/// assert_eq!(spec.layout.size, 0);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct EventSpec {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// The event's name, `<defining mod id>.<what>`.
+    pub name: Str,
+    /// The event data's fields; events grow by appending.
+    pub layout: Layout,
+}
+
+/// A mod's handler for a mod event: the event's data, valid for the call,
+/// and the pointer given at subscription.
+pub type ModEventFn = unsafe extern "system" fn(data: *const c_void, user: *mut c_void);
 
 /// The exports a mod DLL provides, by name.
 ///
@@ -4530,7 +4696,6 @@ const _: () = {
     assert!(core::mem::offset_of!(HostApi, hook_at) == 24 + 35 * 8);
     assert!(core::mem::offset_of!(HostApi, inventory_open) == 24 + 36 * 8);
     assert!(core::mem::offset_of!(HostApi, inventory_submit) == 24 + 38 * 8);
-    assert!(size_of::<HostApi>() == 24 + 115 * 8);
     assert!(core::mem::offset_of!(HostApi, stat_open) == 24 + 107 * 8);
     assert!(size_of::<StatDefData>() == 8 + 16 + 16);
     // Frozen: written as arrays.
@@ -4539,6 +4704,14 @@ const _: () = {
     assert!(size_of::<StatSource>() == 20);
     assert!(size_of::<StatModify>() == 8 + 8 + 12 + 4 + 8);
     assert!(size_of::<StatChange>() == 8 + 24);
+    assert!(size_of::<HostApi>() == 24 + 118 * 8);
+    assert!(core::mem::offset_of!(HostApi, define_event) == 24 + 115 * 8);
+    // Frozen: written as an array.
+    assert!(size_of::<LayoutField>() == 24);
+    assert!(size_of::<Layout>() == 16);
+    assert!(size_of::<ServiceSpec>() == 8 + 16 + 8 + 16 + 8);
+    assert!(size_of::<ServiceFound>() == 8 + 8 + 8 + 3 * 16);
+    assert!(size_of::<EventSpec>() == 8 + 16 + 16);
     assert!(core::mem::offset_of!(HostApi, config_schema) == 24 + 92 * 8);
     assert!(core::mem::offset_of!(HostApi, time_of_day) == 24 + 73 * 8);
     assert!(core::mem::offset_of!(HostApi, set_time_speed) == 24 + 76 * 8);

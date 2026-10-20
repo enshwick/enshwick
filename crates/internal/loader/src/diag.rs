@@ -229,6 +229,8 @@ pub struct Summary {
     pub disabled: Vec<String>,
     /// Mods turned off, oldest first.
     pub turned_off: Vec<TurnedOff>,
+    /// The services mods publish and the events they define, a line each.
+    pub links: Vec<String>,
     /// What mods serve.
     pub served: Served,
     /// What became of the code patches.
@@ -293,6 +295,16 @@ impl Summary {
             let _w = writeln!(out, "\nturned off:");
             for t in &self.turned_off {
                 let _w = writeln!(out, "  {} {}: {}", clock(t.at), t.id, t.reason);
+            }
+        }
+        if !self.links.is_empty() {
+            let _w = writeln!(
+                out,
+                "
+services and events:"
+            );
+            for line in &self.links {
+                let _w = writeln!(out, "  {line}");
             }
         }
         let s = self.served;
@@ -455,6 +467,7 @@ mod tests {
                 reason: "panic in a command handler".into(),
                 at: 44_000,
             }],
+            links: vec!["event trading-post.sold from trading-post 0.3.0 to market-stalls".into()],
             served: Served {
                 resources: 4,
                 built: 4,
@@ -500,6 +513,11 @@ mod tests {
         ));
         assert!(text.contains("  safes 0.1.1 (off)\n  off in mods/enshwick/mods.toml: probe\n"));
         assert!(text.contains("12:13:20Z safes: panic in a command handler"));
+        assert!(text.contains(
+            "services and events:
+  event trading-post.sold from trading-post 0.3.0 to market-stalls
+"
+        ));
         assert!(text.contains("4 resources served (4 built, 0 failed), 12 texts"));
         assert!(text.contains("one in 256 timed"));
         let busy = text.find("building.max_altars").unwrap();

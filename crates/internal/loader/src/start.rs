@@ -119,7 +119,6 @@ pub(crate) fn start(stub_abi: u32, missing_forwards: u32) {
         mods: records(&libraries, &candidates, &plan),
         chains: Mutex::new(Chains::default()),
         mids: Mutex::default(),
-        services: Mutex::default(),
         caller_frame: read_frame,
         subscriptions: Mutex::default(),
         delivery: OnceLock::new(),
@@ -133,6 +132,7 @@ pub(crate) fn start(stub_abi: u32, missing_forwards: u32) {
     crate::stats::seal();
     crate::item_data::seal();
     loader.seal_subscriptions();
+    crate::services::seal(loader);
     crate::content::seal_and_link(loader);
     link_features(loader);
     if side == Side::CLIENT {

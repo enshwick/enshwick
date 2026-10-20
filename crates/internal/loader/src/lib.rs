@@ -76,6 +76,8 @@ pub mod remote;
 pub mod resolve;
 #[cfg(windows)]
 mod saves;
+#[cfg(windows)]
+mod services;
 pub mod settings;
 #[cfg(windows)]
 mod spawns;

@@ -248,6 +248,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "enshwick-example-market-stalls"
+version = "0.1.0"
+dependencies = [
+ "enshwick-example-trading-post-api",
+ "enshwick-loader-api",
+]
+
+[[package]]
+name = "enshwick-example-trading-post"
+version = "0.1.0"
+dependencies = [
+ "enshwick-example-trading-post-api",
+ "enshwick-loader-api",
+]
+
+[[package]]
+name = "enshwick-example-trading-post-api"
+version = "0.1.0"
+dependencies = [
+ "enshwick-loader-api",
+]
+
+[[package]]
 name = "enshwick-flame-altar-count"
 version = "0.4.0"
 dependencies = [

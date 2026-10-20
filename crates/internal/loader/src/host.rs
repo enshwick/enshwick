@@ -12,7 +12,6 @@ use enshwick_loader_api::abi::{
 };
 use enshwick_loader_api::mods::{LOADER_FILE, Updates};
 use enshwick_loader_reflect::{Fingerprint, Reflection};
-use rustc_hash::FxHashMap;
 
 use crate::builds::KnownBuild;
 use crate::chains::{Chains, Link, Next};
@@ -112,8 +111,6 @@ pub(crate) struct Loader {
     pub(crate) chains: Mutex<Chains>,
     /// Every mid-function hook.
     pub(crate) mids: Mutex<Mids>,
-    /// Published services: `(name, version)` to `(owner, table)`.
-    pub(crate) services: Mutex<FxHashMap<(String, u32), (usize, usize)>>,
     /// Reads the caller frame of the running chain.
     pub(crate) caller_frame: fn() -> api_frame::CallerFrame,
     /// Subscriptions while mods initialise.
@@ -678,6 +675,9 @@ pub(crate) static API: HostApi = HostApi {
     content_serve,
     content_read,
     icons_ready,
+    define_event,
+    subscribe_event,
+    send_event,
 };
 
 /// A static slice from a pointer and a count, empty for a null pointer.
@@ -930,62 +930,184 @@ extern "system" fn settings(me: ModHandle, defaults: Str, out: *mut Str) -> Stat
     })
 }
 
-extern "system" fn publish(
-    me: ModHandle,
+impl crate::services::Names for Loader {
+    fn name(&self, index: usize) -> (&str, &str) {
+        self.mods
+            .get(index)
+            .map_or(("?", "?"), |m| (m.id.as_str(), m.version.as_str()))
+    }
+
+    fn off(&self, index: usize) -> bool {
+        self.mods
+            .get(index)
+            .is_none_or(|m| m.off.load(Ordering::Acquire))
+    }
+}
+
+/// The name and layout of a service or event spec the safe layer passed.
+///
+/// # Safety
+///
+/// `name` and `layout` come from a spec valid for the call.
+unsafe fn spec_parts(
     name: Str,
-    version: u32,
-    table: *const core::ffi::c_void,
-) -> Status {
+    layout: &api_frame::Layout,
+) -> Option<(&str, crate::services::Fields)> {
+    let name = text(name)?;
+    // SAFETY: forwarded from the caller.
+    let fields = unsafe { enshwick_loader_api::services::read_layout(layout) }?;
+    Some((name, fields))
+}
+
+extern "system" fn publish(me: ModHandle, spec: *const api_frame::ServiceSpec) -> Status {
     entry("publish", || {
-        let Some(name) = text(name) else {
-            return Status::BAD_ARGS;
-        };
-        let (loader, index) = match caller_index(me) {
+        let (loader, index, record) = match calling(me) {
             Ok(found) => found,
             Err(status) => return status,
         };
-        if table.is_null() {
+        // SAFETY: the safe layer passes a valid spec or null.
+        let Some(spec) = (unsafe { spec.as_ref() }) else {
+            return Status::BAD_ARGS;
+        };
+        // SAFETY: the spec is valid for the call.
+        let Some((name, fields)) = (unsafe { spec_parts(spec.name, &spec.layout) }) else {
+            return Status::BAD_ARGS;
+        };
+        if spec.table.is_null() {
             return Status::BAD_ARGS;
         }
-        let Ok(mut services) = loader.services.lock() else {
-            return Status::REFUSED;
-        };
-        let key = (name.to_owned(), version);
-        if services.contains_key(&key) {
-            return Status::REFUSED;
+        let published = crate::services::registry().publish(
+            index,
+            name,
+            spec.major,
+            fields,
+            spec.table.expose_provenance(),
+            loader,
+        );
+        match published {
+            Ok(()) => Status::OK,
+            Err(reason) => {
+                crate::log::write(Level::WARN, &record.id, &reason);
+                Status::REFUSED
+            }
         }
-        services.insert(key, (index, table.expose_provenance()));
-        Status::OK
     })
 }
 
 extern "system" fn service(
     me: ModHandle,
-    name: Str,
-    version: u32,
-    out: *mut *const core::ffi::c_void,
+    wanted: *const api_frame::ServiceSpec,
+    out: *mut api_frame::ServiceFound,
 ) -> Status {
     entry("service", || {
-        let (Some(loader), Some(name)) = (loader(), text(name)) else {
+        let loader = match caller(me) {
+            Ok(found) => found,
+            Err(status) => return status,
+        };
+        // SAFETY: the safe layer passes a valid spec or null.
+        let Some(wanted) = (unsafe { wanted.as_ref() }) else {
             return Status::BAD_ARGS;
         };
-        if loader.record(me).is_none() {
+        // SAFETY: the spec is valid for the call.
+        let Some((name, fields)) = (unsafe { spec_parts(wanted.name, &wanted.layout) }) else {
             return Status::BAD_ARGS;
-        }
-        let Ok(services) = loader.services.lock() else {
-            return Status::REFUSED;
         };
-        let Some(&(owner, table)) = services.get(&(name.to_owned(), version)) else {
-            return Status::MISSING;
+        let found = crate::services::registry().find(name, wanted.major, &fields, loader);
+        let mut answer = api_frame::ServiceFound::EMPTY;
+        let status = match found {
+            Ok(found) => {
+                let (id, version) = crate::services::Names::name(loader, found.owner);
+                answer.table = core::ptr::with_exposed_provenance(found.table);
+                answer.fields = found.fields;
+                answer.owner = Str::new(keep(id));
+                answer.owner_version = Str::new(keep(version));
+                Status::OK
+            }
+            Err((status, reason)) => {
+                answer.reason = Str::new(keep(&reason));
+                status
+            }
         };
-        if loader
-            .mods
-            .get(owner)
-            .is_none_or(|m| m.off.load(Ordering::Acquire))
-        {
-            return Status::MISSING;
+        // SAFETY: the safe layer passes a valid out pointer or null.
+        match unsafe { out.as_mut() } {
+            Some(slot) => {
+                *slot = answer;
+                status
+            }
+            None => Status::BAD_ARGS,
         }
-        put(out, core::ptr::with_exposed_provenance(table))
+    })
+}
+
+extern "system" fn define_event(
+    me: ModHandle,
+    spec: *const api_frame::EventSpec,
+    out: *mut u32,
+) -> Status {
+    entry("define_event", || {
+        let (_, index, record) = match calling(me) {
+            Ok(found) => found,
+            Err(status) => return status,
+        };
+        if crate::services::sealed() {
+            return Status::TOO_LATE;
+        }
+        // SAFETY: the safe layer passes a valid spec or null.
+        let Some(spec) = (unsafe { spec.as_ref() }) else {
+            return Status::BAD_ARGS;
+        };
+        // SAFETY: the spec is valid for the call.
+        let Some((name, fields)) = (unsafe { spec_parts(spec.name, &spec.layout) }) else {
+            return Status::BAD_ARGS;
+        };
+        let defined = crate::services::registry().define(index, &record.id, name, fields);
+        match defined {
+            Ok(id) => put(out, id),
+            Err(reason) => {
+                crate::log::write(Level::WARN, &record.id, &reason);
+                Status::REFUSED
+            }
+        }
+    })
+}
+
+extern "system" fn subscribe_event(
+    me: ModHandle,
+    spec: *const api_frame::EventSpec,
+    callback: api_frame::ModEventFn,
+    user: *mut core::ffi::c_void,
+) -> Status {
+    entry("subscribe_event", || {
+        let index = match caller_index(me) {
+            Ok((_, index)) => index,
+            Err(status) => return status,
+        };
+        if crate::services::sealed() {
+            return Status::TOO_LATE;
+        }
+        // SAFETY: the safe layer passes a valid spec or null.
+        let Some(spec) = (unsafe { spec.as_ref() }) else {
+            return Status::BAD_ARGS;
+        };
+        // SAFETY: the spec is valid for the call.
+        let Some((name, fields)) = (unsafe { spec_parts(spec.name, &spec.layout) }) else {
+            return Status::BAD_ARGS;
+        };
+        crate::services::registry().subscribe(
+            index,
+            name,
+            fields,
+            callback,
+            user.expose_provenance(),
+        );
+        Status::OK
+    })
+}
+
+extern "system" fn send_event(me: ModHandle, event: u32, data: *const core::ffi::c_void) -> Status {
+    entry("send_event", || match caller_index(me) {
+        Ok((_, index)) => crate::services::send(index, event, data),
+        Err(status) => status,
     })
 }
 

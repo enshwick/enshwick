@@ -358,6 +358,139 @@ fn expand_hook(
     .into())
 }
 
+/// Declares a service table: makes the struct `repr(C)` and implements
+/// `enshwick_loader_api::services::Service` with a layout hash per field.
+///
+/// `#[service(name = "<publisher id>.<what>", version = <major>)]`; the
+/// version defaults to 1. Fields are `extern "system" fn` pointers or plain
+/// data, appended over time. Examples are on `enshwick_loader_api::service`.
+#[proc_macro_attribute]
+pub fn service(args: TokenStream, item: TokenStream) -> TokenStream {
+    let mut name: Option<syn::LitStr> = None;
+    let mut version: Option<syn::LitInt> = None;
+    let settings = syn::meta::parser(|meta| {
+        if meta.path.is_ident("name") {
+            name = Some(meta.value()?.parse()?);
+            Ok(())
+        } else if meta.path.is_ident("version") {
+            version = Some(meta.value()?.parse()?);
+            Ok(())
+        } else {
+            Err(meta.error("expected `name = \"<id>.<what>\"` or `version = <major>`"))
+        }
+    });
+    parse_macro_input!(args with settings);
+    let item = parse_macro_input!(item as syn::ItemStruct);
+    expand_layout(
+        &item,
+        name,
+        Some(version.map_or_else(|| quote!(1), |v| quote!(#v))),
+        &quote!(Service),
+    )
+    .unwrap_or_else(|e| e.to_compile_error().into())
+}
+
+/// Declares a mod event: makes the struct `repr(C)` and implements
+/// `enshwick_loader_api::services::ModEvent` with a layout hash per field.
+///
+/// `#[event(name = "<defining mod id>.<what>")]`; the struct is `Copy`
+/// plain data, appended over time. Examples are on
+/// `enshwick_loader_api::event`.
+#[proc_macro_attribute]
+pub fn event(args: TokenStream, item: TokenStream) -> TokenStream {
+    let mut name: Option<syn::LitStr> = None;
+    let settings = syn::meta::parser(|meta| {
+        if meta.path.is_ident("name") {
+            name = Some(meta.value()?.parse()?);
+            Ok(())
+        } else {
+            Err(meta.error("expected `name = \"<id>.<what>\"`"))
+        }
+    });
+    parse_macro_input!(args with settings);
+    let item = parse_macro_input!(item as syn::ItemStruct);
+    expand_layout(&item, name, None, &quote!(ModEvent))
+        .unwrap_or_else(|e| e.to_compile_error().into())
+}
+
+/// The struct as `repr(C)` with its layout trait: `major` is `Some` for a
+/// service.
+fn expand_layout(
+    item: &syn::ItemStruct,
+    name: Option<syn::LitStr>,
+    major: Option<proc_macro2::TokenStream>,
+    trait_name: &proc_macro2::TokenStream,
+) -> syn::Result<TokenStream> {
+    let ident = &item.ident;
+    let name = name.ok_or_else(|| {
+        syn::Error::new_spanned(ident, "name the declaration: `name = \"<id>.<what>\"`")
+    })?;
+    let text = name.value();
+    let valid = text.split_once('.').is_some_and(|(id, what)| {
+        !id.is_empty()
+            && id.len() <= 64
+            && id
+                .bytes()
+                .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+            && !what.is_empty()
+    });
+    if !valid {
+        return Err(syn::Error::new_spanned(
+            &name,
+            "the name is `<mod id>.<what>`, the mod id in `[a-z0-9-]`",
+        ));
+    }
+    if !item.generics.params.is_empty() {
+        return Err(syn::Error::new_spanned(
+            &item.generics,
+            "a declaration crosses DLLs and takes no generics",
+        ));
+    }
+    if let Some(repr) = item.attrs.iter().find(|a| a.path().is_ident("repr")) {
+        return Err(syn::Error::new_spanned(
+            repr,
+            "the declaration is `repr(C)` already: remove `#[repr]`",
+        ));
+    }
+    let Fields::Named(fields) = &item.fields else {
+        return Err(syn::Error::new_spanned(
+            ident,
+            "a declaration has named fields",
+        ));
+    };
+    let entries = fields.named.iter().filter_map(|field| {
+        let field_ident = field.ident.as_ref()?;
+        let ty = &field.ty;
+        let field_name = field_ident.to_string();
+        let written = format!("{field_name}: {}", quote!(#ty));
+        Some(quote! {
+            ::enshwick_loader_api::abi::LayoutField {
+                name: ::enshwick_loader_api::abi::Str::new(#field_name),
+                hash: ::enshwick_loader_api::services::layout_hash(
+                    #written,
+                    ::core::mem::size_of::<#ty>(),
+                    ::core::mem::align_of::<#ty>(),
+                    ::core::mem::offset_of!(#ident, #field_ident),
+                ),
+            }
+        })
+    });
+    let major = major.map(|major| quote!(const MAJOR: u32 = #major;));
+    Ok(quote! {
+        #[repr(C)]
+        #item
+
+        // SAFETY: the layout lists every field of the `repr(C)` struct in
+        // order, with its size, alignment and offset.
+        unsafe impl ::enshwick_loader_api::services::#trait_name for #ident {
+            const NAME: &'static str = #name;
+            #major
+            const LAYOUT: &'static [::enshwick_loader_api::abi::LayoutField] = &[#(#entries),*];
+        }
+    }
+    .into())
+}
+
 /// Whether the `F` of `next: Next<F>` is an `unsafe fn`; `None` when the
 /// argument has another shape.
 fn next_is_unsafe(arg: &FnArg) -> Option<bool> {

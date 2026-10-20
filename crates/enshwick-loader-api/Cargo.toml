@@ -109,6 +109,10 @@ name = "players"
 required-features = ["test"]
 
 [[test]]
+name = "services"
+required-features = ["test"]
+
+[[test]]
 name = "stats"
 required-features = ["test"]
 

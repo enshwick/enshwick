@@ -18,6 +18,8 @@ every mod is a DLL in the `mods/` folder beside it. Four things make it up:
 The crates under [`crates/internal`](crates/internal) (the loader DLL, the
 stub, the reflection reader and the macros) are parts of the loader, not for
 mods.
+[`examples`](examples) holds small mods that show one part of the API each;
+they are never released.
 
 ## Mods
 

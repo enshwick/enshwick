@@ -1,0 +1,26 @@
+[package]
+name = "enshwick-example-market-stalls"
+version = "0.1.0"
+description = "Example: a mod that uses another mod's typed service and subscribes to its event"
+keywords = ["enshrouded", "mod", "example"]
+categories = ["game-development"]
+readme = "../README.md"
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+enshwick-example-trading-post-api = { path = "../trading-post-api", version = "0.1.0" }
+enshwick-loader-api.workspace = true
+
+[dev-dependencies]
+enshwick-loader-api = { workspace = true, features = ["test"] }
+
+[lints]
+workspace = true

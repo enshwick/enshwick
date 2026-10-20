@@ -294,6 +294,15 @@ pub(crate) fn run_handler(
     unsafe { reply.as_str() }.unwrap_or("").to_owned()
 }
 
+/// A published service, as the fake keeps it.
+#[derive(Clone, Debug)]
+pub(crate) struct FakeService {
+    pub(crate) name: String,
+    pub(crate) major: u32,
+    pub(crate) fields: Vec<(String, u64)>,
+    pub(crate) table: usize,
+}
+
 /// What the fake loader answers: a builder, installed with
 /// [`FakeHost::install`].
 ///
@@ -338,7 +347,7 @@ pub struct FakeHost {
     hosting: bool,
     server_world: u64,
     join_missing: Vec<ModInfo>,
-    services: HashMap<(String, u32), usize>,
+    services: Vec<FakeService>,
     refused_hooks: HashSet<u64>,
     code: (u64, u64),
     workshop_recipes: u32,
@@ -393,7 +402,7 @@ impl FakeHost {
             hosting: false,
             server_world: 0,
             join_missing: Vec::new(),
-            services: HashMap::new(),
+            services: Vec::new(),
             refused_hooks: HashSet::new(),
             code: (0, 0),
             workshop_recipes: 512,
@@ -853,15 +862,14 @@ impl FakeHost {
         self
     }
 
-    /// A service another mod publishes, by its table's address; the table
-    /// must stay valid while the fake is installed.
+    /// A service another mod publishes.
     ///
     /// # Examples
     ///
     /// ```
-    /// #[repr(C)]
-    /// struct Prices {
-    ///     price: extern "system" fn(item: u32) -> u32,
+    /// #[enshwick_loader_api::service(name = "trading-post.prices")]
+    /// pub struct Prices {
+    ///     pub price: extern "system" fn(item: u32) -> u32,
     /// }
     ///
     /// extern "system" fn price(_item: u32) -> u32 {
@@ -870,15 +878,21 @@ impl FakeHost {
     ///
     /// static PRICES: Prices = Prices { price };
     ///
-    /// let loader = enshwick_loader_api::test::FakeHost::new()
-    ///     .service("trading-post.prices", 1, (&raw const PRICES).cast())
-    ///     .install();
+    /// let loader = enshwick_loader_api::test::FakeHost::new().service(&PRICES).install();
     /// # let _ = loader;
     /// ```
     #[must_use]
-    pub fn service(mut self, name: &str, version: u32, table: *const core::ffi::c_void) -> Self {
-        self.services
-            .insert((name.to_owned(), version), table.expose_provenance());
+    pub fn service<T: crate::services::Service>(mut self, table: &'static T) -> Self {
+        self.services.push(FakeService {
+            name: T::NAME.to_owned(),
+            major: T::MAJOR,
+            fields: T::LAYOUT
+                .iter()
+                // SAFETY: the declaration's names are static strings.
+                .filter_map(|f| unsafe { f.name.as_str() }.map(|n| (n.to_owned(), f.hash)))
+                .collect(),
+            table: core::ptr::from_ref(table).expose_provenance(),
+        });
         self
     }
 
@@ -2797,7 +2811,7 @@ impl Installed {
         })
     }
 
-    /// The services the mod published, as `(name, version)`, in order.
+    /// The services the mod published, as `(name, major)`, in order.
     ///
     /// # Examples
     ///
@@ -2808,8 +2822,84 @@ impl Installed {
     #[must_use]
     pub fn published(&self) -> Vec<(String, u32)> {
         table::with(Vec::new(), |s| {
-            s.published.iter().map(|p| (p.0.clone(), p.1)).collect()
+            s.published
+                .iter()
+                .map(|p| (p.name.clone(), p.major))
+                .collect()
         })
+    }
+
+    /// The mod events the mod defined, by name, in order.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick_loader_api::test::FakeHost::new().install();
+    /// assert!(loader.defined_events().is_empty());
+    /// ```
+    #[must_use]
+    pub fn defined_events(&self) -> Vec<String> {
+        table::with(Vec::new(), |s| {
+            s.defined_events.iter().map(|d| d.0.clone()).collect()
+        })
+    }
+
+    /// The names of the mod events the mod sent, in order.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick_loader_api::test::FakeHost::new().install();
+    /// assert!(loader.sent_events().is_empty());
+    /// ```
+    #[must_use]
+    pub fn sent_events(&self) -> Vec<String> {
+        table::with(Vec::new(), |s| s.sent_events.clone())
+    }
+
+    /// Sends the mod event `E`, as the mod that defines it would, to every
+    /// handler of the mod whose layout `E` serves; returns how many ran.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// #[enshwick_loader_api::event(name = "trading-post.sold")]
+    /// #[derive(Clone, Copy, Debug)]
+    /// pub struct Sold {
+    ///     pub item: u32,
+    /// }
+    ///
+    /// let loader = enshwick_loader_api::test::FakeHost::new().install();
+    /// assert_eq!(loader.send_mod_event(&Sold { item: 1 }), 0);
+    /// ```
+    #[must_use = "the count says whether the mod handles the event"]
+    pub fn send_mod_event<E: crate::services::ModEvent>(&self, event: &E) -> usize {
+        let offered: Vec<(&str, u64)> = E::LAYOUT
+            .iter()
+            // SAFETY: the declaration's names are static strings.
+            .filter_map(|f| unsafe { f.name.as_str() }.map(|n| (n, f.hash)))
+            .collect();
+        let handlers: Vec<_> = table::with(Vec::new(), |s| {
+            s.mod_event_subscriptions
+                .iter()
+                .filter(|sub| {
+                    sub.0 == E::NAME
+                        && crate::services::compare(&table::view(&sub.1), &offered).is_ok()
+                })
+                .map(|sub| (sub.2, sub.3))
+                .collect()
+        });
+        for &(callback, user) in &handlers {
+            // SAFETY: the layouts match, the event lives for the call, and
+            // `user` is the pointer the mod subscribed with.
+            unsafe {
+                callback(
+                    core::ptr::from_ref(event).cast(),
+                    core::ptr::with_exposed_provenance_mut(user),
+                );
+            }
+        }
+        handlers.len()
     }
 
     /// The inventory requests the mod submitted that are not finished yet, in

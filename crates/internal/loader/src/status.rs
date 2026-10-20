@@ -161,6 +161,7 @@ pub(crate) fn summary(loader: &Loader) -> Summary {
         mods,
         disabled: crate::modlist::disabled().to_vec(),
         turned_off: crate::diag::history(),
+        links: crate::services::lines(loader),
         served: crate::content::summary(),
         patches: crate::diag::patches(),
         targets,
