@@ -87,6 +87,7 @@ mod host;
 pub mod i18n;
 pub mod interactions;
 pub mod inventory;
+pub mod knowledge;
 mod load;
 pub mod loot;
 pub mod mods;

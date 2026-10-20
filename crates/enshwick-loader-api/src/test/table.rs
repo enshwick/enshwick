@@ -8,10 +8,10 @@ use crate::abi::{
     ActiveBuff, AltarInfo, AltarLimitFn, AltarZoneSize, BedCheckFn, BuffRequest, BuffTypeInfo,
     BuildCheckFn, BuildInfo, CallerFrame, ComfortFn, CommandCallFn, CraftCheckFn, DamageFilterFn,
     DaytimeInfo, EntityPlace, Event, EventFn, ExperiencePassFn, GameEventFn, Header, HookSpec,
-    HostApi, InteractionFn, InventoryRequest, InventoryResultFn, ItemData, Level, MidHookFn,
-    MidHookSpec, ModHandle, ModInfo, NetMessageFn, PlayerInfo, RenameCallFn, ResourceKey,
-    ResourcePatchFn, Side, SkillCheckFn, SpawnRequest, Status, StatusFn, Str, SummonFn,
-    SurvivorLookupFn, SurvivorStatusFn, TeleportRequest, ZoneCheckFn,
+    HostApi, InteractionFn, InventoryRequest, InventoryResultFn, ItemData, KnowledgeInfo, Level,
+    MidHookFn, MidHookSpec, ModHandle, ModInfo, NetMessageFn, PlayerInfo, RenameCallFn,
+    ResourceKey, ResourcePatchFn, Side, SkillCheckFn, SpawnRequest, Status, StatusFn, Str,
+    SummonFn, SurvivorLookupFn, SurvivorStatusFn, TeleportRequest, ZoneCheckFn,
 };
 
 use super::{FakeHost, LinkedHook, ServedResource, SubmittedRequest};
@@ -79,6 +79,12 @@ pub(crate) struct State {
     pub(crate) buff_types: Vec<BuffTypeInfo>,
     /// The buffs of each entity that holds buffs.
     pub(crate) buffs: std::collections::HashMap<u32, Vec<ActiveBuff>>,
+    /// Knowledge values by `(character or 0, id)`.
+    pub(crate) knowledge: Vec<(u32, KnowledgeInfo)>,
+    /// The grants the mod asked for: character, id, kind, value.
+    pub(crate) grants: Vec<(u32, u32, u32, u32)>,
+    /// The quest ids the fake knows.
+    pub(crate) quests: Vec<u32>,
     /// The world key last handed out, alive until the next one.
     world_key: Option<Box<str>>,
     /// The altars `altars` lists, settable while installed.
@@ -156,6 +162,9 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         damage_filters: Vec::new(),
         buff_types: Vec::new(),
         buffs: std::collections::HashMap::new(),
+        knowledge: Vec::new(),
+        grants: Vec::new(),
+        quests: Vec::new(),
         channels: Vec::new(),
         net_sent: Vec::new(),
         notices: Vec::new(),
@@ -1308,6 +1317,71 @@ extern "system" fn remove_buff(_me: ModHandle, entity: u32, id: u32, removed: *m
     })
 }
 
+extern "system" fn knowledge(
+    _me: ModHandle,
+    entity: u32,
+    id: u32,
+    out: *mut KnowledgeInfo,
+) -> Status {
+    let found = with(None, |s| {
+        s.knowledge
+            .iter()
+            .find(|(e, k)| k.id == id && (k.scope == KnowledgeInfo::WORLD || *e == entity))
+            .map(|(_, k)| *k)
+    });
+    let Some(info) = found else {
+        return Status::MISSING;
+    };
+    // SAFETY: the safe layer passes a headed struct for the call.
+    if unsafe { crate::abi::write_headed(out, info) } {
+        Status::OK
+    } else {
+        Status::BAD_ARGS
+    }
+}
+
+extern "system" fn grant_knowledge(
+    _me: ModHandle,
+    entity: u32,
+    id: u32,
+    kind: u32,
+    value: u32,
+) -> Status {
+    with(Status::MISSING, |s| {
+        let Some(info) = s
+            .knowledge
+            .iter()
+            .find(|(_, k)| k.id == id)
+            .map(|(_, k)| *k)
+        else {
+            return Status::BAD_ARGS;
+        };
+        if u32::from(info.kind) != kind {
+            return Status::BAD_ARGS;
+        }
+        s.grants.push((entity, id, kind, value));
+        Status::OK
+    })
+}
+
+extern "system" fn quests(_me: ModHandle, out: *mut u32, capacity: u32, count: *mut u32) -> Status {
+    let ids = with(Vec::new(), |s| s.quests.clone());
+    if count.is_null() {
+        return Status::BAD_ARGS;
+    }
+    if !out.is_null() {
+        for (i, id) in ids.iter().take(capacity as usize).enumerate() {
+            // SAFETY: the safe layer passes room for `capacity` ids.
+            let slot = unsafe { out.add(i) };
+            // SAFETY: as above.
+            unsafe { slot.write(*id) };
+        }
+    }
+    // SAFETY: checked above.
+    unsafe { count.write(u32::try_from(ids.len()).unwrap_or(u32::MAX)) };
+    Status::OK
+}
+
 /// table it sees for the process, so it is one static.
 pub(crate) static TABLE: HostApi = HostApi {
     header: Header::of::<HostApi>(),
@@ -1396,4 +1470,7 @@ pub(crate) static TABLE: HostApi = HostApi {
     buffs,
     apply_buff,
     remove_buff,
+    knowledge,
+    grant_knowledge,
+    quests,
 };

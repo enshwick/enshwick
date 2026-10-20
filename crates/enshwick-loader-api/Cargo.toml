@@ -54,6 +54,10 @@ name = "inventory"
 required-features = ["test"]
 
 [[test]]
+name = "knowledge"
+required-features = ["test"]
+
+[[test]]
 name = "lifecycle"
 required-features = ["test"]
 

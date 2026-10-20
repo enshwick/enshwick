@@ -1609,6 +1609,36 @@ impl Installed {
         table::with(None, |s| s.buffs.get(&entity).cloned())
     }
 
+    /// Sets the knowledge the fake knows, `(character, value)`; a world
+    /// value's character is ignored. A grant is recorded, not applied.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_loader_api::abi::{Header, KnowledgeInfo};
+    ///
+    /// let loader = enshwick_loader_api::test::FakeHost::new().install();
+    /// let flag = KnowledgeInfo { header: Header::of::<KnowledgeInfo>(), id: 9, kind: KnowledgeInfo::BOOL, scope: KnowledgeInfo::WORLD, reserved: 0, value: 1, flags: 0 };
+    /// loader.set_knowledge(&[(0, flag)], &[]);
+    /// assert!(loader.grants().is_empty());
+    /// ```
+    pub fn set_knowledge(&self, values: &[(u32, crate::abi::KnowledgeInfo)], quests: &[u32]) {
+        table::with((), |s| {
+            s.knowledge = values.to_vec();
+            s.quests = quests.to_vec();
+        });
+    }
+
+    /// The knowledge grants the mod asked for: character, id, kind, value.
+    ///
+    /// # Examples
+    ///
+    /// See [`Installed::set_knowledge`].
+    #[must_use]
+    pub fn grants(&self) -> Vec<(u32, u32, u32, u32)> {
+        table::with(Vec::new(), |s| s.grants.clone())
+    }
+
     /// Whether the mod opened altars, and whether it controls their zones.
     ///
     /// # Examples

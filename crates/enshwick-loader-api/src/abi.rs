@@ -14,7 +14,7 @@ use core::sync::atomic::AtomicUsize;
 pub const ABI_MAJOR: u16 = 1;
 
 /// The minor version of this interface. A newer minor only appends fields.
-pub const ABI_MINOR: u16 = 31;
+pub const ABI_MINOR: u16 = 32;
 
 /// Whether `id` is a valid mod id: 1 to 64 characters of `[a-z0-9-]`.
 ///
@@ -518,6 +518,59 @@ impl Event {
     /// The night began in the server's world, as [`Event::DAY_STARTED`] the
     /// day; no data. Server only. Since minor 28.
     pub const NIGHT_STARTED: Self = Self(14);
+    /// A knowledge value of the server's world or of a connected player
+    /// changed: a recipe learnt, a quest step, a place found; data is a
+    /// [`KnowledgeData`]. Raised on the game thread after the step that
+    /// applied it. Server only. Since minor 32.
+    pub const KNOWLEDGE_CHANGED: Self = Self(15);
+    /// A player completed a quest and got its rewards; data is a
+    /// [`QuestData`]. Raised on the game thread after the step. Server
+    /// only. Since minor 32.
+    pub const QUEST_COMPLETED: Self = Self(16);
+}
+
+/// The data of [`Event::KNOWLEDGE_CHANGED`].
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::abi::{Header, KnowledgeData};
+///
+/// let learnt = KnowledgeData { header: Header::of::<KnowledgeData>(), entity: 2, id: 0x1d, value: 3 };
+/// assert_eq!(learnt.value, 3);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct KnowledgeData {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// The player's character, or 0 for the world's knowledge.
+    pub entity: u32,
+    /// The knowledge id.
+    pub id: u32,
+    /// The value now.
+    pub value: u32,
+}
+
+/// The data of [`Event::QUEST_COMPLETED`].
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::abi::{Header, QuestData};
+///
+/// let done = QuestData { header: Header::of::<QuestData>(), entity: 2, quest: 0x51 };
+/// assert_eq!(done.entity, 2);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct QuestData {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// The player's character.
+    pub entity: u32,
+    /// The quest's id, a player knowledge id.
+    pub quest: u32,
 }
 
 /// The data of [`Event::BUILDING_PLACED`] and [`Event::BUILDING_REMOVED`].
@@ -2715,6 +2768,57 @@ pub struct BuffRequest {
     pub duration: i64,
 }
 
+/// A knowledge value, written by [`HostApi::knowledge`].
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::abi::{Header, KnowledgeInfo};
+///
+/// let recipe = KnowledgeInfo {
+///     header: Header::of::<KnowledgeInfo>(),
+///     id: 0x1d,
+///     kind: KnowledgeInfo::FLAGS,
+///     scope: KnowledgeInfo::PLAYER,
+///     reserved: 0,
+///     value: 1,
+///     flags: 3,
+/// };
+/// assert_eq!(recipe.value & 1, 1);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct KnowledgeInfo {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// The knowledge id.
+    pub id: u32,
+    /// [`KnowledgeInfo::BOOL`], [`KnowledgeInfo::COUNTER`] or
+    /// [`KnowledgeInfo::FLAGS`].
+    pub kind: u8,
+    /// [`KnowledgeInfo::WORLD`] or [`KnowledgeInfo::PLAYER`].
+    pub scope: u8,
+    /// Zero.
+    pub reserved: u16,
+    /// The value: 0 or 1, a count, or flag bits.
+    pub value: u32,
+    /// The flag bits the game expects of a flags value; 0 for any.
+    pub flags: u32,
+}
+
+impl KnowledgeInfo {
+    /// Set or not.
+    pub const BOOL: u8 = 0;
+    /// A count.
+    pub const COUNTER: u8 = 1;
+    /// Bits.
+    pub const FLAGS: u8 = 2;
+    /// The world's, shared by every player.
+    pub const WORLD: u8 = 0;
+    /// Each player's own.
+    pub const PLAYER: u8 = 1;
+}
+
 /// The table of services the loader offers a mod.
 ///
 /// Fields are only ever appended; a mod checks [`Header::covers`] before it
@@ -3249,6 +3353,29 @@ pub struct HostApi {
     /// buffs. On the server's game thread only. Since minor 31.
     pub remove_buff:
         extern "system" fn(me: ModHandle, entity: u32, id: u32, removed: *mut u8) -> Status,
+    /// Writes knowledge `id` of the player whose character is `entity`, or
+    /// of the world for 0 or for an id of the world's;
+    /// [`Status::MISSING`] for an id the game does not know,
+    /// [`Status::REFUSED`] for a player not in the game. On the server's
+    /// game thread only. Since minor 32.
+    pub knowledge:
+        extern "system" fn(me: ModHandle, entity: u32, id: u32, out: *mut KnowledgeInfo) -> Status,
+    /// Grants knowledge `id`, of `kind`, to the player whose character is
+    /// `entity`, or to the world for 0, as the game grants it: the next
+    /// step applies it with what follows (experience, unlocks, clients,
+    /// the save). `value` is ignored for [`KnowledgeInfo::BOOL`], added for
+    /// [`KnowledgeInfo::COUNTER`], the bit to set for
+    /// [`KnowledgeInfo::FLAGS`]. [`Status::BAD_ARGS`] for an unknown id,
+    /// a kind that is not the id's or a bit the game does not expect,
+    /// [`Status::REFUSED`] for a player not in the
+    /// game or a full queue. On the server's game thread only. Since minor
+    /// 32.
+    pub grant_knowledge:
+        extern "system" fn(me: ModHandle, entity: u32, id: u32, kind: u32, value: u32) -> Status,
+    /// Up to `capacity` quest ids of the running game, and how many there
+    /// are. On the server's game thread only. Since minor 32.
+    pub quests:
+        extern "system" fn(me: ModHandle, out: *mut u32, capacity: u32, count: *mut u32) -> Status,
 }
 
 /// The exports a mod DLL provides, by name.
@@ -3310,7 +3437,7 @@ const _: () = {
     assert!(core::mem::offset_of!(HostApi, hook_at) == 24 + 35 * 8);
     assert!(core::mem::offset_of!(HostApi, inventory_open) == 24 + 36 * 8);
     assert!(core::mem::offset_of!(HostApi, inventory_submit) == 24 + 38 * 8);
-    assert!(size_of::<HostApi>() == 24 + 84 * 8);
+    assert!(size_of::<HostApi>() == 24 + 87 * 8);
     assert!(core::mem::offset_of!(HostApi, time_of_day) == 24 + 73 * 8);
     assert!(core::mem::offset_of!(HostApi, set_time_speed) == 24 + 76 * 8);
     assert!(size_of::<DaytimeInfo>() == 8 + 5 * 8 + 8);
@@ -3323,6 +3450,11 @@ const _: () = {
     assert!(size_of::<BuffTypeInfo>() == 8 + 12 + 4 + 8);
     assert!(size_of::<ActiveBuff>() == 8 + 16 + 16);
     assert!(size_of::<BuffRequest>() == 8 + 16 + 8);
+    assert!(core::mem::offset_of!(HostApi, knowledge) == 24 + 84 * 8);
+    assert!(core::mem::offset_of!(HostApi, quests) == 24 + 86 * 8);
+    assert!(size_of::<KnowledgeInfo>() == 8 + 16);
+    assert!(size_of::<KnowledgeData>() == 8 + 12);
+    assert!(size_of::<QuestData>() == 8 + 8);
     assert!(size_of::<InventoryOp>() == 32);
     assert!(size_of::<InventoryRequest>() == 32);
     assert!(size_of::<InventoryOpResult>() == 8);

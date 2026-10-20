@@ -49,6 +49,8 @@ The types are in
 | `JoinRefused` | none | the join check kept this client out of a server | game |
 | `DayStarted` | none | the day began in the server's world, by the clock or a time a mod set ([time of day](daytime.md)) | game |
 | `NightStarted` | none | the night began in the server's world | game |
+| `KnowledgeChanged` | `KnowledgeData` (`entity`, `id`, `value`) | a knowledge value of a player (or the world, entity 0) changed ([knowledge](knowledge.md)) | game |
+| `QuestCompleted` | `QuestData` (`entity`, `quest`) | a player completed a quest and got its rewards | game |
 
 The data:
 

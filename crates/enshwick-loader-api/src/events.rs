@@ -8,7 +8,7 @@
 
 use core::ffi::c_void;
 
-use crate::abi::{BuildingData, Event, PlayerData, TickData};
+use crate::abi::{BuildingData, Event, KnowledgeData, PlayerData, QuestData, TickData};
 
 mod sealed {
     pub trait Sealed {}
@@ -121,6 +121,10 @@ with_data! {
     PlayerLeft = PLAYER_LEFT: PlayerData, size_of::<PlayerData>();
     /// [`Event::BUILDING_PLACED`].
     BuildingPlaced = BUILDING_PLACED: BuildingData, size_of::<BuildingData>();
+    /// [`Event::KNOWLEDGE_CHANGED`]; [`crate::knowledge::Knowledge`] reads and grants.
+    KnowledgeChanged = KNOWLEDGE_CHANGED: KnowledgeData, size_of::<KnowledgeData>();
+    /// [`Event::QUEST_COMPLETED`].
+    QuestCompleted = QUEST_COMPLETED: QuestData, size_of::<QuestData>();
     /// [`Event::BUILDING_REMOVED`].
     BuildingRemoved = BUILDING_REMOVED: BuildingData, size_of::<BuildingData>();
 }

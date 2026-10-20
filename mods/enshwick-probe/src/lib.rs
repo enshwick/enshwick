@@ -14,6 +14,7 @@ mod census;
 mod checks;
 mod clock;
 mod damage;
+mod knowledge;
 mod settings;
 
 use std::ops::ControlFlow;
@@ -72,6 +73,10 @@ fn extras(load: &mut Load<'_>, scheduler: Scheduler) -> Vec<Check> {
     match buffs::BuffChecks::new(load, scheduler) {
         Ok(buffs) => extras.push(Box::new(move || buffs.run())),
         Err(off) => enshwick_loader_api::warn!("FAIL buffs: {off}"),
+    }
+    match knowledge::KnowledgeChecks::new(load, scheduler) {
+        Ok(knowledge) => extras.push(Box::new(move || knowledge.run())),
+        Err(off) => enshwick_loader_api::warn!("FAIL knowledge: {off}"),
     }
     extras
 }

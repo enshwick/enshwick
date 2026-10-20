@@ -572,6 +572,9 @@ pub(crate) static API: HostApi = HostApi {
     buffs,
     apply_buff,
     remove_buff,
+    knowledge,
+    grant_knowledge,
+    quests,
 };
 
 /// A static slice from a pointer and a count, empty for a null pointer.
@@ -933,7 +936,7 @@ extern "system" fn subscribe(
             Ok(found) => found,
             Err(status) => return status,
         };
-        if !(Event::SETTINGS_CHANGED.0..=Event::NIGHT_STARTED.0).contains(&event.0) {
+        if !(Event::SETTINGS_CHANGED.0..=Event::QUEST_COMPLETED.0).contains(&event.0) {
             return Status::MISSING;
         }
         if loader.delivery.get().is_some() {
@@ -2090,6 +2093,55 @@ extern "system" fn remove_buff(me: ModHandle, entity: u32, id: u32, removed: *mu
     entry("remove_buff", || {
         match caller(me).and_then(|loader| crate::buffs::remove(loader, entity, id)) {
             Ok(had) => put(removed, u8::from(had)),
+            Err(status) => status,
+        }
+    })
+}
+
+extern "system" fn knowledge(
+    me: ModHandle,
+    entity: u32,
+    id: u32,
+    out: *mut enshwick_loader_api::abi::KnowledgeInfo,
+) -> Status {
+    entry("knowledge", || {
+        match caller(me).and_then(|loader| crate::knowledge::value(loader, entity, id)) {
+            Ok(info) => put_headed(out, info),
+            Err(status) => status,
+        }
+    })
+}
+
+extern "system" fn grant_knowledge(
+    me: ModHandle,
+    entity: u32,
+    id: u32,
+    kind: u32,
+    value: u32,
+) -> Status {
+    entry("grant_knowledge", || {
+        match caller(me).and_then(|loader| crate::knowledge::grant(loader, entity, id, kind, value))
+        {
+            Ok(()) => Status::OK,
+            Err(status) => status,
+        }
+    })
+}
+
+extern "system" fn quests(me: ModHandle, out: *mut u32, capacity: u32, count: *mut u32) -> Status {
+    entry("quests", || {
+        match caller(me).and_then(crate::knowledge::quests) {
+            Ok(ids) => {
+                if !out.is_null() {
+                    for (i, id) in ids.iter().take(capacity as usize).enumerate() {
+                        // SAFETY: the caller passes room for `capacity` ids at `out`.
+                        let slot = unsafe { out.add(i) };
+                        // SAFETY: as above.
+                        unsafe { slot.write(*id) };
+                    }
+                }
+                put(count, u32::try_from(ids.len()).unwrap_or(u32::MAX))
+            }
             Err(status) => status,
         }
     })
