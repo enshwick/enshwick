@@ -16,6 +16,7 @@ pub mod manifest;
 #[cfg(windows)]
 mod patch;
 pub mod resolve;
+pub mod settings;
 #[cfg(windows)]
 mod start;
 

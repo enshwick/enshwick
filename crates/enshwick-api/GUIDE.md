@@ -198,9 +198,25 @@ loads first. Put the table type in a small crate both mods depend on, as
 
 ## Logging
 
-`enshwick_api::info!`, `warn!` and `error!` write to `logs/enshwick/`
+`enshwick_api::error!`, `warn!`, `info!` and `debug!` write to `logs/enshwick/`
 (`all.log`, `loader.log`, `mods/<id>.log`) under the mod's id, formatted like
 `format!`. Log milestones and failures, never per frame.
+
+The player picks how much is kept in `mod-configs/enshwick.toml`:
+
+```toml
+log_level = "info"
+log_levels = { flame-altar-zones = "debug" }
+```
+
+A line above the mod's level costs one atomic load: its arguments are neither
+evaluated nor formatted. For lines that may repeat, `info_once!` and
+`warn_once!` log the first time a call site runs, and `warn_every!` and
+`error_every!` log at most once per period, noting how many they skipped:
+
+```rust
+enshwick_api::warn_every!(Duration::from_secs(60), "bed {bed} has no owner");
+```
 
 ## Releasing
 

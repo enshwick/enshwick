@@ -158,6 +158,7 @@ pub(crate) static API: HostApi = HostApi {
     service,
     constant,
     data_dir,
+    log_level,
 };
 
 /// A static slice from a pointer and a count, empty for a null pointer.
@@ -432,6 +433,12 @@ extern "system" fn data_dir(me: ModHandle, out: *mut Str) -> Status {
     // The path lives for the process: the mod keeps it as long as it likes.
     let path: &'static str = Box::leak(dir.to_string_lossy().into_owned().into_boxed_str());
     put(out, Str::new(path))
+}
+
+extern "system" fn log_level(me: ModHandle) -> Level {
+    loader()
+        .and_then(|loader| loader.record(me))
+        .map_or(Level::INFO, |(_, record)| crate::log::level(&record.id))
 }
 
 /// Mod handles start at 1; 0 is no mod.

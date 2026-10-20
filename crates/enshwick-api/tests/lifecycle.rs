@@ -123,6 +123,14 @@ mod tests {
         Status::OK
     }
 
+    extern "system" fn log_level(_me: ModHandle) -> Level {
+        Level::WARN
+    }
+
+    fn evaluated() -> u32 {
+        panic!("a filtered line evaluates nothing")
+    }
+
     static API: HostApi = HostApi {
         header: Header::of::<HostApi>(),
         host_version: Str::new("0.0.0-test"),
@@ -140,6 +148,7 @@ mod tests {
         service,
         constant,
         data_dir,
+        log_level,
     };
 
     extern "system" fn original(value: u32) -> u32 {
@@ -176,6 +185,11 @@ mod tests {
             assert!(load.symbol("nope").is_err());
             load.hook(&DOUBLE, load.system("anything")?)?;
             enshwick_api::info!("limit {}", settings.limit);
+            enshwick_api::debug!("{}", evaluated());
+            for _ in 0..3 {
+                enshwick_api::warn_once!("once");
+                enshwick_api::warn_every!(std::time::Duration::from_secs(3600), "every");
+            }
             Ok(Self {
                 limit: settings.limit,
             })
@@ -204,7 +218,8 @@ mod tests {
         );
         assert_eq!(HOOKS.lock().unwrap()[0].0, 0x1_4009_0a60);
         assert_eq!(HOOKS.lock().unwrap()[0].2, -5);
-        assert!(LOGS.lock().unwrap().contains(&"limit 7".to_owned()));
+        // The host keeps `warn` and above: `info` is filtered, repeats are not.
+        assert_eq!(LOGS.lock().unwrap().as_slice(), ["once", "every"]);
 
         // The chain: the detour doubles what the original returns.
         let entry: extern "system" fn(u32) -> u32 =

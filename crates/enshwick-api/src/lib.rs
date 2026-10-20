@@ -66,6 +66,8 @@ pub use load::{Load, Mod, Off};
 #[doc(hidden)]
 pub mod __private {
     use std::sync::OnceLock;
+    use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU64, Ordering};
+    use std::time::{Duration, Instant};
 
     use crate::abi::{HostApi, Level, ManifestFlags, ModHandle, Status};
     use crate::{Host, Load, Mod};
@@ -92,7 +94,90 @@ pub mod __private {
         }
     }
 
+    /// The most detailed level the loader keeps, read once at init.
+    static MAX_LEVEL: AtomicU8 = AtomicU8::new(Level::INFO.0);
+
+    #[inline]
+    #[must_use]
+    pub fn enabled(level: Level) -> bool {
+        level.0 <= MAX_LEVEL.load(Ordering::Relaxed)
+    }
+
+    /// A call site that logs its first time only.
+    #[derive(Debug)]
+    pub struct Once(AtomicBool);
+
+    impl Once {
+        #[must_use]
+        pub const fn new() -> Self {
+            Self(AtomicBool::new(false))
+        }
+
+        #[inline]
+        #[must_use]
+        pub fn first(&self) -> bool {
+            !self.0.load(Ordering::Relaxed) && !self.0.swap(true, Ordering::Relaxed)
+        }
+    }
+
+    impl Default for Once {
+        fn default() -> Self {
+            Self::new()
+        }
+    }
+
+    /// A call site that logs at most once per period, counting what it skips.
+    #[derive(Debug)]
+    pub struct Every {
+        next: AtomicU64,
+        skipped: AtomicU64,
+    }
+
+    impl Every {
+        #[must_use]
+        pub const fn new() -> Self {
+            Self {
+                next: AtomicU64::new(0),
+                skipped: AtomicU64::new(0),
+            }
+        }
+
+        /// The lines skipped since the last one when a line is due now.
+        #[must_use]
+        pub fn due(&self, period: Duration) -> Option<u64> {
+            static EPOCH: OnceLock<Instant> = OnceLock::new();
+            let now = u64::try_from(EPOCH.get_or_init(Instant::now).elapsed().as_millis())
+                .unwrap_or(u64::MAX);
+            let next = self.next.load(Ordering::Relaxed);
+            let period = u64::try_from(period.as_millis()).unwrap_or(u64::MAX);
+            if now < next
+                || self
+                    .next
+                    .compare_exchange(
+                        next,
+                        now.saturating_add(period),
+                        Ordering::Relaxed,
+                        Ordering::Relaxed,
+                    )
+                    .is_err()
+            {
+                self.skipped.fetch_add(1, Ordering::Relaxed);
+                return None;
+            }
+            Some(self.skipped.swap(0, Ordering::Relaxed))
+        }
+    }
+
+    impl Default for Every {
+        fn default() -> Self {
+            Self::new()
+        }
+    }
+
     pub fn log(level: Level, message: core::fmt::Arguments<'_>) {
+        if !enabled(level) {
+            return;
+        }
         if let Some(host) = crate::host() {
             match message.as_str() {
                 Some(text) => host.log(level, text),
@@ -110,6 +195,7 @@ pub mod __private {
             return Status::BAD_ARGS;
         };
         let host = host.install();
+        MAX_LEVEL.store(host.log_level().0, Ordering::Relaxed);
         let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             M::init(&mut Load::new(host))
         }));

@@ -22,7 +22,8 @@ every mod is a DLL in the `mods/` folder beside it.
    folder beside it.
 3. Start the game or the server. Each mod writes its settings to
    `mod-configs/<id>.toml` on first start; the log is `logs/enshwick/`
-   (`all.log`, `loader.log`, `mods/<id>.log`).
+   (`all.log`, `loader.log`, `mods/<id>.log`), and how much it keeps is set in
+   `mod-configs/enshwick.toml`.
 
 Players and their server need the same mods: the server advertises its mod set
 and a player with a different one is warned before joining. To remove a mod,

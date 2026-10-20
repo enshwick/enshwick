@@ -159,8 +159,16 @@ fn begin(stub_abi: u32, missing_forwards: u32) -> Option<PathBuf> {
     for dir in ["mods", "mod-configs", "mod-data", "logs"] {
         std::fs::create_dir_all(game_dir.join(dir)).ok()?;
     }
-    log::open(&game_dir.join("logs").join("enshwick"));
+    let settings_file = game_dir
+        .join("mod-configs")
+        .join(format!("{}.toml", crate::settings::LOADER_ID));
+    let (settings, problem) = crate::settings::Settings::read(&settings_file);
+    log::set_levels(settings);
+    log::open(&game_dir.join("logs").join(crate::settings::LOADER_ID));
     crate::log!(INFO, "Enshwick {} starting", env!("CARGO_PKG_VERSION"));
+    if let Some(problem) = problem {
+        crate::log!(WARN, "loader settings left at their defaults: {problem}");
+    }
     if stub_abi != STUB_ABI {
         crate::log!(
             WARN,

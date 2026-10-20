@@ -14,7 +14,7 @@ use core::sync::atomic::AtomicUsize;
 pub const ABI_MAJOR: u16 = 1;
 
 /// The minor version of this interface. A newer minor only appends fields.
-pub const ABI_MINOR: u16 = 0;
+pub const ABI_MINOR: u16 = 1;
 
 /// Whether `id` is a valid mod id: 1 to 64 characters of `[a-z0-9-]`.
 ///
@@ -298,7 +298,72 @@ impl Level {
     pub const INFO: Self = Self(2);
     /// Detail for development, off in releases.
     pub const DEBUG: Self = Self(3);
+
+    /// The level's name as settings and log lines spell it.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_api::abi::Level;
+    ///
+    /// assert_eq!(Level::WARN.name(), "warn");
+    /// ```
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::ERROR => "error",
+            Self::WARN => "warn",
+            Self::INFO => "info",
+            _ => "debug",
+        }
+    }
 }
+
+impl Default for Level {
+    fn default() -> Self {
+        Self::INFO
+    }
+}
+
+impl core::str::FromStr for Level {
+    type Err = UnknownLevel;
+
+    fn from_str(name: &str) -> Result<Self, Self::Err> {
+        match name {
+            "error" => Ok(Self::ERROR),
+            "warn" => Ok(Self::WARN),
+            "info" => Ok(Self::INFO),
+            "debug" => Ok(Self::DEBUG),
+            _ => Err(UnknownLevel),
+        }
+    }
+}
+
+impl serde::Serialize for Level {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.name())
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for Level {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let name = <std::borrow::Cow<'de, str>>::deserialize(deserializer)?;
+        name.parse().map_err(serde::de::Error::custom)
+    }
+}
+
+/// A level name other than `error`, `warn`, `info` or `debug`.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_api::abi::Level;
+///
+/// assert!("loud".parse::<Level>().is_err());
+/// ```
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
+#[error("a log level is one of \"error\", \"warn\", \"info\" or \"debug\"")]
+pub struct UnknownLevel;
 
 /// A game build's identity: the CodeView GUID, in file order, and age.
 ///
@@ -790,6 +855,9 @@ pub struct HostApi {
     /// The mod's own data folder, `mod-data/<id>`, created on first use; the
     /// path stays valid for the process.
     pub data_dir: extern "system" fn(me: ModHandle, out: *mut Str) -> Status,
+    /// The most detailed level kept for the mod's lines; the mod skips
+    /// formatting anything more detailed. Since minor 1.
+    pub log_level: extern "system" fn(me: ModHandle) -> Level,
 }
 
 /// The exports a mod DLL provides, by name.
@@ -834,5 +902,6 @@ const _: () = {
     assert!(core::mem::offset_of!(HostApi, service) == 24 + 11 * 8);
     assert!(core::mem::offset_of!(HostApi, constant) == 24 + 12 * 8);
     assert!(core::mem::offset_of!(HostApi, data_dir) == 24 + 13 * 8);
-    assert!(size_of::<HostApi>() == 24 + 14 * 8);
+    assert!(core::mem::offset_of!(HostApi, log_level) == 24 + 14 * 8);
+    assert!(size_of::<HostApi>() == 24 + 15 * 8);
 };
