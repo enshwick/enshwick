@@ -1,23 +1,53 @@
 [en]
 "safe.name" = "Safe"
-"safe.description" = "A chest only the player who placed it can open, empty or pick up."
+"safe.description" = "A chest only its owner and the players they allow can open; only the owner can pick it up."
+"safe.label" = "Safe · {owner}"
+"command.help" = "allow <player>, deny <player> or list who may open your nearest Safe within 4 m"
+"command.usage" = "/safe allow <player>, /safe deny <player>, /safe list: who may open your nearest Safe within 4 m."
+"command.no_safe" = "No Safe of yours within 4 m."
+"command.no_player" = "No player named {name} is online."
+"command.several" = "Several players online are named {name}."
+"command.self" = "You may always open your own Safe."
+"command.allowed" = "{name} may now open your Safe at {at}, your nearest within 4 m."
+"command.already" = "{name} may already open your Safe at {at}."
+"command.denied" = "{name} may no longer open your Safe at {at}."
+"command.not_allowed" = "{name} is not allowed at your Safe at {at}."
+"command.list" = "Allowed at your Safe at {at}: {names}."
+"command.list_empty" = "Only you may open your Safe at {at}."
 
 [uk]
 "safe.name" = "Сейф"
-"safe.description" = "Скриня, яку може відкрити, спорожнити чи підняти лише той, хто її поставив."
+"safe.description" = "Скриня, яку можуть відкрити лише власник і гравці, яким він дозволив; підняти її може лише власник."
+"safe.label" = "Сейф · {owner}"
+"command.help" = "allow <гравець>, deny <гравець> чи list: хто може відкривати ваш найближчий сейф у межах 4 м"
+"command.usage" = "/safe allow <гравець>, /safe deny <гравець>, /safe list: хто може відкривати ваш найближчий сейф у межах 4 м."
+"command.no_safe" = "У межах 4 м немає вашого сейфа."
+"command.no_player" = "Гравця {name} немає в грі."
+"command.several" = "У грі кілька гравців на ім'я {name}."
+"command.self" = "Свій сейф ви можете відкривати завжди."
+"command.allowed" = "{name} тепер може відкривати ваш сейф у {at}, найближчий у межах 4 м."
+"command.already" = "{name} уже може відкривати ваш сейф у {at}."
+"command.denied" = "{name} більше не може відкривати ваш сейф у {at}."
+"command.not_allowed" = "{name} не має доступу до вашого сейфа в {at}."
+"command.list" = "Доступ до вашого сейфа в {at}: {names}."
+"command.list_empty" = "Ваш сейф у {at} можете відкривати лише ви."
 
 [de]
 "safe.name" = "Tresor"
 "safe.description" = "Eine Truhe, die nur der Spieler öffnen, leeren oder aufheben kann, der sie aufgestellt hat."
+"safe.label" = "Tresor · {owner}"
 
 [fr]
 "safe.name" = "Coffre-fort"
 "safe.description" = "Un coffre que seul le joueur qui l'a posé peut ouvrir, vider ou ramasser."
+"safe.label" = "Coffre-fort · {owner}"
 
 [es]
 "safe.name" = "Caja fuerte"
 "safe.description" = "Un cofre que solo el jugador que lo colocó puede abrir, vaciar o recoger."
+"safe.label" = "Caja fuerte · {owner}"
 
 [pl]
 "safe.name" = "Sejf"
 "safe.description" = "Skrzynia, którą może otworzyć, opróżnić lub podnieść tylko gracz, który ją postawił."
+"safe.label" = "Sejf · {owner}"
