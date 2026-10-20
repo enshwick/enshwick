@@ -1,15 +1,18 @@
 # Recipes
 
-Two calls add recipes:
+Two calls add recipes, and one changes them:
 
 - [`Load::add_recipe`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/content/recipes.rs)
   adds one recipe for a new output, copied from the recipe of a vanilla item;
 - [`Load::derive_recipes`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/content/recipes.rs)
   looks at every recipe in the registry and adds a scaled copy of each one
-  you pick.
+  you pick;
+- [`Load::modify_recipes`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/content/recipes.rs)
+  changes the output and ingredient counts of the recipes you pick, in place.
 
-Both patch the game's recipe registry, which every mod shares; patches from
-several mods run in turn and their recipes end up side by side.
+All three patch the game's recipe registry, which every mod shares; patches
+from several mods run in turn, so their recipes end up side by side and
+their changes add up.
 
 ## A single recipe
 
@@ -60,7 +63,7 @@ beside it, `None` to leave it alone:
 use enshwick_api::content::recipes::{Derived, RecipeView};
 
 fn init(load: &mut enshwick_api::Load<'_>) -> Result<(), enshwick_api::Off> {
-    load.derive_recipes("building-yield", |recipe: &RecipeView<'_>| {
+    load.derive_recipes("my-mod", |recipe: &RecipeView<'_>| {
         recipe
             .debug_name()
             .starts_with("Block_")
@@ -93,6 +96,37 @@ A copy needs a GUID of its own. The loader derives it from the original's
 GUID, marked with a hash of `salt`, so it stays the same on every start and
 differs between mods that copy the same recipe. Use the mod id as the salt,
 and never change it: saves hold the copies' ids like any other.
+
+## Changing recipes in place
+
+`modify_recipes(modify)` calls `modify` with each recipe in the registry and
+lets it change the recipe's counts in place, with no recipe added:
+
+```rust
+use enshwick_api::content::recipes::RecipeEdit;
+
+fn init(load: &mut enshwick_api::Load<'_>) -> Result<(), enshwick_api::Off> {
+    load.modify_recipes(|recipe: &mut RecipeEdit<'_>| {
+        if recipe.view().debug_name().starts_with("Block_") {
+            recipe.scale_output(2);
+        }
+    })
+}
+```
+
+[`RecipeEdit`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/content/recipes.rs)
+has:
+
+- `view()`, the recipe as a `RecipeView` reads it now;
+- `scale_output(by)`, each output count times `by`;
+- `scale_inputs(by)`, each ingredient count times `by`.
+
+The server and the client serve the same patched registry, so the crafting
+menu shows the new counts; give the mod `side: BOTH` and `join = true`, and
+mark the settings the patch reads `#[config(sync)]` so a joined player runs
+with the server's. Like the other recipe patches, `modify` sees the registry
+as it reaches it, with what mods before it added or changed, and mods after
+it see its changes. The mod's log says `<n> recipes changed`.
 
 ## The workshop limit
 
@@ -137,9 +171,8 @@ limit holds.
 
 ## A worked example
 
-[`enshwick-building-yield`](https://github.com/themaiby/enshwick/blob/main/mods/enshwick-building-yield/src/lib.rs)
-adds bulk recipes for building blocks, overgrowth and decor at a Bulk
-Workbench of its own. It calls `derive_recipes` twice, materials first, so
-that where a workshop runs out of room, decor gives way. Each call picks
-categories by debug name and returns the same `Derived` with the mod's
-workshop.
+[`enshwick-building-materials`](https://github.com/themaiby/enshwick/blob/main/mods/enshwick-building-materials/src/lib.rs)
+doubles the output of the vanilla recipes for building blocks, overgrowth
+and decor with one `modify_recipes` call. It picks categories by debug name,
+and reads the multiplier and the categories from join values, which a client
+takes from the server on joining.

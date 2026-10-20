@@ -41,7 +41,7 @@ fn manifest() -> &'static enshwick_api::abi::Manifest {
 without it is warned before joining; see [The join check](concepts/join-check.md).
 [`enshwick-safes`](https://github.com/themaiby/enshwick/tree/main/mods/enshwick-safes)
 and
-[`enshwick-building-yield`](https://github.com/themaiby/enshwick/tree/main/mods/enshwick-building-yield)
+[`enshwick-building-materials`](https://github.com/themaiby/enshwick/tree/main/mods/enshwick-building-materials)
 are content mods of this kind.
 
 Every content call is made during `init`. The loader seals what mods
