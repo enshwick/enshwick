@@ -1,12 +1,8 @@
-# The checks of CONTRIBUTING.md, on every pull request. Branch
-# protection merges only branches up to date with their base, so the shared
-# branches need no second run after a merge.
+# The checks of CONTRIBUTING.md. Until the first public release they run
+# locally (git hooks and the checks before a push); here only on demand.
 name: ci
 
 on:
-  pull_request:
-    branches: [main]
-    types: [opened, edited, synchronize, reopened]
   workflow_dispatch:
 
 permissions:
