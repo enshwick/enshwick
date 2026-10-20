@@ -13,6 +13,12 @@ differs stays unhooked. Keep it off games people play.
   viewers that build its stat rows and of the function that draws the rows.
   The tooltip's description is shown with what its pointers point at. Lines
   start with `R1 dump`; each names the function and who called it.
+- The interface, whenever what a call sees changes: each scroll area's start
+  (who opens it and its kept state) and its offset as the wheel, the
+  scrollbar or the gamepad moves it (`R2 scroll begin`, `R2 scroll end`);
+  each tab bar's labels and chosen tab, the world settings' among them
+  (`R3 tabs`); the game's text input dialog when it opens (`R5 text dialog`)
+  and each text field's text as it is typed (`R5 text field`).
 - Join attempts: each server change the game asks for, what the call
   answers (0 when the join check refused it), and for 30 seconds after, once
   a second, how many main- and pause-menu entries were drawn. Lines start
@@ -33,8 +39,9 @@ From the chat as an administrator while the client hosts a game:
 
 ```toml
 enabled = false
-# Look at the item tooltip and at join attempts.
+# Look at the item tooltip, the interface and join attempts.
 tooltip = true
+ui = true
 join = true
 # The least time between two dumps of one tooltip function, unless a mark
 # comes between, and the most dumps between two marks.
