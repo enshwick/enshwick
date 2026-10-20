@@ -217,6 +217,7 @@ pub struct FakeHost {
     placed: Vec<(u32, EntityPlace)>,
     world_key: Option<String>,
     refused_writes: HashSet<u32>,
+    net_peers: HashSet<u64>,
 }
 
 impl Default for FakeHost {
@@ -269,6 +270,7 @@ impl FakeHost {
             placed: Vec::new(),
             world_key: None,
             refused_writes: HashSet::new(),
+            net_peers: HashSet::new(),
         }
     }
 
@@ -515,6 +517,27 @@ impl FakeHost {
     ) -> Self {
         self.components
             .insert((entity, type_hash), data.expose_provenance());
+        self
+    }
+
+    /// A peer that takes mod messages: a player's account key on the
+    /// server, or [`Peer::Server`](crate::net::Peer::Server) on a client.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_loader_api::net::Peer;
+    ///
+    /// let loader = enshwick_loader_api::test::FakeHost::new().net_peer(Peer::Player(7)).install();
+    /// # let _ = loader;
+    /// ```
+    #[must_use]
+    pub fn net_peer(mut self, peer: crate::net::Peer) -> Self {
+        let raw = match peer {
+            crate::net::Peer::Server => crate::abi::NetMessage::SERVER,
+            crate::net::Peer::Player(key) => key,
+        };
+        self.net_peers.insert(raw);
         self
     }
 
@@ -1910,6 +1933,82 @@ impl Installed {
             // SAFETY: a filter the mod registered with its own pointer.
             unsafe { callback(call, core::ptr::with_exposed_provenance_mut(user)) != 0 }
         })
+    }
+
+    /// The messages the mod sent: the channel's full name (`name@version`),
+    /// the raw peer ([`NetMessage::SERVER`](crate::abi::NetMessage::SERVER),
+    /// a player's key, or 0 for every client) and the encoded bytes.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick_loader_api::test::FakeHost::new().install();
+    /// assert!(loader.net_sent().is_empty());
+    /// ```
+    #[must_use]
+    pub fn net_sent(&self) -> Vec<(String, u64, Vec<u8>)> {
+        table::with(Vec::new(), |s| {
+            s.net_sent
+                .iter()
+                .map(|(id, peer, bytes)| {
+                    let name = s
+                        .channels
+                        .iter()
+                        .find(|c| c.1 == *id)
+                        .map_or_else(String::new, |c| c.0.clone());
+                    (name, *peer, bytes.clone())
+                })
+                .collect()
+        })
+    }
+
+    /// Hands `message` from `from` to the mod's channel `name@version`, as
+    /// the loader does when one comes in, encoded as the channel encodes
+    /// it; false when the mod opened no such channel.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_loader_api::net::Peer;
+    ///
+    /// let loader = enshwick_loader_api::test::FakeHost::new().install();
+    /// assert!(!loader.net_deliver("markers@1", Peer::Server, &5u32));
+    /// ```
+    #[must_use]
+    pub fn net_deliver<M: serde::Serialize>(
+        &self,
+        name: &str,
+        from: crate::net::Peer,
+        message: &M,
+    ) -> bool {
+        let Ok(bytes) = postcard::to_allocvec(message) else {
+            return false;
+        };
+        let channel = table::with(None, |s| {
+            s.channels
+                .iter()
+                .find(|c| c.0 == name)
+                .map(|c| (c.1, c.2, c.3))
+        });
+        let Some((id, callback, user)) = channel else {
+            return false;
+        };
+        let peer = match from {
+            crate::net::Peer::Server => crate::abi::NetMessage::SERVER,
+            crate::net::Peer::Player(key) => key,
+        };
+        let raw = crate::abi::NetMessage {
+            header: Header::of::<crate::abi::NetMessage>(),
+            channel: id,
+            reserved: 0,
+            peer,
+            data: bytes.as_ptr(),
+            size: u32::try_from(bytes.len()).unwrap_or(0),
+            reserved_tail: 0,
+        };
+        // SAFETY: a handler the mod registered with its own pointer.
+        unsafe { callback(&raw const raw, core::ptr::with_exposed_provenance_mut(user)) };
+        true
     }
 
     /// How many saves the mod asked for.

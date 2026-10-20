@@ -22,6 +22,8 @@ Once the world has loaded, and again on `/probe check`:
 - spawns: a copy of an entity in the world, one with health if there is one,
   three metres above it; that it arrives where asked, its health writes when
   it has health, a teleport five metres away, and its destruction;
+- mod messages: that a channel is refused to the probe, which is no join
+  mod; messages themselves need a client;
 - actions: a ping far from anything, which the game must hand back as a game
   event in the next step; that a type off the allow list and a teleport of
   an entity not in the world are refused;

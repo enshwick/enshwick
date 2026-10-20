@@ -345,11 +345,13 @@ mod runtime {
         let Some(reply) = reply else {
             // A server that does not answer the query: nothing to compare.
             crate::log!(INFO, "joining {address}: no rules answer");
+            crate::net::joining(false);
             crate::host::apply_join_values(&BTreeMap::new());
             return true;
         };
         let server = super::rule(&reply, crate::advertise::RULE)
             .map(|fingerprint| (fingerprint, super::mod_rules_value(&reply)));
+        crate::net::joining(server.is_some());
         // The client runs with the server's join values, so its own
         // fingerprint counts them.
         let values = if server.is_some() {

@@ -10,6 +10,12 @@
 //!
 //! Mods may also run a command line as the server's console, an
 //! administrator with no character, on the game thread.
+//!
+//! The same links carry mod messages (see the net module): the server takes
+//! a client's frame lines as it takes commands, and a client takes the
+//! server's frame lines where it posts what the server sent, before its chat
+//! shows them, and puts its own frames into its chat queue before the game
+//! sends it.
 
 use core::ffi::c_void;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -66,6 +72,8 @@ struct Line {
 #[derive(Debug, Clone, Copy)]
 struct Layout {
     post_return: u64,
+    /// Where a client posts what the server sent; 0 on the server.
+    receive_returns: [u64; 2],
     mark: MarkFn,
     store: usize,
     slots: usize,
@@ -89,10 +97,30 @@ type PostFn = unsafe extern "system" fn(
     extra: *const [u64; 2],
 ) -> *mut u8;
 type MarkFn = unsafe extern "system" fn(store: *mut u8, node: *mut u8, slot: u32, bytes: u32);
+type ClientSendFn = unsafe extern "system" fn(client: *mut u8) -> u64;
+type ClientQueueFn = unsafe extern "system" fn(
+    out: *mut u8,
+    store: *mut u8,
+    kind: u8,
+    text: *const [usize; 2],
+    loca1: u32,
+    loca2: u32,
+) -> *mut u8;
+
+/// The client's own chat queue, from the build table.
+#[derive(Debug, Clone, Copy)]
+struct ClientLayout {
+    queue: ClientQueueFn,
+    store: usize,
+}
 
 static LOADED: OnceLock<(&'static Loader, Layout)> = OnceLock::new();
 // SAFETY: the slot joins the chain of the chat post, typed `PostFn`.
 static POST_NEXT: Next<PostFn> = unsafe { Next::new() };
+// SAFETY: the slot joins the chain of the client's chat send, typed
+// `ClientSendFn`.
+static CLIENT_SEND_NEXT: Next<ClientSendFn> = unsafe { Next::new() };
+static CLIENT: OnceLock<ClientLayout> = OnceLock::new();
 static COMMANDS: Mutex<Vec<Command>> = Mutex::new(Vec::new());
 static SEALED: AtomicBool = AtomicBool::new(false);
 static OUTBOX: Mutex<Vec<Line>> = Mutex::new(Vec::new());
@@ -110,7 +138,7 @@ pub(crate) fn register(
     if SEALED.load(Ordering::Acquire) {
         return Status::TOO_LATE;
     }
-    if !is_valid_name(name) || name == LOADER_ID {
+    if !is_valid_name(name) || name == LOADER_ID || name == crate::net::COMMAND {
         return Status::BAD_ARGS;
     }
     let mut commands = COMMANDS.lock().unwrap_or_else(PoisonError::into_inner);
@@ -179,6 +207,10 @@ pub(crate) fn link(loader: &'static Loader) {
         let mark = usize::try_from(symbol("chat.mark_delivered")?).ok()?;
         Some(Layout {
             post_return: symbol("chat.post_return")?,
+            receive_returns: [
+                symbol("chat.receive_return_a").unwrap_or(0),
+                symbol("chat.receive_return_b").unwrap_or(0),
+            ],
             // SAFETY: the symbol is the game's mark-delivered function on
             // this build.
             mark: unsafe { core::mem::transmute::<usize, MarkFn>(mark) },
@@ -206,6 +238,82 @@ pub(crate) fn link(loader: &'static Loader) {
     }
     let count = COMMANDS.lock().map(|c| c.len()).unwrap_or_default();
     crate::log!(INFO, "chat commands on: {count} from mods, and /enshwick");
+    link_client(loader, symbol("chat.client_send"));
+}
+
+/// Links the client's chat send, so its own frames go with what it sends.
+fn link_client(loader: &'static Loader, target: Option<u64>) {
+    let (Some(target), Some(queue), Some(store)) = (
+        target,
+        loader.address("chat.client_queue"),
+        loader.offset("chat.client_store"),
+    ) else {
+        return;
+    };
+    let Ok(queue) = usize::try_from(queue) else {
+        return;
+    };
+    let _first = CLIENT.set(ClientLayout {
+        // SAFETY: the symbol is the client's chat queue with this signature
+        // on this build.
+        queue: unsafe { core::mem::transmute::<usize, ClientQueueFn>(queue) },
+        store,
+    });
+    loader.link_feature(
+        "mod messages to the server",
+        Some(target),
+        &CLIENT_SEND_NEXT,
+        client_send as ClientSendFn,
+        HookFlags::NONE,
+    );
+}
+
+unsafe extern "system" fn client_send(client: *mut u8) -> u64 {
+    let _caught = std::panic::catch_unwind(|| {
+        // SAFETY: the game client, on the thread that sends its chat.
+        unsafe { queue_frames(client) };
+    });
+    // SAFETY: forwarded unchanged.
+    unsafe { CLIENT_SEND_NEXT.get()(client) }
+}
+
+/// Puts the client's waiting frame lines into its chat queue.
+///
+/// # Safety
+///
+/// `client` is the game client, on the thread that sends its chat.
+unsafe fn queue_frames(client: *mut u8) {
+    let Some(layout) = CLIENT.get() else {
+        return;
+    };
+    if client.is_null() {
+        return;
+    }
+    let lines = crate::net::client_lines();
+    if lines.is_empty() {
+        return;
+    }
+    // SAFETY: the game client holds its chat store here.
+    let store: usize = unsafe { crate::world::read(client.addr(), layout.store) };
+    if store == 0 {
+        return;
+    }
+    for line in lines {
+        let span = [line.as_ptr().expose_provenance(), line.len()];
+        let mut result = [0u8; 16];
+        // SAFETY: the client's chat store, on its own thread, with a line
+        // the game copies before the call returns.
+        unsafe {
+            (layout.queue)(
+                result.as_mut_ptr(),
+                core::ptr::with_exposed_provenance_mut(store),
+                0,
+                &raw const span,
+                0,
+                0,
+            );
+        };
+    }
 }
 
 fn next() -> Option<PostFn> {
@@ -223,6 +331,15 @@ unsafe extern "system" fn post(
     hash: u64,
     extra: *const [u64; 2],
 ) -> *mut u8 {
+    let frame = std::panic::catch_unwind(|| {
+        // SAFETY: the game's arguments, read before anything else is called.
+        unsafe { server_frame(out, kind, text) }
+    });
+    if frame.unwrap_or(false) {
+        // SAFETY: the game's result record holds at least 8 bytes.
+        unsafe { out.cast::<u64>().write_unaligned(0) };
+        return out;
+    }
     let caught = std::panic::catch_unwind(|| {
         // SAFETY: the game's arguments, read before anything else is called.
         unsafe { command_line(out, kind, text) }
@@ -240,6 +357,46 @@ unsafe extern "system" fn post(
         Some(next) => unsafe { next(out, store, kind, text, loca1, loca2, handle, hash, extra) },
         None => out,
     }
+}
+
+/// Whether the client is posting a frame line the server sent, which it
+/// then hands to the net instead of the chat.
+///
+/// # Safety
+///
+/// The game's chat post arguments, at its entry.
+unsafe fn server_frame(out: *mut u8, kind: u8, text: *const [usize; 2]) -> bool {
+    let Some((loader, layout)) = LOADED.get() else {
+        return false;
+    };
+    if kind != layout.reply_type
+        || out.is_null()
+        || text.is_null()
+        || layout.receive_returns[0] == 0
+    {
+        return false;
+    }
+    let frame = (loader.caller_frame)();
+    if frame.rsp == 0 {
+        return false;
+    }
+    // SAFETY: the frame was taken at this chain's entry, on this thread.
+    let caller = unsafe { frame.return_address() };
+    if !layout.receive_returns.contains(&caller) {
+        return false;
+    }
+    // SAFETY: the game passes its text span: pointer and byte length.
+    let [ptr, len] = unsafe { text.read() };
+    if ptr == 0 || len == 0 || len > layout.max_text {
+        return false;
+    }
+    // SAFETY: the span holds `len` bytes for the call.
+    let bytes =
+        unsafe { core::slice::from_raw_parts(core::ptr::with_exposed_provenance::<u8>(ptr), len) };
+    if !crate::net::is_frame(bytes) {
+        return false;
+    }
+    core::str::from_utf8(bytes).is_ok_and(crate::net::client_received)
 }
 
 /// The line when the game posts a player's `/` line from their client.
@@ -301,6 +458,10 @@ fn dispatch(loader: &Loader, line: &str, to: To) {
         To::Machine(_, key) | To::Key(key) => key,
         To::All => 0,
     };
+    if name == crate::net::COMMAND {
+        crate::net::server_received(key, args);
+        return;
+    }
     let player = sender(loader, key);
     let who =
         String::from_utf8_lossy(&player.name[..usize::from(player.name_len).min(64)]).into_owned();

@@ -463,6 +463,10 @@ pub static BUILDS: &[KnownBuild] = &[
             ("world.time", 0x9b_0e10),
             ("ecs.spawn_request", 0x95_37d0),
             ("building.cursor_check", 0x29_7370),
+            ("chat.receive_return_a", 0x84_0b59),
+            ("chat.receive_return_b", 0x86_9b1b),
+            ("chat.client_send", 0x86_64d0),
+            ("chat.client_queue", 0xe9_73b0),
         ],
         constants: &[
             ("text.pool_language", 0xd8),
@@ -646,6 +650,8 @@ pub static BUILDS: &[KnownBuild] = &[
             // data here; the flag it sets without building permission.
             ("building.cursor_item_info", 0x60),
             ("building.cursor_no_permission", 0x4000),
+            // The client's own chat: the game client holds it here.
+            ("chat.client_store", 0xf8),
         ],
     },
 ];

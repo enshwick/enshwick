@@ -51,6 +51,8 @@ pub mod manifest;
 #[cfg(windows)]
 mod mid;
 #[cfg(windows)]
+mod net;
+#[cfg(windows)]
 mod patch;
 #[cfg(windows)]
 mod progress;

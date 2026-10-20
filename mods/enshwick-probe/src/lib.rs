@@ -113,6 +113,15 @@ impl Mod for Probe {
         log_typed::<Revived>(load);
 
         vetoes(load, &settings);
+        // The probe is no join mod, so the loader refuses it a channel.
+        match load.channel::<u32, _>("probe", 1, |_, _| ()) {
+            Err(off) => enshwick_loader_api::info!(
+                "PASS a channel is refused to a mod that is no join mod: {off}"
+            ),
+            Ok(_) => {
+                enshwick_loader_api::warn!("FAIL a channel opened for a mod that is no join mod");
+            }
+        }
         let checks = Arc::new(Checks::new(load)?);
         let ping = load.event_type("keen::ecs::UiPingEvent")?;
         let pinged = Arc::clone(&checks);

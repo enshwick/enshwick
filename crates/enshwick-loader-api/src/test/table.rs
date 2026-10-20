@@ -8,9 +8,9 @@ use crate::abi::{
     AltarInfo, AltarLimitFn, AltarZoneSize, BedCheckFn, BuildCheckFn, BuildInfo, CallerFrame,
     ComfortFn, CommandCallFn, CraftCheckFn, EntityPlace, Event, EventFn, ExperiencePassFn,
     GameEventFn, Header, HookSpec, HostApi, InteractionFn, InventoryRequest, InventoryResultFn,
-    ItemData, Level, MidHookFn, MidHookSpec, ModHandle, ModInfo, PlayerInfo, RenameCallFn,
-    ResourceKey, ResourcePatchFn, Side, SkillCheckFn, SpawnRequest, Status, StatusFn, Str,
-    SummonFn, SurvivorLookupFn, SurvivorStatusFn, TeleportRequest, ZoneCheckFn,
+    ItemData, Level, MidHookFn, MidHookSpec, ModHandle, ModInfo, NetMessageFn, PlayerInfo,
+    RenameCallFn, ResourceKey, ResourcePatchFn, Side, SkillCheckFn, SpawnRequest, Status, StatusFn,
+    Str, SummonFn, SurvivorLookupFn, SurvivorStatusFn, TeleportRequest, ZoneCheckFn,
 };
 
 use super::{FakeHost, LinkedHook, ServedResource, SubmittedRequest};
@@ -60,6 +60,10 @@ pub(crate) struct State {
     /// The spawns the mod asked for, with the ids handed out.
     pub(crate) spawns: Vec<(u32, SpawnRequest)>,
     pub(crate) craft_filters: Vec<(CraftCheckFn, usize)>,
+    /// Channels the mod opened: full name, id, handler and pointer.
+    pub(crate) channels: Vec<(String, u32, NetMessageFn, usize)>,
+    /// Messages the mod sent: channel id, raw peer and bytes.
+    pub(crate) net_sent: Vec<(u32, u64, Vec<u8>)>,
     pub(crate) build_filters: Vec<(BuildCheckFn, usize)>,
     /// The world key last handed out, alive until the next one.
     world_key: Option<Box<str>>,
@@ -132,6 +136,8 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         teleports: Vec::new(),
         spawns: Vec::new(),
         craft_filters: Vec::new(),
+        channels: Vec::new(),
+        net_sent: Vec::new(),
         build_filters: Vec::new(),
         world_key: None,
         altars: Vec::new(),
@@ -1008,6 +1014,61 @@ extern "system" fn build_filter(
     })
 }
 
+extern "system" fn net_channel(
+    _me: ModHandle,
+    name: Str,
+    callback: NetMessageFn,
+    user: *mut c_void,
+    out: *mut u32,
+) -> Status {
+    let name = text(name);
+    let id = with(None, |s| {
+        if s.channels.iter().any(|c| c.0 == name) {
+            return None;
+        }
+        let id = u32::try_from(s.channels.len() + 1).unwrap_or(u32::MAX);
+        s.channels
+            .push((name, id, callback, user.expose_provenance()));
+        Some(id)
+    });
+    match id {
+        Some(id) => put(out, id),
+        None => Status::REFUSED,
+    }
+}
+
+extern "system" fn net_send(
+    _me: ModHandle,
+    channel: u32,
+    peer: u64,
+    data: *const u8,
+    size: u32,
+) -> Status {
+    let bytes = if size == 0 || data.is_null() {
+        Vec::new()
+    } else {
+        // SAFETY: the safe layer passes `size` bytes at `data` for the call.
+        unsafe { core::slice::from_raw_parts(data, size as usize) }.to_vec()
+    };
+    with(Status::MISSING, |s| {
+        if peer != 0 && !s.host.net_peers.contains(&peer) {
+            return Status::MISSING;
+        }
+        s.net_sent.push((channel, peer, bytes));
+        Status::OK
+    })
+}
+
+extern "system" fn net_ready(_me: ModHandle, peer: u64) -> Status {
+    with(Status::MISSING, |s| {
+        if s.host.net_peers.contains(&peer) {
+            Status::OK
+        } else {
+            Status::MISSING
+        }
+    })
+}
+
 /// The first entity id the fake hands out for a spawn.
 const FIRST_SPAWNED: u32 = 0x10_0000;
 
@@ -1103,4 +1164,7 @@ pub(crate) static TABLE: HostApi = HostApi {
     spawn,
     craft_filter,
     build_filter,
+    net_channel,
+    net_send,
+    net_ready,
 };

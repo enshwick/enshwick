@@ -27,6 +27,7 @@
 - [Crafting and building vetoes](vetoes.md)
 - [Character progress](progress.md)
 - [Commands and chat](commands.md)
+- [Messages between server and client](messages.md)
 - [State and data folders](state.md)
 - [Services between mods](services.md)
 
@@ -60,4 +61,3 @@
 
 - [ABI reference](abi-reference.md)
 - [FAQ and troubleshooting](faq.md)
-- [Upgrading from 0.3](upgrading.md)

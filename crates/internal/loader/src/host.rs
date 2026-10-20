@@ -557,6 +557,9 @@ pub(crate) static API: HostApi = HostApi {
     spawn,
     craft_filter,
     build_filter,
+    net_channel,
+    net_send,
+    net_ready,
 };
 
 /// A static slice from a pointer and a count, empty for a null pointer.
@@ -1836,6 +1839,68 @@ extern "system" fn build_filter(
 ) -> Status {
     entry("build_filter", || match caller_index(me) {
         Ok((loader, index)) => crate::vetoes::register_build(loader, index, callback, user),
+        Err(status) => status,
+    })
+}
+
+extern "system" fn net_channel(
+    me: ModHandle,
+    name: Str,
+    callback: api_frame::NetMessageFn,
+    user: *mut core::ffi::c_void,
+    out: *mut u32,
+) -> Status {
+    entry("net_channel", || {
+        let (loader, index) = match caller_index(me) {
+            Ok(found) => found,
+            Err(status) => return status,
+        };
+        // SAFETY: the name is borrowed for the call.
+        let Some(name) = (unsafe { name.as_str() }) else {
+            return Status::BAD_ARGS;
+        };
+        match crate::net::open(loader, index, name, callback, user) {
+            Ok(id) => put(out, id),
+            Err(status) => status,
+        }
+    })
+}
+
+extern "system" fn net_send(
+    me: ModHandle,
+    channel: u32,
+    peer: u64,
+    data: *const u8,
+    size: u32,
+) -> Status {
+    entry("net_send", || {
+        let (loader, index) = match caller_index(me) {
+            Ok(found) => found,
+            Err(status) => return status,
+        };
+        let Ok(len) = usize::try_from(size) else {
+            return Status::BAD_ARGS;
+        };
+        if data.is_null() && len != 0 {
+            return Status::BAD_ARGS;
+        }
+        let bytes = if len == 0 {
+            &[][..]
+        } else {
+            // SAFETY: the caller passes `size` bytes at `data` for the call.
+            unsafe { core::slice::from_raw_parts(data, len) }
+        };
+        match crate::net::send(loader, index, channel, peer, bytes) {
+            Ok(()) => Status::OK,
+            Err(status) => status,
+        }
+    })
+}
+
+extern "system" fn net_ready(me: ModHandle, peer: u64) -> Status {
+    entry("net_ready", || match caller(me) {
+        Ok(_) if crate::net::ready(peer) => Status::OK,
+        Ok(_) => Status::MISSING,
         Err(status) => status,
     })
 }

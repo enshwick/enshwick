@@ -12,7 +12,7 @@ raw table. The exact types and signatures are in the
 | Constant                                                                                            | Value | Meaning                                         |
 | --------------------------------------------------------------------------------------------------- | ----- | ----------------------------------------------- |
 | [`ABI_MAJOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 1     | A loader refuses a mod built for another major. |
-| [`ABI_MINOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 25    | A newer minor only appends.                     |
+| [`ABI_MINOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 26    | A newer minor only appends.                     |
 
 The ABI version is apart from Enshwick Loader's version (such as 0.2.0, see
 [Releasing and updates](releasing.md#versions)): a platform release raises
@@ -218,6 +218,9 @@ marked "init only" are allowed during `enshwick_mod_init` only.
 | `spawn`               | Spawns an entity from a template as the admin spawn does; server game thread only               | 24          |
 | `craft_filter`        | Calls a filter on each player's craft request in the server's world; init only                  | 25          |
 | `build_filter`        | Calls a filter after the cursor check allows a placement, on both sides; init only              | 25          |
+| `net_channel`         | Opens a join mod's channel between its server and client parts; init only                       | 26          |
+| `net_send`            | Sends a message on the mod's channel to the server or a player's client; any thread             | 26          |
+| `net_ready`           | Whether a peer takes messages now; any thread                                                   | 26          |
 
 ## Under an older loader
 
@@ -256,6 +259,7 @@ the mod off with a reason, which the mod's log shows as `off: <reason>`:
 | 23          | `Load::actions`                 | Off: `actions: needs a newer loader`                      |
 | 24          | `Actions::spawn`                | `WorldError::Missing`                                     |
 | 25          | craft and build filters         | Off: `craft filters: needs a newer loader` and the like   |
+| 26          | `Load::channel`                 | Off: `mod messages: needs a newer loader`                 |
 
 A mod that can do without a feature catches the `Off` and goes on without it
 instead of returning it from `init`.
