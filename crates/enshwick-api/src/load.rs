@@ -368,6 +368,35 @@ impl Load<'_> {
         })
     }
 
+    /// Calls `handler` on every event of kind `E` with its typed data, on the
+    /// thread that raises it. A panic in `handler` turns the mod off.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] when the loader does not know the event.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_api::events::{PlayerJoined, WorldSaved};
+    ///
+    /// fn init(load: &mut enshwick_api::Load<'_>) -> Result<(), enshwick_api::Off> {
+    ///     load.on::<PlayerJoined>(|player| enshwick_api::info!("entity {} joined", player.entity))?;
+    ///     load.on::<WorldSaved>(|()| enshwick_api::info!("saved"))
+    /// }
+    /// ```
+    pub fn on<E: crate::events::Kind>(
+        &mut self,
+        handler: impl Fn(&E::Data) + Send + Sync + 'static,
+    ) -> Result<(), Off> {
+        self.subscribe(E::EVENT, move |raw| {
+            // SAFETY: the loader passes this event's data, valid for the call.
+            if let Some(data) = unsafe { E::data(raw) } {
+                handler(data);
+            }
+        })
+    }
+
     /// Calls `handler` on every `event` for this mod with the event's data,
     /// null for events without, on the thread that raises it. A panic in
     /// `handler` turns the mod off.

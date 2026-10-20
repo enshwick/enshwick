@@ -124,6 +124,13 @@ impl Loader {
         let _first = self.delivery.set(made.into_boxed_slice());
     }
 
+    /// Whether a mod subscribed to `event`.
+    pub(crate) fn subscribed(&self, event: Event) -> bool {
+        self.delivery
+            .get()
+            .is_some_and(|d| d.iter().any(|s| s.event == event))
+    }
+
     /// Raises `event` with `data` for every mod still on, or for mod `only`.
     pub(crate) fn emit(&self, event: Event, only: Option<usize>, data: *const core::ffi::c_void) {
         let Some(delivery) = self.delivery.get() else {
@@ -510,10 +517,7 @@ extern "system" fn subscribe(
     if record.off.load(Ordering::Acquire) {
         return Status::FAULTED;
     }
-    if !matches!(
-        event,
-        Event::SETTINGS_CHANGED | Event::LOADER_SETTINGS_CHANGED
-    ) {
+    if !(Event::SETTINGS_CHANGED.0..=Event::SHUTDOWN.0).contains(&event.0) {
         return Status::MISSING;
     }
     if loader.delivery.get().is_some() {
