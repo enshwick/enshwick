@@ -27,6 +27,7 @@
 - [Survivors](survivors.md)
 - [Interactions](interactions.md)
 - [Crafting and building vetoes](vetoes.md)
+- [Damage](damage.md)
 - [Character progress](progress.md)
 - [Commands and chat](commands.md)
 - [Messages between server and client](messages.md)

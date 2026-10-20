@@ -14,7 +14,7 @@ use core::sync::atomic::AtomicUsize;
 pub const ABI_MAJOR: u16 = 1;
 
 /// The minor version of this interface. A newer minor only appends fields.
-pub const ABI_MINOR: u16 = 29;
+pub const ABI_MINOR: u16 = 30;
 
 /// Whether `id` is a valid mod id: 1 to 64 characters of `[a-z0-9-]`.
 ///
@@ -2529,6 +2529,67 @@ impl DaytimeInfo {
     pub const DAY: u32 = 1;
 }
 
+/// Damage about to reach an entity's health, handed to the filters
+/// registered with [`HostApi::damage_filter`], which may change it.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::abi::{DamageCheck, Header};
+///
+/// let mut fall = DamageCheck {
+///     header: Header::of::<DamageCheck>(),
+///     cause: DamageCheck::FALL,
+///     target: 2,
+///     source: 0,
+///     reserved: 0,
+///     amounts: [0.0; 13],
+///     total: 40.0,
+/// };
+/// fall.total *= 0.5;
+/// assert_eq!(fall.total, 20.0);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct DamageCheck {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// [`DamageCheck::HIT`], [`DamageCheck::FALL`], [`DamageCheck::SHROUD`]
+    /// or [`DamageCheck::SHROUD_DEATH`].
+    pub cause: u32,
+    /// The entity that takes the damage.
+    pub target: u32,
+    /// What dealt a hit: the attacker, or its projectile; 0 for other
+    /// causes.
+    pub source: u32,
+    /// Zero.
+    pub reserved: u32,
+    /// A hit's damage by type (`DamageTypeNew`: cut 0, pierce 1, blunt 2,
+    /// fire 3, ice 4, shroud 5, lightning 6, healing 7, poison 8, wood 9,
+    /// stone 10, metal 11, explosion 12), after the target's resistances
+    /// and before its armour; healing is what heals. Zero for other causes.
+    pub amounts: [f32; 13],
+    /// The health the damage takes, for causes other than a hit; for a hit,
+    /// the sum of its damage types but healing, which the loader does not
+    /// read back.
+    pub total: f32,
+}
+
+impl DamageCheck {
+    /// A hit from a weapon, a spell, a creature or an explosion.
+    pub const HIT: u32 = 0;
+    /// A fall.
+    pub const FALL: u32 = 1;
+    /// The shroud draining a character whose time in it ran out.
+    pub const SHROUD: u32 = 2;
+    /// The deadly shroud, which kills at once.
+    pub const SHROUD_DEATH: u32 = 3;
+}
+
+/// A mod's damage filter: the damage, which it may change, and the pointer
+/// given at registration. It runs on the game's worker threads.
+pub type DamageFilterFn = unsafe extern "system" fn(check: *mut DamageCheck, user: *mut c_void);
+
 /// The table of services the loader offers a mod.
 ///
 /// Fields are only ever appended; a mod checks [`Header::covers`] before it
@@ -3023,6 +3084,14 @@ pub struct HostApi {
     /// [`Status::BAD_ARGS`] for a wrong size or a day or night length of
     /// zero or less. On the server's game thread only. Since minor 29.
     pub set_game_settings: extern "system" fn(me: ModHandle, data: *const u8, size: u32) -> Status,
+    /// Calls `callback` with `user` on damage about to reach an entity's
+    /// health in the server's world, before the game applies it: hits,
+    /// falls and the shroud; what the filters leave in the
+    /// [`DamageCheck`] is what the game applies. Runs on the game's worker
+    /// threads, in load order. Allowed during `enshwick_mod_init` only.
+    /// Since minor 30.
+    pub damage_filter:
+        extern "system" fn(me: ModHandle, callback: DamageFilterFn, user: *mut c_void) -> Status,
 }
 
 /// The exports a mod DLL provides, by name.
@@ -3084,11 +3153,13 @@ const _: () = {
     assert!(core::mem::offset_of!(HostApi, hook_at) == 24 + 35 * 8);
     assert!(core::mem::offset_of!(HostApi, inventory_open) == 24 + 36 * 8);
     assert!(core::mem::offset_of!(HostApi, inventory_submit) == 24 + 38 * 8);
-    assert!(size_of::<HostApi>() == 24 + 79 * 8);
+    assert!(size_of::<HostApi>() == 24 + 80 * 8);
     assert!(core::mem::offset_of!(HostApi, time_of_day) == 24 + 73 * 8);
     assert!(core::mem::offset_of!(HostApi, set_time_speed) == 24 + 76 * 8);
     assert!(size_of::<DaytimeInfo>() == 8 + 5 * 8 + 8);
     assert!(core::mem::offset_of!(HostApi, game_settings) == 24 + 77 * 8);
+    assert!(core::mem::offset_of!(HostApi, damage_filter) == 24 + 79 * 8);
+    assert!(size_of::<DamageCheck>() == 8 + 16 + 13 * 4 + 4);
     assert!(size_of::<InventoryOp>() == 32);
     assert!(size_of::<InventoryRequest>() == 32);
     assert!(size_of::<InventoryOpResult>() == 8);

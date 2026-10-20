@@ -36,7 +36,8 @@ Once the world has loaded, and again on `/probe check`:
   back;
 - a save on demand, followed by `WorldSaved`.
 
-From start it counts every game event by type and logs the counts every
+From start it counts the damage its damage filter sees by cause, and every
+game event by type, and logs the counts every
 minute, and logs each typed game event it receives; a typed event whose
 fields this game build lacks shows as `FAIL typed <type>`.
 
@@ -64,6 +65,9 @@ enabled = false
 # the probe logs each craft request and the first placement either way.
 refuse_crafting = false
 refuse_building = false
+# Halve every damage, to see the damage filter in game; the probe counts
+# the damage it sees by cause and logs the counts every minute either way.
+soften_damage = false
 ```
 
 Licensed under [MIT](../../LICENSE).

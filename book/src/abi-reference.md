@@ -12,7 +12,7 @@ raw table. The exact types and signatures are in the
 | Constant                                                                                            | Value | Meaning                                         |
 | --------------------------------------------------------------------------------------------------- | ----- | ----------------------------------------------- |
 | [`ABI_MAJOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 1     | A loader refuses a mod built for another major. |
-| [`ABI_MINOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 29    | A newer minor only appends.                     |
+| [`ABI_MINOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 30    | A newer minor only appends.                     |
 
 The ABI version is apart from Enshwick Loader's version (such as 0.2.0, see
 [Releasing and updates](releasing.md#versions)): a platform release raises
@@ -231,6 +231,7 @@ marked "init only" are allowed during `enshwick_mod_init` only.
 | `set_time_speed`      | Sets the mod's factor on the clock's speed, 0 to 1000; server game thread only                  | 28          |
 | `game_settings`       | Copies the server's live game settings and their preset; server game thread only                | 29          |
 | `set_game_settings`   | Replaces the live game settings as the admin command does, until the server stops               | 29          |
+| `damage_filter`       | Calls a filter on damage before the game applies it, on worker threads; init only               | 30          |
 
 ## Under an older loader
 
@@ -273,6 +274,7 @@ the mod off with a reason, which the mod's log shows as `off: <reason>`:
 | 27          | `World::notify`                 | A chat line                                               |
 | 28          | `Load::clock`, `clock_speed`    | Off: `clock: needs a newer loader` and the like           |
 | 29          | `Load::game_settings`           | Off: `game settings: needs a newer loader`                |
+| 30          | `Load::on_damage`               | Off: `damage filters: needs a newer loader`               |
 
 A mod that can do without a feature catches the `Off` and goes on without it
 instead of returning it from `init`.
