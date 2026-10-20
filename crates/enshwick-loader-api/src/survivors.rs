@@ -30,6 +30,10 @@ use crate::content::Guid;
 use crate::ecs::Entity;
 use crate::{Load, Off};
 
+mod workshop;
+
+pub use workshop::{WORKSHOP_SURVIVORS, WorkshopSurvivor};
+
 /// A survivor's id, the same for every entity of it.
 ///
 /// # Examples

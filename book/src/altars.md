@@ -105,8 +105,11 @@ altar that would start a 17th base with the game's own "too many altars". It
 returns `false` on a game build whose code the platform does not know, where
 the game keeps 16. The code patches and the refusal of a 17th base go in
 together or not at all: when a patch or one of the loader's hooks cannot be
-armed, none of them is, the mod is turned off, and the game keeps 16. `altars::grouping()` tells how many zones and bases the
-last grouping found.
+armed, none of them is, the mod is turned off, and the game keeps 16.
+`altars::grouping()` tells how many zones and bases the last grouping found.
+`altars::VANILLA_ALTARS_PER_FLAME_LEVEL` and `altars::vanilla_altars(level)`
+give the game's own table, and `VANILLA_ALTAR_ZONES` and `RAISED_ALTAR_ZONES`
+the two zone limits.
 
 ## Building across zones
 

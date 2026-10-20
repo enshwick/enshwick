@@ -523,6 +523,71 @@ pub enum SetSizesError {
 /// The most zones a [`ZoneCheck`] carries; the engine keeps at most 255.
 pub const MAX_ZONES: usize = 256;
 
+/// The game's own altars per Flame level, `altarsPerFlameLevel` from level 0;
+/// later levels repeat the last entry. The default a limit falls back to
+/// (see [`Load::on_altar_limit`]).
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::altars::VANILLA_ALTARS_PER_FLAME_LEVEL;
+///
+/// assert_eq!(VANILLA_ALTARS_PER_FLAME_LEVEL.first(), Some(&1));
+/// ```
+pub const VANILLA_ALTARS_PER_FLAME_LEVEL: [u8; 12] = [1, 2, 4, 6, 8, 10, 11, 12, 13, 14, 15, 16];
+
+/// The altars the game itself allows at `flame_level`, from
+/// [`VANILLA_ALTARS_PER_FLAME_LEVEL`].
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::altars::vanilla_altars;
+///
+/// assert_eq!((vanilla_altars(0), vanilla_altars(3), vanilla_altars(40)), (1, 6, 16));
+/// ```
+#[must_use]
+pub const fn vanilla_altars(flame_level: u32) -> u8 {
+    let table = &VANILLA_ALTARS_PER_FLAME_LEVEL;
+    let last = table.len() - 1;
+    let index = if (flame_level as usize) < last {
+        flame_level as usize
+    } else {
+        last
+    };
+    table[index]
+}
+
+/// The altar zones the game's own grouping puts into bases; a world with
+/// more needs [`Load::raise_base_limit`] to open safely.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::altars::{VANILLA_ALTAR_ZONES, grouping};
+///
+/// let past_vanilla = grouping().is_some_and(|g| g.zones > u32::from(VANILLA_ALTAR_ZONES));
+/// # let _ = past_vanilla;
+/// ```
+pub const VANILLA_ALTAR_ZONES: u8 = 16;
+
+/// The altar zones the game groups into its 16 bases once
+/// [`Load::raise_base_limit`] is in force: a base names its zones in a 32-bit
+/// mask.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::altars::{RAISED_ALTAR_ZONES, VANILLA_ALTAR_ZONES};
+///
+/// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+///     let cap = if load.raise_base_limit()? { RAISED_ALTAR_ZONES } else { VANILLA_ALTAR_ZONES };
+///     enshwick_loader_api::info!("up to {cap} altar zones");
+///     Ok(())
+/// }
+/// ```
+pub const RAISED_ALTAR_ZONES: u8 = 32;
+
 /// A placement the game refused because the object does not lie in a single
 /// building zone; see [`Load::on_zone_check`]. Coordinates are 32.32
 /// fixed-point metres.
@@ -678,7 +743,9 @@ pub struct Grouping {
 /// # Examples
 ///
 /// ```
-/// let past_vanilla = enshwick_loader_api::altars::grouping().is_some_and(|g| g.zones > 16);
+/// use enshwick_loader_api::altars::{VANILLA_ALTAR_ZONES, grouping};
+///
+/// let past_vanilla = grouping().is_some_and(|g| g.zones > u32::from(VANILLA_ALTAR_ZONES));
 /// # let _ = past_vanilla;
 /// ```
 #[must_use]
@@ -699,7 +766,11 @@ where
 {
     // SAFETY: `user` is the leaked `F` this function was registered with.
     let limit = unsafe { &*user.cast::<F>() };
-    crate::host::guard("panic in an altar limit", || 16, || limit(flame_level))
+    crate::host::guard(
+        "panic in an altar limit",
+        || vanilla_altars(flame_level),
+        || limit(flame_level),
+    )
 }
 
 impl Load<'_> {
@@ -751,7 +822,9 @@ impl Load<'_> {
     ///
     /// ```
     /// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
-    ///     let cap = if load.raise_base_limit()? { 32 } else { 16 };
+    ///     use enshwick_loader_api::altars::{RAISED_ALTAR_ZONES, VANILLA_ALTAR_ZONES};
+    ///
+    ///     let cap = if load.raise_base_limit()? { RAISED_ALTAR_ZONES } else { VANILLA_ALTAR_ZONES };
     ///     enshwick_loader_api::info!("up to {cap} altar zones");
     ///     Ok(())
     /// }

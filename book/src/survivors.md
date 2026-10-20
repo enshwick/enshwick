@@ -56,12 +56,18 @@ staff. `load.on_summon` runs before a staff spawns or moves a survivor;
 returning `true` makes the use take the item, in the same transaction and only
 when the spawn or move works.
 
+`survivors::WORKSHOP_SURVIVORS` lists the game's workshop survivors, each with
+its id, its vanilla staff and the template the staff places;
+`WorkshopSurvivor::find("blacksmith")` picks one by its short name.
+
 ```rust
-use enshwick_loader_api::survivors::SurvivorId;
+use enshwick_loader_api::survivors::WorkshopSurvivor;
 
 fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
     const MY_STAFF: u32 = 0x5e01;
-    load.add_summon_item(MY_STAFF, SurvivorId(1_201_801_546))?;
+    let smith = WorkshopSurvivor::find("blacksmith")
+        .ok_or_else(|| enshwick_loader_api::Off::new("no blacksmith"))?;
+    load.add_summon_item(MY_STAFF, smith.id())?;
     load.on_summon(|summon| summon.item == MY_STAFF && summon.ammo == 0)
 }
 ```

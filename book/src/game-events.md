@@ -77,8 +77,8 @@ fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_
 `load.on_every_raw_game_event(|event| ...)` receives every event of every type,
 for finding out what the game raises; the
 [probe](https://github.com/themaiby/enshwick/tree/main/mods/enshwick-probe)
-uses it to count them. Each event is copied for the mod, so leave it to
-development builds.
+uses it to count them, naming the types in `game_events::EVENT_TYPE_NAMES`.
+Each event is copied for the mod, so leave it to development builds.
 
 ## When and where
 

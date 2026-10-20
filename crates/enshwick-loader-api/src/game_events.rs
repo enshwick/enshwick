@@ -29,6 +29,85 @@ mod sealed {
     pub trait Sealed {}
 }
 
+/// The reflected names of the game event types the server's systems raise,
+/// from the game's reflection data, for tools that name what they see; a
+/// build may lack some, which [`Load::event_type`] then refuses.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::game_events::EVENT_TYPE_NAMES;
+///
+/// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+///     let known = EVENT_TYPE_NAMES.iter().filter(|&&name| load.event_type(name).is_ok());
+///     enshwick_loader_api::info!("{} game event types on this build", known.count());
+///     Ok(())
+/// }
+/// ```
+pub const EVENT_TYPE_NAMES: &[&str] = &[
+    "keen::ecs::HitEvent",
+    "keen::ecs::EntityDiedEvent",
+    "keen::ecs::LevelUpEvent",
+    "keen::ecs::XPGainedEvent",
+    "keen::ecs::CraftRecipeEvent",
+    "keen::ecs::CraftRecipeSuccessEvent",
+    "keen::ecs::AcceptOfferedInteractionEvent",
+    "keen::ecs::InteractionAcceptedEvent",
+    "keen::ecs::BuildingPlaceEvent",
+    "keen::ecs::BuildingPickUpEvent",
+    "keen::ecs::BuildingTearDownEvent",
+    "keen::ecs::FlameAltarEvent",
+    "keen::ecs::LootInteractionEvent",
+    "keen::ecs::HandleEquipmentSlotChangedEvent",
+    "keen::ecs::RevivedPlayerEvent",
+    "keen::ecs::OnDestroyNotifyEvent",
+    "keen::ecs::LoginEvent",
+    "keen::ecs::PickupEvent",
+    "keen::ecs::ParryEvent",
+    "keen::ecs::AllItemsRepairedEvent",
+    "keen::ecs::TransformedToLootEvent",
+    "keen::ecs::AppliedBuffEvent",
+    "keen::ecs::LogicEntityPlacedEvent",
+    "keen::ecs::ProhibitedHit",
+    "keen::ecs::PlayerSpawnInfoChangeEvent",
+    "keen::ecs::CookingEvent",
+    "keen::ecs::GameSettingsChangedEvent",
+    "keen::ecs::AccountActionEvent",
+    "keen::ecs::KillFaction",
+    "keen::ecs::NoiseEvent",
+    "keen::ecs::ResourceChangeEvent",
+    "keen::ecs::PuzzleCompletedEvent",
+    "keen::ecs::DestroyedWithoutSurfaceEvent",
+    "keen::ecs::NotifyEvent",
+    "keen::ecs::SetToggleStateEvent",
+    "keen::ecs::ToggleInteractionEvent",
+    "keen::ecs::NpcCommandEvent",
+    "keen::ecs::FootDown",
+    "keen::ecs::GenericEnemyEvent",
+    "keen::ecs::EnemyAttackStartedEvent",
+    "keen::ecs::CallForHelpEvent",
+    "keen::ecs::AddThreatTargetEvent",
+    "keen::ecs::RestoreEnemyHealthEvent",
+    "keen::ecs::SetEnemyVariableEvent",
+    "keen::ecs::StartGuardingEvent",
+    "keen::ecs::StopGuardingEvent",
+    "keen::ecs::UiWorldEvent",
+    "keen::ecs::UiPingEvent",
+    "keen::ecs::OpenHudScreenEvent",
+    "keen::ecs::KnowledgeGrantsExperienceEvent",
+    "keen::ecs::KnowledgeAnalyticsEvent",
+    "keen::ecs::TerraformingHitEvent",
+    "keen::ecs::ResourceCandidate",
+    "keen::ecs::HitCandidate",
+    "keen::ecs::CollisionEvent",
+    "keen::ecs::InventoryFull",
+    "keen::ecs::AreaDepositEvent",
+    "keen::ecs::ApplyPushBackEvent",
+    "keen::ecs::ActivateFactionPacifyEvent",
+    "keen::ecs::VisceralAttackExecutedEvent",
+    "keen::ecs::StartPlaySongEvent",
+];
+
 /// A reflected game event type, resolved once at init.
 ///
 /// # Examples

@@ -253,6 +253,54 @@ pub unsafe fn keys_from_abi(keys: &[Str]) -> Vec<String> {
         .collect()
 }
 
+/// The id the loader lists itself under in [`mods`]; no mod may take it.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::mods::LOADER_ID;
+///
+/// let mods = enshwick_loader_api::mods();
+/// let others = mods.iter().filter(|m| m.id != LOADER_ID);
+/// assert!(others.count() <= mods.len());
+/// ```
+pub const LOADER_ID: &str = "enshwick";
+
+/// The stub that starts the loader, in the game's folder.
+///
+/// # Examples
+///
+/// ```
+/// assert!(enshwick_loader_api::mods::LOADER_FILES.contains(&enshwick_loader_api::mods::STUB_FILE));
+/// ```
+pub const STUB_FILE: &str = "powrprof.dll";
+
+/// The loader's DLL relative to the game's folder, as its [`ModEntry::file`]
+/// reads.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::mods::{LOADER_FILE, LOADER_ID};
+///
+/// let loader = enshwick_loader_api::mods().into_iter().find(|m| m.id == LOADER_ID);
+/// assert!(loader.is_none_or(|m| m.file == LOADER_FILE));
+/// ```
+pub const LOADER_FILE: &str = "mods/enshwick/enshwick.dll";
+
+/// Every file the loader is made of, relative to the game's folder: what an
+/// update of the loader replaces and no mod may write.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::mods::LOADER_FILES;
+///
+/// let taken = |file: &str| LOADER_FILES.contains(&file);
+/// assert!(taken("powrprof.dll") && !taken("mods/enshwick-safes.dll"));
+/// ```
+pub const LOADER_FILES: [&str; 2] = [STUB_FILE, LOADER_FILE];
+
 /// One loaded mod, or the loader itself, from [`mods`] or [`Host::mods`].
 ///
 /// # Examples
