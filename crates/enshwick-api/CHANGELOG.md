@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.1.3](https://github.com/themaiby/enshwick/compare/enshwick-api-v0.1.2...enshwick-api-v0.1.3) (2026-10-20)
+
+
+### Features
+
+* a scheduler for work on the server's game thread ([#44](https://github.com/themaiby/enshwick/issues/44)) ([3f3889a](https://github.com/themaiby/enshwick/commit/3f3889ac6300d77a4ab482603c571fe767f63ee5))
+* cargo enshwick, to start a mod and install it into the game ([#38](https://github.com/themaiby/enshwick/issues/38)) ([58ea01c](https://github.com/themaiby/enshwick/commit/58ea01cca185612ab188783dc7035a580e41f031))
+* events, with settings applied while the game runs ([#41](https://github.com/themaiby/enshwick/issues/41)) ([5eb9204](https://github.com/themaiby/enshwick/commit/5eb9204263da3410dcaeacb295dff33f14b87e80))
+* game events: tick, world loaded and saved, players, shutdown ([#43](https://github.com/themaiby/enshwick/issues/43)) ([f23019b](https://github.com/themaiby/enshwick/commit/f23019b92710e1e223826dac29d4fff5f96a9f9d))
+* name mod versions everywhere, checked at release ([#42](https://github.com/themaiby/enshwick/issues/42)) ([5dc88e3](https://github.com/themaiby/enshwick/commit/5dc88e3a296565b1691d3d54be726540a2255fc8))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * enshwick-macros bumped from 0.1.0 to 0.1.1
+
 ## [0.1.2](https://github.com/themaiby/enshwick/compare/enshwick-api-v0.1.1...enshwick-api-v0.1.2) (2026-10-20)
 
 

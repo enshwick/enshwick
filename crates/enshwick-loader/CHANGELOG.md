@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.1.4](https://github.com/themaiby/enshwick/compare/enshwick-loader-v0.1.3...enshwick-loader-v0.1.4) (2026-10-20)
+
+
+### Features
+
+* events, with settings applied while the game runs ([#41](https://github.com/themaiby/enshwick/issues/41)) ([5eb9204](https://github.com/themaiby/enshwick/commit/5eb9204263da3410dcaeacb295dff33f14b87e80))
+* game events: tick, world loaded and saved, players, shutdown ([#43](https://github.com/themaiby/enshwick/issues/43)) ([f23019b](https://github.com/themaiby/enshwick/commit/f23019b92710e1e223826dac29d4fff5f96a9f9d))
+* name mod versions everywhere, checked at release ([#42](https://github.com/themaiby/enshwick/issues/42)) ([5dc88e3](https://github.com/themaiby/enshwick/commit/5dc88e3a296565b1691d3d54be726540a2255fc8))
+* name the mod behind a crash in crash.log ([#45](https://github.com/themaiby/enshwick/issues/45)) ([c755862](https://github.com/themaiby/enshwick/commit/c755862b638604120ad4cbb1222c76e86af247d4))
+* the loader's own hook engine, on iced-x86, instead of minhook ([#46](https://github.com/themaiby/enshwick/issues/46)) ([e9de94c](https://github.com/themaiby/enshwick/commit/e9de94cf7b7a4ebf1b49d92d9a4fd5542091aaaa))
+
 ## [0.1.3](https://github.com/themaiby/enshwick/compare/enshwick-loader-v0.1.2...enshwick-loader-v0.1.3) (2026-10-20)
 
 
