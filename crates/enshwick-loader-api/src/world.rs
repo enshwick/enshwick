@@ -1,8 +1,9 @@
 //! The server's world: components, templates, positions and players,
-//! entity queries, labels, chat lines, destroy requests and saves. Call them on the server's game thread, from a game event or a
-//! [`Scheduler`](crate::schedule::Scheduler) task; elsewhere they return
-//! `None` or nothing. On a client the server is the built-in one, while it
-//! hosts a game.
+//! entity queries, labels, chat lines, destroy requests and saves. Most calls
+//! belong on the server's game thread, from a game event or a
+//! [`Scheduler`](crate::schedule::Scheduler) task, and each says what it does
+//! elsewhere. On a client the server is the built-in one, while it hosts a
+//! game.
 
 mod stats;
 
@@ -573,7 +574,8 @@ impl World {
     /// [`WorldError::Refused`] for a player's character,
     /// [`WorldError::Gone`] for an entity not in the world,
     /// [`WorldError::WrongThread`] off the game thread and
-    /// [`WorldError::Missing`] under a loader older than ABI minor 21.
+    /// [`WorldError::Missing`] under a loader older than ABI minor 21 or on
+    /// any other refusal.
     ///
     /// # Examples
     ///
@@ -602,7 +604,8 @@ impl World {
     ///
     /// [`WorldError::Refused`] while the world may not be saved, as before
     /// it has loaded; [`WorldError::WrongThread`] off the game thread;
-    /// [`WorldError::Missing`] under a loader older than ABI minor 21.
+    /// [`WorldError::Missing`] under a loader older than ABI minor 21 or on
+    /// any other refusal.
     ///
     /// # Examples
     ///

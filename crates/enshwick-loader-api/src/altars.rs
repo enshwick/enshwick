@@ -15,8 +15,9 @@
 //! fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
 //!     let altars = load.altars()?;
 //!     load.on::<AltarsChanged>(move |()| {
-//!         let bases = altars.bases();
-//!         enshwick_loader_api::info!("{} altars in {} bases", altars.list().len(), bases.len());
+//!         let list = altars.list();
+//!         let bases = enshwick_loader_api::altars::bases_of(&list);
+//!         enshwick_loader_api::info!("{} altars in {} bases", list.len(), bases.len());
 //!     })
 //! }
 //! ```
@@ -83,8 +84,8 @@ impl CellBox {
         (0..3).all(|a| self.min[a] <= cell[a] && cell[a] < self.max[a])
     }
 
-    /// Whether the two boxes overlap or share a face, as zones that the
-    /// engine groups into one base do.
+    /// Whether the two boxes share a cell boundary or more, edges and corners
+    /// included, as zones that the engine groups into one base do.
     ///
     /// # Examples
     ///
@@ -337,7 +338,7 @@ pub struct Altars {
 
 impl Altars {
     /// Every altar of the server's world as it is now; empty while no world
-    /// runs. Any thread.
+    /// runs or when the loader refuses. Any thread.
     ///
     /// # Examples
     ///
@@ -537,10 +538,6 @@ where
     ))
 }
 
-fn covered(host: Host, field: usize) -> Result<(), Off> {
-    crate::load::offered(host.api(), field, "altars")
-}
-
 impl Load<'_> {
     /// Asks the loader to follow the Flame Altars, for [`Altars::list`] and
     /// [`AltarsChanged`](crate::events::AltarsChanged).
@@ -555,7 +552,11 @@ impl Load<'_> {
     /// See the [module](self).
     pub fn altars(&mut self) -> Result<Altars, Off> {
         let host = self.host();
-        covered(host, core::mem::offset_of!(HostApi, altars_open))?;
+        crate::load::offered(
+            host.api(),
+            core::mem::offset_of!(HostApi, altars_open),
+            "altars",
+        )?;
         let status = (host.api().altars_open)(host.handle());
         crate::load::ok(status, Altars { host }, || "altars".to_owned())
     }
@@ -572,7 +573,11 @@ impl Load<'_> {
     /// See [`ZoneControl`].
     pub fn control_altar_zones(&mut self) -> Result<ZoneControl, Off> {
         let host = self.host();
-        covered(host, core::mem::offset_of!(HostApi, altar_zones_control))?;
+        crate::load::offered(
+            host.api(),
+            core::mem::offset_of!(HostApi, altar_zones_control),
+            "altar zones",
+        )?;
         let status = (host.api().altar_zones_control)(host.handle());
         crate::load::ok(status, ZoneControl { host }, || {
             "altar zones, sized by one mod at a time".to_owned()
@@ -582,8 +587,8 @@ impl Load<'_> {
     /// Runs `filter` when the game refuses a placement because the object's
     /// box does not lie in a single building zone; returning `true` accepts
     /// it after all. It runs on both sides, on the thread that checks the
-    /// placement, so it never blocks, and while a player aims a piece, so it
-    /// stays cheap.
+    /// placement, every time a player aims a piece: keep it cheap and never
+    /// block.
     ///
     /// # Errors
     ///
@@ -609,7 +614,11 @@ impl Load<'_> {
         F: Fn(&ZoneCheck<'_>) -> bool + Send + Sync + 'static,
     {
         let host = self.host();
-        covered(host, core::mem::offset_of!(HostApi, zone_check_filter))?;
+        crate::load::offered(
+            host.api(),
+            core::mem::offset_of!(HostApi, zone_check_filter),
+            "zone checks",
+        )?;
         crate::load::hand_over(
             filter,
             |user| (host.api().zone_check_filter)(host.handle(), run_zone_check::<F>, user),
@@ -685,7 +694,11 @@ impl Load<'_> {
         F: Fn(u32) -> u8 + Send + Sync + 'static,
     {
         let host = self.host();
-        covered(host, core::mem::offset_of!(HostApi, altar_limit))?;
+        crate::load::offered(
+            host.api(),
+            core::mem::offset_of!(HostApi, altar_limit),
+            "the altar limit",
+        )?;
         crate::load::hand_over(
             limit,
             |user| (host.api().altar_limit)(host.handle(), run_limit::<F>, user),
@@ -694,8 +707,8 @@ impl Load<'_> {
     }
 
     /// Lets the game group 32 altar zones into its 16 bases, refusing an
-    /// altar that would start a 17th base; `Ok(false)` when this build's code
-    /// is not the one the platform knows and the game keeps 16. The patches
+    /// altar that would start a 17th base; `Ok(false)` when the platform does
+    /// not recognise this build's code, and the game keeps 16. The patches
     /// count as the mod's own: one the game refuses at arming turns the mod
     /// off.
     ///
@@ -714,7 +727,11 @@ impl Load<'_> {
     /// ```
     pub fn raise_base_limit(&mut self) -> Result<bool, Off> {
         let host = self.host();
-        covered(host, core::mem::offset_of!(HostApi, raise_base_limit))?;
+        crate::load::offered(
+            host.api(),
+            core::mem::offset_of!(HostApi, raise_base_limit),
+            "the base limit",
+        )?;
         let status = (host.api().raise_base_limit)(host.handle());
         if status.is_ok() {
             Ok(true)

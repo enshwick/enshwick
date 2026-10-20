@@ -182,9 +182,10 @@ pub struct Rename {
 /// ```
 /// use enshwick_loader_api::commands::{RunError, run};
 ///
-/// assert_eq!(run("no slash").unwrap_err(), RunError::NotACommand);
+/// assert_eq!(run("no slash"), Err(RunError::NotACommand));
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum RunError {
     /// The line does not start with `/name`.
     NotACommand,

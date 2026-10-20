@@ -160,6 +160,7 @@ impl Lookup {
 ///
 /// See the [module](self).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Answer {
     /// The game's own answer.
     Vanilla,

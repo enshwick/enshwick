@@ -559,8 +559,8 @@ impl Load<'_> {
         })
     }
 
-    /// Reads of the server's world: components, templates, positions and
-    /// players; on a client, of the built-in server while it hosts a game.
+    /// The server's [`World`](crate::world::World): reads, queries and
+    /// requests; on a client, the built-in server's while it hosts a game.
     ///
     /// # Errors
     ///
@@ -847,18 +847,18 @@ impl Load<'_> {
     ///
     /// ```
     /// #[repr(C)]
-    /// struct Zones {
-    ///     count: extern "system" fn() -> u32,
+    /// struct Prices {
+    ///     price: extern "system" fn(item: u32) -> u32,
     /// }
     ///
-    /// extern "system" fn count() -> u32 {
+    /// extern "system" fn price(_item: u32) -> u32 {
     ///     0
     /// }
     ///
-    /// static ZONES: Zones = Zones { count };
+    /// static PRICES: Prices = Prices { price };
     ///
     /// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
-    ///     load.publish("trading-post.prices", 1, &ZONES)
+    ///     load.publish("trading-post.prices", 1, &PRICES)
     /// }
     /// ```
     pub fn publish<T: Sync>(
@@ -892,14 +892,14 @@ impl Load<'_> {
     ///
     /// ```
     /// #[repr(C)]
-    /// struct Zones {
-    ///     count: extern "system" fn() -> u32,
+    /// struct Prices {
+    ///     price: extern "system" fn(item: u32) -> u32,
     /// }
     ///
     /// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
-    ///     // SAFETY: `Zones` is the table `trading-post` publishes as v1.
-    ///     let zones: &'static Zones = unsafe { load.service("trading-post.prices", 1)? };
-    ///     let _ = (zones.count)();
+    ///     // SAFETY: `Prices` is the table `trading-post` publishes as v1.
+    ///     let prices: &'static Prices = unsafe { load.service("trading-post.prices", 1)? };
+    ///     let _ = (prices.price)(0);
     ///     Ok(())
     /// }
     /// ```
@@ -960,7 +960,7 @@ unsafe extern "system" fn deliver<F: Fn(*const c_void)>(
 }
 
 /// Runs an engine event handler; `user` is the handler boxed by
-/// [`Load::on_game_event`], alive for the process.
+/// `Load::game_events`, alive for the process.
 unsafe extern "system" fn deliver_game<F: Fn(&crate::game_events::GameEvent<'_>)>(
     event: *const crate::abi::GameEventData,
     user: *mut c_void,

@@ -50,12 +50,13 @@ pub(crate) struct State {
     pub(crate) destroyed: Vec<u32>,
     /// How many saves the mod asked for.
     pub(crate) saves: usize,
-    /// The world key last handed out, alive while the fake is installed.
+    /// The world key last handed out, alive until the next one.
     world_key: Option<Box<str>>,
     /// The altars `altars` lists, settable while installed.
     pub(crate) altars: Vec<AltarInfo>,
-    /// Whether the mod opened altars, and whether it controls their zones.
+    /// Whether the mod opened altars.
     pub(crate) altars_opened: bool,
+    /// Whether the mod sizes the altar zones.
     pub(crate) zone_control: bool,
     /// The zone sizes the mod set last.
     pub(crate) zone_sizes: Vec<AltarZoneSize>,
@@ -443,10 +444,10 @@ extern "system" fn join_missing(
     list(&mods, out, entry_size, capacity, count)
 }
 
-/// Copies up to `capacity` of `mods` to `out`, `entry_size` bytes apart, and
+/// Copies up to `capacity` of `items` to `out`, `entry_size` bytes apart, and
 /// writes how many there are.
 fn list<T: Copy>(
-    mods: &[T],
+    items: &[T],
     out: *mut T,
     entry_size: u32,
     capacity: u32,
@@ -456,7 +457,7 @@ fn list<T: Copy>(
     let shared = stride.min(size_of::<T>());
     let capacity = usize::try_from(capacity).unwrap_or(0);
     if !out.is_null() {
-        for (i, info) in mods.iter().take(capacity).enumerate() {
+        for (i, info) in items.iter().take(capacity).enumerate() {
             let entry = out.cast::<u8>().wrapping_add(i * stride);
             // SAFETY: the safe layer passes room for `capacity` entries of
             // `stride` bytes; the fake fills what both sides know.
@@ -465,7 +466,7 @@ fn list<T: Copy>(
             }
         }
     }
-    put(count, u32::try_from(mods.len()).unwrap_or(u32::MAX))
+    put(count, u32::try_from(items.len()).unwrap_or(u32::MAX))
 }
 
 extern "system" fn sync(_me: ModHandle, synced: Str, out: *mut Str) -> Status {

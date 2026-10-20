@@ -72,8 +72,13 @@ impl EventType {
     /// # Examples
     ///
     /// ```
-    /// fn is_death(load: &enshwick_loader_api::Load<'_>, event: &enshwick_loader_api::game_events::GameEvent<'_>) -> Result<bool, enshwick_loader_api::Off> {
-    ///     Ok(event.type_hash() == load.event_type("keen::ecs::EntityDiedEvent")?.hash())
+    /// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+    ///     let died = load.event_type("keen::ecs::EntityDiedEvent")?.hash();
+    ///     load.on_every_game_event(move |event| {
+    ///         if event.type_hash() == died {
+    ///             enshwick_loader_api::debug!("an entity died");
+    ///         }
+    ///     })
     /// }
     /// ```
     #[must_use]

@@ -405,8 +405,8 @@ where
         Ok(())
     }
 
-    /// Writes the open world's value on a thread of its own when it changed,
-    /// so the game thread never waits on the disk.
+    /// Writes the open world's value on a thread of its own when it changed;
+    /// the game thread waits only for a previous write still under way.
     pub(crate) fn flush_in_background(&self) {
         let mut slot = self.lock();
         let Some(open) = slot.open.as_mut().filter(|open| open.changed) else {
@@ -438,7 +438,8 @@ where
         }
     }
 
-    /// `f` on the running world's value; `None` while no world is open.
+    /// `f` on the running world's value; `None` while no world is open. The
+    /// store stays locked while `f` runs, so `f` must not use it.
     ///
     /// # Examples
     ///
@@ -454,7 +455,8 @@ where
     }
 
     /// `f` on the running world's value, which is written when the world
-    /// next saves; `None`, changing nothing, while no world is open.
+    /// next saves; `None`, changing nothing, while no world is open. As for
+    /// [`WorldStore::with`], `f` must not use the store.
     ///
     /// # Examples
     ///
