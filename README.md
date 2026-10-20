@@ -21,7 +21,8 @@ every mod is a DLL in the `mods/` folder beside it.
    `enshrouded_server.exe` (servers). You get `powrprof.dll` there and a `mods`
    folder beside it.
 3. Start the game or the server. Each mod writes its settings to
-   `mods/<mod>.toml` on first start; the log is `mods/enshwick.log`.
+   `mod-configs/<id>.toml` on first start; the log is `logs/enshwick/`
+   (`all.log`, `loader.log`, `mods/<id>.log`).
 
 Players and their server need the same mods: the server advertises its mod set
 and a player with a different one is warned before joining. To remove a mod,

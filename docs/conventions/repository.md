@@ -9,6 +9,7 @@
 | ------------------------------------ | --------------------------------------------------------------------------- |
 | `docs/`                              | conventions, decisions, specs, plans ([documentation.md](documentation.md)) |
 | `crates/enshwick-api/`               | the modding API: the ABI with the loader and the safe layer mods use        |
+| `crates/enshwick-macros/`            | derive macros of the API: `Config`                                          |
 | `crates/enshwick-geometry/`          | altar zones as integer boxes: clusters, uniform growth, the zones service   |
 | `crates/enshwick-loader/`            | the loader, `mods/enshwick/enshwick.dll`: game build, mods, hooks, log      |
 | `crates/enshwick-stub/`              | the `powrprof.dll` stub that starts the loader                              |

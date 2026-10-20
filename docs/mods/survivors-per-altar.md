@@ -17,7 +17,7 @@ zone.
 
 ## Settings
 
-`mods/survivors-per-altar.toml`, written on first start:
+`mod-configs/survivors-per-altar.toml`, written on first start:
 
 ```toml
 per_altar = true

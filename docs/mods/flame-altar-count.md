@@ -10,7 +10,7 @@ doubles the vanilla count, up to 16.
 
 ## Settings
 
-`mods/enshwick-flame-altar-count.toml`, written on first start:
+`mod-configs/enshwick-flame-altar-count.toml`, written on first start:
 
 ```toml
 altars_per_flame_level = [2, 4, 8, 12, 16, 16, 16, 16, 16, 16, 16, 16]

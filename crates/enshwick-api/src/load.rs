@@ -262,7 +262,7 @@ impl Load<'_> {
         ok(status, (), || format!("hook {}", hook.name()))
     }
 
-    /// The mod's settings: its file in `mods/`, created from `defaults` when
+    /// The mod's settings: its file in `mod-configs/`, created from `defaults` when
     /// missing, parsed into `T`.
     ///
     /// `defaults` is the commented TOML a player sees on first start; `T`
@@ -294,6 +294,36 @@ impl Load<'_> {
         // which outlives this borrow.
         let text = unsafe { text.as_str() }.ok_or_else(|| Off::new("settings: not UTF-8"))?;
         toml::from_str(text).map_err(|e| Off::new(format!("settings: {}", e.message())))
+    }
+
+    /// The mod's typed settings: `mod-configs/<id>.toml`, written from
+    /// [`Config::template`](crate::config::Config::template) when missing, parsed
+    /// and checked with [`Config::validate`](crate::config::Config::validate).
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] when the file does not parse into `T` or a value is refused.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// /// Altar settings.
+    /// #[derive(Default, serde::Deserialize, serde::Serialize, enshwick_api::Config)]
+    /// struct Settings {
+    ///     /// Altars allowed at each Flame level.
+    ///     altars: Vec<u8>,
+    /// }
+    ///
+    /// fn init(load: &mut enshwick_api::Load<'_>) -> Result<Settings, enshwick_api::Off> {
+    ///     load.config()
+    /// }
+    /// ```
+    pub fn config<T: crate::config::Config>(&mut self) -> Result<T, Off> {
+        let settings: T = self.settings(&T::template())?;
+        settings
+            .validate()
+            .map_err(|why| Off::new(format!("settings: {why}")))?;
+        Ok(settings)
     }
 
     /// Publishes a service other mods can find by `name` and `version`.

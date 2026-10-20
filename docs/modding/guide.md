@@ -68,7 +68,8 @@ enshwick_api::declare_mod!(MyMod);
 ```
 
 Build it with `cargo build --release` for `x86_64-pc-windows-msvc`, copy the DLL
-into `mods/`, start the game and read `mods/enshwick.log`.
+into `mods/`, start the game and read `logs/enshwick/` (`all.log`, `loader.log`,
+`mods/<id>.log`).
 [`enshwick-flame-altar-count`](../../mods/enshwick-flame-altar-count) is this
 mod in full.
 
@@ -112,10 +113,17 @@ what one side sees or decides, such as a server-only balance change.
 
 ## Settings
 
-`Load::settings(DEFAULTS)` returns the mod's `mods/<id>.toml`, written from
-`DEFAULTS` on first start, parsed with serde into your type. Write `DEFAULTS` as
-the commented file a player should see, and use `#[serde(deny_unknown_fields)]`
-so a typo turns the mod off with a message instead of being ignored.
+The easiest way: derive `enshwick_api::Config` on a settings type that also
+derives serde's `Deserialize` and `Serialize` and implements `Default`, and call
+`load.config::<Settings>()`. The file a player sees is written from the type:
+the struct's doc comment heads it, each field's doc comment precedes its key,
+and values come from `Default`. Override `Config::validate` to refuse values.
+
+`Load::settings(DEFAULTS)` returns the mod's `mod-configs/<id>.toml`, written
+from `DEFAULTS` on first start, parsed with serde into your type. Write
+`DEFAULTS` as the commented file a player should see, and use
+`#[serde(deny_unknown_fields)]` so a typo turns the mod off with a message
+instead of being ignored.
 
 ## Finding the game
 
@@ -183,9 +191,9 @@ loads first. Put the table type in a small crate both mods depend on, as
 
 ## Logging
 
-`enshwick_api::info!`, `warn!` and `error!` write to `mods/enshwick.log` under
-the mod's id, formatted like `format!`. Log milestones and failures, never per
-frame.
+`enshwick_api::info!`, `warn!` and `error!` write to `logs/enshwick/`
+(`all.log`, `loader.log`, `mods/<id>.log`) under the mod's id, formatted like
+`format!`. Log milestones and failures, never per frame.
 
 ## Releasing
 
