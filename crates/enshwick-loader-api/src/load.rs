@@ -132,7 +132,9 @@ impl Load<'_> {
     ///
     /// # Errors
     ///
-    /// [`Off`] when neither the mod nor the loader pins the id for this build.
+    /// [`Off`] when neither the mod nor the loader pins the id for this build,
+    /// or the address it names is null, so a mod that turns the address into
+    /// a function pointer never makes a null one.
     ///
     /// # Examples
     ///
@@ -146,7 +148,11 @@ impl Load<'_> {
     pub fn symbol(&self, name: &str) -> Result<u64, Off> {
         let mut out = 0;
         let status = (self.api().symbol)(self.host.handle(), Str::new(name), &raw mut out);
-        ok(status, out, || format!("symbol {name}"))
+        let address = ok(status, out, || format!("symbol {name}"))?;
+        if address == 0 {
+            return Err(Off::new(format!("symbol {name}: null on this game build")));
+        }
+        Ok(address)
     }
 
     /// An engine constant of the running build, such as a field offset that
