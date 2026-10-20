@@ -14,7 +14,7 @@ use core::sync::atomic::AtomicUsize;
 pub const ABI_MAJOR: u16 = 1;
 
 /// The minor version of this interface. A newer minor only appends fields.
-pub const ABI_MINOR: u16 = 11;
+pub const ABI_MINOR: u16 = 12;
 
 /// Whether `id` is a valid mod id: 1 to 64 characters of `[a-z0-9-]`.
 ///
@@ -1392,6 +1392,211 @@ pub struct MidHookSpec {
     pub flags: HookFlags,
 }
 
+/// One operation of an inventory transaction, in [`InventoryRequest::ops`].
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_api::abi::InventoryOp;
+///
+/// // Everything from a chest (entity 40) to a player (entity 2).
+/// let op = InventoryOp {
+///     kind: InventoryOp::MOVE_ALL,
+///     flags: 0,
+///     target: 40,
+///     other: 2,
+///     item: 0,
+///     count: 0,
+/// };
+/// assert_eq!(op.kind, 5);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub struct InventoryOp {
+    /// What to do: one of the constants on this type.
+    pub kind: u32,
+    /// [`InventoryOp::INCLUDE_SPECIAL`] or none.
+    pub flags: u32,
+    /// The inventory entity, or for slot operations the slot reference
+    /// (`sub-inventory | index << 32`).
+    pub target: u64,
+    /// The destination inventory entity of a move; 0 otherwise.
+    pub other: u64,
+    /// The item id of a give or take.
+    pub item: u32,
+    /// How many to give or take; for a slot move, how many to move, 0 for the
+    /// whole stack.
+    pub count: u32,
+}
+
+impl InventoryOp {
+    /// Adds `count` new items `item` to the inventory `target`.
+    pub const GIVE: u32 = 1;
+    /// Removes `count` items `item` from the inventory `target`.
+    pub const TAKE: u32 = 2;
+    /// Destroys the stack in slot `target`.
+    pub const DESTROY_SLOT: u32 = 3;
+    /// Moves the stack in slot `target`, or `count` of it, into the inventory
+    /// `other`.
+    pub const MOVE_SLOT: u32 = 4;
+    /// Moves every stack of the inventory `target` into the inventory `other`.
+    pub const MOVE_ALL: u32 = 5;
+    /// For [`InventoryOp::MOVE_ALL`]: also move the source's action bar,
+    /// equipment and locked slots.
+    pub const INCLUDE_SPECIAL: u32 = 1;
+}
+
+/// Inventory operations to run in one transaction, for
+/// [`HostApi::inventory_submit`].
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_api::abi::{Header, InventoryOp, InventoryRequest};
+///
+/// let ops = [InventoryOp { kind: InventoryOp::GIVE, target: 2, item: 0x1234, count: 5, ..Default::default() }];
+/// let request = InventoryRequest {
+///     header: Header::of::<InventoryRequest>(),
+///     flags: InventoryRequest::NOTIFY,
+///     actor: 2,
+///     ops: ops.as_ptr(),
+///     op_count: 1,
+///     reserved: 0,
+/// };
+/// assert_eq!(request.op_count, 1);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct InventoryRequest {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// [`InventoryRequest::ALLOW_PARTIAL`], [`InventoryRequest::NOTIFY`].
+    pub flags: u32,
+    /// The player the game credits with the change, for pickup and
+    /// inventory-full messages; 0 for whichever player the game is serving.
+    pub actor: u32,
+    /// The operations, read during the call.
+    pub ops: *const InventoryOp,
+    /// How many operations `ops` holds.
+    pub op_count: u32,
+    /// Zero.
+    pub reserved: u32,
+}
+
+impl InventoryRequest {
+    /// Commit even when a give or take leaves some of its count undone.
+    pub const ALLOW_PARTIAL: u32 = 1;
+    /// Show the actor the pickup and inventory-full messages.
+    pub const NOTIFY: u32 = 2;
+}
+
+/// The outcome of one operation in an [`InventoryResult`].
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_api::abi::InventoryOpResult;
+///
+/// let done = InventoryOpResult { error: 0, remaining: 0 };
+/// assert_ne!(done.error, InventoryOpResult::NOT_RUN);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub struct InventoryOpResult {
+    /// The game's error code, 0 for none, or [`InventoryOpResult::NOT_RUN`].
+    pub error: u32,
+    /// How much of the count the operation could not do.
+    pub remaining: u32,
+}
+
+impl InventoryOpResult {
+    /// The operation did not run: one before it failed.
+    pub const NOT_RUN: u32 = 0x100;
+}
+
+/// What became of an [`InventoryRequest`], passed to its
+/// [`InventoryDoneFn`].
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_api::abi::InventoryResult;
+///
+/// assert_ne!(InventoryResult::COMMITTED, InventoryResult::ROLLED_BACK);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct InventoryResult {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// One of the constants on this type.
+    pub outcome: u32,
+    /// How many results `ops` holds: one per operation, or none when the
+    /// request never ran.
+    pub op_count: u32,
+    /// The operations' results, valid for the call.
+    pub ops: *const InventoryOpResult,
+}
+
+impl InventoryResult {
+    /// Every operation succeeded and the transaction was committed.
+    pub const COMMITTED: u32 = 0;
+    /// An operation failed or fell short; the transaction was rolled back
+    /// and nothing changed.
+    pub const ROLLED_BACK: u32 = 1;
+    /// The request could not run: this game build lacks a piece, or its hook
+    /// was not armed. Nothing changed.
+    pub const UNAVAILABLE: u32 = 2;
+    /// The game did not run inventories in time, as with nobody online.
+    /// Nothing changed.
+    pub const TIMED_OUT: u32 = 3;
+}
+
+/// Receives the [`InventoryResult`] of a request, on the server's game thread
+/// after a simulation step; it must not unwind.
+pub type InventoryDoneFn =
+    unsafe extern "system" fn(result: *const InventoryResult, user: *mut c_void);
+
+/// An item's static data, from [`HostApi::item_info`].
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_api::abi::{Header, ItemData};
+///
+/// let sword = ItemData {
+///     header: Header::of::<ItemData>(),
+///     id: 7,
+///     max_stack: 1,
+///     reserved: 0,
+///     flags: ItemData::HAS_PIDE,
+/// };
+/// assert_ne!(sword.flags & ItemData::HAS_PIDE, 0);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct ItemData {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// The item id: FNV-1a of the item's GUID.
+    pub id: u32,
+    /// How many fit one stack.
+    pub max_stack: u16,
+    /// Zero.
+    pub reserved: u16,
+    /// `ItemInfo` flags: [`ItemData::HAS_PIDE`] and the others on this type.
+    pub flags: u32,
+}
+
+impl ItemData {
+    /// Each item has an entity of its own, with durability or a level.
+    pub const HAS_PIDE: u32 = 1 << 1;
+    /// The item is a container.
+    pub const IS_CONTAINER: u32 = 1 << 2;
+    /// The item is a blueprint.
+    pub const IS_BLUEPRINT: u32 = 1 << 3;
+}
+
 /// The table of services the loader offers a mod.
 ///
 /// Fields are only ever appended; a mod checks [`Header::covers`] before it
@@ -1593,6 +1798,26 @@ pub struct HostApi {
     /// function, with the registers there; allowed during
     /// `enshwick_mod_init` only. Since minor 11.
     pub hook_at: extern "system" fn(me: ModHandle, spec: *const MidHookSpec) -> Status,
+    /// Asks for inventory transactions and item data; allowed during
+    /// `enshwick_mod_init` only. [`Status::MISSING`] when this game build
+    /// lacks a piece of them. Requests run in the game server: the dedicated
+    /// server, or the client while it hosts. Since minor 12.
+    pub inventory_open: extern "system" fn(me: ModHandle) -> Status,
+    /// Writes the static data of the item `item`; [`Status::MISSING`] for an
+    /// unknown item, or before the game first ran its inventories. Any
+    /// thread. Since minor 12.
+    pub item_info: extern "system" fn(me: ModHandle, item: u32, out: *mut ItemData) -> Status,
+    /// Queues `request`, from any thread, for the game's inventory system,
+    /// which runs it as one transaction: all or nothing. `done` gets the
+    /// result with `user` on the game thread after a later step, unless the
+    /// mod is off by then. On an error status nothing is queued and `done` is
+    /// never called. Since minor 12.
+    pub inventory_submit: extern "system" fn(
+        me: ModHandle,
+        request: *const InventoryRequest,
+        done: InventoryDoneFn,
+        user: *mut c_void,
+    ) -> Status,
 }
 
 /// The exports a mod DLL provides, by name.
@@ -1652,7 +1877,14 @@ const _: () = {
     assert!(core::mem::offset_of!(HostApi, rename_filter) == 24 + 33 * 8);
     assert!(core::mem::offset_of!(HostApi, join_missing) == 24 + 34 * 8);
     assert!(core::mem::offset_of!(HostApi, hook_at) == 24 + 35 * 8);
-    assert!(size_of::<HostApi>() == 24 + 36 * 8);
+    assert!(core::mem::offset_of!(HostApi, inventory_open) == 24 + 36 * 8);
+    assert!(core::mem::offset_of!(HostApi, inventory_submit) == 24 + 38 * 8);
+    assert!(size_of::<HostApi>() == 24 + 39 * 8);
+    assert!(size_of::<InventoryOp>() == 32);
+    assert!(size_of::<InventoryRequest>() == 32);
+    assert!(size_of::<InventoryOpResult>() == 8);
+    assert!(size_of::<InventoryResult>() == 24);
+    assert!(size_of::<ItemData>() == 20);
     assert!(size_of::<Registers>() == 17 * 8);
     assert!(core::mem::offset_of!(Registers, rsp) == 4 * 8);
     assert!(core::mem::offset_of!(Registers, rflags) == 16 * 8);

@@ -415,6 +415,9 @@ pub(crate) static API: HostApi = HostApi {
     rename_filter,
     join_missing,
     hook_at,
+    inventory_open,
+    item_info,
+    inventory_submit,
 };
 
 /// A static slice from a pointer and a count, empty for a null pointer.
@@ -918,6 +921,47 @@ extern "system" fn patch_code(
 
 extern "system" fn workshop_recipes() -> u32 {
     crate::code::workshop_recipes()
+}
+
+extern "system" fn inventory_open(me: ModHandle) -> Status {
+    match caller(me) {
+        Ok(loader) => crate::inventory::open(loader),
+        Err(status) => status,
+    }
+}
+
+extern "system" fn item_info(me: ModHandle, item: u32, out: *mut api_frame::ItemData) -> Status {
+    match caller(me).and_then(|loader| crate::inventory::item_info(loader, item)) {
+        Ok(data) => put(out, data),
+        Err(status) => status,
+    }
+}
+
+extern "system" fn inventory_submit(
+    me: ModHandle,
+    request: *const api_frame::InventoryRequest,
+    done: api_frame::InventoryDoneFn,
+    user: *mut core::ffi::c_void,
+) -> Status {
+    let loader = match caller(me) {
+        Ok(loader) => loader,
+        Err(status) => return status,
+    };
+    let Some((index, _)) = loader.record(me) else {
+        return Status::BAD_ARGS;
+    };
+    // SAFETY: a non-null request from a mod points at a valid request for the
+    // call.
+    let Some(request) = (unsafe { request.as_ref() }) else {
+        return Status::BAD_ARGS;
+    };
+    if !request
+        .header
+        .covers(core::mem::offset_of!(api_frame::InventoryRequest, op_count) + 4)
+    {
+        return Status::BAD_ARGS;
+    }
+    crate::inventory::submit(loader, index, request, done, user)
 }
 
 /// The listing entry of the loader itself.

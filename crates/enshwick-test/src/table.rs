@@ -5,12 +5,19 @@ use core::sync::atomic::Ordering;
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use enshwick_api::abi::{
-    BuildInfo, CallerFrame, CommandFn, Event, EventFn, Header, HookSpec, HostApi, Level, MidHookFn,
-    MidHookSpec, ModHandle, ModInfo, PlayerInfo, RenameFn, ResourceKey, ResourcePatchFn, Status,
-    Str,
+    BuildInfo, CallerFrame, CommandFn, Event, EventFn, Header, HookSpec, HostApi, InventoryDoneFn,
+    InventoryRequest, ItemData, Level, MidHookFn, MidHookSpec, ModHandle, ModInfo, PlayerInfo,
+    RenameFn, ResourceKey, ResourcePatchFn, Side, Status, Str,
 };
 
-use crate::{FakeHost, LinkedHook, ServedResource};
+use crate::{FakeHost, LinkedHook, ServedResource, SubmittedRequest};
+
+/// A submitted inventory request and where its result goes.
+pub(crate) struct OpenRequest {
+    pub(crate) request: SubmittedRequest,
+    pub(crate) done: InventoryDoneFn,
+    pub(crate) user: usize,
+}
 
 /// What the installed fake answers and what it has recorded.
 pub(crate) struct State {
@@ -31,6 +38,7 @@ pub(crate) struct State {
     pub(crate) chat: Vec<(u64, String)>,
     pub(crate) labels: Vec<(u32, String)>,
     pub(crate) rename_filters: Vec<(RenameFn, usize)>,
+    pub(crate) inventory_requests: Vec<OpenRequest>,
     /// The settings text last handed out, alive until the next call.
     settings: Option<Box<str>>,
     /// The join values last handed out, alive until the next call.
@@ -61,6 +69,7 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         published: Vec::new(),
         defaults: Vec::new(),
         synced: Vec::new(),
+        inventory_requests: Vec::new(),
         sync_out: None,
         commands: Vec::new(),
         chat: Vec::new(),
@@ -451,7 +460,7 @@ extern "system" fn workshop_recipes() -> u32 {
 
 extern "system" fn hosting() -> u8 {
     with(0, |s| {
-        u8::from(s.host.side == enshwick_api::abi::Side::SERVER || s.host.hosting)
+        u8::from(s.host.side == Side::SERVER || s.host.hosting)
     })
 }
 
@@ -501,6 +510,53 @@ extern "system" fn rename_filter(_me: ModHandle, callback: RenameFn, user: *mut 
 }
 
 /// The table every installed fake answers through; a mod keeps the first
+extern "system" fn inventory_open(_me: ModHandle) -> Status {
+    with(Status::MISSING, |s| {
+        if s.host.no_inventories {
+            Status::MISSING
+        } else {
+            Status::OK
+        }
+    })
+}
+
+extern "system" fn item_info(_me: ModHandle, item: u32, out: *mut ItemData) -> Status {
+    found(with(None, |s| s.host.items.get(&item).copied()), out)
+}
+
+extern "system" fn inventory_submit(
+    _me: ModHandle,
+    request: *const InventoryRequest,
+    done: InventoryDoneFn,
+    user: *mut c_void,
+) -> Status {
+    // SAFETY: the safe layer passes a valid request for the call; `as_ref`
+    // turns away null.
+    let Some(request) = (unsafe { request.as_ref() }) else {
+        return Status::BAD_ARGS;
+    };
+    if request.ops.is_null() || request.op_count == 0 {
+        return Status::BAD_ARGS;
+    }
+    // SAFETY: the request holds `op_count` operations, read during the call.
+    let ops = unsafe { core::slice::from_raw_parts(request.ops, request.op_count as usize) };
+    with(Status::MISSING, |s| {
+        if s.host.no_inventories {
+            return Status::MISSING;
+        }
+        s.inventory_requests.push(OpenRequest {
+            request: SubmittedRequest {
+                ops: ops.to_vec(),
+                flags: request.flags,
+                actor: request.actor,
+            },
+            done,
+            user: user.expose_provenance(),
+        });
+        Status::OK
+    })
+}
+
 /// table it sees for the process, so it is one static.
 pub(crate) static TABLE: HostApi = HostApi {
     header: Header::of::<HostApi>(),
@@ -541,4 +597,7 @@ pub(crate) static TABLE: HostApi = HostApi {
     rename_filter,
     join_missing,
     hook_at,
+    inventory_open,
+    item_info,
+    inventory_submit,
 };

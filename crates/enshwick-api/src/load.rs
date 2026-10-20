@@ -565,6 +565,21 @@ impl Load<'_> {
         crate::world::World::resolve(self)
     }
 
+    /// Inventory reads and transactions in the game server, dedicated or
+    /// hosted by the client; a mod asks for them during `init`.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] under a loader older than ABI minor 12, or when this game
+    /// build lacks a piece of them.
+    ///
+    /// # Examples
+    ///
+    /// See [`Inventories`](crate::inventory::Inventories).
+    pub fn inventories(&mut self) -> Result<crate::inventory::Inventories, Off> {
+        crate::inventory::Inventories::resolve(self)
+    }
+
     /// The mod's [`Scheduler`](crate::schedule::Scheduler), which runs work on
     /// the server's game thread after each simulation step: the dedicated
     /// server's, or the built-in server's while a client hosts a game.

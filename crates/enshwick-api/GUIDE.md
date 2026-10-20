@@ -277,6 +277,54 @@ and the server's features act whenever the client hosts:
   server and client halves hook one function, it links one detour there that
   answers for both.
 
+## Inventories
+
+`load.inventories()?` during `init` reads and changes inventories in the
+game server: the dedicated server, or the client while it hosts a game. It is
+`Copy`.
+
+```rust
+use enshwick_api::ecs::Entity;
+use enshwick_api::inventory::{Batch, Op};
+
+let inventories = load.inventories()?;
+// On the game thread, from an event or a scheduled task:
+let stacks = inventories.read().slots(corpse).iter().filter(|s| !s.is_empty()).count();
+inventories.move_all(corpse, player, move |outcome| {
+    enshwick_api::info!("{stacks} stacks: {:?}", outcome.done);
+});
+// A trade, all or nothing:
+let trade = Batch::new()
+    .with(Op::Take { from: player, item: COIN, count: 5 })
+    .with(Op::Give { to: player, item: SWORD, count: 1 });
+let ticket = inventories.submit(&trade, |_| {});
+```
+
+- Reads are synchronous: `slots(root)` follows the inventory's sub-inventories
+  (virtual links included) and lists every slot with its item id, count, item
+  entity (`pide`, for items with durability or a level) and `SlotRef`, the
+  game's `sub-inventory | index << 32`. `count`, `slot`, `root` (the chest or
+  player a slot belongs to) and `durability(pide)` go with it, and
+  `item_info(item)` gives the stack size and flags. `read()` works on the
+  server's game thread between steps; elsewhere it returns nothing.
+  `read_in(ctx)` reads from inside a hooked system, through its context.
+- Changes are requests: `give`, `take`, `destroy_slot`, `move_slot`, `move_all`,
+  or a `Batch` of them through `submit`. Submit from any thread. The loader runs
+  each request inside the game's inventory system as one transaction: if an
+  operation fails, or a give or take falls short without `allow_partial`,
+  the game rolls the transaction back and nothing changes. Moves leave what does
+  not fit in the source, as the game's "take all" does, and count as done.
+- The callback runs on the game thread after a later step, with an `Outcome`:
+  `Committed`, `RolledBack`, `Unavailable`, `TimedOut` or `Refused`, and a
+  result per operation. The returned `Ticket` holds the same outcome for
+  polling. A batch over the limits (64 operations, 16 inventories, the game's
+  op log) is refused before it reaches the game; `Batch::split` cuts it into
+  parts that fit, each all or nothing on its own.
+- The inventory system runs once per player each step, so with nobody online
+  nothing runs and requests time out after 30 seconds. A client that hosts
+  nothing refuses requests (`Unavailable`, delivered once a game runs). A build without the
+  pieces turns the mod off at `load.inventories()`.
+
 ## Content: items, recipes, workshops and texts
 
 New game content works on the server and the client alike; the mod runs on
@@ -457,7 +505,9 @@ A hook's chain continues to its target, so a target set to `address` of a plain
 function stands in for the game's. `logs()`, `faults()`, `hooks()`, `texts()`
 and `resources()` show what the mod asked for; `raise::<events::Tick>(&data)`
 raises an event, and `set_settings` with `SettingsChanged` plays a player's
-edit. A mod initialises once per process, so write one test per mod life and run
+edit. `inventory_requests()` lists the inventory requests and
+`finish_inventory(outcome, results)` answers the oldest as the game would;
+`item` and `without_inventories` set what the build has. A mod initialises once per process, so write one test per mod life and run
 them with `cargo nextest`, which gives each test its own process.
 
 ## Working inside a system
