@@ -381,9 +381,8 @@ impl Default for Access {
 
 /// A transform's position: x, y and z in 32.32 fixed point first.
 fn position(transform: *mut u8) -> [f64; 3] {
-    // SAFETY: a live CurrentTransform holds three i64 first.
-    let fixed = unsafe { transform.cast::<[i64; 3]>().read_unaligned() };
-    enshwick_loader_api::ecs::metres(fixed)
+    // SAFETY: a live CurrentTransform.
+    unsafe { enshwick_loader_api::ecs::transform_position(transform) }
 }
 
 #[cfg(test)]

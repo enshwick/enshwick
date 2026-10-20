@@ -29,6 +29,7 @@ use std::time::Duration;
 
 use arc_swap::ArcSwap;
 use enshwick_loader_api::abi::Side;
+use enshwick_loader_api::ecs::transform_position;
 use enshwick_loader_api::events::Shutdown;
 use enshwick_loader_api::raw::read_at;
 use enshwick_loader_api::state::Hold;
@@ -101,8 +102,6 @@ const ZONE_SIZE: usize = 0x20;
 const ZONE_HIGH: usize = 0x10;
 /// The most zones the game lists.
 const MAX_LISTED: usize = 0xff;
-/// Engine positions are 32.32 fixed point.
-const FIXED_PER_METRE: f64 = 4_294_967_296.0;
 /// How often the dedicated server checks whether its hold must change.
 const HOLD_EVERY: Duration = Duration::from_secs(5);
 
@@ -385,10 +384,6 @@ fn add_base(
 }
 
 /// Runs the cursor check, then refuses an altar that would start a 17th base.
-#[expect(
-    clippy::cast_precision_loss,
-    reason = "world positions are far below 2^53 fixed-point units"
-)]
 fn check(
     next: Next<unsafe extern "system" fn(*mut u32, *const u8, *const i64, *const u8, u64, u64)>,
     flags: *mut u32,
@@ -430,11 +425,8 @@ fn check(
         return;
     }
     // SAFETY: the cursor's transform: the position first, three i64.
-    let position = unsafe { transform.cast::<[i64; 3]>().read_unaligned() };
-    let candidate = limit::candidate(
-        position.map(|v| v as f64 / FIXED_PER_METRE),
-        [out[0], out[1], out[2]],
-    );
+    let position = unsafe { transform_position(transform.cast()) };
+    let candidate = limit::candidate(position, [out[0], out[1], out[2]]);
     if zones.refuses(&candidate) {
         // SAFETY: as above.
         let refused = unsafe { flags.read() } | MAX_ALTARS_REACHED;

@@ -15,12 +15,12 @@
 use std::sync::OnceLock;
 
 use arrayvec::ArrayVec;
+use enshwick_loader_api::ecs::FIXED_PER_METRE;
 use enshwick_loader_api::raw::read_at;
 use enshwick_loader_api::{Load, Next, Off};
 
 /// The engine keeps at most 255 zones.
 const MAX_ZONES: usize = 256;
-const FIXED_PER_METRE: f32 = 4_294_967_296.0;
 
 type Zone = ([i64; 3], [i64; 3]);
 
@@ -115,7 +115,7 @@ unsafe fn across(layout: &Layout, list: *const u8, corners: *const i64, margin: 
         low_corner,
         high_corner,
         &zones,
-        (margin * FIXED_PER_METRE) as i64,
+        (f64::from(margin) * FIXED_PER_METRE) as i64,
     )
 }
 
