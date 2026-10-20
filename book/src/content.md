@@ -11,6 +11,8 @@ first and the served resources under them last:
   its own;
 - [Loot containers](content/loot.md): reading the corpses and loot bags
   enemies leave;
+- [Random loot](content/random-loot.md): mod items in random loot, each
+  with an exact chance;
 - [Served resources](content/resources.md): any resource, new or changed,
   built from bytes;
 - [Texts](content/texts.md): names and descriptions per language.

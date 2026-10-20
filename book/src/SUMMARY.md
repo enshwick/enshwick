@@ -39,6 +39,7 @@
   - [Recipes](content/recipes.md)
   - [Workshops](content/workshops.md)
   - [Loot containers](content/loot.md)
+  - [Random loot](content/random-loot.md)
   - [Served resources](content/resources.md)
   - [Texts](content/texts.md)
 - [Inventories](inventories.md)

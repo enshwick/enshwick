@@ -38,6 +38,7 @@ chapters! {
     Recipes => "content/recipes.md",
     Workshops => "content/workshops.md",
     Loot => "content/loot.md",
+    RandomLoot => "content/random-loot.md",
     Resources => "content/resources.md",
     Texts => "content/texts.md",
     Inventories => "inventories.md",

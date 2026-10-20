@@ -1,0 +1,92 @@
+# Random loot
+
+`load.add_loot(drop)` puts an item into random loot with an exact chance per
+roll, on top of the vanilla loot. The item is a vanilla one or one from
+[`add_item`](items.md); the game skips an item its registry does not hold.
+The API is in
+[`loot/drops.rs`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/loot/drops.rs).
+
+```rust
+use enshwick_api::content::Guid;
+use enshwick_api::loot::{Drop, Kinds, Source};
+
+const STAFF: Guid = Guid::parse("8a3f6e21-5c4b-4d7e-9f10-2b7c5e6a9d31");
+const RING: Guid = Guid::parse("0b1c2d3e-4f50-4617-8293-a4b5c6d7e8f9");
+const AMULET: Guid = Guid::parse("1c2d3e4f-5061-4728-93a4-b5c6d7e8f901");
+
+fn init(load: &mut enshwick_api::Load<'_>) -> Result<(), enshwick_api::Off> {
+    load.add_loot(Drop::new(STAFF.id(), 0.10, Source::bosses()))?;
+    load.add_loot(Drop::new(STAFF.id(), 0.02, Source::locked_chests()))?;
+    load.add_loot(
+        Drop::one_of(&[RING.id(), AMULET.id()], 0.01, Source::kinds(Kinds::CORPSES))
+            .count(1, 2),
+    )
+}
+```
+
+## When loot rolls
+
+- The game rolls a container's loot once, when a player first opens it:
+  world chests and enemy corpses. Each matching drop then rolls its own
+  chance and adds its stack in the same transaction as the vanilla loot, so
+  it is saved and replicated with it.
+- Containers rolled before, in a save, stay as they were.
+- Destroyed objects and pickup spawners roll a single item instead. A drop
+  for `Kinds::DESTROYED` that hits takes the place of that item.
+- A full container keeps what fits.
+- Loot rolls on the server: the dedicated one, or a client's while it hosts.
+
+## A drop
+
+A [`Drop`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/loot/drops.rs)
+holds the items, the chance, the count and the source:
+
+- `Drop::new(item, chance, from)` gives one item, `item` being the game id
+  [`Guid::id`](items.md) returns;
+- `Drop::one_of(items, chance, from)` gives one of several items, each as
+  likely; `chance` is that of any of them;
+- `.count(min, max)` gives `min` to `max` items per hit, each count in
+  between as likely; one by default.
+
+`add_loot` turns the mod off when the drop is not valid: no item, an item id
+of 0, a chance outside 0 to 1, or a count with `min` of 0 or above `max`. It
+also does so when the running build lacks a piece the drops need, such as the
+pinned `loot.roll` symbol, or `loot.roll_one` for a `DESTROYED` drop.
+
+## Where it drops
+
+`Source` filters the rolls a drop takes part in:
+
+| Filter                         | Matches                                          |
+| ------------------------------ | ------------------------------------------------ |
+| `Source::kinds(kinds)`         | every container of those kinds                   |
+| `Source::bosses()`             | bosses' corpses only                             |
+| `Source::locked_chests()`      | chests that need a key or a lockpick only        |
+| `.with_labels(&[id, ...])`     | the same, limited to these loot label ids        |
+| `.with_nodes(&[node, ...])`    | the same, limited to these world nodes           |
+
+`Kinds` are `CORPSES` (corpses and loot bags enemies leave), `CHESTS` (world
+chests and every other container that rolls on first opening), `DESTROYED`
+and `CONTAINERS` (corpses and chests); `with` joins two sets.
+
+A loot label id is the FNV-1a hash of an enemy or chest type's label
+collection GUID. `Source::matches` tells whether a
+[`Roll`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/loot/drops.rs)
+comes from a source, which a unit test can check without the game:
+
+```rust
+use enshwick_api::ecs::Entity;
+use enshwick_api::loot::{Kinds, Roll, Source};
+
+let boss = Roll { kind: Kinds::CORPSES, entity: Entity(7), node: 0, labels: 9, boss: true, locked: false };
+assert!(Source::bosses().matches(&boss));
+assert!(!Source::locked_chests().matches(&boss));
+assert!(Source::kinds(Kinds::CORPSES).with_labels(&[9]).matches(&boss));
+```
+
+## A worked example: copy staffs
+
+[Survivors per altar](https://github.com/themaiby/enshwick/tree/main/mods/enshwick-survivors-per-altar)
+adds a copy staff per survivor with `add_item`, then puts them in loot with
+`Drop::one_of`: one chance for bosses and one for locked chests, both from
+its settings, and no drop when a chance is 0.

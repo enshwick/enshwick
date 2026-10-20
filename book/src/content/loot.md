@@ -3,7 +3,8 @@
 [`enshwick_api::loot`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/loot.rs)
 reads the containers a dead enemy leaves, corpses and loot bags, and other
 containers that dissolve once emptied. It reads only; empty a container
-through [Inventories](../inventories.md).
+through [Inventories](../inventories.md). To put items into the loot a
+container rolls, see [Random loot](random-loot.md).
 
 ## The system and the hook
 
