@@ -7,7 +7,7 @@ use enshwick_loader_api::abi::{Manifest, ManifestFlags, Relation, Side, Str};
 /// Describes the mod in `dll`; an error when its version is not `expected`.
 pub(crate) fn show(dll: &Path, expected: Option<&str>) -> Result<String, String> {
     let manifest = query(dll)?;
-    let text = describe(manifest);
+    let text = describe(&manifest);
     // SAFETY: the manifest's strings are static data in the loaded DLL.
     let version = unsafe { manifest.version.as_str() }.unwrap_or_default();
     match expected {
@@ -75,8 +75,27 @@ fn describe(manifest: &Manifest) -> String {
     lines.join("\n")
 }
 
+/// Copies the manifest `raw` points at, which may come from an older or a
+/// newer minor: the fields the mod's minor lacks stay empty.
+///
+/// # Safety
+///
+/// `raw` is null or points at a manifest readable for the size its header
+/// says, with static strings and lists.
+unsafe fn copy(raw: *const Manifest) -> Result<Manifest, String> {
+    // The fields every minor has; `builds` and later came after.
+    const REQUIRED: usize = core::mem::offset_of!(Manifest, builds);
+    // SAFETY: forwarded from the caller; an all-zero manifest is valid.
+    let manifest = unsafe { enshwick_loader_api::abi::read_headed(raw, REQUIRED) }
+        .ok_or("the mod returned no manifest, or a truncated one")?;
+    if manifest.header.abi_major != enshwick_loader_api::abi::ABI_MAJOR {
+        return Err(format!("built for ABI {}", manifest.header.abi_major));
+    }
+    Ok(manifest)
+}
+
 #[cfg(windows)]
-fn query(dll: &Path) -> Result<&'static Manifest, String> {
+fn query(dll: &Path) -> Result<Manifest, String> {
     use std::os::windows::ffi::OsStrExt as _;
 
     use windows_sys::Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryW};
@@ -94,21 +113,40 @@ fn query(dll: &Path) -> Result<&'static Manifest, String> {
     // SAFETY: a mod's query export has this signature.
     let query: extern "system" fn() -> *const Manifest = unsafe { core::mem::transmute(query) };
     // SAFETY: the export returns its static manifest or null.
-    let manifest = unsafe { query().as_ref() }.ok_or("the mod returned no manifest")?;
-    if manifest.header.abi_major != enshwick_loader_api::abi::ABI_MAJOR {
-        return Err(format!("built for ABI {}", manifest.header.abi_major));
-    }
-    Ok(manifest)
+    unsafe { copy(query()) }
 }
 
 #[cfg(not(windows))]
-fn query(_dll: &Path) -> Result<&'static Manifest, String> {
+fn query(_dll: &Path) -> Result<Manifest, String> {
     Err("reading a mod DLL needs Windows".into())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_manifest_of_an_older_minor_is_copied_up_to_its_size() {
+        let mut old =
+            *enshwick_loader_api::manifest!(id: "old-mod", side: SERVER, version: "1.0.0");
+        old.header.size = u32::try_from(core::mem::offset_of!(Manifest, builds)).unwrap();
+        // SAFETY: a valid manifest, as long as its header says.
+        let copied = unsafe { copy(&raw const old) }.unwrap();
+        assert!(copied.updates.is_null());
+        assert!(copied.signed_by.iter().all(Str::is_empty));
+        assert_eq!(
+            describe(&copied),
+            "id: old-mod
+version: 1.0.0
+side: server
+join check: no"
+        );
+        old.header.size = 8;
+        // SAFETY: as above.
+        assert!(unsafe { copy(&raw const old) }.is_err());
+        // SAFETY: null is refused.
+        assert!(unsafe { copy(core::ptr::null()) }.is_err());
+    }
 
     #[test]
     fn a_manifest_reads_as_lines() {
