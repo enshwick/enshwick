@@ -129,6 +129,10 @@
     "mods/enshwick-dev-tools": {
       "package-name": "enshwick-dev-tools",
       "component": "enshwick-dev-tools"
+    },
+    "mods/enshwick-proton-optimizer": {
+      "package-name": "enshwick-proton-optimizer",
+      "component": "enshwick-proton-optimizer"
     }
   }
 }

@@ -15,5 +15,6 @@
   "mods/enshwick-build-camera": "0.1.1",
   "mods/enshwick-shared-experience": "0.1.1",
   "mods/enshwick-area-loot": "0.1.1",
-  "mods/enshwick-dev-tools": "0.1.1"
+  "mods/enshwick-dev-tools": "0.1.1",
+  "mods/enshwick-proton-optimizer": "0.1.0"
 }
