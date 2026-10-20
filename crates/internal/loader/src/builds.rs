@@ -356,10 +356,13 @@ pub static BUILDS: &[KnownBuild] = &[
             ("building.cursor_item_info", 0x60),
             ("building.cursor_no_permission", 0x4000),
             // The server's game object holds the clock, `g38_daytime::Daytime`,
-            // here; the clock's speed (f32), day and night bounds and real
+            // here; its anchor (the ECS time and the game time of the last
+            // change), the clock's speed (f32), day and night bounds and real
             // lengths, the time of day it works out each step, and whether
             // it is day (u8). Times are i64 nanoseconds.
             ("daytime.object", 0x2d0),
+            ("daytime.anchor", 0x10),
+            ("daytime.game_time", 0x18),
             ("daytime.speed", 0x20),
             ("daytime.day_start", 0x28),
             ("daytime.day_end", 0x30),
@@ -667,10 +670,13 @@ pub static BUILDS: &[KnownBuild] = &[
             ("building.cursor_item_info", 0x60),
             ("building.cursor_no_permission", 0x4000),
             // The server's game object holds the clock, `g38_daytime::Daytime`,
-            // here; the clock's speed (f32), day and night bounds and real
+            // here; its anchor (the ECS time and the game time of the last
+            // change), the clock's speed (f32), day and night bounds and real
             // lengths, the time of day it works out each step, and whether
             // it is day (u8). Times are i64 nanoseconds.
             ("daytime.object", 0x2d0),
+            ("daytime.anchor", 0x10),
+            ("daytime.game_time", 0x18),
             ("daytime.speed", 0x20),
             ("daytime.day_start", 0x28),
             ("daytime.day_end", 0x30),

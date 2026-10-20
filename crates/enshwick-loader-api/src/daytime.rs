@@ -125,7 +125,8 @@ impl Clock {
     }
 
     /// Sets the time of day to `hours`, taken modulo 24; every client jumps
-    /// to it after the next step.
+    /// to it after the next step. The world moves forward to the next time
+    /// the clock shows that hour, as if the hours between had passed.
     ///
     /// # Errors
     ///

@@ -9,6 +9,11 @@
 //! when the version moved, so clients jump once and follow; a raw write
 //! would never reach them.
 //!
+//! The game's setter of the time of day restarts the game time, which the
+//! weather and other schedules count in, within one day; the loader moves
+//! it on to the next time the clock shows that hour instead, so a time set
+//! only ever moves the world forward, as sleeping does.
+//!
 //! The game sets the speed itself every step from `server_nighttime_skip`:
 //! 1 by day, faster at night while players sleep. Mods change it as a factor
 //! on the game's own: the loader detours the speed setter and multiplies
@@ -43,6 +48,8 @@ struct Layout {
     world: usize,
     game: usize,
     daytime: usize,
+    anchor: usize,
+    game_time: usize,
     speed: usize,
     day_start: usize,
     day_end: usize,
@@ -83,6 +90,8 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
                 world: loader.offset("server.world")?,
                 game: loader.offset("server.player_infos")?,
                 daytime: loader.offset("daytime.object")?,
+                anchor: loader.offset("daytime.anchor")?,
+                game_time: loader.offset("daytime.game_time")?,
                 speed: loader.offset("daytime.speed")?,
                 day_start: loader.offset("daytime.day_start")?,
                 day_end: loader.offset("daytime.day_end")?,
@@ -144,10 +153,54 @@ pub(crate) fn set_time(loader: &Loader, time: i64) -> Result<(), Status> {
     let time = time.rem_euclid(DAY);
     // SAFETY: the game's ECS time of its live world, on the game thread.
     let now = unsafe { (layout.now)(core::ptr::with_exposed_provenance(world)) };
+    let before = game_time(layout, daytime, now);
     // SAFETY: the game's setter on its live `Daytime`, on the game thread
     // between steps, as its admin command calls it.
     unsafe { (layout.set_time)(core::ptr::with_exposed_provenance_mut(daytime), time, now) };
+    // SAFETY: the lengths of a day and a night inside the live `Daytime`.
+    let day: i64 = unsafe { crate::world::read(daytime, layout.day_length) };
+    // SAFETY: as above.
+    let night: i64 = unsafe { crate::world::read(daytime, layout.night_length) };
+    let cycle = day.saturating_add(night);
+    // SAFETY: the anchor's game time the setter just wrote.
+    let within: i64 = unsafe { crate::world::read(daytime, layout.game_time) };
+    let after = forward(before, within, cycle);
+    if after != within {
+        // SAFETY: the anchor's game time inside the live `Daytime`, which
+        // the server sends with the version the setter bumped.
+        unsafe {
+            core::ptr::with_exposed_provenance_mut::<i64>(daytime + layout.game_time)
+                .write_unaligned(after);
+        };
+    }
     Ok(())
+}
+
+/// The game time at ECS time `now`, as the game works it out.
+fn game_time(layout: &Layout, daytime: usize, now: i64) -> i64 {
+    // SAFETY: the anchor and the speed inside the live `Daytime`.
+    let anchor: i64 = unsafe { crate::world::read(daytime, layout.anchor) };
+    // SAFETY: as above.
+    let game: i64 = unsafe { crate::world::read(daytime, layout.game_time) };
+    // SAFETY: as above.
+    let speed: f32 = unsafe { crate::world::read(daytime, layout.speed) };
+    #[expect(
+        clippy::cast_possible_truncation,
+        clippy::cast_precision_loss,
+        reason = "the game scales the elapsed time in floating point too"
+    )]
+    let elapsed = (now.saturating_sub(anchor) as f64 * f64::from(speed)) as i64;
+    game.saturating_add(elapsed)
+}
+
+/// `within`, a game time inside the first day, moved on by whole days to
+/// the first that is not before `before`.
+fn forward(before: i64, within: i64, cycle: i64) -> i64 {
+    if cycle <= 0 || within >= before {
+        return within;
+    }
+    let days = (before - within).div_euclid(cycle) + i64::from((before - within) % cycle != 0);
+    within.saturating_add(days.saturating_mul(cycle))
 }
 
 /// Registers mod `owner` as one that changes the speed.
@@ -288,6 +341,15 @@ mod tests {
         assert!(same(60.0, 60.03));
         assert!(!same(1.0, 1.01));
         assert!(same(0.0, 0.0));
+    }
+
+    #[test]
+    fn a_time_set_moves_the_game_time_forward_by_whole_days() {
+        let day = 2520;
+        assert_eq!(forward(10 * day + 100, 50, day), 11 * day + 50);
+        assert_eq!(forward(10 * day + 50, 50, day), 10 * day + 50);
+        assert_eq!(forward(10, 50, day), 50, "already ahead");
+        assert_eq!(forward(10 * day, 50, 0), 50, "no day length");
     }
 
     #[test]

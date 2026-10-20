@@ -38,7 +38,11 @@ or while no world runs.
 
 `set_hours(hours)` sets the time, taken modulo 24, through the game's own
 setter: every client jumps to it after the next step and runs on from there,
-as after an administrator's change of the time. It fails with a
+as after an administrator's change of the time. The world moves forward to
+the next time the clock shows that hour, as if the hours between had passed,
+so what the game counts in game time, such as the weather, goes on from
+there; the game's own setter would send it back to the first day. It fails
+with a
 [`WorldError`](world.md#writing-components): `WrongThread` off the game
 thread, `Refused` for an hour that is not a finite number, `Missing` on a
 build without the clock.
