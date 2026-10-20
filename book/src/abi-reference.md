@@ -23,10 +23,15 @@ The policy:
   start with a [`Header`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/abi.rs):
   the struct's size as its writer knew it and the writer's major and minor.
   Fields are only ever appended, so a reader checks with `Header::covers(end)`
-  that a field is there before it reads it.
+  that a field is there before it reads it. `abi::read_headed` copies such a
+  struct as far as its writer's header reaches and leaves the rest zero;
+  `abi::write_headed` writes only the bytes both sides know.
 
 A mod built against a newer `enshwick-api` therefore runs under an older
 loader of the same major, as long as it does not need what that loader lacks.
+A mod built against an older one loads under a newer loader: the loader reads
+the manifest fields the mod's header covers and takes the rest as empty, with
+no update source and no build rows.
 
 ## The exports of a mod
 
@@ -115,8 +120,9 @@ id through `Load::subscribe`. See [Events and the scheduler](events.md).
 
 Subscribing needs minor 2; `JOIN_MISSING` came with minor 10. "Server"
 events also reach a client while it hosts a game, solo play included. The
-typed events skip a handler when the data's header is shorter than the struct
-the mod was built with.
+typed events hand a handler the fields the loader knows, with fields added
+after the event zero; they skip the handler only when the data lacks a field
+the event came with.
 
 ## The host table
 
