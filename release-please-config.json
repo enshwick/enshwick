@@ -4,6 +4,7 @@
   "include-component-in-tag": true,
   "tag-separator": "-",
   "separate-pull-requests": false,
+  "always-update": true,
   "plugins": [
     {
       "type": "cargo-workspace",
