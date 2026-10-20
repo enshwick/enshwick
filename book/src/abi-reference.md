@@ -12,7 +12,7 @@ raw table. The exact types and signatures are in the
 | Constant                                                                                     | Value | Meaning                                         |
 | -------------------------------------------------------------------------------------------- | ----- | ----------------------------------------------- |
 | [`ABI_MAJOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/abi.rs) | 1     | A loader refuses a mod built for another major. |
-| [`ABI_MINOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/abi.rs) | 13    | A newer minor only appends.                     |
+| [`ABI_MINOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/abi.rs) | 14    | A newer minor only appends.                     |
 
 The policy:
 
@@ -64,12 +64,15 @@ builds:
 | `dependencies` | `Dependency { id, range, relation }`; relation `REQUIRES` (0), `AFTER` (1) or `CONFLICTS` (2)     | 0           |
 | `builds`       | `BuildRow { side, fingerprint, symbols, constants }`: symbols and constants pinned per game build | 0           |
 | `updates`      | `UpdateSource { kind, location, component }`, or null; kind `NONE`, `GITHUB` or `URL`             | 5           |
+| `signed_by`    | Two `Str`: the author's minisign public keys (`RW...`); empty strings for none                    | 14          |
 
 The loader skips a mod whose manifest has another major, an invalid id, the
 loader's own id `enshwick`, a version that is not SemVer, an unknown side, or a
 dependency range that does not parse; the reason goes to `loader.log` as
 `<file> skipped: <reason>`. A malformed update source is dropped with a
-warning and the mod loads.
+warning and the mod loads, and so is a `signed_by` key that is not a minisign
+public key: `<file>: key ignored: the signed_by key "..." is not a minisign
+public key`.
 
 ## Status codes
 
@@ -201,6 +204,7 @@ the mod off with a reason, which the mod's log shows as `off: <reason>`:
 | 12          | `Load::inventories`             | Off: `inventories need a newer loader (ABI minor 12)`        |
 | 13          | status lines                    | Off: `status lines need a newer loader`                      |
 | 13          | `commands::run`                 | `Err(RunError::NoLoader)`                                    |
+| 14          | `ModEntry::signed_by`           | Empty                                                        |
 
 A mod that can do without a feature catches the `Off` and goes on without it
 instead of returning it from `init`.

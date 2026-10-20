@@ -5,15 +5,18 @@
 //! each mod's source for its releases (a GitHub repository, or the document
 //! of a `url(...)` source, see [`document`]) and, when newer ones exist, asks
 //! the player. What the player accepts is downloaded, checked against
-//! its minisign signature and staged in `mods/.staged/`, which the
+//! its minisign signature by a key the installed version names (see
+//! [`trust`]) and staged in `mods/.staged/`, which the
 //! `powrprof.dll` stub moves into place at the next start. When the join
 //! check keeps the player out of a server that runs mods this game lacks or
 //! has in another version, the updater offers the server's versions the
-//! same way. Settings files are never touched.
+//! same way, each checked against the author key the server names for it.
+//! Settings files are never touched.
 
 pub mod document;
 pub mod release;
 pub mod stage;
+pub mod trust;
 pub mod verify;
 
 mod ask;
@@ -32,6 +35,7 @@ use semver::Version;
 use crate::document::Document;
 use crate::net::{Client, Failure};
 use crate::release::Pick;
+use crate::trust::{Refusal, Trust};
 
 /// How long after start the updater looks, so the game's window is up.
 const START_DELAY: Duration = Duration::from_secs(15);
@@ -50,9 +54,9 @@ struct Settings {
     enabled: bool,
     /// Hours between checks at start; 0 checks at every start.
     check_interval_hours: u32,
-    /// Public keys, besides Enshwick's own, whose signed releases are
-    /// installed: the second line of a minisign .pub file, such as
-    /// "RWQ...". Add only keys of authors you trust.
+    /// Public keys accepted for updates besides the ones each installed mod
+    /// names: the second line of a minisign .pub file, such as "RWQ...".
+    /// For an author who changed keys; add only keys of authors you trust.
     trusted_keys: Vec<String>,
     /// Offer prereleases too.
     prereleases: bool,
@@ -77,11 +81,12 @@ impl Settings {
         Ok(())
     }
 
-    /// Enshwick's key and the trusted ones.
-    fn keys(&self) -> Vec<minisign_verify::PublicKey> {
-        core::iter::once(verify::ENSHWICK_KEY)
-            .chain(self.trusted_keys.iter().map(String::as_str))
-            .filter_map(|key| verify::key(key).ok())
+    /// The trusted keys that read as keys.
+    fn trusted(&self) -> Vec<String> {
+        self.trusted_keys
+            .iter()
+            .filter(|key| verify::key(key).is_ok())
+            .map(|key| key.trim().to_owned())
             .collect()
     }
 }
@@ -122,6 +127,11 @@ pub struct Offer {
     pub file: String,
     /// The release to install.
     pub pick: Pick,
+    /// Where the release comes from, as the player reads it.
+    pub source: String,
+    /// The keys one of which must have signed it, or why it is not installed
+    /// automatically.
+    pub trust: Result<Trust, Refusal>,
 }
 
 impl Offer {
@@ -132,6 +142,7 @@ impl Offer {
     /// ```
     /// use enshwick_updater::Offer;
     /// use enshwick_updater::release::Pick;
+    /// use enshwick_updater::trust::Refusal;
     ///
     /// let offer = Offer {
     ///     id: "safes".into(),
@@ -144,6 +155,8 @@ impl Offer {
     ///         archive_url: String::new(),
     ///         signature_url: String::new(),
     ///     },
+    ///     source: "github.com/themaiby/enshwick".into(),
+    ///     trust: Err(Refusal::Unsigned),
     /// };
     /// assert_eq!(offer.line(), "safes: 0.1.0 \u{2192} 0.2.0");
     /// ```
@@ -159,6 +172,28 @@ impl Offer {
 
     fn key(&self) -> String {
         format!("{}@{}", self.id, self.pick.version)
+    }
+
+    /// The offer's lines in the question after a refused join, for a mod the
+    /// game lacks: the version, where it comes from and the key the server
+    /// names.
+    fn server_lines(&self) -> String {
+        let keys = self.trust.as_ref().map_or(&[][..], Trust::keys).join(", ");
+        format!(
+            "{} {}\n    from {}\n    author key {keys}",
+            self.id, self.pick.version, self.source
+        )
+    }
+}
+
+/// Where `updates` comes from, as the player reads it.
+fn source_of(updates: &Updates) -> String {
+    match updates {
+        Updates::GitHub {
+            repository,
+            component,
+        } => format!("github.com/{repository} ({component})"),
+        Updates::Url(url) => url.clone(),
     }
 }
 
@@ -229,11 +264,20 @@ fn at_start() {
         enshwick_api::info!("everything is up to date");
         return;
     }
-    let question = format!(
-        "Updates for Enshwick are available:\n\n{}\n\nDownload them now? They are checked against their signatures and take effect the next time you start the game. Your settings stay as they are.",
+    let (offers, by_hand) = signed(offers);
+    let by_hand = (!by_hand.is_empty()).then(|| format!("Not downloaded:\n\n{by_hand}"));
+    if offers.is_empty() {
+        if let Some(by_hand) = by_hand {
+            ask::tell(&format!("Updates for Enshwick are available.\n\n{by_hand}"));
+        }
+        return;
+    }
+    let mut question = vec![format!(
+        "Updates for Enshwick are available:\n\n{}\n\nDownload them now? Each is checked against the signature of the author of the version you have and takes effect the next time you start the game. Your settings stay as they are.",
         lines(&offers)
-    );
-    if !ask::confirm(&question) {
+    )];
+    question.extend(by_hand);
+    if !ask::confirm(&question.join("\n\n")) {
         enshwick_api::info!("the player declined {}", lines(&offers).replace('\n', ", "));
         return;
     }
@@ -260,10 +304,11 @@ fn after_refused_join() {
     }
     let client = Client::new();
     let installed = enshwick_api::mods();
+    let trusted = context.settings.trusted();
     let mut offers = Vec::new();
     let mut unavailable = Vec::new();
     for entry in &missing {
-        match server_version(&client, entry, &installed) {
+        match server_version(&client, entry, &installed, &trusted) {
             Ok(offer) => offers.push(offer),
             Err(why) => {
                 enshwick_api::warn!("{} {}: {why}", entry.id, entry.version);
@@ -273,19 +318,44 @@ fn after_refused_join() {
     }
     let _busy = BUSY.lock().unwrap_or_else(PoisonError::into_inner);
     let offers = unoffered(offers);
+    let (offers, by_hand) = signed(offers);
+    if !by_hand.is_empty() {
+        unavailable.push(by_hand);
+    }
     if offers.is_empty() {
+        if !unavailable.is_empty() {
+            ask::tell(&format!(
+                "This server runs mods you do not have in its version.\n\nNot available for download:\n{}",
+                unavailable.join("\n")
+            ));
+        }
         return;
     }
-    let mut question = vec![format!(
-        "This server runs mods you do not have in its version:\n\n{}\n\nDownload the server's versions? They are checked against their signatures; restart the game afterwards and join again. Your settings stay as they are.",
-        lines(&offers)
-    )];
+    let (updates, new): (Vec<&Offer>, Vec<&Offer>) =
+        offers.iter().partition(|offer| offer.from.is_some());
+    let mut question = vec!["This server runs mods you do not have in its version.".to_owned()];
+    if !updates.is_empty() {
+        question.push(format!(
+            "Updates of mods you have, each checked against the signature of the author of the version you have:\n\n{}",
+            updates.iter().map(|offer| offer.line()).collect::<Vec<_>>().join("\n")
+        ));
+    }
+    if !new.is_empty() {
+        question.push(format!(
+            "Mods you do not have yet:\n\n{}\n\nThe server names the author key of each. A mod is installed only if its download is signed by that key: you trust these mods because you trust this server.",
+            new.iter().map(|offer| offer.server_lines()).collect::<Vec<_>>().join("\n")
+        ));
+    }
     if !unavailable.is_empty() {
         question.push(format!(
             "Not available for download:\n{}",
             unavailable.join("\n")
         ));
     }
+    question.push(
+        "Download them? Restart the game afterwards and join again. Your settings stay as they are."
+            .to_owned(),
+    );
     let question = question.join("\n\n");
     if !ask::confirm(&question) {
         enshwick_api::info!(
@@ -308,7 +378,10 @@ fn server_version(
     client: &Client,
     entry: &ModEntry,
     installed: &[ModEntry],
+    trusted: &[String],
 ) -> Result<Offer, String> {
+    let ours = installed.iter().find(|m| m.id == entry.id);
+    let trust = trust::for_missing(entry, ours, trusted);
     let version = Version::parse(&entry.version).map_err(|e| format!("bad version: {e}"))?;
     let pick = match &entry.updates {
         Some(Updates::GitHub {
@@ -333,12 +406,13 @@ fn server_version(
         }
         None => return Err("no release source".to_owned()),
     };
-    let ours = installed.iter().find(|m| m.id == entry.id);
     Ok(Offer {
         id: entry.id.clone(),
         from: ours.map(|m| m.version.clone()),
         file: ours.map_or_else(|| entry.file.clone(), |m| m.file.clone()),
         pick,
+        source: entry.updates.as_ref().map(source_of).unwrap_or_default(),
+        trust,
     })
 }
 
@@ -371,6 +445,7 @@ fn newer(client: &Client, context: &Context, mods: &[ModEntry]) -> Result<Vec<Of
             continue;
         }
         let prereleases = context.settings.prereleases;
+        let trust = || trust::for_installed(entry, &context.settings.trusted());
         let (repository, component) = match updates {
             Updates::GitHub {
                 repository,
@@ -391,6 +466,8 @@ fn newer(client: &Client, context: &Context, mods: &[ModEntry]) -> Result<Vec<Of
                         from: Some(entry.version.clone()),
                         file: entry.file.clone(),
                         pick,
+                        source: source_of(updates),
+                        trust: trust(),
                     });
                 }
                 continue;
@@ -421,6 +498,8 @@ fn newer(client: &Client, context: &Context, mods: &[ModEntry]) -> Result<Vec<Of
                 from: Some(entry.version.clone()),
                 file: entry.file.clone(),
                 pick,
+                source: source_of(updates),
+                trust: trust(),
             });
         }
     }
@@ -438,6 +517,23 @@ fn unoffered(offers: Vec<Offer>) -> Vec<Offer> {
         .collect()
 }
 
+/// `offers` split into those that can be installed and the lines of those
+/// the player updates by hand, which are not downloaded.
+fn signed(offers: Vec<Offer>) -> (Vec<Offer>, String) {
+    let (signed, by_hand): (Vec<Offer>, Vec<Offer>) =
+        offers.into_iter().partition(|offer| offer.trust.is_ok());
+    let by_hand = by_hand
+        .iter()
+        .filter_map(|offer| {
+            let note = offer.trust.as_ref().err()?.note();
+            enshwick_api::info!("not offered {}: {note}", offer.line());
+            Some(format!("{}: {note}", offer.line()))
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    (signed, by_hand)
+}
+
 fn lines(offers: &[Offer]) -> String {
     offers
         .iter()
@@ -449,11 +545,10 @@ fn lines(offers: &[Offer]) -> String {
 /// Downloads, checks and stages every offer, then tells the player what
 /// came of it, ending with `next`.
 fn install_all(client: &Client, context: &Context, offers: &[Offer], next: &str) {
-    let keys = context.settings.keys();
     let mut done = Vec::new();
     let mut failed = Vec::new();
     for offer in offers {
-        match install(client, context, &keys, offer) {
+        match install(client, context, offer) {
             Ok(files) => {
                 enshwick_api::info!("staged {}: {}", offer.line(), files.join(", "));
                 done.push(offer.line());
@@ -479,12 +574,13 @@ fn install_all(client: &Client, context: &Context, offers: &[Offer], next: &str)
     }
 }
 
-fn install(
-    client: &Client,
-    context: &Context,
-    keys: &[minisign_verify::PublicKey],
-    offer: &Offer,
-) -> Result<Vec<String>, String> {
+fn install(client: &Client, context: &Context, offer: &Offer) -> Result<Vec<String>, String> {
+    let trust = offer.trust.as_ref().map_err(Refusal::note)?;
+    let keys: Vec<_> = trust
+        .keys()
+        .iter()
+        .filter_map(|key| verify::key(key).ok())
+        .collect();
     let pick = &offer.pick;
     let archive = client
         .archive(&pick.archive_url)
@@ -492,8 +588,13 @@ fn install(
     let signature = client
         .signature(&pick.signature_url)
         .map_err(|e| e.to_string())?;
-    verify::check(keys, &archive, &signature, &pick.tag, &pick.archive)
-        .map_err(|why| format!("refused: {why}"))?;
+    verify::check(&keys, &archive, &signature, &pick.tag, &pick.archive).map_err(|why| {
+        if why == verify::UNSIGNED {
+            format!("refused: {}", trust.refusal())
+        } else {
+            format!("refused: {why}")
+        }
+    })?;
     let installed = Some(offer.file.as_str()).filter(|file| !file.is_empty());
     stage::stage(
         &archive,
@@ -535,6 +636,7 @@ impl Mod for Updater {
             id: "updater",
             side: CLIENT,
             updates: github("themaiby/enshwick", "enshwick-updater"),
+            signed_by: ["RWTjqgtfpy3lSOLC4uaUXuvvKSLQKOFf6nUnEytoiFjSzxMEhLnoAdJF"],
         )
     }
 
@@ -578,7 +680,15 @@ mod tests {
         assert_eq!(settings.check_interval_hours, 24);
         assert!(!settings.prereleases);
         assert!(settings.validate().is_ok());
-        assert_eq!(settings.keys().len(), 1);
+        assert!(settings.trusted().is_empty());
+    }
+
+    #[test]
+    fn the_updater_declares_the_key_it_ships() {
+        let manifest = Updater::manifest();
+        // SAFETY: the manifest's static strings.
+        let declared = unsafe { manifest.signed_by[0].as_str() };
+        assert_eq!(declared, verify::ENSHWICK_KEY.lines().last());
     }
 
     #[test]
@@ -589,7 +699,7 @@ mod tests {
             .trusted_keys
             .push("RWSVvUJNE6Z0IzsG2I1G/+JlpjWYHLgP8QVhvMlSWCg0AShBnBmVIt4r".into());
         assert!(settings.validate().is_ok());
-        assert_eq!(settings.keys().len(), 2);
+        assert_eq!(settings.trusted().len(), 1);
         settings.trusted_keys.push("not a key".into());
         assert!(settings.validate().is_err());
     }
@@ -615,6 +725,8 @@ mod tests {
                 archive_url: String::new(),
                 signature_url: String::new(),
             },
+            source: String::new(),
+            trust: Err(Refusal::Unsigned),
         }
     }
 

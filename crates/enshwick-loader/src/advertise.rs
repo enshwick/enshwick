@@ -7,7 +7,9 @@
 //! mod with join values `enshwick.sync.<id>`, `enshwick.sync.<id>.1`, ...
 //! (its values as an inline TOML table, split the same way), and for each join
 //! mod with an update source `enshwick.src.<id>` (`github:<owner/name>:<component>`
-//! or `url:<url>`), so a client that lacks the mod knows where to get it.
+//! or `url:<url>`), so a client that lacks the mod knows where to get it, and
+//! for each join mod that declares author keys `enshwick.key.<id>` (the keys,
+//! `RW...`, separated by a space), so the client knows who must have signed it.
 //! Players see it before they join, with or without mods, and a modded client
 //! compares it with its own. The game sets its name once at start, so the
 //! loader sets it again now and then, and with it the join values, which a
@@ -33,6 +35,8 @@ pub const RULE_SYNC: &str = "enshwick.sync";
 pub const SYNC_RULES: usize = 8;
 /// The prefix of a mod's update source rule, `enshwick.src.<id>`.
 pub const RULE_SOURCE: &str = "enshwick.src";
+/// The prefix of a mod's author key rule, `enshwick.key.<id>`.
+pub const RULE_KEY: &str = "enshwick.key";
 
 /// The fingerprint of a mod set: FNV-1a over the loader version, every
 /// `id@version` and every mod's join values, sorted, as eight hex digits.
@@ -93,10 +97,22 @@ pub fn sync_rules(id: &str, values: &str) -> Option<Vec<(String, String)>> {
 /// `enshwick.src.<id>` each, leaving out a source too long for one rule.
 #[must_use]
 pub fn source_rules(sources: &[(String, String)]) -> Vec<(String, String)> {
-    sources
+    line_rules(RULE_SOURCE, sources)
+}
+
+/// The author key rules of the mods `keys`, `(id, keys line)`: one
+/// `enshwick.key.<id>` each, leaving out a line too long for one rule.
+#[must_use]
+pub fn key_rules(keys: &[(String, String)]) -> Vec<(String, String)> {
+    line_rules(RULE_KEY, keys)
+}
+
+/// One `<prefix>.<id>` rule per `(id, line)` that fits in one rule.
+fn line_rules(prefix: &str, lines: &[(String, String)]) -> Vec<(String, String)> {
+    lines
         .iter()
         .filter(|(_, line)| !line.is_empty() && line.len() <= RULE_LIMIT)
-        .map(|(id, line)| (format!("{RULE_SOURCE}.{id}"), line.clone()))
+        .map(|(id, line)| (format!("{prefix}.{id}"), line.clone()))
         .collect()
 }
 
@@ -117,19 +133,21 @@ pub struct Advert {
 
 impl Advert {
     /// The advert of a server named `configured` running `mods` with the join
-    /// values `synced` and the update sources `sources`, which stay out of
-    /// the fingerprint.
+    /// values `synced`, the update sources `sources` and the author keys
+    /// `keys`; sources and keys stay out of the fingerprint.
     #[must_use]
     pub fn new(
         loader_version: &str,
         configured: &str,
         mods: &[(String, String)],
         sources: &[(String, String)],
+        keys: &[(String, String)],
         synced: &BTreeMap<String, String>,
     ) -> Self {
         let mut fit = BTreeMap::new();
         let mut rules = mod_rules(mods);
         rules.extend(source_rules(sources));
+        rules.extend(key_rules(keys));
         let mut too_long = Vec::new();
         for (id, values) in synced {
             match sync_rules(id, values) {
@@ -279,6 +297,7 @@ mod runtime {
         game_dir: &Path,
         mods: Vec<(String, String)>,
         sources: Vec<(String, String)>,
+        keys: Vec<(String, String)>,
         synced: Synced,
     ) {
         let config = std::fs::read_to_string(game_dir.join("enshrouded_server.json")).ok();
@@ -288,7 +307,9 @@ mod runtime {
         let spawned = std::thread::Builder::new()
             .name("enshwick-advertise".into())
             .spawn(move || {
-                if std::panic::catch_unwind(|| run(&configured, &mods, &sources, synced)).is_err() {
+                if std::panic::catch_unwind(|| run(&configured, &mods, &sources, &keys, synced))
+                    .is_err()
+                {
                     crate::log!(WARN, "mod set advertisement stopped: it panicked");
                 }
             });
@@ -299,6 +320,7 @@ mod runtime {
         configured: &str,
         mods: &[(String, String)],
         sources: &[(String, String)],
+        keys: &[(String, String)],
         synced: Synced,
     ) {
         let Some(api) = Api::load() else {
@@ -332,6 +354,7 @@ mod runtime {
                 configured,
                 mods,
                 sources,
+                keys,
                 &synced(),
             );
             let mut stale = Vec::new();
@@ -501,7 +524,14 @@ mod tests {
             None
         );
 
-        let advert = Advert::new("0.1.0", "Homelab", &mods(), &[], &synced("{ a = [2] }"));
+        let advert = Advert::new(
+            "0.1.0",
+            "Homelab",
+            &mods(),
+            &[],
+            &[],
+            &synced("{ a = [2] }"),
+        );
         assert_eq!(
             advert.rules,
             [
@@ -516,7 +546,14 @@ mod tests {
             advert.name,
             format!("Homelab [enshwick {}]", advert.fingerprint)
         );
-        let huge = Advert::new("0.1.0", "Homelab", &mods(), &[], &synced(&"x".repeat(2000)));
+        let huge = Advert::new(
+            "0.1.0",
+            "Homelab",
+            &mods(),
+            &[],
+            &[],
+            &synced(&"x".repeat(2000)),
+        );
         assert_eq!(huge.too_long, ["count"]);
         assert_eq!(huge.fingerprint, fingerprint("0.1.0", &mods(), &none()));
     }
@@ -541,8 +578,25 @@ mod tests {
                 "github:themaiby/enshwick:enshwick-flame-altar-count".to_owned()
             )]
         );
-        let with = Advert::new("0.1.0", "Homelab", &mods(), &sources, &none());
-        let without = Advert::new("0.1.0", "Homelab", &mods(), &[], &none());
+        let with = Advert::new("0.1.0", "Homelab", &mods(), &sources, &[], &none());
+        let without = Advert::new("0.1.0", "Homelab", &mods(), &[], &[], &none());
+        assert_eq!(with.fingerprint, without.fingerprint);
+        assert_eq!(with.rules.len(), without.rules.len() + 1);
+    }
+
+    #[test]
+    fn keys_are_rules_that_fit_and_stay_out_of_the_fingerprint() {
+        let key = "RWTjqgtfpy3lSOLC4uaUXuvvKSLQKOFf6nUnEytoiFjSzxMEhLnoAdJF";
+        let keys = vec![
+            ("count".to_owned(), format!("{key} {key}")),
+            ("zones".to_owned(), "x".repeat(200)),
+        ];
+        assert_eq!(
+            key_rules(&keys),
+            [("enshwick.key.count".to_owned(), format!("{key} {key}"))]
+        );
+        let with = Advert::new("0.1.0", "Homelab", &mods(), &[], &keys, &none());
+        let without = Advert::new("0.1.0", "Homelab", &mods(), &[], &[], &none());
         assert_eq!(with.fingerprint, without.fingerprint);
         assert_eq!(with.rules.len(), without.rules.len() + 1);
     }

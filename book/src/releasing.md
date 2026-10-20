@@ -1,8 +1,8 @@
 # Releasing and updates
 
 A player installs a mod by copying its DLL into `mods/`. This chapter covers
-what a release carries: the version, where updates come from, how an updater
-installs them, and how releases are signed.
+what a release carries: the version, where updates come from, who signs them,
+how an updater installs them, and how releases are signed.
 
 ## Versions
 
@@ -69,6 +69,7 @@ let manifest = enshwick_api::manifest!(
     side: BOTH,
     join = true,
     updates: github("themaiby/enshwick", "enshwick-safes"),
+    signed_by: ["RWTjqgtfpy3lSOLC4uaUXuvvKSLQKOFf6nUnEytoiFjSzxMEhLnoAdJF"],
 );
 assert!(!manifest.updates.is_null());
 ```
@@ -89,6 +90,30 @@ and the mod loads without one.
 
 The updater in this repository reads both. The document a `url(...)` source
 serves is described below.
+
+## Author keys
+
+`signed_by:` names the [minisign](https://jedisct1.github.io/minisign/)
+public keys you sign your releases with, each the second line of a `.pub`
+file (`RW...`). Name one; name two while you move to a new key. The build
+fails on a string that is not a minisign public key.
+
+An updater trusts a mod the way a phone trusts an app: on first install. The
+keys the installed DLL names are the ones a new release must be signed with,
+so nobody else can publish an update of your mod, even from your repository
+or your URL. Without `signed_by:` the updater does not install your updates;
+it tells the player to update the mod by hand.
+
+The loader checks each key and lists it in `ModEntry::signed_by`. A key that
+is not a minisign public key is dropped with a warning such as
+`my_mod.dll: key ignored: the signed_by key "RW..." is not a minisign public key (RW..., 56 characters)`,
+and the mod loads with the others.
+
+To move to a new key, release one version that names both keys, signed with
+the old one. Releases after it can be signed with the new key. A player who
+skipped that version is refused the newer release with a note that it is
+signed by another key, and updates by hand or adds the new key to
+`trusted_keys`.
 
 ## The document of a URL source
 
@@ -137,15 +162,16 @@ lists every loaded mod, the loader first (id `enshwick`), in load order. Each
 [`ModEntry`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/mods.rs)
 has:
 
-| Field     | What it holds                                                                   |
-| --------- | ------------------------------------------------------------------------------- |
-| `id`      | The mod id                                                                      |
-| `version` | Its SemVer version                                                              |
-| `side`    | The sides it runs on                                                            |
-| `join`    | Whether it counts in the join check                                             |
-| `running` | Not refused at init and not faulted since                                       |
-| `file`    | The DLL's path relative to the game's folder, such as `mods/enshwick_safes.dll` |
-| `updates` | `Some(Updates::GitHub { .. })`, `Some(Updates::Url(..))` or `None`              |
+| Field       | What it holds                                                                   |
+| ----------- | ------------------------------------------------------------------------------- |
+| `id`        | The mod id                                                                      |
+| `version`   | Its SemVer version                                                              |
+| `side`      | The sides it runs on                                                            |
+| `join`      | Whether it counts in the join check                                             |
+| `running`   | Not refused at init and not faulted since                                       |
+| `file`      | The DLL's path relative to the game's folder, such as `mods/enshwick_safes.dll` |
+| `updates`   | `Some(Updates::GitHub { .. })`, `Some(Updates::Url(..))` or `None`              |
+| `signed_by` | The author keys the manifest names, checked; empty for none                     |
 
 ```rust
 use enshwick_api::mods::Updates;
@@ -166,7 +192,10 @@ A server advertises each running join mod's source in the Steam rule
 `enshwick.src.<id>`, as one line written by
 [`Updates::to_line`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/mods.rs):
 `github:<owner/name>:<component>` or `url:<url>`. A line longer than a Steam
-rule holds (127 bytes) is left out. `Updates::parse` reads a line back.
+rule holds (127 bytes) is left out. `Updates::parse` reads a line back. A
+running join mod that names author keys also gets the rule
+`enshwick.key.<id>`: its keys separated by a space, written by
+`mods::keys_line` and read back by `mods::parse_keys`.
 
 ```rust
 use enshwick_api::mods::Updates;
@@ -186,8 +215,10 @@ then raises
 on the client.
 [`mods::join_missing()`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/mods.rs)
 then lists those mods: the server's version, `running` false, the client's
-DLL path when it has the mod (empty otherwise), and the source the server
-advertises, else the client's own source for the mod.
+DLL path when it has the mod (empty otherwise), the source the server
+advertises, else the client's own source for the mod, and in `signed_by` the
+author keys the server advertises (empty when it advertises none, or under a
+loader older than ABI minor 14).
 
 The handler runs on the game thread once the player closed the note. Hand
 downloads to a thread of your own:
@@ -239,23 +270,36 @@ is such a mod, for players:
   an archive with a path that leaves the game's folder;
 - it never touches settings files.
 
-It installs an archive only when a trusted key signed it and the signature's
+It installs an archive only when the right key signed it and the signature's
 trusted comment names both the release's tag and the archive's file name, so a
 signed archive cannot pass for another release. For a URL source the tag is
-`<id>-v<version>`. The trusted keys are
-Enshwick's own, which signs every release of this repository, and those in
-`trusted_keys` of `mod-configs/updater.toml`.
+`<id>-v<version>`. The right key is:
+
+| The mod is                                  | The archive must be signed by                                               |
+| ------------------------------------------- | --------------------------------------------------------------------------- |
+| installed and names keys in `signed_by:`    | one of those keys, or a key in `trusted_keys` of `mod-configs/updater.toml` |
+| installed without `signed_by:`              | nothing: the updater lists it as "update it by hand" and downloads nothing  |
+| not installed, offered after a refused join | the key the server advertises in `enshwick.key.<id>`                        |
+
+A release signed by another key than the installed version names is refused
+with a note: it may have been tampered with, or the author changed keys, and
+the player updates it by hand. For a mod offered after a refused join, the
+dialog shows the version, the source and the author key the server names,
+and says that the player trusts the mod because they trust the server. Mods
+of this repository released before author keys are checked against
+Enshwick's own key, which has signed all of them.
 
 ## Signing your own releases
 
 A mod outside this repository gets updates from the updater when:
 
 1. its manifest says `updates: github("you/your-repo", "my-mod")`;
-2. its releases are tagged `my-mod-v<semver>`;
-3. each release carries `my-mod.zip`, with the DLL at `mods/<file>.dll`;
-4. each release carries `my-mod.zip.minisig`, a
-   [minisign](https://jedisct1.github.io/minisign/) signature whose trusted
-   comment names the tag and the archive.
+2. its manifest names your public key with `signed_by: ["RW..."]`;
+3. its releases are tagged `my-mod-v<semver>`;
+4. each release carries `my-mod.zip`, with the DLL at `mods/<file>.dll`;
+5. each release carries `my-mod.zip.minisig`, a
+   [minisign](https://jedisct1.github.io/minisign/) signature by that key
+   whose trusted comment names the tag and the archive.
 
 Releases hosted elsewhere work the same way with `updates: url("https://...")`
 and a [document](#the-document-of-a-url-source) that lists them, the tag in
@@ -273,12 +317,21 @@ Sign each archive with the tag and file name in the trusted comment:
 minisign -S -s my-mod.key -m my-mod.zip -t "my-mod-v1.2.0 my-mod.zip"
 ```
 
-Publish the public key, the second line of `my-mod.pub` (`RW...`). Players
-who trust you add it to `trusted_keys`:
+Declare the public key, the second line of `my-mod.pub` (`RW...`), in the
+manifest, and publish it where players can compare it, such as your README:
 
-```toml
-trusted_keys = ["RWQ..."]
+```rust,ignore
+enshwick_api::manifest!(
+    id: "my-mod",
+    side: BOTH,
+    updates: github("you/your-repo", "my-mod"),
+    signed_by: ["RWQ..."],
+)
 ```
+
+Players need nothing else: the key comes with the DLL they install. Keep the
+secret key safe; a release signed with a lost key cannot reach players who
+have your mod, and one signed with a stolen key can.
 
 ## Removed mods and holds
 

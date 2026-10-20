@@ -8,7 +8,10 @@
 /// mod counts in the join check), `requires: ["id" => "range", ...]`,
 /// `after: ["id", ...]`,
 /// `updates: github("owner/name", "component")` or `updates: url("https://...")`,
-/// where new releases come from (see [`UpdateSource`](crate::abi::UpdateSource)), and
+/// where new releases come from (see [`UpdateSource`](crate::abi::UpdateSource)),
+/// `signed_by: ["RW...", ...]`, the minisign public keys (one, or two while
+/// rotating) the author signs releases with, which an updater requires of
+/// every new release, and
 /// `builds: [{ side, guid, age, symbols: ["id" => rva], constants: ["id" => value] }]`,
 /// symbols and constants the mod pins itself for those game builds. The loader
 /// names the version in every message about the mod: a missing or mismatched
@@ -23,6 +26,7 @@
 ///     join = true,
 ///     requires: ["flame-altar-zones" => "^0.1"],
 ///     updates: github("themaiby/enshwick", "enshwick-survivors-per-altar"),
+///     signed_by: ["RWTjqgtfpy3lSOLC4uaUXuvvKSLQKOFf6nUnEytoiFjSzxMEhLnoAdJF"],
 ///     builds: [{
 ///         side: SERVER,
 ///         guid: "1c129660cd6efc4f9f0b21652d5ff2bf",
@@ -34,11 +38,13 @@
 /// assert_eq!(manifest.dependency_count, 1);
 /// assert_eq!(manifest.build_count, 1);
 /// assert!(!manifest.updates.is_null());
+/// assert!(!manifest.signed_by[0].is_empty() && manifest.signed_by[1].is_empty());
 ///
 /// let pinned = enshwick_api::manifest!(id: "safes", side: SERVER, version: "0.3.0");
 /// // SAFETY: a static string.
 /// assert_eq!(unsafe { pinned.version.as_str() }, Some("0.3.0"));
 /// assert!(pinned.updates.is_null());
+/// assert!(pinned.signed_by.iter().all(enshwick_api::abi::Str::is_empty));
 ///
 /// let elsewhere = enshwick_api::manifest!(
 ///     id: "my-mod",
@@ -48,6 +54,12 @@
 /// // SAFETY: the macro points at a static source.
 /// let source = unsafe { &*elsewhere.updates };
 /// assert_eq!(source.kind, enshwick_api::abi::UpdateKind::URL);
+/// ```
+///
+/// A `signed_by` key that is not a minisign public key fails the build:
+///
+/// ```compile_fail
+/// let manifest = enshwick_api::manifest!(id: "my-mod", side: SERVER, signed_by: ["RWnot-a-key"]);
 /// ```
 #[macro_export]
 macro_rules! manifest {
@@ -59,6 +71,7 @@ macro_rules! manifest {
         $(, requires: [$($req:literal => $range:literal),* $(,)?])?
         $(, after: [$($after:literal),* $(,)?])?
         $(, updates: $source:ident($($source_arg:literal),* $(,)?))?
+        $(, signed_by: [$($key:literal),* $(,)?])?
         $(, builds: [$({
             side: $bside:ident,
             guid: $guid:literal,
@@ -112,6 +125,7 @@ macro_rules! manifest {
             builds: BUILDS.as_ptr(),
             build_count: BUILDS.len(),
             updates: $crate::__private::first_or_null(UPDATES),
+            signed_by: $crate::__private::signed_by(&[$($($key),*)?]),
         };
         &MANIFEST
     }};

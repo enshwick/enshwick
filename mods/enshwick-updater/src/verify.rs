@@ -7,6 +7,9 @@ use minisign_verify::{PublicKey, Signature};
 /// release workflow uploads.
 pub const ENSHWICK_KEY: &str = include_str!("../keys/enshwick.pub");
 
+/// Why [`check`] refuses an archive none of its keys signed.
+pub const UNSIGNED: &str = "no trusted key signed it";
+
 /// A public key from a minisign `.pub` file or its base64 line alone.
 ///
 /// # Errors
@@ -52,7 +55,7 @@ pub fn check(
         .iter()
         .any(|key| key.verify(archive, &signature, false).is_ok());
     if !signed {
-        return Err("no trusted key signed it".to_owned());
+        return Err(UNSIGNED.to_owned());
     }
     let words: Vec<&str> = signature.trusted_comment().split_whitespace().collect();
     if words.contains(&tag) && words.contains(&file) {

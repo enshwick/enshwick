@@ -63,6 +63,7 @@ impl Mod for SurvivorsPerAltar {
             join = true,
             requires: ["flame-altar-zones" => "^0.1"],
             updates: github("themaiby/enshwick", "enshwick-survivors-per-altar"),
+            signed_by: ["RWTjqgtfpy3lSOLC4uaUXuvvKSLQKOFf6nUnEytoiFjSzxMEhLnoAdJF"],
             builds: [
                 {
                     side: SERVER,

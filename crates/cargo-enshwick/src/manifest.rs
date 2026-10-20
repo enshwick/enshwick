@@ -62,6 +62,16 @@ fn describe(manifest: &Manifest) -> String {
                 .to_owned(),
         );
     }
+    let keys_end = core::mem::offset_of!(Manifest, signed_by) + size_of::<[Str; 2]>();
+    if manifest.header.covers(keys_end) {
+        lines.extend(
+            manifest
+                .signed_by
+                .iter()
+                .filter(|key| !key.is_empty())
+                .map(|key| format!("signed by: {}", text(key))),
+        );
+    }
     lines.join("\n")
 }
 
@@ -109,11 +119,13 @@ mod tests {
             join = true,
             requires: ["flame-altar-zones" => "^0.1"],
             after: ["flame-altar-count"],
+            signed_by: ["RWTjqgtfpy3lSOLC4uaUXuvvKSLQKOFf6nUnEytoiFjSzxMEhLnoAdJF"],
         );
         assert_eq!(
             describe(manifest),
             "id: survivors-per-altar\nversion: 0.2.0\nside: both\njoin check: yes\n\
-             requires: flame-altar-zones ^0.1\nafter: flame-altar-count"
+             requires: flame-altar-zones ^0.1\nafter: flame-altar-count\n\
+             signed by: RWTjqgtfpy3lSOLC4uaUXuvvKSLQKOFf6nUnEytoiFjSzxMEhLnoAdJF"
         );
     }
 }

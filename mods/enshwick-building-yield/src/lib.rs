@@ -126,6 +126,7 @@ impl Mod for BuildingYield {
             side: BOTH,
             join = true,
             updates: github("themaiby/enshwick", "enshwick-building-yield"),
+            signed_by: ["RWTjqgtfpy3lSOLC4uaUXuvvKSLQKOFf6nUnEytoiFjSzxMEhLnoAdJF"],
         )
     }
 

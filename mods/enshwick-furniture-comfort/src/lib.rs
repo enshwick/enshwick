@@ -83,6 +83,7 @@ impl Mod for FurnitureComfort {
             id: "furniture-comfort",
             side: SERVER,
             updates: github("themaiby/enshwick", "enshwick-furniture-comfort"),
+            signed_by: ["RWTjqgtfpy3lSOLC4uaUXuvvKSLQKOFf6nUnEytoiFjSzxMEhLnoAdJF"],
         )
     }
 

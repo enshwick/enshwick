@@ -21,6 +21,10 @@ use crate::mid::{MidLink, Mids};
 /// Where the loader's own releases come from.
 const LOADER_UPDATES: UpdateSource = UpdateSource::github("themaiby/enshwick", "enshwick-loader");
 
+/// The key Enshwick's releases are signed with, the loader's among them;
+/// the public key of `mods/enshwick-updater/keys/enshwick.pub`.
+const LOADER_KEY: &str = "RWTjqgtfpy3lSOLC4uaUXuvvKSLQKOFf6nUnEytoiFjSzxMEhLnoAdJF";
+
 /// The loader's DLL relative to the game's folder.
 const LOADER_FILE: &str = "mods/enshwick/enshwick.dll";
 
@@ -35,6 +39,8 @@ pub(crate) struct ModRecord {
     pub(crate) file: String,
     /// Where its new releases come from, checked.
     pub(crate) updates: UpdateSource,
+    /// The keys its author signs releases with, checked; empty for none.
+    pub(crate) signed_by: [Str; 2],
     /// Its static manifest, inside its DLL.
     pub(crate) manifest: &'static Manifest,
     /// Set when the mod is off: refused at init or faulted later.
@@ -181,6 +187,7 @@ struct Missing {
     kind: UpdateKind,
     location: &'static str,
     component: &'static str,
+    keys: [&'static str; 2],
 }
 
 /// The server's join mods the last refused join found missing.
@@ -201,16 +208,21 @@ fn keep(text: &str) -> &'static str {
     held
 }
 
+/// One of the server's join mods the join check found missing on this
+/// client: its id, the server's version, and the update source and author
+/// keys the server advertises.
+pub(crate) type Wanted = (String, String, Option<Updates>, Vec<String>);
+
 /// On a client the join check kept out: records `missing`, the server's
-/// join mods this client lacks or runs in another version as `(id, server
-/// version, source)`, and raises [`Event::JOIN_MISSING`].
-pub(crate) fn report_join_missing(missing: &[(String, String, Option<Updates>)]) {
+/// join mods this client lacks or runs in another version, and raises
+/// [`Event::JOIN_MISSING`].
+pub(crate) fn report_join_missing(missing: &[Wanted]) {
     let Some(loader) = loader() else {
         return;
     };
     let entries = missing
         .iter()
-        .map(|(id, version, source)| {
+        .map(|(id, version, source, keys)| {
             let ours = loader.mods.iter().find(|m| &m.id == id);
             let file = ours.map_or("", |m| m.file.as_str());
             // SAFETY: the loader keeps every source's strings for the process.
@@ -223,6 +235,10 @@ pub(crate) fn report_join_missing(missing: &[(String, String, Option<Updates>)])
                 Some(Updates::Url(url)) => (UpdateKind::URL, keep(&url), ""),
                 None => (UpdateKind::NONE, "", ""),
             };
+            let mut kept = [""; 2];
+            for (slot, key) in kept.iter_mut().zip(keys) {
+                *slot = keep(key);
+            }
             Missing {
                 id: keep(id),
                 version: keep(version),
@@ -230,6 +246,7 @@ pub(crate) fn report_join_missing(missing: &[(String, String, Option<Updates>)])
                 kind,
                 location,
                 component,
+                keys: kept,
             }
         })
         .collect();
@@ -991,6 +1008,7 @@ fn loader_info() -> ModInfo {
         off: 0,
         file: Str::new(LOADER_FILE),
         updates: LOADER_UPDATES,
+        signed_by: [Str::new(LOADER_KEY), Str::EMPTY],
     }
 }
 
@@ -1005,6 +1023,7 @@ fn mod_info(record: &'static ModRecord) -> ModInfo {
         off: u8::from(record.off.load(Ordering::Acquire)),
         file: Str::new(&record.file),
         updates: record.updates,
+        signed_by: record.signed_by,
     }
 }
 
@@ -1061,6 +1080,7 @@ extern "system" fn join_missing(
                 component: Str::new(missing.component),
                 ..UpdateSource::NONE
             },
+            signed_by: missing.keys.map(Str::new),
         })
         .collect();
     // SAFETY: forwarded from the mod's call.
