@@ -9,6 +9,8 @@ pub mod advertise;
 pub mod builds;
 pub mod chains;
 #[cfg(windows)]
+mod code;
+#[cfg(windows)]
 mod content;
 #[cfg(windows)]
 mod crash;

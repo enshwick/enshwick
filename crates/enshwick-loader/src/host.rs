@@ -322,6 +322,9 @@ pub(crate) static API: HostApi = HostApi {
     add_text,
     mods,
     sync,
+    code_range,
+    patch_code,
+    workshop_recipes,
 };
 
 /// A static slice from a pointer and a count, empty for a null pointer.
@@ -749,6 +752,55 @@ extern "system" fn add_text(me: ModHandle, id: u32, language: u32, text: Str) ->
         Some(_) => Status::FAULTED,
         None => Status::BAD_ARGS,
     }
+}
+
+extern "system" fn code_range(start: *mut u64, len: *mut u64) -> Status {
+    let Some((address, size)) = loader().and_then(|loader| crate::code::text(loader.base)) else {
+        return Status::MISSING;
+    };
+    let status = put(start, address as u64);
+    if !status.is_ok() {
+        return status;
+    }
+    put(len, size as u64)
+}
+
+extern "system" fn patch_code(
+    me: ModHandle,
+    address: u64,
+    expected: *const u8,
+    replacement: *const u8,
+    len: usize,
+) -> Status {
+    let loader = match caller(me) {
+        Ok(loader) => loader,
+        Err(status) => return status,
+    };
+    let Some((index, _)) = loader.record(me) else {
+        return Status::BAD_ARGS;
+    };
+    let (Ok(address), Some(text)) = (usize::try_from(address), crate::code::text(loader.base))
+    else {
+        return Status::BAD_ARGS;
+    };
+    // SAFETY: the mod passes `len` readable bytes behind each pointer,
+    // copied before the call returns.
+    let expected = unsafe { slice(expected, len) };
+    // SAFETY: as above.
+    let replacement = unsafe { slice(replacement, len) };
+    crate::code::register(
+        crate::code::CodePatch {
+            owner: index,
+            address,
+            expected: expected.into(),
+            replacement: replacement.into(),
+        },
+        text,
+    )
+}
+
+extern "system" fn workshop_recipes() -> u32 {
+    crate::code::workshop_recipes()
 }
 
 /// The listing entry of the loader itself.

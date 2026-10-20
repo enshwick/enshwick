@@ -390,7 +390,11 @@ fn arm(loader: &Loader, frame: Option<FrameSlot>) {
         return;
     };
     chains.seal();
-    let failures = patch::arm(&mut chains, frame, off);
+    let patches = crate::code::seal();
+    let patch::Armed {
+        failures,
+        code: verdicts,
+    } = patch::arm(&mut chains, frame, off, &patches);
     let armed = chains.len() - failures.len();
     let owners: Vec<(usize, u64)> = failures
         .iter()
@@ -417,6 +421,49 @@ fn arm(loader: &Loader, frame: Option<FrameSlot>) {
         );
     }
     crate::log!(INFO, "{armed} hook targets armed");
+    report_patches(loader, &patches, &verdicts);
+}
+
+/// Logs what became of each code patch and turns off the owners of skipped
+/// ones.
+fn report_patches(
+    loader: &Loader,
+    patches: &[crate::code::CodePatch],
+    verdicts: &[crate::code::Verdict],
+) {
+    for (patch, verdict) in patches.iter().zip(verdicts) {
+        let owner = loader
+            .mods
+            .get(patch.owner)
+            .map_or(crate::settings::LOADER_ID, |m| m.id.as_str());
+        let len = patch.replacement.len();
+        match verdict {
+            crate::code::Verdict::Write => crate::log!(
+                INFO,
+                "code patch of {owner} at {:#x} written, {len} bytes",
+                patch.address
+            ),
+            crate::code::Verdict::Off => crate::log!(
+                INFO,
+                "code patch of {owner} at {:#x} left out: the mod is off",
+                patch.address
+            ),
+            crate::code::Verdict::Skip(reason) => {
+                crate::log!(
+                    ERROR,
+                    "code patch of {owner} at {:#x} skipped: {reason}",
+                    patch.address
+                );
+                loader.turn_off(
+                    patch.owner,
+                    &format!("its code patch at {:#x} was skipped", patch.address),
+                );
+            }
+        }
+    }
+    if crate::code::lifted() {
+        crate::log!(INFO, "workshop recipe limit lifted");
+    }
 }
 
 /// Calls `ready` on every mod still on.

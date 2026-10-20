@@ -20,6 +20,7 @@ pub(crate) struct State {
     pub(crate) subscriptions: Vec<(Event, EventFn, usize)>,
     pub(crate) served: Vec<(ServedResource, ResourcePatchFn, usize)>,
     pub(crate) texts: Vec<(u32, u32, String)>,
+    pub(crate) code_patches: Vec<(u64, Vec<u8>, Vec<u8>)>,
     pub(crate) published: Vec<(String, u32, usize)>,
     pub(crate) defaults: Vec<String>,
     pub(crate) synced: Vec<String>,
@@ -48,6 +49,7 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         subscriptions: Vec::new(),
         served: Vec::new(),
         texts: Vec::new(),
+        code_patches: Vec::new(),
         published: Vec::new(),
         defaults: Vec::new(),
         synced: Vec::new(),
@@ -361,6 +363,42 @@ extern "system" fn sync(_me: ModHandle, synced: Str, out: *mut Str) -> Status {
     put(out, served)
 }
 
+extern "system" fn code_range(start: *mut u64, len: *mut u64) -> Status {
+    let (address, size) = with((0, 0), |s| s.host.code);
+    if address == 0 {
+        return Status::MISSING;
+    }
+    let status = put(start, address);
+    if !status.is_ok() {
+        return status;
+    }
+    put(len, size)
+}
+
+extern "system" fn patch_code(
+    _me: ModHandle,
+    address: u64,
+    expected: *const u8,
+    replacement: *const u8,
+    len: usize,
+) -> Status {
+    if expected.is_null() || replacement.is_null() || len == 0 {
+        return Status::BAD_ARGS;
+    }
+    // SAFETY: the safe layer passes `len` bytes behind each pointer.
+    let expected = unsafe { core::slice::from_raw_parts(expected, len) }.to_vec();
+    // SAFETY: as above.
+    let replacement = unsafe { core::slice::from_raw_parts(replacement, len) }.to_vec();
+    with(Status::MISSING, |s| {
+        s.code_patches.push((address, expected, replacement));
+        Status::OK
+    })
+}
+
+extern "system" fn workshop_recipes() -> u32 {
+    with(512, |s| s.host.workshop_recipes)
+}
+
 /// The table every installed fake answers through; a mod keeps the first
 /// table it sees for the process, so it is one static.
 pub(crate) static TABLE: HostApi = HostApi {
@@ -391,4 +429,7 @@ pub(crate) static TABLE: HostApi = HostApi {
     add_text,
     mods,
     sync,
+    code_range,
+    patch_code,
+    workshop_recipes,
 };
