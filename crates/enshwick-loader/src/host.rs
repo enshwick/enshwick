@@ -46,6 +46,8 @@ pub(crate) struct Loader {
     pub(crate) mods_dir: PathBuf,
     /// The `mod-configs` folder.
     pub(crate) configs_dir: PathBuf,
+    /// The `mod-data` folder.
+    pub(crate) data_dir: PathBuf,
     /// Loaded mods, in load order; handle `n` is index `n - 1`.
     pub(crate) mods: Vec<ModRecord>,
     /// Every hook chain.
@@ -155,6 +157,7 @@ pub(crate) static API: HostApi = HostApi {
     publish,
     service,
     constant,
+    data_dir,
 };
 
 /// A static slice from a pointer and a count, empty for a null pointer.
@@ -413,6 +416,22 @@ extern "system" fn constant(me: ModHandle, name: Str, out: *mut u64) -> Status {
     loader
         .resolve_constant(index, name)
         .map_or(Status::MISSING, |value| put(out, value))
+}
+
+extern "system" fn data_dir(me: ModHandle, out: *mut Str) -> Status {
+    let Some(loader) = loader() else {
+        return Status::BAD_ARGS;
+    };
+    let Some((_, record)) = loader.record(me) else {
+        return Status::BAD_ARGS;
+    };
+    let dir = loader.data_dir.join(&record.id);
+    if std::fs::create_dir_all(&dir).is_err() {
+        return Status::REFUSED;
+    }
+    // The path lives for the process: the mod keeps it as long as it likes.
+    let path: &'static str = Box::leak(dir.to_string_lossy().into_owned().into_boxed_str());
+    put(out, Str::new(path))
 }
 
 /// Mod handles start at 1; 0 is no mod.

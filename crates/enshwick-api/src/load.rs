@@ -326,6 +326,31 @@ impl Load<'_> {
         Ok(settings)
     }
 
+    /// The mod's own data folder, `mod-data/<id>` beside the game, for state
+    /// that outlives a session.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] when the folder cannot be created.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// fn init(load: &mut enshwick_api::Load<'_>) -> Result<(), enshwick_api::Off> {
+    ///     let dir = load.data_dir()?;
+    ///     assert!(dir.ends_with("my-mod"));
+    ///     Ok(())
+    /// }
+    /// ```
+    pub fn data_dir(&self) -> Result<std::path::PathBuf, Off> {
+        let mut out = Str::EMPTY;
+        let status = (self.api().data_dir)(self.host.handle(), &raw mut out);
+        ok(status, (), || "data folder".to_owned())?;
+        // SAFETY: the loader keeps the path alive for the process.
+        let path = unsafe { out.as_str() }.ok_or_else(|| Off::new("data folder: not UTF-8"))?;
+        Ok(std::path::PathBuf::from(path))
+    }
+
     /// Publishes a service other mods can find by `name` and `version`.
     ///
     /// `T` is a `repr(C)` table of `extern "system"` functions, the contract

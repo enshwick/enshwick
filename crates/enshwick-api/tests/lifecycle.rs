@@ -117,6 +117,12 @@ mod tests {
         Status::OK
     }
 
+    extern "system" fn data_dir(_me: ModHandle, out: *mut Str) -> Status {
+        // SAFETY: the safe layer passes a valid out pointer.
+        unsafe { *out = Str::new("mod-data/test-mod") };
+        Status::OK
+    }
+
     static API: HostApi = HostApi {
         header: Header::of::<HostApi>(),
         host_version: Str::new("0.0.0-test"),
@@ -133,6 +139,7 @@ mod tests {
         publish,
         service,
         constant,
+        data_dir,
     };
 
     extern "system" fn original(value: u32) -> u32 {

@@ -125,6 +125,13 @@ from `DEFAULTS` on first start, parsed with serde into your type. Write
 `#[serde(deny_unknown_fields)]` so a typo turns the mod off with a message
 instead of being ignored.
 
+## State between sessions
+
+`load.data_dir()` is the mod's own folder, `mod-data/<id>`. `state::Store<T>`
+keeps a serde value there as TOML, written to a temporary file and renamed, so a
+crash never leaves half a file; `load()` returns `T::default()` until the first
+`save`.
+
 ## Finding the game
 
 Addresses change with every game update, so a mod never hard-codes one.
