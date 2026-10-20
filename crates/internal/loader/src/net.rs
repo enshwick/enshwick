@@ -51,6 +51,8 @@ const HELLO: u8 = 1;
 const WELCOME: u8 = 2;
 /// A control frame from the server: a notice for the client to show.
 const NOTICE: u8 = 3;
+/// A control frame from the server: item data records.
+const ITEM_DATA: u8 = 4;
 /// Messages each peer may send per second, and in one burst.
 const RATE: f64 = 20.0;
 const BURST: f64 = 40.0;
@@ -193,9 +195,9 @@ pub(crate) fn link() {
     let _first = CHANNELS.set(channels.into_boxed_slice());
 }
 
-/// Whether any mod opened a channel.
+/// Whether any mod opened a channel or keeps item data.
 fn wanted() -> bool {
-    CHANNELS.get().is_some_and(|c| !c.is_empty())
+    CHANNELS.get().is_some_and(|c| !c.is_empty()) || crate::item_data::wanted()
 }
 
 /// The frames of one message: base64 lines with the prefix.
@@ -326,6 +328,24 @@ pub(crate) fn notice(key: u64, entity: u32, text: &str) -> Result<(), Status> {
     Ok(())
 }
 
+/// Sends item data records to the client of the player with account key
+/// `key`, or to every client that said hello for 0; `records` fits one
+/// frame.
+pub(crate) fn item_data(key: u64, records: &[u8]) {
+    let mut data = control(ITEM_DATA);
+    data.extend_from_slice(records);
+    let peers: Vec<u64> = if key == 0 {
+        state(|s| s.peers.keys().copied().collect())
+    } else {
+        vec![key]
+    };
+    for peer in peers.into_iter().filter(|&p| p != NetMessage::SERVER) {
+        for line in frames(CONTROL, 0, &data) {
+            crate::chat::send(peer, &line);
+        }
+    }
+}
+
 /// Takes a frame line a client sent, on the server's game thread: `args` is
 /// the line after the command name, `key` the client's account key.
 pub(crate) fn server_received(key: u64, args: &str) {
@@ -344,6 +364,11 @@ pub(crate) fn server_received(key: u64, args: &str) {
             }
             for line in frames(CONTROL, 0, &control(WELCOME)) {
                 crate::chat::send(key, &line);
+            }
+            if fresh {
+                for records in crate::item_data::hello() {
+                    item_data(key, &records);
+                }
             }
         }
         return;
@@ -377,6 +402,8 @@ pub(crate) fn client_received(text: &str) -> bool {
             if fresh {
                 crate::log!(INFO, "mod messages: the server answered");
             }
+        } else if let Some(records) = frame.part.strip_prefix(control(ITEM_DATA).as_slice()) {
+            crate::item_data::received(records);
         } else if let Some(rest) = frame.part.strip_prefix(control(NOTICE).as_slice())
             && let Some((entity, text)) = rest.split_first_chunk::<4>()
             && let Ok(text) = core::str::from_utf8(text)
@@ -414,6 +441,7 @@ pub(crate) fn forget() {
     let mut guard = STATE.lock().unwrap_or_else(PoisonError::into_inner);
     *guard = None;
     WAITING.store(false, Ordering::Release);
+    crate::item_data::forget_client();
 }
 
 /// Forgets a player's client, when the player leaves.

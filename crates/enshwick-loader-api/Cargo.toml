@@ -30,6 +30,10 @@ name = "actions"
 required-features = ["test"]
 
 [[test]]
+name = "item_data"
+required-features = ["test"]
+
+[[test]]
 name = "daytime"
 required-features = ["test"]
 

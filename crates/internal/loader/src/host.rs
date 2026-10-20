@@ -441,13 +441,22 @@ impl Loader {
 
     /// Whether a mod subscribed to `event`.
     pub(crate) fn subscribed(&self, event: Event) -> bool {
-        self.delivery
-            .get()
-            .is_some_and(|d| d.iter().any(|s| s.event == event))
+        let item_data = matches!(
+            event,
+            Event::WORLD_LOADED | Event::WORLD_SAVED | Event::SHUTDOWN
+        ) && crate::item_data::wanted();
+        item_data
+            || self
+                .delivery
+                .get()
+                .is_some_and(|d| d.iter().any(|s| s.event == event))
     }
 
     /// Raises `event` with `data` for every mod still on, or for mod `only`.
     pub(crate) fn emit(&self, event: Event, only: Option<usize>, data: *const core::ffi::c_void) {
+        if only.is_none() {
+            crate::item_data::world_event(self, event);
+        }
         let Some(delivery) = self.delivery.get() else {
             return;
         };
@@ -613,6 +622,9 @@ pub(crate) static API: HostApi = HostApi {
     terrain_edit,
     config_schema,
     summoned,
+    item_data_open,
+    item_data_get,
+    item_data_set,
 };
 
 /// A static slice from a pointer and a count, empty for a null pointer.
@@ -1678,6 +1690,80 @@ extern "system" fn summoned(
     entry("summoned", || match caller_index(me) {
         Ok((loader, index)) => crate::survivors::register_summoned(loader, index, callback, user),
         Err(status) => status,
+    })
+}
+
+extern "system" fn item_data_open(me: ModHandle, id: Str, out: *mut u32) -> Status {
+    entry("item_data_open", || {
+        let Some(id) = text(id) else {
+            return Status::BAD_ARGS;
+        };
+        match caller_index(me).and_then(|(loader, index)| crate::item_data::open(loader, index, id))
+        {
+            Ok(kind) => put(out, kind),
+            Err(status) => status,
+        }
+    })
+}
+
+extern "system" fn item_data_get(
+    me: ModHandle,
+    kind: u32,
+    pide: u32,
+    item: u32,
+    out: *mut u8,
+    capacity: u32,
+    len: *mut u32,
+) -> Status {
+    entry("item_data_get", || {
+        if let Err(status) = caller(me) {
+            return status;
+        }
+        let value = match crate::item_data::get(kind, pide, item) {
+            Ok(value) => value,
+            Err(status) => return status,
+        };
+        let size = u32::try_from(value.len()).unwrap_or(u32::MAX);
+        if !len.is_null() {
+            // SAFETY: the caller's length out pointer.
+            unsafe { len.write(size) };
+        }
+        if size > capacity || out.is_null() {
+            return Status::BAD_ARGS;
+        }
+        // SAFETY: the caller passes room for `capacity` bytes at `out`.
+        unsafe { out.copy_from_nonoverlapping(value.as_ptr(), value.len()) };
+        Status::OK
+    })
+}
+
+extern "system" fn item_data_set(
+    me: ModHandle,
+    kind: u32,
+    pide: u32,
+    item: u32,
+    data: *const u8,
+    len: u32,
+) -> Status {
+    entry("item_data_set", || {
+        if let Err(status) = caller(me) {
+            return status;
+        }
+        let Ok(len) = usize::try_from(len) else {
+            return Status::BAD_ARGS;
+        };
+        let value = if len == 0 {
+            &[][..]
+        } else if data.is_null() {
+            return Status::BAD_ARGS;
+        } else {
+            // SAFETY: the caller passes `len` bytes at `data` for the call.
+            unsafe { core::slice::from_raw_parts(data, len) }
+        };
+        match crate::item_data::set(kind, pide, item, value) {
+            Ok(()) => Status::OK,
+            Err(status) => status,
+        }
     })
 }
 

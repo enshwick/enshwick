@@ -110,6 +110,10 @@ pub(crate) struct State {
     pub(crate) bed_checks: Vec<(BedCheckFn, usize)>,
     pub(crate) summons: Vec<(SummonFn, usize)>,
     pub(crate) summoned: Vec<(SummonFn, usize)>,
+    /// Item data kinds by full id, and values by kind and entity: the item
+    /// and the bytes.
+    pub(crate) item_kinds: Vec<String>,
+    pub(crate) item_values: std::collections::BTreeMap<(u32, u32), (u32, Vec<u8>)>,
     pub(crate) summon_items: Vec<(u32, u32)>,
     pub(crate) survivor_status: Option<(SurvivorStatusFn, usize)>,
     pub(crate) interaction_filters: Vec<(InteractionFn, usize)>,
@@ -195,6 +199,8 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         bed_checks: Vec::new(),
         summons: Vec::new(),
         summoned: Vec::new(),
+        item_kinds: Vec::new(),
+        item_values: std::collections::BTreeMap::new(),
         summon_items: Vec::new(),
         survivor_status: None,
         interaction_filters: Vec::new(),
@@ -818,6 +824,85 @@ extern "system" fn summon_filter(_me: ModHandle, callback: SummonFn, user: *mut 
 extern "system" fn summoned(_me: ModHandle, callback: SummonFn, user: *mut c_void) -> Status {
     with(Status::MISSING, |s| {
         s.summoned.push((callback, user.expose_provenance()));
+        Status::OK
+    })
+}
+
+extern "system" fn item_data_open(_me: ModHandle, id: Str, out: *mut u32) -> Status {
+    let id = text(id);
+    let full = if id.contains(':') {
+        id
+    } else {
+        format!("fake:{id}")
+    };
+    let kind = with(None, |s| {
+        let index = s
+            .item_kinds
+            .iter()
+            .position(|k| *k == full)
+            .unwrap_or_else(|| {
+                s.item_kinds.push(full.clone());
+                s.item_kinds.len() - 1
+            });
+        u32::try_from(index).ok()
+    });
+    found(kind, out)
+}
+
+extern "system" fn item_data_get(
+    _me: ModHandle,
+    kind: u32,
+    pide: u32,
+    item: u32,
+    out: *mut u8,
+    capacity: u32,
+    len: *mut u32,
+) -> Status {
+    let value = with(None, |s| {
+        s.item_values
+            .get(&(kind, pide))
+            .filter(|(held, _)| *held == item)
+            .map(|(_, bytes)| bytes.clone())
+    });
+    let Some(value) = value else {
+        return Status::MISSING;
+    };
+    let size = u32::try_from(value.len()).unwrap_or(u32::MAX);
+    if !len.is_null() {
+        // SAFETY: the safe layer's length out pointer.
+        unsafe { len.write(size) };
+    }
+    if size > capacity || out.is_null() {
+        return Status::BAD_ARGS;
+    }
+    // SAFETY: the safe layer passes room for `capacity` bytes.
+    unsafe { out.copy_from_nonoverlapping(value.as_ptr(), value.len()) };
+    Status::OK
+}
+
+extern "system" fn item_data_set(
+    _me: ModHandle,
+    kind: u32,
+    pide: u32,
+    item: u32,
+    data: *const u8,
+    len: u32,
+) -> Status {
+    if pide == 0 || item == 0 {
+        return Status::BAD_ARGS;
+    }
+    let value = if len == 0 || data.is_null() {
+        Vec::new()
+    } else {
+        // SAFETY: the safe layer passes `len` bytes at `data`.
+        unsafe { core::slice::from_raw_parts(data, len as usize) }.to_vec()
+    };
+    with(Status::MISSING, |s| {
+        if value.is_empty() {
+            s.item_values.remove(&(kind, pide));
+        } else {
+            s.item_values.insert((kind, pide), (item, value));
+        }
         Status::OK
     })
 }
@@ -1622,4 +1707,7 @@ pub(crate) static TABLE: HostApi = HostApi {
     terrain_edit,
     config_schema,
     summoned,
+    item_data_open,
+    item_data_get,
+    item_data_set,
 };

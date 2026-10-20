@@ -52,6 +52,8 @@ mod host;
 mod interactions;
 #[cfg(windows)]
 mod inventory;
+#[cfg(windows)]
+mod item_data;
 pub mod join;
 #[cfg(windows)]
 mod knowledge;
