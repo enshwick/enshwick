@@ -555,6 +555,8 @@ pub(crate) static API: HostApi = HostApi {
     emit,
     teleport,
     spawn,
+    craft_filter,
+    build_filter,
 };
 
 /// A static slice from a pointer and a count, empty for a null pointer.
@@ -1813,6 +1815,28 @@ extern "system" fn spawn(
             Ok(entity) => put(out, entity),
             Err(status) => status,
         }
+    })
+}
+
+extern "system" fn craft_filter(
+    me: ModHandle,
+    callback: api_frame::CraftCheckFn,
+    user: *mut core::ffi::c_void,
+) -> Status {
+    entry("craft_filter", || match caller_index(me) {
+        Ok((loader, index)) => crate::vetoes::register_craft(loader, index, callback, user),
+        Err(status) => status,
+    })
+}
+
+extern "system" fn build_filter(
+    me: ModHandle,
+    callback: api_frame::BuildCheckFn,
+    user: *mut core::ffi::c_void,
+) -> Status {
+    entry("build_filter", || match caller_index(me) {
+        Ok((loader, index)) => crate::vetoes::register_build(loader, index, callback, user),
+        Err(status) => status,
     })
 }
 

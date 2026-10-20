@@ -24,6 +24,7 @@
 - [Altars and bases](altars.md)
 - [Survivors](survivors.md)
 - [Interactions](interactions.md)
+- [Crafting and building vetoes](vetoes.md)
 - [Character progress](progress.md)
 - [Commands and chat](commands.md)
 - [State and data folders](state.md)

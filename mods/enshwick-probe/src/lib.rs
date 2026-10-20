@@ -14,6 +14,7 @@ mod checks;
 
 use std::ops::ControlFlow;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use enshwick_loader_api::events::{WorldLoaded, WorldSaved};
@@ -33,10 +34,14 @@ const CHECK_DELAY: Duration = Duration::from_secs(10);
 
 /// Probe settings, read at start.
 #[derive(Debug, Default, serde::Deserialize, serde::Serialize, enshwick_loader_api::Config)]
-#[serde(deny_unknown_fields)]
+#[serde(default, deny_unknown_fields)]
 struct Settings {
     /// Exercise the platform API and log what it sees; development only.
     enabled: bool,
+    /// Refuse every craft request, to see the craft filter in game.
+    refuse_crafting: bool,
+    /// Refuse every placement, to see the build filter in game.
+    refuse_building: bool,
 }
 
 /// The probe.
@@ -48,6 +53,34 @@ fn log_typed<E: Kind + core::fmt::Debug>(load: &mut Load<'_>) {
     match load.on_game::<E>(|event| enshwick_loader_api::info!("event: {event:?}")) {
         Ok(()) => enshwick_loader_api::info!("PASS typed {} resolves", E::TYPE_NAME),
         Err(off) => enshwick_loader_api::warn!("FAIL typed {}: {off}", E::TYPE_NAME),
+    }
+}
+
+/// Logs the craft requests and the first placement the filters see, and
+/// refuses them when the settings say so.
+fn vetoes(load: &mut Load<'_>, settings: &Settings) {
+    let refuse_crafting = settings.refuse_crafting;
+    let crafts = load.on_craft(move |craft| {
+        enshwick_loader_api::info!("craft filter: {craft:?}, refused: {refuse_crafting}");
+        !refuse_crafting
+    });
+    match crafts {
+        Ok(()) => enshwick_loader_api::info!("PASS craft filter registered"),
+        Err(off) => enshwick_loader_api::warn!("FAIL craft filter: {off}"),
+    }
+    let refuse_building = settings.refuse_building;
+    let seen = AtomicBool::new(false);
+    let builds = load.on_build(move |placement| {
+        if !seen.swap(true, Ordering::Relaxed) {
+            enshwick_loader_api::info!(
+                "build filter, first call: {placement:?}, refused: {refuse_building}"
+            );
+        }
+        !refuse_building
+    });
+    match builds {
+        Ok(()) => enshwick_loader_api::info!("PASS build filter registered"),
+        Err(off) => enshwick_loader_api::warn!("FAIL build filter: {off}"),
     }
 }
 
@@ -79,6 +112,7 @@ impl Mod for Probe {
         log_typed::<EquipmentChanged>(load);
         log_typed::<Revived>(load);
 
+        vetoes(load, &settings);
         let checks = Arc::new(Checks::new(load)?);
         let ping = load.event_type("keen::ecs::UiPingEvent")?;
         let pinged = Arc::clone(&checks);

@@ -1870,6 +1870,48 @@ impl Installed {
         table::with(Vec::new(), |s| s.spawns.clone())
     }
 
+    /// Asks the mod's craft filters about `call`, as the server does
+    /// before it crafts; whether the craft goes ahead.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_loader_api::abi::{CraftCheck, Header};
+    ///
+    /// let loader = enshwick_loader_api::test::FakeHost::new().install();
+    /// let craft = CraftCheck { header: Header::of::<CraftCheck>(), player: 2, station: 0, recipe: 1, amount: 1 };
+    /// assert!(loader.craft(&craft));
+    /// ```
+    #[must_use]
+    pub fn craft(&self, call: &crate::abi::CraftCheck) -> bool {
+        let filters = table::with(Vec::new(), |s| s.craft_filters.clone());
+        filters.iter().all(|&(callback, user)| {
+            // SAFETY: a filter the mod registered with its own pointer.
+            unsafe { callback(call, core::ptr::with_exposed_provenance_mut(user)) != 0 }
+        })
+    }
+
+    /// Asks the mod's build filters about `call`, as the cursor check does
+    /// after it allowed a placement; whether the placement goes ahead.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_loader_api::abi::{BuildCheck, Header};
+    ///
+    /// let loader = enshwick_loader_api::test::FakeHost::new().install();
+    /// let wall = BuildCheck { header: Header::of::<BuildCheck>(), player: 2, item: 7, position: [0; 3] };
+    /// assert!(loader.build(&wall));
+    /// ```
+    #[must_use]
+    pub fn build(&self, call: &crate::abi::BuildCheck) -> bool {
+        let filters = table::with(Vec::new(), |s| s.build_filters.clone());
+        filters.iter().all(|&(callback, user)| {
+            // SAFETY: a filter the mod registered with its own pointer.
+            unsafe { callback(call, core::ptr::with_exposed_provenance_mut(user)) != 0 }
+        })
+    }
+
     /// How many saves the mod asked for.
     ///
     /// # Examples

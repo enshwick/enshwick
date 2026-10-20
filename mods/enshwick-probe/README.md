@@ -49,6 +49,10 @@ From the chat as an administrator, or through the admin tools' command file
 
 ```toml
 enabled = false
+# Refuse every craft request or every placement, to see the vetoes in game;
+# the probe logs each craft request and the first placement either way.
+refuse_crafting = false
+refuse_building = false
 ```
 
 Licensed under [MIT](../../LICENSE).

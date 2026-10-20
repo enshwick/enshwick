@@ -59,6 +59,23 @@ static FRAME: OnceLock<Option<FrameSlot>> = OnceLock::new();
 static STARTED: AtomicBool = AtomicBool::new(false);
 
 /// Runs once, on the stub's thread.
+/// Seals what mods asked for and links the loader's own features; the
+/// client links the server's too, for the games it hosts.
+fn link_features(loader: &'static Loader) {
+    crate::events::link(loader);
+    crate::vetoes::link(loader);
+    crate::game_events::link(loader);
+    crate::saves::link(loader);
+    crate::inventory::link(loader);
+    crate::chat::link(loader);
+    crate::label::link(loader);
+    crate::altars::link(loader);
+    crate::survivors::link(loader);
+    crate::interactions::link(loader);
+    crate::progress::link(loader);
+    crate::bases::link(loader);
+}
+
 pub(crate) fn start(stub_abi: u32, missing_forwards: u32) {
     if STARTED.swap(true, Ordering::AcqRel) {
         return;
@@ -118,18 +135,7 @@ pub(crate) fn start(stub_abi: u32, missing_forwards: u32) {
     initialise(loader, &order);
     loader.seal_subscriptions();
     crate::content::seal_and_link(loader);
-    // The client runs the server's code while it hosts a game.
-    crate::events::link(loader);
-    crate::game_events::link(loader);
-    crate::saves::link(loader);
-    crate::inventory::link(loader);
-    crate::chat::link(loader);
-    crate::label::link(loader);
-    crate::altars::link(loader);
-    crate::survivors::link(loader);
-    crate::interactions::link(loader);
-    crate::progress::link(loader);
-    crate::bases::link(loader);
+    link_features(loader);
     if side == Side::CLIENT {
         link_join(loader);
         let waited = wait_for_window(CLIENT_ARM_DELAY);

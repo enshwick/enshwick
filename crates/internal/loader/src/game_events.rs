@@ -5,6 +5,9 @@
 //! and hands them over right after it, with the world still quiescent and
 //! the entities they name still in it.
 //!
+//! The same pass lets the craft filters screen the craft requests in the
+//! streams before the engine moves them (see the vetoes module).
+//!
 //! A client runs the same move for its own world as well as for a hosted
 //! game's server; only the server's entity world is followed.
 
@@ -115,7 +118,7 @@ pub(crate) fn link(loader: &'static Loader) {
         subscribers: subscribers.into_boxed_slice(),
     };
     let count = sealed.subscribers.len();
-    if SEALED.set(sealed).is_err() || count == 0 {
+    if SEALED.set(sealed).is_err() || (count == 0 && !crate::vetoes::crafting()) {
         return;
     }
     let constant = |name: &str| {
@@ -219,6 +222,15 @@ unsafe fn copy(layout: &Layout, entity_world: *mut u8) {
                 if at + layout.record_header + size > used {
                     break;
                 }
+                // SAFETY: the record's payload, inside the bytes used, on
+                // the game thread before the engine moves the streams.
+                unsafe {
+                    crate::vetoes::screen(
+                        type_hash,
+                        core::ptr::with_exposed_provenance_mut(record + layout.record_header),
+                        size,
+                    );
+                };
                 if sealed.wants(type_hash) {
                     // SAFETY: as above.
                     let payload = unsafe {

@@ -65,6 +65,10 @@ name = "world_queries"
 required-features = ["test"]
 
 [[test]]
+name = "vetoes"
+required-features = ["test"]
+
+[[test]]
 name = "worlds"
 required-features = ["test"]
 
