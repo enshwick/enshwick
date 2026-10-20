@@ -15,6 +15,7 @@ publish.workspace = true
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
+arc-swap.workspace = true
 enshwick-api.workspace = true
 serde.workspace = true
 

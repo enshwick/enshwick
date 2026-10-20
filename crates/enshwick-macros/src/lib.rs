@@ -14,6 +14,10 @@ use syn::{
 /// the struct's doc comment heads the file, each field's doc comment precedes
 /// its key, and each value comes from `Default`. `#[config(validate = path)]`
 /// names a `fn(&Self) -> Result<(), String>` that checks parsed values.
+///
+/// `#[config(sync)]` on a field marks a join value, one the server and its
+/// players must agree on: the derive implements `synced` and `merge_synced`
+/// over the marked fields, and a joined client runs with the server's values.
 #[proc_macro_derive(Config, attributes(config))]
 pub fn derive_config(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
@@ -49,6 +53,15 @@ pub fn derive_config(input: TokenStream) -> TokenStream {
             .to_compile_error()
             .into();
     };
+    let mut synced = Vec::new();
+    for field in &fields.named {
+        match is_synced(&field.attrs) {
+            Ok(true) => synced.push(field),
+            Ok(false) => {}
+            Err(e) => return e.to_compile_error().into(),
+        }
+    }
+    let sync = sync_methods(&synced);
     let header = comment(&input.attrs);
     let entries = fields.named.iter().filter_map(|field| {
         let ident = field.ident.as_ref()?;
@@ -72,6 +85,8 @@ pub fn derive_config(input: TokenStream) -> TokenStream {
             }
 
             #validate
+
+            #sync
         }
     }
     .into()
@@ -180,6 +195,58 @@ fn next_is_unsafe(arg: &FnArg) -> Option<bool> {
         GenericArgument::Type(Type::FnPtr(f)) => Some(f.unsafety.is_some()),
         _ => None,
     }
+}
+
+/// Whether a field carries `#[config(sync)]`.
+fn is_synced(attrs: &[Attribute]) -> syn::Result<bool> {
+    let mut synced = false;
+    for attr in attrs.iter().filter(|a| a.path().is_ident("config")) {
+        attr.parse_nested_meta(|meta| {
+            if meta.path.is_ident("sync") {
+                synced = true;
+                Ok(())
+            } else {
+                Err(meta.error("expected `sync`"))
+            }
+        })?;
+    }
+    Ok(synced)
+}
+
+/// `synced` and `merge_synced` over the join value fields, none when there
+/// are none.
+fn sync_methods(fields: &[&syn::Field]) -> Option<impl quote::ToTokens> {
+    if fields.is_empty() {
+        return None;
+    }
+    let idents: Vec<&Ident> = fields.iter().filter_map(|f| f.ident.as_ref()).collect();
+    let keys: Vec<String> = idents.iter().map(ToString::to_string).collect();
+    let types = fields.iter().map(|f| &f.ty);
+    let locals: Vec<Ident> = idents
+        .iter()
+        .map(|ident| quote::format_ident!("__{}", ident))
+        .collect();
+    Some(quote! {
+        fn synced(&self) -> ::core::option::Option<::std::string::String> {
+            let mut table = ::enshwick_api::config::__Synced::default();
+            #(table.put(#keys, &self.#idents);)*
+            ::core::option::Option::Some(table.finish())
+        }
+
+        fn merge_synced(
+            &mut self,
+            synced: &str,
+        ) -> ::core::result::Result<(), ::std::string::String> {
+            let table = ::enshwick_api::config::__Synced::parse(synced)?;
+            #(let #locals = table.take::<#types>(#keys)?;)*
+            #(
+                if let ::core::option::Option::Some(value) = #locals {
+                    self.#idents = value;
+                }
+            )*
+            ::core::result::Result::Ok(())
+        }
+    })
 }
 
 /// The doc comment of `attrs` as TOML comment lines.

@@ -51,7 +51,8 @@ mod tests {
     /// Test settings.
     #[derive(Default, serde::Deserialize, serde::Serialize, enshwick_api::Config)]
     struct Live {
-        /// A limit.
+        /// A limit, the same on the server and its players.
+        #[config(sync)]
         limit: u32,
     }
 
@@ -180,5 +181,23 @@ mod tests {
                 .any(|(_, line)| line.starts_with("settings change skipped"))
         );
         assert_eq!(loader.raise::<events::LoaderSettingsChanged>(&()), 1);
+
+        // A joined server's join values reach the handler over the file's,
+        // and the file's come back without them.
+        loader.set_settings("limit = 9\n");
+        loader.set_server_synced(Some("{ limit = 12 }"));
+        assert_eq!(loader.raise::<events::SettingsChanged>(&()), 1);
+        assert_eq!(LIVE_LIMIT.load(Ordering::Relaxed), 12);
+        assert_eq!(
+            loader.reported_synced().last().map(String::as_str),
+            Some("{ limit = 9 }")
+        );
+        loader.set_server_synced(Some("{ limit = 'x' }"));
+        assert_eq!(loader.raise::<events::SettingsChanged>(&()), 1);
+        assert_eq!(LIVE_LIMIT.load(Ordering::Relaxed), 9);
+        loader.set_server_synced(None);
+        loader.set_settings("limit = 8\n");
+        assert_eq!(loader.raise::<events::SettingsChanged>(&()), 1);
+        assert_eq!(LIVE_LIMIT.load(Ordering::Relaxed), 8);
     }
 }

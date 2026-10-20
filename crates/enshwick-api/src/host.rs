@@ -163,6 +163,30 @@ impl Host {
         Ok(text.to_owned())
     }
 
+    /// Reports this mod's join values, `synced`, and returns the server's to
+    /// run with over them; `None` when there are none or under a loader older
+    /// than ABI minor 6.
+    pub(crate) fn sync(&self, synced: &str) -> Option<String> {
+        // The loader's text lives until this mod's next call; one call at a time.
+        static CALL: Mutex<()> = Mutex::new(());
+        let end = core::mem::offset_of!(HostApi, sync) + size_of::<usize>();
+        if !self.api.header.covers(end) {
+            return None;
+        }
+        let _call = CALL
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut text = Str::EMPTY;
+        let status = (self.api.sync)(self.me, Str::new(synced), &raw mut text);
+        if !status.is_ok() {
+            return None;
+        }
+        // SAFETY: valid until this mod calls `sync` again, which the lock holds
+        // off until the copy is made.
+        let text = unsafe { text.as_str() }?;
+        (!text.is_empty()).then(|| text.to_owned())
+    }
+
     /// Subscribes `callback` to `event`; [`Status::MISSING`] under a loader
     /// older than ABI minor 2.
     pub(crate) fn subscribe(&self, event: Event, callback: EventFn, user: *mut c_void) -> Status {

@@ -10,19 +10,21 @@ doubles the vanilla count, up to 16.
 
 ## Settings
 
-`mod-configs/enshwick-flame-altar-count.toml`, written on first start:
+`mod-configs/flame-altar-count.toml`, written on first start:
 
 ```toml
 altars_per_flame_level = [2, 4, 8, 12, 16, 16, 16, 16, 16, 16, 16, 16]
 ```
 
 Levels past the end of the list use its last entry. Values above 16 are lowered
-to 16, since the game groups only 16 altar zones into bases.
+to 16, since the game groups only 16 altar zones into bases. An edited file
+applies while the game runs.
 
 ## Who needs it
 
 The server and every player: the count shows in the game's interface and decides
 where an altar may be placed. It counts in the join check, so a player with a
-different version or table cannot join.
+different version cannot join. The table is a join value: a player who joins
+runs with the server's table, whatever their own file says.
 
 Licensed under [MIT](../../LICENSE).

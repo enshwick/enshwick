@@ -96,6 +96,9 @@ pub(crate) fn start(stub_abi: u32, missing_forwards: u32) {
                 manifest: libraries[i].manifest,
                 off: AtomicBool::new(false),
                 settings: Mutex::new(None),
+                synced: Mutex::new(None),
+                server_synced: Mutex::new(None),
+                sync_out: Mutex::new(String::new()),
             })
             .collect(),
         chains: Mutex::new(Chains::default()),
@@ -130,7 +133,7 @@ pub(crate) fn start(stub_abi: u32, missing_forwards: u32) {
     if side == Side::SERVER
         && let Some(game_dir) = loader.mods_dir.parent()
     {
-        crate::advertise::start(game_dir, &joined(loader));
+        crate::advertise::start(game_dir, joined(loader), host::join_values);
     }
 }
 
@@ -214,11 +217,7 @@ fn link_join(loader: &Loader) {
     let Some(rva) = loader.build.symbol("net.server_change") else {
         return;
     };
-    let mods = joined(loader);
-    crate::join::set_ours(
-        crate::advertise::fingerprint(env!("CARGO_PKG_VERSION"), &mods),
-        crate::advertise::mod_list(&mods),
-    );
+    crate::join::set_ours(joined(loader));
     let link = crate::chains::Link {
         owner: crate::chains::LOADER,
         detour: (crate::join::detour as *const ()).addr(),
@@ -239,12 +238,7 @@ fn joined(loader: &Loader) -> Vec<(String, String)> {
     loader
         .mods
         .iter()
-        .filter(|m| !m.off.load(Ordering::Acquire))
-        .filter(|m| {
-            m.manifest
-                .flags
-                .contains(enshwick_api::abi::ManifestFlags::JOIN)
-        })
+        .filter(|m| m.joins())
         .map(|m| (m.id.clone(), m.version.clone()))
         .collect()
 }
