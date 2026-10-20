@@ -6,7 +6,6 @@
 //! controls the zones gets `upgrade_building_range` replaced by vanilla's own
 //! loop on the same engine helpers, writing its sizes.
 
-mod engine;
 mod geometry;
 
 use core::ffi::c_void;
@@ -23,9 +22,9 @@ use enshwick_loader_api::abi::{
     ZoneCheckFn,
 };
 
-use self::engine::{Engine, Query};
 use self::geometry::Placed;
 use crate::chains::{LOADER, Link};
+use crate::ecs::{Engine, Query};
 use crate::host::Loader;
 
 const FORGET_AFTER: Duration = Duration::from_secs(2);
@@ -125,7 +124,6 @@ static CHANGED: AtomicBool = AtomicBool::new(false);
 /// Set when the loader's own work in a link went wrong: from then on the
 /// links run vanilla.
 static OFF: AtomicBool = AtomicBool::new(false);
-static ENGINE: OnceLock<Engine> = OnceLock::new();
 static ADD_ZONES_NEXT: AtomicUsize = AtomicUsize::new(0);
 static UPGRADE_NEXT: AtomicUsize = AtomicUsize::new(0);
 
@@ -280,11 +278,7 @@ pub(crate) fn forget() {
 }
 
 fn engine(loader: &Loader) -> Option<&'static Engine> {
-    if let Some(engine) = ENGINE.get() {
-        return Some(engine);
-    }
-    let engine = Engine::resolve(loader)?;
-    Some(ENGINE.get_or_init(|| engine))
+    crate::ecs::engine(loader)
 }
 
 pub(crate) fn register(owner: usize, callback: ZoneCheckFn, user: *mut c_void) -> Status {
@@ -444,7 +438,7 @@ unsafe extern "system" fn add_zones(ctx: *mut u64) {
     if OFF.load(Ordering::Acquire) {
         return;
     }
-    let (Some(loader), Some(engine)) = (crate::host::loader(), ENGINE.get()) else {
+    let (Some(loader), Some(engine)) = (crate::host::loader(), crate::ecs::resolved()) else {
         return;
     };
     let run = || {
@@ -461,7 +455,7 @@ unsafe extern "system" fn add_zones(ctx: *mut u64) {
 
 unsafe extern "system" fn upgrade(ctx: *mut u64) {
     let ready = (!OFF.load(Ordering::Acquire))
-        .then(|| crate::host::loader().zip(ENGINE.get()))
+        .then(|| crate::host::loader().zip(crate::ecs::resolved()))
         .flatten()
         // SAFETY: the system's live context.
         .filter(|(loader, engine)| unsafe { server_world(loader, engine, ctx) });

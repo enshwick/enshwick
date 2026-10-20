@@ -84,9 +84,10 @@ use std::collections::{HashMap, HashSet};
 use std::sync::MutexGuard;
 
 use crate::abi::{
-    AltarInfo, AltarZoneSize, Bounds, CallerFrame, CommandCall, Event, Fingerprint, Header,
-    HookFlags, HostApi, InventoryOp, InventoryOpResult, InventoryResult, ItemData, Level,
-    ModHandle, ModInfo, PlayerInfo, RenameCall, ResourceKey, Side, Status, Str, ZoneCheck,
+    AltarInfo, AltarZoneSize, BedCheck, Bounds, CallerFrame, CommandCall, Event, Fingerprint,
+    Header, HookFlags, HostApi, InventoryOp, InventoryOpResult, InventoryResult, ItemData, Level,
+    ModHandle, ModInfo, PlayerInfo, RenameCall, ResourceKey, Side, Status, Str, Summon,
+    SurvivorLookup, ZoneCheck,
 };
 use crate::events::Kind;
 use crate::{FnPtr, Hook};
@@ -1385,6 +1386,131 @@ impl Installed {
             // SAFETY: a valid call; `user` is the pointer the mod registered with.
             unsafe { callback(&raw const call, user) != 0 }
         })
+    }
+
+    /// Asks the mod's survivor lookup as the game would: survivor
+    /// `survivor`, the game's answer `vanilla`, `purpose` one of the
+    /// [`SurvivorLookup`] constants with its `entity` and `cell`; `beds`
+    /// answers [`Lookup::bed_of`](crate::survivors::Lookup::bed_of). `None`
+    /// for the game's own answer.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_loader_api::abi::SurvivorLookup;
+    ///
+    /// let loader = enshwick_loader_api::test::FakeHost::new().install();
+    /// assert_eq!(loader.survivor_lookup(7, 4096, SurvivorLookup::SPAWN, 0, [0; 3], &[]), None);
+    /// ```
+    #[must_use]
+    pub fn survivor_lookup(
+        &self,
+        survivor: u32,
+        vanilla: u32,
+        purpose: u32,
+        entity: u32,
+        cell: [i64; 3],
+        beds: &[(u32, u32)],
+    ) -> Option<u32> {
+        unsafe extern "system" fn bed_of(token: *mut core::ffi::c_void, entity: u32) -> u32 {
+            // SAFETY: the token is the `beds` slice of the running call.
+            let beds = unsafe { &*token.cast::<&[(u32, u32)]>() };
+            beds.iter()
+                .find(|(e, _)| *e == entity)
+                .map_or(0, |(_, bed)| *bed)
+        }
+        let (answer, user) = table::with(None, |s| s.survivor_lookup)?;
+        let mut beds = beds;
+        let lookup = SurvivorLookup {
+            header: Header::of::<SurvivorLookup>(),
+            survivor,
+            vanilla,
+            purpose,
+            entity,
+            cell,
+            bed_of: Some(bed_of),
+            token: (&raw mut beds).cast(),
+        };
+        let mut out = 0;
+        let user = core::ptr::with_exposed_provenance_mut(user);
+        // SAFETY: a valid call and out pointer; `user` is the mod's pointer.
+        let answered = unsafe { answer(&raw const lookup, user, &raw mut out) };
+        (answered != 0).then_some(out)
+    }
+
+    /// Asks the mod's bed checks as the game would; whether every one keeps
+    /// the bed.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_loader_api::abi::{BedCheck, Header};
+    ///
+    /// let loader = enshwick_loader_api::test::FakeHost::new().install();
+    /// let check = BedCheck { header: Header::of::<BedCheck>(), survivor: 7, entity: 1, bed: 2, home: [0; 3], bed_at: [0; 3] };
+    /// assert!(loader.survivor_bed_check(&check));
+    /// ```
+    #[must_use]
+    pub fn survivor_bed_check(&self, check: &BedCheck) -> bool {
+        let filters = table::with(Vec::new(), |s| s.bed_checks.clone());
+        filters.iter().all(|&(callback, user)| {
+            let user = core::ptr::with_exposed_provenance_mut(user);
+            // SAFETY: a valid check; `user` is the mod's pointer.
+            unsafe { callback(check, user) != 0 }
+        })
+    }
+
+    /// Asks the mod's summon filters as the game would; whether one makes
+    /// the use take the item.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_loader_api::abi::{Header, Summon};
+    ///
+    /// let loader = enshwick_loader_api::test::FakeHost::new().install();
+    /// let summon = Summon { header: Header::of::<Summon>(), item: 1, ammo: 0, template: [0; 16], target: [0; 3] };
+    /// assert!(!loader.summon(&summon));
+    /// ```
+    #[must_use]
+    pub fn summon(&self, summon: &Summon) -> bool {
+        let filters = table::with(Vec::new(), |s| s.summons.clone());
+        filters.iter().any(|&(callback, user)| {
+            let user = core::ptr::with_exposed_provenance_mut(user);
+            // SAFETY: a valid summon; `user` is the mod's pointer.
+            unsafe { callback(summon, user) != 0 }
+        })
+    }
+
+    /// The items the mod filed as summoning staffs, as `(item, survivor)`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick_loader_api::test::FakeHost::new().install();
+    /// assert!(loader.summon_items().is_empty());
+    /// ```
+    #[must_use]
+    pub fn summon_items(&self) -> Vec<(u32, u32)> {
+        table::with(Vec::new(), |s| s.summon_items.clone())
+    }
+
+    /// Asks the mod's survivor menu merge about `statuses`; the byte to show,
+    /// or `None` for the game's.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick_loader_api::test::FakeHost::new().install();
+    /// assert_eq!(loader.survivor_status(7, &[1, 3]), None);
+    /// ```
+    #[must_use]
+    pub fn survivor_status(&self, survivor: u32, statuses: &[u8]) -> Option<u8> {
+        let (callback, user) = table::with(None, |s| s.survivor_status)?;
+        let user = core::ptr::with_exposed_provenance_mut(user);
+        // SAFETY: valid statuses for the call; `user` is the mod's pointer.
+        let answer = unsafe { callback(survivor, statuses.as_ptr(), statuses.len(), user) };
+        (answer & 0x100 != 0).then(|| answer.to_le_bytes()[0])
     }
 
     /// The labels the mod set, as `(entity, text)`, in order.

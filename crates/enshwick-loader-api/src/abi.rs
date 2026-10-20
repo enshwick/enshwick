@@ -14,7 +14,7 @@ use core::sync::atomic::AtomicUsize;
 pub const ABI_MAJOR: u16 = 1;
 
 /// The minor version of this interface. A newer minor only appends fields.
-pub const ABI_MINOR: u16 = 15;
+pub const ABI_MINOR: u16 = 16;
 
 /// Whether `id` is a valid mod id: 1 to 64 characters of `[a-z0-9-]`.
 ///
@@ -1867,6 +1867,158 @@ pub struct ZoneCheck {
 /// registration; returns 1 to accept the placement after all.
 pub type ZoneCheckFn = unsafe extern "system" fn(check: *const ZoneCheck, user: *mut c_void) -> u8;
 
+/// A game system asking which entity is a survivor, as
+/// [`HostApi::survivor_lookup`] hands it to the mod that answers.
+///
+/// The game keeps one entity per survivor; a mod that keeps several, such as
+/// one per base, answers each asker with the one that suits it. Cells are
+/// whole 0.5 m cells.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::abi::{Header, SurvivorLookup};
+///
+/// let lookup = SurvivorLookup {
+///     header: Header::of::<SurvivorLookup>(),
+///     survivor: 0x47a1_5e4a,
+///     vanilla: 4096,
+///     purpose: SurvivorLookup::SPAWN,
+///     entity: 0,
+///     cell: [10, 0, 10],
+///     bed_of: None,
+///     token: core::ptr::null_mut(),
+/// };
+/// assert_eq!(lookup.purpose, SurvivorLookup::SPAWN);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct SurvivorLookup {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// The survivor's id.
+    pub survivor: u32,
+    /// The game's own answer, 0 for none.
+    pub vanilla: u32,
+    /// Who asks; one of the constants on this type.
+    pub purpose: u32,
+    /// The entity the asker works on, as its purpose says; 0 for none.
+    pub entity: u32,
+    /// The cell its purpose names.
+    pub cell: [i64; 3],
+    /// The bed an entity sleeps in, 0 for none; valid during the call with
+    /// `token`.
+    pub bed_of: Option<unsafe extern "system" fn(token: *mut c_void, entity: u32) -> u32>,
+    /// The argument of `bed_of`.
+    pub token: *mut c_void,
+}
+
+impl SurvivorLookup {
+    /// The pass that keeps one entity per survivor: `entity` is the one it
+    /// looks at, `cell` its home. Answer `entity` to keep it, or another
+    /// entity, which makes the game remove `entity`.
+    pub const UNIQUENESS: u32 = 1;
+    /// A summoning staff used at `cell`: answer the entity to move there, or
+    /// 0 to spawn a new one.
+    pub const SPAWN: u32 = 2;
+    /// A bed at `cell` binding its sleeper: answer the entity that may sleep
+    /// there, 0 for none.
+    pub const BED_OWNER: u32 = 3;
+    /// A player giving bed `entity` at `cell` to the survivor with its staff:
+    /// answer the entity that gets it.
+    pub const ASSIGN_BED: u32 = 4;
+    /// The same assignment asking who slept in bed `entity` at `cell` before:
+    /// answer that entity, 0 for none.
+    pub const PREVIOUS_OCCUPANT: u32 = 5;
+    /// A survivor's idle behaviour: `entity` is the survivor, `cell` where it
+    /// stands; answer the entity whose base it keeps to.
+    pub const ROAMING: u32 = 6;
+    /// The first binding of beds after a load, before beds bind their
+    /// sleepers.
+    pub const BED_BINDING: u32 = 7;
+    /// The cursor measuring how far a bed lies from the survivor before it
+    /// offers to assign it; 0 skips the measure.
+    pub const CURSOR: u32 = 8;
+}
+
+/// The mod's survivor lookup: the call and the pointer given at
+/// registration; returns 1 with the answer in `out`, or 0 for the game's own.
+pub type SurvivorLookupFn =
+    unsafe extern "system" fn(call: *const SurvivorLookup, user: *mut c_void, out: *mut u32) -> u8;
+
+/// A survivor's own check that its bed is still its, after the game kept it,
+/// as [`HostApi::survivor_bed_check`] hands it on. Cells are whole 0.5 m
+/// cells.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::abi::{BedCheck, Header};
+///
+/// let check = BedCheck { header: Header::of::<BedCheck>(), survivor: 7, entity: 4096, bed: 4100, home: [0; 3], bed_at: [4, 0, 4] };
+/// assert_eq!(check.bed, 4100);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct BedCheck {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// The survivor's id.
+    pub survivor: u32,
+    /// The survivor's entity.
+    pub entity: u32,
+    /// The bed.
+    pub bed: u32,
+    /// Where the survivor belongs: its saved spawn cell, or where it stands.
+    pub home: [i64; 3],
+    /// Where the bed stands.
+    pub bed_at: [i64; 3],
+}
+
+/// A filter of survivors' beds: returns 0 to make the game clear the bed.
+pub type BedCheckFn = unsafe extern "system" fn(check: *const BedCheck, user: *mut c_void) -> u8;
+
+/// A summoning staff's use about to spawn or move a survivor, as
+/// [`HostApi::summon_filter`] hands it on.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::abi::{Header, Summon};
+///
+/// let summon = Summon { header: Header::of::<Summon>(), item: 0x5e01, ammo: 0, template: [0; 16], target: [0; 3] };
+/// assert_eq!(summon.ammo, 0);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct Summon {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// The item used.
+    pub item: u32,
+    /// The ammunition it used, 0 for none.
+    pub ammo: u32,
+    /// The template GUID it places, in file order.
+    pub template: [u8; 16],
+    /// The target cell.
+    pub target: [i64; 3],
+}
+
+/// A summon filter: returns 1 to make the game take the item in the same
+/// transaction, and only when the spawn or move works.
+pub type SummonFn = unsafe extern "system" fn(summon: *const Summon, user: *mut c_void) -> u8;
+
+/// The client's survivor menu merging the statuses of every entity of one
+/// survivor: the survivor, `count` status bytes at `statuses`, valid for the
+/// call, and the pointer given at registration; returns 0x100 or-ed with the
+/// byte to show, or 0 to leave the game's.
+pub type SurvivorStatusFn = unsafe extern "system" fn(
+    survivor: u32,
+    statuses: *const u8,
+    count: usize,
+    user: *mut c_void,
+) -> u32;
+
 /// The table of services the loader offers a mod.
 ///
 /// Fields are only ever appended; a mod checks [`Header::covers`] before it
@@ -2134,6 +2286,35 @@ pub struct HostApi {
     /// Allowed during `enshwick_mod_init` only. Since minor 15.
     pub zone_check_filter:
         extern "system" fn(me: ModHandle, callback: ZoneCheckFn, user: *mut c_void) -> Status,
+    /// Makes `callback` with `user` the answer to the game's survivor
+    /// lookups that [`SurvivorLookup`] names; one mod at a time
+    /// ([`Status::REFUSED`] for another). Runs on the server's worker
+    /// threads, in the dedicated server or a hosting client, and for
+    /// [`SurvivorLookup::CURSOR`] on a client alone too. Allowed during
+    /// `enshwick_mod_init` only; [`Status::MISSING`] on a build that lacks a
+    /// piece. Since minor 16.
+    pub survivor_lookup:
+        extern "system" fn(me: ModHandle, callback: SurvivorLookupFn, user: *mut c_void) -> Status,
+    /// Calls `callback` with `user` after a survivor's own bed check kept its
+    /// bed; any filter returning 0 clears it. Server's worker threads.
+    /// Allowed during `enshwick_mod_init` only. Since minor 16.
+    pub survivor_bed_check:
+        extern "system" fn(me: ModHandle, callback: BedCheckFn, user: *mut c_void) -> Status,
+    /// Calls `callback` with `user` before a summoning staff spawns or moves
+    /// a survivor; any filter returning 1 makes the use take the item.
+    /// Server's game thread. Allowed during `enshwick_mod_init` only. Since
+    /// minor 16.
+    pub summon_filter:
+        extern "system" fn(me: ModHandle, callback: SummonFn, user: *mut c_void) -> Status,
+    /// Files item `item` as a summoning staff of the survivor `survivor`, so
+    /// the game treats it as that survivor's staff, on both sides. Allowed
+    /// during `enshwick_mod_init` only. Since minor 16.
+    pub summon_item: extern "system" fn(me: ModHandle, item: u32, survivor: u32) -> Status,
+    /// Makes `callback` with `user` merge the statuses the client's survivor
+    /// menu shows for a survivor with several entities. Client only; one mod
+    /// at a time. Allowed during `enshwick_mod_init` only. Since minor 16.
+    pub survivor_status:
+        extern "system" fn(me: ModHandle, callback: SurvivorStatusFn, user: *mut c_void) -> Status,
 }
 
 /// The exports a mod DLL provides, by name.
@@ -2195,7 +2376,7 @@ const _: () = {
     assert!(core::mem::offset_of!(HostApi, hook_at) == 24 + 35 * 8);
     assert!(core::mem::offset_of!(HostApi, inventory_open) == 24 + 36 * 8);
     assert!(core::mem::offset_of!(HostApi, inventory_submit) == 24 + 38 * 8);
-    assert!(size_of::<HostApi>() == 24 + 46 * 8);
+    assert!(size_of::<HostApi>() == 24 + 51 * 8);
     assert!(size_of::<InventoryOp>() == 32);
     assert!(size_of::<InventoryRequest>() == 32);
     assert!(size_of::<InventoryOpResult>() == 8);
@@ -2212,6 +2393,11 @@ const _: () = {
     assert!(core::mem::offset_of!(HostApi, run_command) == 24 + 40 * 8);
     assert!(core::mem::offset_of!(HostApi, altars_open) == 24 + 41 * 8);
     assert!(core::mem::offset_of!(HostApi, zone_check_filter) == 24 + 45 * 8);
+    assert!(core::mem::offset_of!(HostApi, survivor_lookup) == 24 + 46 * 8);
+    assert!(core::mem::offset_of!(HostApi, survivor_status) == 24 + 50 * 8);
+    assert!(size_of::<SurvivorLookup>() == 8 + 16 + 24 + 16);
+    assert!(size_of::<BedCheck>() == 8 + 12 + 4 + 48);
+    assert!(size_of::<Summon>() == 8 + 8 + 16 + 24);
     assert!(size_of::<Bounds>() == 48);
     assert!(size_of::<AltarInfo>() == 16 + 17 * 48 + 24);
     assert!(size_of::<AltarZoneSize>() == 24);

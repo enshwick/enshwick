@@ -1,25 +1,23 @@
-//! What the cursor's survivor lookup answers.
+//! What the cursor's distance check is told.
 //!
-//! The cursor check that refuses a bed "too far" from a survivor runs on both
-//! sides. A client alone measures from the first copy it knows, often one at
-//! another altar, so it is told no copy exists. A server tells it no copy only
-//! while copies exist, and the vanilla answer otherwise. A client that hosts a
-//! game runs both cursors through one function, whose call sites cannot tell
-//! them apart: it answers as a server, which suits both worlds, since the
-//! answer depends only on the survivor.
+//! Before it offers to assign a bed, the cursor measures how far the bed lies
+//! from the survivor and refuses one "too far". It measures from the entity
+//! the lookup answers, often a copy at another altar. A server, or a client
+//! while it hosts, skips the measure while copies exist and keeps it
+//! otherwise; a client alone, which cannot tell the copies apart, always
+//! skips it, as the server does when copies exist.
 
-/// The answer at a cursor call site.
-///
-/// `hosting` is whether this process runs a game server, always true on the
-/// dedicated server; `client_site` whether the caller is the call site the
-/// client alone is quieted at; `copies` how many copies of the survivor the
-/// server knows; `found` the vanilla answer.
+use enshwick_loader_api::survivors::Answer;
+
+/// The cursor's answer: `hosting` is whether this process runs a game server,
+/// always true on the dedicated server; `copies` how many copies of the
+/// survivor the server knows.
 #[must_use]
-pub(crate) fn answer(hosting: bool, client_site: bool, copies: usize, found: u32) -> u32 {
-    match (hosting, client_site) {
-        (true, _) if copies <= 1 => found,
-        (true, _) | (false, true) => 0,
-        (false, false) => found,
+pub(crate) const fn answer(hosting: bool, copies: usize) -> Answer {
+    if hosting && copies <= 1 {
+        Answer::Vanilla
+    } else {
+        Answer::Nobody
     }
 }
 
@@ -28,18 +26,15 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_server_quiets_the_cursor_only_while_copies_exist() {
-        assert_eq!(answer(true, false, 0, 7), 7);
-        assert_eq!(answer(true, false, 1, 7), 7);
-        assert_eq!(answer(true, false, 2, 7), 0);
-        assert_eq!(answer(true, true, 3, 7), 0);
-        assert_eq!(answer(true, true, 1, 7), 7);
+    fn a_server_skips_the_measure_only_while_copies_exist() {
+        assert_eq!(answer(true, 0), Answer::Vanilla);
+        assert_eq!(answer(true, 1), Answer::Vanilla);
+        assert_eq!(answer(true, 2), Answer::Nobody);
     }
 
     #[test]
-    fn a_client_alone_is_quieted_at_its_own_site_only() {
-        assert_eq!(answer(false, true, 0, 7), 0);
-        assert_eq!(answer(false, true, 5, 7), 0);
-        assert_eq!(answer(false, false, 5, 7), 7);
+    fn a_client_alone_always_skips_it() {
+        assert_eq!(answer(false, 0), Answer::Nobody);
+        assert_eq!(answer(false, 5), Answer::Nobody);
     }
 }

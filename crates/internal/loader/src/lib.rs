@@ -25,6 +25,8 @@ mod crash;
 mod detour;
 pub mod diag;
 #[cfg(windows)]
+mod ecs;
+#[cfg(windows)]
 mod events;
 pub mod holds;
 #[cfg(windows)]
@@ -46,6 +48,8 @@ pub mod settings;
 mod start;
 #[cfg(windows)]
 mod status;
+#[cfg(windows)]
+mod survivors;
 #[cfg(windows)]
 mod watch;
 #[cfg(windows)]
