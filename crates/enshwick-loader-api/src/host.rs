@@ -187,9 +187,7 @@ impl Host {
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         let mut text = Str::EMPTY;
         let status = (self.api.settings)(self.me, Str::new(defaults), &raw mut text);
-        if !status.is_ok() {
-            return Err(Off::new(format!("settings: status {}", status.0)));
-        }
+        crate::load::ok(status, (), || "settings".to_owned())?;
         // SAFETY: valid until this mod calls `settings` again, which the lock
         // holds off until the copy is made.
         let text = unsafe { text.as_str() }.ok_or_else(|| Off::new("settings: not UTF-8"))?;

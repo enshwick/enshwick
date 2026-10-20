@@ -403,11 +403,7 @@ impl Load<'_> {
             language,
             crate::abi::Str::new(text),
         );
-        if status.is_ok() {
-            Ok(())
-        } else {
-            Err(Off::new(format!("add text: status {}", status.0)))
-        }
+        crate::load::ok(status, (), || "add text".to_owned())
     }
 
     /// Serves the resource `key`, built by `builder` from the resource
@@ -457,13 +453,11 @@ impl Load<'_> {
             patch,
             user.cast(),
         );
-        if status.is_ok() {
-            Ok(())
-        } else {
+        if !status.is_ok() {
             // SAFETY: refused, so the loader keeps no copy of the pointer.
             drop(unsafe { Box::from_raw(user) });
-            Err(Off::new(format!("serve resource: status {}", status.0)))
         }
+        crate::load::ok(status, (), || "serve resource".to_owned())
     }
 }
 

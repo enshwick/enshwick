@@ -160,14 +160,9 @@ impl World {
     pub fn component_type(&self, _load: &Load<'_>, name: &str) -> Result<ComponentType, Off> {
         let mut hash = 0;
         let status = (self.host.api().type_hash)(Str::new(name), &raw mut hash);
-        if status.is_ok() {
-            Ok(ComponentType(hash))
-        } else {
-            Err(Off::new(format!(
-                "component type {name}: status {}",
-                status.0
-            )))
-        }
+        crate::load::ok(status, ComponentType(hash), || {
+            format!("component type {name}")
+        })
     }
 
     /// A pointer to `entity`'s component of type `ty`, valid until the game

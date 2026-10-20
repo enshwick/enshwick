@@ -845,7 +845,8 @@ unsafe extern "system" fn run_mid_hook<F: Fn(&mut Registers)>(
     }
 }
 
-fn ok<T>(status: Status, value: T, what: impl FnOnce() -> String) -> Result<T, Off> {
+/// `value` when `status` is OK, otherwise an [`Off`] naming `what` and why.
+pub(crate) fn ok<T>(status: Status, value: T, what: impl FnOnce() -> String) -> Result<T, Off> {
     if status.is_ok() {
         Ok(value)
     } else {
@@ -874,6 +875,17 @@ mod tests {
                 .then_some(())
                 .ok_or_else(|| "a long table".to_owned())
         }
+    }
+
+    #[test]
+    fn a_failed_call_names_what_failed_and_why() {
+        use crate::abi::Status;
+        assert_eq!(super::ok(Status::OK, 3, || unreachable!()), Ok(3));
+        let off = super::ok(Status::MISSING, (), || "component type keen::X".to_owned());
+        assert_eq!(
+            off.unwrap_err().to_string(),
+            "component type keen::X: missing on this game build"
+        );
     }
 
     #[test]
