@@ -108,7 +108,7 @@ impl Load<'_> {
     }
 
     /// The loader's services, also available later through
-    /// [`host`](crate::host).
+    /// [`host()`](crate::host()).
     ///
     /// # Examples
     ///
@@ -467,8 +467,8 @@ impl Load<'_> {
     }
 
     /// The mod's typed settings: `mod-configs/<id>.toml`, written from
-    /// [`Config::template`](crate::config::Config::template) when missing, parsed
-    /// and checked with [`Config::validate`](crate::config::Config::validate).
+    /// [`Config::template`] when missing, parsed and checked with
+    /// [`Config::validate`].
     ///
     /// On a server, the fields marked `#[config(sync)]` are reported to the
     /// loader, which advertises them to players; see
