@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.2.0](https://github.com/themaiby/enshwick/compare/enshwick-flame-altar-zones-v0.1.6...enshwick-flame-altar-zones-v0.2.0) (2026-10-20)
+
+
+### ⚠ BREAKING CHANGES
+
+* consolidate into Enshwick Loader, one API crate and one tool ([#85](https://github.com/themaiby/enshwick/issues/85))
+
+### Other
+
+* consolidate into Enshwick Loader, one API crate and one tool ([#85](https://github.com/themaiby/enshwick/issues/85)) ([5ddfde4](https://github.com/themaiby/enshwick/commit/5ddfde457d24f8e000d2dee1c74508f89582d526))
+
 ## [0.1.6](https://github.com/themaiby/enshwick/compare/enshwick-flame-altar-zones-v0.1.5...enshwick-flame-altar-zones-v0.1.6) (2026-10-20)
 
 

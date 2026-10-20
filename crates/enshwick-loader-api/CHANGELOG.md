@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.3.0](https://github.com/themaiby/enshwick/compare/enshwick-loader-api-v0.2.0...enshwick-loader-api-v0.3.0) (2026-10-20)
+
+
+### ⚠ BREAKING CHANGES
+
+* consolidate into Enshwick Loader, one API crate and one tool ([#85](https://github.com/themaiby/enshwick/issues/85))
+
+### Bug Fixes
+
+* build the docs without rustdoc link errors ([#87](https://github.com/themaiby/enshwick/issues/87)) ([57b02cf](https://github.com/themaiby/enshwick/commit/57b02cf899cf0a0bfc97633ea47339e630f0c0e5))
+
+
+### Other
+
+* consolidate into Enshwick Loader, one API crate and one tool ([#85](https://github.com/themaiby/enshwick/issues/85)) ([5ddfde4](https://github.com/themaiby/enshwick/commit/5ddfde457d24f8e000d2dee1c74508f89582d526))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * enshwick-loader-macros bumped from 0.2.0 to 0.3.0
+
 ## [0.2.0](https://github.com/themaiby/enshwick/compare/enshwick-api-v0.1.5...enshwick-api-v0.2.0) (2026-10-20)
 
 
