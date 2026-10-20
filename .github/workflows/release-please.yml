@@ -53,8 +53,11 @@ jobs:
             cp target/release/enshwick.dll "$dir/mods/enshwick/"
             cp LICENSE "$dir/"
           done
-          for dll in target/release/enshwick_*.dll; do
-            name=$(basename "$dll" .dll | tr '_' '-')
+          # Mods are the crates under mods/; other DLLs in target, such as
+          # proc macros, stay out.
+          for dir in mods/*/; do
+            name=$(basename "$dir")
+            dll="target/release/$(echo "$name" | tr '-' '_').dll"
             mkdir -p "$name/mods"
             cp "$dll" "$name/mods/$name.dll"
             cp LICENSE "$name/"
