@@ -159,12 +159,27 @@ for an event only when some mod subscribed to it.
 | `PlayerJoined` | `PlayerData` (`slot`, `entity`, `key`) | a player's character entered the world |
 | `PlayerLeft` | `PlayerData` | a player who joined is leaving; the character is still there |
 | `Shutdown` | none | an orderly stop begins, with the world and players alive; the final save follows |
+| `BuildingPlaced` | `BuildingData` (`entity`, `player`, `item`, `template`, `position`) | a player placed a piece or prop |
+| `BuildingRemoved` | `BuildingData` (`entity`, `player`, `kind`) | a player picked up or tore down a piece |
 | `SettingsChanged` | none | the mod's settings file changed; `on_config_change` wraps it |
 | `LoaderSettingsChanged` | none | `mod-configs/enshwick.toml` changed |
 
 Game events come from the server only, and from its game thread: keep handlers
 short. `key` is the same for the same player account in every session.
 `load.subscribe(Event, |raw| ...)` is the untyped form.
+
+## The world
+
+`load.world()?` on the server reads the world from the game thread (a game event
+or a scheduled task; elsewhere the reads return `None`):
+
+- `position(entity)` in metres, `template(entity)` as a GUID, and
+  `used_item(entity)`, the item a placed prop came from, which it keeps across
+  saves;
+- `component_type(load, "keen::ecs::Name")` at init, then `component(entity, ty)`
+  for a read-only pointer to any reflected component;
+- `player(entity)` and `players()`: slot, a per-account `key`, permission bits
+  (`is_admin()`) and the name the client sent, which is untrusted.
 
 ## Scheduling
 

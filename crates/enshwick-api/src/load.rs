@@ -44,6 +44,7 @@ impl Off {
             Status::BAD_ARGS => "malformed",
             Status::TOO_LATE => "asked for too late",
             Status::FAULTED => "unavailable: the mod has faulted",
+            Status::WRONG_THREAD => "called off the thread it serves",
             _ => "failed",
         };
         Self::new(format!("{what}: {why}"))
@@ -366,6 +367,21 @@ impl Load<'_> {
                 Err(off) => crate::warn!("settings change skipped, the running values stay: {off}"),
             }
         })
+    }
+
+    /// Reads of the server's world: components, templates, positions and
+    /// players.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] when the loader is too old or the game build lacks a type the
+    /// reads need.
+    ///
+    /// # Examples
+    ///
+    /// See [`World`](crate::world::World).
+    pub fn world(&mut self) -> Result<crate::world::World, Off> {
+        crate::world::World::resolve(self)
     }
 
     /// The mod's [`Scheduler`](crate::schedule::Scheduler), which runs work on

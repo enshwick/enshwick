@@ -5,7 +5,7 @@
 
 use core::ffi::c_void;
 
-use crate::abi::{Event, PlayerData, TickData};
+use crate::abi::{BuildingData, Event, PlayerData, TickData};
 
 mod sealed {
     pub trait Sealed {}
@@ -90,6 +90,10 @@ with_data! {
     PlayerJoined = PLAYER_JOINED: PlayerData;
     /// [`Event::PLAYER_LEFT`].
     PlayerLeft = PLAYER_LEFT: PlayerData;
+    /// [`Event::BUILDING_PLACED`].
+    BuildingPlaced = BUILDING_PLACED: BuildingData;
+    /// [`Event::BUILDING_REMOVED`].
+    BuildingRemoved = BUILDING_REMOVED: BuildingData;
 }
 
 #[cfg(test)]

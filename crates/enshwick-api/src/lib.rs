@@ -62,6 +62,7 @@ mod host;
 mod load;
 pub mod schedule;
 pub mod state;
+pub mod world;
 
 pub use enshwick_macros::Config;
 pub use hook::{FnPtr, Hook, Next};

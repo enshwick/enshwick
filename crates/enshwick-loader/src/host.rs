@@ -220,6 +220,11 @@ pub(crate) static API: HostApi = HostApi {
     data_dir,
     log_level,
     subscribe,
+    type_hash,
+    component,
+    entity_template,
+    player,
+    players,
 };
 
 /// A static slice from a pointer and a count, empty for a null pointer.
@@ -517,7 +522,7 @@ extern "system" fn subscribe(
     if record.off.load(Ordering::Acquire) {
         return Status::FAULTED;
     }
-    if !(Event::SETTINGS_CHANGED.0..=Event::SHUTDOWN.0).contains(&event.0) {
+    if !(Event::SETTINGS_CHANGED.0..=Event::BUILDING_REMOVED.0).contains(&event.0) {
         return Status::MISSING;
     }
     if loader.delivery.get().is_some() {
@@ -533,6 +538,84 @@ extern "system" fn subscribe(
         user: user.expose_provenance(),
     });
     Status::OK
+}
+
+extern "system" fn type_hash(type_name: Str, out: *mut u32) -> Status {
+    let (Some(loader), Some(type_name)) = (loader(), text(type_name)) else {
+        return Status::BAD_ARGS;
+    };
+    match loader.reflection.type_info(type_name) {
+        Ok(info) => {
+            crate::world::type_hash(loader, info.va()).map_or(Status::MISSING, |h| put(out, h))
+        }
+        Err(error) => lookup(&error),
+    }
+}
+
+/// The loader and the calling mod, when the mod is on.
+fn caller(me: ModHandle) -> Result<&'static Loader, Status> {
+    let loader = loader().ok_or(Status::BAD_ARGS)?;
+    let (_, record) = loader.record(me).ok_or(Status::BAD_ARGS)?;
+    if record.off.load(Ordering::Acquire) {
+        return Err(Status::FAULTED);
+    }
+    Ok(loader)
+}
+
+extern "system" fn component(
+    me: ModHandle,
+    entity: u32,
+    type_hash: u32,
+    out: *mut *const core::ffi::c_void,
+) -> Status {
+    match caller(me).and_then(|loader| crate::world::component(loader, entity, type_hash)) {
+        Ok(data) => put(out, data),
+        Err(status) => status,
+    }
+}
+
+extern "system" fn entity_template(me: ModHandle, entity: u32, out: *mut [u8; 16]) -> Status {
+    match caller(me).and_then(|loader| crate::world::template(loader, entity)) {
+        Ok(guid) => put(out, guid),
+        Err(status) => status,
+    }
+}
+
+extern "system" fn player(me: ModHandle, entity: u32, out: *mut api_frame::PlayerInfo) -> Status {
+    let found = caller(me)
+        .and_then(crate::world::players)
+        .and_then(|players| {
+            players
+                .into_iter()
+                .find(|p| p.entity == entity)
+                .ok_or(Status::MISSING)
+        });
+    match found {
+        Ok(info) => put(out, info),
+        Err(status) => status,
+    }
+}
+
+extern "system" fn players(
+    me: ModHandle,
+    out: *mut api_frame::PlayerInfo,
+    capacity: u32,
+    count: *mut u32,
+) -> Status {
+    let players = match caller(me).and_then(crate::world::players) {
+        Ok(players) => players,
+        Err(status) => return status,
+    };
+    let total = u32::try_from(players.len()).unwrap_or(u32::MAX);
+    if !out.is_null() {
+        for (index, info) in players.into_iter().take(capacity as usize).enumerate() {
+            // SAFETY: the caller passes room for `capacity` entries.
+            let entry = unsafe { out.add(index) };
+            // SAFETY: as above.
+            unsafe { entry.write(info) };
+        }
+    }
+    put(count, total)
 }
 
 /// Mod handles start at 1; 0 is no mod.

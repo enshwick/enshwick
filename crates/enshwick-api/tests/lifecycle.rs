@@ -160,6 +160,44 @@ mod tests {
         Level::WARN
     }
 
+    extern "system" fn type_hash(_t: Str, out: *mut u32) -> Status {
+        // SAFETY: the safe layer passes a valid out pointer.
+        unsafe { *out = 0x027a_c564 };
+        Status::OK
+    }
+
+    extern "system" fn component(
+        _me: ModHandle,
+        _entity: u32,
+        _hash: u32,
+        _out: *mut *const core::ffi::c_void,
+    ) -> Status {
+        Status::MISSING
+    }
+
+    extern "system" fn entity_template(_me: ModHandle, _e: u32, _out: *mut [u8; 16]) -> Status {
+        Status::MISSING
+    }
+
+    extern "system" fn player(
+        _me: ModHandle,
+        _e: u32,
+        _out: *mut enshwick_api::abi::PlayerInfo,
+    ) -> Status {
+        Status::MISSING
+    }
+
+    extern "system" fn players(
+        _me: ModHandle,
+        _out: *mut enshwick_api::abi::PlayerInfo,
+        _capacity: u32,
+        count: *mut u32,
+    ) -> Status {
+        // SAFETY: the safe layer passes a valid out pointer.
+        unsafe { *count = 0 };
+        Status::OK
+    }
+
     fn evaluated() -> u32 {
         panic!("a filtered line evaluates nothing")
     }
@@ -183,6 +221,11 @@ mod tests {
         data_dir,
         log_level,
         subscribe,
+        type_hash,
+        component,
+        entity_template,
+        player,
+        players,
     };
 
     extern "system" fn original(value: u32) -> u32 {
