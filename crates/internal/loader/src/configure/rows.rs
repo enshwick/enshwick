@@ -3,6 +3,7 @@
 //! its value, whether the player may change it, and the TOML a change writes.
 
 use enshwick_loader_api::config::{Field, Kind, Schema, Stage};
+use enshwick_loader_api::i18n::{Language, Texts};
 
 /// The most stops a slider row gets; longer whole-number ranges slide
 /// freely and round.
@@ -70,7 +71,7 @@ pub struct Row {
 
 /// `max_altars` as `Max altars`.
 #[must_use]
-pub fn words(key: &str) -> String {
+pub fn key_words(key: &str) -> String {
     let spaced = key.replace(['_', '-'], " ");
     let mut chars = spaced.chars();
     chars.next().map_or_else(String::new, |first| {
@@ -106,16 +107,40 @@ fn number(value: &toml::Value) -> Option<f32> {
     }
 }
 
+/// A mod's texts in the player's language, for its rows' words.
+#[derive(Clone, Copy, Debug)]
+pub struct Words<'a> {
+    /// The mod's texts.
+    pub texts: &'a Texts,
+    /// The player's language.
+    pub language: Language,
+}
+
+impl Words<'_> {
+    fn get(&self, key: &str) -> Option<String> {
+        self.texts.get(key, self.language).map(str::to_owned)
+    }
+}
+
 #[expect(
     clippy::cast_possible_truncation,
     clippy::cast_sign_loss,
     reason = "a whole-number range of at most MAX_STOPS values"
 )]
-fn widget(field: &Field, value: &toml::Value) -> Widget {
+fn widget(field: &Field, value: &toml::Value, words: Option<Words<'_>>) -> Widget {
     if !field.choices.is_empty() {
         let shown = value.to_string();
         return Widget::Choice {
-            options: field.choices.iter().map(|c| plain(c)).collect(),
+            options: field
+                .choices
+                .iter()
+                .map(|c| {
+                    let choice = plain(c);
+                    words
+                        .and_then(|w| w.get(&format!("{}.{choice}", field.text)))
+                        .unwrap_or(choice)
+                })
+                .collect(),
             index: field
                 .choices
                 .iter()
@@ -148,9 +173,16 @@ fn widget(field: &Field, value: &toml::Value) -> Widget {
 }
 
 /// The rows of `schema` with the values of the settings file `file`, and
-/// a joined server's join values `server` over them.
+/// a joined server's join values `server` over them, labelled with the
+/// mod's `words` where it has them: `<text>` for a row's label, `<text>.doc`
+/// for its description, `<text>.<choice>` for a choice.
 #[must_use]
-pub fn rows(schema: &Schema, file: &str, server: Option<&toml::Table>) -> Vec<Row> {
+pub fn rows(
+    schema: &Schema,
+    file: &str,
+    server: Option<&toml::Table>,
+    words: Option<Words<'_>>,
+) -> Vec<Row> {
     let table: toml::Table = file.parse().unwrap_or_default();
     schema
         .fields
@@ -165,7 +197,7 @@ pub fn rows(schema: &Schema, file: &str, server: Option<&toml::Table>) -> Vec<Ro
                 .cloned()
                 .or_else(|| default(field))
                 .unwrap_or_else(|| toml::Value::String(String::new()));
-            let widget = widget(field, &value);
+            let widget = widget(field, &value, words);
             let lock = if from_server {
                 Lock::Server
             } else if matches!(widget, Widget::Text(_)) {
@@ -175,8 +207,12 @@ pub fn rows(schema: &Schema, file: &str, server: Option<&toml::Table>) -> Vec<Ro
             };
             Row {
                 key: field.key.clone(),
-                label: words(&field.key),
-                doc: field.doc.clone(),
+                label: words
+                    .and_then(|w| w.get(&field.text))
+                    .unwrap_or_else(|| key_words(&field.key)),
+                doc: words
+                    .and_then(|w| w.get(&format!("{}.doc", field.text)))
+                    .unwrap_or_else(|| field.doc.clone()),
                 widget,
                 lock,
                 restart: field.stage.needs_restart(),
@@ -249,7 +285,7 @@ mod tests {
     #[test]
     fn settings_show_as_rows_with_their_values() {
         let file = "enabled = false\nmax_altars = 6\nradius = 2.5\nmode = \"on\"\n";
-        let rows = rows(&schema(), file, None);
+        let rows = rows(&schema(), file, None, None);
         assert_eq!(rows[0].widget, Widget::Toggle(false));
         assert_eq!(rows[1].label, "Max altars");
         assert!(rows[1].restart);
@@ -289,12 +325,37 @@ mod tests {
     #[test]
     fn a_joined_servers_values_show_locked() {
         let server: toml::Table = "radius = 4.0".parse().unwrap();
-        let rows = rows(&schema(), "radius = 1.0", Some(&server));
+        let rows = rows(&schema(), "radius = 1.0", Some(&server), None);
         assert_eq!(rows[2].lock, Lock::Server);
         assert!(
             matches!(rows[2].widget, Widget::Slider { value, .. } if (value - 4.0).abs() < 1e-3)
         );
         assert_eq!(rows[0].lock, Lock::Open);
+    }
+
+    #[test]
+    fn a_mods_texts_label_its_rows_in_the_players_language() {
+        let texts = Texts::parse(
+            "[en]\n\"config.max_altars\" = \"Altars\"\n[uk]\n\"config.max_altars\" = \"Вівтарі\"\n\"config.max_altars.doc\" = \"На рівень.\"\n\"config.mode.on\" = \"Увімк.\"\n",
+        )
+        .unwrap();
+        let words = Words {
+            texts: &texts,
+            language: Language::UK_UA,
+        };
+        let rows = rows(&schema(), "", None, Some(words));
+        assert_eq!(rows[1].label, "Вівтарі");
+        assert_eq!(rows[1].doc, "На рівень.");
+        assert_eq!(rows[0].label, "Enabled");
+        assert!(
+            matches!(&rows[3].widget, Widget::Choice { options, .. } if options[1] == "Увімк.")
+        );
+        let german = rows_in(&texts, Language::DE_DE);
+        assert_eq!(german[1].label, "Altars");
+    }
+
+    fn rows_in(texts: &Texts, language: Language) -> Vec<Row> {
+        rows(&schema(), "", None, Some(Words { texts, language }))
     }
 
     #[test]
@@ -311,7 +372,7 @@ mod tests {
         assert_eq!(picked(schema.field("mode").unwrap(), 5), None);
         let v: toml::Table = format!("v = {}", toggled(true)).parse().unwrap();
         assert!(schema.field("enabled").unwrap().check(&v["v"]).is_ok());
-        assert_eq!(words("max_altars"), "Max altars");
-        assert_eq!(words(""), "");
+        assert_eq!(key_words("max_altars"), "Max altars");
+        assert_eq!(key_words(""), "");
     }
 }

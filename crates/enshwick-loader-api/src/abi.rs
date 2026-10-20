@@ -14,7 +14,7 @@ use core::sync::atomic::AtomicUsize;
 pub const ABI_MAJOR: u16 = 1;
 
 /// The minor version of this interface. A newer minor only appends fields.
-pub const ABI_MINOR: u16 = 42;
+pub const ABI_MINOR: u16 = 43;
 
 /// Whether `id` is a valid mod id: 1 to 64 characters of `[a-z0-9-]`.
 ///
@@ -4144,6 +4144,11 @@ pub struct HostApi {
     /// `enshwick_mod_init` only. Since minor 41.
     pub config_check:
         extern "system" fn(me: ModHandle, callback: ConfigCheckFn, user: *mut c_void) -> Status,
+    /// Hands the loader the mod's texts, a TOML table per language code as
+    /// [`crate::i18n::Texts`] reads them, for the loader's own screens: the
+    /// Mods screen labels the mod's settings with them. A later call
+    /// replaces them. Since minor 43.
+    pub texts: extern "system" fn(me: ModHandle, toml: Str) -> Status,
 }
 
 /// The exports a mod DLL provides, by name.
@@ -4205,7 +4210,7 @@ const _: () = {
     assert!(core::mem::offset_of!(HostApi, hook_at) == 24 + 35 * 8);
     assert!(core::mem::offset_of!(HostApi, inventory_open) == 24 + 36 * 8);
     assert!(core::mem::offset_of!(HostApi, inventory_submit) == 24 + 38 * 8);
-    assert!(size_of::<HostApi>() == 24 + 103 * 8);
+    assert!(size_of::<HostApi>() == 24 + 104 * 8);
     assert!(core::mem::offset_of!(HostApi, config_schema) == 24 + 92 * 8);
     assert!(core::mem::offset_of!(HostApi, time_of_day) == 24 + 73 * 8);
     assert!(core::mem::offset_of!(HostApi, set_time_speed) == 24 + 76 * 8);
@@ -4272,6 +4277,7 @@ const _: () = {
     assert!(size_of::<UiFrame>() == 24);
     assert!(size_of::<UiWidget>() == 8 + 16 + 32 + 8 + 32);
     assert!(size_of::<UiMarker>() == 8 + 24 + 16 + 8);
+    assert!(core::mem::offset_of!(HostApi, texts) == 24 + 103 * 8);
     assert!(core::mem::offset_of!(HostApi, config_check) == 24 + 102 * 8);
     assert!(size_of::<UiDialog>() == 8 + 48 + 8);
     assert!(size_of::<GameEventData>() == 24);

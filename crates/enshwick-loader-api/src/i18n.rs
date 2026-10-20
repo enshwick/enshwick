@@ -188,6 +188,28 @@ impl Texts {
         find(language).or_else(|| find(Language::FALLBACK))
     }
 
+    /// The texts as TOML, a table per language code, as [`Texts::parse`]
+    /// reads them.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_loader_api::i18n::Texts;
+    ///
+    /// let texts = Texts::parse("[uk]\ngreeting = \"Привіт\"\n")?;
+    /// assert_eq!(Texts::parse(&texts.to_toml())?, texts);
+    /// # Ok::<(), enshwick_loader_api::Off>(())
+    /// ```
+    #[must_use]
+    pub fn to_toml(&self) -> String {
+        let tables: BTreeMap<&str, &BTreeMap<String, String>> = self
+            .by_language
+            .iter()
+            .map(|(language, entries)| (language.code(), entries))
+            .collect();
+        toml::to_string(&tables).unwrap_or_default()
+    }
+
     /// Every language with a text for `key`, and the text, in no set order.
     ///
     /// # Examples
@@ -216,6 +238,9 @@ impl Texts {
 impl Load<'_> {
     /// The mod's texts: `embedded`, usually `include_str!("texts.toml")`,
     /// with `mod-configs/<id>.texts.toml` over it when the server has one.
+    /// The loader keeps them too, to label the mod's settings on the Mods
+    /// screen: `config.<field>` (or the field's `text` key) for a row,
+    /// `<key>.doc` for its description and `<key>.<choice>` for a choice.
     ///
     /// # Errors
     ///
@@ -248,6 +273,14 @@ impl Load<'_> {
                 Texts::parse(&text)
                     .map_err(|off| Off::new(format!("{}: {off}", path.display())))?,
             );
+        }
+        let api = self.host().api();
+        if api
+            .header
+            .covers(core::mem::offset_of!(crate::abi::HostApi, texts) + size_of::<usize>())
+        {
+            let toml = texts.to_toml();
+            let _kept = (api.texts)(self.host().handle(), crate::abi::Str::new(&toml));
         }
         Ok(texts)
     }

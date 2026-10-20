@@ -131,9 +131,12 @@ mods with their names, versions, descriptions and authors, and shows each
 mod's settings as the game's own rows, built from the schema: a toggle for
 `bool`, a slider for a number with a range (in stops for whole numbers up to
 32 values), a dropdown for `choices`, and the value with the file's name for
-the rest (text, lists, tables, numbers without a range). The label is the key
-in words, the doc comment shows under it, `startup` rows say "after a
-restart", and while the client is joined to a server that sets a mod's `sync`
+the rest (text, lists, tables, numbers without a range). Rows speak the
+player's language through the mod's [texts](content/texts.md), which
+`load.texts` hands the loader: the label is the field's text key
+(`config.<field>` or its `text`), the description under it `<key>.doc`, a
+choice `<key>.<choice>`; without a text, the label is the key in words and
+the description the doc comment. `startup` rows say "after a restart", and while the client is joined to a server that sets a mod's `sync`
 values, those rows show the server's values and take no changes. A change is
 written at once, as the game applies its own settings.
 

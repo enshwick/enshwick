@@ -414,7 +414,14 @@ fn server_settings(
         if let Some((heard_id, admin, heard_schema, text)) = settings
             && heard_id == id
         {
-            *rows = rows::rows(&heard_schema, &text, None);
+            let texts = crate::host::loader()
+                .and_then(|loader| loader.mods.iter().find(|m| m.id == id))
+                .and_then(|m| m.texts.lock().ok().and_then(|t| t.clone()));
+            let words = texts.as_ref().map(|texts| rows::Words {
+                texts,
+                language: crate::content::language(),
+            });
+            *rows = rows::rows(&heard_schema, &text, None, words);
             if !admin {
                 for row in rows.iter_mut() {
                     row.lock = Lock::Server;
@@ -531,7 +538,12 @@ fn page_rows(loader: &Loader, index: usize) -> Vec<Row> {
         .ok()
         .and_then(|s| s.clone())
         .and_then(|values| server_table(&values));
-    rows::rows(&schema, &file, server.as_ref())
+    let texts = record.texts.lock().ok().and_then(|t| t.clone());
+    let words = texts.as_ref().map(|texts| rows::Words {
+        texts,
+        language: crate::content::language(),
+    });
+    rows::rows(&schema, &file, server.as_ref(), words)
 }
 
 /// A joined server's join values, an inline table, as a table.
@@ -668,7 +680,12 @@ fn world_rows(
             let file =
                 std::fs::read_to_string(loader.configs_dir.join(format!("{}.toml", record.id)))
                     .unwrap_or_default();
-            let rows = rows::rows(&schema, &file, None);
+            let texts = record.texts.lock().ok().and_then(|t| t.clone());
+            let words = texts.as_ref().map(|texts| rows::Words {
+                texts,
+                language: crate::content::language(),
+            });
+            let rows = rows::rows(&schema, &file, None, words);
             Some((index, record.label(), schema, rows))
         })
         .collect()

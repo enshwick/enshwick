@@ -102,6 +102,10 @@ name = "stats"
 required-features = ["test"]
 
 [[test]]
+name = "published_texts"
+required-features = ["test"]
+
+[[test]]
 name = "symbols"
 required-features = ["test"]
 

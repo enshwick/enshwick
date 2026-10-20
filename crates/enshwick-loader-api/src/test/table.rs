@@ -107,6 +107,8 @@ pub(crate) struct State {
     pub(crate) markers: Vec<super::FakeMarker>,
     /// The mod's check of new settings texts.
     pub(crate) config_check: Option<(ConfigCheckFn, usize)>,
+    /// The texts the mod handed the loader last, as TOML.
+    pub(crate) published_texts: Option<String>,
     /// The frame drawing now: its token, whether a window is open and what
     /// was drawn.
     pub(crate) frame: Option<(u64, bool, Vec<super::Drawn>)>,
@@ -212,6 +214,7 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         hud: None,
         markers: Vec::new(),
         config_check: None,
+        published_texts: None,
         frame: None,
         inputs: Vec::new(),
         dialogs: Vec::new(),
@@ -1856,6 +1859,14 @@ extern "system" fn config_check(
     })
 }
 
+extern "system" fn texts(_me: ModHandle, toml: Str) -> Status {
+    let toml = text(toml);
+    with(Status::MISSING, |s| {
+        s.published_texts = Some(toml);
+        Status::OK
+    })
+}
+
 pub(crate) static TABLE: HostApi = HostApi {
     header: Header::of::<HostApi>(),
     host_version: Str::new("0.0.0-test"),
@@ -1962,4 +1973,5 @@ pub(crate) static TABLE: HostApi = HostApi {
     ui_hud,
     ui_markers,
     config_check,
+    texts,
 };

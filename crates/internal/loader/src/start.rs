@@ -205,6 +205,7 @@ fn records(
             sync_out: Mutex::new(String::new()),
             schema: Mutex::new(None),
             check: OnceLock::new(),
+            texts: Mutex::new(None),
         })
         .collect()
 }
