@@ -3,7 +3,8 @@
 [`load.world()`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/load.rs)
 returns a
 [`World`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/world.rs):
-reads of the server's world, entity labels and chat lines. It is `Copy`; get
+reads of the server's world, entity queries, labels, chat lines, destroy
+requests and saves. It is `Copy`; get
 it during `init` and move it into handlers and tasks.
 
 ```rust
@@ -66,6 +67,44 @@ fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_
     })
 }
 ```
+
+## Finding entities
+
+`entities(ty)` returns every entity with a component of type `ty` and a place
+in the world, as `Placed { entity, position }`, position in metres;
+`near(point, radius, ty)` those within `radius` metres of `point`, nearest
+first. `transform_type()` is the component every placed entity has, so
+`near(point, radius, world.transform_type())` finds everything there. The
+engine walks every archetype with the component, so call them now and then,
+from a command or a timer, not on every step.
+
+```rust
+fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+    let world = load.world()?;
+    let beds = world.component_type(load, "keen::ecs::NpcBed")?;
+    load.command("beds", "counts the beds", move |_ctx, _args| {
+        format!("{} beds", world.entities(beds).len()).into()
+    })
+}
+```
+
+## Destroying entities and saving
+
+`destroy(entity)` asks the server to remove an entity after the systems of
+the next step, the way the game removes things itself: no loot drops and no
+death is raised. It refuses a player's character (`WorldError::Refused`) and
+an entity not in the world (`WorldError::Gone`).
+
+`save()` asks the server to save the world now, as its timed saves do;
+[`WorldSaved`](events.md) follows once the save is on disk. A save already
+under way counts as asked. Before the world has loaded it is refused.
+
+`key()` names the world the server runs: its save file's name and a hash of
+its folder, such as `world0-1a2b3c4d`, the same in every session. A
+[world store](state.md#per-world-state) files the mod's state under it.
+
+All three need ABI minor 21 and, like the reads, the game thread; `key()`
+works from any thread.
 
 ## Players
 

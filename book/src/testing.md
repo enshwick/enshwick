@@ -162,6 +162,8 @@ Every method of `FakeHost` takes and returns the builder.
 | `caller_frame(frame)`                | The caller's context a hook with `HookFlags::CALLER_FRAME` reads.                     |
 | `component(entity, type_hash, data)` | A component of an entity, by address; it must stay valid while the fake is installed. |
 | `template(entity, guid)`             | The template GUID of an entity.                                                       |
+| `placed(type_hash, entity, at)`      | An entity with a component and a place, for `World::entities` and `World::near`.      |
+| `world_key(key)`                     | The key of the running world, for `World::key` and world stores.                      |
 | `player(info)`                       | A connected player with a character in the world.                                     |
 | `loaded(info)`                       | A loaded mod that `enshwick_loader_api::mods()` lists.                                |
 | `join_missing(info)`                 | A server mod that `enshwick_loader_api::mods::join_missing()` lists.                  |
@@ -205,6 +207,8 @@ What the mod asked for, each in order:
 | `chat()`               | `(account key, text)` of each chat line sent; key 0 for everyone.      |
 | `labels()`             | `(entity, text)` of each label set.                                    |
 | `game_event_types()`   | The engine event types asked for, by hash; 0 for every type.           |
+| `destroyed()`          | The entities the mod asked the world to destroy.                       |
+| `saves()`              | How many saves the mod asked for.                                      |
 | `published()`          | `(name, version)` of each service published.                           |
 | `status()`             | The lines the mod's status sources give now.                           |
 | `settings_defaults()`  | The defaults the mod passed each time it read its settings.            |

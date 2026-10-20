@@ -1,12 +1,12 @@
-//! Reads of the server's world: components, templates, positions and
-//! players; entity labels and chat lines. Call them on the server's game thread, from a game event or a
+//! The server's world: components, templates, positions and players,
+//! entity queries, labels, chat lines, destroy requests and saves. Call them on the server's game thread, from a game event or a
 //! [`Scheduler`](crate::schedule::Scheduler) task; elsewhere they return
 //! `None` or nothing. On a client the server is the built-in one, while it
 //! hosts a game.
 
 use core::ffi::c_void;
 
-use crate::abi::{Header, HostApi, PlayerInfo, Status, Str};
+use crate::abi::{EntityPlace, Header, HostApi, PlayerInfo, Status, Str};
 use crate::ecs::Entity;
 use crate::{Host, Load, Off};
 
@@ -94,6 +94,85 @@ impl Player {
     #[must_use]
     pub const fn is_admin(&self) -> bool {
         self.permissions & PlayerInfo::CAN_KICK_BAN != 0
+    }
+}
+
+/// An entity with a place in the world, from [`World::entities`] and
+/// [`World::near`].
+///
+/// # Examples
+///
+/// See [`World::near`].
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Placed {
+    /// The entity.
+    pub entity: Entity,
+    /// Where it is, in metres.
+    pub position: [f64; 3],
+}
+
+impl Placed {
+    fn from_abi(place: &EntityPlace) -> Self {
+        Self {
+            entity: Entity(place.entity),
+            position: crate::ecs::metres(place.position),
+        }
+    }
+
+    /// The distance from `point` in metres.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_loader_api::ecs::Entity;
+    /// use enshwick_loader_api::world::Placed;
+    ///
+    /// let chest = Placed { entity: Entity(7), position: [3.0, 0.0, 4.0] };
+    /// assert_eq!(chest.distance([0.0, 0.0, 0.0]), 5.0);
+    /// ```
+    #[must_use]
+    pub fn distance(&self, point: [f64; 3]) -> f64 {
+        let [x, y, z] = [0, 1, 2].map(|i| self.position[i] - point[i]);
+        (x * x + y * y + z * z).sqrt()
+    }
+}
+
+/// Why the world refused a request.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::world::WorldError;
+///
+/// assert_eq!(WorldError::WrongThread.to_string(), "not on the server's game thread");
+/// ```
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
+#[non_exhaustive]
+pub enum WorldError {
+    /// Called off the server's game thread, or while no server runs.
+    #[error("not on the server's game thread")]
+    WrongThread,
+    /// The entity is not in the world.
+    #[error("the entity is not in the world")]
+    Gone,
+    /// The loader is too old, or this game build lacks the piece.
+    #[error("not available on this loader or game build")]
+    Missing,
+    /// The world refused: a player's character, or a save before the world
+    /// has loaded.
+    #[error("refused by the world")]
+    Refused,
+}
+
+impl WorldError {
+    fn from_status(status: Status, entity: bool) -> Result<(), Self> {
+        match status {
+            Status::OK => Ok(()),
+            Status::WRONG_THREAD => Err(Self::WrongThread),
+            Status::MISSING if entity => Err(Self::Gone),
+            Status::REFUSED | Status::BAD_ARGS => Err(Self::Refused),
+            _ => Err(Self::Missing),
+        }
     }
 }
 
@@ -363,6 +442,154 @@ impl World {
         }
     }
 
+    /// Every entity with a component of type `ty` and a place in the world,
+    /// such as every bed or every chest; with [`World::transform_type`],
+    /// every placed entity. The engine walks every such archetype, so call
+    /// it now and then, not every step. On the game thread only; empty
+    /// elsewhere.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// fn count(load: &enshwick_loader_api::Load<'_>, world: &enshwick_loader_api::world::World) -> Result<usize, enshwick_loader_api::Off> {
+    ///     let beds = world.component_type(load, "keen::ecs::NpcBed")?;
+    ///     Ok(world.entities(beds).len())
+    /// }
+    /// ```
+    #[must_use]
+    pub fn entities(&self, ty: ComponentType) -> Vec<Placed> {
+        if !self.offers(core::mem::offset_of!(HostApi, entities)) {
+            return Vec::new();
+        }
+        let entities = self.host.api().entities;
+        let mut capacity = 1024u32;
+        loop {
+            let mut places = vec![EntityPlace::default(); capacity as usize];
+            let mut count = 0u32;
+            let status = entities(
+                self.host.handle(),
+                ty.0,
+                places.as_mut_ptr(),
+                capacity,
+                &raw mut count,
+            );
+            if !status.is_ok() {
+                return Vec::new();
+            }
+            if count <= capacity {
+                places.truncate(count as usize);
+                return places.iter().map(Placed::from_abi).collect();
+            }
+            capacity = count;
+        }
+    }
+
+    /// The entities with a component of type `ty` within `radius` metres of
+    /// `point`, nearest first; with [`World::transform_type`], every placed
+    /// entity there. On the game thread only; empty elsewhere.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// fn nearby(world: &enshwick_loader_api::world::World, player: enshwick_loader_api::ecs::Entity) -> usize {
+    ///     let Some(at) = world.position(player) else { return 0 };
+    ///     world.near(at, 20.0, world.transform_type()).len()
+    /// }
+    /// ```
+    #[must_use]
+    pub fn near(&self, point: [f64; 3], radius: f64, ty: ComponentType) -> Vec<Placed> {
+        let mut found: Vec<(f64, Placed)> = self
+            .entities(ty)
+            .into_iter()
+            .map(|placed| (placed.distance(point), placed))
+            .filter(|&(distance, _)| distance <= radius)
+            .collect();
+        found.sort_by(|a, b| a.0.total_cmp(&b.0));
+        found.into_iter().map(|(_, placed)| placed).collect()
+    }
+
+    /// The component type every placed entity has, `CurrentTransform`.
+    ///
+    /// # Examples
+    ///
+    /// See [`World::near`].
+    #[must_use]
+    pub const fn transform_type(&self) -> ComponentType {
+        self.transform
+    }
+
+    /// Asks the server to destroy `entity` after the systems of the next
+    /// step, as the game removes things itself: no loot and no death.
+    ///
+    /// # Errors
+    ///
+    /// [`WorldError::Refused`] for a player's character,
+    /// [`WorldError::Gone`] for an entity not in the world,
+    /// [`WorldError::WrongThread`] off the game thread and
+    /// [`WorldError::Missing`] under a loader older than ABI minor 21.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// fn clear(world: &enshwick_loader_api::world::World, drop: enshwick_loader_api::ecs::Entity) {
+    ///     if let Err(why) = world.destroy(drop) {
+    ///         enshwick_loader_api::warn!("entity {} stays: {why}", drop.0);
+    ///     }
+    /// }
+    /// ```
+    pub fn destroy(&self, entity: Entity) -> Result<(), WorldError> {
+        if !self.offers(core::mem::offset_of!(HostApi, destroy)) {
+            return Err(WorldError::Missing);
+        }
+        WorldError::from_status(
+            (self.host.api().destroy)(self.host.handle(), entity.0),
+            true,
+        )
+    }
+
+    /// Asks the server to save the world now, as its timed saves do;
+    /// [`WorldSaved`](crate::events::WorldSaved) follows once the save is on
+    /// disk. A save already under way counts as asked.
+    ///
+    /// # Errors
+    ///
+    /// [`WorldError::Refused`] while the world may not be saved, as before
+    /// it has loaded; [`WorldError::WrongThread`] off the game thread;
+    /// [`WorldError::Missing`] under a loader older than ABI minor 21.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// fn checkpoint(world: &enshwick_loader_api::world::World) {
+    ///     if let Err(why) = world.save() {
+    ///         enshwick_loader_api::warn!("no save now: {why}");
+    ///     }
+    /// }
+    /// ```
+    pub fn save(&self) -> Result<(), WorldError> {
+        if !self.offers(core::mem::offset_of!(HostApi, save_world)) {
+            return Err(WorldError::Missing);
+        }
+        WorldError::from_status((self.host.api().save_world)(self.host.handle()), false)
+    }
+
+    /// The key of the world the server runs: its save file's name and a hash
+    /// of its folder, such as `world0-1a2b3c4d`, the same in every session;
+    /// `None` before the server has read the world, or under a loader older
+    /// than ABI minor 21. Any thread.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// fn folder(world: &enshwick_loader_api::world::World) -> Option<String> {
+    ///     world.key().map(|key| format!("worlds/{key}"))
+    /// }
+    /// ```
+    #[must_use]
+    pub fn key(&self) -> Option<String> {
+        world_key(self.host)
+    }
+
     /// Every connected player with a character in the world.
     ///
     /// # Examples
@@ -392,4 +619,19 @@ impl World {
             .map(Player::from_info)
             .collect()
     }
+}
+
+/// The key of the world the server runs, from the loader.
+pub(crate) fn world_key(host: Host) -> Option<String> {
+    let api = host.api();
+    let end = core::mem::offset_of!(HostApi, world_key) + size_of::<usize>();
+    if !api.header.covers(end) {
+        return None;
+    }
+    let mut out = Str::EMPTY;
+    if !(api.world_key)(host.handle(), &raw mut out).is_ok() {
+        return None;
+    }
+    // SAFETY: the loader keeps the key for the process.
+    unsafe { out.as_str() }.map(str::to_owned)
 }

@@ -29,6 +29,8 @@ pub mod diag;
 #[cfg(windows)]
 mod ecs;
 #[cfg(windows)]
+mod entities;
+#[cfg(windows)]
 mod events;
 #[cfg(windows)]
 mod game_events;
@@ -51,6 +53,8 @@ mod patch;
 #[cfg(windows)]
 mod progress;
 pub mod resolve;
+#[cfg(windows)]
+mod saves;
 pub mod settings;
 #[cfg(windows)]
 mod start;

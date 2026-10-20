@@ -28,6 +28,38 @@ fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_
 Write files from a thread of your own or a loader thread, not from a hook or a
 game event handler: the game thread waits on the disk otherwise.
 
+## Per-world state
+
+[`load.world_store::<T>(name)`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/load.rs)
+keeps a value per world, in `mod-data/<id>/worlds/<key>/<name>.toml`, never
+inside the game's save: removing the mod leaves the world as vanilla left it.
+The key is [`World::key`](world.md#destroying-entities-and-saving).
+
+```rust
+#[derive(Default, serde::Deserialize, serde::Serialize)]
+struct Bounties {
+    paid: u64,
+}
+
+fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+    let bounties = load.world_store::<Bounties>("bounties")?;
+    load.on::<enshwick_loader_api::events::PlayerJoined>(move |_| {
+        let _paid = bounties.update(|b| b.paid += 1);
+    })
+}
+```
+
+- The store opens the running world's file when the world has loaded and
+  writes it, when changed, as the world saves (on a thread of its own) and at
+  shutdown. The mod's state and the world's save move together: a crash
+  loses both since the last save.
+- `with(|value| ...)` reads and `update(|value| ...)` changes the value; both
+  return `None` while no world is open, before the world loads or after a
+  hosted game stops. `flush()` writes now.
+- A file that does not parse keeps the store shut and stays as it is, so a
+  fix by hand loses nothing.
+- `T` is a TOML table, such as a struct, with a `Default` for a new world.
+
 ## Store
 
 [`state::Store<T>`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/state.rs)

@@ -1,0 +1,170 @@
+//! Entity queries and destroy requests on the server's game thread.
+//!
+//! The query is the engine's own walk over every archetype that holds a
+//! component type and a transform, the one its game code uses to find
+//! placed things. A destroy is a request in the entity world's first command
+//! buffer, which the engine plays back after the systems of the next step,
+//! as it does for its own game-thread code.
+
+use std::sync::OnceLock;
+
+use enshwick_loader_api::abi::{EntityPlace, Status};
+
+use crate::host::Loader;
+
+/// The engine's growable array the query fills; the loader gives it no grow
+/// function, so a full array ends the walk with 0.
+#[repr(C)]
+struct Found {
+    entries: *mut u8,
+    count: u64,
+    capacity: u64,
+    grow: usize,
+}
+
+type QueryFn = unsafe extern "system" fn(out: *mut Found, entity_world: *mut u8, ty: u32) -> u8;
+type DestroyFn = unsafe extern "system" fn(buffer: *mut u8, requester: u32, entity: u32) -> u8;
+
+/// The game functions and offsets, from the build table.
+#[derive(Debug, Clone, Copy)]
+struct Layout {
+    query: QueryFn,
+    destroy: DestroyFn,
+    entry_size: usize,
+    entry_transform: usize,
+    command_buffers: usize,
+}
+
+/// Entries the first walk makes room for.
+const FIRST_CAPACITY: usize = 1024;
+/// The most entries a query returns.
+const MAX_CAPACITY: usize = 1 << 19;
+
+static LAYOUT: OnceLock<Option<Layout>> = OnceLock::new();
+
+fn layout(loader: &Loader) -> Option<&'static Layout> {
+    LAYOUT
+        .get_or_init(|| {
+            let function = |name: &str| {
+                loader
+                    .build
+                    .symbol(name)
+                    .and_then(|rva| usize::try_from(loader.base + rva).ok())
+            };
+            let constant = |name: &str| {
+                loader
+                    .build
+                    .constant(name)
+                    .and_then(|v| usize::try_from(v).ok())
+            };
+            let (query, destroy) = (
+                function("ecs.entities_with")?,
+                function("ecs.destroy_request")?,
+            );
+            Some(Layout {
+                // SAFETY: each symbol is the game function with this
+                // signature on this build.
+                query: unsafe { core::mem::transmute::<usize, QueryFn>(query) },
+                // SAFETY: as above.
+                destroy: unsafe { core::mem::transmute::<usize, DestroyFn>(destroy) },
+                entry_size: constant("ecs.entities_entry_size")?,
+                entry_transform: constant("ecs.entities_entry_transform")?,
+                command_buffers: constant("ecs.command_buffers")?,
+            })
+        })
+        .as_ref()
+}
+
+/// The server's entity world, when the caller is on its game thread.
+fn entity_world() -> Result<usize, Status> {
+    crate::world::server()?;
+    usize::try_from(crate::world::server_world())
+        .ok()
+        .filter(|&world| world != 0)
+        .ok_or(Status::MISSING)
+}
+
+/// Every entity with a component of type `ty` and a transform, with its
+/// position in 32.32 fixed-point metres.
+pub(crate) fn with_component(loader: &Loader, ty: u32) -> Result<Vec<EntityPlace>, Status> {
+    let layout = layout(loader).ok_or(Status::MISSING)?;
+    let world = entity_world()?;
+    let mut capacity = FIRST_CAPACITY;
+    loop {
+        let mut entries = vec![0u8; capacity * layout.entry_size];
+        let mut found = Found {
+            entries: entries.as_mut_ptr(),
+            count: 0,
+            capacity: capacity as u64,
+            grow: 0,
+        };
+        // SAFETY: the server's entity world on its game thread between steps,
+        // and an array with room for `capacity` entries.
+        let whole = unsafe {
+            (layout.query)(
+                &raw mut found,
+                core::ptr::with_exposed_provenance_mut(world),
+                ty,
+            )
+        };
+        if whole != 0 || capacity >= MAX_CAPACITY {
+            let count = usize::try_from(found.count).unwrap_or(0).min(capacity);
+            return Ok(entries
+                .chunks_exact(layout.entry_size)
+                .take(count)
+                .map(|entry| place(layout, entry))
+                .collect());
+        }
+        capacity *= 4;
+    }
+}
+
+/// One entry of the engine's array: the entity, then its transform, which
+/// starts with the position.
+fn place(layout: &Layout, entry: &[u8]) -> EntityPlace {
+    let word = |at: usize| {
+        entry
+            .get(at..at + 8)
+            .and_then(|b| b.try_into().ok())
+            .map_or(0, i64::from_le_bytes)
+    };
+    let at = layout.entry_transform;
+    EntityPlace {
+        entity: entry
+            .get(..4)
+            .and_then(|b| b.try_into().ok())
+            .map_or(0, u32::from_le_bytes),
+        reserved: 0,
+        position: [word(at), word(at + 8), word(at + 16)],
+    }
+}
+
+/// Asks the engine to destroy `entity` after the systems of the next step;
+/// players' characters and entities not in the world are refused.
+pub(crate) fn destroy(loader: &Loader, entity: u32) -> Result<(), Status> {
+    let layout = layout(loader).ok_or(Status::MISSING)?;
+    let world = entity_world()?;
+    if entity == 0 {
+        return Err(Status::BAD_ARGS);
+    }
+    crate::world::template(loader, entity)?;
+    if crate::world::players(loader)?
+        .iter()
+        .any(|p| p.entity == entity)
+    {
+        return Err(Status::REFUSED);
+    }
+    // SAFETY: the entity world holds a pointer to its command buffers.
+    let buffer: usize = unsafe { crate::world::read(world, layout.command_buffers) };
+    if buffer == 0 {
+        return Err(Status::MISSING);
+    }
+    // SAFETY: the world's first command buffer, on the game thread between
+    // steps, where no system writes it.
+    let queued =
+        unsafe { (layout.destroy)(core::ptr::with_exposed_provenance_mut(buffer), 0, entity) };
+    if queued == 0 {
+        return Err(Status::REFUSED);
+    }
+    Ok(())
+}

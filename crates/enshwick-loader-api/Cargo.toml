@@ -53,6 +53,10 @@ name = "symbols"
 required-features = ["test"]
 
 [[test]]
+name = "world_queries"
+required-features = ["test"]
+
+[[test]]
 name = "worlds"
 required-features = ["test"]
 

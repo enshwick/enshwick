@@ -456,6 +456,10 @@ pub(crate) static API: HostApi = HostApi {
     raise_base_limit,
     base_zones,
     game_event,
+    entities,
+    destroy,
+    save_world,
+    world_key,
 };
 
 /// A static slice from a pointer and a count, empty for a null pointer.
@@ -1482,6 +1486,48 @@ extern "system" fn game_event(
         return Status::FAULTED;
     }
     crate::game_events::register(index, type_hash, callback, user)
+}
+
+extern "system" fn entities(
+    me: ModHandle,
+    type_hash: u32,
+    out: *mut api_frame::EntityPlace,
+    capacity: u32,
+    count: *mut u32,
+) -> Status {
+    let found =
+        match caller(me).and_then(|loader| crate::entities::with_component(loader, type_hash)) {
+            Ok(found) => found,
+            Err(status) => return status,
+        };
+    if !out.is_null() {
+        for (index, place) in found.iter().take(capacity as usize).enumerate() {
+            // SAFETY: the caller passes room for `capacity` entries.
+            unsafe { out.wrapping_add(index).write(*place) };
+        }
+    }
+    put(count, u32::try_from(found.len()).unwrap_or(u32::MAX))
+}
+
+extern "system" fn destroy(me: ModHandle, entity: u32) -> Status {
+    match caller(me).and_then(|loader| crate::entities::destroy(loader, entity)) {
+        Ok(()) => Status::OK,
+        Err(status) => status,
+    }
+}
+
+extern "system" fn save_world(me: ModHandle) -> Status {
+    match caller(me).and_then(crate::saves::request) {
+        Ok(()) => Status::OK,
+        Err(status) => status,
+    }
+}
+
+extern "system" fn world_key(me: ModHandle, out: *mut Str) -> Status {
+    match caller(me) {
+        Ok(_) => crate::saves::world_key().map_or(Status::MISSING, |key| put(out, Str::new(key))),
+        Err(status) => status,
+    }
 }
 
 /// Mod handles start at 1; 0 is no mod.

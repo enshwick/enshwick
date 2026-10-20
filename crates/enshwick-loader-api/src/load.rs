@@ -781,6 +781,44 @@ impl Load<'_> {
         Ok(std::path::PathBuf::from(path))
     }
 
+    /// A value of type `T` kept per world under the mod's data folder,
+    /// opened when the world loads and written when it saves; see
+    /// [`WorldStore`](crate::state::WorldStore).
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] when `name` is not 1 to 64 of `[a-z0-9_-]`, the data folder
+    /// cannot be created or the world events are refused.
+    ///
+    /// # Examples
+    ///
+    /// See [`WorldStore`](crate::state::WorldStore).
+    pub fn world_store<T>(&mut self, name: &str) -> Result<crate::state::WorldStore<T>, Off>
+    where
+        T: serde::de::DeserializeOwned + serde::Serialize + Default + Send + 'static,
+    {
+        let store = crate::state::WorldStore::new(&self.data_dir()?, name)?;
+        let host = self.host;
+        let opened = store.clone();
+        self.on::<crate::events::WorldLoaded>(move |()| match crate::world::world_key(host) {
+            Some(key) => {
+                if let Err(off) = opened.open(&key) {
+                    crate::error!("world store kept shut: {off}");
+                }
+            }
+            None => crate::warn!("world store kept shut: the loader names no world"),
+        })?;
+        let saved = store.clone();
+        self.on::<crate::events::WorldSaved>(move |()| saved.flush_in_background())?;
+        let closed = store.clone();
+        self.on::<crate::events::Shutdown>(move |()| {
+            if let Err(off) = closed.close() {
+                crate::error!("{off}");
+            }
+        })?;
+        Ok(store)
+    }
+
     /// Publishes a service other mods can find by `name` and `version`.
     ///
     /// `T` is a `repr(C)` table of `extern "system"` functions, the contract

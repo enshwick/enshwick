@@ -6,10 +6,10 @@ use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use crate::abi::{
     AltarInfo, AltarLimitFn, AltarZoneSize, BedCheckFn, BuildInfo, CallerFrame, ComfortFn,
-    CommandFn, Event, EventFn, ExperienceFn, GameEventFn, Header, HookSpec, HostApi, InteractionFn,
-    InventoryDoneFn, InventoryRequest, ItemData, Level, MidHookFn, MidHookSpec, ModHandle, ModInfo,
-    PlayerInfo, RenameFn, ResourceKey, ResourcePatchFn, Side, SkillFn, Status, StatusFn, Str,
-    SummonFn, SurvivorLookupFn, SurvivorStatusFn, ZoneCheckFn,
+    CommandFn, EntityPlace, Event, EventFn, ExperienceFn, GameEventFn, Header, HookSpec, HostApi,
+    InteractionFn, InventoryDoneFn, InventoryRequest, ItemData, Level, MidHookFn, MidHookSpec,
+    ModHandle, ModInfo, PlayerInfo, RenameFn, ResourceKey, ResourcePatchFn, Side, SkillFn, Status,
+    StatusFn, Str, SummonFn, SurvivorLookupFn, SurvivorStatusFn, ZoneCheckFn,
 };
 
 use super::{FakeHost, LinkedHook, ServedResource, SubmittedRequest};
@@ -46,6 +46,12 @@ pub(crate) struct State {
     pub(crate) status_sources: Vec<(StatusFn, usize)>,
     /// The command lines the mod ran as the console, in order.
     pub(crate) console: Vec<String>,
+    /// The entities the mod asked to destroy, in order.
+    pub(crate) destroyed: Vec<u32>,
+    /// How many saves the mod asked for.
+    pub(crate) saves: usize,
+    /// The world key last handed out, alive while the fake is installed.
+    world_key: Option<Box<str>>,
     /// The altars `altars` lists, settable while installed.
     pub(crate) altars: Vec<AltarInfo>,
     /// Whether the mod opened altars, and whether it controls their zones.
@@ -107,6 +113,9 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         rename_filters: Vec::new(),
         status_sources: Vec::new(),
         console: Vec::new(),
+        destroyed: Vec::new(),
+        saves: 0,
+        world_key: None,
         altars: Vec::new(),
         altars_opened: false,
         zone_control: false,
@@ -844,6 +853,60 @@ extern "system" fn game_event(
     })
 }
 
+extern "system" fn entities(
+    _me: ModHandle,
+    type_hash: u32,
+    out: *mut EntityPlace,
+    capacity: u32,
+    count: *mut u32,
+) -> Status {
+    let found: Vec<EntityPlace> = with(Vec::new(), |s| {
+        s.host
+            .placed
+            .iter()
+            .filter(|(ty, _)| *ty == type_hash)
+            .map(|(_, place)| *place)
+            .collect()
+    });
+    for (i, place) in found.iter().take(capacity as usize).enumerate() {
+        // SAFETY: the safe layer passes room for `capacity` entries.
+        unsafe { out.wrapping_add(i).write(*place) };
+    }
+    put(count, u32::try_from(found.len()).unwrap_or(u32::MAX))
+}
+
+extern "system" fn destroy(_me: ModHandle, entity: u32) -> Status {
+    with(Status::MISSING, |s| {
+        if s.host.players.iter().any(|p| p.entity == entity) {
+            return Status::REFUSED;
+        }
+        if !s.host.placed.iter().any(|(_, p)| p.entity == entity)
+            && !s.host.templates.contains_key(&entity)
+        {
+            return Status::MISSING;
+        }
+        s.destroyed.push(entity);
+        Status::OK
+    })
+}
+
+extern "system" fn save_world(_me: ModHandle) -> Status {
+    with(Status::MISSING, |s| {
+        s.saves += 1;
+        Status::OK
+    })
+}
+
+extern "system" fn world_key(_me: ModHandle, out: *mut Str) -> Status {
+    with(Status::MISSING, |s| {
+        let Some(key) = s.host.world_key.clone() else {
+            return Status::MISSING;
+        };
+        let kept = s.world_key.insert(key.into_boxed_str());
+        put(out, Str::new(kept))
+    })
+}
+
 /// table it sees for the process, so it is one static.
 pub(crate) static TABLE: HostApi = HostApi {
     header: Header::of::<HostApi>(),
@@ -907,4 +970,8 @@ pub(crate) static TABLE: HostApi = HostApi {
     raise_base_limit,
     base_zones,
     game_event,
+    entities,
+    destroy,
+    save_world,
+    world_key,
 };
