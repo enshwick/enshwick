@@ -73,7 +73,7 @@ dependencies = [
 
 [[package]]
 name = "enshwick-api"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "enshwick-macros",
  "serde",
@@ -83,7 +83,7 @@ dependencies = [
 
 [[package]]
 name = "enshwick-flame-altar-count"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "enshwick-api",
  "serde",
@@ -92,7 +92,7 @@ dependencies = [
 
 [[package]]
 name = "enshwick-flame-altar-zones"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "arc-swap",
  "arrayvec",
@@ -104,7 +104,7 @@ dependencies = [
 
 [[package]]
 name = "enshwick-furniture-comfort"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "enshwick-api",
  "serde",
@@ -121,7 +121,7 @@ dependencies = [
 
 [[package]]
 name = "enshwick-loader"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "enshwick-api",
  "enshwick-reflect",
@@ -158,7 +158,7 @@ dependencies = [
 
 [[package]]
 name = "enshwick-survivors-per-altar"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "enshwick-api",
  "enshwick-geometry",
