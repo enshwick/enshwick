@@ -12,7 +12,7 @@ raw table. The exact types and signatures are in the
 | Constant                                                                                            | Value | Meaning                                         |
 | --------------------------------------------------------------------------------------------------- | ----- | ----------------------------------------------- |
 | [`ABI_MAJOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 1     | A loader refuses a mod built for another major. |
-| [`ABI_MINOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 19    | A newer minor only appends.                     |
+| [`ABI_MINOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 20    | A newer minor only appends.                     |
 
 The ABI version is apart from Enshwick Loader's version (such as 0.2.0, see
 [Releasing and updates](releasing.md#versions)): a platform release raises
@@ -201,6 +201,7 @@ marked "init only" are allowed during `enshwick_mod_init` only.
 | `altar_limit`         | Decides how many altars each Flame level allows, one mod at a time; init only                   | 19          |
 | `raise_base_limit`    | Lets the game group 32 altar zones in its 16 bases; init only; `MISSING` on an unknown build    | 19          |
 | `base_zones`          | The zones and bases of the last grouping, while the raised limit is in force                    | 19          |
+| `game_event`          | Calls a handler on every engine event of a reflected type, or of all; init only                 | 20          |
 
 ## Under an older loader
 
@@ -233,6 +234,7 @@ the mod off with a reason, which the mod's log shows as `off: <reason>`:
 | 17          | interaction filters             | Off: `interaction filters need a newer loader`               |
 | 18          | skills, comfort, experience     | Off: `skill overrides need a newer loader` and the like      |
 | 19          | altar limit and bases           | Off: `altars need a newer loader`                            |
+| 20          | engine events                   | Off: `engine events need a newer loader (ABI minor 20)`      |
 
 A mod that can do without a feature catches the `Off` and goes on without it
 instead of returning it from `init`.

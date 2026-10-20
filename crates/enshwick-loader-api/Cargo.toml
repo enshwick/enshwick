@@ -25,6 +25,10 @@ serde = { workspace = true, features = ["derive"] }
 test = []
 
 [[test]]
+name = "game_events"
+required-features = ["test"]
+
+[[test]]
 name = "inventory"
 required-features = ["test"]
 

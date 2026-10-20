@@ -1073,6 +1073,57 @@ impl Installed {
         handlers.len()
     }
 
+    /// The engine event types the mod asked for, by hash, 0 for every type.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick_loader_api::test::FakeHost::new().install();
+    /// assert!(loader.game_event_types().is_empty());
+    /// ```
+    #[must_use]
+    pub fn game_event_types(&self) -> Vec<u32> {
+        table::with(Vec::new(), |s| s.game_events.iter().map(|g| g.0).collect())
+    }
+
+    /// Hands the engine event of `type_hash` with `bytes` to every handler of
+    /// the mod for that type or for every type, on this thread; returns how
+    /// many ran.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick_loader_api::test::FakeHost::new().install();
+    /// assert_eq!(loader.raise_game_event(0xd8ec_982a, &[0; 16]), 0);
+    /// ```
+    #[must_use = "the count says whether the mod handles the event"]
+    pub fn raise_game_event(&self, type_hash: u32, bytes: &[u8]) -> usize {
+        let handlers: Vec<_> = table::with(Vec::new(), |s| {
+            s.game_events
+                .iter()
+                .filter(|g| g.0 == 0 || g.0 == type_hash)
+                .map(|g| (g.1, g.2))
+                .collect()
+        });
+        let data = crate::abi::GameEventData {
+            header: Header::of::<crate::abi::GameEventData>(),
+            type_hash,
+            size: u32::try_from(bytes.len()).unwrap_or(u32::MAX),
+            data: bytes.as_ptr(),
+        };
+        for &(callback, user) in &handlers {
+            // SAFETY: `data` lives for the call and `user` is the pointer the
+            // mod subscribed with.
+            unsafe {
+                callback(
+                    &raw const data,
+                    core::ptr::with_exposed_provenance_mut(user),
+                );
+            };
+        }
+        handlers.len()
+    }
+
     /// Replaces the text of the mod's settings file, as a player's edit
     /// would; raise [`events::SettingsChanged`](crate::events::SettingsChanged)
     /// after it.

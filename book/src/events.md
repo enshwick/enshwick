@@ -73,6 +73,11 @@ the game thread, so hand downloads to a thread of your own, as
 [`enshwick-updater`](https://github.com/themaiby/enshwick/tree/main/mods/enshwick-updater)
 does.
 
+## Engine events
+
+Beyond these, a mod observes the game's own ECS events, such as hits, deaths
+and levels gained; see [Engine events](game-events.md).
+
 ## Server-only game events
 
 Every event from `Tick` to `BuildingRemoved` comes from the server, on its

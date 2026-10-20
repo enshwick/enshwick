@@ -455,6 +455,7 @@ pub(crate) static API: HostApi = HostApi {
     altar_limit,
     raise_base_limit,
     base_zones,
+    game_event,
 };
 
 /// A static slice from a pointer and a count, empty for a null pointer.
@@ -1466,6 +1467,21 @@ fn caller_index(me: ModHandle) -> Option<(&'static Loader, usize)> {
     let loader = loader()?;
     let (index, record) = loader.record(me)?;
     (!record.off.load(Ordering::Acquire)).then_some((loader, index))
+}
+
+extern "system" fn game_event(
+    me: ModHandle,
+    type_hash: u32,
+    callback: api_frame::GameEventFn,
+    user: *mut core::ffi::c_void,
+) -> Status {
+    let Some((index, record)) = loader().and_then(|loader| loader.record(me)) else {
+        return Status::BAD_ARGS;
+    };
+    if record.off.load(Ordering::Acquire) {
+        return Status::FAULTED;
+    }
+    crate::game_events::register(index, type_hash, callback, user)
 }
 
 /// Mod handles start at 1; 0 is no mod.
