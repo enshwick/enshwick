@@ -1,0 +1,181 @@
+# Getting started
+
+This chapter sets up the tools, creates a mod, puts it into the game and
+shows where its log goes.
+
+## The toolchain
+
+A mod is a Windows DLL. You need:
+
+- Rust 1.98 or newer through [rustup](https://rustup.rs), with the target
+  `x86_64-pc-windows-msvc`;
+- on Windows, the MSVC build tools;
+- the Enshwick loader in the game's folder: extract `enshwick.zip` from the
+  [latest release](https://github.com/themaiby/enshwick/releases) next to
+  `enshrouded.exe` or `enshrouded_server.exe`.
+
+```bash
+rustup target add x86_64-pc-windows-msvc
+cargo install --git https://github.com/themaiby/enshwick cargo-enshwick
+```
+
+The second line installs
+[`cargo enshwick`](https://github.com/themaiby/enshwick/tree/main/crates/cargo-enshwick),
+a Cargo subcommand that starts a mod, installs it and reads a built one.
+
+## A new mod
+
+```bash
+cargo enshwick new my-mod --side server
+```
+
+`new <id>` creates the crate in `<dir>/<id>`; `--dir` sets the folder (the
+current one by default) and `--side` is `server` (the default), `client` or
+`both`. The id is 1 to 64 characters of `[a-z0-9-]`. The crate holds:
+
+- `Cargo.toml`: a `cdylib` named after the id, `enshwick-api` from this
+  repository's git tag for the API version the tool was built with, `serde`,
+  and a release profile with `panic = "unwind"`, which every hook needs to
+  catch panics;
+- `src/lib.rs`: a settings type with one field, `enabled`, a mod type named
+  after the id (`my-mod` becomes `MyMod`), its manifest and
+  `declare_mod!`;
+- `README.md` and `.gitignore`.
+
+It builds and loads as it is: on first start it writes
+`mod-configs/my-mod.toml` and logs one line.
+
+## Install it into the game
+
+```bash
+cd my-mod
+cargo enshwick install --game "C:/Program Files (x86)/Steam/steamapps/common/Enshrouded"
+```
+
+`install` builds the mod in release and copies the DLL to
+`<game>/mods/<package>.dll`. The game folder is `--game`, or the
+`ENSHROUDED_DIR` environment variable; it must hold `enshrouded.exe` or
+`enshrouded_server.exe`. In a workspace with several mods, `--package` (`-p`)
+names one; without it, `install` takes the package in the current folder, or
+the workspace's only mod. It also says when the loader is not installed in
+that folder yet.
+
+To see what a built DLL says about itself (id, version, side, join check and
+dependencies):
+
+```bash
+cargo enshwick manifest target/release/my_mod.dll
+```
+
+`--expect-version <version>` makes it fail when the DLL reports another
+version, for release pipelines. It loads the DLL, so it runs on Windows only.
+
+## A first mod
+
+This mod sets how many Flame Altars every Flame level allows. The game asks
+one function for that number; the mod links a hook into it and answers from
+its settings.
+
+```rust
+use std::sync::atomic::{AtomicU8, Ordering};
+
+use enshwick_api::{Load, Mod, Next, Off};
+
+/// Flame Altar settings.
+#[derive(serde::Deserialize, serde::Serialize, enshwick_api::Config)]
+#[serde(deny_unknown_fields)]
+struct Settings {
+    /// Altars allowed at every Flame level, 1 to 16.
+    altars: u8,
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Self { altars: 16 }
+    }
+}
+
+/// What the hook answers; replaced whole when the settings change.
+static ALTARS: AtomicU8 = AtomicU8::new(16);
+
+struct AltarCount;
+
+enshwick_api::detour! {
+    static MAX_ALTARS: unsafe extern "system" fn(balancing: u64, level: u32) -> u8 = max_altars;
+}
+
+fn max_altars(next: Next<unsafe extern "system" fn(u64, u32) -> u8>, balancing: u64, level: u32) -> u8 {
+    match AltarCount::instance() {
+        Some(_) => ALTARS.load(Ordering::Relaxed),
+        // SAFETY: the original takes the arguments the game passed.
+        None => unsafe { next.get()(balancing, level) },
+    }
+}
+
+fn apply(settings: &Settings) {
+    ALTARS.store(settings.altars.clamp(1, 16), Ordering::Relaxed);
+}
+
+impl Mod for AltarCount {
+    fn manifest() -> &'static enshwick_api::abi::Manifest {
+        enshwick_api::manifest!(id: "my-altar-count", side: BOTH, join = true)
+    }
+
+    fn init(load: &mut Load<'_>) -> Result<Self, Off> {
+        let settings: Settings = load.config()?;
+        apply(&settings);
+        load.hook(&MAX_ALTARS, load.symbol("building.max_altars")?)?;
+        load.on_config_change(|settings: Settings| apply(&settings))?;
+        enshwick_api::info!("{} altars per Flame level", settings.altars);
+        Ok(Self)
+    }
+}
+
+enshwick_api::declare_mod!(AltarCount);
+```
+
+What each piece does:
+
+- `Settings` derives [`Config`](settings.md): the file
+  `mod-configs/my-altar-count.toml` is written from its doc comments and
+  `Default` on first start, and `load.config()` reads it.
+- `detour!` declares a hook: a static `MAX_ALTARS` and an entry point that
+  catches panics. The body gets `next`, the rest of the chain, and the
+  function's arguments. See [Hooks](hooks.md).
+- `manifest!` names the mod and where it runs. `side: BOTH` and
+  `join = true` because the client's interface asks the same function, so
+  players and their server must agree. See
+  [The loader and the ABI](concepts/loader-and-abi.md).
+- `init` reads the settings, finds the function by its symbolic id and links
+  the hook. Any `?` that fails turns the mod off with the reason in the log;
+  the game then runs vanilla. See [The life of a mod](concepts/lifecycle.md).
+- `on_config_change` applies an edited file while the game runs. The hook
+  reads an atomic, so the handler can change it under a running game.
+- `declare_mod!` exports the mod and adds `AltarCount::instance()`.
+
+[`enshwick-flame-altar-count`](https://github.com/themaiby/enshwick/tree/main/mods/enshwick-flame-altar-count)
+is this mod in full: a table per Flame level swapped with `arc-swap`, the
+table as a join value, and more than 16 altars.
+
+## Where the logs are
+
+The loader writes to `logs/enshwick/` in the game's folder, starting each
+file afresh at every start:
+
+- `all.log`: every line of the loader and every mod;
+- `loader.log`: the loader's lines, such as which mods loaded, were skipped or
+  turned off, and why;
+- `mods/<id>.log`: one mod's lines;
+- `status.log`, `crash.log` and `stub.log`: see
+  [Logging and diagnostics](logging.md).
+
+A mod writes there with `enshwick_api::info!` and the other log macros.
+`mod-configs/enshwick.toml` sets how much is kept.
+
+## What to read next
+
+Read [Concepts](concepts.md) once: how the loader finds and starts mods, the
+two sides of the game, the join check and threads. Then take the chapter for
+what your mod does: [Settings](settings.md), [Events](events.md),
+[Hooks](hooks.md), [Content](content.md). [Testing](testing.md) shows how to
+test a mod without the game.

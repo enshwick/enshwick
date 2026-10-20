@@ -1,0 +1,247 @@
+# Releasing and updates
+
+A player installs a mod by copying its DLL into `mods/`. This chapter covers
+what a release carries: the version, where updates come from, how an updater
+installs them, and how releases are signed.
+
+## Versions
+
+A mod's version is [SemVer](https://semver.org). Leave `version` out of
+[`manifest!`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/declare.rs)
+and the manifest takes the crate's version (`CARGO_PKG_VERSION`), so the
+version you release is the one the DLL reports. Set `version: "0.3.0"` only
+when the two must differ.
+
+The loader names the version wherever the mod comes up:
+
+- `safes 0.2.0 initialised` in `loader.log`;
+- `requires flame-altar-zones ^0.2, found 0.1.3` when a requirement is out of
+  range;
+- `safes: server 0.2.0, yours 0.1.0` in the note of a refused join.
+
+`cargo enshwick manifest` shows what a built DLL says about itself (id,
+version, side, join check, dependencies). With `--expect-version` it fails
+unless the DLL has that version:
+
+```bash
+cargo enshwick manifest target/release/my_mod.dll --expect-version 0.3.0
+```
+
+## Releases in this repository
+
+Mods in this repository follow
+[CONTRIBUTING.md](https://github.com/themaiby/enshwick/blob/main/CONTRIBUTING.md):
+
+- the crate is `mods/enshwick-<id>`, named `enshwick-<id>`;
+- the pull request title is a conventional commit, which becomes the squashed
+  commit and the changelog entry;
+- [release-please](https://github.com/googleapis/release-please) keeps one
+  release pull request for the workspace and, once it is merged, tags each
+  released crate `<component>-v<semver>`, the component being the crate name:
+  `enshwick-safes-v0.2.0`.
+
+Before 1.0, a `feat` bumps the patch version and a breaking change the minor
+(see
+[release-please-config.json](https://github.com/themaiby/enshwick/blob/main/release-please-config.json)).
+
+The
+[release workflow](https://github.com/themaiby/enshwick/blob/main/.github/workflows/release-please.yml)
+then builds the workspace and attaches to each mod's release:
+
+| File                  | What it holds                         |
+| --------------------- | ------------------------------------- |
+| `<crate>.zip`         | `mods/<crate>.dll` and `LICENSE`      |
+| `<crate>.zip.minisig` | The minisign signature of the archive |
+
+The loader's and the stub's releases carry `enshwick-loader.zip` (the stub and
+the loader) and `enshwick.zip` (everything that goes next to the game), each
+with its `.minisig`. Before it signs anything, the workflow checks with
+`cargo enshwick manifest --expect-version` that every released mod's DLL
+reports the version of its tag.
+
+## Where updates come from
+
+`updates:` in the manifest names the source of new releases:
+
+```rust
+let manifest = enshwick_api::manifest!(
+    id: "safes",
+    side: BOTH,
+    join = true,
+    updates: github("themaiby/enshwick", "enshwick-safes"),
+);
+assert!(!manifest.updates.is_null());
+```
+
+| Source                         | Meaning                                                            |
+| ------------------------------ | ------------------------------------------------------------------ |
+| `github("owner/name", "comp")` | GitHub releases of that repository whose tags are `comp-v<semver>` |
+| `url("https://...")`           | A JSON document at that URL that names the latest release          |
+
+A mod without `updates:` is updated by hand.
+
+The loader checks the source and lists it; it fetches nothing itself. It
+accepts a repository of the form `owner/name`, a component of `[a-z0-9_-]`
+(up to 64 characters) and a URL that starts with `https://`. A malformed
+source is dropped with a warning such as
+`my_mod.dll: no update source: the update URL "http://..." is not https://`,
+and the mod loads without one.
+
+The updater in this repository reads `github(...)` sources only. A `url(...)`
+source is declared, checked, listed and advertised like the other, but no
+format for its document is defined here yet; it is for an updater of your
+own.
+
+## The list of loaded mods
+
+[`enshwick_api::mods()`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/mods.rs)
+lists every loaded mod, the loader first (id `enshwick`), in load order. Each
+[`ModEntry`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/mods.rs)
+has:
+
+| Field     | What it holds                                                                   |
+| --------- | ------------------------------------------------------------------------------- |
+| `id`      | The mod id                                                                      |
+| `version` | Its SemVer version                                                              |
+| `side`    | The sides it runs on                                                            |
+| `join`    | Whether it counts in the join check                                             |
+| `running` | Not refused at init and not faulted since                                       |
+| `file`    | The DLL's path relative to the game's folder, such as `mods/enshwick_safes.dll` |
+| `updates` | `Some(Updates::GitHub { .. })`, `Some(Updates::Url(..))` or `None`              |
+
+```rust
+use enshwick_api::mods::Updates;
+
+for entry in enshwick_api::mods() {
+    if let Some(Updates::GitHub { repository, component }) = &entry.updates {
+        enshwick_api::info!("{} {}: {repository}, tags {component}-v*", entry.id, entry.version);
+    }
+}
+```
+
+The list is empty before the loader initialises the mod and under a loader
+older than ABI minor 5.
+
+## A server's sources and the join check
+
+A server advertises each running join mod's source in the Steam rule
+`enshwick.src.<id>`, as one line written by
+[`Updates::to_line`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/mods.rs):
+`github:<owner/name>:<component>` or `url:<url>`. A line longer than a Steam
+rule holds (127 bytes) is left out. `Updates::parse` reads a line back.
+
+```rust
+use enshwick_api::mods::Updates;
+
+let safes = Updates::GitHub {
+    repository: "themaiby/enshwick".into(),
+    component: "enshwick-safes".into(),
+};
+assert_eq!(safes.to_line(), "github:themaiby/enshwick:enshwick-safes");
+assert_eq!(safes.tag_prefix().as_deref(), Some("enshwick-safes-v"));
+```
+
+When the join check keeps a client out because the server runs join mods the
+client lacks or has in another version, the loader shows the player a note,
+then raises
+[`events::JoinMissing`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/events.rs)
+on the client.
+[`mods::join_missing()`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/mods.rs)
+then lists those mods: the server's version, `running` false, the client's
+DLL path when it has the mod (empty otherwise), and the source the server
+advertises, else the client's own source for the mod.
+
+The handler runs on the game thread once the player closed the note. Hand
+downloads to a thread of your own:
+
+```rust
+use enshwick_api::events::JoinMissing;
+
+fn init(load: &mut enshwick_api::Load<'_>) -> Result<(), enshwick_api::Off> {
+    load.on::<JoinMissing>(|()| {
+        let missing = enshwick_api::mods::join_missing();
+        std::thread::spawn(move || {
+            for entry in missing {
+                enshwick_api::info!("the server runs {} {}", entry.id, entry.version);
+            }
+        });
+    })
+}
+```
+
+`join_missing()` is empty before a refused join and under a loader older than
+ABI minor 10. See [The join check](concepts/join-check.md) for the check
+itself.
+
+## Staged updates
+
+An updater never replaces a loaded DLL. It writes the new file to
+`mods/.staged/<path>`, where `<path>` is the file's path relative to the
+game's folder (`ModEntry::file` for a mod). On the next start, before the
+loader runs, the `powrprof.dll` stub moves each staged file to `<path>` and
+keeps the file it replaces as `<path>.previous`, for one rollback.
+
+A file that cannot be moved stays staged for the next start; the game starts
+anyway. The stub writes what it moved to `logs/enshwick/stub.log`.
+
+## The updater mod
+
+[The updater](https://github.com/themaiby/enshwick/tree/main/mods/enshwick-updater)
+is such a mod, for players:
+
+- a short while after start, on a thread of its own, it asks each loaded mod's
+  GitHub repository for newer releases, and asks the player before it
+  downloads anything;
+- after a refused join it offers the server's versions of the missing mods,
+  from the sources the server advertises;
+- it downloads `<component>.zip` and `<component>.zip.minisig` from the
+  release, checks the signature, and stages the archive's DLLs;
+- it takes only `powrprof.dll` and `mods/*.dll` from an archive, and refuses
+  an archive with a path that leaves the game's folder;
+- it never touches settings files.
+
+It installs an archive only when a trusted key signed it and the signature's
+trusted comment names both the release's tag and the archive's file name, so a
+signed archive cannot pass for another release. The trusted keys are
+Enshwick's own, which signs every release of this repository, and those in
+`trusted_keys` of `mod-configs/updater.toml`.
+
+## Signing your own releases
+
+A mod outside this repository gets updates from the updater when:
+
+1. its manifest says `updates: github("you/your-repo", "my-mod")`;
+2. its releases are tagged `my-mod-v<semver>`;
+3. each release carries `my-mod.zip`, with the DLL at `mods/<file>.dll`;
+4. each release carries `my-mod.zip.minisig`, a
+   [minisign](https://jedisct1.github.io/minisign/) signature whose trusted
+   comment names the tag and the archive.
+
+Make a key pair once and keep the secret key out of the repository:
+
+```bash
+minisign -G -p my-mod.pub -s my-mod.key
+```
+
+Sign each archive with the tag and file name in the trusted comment:
+
+```bash
+minisign -S -s my-mod.key -m my-mod.zip -t "my-mod-v1.2.0 my-mod.zip"
+```
+
+Publish the public key, the second line of `my-mod.pub` (`RW...`). Players
+who trust you add it to `trusted_keys`:
+
+```toml
+trusted_keys = ["RWQ..."]
+```
+
+## Removed mods and holds
+
+A mod that keeps a world the vanilla game cannot open safely can set a
+[`state::Hold`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/state.rs).
+While `mod-data/<id>/hold.txt` exists, the loader stops the game before the
+world loads when that mod does not run: removed, skipped, off, or on a game
+build the loader does not know. Removing such a mod therefore needs the
+player to delete its `hold.txt` as well, at their own risk. See
+[State and data folders](state.md).

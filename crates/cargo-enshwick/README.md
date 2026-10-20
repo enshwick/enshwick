@@ -19,6 +19,6 @@ cargo enshwick install --game "C:/Program Files (x86)/Steam/steamapps/common/Ens
   `<game>/mods/<package>.dll`. The game folder is `--game` or `ENSHROUDED_DIR`;
   in a workspace with several mods, `--package` names one.
 
-The [modding guide](../enshwick-api/GUIDE.md) covers what goes into the mod.
+The [modding book](https://github.com/themaiby/enshwick/blob/main/book/src/SUMMARY.md) covers what goes into the mod.
 
 Licensed under [MIT](../../LICENSE).

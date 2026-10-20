@@ -74,6 +74,12 @@
 
 mod table;
 
+/// The modding book's chapter on tests, whose examples run as doctests here.
+#[cfg(doctest)]
+#[doc = include_str!("../../../book/src/testing.md")]
+#[expect(dead_code, reason = "the doc comment carries the chapter")]
+struct BookTesting;
+
 use std::collections::{HashMap, HashSet};
 use std::sync::MutexGuard;
 

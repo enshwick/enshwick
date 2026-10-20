@@ -57,6 +57,8 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 extern crate self as enshwick_api;
 
 pub mod abi;
+#[cfg(doctest)]
+mod book;
 pub mod code;
 pub mod commands;
 pub mod config;

@@ -1,0 +1,12 @@
+[book]
+title = "The Enshwick modding book"
+authors = ["Enshwick contributors"]
+language = "en"
+src = "src"
+
+[rust]
+edition = "2024"
+
+[output.html]
+git-repository-url = "https://github.com/themaiby/enshwick"
+edit-url-template = "https://github.com/themaiby/enshwick/edit/main/book/{path}"
