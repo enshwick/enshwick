@@ -9,12 +9,12 @@
 //! filters first when the call comes from the rename message.
 
 use core::ffi::c_void;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::Ordering;
 use std::sync::{Mutex, OnceLock, PoisonError};
 
 use enshwick_loader_api::abi::{Header, HookFlags, PlayerInfo, RenameCall, RenameFn, Status, Str};
 
-use crate::chains::{LOADER, Link};
+use crate::chains::Next;
 use crate::host::Loader;
 
 /// The game's error for a string it could not take; the rename path then
@@ -66,7 +66,8 @@ struct Filter {
 
 static LAYOUT: OnceLock<Option<Layout>> = OnceLock::new();
 static LOADED: OnceLock<&'static Loader> = OnceLock::new();
-static REPLACE_NEXT: AtomicUsize = AtomicUsize::new(0);
+// SAFETY: the slot joins the chain of the string swap, typed `ReplaceFn`.
+static REPLACE_NEXT: Next<ReplaceFn> = unsafe { Next::new() };
 static FILTERS: Mutex<Vec<Filter>> = Mutex::new(Vec::new());
 static SEALED: OnceLock<Box<[Filter]>> = OnceLock::new();
 
@@ -139,21 +140,12 @@ pub(crate) fn link(loader: &'static Loader) {
         crate::log!(WARN, "rename filters off: this build has no label layout");
         return;
     };
-    let link = Link {
-        owner: LOADER,
-        detour: (replace as ReplaceFn as *const ()).addr(),
-        next: &REPLACE_NEXT,
-        priority: i32::MIN,
-        flags: HookFlags::CALLER_FRAME,
-    };
     let target = (layout.replace as *const ()).addr() as u64;
-    if let Ok(mut chains) = loader.chains.lock() {
-        let status = chains.add(target, link);
-        if status.is_ok() {
-            crate::log!(INFO, "rename filters on");
-        } else {
-            crate::log!(WARN, "rename filters off: refused ({})", status.0);
-        }
+    let status = loader.link(target, &REPLACE_NEXT, replace, HookFlags::CALLER_FRAME);
+    if status.is_ok() {
+        crate::log!(INFO, "rename filters on");
+    } else {
+        crate::log!(WARN, "rename filters off: refused ({})", status.0);
     }
 }
 
@@ -227,13 +219,6 @@ pub(crate) fn set(loader: &Loader, entity: u32, text: &str) -> Status {
     Status::OK
 }
 
-fn replace_next() -> ReplaceFn {
-    let address = REPLACE_NEXT.load(Ordering::Acquire);
-    // SAFETY: the loader points the slot at the rest of the chain, which has
-    // the string swap's signature, before the link can run.
-    unsafe { core::mem::transmute_copy::<usize, ReplaceFn>(&address) }
-}
-
 unsafe extern "system" fn replace(
     out: *mut [u64; 2],
     strings: *mut u8,
@@ -250,7 +235,7 @@ unsafe extern "system" fn replace(
         return out.cast();
     }
     // SAFETY: forwarded unchanged.
-    unsafe { replace_next()(out, strings, old, text) }
+    unsafe { REPLACE_NEXT.get()(out, strings, old, text) }
 }
 
 /// Whether a filter refuses this swap, when it is a player's rename.

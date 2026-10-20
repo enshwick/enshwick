@@ -14,14 +14,14 @@
 //! queue what happened; the post-step link raises it on the game thread.
 
 use core::ffi::c_void;
-use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock, PoisonError};
 
 use enshwick_loader_api::abi::{
     BuildingData, Event, Header, HookFlags, PlayerData, Side, TickData,
 };
 
-use crate::chains::{LOADER, Link};
+use crate::chains::Next;
 use crate::host::Loader;
 
 /// Server states, from the game's state machine.
@@ -95,12 +95,18 @@ static SESSION: Mutex<Session> = Mutex::new(Session {
 });
 
 static LOADED: OnceLock<(&'static Loader, Offsets)> = OnceLock::new();
-static STEP_NEXT: AtomicUsize = AtomicUsize::new(0);
-static STATE_NEXT: AtomicUsize = AtomicUsize::new(0);
-static SAVE_NEXT: AtomicUsize = AtomicUsize::new(0);
-static REMOVE_NEXT: AtomicUsize = AtomicUsize::new(0);
-static PLACE_NEXT: AtomicUsize = AtomicUsize::new(0);
-static PICKUP_NEXT: AtomicUsize = AtomicUsize::new(0);
+// SAFETY: each slot joins the chain of the function its type names.
+static STEP_NEXT: Next<StepFn> = unsafe { Next::new() };
+// SAFETY: as above.
+static STATE_NEXT: Next<StateFn> = unsafe { Next::new() };
+// SAFETY: as above.
+static SAVE_NEXT: Next<SaveFn> = unsafe { Next::new() };
+// SAFETY: as above.
+static REMOVE_NEXT: Next<RemoveFn> = unsafe { Next::new() };
+// SAFETY: as above.
+static PLACE_NEXT: Next<PlaceFn> = unsafe { Next::new() };
+// SAFETY: as above.
+static PICKUP_NEXT: Next<PickupFn> = unsafe { Next::new() };
 /// Building events from worker threads, raised after the step.
 static BUILDING: Mutex<Vec<BuildingData>> = Mutex::new(Vec::new());
 static STEPS: AtomicU64 = AtomicU64::new(0);
@@ -175,67 +181,34 @@ pub(crate) fn link(loader: &'static Loader) {
     if LOADED.set((loader, offsets)).is_err() {
         return;
     }
-    let links: [(&[Event], &str, *const (), &'static AtomicUsize); 6] = [
-        (&[], "server.post_step", step as *const (), &STEP_NEXT),
-        (
-            &[Event::WORLD_LOADED, Event::SHUTDOWN],
-            "server.set_state",
-            set_state as *const (),
-            &STATE_NEXT,
-        ),
-        (
-            &[Event::WORLD_SAVED],
-            "server.save_step",
-            save as *const (),
-            &SAVE_NEXT,
-        ),
-        (
-            &[Event::PLAYER_LEFT, Event::PLAYER_JOINED],
-            "server.player_remove",
-            remove as *const (),
-            &REMOVE_NEXT,
-        ),
-        (
-            &[Event::BUILDING_PLACED],
-            "building.spawn_prop",
-            place as *const (),
-            &PLACE_NEXT,
-        ),
-        (
-            &[Event::BUILDING_REMOVED],
-            "building.pickup",
-            pickup as *const (),
-            &PICKUP_NEXT,
-        ),
-    ];
     // A client follows every hosted game's start and stop.
     let client = loader.side == Side::CLIENT;
-    for (events, symbol, detour, next) in links {
+    let link = |events: &[Event], symbol: &str| -> Option<u64> {
         let session = client && symbol == "server.set_state";
-        if !events.is_empty() && !wants(events) && !session {
-            continue;
-        }
-        let Some(rva) = loader.build.symbol(symbol) else {
-            crate::log!(WARN, "game events through {symbol} off: not in this build");
-            continue;
-        };
-        let link = Link {
-            owner: LOADER,
-            detour: detour.addr(),
-            next,
-            priority: i32::MIN,
-            flags: HookFlags::NONE,
-        };
-        if let Ok(mut chains) = loader.chains.lock() {
-            let status = chains.add(loader.base + rva, link);
-            if !status.is_ok() {
-                crate::log!(
-                    WARN,
-                    "game events through {symbol} off: refused ({})",
-                    status.0
-                );
-            }
-        }
+        (events.is_empty() || wants(events) || session).then(|| loader.address(symbol).unwrap_or(0))
+    };
+    let none = HookFlags::NONE;
+    let feature = "game events";
+    if let Some(target) = link(&[], "server.post_step") {
+        loader.link_feature(feature, Some(target), &STEP_NEXT, step, none);
+    }
+    if let Some(target) = link(&[Event::WORLD_LOADED, Event::SHUTDOWN], "server.set_state") {
+        loader.link_feature(feature, Some(target), &STATE_NEXT, set_state, none);
+    }
+    if let Some(target) = link(&[Event::WORLD_SAVED], "server.save_step") {
+        loader.link_feature(feature, Some(target), &SAVE_NEXT, save, none);
+    }
+    if let Some(target) = link(
+        &[Event::PLAYER_LEFT, Event::PLAYER_JOINED],
+        "server.player_remove",
+    ) {
+        loader.link_feature(feature, Some(target), &REMOVE_NEXT, remove, none);
+    }
+    if let Some(target) = link(&[Event::BUILDING_PLACED], "building.spawn_prop") {
+        loader.link_feature(feature, Some(target), &PLACE_NEXT, place, none);
+    }
+    if let Some(target) = link(&[Event::BUILDING_REMOVED], "building.pickup") {
+        loader.link_feature(feature, Some(target), &PICKUP_NEXT, pickup, none);
     }
 }
 
@@ -247,13 +220,6 @@ pub(crate) fn link(loader: &'static Loader) {
 unsafe fn read<T: Copy>(base: *const u8, offset: usize) -> T {
     // SAFETY: forwarded from the caller.
     unsafe { base.wrapping_add(offset).cast::<T>().read_unaligned() }
-}
-
-fn next<F: Copy>(slot: &AtomicUsize) -> F {
-    let address = slot.load(Ordering::Acquire);
-    // SAFETY: the loader points the slot at the rest of the chain, which has
-    // the hooked function's signature, before the link can run.
-    unsafe { core::mem::transmute_copy::<usize, F>(&address) }
 }
 
 fn player(slot_index: usize, slot: *const u8, offsets: &Offsets) -> PlayerData {
@@ -269,7 +235,7 @@ fn player(slot_index: usize, slot: *const u8, offsets: &Offsets) -> PlayerData {
 
 unsafe extern "system" fn step(server: *mut u8) {
     // SAFETY: forwarded unchanged.
-    unsafe { next::<StepFn>(&STEP_NEXT)(server) };
+    unsafe { STEP_NEXT.get()(server) };
     let Some((loader, offsets)) = loaded() else {
         return;
     };
@@ -356,6 +322,12 @@ fn forget_joined() {
     }
 }
 
+/// The thread that steps the game this client hosts, once it has stepped.
+pub(crate) fn hosted_thread() -> Option<u32> {
+    let session = SESSION.lock().unwrap_or_else(PoisonError::into_inner);
+    (session.server != 0 && !session.ended).then_some(session.thread)
+}
+
 /// Ends a hosted game on the client: its server goes away with it.
 fn end_session() {
     SESSION
@@ -367,6 +339,7 @@ fn end_session() {
     crate::survivors::forget();
     crate::interactions::forget();
     crate::bases::forget();
+    crate::saves::forget();
     forget_joined();
     BUILDING
         .lock()
@@ -384,7 +357,7 @@ unsafe extern "system" fn set_state(entry: *mut u8, state: u8) {
         // SAFETY: the entry is the game's server instance entry.
         .map(|(_, offsets)| unsafe { read::<u8>(entry, offsets.entry_state) });
     // SAFETY: forwarded unchanged.
-    unsafe { next::<StateFn>(&STATE_NEXT)(entry, state) };
+    unsafe { STATE_NEXT.get()(entry, state) };
     let (Some((loader, _)), Some(old)) = (loaded(), old) else {
         return;
     };
@@ -403,7 +376,7 @@ unsafe extern "system" fn set_state(entry: *mut u8, state: u8) {
 
 unsafe extern "system" fn save(out: *mut u8, save: *mut u8, context: *mut u8) -> *mut u8 {
     // SAFETY: forwarded unchanged.
-    let result = unsafe { next::<SaveFn>(&SAVE_NEXT)(out, save, context) };
+    let result = unsafe { SAVE_NEXT.get()(out, save, context) };
     // SAFETY: the game wrote its result's first byte through `out`.
     let done = !out.is_null() && unsafe { out.read() } == 0;
     if done && let Some((loader, _)) = loaded() {
@@ -435,7 +408,7 @@ unsafe extern "system" fn remove(server: *mut u8, slot: *mut u8) {
         }
     }
     // SAFETY: forwarded unchanged.
-    unsafe { next::<RemoveFn>(&REMOVE_NEXT)(server, slot) };
+    unsafe { REMOVE_NEXT.get()(server, slot) };
 }
 
 fn queue(data: BuildingData) {
@@ -458,7 +431,7 @@ unsafe extern "system" fn place(
 ) -> u32 {
     // SAFETY: forwarded unchanged.
     let entity = unsafe {
-        next::<PlaceFn>(&PLACE_NEXT)(
+        PLACE_NEXT.get()(
             context, template, position, rotation, item, variant, material,
         )
     };
@@ -500,7 +473,7 @@ unsafe extern "system" fn pickup(context: *mut u8, target: *const u8, tool: u32)
             (entity, mode, player, replay)
         });
     // SAFETY: forwarded unchanged.
-    let done = unsafe { next::<PickupFn>(&PICKUP_NEXT)(context, target, tool) };
+    let done = unsafe { PICKUP_NEXT.get()(context, target, tool) };
     if done != 0
         && let Some((entity, mode, player, replay)) = before
     {

@@ -244,18 +244,14 @@ fn link_join(loader: &Loader) {
         return;
     };
     crate::join::set_ours(joined(loader));
-    let link = crate::chains::Link {
-        owner: crate::chains::LOADER,
-        detour: (crate::join::detour as *const ()).addr(),
-        next: &crate::join::NEXT,
-        priority: i32::MIN,
-        flags: enshwick_loader_api::abi::HookFlags::NONE,
-    };
-    if let Ok(mut chains) = loader.chains.lock() {
-        let status = chains.add(loader.base + rva, link);
-        if !status.is_ok() {
-            crate::log!(WARN, "join check off: its hook was refused ({})", status.0);
-        }
+    let status = loader.link(
+        loader.base + rva,
+        &crate::join::NEXT,
+        crate::join::detour,
+        enshwick_loader_api::abi::HookFlags::NONE,
+    );
+    if !status.is_ok() {
+        crate::log!(WARN, "join check off: its hook was refused ({})", status.0);
     }
 }
 

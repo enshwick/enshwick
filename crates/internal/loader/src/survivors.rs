@@ -7,7 +7,7 @@
 
 use core::ffi::c_void;
 use std::cell::{Cell, RefCell};
-use std::sync::atomic::{AtomicBool, AtomicU16, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU16, Ordering};
 use std::sync::{Mutex, OnceLock, PoisonError};
 use std::time::{Duration, Instant};
 
@@ -17,9 +17,9 @@ use enshwick_loader_api::abi::{
 };
 use enshwick_loader_api::altars::cell_of_fixed;
 
-use crate::chains::{LOADER, Link};
+use crate::chains::Next;
 use crate::ecs::Engine;
-use crate::host::Loader;
+use crate::host::{Loader, Registered, take};
 
 /// How long a staff's move reaches only the entity it was answered.
 const MOVE_WINDOW: Duration = Duration::from_secs(2);
@@ -100,13 +100,6 @@ struct Layout {
     offsets: Offsets,
 }
 
-#[derive(Debug, Clone, Copy)]
-struct Registered<F> {
-    owner: usize,
-    callback: F,
-    user: usize,
-}
-
 static LOADED: OnceLock<&'static Loader> = OnceLock::new();
 static LAYOUT: OnceLock<Option<Layout>> = OnceLock::new();
 static ITEM_MAP: OnceLock<Option<ItemMap>> = OnceLock::new();
@@ -149,14 +142,22 @@ thread_local! {
     static STATUS_ROWS: RefCell<StatusRows> = const { RefCell::new((Vec::new(), Vec::new())) };
 }
 
-static LOOKUP_NEXT: AtomicUsize = AtomicUsize::new(0);
-static CURSOR_NEXT: AtomicUsize = AtomicUsize::new(0);
-static MOVE_NEXT: AtomicUsize = AtomicUsize::new(0);
-static UPDATE_NEXT: AtomicUsize = AtomicUsize::new(0);
-static BED_CHECK_NEXT: AtomicUsize = AtomicUsize::new(0);
-static SPAWN_NEXT: AtomicUsize = AtomicUsize::new(0);
-static REGISTRY_NEXT: AtomicUsize = AtomicUsize::new(0);
-static MENU_NEXT: AtomicUsize = AtomicUsize::new(0);
+// SAFETY: each slot joins the chain of the function its type names.
+static LOOKUP_NEXT: Next<LookupFn> = unsafe { Next::new() };
+// SAFETY: as above.
+static CURSOR_NEXT: Next<LookupFn> = unsafe { Next::new() };
+// SAFETY: as above.
+static MOVE_NEXT: Next<MoveFn> = unsafe { Next::new() };
+// SAFETY: as above.
+static UPDATE_NEXT: Next<UpdateFn> = unsafe { Next::new() };
+// SAFETY: as above.
+static BED_CHECK_NEXT: Next<BedCheckGameFn> = unsafe { Next::new() };
+// SAFETY: as above.
+static SPAWN_NEXT: Next<SpawnFn> = unsafe { Next::new() };
+// SAFETY: as above.
+static REGISTRY_NEXT: Next<RegistryLoadFn> = unsafe { Next::new() };
+// SAFETY: as above.
+static MENU_NEXT: Next<SystemFn> = unsafe { Next::new() };
 
 type LookupFn = unsafe extern "system" fn(bases: *mut u8, npc: *const u32) -> u32;
 type MoveFn = unsafe extern "system" fn(*mut *mut u64, usize, usize, usize) -> usize;
@@ -169,7 +170,7 @@ type FindSlotFn = unsafe extern "system" fn(map: *mut u8, key: *const u32) -> u6
 type TemplateFn = unsafe extern "system" fn(ctx: *mut u64) -> *const [u8; 16];
 
 fn symbol(loader: &Loader, name: &str) -> Option<u64> {
-    loader.build.symbol(name).map(|rva| loader.base + rva)
+    loader.address(name)
 }
 
 fn constant(loader: &Loader, name: &str) -> Option<u64> {
@@ -290,11 +291,7 @@ pub(crate) fn register_lookup(
     if held.is_some_and(|r| r.owner != owner) {
         return Status::REFUSED;
     }
-    *held = Some(Registered {
-        owner,
-        callback,
-        user: user.expose_provenance(),
-    });
+    *held = Some(Registered::new(owner, callback, user));
     Status::OK
 }
 
@@ -313,11 +310,7 @@ pub(crate) fn register_bed_check(
     BED_CHECKS
         .lock()
         .unwrap_or_else(PoisonError::into_inner)
-        .push(Registered {
-            owner,
-            callback,
-            user: user.expose_provenance(),
-        });
+        .push(Registered::new(owner, callback, user));
     Status::OK
 }
 
@@ -336,11 +329,7 @@ pub(crate) fn register_summon(
     SUMMONS
         .lock()
         .unwrap_or_else(PoisonError::into_inner)
-        .push(Registered {
-            owner,
-            callback,
-            user: user.expose_provenance(),
-        });
+        .push(Registered::new(owner, callback, user));
     Status::OK
 }
 
@@ -376,19 +365,10 @@ pub(crate) fn register_status(
     if held.is_some_and(|r| r.owner != owner) {
         return Status::REFUSED;
     }
-    *held = Some(Registered {
-        owner,
-        callback,
-        user: user.expose_provenance(),
-    });
+    *held = Some(Registered::new(owner, callback, user));
     Status::OK
 }
 
-fn take<T>(list: &Mutex<Vec<T>>) -> Vec<T> {
-    std::mem::take(&mut *list.lock().unwrap_or_else(PoisonError::into_inner))
-}
-
-#[expect(clippy::too_many_lines, reason = "one link per feature")]
 pub(crate) fn link(loader: &'static Loader) {
     let sealed = Sealed {
         lookup: LOOKUP.lock().unwrap_or_else(PoisonError::into_inner).take(),
@@ -406,96 +386,77 @@ pub(crate) fn link(loader: &'static Loader) {
     );
     let _first = SEALED.set(sealed);
     let _first = LOADED.set(loader);
-    let mut links: Vec<(&str, u64, *const (), &'static AtomicUsize, HookFlags)> = Vec::new();
-    let at = |name: &str| symbol(loader, name).unwrap_or(0);
+    let at = |name: &str| symbol(loader, name);
     if lookup {
-        links.push((
+        loader.link_feature(
             "npc.lookup",
             at("npc.lookup"),
-            lookup_link as LookupFn as *const (),
             &LOOKUP_NEXT,
+            lookup_link as LookupFn,
             HookFlags::CALLER_FRAME,
-        ));
-        links.push((
+        );
+        loader.link_feature(
             "npc.lookup_cursor",
             at("npc.lookup_cursor"),
-            cursor_link as LookupFn as *const (),
             &CURSOR_NEXT,
+            cursor_link as LookupFn,
             HookFlags::CALLER_FRAME,
-        ));
-        links.push((
+        );
+        loader.link_feature(
             "npc.move",
             at("npc.move"),
-            move_link as MoveFn as *const (),
             &MOVE_NEXT,
+            move_link,
             HookFlags::NONE,
-        ));
-        links.push((
+        );
+        loader.link_feature(
             "npc.update",
             at("npc.update"),
-            update_link as UpdateFn as *const (),
             &UPDATE_NEXT,
+            update_link,
             HookFlags::NONE,
-        ));
+        );
     }
     if beds {
-        links.push((
+        loader.link_feature(
             "npc.bed_check",
             at("npc.bed_check"),
-            bed_check_link as BedCheckGameFn as *const (),
             &BED_CHECK_NEXT,
+            bed_check_link,
             HookFlags::NONE,
-        ));
+        );
     }
     if summons {
-        links.push((
+        loader.link_feature(
             "survivors.spawn",
             at("survivors.spawn"),
-            spawn_link as SpawnFn as *const (),
             &SPAWN_NEXT,
+            spawn_link,
             HookFlags::NONE,
-        ));
+        );
     }
     if items {
-        links.push((
+        loader.link_feature(
             "survivors.registry_load",
             at("survivors.registry_load"),
-            registry_link as RegistryLoadFn as *const (),
             &REGISTRY_NEXT,
+            registry_link,
             HookFlags::NONE,
-        ));
+        );
     }
     if status {
-        match loader.reflection.system("ui_npc_status") {
-            Ok(found) if found.entry() != 0 => links.push((
-                "ui_npc_status",
-                found.entry(),
-                menu_link as SystemFn as *const (),
-                &MENU_NEXT,
-                HookFlags::NONE,
-            )),
-            _ => crate::log!(WARN, "survivor menu off: no system ui_npc_status"),
-        }
-    }
-    for (name, target, detour, next, flags) in links {
-        if target == 0 {
-            crate::log!(WARN, "survivors: {name} is not in this build");
-            continue;
-        }
-        let link = Link {
-            owner: LOADER,
-            detour: detour.addr(),
-            next,
-            priority: i32::MIN,
-            flags,
-        };
-        let status = loader
-            .chains
-            .lock()
-            .map_or(Status::REFUSED, |mut chains| chains.add(target, link));
-        if !status.is_ok() {
-            crate::log!(WARN, "survivors: {name} refused ({})", status.0);
-        }
+        let menu = loader
+            .reflection
+            .system("ui_npc_status")
+            .ok()
+            .map(enshwick_loader_reflect::System::entry);
+        loader.link_feature(
+            "survivor menu",
+            menu,
+            &MENU_NEXT,
+            menu_link,
+            HookFlags::NONE,
+        );
     }
     if lookup || beds || summons || items || status {
         crate::log!(
@@ -510,13 +471,6 @@ pub(crate) fn forget() {
     NPC_COMMON_TYPE.store(u16::MAX, Ordering::Release);
     *MOVING.lock().unwrap_or_else(PoisonError::into_inner) = None;
     MOVE_ACTIVE.store(false, Ordering::Release);
-}
-
-fn next<F: Copy>(slot: &AtomicUsize) -> F {
-    let address = slot.load(Ordering::Acquire);
-    // SAFETY: the loader points the slot at the rest of the chain, which has
-    // the hooked function's signature, before the link can run.
-    unsafe { core::mem::transmute_copy::<usize, F>(&address) }
 }
 
 unsafe fn read_at<T: Copy>(base: u64, offset: u64) -> T {
@@ -553,12 +507,12 @@ fn call(survivor: u32, vanilla: u32, purpose: u32, entity: u32, cell: [i64; 3]) 
 
 unsafe extern "system" fn lookup_link(bases: *mut u8, npc: *const u32) -> u32 {
     // SAFETY: the rest of the chain takes the arguments the game passed.
-    unsafe { lookup(next::<LookupFn>(&LOOKUP_NEXT), bases, npc) }
+    unsafe { lookup(LOOKUP_NEXT.get(), bases, npc) }
 }
 
 unsafe extern "system" fn cursor_link(bases: *mut u8, npc: *const u32) -> u32 {
     // SAFETY: as above.
-    unsafe { lookup(next::<LookupFn>(&CURSOR_NEXT), bases, npc) }
+    unsafe { lookup(CURSOR_NEXT.get(), bases, npc) }
 }
 
 /// # Safety
@@ -832,7 +786,7 @@ unsafe extern "system" fn update_link(
         return 0;
     }
     // SAFETY: the rest of the chain takes the arguments the game passed.
-    unsafe { next::<UpdateFn>(&UPDATE_NEXT)(bases, npc, state, flag) }
+    unsafe { UPDATE_NEXT.get()(bases, npc, state, flag) }
 }
 
 unsafe extern "system" fn move_link(ctx: *mut *mut u64, b: usize, c: usize, d: usize) -> usize {
@@ -847,7 +801,7 @@ unsafe extern "system" fn move_link(ctx: *mut *mut u64, b: usize, c: usize, d: u
         return 0;
     }
     // SAFETY: the rest of the chain takes the arguments the game passed.
-    unsafe { next::<MoveFn>(&MOVE_NEXT)(ctx, b, c, d) }
+    unsafe { MOVE_NEXT.get()(ctx, b, c, d) }
 }
 
 /// Whether this entity is another entity of the survivor a staff moves.
@@ -892,7 +846,7 @@ unsafe fn skip_move(ctx: *mut *mut u64) -> bool {
 
 unsafe extern "system" fn bed_check_link(ctx: *mut u8) -> u8 {
     // SAFETY: the rest of the chain takes the argument the game passed.
-    let valid = unsafe { next::<BedCheckGameFn>(&BED_CHECK_NEXT)(ctx) };
+    let valid = unsafe { BED_CHECK_NEXT.get()(ctx) };
     if valid == 0 || ctx.is_null() {
         return valid;
     }
@@ -966,7 +920,7 @@ unsafe extern "system" fn spawn_link(ctx: *mut u64, request: *mut u8) -> u8 {
         let _done = std::panic::catch_unwind(|| unsafe { summon(request) });
     }
     // SAFETY: the rest of the chain takes the arguments the game passed.
-    unsafe { next::<SpawnFn>(&SPAWN_NEXT)(ctx, request) }
+    unsafe { SPAWN_NEXT.get()(ctx, request) }
 }
 
 /// Asks the summon filters and marks the request consuming when one says so.
@@ -1031,7 +985,7 @@ unsafe extern "system" fn registry_link(registry: *mut u8) {
         |(m, _)| unsafe { read_at::<usize>(registry.addr() as u64, m.loaded as u64) } != 0,
     );
     // SAFETY: the rest of the chain takes the registry the game passed.
-    unsafe { next::<RegistryLoadFn>(&REGISTRY_NEXT)(registry) };
+    unsafe { REGISTRY_NEXT.get()(registry) };
     let Some((map, sealed)) = ready.filter(|_| !built) else {
         return;
     };
@@ -1101,7 +1055,7 @@ unsafe fn file(map: &ItemMap, table: *mut u8, item: u32, survivor: u32) -> bool 
 
 unsafe extern "system" fn menu_link(ctx: *mut u64) {
     // SAFETY: the original system takes its own context.
-    unsafe { next::<SystemFn>(&MENU_NEXT)(ctx) };
+    unsafe { MENU_NEXT.get()(ctx) };
     if ctx.is_null() {
         return;
     }

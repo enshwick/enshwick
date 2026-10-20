@@ -6,6 +6,7 @@
 //! Wiring writes only those slots, so turning a faulty mod off while the game
 //! runs never touches code.
 
+use core::marker::PhantomData;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use enshwick_loader_api::abi::{HookFlags, Status};
@@ -13,6 +14,71 @@ use rustc_hash::FxHashMap;
 
 /// The owner of the loader's own links, which never turn off.
 pub const LOADER: usize = usize::MAX;
+
+/// The `next` slot of one of the loader's own links, typed by the function
+/// it hooks, so a link calls on with the hooked function's signature.
+#[derive(Debug)]
+pub struct Next<F> {
+    slot: AtomicUsize,
+    function: PhantomData<F>,
+}
+
+impl<F: Copy> Next<F> {
+    /// An empty slot, which the loader points at the rest of the chain when
+    /// it wires it.
+    ///
+    /// # Safety
+    ///
+    /// `F` is the pointer type of the hooked function, with its exact
+    /// signature and calling convention, and the slot is used only as the
+    /// `next` of a link on that function, whose detour [`Next::get`] is
+    /// called from. Chains are wired before their targets jump to them, so
+    /// the slot holds a function of type `F` whenever the detour runs.
+    #[must_use]
+    pub const unsafe fn new() -> Self {
+        const {
+            assert!(size_of::<F>() == size_of::<usize>());
+        }
+        Self {
+            slot: AtomicUsize::new(0),
+            function: PhantomData,
+        }
+    }
+
+    /// The rest of the chain: the next link, or the original function.
+    #[must_use]
+    pub fn get(&self) -> F {
+        let address = self.slot.load(Ordering::Acquire);
+        debug_assert_ne!(address, 0, "a link ran before its chain was wired");
+        // SAFETY: by the contract of `new`, the slot holds a function of
+        // type `F` whenever a detour calls this, and `F` is pointer-sized.
+        unsafe { core::mem::transmute_copy::<usize, F>(&address) }
+    }
+
+    /// The rest of the chain, or `None` before the chain is wired, for a
+    /// caller that is not the link's own detour.
+    #[must_use]
+    pub fn wired(&self) -> Option<F> {
+        let address = self.slot.load(Ordering::Acquire);
+        // SAFETY: by the contract of `new`, a slot that is not empty holds a
+        // function of type `F`, and `F` is pointer-sized.
+        (address != 0).then(|| unsafe { core::mem::transmute_copy::<usize, F>(&address) })
+    }
+
+    /// The untyped slot the chain wires.
+    #[must_use]
+    pub const fn slot(&'static self) -> &'static AtomicUsize {
+        &self.slot
+    }
+
+    /// `detour`'s address, for a link whose `next` is this slot.
+    #[must_use]
+    pub fn address_of(detour: F) -> usize {
+        // SAFETY: `F` is a function pointer type by the contract of `new`,
+        // checked pointer-sized there.
+        unsafe { core::mem::transmute_copy::<F, usize>(&detour) }
+    }
+}
 
 /// One mod's link on a target.
 #[derive(Debug)]

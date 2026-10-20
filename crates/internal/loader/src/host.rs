@@ -7,15 +7,15 @@ use std::sync::{Mutex, OnceLock};
 
 use enshwick_loader_api::abi as api_frame;
 use enshwick_loader_api::abi::{
-    BuildInfo, Event, EventFn, Header, HookSpec, HostApi, Level, Manifest, ManifestFlags,
-    MidHookSpec, ModHandle, ModInfo, Side, Status, Str, UpdateKind, UpdateSource,
+    BuildInfo, Event, EventFn, Header, HookFlags, HookSpec, HostApi, Level, Manifest,
+    ManifestFlags, MidHookSpec, ModHandle, ModInfo, Side, Status, Str, UpdateKind, UpdateSource,
 };
 use enshwick_loader_api::mods::Updates;
 use enshwick_loader_reflect::{Fingerprint, Reflection};
 use rustc_hash::FxHashMap;
 
 use crate::builds::KnownBuild;
-use crate::chains::{Chains, Link};
+use crate::chains::{Chains, Link, Next};
 use crate::mid::{MidLink, Mids};
 
 /// Where the loader's own releases come from.
@@ -269,6 +269,46 @@ pub(crate) fn loader() -> Option<&'static Loader> {
     LOADER.get()
 }
 
+/// A mod's callback with the pointer it registered beside it.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct Registered<F> {
+    /// The owning mod's index.
+    pub(crate) owner: usize,
+    /// The callback, inside the mod's DLL, which stays loaded.
+    pub(crate) callback: F,
+    /// The pointer the callback takes, as an address.
+    pub(crate) user: usize,
+}
+
+impl<F> Registered<F> {
+    pub(crate) fn new(owner: usize, callback: F, user: *mut core::ffi::c_void) -> Self {
+        Self {
+            owner,
+            callback,
+            user: user.expose_provenance(),
+        }
+    }
+
+    /// The pointer the mod registered with the callback.
+    pub(crate) fn user(&self) -> *mut core::ffi::c_void {
+        core::ptr::with_exposed_provenance_mut(self.user)
+    }
+
+    /// Whether its mod still runs.
+    pub(crate) fn live(&self) -> bool {
+        !is_off(self.owner)
+    }
+}
+
+/// Takes what mods registered during init, for sealing.
+pub(crate) fn take<T>(list: &Mutex<Vec<T>>) -> Vec<T> {
+    std::mem::take(
+        &mut *list
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner),
+    )
+}
+
 /// Whether the mod at index `owner` is off; the loader's own links never are.
 pub(crate) fn is_off(owner: usize) -> bool {
     owner != crate::chains::LOADER
@@ -281,6 +321,60 @@ pub(crate) fn is_off(owner: usize) -> bool {
 }
 
 impl Loader {
+    /// The address of the build table's symbol `name` in the running game.
+    pub(crate) fn address(&self, name: &str) -> Option<u64> {
+        self.build.symbol(name).map(|rva| self.base + rva)
+    }
+
+    /// The build table's constant `name` as an offset or a size.
+    pub(crate) fn offset(&self, name: &str) -> Option<usize> {
+        self.build
+            .constant(name)
+            .and_then(|value| usize::try_from(value).ok())
+    }
+
+    /// Links one of the loader's own detours on `target`, ahead of every
+    /// mod's link there.
+    pub(crate) fn link<F: Copy>(
+        &self,
+        target: u64,
+        next: &'static Next<F>,
+        detour: F,
+        flags: HookFlags,
+    ) -> Status {
+        let link = Link {
+            owner: crate::chains::LOADER,
+            detour: Next::<F>::address_of(detour),
+            next: next.slot(),
+            priority: i32::MIN,
+            flags,
+        };
+        self.chains
+            .lock()
+            .map_or(Status::REFUSED, |mut chains| chains.add(target, link))
+    }
+
+    /// [`Loader::link`] for a feature, logging why it stays off: a target
+    /// this build lacks, or a refused link. True when linked.
+    pub(crate) fn link_feature<F: Copy>(
+        &self,
+        feature: &str,
+        target: Option<u64>,
+        next: &'static Next<F>,
+        detour: F,
+        flags: HookFlags,
+    ) -> bool {
+        let Some(target) = target.filter(|&t| t != 0) else {
+            crate::log!(WARN, "{feature} off: not in this build");
+            return false;
+        };
+        let status = self.link(target, next, detour, flags);
+        if !status.is_ok() {
+            crate::log!(WARN, "{feature} off: refused ({})", status.0);
+        }
+        status.is_ok()
+    }
+
     fn record(&self, me: ModHandle) -> Option<(usize, &ModRecord)> {
         let index = me.0.checked_sub(1)?;
         self.mods.get(index).map(|record| (index, record))
@@ -512,36 +606,40 @@ fn put<T>(out: *mut T, value: T) -> Status {
 }
 
 extern "system" fn build(out: *mut BuildInfo) {
-    let Some(loader) = loader() else {
-        return;
-    };
-    let _written = put_headed(
-        out,
-        BuildInfo {
-            header: Header::of::<BuildInfo>(),
-            side: loader.side,
-            base: loader.base,
-            fingerprint: enshwick_loader_api::abi::Fingerprint {
-                guid: loader.fingerprint.guid(),
-                age: loader.fingerprint.age(),
+    entry("build", || {
+        let Some(loader) = loader() else {
+            return;
+        };
+        let _written = put_headed(
+            out,
+            BuildInfo {
+                header: Header::of::<BuildInfo>(),
+                side: loader.side,
+                base: loader.base,
+                fingerprint: enshwick_loader_api::abi::Fingerprint {
+                    guid: loader.fingerprint.guid(),
+                    age: loader.fingerprint.age(),
+                },
             },
-        },
-    );
+        );
+    });
 }
 
 extern "system" fn symbol(me: ModHandle, name: Str, out: *mut u64) -> Status {
-    let (Some(loader), Some(name)) = (loader(), text(name)) else {
-        return Status::BAD_ARGS;
-    };
-    let Some((index, _)) = loader.record(me) else {
-        return Status::BAD_ARGS;
-    };
-    loader
-        .resolve_symbol(index, name)
-        .map_or(Status::MISSING, |address| {
-            crate::diag::name(address, name);
-            put(out, address)
-        })
+    entry("symbol", || {
+        let (Some(loader), Some(name)) = (loader(), text(name)) else {
+            return Status::BAD_ARGS;
+        };
+        let Some((index, _)) = loader.record(me) else {
+            return Status::BAD_ARGS;
+        };
+        loader
+            .resolve_symbol(index, name)
+            .map_or(Status::MISSING, |address| {
+                crate::diag::name(address, name);
+                put(out, address)
+            })
+    })
 }
 
 fn lookup(error: &enshwick_loader_reflect::LookupError) -> Status {
@@ -552,151 +650,159 @@ fn lookup(error: &enshwick_loader_reflect::LookupError) -> Status {
 }
 
 extern "system" fn system(name: Str, out: *mut u64) -> Status {
-    let (Some(loader), Some(name)) = (loader(), text(name)) else {
-        return Status::BAD_ARGS;
-    };
-    match loader.reflection.system(name) {
-        Ok(found) if found.entry() != 0 => {
-            crate::diag::name(found.entry(), name);
-            put(out, found.entry())
+    entry("system", || {
+        let (Some(loader), Some(name)) = (loader(), text(name)) else {
+            return Status::BAD_ARGS;
+        };
+        match loader.reflection.system(name) {
+            Ok(found) if found.entry() != 0 => {
+                crate::diag::name(found.entry(), name);
+                put(out, found.entry())
+            }
+            Ok(_) => Status::MISSING,
+            Err(error) => lookup(&error),
         }
-        Ok(_) => Status::MISSING,
-        Err(error) => lookup(&error),
-    }
+    })
 }
 
 extern "system" fn field_offset(type_name: Str, field: Str, out: *mut u64) -> Status {
-    let (Some(loader), Some(type_name), Some(field)) = (loader(), text(type_name), text(field))
-    else {
-        return Status::BAD_ARGS;
-    };
-    match loader.reflection.field_offset(type_name, field) {
-        Ok(offset) => put(out, offset),
-        Err(error) => lookup(&error),
-    }
+    entry("field_offset", || {
+        let (Some(loader), Some(type_name), Some(field)) = (loader(), text(type_name), text(field))
+        else {
+            return Status::BAD_ARGS;
+        };
+        match loader.reflection.field_offset(type_name, field) {
+            Ok(offset) => put(out, offset),
+            Err(error) => lookup(&error),
+        }
+    })
 }
 
 extern "system" fn type_size(type_name: Str, out: *mut u32) -> Status {
-    let (Some(loader), Some(type_name)) = (loader(), text(type_name)) else {
-        return Status::BAD_ARGS;
-    };
-    match loader.reflection.type_info(type_name) {
-        Ok(info) => put(out, info.size()),
-        Err(error) => lookup(&error),
-    }
+    entry("type_size", || {
+        let (Some(loader), Some(type_name)) = (loader(), text(type_name)) else {
+            return Status::BAD_ARGS;
+        };
+        match loader.reflection.type_info(type_name) {
+            Ok(info) => put(out, info.size()),
+            Err(error) => lookup(&error),
+        }
+    })
 }
 
 extern "system" fn hook(me: ModHandle, spec: *const HookSpec) -> Status {
-    let Some(loader) = loader() else {
-        return Status::BAD_ARGS;
-    };
-    let Some((index, record)) = loader.record(me) else {
-        return Status::BAD_ARGS;
-    };
-    if record.off.load(Ordering::Acquire) {
-        return Status::FAULTED;
-    }
-    // SAFETY: a non-null spec from a mod points at a valid `HookSpec`.
-    let Some(spec) = (unsafe { spec.as_ref() }) else {
-        return Status::BAD_ARGS;
-    };
-    // SAFETY: `next` is a static inside the mod's DLL, which is never unloaded.
-    let Some(next) = (unsafe { spec.next.as_ref::<'static>() }) else {
-        return Status::BAD_ARGS;
-    };
-    let link = Link {
-        owner: index,
-        detour: spec.detour,
-        next,
-        priority: spec.priority,
-        flags: spec.flags,
-    };
-    match loader.chains.lock() {
-        Ok(mut chains) => chains.add(spec.target, link),
-        Err(_) => Status::REFUSED,
-    }
+    entry("hook", || {
+        let (loader, index, _) = match calling(me) {
+            Ok(found) => found,
+            Err(status) => return status,
+        };
+        // SAFETY: a non-null spec from a mod points at a valid `HookSpec`.
+        let Some(spec) = (unsafe { spec.as_ref() }) else {
+            return Status::BAD_ARGS;
+        };
+        // SAFETY: `next` is a static inside the mod's DLL, which is never unloaded.
+        let Some(next) = (unsafe { spec.next.as_ref::<'static>() }) else {
+            return Status::BAD_ARGS;
+        };
+        let link = Link {
+            owner: index,
+            detour: spec.detour,
+            next,
+            priority: spec.priority,
+            flags: spec.flags,
+        };
+        match loader.chains.lock() {
+            Ok(mut chains) => chains.add(spec.target, link),
+            Err(_) => Status::REFUSED,
+        }
+    })
 }
 
 extern "system" fn hook_at(me: ModHandle, spec: *const MidHookSpec) -> Status {
-    let Some(loader) = loader() else {
-        return Status::BAD_ARGS;
-    };
-    let Some((index, record)) = loader.record(me) else {
-        return Status::BAD_ARGS;
-    };
-    if record.off.load(Ordering::Acquire) {
-        return Status::FAULTED;
-    }
-    // SAFETY: a non-null spec from a mod points at a valid `MidHookSpec`.
-    let Some(spec) = (unsafe { spec.as_ref() }) else {
-        return Status::BAD_ARGS;
-    };
-    let link = MidLink {
-        owner: index,
-        handler: spec.handler,
-        user: spec.user.expose_provenance(),
-        priority: spec.priority,
-        flags: spec.flags,
-    };
-    match loader.mids.lock() {
-        Ok(mut mids) => mids.add(spec.address, link),
-        Err(_) => Status::REFUSED,
-    }
+    entry("hook_at", || {
+        let (loader, index, _) = match calling(me) {
+            Ok(found) => found,
+            Err(status) => return status,
+        };
+        // SAFETY: a non-null spec from a mod points at a valid `MidHookSpec`.
+        let Some(spec) = (unsafe { spec.as_ref() }) else {
+            return Status::BAD_ARGS;
+        };
+        let link = MidLink {
+            owner: index,
+            handler: spec.handler,
+            user: spec.user.expose_provenance(),
+            priority: spec.priority,
+            flags: spec.flags,
+        };
+        match loader.mids.lock() {
+            Ok(mut mids) => mids.add(spec.address, link),
+            Err(_) => Status::REFUSED,
+        }
+    })
 }
 
 extern "system" fn caller_frame(out: *mut api_frame::CallerFrame) {
-    let frame = loader()
-        .map(|loader| (loader.caller_frame)())
-        .unwrap_or_default();
-    let _written = put(out, frame);
+    entry("caller_frame", || {
+        let frame = loader()
+            .map(|loader| (loader.caller_frame)())
+            .unwrap_or_default();
+        let _written = put(out, frame);
+    });
 }
 
 extern "system" fn fault(me: ModHandle, reason: Str) {
-    let Some(loader) = loader() else {
-        return;
-    };
-    if let Some((index, _)) = loader.record(me) {
-        loader.turn_off(index, text(reason).unwrap_or("a fault"));
-    }
+    entry("fault", || {
+        let Some(loader) = loader() else {
+            return;
+        };
+        if let Some((index, _)) = loader.record(me) {
+            loader.turn_off(index, text(reason).unwrap_or("a fault"));
+        }
+    });
 }
 
 extern "system" fn log(me: ModHandle, level: Level, message: Str) {
-    let Some(loader) = loader() else {
-        return;
-    };
-    if let (Some((_, record)), Some(message)) = (loader.record(me), text(message)) {
-        crate::log::write(level, &record.id, message);
-    }
+    entry("log", || {
+        let Some(loader) = loader() else {
+            return;
+        };
+        if let (Some((_, record)), Some(message)) = (loader.record(me), text(message)) {
+            crate::log::write(level, &record.id, message);
+        }
+    });
 }
 
 extern "system" fn settings(me: ModHandle, defaults: Str, out: *mut Str) -> Status {
-    let (Some(loader), Some(defaults)) = (loader(), text(defaults)) else {
-        return Status::BAD_ARGS;
-    };
-    let Some((_, record)) = loader.record(me) else {
-        return Status::BAD_ARGS;
-    };
-    let path = loader.configs_dir.join(format!("{}.toml", record.id));
-    let old = loader.mods_dir.join(format!("{}.toml", record.id));
-    if !path.exists() && old.exists() && std::fs::rename(&old, &path).is_ok() {
-        crate::log::write(Level::INFO, &record.id, "settings moved to mod-configs");
-    }
-    let content = std::fs::read_to_string(&path).unwrap_or_else(|_| {
-        if std::fs::write(&path, defaults).is_err() {
-            crate::log::write(
-                Level::WARN,
-                &record.id,
-                "could not write the default settings",
-            );
+    entry("settings", || {
+        let (Some(loader), Some(defaults)) = (loader(), text(defaults)) else {
+            return Status::BAD_ARGS;
+        };
+        let Some((_, record)) = loader.record(me) else {
+            return Status::BAD_ARGS;
+        };
+        let path = loader.configs_dir.join(format!("{}.toml", record.id));
+        let old = loader.mods_dir.join(format!("{}.toml", record.id));
+        if !path.exists() && old.exists() && std::fs::rename(&old, &path).is_ok() {
+            crate::log::write(Level::INFO, &record.id, "settings moved to mod-configs");
         }
-        defaults.to_owned()
-    });
-    let Ok(mut slot) = record.settings.lock() else {
-        return Status::REFUSED;
-    };
-    let kept = slot.insert(content);
-    // The text stays in the record until the loader drops it after init.
-    put(out, Str::new(kept))
+        let content = std::fs::read_to_string(&path).unwrap_or_else(|_| {
+            if std::fs::write(&path, defaults).is_err() {
+                crate::log::write(
+                    Level::WARN,
+                    &record.id,
+                    "could not write the default settings",
+                );
+            }
+            defaults.to_owned()
+        });
+        let Ok(mut slot) = record.settings.lock() else {
+            return Status::REFUSED;
+        };
+        let kept = slot.insert(content);
+        // The text stays in the record until the loader drops it after init.
+        put(out, Str::new(kept))
+    })
 }
 
 extern "system" fn publish(
@@ -705,24 +811,27 @@ extern "system" fn publish(
     version: u32,
     table: *const core::ffi::c_void,
 ) -> Status {
-    let (Some(loader), Some(name)) = (loader(), text(name)) else {
-        return Status::BAD_ARGS;
-    };
-    let Some((index, _)) = loader.record(me) else {
-        return Status::BAD_ARGS;
-    };
-    if table.is_null() {
-        return Status::BAD_ARGS;
-    }
-    let Ok(mut services) = loader.services.lock() else {
-        return Status::REFUSED;
-    };
-    let key = (name.to_owned(), version);
-    if services.contains_key(&key) {
-        return Status::REFUSED;
-    }
-    services.insert(key, (index, table.expose_provenance()));
-    Status::OK
+    entry("publish", || {
+        let Some(name) = text(name) else {
+            return Status::BAD_ARGS;
+        };
+        let (loader, index) = match caller_index(me) {
+            Ok(found) => found,
+            Err(status) => return status,
+        };
+        if table.is_null() {
+            return Status::BAD_ARGS;
+        }
+        let Ok(mut services) = loader.services.lock() else {
+            return Status::REFUSED;
+        };
+        let key = (name.to_owned(), version);
+        if services.contains_key(&key) {
+            return Status::REFUSED;
+        }
+        services.insert(key, (index, table.expose_provenance()));
+        Status::OK
+    })
 }
 
 extern "system" fn service(
@@ -731,60 +840,68 @@ extern "system" fn service(
     version: u32,
     out: *mut *const core::ffi::c_void,
 ) -> Status {
-    let (Some(loader), Some(name)) = (loader(), text(name)) else {
-        return Status::BAD_ARGS;
-    };
-    if loader.record(me).is_none() {
-        return Status::BAD_ARGS;
-    }
-    let Ok(services) = loader.services.lock() else {
-        return Status::REFUSED;
-    };
-    let Some(&(owner, table)) = services.get(&(name.to_owned(), version)) else {
-        return Status::MISSING;
-    };
-    if loader
-        .mods
-        .get(owner)
-        .is_none_or(|m| m.off.load(Ordering::Acquire))
-    {
-        return Status::MISSING;
-    }
-    put(out, core::ptr::with_exposed_provenance(table))
+    entry("service", || {
+        let (Some(loader), Some(name)) = (loader(), text(name)) else {
+            return Status::BAD_ARGS;
+        };
+        if loader.record(me).is_none() {
+            return Status::BAD_ARGS;
+        }
+        let Ok(services) = loader.services.lock() else {
+            return Status::REFUSED;
+        };
+        let Some(&(owner, table)) = services.get(&(name.to_owned(), version)) else {
+            return Status::MISSING;
+        };
+        if loader
+            .mods
+            .get(owner)
+            .is_none_or(|m| m.off.load(Ordering::Acquire))
+        {
+            return Status::MISSING;
+        }
+        put(out, core::ptr::with_exposed_provenance(table))
+    })
 }
 
 extern "system" fn constant(me: ModHandle, name: Str, out: *mut u64) -> Status {
-    let (Some(loader), Some(name)) = (loader(), text(name)) else {
-        return Status::BAD_ARGS;
-    };
-    let Some((index, _)) = loader.record(me) else {
-        return Status::BAD_ARGS;
-    };
-    loader
-        .resolve_constant(index, name)
-        .map_or(Status::MISSING, |value| put(out, value))
+    entry("constant", || {
+        let (Some(loader), Some(name)) = (loader(), text(name)) else {
+            return Status::BAD_ARGS;
+        };
+        let Some((index, _)) = loader.record(me) else {
+            return Status::BAD_ARGS;
+        };
+        loader
+            .resolve_constant(index, name)
+            .map_or(Status::MISSING, |value| put(out, value))
+    })
 }
 
 extern "system" fn data_dir(me: ModHandle, out: *mut Str) -> Status {
-    let Some(loader) = loader() else {
-        return Status::BAD_ARGS;
-    };
-    let Some((_, record)) = loader.record(me) else {
-        return Status::BAD_ARGS;
-    };
-    let dir = loader.data_dir.join(&record.id);
-    if std::fs::create_dir_all(&dir).is_err() {
-        return Status::REFUSED;
-    }
-    // The path lives for the process: the mod keeps it as long as it likes.
-    let path: &'static str = Box::leak(dir.to_string_lossy().into_owned().into_boxed_str());
-    put(out, Str::new(path))
+    entry("data_dir", || {
+        let Some(loader) = loader() else {
+            return Status::BAD_ARGS;
+        };
+        let Some((_, record)) = loader.record(me) else {
+            return Status::BAD_ARGS;
+        };
+        let dir = loader.data_dir.join(&record.id);
+        if std::fs::create_dir_all(&dir).is_err() {
+            return Status::REFUSED;
+        }
+        // The path lives for the process: the mod keeps it as long as it likes.
+        let path: &'static str = Box::leak(dir.to_string_lossy().into_owned().into_boxed_str());
+        put(out, Str::new(path))
+    })
 }
 
 extern "system" fn log_level(me: ModHandle) -> Level {
-    loader()
-        .and_then(|loader| loader.record(me))
-        .map_or(Level::INFO, |(_, record)| crate::log::level(&record.id))
+    entry("log_level", || {
+        loader()
+            .and_then(|loader| loader.record(me))
+            .map_or(Level::INFO, |(_, record)| crate::log::level(&record.id))
+    })
 }
 
 extern "system" fn subscribe(
@@ -793,53 +910,109 @@ extern "system" fn subscribe(
     callback: EventFn,
     user: *mut core::ffi::c_void,
 ) -> Status {
-    let Some(loader) = loader() else {
-        return Status::BAD_ARGS;
-    };
-    let Some((index, record)) = loader.record(me) else {
-        return Status::BAD_ARGS;
-    };
-    if record.off.load(Ordering::Acquire) {
-        return Status::FAULTED;
-    }
-    if !(Event::SETTINGS_CHANGED.0..=Event::ALTARS_CHANGED.0).contains(&event.0) {
-        return Status::MISSING;
-    }
-    if loader.delivery.get().is_some() {
-        return Status::TOO_LATE;
-    }
-    let Ok(mut subscriptions) = loader.subscriptions.lock() else {
-        return Status::REFUSED;
-    };
-    subscriptions.push(Subscription {
-        owner: index,
-        event,
-        callback,
-        user: user.expose_provenance(),
-    });
-    Status::OK
+    entry("subscribe", || {
+        let (loader, index, _) = match calling(me) {
+            Ok(found) => found,
+            Err(status) => return status,
+        };
+        if !(Event::SETTINGS_CHANGED.0..=Event::ALTARS_CHANGED.0).contains(&event.0) {
+            return Status::MISSING;
+        }
+        if loader.delivery.get().is_some() {
+            return Status::TOO_LATE;
+        }
+        let Ok(mut subscriptions) = loader.subscriptions.lock() else {
+            return Status::REFUSED;
+        };
+        subscriptions.push(Subscription {
+            owner: index,
+            event,
+            callback,
+            user: user.expose_provenance(),
+        });
+        Status::OK
+    })
 }
 
 extern "system" fn type_hash(type_name: Str, out: *mut u32) -> Status {
-    let (Some(loader), Some(type_name)) = (loader(), text(type_name)) else {
-        return Status::BAD_ARGS;
-    };
-    match loader.reflection.type_info(type_name) {
-        Ok(info) => {
-            crate::world::type_hash(loader, info.va()).map_or(Status::MISSING, |h| put(out, h))
+    entry("type_hash", || {
+        let (Some(loader), Some(type_name)) = (loader(), text(type_name)) else {
+            return Status::BAD_ARGS;
+        };
+        match loader.reflection.type_info(type_name) {
+            Ok(info) => {
+                crate::world::type_hash(loader, info.va()).map_or(Status::MISSING, |h| put(out, h))
+            }
+            Err(error) => lookup(&error),
         }
-        Err(error) => lookup(&error),
-    }
+    })
 }
 
 /// The loader and the calling mod, when the mod is on.
-fn caller(me: ModHandle) -> Result<&'static Loader, Status> {
+/// What an entry point answers when the loader's own code in it panicked.
+trait Fallback {
+    const FALLBACK: Self;
+}
+
+impl Fallback for Status {
+    const FALLBACK: Self = Self::REFUSED;
+}
+
+impl Fallback for () {
+    const FALLBACK: Self = ();
+}
+
+impl Fallback for Level {
+    const FALLBACK: Self = Self::INFO;
+}
+
+impl Fallback for u8 {
+    const FALLBACK: Self = 0;
+}
+
+impl Fallback for u32 {
+    const FALLBACK: Self = 0;
+}
+
+impl Fallback for u64 {
+    const FALLBACK: Self = 0;
+}
+
+/// Runs the body of the entry point `name`, so a panic in the loader's own
+/// code never unwinds into the mod that called it: the call is refused and
+/// the fault logged.
+fn entry<R: Fallback>(name: &str, body: impl FnOnce() -> R) -> R {
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(body))
+        .unwrap_or_else(|_| entry_fault(name))
+}
+
+#[cold]
+fn entry_fault<R: Fallback>(name: &str) -> R {
+    crate::log!(ERROR, "{name}: the loader panicked; the call is refused");
+    R::FALLBACK
+}
+
+/// The calling mod of an entry point, with its index and record: refused
+/// with [`Status::BAD_ARGS`] for a handle the loader never gave out and with
+/// [`Status::FAULTED`] for a mod that is off, the one answer every entry
+/// point gives a mod that is off.
+fn calling(me: ModHandle) -> Result<(&'static Loader, usize, &'static ModRecord), Status> {
     let loader = loader().ok_or(Status::BAD_ARGS)?;
-    let (_, record) = loader.record(me).ok_or(Status::BAD_ARGS)?;
+    let (index, record) = loader.record(me).ok_or(Status::BAD_ARGS)?;
     if record.off.load(Ordering::Acquire) {
         return Err(Status::FAULTED);
     }
-    Ok(loader)
+    Ok((loader, index, record))
+}
+
+/// [`calling`], for an entry point that needs only the loader.
+fn caller(me: ModHandle) -> Result<&'static Loader, Status> {
+    calling(me).map(|(loader, _, _)| loader)
+}
+
+/// [`calling`], for an entry point that needs the loader and the index.
+fn caller_index(me: ModHandle) -> Result<(&'static Loader, usize), Status> {
+    calling(me).map(|(loader, index, _)| (loader, index))
 }
 
 extern "system" fn component(
@@ -848,32 +1021,38 @@ extern "system" fn component(
     type_hash: u32,
     out: *mut *const core::ffi::c_void,
 ) -> Status {
-    match caller(me).and_then(|loader| crate::world::component(loader, entity, type_hash)) {
-        Ok(data) => put(out, data),
-        Err(status) => status,
-    }
+    entry("component", || {
+        match caller(me).and_then(|loader| crate::world::component(loader, entity, type_hash)) {
+            Ok(data) => put(out, data),
+            Err(status) => status,
+        }
+    })
 }
 
 extern "system" fn entity_template(me: ModHandle, entity: u32, out: *mut [u8; 16]) -> Status {
-    match caller(me).and_then(|loader| crate::world::template(loader, entity)) {
-        Ok(guid) => put(out, guid),
-        Err(status) => status,
-    }
+    entry("entity_template", || {
+        match caller(me).and_then(|loader| crate::world::template(loader, entity)) {
+            Ok(guid) => put(out, guid),
+            Err(status) => status,
+        }
+    })
 }
 
 extern "system" fn player(me: ModHandle, entity: u32, out: *mut api_frame::PlayerInfo) -> Status {
-    let found = caller(me)
-        .and_then(crate::world::players)
-        .and_then(|players| {
-            players
-                .into_iter()
-                .find(|p| p.entity == entity)
-                .ok_or(Status::MISSING)
-        });
-    match found {
-        Ok(info) => put(out, info),
-        Err(status) => status,
-    }
+    entry("player", || {
+        let found = caller(me)
+            .and_then(crate::world::players)
+            .and_then(|players| {
+                players
+                    .into_iter()
+                    .find(|p| p.entity == entity)
+                    .ok_or(Status::MISSING)
+            });
+        match found {
+            Ok(info) => put(out, info),
+            Err(status) => status,
+        }
+    })
 }
 
 extern "system" fn players(
@@ -882,20 +1061,22 @@ extern "system" fn players(
     capacity: u32,
     count: *mut u32,
 ) -> Status {
-    let players = match caller(me).and_then(crate::world::players) {
-        Ok(players) => players,
-        Err(status) => return status,
-    };
-    let total = u32::try_from(players.len()).unwrap_or(u32::MAX);
-    if !out.is_null() {
-        for (index, info) in players.into_iter().take(capacity as usize).enumerate() {
-            // SAFETY: the caller passes room for `capacity` entries.
-            let entry = unsafe { out.add(index) };
-            // SAFETY: as above.
-            unsafe { entry.write(info) };
+    entry("players", || {
+        let players = match caller(me).and_then(crate::world::players) {
+            Ok(players) => players,
+            Err(status) => return status,
+        };
+        let total = u32::try_from(players.len()).unwrap_or(u32::MAX);
+        if !out.is_null() {
+            for (index, info) in players.into_iter().take(capacity as usize).enumerate() {
+                // SAFETY: the caller passes room for `capacity` entries.
+                let entry = unsafe { out.add(index) };
+                // SAFETY: as above.
+                unsafe { entry.write(info) };
+            }
         }
-    }
-    put(count, total)
+        put(count, total)
+    })
 }
 
 extern "system" fn serve_resource(
@@ -905,44 +1086,43 @@ extern "system" fn serve_resource(
     patch: api_frame::ResourcePatchFn,
     user: *mut core::ffi::c_void,
 ) -> Status {
-    let Some(loader) = loader() else {
-        return Status::BAD_ARGS;
-    };
-    let Some((index, record)) = loader.record(me) else {
-        return Status::BAD_ARGS;
-    };
-    if record.off.load(Ordering::Acquire) {
-        return Status::FAULTED;
-    }
-    // SAFETY: non-null keys from a mod point at valid keys for the call.
-    let (Some(key), Some(base)) = (unsafe { key.as_ref() }, unsafe { base.as_ref() }) else {
-        return Status::BAD_ARGS;
-    };
-    crate::content::register(index, *key, *base, patch, user)
+    entry("serve_resource", || {
+        let (_, index, _) = match calling(me) {
+            Ok(found) => found,
+            Err(status) => return status,
+        };
+        // SAFETY: non-null keys from a mod point at valid keys for the call.
+        let (Some(key), Some(base)) = (unsafe { key.as_ref() }, unsafe { base.as_ref() }) else {
+            return Status::BAD_ARGS;
+        };
+        crate::content::register(index, *key, *base, patch, user)
+    })
 }
 
 extern "system" fn add_text(me: ModHandle, id: u32, language: u32, text: Str) -> Status {
-    let (Some(loader), Some(text)) = (loader(), self::text(text)) else {
-        return Status::BAD_ARGS;
-    };
-    match loader.record(me) {
-        Some((_, record)) if !record.off.load(Ordering::Acquire) => {
-            crate::content::add_text(id, language, text)
+    entry("add_text", || {
+        let Some(text) = self::text(text) else {
+            return Status::BAD_ARGS;
+        };
+        match caller(me) {
+            Ok(_) => crate::content::add_text(id, language, text),
+            Err(status) => status,
         }
-        Some(_) => Status::FAULTED,
-        None => Status::BAD_ARGS,
-    }
+    })
 }
 
 extern "system" fn code_range(start: *mut u64, len: *mut u64) -> Status {
-    let Some((address, size)) = loader().and_then(|loader| crate::code::text(loader.base)) else {
-        return Status::MISSING;
-    };
-    let status = put(start, address as u64);
-    if !status.is_ok() {
-        return status;
-    }
-    put(len, size as u64)
+    entry("code_range", || {
+        let Some((address, size)) = loader().and_then(|loader| crate::code::text(loader.base))
+        else {
+            return Status::MISSING;
+        };
+        let status = put(start, address as u64);
+        if !status.is_ok() {
+            return status;
+        }
+        put(len, size as u64)
+    })
 }
 
 extern "system" fn patch_code(
@@ -952,49 +1132,51 @@ extern "system" fn patch_code(
     replacement: *const u8,
     len: usize,
 ) -> Status {
-    let loader = match caller(me) {
-        Ok(loader) => loader,
-        Err(status) => return status,
-    };
-    let Some((index, _)) = loader.record(me) else {
-        return Status::BAD_ARGS;
-    };
-    let (Ok(address), Some(text)) = (usize::try_from(address), crate::code::text(loader.base))
-    else {
-        return Status::BAD_ARGS;
-    };
-    // SAFETY: the mod passes `len` readable bytes behind each pointer,
-    // copied before the call returns.
-    let expected = unsafe { slice(expected, len) };
-    // SAFETY: as above.
-    let replacement = unsafe { slice(replacement, len) };
-    crate::code::register(
-        crate::code::CodePatch {
-            owner: index,
-            address,
-            expected: expected.into(),
-            replacement: replacement.into(),
-        },
-        text,
-    )
+    entry("patch_code", || {
+        let (loader, index) = match caller_index(me) {
+            Ok(found) => found,
+            Err(status) => return status,
+        };
+        let (Ok(address), Some(text)) = (usize::try_from(address), crate::code::text(loader.base))
+        else {
+            return Status::BAD_ARGS;
+        };
+        // SAFETY: the mod passes `len` readable bytes behind each pointer,
+        // copied before the call returns.
+        let expected = unsafe { slice(expected, len) };
+        // SAFETY: as above.
+        let replacement = unsafe { slice(replacement, len) };
+        crate::code::register(
+            crate::code::CodePatch {
+                owner: index,
+                address,
+                expected: expected.into(),
+                replacement: replacement.into(),
+                needs: Box::default(),
+            },
+            text,
+        )
+    })
 }
 
 extern "system" fn workshop_recipes() -> u32 {
-    crate::code::workshop_recipes()
+    entry("workshop_recipes", crate::code::workshop_recipes)
 }
 
 extern "system" fn inventory_open(me: ModHandle) -> Status {
-    match caller(me) {
+    entry("inventory_open", || match caller(me) {
         Ok(loader) => crate::inventory::open(loader),
         Err(status) => status,
-    }
+    })
 }
 
 extern "system" fn item_info(me: ModHandle, item: u32, out: *mut api_frame::ItemData) -> Status {
-    match caller(me).and_then(|loader| crate::inventory::item_info(loader, item)) {
-        Ok(data) => put_headed(out, data),
-        Err(status) => status,
-    }
+    entry("item_info", || {
+        match caller(me).and_then(|loader| crate::inventory::item_info(loader, item)) {
+            Ok(data) => put_headed(out, data),
+            Err(status) => status,
+        }
+    })
 }
 
 extern "system" fn inventory_submit(
@@ -1003,21 +1185,20 @@ extern "system" fn inventory_submit(
     done: api_frame::InventoryDoneFn,
     user: *mut core::ffi::c_void,
 ) -> Status {
-    let loader = match caller(me) {
-        Ok(loader) => loader,
-        Err(status) => return status,
-    };
-    let Some((index, _)) = loader.record(me) else {
-        return Status::BAD_ARGS;
-    };
-    let required = core::mem::offset_of!(api_frame::InventoryRequest, op_count) + 4;
-    // SAFETY: a non-null request from a mod points at a valid request for the
-    // call; an all-zero request is valid.
-    let Some(request) = (unsafe { enshwick_loader_api::abi::read_headed(request, required) })
-    else {
-        return Status::BAD_ARGS;
-    };
-    crate::inventory::submit(loader, index, &request, done, user)
+    entry("inventory_submit", || {
+        let (loader, index) = match caller_index(me) {
+            Ok(found) => found,
+            Err(status) => return status,
+        };
+        let required = core::mem::offset_of!(api_frame::InventoryRequest, op_count) + 4;
+        // SAFETY: a non-null request from a mod points at a valid request for the
+        // call; an all-zero request is valid.
+        let Some(request) = (unsafe { enshwick_loader_api::abi::read_headed(request, required) })
+        else {
+            return Status::BAD_ARGS;
+        };
+        crate::inventory::submit(loader, index, &request, done, user)
+    })
 }
 
 /// The listing entry of the loader itself.
@@ -1057,17 +1238,19 @@ extern "system" fn mods(
     capacity: u32,
     count: *mut u32,
 ) -> Status {
-    let Some(loader) = loader() else {
-        return Status::BAD_ARGS;
-    };
-    if loader.record(me).is_none() {
-        return Status::BAD_ARGS;
-    }
-    let infos: Vec<ModInfo> = core::iter::once(loader_info())
-        .chain(loader.mods.iter().map(mod_info))
-        .collect();
-    // SAFETY: forwarded from the mod's call.
-    unsafe { list(&infos, out, entry_size, capacity, count) }
+    entry("mods", || {
+        let Some(loader) = loader() else {
+            return Status::BAD_ARGS;
+        };
+        if loader.record(me).is_none() {
+            return Status::BAD_ARGS;
+        }
+        let infos: Vec<ModInfo> = core::iter::once(loader_info())
+            .chain(loader.mods.iter().map(mod_info))
+            .collect();
+        // SAFETY: forwarded from the mod's call.
+        unsafe { list(&infos, out, entry_size, capacity, count) }
+    })
 }
 
 extern "system" fn join_missing(
@@ -1077,37 +1260,39 @@ extern "system" fn join_missing(
     capacity: u32,
     count: *mut u32,
 ) -> Status {
-    let Some(loader) = loader() else {
-        return Status::BAD_ARGS;
-    };
-    if loader.record(me).is_none() {
-        return Status::BAD_ARGS;
-    }
-    let held = JOIN_MISSING
-        .lock()
-        .map(|held| held.clone())
-        .unwrap_or_default();
-    let infos: Vec<ModInfo> = held
-        .iter()
-        .map(|missing| ModInfo {
-            header: Header::of::<ModInfo>(),
-            id: Str::new(missing.id),
-            version: Str::new(missing.version),
-            side: Side::BOTH,
-            flags: ManifestFlags::JOIN,
-            off: 1,
-            file: Str::new(missing.file),
-            updates: UpdateSource {
-                kind: missing.kind,
-                location: Str::new(missing.location),
-                component: Str::new(missing.component),
-                ..UpdateSource::NONE
-            },
-            signed_by: missing.keys.map(Str::new),
-        })
-        .collect();
-    // SAFETY: forwarded from the mod's call.
-    unsafe { list(&infos, out, entry_size, capacity, count) }
+    entry("join_missing", || {
+        let Some(loader) = loader() else {
+            return Status::BAD_ARGS;
+        };
+        if loader.record(me).is_none() {
+            return Status::BAD_ARGS;
+        }
+        let held = JOIN_MISSING
+            .lock()
+            .map(|held| held.clone())
+            .unwrap_or_default();
+        let infos: Vec<ModInfo> = held
+            .iter()
+            .map(|missing| ModInfo {
+                header: Header::of::<ModInfo>(),
+                id: Str::new(missing.id),
+                version: Str::new(missing.version),
+                side: Side::BOTH,
+                flags: ManifestFlags::JOIN,
+                off: 1,
+                file: Str::new(missing.file),
+                updates: UpdateSource {
+                    kind: missing.kind,
+                    location: Str::new(missing.location),
+                    component: Str::new(missing.component),
+                    ..UpdateSource::NONE
+                },
+                signed_by: missing.keys.map(Str::new),
+            })
+            .collect();
+        // SAFETY: forwarded from the mod's call.
+        unsafe { list(&infos, out, entry_size, capacity, count) }
+    })
 }
 
 /// Copies up to `capacity` of `infos` to `out`, `entry_size` bytes apart, and
@@ -1143,37 +1328,41 @@ unsafe fn list<T: Copy>(
 }
 
 extern "system" fn sync(me: ModHandle, synced: Str, out: *mut Str) -> Status {
-    let (Some(loader), Some(synced)) = (loader(), text(synced)) else {
-        return Status::BAD_ARGS;
-    };
-    let Some((_, record)) = loader.record(me) else {
-        return Status::BAD_ARGS;
-    };
-    if let Ok(mut reported) = record.synced.lock() {
-        *reported = (!synced.is_empty()).then(|| synced.to_owned());
-    }
-    let server = record
-        .server_synced
-        .lock()
-        .ok()
-        .and_then(|held| held.clone())
-        .unwrap_or_default();
-    let Ok(mut slot) = record.sync_out.lock() else {
-        return Status::REFUSED;
-    };
-    *slot = server;
-    // The text stays in the record until the mod's next call.
-    put(out, Str::new(slot.as_str()))
+    entry("sync", || {
+        let (Some(loader), Some(synced)) = (loader(), text(synced)) else {
+            return Status::BAD_ARGS;
+        };
+        let Some((_, record)) = loader.record(me) else {
+            return Status::BAD_ARGS;
+        };
+        if let Ok(mut reported) = record.synced.lock() {
+            *reported = (!synced.is_empty()).then(|| synced.to_owned());
+        }
+        let server = record
+            .server_synced
+            .lock()
+            .ok()
+            .and_then(|held| held.clone())
+            .unwrap_or_default();
+        let Ok(mut slot) = record.sync_out.lock() else {
+            return Status::REFUSED;
+        };
+        *slot = server;
+        // The text stays in the record until the mod's next call.
+        put(out, Str::new(slot.as_str()))
+    })
 }
 
 extern "system" fn hosting() -> u8 {
-    loader().map_or(0, |loader| {
-        u8::from(loader.side == Side::SERVER || crate::world::hosting())
+    entry("hosting", || {
+        loader().map_or(0, |loader| {
+            u8::from(loader.side == Side::SERVER || crate::world::hosting())
+        })
     })
 }
 
 extern "system" fn server_world() -> u64 {
-    crate::world::server_world()
+    entry("server_world", crate::world::server_world)
 }
 
 extern "system" fn command(
@@ -1183,40 +1372,44 @@ extern "system" fn command(
     callback: api_frame::CommandFn,
     user: *mut core::ffi::c_void,
 ) -> Status {
-    let (Some(name), Some(help)) = (text(name), text(help)) else {
-        return Status::BAD_ARGS;
-    };
-    let Some((index, record)) = loader().and_then(|loader| loader.record(me)) else {
-        return Status::BAD_ARGS;
-    };
-    if record.off.load(Ordering::Acquire) {
-        return Status::FAULTED;
-    }
-    let status = crate::chat::register(index, name, help, callback, user);
-    if status.is_ok() {
-        crate::log::write(Level::DEBUG, &record.id, &format!("command /{name}"));
-    }
-    status
+    entry("command", || {
+        let (Some(name), Some(help)) = (text(name), text(help)) else {
+            return Status::BAD_ARGS;
+        };
+        let (_, index, record) = match calling(me) {
+            Ok(found) => found,
+            Err(status) => return status,
+        };
+        let status = crate::chat::register(index, name, help, callback, user);
+        if status.is_ok() {
+            crate::log::write(Level::DEBUG, &record.id, &format!("command /{name}"));
+        }
+        status
+    })
 }
 
 extern "system" fn chat(me: ModHandle, to: u64, message: Str) -> Status {
-    let Some(message) = text(message) else {
-        return Status::BAD_ARGS;
-    };
-    match caller(me) {
-        Ok(_) => crate::chat::send(to, message),
-        Err(status) => status,
-    }
+    entry("chat", || {
+        let Some(message) = text(message) else {
+            return Status::BAD_ARGS;
+        };
+        match caller(me) {
+            Ok(_) => crate::chat::send(to, message),
+            Err(status) => status,
+        }
+    })
 }
 
 extern "system" fn set_label(me: ModHandle, entity: u32, label: Str) -> Status {
-    let Some(label) = text(label) else {
-        return Status::BAD_ARGS;
-    };
-    match caller(me) {
-        Ok(loader) => crate::label::set(loader, entity, label),
-        Err(status) => status,
-    }
+    entry("set_label", || {
+        let Some(label) = text(label) else {
+            return Status::BAD_ARGS;
+        };
+        match caller(me) {
+            Ok(loader) => crate::label::set(loader, entity, label),
+            Err(status) => status,
+        }
+    })
 }
 
 extern "system" fn rename_filter(
@@ -1224,13 +1417,13 @@ extern "system" fn rename_filter(
     callback: api_frame::RenameFn,
     user: *mut core::ffi::c_void,
 ) -> Status {
-    let Some((index, record)) = loader().and_then(|loader| loader.record(me)) else {
-        return Status::BAD_ARGS;
-    };
-    if record.off.load(Ordering::Acquire) {
-        return Status::FAULTED;
-    }
-    crate::label::register(index, callback, user)
+    entry("rename_filter", || {
+        let (_, index, _) = match calling(me) {
+            Ok(found) => found,
+            Err(status) => return status,
+        };
+        crate::label::register(index, callback, user)
+    })
 }
 
 extern "system" fn status(
@@ -1238,13 +1431,13 @@ extern "system" fn status(
     callback: api_frame::StatusFn,
     user: *mut core::ffi::c_void,
 ) -> Status {
-    let Some((index, record)) = loader().and_then(|loader| loader.record(me)) else {
-        return Status::BAD_ARGS;
-    };
-    if record.off.load(Ordering::Acquire) {
-        return Status::FAULTED;
-    }
-    crate::status::register(index, callback, user)
+    entry("status", || {
+        let (_, index, _) = match calling(me) {
+            Ok(found) => found,
+            Err(status) => return status,
+        };
+        crate::status::register(index, callback, user)
+    })
 }
 
 thread_local! {
@@ -1253,28 +1446,33 @@ thread_local! {
 }
 
 extern "system" fn run_command(me: ModHandle, line: Str, out: *mut Str) -> Status {
-    let Some(line) = text(line) else {
-        return Status::BAD_ARGS;
-    };
-    let loader = match caller(me) {
-        Ok(loader) => loader,
-        Err(status) => return status,
-    };
-    match crate::chat::run_console(loader, line) {
-        Ok(reply) => CONSOLE_REPLY.with_borrow_mut(|kept| {
-            *kept = reply;
-            // The text stays in this thread's buffer until its next call.
-            put(out, Str::new(kept))
-        }),
-        Err(status) => status,
-    }
+    entry("run_command", || {
+        let Some(line) = text(line) else {
+            return Status::BAD_ARGS;
+        };
+        let loader = match caller(me) {
+            Ok(loader) => loader,
+            Err(status) => return status,
+        };
+        match crate::chat::run_console(loader, line) {
+            Ok(reply) => CONSOLE_REPLY.with_borrow_mut(|kept| {
+                *kept = reply;
+                // The text stays in this thread's buffer until its next call.
+                put(out, Str::new(kept))
+            }),
+            Err(status) => status,
+        }
+    })
 }
 
 extern "system" fn altars_open(me: ModHandle) -> Status {
-    let Some((loader, index)) = caller_index(me) else {
-        return Status::BAD_ARGS;
-    };
-    crate::altars::open(loader, index)
+    entry("altars_open", || {
+        let (loader, index) = match caller_index(me) {
+            Ok(found) => found,
+            Err(status) => return status,
+        };
+        crate::altars::open(loader, index)
+    })
 }
 
 extern "system" fn altars(
@@ -1284,22 +1482,28 @@ extern "system" fn altars(
     capacity: u32,
     count: *mut u32,
 ) -> Status {
-    let Some((_, index)) = caller_index(me) else {
-        return Status::BAD_ARGS;
-    };
-    if !crate::altars::opened(index) {
-        return Status::REFUSED;
-    }
-    let altars = crate::altars::list();
-    // SAFETY: forwarded from the mod's call.
-    unsafe { list(&altars, out, entry_size, capacity, count) }
+    entry("altars", || {
+        let (_, index) = match caller_index(me) {
+            Ok(found) => found,
+            Err(status) => return status,
+        };
+        if !crate::altars::opened(index) {
+            return Status::REFUSED;
+        }
+        let altars = crate::altars::list();
+        // SAFETY: forwarded from the mod's call.
+        unsafe { list(&altars, out, entry_size, capacity, count) }
+    })
 }
 
 extern "system" fn altar_zones_control(me: ModHandle) -> Status {
-    let Some((loader, index)) = caller_index(me) else {
-        return Status::BAD_ARGS;
-    };
-    crate::altars::control(loader, index)
+    entry("altar_zones_control", || {
+        let (loader, index) = match caller_index(me) {
+            Ok(found) => found,
+            Err(status) => return status,
+        };
+        crate::altars::control(loader, index)
+    })
 }
 
 extern "system" fn set_altar_zones(
@@ -1307,18 +1511,21 @@ extern "system" fn set_altar_zones(
     sizes: *const api_frame::AltarZoneSize,
     count: usize,
 ) -> Status {
-    let Some((_, index)) = caller_index(me) else {
-        return Status::BAD_ARGS;
-    };
-    let sizes = if count == 0 {
-        &[][..]
-    } else if sizes.is_null() {
-        return Status::BAD_ARGS;
-    } else {
-        // SAFETY: the mod passes `count` sizes, valid for the call.
-        unsafe { core::slice::from_raw_parts(sizes, count) }
-    };
-    crate::altars::set_sizes(index, sizes)
+    entry("set_altar_zones", || {
+        let (_, index) = match caller_index(me) {
+            Ok(found) => found,
+            Err(status) => return status,
+        };
+        let sizes = if count == 0 {
+            &[][..]
+        } else if sizes.is_null() {
+            return Status::BAD_ARGS;
+        } else {
+            // SAFETY: the mod passes `count` sizes, valid for the call.
+            unsafe { core::slice::from_raw_parts(sizes, count) }
+        };
+        crate::altars::set_sizes(index, sizes)
+    })
 }
 
 extern "system" fn zone_check_filter(
@@ -1326,10 +1533,13 @@ extern "system" fn zone_check_filter(
     callback: api_frame::ZoneCheckFn,
     user: *mut core::ffi::c_void,
 ) -> Status {
-    let Some((_, index)) = caller_index(me) else {
-        return Status::BAD_ARGS;
-    };
-    crate::altars::register(index, callback, user)
+    entry("zone_check_filter", || {
+        let (_, index) = match caller_index(me) {
+            Ok(found) => found,
+            Err(status) => return status,
+        };
+        crate::altars::register(index, callback, user)
+    })
 }
 
 extern "system" fn survivor_lookup(
@@ -1337,10 +1547,10 @@ extern "system" fn survivor_lookup(
     callback: api_frame::SurvivorLookupFn,
     user: *mut core::ffi::c_void,
 ) -> Status {
-    match caller_index(me) {
-        Some((loader, index)) => crate::survivors::register_lookup(loader, index, callback, user),
-        None => Status::BAD_ARGS,
-    }
+    entry("survivor_lookup", || match caller_index(me) {
+        Ok((loader, index)) => crate::survivors::register_lookup(loader, index, callback, user),
+        Err(status) => status,
+    })
 }
 
 extern "system" fn survivor_bed_check(
@@ -1348,12 +1558,10 @@ extern "system" fn survivor_bed_check(
     callback: api_frame::BedCheckFn,
     user: *mut core::ffi::c_void,
 ) -> Status {
-    match caller_index(me) {
-        Some((loader, index)) => {
-            crate::survivors::register_bed_check(loader, index, callback, user)
-        }
-        None => Status::BAD_ARGS,
-    }
+    entry("survivor_bed_check", || match caller_index(me) {
+        Ok((loader, index)) => crate::survivors::register_bed_check(loader, index, callback, user),
+        Err(status) => status,
+    })
 }
 
 extern "system" fn summon_filter(
@@ -1361,17 +1569,17 @@ extern "system" fn summon_filter(
     callback: api_frame::SummonFn,
     user: *mut core::ffi::c_void,
 ) -> Status {
-    match caller_index(me) {
-        Some((loader, index)) => crate::survivors::register_summon(loader, index, callback, user),
-        None => Status::BAD_ARGS,
-    }
+    entry("summon_filter", || match caller_index(me) {
+        Ok((loader, index)) => crate::survivors::register_summon(loader, index, callback, user),
+        Err(status) => status,
+    })
 }
 
 extern "system" fn summon_item(me: ModHandle, item: u32, survivor: u32) -> Status {
-    match caller_index(me) {
-        Some((loader, _)) => crate::survivors::register_item(loader, item, survivor),
-        None => Status::BAD_ARGS,
-    }
+    entry("summon_item", || match caller_index(me) {
+        Ok((loader, _)) => crate::survivors::register_item(loader, item, survivor),
+        Err(status) => status,
+    })
 }
 
 extern "system" fn survivor_status(
@@ -1379,10 +1587,10 @@ extern "system" fn survivor_status(
     callback: api_frame::SurvivorStatusFn,
     user: *mut core::ffi::c_void,
 ) -> Status {
-    match caller_index(me) {
-        Some((loader, index)) => crate::survivors::register_status(loader, index, callback, user),
-        None => Status::BAD_ARGS,
-    }
+    entry("survivor_status", || match caller_index(me) {
+        Ok((loader, index)) => crate::survivors::register_status(loader, index, callback, user),
+        Err(status) => status,
+    })
 }
 
 extern "system" fn interaction_filter(
@@ -1390,10 +1598,10 @@ extern "system" fn interaction_filter(
     callback: api_frame::InteractionFn,
     user: *mut core::ffi::c_void,
 ) -> Status {
-    match caller_index(me) {
-        Some((loader, index)) => crate::interactions::register(loader, index, callback, user),
-        None => Status::BAD_ARGS,
-    }
+    entry("interaction_filter", || match caller_index(me) {
+        Ok((loader, index)) => crate::interactions::register(loader, index, callback, user),
+        Err(status) => status,
+    })
 }
 
 extern "system" fn skill_override(
@@ -1402,12 +1610,10 @@ extern "system" fn skill_override(
     callback: api_frame::SkillFn,
     user: *mut core::ffi::c_void,
 ) -> Status {
-    match caller_index(me) {
-        Some((loader, index)) => {
-            crate::progress::register_skill(loader, index, node, callback, user)
-        }
-        None => Status::BAD_ARGS,
-    }
+    entry("skill_override", || match caller_index(me) {
+        Ok((loader, index)) => crate::progress::register_skill(loader, index, node, callback, user),
+        Err(status) => status,
+    })
 }
 
 extern "system" fn comfort_filter(
@@ -1415,10 +1621,10 @@ extern "system" fn comfort_filter(
     callback: api_frame::ComfortFn,
     user: *mut core::ffi::c_void,
 ) -> Status {
-    match caller_index(me) {
-        Some((loader, index)) => crate::progress::register_comfort(loader, index, callback, user),
-        None => Status::BAD_ARGS,
-    }
+    entry("comfort_filter", || match caller_index(me) {
+        Ok((loader, index)) => crate::progress::register_comfort(loader, index, callback, user),
+        Err(status) => status,
+    })
 }
 
 extern "system" fn experience_filter(
@@ -1426,12 +1632,10 @@ extern "system" fn experience_filter(
     callback: api_frame::ExperienceFn,
     user: *mut core::ffi::c_void,
 ) -> Status {
-    match caller_index(me) {
-        Some((loader, index)) => {
-            crate::progress::register_experience(loader, index, callback, user)
-        }
-        None => Status::BAD_ARGS,
-    }
+    entry("experience_filter", || match caller_index(me) {
+        Ok((loader, index)) => crate::progress::register_experience(loader, index, callback, user),
+        Err(status) => status,
+    })
 }
 
 extern "system" fn altar_limit(
@@ -1439,38 +1643,33 @@ extern "system" fn altar_limit(
     callback: api_frame::AltarLimitFn,
     user: *mut core::ffi::c_void,
 ) -> Status {
-    match caller_index(me) {
-        Some((loader, index)) => crate::bases::register_limit(loader, index, callback, user),
-        None => Status::BAD_ARGS,
-    }
+    entry("altar_limit", || match caller_index(me) {
+        Ok((loader, index)) => crate::bases::register_limit(loader, index, callback, user),
+        Err(status) => status,
+    })
 }
 
 extern "system" fn raise_base_limit(me: ModHandle) -> Status {
-    match caller_index(me) {
-        Some((loader, index)) => crate::bases::raise(loader, index),
-        None => Status::BAD_ARGS,
-    }
+    entry("raise_base_limit", || match caller_index(me) {
+        Ok((loader, index)) => crate::bases::raise(loader, index),
+        Err(status) => status,
+    })
 }
 
 extern "system" fn base_zones(me: ModHandle, zones: *mut u32, bases: *mut u32) -> Status {
-    if caller_index(me).is_none() {
-        return Status::BAD_ARGS;
-    }
-    let Some((zone_count, base_count)) = crate::bases::zones() else {
-        return Status::MISSING;
-    };
-    let status = put(zones, zone_count);
-    if !status.is_ok() {
-        return status;
-    }
-    put(bases, base_count)
-}
-
-/// The loader and the index of the calling mod, unless it is unknown or off.
-fn caller_index(me: ModHandle) -> Option<(&'static Loader, usize)> {
-    let loader = loader()?;
-    let (index, record) = loader.record(me)?;
-    (!record.off.load(Ordering::Acquire)).then_some((loader, index))
+    entry("base_zones", || {
+        if let Err(status) = caller(me) {
+            return status;
+        }
+        let Some((zone_count, base_count)) = crate::bases::zones() else {
+            return Status::MISSING;
+        };
+        let status = put(zones, zone_count);
+        if !status.is_ok() {
+            return status;
+        }
+        put(bases, base_count)
+    })
 }
 
 extern "system" fn game_event(
@@ -1479,13 +1678,13 @@ extern "system" fn game_event(
     callback: api_frame::GameEventFn,
     user: *mut core::ffi::c_void,
 ) -> Status {
-    let Some((index, record)) = loader().and_then(|loader| loader.record(me)) else {
-        return Status::BAD_ARGS;
-    };
-    if record.off.load(Ordering::Acquire) {
-        return Status::FAULTED;
-    }
-    crate::game_events::register(index, type_hash, callback, user)
+    entry("game_event", || {
+        let (_, index, _) = match calling(me) {
+            Ok(found) => found,
+            Err(status) => return status,
+        };
+        crate::game_events::register(index, type_hash, callback, user)
+    })
 }
 
 extern "system" fn entities(
@@ -1495,39 +1694,48 @@ extern "system" fn entities(
     capacity: u32,
     count: *mut u32,
 ) -> Status {
-    let found =
-        match caller(me).and_then(|loader| crate::entities::with_component(loader, type_hash)) {
+    entry("entities", || {
+        let found = match caller(me)
+            .and_then(|loader| crate::entities::with_component(loader, type_hash))
+        {
             Ok(found) => found,
             Err(status) => return status,
         };
-    if !out.is_null() {
-        for (index, place) in found.iter().take(capacity as usize).enumerate() {
-            // SAFETY: the caller passes room for `capacity` entries.
-            unsafe { out.wrapping_add(index).write(*place) };
+        if !out.is_null() {
+            for (index, place) in found.iter().take(capacity as usize).enumerate() {
+                // SAFETY: the caller passes room for `capacity` entries.
+                unsafe { out.wrapping_add(index).write(*place) };
+            }
         }
-    }
-    put(count, u32::try_from(found.len()).unwrap_or(u32::MAX))
+        put(count, u32::try_from(found.len()).unwrap_or(u32::MAX))
+    })
 }
 
 extern "system" fn destroy(me: ModHandle, entity: u32) -> Status {
-    match caller(me).and_then(|loader| crate::entities::destroy(loader, entity)) {
-        Ok(()) => Status::OK,
-        Err(status) => status,
-    }
+    entry("destroy", || {
+        match caller(me).and_then(|loader| crate::entities::destroy(loader, entity)) {
+            Ok(()) => Status::OK,
+            Err(status) => status,
+        }
+    })
 }
 
 extern "system" fn save_world(me: ModHandle) -> Status {
-    match caller(me).and_then(crate::saves::request) {
-        Ok(()) => Status::OK,
-        Err(status) => status,
-    }
+    entry("save_world", || {
+        match caller(me).and_then(crate::saves::request) {
+            Ok(()) => Status::OK,
+            Err(status) => status,
+        }
+    })
 }
 
 extern "system" fn world_key(me: ModHandle, out: *mut Str) -> Status {
-    match caller(me) {
-        Ok(_) => crate::saves::world_key().map_or(Status::MISSING, |key| put(out, Str::new(key))),
+    entry("world_key", || match caller(me) {
+        Ok(loader) => {
+            crate::saves::world_key(loader).map_or(Status::MISSING, |key| put(out, Str::new(key)))
+        }
         Err(status) => status,
-    }
+    })
 }
 
 /// Mod handles start at 1; 0 is no mod.

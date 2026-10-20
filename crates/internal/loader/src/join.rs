@@ -295,18 +295,21 @@ pub(crate) use runtime::{NEXT, detour};
 
 #[cfg(windows)]
 mod runtime {
+    use super::super::chains::Next;
     use std::collections::BTreeMap;
     use std::sync::OnceLock;
-    use std::sync::atomic::{AtomicUsize, Ordering};
 
     use windows_sys::Win32::UI::WindowsAndMessaging::{
         MB_ICONWARNING, MB_OK, MB_SETFOREGROUND, MB_TOPMOST, MessageBoxW,
     };
 
-    type ServerChange = unsafe extern "system" fn(provider: *mut u8, request: *const u8) -> u64;
+    pub(crate) type ServerChange =
+        unsafe extern "system" fn(provider: *mut u8, request: *const u8) -> u64;
 
+    // SAFETY: the slot joins the chain of the server change, typed
+    // `ServerChange`.
     /// The rest of the chain after the loader's link.
-    pub(crate) static NEXT: AtomicUsize = AtomicUsize::new(0);
+    pub(crate) static NEXT: Next<ServerChange> = unsafe { Next::new() };
     /// The request holds the address in its first 0x40 bytes.
     const ADDRESS_BYTES: usize = 0x40;
 
@@ -328,12 +331,8 @@ mod runtime {
                 return 0;
             }
         }
-        let next = NEXT.load(Ordering::Acquire);
-        // SAFETY: the loader points the slot at the rest of the chain, which has
-        // this signature, before the link can run.
-        let next: ServerChange = unsafe { core::mem::transmute(next) };
         // SAFETY: forwarded unchanged.
-        unsafe { next(provider, request) }
+        unsafe { NEXT.get()(provider, request) }
     }
 
     /// Compares mod sets, turns off what the server lacks, takes the server's

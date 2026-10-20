@@ -11,6 +11,7 @@ mod geometry;
 use core::ffi::c_void;
 use std::cell::RefCell;
 use std::collections::BTreeMap;
+use std::sync::TryLockError;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, OnceLock, PoisonError};
 use std::time::{Duration, Instant};
@@ -24,9 +25,9 @@ use enshwick_loader_api::abi::{
 use enshwick_loader_api::altars::MAX_ZONES;
 
 use self::geometry::Placed;
-use crate::chains::{LOADER, Link};
+use crate::chains::Next;
 use crate::ecs::{Engine, Query, read_at};
-use crate::host::Loader;
+use crate::host::{Loader, Registered};
 
 const FORGET_AFTER: Duration = Duration::from_secs(2);
 /// `add_buildzones_server`'s iterator: context, `BaseIdComponent`,
@@ -123,15 +124,12 @@ static CHANGED: AtomicBool = AtomicBool::new(false);
 /// Set when the loader's own work in a link went wrong: from then on the
 /// links run vanilla.
 static OFF: AtomicBool = AtomicBool::new(false);
-static ADD_ZONES_NEXT: AtomicUsize = AtomicUsize::new(0);
-static UPGRADE_NEXT: AtomicUsize = AtomicUsize::new(0);
+// SAFETY: each slot joins the chain of an engine system, typed `SystemFn`.
+static ADD_ZONES_NEXT: Next<SystemFn> = unsafe { Next::new() };
+// SAFETY: as above.
+static UPGRADE_NEXT: Next<SystemFn> = unsafe { Next::new() };
 
-#[derive(Debug, Clone, Copy)]
-struct Filter {
-    owner: usize,
-    callback: ZoneCheckFn,
-    user: usize,
-}
+type Filter = Registered<ZoneCheckFn>;
 
 #[derive(Debug, Clone, Copy)]
 struct SeamLayout {
@@ -146,7 +144,8 @@ struct SeamLayout {
 static FILTERS: Mutex<Vec<Filter>> = Mutex::new(Vec::new());
 static SEALED: OnceLock<Box<[Filter]>> = OnceLock::new();
 static SEAM: OnceLock<SeamLayout> = OnceLock::new();
-static SEAM_NEXT: AtomicUsize = AtomicUsize::new(0);
+// SAFETY: the slot joins the chain of the seam check, typed `SeamFn`.
+static SEAM_NEXT: Next<SeamFn> = unsafe { Next::new() };
 
 thread_local! {
     static PLACED: RefCell<Vec<(u32, Placed)>> = const { RefCell::new(Vec::new()) };
@@ -283,11 +282,7 @@ pub(crate) fn register(owner: usize, callback: ZoneCheckFn, user: *mut c_void) -
     FILTERS
         .lock()
         .unwrap_or_else(PoisonError::into_inner)
-        .push(Filter {
-            owner,
-            callback,
-            user: user.expose_provenance(),
-        });
+        .push(Registered::new(owner, callback, user));
     Status::OK
 }
 
@@ -301,25 +296,25 @@ pub(crate) fn link(loader: &'static Loader) {
         return;
     }
     let controlled = CONTROLLER.load(Ordering::Acquire) != 0;
-    let systems: [(&str, *const (), &'static AtomicUsize, HookFlags); 2] = [
+    let upgrade_flags = if controlled {
+        HookFlags::EXCLUSIVE
+    } else {
+        HookFlags::NONE
+    };
+    for (system, next, detour, flags) in [
         (
             "add_buildzones_server",
-            add_zones as SystemFn as *const (),
             &ADD_ZONES_NEXT,
+            add_zones as SystemFn,
             HookFlags::NONE,
         ),
         (
             "upgrade_building_range",
-            upgrade as SystemFn as *const (),
             &UPGRADE_NEXT,
-            if controlled {
-                HookFlags::EXCLUSIVE
-            } else {
-                HookFlags::NONE
-            },
+            upgrade as SystemFn,
+            upgrade_flags,
         ),
-    ];
-    for (system, detour, next, flags) in systems {
+    ] {
         let entry = match loader.reflection.system(system) {
             Ok(found) if found.entry() != 0 => found.entry(),
             _ => {
@@ -328,17 +323,7 @@ pub(crate) fn link(loader: &'static Loader) {
                 return;
             }
         };
-        let link = Link {
-            owner: LOADER,
-            detour: detour.addr(),
-            next,
-            priority: i32::MIN,
-            flags,
-        };
-        let status = loader
-            .chains
-            .lock()
-            .map_or(Status::REFUSED, |mut chains| chains.add(entry, link));
+        let status = loader.link(entry, next, detour, flags);
         if !status.is_ok() {
             crate::log!(WARN, "altars off: {system} refused ({})", status.0);
             OFF.store(true, Ordering::Release);
@@ -363,12 +348,7 @@ fn link_seam(loader: &'static Loader) {
     if !wanted {
         return;
     }
-    let size = |name: &str| {
-        loader
-            .build
-            .constant(name)
-            .and_then(|v| usize::try_from(v).ok())
-    };
+    let size = |name: &str| loader.offset(name);
     let layout = (|| {
         Some(SeamLayout {
             entries: size("building.zone_list_entries")?,
@@ -379,33 +359,17 @@ fn link_seam(loader: &'static Loader) {
             corner_size: size("building.corner_size")?,
         })
     })();
-    let (Some(layout), Some(rva)) = (layout, loader.build.symbol("building.seam_check")) else {
+    let (Some(layout), Some(target)) = (layout, loader.address("building.seam_check")) else {
         crate::log!(WARN, "zone checks off: this build lacks the zone list");
         return;
     };
     let _first = SEAM.set(layout);
-    let link = Link {
-        owner: LOADER,
-        detour: (seam as SeamFn as *const ()).addr(),
-        next: &SEAM_NEXT,
-        priority: i32::MIN,
-        flags: HookFlags::NONE,
-    };
-    let status = loader.chains.lock().map_or(Status::REFUSED, |mut chains| {
-        chains.add(loader.base + rva, link)
-    });
+    let status = loader.link(target, &SEAM_NEXT, seam, HookFlags::NONE);
     if status.is_ok() {
         crate::log!(INFO, "zone checks on");
     } else {
         crate::log!(WARN, "zone checks off: refused ({})", status.0);
     }
-}
-
-fn next<F: Copy>(slot: &AtomicUsize) -> F {
-    let address = slot.load(Ordering::Acquire);
-    // SAFETY: the loader points the slot at the rest of the chain, which has
-    // the hooked function's signature, before the link can run.
-    unsafe { core::mem::transmute_copy::<usize, F>(&address) }
 }
 
 fn turn_off(why: &str) {
@@ -429,7 +393,7 @@ unsafe fn server_world(loader: &Loader, engine: &Engine, ctx: *mut u64) -> bool 
 
 unsafe extern "system" fn add_zones(ctx: *mut u64) {
     // SAFETY: the original system takes its own context.
-    unsafe { next::<SystemFn>(&ADD_ZONES_NEXT)(ctx) };
+    unsafe { ADD_ZONES_NEXT.get()(ctx) };
     if OFF.load(Ordering::Acquire) {
         return;
     }
@@ -456,7 +420,7 @@ unsafe extern "system" fn upgrade(ctx: *mut u64) {
         .filter(|(loader, engine)| unsafe { server_world(loader, engine, ctx) });
     let Some((_, engine)) = ready else {
         // SAFETY: the original system takes its own context.
-        unsafe { next::<SystemFn>(&UPGRADE_NEXT)(ctx) };
+        unsafe { UPGRADE_NEXT.get()(ctx) };
         return;
     };
     let controller = CONTROLLER.load(Ordering::Acquire);
@@ -470,27 +434,37 @@ unsafe extern "system" fn upgrade(ctx: *mut u64) {
         // SAFETY: the system's live context.
         unsafe { engine.set_row(ctx, 0) };
         // SAFETY: the original system takes its own context.
-        unsafe { next::<SystemFn>(&UPGRADE_NEXT)(ctx) };
+        unsafe { UPGRADE_NEXT.get()(ctx) };
         return;
     }
     // SAFETY: the original system takes its own context.
-    unsafe { next::<SystemFn>(&UPGRADE_NEXT)(ctx) };
+    unsafe { UPGRADE_NEXT.get()(ctx) };
     // SAFETY: the system's live context, after vanilla ran.
     if std::panic::catch_unwind(|| unsafe { read_levels(engine, ctx) }).is_err() {
         turn_off("the level pass panicked");
     }
 }
 
+/// How many entries a thread holds back while the state is busy before it
+/// waits for the state instead.
+const HELD_BACK: usize = 4096;
+
+/// Merges this thread's batches into the state. When another pass holds the
+/// state, the batches stay queued in the thread's buffers and go in with
+/// its next pass, so no pass is lost; a queue grown past [`HELD_BACK`] waits
+/// for the state.
 fn merge(
     placed: &mut Vec<(u32, Placed)>,
     built: &mut Vec<(u32, [f32; 3])>,
     levels: &mut Vec<(u32, Sizes)>,
 ) {
-    let Ok(mut state) = STATE.try_lock() else {
-        placed.clear();
-        built.clear();
-        levels.clear();
-        return;
+    let mut state = match STATE.try_lock() {
+        Ok(state) => state,
+        Err(TryLockError::Poisoned(poisoned)) => poisoned.into_inner(),
+        Err(TryLockError::WouldBlock) if placed.len() + built.len() + levels.len() < HELD_BACK => {
+            return;
+        }
+        Err(TryLockError::WouldBlock) => STATE.lock().unwrap_or_else(PoisonError::into_inner),
     };
     let now = Instant::now();
     let mut changed = false;
@@ -578,7 +552,9 @@ unsafe fn read_levels(engine: &Engine, ctx: *mut u64) {
     LEVELS.with_borrow_mut(|levels| {
         // SAFETY: forwarded from the caller.
         unsafe { read_levels_into(engine, ctx, levels) };
-        merge(&mut Vec::new(), &mut Vec::new(), levels);
+        PLACED.with_borrow_mut(|placed| {
+            BUILT.with_borrow_mut(|built| merge(placed, built, levels));
+        });
     });
 }
 
@@ -714,7 +690,7 @@ unsafe fn level_sizes(
 
 unsafe extern "system" fn seam(zones: *const u8, corners: *const i64, margin: f32) -> u8 {
     // SAFETY: the rest of the chain takes the arguments the game passed.
-    let vanilla = unsafe { next::<SeamFn>(&SEAM_NEXT)(zones, corners, margin) };
+    let vanilla = unsafe { SEAM_NEXT.get()(zones, corners, margin) };
     if vanilla != 0 || zones.is_null() || corners.is_null() {
         return vanilla;
     }
@@ -778,15 +754,11 @@ unsafe fn check(
         },
         margin: (f64::from(margin) * enshwick_loader_api::ecs::FIXED_PER_METRE) as i64,
     };
-    filters
-        .iter()
-        .filter(|f| !crate::host::is_off(f.owner))
-        .any(|f| {
-            let pointer = core::ptr::with_exposed_provenance_mut(f.user);
-            // SAFETY: the callback lives in the mod's DLL, which stays loaded,
-            // and takes the pointer it registered; the call is valid for it.
-            unsafe { (f.callback)(&raw const call, pointer) != 0 }
-        })
+    filters.iter().filter(|f| f.live()).any(|f| {
+        // SAFETY: the callback lives in the mod's DLL, which stays loaded,
+        // and takes the pointer it registered; the call is valid for it.
+        unsafe { (f.callback)(&raw const call, f.user()) != 0 }
+    })
 }
 
 #[cfg(test)]

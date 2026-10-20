@@ -2,19 +2,20 @@
 //! the hooks, and the loader's own patch that lifts the game's limit of 512
 //! recipes per workshop.
 //!
-//! A patch names the bytes it expects and the bytes that replace them. The
-//! loader refuses a patch that overlaps another when it is registered, and
-//! at arming skips one whose bytes no longer read as expected or that overlaps
-//! the bytes a hook replaces, turning its owner off.
+//! A patch names the bytes it expects and the bytes that replace them, and
+//! the hooks it is unsafe without. The loader refuses a patch that overlaps
+//! another when it is registered, and at arming skips one whose bytes no
+//! longer read as expected, that overlaps the bytes a hook replaces or whose
+//! hooks are not armed with it, turning its owner off.
 
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock, PoisonError};
 
 use enshwick_loader_api::abi::{HookFlags, Status};
 use enshwick_loader_api::code::Pattern;
 use rustc_hash::FxHashMap;
 
-use crate::chains::{LOADER, Link};
+use crate::chains::{LOADER, Next};
 use crate::host::Loader;
 
 /// The game's own number of recipes per workshop.
@@ -47,6 +48,9 @@ pub(crate) struct CodePatch {
     pub(crate) expected: Box<[u8]>,
     /// What they become.
     pub(crate) replacement: Box<[u8]>,
+    /// The hook targets that must be armed in the same batch: a patch that
+    /// only works together with the loader's links stays out without them.
+    pub(crate) needs: Box<[u64]>,
 }
 
 impl CodePatch {
@@ -124,21 +128,38 @@ pub(crate) fn text_bytes(base: u64) -> Option<&'static [u8]> {
 /// Registers `patch` within `text`; refused once sealed, outside the code,
 /// with lengths that differ or are zero, and over another patch.
 pub(crate) fn register(patch: CodePatch, text: (usize, usize)) -> Status {
+    register_all(vec![patch], text)
+}
+
+/// Registers every patch of `patches` within `text`, or none of them, on
+/// the terms of [`register`]; patches of one set must not overlap each
+/// other either.
+pub(crate) fn register_all(patches: Vec<CodePatch>, text: (usize, usize)) -> Status {
     if SEALED.load(Ordering::Acquire) {
         return Status::TOO_LATE;
     }
-    let (address, len) = patch.span();
-    if len == 0 || patch.replacement.len() != len {
-        return Status::BAD_ARGS;
-    }
-    if address < text.0 || address.saturating_add(len) > text.0.saturating_add(text.1) {
+    let inside = |(address, len): (usize, usize)| {
+        len != 0
+            && address >= text.0
+            && address.saturating_add(len) <= text.0.saturating_add(text.1)
+    };
+    if patches
+        .iter()
+        .any(|p| p.replacement.len() != p.expected.len() || !inside(p.span()))
+    {
         return Status::BAD_ARGS;
     }
     let mut pending = PENDING.lock().unwrap_or_else(PoisonError::into_inner);
-    if pending.iter().any(|p| overlaps(p.span(), (address, len))) {
+    let clash = patches.iter().enumerate().any(|(i, patch)| {
+        pending
+            .iter()
+            .chain(&patches[..i])
+            .any(|p| overlaps(p.span(), patch.span()))
+    });
+    if clash {
         return Status::REFUSED;
     }
-    pending.push(patch);
+    pending.extend(patches);
     Status::OK
 }
 
@@ -148,10 +169,11 @@ pub(crate) fn seal() -> Vec<CodePatch> {
     std::mem::take(&mut *PENDING.lock().unwrap_or_else(PoisonError::into_inner))
 }
 
-/// What arming does with each patch, given the bytes the hooks replace and
-/// what `current` reads at an address and length now. An owner's patches go
-/// in together or not at all: one skipped skips the rest, since a change
-/// made of several patches may be unsafe in part.
+/// What arming does with each patch, given the bytes the hooks being armed
+/// replace, their targets first, and what `current` reads at an address and
+/// length now. An owner's patches go in together or not at all: one skipped
+/// skips the rest, since a change made of several patches may be unsafe in
+/// part.
 pub(crate) fn check(
     patches: &[CodePatch],
     hooked: &[(usize, usize)],
@@ -166,6 +188,13 @@ pub(crate) fn check(
             }
             if let Some(&(target, _)) = hooked.iter().find(|&&h| overlaps(h, patch.span())) {
                 return Verdict::Skip(format!("it overlaps the hook at {target:#x}"));
+            }
+            if let Some(target) = patch.needs.iter().find(|&&t| {
+                !hooked
+                    .iter()
+                    .any(|&(at, _)| u64::try_from(at).is_ok_and(|at| at == t))
+            }) {
+                return Verdict::Skip(format!("the hook at {target:#x} it needs is not armed"));
             }
             match current(patch.address, patch.expected.len()) {
                 Some(bytes) if *bytes == *patch.expected => Verdict::Write,
@@ -236,7 +265,8 @@ struct Lift {
 
 static LIFT: OnceLock<Lift> = OnceLock::new();
 static LIFTED: AtomicBool = AtomicBool::new(false);
-static LOOKUP_NEXT: AtomicUsize = AtomicUsize::new(0);
+// SAFETY: the slot joins the chain of the list lookup, typed `LookupFn`.
+static LOOKUP_NEXT: Next<LookupFn> = unsafe { Next::new() };
 /// Full recipe lists of the workshops past the game's limit, as addresses.
 static WORKSHOPS: OnceLock<FxHashMap<u32, Box<[usize]>>> = OnceLock::new();
 
@@ -276,6 +306,7 @@ fn limit_patch(code: &[u8], start: usize) -> Result<CodePatch, String> {
         address: start + stop,
         expected: expected.into(),
         replacement: stop_replacement().into(),
+        needs: Box::default(),
     })
 }
 
@@ -318,6 +349,11 @@ pub(crate) fn lift_workshop_limit(loader: &'static Loader) {
     let Some(range) = text(loader.base) else {
         return;
     };
+    let lookup = lookup as u64;
+    let patch = CodePatch {
+        needs: Box::new([lookup]),
+        ..patch
+    };
     let status = register(patch, range);
     if !status.is_ok() {
         crate::log!(
@@ -327,23 +363,13 @@ pub(crate) fn lift_workshop_limit(loader: &'static Loader) {
         );
         return;
     }
-    let lookup = lookup as u64;
-    let link = Link {
-        owner: LOADER,
-        detour: (lookup_detour as LookupFn as *const ()).addr(),
-        next: &LOOKUP_NEXT,
-        priority: i32::MIN,
-        flags: HookFlags::NONE,
-    };
-    if let Ok(mut chains) = loader.chains.lock() {
-        let status = chains.add(lookup, link);
-        if !status.is_ok() {
-            crate::log!(
-                WARN,
-                "workshop recipe list lookup at {lookup:#x} refused ({})",
-                status.0
-            );
-        }
+    let status = loader.link(lookup, &LOOKUP_NEXT, lookup_detour, HookFlags::NONE);
+    if !status.is_ok() {
+        crate::log!(
+            WARN,
+            "workshop recipe list lookup at {lookup:#x} refused ({})",
+            status.0
+        );
     }
     let _ = LIFT.set(Lift {
         patch: address,
@@ -363,6 +389,7 @@ pub(crate) fn arming(patches: &[CodePatch], verdicts: &[Verdict], hooked: &[u64]
                 .any(|(p, v)| p.address == lift.patch && *v == Verdict::Write)
     });
     LIFTED.store(lifted, Ordering::Release);
+    crate::bases::arming(patches, verdicts);
 }
 
 /// Whether the workshop limit is lifted.
@@ -451,12 +478,8 @@ unsafe extern "system" fn lookup_detour(
     registry: *mut u8,
     workshop: *const u32,
 ) -> *mut [u64; 2] {
-    let address = LOOKUP_NEXT.load(Ordering::Acquire);
-    // SAFETY: the loader points the slot at the rest of the chain, which has
-    // the lookup's signature, before the link can run.
-    let next = unsafe { core::mem::transmute_copy::<usize, LookupFn>(&address) };
     // SAFETY: forwarded unchanged.
-    let result = unsafe { next(out, registry, workshop) };
+    let result = unsafe { LOOKUP_NEXT.get()(out, registry, workshop) };
     if out.is_null() || workshop.is_null() {
         return result;
     }
@@ -479,6 +502,7 @@ mod tests {
             address,
             expected: expected.into(),
             replacement: replacement.into(),
+            needs: Box::default(),
         }
     }
 
@@ -572,6 +596,51 @@ mod tests {
             register(patch(1, 0x0fff, &[1, 2], &[3, 4]), text),
             Status::BAD_ARGS
         );
+    }
+
+    #[test]
+    fn a_patch_whose_hook_is_not_armed_stays_out_with_its_owner_s_others() {
+        let code = [0x90_u8; 16];
+        let base = code.as_ptr().addr();
+        let current = |address: usize, len: usize| {
+            let from = address.checked_sub(base)?;
+            code.get(from..from + len).map(<[u8]>::to_vec)
+        };
+        let hook = u64::try_from(base + 8).unwrap();
+        let needing = |owner, at| CodePatch {
+            needs: Box::new([hook]),
+            ..patch(owner, base + at, &[0x90], &[0xcc])
+        };
+        let patches = [needing(0, 0), patch(0, base + 1, &[0x90], &[0xcc])];
+        let verdicts = check(&patches, &[], |_| false, current);
+        assert!(matches!(&verdicts[0], Verdict::Skip(why) if why.contains("needs")));
+        assert!(matches!(&verdicts[1], Verdict::Skip(why) if why.contains("another patch")));
+        let verdicts = check(&patches, &[(base + 8, 5)], |_| false, current);
+        assert_eq!(verdicts, [Verdict::Write, Verdict::Write]);
+    }
+
+    #[test]
+    fn a_set_of_patches_registers_whole_or_not_at_all() {
+        let text = (0x2000, 0x100);
+        assert_eq!(
+            register_all(
+                vec![
+                    patch(0, 0x2010, &[1], &[2]),
+                    patch(0, 0x2020, &[1, 2], &[3]),
+                ],
+                text
+            ),
+            Status::BAD_ARGS
+        );
+        assert_eq!(
+            register_all(
+                vec![patch(0, 0x2010, &[1], &[2]), patch(0, 0x2010, &[1], &[3])],
+                text
+            ),
+            Status::REFUSED
+        );
+        assert_eq!(register(patch(1, 0x2010, &[1], &[2]), text), Status::OK);
+        assert_eq!(register(patch(1, 0x2020, &[1], &[2]), text), Status::OK);
     }
 
     #[test]
