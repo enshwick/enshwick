@@ -51,6 +51,7 @@ A real mod keeps the texts in a file and embeds it with
 | `debug_name` | The name in the item registry's debug list. |
 | `meter` | A count each item keeps, see [Meters](#meters); `None` for none. |
 | `stats` | Lines the tooltip shows after the vanilla item's, see [Tooltip lines](#tooltip-lines). |
+| `icon` | An icon of its own, see [Icons](#icons); `None` keeps the vanilla icon. |
 
 `NewItem::new(guid, like, debug_name)` makes one with no edits but its
 identity; set the other fields with struct update syntax.
@@ -59,8 +60,9 @@ identity; set the other fields with struct update syntax.
 vanilla one with the new id, GUID, name, description, meter and tooltip lines
 written in, and the item registry with the new GUID listed after the others;
 with a meter also the entity template and the template collection with it.
-Everything else in the `ItemInfo` is the vanilla item's, so a cloned chest
-places the same vanilla chest.
+With an icon it serves the icon's UI image too. Everything else in the
+`ItemInfo` is the vanilla item's, so a cloned chest places the same vanilla
+chest.
 
 The item exists once the game reads it, but nobody has one yet. Players get
 it from a [recipe](recipes.md), loot, or a mod's
@@ -133,6 +135,53 @@ fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_
 `StatFormat::Number` reads `5`, `Signed` reads `+5` and `Percent` reads
 `5%`. The lines are the same for every item of the type; what one item holds
 of its own shows through its meter.
+
+## Icons
+
+The game's item icons are pictures it ships ready-made: UI images, named by
+GUID, whose pixels it reads from its archive. An
+[`Icon`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/content/icons.rs)
+is a UI image the mod serves under a GUID of its own, made when the client
+first shows it:
+
+- `Pixels::Tint(Tint { colour, amount })` recolours the vanilla icon
+  `like`: every pixel moves `amount` percent toward `colour` at its own
+  brightness, so the shading stays. The pixels come from the player's own
+  game files, so no game data ships with the mod;
+- `Pixels::Png(include_bytes!("icon.png"))` draws the mod's own picture,
+  best square, such as 256 by 256.
+
+```rust
+use enshwick_loader_api::content::Guid;
+use enshwick_loader_api::content::icons::{Icon, Pixels, Tint};
+use enshwick_loader_api::content::items::NewItem;
+
+/// The Blacksmith's summoning staff; its icon is a portrait.
+const VANILLA_STAFF: Guid = Guid::parse("505ccfbc-440d-4d63-a3d6-d689d3d55e78");
+const STAFF: Guid = Guid::parse("8a3f6e21-5c4b-4d7e-9f10-2b7c5e6a9d31");
+const STAFF_ICON: Guid = Guid::parse("3c1f2a9e-7d4b-4e8a-9f60-1a2b3c4d5e6f");
+
+fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+    load.add_item(NewItem {
+        icon: Some(Icon {
+            guid: STAFF_ICON,
+            like: VANILLA_STAFF,
+            pixels: Pixels::Tint(Tint { colour: [120, 170, 255], amount: 60 }),
+        }),
+        ..NewItem::new(STAFF, VANILLA_STAFF, "Spectral staff")
+    })
+}
+```
+
+`like` is the vanilla icon's GUID: an item's own GUID for an item whose icon
+the game draws from its model, most items, or the GUID in its `iconImage`.
+
+An icon shows on a client whose loader knows the build's texture code: the
+loader serves the pixels, lists the icon with the game's UI images and
+waits until the UI knows it before an item names it, since a UI image the
+UI does not know ends the game. Anywhere else, a client of another build or
+the dedicated server, the item keeps its vanilla icon. `Load::add_icon`
+serves an icon alone, for an item a mod serves itself.
 
 ## GUIDs and item ids
 

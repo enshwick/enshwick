@@ -14,7 +14,7 @@ use core::sync::atomic::AtomicUsize;
 pub const ABI_MAJOR: u16 = 1;
 
 /// The minor version of this interface. A newer minor only appends fields.
-pub const ABI_MINOR: u16 = 43;
+pub const ABI_MINOR: u16 = 44;
 
 /// Whether `id` is a valid mod id: 1 to 64 characters of `[a-z0-9-]`.
 ///
@@ -4149,6 +4149,31 @@ pub struct HostApi {
     /// Mods screen labels the mod's settings with them. A later call
     /// replaces them. Since minor 43.
     pub texts: extern "system" fn(me: ModHandle, toml: Str) -> Status,
+    /// Serves `len` bytes at `data` as game content, the pixels of a
+    /// texture the mod serves, and writes the content hash a resource names
+    /// them by to `out`; the same bytes give the same hash. The loader
+    /// keeps the bytes for the life of the process. Any thread. Since minor
+    /// 44.
+    pub content_serve:
+        extern "system" fn(me: ModHandle, data: *const u8, len: u32, out: *mut [u32; 4]) -> Status,
+    /// Copies the game's own content `hash` from its archive into `out`, at
+    /// most `capacity` bytes, and writes its length to `len`;
+    /// [`Status::MISSING`] for a hash the archive lacks or keeps
+    /// compressed, [`Status::BAD_ARGS`] when `capacity` is short, with
+    /// `len` written. Reads the archive's files, never the game's memory.
+    /// Any thread. Since minor 44.
+    pub content_read: extern "system" fn(
+        me: ModHandle,
+        hash: *const [u32; 4],
+        out: *mut u8,
+        capacity: u32,
+        len: *mut u32,
+    ) -> Status,
+    /// [`Status::OK`] when this client shows the UI images mods serve: the
+    /// content and UI registry links run and the registry knows the served
+    /// images; [`Status::MISSING`] otherwise, and always on a server. Any
+    /// thread. Since minor 44.
+    pub icons_ready: extern "system" fn(me: ModHandle) -> Status,
 }
 
 /// The exports a mod DLL provides, by name.
@@ -4210,7 +4235,7 @@ const _: () = {
     assert!(core::mem::offset_of!(HostApi, hook_at) == 24 + 35 * 8);
     assert!(core::mem::offset_of!(HostApi, inventory_open) == 24 + 36 * 8);
     assert!(core::mem::offset_of!(HostApi, inventory_submit) == 24 + 38 * 8);
-    assert!(size_of::<HostApi>() == 24 + 104 * 8);
+    assert!(size_of::<HostApi>() == 24 + 107 * 8);
     assert!(core::mem::offset_of!(HostApi, config_schema) == 24 + 92 * 8);
     assert!(core::mem::offset_of!(HostApi, time_of_day) == 24 + 73 * 8);
     assert!(core::mem::offset_of!(HostApi, set_time_speed) == 24 + 76 * 8);

@@ -545,6 +545,7 @@ mod tests {
         flags: 0x78,
         pid_entity: 0x80,
         ui_values: 0x90,
+        icon_image: 0x58,
         ui_value: [0x28, 0, 4, 8, 0x24],
         refs: 0,
         names: 0x38,

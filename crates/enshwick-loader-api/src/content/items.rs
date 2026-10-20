@@ -54,6 +54,9 @@ pub struct NewItem {
     pub meter: Option<Meter>,
     /// Lines the item's tooltip shows after the vanilla item's.
     pub stats: Vec<Stat>,
+    /// An icon of its own; `None` keeps the vanilla item's. It shows on a
+    /// client whose loader knows the build's texture code.
+    pub icon: Option<super::icons::Icon>,
 }
 
 impl NewItem {
@@ -72,6 +75,7 @@ impl NewItem {
             debug_name: debug_name.into(),
             meter: None,
             stats: Vec::new(),
+            icon: None,
         }
     }
 }
@@ -220,6 +224,8 @@ pub struct ItemLayout {
     pub pid_entity: usize,
     /// `ItemInfo.uiValues`, the tooltip's lines.
     pub ui_values: usize,
+    /// `ItemInfo.iconImage`, the UI image of its icon.
+    pub icon_image: usize,
     /// `ImpactUiValue`: its size, then `locaId`, `valueFormat`, `value` and
     /// `isSigned`.
     pub ui_value: [usize; 5],
@@ -260,6 +266,7 @@ impl ItemLayout {
             flags: item("flags")?,
             pid_entity: item("pidEntity")?,
             ui_values: item("uiValues")?,
+            icon_image: item("iconImage")?,
             ui_value: [
                 load.type_size("keen::ImpactUiValue")? as usize,
                 value("locaId")?,
@@ -345,7 +352,7 @@ const VARIANT: usize = 12;
 ///
 /// let layout = ItemLayout {
 ///     id: 0, object: 4, name: 0x48, description: 0x68, flags: 0x70, pid_entity: 0x78,
-///     ui_values: 0x88, ui_value: [0x28, 0, 4, 8, 0x24], refs: 0, names: 0x38,
+///     ui_values: 0x88, icon_image: 0x58, ui_value: [0x28, 0, 4, 8, 0x24], refs: 0, names: 0x38,
 /// };
 /// let item = NewItem::new(
 ///     Guid::parse("8a3f6e21-5c4b-4d7e-9f10-2b7c5e6a9d31"),
@@ -377,6 +384,9 @@ pub fn clone_item(layout: &ItemLayout, like: &[u8], item: &NewItem) -> Option<Ve
         let flags = flags | ItemData::HAS_PIDE | ItemData::USES_FUEL;
         written &= info.write(layout.flags, &flags.to_le_bytes())
             && info.write(layout.pid_entity, &meter.template.0);
+    }
+    if let Some(icon) = item.icon {
+        written &= info.write(layout.icon_image, &icon.guid.0);
     }
     if !item.stats.is_empty() {
         let [size, label, format, value, signed] = layout.ui_value;
@@ -569,10 +579,24 @@ impl Load<'_> {
             )));
         }
         let (guid, like, debug_name) = (item.guid, item.like, item.debug_name.clone());
+        if let Some(icon) = item.icon {
+            self.add_icon(icon)?;
+        }
         self.serve(
             guid.key(types::ITEM_INFO),
             like.key(types::ITEM_INFO),
-            move |base| clone_item(&layout, base, &item),
+            move |base| {
+                // Naming an icon the client's UI does not know ends the
+                // game: only once the loader says it shows served ones.
+                if item.icon.is_some() && !super::icons::ready() {
+                    let vanilla = NewItem {
+                        icon: None,
+                        ..item.clone()
+                    };
+                    return clone_item(&layout, base, &vanilla);
+                }
+                clone_item(&layout, base, &item)
+            },
         )?;
         let registry = ITEM_REGISTRY.key(types::ITEM_REGISTRY);
         self.serve(registry, registry, move |base| {
@@ -619,6 +643,7 @@ mod tests {
         flags: 0x78,
         pid_entity: 0x80,
         ui_values: 0x90,
+        icon_image: 0x58,
         ui_value: [0x28, 0, 4, 8, 0x24],
         refs: 0,
         names: 0x38,

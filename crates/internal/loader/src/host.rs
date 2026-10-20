@@ -666,6 +666,9 @@ pub(crate) static API: HostApi = HostApi {
     ui_markers,
     config_check,
     texts,
+    content_serve,
+    content_read,
+    icons_ready,
 };
 
 /// A static slice from a pointer and a count, empty for a null pointer.
@@ -1814,6 +1817,72 @@ extern "system" fn item_data_set(
             Ok(()) => Status::OK,
             Err(status) => status,
         }
+    })
+}
+
+extern "system" fn content_serve(
+    me: ModHandle,
+    data: *const u8,
+    len: u32,
+    out: *mut [u32; 4],
+) -> Status {
+    entry("content_serve", || {
+        if let Err(status) = caller(me) {
+            return status;
+        }
+        let Ok(len) = usize::try_from(len) else {
+            return Status::BAD_ARGS;
+        };
+        if data.is_null() || len == 0 {
+            return Status::BAD_ARGS;
+        }
+        // SAFETY: the caller passes `len` bytes at `data` for the call.
+        let bytes = unsafe { core::slice::from_raw_parts(data, len) };
+        match crate::textures::serve(bytes) {
+            Ok(hash) => put(out, hash),
+            Err(status) => status,
+        }
+    })
+}
+
+extern "system" fn content_read(
+    me: ModHandle,
+    hash: *const [u32; 4],
+    out: *mut u8,
+    capacity: u32,
+    len: *mut u32,
+) -> Status {
+    entry("content_read", || {
+        if let Err(status) = caller(me) {
+            return status;
+        }
+        // SAFETY: the caller passes a hash for the call; `as_ref` turns away null.
+        let Some(hash) = (unsafe { hash.as_ref() }).copied() else {
+            return Status::BAD_ARGS;
+        };
+        let data = match crate::textures::content_of(&hash) {
+            Ok(data) => data,
+            Err(status) => return status,
+        };
+        let size = u32::try_from(data.len()).unwrap_or(u32::MAX);
+        if !len.is_null() {
+            // SAFETY: the caller's length out pointer.
+            unsafe { len.write(size) };
+        }
+        if size > capacity || out.is_null() {
+            return Status::BAD_ARGS;
+        }
+        // SAFETY: the caller passes room for `capacity` bytes at `out`.
+        unsafe { out.copy_from_nonoverlapping(data.as_ptr(), data.len()) };
+        Status::OK
+    })
+}
+
+extern "system" fn icons_ready(me: ModHandle) -> Status {
+    entry("icons_ready", || match caller(me) {
+        Ok(_) if crate::textures::ready() => Status::OK,
+        Ok(_) => Status::MISSING,
+        Err(status) => status,
     })
 }
 
