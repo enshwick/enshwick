@@ -78,23 +78,19 @@
   "packages": {
     "crates/cargo-enshwick": {
       "package-name": "cargo-enshwick",
-      "component": "cargo-enshwick",
-      "release-as": "0.2.0"
+      "component": "cargo-enshwick"
     },
     "crates/enshwick-api": {
       "package-name": "enshwick-api",
-      "component": "enshwick-api",
-      "release-as": "0.2.0"
+      "component": "enshwick-api"
     },
     "crates/enshwick-loader": {
       "package-name": "enshwick-loader",
-      "component": "enshwick-loader",
-      "release-as": "0.2.0"
+      "component": "enshwick-loader"
     },
     "crates/enshwick-stub": {
       "package-name": "enshwick-stub",
-      "component": "enshwick-stub",
-      "release-as": "0.2.0"
+      "component": "enshwick-stub"
     },
     "mods/enshwick-flame-altar-count": {
       "package-name": "enshwick-flame-altar-count",
@@ -114,13 +110,11 @@
     },
     "crates/enshwick-macros": {
       "package-name": "enshwick-macros",
-      "component": "enshwick-macros",
-      "release-as": "0.2.0"
+      "component": "enshwick-macros"
     },
     "crates/enshwick-reflect": {
       "package-name": "enshwick-reflect",
-      "component": "enshwick-reflect",
-      "release-as": "0.2.0"
+      "component": "enshwick-reflect"
     },
     "mods/enshwick-safes": {
       "package-name": "enshwick-safes",
@@ -136,8 +130,7 @@
     },
     "crates/enshwick-test": {
       "package-name": "enshwick-test",
-      "component": "enshwick-test",
-      "release-as": "0.2.0"
+      "component": "enshwick-test"
     },
     "mods/enshwick-updater": {
       "package-name": "enshwick-updater",
