@@ -12,7 +12,7 @@ raw table. The exact types and signatures are in the
 | Constant                                                                                            | Value | Meaning                                         |
 | --------------------------------------------------------------------------------------------------- | ----- | ----------------------------------------------- |
 | [`ABI_MAJOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 1     | A loader refuses a mod built for another major. |
-| [`ABI_MINOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 31    | A newer minor only appends.                     |
+| [`ABI_MINOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 32    | A newer minor only appends.                     |
 
 The ABI version is apart from Enshwick Loader's version (such as 0.2.0, see
 [Releasing and updates](releasing.md#versions)): a platform release raises
@@ -117,30 +117,32 @@ and the types in
 or with a raw [`Event`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs)
 id through `Load::subscribe`. See [Events and the scheduler](events.md).
 
-| Id  | Constant                  | Typed event             | Data           | Raised on       | Side   |
-| --- | ------------------------- | ----------------------- | -------------- | --------------- | ------ |
-| 1   | `SETTINGS_CHANGED`        | `SettingsChanged`       | none           | a loader thread | both   |
-| 2   | `LOADER_SETTINGS_CHANGED` | `LoaderSettingsChanged` | none           | a loader thread | both   |
-| 3   | `TICK`                    | `Ticked`                | `TickData`     | the game thread | server |
-| 4   | `WORLD_LOADED`            | `WorldLoaded`           | none           | the game thread | server |
-| 5   | `WORLD_SAVED`             | `WorldSaved`            | none           | the game thread | server |
-| 6   | `PLAYER_JOINED`           | `PlayerJoined`          | `PlayerData`   | the game thread | server |
-| 7   | `PLAYER_LEFT`             | `PlayerLeft`            | `PlayerData`   | the game thread | server |
-| 8   | `SHUTDOWN`                | `ShutdownStarted`       | none           | the game thread | server |
-| 9   | `BUILDING_PLACED`         | `BuildingPlaced`        | `BuildingData` | the game thread | server |
-| 10  | `BUILDING_REMOVED`        | `BuildingRemoved`       | `BuildingData` | the game thread | server |
-| 11  | `JOIN_MISSING`            | `JoinRefused`           | none           | the game thread | client |
-| 12  | `ALTARS_CHANGED`          | `AltarsChanged`         | none           | the game thread | server |
-| 13  | `DAY_STARTED`             | `DayStarted`            | none           | the game thread | server |
-| 14  | `NIGHT_STARTED`           | `NightStarted`          | none           | the game thread | server |
+| Id | Constant                  | Typed event             | Data            | Raised on       | Side   |
+| -- | ------------------------- | ----------------------- | --------------- | --------------- | ------ |
+| 1  | `SETTINGS_CHANGED`        | `SettingsChanged`       | none            | a loader thread | both   |
+| 2  | `LOADER_SETTINGS_CHANGED` | `LoaderSettingsChanged` | none            | a loader thread | both   |
+| 3  | `TICK`                    | `Ticked`                | `TickData`      | the game thread | server |
+| 4  | `WORLD_LOADED`            | `WorldLoaded`           | none            | the game thread | server |
+| 5  | `WORLD_SAVED`             | `WorldSaved`            | none            | the game thread | server |
+| 6  | `PLAYER_JOINED`           | `PlayerJoined`          | `PlayerData`    | the game thread | server |
+| 7  | `PLAYER_LEFT`             | `PlayerLeft`            | `PlayerData`    | the game thread | server |
+| 8  | `SHUTDOWN`                | `ShutdownStarted`       | none            | the game thread | server |
+| 9  | `BUILDING_PLACED`         | `BuildingPlaced`        | `BuildingData`  | the game thread | server |
+| 10 | `BUILDING_REMOVED`        | `BuildingRemoved`       | `BuildingData`  | the game thread | server |
+| 11 | `JOIN_MISSING`            | `JoinRefused`           | none            | the game thread | client |
+| 12 | `ALTARS_CHANGED`          | `AltarsChanged`         | none            | the game thread | server |
+| 13 | `DAY_STARTED`             | `DayStarted`            | none            | the game thread | server |
+| 14 | `NIGHT_STARTED`           | `NightStarted`          | none            | the game thread | server |
+| 15 | `KNOWLEDGE_CHANGED`       | `KnowledgeChanged`      | `KnowledgeData` | the game thread | server |
+| 16 | `QUEST_COMPLETED`         | `QuestCompleted`        | `QuestData`     | the game thread | server |
 
 Subscribing needs minor 2; `JOIN_MISSING` came with minor 10 and
 `ALTARS_CHANGED`, raised for mods that opened altars, with minor 15;
-`DAY_STARTED` and `NIGHT_STARTED` with minor 28. "Server"
-events also reach a client while it hosts a game, solo play included. The
-typed events hand a handler the fields the loader knows, with fields added
-after the event zero; they skip the handler only when the data lacks a field
-the event came with.
+`DAY_STARTED` and `NIGHT_STARTED` with minor 28; `KNOWLEDGE_CHANGED` and
+`QUEST_COMPLETED` with minor 32. "Server" events also reach a client while it
+hosts a game, solo play included. The typed events hand a handler the fields
+the loader knows, with fields added after the event zero; they skip the
+handler only when the data lacks a field the event came with.
 
 ## The host table
 
@@ -236,6 +238,9 @@ marked "init only" are allowed during `enshwick_mod_init` only.
 | `buffs`               | The buffs an entity has; server game thread only                                                | 31          |
 | `apply_buff`          | Gives an entity a buff, or renews it, as the game restores saved buffs; server game thread only | 31          |
 | `remove_buff`         | Removes a buff type from an entity, as the game cleanses one; server game thread only           | 31          |
+| `knowledge`           | A knowledge value of a player or the world; server game thread only                             | 32          |
+| `grant_knowledge`     | Grants knowledge as the game does, applied the next step; server game thread only               | 32          |
+| `quests`              | The quest ids of the running game; server game thread only                                      | 32          |
 
 ## Under an older loader
 
@@ -280,6 +285,7 @@ the mod off with a reason, which the mod's log shows as `off: <reason>`:
 | 29          | `Load::game_settings`           | Off: `game settings: needs a newer loader`                |
 | 30          | `Load::on_damage`               | Off: `damage filters: needs a newer loader`               |
 | 31          | `Load::buffs`                   | Off: `buffs: needs a newer loader`                        |
+| 32          | `Load::knowledge`               | Off: `knowledge: needs a newer loader`                    |
 
 A mod that can do without a feature catches the `Off` and goes on without it
 instead of returning it from `init`.

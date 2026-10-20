@@ -53,6 +53,8 @@ mod interactions;
 mod inventory;
 pub mod join;
 #[cfg(windows)]
+mod knowledge;
+#[cfg(windows)]
 mod label;
 pub mod log;
 pub mod manifest;

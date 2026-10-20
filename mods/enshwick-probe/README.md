@@ -37,6 +37,10 @@ Once the world has loaded, and again on `/probe check`:
 - buffs: the types of the running game; on the first entity that holds
   buffs, its buffs, a shown buff given for 30 seconds that reads back, and
   its removal, gone a second later (skipped without such an entity);
+- knowledge: the quests of the running game, a world counter that reads,
+  a grant of the wrong kind and one of an unknown id refused, and the
+  counter raised by one, read back a second later; knowledge changes and
+  completed quests are logged as they come;
 - a save on demand, followed by `WorldSaved`.
 
 From start it counts the damage its damage filter sees by cause, and every

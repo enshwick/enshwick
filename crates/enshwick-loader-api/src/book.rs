@@ -30,6 +30,7 @@ chapters! {
     GameSettings => "game-settings.md",
     Damage => "damage.md",
     Buffs => "buffs.md",
+    Knowledge => "knowledge.md",
     Altars => "altars.md",
     Survivors => "survivors.md",
     Interactions => "interactions.md",

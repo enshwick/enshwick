@@ -30,6 +30,7 @@
 - [Damage](damage.md)
 - [Character progress](progress.md)
 - [Buffs](buffs.md)
+- [Knowledge and quests](knowledge.md)
 - [Commands and chat](commands.md)
 - [Messages between server and client](messages.md)
 - [State and data folders](state.md)

@@ -188,6 +188,9 @@ pub static BUILDS: &[KnownBuild] = &[
             ("buffs.type_by_id", 0x92_70e0),
             ("buffs.restore", 0x79_c840),
             ("buffs.cleanse", 0x5_9090),
+            ("knowledge.player_value", 0x99_2bb0),
+            ("knowledge.world_value", 0x99_2ce0),
+            ("knowledge.push", 0x99_6880),
         ],
         constants: &[
             ("ecs.context_row", 8),
@@ -403,6 +406,31 @@ pub static BUILDS: &[KnownBuild] = &[
             ("buffs.record_has_level", 0x19),
             ("buffs.record_strength", 0x24),
             ("buffs.record_has_strength", 0x28),
+            // The game object holds its knowledge object here, which holds
+            // the store; the store holds the definitions' holder (its blob
+            // at `defs_blob`), the player records (count u64, record size,
+            // active byte), the update counter (u32) and the world's change
+            // log (pointer, count u32); a record its change log the same
+            // way; log entries are `{id, value}` at `log_entry_size`. The
+            // game object holds the trigger queue and the journal registry,
+            // which holds the journal's blob.
+            ("knowledge.object", 0x1b8),
+            ("knowledge.state", 0x08),
+            ("knowledge.defs", 0x08),
+            ("knowledge.defs_blob", 0x10),
+            ("knowledge.records", 0x98),
+            ("knowledge.record_count", 0xa0),
+            ("knowledge.record_size", 0x90),
+            ("knowledge.record_active", 0x8a),
+            ("knowledge.step", 0x90),
+            ("knowledge.world_log", 0x68),
+            ("knowledge.world_log_count", 0x70),
+            ("knowledge.record_log", 0x58),
+            ("knowledge.record_log_count", 0x60),
+            ("knowledge.log_entry_size", 0x10),
+            ("knowledge.queue", 0x1d0),
+            ("knowledge.journal", 0x1e8),
+            ("knowledge.journal_blob", 0x48),
         ],
     },
     KnownBuild {
@@ -522,6 +550,9 @@ pub static BUILDS: &[KnownBuild] = &[
             ("buffs.type_by_id", 0xe7_29d0),
             ("buffs.restore", 0xe3_2ca0),
             ("buffs.cleanse", 0x23_c640),
+            ("knowledge.player_value", 0x11f_c410),
+            ("knowledge.world_value", 0x11f_c540),
+            ("knowledge.push", 0x120_0600),
             ("chat.receive_return_a", 0x84_0b59),
             ("chat.receive_return_b", 0x86_9b1b),
             ("chat.client_send", 0x86_64d0),
@@ -750,6 +781,31 @@ pub static BUILDS: &[KnownBuild] = &[
             ("buffs.record_has_level", 0x19),
             ("buffs.record_strength", 0x24),
             ("buffs.record_has_strength", 0x28),
+            // The game object holds its knowledge object here, which holds
+            // the store; the store holds the definitions' holder (its blob
+            // at `defs_blob`), the player records (count u64, record size,
+            // active byte), the update counter (u32) and the world's change
+            // log (pointer, count u32); a record its change log the same
+            // way; log entries are `{id, value}` at `log_entry_size`. The
+            // game object holds the trigger queue and the journal registry,
+            // which holds the journal's blob.
+            ("knowledge.object", 0x1b8),
+            ("knowledge.state", 0x08),
+            ("knowledge.defs", 0x08),
+            ("knowledge.defs_blob", 0x10),
+            ("knowledge.records", 0x98),
+            ("knowledge.record_count", 0xa0),
+            ("knowledge.record_size", 0x90),
+            ("knowledge.record_active", 0x8a),
+            ("knowledge.step", 0x90),
+            ("knowledge.world_log", 0x68),
+            ("knowledge.world_log_count", 0x70),
+            ("knowledge.record_log", 0x58),
+            ("knowledge.record_log_count", 0x60),
+            ("knowledge.log_entry_size", 0x10),
+            ("knowledge.queue", 0x1d0),
+            ("knowledge.journal", 0x1e8),
+            ("knowledge.journal_blob", 0x48),
             // The client's own chat: the game client holds it here.
             ("chat.client_store", 0xf8),
         ],
