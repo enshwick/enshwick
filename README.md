@@ -13,6 +13,7 @@ every mod is a DLL in the `mods/` folder beside it.
 | [Furniture comfort](mods/enshwick-furniture-comfort)     | more comfort from furniture, twice vanilla by default              |
 | [Survivors per altar](mods/enshwick-survivors-per-altar) | a copy of each survivor at every altar, with beds of its own altar |
 | [Safes](mods/enshwick-safes)                             | a craftable chest only the player who placed it can use            |
+| [Building yield](mods/enshwick-building-yield)           | bulk recipes for blocks, roofs, overgrowth, decor and furniture    |
 
 ## Install
 
