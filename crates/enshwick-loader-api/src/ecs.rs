@@ -128,7 +128,9 @@ impl Ecs {
     /// # Safety
     ///
     /// `ctx` is the live query context of the hooked system and `N` matches its
-    /// iterator.
+    /// iterator. The [`Query`] stays inside that call of the hook: its safe
+    /// [`Query::next`] walks `ctx`, so a query kept past the hook's return,
+    /// in a static or another thread's hands, walks freed memory.
     ///
     /// # Examples
     ///
@@ -165,9 +167,15 @@ impl Ecs {
     /// # Examples
     ///
     /// ```
-    /// unsafe fn rewind(ecs: &enshwick_loader_api::ecs::Ecs, ctx: *mut u64) {
+    /// /// Walks the query again from its first row, leaving the counter as found.
+    /// unsafe fn again(ecs: &enshwick_loader_api::ecs::Ecs, ctx: *mut u64) {
     ///     // SAFETY: called from the system's hook with its context.
+    ///     let row = unsafe { ecs.row(ctx) };
+    ///     // SAFETY: as above.
     ///     unsafe { ecs.set_row(ctx, 0) };
+    ///     // ... a second pass over the rows ...
+    ///     // SAFETY: as above.
+    ///     unsafe { ecs.set_row(ctx, row) };
     /// }
     /// ```
     #[must_use]
@@ -267,6 +275,10 @@ impl Ecs {
 }
 
 /// A walk over a system's query; each row's iterator words.
+///
+/// Made by [`Ecs::query`], whose safety contract keeps it inside the hooked
+/// call; it holds the context as a raw pointer, so it is neither `Send` nor
+/// `Sync`.
 ///
 /// # Examples
 ///
