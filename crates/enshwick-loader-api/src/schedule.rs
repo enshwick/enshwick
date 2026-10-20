@@ -16,6 +16,8 @@ struct Task {
 
 #[derive(Default)]
 struct Queue {
+    /// Whether a tick handler runs the queue.
+    ticking: AtomicBool,
     /// Set while `tasks` holds anything, so an idle step takes no lock.
     pending: AtomicBool,
     tasks: Mutex<Vec<Task>>,
@@ -57,14 +59,19 @@ impl core::fmt::Debug for Scheduler {
 }
 
 impl Scheduler {
-    /// The mod's scheduler, and whether this call created it.
+    /// The mod's scheduler, and whether the caller is to subscribe the tick
+    /// that runs it: true once, and again after
+    /// [`Scheduler::unsubscribed`].
     pub(crate) fn get() -> (Self, bool) {
-        let mut created = false;
-        let queue = QUEUE.get_or_init(|| {
-            created = true;
-            Queue::default()
-        });
-        (Self { queue }, created)
+        let queue = QUEUE.get_or_init(Queue::default);
+        let subscribe = !queue.ticking.swap(true, Ordering::AcqRel);
+        (Self { queue }, subscribe)
+    }
+
+    /// The tick could not be subscribed; the next [`Scheduler::get`] asks
+    /// for it again.
+    pub(crate) fn unsubscribed(self) {
+        self.queue.ticking.store(false, Ordering::Release);
     }
 
     /// Runs `task` after the next simulation step.
@@ -133,11 +140,11 @@ impl Scheduler {
                 .tasks
                 .lock()
                 .unwrap_or_else(PoisonError::into_inner);
-            let (due, waiting) = std::mem::take(&mut *tasks)
-                .into_iter()
-                .partition(|task| task.due <= now);
-            *tasks = waiting;
-            due
+            // Most steps have nothing due: leave the queue as it is, unallocated.
+            if !tasks.iter().any(|task| task.due <= now) {
+                return;
+            }
+            tasks.extract_if(.., |task| task.due <= now).collect()
         };
         // Outside the lock: a task may schedule more.
         let again: Vec<Task> = due
