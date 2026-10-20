@@ -1,0 +1,307 @@
+//! Character progress: skill node checks, the comfort furniture gives a base,
+//! and the experience the server applies each tick.
+//!
+//! # Examples
+//!
+//! ```
+//! use enshwick_loader_api::progress::{SkillGate, AIRBORNE_ARCHITECT};
+//!
+//! fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+//!     // Fly mode for everyone, the skill tree untouched.
+//!     load.on_skill(AIRBORNE_ARCHITECT, |check| (check.gate == SkillGate::FlyMode).then_some(true))
+//! }
+//! ```
+
+use core::ffi::c_void;
+
+pub use crate::abi::ExperienceRow;
+use crate::abi::{Comfort as RawComfort, ExperiencePass, HostApi, SkillCheck as RawSkillCheck};
+use crate::{Load, Off};
+
+/// The Airborne Architect node, which opens the building fly mode.
+pub const AIRBORNE_ARCHITECT: u32 = 0x4475_e8dd;
+
+/// Which game check asks about a skill node.
+///
+/// # Examples
+///
+/// See the [module](self).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum SkillGate {
+    /// The building fly mode gate, on both sides.
+    FlyMode,
+    /// A check the platform does not name.
+    Other,
+}
+
+/// The game asking whether a character unlocked a skill node.
+///
+/// # Examples
+///
+/// See the [module](self).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SkillCheck {
+    /// The node.
+    pub node: u32,
+    /// Who asks.
+    pub gate: SkillGate,
+    /// The game's own answer.
+    pub unlocked: bool,
+}
+
+/// A comfort provider in a base registering its comfort; a base keeps the
+/// best per category and a player's comfort is the sum.
+///
+/// # Examples
+///
+/// See [`Load::on_comfort`].
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Comfort {
+    /// The comfort category.
+    pub category: u32,
+    /// The comfort it registers, after the filters before this one.
+    pub value: i32,
+    /// Where the provider stands, in metres.
+    pub position: [f32; 3],
+}
+
+/// The game's level table, during an experience pass.
+///
+/// # Examples
+///
+/// See [`Load::on_experience`].
+#[derive(Debug)]
+pub struct Levels {
+    cap: u32,
+    need_for: Option<unsafe extern "system" fn(*mut c_void, u32) -> u32>,
+    token: *mut c_void,
+}
+
+impl Levels {
+    /// The highest level.
+    ///
+    /// # Examples
+    ///
+    /// See [`Load::on_experience`].
+    #[must_use]
+    pub const fn cap(&self) -> u32 {
+        self.cap
+    }
+
+    /// What `level` needs, 0 for level 0 or past the cap.
+    ///
+    /// # Examples
+    ///
+    /// See [`Load::on_experience`].
+    #[must_use]
+    pub fn need(&self, level: u32) -> u32 {
+        match self.need_for {
+            Some(need_for) if level != 0 && level <= self.cap => {
+                // SAFETY: the loader's function and token, valid for this pass.
+                unsafe { need_for(self.token, level) }
+            }
+            _ => 0,
+        }
+    }
+}
+
+unsafe extern "system" fn run_skill<F>(check: *const RawSkillCheck, user: *mut c_void) -> u8
+where
+    F: Fn(&SkillCheck) -> Option<bool>,
+{
+    // SAFETY: the loader passes a valid check for the duration of the call.
+    let Some(check) = (unsafe { check.as_ref() }) else {
+        return 0;
+    };
+    let call = SkillCheck {
+        node: check.node,
+        gate: if check.gate == RawSkillCheck::FLY_MODE {
+            SkillGate::FlyMode
+        } else {
+            SkillGate::Other
+        },
+        unlocked: check.unlocked != 0,
+    };
+    // SAFETY: `user` is the leaked `F` this function was registered with.
+    let handler = unsafe { &*user.cast::<F>() };
+    let answer = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| handler(&call)))
+        .unwrap_or_else(|_| {
+            if let Some(host) = crate::host() {
+                host.fault("panic in a skill override");
+            }
+            None
+        });
+    match answer {
+        None => 0,
+        Some(true) => 1,
+        Some(false) => 2,
+    }
+}
+
+unsafe extern "system" fn run_comfort<F>(comfort: *const RawComfort, user: *mut c_void) -> i32
+where
+    F: Fn(&Comfort) -> i32,
+{
+    // SAFETY: the loader passes a valid registration for the call.
+    let Some(comfort) = (unsafe { comfort.as_ref() }) else {
+        return 0;
+    };
+    let call = Comfort {
+        category: comfort.category,
+        value: comfort.value,
+        position: comfort.position,
+    };
+    // SAFETY: `user` is the leaked `F` this function was registered with.
+    let handler = unsafe { &*user.cast::<F>() };
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| handler(&call))).unwrap_or_else(|_| {
+        if let Some(host) = crate::host() {
+            host.fault("panic in a comfort filter");
+        }
+        call.value
+    })
+}
+
+unsafe extern "system" fn run_experience<F>(pass: *mut ExperiencePass, user: *mut c_void)
+where
+    F: Fn(&mut [ExperienceRow], &Levels),
+{
+    // SAFETY: the loader passes a valid pass for the duration of the call.
+    let Some(pass) = (unsafe { pass.as_mut() }) else {
+        return;
+    };
+    let rows = if pass.rows.is_null() || pass.row_count == 0 {
+        &mut [][..]
+    } else {
+        // SAFETY: `row_count` writable rows, valid for the call.
+        unsafe { core::slice::from_raw_parts_mut(pass.rows, pass.row_count) }
+    };
+    let levels = Levels {
+        cap: pass.level_cap,
+        need_for: pass.need_for,
+        token: pass.token,
+    };
+    // SAFETY: `user` is the leaked `F` this function was registered with.
+    let handler = unsafe { &*user.cast::<F>() };
+    if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| handler(rows, &levels))).is_err()
+        && let Some(host) = crate::host()
+    {
+        host.fault("panic in an experience filter");
+    }
+}
+
+fn refused(what: &str, status: crate::abi::Status) -> Off {
+    Off::new(format!(
+        "{what} refused by the loader (status {})",
+        status.0
+    ))
+}
+
+impl Load<'_> {
+    /// Answers the game's checks of skill node `node`: `Some(true)` unlocks
+    /// it for that check, `Some(false)` locks it, `None` keeps the game's
+    /// answer. It runs on both sides, on the checking thread, and only for
+    /// `node`.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] after init, on a build that lacks the check, or with a loader
+    /// older than the API.
+    ///
+    /// # Examples
+    ///
+    /// See the [module](self).
+    pub fn on_skill<F>(&mut self, node: u32, handler: F) -> Result<(), Off>
+    where
+        F: Fn(&SkillCheck) -> Option<bool> + Send + Sync + 'static,
+    {
+        let host = self.host();
+        let end = core::mem::offset_of!(HostApi, skill_override) + size_of::<usize>();
+        if !host.api().header.covers(end) {
+            return Err(Off::new("skill overrides need a newer loader"));
+        }
+        let user = Box::into_raw(Box::new(handler));
+        let status = (host.api().skill_override)(host.handle(), node, run_skill::<F>, user.cast());
+        if status.is_ok() {
+            return Ok(());
+        }
+        // SAFETY: refused, so the loader keeps no copy of the pointer.
+        drop(unsafe { Box::from_raw(user) });
+        Err(refused("the skill override", status))
+    }
+
+    /// Changes the comfort each provider registers in a base: `filter`
+    /// returns the value to register. Server's worker threads, on the hot
+    /// path of every base: keep it to arithmetic.
+    ///
+    /// # Errors
+    ///
+    /// As for [`Load::on_skill`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+    ///     load.on_comfort(|comfort| comfort.value.saturating_mul(2))
+    /// }
+    /// ```
+    pub fn on_comfort<F>(&mut self, filter: F) -> Result<(), Off>
+    where
+        F: Fn(&Comfort) -> i32 + Send + Sync + 'static,
+    {
+        let host = self.host();
+        let end = core::mem::offset_of!(HostApi, comfort_filter) + size_of::<usize>();
+        if !host.api().header.covers(end) {
+            return Err(Off::new("comfort filters need a newer loader"));
+        }
+        let user = Box::into_raw(Box::new(filter));
+        let status = (host.api().comfort_filter)(host.handle(), run_comfort::<F>, user.cast());
+        if status.is_ok() {
+            return Ok(());
+        }
+        // SAFETY: refused, so the loader keeps no copy of the pointer.
+        drop(unsafe { Box::from_raw(user) });
+        Err(refused("the comfort filter", status))
+    }
+
+    /// Runs `filter` on every spawned character's experience before the
+    /// server applies it; changes to `gained` are written back and sent to
+    /// the players. Server's worker threads, once per batch.
+    ///
+    /// # Errors
+    ///
+    /// As for [`Load::on_skill`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+    ///     // Double every gain, never past the end of the level.
+    ///     load.on_experience(|rows, _levels| {
+    ///         for row in rows {
+    ///             let room = row.need.saturating_sub(row.progress);
+    ///             row.gained = row.gained.saturating_mul(2).min(room.max(row.gained));
+    ///         }
+    ///     })
+    /// }
+    /// ```
+    pub fn on_experience<F>(&mut self, filter: F) -> Result<(), Off>
+    where
+        F: Fn(&mut [ExperienceRow], &Levels) + Send + Sync + 'static,
+    {
+        let host = self.host();
+        let end = core::mem::offset_of!(HostApi, experience_filter) + size_of::<usize>();
+        if !host.api().header.covers(end) {
+            return Err(Off::new("experience filters need a newer loader"));
+        }
+        let user = Box::into_raw(Box::new(filter));
+        let status =
+            (host.api().experience_filter)(host.handle(), run_experience::<F>, user.cast());
+        if status.is_ok() {
+            return Ok(());
+        }
+        // SAFETY: refused, so the loader keeps no copy of the pointer.
+        drop(unsafe { Box::from_raw(user) });
+        Err(refused("the experience filter", status))
+    }
+}

@@ -44,6 +44,8 @@ pub mod manifest;
 mod mid;
 #[cfg(windows)]
 mod patch;
+#[cfg(windows)]
+mod progress;
 pub mod resolve;
 pub mod settings;
 #[cfg(windows)]

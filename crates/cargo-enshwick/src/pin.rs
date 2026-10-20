@@ -210,7 +210,6 @@ mod tests {
             }
         }
         assert!(tables.contains(&Table::Loader));
-        assert!(tables.contains(&Table::Mod));
     }
 
     /// The raw file offset and size of section `name`.

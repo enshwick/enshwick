@@ -14,7 +14,7 @@ use core::sync::atomic::AtomicUsize;
 pub const ABI_MAJOR: u16 = 1;
 
 /// The minor version of this interface. A newer minor only appends fields.
-pub const ABI_MINOR: u16 = 17;
+pub const ABI_MINOR: u16 = 18;
 
 /// Whether `id` is a valid mod id: 1 to 64 characters of `[a-z0-9-]`.
 ///
@@ -2087,6 +2087,130 @@ impl Interaction {
 pub type InteractionFn =
     unsafe extern "system" fn(call: *const Interaction, user: *mut c_void) -> u8;
 
+/// The game asking whether a character unlocked a skill node, as
+/// [`HostApi::skill_override`] hands it on.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::abi::{Header, SkillCheck};
+///
+/// let check = SkillCheck { header: Header::of::<SkillCheck>(), node: 0x4475_e8dd, gate: SkillCheck::FLY_MODE, unlocked: 0, reserved: [0; 3] };
+/// assert_eq!(check.gate, SkillCheck::FLY_MODE);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct SkillCheck {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// The skill node.
+    pub node: u32,
+    /// The gate that asks, one of the constants on this type.
+    pub gate: u32,
+    /// 1 when the character unlocked it.
+    pub unlocked: u8,
+    /// Zero.
+    pub reserved: [u8; 3],
+}
+
+impl SkillCheck {
+    /// A caller the platform does not name.
+    pub const OTHER: u32 = 0;
+    /// The building fly mode gate, on both sides.
+    pub const FLY_MODE: u32 = 1;
+}
+
+/// A skill override: the check and the pointer given at registration;
+/// returns 0 for the game's answer, 1 for unlocked, 2 for locked.
+pub type SkillFn = unsafe extern "system" fn(check: *const SkillCheck, user: *mut c_void) -> u8;
+
+/// A comfort provider in a base registering its comfort for its category,
+/// as [`HostApi::comfort_filter`] hands it on.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::abi::{Comfort, Header};
+///
+/// let comfort = Comfort { header: Header::of::<Comfort>(), category: 3, value: 5, position: [0.0; 3] };
+/// assert_eq!(comfort.value, 5);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct Comfort {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// The comfort category; a base keeps the best provider per category.
+    pub category: u32,
+    /// The comfort it registers.
+    pub value: i32,
+    /// Where the provider stands, in metres.
+    pub position: [f32; 3],
+}
+
+/// A comfort filter: the registration and the pointer given at
+/// registration; returns the comfort to register.
+pub type ComfortFn = unsafe extern "system" fn(comfort: *const Comfort, user: *mut c_void) -> i32;
+
+/// One character's experience before the game applies it, in an
+/// [`ExperiencePass`]. Its layout is frozen: it is passed as an array.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::abi::ExperienceRow;
+///
+/// let row = ExperienceRow { entity: 4096, level: 3, progress: 10, need: 100, gained: 5 };
+/// assert_eq!(row.gained, 5);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct ExperienceRow {
+    /// The character's entity.
+    pub entity: u32,
+    /// Its level.
+    pub level: u32,
+    /// Experience inside the level.
+    pub progress: u32,
+    /// What the level needs.
+    pub need: u32,
+    /// Gained experience the game applies next, at most one level a tick;
+    /// a filter may change it.
+    pub gained: u32,
+}
+
+/// Every spawned character's experience before the server applies it, as
+/// [`HostApi::experience_filter`] hands it on.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::abi::{ExperiencePass, Header};
+///
+/// let pass = ExperiencePass { header: Header::of::<ExperiencePass>(), rows: core::ptr::null_mut(), row_count: 0, level_cap: 25, need_for: None, token: core::ptr::null_mut() };
+/// assert_eq!(pass.level_cap, 25);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct ExperiencePass {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// The characters, valid and writable for the call.
+    pub rows: *mut ExperienceRow,
+    /// How many rows there are.
+    pub row_count: usize,
+    /// The highest level.
+    pub level_cap: u32,
+    /// What level `level` (1 or more) needs; valid during the call with
+    /// `token`.
+    pub need_for: Option<unsafe extern "system" fn(token: *mut c_void, level: u32) -> u32>,
+    /// The argument of `need_for`.
+    pub token: *mut c_void,
+}
+
+/// An experience filter: the pass and the pointer given at registration.
+pub type ExperienceFn = unsafe extern "system" fn(pass: *mut ExperiencePass, user: *mut c_void);
+
 /// The table of services the loader offers a mod.
 ///
 /// Fields are only ever appended; a mod checks [`Header::covers`] before it
@@ -2390,6 +2514,28 @@ pub struct HostApi {
     /// build that lacks a piece. Since minor 17.
     pub interaction_filter:
         extern "system" fn(me: ModHandle, callback: InteractionFn, user: *mut c_void) -> Status,
+    /// Calls `callback` with `user` when the game asks whether a character
+    /// unlocked skill node `node`; the first filter that answers decides.
+    /// Runs on both sides, on the asking thread. Allowed during
+    /// `enshwick_mod_init` only. Since minor 18.
+    pub skill_override: extern "system" fn(
+        me: ModHandle,
+        node: u32,
+        callback: SkillFn,
+        user: *mut c_void,
+    ) -> Status,
+    /// Calls `callback` with `user` when a comfort provider registers its
+    /// comfort; filters run in load order, each on the last one's value.
+    /// Server's worker threads. Allowed during `enshwick_mod_init` only.
+    /// Since minor 18.
+    pub comfort_filter:
+        extern "system" fn(me: ModHandle, callback: ComfortFn, user: *mut c_void) -> Status,
+    /// Calls `callback` with `user` before the server applies the
+    /// characters' gained experience, once per batch; filters run in load
+    /// order. Server's worker threads. Allowed during `enshwick_mod_init`
+    /// only. Since minor 18.
+    pub experience_filter:
+        extern "system" fn(me: ModHandle, callback: ExperienceFn, user: *mut c_void) -> Status,
 }
 
 /// The exports a mod DLL provides, by name.
@@ -2451,7 +2597,7 @@ const _: () = {
     assert!(core::mem::offset_of!(HostApi, hook_at) == 24 + 35 * 8);
     assert!(core::mem::offset_of!(HostApi, inventory_open) == 24 + 36 * 8);
     assert!(core::mem::offset_of!(HostApi, inventory_submit) == 24 + 38 * 8);
-    assert!(size_of::<HostApi>() == 24 + 52 * 8);
+    assert!(size_of::<HostApi>() == 24 + 55 * 8);
     assert!(size_of::<InventoryOp>() == 32);
     assert!(size_of::<InventoryRequest>() == 32);
     assert!(size_of::<InventoryOpResult>() == 8);
@@ -2471,6 +2617,13 @@ const _: () = {
     assert!(core::mem::offset_of!(HostApi, survivor_lookup) == 24 + 46 * 8);
     assert!(core::mem::offset_of!(HostApi, survivor_status) == 24 + 50 * 8);
     assert!(core::mem::offset_of!(HostApi, interaction_filter) == 24 + 51 * 8);
+    assert!(core::mem::offset_of!(HostApi, skill_override) == 24 + 52 * 8);
+    assert!(core::mem::offset_of!(HostApi, experience_filter) == 24 + 54 * 8);
+    assert!(size_of::<SkillCheck>() == 20);
+    assert!(size_of::<Comfort>() == 28);
+    // Frozen: passed as an array.
+    assert!(size_of::<ExperienceRow>() == 20);
+    assert!(size_of::<ExperiencePass>() == 48);
     assert!(size_of::<Interaction>() == 8 + 16 + 8 + 24);
     assert!(size_of::<SurvivorLookup>() == 8 + 16 + 24 + 16);
     assert!(size_of::<BedCheck>() == 8 + 12 + 4 + 48);

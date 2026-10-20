@@ -12,7 +12,7 @@ raw table. The exact types and signatures are in the
 | Constant                                                                                            | Value | Meaning                                         |
 | --------------------------------------------------------------------------------------------------- | ----- | ----------------------------------------------- |
 | [`ABI_MAJOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 1     | A loader refuses a mod built for another major. |
-| [`ABI_MINOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 17    | A newer minor only appends.                     |
+| [`ABI_MINOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 18    | A newer minor only appends.                     |
 
 The ABI version is apart from Enshwick Loader's version (such as 0.2.0, see
 [Releasing and updates](releasing.md#versions)): a platform release raises
@@ -195,6 +195,9 @@ marked "init only" are allowed during `enshwick_mod_init` only.
 | `summon_item`         | Files an item as a survivor's summoning staff; init only                                        | 16          |
 | `survivor_status`     | Merges the client's survivor menu statuses, one mod at a time; init only                        | 16          |
 | `interaction_filter`  | Calls a filter before a player's interaction with an entity, in the server's world; init only   | 17          |
+| `skill_override`      | Answers the game's checks of one skill node; init only                                          | 18          |
+| `comfort_filter`      | Changes the comfort each provider registers in a base; init only                                | 18          |
+| `experience_filter`   | Changes the characters' gained experience before the server applies it; init only               | 18          |
 
 ## Under an older loader
 
@@ -225,6 +228,7 @@ the mod off with a reason, which the mod's log shows as `off: <reason>`:
 | 15          | altars and zone checks          | Off: `altars need a newer loader`                            |
 | 16          | survivors                       | Off: `the survivor lookup needs a newer loader`              |
 | 17          | interaction filters             | Off: `interaction filters need a newer loader`               |
+| 18          | skills, comfort, experience     | Off: `skill overrides need a newer loader` and the like      |
 
 A mod that can do without a feature catches the `Off` and goes on without it
 instead of returning it from `init`.

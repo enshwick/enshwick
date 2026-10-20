@@ -449,6 +449,9 @@ pub(crate) static API: HostApi = HostApi {
     summon_item,
     survivor_status,
     interaction_filter,
+    skill_override,
+    comfort_filter,
+    experience_filter,
 };
 
 /// A static slice from a pointer and a count, empty for a null pointer.
@@ -1381,6 +1384,44 @@ extern "system" fn interaction_filter(
 ) -> Status {
     match caller_index(me) {
         Some((loader, index)) => crate::interactions::register(loader, index, callback, user),
+        None => Status::BAD_ARGS,
+    }
+}
+
+extern "system" fn skill_override(
+    me: ModHandle,
+    node: u32,
+    callback: api_frame::SkillFn,
+    user: *mut core::ffi::c_void,
+) -> Status {
+    match caller_index(me) {
+        Some((loader, index)) => {
+            crate::progress::register_skill(loader, index, node, callback, user)
+        }
+        None => Status::BAD_ARGS,
+    }
+}
+
+extern "system" fn comfort_filter(
+    me: ModHandle,
+    callback: api_frame::ComfortFn,
+    user: *mut core::ffi::c_void,
+) -> Status {
+    match caller_index(me) {
+        Some((loader, index)) => crate::progress::register_comfort(loader, index, callback, user),
+        None => Status::BAD_ARGS,
+    }
+}
+
+extern "system" fn experience_filter(
+    me: ModHandle,
+    callback: api_frame::ExperienceFn,
+    user: *mut core::ffi::c_void,
+) -> Status {
+    match caller_index(me) {
+        Some((loader, index)) => {
+            crate::progress::register_experience(loader, index, callback, user)
+        }
         None => Status::BAD_ARGS,
     }
 }

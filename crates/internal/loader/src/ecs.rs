@@ -221,13 +221,68 @@ impl Engine {
         unsafe { (self.mark)(tracker, stamp_a, stamp_b, entity, type_index, flags) };
     }
 
-    /// The level attribute of the `Level` set `set`, looked up in the row's
-    /// attribute `registry`.
+    /// The level attribute of the `Level` set `set`.
     ///
     /// # Safety
     ///
-    /// `set` is a live attribute set and `registry` its row's registry word.
+    /// As for [`Engine::attribute`].
     pub(crate) unsafe fn level(&self, registry: u64, set: *const u8) -> Option<u32> {
+        // SAFETY: forwarded from the caller.
+        let word = unsafe { self.attribute_word(registry, set, self.level_attribute) }?;
+        // SAFETY: the attribute's word inside the set's data.
+        Some(unsafe { read_at(word, 0) })
+    }
+
+    /// The value of `attribute` in the attribute set `set`, looked up in its
+    /// row's attribute `registry`; `None` when the set is not initialised or
+    /// lacks it.
+    ///
+    /// # Safety
+    ///
+    /// `set` is a live attribute set and `registry` its row's registry word,
+    /// inside the running system.
+    pub(crate) unsafe fn attribute(
+        &self,
+        registry: u64,
+        set: *const u8,
+        attribute: u32,
+    ) -> Option<u32> {
+        // SAFETY: forwarded from the caller.
+        let word = unsafe { self.attribute_word(registry, set, attribute) }?;
+        // SAFETY: the attribute's word inside the set's data.
+        Some(unsafe { read_at(word, 0) })
+    }
+
+    /// Writes `value` to `attribute` in `set`; false when nothing was written.
+    ///
+    /// # Safety
+    ///
+    /// As for [`Engine::attribute`], and the running system writes `set`.
+    pub(crate) unsafe fn set_attribute(
+        &self,
+        registry: u64,
+        set: *mut u8,
+        attribute: u32,
+        value: u32,
+    ) -> bool {
+        // SAFETY: forwarded from the caller.
+        let Some(word) = (unsafe { self.attribute_word(registry, set, attribute) }) else {
+            return false;
+        };
+        // SAFETY: the attribute's word inside a set the system writes.
+        unsafe { word.cast_mut().cast::<u32>().write_unaligned(value) };
+        true
+    }
+
+    /// # Safety
+    ///
+    /// As for [`Engine::attribute`].
+    unsafe fn attribute_word(
+        &self,
+        registry: u64,
+        set: *const u8,
+        attribute: u32,
+    ) -> Option<*const u8> {
         if set.is_null() {
             return None;
         }
@@ -238,7 +293,7 @@ impl Engine {
         }
         let mut found = [0u64; 2];
         // SAFETY: the row's attribute registry, inside its system.
-        unsafe { (self.find)(found.as_mut_ptr(), self.level_attribute, registry) };
+        unsafe { (self.find)(found.as_mut_ptr(), attribute, registry) };
         let definition =
             core::ptr::with_exposed_provenance::<u8>(usize::try_from(found[1]).unwrap_or(0));
         if found[0] & 0xff != 0 || definition.is_null() {
@@ -255,8 +310,7 @@ impl Engine {
         let slot = usize::from(unsafe { read_at::<u16>(definition, self.attribute_slot) });
         // SAFETY: the set's data offset.
         let data = usize::from(unsafe { read_at::<u16>(set, self.level_data) });
-        // SAFETY: the attribute's word inside the set's data.
-        Some(unsafe { read_at(set, data + slot * 4) })
+        Some(set.wrapping_add(data + slot * 4))
     }
 
     /// The component of type index `kind` of `entity`, read in the live

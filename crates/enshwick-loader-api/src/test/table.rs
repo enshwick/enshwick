@@ -5,10 +5,11 @@ use core::sync::atomic::Ordering;
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use crate::abi::{
-    AltarInfo, AltarZoneSize, BedCheckFn, BuildInfo, CallerFrame, CommandFn, Event, EventFn,
-    Header, HookSpec, HostApi, InteractionFn, InventoryDoneFn, InventoryRequest, ItemData, Level,
-    MidHookFn, MidHookSpec, ModHandle, ModInfo, PlayerInfo, RenameFn, ResourceKey, ResourcePatchFn,
-    Side, Status, StatusFn, Str, SummonFn, SurvivorLookupFn, SurvivorStatusFn, ZoneCheckFn,
+    AltarInfo, AltarZoneSize, BedCheckFn, BuildInfo, CallerFrame, ComfortFn, CommandFn, Event,
+    EventFn, ExperienceFn, Header, HookSpec, HostApi, InteractionFn, InventoryDoneFn,
+    InventoryRequest, ItemData, Level, MidHookFn, MidHookSpec, ModHandle, ModInfo, PlayerInfo,
+    RenameFn, ResourceKey, ResourcePatchFn, Side, SkillFn, Status, StatusFn, Str, SummonFn,
+    SurvivorLookupFn, SurvivorStatusFn, ZoneCheckFn,
 };
 
 use super::{FakeHost, LinkedHook, ServedResource, SubmittedRequest};
@@ -57,6 +58,9 @@ pub(crate) struct State {
     pub(crate) summon_items: Vec<(u32, u32)>,
     pub(crate) survivor_status: Option<(SurvivorStatusFn, usize)>,
     pub(crate) interaction_filters: Vec<(InteractionFn, usize)>,
+    pub(crate) skills: Vec<(u32, SkillFn, usize)>,
+    pub(crate) comfort_filters: Vec<(ComfortFn, usize)>,
+    pub(crate) experience_filters: Vec<(ExperienceFn, usize)>,
     /// The reply `run_command` last handed out, alive until the next call.
     run_out: Option<Box<str>>,
     /// The settings text last handed out, alive until the next call.
@@ -108,6 +112,9 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         summon_items: Vec::new(),
         survivor_status: None,
         interaction_filters: Vec::new(),
+        skills: Vec::new(),
+        comfort_filters: Vec::new(),
+        experience_filters: Vec::new(),
         run_out: None,
         settings: None,
     });
@@ -748,6 +755,41 @@ extern "system" fn interaction_filter(
     })
 }
 
+extern "system" fn skill_override(
+    _me: ModHandle,
+    node: u32,
+    callback: SkillFn,
+    user: *mut c_void,
+) -> Status {
+    with(Status::MISSING, |s| {
+        s.skills.push((node, callback, user.expose_provenance()));
+        Status::OK
+    })
+}
+
+extern "system" fn comfort_filter(
+    _me: ModHandle,
+    callback: ComfortFn,
+    user: *mut c_void,
+) -> Status {
+    with(Status::MISSING, |s| {
+        s.comfort_filters.push((callback, user.expose_provenance()));
+        Status::OK
+    })
+}
+
+extern "system" fn experience_filter(
+    _me: ModHandle,
+    callback: ExperienceFn,
+    user: *mut c_void,
+) -> Status {
+    with(Status::MISSING, |s| {
+        s.experience_filters
+            .push((callback, user.expose_provenance()));
+        Status::OK
+    })
+}
+
 /// table it sees for the process, so it is one static.
 pub(crate) static TABLE: HostApi = HostApi {
     header: Header::of::<HostApi>(),
@@ -804,4 +846,7 @@ pub(crate) static TABLE: HostApi = HostApi {
     summon_item,
     survivor_status,
     interaction_filter,
+    skill_override,
+    comfort_filter,
+    experience_filter,
 };

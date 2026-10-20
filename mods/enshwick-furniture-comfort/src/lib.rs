@@ -2,14 +2,14 @@
 //!
 //! Each tick every comfort provider in a base registers its comfort for its
 //! category, and the base keeps the best per category; a player's comfort is
-//! the sum. The hook scales what each provider registers. It runs on the
+//! the sum. The mod scales what each provider registers. It runs on the
 //! server, which decides comfort, so players without the mod see the higher
 //! comfort and rested time too; only item tooltips keep vanilla numbers. A
 //! client loads it for the games it hosts, where its built-in server decides.
 
 use std::sync::atomic::{AtomicU32, Ordering};
 
-use enshwick_loader_api::{Load, Mod, Next, Off};
+use enshwick_loader_api::{Load, Mod, Off};
 
 /// Furniture comfort settings.
 #[derive(Debug, serde::Deserialize, serde::Serialize, enshwick_loader_api::Config)]
@@ -46,17 +46,6 @@ const MAX_MULTIPLIER: f32 = 100.0;
 /// The factor, as `f32` bits, read on every registration.
 static MULTIPLIER: AtomicU32 = AtomicU32::new(0x3f80_0000);
 
-type Register = unsafe extern "system" fn(
-    system: *mut u8,
-    category: u32,
-    comfort: i32,
-    position: *const f32,
-) -> u64;
-
-enshwick_loader_api::detour! {
-    static REGISTER: unsafe extern "system" fn(system: *mut u8, category: u32, comfort: i32, position: *const f32) -> u64 = register;
-}
-
 /// `comfort` scaled by `multiplier`, rounded and kept in range.
 #[must_use]
 #[expect(
@@ -66,18 +55,6 @@ enshwick_loader_api::detour! {
 pub fn scaled(comfort: i32, multiplier: f32) -> i32 {
     let value = (f64::from(comfort) * f64::from(multiplier)).round();
     value.clamp(f64::from(i32::MIN), f64::from(i32::MAX)) as i32
-}
-
-fn register(
-    next: Next<Register>,
-    system: *mut u8,
-    category: u32,
-    comfort: i32,
-    position: *const f32,
-) -> u64 {
-    let multiplier = f32::from_bits(MULTIPLIER.load(Ordering::Relaxed));
-    // SAFETY: the rest of the chain takes the arguments the game passed.
-    unsafe { next.get()(system, category, scaled(comfort, multiplier), position) }
 }
 
 /// The mod's state.
@@ -97,7 +74,12 @@ impl Mod for FurnitureComfort {
     fn init(load: &mut Load<'_>) -> Result<Self, Off> {
         let settings: Settings = load.config()?;
         MULTIPLIER.store(settings.multiplier.to_bits(), Ordering::Relaxed);
-        load.hook(&REGISTER, load.symbol("comfort.base_register")?)?;
+        load.on_comfort(|comfort| {
+            scaled(
+                comfort.value,
+                f32::from_bits(MULTIPLIER.load(Ordering::Relaxed)),
+            )
+        })?;
         load.on_config_change(|settings: Settings| {
             MULTIPLIER.store(settings.multiplier.to_bits(), Ordering::Relaxed);
             enshwick_loader_api::info!("furniture comfort x{}", settings.multiplier);
