@@ -83,6 +83,10 @@ struct Offsets {
     npc_saved_state: usize,
     npc_common: usize,
     npc_state: usize,
+    spawn_template: usize,
+    spawn_used_item: usize,
+    spawn_ammo_item: usize,
+    spawn_consume: usize,
 }
 
 #[derive(Debug)]
@@ -123,6 +127,7 @@ type LookupFn = unsafe extern "system" fn(*mut u8, *const u32) -> u32;
 type MoveFn = unsafe extern "system" fn(*mut *mut u64, usize, usize, usize) -> usize;
 type UpdateFn = unsafe extern "system" fn(*mut u8, *const u32, usize, usize) -> usize;
 type BedCheckFn = unsafe extern "system" fn(*mut u8) -> u8;
+type SpawnFn = unsafe extern "system" fn(*mut u64, *mut u8) -> u8;
 
 enshwick_api::detour! {
     static LOOKUP: unsafe extern "system" fn(bases: *mut u8, npc: *const u32) -> u32 = lookup,
@@ -131,6 +136,9 @@ enshwick_api::detour! {
 enshwick_api::detour! {
     static CURSOR_LOOKUP: unsafe extern "system" fn(bases: *mut u8, npc: *const u32) -> u32 = lookup,
         flags = enshwick_api::abi::HookFlags::CALLER_FRAME;
+}
+enshwick_api::detour! {
+    static SPAWN: unsafe extern "system" fn(ctx: *mut u64, request: *mut u8) -> u8 = spawn;
 }
 enshwick_api::detour! {
     static MOVE: unsafe extern "system" fn(ctx: *mut *mut u64, b: usize, c: usize, d: usize) -> usize = move_npc;
@@ -147,14 +155,14 @@ enshwick_api::detour! {
 /// # Safety
 ///
 /// `address` is a function of type `F`.
-unsafe fn function<F: Copy>(address: u64) -> F {
+pub(crate) unsafe fn function<F: Copy>(address: u64) -> F {
     let address = usize::try_from(address).unwrap_or(0);
     // SAFETY: forwarded from the caller; `F` is a function pointer.
     unsafe { core::mem::transmute_copy(&address) }
 }
 
 /// Links every server hook.
-pub(crate) fn link(load: &mut Load<'_>) -> Result<(), Off> {
+pub(crate) fn link(load: &mut Load<'_>, staffs: bool) -> Result<(), Off> {
     let client = load.host().build().side == Side::CLIENT;
     let symbol = |name| load.symbol(name);
     let constant = |name| load.constant(name);
@@ -203,6 +211,10 @@ pub(crate) fn link(load: &mut Load<'_>) -> Result<(), Off> {
         npc_saved_state: size("survivors.npc_saved_state")?,
         npc_common: size("survivors.npc_common")?,
         npc_state: size("survivors.npc_state")?,
+        spawn_template: size("survivors.spawn_template")?,
+        spawn_used_item: size("survivors.spawn_used_item")?,
+        spawn_ammo_item: size("survivors.spawn_ammo_item")?,
+        spawn_consume: size("survivors.spawn_consume")?,
     };
     // SAFETY: `ZonesService` is the table `flame-altar-zones` publishes.
     let zones: &'static ZonesService = unsafe { load.service(service::NAME, service::VERSION)? };
@@ -224,6 +236,9 @@ pub(crate) fn link(load: &mut Load<'_>) -> Result<(), Off> {
     load.hook(&MOVE, load.symbol("npc.move")?)?;
     load.hook(&UPDATE, load.symbol("npc.update")?)?;
     load.hook(&BED_CHECK, load.symbol("npc.bed_check")?)?;
+    if staffs {
+        load.hook(&SPAWN, load.symbol("survivors.spawn")?)?;
+    }
     if client {
         // Entities belong to one hosted game; the next starts clean.
         load.on::<Shutdown>(|()| forget())?;
@@ -606,6 +621,66 @@ fn update(
 }
 
 /// Lets only the copy a summoning staff moves take the move command.
+fn spawn(next: Next<SpawnFn>, ctx: *mut u64, request: *mut u8) -> u8 {
+    if let Some(engine) = ENGINE.get()
+        && !request.is_null()
+    {
+        // SAFETY: the game's spawn request, before the spawn reads it.
+        unsafe { consume_copy_staff(engine, request) };
+    }
+    // SAFETY: the rest of the chain takes the arguments the game passed.
+    unsafe { next.get()(ctx, request) }
+}
+
+/// Marks a copy staff's use at an altar as consuming, so the game takes one
+/// staff in the same transaction as the spawn or move, and only when that
+/// works. The staff's effect spawn, which carries the same item, is left
+/// alone, and so is a use outside every altar zone, where the copy would not
+/// stay.
+///
+/// # Safety
+///
+/// `request` is the live spawn request.
+unsafe fn consume_copy_staff(engine: &Engine, request: *mut u8) {
+    let o = &engine.offsets;
+    let base = request as u64;
+    // SAFETY: the request holds the used item's id here.
+    let item: u32 = unsafe { read_at(base, o.spawn_used_item as u64) };
+    let Some(staff) = crate::staffs::copy_staff(item) else {
+        return;
+    };
+    // SAFETY: and the ammunition's id here, the template and the target.
+    let ammo: u32 = unsafe { read_at(base, o.spawn_ammo_item as u64) };
+    // SAFETY: as above.
+    let template: [u8; 16] = unsafe { read_at(base, o.spawn_template as u64) };
+    if ammo != 0 || template != staff.template.0 {
+        return;
+    }
+    // SAFETY: as above.
+    let target: [i64; 3] = unsafe { read_at(base, o.spawn_target as u64) };
+    let at = cells_fixed(target);
+    let Ok(mut slot) = SHARED.lock() else {
+        return;
+    };
+    let Some(shared) = slot.as_mut() else {
+        return;
+    };
+    refresh(engine, shared);
+    if shared.copies.altar_at(at).is_none() {
+        enshwick_api::info!(
+            "copy staff of {} used outside every altar zone: kept",
+            staff.key
+        );
+        return;
+    }
+    // SAFETY: the request's consume flag, which the spawn reads next.
+    unsafe { request.wrapping_add(o.spawn_consume).write(1) };
+    enshwick_api::info!(
+        "copy staff of {} used at {at:?}: taken on success",
+        staff.key
+    );
+}
+
 fn move_npc(next: Next<MoveFn>, ctx: *mut *mut u64, b: usize, c: usize, d: usize) -> usize {
     if !ctx.is_null()
         && let Some(engine) = ENGINE.get()

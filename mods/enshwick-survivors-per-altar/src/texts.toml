@@ -1,0 +1,41 @@
+[en]
+"copy.name" = "Copy staff: {survivor}"
+"copy.description" = "Used once at a Flame Altar: places a copy of {survivor} there, or moves the copy that altar already has. Used up only when it works."
+"survivor.blacksmith" = "Oswald Anders"
+"survivor.blacksmith_assistant" = "Rochelle Anders"
+"survivor.alchemist" = "Balthazar"
+"survivor.alchemist_assistant" = "Lady Leclair"
+"survivor.carpenter" = "Cade Hawthorn"
+"survivor.carpenter_assistant" = "Aunt Braelyn"
+"survivor.hunter" = "Athalan Skree"
+"survivor.hunter_assistant" = "Galen Yager"
+"survivor.farmer" = "Emily Fray"
+"survivor.farmer_assistant" = "Fenrig Mills, Jr."
+"survivor.bard" = "Valory"
+"survivor.bard_assistant" = "Chester Loft"
+"survivor.crypt_keeper" = "Alden Crowley"
+"survivor.crypt_keeper_assistant" = "Nameless One"
+"survivor.barber" = "Elio Ricci"
+"survivor.researcher" = "Loraine Crim"
+"survivor.trader" = "Mei-Yin Chen"
+"survivor.fisher" = "Melville Fontaine"
+
+[uk]
+"copy.name" = "Посох копії: {survivor}"
+"copy.description" = "Одноразовий, біля вівтаря Полум'я: ставить там копію персонажа {survivor} або переносить копію, яка вже є в цього вівтаря. Витрачається, лише коли спрацював."
+
+[de]
+"copy.name" = "Kopiestab: {survivor}"
+"copy.description" = "Einmal an einem Flammenaltar verwendbar: stellt dort eine Kopie von {survivor} auf oder versetzt die Kopie, die dieser Altar schon hat. Wird nur verbraucht, wenn es klappt."
+
+[fr]
+"copy.name" = "Bâton de copie : {survivor}"
+"copy.description" = "S'utilise une fois près d'un autel de la Flamme : y place une copie de {survivor}, ou y déplace la copie que cet autel possède déjà. N'est consommé qu'en cas de réussite."
+
+[es]
+"copy.name" = "Bastón de copia: {survivor}"
+"copy.description" = "Se usa una vez en un altar de la Llama: coloca allí una copia de {survivor} o mueve la copia que ese altar ya tiene. Solo se gasta si funciona."
+
+[pl]
+"copy.name" = "Kostur kopii: {survivor}"
+"copy.description" = "Jednorazowy, przy ołtarzu Płomienia: stawia tam kopię postaci {survivor} albo przenosi kopię, którą ten ołtarz już ma. Zużywa się tylko, gdy zadziała."
