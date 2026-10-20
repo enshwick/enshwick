@@ -14,7 +14,7 @@ use core::sync::atomic::AtomicUsize;
 pub const ABI_MAJOR: u16 = 1;
 
 /// The minor version of this interface. A newer minor only appends fields.
-pub const ABI_MINOR: u16 = 37;
+pub const ABI_MINOR: u16 = 38;
 
 /// Whether `id` is a valid mod id: 1 to 64 characters of `[a-z0-9-]`.
 ///
@@ -3729,6 +3729,40 @@ pub struct HostApi {
     /// Allowed during `enshwick_mod_init` only. Since minor 37.
     pub summoned:
         extern "system" fn(me: ModHandle, callback: SummonFn, user: *mut c_void) -> Status,
+    /// Opens the item data kind `id`, `name` for the mod's own
+    /// (`<mod>:<name>`) or `mod:name` for any mod's, each side 1 to 64 of
+    /// `[a-z0-9_-]`, and writes its index to `out`; every mod gets the same
+    /// index for one id. Allowed during `enshwick_mod_init` only. Since
+    /// minor 38.
+    pub item_data_open: extern "system" fn(me: ModHandle, id: Str, out: *mut u32) -> Status,
+    /// Copies the value of kind `kind` on the item entity `pide` holding
+    /// item `item` into `out`, at most `capacity` bytes, and writes its
+    /// length to `len`; [`Status::MISSING`] when it has none or its entity
+    /// holds another item, [`Status::BAD_ARGS`] when `capacity` is short,
+    /// with `len` written. On the server the server's values, on a client
+    /// what the server sent. Any thread. Since minor 38.
+    pub item_data_get: extern "system" fn(
+        me: ModHandle,
+        kind: u32,
+        pide: u32,
+        item: u32,
+        out: *mut u8,
+        capacity: u32,
+        len: *mut u32,
+    ) -> Status,
+    /// Sets the value of kind `kind` on the item entity `pide` holding item
+    /// `item` to `len` bytes at `data`, at most 512, or removes it for 0;
+    /// the clients that run Enshwick get the change. [`Status::REFUSED`]
+    /// on a client alone, [`Status::MISSING`] before the world has loaded.
+    /// Any thread. Since minor 38.
+    pub item_data_set: extern "system" fn(
+        me: ModHandle,
+        kind: u32,
+        pide: u32,
+        item: u32,
+        data: *const u8,
+        len: u32,
+    ) -> Status,
 }
 
 /// The exports a mod DLL provides, by name.
@@ -3790,7 +3824,7 @@ const _: () = {
     assert!(core::mem::offset_of!(HostApi, hook_at) == 24 + 35 * 8);
     assert!(core::mem::offset_of!(HostApi, inventory_open) == 24 + 36 * 8);
     assert!(core::mem::offset_of!(HostApi, inventory_submit) == 24 + 38 * 8);
-    assert!(size_of::<HostApi>() == 24 + 94 * 8);
+    assert!(size_of::<HostApi>() == 24 + 97 * 8);
     assert!(core::mem::offset_of!(HostApi, config_schema) == 24 + 92 * 8);
     assert!(core::mem::offset_of!(HostApi, time_of_day) == 24 + 73 * 8);
     assert!(core::mem::offset_of!(HostApi, set_time_speed) == 24 + 76 * 8);

@@ -128,6 +128,7 @@ pub(crate) fn start(stub_abi: u32, missing_forwards: u32) {
     let order: Vec<&Library> = plan.order.iter().map(|&i| &libraries[i]).collect();
     attribute_crashes(loader, &order);
     initialise(loader, &order);
+    crate::item_data::seal();
     loader.seal_subscriptions();
     crate::content::seal_and_link(loader);
     link_features(loader);

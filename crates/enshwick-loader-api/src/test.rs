@@ -1898,6 +1898,28 @@ impl Installed {
         handlers.len()
     }
 
+    /// The item data kinds the mod opened, by full id, and every value set:
+    /// `(kind id, entity, item, bytes)`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick_loader_api::test::FakeHost::new().install();
+    /// assert!(loader.item_data().is_empty());
+    /// ```
+    #[must_use]
+    pub fn item_data(&self) -> Vec<(String, u32, u32, Vec<u8>)> {
+        table::with(Vec::new(), |s| {
+            s.item_values
+                .iter()
+                .map(|(&(kind, pide), (item, bytes))| {
+                    let id = s.item_kinds.get(kind as usize).cloned().unwrap_or_default();
+                    (id, pide, *item, bytes.clone())
+                })
+                .collect()
+        })
+    }
+
     /// The items the mod filed as summoning staffs, as `(item, survivor)`.
     ///
     /// # Examples

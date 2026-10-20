@@ -58,6 +58,7 @@
   - [Served resources](content/resources.md)
   - [Texts](content/texts.md)
 - [Inventories](inventories.md)
+- [Item data](item-data.md)
 
 # Shipping
 
