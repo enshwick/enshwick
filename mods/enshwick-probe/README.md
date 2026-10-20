@@ -31,6 +31,9 @@ Once the world has loaded, and again on `/probe check`:
 - the clock: a reading, a time an hour past the next turn of day or night
   that reads back (the turn's event follows), the time put back, a factor of 10 on the speed that the clock's speed shows, and the
   factor put back; the turns of day and night are logged as they come;
+- game settings: a typed read, the perk cost raised by a half that reads
+  back with the preset custom, a night of zero refused, and the settings put
+  back;
 - a save on demand, followed by `WorldSaved`.
 
 From start it counts every game event by type and logs the counts every

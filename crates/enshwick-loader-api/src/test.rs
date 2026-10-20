@@ -1521,6 +1521,32 @@ impl Installed {
         table::with(None, |s| s.clock_speed)
     }
 
+    /// Sets the game settings the fake reports, `keen::ecs::GameSettings`
+    /// as bytes of its reflected size, and their preset; until then no
+    /// world runs. A change the mod makes replaces them and makes the
+    /// preset custom (4).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick_loader_api::test::FakeHost::new().install();
+    /// loader.set_game_settings(vec![0; 144], 0);
+    /// assert_eq!(loader.game_settings().map(|(bytes, _)| bytes.len()), Some(144));
+    /// ```
+    pub fn set_game_settings(&self, bytes: Vec<u8>, preset: u32) {
+        table::with((), |s| s.game_settings = Some((bytes, preset)));
+    }
+
+    /// The game settings' bytes and preset as the mod left them.
+    ///
+    /// # Examples
+    ///
+    /// See [`Installed::set_game_settings`].
+    #[must_use]
+    pub fn game_settings(&self) -> Option<(Vec<u8>, u32)> {
+        table::with(None, |s| s.game_settings.clone())
+    }
+
     /// Whether the mod opened altars, and whether it controls their zones.
     ///
     /// # Examples

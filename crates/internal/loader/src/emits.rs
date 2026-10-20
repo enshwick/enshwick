@@ -33,6 +33,8 @@ const ALLOWED: [&str; 4] = [
 
 /// The source id the game's own game-thread pushes give their events.
 const GAME_THREAD_SOURCE: u16 = 0;
+/// The largest event the game's push takes, exclusive.
+const MAX_EVENT: u32 = 256;
 /// The command kind that sets a component on an entity.
 const SET_COMPONENT: u8 = 3;
 
@@ -171,11 +173,23 @@ fn entity_world() -> Result<usize, Status> {
 pub(crate) fn emit(loader: &Loader, hash: u32, bytes: &[u8]) -> Result<(), Status> {
     let layout = layout(loader).ok_or(Status::MISSING)?;
     let allowed = layout.allowed.get(&hash).ok_or(Status::REFUSED)?;
-    if usize::try_from(allowed.size).ok() != Some(bytes.len())
-        || bytes.len() < layout.time_offset + size_of::<i64>()
-    {
+    if usize::try_from(allowed.size).ok() != Some(bytes.len()) {
         return Err(Status::BAD_ARGS);
     }
+    push(loader, hash, bytes)
+}
+
+/// Raises the event `bytes` of type `hash` for the loader's own features,
+/// which know the type's consumers; stamped with the game time.
+pub(crate) fn push(loader: &Loader, hash: u32, bytes: &[u8]) -> Result<(), Status> {
+    let layout = layout(loader).ok_or(Status::MISSING)?;
+    if bytes.len() < layout.time_offset + size_of::<i64>() {
+        return Err(Status::BAD_ARGS);
+    }
+    let size = u32::try_from(bytes.len())
+        .ok()
+        .filter(|&size| size < MAX_EVENT)
+        .ok_or(Status::BAD_ARGS)?;
     let world = entity_world()?;
     // SAFETY: the entity world holds its stream array; the first stream is
     // the one the game's game-thread code pushes into.
@@ -191,12 +205,12 @@ pub(crate) fn emit(loader: &Loader, hash: u32, bytes: &[u8]) -> Result<(), Statu
         ))
     };
     // SAFETY: the server's first stream on its game thread between steps,
-    // where no system pushes; the size is under 256 as reflection says.
+    // where no system pushes; the size is under the stream's limit.
     let payload = unsafe {
         (layout.push)(
             core::ptr::with_exposed_provenance_mut(stream),
             hash,
-            allowed.size,
+            size,
             GAME_THREAD_SOURCE,
         )
     };

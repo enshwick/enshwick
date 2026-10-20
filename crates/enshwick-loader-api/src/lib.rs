@@ -79,6 +79,7 @@ mod declare;
 pub mod ecs;
 pub mod events;
 pub mod game_events;
+pub mod game_settings;
 mod hook;
 mod host;
 pub mod i18n;

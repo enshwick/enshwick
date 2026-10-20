@@ -22,6 +22,7 @@
 - [The world](world.md)
 - [Actions](actions.md)
 - [Time of day](daytime.md)
+- [Game settings](game-settings.md)
 - [Altars and bases](altars.md)
 - [Survivors](survivors.md)
 - [Interactions](interactions.md)
