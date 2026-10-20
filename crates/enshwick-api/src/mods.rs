@@ -145,6 +145,114 @@ impl Updates {
     }
 }
 
+/// Whether `text` is a minisign public key as the second line of a `.pub`
+/// file holds it: `RW` and base64, 42 bytes of an Ed25519 key.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_api::mods::is_author_key;
+///
+/// assert!(is_author_key("RWTjqgtfpy3lSOLC4uaUXuvvKSLQKOFf6nUnEytoiFjSzxMEhLnoAdJF"));
+/// assert!(!is_author_key("RWnot-a-key"));
+/// ```
+#[must_use]
+pub const fn is_author_key(text: &str) -> bool {
+    /// An Ed25519 public key in minisign is 42 bytes, 56 base64 digits.
+    const LEN: usize = (2 + 8 + 32) / 3 * 4;
+    let text = text.as_bytes();
+    if text.len() != LEN {
+        return false;
+    }
+    let mut digits = [0u8; 3];
+    let mut i = 0;
+    while i < LEN {
+        let digit = match text[i] {
+            b @ b'A'..=b'Z' => b - b'A',
+            b @ b'a'..=b'z' => b - b'a' + 26,
+            b @ b'0'..=b'9' => b - b'0' + 52,
+            b'+' => 62,
+            b'/' => 63,
+            _ => return false,
+        };
+        if i < digits.len() {
+            digits[i] = digit;
+        }
+        i += 1;
+    }
+    // The first two bytes name the algorithm, `Ed`.
+    let algorithm = [
+        (digits[0] << 2) | (digits[1] >> 4),
+        ((digits[1] & 0xf) << 4) | (digits[2] >> 2),
+    ];
+    algorithm[0] == b'E' && algorithm[1] == b'd'
+}
+
+/// The author keys as one line, as a server advertises them: the keys
+/// separated by spaces; [`parse_keys`] reads it back.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_api::mods::{keys_line, parse_keys};
+///
+/// let keys = vec!["RWTjqgtfpy3lSOLC4uaUXuvvKSLQKOFf6nUnEytoiFjSzxMEhLnoAdJF".to_owned()];
+/// assert_eq!(parse_keys(&keys_line(&keys)), keys);
+/// ```
+#[must_use]
+pub fn keys_line(keys: &[String]) -> String {
+    keys.join(" ")
+}
+
+/// The author keys in a line written by [`keys_line`]; empty when any of
+/// them is not a key, or when there are more than two.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_api::mods::parse_keys;
+///
+/// assert!(parse_keys("RWnot-a-key").is_empty());
+/// assert!(parse_keys("").is_empty());
+/// ```
+#[must_use]
+pub fn parse_keys(line: &str) -> Vec<String> {
+    let keys: Vec<String> = line.split_whitespace().map(str::to_owned).collect();
+    if keys.len() <= 2 && keys.iter().all(|key| is_author_key(key)) {
+        keys
+    } else {
+        Vec::new()
+    }
+}
+
+/// The author keys of an ABI listing or manifest, skipping empty and
+/// malformed ones.
+///
+/// # Safety
+///
+/// The strings are valid for the call.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_api::abi::Str;
+/// use enshwick_api::mods::keys_from_abi;
+///
+/// let key = "RWTjqgtfpy3lSOLC4uaUXuvvKSLQKOFf6nUnEytoiFjSzxMEhLnoAdJF";
+/// // SAFETY: static strings.
+/// let keys = unsafe { keys_from_abi(&[Str::new(key), Str::new("bad")]) };
+/// assert_eq!(keys, [key]);
+/// ```
+#[must_use]
+pub unsafe fn keys_from_abi(keys: &[Str]) -> Vec<String> {
+    keys.iter()
+        // SAFETY: forwarded from the caller.
+        .filter_map(|key| unsafe { key.as_str() })
+        .filter(|key| is_author_key(key))
+        .map(str::to_owned)
+        .collect()
+}
+
 /// One loaded mod, or the loader itself, from [`mods`] or [`Host::mods`].
 ///
 /// # Examples
@@ -175,6 +283,11 @@ pub struct ModEntry {
     pub file: String,
     /// Where new releases come from; `None` when the mod declares none.
     pub updates: Option<Updates>,
+    /// The minisign public keys (`RW...`) the author signs releases with, as
+    /// the manifest declares them with `signed_by:`; empty when it declares
+    /// none or under a loader older than ABI minor 14. In [`join_missing`],
+    /// the keys the server advertises for the mod.
+    pub signed_by: Vec<String>,
 }
 
 /// Every loaded mod, the loader first, in load order.
@@ -285,6 +398,7 @@ impl Host {
             off: 0,
             file: Str::EMPTY,
             updates: UpdateSource::NONE,
+            signed_by: [Str::EMPTY; 2],
         };
         let mut infos = vec![blank; count as usize];
         let capacity = u32::try_from(infos.len()).unwrap_or(u32::MAX);
@@ -333,6 +447,13 @@ unsafe fn entry(info: &ModInfo) -> Option<ModEntry> {
     } else {
         None
     };
+    let keys_end = core::mem::offset_of!(ModInfo, signed_by) + size_of::<[Str; 2]>();
+    let signed_by = if info.header.covers(keys_end) {
+        // SAFETY: as above.
+        unsafe { keys_from_abi(&info.signed_by) }
+    } else {
+        Vec::new()
+    };
     Some(ModEntry {
         id: id.to_owned(),
         version: version.to_owned(),
@@ -341,6 +462,7 @@ unsafe fn entry(info: &ModInfo) -> Option<ModEntry> {
         running: info.off == 0,
         file: file.to_owned(),
         updates,
+        signed_by,
     })
 }
 
@@ -406,6 +528,7 @@ mod tests {
             off: 1,
             file: Str::new("mods/enshwick_safes.dll"),
             updates: UpdateSource::NONE,
+            signed_by: [Str::new(KEY), Str::new("RWnot-a-key")],
         };
         // SAFETY: static strings.
         let entry = unsafe { entry(&info) }.unwrap();
@@ -413,5 +536,57 @@ mod tests {
         assert!(!entry.running);
         assert_eq!(entry.updates, None);
         assert_eq!(entry.file, "mods/enshwick_safes.dll");
+        assert_eq!(entry.signed_by, [KEY]);
+    }
+
+    #[test]
+    fn an_entry_of_an_older_minor_has_no_keys() {
+        let mut info = ModInfo {
+            header: Header::of::<ModInfo>(),
+            id: Str::new("safes"),
+            version: Str::new("0.1.0"),
+            side: Side::BOTH,
+            flags: ManifestFlags::JOIN,
+            off: 0,
+            file: Str::new("mods/enshwick_safes.dll"),
+            updates: UpdateSource::NONE,
+            signed_by: [Str::new(KEY), Str::EMPTY],
+        };
+        info.header.size = u32::try_from(core::mem::offset_of!(ModInfo, signed_by)).unwrap();
+        // SAFETY: static strings.
+        let entry = unsafe { entry(&info) }.unwrap();
+        assert!(entry.signed_by.is_empty());
+    }
+
+    const KEY: &str = "RWTjqgtfpy3lSOLC4uaUXuvvKSLQKOFf6nUnEytoiFjSzxMEhLnoAdJF";
+
+    #[test]
+    fn author_keys_are_minisign_public_keys() {
+        assert!(is_author_key(KEY));
+        assert!(is_author_key(
+            "RWSVvUJNE6Z0IzsG2I1G/+JlpjWYHLgP8QVhvMlSWCg0AShBnBmVIt4r"
+        ));
+        for bad in [
+            "",
+            "RW",
+            &KEY[..55],
+            &format!("{KEY}A"),
+            &format!("{}=", &KEY[..55]),
+            &KEY.replace('R', "S"),
+            &KEY.replace('j', "-"),
+            "untrusted comment: minisign public key",
+        ] {
+            assert!(!is_author_key(bad), "{bad}");
+        }
+    }
+
+    #[test]
+    fn key_lines_round_trip_and_refuse_bad_keys() {
+        let other = "RWSVvUJNE6Z0IzsG2I1G/+JlpjWYHLgP8QVhvMlSWCg0AShBnBmVIt4r";
+        let two = vec![KEY.to_owned(), other.to_owned()];
+        assert_eq!(parse_keys(&keys_line(&two)), two);
+        assert!(keys_line(&two).len() <= 127);
+        assert!(parse_keys(&format!("{KEY} RWnot")).is_empty());
+        assert!(parse_keys(&format!("{KEY} {KEY} {KEY}")).is_empty());
     }
 }

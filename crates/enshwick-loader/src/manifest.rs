@@ -1,7 +1,7 @@
 //! Reading a mod's manifest into a resolver candidate.
 
 use enshwick_api::abi::{
-    ABI_MAJOR, Dependency, Manifest, Relation, Side, UpdateKind, UpdateSource, read_headed,
+    ABI_MAJOR, Dependency, Manifest, Relation, Side, Str, UpdateKind, UpdateSource, read_headed,
 };
 use semver::{Version, VersionReq};
 
@@ -126,6 +126,39 @@ pub unsafe fn updates(manifest: &Manifest) -> Result<UpdateSource, String> {
     }
 }
 
+/// The author keys `manifest` declares with `signed_by:`, checked, and a
+/// reason for the log for each key left out because it is not a minisign
+/// public key; none for a manifest older than ABI minor 14.
+///
+/// # Safety
+///
+/// `manifest` and every string in it are valid for the call.
+#[must_use]
+pub unsafe fn signed_by(manifest: &Manifest) -> ([Str; 2], Vec<String>) {
+    let mut keys = [Str::EMPTY; 2];
+    let mut refused = Vec::new();
+    let end = core::mem::offset_of!(Manifest, signed_by) + size_of::<[Str; 2]>();
+    if !manifest.header.covers(end) {
+        return (keys, refused);
+    }
+    let mut kept = 0;
+    for key in &manifest.signed_by {
+        // SAFETY: forwarded from the caller.
+        match unsafe { key.as_str() } {
+            Some("") => {}
+            Some(text) if enshwick_api::mods::is_author_key(text) => {
+                keys[kept] = *key;
+                kept += 1;
+            }
+            Some(text) => refused.push(format!(
+                "the signed_by key {text:?} is not a minisign public key (RW..., 56 characters)"
+            )),
+            None => refused.push("a signed_by key is not UTF-8".to_owned()),
+        }
+    }
+    (keys, refused)
+}
+
 /// Whether `text` is a GitHub `owner/name`.
 fn is_repository(text: &str) -> bool {
     let part = |p: &str| {
@@ -201,7 +234,36 @@ mod tests {
             builds: core::ptr::null(),
             build_count: 0,
             updates: core::ptr::null(),
+            signed_by: [Str::EMPTY; 2],
         }
+    }
+
+    const KEY: &str = "RWTjqgtfpy3lSOLC4uaUXuvvKSLQKOFf6nUnEytoiFjSzxMEhLnoAdJF";
+
+    #[test]
+    fn author_keys_are_checked_and_bad_ones_left_out() {
+        let mut m = manifest("safes", "0.1.0");
+        // SAFETY: static data.
+        let (keys, refused) = unsafe { signed_by(&m) };
+        assert!(keys.iter().all(Str::is_empty) && refused.is_empty());
+        m.signed_by = [Str::new("RWnot-a-key"), Str::new(KEY)];
+        // SAFETY: static data.
+        let (keys, refused) = unsafe { signed_by(&m) };
+        // SAFETY: static strings.
+        assert_eq!(unsafe { keys[0].as_str() }, Some(KEY));
+        assert!(keys[1].is_empty());
+        assert_eq!(refused.len(), 1);
+        assert!(refused[0].contains("RWnot-a-key"), "{}", refused[0]);
+    }
+
+    #[test]
+    fn a_manifest_older_than_author_keys_has_none() {
+        let mut old = manifest("safes", "0.1.0");
+        old.signed_by = [Str::new(KEY), Str::EMPTY];
+        old.header.size = u32::try_from(core::mem::offset_of!(Manifest, signed_by)).unwrap();
+        // SAFETY: static data.
+        let (keys, refused) = unsafe { signed_by(&old) };
+        assert!(keys.iter().all(Str::is_empty) && refused.is_empty());
     }
 
     static GITHUB: UpdateSource = UpdateSource::github("themaiby/enshwick", "enshwick-safes");

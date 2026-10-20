@@ -14,7 +14,7 @@ use core::sync::atomic::AtomicUsize;
 pub const ABI_MAJOR: u16 = 1;
 
 /// The minor version of this interface. A newer minor only appends fields.
-pub const ABI_MINOR: u16 = 13;
+pub const ABI_MINOR: u16 = 14;
 
 /// Whether `id` is a valid mod id: 1 to 64 characters of `[a-z0-9-]`.
 ///
@@ -1151,6 +1151,7 @@ impl UpdateSource {
 ///     builds: core::ptr::null(),
 ///     build_count: 0,
 ///     updates: core::ptr::null(),
+///     signed_by: [Str::EMPTY; 2],
 /// };
 /// assert!(manifest.flags.contains(ManifestFlags::JOIN));
 /// ```
@@ -1177,6 +1178,11 @@ pub struct Manifest {
     pub build_count: usize,
     /// Where new releases come from; null for none. Since minor 5.
     pub updates: *const UpdateSource,
+    /// The minisign public keys the author signs releases with, each the
+    /// base64 line of a `.pub` file (`RW...`); empty strings for none. An
+    /// updater installs a new release of the mod only when one of them
+    /// signed it. Two, so an author can rotate keys. Since minor 14.
+    pub signed_by: [Str; 2],
 }
 
 // SAFETY: a manifest is immutable static data; its pointers refer to statics.
@@ -1343,6 +1349,7 @@ impl CallerFrame {
 ///     off: 0,
 ///     file: Str::new("mods/enshwick_safes.dll"),
 ///     updates: UpdateSource::github("themaiby/enshwick", "enshwick-safes"),
+///     signed_by: [Str::new("RWTjqgtfpy3lSOLC4uaUXuvvKSLQKOFf6nUnEytoiFjSzxMEhLnoAdJF"), Str::EMPTY],
 /// };
 /// assert_eq!(safes.off, 0);
 /// ```
@@ -1367,6 +1374,10 @@ pub struct ModInfo {
     pub file: Str,
     /// Where new releases come from; [`UpdateKind::NONE`] for none.
     pub updates: UpdateSource,
+    /// The author's minisign public keys from the manifest, checked; empty
+    /// strings for none. In [`HostApi::join_missing`], the keys the server
+    /// advertises for the mod. Since minor 14.
+    pub signed_by: [Str; 2],
 }
 
 /// An opaque handle the loader gives each mod; every call names its caller

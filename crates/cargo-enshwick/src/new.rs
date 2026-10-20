@@ -112,7 +112,15 @@ pub struct {type};
 
 impl Mod for {type} {
     fn manifest() -> &'static enshwick_api::abi::Manifest {
-        enshwick_api::manifest!(id: "{id}", side: {side})
+        enshwick_api::manifest!(
+            id: "{id}",
+            side: {side},
+            // Players get your releases from the updater once you name where
+            // they come from and the minisign key you sign them with; see
+            // "Releasing and updates" in the modding book.
+            // updates: github("you/your-repo", "{id}"),
+            // signed_by: ["RW...: the second line of your minisign .pub file"],
+        )
     }
 
     fn init(load: &mut Load<'_>) -> Result<Self, Off> {
@@ -157,7 +165,8 @@ mod tests {
         };
         assert!(text("Cargo.toml").contains("name = \"area-loot\""));
         assert!(text("Cargo.toml").contains(&format!("enshwick-api-v{}", enshwick_api::VERSION)));
-        assert!(text("src/lib.rs").contains("manifest!(id: \"area-loot\", side: BOTH)"));
+        assert!(text("src/lib.rs").contains("id: \"area-loot\",\n            side: BOTH,"));
+        assert!(text("src/lib.rs").contains("// signed_by: [\"RW..."));
         assert!(text("src/lib.rs").contains("declare_mod!(AreaLoot)"));
         assert!(
             !files

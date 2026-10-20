@@ -7,7 +7,7 @@
 //! without them; the files stay as they are.
 //!
 //! A client kept out tells its mods which of the server's mods it lacks, with
-//! the versions and update sources the server advertises
+//! the versions, update sources and author keys the server advertises
 //! ([`Event::JOIN_MISSING`](enshwick_api::abi::Event::JOIN_MISSING)), so an
 //! updater can offer them.
 //!
@@ -177,6 +177,15 @@ pub fn wanted(server: &str, ours: &str) -> Vec<(String, String)> {
 pub fn source(reply: &[u8], id: &str) -> Option<Updates> {
     let line = rule(reply, &format!("{}.{id}", crate::advertise::RULE_SOURCE))?;
     Updates::parse(&line)
+}
+
+/// The author keys a server advertises for mod `id`; empty when it
+/// advertises none or a line this loader cannot read.
+#[must_use]
+pub fn keys(reply: &[u8], id: &str) -> Vec<String> {
+    rule(reply, &format!("{}.{id}", crate::advertise::RULE_KEY))
+        .map(|line| enshwick_api::mods::parse_keys(&line))
+        .unwrap_or_default()
 }
 
 /// The whole mod list a server advertises across its mod rules.
@@ -373,14 +382,14 @@ mod runtime {
             show(&text);
             // Told after the note closes, so an updater's offer follows it.
             if let Some((_, server_mods)) = &server {
-                let missing: Vec<(String, String, Option<super::Updates>)> =
-                    super::wanted(server_mods, &ours_mods)
-                        .into_iter()
-                        .map(|(id, version)| {
-                            let source = super::source(&reply, &id);
-                            (id, version, source)
-                        })
-                        .collect();
+                let missing: Vec<crate::host::Wanted> = super::wanted(server_mods, &ours_mods)
+                    .into_iter()
+                    .map(|(id, version)| {
+                        let source = super::source(&reply, &id);
+                        let keys = super::keys(&reply, &id);
+                        (id, version, source, keys)
+                    })
+                    .collect();
                 crate::host::report_join_missing(&missing);
             }
         } else {
@@ -553,6 +562,15 @@ mod tests {
         );
         assert_eq!(source(&reply, "b"), None);
         assert_eq!(source(&reply, "c"), None);
+    }
+
+    #[test]
+    fn keys_are_read_from_the_rules() {
+        let key = "RWTjqgtfpy3lSOLC4uaUXuvvKSLQKOFf6nUnEytoiFjSzxMEhLnoAdJF";
+        let reply = reply(&[("enshwick.key.a", key), ("enshwick.key.b", "RWnot-a-key")]);
+        assert_eq!(keys(&reply, "a"), [key]);
+        assert!(keys(&reply, "b").is_empty());
+        assert!(keys(&reply, "c").is_empty());
     }
 
     #[test]

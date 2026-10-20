@@ -12,6 +12,9 @@ mod tests {
     use enshwick_api::{Next, events, hook};
     use enshwick_test::{FakeHost, address};
 
+    /// Enshwick's release key, which the loader's entry names.
+    const KEY: &str = "RWTjqgtfpy3lSOLC4uaUXuvvKSLQKOFf6nUnEytoiFjSzxMEhLnoAdJF";
+
     static ORIGINAL_CALLS: AtomicU32 = AtomicU32::new(0);
     static LIVE_LIMIT: AtomicU32 = AtomicU32::new(0);
 
@@ -115,6 +118,7 @@ mod tests {
                 off: 0,
                 file: Str::new("mods/enshwick/enshwick.dll"),
                 updates: UpdateSource::github("themaiby/enshwick", "enshwick-loader"),
+                signed_by: [Str::new(KEY), Str::new("RWnot-a-key")],
             })
             .install();
         // SAFETY: the exports of `declare_mod!` above.
@@ -136,6 +140,7 @@ mod tests {
                 .and_then(enshwick_api::mods::Updates::tag_prefix),
             Some("enshwick-loader-v".to_owned())
         );
+        assert_eq!(listed[0].signed_by, [KEY]);
         let hooks = loader.hooks();
         assert_eq!(hooks[0].target, target);
         assert_eq!(hooks[0].priority, -5);

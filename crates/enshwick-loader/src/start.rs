@@ -94,6 +94,7 @@ pub(crate) fn start(stub_abi: u32, missing_forwards: u32) {
                 version: candidates[i].version.to_string(),
                 file: format!("mods/{}", libraries[i].file),
                 updates: updates_of(&libraries[i]),
+                signed_by: signed_by_of(&libraries[i]),
                 manifest: libraries[i].manifest,
                 off: AtomicBool::new(false),
                 settings: Mutex::new(None),
@@ -145,7 +146,13 @@ pub(crate) fn start(stub_abi: u32, missing_forwards: u32) {
     if side == Side::SERVER
         && let Some(game_dir) = loader.mods_dir.parent()
     {
-        crate::advertise::start(game_dir, joined(loader), sources(loader), host::join_values);
+        crate::advertise::start(
+            game_dir,
+            joined(loader),
+            sources(loader),
+            keys(loader),
+            host::join_values,
+        );
     }
 }
 
@@ -265,6 +272,21 @@ fn sources(loader: &Loader) -> Vec<(String, String)> {
             // SAFETY: the loader keeps every source's strings for the process.
             let updates = unsafe { enshwick_api::mods::Updates::from_abi(&m.updates) }?;
             Some((m.id.clone(), updates.to_line()))
+        })
+        .collect()
+}
+
+/// The author keys of the running join mods that declare any, `(id, keys
+/// line)`.
+fn keys(loader: &Loader) -> Vec<(String, String)> {
+    loader
+        .mods
+        .iter()
+        .filter(|m| m.joins())
+        .filter_map(|m| {
+            // SAFETY: the loader keeps every key's string for the process.
+            let keys = unsafe { enshwick_api::mods::keys_from_abi(&m.signed_by) };
+            (!keys.is_empty()).then(|| (m.id.clone(), enshwick_api::mods::keys_line(&keys)))
         })
         .collect()
 }
@@ -390,6 +412,16 @@ fn updates_of(library: &Library) -> enshwick_api::abi::UpdateSource {
         crate::log!(WARN, "{}: no update source: {reason}", library.file);
         enshwick_api::abi::UpdateSource::NONE
     })
+}
+
+/// The author keys a library declares; a malformed one is left out, logged.
+fn signed_by_of(library: &Library) -> [enshwick_api::abi::Str; 2] {
+    // SAFETY: the manifest is static data inside its loaded DLL.
+    let (keys, refused) = unsafe { crate::manifest::signed_by(library.manifest) };
+    for reason in refused {
+        crate::log!(WARN, "{}: key ignored: {reason}", library.file);
+    }
+    keys
 }
 
 /// Calls every mod's `init` in load order.
