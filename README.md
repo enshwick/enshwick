@@ -10,6 +10,7 @@ every mod is a DLL in the `mods/` folder beside it.
 | ------------------------------------------------------- | ------------------------------------------------------------------ |
 | [Flame altar zones](docs/mods/flame-altar-zones.md)     | touching altar zones grow together and can be built across         |
 | [Flame altar count](docs/mods/flame-altar-count.md)     | how many altars each Flame level allows, twice vanilla by default  |
+| [Furniture comfort](docs/mods/furniture-comfort.md)     | more comfort from furniture, twice vanilla by default              |
 | [Survivors per altar](docs/mods/survivors-per-altar.md) | a copy of each survivor at every altar, with beds of its own altar |
 
 ## Install
@@ -31,10 +32,10 @@ game's launch options.
 
 ## For mod authors
 
-Mods are written in Rust against [`enshwick-api`](crates/enshwick-api). How the
-repository is laid out, checked and released:
-[docs/conventions/](docs/conventions/). Contributions follow
-[CONTRIBUTING.md](CONTRIBUTING.md).
+Mods are written in Rust against [`enshwick-api`](crates/enshwick-api); start
+with [the modding guide](docs/modding/guide.md). How the repository is laid out,
+checked and released: [docs/conventions/](docs/conventions/). Contributions
+follow [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 

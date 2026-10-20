@@ -61,7 +61,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           OUTPUTS: ${{ needs.release-please.outputs.all }}
         run: |
-          echo "$OUTPUTS" | jq -r 'to_entries[] | select(.key | endswith("--tag_name")) | .value' |
+          # jq on Windows ends lines with CRLF; the tags must not keep the CR.
+          echo "$OUTPUTS" | jq -r 'to_entries[] | select(.key | endswith("--tag_name")) | .value' | tr -d '\r' |
             while read -r tag; do
               gh release upload "$tag" enshwick.zip --clobber --repo "$GITHUB_REPOSITORY"
             done
