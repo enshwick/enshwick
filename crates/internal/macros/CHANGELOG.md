@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.5.0](https://github.com/themaiby/enshwick/compare/enshwick-loader-macros-v0.4.0...enshwick-loader-macros-v0.5.0) (2026-10-20)
+
+
+### ⚠ BREAKING CHANGES
+
+* **api:** config stages, ranges, choices, schema and /config ([#130](https://github.com/themaiby/enshwick/issues/130))
+
+### Features
+
+* **api:** config stages, ranges, choices, schema and /config ([#130](https://github.com/themaiby/enshwick/issues/130)) ([8a19e89](https://github.com/themaiby/enshwick/commit/8a19e89afe6ac74d09d9a32c66b1fc133e81bc68))
+
 ## [0.4.0](https://github.com/themaiby/enshwick/compare/enshwick-loader-macros-v0.3.1...enshwick-loader-macros-v0.4.0) (2026-10-20)
 
 

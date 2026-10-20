@@ -58,7 +58,7 @@ checksum = "fc652a48c352aef3ea3aed32080501cf3ef6ed5da78602a020c991775b0aff04"
 
 [[package]]
 name = "cargo-enshwick"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "enshwick-loader-api",
@@ -207,7 +207,7 @@ checksum = "edd0f118536f44f5ccd48bcb8b111bdc3de888b58c74639dfb034a357d0f206d"
 
 [[package]]
 name = "enshwick-admin-tools"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "enshwick-loader-api",
  "serde",
@@ -216,7 +216,7 @@ dependencies = [
 
 [[package]]
 name = "enshwick-area-loot"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "enshwick-loader-api",
  "serde",
@@ -225,7 +225,7 @@ dependencies = [
 
 [[package]]
 name = "enshwick-build-camera"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "enshwick-loader-api",
  "serde",
@@ -234,7 +234,7 @@ dependencies = [
 
 [[package]]
 name = "enshwick-building-materials"
-version = "0.3.2"
+version = "0.4.0"
 dependencies = [
  "enshwick-loader-api",
  "serde",
@@ -243,7 +243,7 @@ dependencies = [
 
 [[package]]
 name = "enshwick-flame-altar-count"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "arc-swap",
  "enshwick-loader-api",
@@ -253,7 +253,7 @@ dependencies = [
 
 [[package]]
 name = "enshwick-flame-altar-zones"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "arrayvec",
  "enshwick-loader-api",
@@ -265,7 +265,7 @@ dependencies = [
 
 [[package]]
 name = "enshwick-furniture-comfort"
-version = "0.2.2"
+version = "0.3.0"
 dependencies = [
  "enshwick-loader-api",
  "serde",
@@ -274,7 +274,7 @@ dependencies = [
 
 [[package]]
 name = "enshwick-loader"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "arc-swap",
  "arrayvec",
@@ -293,7 +293,7 @@ dependencies = [
 
 [[package]]
 name = "enshwick-loader-api"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "enshwick-loader-macros",
  "postcard",
@@ -304,7 +304,7 @@ dependencies = [
 
 [[package]]
 name = "enshwick-loader-macros"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -313,7 +313,7 @@ dependencies = [
 
 [[package]]
 name = "enshwick-loader-reflect"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "rustc-hash",
  "thiserror",
@@ -321,14 +321,14 @@ dependencies = [
 
 [[package]]
 name = "enshwick-loader-stub"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "windows-sys 0.61.2",
 ]
 
 [[package]]
 name = "enshwick-probe"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "enshwick-loader-api",
  "serde",
@@ -336,7 +336,7 @@ dependencies = [
 
 [[package]]
 name = "enshwick-proton-optimizer"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "enshwick-loader-api",
  "serde",
@@ -346,7 +346,7 @@ dependencies = [
 
 [[package]]
 name = "enshwick-safes"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "arc-swap",
  "enshwick-loader-api",
@@ -356,7 +356,7 @@ dependencies = [
 
 [[package]]
 name = "enshwick-shared-experience"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "enshwick-loader-api",
  "serde",
@@ -365,7 +365,7 @@ dependencies = [
 
 [[package]]
 name = "enshwick-survivors-per-altar"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "enshwick-loader-api",
  "serde",
@@ -374,7 +374,7 @@ dependencies = [
 
 [[package]]
 name = "enshwick-updater"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "enshwick-loader-api",
  "minisign-verify",
