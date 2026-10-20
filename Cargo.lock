@@ -43,6 +43,7 @@ dependencies = [
  "enshwick-api",
  "serde",
  "serde_json",
+ "windows-sys",
 ]
 
 [[package]]
