@@ -14,6 +14,12 @@ zone.
   copy still needs one.
 - The original survivor is never touched; removing the mod lets the game remove
   the copies.
+- Copy staffs: one per workshop survivor, such as "Copy staff: Oswald Anders".
+  It does what the survivor's staff does at an altar, places a copy or moves
+  the one there, and is used up when that works. Outside every altar zone it
+  is kept. Bosses drop one at 10 %, chests that need a key or a lockpick hold
+  one at 2 %, a random survivor's each time. Removing the mod removes the
+  staffs from inventories.
 
 ## Settings
 
@@ -21,6 +27,10 @@ zone.
 
 ```toml
 per_altar = true
+copy_staffs = true
+# From 0 to 1; 0 turns that source off.
+copy_staff_boss_chance = 0.10
+copy_staff_locked_chest_chance = 0.02
 ```
 
 ## Who needs it
