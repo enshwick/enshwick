@@ -309,11 +309,13 @@ pub(crate) struct Engine {
     action_query: ActionQueryFn,
     pub(super) main_menu_site: u64,
     pub(super) pause_menu_site: u64,
+    pub(super) world_settings_site: u64,
 }
 
 /// Every function the loader calls or hooks, by symbol; each must read its
 /// `<symbol>.bytes` constant.
-const FUNCTIONS: [&str; 42] = [
+const FUNCTIONS: [&str; 43] = [
+    "ui.world_settings_site",
     "ui.main_entry",
     "ui.pause_entry",
     "ui.action_new",
@@ -528,6 +530,7 @@ impl Engine {
             action_query: function!("ui.action_query", ActionQueryFn),
             main_menu_site: loader.address("ui.main_menu_site").unwrap_or(0),
             pause_menu_site: loader.address("ui.pause_menu_site").unwrap_or(0),
+            world_settings_site: loader.address("ui.world_settings_site").unwrap_or(0),
         })
     }
 

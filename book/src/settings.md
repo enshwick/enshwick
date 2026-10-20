@@ -137,6 +137,12 @@ restart", and while the client is joined to a server that sets a mod's `sync`
 values, those rows show the server's values and take no changes. A change is
 written at once, as the game applies its own settings.
 
+The world settings, when a player creates, starts or hosts a world and in the
+pause menu's world settings, show the same rows under their last tab, every
+setting but each player's own (`client`); they are read-only where the game
+makes its own rows read-only, for a player who is no host. Settings stay
+global: a change there applies to every world.
+
 On a client joined to a dedicated server, the screen also offers "Server
 settings": the server's mods with settings, and each one's values as the
 server holds them, asked over the loader's own messages. An administrator

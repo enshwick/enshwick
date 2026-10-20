@@ -16,6 +16,10 @@
 //! comments kept, and the mod told. While the client is joined to a server
 //! that sets a mod's join values, those rows show the server's values and
 //! take no changes.
+//!
+//! The world settings view shows the same rows under its last tab, inside
+//! its scroll area, from a hook after the tab's own rows: read-only where the
+//! view is, for a player who may not change the world.
 
 use core::cell::RefCell;
 use std::sync::atomic::{AtomicU8, AtomicU64, Ordering};
@@ -106,6 +110,11 @@ pub(super) fn link(loader: &Loader, engine: &Engine) {
             engine.pause_menu_site,
             pause_menu,
             "the pause menu's Mods entry",
+        ),
+        (
+            engine.world_settings_site,
+            world_settings,
+            "the world settings' Mods rows",
         ),
     ] {
         let link = crate::mid::MidLink {
@@ -616,6 +625,160 @@ fn draw_row(
             None
         }
     }
+}
+
+/// The world settings view's config, in `rsi` at the hook: its byte that
+/// makes every row read-only, as for a player who is no host.
+const VIEW_READ_ONLY: usize = 0x91;
+/// The view's tab state, in `r15` at the hook: the shown tab's index.
+const VIEW_TAB: usize = 8;
+/// The view's last tab, under which the mods' rows show.
+const LAST_TAB: u8 = 3;
+
+/// The mods' rows in the world settings, kept while the view shows.
+struct WorldRows {
+    /// The frame they last showed in.
+    frame: u64,
+    /// Each mod with settings: index, label, schema and rows.
+    mods: Vec<(usize, String, enshwick_loader_api::config::Schema, Vec<Row>)>,
+    /// The last change's outcome.
+    message: Option<(String, bool)>,
+}
+
+thread_local! {
+    static WORLD: RefCell<Option<WorldRows>> = const { RefCell::new(None) };
+}
+
+/// Every mod's world rows: its settings but each player's own.
+fn world_rows(
+    loader: &Loader,
+) -> Vec<(usize, String, enshwick_loader_api::config::Schema, Vec<Row>)> {
+    loader
+        .mods
+        .iter()
+        .enumerate()
+        .filter_map(|(index, record)| {
+            let mut schema = record.schema.lock().ok().and_then(|s| s.clone())?;
+            schema
+                .fields
+                .retain(|f| f.stage != enshwick_loader_api::config::Stage::Client);
+            if schema.fields.is_empty() {
+                return None;
+            }
+            let file =
+                std::fs::read_to_string(loader.configs_dir.join(format!("{}.toml", record.id)))
+                    .unwrap_or_default();
+            let rows = rows::rows(&schema, &file, None);
+            Some((index, record.label(), schema, rows))
+        })
+        .collect()
+}
+
+unsafe extern "system" fn world_settings(registers: *mut Registers, _user: *mut core::ffi::c_void) {
+    // SAFETY: the stub passes the registers at the hook.
+    let Some(registers) = (unsafe { registers.as_ref() }) else {
+        return;
+    };
+    let (Ok(view), Ok(tab_state)) = (
+        usize::try_from(registers.rsi),
+        usize::try_from(registers.r15),
+    ) else {
+        return;
+    };
+    if view == 0 || tab_state == 0 {
+        return;
+    }
+    // SAFETY: at the hook `r15` holds the view's tab state, read here.
+    let tab = unsafe { crate::world::read::<u8>(tab_state, VIEW_TAB) };
+    if tab != LAST_TAB {
+        return;
+    }
+    // SAFETY: at the hook `rsi` holds the view's config.
+    let read_only = unsafe { crate::world::read::<u8>(view, VIEW_READ_ONLY) } != 0;
+    let drawn = std::panic::catch_unwind(|| world(read_only));
+    if drawn.is_err() {
+        crate::log!(
+            ERROR,
+            "interface: the loader panicked in the world settings"
+        );
+    }
+}
+
+/// Draws the mods' rows under the world settings' last tab, in its scroll
+/// area; read-only for a player who may not change the world.
+fn world(read_only: bool) {
+    let (Some(engine), Some(loader)) = (ENGINE.get(), crate::host::loader()) else {
+        return;
+    };
+    let context = engine.context();
+    if context == 0 {
+        return;
+    }
+    let frame = FRAME.load(Ordering::Relaxed);
+    // SAFETY: inside the world settings' scroll area, a frame on its thread,
+    // drawing rows as the view's own sections do.
+    let paint = unsafe { Painter::new(engine, context) };
+    WORLD.with_borrow_mut(|slot| {
+        let fresh = slot.as_ref().is_none_or(|w| w.frame + 1 < frame);
+        if fresh {
+            *slot = Some(WorldRows {
+                frame,
+                mods: world_rows(loader),
+                message: None,
+            });
+        }
+        let Some(world) = slot.as_mut() else {
+            return;
+        };
+        world.frame = frame;
+        if world.mods.is_empty() {
+            return;
+        }
+        paint.label(b"Mods", UiWidget::STYLE_H2, false, false);
+        paint.label(
+            b"These settings apply to every world.",
+            UiWidget::STYLE_SECONDARY,
+            true,
+            false,
+        );
+        if let Some((text, ok)) = &world.message {
+            let style = if *ok {
+                UiWidget::STYLE_POSITIVE
+            } else {
+                UiWidget::STYLE_NEGATIVE
+            };
+            paint.label(text.as_bytes(), style, true, false);
+        }
+        let mut changed = None;
+        for (index, label, schema, rows) in &world.mods {
+            paint.label(label.as_bytes(), UiWidget::STYLE_H3, false, false);
+            for row in rows {
+                let mut row = row.clone();
+                if read_only && row.lock == Lock::Open {
+                    row.lock = Lock::File;
+                }
+                let id = loader.mods.get(*index).map_or("", |m| m.id.as_str());
+                if let Some(value) = draw_row(&paint, id, schema, &row) {
+                    changed = Some((*index, row.key.clone(), value));
+                }
+            }
+        }
+        let Some((index, key, value)) = changed else {
+            return;
+        };
+        let id = loader
+            .mods
+            .get(index)
+            .map_or("", |m| m.id.as_str())
+            .to_owned();
+        world.message = Some(
+            match crate::configure::apply(loader, index, &key, &value, "the world settings") {
+                Ok(change) => (crate::configure::changed(&id, &key, &change), true),
+                Err(reply) => (reply, false),
+            },
+        );
+        world.mods = world_rows(loader);
+    });
 }
 
 #[cfg(test)]

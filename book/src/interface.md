@@ -163,7 +163,8 @@ pause menu, beside Settings. It opens a screen of the loader's own that lists
 every mod and shows the settings of each mod that derives `Config`, as the
 game's settings rows, with nothing to write in the mod; see
 [Settings](settings.md#the-schema-and-config). Back, Escape or the gamepad's B
-steps back from a mod's settings to the list, and from the list out.
+steps back from a mod's settings to the list, and from the list out. The world settings show the
+same rows under their last tab.
 
 ## Testing
 
