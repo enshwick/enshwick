@@ -54,6 +54,17 @@ struct Settings {
     copy_staff_locked_chest_chance: f64,
 }
 
+/// `chance` within 0 to 1, warning about a value outside, such as `10` typed
+/// for 10 %: a setting out of range never turns the copies off.
+fn chance(name: &str, chance: f64) -> f64 {
+    if (0.0..=1.0).contains(&chance) {
+        return chance;
+    }
+    let kept = if chance > 1.0 { 1.0 } else { 0.0 };
+    enshwick_loader_api::warn!("{name} must be from 0 to 1, not {chance}: {kept} is used");
+    kept
+}
+
 /// The mod's state.
 #[derive(Debug)]
 pub struct SurvivorsPerAltar;
@@ -228,13 +239,12 @@ fn copy_staffs(load: &mut Load<'_>, settings: &Settings) -> Result<(), Off> {
     staffs::add(load, &texts)?;
     staffs::link(load)?;
     let items = staffs::copy_ids();
-    for (chance, source) in [
-        (settings.copy_staff_boss_chance, Source::bosses()),
-        (
-            settings.copy_staff_locked_chest_chance,
-            Source::locked_chests(),
-        ),
-    ] {
+    let boss = chance("copy_staff_boss_chance", settings.copy_staff_boss_chance);
+    let locked = chance(
+        "copy_staff_locked_chest_chance",
+        settings.copy_staff_locked_chest_chance,
+    );
+    for (chance, source) in [(boss, Source::bosses()), (locked, Source::locked_chests())] {
         if chance > 0.0 {
             load.add_loot(Drop::one_of(&items, chance, source))?;
         }
@@ -242,8 +252,8 @@ fn copy_staffs(load: &mut Load<'_>, settings: &Settings) -> Result<(), Off> {
     enshwick_loader_api::info!(
         "{} copy staffs; in loot from bosses at {}, locked chests at {}",
         items.len(),
-        settings.copy_staff_boss_chance,
-        settings.copy_staff_locked_chest_chance
+        boss,
+        locked
     );
     Ok(())
 }
@@ -265,5 +275,14 @@ mod tests {
         let old: Settings = toml::from_str("per_altar = true\n").unwrap();
         assert!(old.copy_staffs);
         assert!((old.copy_staff_locked_chest_chance - 0.02).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn chances_stay_within_zero_to_one() {
+        assert!((chance("c", 0.25) - 0.25).abs() < f64::EPSILON);
+        assert!((chance("c", 10.0) - 1.0).abs() < f64::EPSILON);
+        assert!((chance("c", f64::INFINITY) - 1.0).abs() < f64::EPSILON);
+        assert!(chance("c", -0.5).abs() < f64::EPSILON);
+        assert!(chance("c", f64::NAN).abs() < f64::EPSILON);
     }
 }

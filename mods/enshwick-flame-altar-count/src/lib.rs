@@ -83,6 +83,9 @@ impl AltarTable {
         {
             enshwick_loader_api::warn!("altars above {cap} lowered to {cap}: {}", cap_reason(cap));
         }
+        if settings.altars_per_flame_level.contains(&0) {
+            enshwick_loader_api::warn!("a level with 0 altars raised to 1: every level allows one");
+        }
         let table = Self::new(&settings.altars_per_flame_level, cap);
         enshwick_loader_api::info!("altars per Flame level: {:?}", table.table);
         table

@@ -12,7 +12,7 @@ each comfort category counts, as in vanilla.
 multiplier = 2.0
 ```
 
-An edit takes effect about a second after saving the file, without a restart.
+`multiplier` goes from 0 to 100; 1 is vanilla. An edit takes effect about a second after saving the file, without a restart.
 
 ## Who needs it
 

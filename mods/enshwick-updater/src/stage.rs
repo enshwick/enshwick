@@ -120,6 +120,33 @@ pub fn plan(names: &[String], installed: Option<&str>) -> Result<Vec<(usize, Str
     Ok(files)
 }
 
+/// Refuses a plan that writes any of `taken`, files of other mods or of the
+/// loader, compared without case as Windows does.
+///
+/// # Errors
+///
+/// The first path that belongs to something else.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_updater::stage::refuse_taken;
+///
+/// let files = [(0, "mods/enshwick/enshwick.dll".to_owned())];
+/// let taken = ["mods/Enshwick/enshwick.dll".to_owned()];
+/// assert!(refuse_taken(&files, &taken).is_err());
+/// assert!(refuse_taken(&files, &[]).is_ok());
+/// ```
+pub fn refuse_taken(files: &[(usize, String)], taken: &[String]) -> Result<(), String> {
+    match files
+        .iter()
+        .find(|(_, to)| taken.iter().any(|t| t.eq_ignore_ascii_case(to)))
+    {
+        Some((_, to)) => Err(format!("{to} belongs to another mod or the loader")),
+        None => Ok(()),
+    }
+}
+
 /// Unpacks a verified `archive` into `game`'s staging folder as [`plan`]
 /// says. Every file is unpacked under `scratch` first and only then moved
 /// into the staging folder, so a failure leaves nothing half-staged.
@@ -132,6 +159,7 @@ pub fn plan(names: &[String], installed: Option<&str>) -> Result<Vec<(usize, Str
 pub fn stage(
     archive: &[u8],
     installed: Option<&str>,
+    taken: &[String],
     game: &Path,
     scratch: &Path,
 ) -> Result<Vec<String>, String> {
@@ -146,6 +174,7 @@ pub fn stage(
         .collect::<Option<_>>()
         .ok_or("an entry name is unreadable")?;
     let files = plan(&names, installed)?;
+    refuse_taken(&files, taken)?;
     // Scratch space of earlier runs goes first.
     let _gone = std::fs::remove_dir_all(scratch);
     let mut unpacked: Vec<(PathBuf, String)> = Vec::new();
@@ -311,7 +340,7 @@ mod tests {
             ("powrprof.dll", b"stub"),
             ("mods/enshwick/enshwick.dll", b"loader"),
         ]);
-        let staged = stage(&archive, None, &game, &game.join("scratch")).unwrap();
+        let staged = stage(&archive, None, &[], &game, &game.join("scratch")).unwrap();
         assert_eq!(staged, ["powrprof.dll", "mods/enshwick/enshwick.dll"]);
         let root = game.join(STAGED);
         assert_eq!(std::fs::read(root.join("powrprof.dll")).unwrap(), b"stub");
@@ -330,9 +359,9 @@ mod tests {
     fn a_hostile_archive_stages_nothing() {
         let game = scratch("hostile");
         let archive = zip(&[("mods/a.dll", b"a"), ("../../x.dll", b"x")]);
-        assert!(stage(&archive, None, &game, &game.join("scratch")).is_err());
+        assert!(stage(&archive, None, &[], &game, &game.join("scratch")).is_err());
         assert!(!game.join(STAGED).exists());
-        assert!(stage(b"not a zip", None, &game, &game.join("scratch")).is_err());
+        assert!(stage(b"not a zip", None, &[], &game, &game.join("scratch")).is_err());
         let _gone = std::fs::remove_dir_all(&game);
     }
 }

@@ -25,7 +25,8 @@ overgrowth = true # overgrowth materials
 decor = true      # decor and furniture
 ```
 
-A joined player runs with the server's values.
+A change applies at the next start of the game: the recipes are built once
+per run. Give the server and every player the same values.
 
 ## Who needs it
 

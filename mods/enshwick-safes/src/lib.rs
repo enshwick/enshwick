@@ -159,13 +159,15 @@ impl Owners {
 /// Writes the owners on a thread of their own, one write at a time.
 fn save(store: &'static Store<Owners>) {
     static WRITING: Mutex<()> = Mutex::new(());
-    let owners = Owners::from_map(&ACCESS.owners.load());
     let spawned = std::thread::Builder::new()
         .name("safes-save".into())
         .spawn(move || {
             let _one = WRITING
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner);
+            // Read under the lock: the last write is always the newest map,
+            // never an older copy whose thread happened to run last.
+            let owners = Owners::from_map(&ACCESS.owners.load());
             if let Err(off) = store.save(&owners) {
                 enshwick_loader_api::warn!("owners not saved: {off}");
             }

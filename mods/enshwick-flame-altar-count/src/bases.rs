@@ -24,10 +24,12 @@
 
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, OnceLock};
+use std::thread::Thread;
 use std::time::Duration;
 
 use arc_swap::ArcSwap;
 use enshwick_loader_api::abi::Side;
+use enshwick_loader_api::events::Shutdown;
 use enshwick_loader_api::state::Hold;
 use enshwick_loader_api::{Load, Next, Off};
 
@@ -117,6 +119,8 @@ static ENGINE: OnceLock<Engine> = OnceLock::new();
 static ZONES: OnceLock<ArcSwap<Zones>> = OnceLock::new();
 /// How many zones the world has, `u32::MAX` before the first grouping.
 static ZONE_COUNT: AtomicU32 = AtomicU32::new(u32::MAX);
+/// The thread that keeps the hold, woken when the zone count changes.
+static HOLD_THREAD: OnceLock<Thread> = OnceLock::new();
 
 enshwick_loader_api::detour! {
     static GROUP: unsafe extern "system" fn(bases: *mut u8, world: *mut u8) = group;
@@ -220,6 +224,13 @@ pub(crate) fn link(load: &mut Load<'_>) -> Result<bool, Off> {
     let sites = match Sites::find(load) {
         Ok(sites) => sites,
         Err(off) => {
+            // A world held for its altars must not open with the vanilla
+            // grouping: off, the loader stops the server for the hold.
+            if load.host().build().side == Side::SERVER
+                && let Some(reason) = Hold::new(&load.data_dir()?).reason()
+            {
+                return Err(Off::new(format!("{reason}, and {off}")));
+            }
             enshwick_loader_api::warn!("the game keeps 16 altars: {off}");
             return Ok(false);
         }
@@ -242,23 +253,33 @@ pub(crate) fn link(load: &mut Load<'_>) -> Result<bool, Off> {
     load.hook(&GROUP, sites.grouping)?;
     load.hook(&ADD_BASE, sites.new_base)?;
     load.hook(&CHECK, sites.cursor)?;
+    // A client that hosts another game starts from no zones again.
+    load.on::<Shutdown>(|()| {
+        if let Some(zones) = ZONES.get() {
+            zones.store(Arc::new(Zones::default()));
+        }
+        ZONE_COUNT.store(u32::MAX, Ordering::Relaxed);
+    })?;
     if load.host().build().side == Side::SERVER {
         let hold = Hold::new(&load.data_dir()?);
-        drop(
-            std::thread::Builder::new()
-                .name("flame-altar-count-hold".into())
-                .spawn(move || keep_hold(&hold)),
-        );
+        if let Ok(thread) = std::thread::Builder::new()
+            .name("flame-altar-count-hold".into())
+            .spawn(move || keep_hold(&hold))
+        {
+            let _first = HOLD_THREAD.set(thread.thread().clone());
+        }
     }
     Ok(true)
 }
 
 /// Sets the hold while the world has more zones than vanilla groups, and
-/// clears it when it has no more; runs for the process.
+/// clears it when it has no more; runs for the process. A change of the
+/// zone count wakes it at once, so a server stopped right after its 17th
+/// altar is held too.
 fn keep_hold(hold: &Hold) {
     let mut set = hold.reason().is_some();
     loop {
-        std::thread::sleep(HOLD_EVERY);
+        std::thread::park_timeout(HOLD_EVERY);
         let zones = ZONE_COUNT.load(Ordering::Relaxed);
         if zones == u32::MAX {
             continue;
@@ -324,6 +345,14 @@ fn group(next: Next<unsafe extern "system" fn(*mut u8, *mut u8)>, bases: *mut u8
             based: i < MAX_ZONES && members >> i & 1 == 1,
         }
     };
+    // Stored before the check below: a world with no zones equals the
+    // starting state, and its count must still reach the hold.
+    let listed = u32::try_from(len).unwrap_or(u32::MAX - 1);
+    if ZONE_COUNT.swap(listed, Ordering::Relaxed) != listed
+        && let Some(thread) = HOLD_THREAD.get()
+    {
+        thread.unpark();
+    }
     let current = known.load();
     if current.bases == count
         && current.zones.len() == len
@@ -335,10 +364,6 @@ fn group(next: Next<unsafe extern "system" fn(*mut u8, *mut u8)>, bases: *mut u8
         zones: (0..len).map(zone).collect(),
         bases: count,
     };
-    ZONE_COUNT.store(
-        u32::try_from(len).unwrap_or(u32::MAX - 1),
-        Ordering::Relaxed,
-    );
     let apart = zones.apart();
     let shape = |z: &Zones| (z.zones.len(), z.bases, z.apart());
     if shape(&current) == shape(&zones) {

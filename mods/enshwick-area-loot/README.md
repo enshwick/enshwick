@@ -24,7 +24,9 @@ enabled = true
 ```
 
 `radius` is measured across the ground from the emptied container, `height` up
-and down from it. An edit takes effect about a second after saving the file,
+and down from it, both in metres: `radius` up to 50, `height` up to 20.
+Switched back on, the mod starts watching afresh, so nothing emptied while it
+was off is taken. An edit takes effect about a second after saving the file,
 without a restart.
 
 ## Who needs it

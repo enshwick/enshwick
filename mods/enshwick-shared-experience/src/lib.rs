@@ -253,18 +253,28 @@ unsafe fn share_experience(engine: &Engine, ctx: *mut u64) {
     }
 }
 
-/// Writes the mark on a thread of its own.
-fn save(store: &'static Store<Saved>) {
+/// Held while the mark is written: every write goes through one temporary
+/// file, which two at once would leave half written.
+static WRITING: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+/// Writes the current mark, one write at a time.
+fn write(store: &Store<Saved>) {
+    let _one = WRITING
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let saved = Saved {
         high_water: HIGH_WATER.load(Ordering::Relaxed),
     };
+    if let Err(off) = store.save(&saved) {
+        enshwick_loader_api::warn!("experience mark not saved: {off}");
+    }
+}
+
+/// Writes the mark on a thread of its own.
+fn save(store: &'static Store<Saved>) {
     let spawned = std::thread::Builder::new()
         .name("shared-experience-save".into())
-        .spawn(move || {
-            if let Err(off) = store.save(&saved) {
-                enshwick_loader_api::warn!("experience mark not saved: {off}");
-            }
-        });
+        .spawn(move || write(store));
     if spawned.is_err() {
         enshwick_loader_api::warn!("experience mark not saved: no thread");
     }
@@ -330,14 +340,7 @@ impl Mod for SharedExperience {
             HIGH_WATER.store(store.load()?.high_water, Ordering::Relaxed);
             load.on::<WorldSaved>(move |()| save(store))?;
             // The process may end soon after: write before returning.
-            load.on::<Shutdown>(move |()| {
-                let saved = Saved {
-                    high_water: HIGH_WATER.load(Ordering::Relaxed),
-                };
-                if let Err(off) = store.save(&saved) {
-                    enshwick_loader_api::warn!("experience mark not saved: {off}");
-                }
-            })?;
+            load.on::<Shutdown>(move |()| write(store))?;
         } else {
             // A hosted game starts from the characters in it, its host among
             // them; the next game may be another world.

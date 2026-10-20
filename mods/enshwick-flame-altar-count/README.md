@@ -17,7 +17,7 @@ altars_per_flame_level = [2, 4, 8, 12, 16, 20, 22, 24, 26, 28, 30, 32]
 ```
 
 Levels past the end of the list use its last entry. Values above 32 are lowered
-to 32. An edited file applies while the game runs.
+to 32 and 0 is raised to 1, each with a warning in the log. An edited file applies while the game runs.
 
 ## Altars past 16
 
@@ -41,8 +41,10 @@ The save keeps every altar as vanilla does. A world with more than 16 altars
 needs the mod to open safely: without it the game groups the altars past 16 on
 its own and may crash. So while the world has more than 16 altars, the
 dedicated server holds the game: when a game update makes the build unknown to
-Enshwick, or the mod is missing or off, Enshwick stops the server before the
-world loads and says why in `logs/enshwick/loader.log`. Update Enshwick and the
+Enshwick, the mod is missing or off, or it cannot find its places in the game,
+Enshwick stops the server before the world loads and says why in
+`logs/enshwick/loader.log`. Only a dedicated server keeps the hold: a player
+hosting such a world must keep the mod running and up to date. Update Enshwick and the
 mod, or remove altars down to 16 with the mod running. To open the world anyway,
 at your own risk, delete `mod-data/flame-altar-count/hold.txt`.
 

@@ -120,7 +120,9 @@ thread_local! {
     /// Set when the uniqueness pass keeps a copy that is not the record: the
     /// record update that follows on this thread must not take the copy's base
     /// and happiness.
-    static SKIP_UPDATE: Cell<bool> = const { Cell::new(false) };
+    /// It names the survivor, so an update of another survivor is never
+    /// skipped when vanilla bails out before the expected one.
+    static SKIP_UPDATE: Cell<Option<u32>> = const { Cell::new(None) };
 }
 
 type LookupFn = unsafe extern "system" fn(*mut u8, *const u32) -> u32;
@@ -266,15 +268,17 @@ unsafe fn read_at<T: Copy>(base: u64, offset: u64) -> T {
 }
 
 fn lookup(next: Next<LookupFn>, bases: *mut u8, npc: *const u32) -> u32 {
+    // The frame is valid only until the hook calls anything hooked, the rest
+    // of the chain included: take it first.
+    let frame = enshwick_loader_api::host().map(|host| host.caller_frame());
     // SAFETY: the rest of the chain takes the arguments the game passed.
     let found = unsafe { next.get()(bases, npc) };
-    let (Some(engine), Some(host)) = (ENGINE.get(), enshwick_loader_api::host()) else {
+    let (Some(engine), Some(frame)) = (ENGINE.get(), frame) else {
         return found;
     };
     if npc.is_null() {
         return found;
     }
-    let frame = host.caller_frame();
     // SAFETY: the frame was taken at entry of this chain.
     let caller = unsafe { frame.return_address() };
     // SAFETY: `npc` points at the survivor id the caller looks up.
@@ -311,7 +315,7 @@ unsafe fn resolve(engine: &Engine, found: u32, npc: u32, caller: u64, frame: &Ca
     };
     refresh(engine, shared);
     if cursor {
-        let copies = shared.copies.copies_of(npc).len();
+        let copies = shared.copies.copy_count(npc);
         return crate::cursor::answer(true, client_site, copies, found);
     }
     let stack = frame.stack();
@@ -344,7 +348,7 @@ unsafe fn resolve(engine: &Engine, found: u32, npc: u32, caller: u64, frame: &Ca
         // SAFETY: `npc_bed`'s live context and the bed's transform.
         unsafe { calibrate(engine, ctx, transform) };
     }
-    if shared.copies.copies_of(npc).len() <= 1 {
+    if shared.copies.copy_count(npc) <= 1 {
         return found;
     }
     if bed {
@@ -377,19 +381,19 @@ unsafe fn file_copy(engine: &Engine, shared: &mut Shared, found: u32, npc: u32, 
     let transform: *const u8 = unsafe { read_at(stack, o.unique_transform) };
     // SAFETY: the copy's components.
     let home = unsafe { home(saved, transform) };
-    SKIP_UPDATE.with(|skip| skip.set(false));
+    SKIP_UPDATE.with(|skip| skip.set(None));
     shared.seen.insert(me, Instant::now());
     // Right after a load the zones are not known yet: keep every copy until
     // they are, or each would look like one outside the zones.
     if !shared.copies.knows_altars() {
-        SKIP_UPDATE.with(|skip| skip.set(found != 0 && me != found));
+        SKIP_UPDATE.with(|skip| skip.set((found != 0 && me != found).then_some(npc)));
         return if found == 0 { 0 } else { me };
     }
     let original = if found == 0 { me } else { found };
     match shared.copies.observe(npc, me, home, original) {
         Verdict::Keep if found == 0 => 0,
         Verdict::Keep => {
-            SKIP_UPDATE.with(|skip| skip.set(me != found));
+            SKIP_UPDATE.with(|skip| skip.set((me != found).then_some(npc)));
             me
         }
         Verdict::Remove => {
@@ -415,6 +419,9 @@ unsafe fn bed_owner(engine: &Engine, shared: &Shared, npc: u32, stack: u64, foun
     let transform: u64 = unsafe { read_at(stack, o.bed_transform) };
     // SAFETY: as above.
     let kind_ptr: u64 = unsafe { read_at(stack, o.bed_npc_common_type) };
+    if transform == 0 || kind_ptr == 0 {
+        return found;
+    }
     // SAFETY: the bed's position, 32.32 fixed point.
     let position: [i64; 3] = unsafe { read_at(transform, 0) };
     // SAFETY: the type index the pointer names.
@@ -449,6 +456,9 @@ unsafe fn assign_or_roam(
         let ctx: *mut u64 = unsafe { read_at(stack, o.assign_context) };
         // SAFETY: as above.
         let targets: u64 = unsafe { read_at(stack, o.assign_targets) };
+        if targets == 0 {
+            return found;
+        }
         // SAFETY: the selected target, the bed, at this offset.
         (ctx, unsafe { read_at::<u32>(targets, o.assign_bed as u64) })
     };
@@ -489,20 +499,14 @@ unsafe fn sleeper(
     if kind == u16::MAX || bed == 0 {
         return None;
     }
-    shared
-        .copies
-        .copies_of(npc)
-        .into_iter()
-        .map(|(e, _)| e)
-        .find(|&e| {
-            // SAFETY: reading a component of an entity in the live context.
-            let common = unsafe { (engine.component_read)(ctx, &raw const kind, e) };
-            // SAFETY: `NpcCommon.bedId` at this offset.
-            !common.is_null()
-                && unsafe {
-                    read_at::<u32>(common.addr() as u64, engine.offsets.npc_common_bed as u64)
-                } == bed
-        })
+    shared.copies.copies_of(npc).map(|(e, _)| e).find(|&e| {
+        // SAFETY: reading a component of an entity in the live context.
+        let common = unsafe { (engine.component_read)(ctx, &raw const kind, e) };
+        // SAFETY: `NpcCommon.bedId` at this offset.
+        !common.is_null()
+            && unsafe { read_at::<u32>(common.addr() as u64, engine.offsets.npc_common_bed as u64) }
+                == bed
+    })
 }
 
 /// Learns the type index of `CurrentTransform` from a bed whose transform the
@@ -615,7 +619,9 @@ fn update(
     state: usize,
     flag: usize,
 ) -> usize {
-    if SKIP_UPDATE.with(|skip| skip.replace(false)) {
+    let skip = SKIP_UPDATE.with(Cell::take);
+    // SAFETY: `npc` points at the survivor id the game updates.
+    if skip.is_some() && !npc.is_null() && skip == Some(unsafe { npc.read() }) {
         return 0;
     }
     // SAFETY: the rest of the chain takes the arguments the game passed.
@@ -718,15 +724,14 @@ unsafe fn skip_move(engine: &Engine, ctx: *mut *mut u64) -> bool {
     let query: *mut u64 = unsafe { ctx.read() };
     // SAFETY: a live query context.
     let Entity(me) = unsafe { engine.ecs.entity(query) };
-    // SAFETY: the context points at the NPC's `ActiveNpcState` here.
-    let state: u64 = unsafe { read_at(ctx.addr() as u64, engine.offsets.move_survivor as u64) };
-    // SAFETY: the state starts with the survivor id.
-    let id: u32 = unsafe { read_at(state, 0) };
     if me == target {
         shared.moving = None;
         return false;
     }
-    id == survivor
+    // SAFETY: the context points at the NPC's `ActiveNpcState` here.
+    let state: u64 = unsafe { read_at(ctx.addr() as u64, engine.offsets.move_survivor as u64) };
+    // SAFETY: the state starts with the survivor id.
+    state != 0 && unsafe { read_at::<u32>(state, 0) } == survivor
 }
 
 /// The game's check that an NPC's bed is still its own, made stricter: a bed at
@@ -778,7 +783,7 @@ unsafe fn foreign_bed(engine: &Engine, ctx: u64) -> bool {
     let Some(shared) = slot.as_ref() else {
         return false;
     };
-    if !shared.copies.knows_altars() || shared.copies.copies_of(npc).len() <= 1 {
+    if !shared.copies.knows_altars() || shared.copies.copy_count(npc) <= 1 {
         return false;
     }
     let (Some(mine), Some(beds)) = (shared.copies.altar_at(home), shared.copies.altar_at(bed_at))

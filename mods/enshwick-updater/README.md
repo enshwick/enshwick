@@ -16,7 +16,9 @@ keeps the file it replaces as `<file>.previous`. Settings files in
 
 When a server runs mods you lack, or has them in another version, the join
 check keeps you out and says which. The updater then offers the server's
-versions, from the sources the server advertises, checked the same way.
+versions, checked the same way. A mod you have comes from its own source,
+never one the server names; a mod you lack comes from the source the server
+advertises. A version older than yours is marked `(older)` in the window.
 Restart the game once they are downloaded and join again.
 
 ## What is installed
@@ -41,7 +43,8 @@ comment must name the release's tag and the archive's file name, so a signed
 archive cannot pass for another release. From an archive only DLLs
 are taken, and only where Enshwick keeps them: `powrprof.dll` beside the game
 and `*.dll` under `mods/`. An archive with a path that leaves the game's
-folder is refused whole.
+folder, or that would write another mod's DLL or the loader's files, is
+refused whole.
 
 ## Settings
 
@@ -56,6 +59,7 @@ prereleases = false
 
 - `enabled`: off, the updater never goes online.
 - `check_interval_hours`: hours between checks at start; `0` checks at every
+  start. A check that could not reach every source runs again at the next
   start. The offer of a server's versions does not wait for the interval.
 - `trusted_keys`: public keys accepted for updates besides the ones each
   installed mod names, each the second line of a minisign `.pub` file

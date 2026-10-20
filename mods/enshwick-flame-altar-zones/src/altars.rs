@@ -316,6 +316,19 @@ unsafe fn observe(engine: &Engine, ctx: *mut u64) {
     });
 }
 
+/// The range to write for an altar at `level` with vanilla size `current`:
+/// its solved range for that level, or while a rise waits for the solver the
+/// larger of its last solved range and vanilla, so no zone shrinks meanwhile.
+fn pending_range(solved: Option<(usize, [f32; 3])>, level: usize, current: [f32; 3]) -> [f32; 3] {
+    let vanilla = current.map(|v| v * HALF);
+    match solved {
+        Some((solved_level, range)) if solved_level == level => range,
+        Some((solved_level, range)) if solved_level < level => {
+            [0, 1, 2].map(|axis| range[axis].max(vanilla[axis]))
+        }
+        _ => vanilla,
+    }
+}
 /// Vanilla's `upgrade_building_range`, writing solved ranges where there are
 /// any.
 ///
@@ -340,10 +353,7 @@ unsafe fn write_ranges(engine: &Engine, ctx: *mut u64) {
             };
             // SAFETY: the system's live context.
             let Entity(id) = unsafe { engine.ecs.entity(ctx) };
-            let target = match targets.get(&id) {
-                Some(&(solved_level, range)) if solved_level == level => range,
-                _ => current.map(|v| v * HALF),
-            };
+            let target = pending_range(targets.get(&id).copied(), level, current);
             levels.push((id, sizes));
             let shape = words[UPGRADE_SHAPE] as *mut u8;
             // SAFETY: the trigger shape this system writes holds its range here.
@@ -549,6 +559,20 @@ pub(crate) fn zones() -> Vec<(u32, Box3)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[expect(clippy::float_cmp, reason = "ranges are copied or halved exactly")]
+    fn a_zone_never_shrinks_while_its_rise_waits_for_the_solver() {
+        let current = [40.0, 20.0, 40.0];
+        let vanilla = [20.0, 10.0, 20.0];
+        assert_eq!(pending_range(None, 2, current), vanilla);
+        assert_eq!(pending_range(Some((2, [30.0; 3])), 2, current), [30.0; 3]);
+        assert_eq!(
+            pending_range(Some((1, [25.0, 5.0, 15.0])), 2, current),
+            [25.0, 10.0, 20.0]
+        );
+        assert_eq!(pending_range(Some((3, [50.0; 3])), 2, current), vanilla);
+    }
 
     #[test]
     fn seen_merges_batches_and_reports_changes() {

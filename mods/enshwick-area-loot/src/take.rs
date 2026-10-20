@@ -4,7 +4,7 @@
 //! inventory transactions.
 
 use std::collections::VecDeque;
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::{Mutex, MutexGuard, OnceLock, PoisonError};
 use std::time::{Duration, Instant};
 
@@ -40,6 +40,8 @@ static ENABLED: AtomicBool = AtomicBool::new(true);
 static RADIUS: AtomicU32 = AtomicU32::new(0x4140_0000);
 static HEIGHT: AtomicU32 = AtomicU32::new(0x4080_0000);
 static OFF: AtomicBool = AtomicBool::new(false);
+/// Counts the games run, so a take chain never reaches into the next one.
+static GAME: AtomicU64 = AtomicU64::new(0);
 
 enshwick_loader_api::detour! {
     static CHECK: unsafe extern "system" fn(ctx: *mut u64) = check;
@@ -47,7 +49,15 @@ enshwick_loader_api::detour! {
 
 /// Applies `settings` from now on.
 pub(crate) fn apply(settings: &Settings) {
-    ENABLED.store(settings.enabled, Ordering::Relaxed);
+    let was = ENABLED.swap(settings.enabled, Ordering::Relaxed);
+    // Off, the tracker stood still: what was emptied meanwhile must not count
+    // as emptied now, with its loot sent to whoever opened it last.
+    if settings.enabled
+        && !was
+        && let Some(t) = tracker().as_mut()
+    {
+        t.clear();
+    }
     RADIUS.store(settings.radius.to_bits(), Ordering::Relaxed);
     HEIGHT.store(settings.height.to_bits(), Ordering::Relaxed);
 }
@@ -68,6 +78,7 @@ pub(crate) fn link(load: &mut Load<'_>) -> Result<(), Off> {
     load.hook(&CHECK, load.system(enshwick_loader_api::loot::SYSTEM)?)?;
     // Entity ids belong to one game.
     load.on::<enshwick_loader_api::events::Shutdown>(|()| {
+        GAME.fetch_add(1, Ordering::AcqRel);
         if let Some(t) = tracker().as_mut() {
             t.clear();
         }
@@ -130,7 +141,7 @@ unsafe fn pass(engine: &Engine, ctx: *mut u64) {
                     container.entity.0,
                     queue.len()
                 );
-                take_next(player, queue);
+                take_next(player, queue, GAME.load(Ordering::Acquire));
             }
         }
     }
@@ -184,10 +195,22 @@ unsafe fn gather(
 
 /// Empties the first container of `queue` into `player`, and the next once
 /// that one emptied completely.
-fn take_next(player: Entity, mut queue: VecDeque<Entity>) {
+fn take_next(player: Entity, mut queue: VecDeque<Entity>, game: u64) {
     let Some(engine) = ENGINE.get() else {
         return;
     };
+    // Switched off, stopped by a panic or another game since: the rest stays.
+    if OFF.load(Ordering::Acquire)
+        || !ENABLED.load(Ordering::Relaxed)
+        || GAME.load(Ordering::Acquire) != game
+    {
+        if let Some(t) = tracker().as_mut() {
+            for rest in queue {
+                t.release(rest);
+            }
+        }
+        return;
+    }
     let Some(container) = queue.pop_front() else {
         return;
     };
@@ -208,7 +231,7 @@ fn take_next(player: Entity, mut queue: VecDeque<Entity>) {
             .iter()
             .any(|s| !s.is_empty());
         if emptied(outcome) && !left {
-            take_next(player, queue);
+            take_next(player, queue, game);
             return;
         }
         // Inventory full or the container changed: the rest stays for later.

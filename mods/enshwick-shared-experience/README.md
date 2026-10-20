@@ -5,9 +5,11 @@ server remembers the most experience any character has reached, and every
 character below it catches up: while online, and on the next join for those
 who were away.
 
+- Every character's play moves the mark: what anyone earns raises it, so a
+  character catching up still advances everyone.
 - Playing together does not speed anyone up. When several players earn
-  experience in the same moment, as from one kill, the leader's gain counts
-  once.
+  experience in the same moment, as from one kill, only the largest gain of
+  that moment counts, once.
 - A character behind the leader gains the difference, one level per tick, with
   the level-up banner, skill points and saved level as if earned in play.
 - Characters already ahead, including those brought from another world, raise
