@@ -160,13 +160,42 @@ impl Offer {
     /// };
     /// assert_eq!(offer.line(), "safes: 0.1.0 \u{2192} 0.2.0");
     /// ```
+    ///
+    /// A version older than the installed one says so:
+    ///
+    /// ```
+    /// # use enshwick_updater::Offer;
+    /// # use enshwick_updater::release::Pick;
+    /// # use enshwick_updater::trust::Refusal;
+    /// # let offer = Offer {
+    /// #     id: "safes".into(),
+    /// #     from: Some("0.3.0".into()),
+    /// #     file: String::new(),
+    /// #     pick: Pick {
+    /// #         tag: String::new(),
+    /// #         version: semver::Version::new(0, 2, 0),
+    /// #         archive: String::new(),
+    /// #         archive_url: String::new(),
+    /// #         signature_url: String::new(),
+    /// #     },
+    /// #     source: String::new(),
+    /// #     trust: Err(Refusal::Unsigned),
+    /// # };
+    /// assert_eq!(offer.line(), "safes: 0.3.0 \u{2192} 0.2.0 (older)");
+    /// ```
     #[must_use]
     pub fn line(&self) -> String {
+        let older = self
+            .from
+            .as_deref()
+            .and_then(|from| Version::parse(from).ok())
+            .is_some_and(|from| self.pick.version < from);
         format!(
-            "{}: {} \u{2192} {}",
+            "{}: {} \u{2192} {}{}",
             self.id,
             self.from.as_deref().unwrap_or("not installed"),
-            self.pick.version
+            self.pick.version,
+            if older { " (older)" } else { "" }
         )
     }
 
@@ -383,7 +412,14 @@ fn server_version(
     let ours = installed.iter().find(|m| m.id == entry.id);
     let trust = trust::for_missing(entry, ours, trusted);
     let version = Version::parse(&entry.version).map_err(|e| format!("bad version: {e}"))?;
-    let pick = match &entry.updates {
+    // A mod this game has comes from its own source, never one the server
+    // names: the server could otherwise pass another release signed by the
+    // same key for it.
+    let updates = match ours {
+        Some(ours) => ours.updates.as_ref(),
+        None => entry.updates.as_ref(),
+    };
+    let pick = match updates {
         Some(Updates::GitHub {
             repository,
             component,
@@ -409,9 +445,9 @@ fn server_version(
     Ok(Offer {
         id: entry.id.clone(),
         from: ours.map(|m| m.version.clone()),
-        file: ours.map_or_else(|| entry.file.clone(), |m| m.file.clone()),
+        file: ours.map(|m| m.file.clone()).unwrap_or_default(),
         pick,
-        source: entry.updates.as_ref().map(source_of).unwrap_or_default(),
+        source: updates.map(source_of).unwrap_or_default(),
         trust,
     })
 }
@@ -596,13 +632,34 @@ fn install(client: &Client, context: &Context, offer: &Offer) -> Result<Vec<Stri
         }
     })?;
     let installed = Some(offer.file.as_str()).filter(|file| !file.is_empty());
+    let taken = taken(&offer.id, &enshwick_loader_api::mods());
     stage::stage(
         &archive,
         installed,
+        &taken,
         &context.game,
         &context.data.join(SCRATCH),
     )
 }
+
+/// The files an update of `id` must not write: those of every other mod, and
+/// the loader's own unless the update is the loader's.
+fn taken(id: &str, installed: &[ModEntry]) -> Vec<String> {
+    let mut taken: Vec<String> = installed
+        .iter()
+        .filter(|m| m.id != id && !m.file.is_empty())
+        .map(|m| m.file.clone())
+        .collect();
+    if id != LOADER_ID {
+        taken.extend(LOADER_FILES.iter().map(|&file| file.to_owned()));
+    }
+    taken
+}
+
+/// The loader's mod id, as it lists itself.
+const LOADER_ID: &str = "enshwick";
+/// The loader's files, relative to the game's folder.
+const LOADER_FILES: [&str; 2] = ["powrprof.dll", "mods/enshwick/enshwick.dll"];
 
 /// Runs `work` on a thread of its own; a panic only ends that thread.
 fn spawn(name: &'static str, work: fn()) {
@@ -671,6 +728,36 @@ enshwick_loader_api::declare_mod!(Updater);
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn listed(id: &str, file: &str) -> ModEntry {
+        ModEntry {
+            id: id.into(),
+            version: "1.0.0".into(),
+            side: enshwick_loader_api::abi::Side::BOTH,
+            join: true,
+            running: true,
+            file: file.into(),
+            updates: None,
+            signed_by: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn an_update_never_writes_another_mods_or_the_loaders_files() {
+        let installed = [
+            listed("enshwick", "mods/enshwick/enshwick.dll"),
+            listed("safes", "mods/enshwick-safes.dll"),
+            listed("updater", "mods/enshwick-updater.dll"),
+        ];
+        let taken = taken("safes", &installed);
+        assert!(!taken.contains(&"mods/enshwick-safes.dll".to_owned()));
+        assert!(taken.contains(&"mods/enshwick-updater.dll".to_owned()));
+        assert!(taken.contains(&"powrprof.dll".to_owned()));
+        assert!(taken.contains(&"mods/enshwick/enshwick.dll".to_owned()));
+        let loader = super::taken("enshwick", &installed);
+        assert!(!loader.contains(&"powrprof.dll".to_owned()));
+        assert!(!loader.contains(&"mods/enshwick/enshwick.dll".to_owned()));
+    }
 
     #[test]
     fn the_default_settings_parse() {
