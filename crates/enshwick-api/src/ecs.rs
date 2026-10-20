@@ -294,3 +294,155 @@ impl<const N: usize> Query<'_, N> {
         (more & 0xff != 0).then_some(&self.words)
     }
 }
+
+type TypeIndex = unsafe extern "system" fn(map: *const u8, hash: *const u32) -> *const u16;
+type ReadComponent = unsafe extern "system" fn(
+    out: *mut [usize; 2],
+    world: *const u8,
+    index: *const u16,
+    entity: u32,
+);
+type SlotRoot = unsafe extern "system" fn(
+    out: *mut [u64; 2],
+    slot: u64,
+    owner_index: u64,
+    ctx: *mut u64,
+) -> *mut [u64; 2];
+
+/// Component reads from inside a hooked ECS system, on the worker thread that
+/// runs it: what another system's entities hold, such as a chest's
+/// `UsedItem` or position.
+///
+/// # Examples
+///
+/// ```
+/// fn init(load: &mut enshwick_api::Load<'_>) -> Result<enshwick_api::ecs::Components, enshwick_api::Off> {
+///     enshwick_api::ecs::Components::resolve(load)
+/// }
+/// ```
+#[derive(Clone, Copy, Debug)]
+pub struct Components {
+    type_index: TypeIndex,
+    read: ReadComponent,
+    slot_root: SlotRoot,
+    entity_world: usize,
+    registry_maps: [usize; 2],
+}
+
+impl Components {
+    /// Resolves the reads for the running build.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] when the loader lacks any of them for this build.
+    ///
+    /// # Examples
+    ///
+    /// See [`Components`].
+    pub fn resolve(load: &Load<'_>) -> Result<Self, Off> {
+        let size = |name| {
+            load.constant(name)
+                .map(|v| usize::try_from(v).unwrap_or(usize::MAX))
+        };
+        let (type_index, read, slot_root) = (
+            load.symbol("ecs.type_index")?,
+            load.symbol("ecs.component_read_raw")?,
+            load.symbol("ecs.slot_root")?,
+        );
+        // SAFETY: the loader pins this id to the component type lookup.
+        let type_index = unsafe { function::<TypeIndex>(type_index) };
+        // SAFETY: the loader pins this id to the side-effect-free component read.
+        let read = unsafe { function::<ReadComponent>(read) };
+        // SAFETY: the loader pins this id to the slot root walk.
+        let slot_root = unsafe { function::<SlotRoot>(slot_root) };
+        Ok(Self {
+            type_index,
+            read,
+            slot_root,
+            entity_world: size("ecs.context_entity_world")?,
+            registry_maps: [
+                size("ecs.registry_type_map")?,
+                size("ecs.registry_type_map_fallback")?,
+            ],
+        })
+    }
+
+    /// A pointer to `entity`'s component of type `hash` (see
+    /// [`World::component_type`](crate::world::World::component_type)), or
+    /// `None` when it has none. Writing through it is only right for
+    /// components no client sees, which need no change mark.
+    ///
+    /// # Safety
+    ///
+    /// `ctx` is the live context of the hooked system, used on its thread.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// unsafe fn used_item(
+    ///     c: &enshwick_api::ecs::Components,
+    ///     ctx: *mut u64,
+    ///     chest: enshwick_api::ecs::Entity,
+    /// ) -> Option<u32> {
+    ///     // SAFETY: called from a system's hook with its context.
+    ///     let data = unsafe { c.component(ctx, chest, 0x0b02_361d) }?;
+    ///     // SAFETY: UsedItem is the item id alone.
+    ///     Some(unsafe { data.cast::<u32>().read_unaligned() })
+    /// }
+    /// ```
+    #[must_use]
+    pub unsafe fn component(&self, ctx: *mut u64, entity: Entity, hash: u32) -> Option<*mut u8> {
+        if ctx.is_null() || entity.is_none() {
+            return None;
+        }
+        // SAFETY: the first word of a context is its query descriptor, which
+        // points at the entity world.
+        let descriptor: *const u8 = unsafe { read_at(ctx.cast(), 0) };
+        // SAFETY: as above.
+        let world: *const u8 = unsafe { read_at(descriptor, self.entity_world) };
+        if world.is_null() {
+            return None;
+        }
+        // SAFETY: the entity world starts with its component registry.
+        let registry: *const u8 = unsafe { read_at(world, 0) };
+        let index = self.registry_maps.iter().find_map(|&map| {
+            // SAFETY: the registry's type maps; lookups do not change them.
+            let index = unsafe { (self.type_index)(registry.wrapping_add(map), &raw const hash) };
+            (!index.is_null()).then_some(index)
+        })?;
+        let mut out = [0usize; 2];
+        // SAFETY: a read with no side effects, from inside a running system.
+        unsafe { (self.read)(&raw mut out, world, index, entity.0) };
+        (out[0] != 0).then(|| core::ptr::with_exposed_provenance_mut(out[0]))
+    }
+
+    /// The inventory an item slot belongs to at the root: the chest or player
+    /// holding it. `slot` is the game's slot id and `owner_index` the
+    /// system's `OwnerRelationship` index pointer.
+    ///
+    /// # Safety
+    ///
+    /// As for [`Components::component`]; `owner_index` comes from the same
+    /// system.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// unsafe fn root(c: &enshwick_api::ecs::Components, ctx: *mut u64, slot: u64, index: u64) {
+    ///     // SAFETY: called from the inventory system's hook.
+    ///     let _ = unsafe { c.slot_root(ctx, slot, index) };
+    /// }
+    /// ```
+    #[must_use]
+    pub unsafe fn slot_root(&self, ctx: *mut u64, slot: u64, owner_index: u64) -> Option<Entity> {
+        let mut out = [0u64; 2];
+        // SAFETY: the game's walk up `OwnerRelationship`, inside its system.
+        unsafe { (self.slot_root)(&raw mut out, slot, owner_index, ctx) };
+        #[expect(
+            clippy::cast_possible_truncation,
+            reason = "the error is the low byte, the root a u32"
+        )]
+        let (error, root) = (out[0] as u8, out[1] as u32);
+        (error == 0 && root != 0).then_some(Entity(root))
+    }
+}

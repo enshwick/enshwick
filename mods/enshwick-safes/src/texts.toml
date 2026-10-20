@@ -1,0 +1,23 @@
+[en]
+"safe.name" = "Safe"
+"safe.description" = "A chest only the player who placed it can open, empty or pick up."
+
+[uk]
+"safe.name" = "Сейф"
+"safe.description" = "Скриня, яку може відкрити, спорожнити чи підняти лише той, хто її поставив."
+
+[de]
+"safe.name" = "Tresor"
+"safe.description" = "Eine Truhe, die nur der Spieler öffnen, leeren oder aufheben kann, der sie aufgestellt hat."
+
+[fr]
+"safe.name" = "Coffre-fort"
+"safe.description" = "Un coffre que seul le joueur qui l'a posé peut ouvrir, vider ou ramasser."
+
+[es]
+"safe.name" = "Caja fuerte"
+"safe.description" = "Un cofre que solo el jugador que lo colocó puede abrir, vaciar o recoger."
+
+[pl]
+"safe.name" = "Sejf"
+"safe.description" = "Skrzynia, którą może otworzyć, opróżnić lub podnieść tylko gracz, który ją postawił."

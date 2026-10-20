@@ -14,7 +14,7 @@ use core::sync::atomic::AtomicUsize;
 pub const ABI_MAJOR: u16 = 1;
 
 /// The minor version of this interface. A newer minor only appends fields.
-pub const ABI_MINOR: u16 = 3;
+pub const ABI_MINOR: u16 = 4;
 
 /// Whether `id` is a valid mod id: 1 to 64 characters of `[a-z0-9-]`.
 ///
@@ -558,6 +558,38 @@ pub struct PlayerData {
 /// without data, valid for the call) and the pointer given at subscription.
 pub type EventFn = unsafe extern "system" fn(event: Event, data: *const c_void, user: *mut c_void);
 
+/// A game resource's key: its GUID in memory order, its type hash and part.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_api::abi::ResourceKey;
+///
+/// let item = ResourceKey { guid: [0x3a; 16], type_hash: 0xb5ce_8765, part: 0 };
+/// assert_eq!(item.part, 0);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct ResourceKey {
+    /// The resource's GUID, in memory order (`bytes_le` of the textual form).
+    pub guid: [u8; 16],
+    /// The reflected type hash of the resource's root type.
+    pub type_hash: u32,
+    /// The part of a resource split in parts; 0 for most.
+    pub part: u32,
+}
+
+/// Builds a served resource from its base: `base` is the base resource's
+/// bytes, valid for the call. On [`Status::OK`] the function writes a pointer
+/// and length of bytes that stay valid for the life of the process.
+pub type ResourcePatchFn = unsafe extern "system" fn(
+    base: *const u8,
+    base_len: usize,
+    user: *mut c_void,
+    out: *mut *const u8,
+    out_len: *mut usize,
+) -> Status;
+
 /// A level name other than `error`, `warn`, `info` or `debug`.
 ///
 /// # Examples
@@ -1100,6 +1132,21 @@ pub struct HostApi {
         capacity: u32,
         count: *mut u32,
     ) -> Status,
+    /// Serves the resource `key` as `patch` makes it from the resource
+    /// `base`, built the first time the game reads it: a new resource when
+    /// the keys differ, a changed vanilla one when they are equal. Allowed
+    /// during `enshwick_mod_init` only; one mod per key. Since minor 4.
+    pub serve_resource: extern "system" fn(
+        me: ModHandle,
+        key: *const ResourceKey,
+        base: *const ResourceKey,
+        patch: ResourcePatchFn,
+        user: *mut c_void,
+    ) -> Status,
+    /// Adds the text of `LocaTag` `id` in `language` (`LanguageId`, 0 for any
+    /// language without its own); the client shows it wherever the game asks
+    /// for that tag. Allowed during `enshwick_mod_init` only. Since minor 4.
+    pub add_text: extern "system" fn(me: ModHandle, id: u32, language: u32, text: Str) -> Status,
 }
 
 /// The exports a mod DLL provides, by name.
@@ -1147,5 +1194,8 @@ const _: () = {
     assert!(core::mem::offset_of!(HostApi, log_level) == 24 + 14 * 8);
     assert!(core::mem::offset_of!(HostApi, subscribe) == 24 + 15 * 8);
     assert!(core::mem::offset_of!(HostApi, players) == 24 + 20 * 8);
-    assert!(size_of::<HostApi>() == 24 + 21 * 8);
+    assert!(core::mem::offset_of!(HostApi, serve_resource) == 24 + 21 * 8);
+    assert!(core::mem::offset_of!(HostApi, add_text) == 24 + 22 * 8);
+    assert!(size_of::<HostApi>() == 24 + 23 * 8);
+    assert!(size_of::<ResourceKey>() == 24);
 };

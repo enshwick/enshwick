@@ -189,6 +189,39 @@ game thread after a simulation step: `next_tick(f)`, `after(delay, f)` and
 repeating. Call it from any thread; tasks run where the game's server code runs,
 so they may call into the game. An idle step costs one atomic load.
 
+## Content: items, recipes and texts
+
+New game content works on the server and the client alike; the mod runs on
+both (`side: BOTH`, `join = true`).
+
+```rust
+use enshwick_api::content::{Guid, items::NewItem, recipes::NewRecipe};
+
+const CHEST: Guid = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");
+const SAFE: Guid = Guid::parse("8a3f6e21-5c4b-4d7e-9f10-2b7c5e6a9d31");
+
+let texts = load.texts(include_str!("texts.toml"))?;
+load.add_texts(&texts, &[("safe.name", SAFE_NAME)])?;
+load.add_item(NewItem { guid: SAFE, like: CHEST, name: Some(SAFE_NAME), description: None, debug_name: "Safe".into() })?;
+load.add_recipe(NewRecipe { guid: SAFE_RECIPE, like: CHEST, output: SAFE, output_count: 1, cost: 2 })?;
+```
+
+- `add_item` clones a vanilla item under a new GUID (its game id is
+  `Guid::id`) and lists it in the item registry; `add_recipe` copies the
+  recipe of a vanilla item for a new output, at the same workshop and unlocked
+  with it. Several mods can add items and recipes; their changes compose.
+- Texts live in one TOML file per mod, a table per language code (`en`, `uk`,
+  `de`, ... see `i18n::Language`), `en` being the fallback. A server owner
+  overrides or adds texts in `mod-configs/<id>.texts.toml`.
+- Lower down, `load.serve(key, base, |bytes| ...)` serves any game resource,
+  new or changed, built from its base with `content::Blob`, which grows arrays
+  and keeps every offset right; `load.add_text(tag, language, text)` gives one
+  tag one text.
+
+Items a mod adds disappear from inventories when the mod is removed, as the
+game drops unknown items; a placed object keeps working as its vanilla
+template.
+
 ## State between sessions
 
 `load.data_dir()` is the mod's own folder, `mod-data/<id>`. `state::Store<T>`
@@ -238,7 +271,10 @@ panics. `load.hook(&HOOK, address)` puts it into the chain of that function.
 hooked system: `query::<N>(ctx)` walks the system's rows with the engine's own
 iterator on a stack buffer, `entity(ctx)` names the current row's entity,
 `set_row` restarts a walk, and `mark_changed` makes replication send a written
-component.
+component. Such hooks run on worker threads; `ecs::Components::resolve(load)`
+reads any entity's component from the system's context
+(`component(ctx, entity, hash)`, the hash from `World::component_type`) and
+finds the inventory an item slot belongs to (`slot_root`).
 
 ## Services between mods
 

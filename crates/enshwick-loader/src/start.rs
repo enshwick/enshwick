@@ -21,8 +21,11 @@ use crate::resolve::{self, Candidate};
 use crate::{builds, log};
 
 /// The client starts under Steam's DRM wrapper, which may check the game's code
-/// before it runs; hooks wait until the game is well underway.
+/// before it runs. The game opens its window only once its own code runs, so
+/// hooks wait for that window, and at most this long.
 const CLIENT_ARM_DELAY: Duration = Duration::from_secs(15);
+/// How often the client looks for its window.
+const WINDOW_POLL: Duration = Duration::from_millis(100);
 
 /// The stub contract the loader speaks.
 const STUB_ABI: u32 = 1;
@@ -106,12 +109,18 @@ pub(crate) fn start(stub_abi: u32, missing_forwards: u32) {
     attribute_crashes(loader, &order);
     initialise(loader, &order);
     loader.seal_subscriptions();
+    crate::content::seal_and_link(loader);
     if side == Side::SERVER {
         crate::events::link(loader);
     }
     if side == Side::CLIENT {
         link_join(loader);
-        std::thread::sleep(CLIENT_ARM_DELAY);
+        let waited = wait_for_window(CLIENT_ARM_DELAY);
+        crate::log!(
+            INFO,
+            "arming {} ms after the loader started",
+            waited.as_millis()
+        );
     }
     arm(loader, frame);
     ready(loader, &order);
@@ -121,6 +130,49 @@ pub(crate) fn start(stub_abi: u32, missing_forwards: u32) {
     {
         crate::advertise::start(game_dir, &joined(loader));
     }
+}
+
+/// Waits until this process shows a window or `limit` passes; how long it
+/// waited.
+fn wait_for_window(limit: Duration) -> Duration {
+    use windows_sys::Win32::Foundation::{HWND, LPARAM};
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        EnumWindows, GetWindowThreadProcessId, IsWindowVisible,
+    };
+
+    unsafe extern "system" fn ours(window: HWND, found: LPARAM) -> i32 {
+        let mut process = 0u32;
+        // SAFETY: a window Windows enumerates; the out word is ours.
+        unsafe { GetWindowThreadProcessId(window, &raw mut process) };
+        // SAFETY: as above.
+        let visible = unsafe { IsWindowVisible(window) } != 0;
+        // SAFETY: no preconditions.
+        let me = unsafe { windows_sys::Win32::System::Threading::GetCurrentProcessId() };
+        if visible && process == me {
+            let flag = core::ptr::with_exposed_provenance_mut::<bool>(found.cast_unsigned());
+            // SAFETY: `found` is the address of the caller's flag.
+            unsafe { flag.write(true) };
+            return 0;
+        }
+        1
+    }
+
+    let started = std::time::Instant::now();
+    while started.elapsed() < limit {
+        let mut found = false;
+        // SAFETY: the callback only writes the flag, which outlives the call.
+        unsafe {
+            EnumWindows(
+                Some(ours),
+                (&raw mut found).expose_provenance().cast_signed(),
+            )
+        };
+        if found {
+            break;
+        }
+        std::thread::sleep(WINDOW_POLL);
+    }
+    started.elapsed()
 }
 
 /// Names the mod or the loader in `crash.log` when a fault involves its code.

@@ -198,6 +198,20 @@ mod tests {
         Status::OK
     }
 
+    extern "system" fn serve_resource(
+        _me: ModHandle,
+        _key: *const enshwick_api::abi::ResourceKey,
+        _base: *const enshwick_api::abi::ResourceKey,
+        _patch: enshwick_api::abi::ResourcePatchFn,
+        _user: *mut core::ffi::c_void,
+    ) -> Status {
+        Status::OK
+    }
+
+    extern "system" fn add_text(_me: ModHandle, _id: u32, _language: u32, _text: Str) -> Status {
+        Status::OK
+    }
+
     fn evaluated() -> u32 {
         panic!("a filtered line evaluates nothing")
     }
@@ -226,6 +240,8 @@ mod tests {
         entity_template,
         player,
         players,
+        serve_resource,
+        add_text,
     };
 
     extern "system" fn original(value: u32) -> u32 {
