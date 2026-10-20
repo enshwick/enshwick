@@ -5,7 +5,7 @@ mod tests {
     use std::sync::OnceLock;
 
     use enshwick_loader_api::abi::{Status, TeleportRequest};
-    use enshwick_loader_api::actions::{Actions, NpcOrder, Teleport};
+    use enshwick_loader_api::actions::{Actions, NpcOrder, Spawn, Teleport};
     use enshwick_loader_api::ecs::Entity;
     use enshwick_loader_api::world::WorldError;
     use enshwick_loader_api::{Load, Mod, Off};
@@ -98,6 +98,18 @@ mod tests {
             actions.teleport(Entity(7), [0.0; 3], Teleport::new()),
             Err(WorldError::Gone)
         );
+        let spawned = actions
+            .spawn([7; 16], [1.0, 2.0, 3.0], Spawn::new().level(4))
+            .unwrap();
+        assert_eq!(
+            actions.spawn([0; 16], [0.0; 3], Spawn::new()),
+            Err(WorldError::Refused)
+        );
+        let spawns = loader.spawns();
+        assert_eq!(spawns.len(), 1);
+        assert_eq!(spawns[0].0, spawned.0);
+        assert_eq!((spawns[0].1.template, spawns[0].1.level), ([7; 16], 4));
+        assert_eq!(spawns[0].1.position, [1 << 32, 2 << 32, 3 << 32]);
         let teleports = loader.teleports();
         assert_eq!(teleports.len(), 1);
         assert_eq!(teleports[0].entity, 5);

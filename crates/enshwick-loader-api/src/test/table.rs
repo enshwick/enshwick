@@ -9,8 +9,8 @@ use crate::abi::{
     CommandCallFn, EntityPlace, Event, EventFn, ExperiencePassFn, GameEventFn, Header, HookSpec,
     HostApi, InteractionFn, InventoryRequest, InventoryResultFn, ItemData, Level, MidHookFn,
     MidHookSpec, ModHandle, ModInfo, PlayerInfo, RenameCallFn, ResourceKey, ResourcePatchFn, Side,
-    SkillCheckFn, Status, StatusFn, Str, SummonFn, SurvivorLookupFn, SurvivorStatusFn,
-    TeleportRequest, ZoneCheckFn,
+    SkillCheckFn, SpawnRequest, Status, StatusFn, Str, SummonFn, SurvivorLookupFn,
+    SurvivorStatusFn, TeleportRequest, ZoneCheckFn,
 };
 
 use super::{FakeHost, LinkedHook, ServedResource, SubmittedRequest};
@@ -57,6 +57,8 @@ pub(crate) struct State {
     pub(crate) emits: Vec<(u32, Vec<u8>)>,
     /// The teleports the mod asked for.
     pub(crate) teleports: Vec<TeleportRequest>,
+    /// The spawns the mod asked for, with the ids handed out.
+    pub(crate) spawns: Vec<(u32, SpawnRequest)>,
     /// The world key last handed out, alive until the next one.
     world_key: Option<Box<str>>,
     /// The altars `altars` lists, settable while installed.
@@ -126,6 +128,7 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         writes: Vec::new(),
         emits: Vec::new(),
         teleports: Vec::new(),
+        spawns: Vec::new(),
         world_key: None,
         altars: Vec::new(),
         altars_opened: false,
@@ -979,6 +982,28 @@ extern "system" fn teleport(_me: ModHandle, request: *const TeleportRequest) -> 
     })
 }
 
+/// The first entity id the fake hands out for a spawn.
+const FIRST_SPAWNED: u32 = 0x10_0000;
+
+extern "system" fn spawn(_me: ModHandle, request: *const SpawnRequest, out: *mut u32) -> Status {
+    // SAFETY: the safe layer passes a valid request for the call.
+    let Some(request) = (unsafe { request.as_ref() }).copied() else {
+        return Status::BAD_ARGS;
+    };
+    if request.template == [0; 16] {
+        return Status::BAD_ARGS;
+    }
+    let entity = with(None, |s| {
+        let entity = FIRST_SPAWNED + u32::try_from(s.spawns.len()).unwrap_or(0);
+        s.spawns.push((entity, request));
+        Some(entity)
+    });
+    match entity {
+        Some(entity) => put(out, entity),
+        None => Status::MISSING,
+    }
+}
+
 /// table it sees for the process, so it is one static.
 pub(crate) static TABLE: HostApi = HostApi {
     header: Header::of::<HostApi>(),
@@ -1049,4 +1074,5 @@ pub(crate) static TABLE: HostApi = HostApi {
     component_write,
     emit,
     teleport,
+    spawn,
 };

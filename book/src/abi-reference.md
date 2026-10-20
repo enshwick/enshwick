@@ -12,7 +12,7 @@ raw table. The exact types and signatures are in the
 | Constant                                                                                            | Value | Meaning                                         |
 | --------------------------------------------------------------------------------------------------- | ----- | ----------------------------------------------- |
 | [`ABI_MAJOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 1     | A loader refuses a mod built for another major. |
-| [`ABI_MINOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 23    | A newer minor only appends.                     |
+| [`ABI_MINOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 24    | A newer minor only appends.                     |
 
 The ABI version is apart from Enshwick Loader's version (such as 0.2.0, see
 [Releasing and updates](releasing.md#versions)): a platform release raises
@@ -215,6 +215,7 @@ marked "init only" are allowed during `enshwick_mod_init` only.
 | `component_write`     | A component to write, marked changed; refuses client copies; server game thread only            | 22          |
 | `emit`                | Raises a game event of an allowed type; server game thread only                                 | 23          |
 | `teleport`            | Moves an entity as the admin teleport does, after the next step; server game thread only        | 23          |
+| `spawn`               | Spawns an entity from a template as the admin spawn does; server game thread only               | 24          |
 
 ## Under an older loader
 
@@ -251,6 +252,7 @@ the mod off with a reason, which the mod's log shows as `off: <reason>`:
 | 21          | entity queries, destroy, saves  | Empty, `None` or `WorldError::Missing`                    |
 | 22          | component and stat writes       | `WorldError::Missing`                                     |
 | 23          | `Load::actions`                 | Off: `actions: needs a newer loader`                      |
+| 24          | `Actions::spawn`                | `WorldError::Missing`                                     |
 
 A mod that can do without a feature catches the `Off` and goes on without it
 instead of returning it from `init`.

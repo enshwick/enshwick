@@ -14,7 +14,7 @@ use core::sync::atomic::AtomicUsize;
 pub const ABI_MAJOR: u16 = 1;
 
 /// The minor version of this interface. A newer minor only appends fields.
-pub const ABI_MINOR: u16 = 23;
+pub const ABI_MINOR: u16 = 24;
 
 /// Whether `id` is a valid mod id: 1 to 64 characters of `[a-z0-9-]`.
 ///
@@ -2327,6 +2327,45 @@ impl TeleportRequest {
     pub const ORIENTED: u32 = 2;
 }
 
+/// A request to spawn an entity from a template, for [`HostApi::spawn`].
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::abi::{Header, SpawnRequest};
+///
+/// let wolf = SpawnRequest {
+///     header: Header::of::<SpawnRequest>(),
+///     template: [0x3a; 16],
+///     position: [100 << 32, 40 << 32, 0],
+///     orientation: [0.0, 0.0, 0.0, 1.0],
+///     level: 12,
+///     reserved: 0,
+///     lifetime_ns: 0,
+/// };
+/// assert_eq!(wolf.level, 12);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct SpawnRequest {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// The template GUID, in the order [`HostApi::entity_template`] writes.
+    pub template: [u8; 16],
+    /// Where, in 32.32 fixed-point metres.
+    pub position: [i64; 3],
+    /// The orientation, a quaternion `x, y, z, w`.
+    pub orientation: [f32; 4],
+    /// The level the entity spawns at, as the game scales enemies; 0 for
+    /// the template's own.
+    pub level: u32,
+    /// Zero.
+    pub reserved: u32,
+    /// Game time in nanoseconds after which the game removes the entity; 0
+    /// to keep it.
+    pub lifetime_ns: u64,
+}
+
 /// The table of services the loader offers a mod.
 ///
 /// Fields are only ever appended; a mod checks [`Header::covers`] before it
@@ -2731,6 +2770,13 @@ pub struct HostApi {
     /// prop: it moves actors and characters.
     /// On the server's game thread only. Since minor 23.
     pub teleport: extern "system" fn(me: ModHandle, request: *const TeleportRequest) -> Status,
+    /// Asks the server to spawn an entity from a template, as its admin
+    /// spawn does, and writes the new entity's id to `out`; the entity is in
+    /// the world after the next step. [`Status::BAD_ARGS`] for a zero
+    /// template; a template the game does not know spawns nothing. On the
+    /// server's game thread only. Since minor 24.
+    pub spawn:
+        extern "system" fn(me: ModHandle, request: *const SpawnRequest, out: *mut u32) -> Status,
 }
 
 /// The exports a mod DLL provides, by name.
@@ -2792,7 +2838,7 @@ const _: () = {
     assert!(core::mem::offset_of!(HostApi, hook_at) == 24 + 35 * 8);
     assert!(core::mem::offset_of!(HostApi, inventory_open) == 24 + 36 * 8);
     assert!(core::mem::offset_of!(HostApi, inventory_submit) == 24 + 38 * 8);
-    assert!(size_of::<HostApi>() == 24 + 66 * 8);
+    assert!(size_of::<HostApi>() == 24 + 67 * 8);
     assert!(size_of::<InventoryOp>() == 32);
     assert!(size_of::<InventoryRequest>() == 32);
     assert!(size_of::<InventoryOpResult>() == 8);
@@ -2820,6 +2866,8 @@ const _: () = {
     assert!(core::mem::offset_of!(HostApi, component_write) == 24 + 63 * 8);
     assert!(core::mem::offset_of!(HostApi, teleport) == 24 + 65 * 8);
     assert!(size_of::<TeleportRequest>() == 8 + 8 + 24 + 16);
+    assert!(core::mem::offset_of!(HostApi, spawn) == 24 + 66 * 8);
+    assert!(size_of::<SpawnRequest>() == 8 + 16 + 24 + 16 + 8 + 8);
     assert!(size_of::<GameEventData>() == 24);
     // Frozen: written as an array.
     assert!(size_of::<EntityPlace>() == 32);

@@ -554,6 +554,7 @@ pub(crate) static API: HostApi = HostApi {
     component_write,
     emit,
     teleport,
+    spawn,
 };
 
 /// A static slice from a pointer and a count, empty for a null pointer.
@@ -1787,6 +1788,29 @@ extern "system" fn teleport(
         };
         match caller(me).and_then(|loader| crate::emits::teleport(loader, &request)) {
             Ok(()) => Status::OK,
+            Err(status) => status,
+        }
+    })
+}
+
+extern "system" fn spawn(
+    me: ModHandle,
+    request: *const enshwick_loader_api::abi::SpawnRequest,
+    out: *mut u32,
+) -> Status {
+    entry("spawn", || {
+        // SAFETY: the caller passes null or a request with its header; an
+        // all-zero request is valid.
+        let Some(request) = (unsafe {
+            enshwick_loader_api::abi::read_headed(
+                request,
+                size_of::<enshwick_loader_api::abi::SpawnRequest>(),
+            )
+        }) else {
+            return Status::BAD_ARGS;
+        };
+        match caller(me).and_then(|loader| crate::spawns::spawn(loader, &request)) {
+            Ok(entity) => put(out, entity),
             Err(status) => status,
         }
     })

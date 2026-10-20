@@ -4,7 +4,7 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
-use enshwick_loader_api::actions::{Actions, Teleport};
+use enshwick_loader_api::actions::{Actions, Spawn, Teleport};
 use enshwick_loader_api::ecs::Entity;
 use enshwick_loader_api::game_events::{EventType, RawGameEvent};
 use enshwick_loader_api::schedule::Scheduler;
@@ -20,6 +20,8 @@ const DESTROY_WAIT: Duration = Duration::from_secs(2);
 const REPLICATION_WAIT: Duration = Duration::from_secs(1);
 /// Where the probe pings, far from anything a player would see.
 const PING_AT: [f64; 3] = [-12345.0, -500.0, 777.0];
+/// When the probe looks at a teleported entity's components.
+const TELEPORT_PEEK: Duration = Duration::from_millis(500);
 
 /// What the probe keeps per world: how often it checked it.
 #[derive(Debug, Default, serde::Deserialize, serde::Serialize)]
@@ -32,6 +34,10 @@ struct Visits {
 pub(crate) struct Checks {
     world: World,
     network_health: ComponentType,
+    health: ComponentType,
+    /// `Teleport`, `TeleportCount` and `LastTransform`, which the game's
+    /// teleport reads and writes.
+    teleport_parts: [ComponentType; 3],
     experience: ComponentType,
     store: WorldStore<Visits>,
     save_asked: AtomicBool,
@@ -57,6 +63,12 @@ impl Checks {
         let world = load.world()?;
         Ok(Self {
             network_health: world.component_type(load, "keen::ecs::NetworkHealth")?,
+            health: world.component_type(load, "keen::ecs::Health")?,
+            teleport_parts: [
+                world.component_type(load, "keen::ecs::Teleport")?,
+                world.component_type(load, "keen::ecs::TeleportCount")?,
+                world.component_type(load, "keen::ecs::LastTransform")?,
+            ],
             experience: world.component_type(load, "keen::ecs::Experience")?,
             store: load.world_store("visits")?,
             world,
@@ -82,6 +94,7 @@ impl Checks {
         self.stats();
         self.writes();
         self.actions();
+        self.spawns();
         match self.store.update(|visits| {
             visits.checks += 1;
             visits.checks
@@ -155,8 +168,8 @@ impl Checks {
         }
     }
 
-    /// Writes an actor's health one below what it has, checks the read back
-    /// and the replicated copy a moment later, then puts it back.
+    /// Checks that the replicated health is refused as a writable type, and
+    /// writes the health of an actor in the world, if there is one.
     fn writes(&self) {
         if self.copies_refused {
             pass("writes: the replicated health is refused as a writable type");
@@ -173,15 +186,29 @@ impl Checks {
                     .vitals(entity)
                     .is_some_and(|v| v.health.current > 1)
             });
-        let Some(entity) = actor else {
-            enshwick_loader_api::info!("SKIP writes: no living actor with replicated health");
-            return;
-        };
-        let Some(before) = self.world.vitals(entity).map(|v| v.health) else {
+        match actor {
+            Some(entity) => {
+                Self::write_health(self.world, self.scheduler, self.network_health, entity);
+            }
+            None => enshwick_loader_api::info!(
+                "SKIP writes: no living actor with replicated health; the spawn check tries its own"
+            ),
+        }
+    }
+
+    /// Writes `entity`'s health one below what it has, checks the read back
+    /// and the replicated copy a moment later, then puts it back.
+    fn write_health(
+        world: World,
+        scheduler: Scheduler,
+        network_health: ComponentType,
+        entity: Entity,
+    ) {
+        let Some(before) = world.vitals(entity).map(|v| v.health) else {
             return;
         };
         let target = before.current - 1;
-        match self.world.set_health(entity, target) {
+        match world.set_health(entity, target) {
             Ok(written) if written.current == target => pass(&format!(
                 "set_health of entity {} to {target}: {written:?}",
                 entity.0
@@ -194,16 +221,14 @@ impl Checks {
                 return;
             }
         }
-        match self.world.heal(entity, i32::MIN) {
+        match world.heal(entity, i32::MIN) {
             Ok(written) if written.current == 1 => {
                 pass("heal by i32::MIN keeps health at 1");
             }
             other => fail(&format!("heal by i32::MIN: {other:?}")),
         }
-        let _back_to_target = self.world.set_health(entity, target);
-        let world = self.world;
-        let network_health = self.network_health;
-        self.scheduler.after(REPLICATION_WAIT, move || {
+        let _back_to_target = world.set_health(entity, target);
+        scheduler.after(REPLICATION_WAIT, move || {
             let replicated = world.component(entity, network_health).map(|data| {
                 // SAFETY: NetworkHealth is health then its maximum, two u32,
                 // read at once on the game thread.
@@ -248,6 +273,107 @@ impl Checks {
             Err(WorldError::Gone) => pass("teleport refuses an entity not in the world"),
             other => fail(&format!("teleport of a missing entity: {other:?}")),
         }
+    }
+
+    /// Spawns a copy of an entity in the world three metres above it,
+    /// preferring one with health, then checks it arrived, writes its
+    /// health, teleports it and destroys it.
+    fn spawns(&self) {
+        let source = self
+            .world
+            .entities(self.health)
+            .into_iter()
+            .chain(self.world.entities(self.world.transform_type()))
+            .find_map(|placed| Some((self.world.template(placed.entity)?, placed.position)));
+        let Some((template, [x, y, z])) = source else {
+            enshwick_loader_api::info!("SKIP spawns: no entity with a template in the world");
+            return;
+        };
+        self.spawn(template, [x, y + 3.0, z]);
+    }
+
+    /// Spawns one entity of `template` at `at` and follows it through
+    /// writes, a teleport and its destruction.
+    pub(crate) fn spawn(&self, template: [u8; 16], at: [f64; 3]) -> String {
+        let entity = match self.actions.spawn(template, at, Spawn::new()) {
+            Ok(entity) => entity,
+            Err(why) => {
+                fail(&format!("spawn of {template:02x?}: {why}"));
+                return format!("{why}");
+            }
+        };
+        pass(&format!(
+            "spawn of {template:02x?} at {at:?} handed out entity {}",
+            entity.0
+        ));
+        let world = self.world;
+        let actions = self.actions;
+        let scheduler = self.scheduler;
+        let network_health = self.network_health;
+        let teleport_parts = self.teleport_parts;
+        self.scheduler.after(DESTROY_WAIT, move || {
+            if world.template(entity) == Some(template) {
+                pass(&format!("spawned entity {} is in the world", entity.0));
+            } else {
+                fail(&format!("spawned entity {} is not in the world", entity.0));
+                return;
+            }
+            match world.position(entity) {
+                Some(p) if (0..3).all(|i| (p[i] - at[i]).abs() < 0.5) => {
+                    pass(&format!("spawned entity {} stands at {p:?}", entity.0));
+                }
+                other => fail(&format!(
+                    "spawned entity {} stands at {other:?}, asked {at:?}",
+                    entity.0
+                )),
+            }
+            let vitals = world.vitals(entity);
+            enshwick_loader_api::info!("spawned entity {} has vitals {vitals:?}", entity.0);
+            if vitals.is_some_and(|v| v.health.current > 1) {
+                Self::write_health(world, scheduler, network_health, entity);
+            }
+            let to = [at[0] + 5.0, at[1], at[2]];
+            let movable = world.component(entity, teleport_parts[1]).is_some();
+            match actions.teleport(entity, to, Teleport::new()) {
+                Ok(()) if movable => pass(&format!("teleport of entity {} asked", entity.0)),
+                Err(WorldError::Refused) if !movable => {
+                    pass(&format!(
+                        "teleport of entity {} refused: the game's teleport does not move it",
+                        entity.0
+                    ));
+                    let destroyed = world.destroy(entity);
+                    enshwick_loader_api::info!("spawned entity {} destroyed: {destroyed:?}", entity.0);
+                    return;
+                }
+                other => {
+                    fail(&format!("teleport of entity {} (movable {movable}): {other:?}", entity.0));
+                    return;
+                }
+            }
+            scheduler.after(TELEPORT_PEEK, move || {
+                enshwick_loader_api::info!(
+                    "entity {} a moment after its teleport: Teleport {}, TeleportCount {}, LastTransform {}",
+                    entity.0,
+                    world.component(entity, teleport_parts[0]).is_some(),
+                    world.component(entity, teleport_parts[1]).is_some(),
+                    world.component(entity, teleport_parts[2]).is_some(),
+                );
+            });
+            scheduler.after(DESTROY_WAIT, move || {
+                match world.position(entity) {
+                    Some(p) if (p[0] - to[0]).abs() < 0.5 => {
+                        pass(&format!("teleported entity {} stands at {p:?}", entity.0));
+                    }
+                    other => fail(&format!(
+                        "teleported entity {} stands at {other:?}, asked {to:?}",
+                        entity.0
+                    )),
+                }
+                let destroyed = world.destroy(entity);
+                enshwick_loader_api::info!("spawned entity {} destroyed: {destroyed:?}", entity.0);
+            });
+        });
+        format!("entity {}", entity.0)
     }
 
     /// Notes a ping the game raised, and whether it is the probe's.
@@ -321,6 +447,17 @@ impl Checks {
             self.world.vitals(entity),
             self.world.progress(entity)
         )
+    }
+
+    /// `/probe spawn <id>`: a copy of an entity three metres above it.
+    pub(crate) fn spawn_copy(&self, id: &str) -> String {
+        let Some(entity) = parse(id) else {
+            return format!("not an entity id: {id}");
+        };
+        match (self.world.template(entity), self.world.position(entity)) {
+            (Some(template), Some([x, y, z])) => self.spawn(template, [x, y + 3.0, z]),
+            _ => format!("entity {} has no template or place", entity.0),
+        }
     }
 
     /// `/probe destroy <id>`.

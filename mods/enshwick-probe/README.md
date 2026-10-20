@@ -17,6 +17,9 @@ Once the world has loaded, and again on `/probe check`:
 - component writes: the replicated health is refused as a writable type; an
   actor's health is set one lower, healed by the most negative amount (it
   stays at 1), its replicated copy checked a second later, and put back;
+- spawns: a copy of an entity in the world, one with health if there is one,
+  three metres above it; that it arrives where asked, its health writes when
+  it has health, a teleport five metres away, and its destruction;
 - actions: a ping far from anything, which the game must hand back as a game
   event in the next step; that a type off the allow list and a teleport of
   an entity not in the world are refused;
@@ -38,6 +41,7 @@ From the chat as an administrator, or through the admin tools' command file
 | `/probe check`        | runs the checks again                                          |
 | `/probe vitals <id>`  | an entity's vitals and progress, against its replicated health |
 | `/probe destroy <id>` | asks the world to destroy an entity; on a copy of a world only |
+| `/probe spawn <id>`   | spawns a copy of an entity above it and follows it as above    |
 
 ## Settings
 

@@ -177,6 +177,7 @@ pub static BUILDS: &[KnownBuild] = &[
             ("ecs.event_push", 0x5f_5d00),
             ("ecs.command_append", 0x5f_2d00),
             ("world.time", 0x65_1a50),
+            ("ecs.spawn_request", 0x5f_40d0),
         ],
         constants: &[
             ("ecs.context_row", 8),
@@ -455,6 +456,7 @@ pub static BUILDS: &[KnownBuild] = &[
             ("ecs.event_push", 0x95_5400),
             ("ecs.command_append", 0x95_2400),
             ("world.time", 0x9b_0e10),
+            ("ecs.spawn_request", 0x95_37d0),
         ],
         constants: &[
             ("text.pool_language", 0xd8),

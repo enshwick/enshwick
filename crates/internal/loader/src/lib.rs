@@ -59,6 +59,8 @@ pub mod resolve;
 mod saves;
 pub mod settings;
 #[cfg(windows)]
+mod spawns;
+#[cfg(windows)]
 mod start;
 #[cfg(windows)]
 mod status;

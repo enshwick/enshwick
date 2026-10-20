@@ -1,4 +1,5 @@
-//! Actions in the server's world: game events a mod raises and teleports.
+//! Actions in the server's world: game events a mod raises, teleports and
+//! spawns.
 //!
 //! An event goes where the game's own events go: the loader puts it into
 //! the stream the engine moves at the start of the next step, and the
@@ -6,6 +7,8 @@
 //! types the server's own systems raise are allowed, each with a typed call
 //! here; the loader refuses any other. A teleport is the game's admin
 //! teleport: the entity moves after the next step, and clients see it jump.
+//! A spawn is the game's admin spawn: the new entity's id comes back at
+//! once, and the entity is in the world after the next step.
 //!
 //! Every call belongs on the server's game thread, from a game event, a
 //! [`Scheduler`](crate::schedule::Scheduler) task or a command; on a client,
@@ -27,7 +30,7 @@
 //! }
 //! ```
 
-use crate::abi::{Header, HostApi, Status, TeleportRequest};
+use crate::abi::{Header, HostApi, SpawnRequest, Status, TeleportRequest};
 use crate::ecs::Entity;
 use crate::game_events::{EventType, Field, Scalar};
 use crate::world::WorldError;
@@ -83,6 +86,83 @@ impl Teleport {
     ///
     /// let north = Teleport::new().facing_yaw(0.0);
     /// assert_eq!(north.facing, Some([0.0, 0.0, 0.0, 1.0]));
+    /// ```
+    #[must_use]
+    pub fn facing_yaw(mut self, yaw: f32) -> Self {
+        let half = yaw / 2.0;
+        self.facing = Some([0.0, half.sin(), 0.0, half.cos()]);
+        self
+    }
+}
+
+/// How an entity starts, for [`Actions::spawn`].
+///
+/// # Examples
+///
+/// ```
+/// use core::time::Duration;
+/// use enshwick_loader_api::actions::Spawn;
+///
+/// let brief = Spawn::new().level(10).despawn_after(Duration::from_secs(60));
+/// assert_eq!(brief.level, Some(10));
+/// ```
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+#[non_exhaustive]
+pub struct Spawn {
+    /// The level the game scales the entity to, as for enemies; `None` for
+    /// the template's own.
+    pub level: Option<u32>,
+    /// Game time after which the game removes the entity; `None` keeps it.
+    pub despawn_after: Option<core::time::Duration>,
+    /// The orientation, a quaternion `x, y, z, w`; `None` for none turned.
+    pub facing: Option<[f32; 4]>,
+}
+
+impl Spawn {
+    /// The template as it is.
+    ///
+    /// # Examples
+    ///
+    /// See [`Spawn`].
+    #[must_use]
+    pub const fn new() -> Self {
+        Self {
+            level: None,
+            despawn_after: None,
+            facing: None,
+        }
+    }
+
+    /// Spawn at `level`.
+    ///
+    /// # Examples
+    ///
+    /// See [`Spawn`].
+    #[must_use]
+    pub const fn level(mut self, level: u32) -> Self {
+        self.level = Some(level);
+        self
+    }
+
+    /// Let the game remove the entity after `time` of game time.
+    ///
+    /// # Examples
+    ///
+    /// See [`Spawn`].
+    #[must_use]
+    pub const fn despawn_after(mut self, time: core::time::Duration) -> Self {
+        self.despawn_after = Some(time);
+        self
+    }
+
+    /// Turn the entity `yaw` radians about the vertical axis.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_loader_api::actions::Spawn;
+    ///
+    /// assert!(Spawn::new().facing_yaw(1.0).facing.is_some());
     /// ```
     #[must_use]
     pub fn facing_yaw(mut self, yaw: f32) -> Self {
@@ -409,6 +489,71 @@ impl Actions {
             (self.host.api().teleport)(self.host.handle(), &raw const request),
             true,
         )
+    }
+}
+
+impl Actions {
+    /// Asks the server to spawn an entity of `template`, its GUID as
+    /// [`World::template`](crate::world::World::template) gives it, at
+    /// `position` in metres, as its admin spawn does: an enemy, an animal,
+    /// a survivor or a prop. The new entity's id comes back at once; the
+    /// entity is in the world after the next step, and a template the game
+    /// does not know spawns nothing.
+    ///
+    /// # Errors
+    ///
+    /// [`WorldError::Refused`] for a zero template or a request the world
+    /// turns away, [`WorldError::WrongThread`] off the game thread and
+    /// [`WorldError::Missing`] under a loader older than ABI minor 24.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_loader_api::actions::Spawn;
+    ///
+    /// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+    ///     let actions = load.actions()?;
+    ///     let world = load.world()?;
+    ///     load.add_command("clone", "spawns a copy of an entity beside you: /clone <entity>", move |ctx, args| {
+    ///         let source = args.first().and_then(|a| a.parse().ok()).map(enshwick_loader_api::ecs::Entity);
+    ///         let (Some(template), Some([x, y, z])) = (source.and_then(|e| world.template(e)), world.position(ctx.player.entity)) else {
+    ///             return "/clone <entity>".into();
+    ///         };
+    ///         format!("{:?}", actions.spawn(template, [x + 2.0, y, z], Spawn::new())).into()
+    ///     })
+    /// }
+    /// ```
+    pub fn spawn(
+        &self,
+        template: [u8; 16],
+        position: [f64; 3],
+        how: Spawn,
+    ) -> Result<Entity, WorldError> {
+        let api = self.host.api();
+        if !api
+            .header
+            .covers(core::mem::offset_of!(HostApi, spawn) + size_of::<usize>())
+        {
+            return Err(WorldError::Missing);
+        }
+        let lifetime = how.despawn_after.map_or(0, |time| {
+            u64::try_from(time.as_nanos()).unwrap_or(u64::MAX).max(1)
+        });
+        let request = SpawnRequest {
+            header: Header::of::<SpawnRequest>(),
+            template,
+            position: crate::ecs::fixed(position),
+            orientation: how.facing.unwrap_or([0.0, 0.0, 0.0, 1.0]),
+            level: how.level.unwrap_or(0),
+            reserved: 0,
+            lifetime_ns: lifetime,
+        };
+        let mut entity = 0u32;
+        world_result(
+            (api.spawn)(self.host.handle(), &raw const request, &raw mut entity),
+            false,
+        )?;
+        Ok(Entity(entity))
     }
 }
 
