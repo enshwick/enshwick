@@ -394,10 +394,11 @@ impl Load<'_> {
     /// ```
     pub fn add_text(&mut self, tag: Guid, language: u32, text: &str) -> Result<(), Off> {
         let api = self.host().api();
-        let end = core::mem::offset_of!(crate::abi::HostApi, add_text) + size_of::<usize>();
-        if !api.header.covers(end) {
-            return Err(Off::new("mod texts need a newer loader"));
-        }
+        crate::load::offered(
+            api,
+            core::mem::offset_of!(crate::abi::HostApi, add_text),
+            "mod texts",
+        )?;
         let status = (api.add_text)(
             self.host().handle(),
             tag.id(),
@@ -440,10 +441,11 @@ impl Load<'_> {
         builder: impl Fn(&[u8]) -> Option<Vec<u8>> + Send + Sync + 'static,
     ) -> Result<(), Off> {
         let api = self.host().api();
-        let end = core::mem::offset_of!(crate::abi::HostApi, serve_resource) + size_of::<usize>();
-        if !api.header.covers(end) {
-            return Err(Off::new("served resources need a newer loader"));
-        }
+        crate::load::offered(
+            api,
+            core::mem::offset_of!(crate::abi::HostApi, serve_resource),
+            "served resources",
+        )?;
         let builder: Box<Builder> = Box::new(Box::new(builder));
         let user = Box::into_raw(builder);
         let patch: ResourcePatchFn = build;

@@ -160,6 +160,7 @@ impl Lookup {
 ///
 /// See the [module](self).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Answer {
     /// The game's own answer.
     Vanilla,
@@ -247,13 +248,11 @@ where
     };
     // SAFETY: `user` is the leaked `F` this function was registered with.
     let handler = unsafe { &*user.cast::<F>() };
-    let answer = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| handler(&lookup)))
-        .unwrap_or_else(|_| {
-            if let Some(host) = crate::host() {
-                host.fault("panic in a survivor lookup");
-            }
-            Answer::Vanilla
-        });
+    let answer = crate::host::guard(
+        "panic in a survivor lookup",
+        || Answer::Vanilla,
+        || handler(&lookup),
+    );
     let value = match answer {
         Answer::Vanilla => return 0,
         Answer::Entity(entity) => entity.0,
@@ -283,13 +282,7 @@ where
     };
     // SAFETY: `user` is the leaked `F` this function was registered with.
     let handler = unsafe { &*user.cast::<F>() };
-    let keep = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| handler(&call)))
-        .unwrap_or_else(|_| {
-            if let Some(host) = crate::host() {
-                host.fault("panic in a survivor bed check");
-            }
-            true
-        });
+    let keep = crate::host::guard("panic in a survivor bed check", || true, || handler(&call));
     u8::from(keep)
 }
 
@@ -309,13 +302,7 @@ where
     };
     // SAFETY: `user` is the leaked `F` this function was registered with.
     let handler = unsafe { &*user.cast::<F>() };
-    let consume = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| handler(&call)))
-        .unwrap_or_else(|_| {
-            if let Some(host) = crate::host() {
-                host.fault("panic in a summon filter");
-            }
-            false
-        });
+    let consume = crate::host::guard("panic in a summon filter", || false, || handler(&call));
     u8::from(consume)
 }
 
@@ -336,15 +323,11 @@ where
     };
     // SAFETY: `user` is the leaked `F` this function was registered with.
     let handler = unsafe { &*user.cast::<F>() };
-    let shown = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        handler(SurvivorId(survivor), statuses)
-    }))
-    .unwrap_or_else(|_| {
-        if let Some(host) = crate::host() {
-            host.fault("panic in a survivor status merge");
-        }
-        None
-    });
+    let shown = crate::host::guard(
+        "panic in a survivor status merge",
+        || None,
+        || handler(SurvivorId(survivor), statuses),
+    );
     shown.map_or(0, |byte| 0x100 | u32::from(byte))
 }
 
@@ -360,22 +343,9 @@ impl Load<'_> {
         handler: F,
     ) -> Result<(), Off> {
         let host = self.host();
-        if !host.api().header.covers(field + size_of::<usize>()) {
-            return Err(Off::new(format!("{what} needs a newer loader")));
-        }
+        crate::load::offered(host.api(), field, what)?;
         let register = pick(host.api());
-        let user = Box::into_raw(Box::new(handler));
-        let status = register(host.handle(), run, user.cast());
-        if status.is_ok() {
-            Ok(())
-        } else {
-            // SAFETY: refused, so the loader keeps no copy of the pointer.
-            drop(unsafe { Box::from_raw(user) });
-            Err(Off::new(format!(
-                "{what} refused by the loader (status {}; another mod holds it, or the build lacks it)",
-                status.0
-            )))
-        }
+        crate::load::hand_over(handler, |user| register(host.handle(), run, user), what)
     }
 
     /// Makes `handler` the answer to the game's survivor lookups; one mod at
@@ -481,10 +451,11 @@ impl Load<'_> {
     /// ```
     pub fn file_summon_item(&mut self, item: u32, survivor: SurvivorId) -> Result<(), Off> {
         let host = self.host();
-        let end = core::mem::offset_of!(HostApi, summon_item) + size_of::<usize>();
-        if !host.api().header.covers(end) {
-            return Err(Off::new("summon items need a newer loader"));
-        }
+        crate::load::offered(
+            host.api(),
+            core::mem::offset_of!(HostApi, summon_item),
+            "summon items",
+        )?;
         let status = (host.api().summon_item)(host.handle(), item, survivor.0);
         if status.is_ok() {
             Ok(())

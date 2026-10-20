@@ -15,8 +15,9 @@
 //! fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
 //!     let altars = load.altars()?;
 //!     load.on::<AltarsChanged>(move |()| {
-//!         let bases = altars.bases();
-//!         enshwick_loader_api::info!("{} altars in {} bases", altars.list().len(), bases.len());
+//!         let list = altars.list();
+//!         let bases = enshwick_loader_api::altars::bases_of(&list);
+//!         enshwick_loader_api::info!("{} altars in {} bases", list.len(), bases.len());
 //!     })
 //! }
 //! ```
@@ -83,8 +84,8 @@ impl CellBox {
         (0..3).all(|a| self.min[a] <= cell[a] && cell[a] < self.max[a])
     }
 
-    /// Whether the two boxes overlap or share a face, as zones that the
-    /// engine groups into one base do.
+    /// Whether the two boxes share a cell boundary or more, edges and corners
+    /// included, as zones that the engine groups into one base do.
     ///
     /// # Examples
     ///
@@ -337,7 +338,7 @@ pub struct Altars {
 
 impl Altars {
     /// Every altar of the server's world as it is now; empty while no world
-    /// runs. Any thread.
+    /// runs or when the loader refuses. Any thread.
     ///
     /// # Examples
     ///
@@ -488,16 +489,12 @@ impl ZoneControl {
             })
             .collect();
         let status = (self.host.api().set_altar_zones)(self.host.handle(), raw.as_ptr(), raw.len());
-        if status.is_ok() {
-            Ok(())
-        } else {
-            Err(Off::new(format!(
-                "altar zone sizes refused (status {})",
-                status.0
-            )))
-        }
+        crate::load::ok(status, (), || "altar zone sizes".to_owned())
     }
 }
+
+/// The most zones a [`ZoneCheck`] carries; the engine keeps at most 255.
+pub const MAX_ZONES: usize = 256;
 
 /// A placement the game refused because the object does not lie in a single
 /// building zone; see [`Load::on_zone_check`]. Coordinates are 32.32
@@ -537,22 +534,11 @@ where
         object: check.object,
         margin: check.margin,
     };
-    if let Ok(accepted) = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| filter(&call))) {
-        u8::from(accepted)
-    } else {
-        if let Some(host) = crate::host() {
-            host.fault("panic in a zone check");
-        }
-        0
-    }
-}
-
-fn covered(host: Host, field: usize) -> Result<(), Off> {
-    if host.api().header.covers(field + size_of::<usize>()) {
-        Ok(())
-    } else {
-        Err(Off::new("altars need a newer loader"))
-    }
+    u8::from(crate::host::guard(
+        "panic in a zone check",
+        || false,
+        || filter(&call),
+    ))
 }
 
 impl Load<'_> {
@@ -569,16 +555,13 @@ impl Load<'_> {
     /// See the [module](self).
     pub fn altars(&mut self) -> Result<Altars, Off> {
         let host = self.host();
-        covered(host, core::mem::offset_of!(HostApi, altars_open))?;
+        crate::load::offered(
+            host.api(),
+            core::mem::offset_of!(HostApi, altars_open),
+            "altars",
+        )?;
         let status = (host.api().altars_open)(host.handle());
-        if status.is_ok() {
-            Ok(Altars { host })
-        } else {
-            Err(Off::new(format!(
-                "altars refused by the loader (status {})",
-                status.0
-            )))
-        }
+        crate::load::ok(status, Altars { host }, || "altars".to_owned())
     }
 
     /// Makes the mod the one that sizes altar zones; it follows the altars
@@ -593,23 +576,22 @@ impl Load<'_> {
     /// See [`ZoneControl`].
     pub fn control_altar_zones(&mut self) -> Result<ZoneControl, Off> {
         let host = self.host();
-        covered(host, core::mem::offset_of!(HostApi, altar_zones_control))?;
+        crate::load::offered(
+            host.api(),
+            core::mem::offset_of!(HostApi, altar_zones_control),
+            "altar zones",
+        )?;
         let status = (host.api().altar_zones_control)(host.handle());
-        if status.is_ok() {
-            Ok(ZoneControl { host })
-        } else {
-            Err(Off::new(format!(
-                "altar zones: refused by the loader (status {}; sized by another mod?)",
-                status.0
-            )))
-        }
+        crate::load::ok(status, ZoneControl { host }, || {
+            "altar zones, sized by one mod at a time".to_owned()
+        })
     }
 
     /// Runs `filter` when the game refuses a placement because the object's
     /// box does not lie in a single building zone; returning `true` accepts
     /// it after all. It runs on both sides, on the thread that checks the
-    /// placement, so it never blocks, and while a player aims a piece, so it
-    /// stays cheap.
+    /// placement, every time a player aims a piece: keep it cheap and never
+    /// block.
     ///
     /// # Errors
     ///
@@ -635,20 +617,16 @@ impl Load<'_> {
         F: Fn(&ZoneCheck<'_>) -> bool + Send + Sync + 'static,
     {
         let host = self.host();
-        covered(host, core::mem::offset_of!(HostApi, zone_check_filter))?;
-        let user = Box::into_raw(Box::new(filter));
-        let status =
-            (host.api().zone_check_filter)(host.handle(), run_zone_check::<F>, user.cast());
-        if status.is_ok() {
-            Ok(())
-        } else {
-            // SAFETY: refused, so the loader keeps no copy of the pointer.
-            drop(unsafe { Box::from_raw(user) });
-            Err(Off::new(format!(
-                "zone checks refused by the loader (status {})",
-                status.0
-            )))
-        }
+        crate::load::offered(
+            host.api(),
+            core::mem::offset_of!(HostApi, zone_check_filter),
+            "zone checks",
+        )?;
+        crate::load::hand_over(
+            filter,
+            |user| (host.api().zone_check_filter)(host.handle(), run_zone_check::<F>, user),
+            "zone checks",
+        )
     }
 }
 
@@ -694,14 +672,7 @@ where
 {
     // SAFETY: `user` is the leaked `F` this function was registered with.
     let limit = unsafe { &*user.cast::<F>() };
-    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| limit(flame_level))).unwrap_or_else(
-        |_| {
-            if let Some(host) = crate::host() {
-                host.fault("panic in an altar limit");
-            }
-            16
-        },
-    )
+    crate::host::guard("panic in an altar limit", || 16, || limit(flame_level))
 }
 
 impl Load<'_> {
@@ -726,23 +697,21 @@ impl Load<'_> {
         F: Fn(u32) -> u8 + Send + Sync + 'static,
     {
         let host = self.host();
-        covered(host, core::mem::offset_of!(HostApi, altar_limit))?;
-        let user = Box::into_raw(Box::new(limit));
-        let status = (host.api().altar_limit)(host.handle(), run_limit::<F>, user.cast());
-        if status.is_ok() {
-            return Ok(());
-        }
-        // SAFETY: refused, so the loader keeps no copy of the pointer.
-        drop(unsafe { Box::from_raw(user) });
-        Err(Off::new(format!(
-            "the altar limit refused by the loader (status {}; another mod decides?)",
-            status.0
-        )))
+        crate::load::offered(
+            host.api(),
+            core::mem::offset_of!(HostApi, altar_limit),
+            "the altar limit",
+        )?;
+        crate::load::hand_over(
+            limit,
+            |user| (host.api().altar_limit)(host.handle(), run_limit::<F>, user),
+            "the altar limit, set by one mod at a time",
+        )
     }
 
     /// Lets the game group 32 altar zones into its 16 bases, refusing an
-    /// altar that would start a 17th base; `Ok(false)` when this build's code
-    /// is not the one the platform knows and the game keeps 16. The patches
+    /// altar that would start a 17th base; `Ok(false)` when the platform does
+    /// not recognise this build's code, and the game keeps 16. The patches
     /// count as the mod's own: one the game refuses at arming turns the mod
     /// off.
     ///
@@ -761,17 +730,18 @@ impl Load<'_> {
     /// ```
     pub fn raise_base_limit(&mut self) -> Result<bool, Off> {
         let host = self.host();
-        covered(host, core::mem::offset_of!(HostApi, raise_base_limit))?;
+        crate::load::offered(
+            host.api(),
+            core::mem::offset_of!(HostApi, raise_base_limit),
+            "the base limit",
+        )?;
         let status = (host.api().raise_base_limit)(host.handle());
         if status.is_ok() {
             Ok(true)
         } else if status == crate::abi::Status::MISSING {
             Ok(false)
         } else {
-            Err(Off::new(format!(
-                "the base limit refused by the loader (status {})",
-                status.0
-            )))
+            Err(Off::status("the base limit", status))
         }
     }
 }

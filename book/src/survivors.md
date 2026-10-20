@@ -70,5 +70,5 @@ fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_
 
 The client's survivor menu keeps one record per survivor. With several
 entities of one survivor, `load.on_survivor_status` decides what it shows: it
-gets the status byte of each entity and returns the byte to show, or `None`
-for the game's. Client only; one mod at a time.
+gets the survivor and the status byte of each entity, and returns the byte to
+show, or `None` for the game's. Client only; one mod at a time.

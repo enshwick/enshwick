@@ -4,8 +4,8 @@
 //! The file is read again whenever its length or modified time changes.
 //! Only complete lines run, so a line still being written waits for its line
 //! break. Lines already in the file when the server starts are skipped; a
-//! file that shrinks or whose part already read changes, emptied or replaced,
-//! is read from its start again.
+//! file that shrinks, or whose part already read changed (emptied or
+//! replaced), is read again from its start.
 
 /// Where the command file has been read up to.
 ///
@@ -35,7 +35,7 @@ pub struct Tail {
     read: u64,
 }
 
-/// A hash of `bytes`, the same in every run.
+/// A hash of `bytes`, the same throughout the process.
 fn hash(bytes: &[u8]) -> u64 {
     use std::hash::{DefaultHasher, Hasher};
     let mut hasher = DefaultHasher::new();

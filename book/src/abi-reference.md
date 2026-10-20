@@ -213,33 +213,33 @@ The safe layer checks `header.covers` before it calls a field added after
 minor 0. When the loader lacks a field, the feature either degrades or turns
 the mod off with a reason, which the mod's log shows as `off: <reason>`:
 
-| Needs minor | Feature                         | Under an older loader                                        |
-| ----------- | ------------------------------- | ------------------------------------------------------------ |
-| 1           | `Host::log_level`               | `Level::DEBUG` is assumed                                    |
-| 2           | `Load::on`, `Load::subscribe`   | Off: `event <id>: missing on this game build`                |
-| 3           | `Load::world`                   | Off: `world reads need a newer loader`                       |
-| 4           | served resources                | Off: `served resources need a newer loader`                  |
-| 4           | mod texts                       | Off: `mod texts need a newer loader`                         |
-| 5           | `mods()`                        | An empty list                                                |
-| 6           | join values                     | None: the mod runs with its file's values                    |
-| 7           | `Load::code`, `Load::find_code` | Off: `code search needs a newer loader`                      |
-| 7           | `Load::patch_code`              | Off: `code patches need a newer loader`                      |
-| 8           | `Host::hosting`                 | Whether this is the dedicated server                         |
-| 9           | chat commands                   | Off: `chat commands need a newer loader`                     |
-| 9           | rename filters                  | Off: `rename filters need a newer loader`                    |
-| 10          | `mods::join_missing()`          | An empty list                                                |
-| 11          | `Load::hook_at`                 | Off: `mid-function hooks need a newer loader (ABI minor 11)` |
-| 12          | `Load::inventories`             | Off: `inventories need a newer loader (ABI minor 12)`        |
-| 13          | status lines                    | Off: `status lines need a newer loader`                      |
-| 13          | `commands::run`                 | `Err(RunError::NoLoader)`                                    |
-| 14          | `ModEntry::signed_by`           | Empty                                                        |
-| 15          | altars and zone checks          | Off: `altars need a newer loader`                            |
-| 16          | survivors                       | Off: `the survivor lookup needs a newer loader`              |
-| 17          | interaction filters             | Off: `interaction filters need a newer loader`               |
-| 18          | skills, comfort, experience     | Off: `skill overrides need a newer loader` and the like      |
-| 19          | altar limit and bases           | Off: `altars need a newer loader`                            |
-| 20          | engine events                   | Off: `engine events need a newer loader (ABI minor 20)`      |
-| 21          | entity queries, destroy, saves  | Empty, `None` or `WorldError::Missing`                       |
+| Needs minor | Feature                         | Under an older loader                                     |
+| ----------- | ------------------------------- | --------------------------------------------------------- |
+| 1           | `Host::log_level`               | `Level::DEBUG` is assumed                                 |
+| 2           | `Load::on`, `Load::subscribe`   | Off: `event <id>: missing on this game build`             |
+| 3           | `Load::world`                   | Off: `world reads: needs a newer loader`                  |
+| 4           | served resources                | Off: `served resources: needs a newer loader`             |
+| 4           | mod texts                       | Off: `mod texts: needs a newer loader`                    |
+| 5           | `mods()`                        | An empty list                                             |
+| 6           | join values                     | None: the mod runs with its file's values                 |
+| 7           | `Load::code`, `Load::find_code` | Off: `code searches: needs a newer loader`                |
+| 7           | `Load::patch_code`              | Off: `code patches: needs a newer loader`                 |
+| 8           | `Host::hosting`                 | Whether this is the dedicated server                      |
+| 9           | chat commands                   | Off: `chat commands: needs a newer loader`                |
+| 9           | rename filters                  | Off: `rename filters: needs a newer loader`               |
+| 10          | `mods::join_missing()`          | An empty list                                             |
+| 11          | `Load::hook_at`                 | Off: `mid-function hooks: needs a newer loader`           |
+| 12          | `Load::inventories`             | Off: `inventories: needs a newer loader`                  |
+| 13          | status lines                    | Off: `status lines: needs a newer loader`                 |
+| 13          | `commands::run`                 | `Err(RunError::NoLoader)`                                 |
+| 14          | `ModEntry::signed_by`           | Empty                                                     |
+| 15          | altars and zone checks          | Off: `altars: needs a newer loader`                       |
+| 16          | survivors                       | Off: `the survivor lookup: needs a newer loader`          |
+| 17          | interaction filters             | Off: `interaction filters: needs a newer loader`          |
+| 18          | skills, comfort, experience     | Off: `skill overrides: needs a newer loader` and the like |
+| 19          | altar limit and bases           | Off: `altars: needs a newer loader`                       |
+| 20          | engine events                   | Off: `engine events: needs a newer loader`                |
+| 21          | entity queries, destroy, saves  | Empty, `None` or `WorldError::Missing`                    |
 
 A mod that can do without a feature catches the `Off` and goes on without it
 instead of returning it from `init`.

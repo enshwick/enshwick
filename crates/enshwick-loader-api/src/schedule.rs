@@ -3,7 +3,7 @@
 //! code runs, so they may call into the game.
 
 use std::ops::ControlFlow;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock, PoisonError};
 use std::time::{Duration, Instant};
 
@@ -14,13 +14,37 @@ struct Task {
     run: Box<dyn FnMut() -> ControlFlow<()> + Send>,
 }
 
-#[derive(Default)]
 struct Queue {
     /// Whether a tick handler runs the queue.
     ticking: AtomicBool,
-    /// Set while `tasks` holds anything, so an idle step takes no lock.
-    pending: AtomicBool,
+    /// When the earliest task is due, in nanoseconds from `epoch`, or
+    /// [`IDLE`]; written under the `tasks` lock, so a step with nothing due
+    /// takes no lock.
+    next_due: AtomicU64,
+    epoch: Instant,
     tasks: Mutex<Vec<Task>>,
+}
+
+const IDLE: u64 = u64::MAX;
+
+impl Queue {
+    fn new() -> Self {
+        Self {
+            ticking: AtomicBool::new(false),
+            next_due: AtomicU64::new(IDLE),
+            epoch: Instant::now(),
+            tasks: Mutex::new(Vec::new()),
+        }
+    }
+
+    fn nanos(&self, at: Instant) -> u64 {
+        u64::try_from(at.saturating_duration_since(self.epoch).as_nanos()).unwrap_or(IDLE - 1)
+    }
+
+    /// Lowers `next_due` to `due`; called under the `tasks` lock.
+    fn due_by(&self, due: Instant) {
+        self.next_due.fetch_min(self.nanos(due), Ordering::AcqRel);
+    }
 }
 
 static QUEUE: OnceLock<Queue> = OnceLock::new();
@@ -53,7 +77,10 @@ pub struct Scheduler {
 impl core::fmt::Debug for Scheduler {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("Scheduler")
-            .field("pending", &self.queue.pending.load(Ordering::Relaxed))
+            .field(
+                "pending",
+                &(self.queue.next_due.load(Ordering::Relaxed) != IDLE),
+            )
             .finish()
     }
 }
@@ -63,7 +90,7 @@ impl Scheduler {
     /// that runs it: true once, and again after
     /// [`Scheduler::unsubscribed`].
     pub(crate) fn get() -> (Self, bool) {
-        let queue = QUEUE.get_or_init(Queue::default);
+        let queue = QUEUE.get_or_init(Queue::new);
         let subscribe = !queue.ticking.swap(true, Ordering::AcqRel);
         (Self { queue }, subscribe)
     }
@@ -124,27 +151,38 @@ impl Scheduler {
             .tasks
             .lock()
             .unwrap_or_else(PoisonError::into_inner);
+        self.queue.due_by(task.due);
         tasks.push(task);
-        self.queue.pending.store(true, Ordering::Release);
     }
 
     /// Runs the tasks that are due; called after each step.
+    #[inline]
     pub(crate) fn run_due(self) {
-        if !self.queue.pending.load(Ordering::Acquire) {
+        let next_due = self.queue.next_due.load(Ordering::Acquire);
+        if next_due == IDLE {
             return;
         }
         let now = Instant::now();
+        if self.queue.nanos(now) >= next_due {
+            self.run_due_at(now);
+        }
+    }
+
+    #[cold]
+    fn run_due_at(self, now: Instant) {
         let due: Vec<Task> = {
             let mut tasks = self
                 .queue
                 .tasks
                 .lock()
                 .unwrap_or_else(PoisonError::into_inner);
-            // Most steps have nothing due: leave the queue as it is, unallocated.
-            if !tasks.iter().any(|task| task.due <= now) {
-                return;
-            }
-            tasks.extract_if(.., |task| task.due <= now).collect()
+            let due = tasks.extract_if(.., |task| task.due <= now).collect();
+            let next = tasks.iter().map(|task| task.due).min();
+            self.queue.next_due.store(
+                next.map_or(IDLE, |at| self.queue.nanos(at)),
+                Ordering::Release,
+            );
+            due
         };
         // Outside the lock: a task may schedule more.
         let again: Vec<Task> = due
@@ -162,10 +200,10 @@ impl Scheduler {
             .tasks
             .lock()
             .unwrap_or_else(PoisonError::into_inner);
+        for task in &again {
+            self.queue.due_by(task.due);
+        }
         tasks.extend(again);
-        self.queue
-            .pending
-            .store(!tasks.is_empty(), Ordering::Release);
     }
 }
 
@@ -204,6 +242,6 @@ mod tests {
         assert_eq!(once.load(Ordering::Relaxed), 1);
         assert_eq!(repeated.load(Ordering::Relaxed), 3);
         assert_eq!(later.load(Ordering::Relaxed), 0);
-        assert!(scheduler.queue.pending.load(Ordering::Relaxed));
+        assert_ne!(scheduler.queue.next_due.load(Ordering::Relaxed), IDLE);
     }
 }

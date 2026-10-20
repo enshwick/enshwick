@@ -21,10 +21,11 @@ use enshwick_loader_api::abi::{
     AltarInfo, AltarZoneSize, Bounds, Event, Header, HookFlags, Side, Status, ZoneCheck,
     ZoneCheckFn,
 };
+use enshwick_loader_api::altars::MAX_ZONES;
 
 use self::geometry::Placed;
 use crate::chains::{LOADER, Link};
-use crate::ecs::{Engine, Query};
+use crate::ecs::{Engine, Query, read_at};
 use crate::host::Loader;
 
 const FORGET_AFTER: Duration = Duration::from_secs(2);
@@ -54,8 +55,6 @@ const SHAPE_RANGE: usize = 4;
 const HALF: f32 = 0.5;
 /// The most levels an altar reports; the engine has far fewer.
 const MAX_LEVELS: usize = 16;
-/// The engine keeps at most 255 zones.
-const MAX_ZONES: usize = 256;
 
 type Sizes = ArrayVec<[f32; 3], MAX_LEVELS>;
 
@@ -163,7 +162,7 @@ pub(crate) fn open(loader: &Loader, owner: usize) -> Status {
     if loader.delivery.get().is_some() {
         return Status::TOO_LATE;
     }
-    if engine(loader).is_none() {
+    if crate::ecs::engine(loader).is_none() {
         return Status::MISSING;
     }
     let mut openers = OPENERS.lock().unwrap_or_else(PoisonError::into_inner);
@@ -277,10 +276,6 @@ pub(crate) fn forget() {
     CHANGED.store(true, Ordering::Release);
 }
 
-fn engine(loader: &Loader) -> Option<&'static Engine> {
-    crate::ecs::engine(loader)
-}
-
 pub(crate) fn register(owner: usize, callback: ZoneCheckFn, user: *mut c_void) -> Status {
     if SEALED.get().is_some() {
         return Status::TOO_LATE;
@@ -301,7 +296,7 @@ pub(crate) fn link(loader: &'static Loader) {
     if !WANTED.load(Ordering::Acquire) {
         return;
     }
-    if engine(loader).is_none() {
+    if crate::ecs::engine(loader).is_none() {
         crate::log!(WARN, "altars off: this build lacks their engine helpers");
         return;
     }
@@ -464,7 +459,8 @@ unsafe extern "system" fn upgrade(ctx: *mut u64) {
         unsafe { next::<SystemFn>(&UPGRADE_NEXT)(ctx) };
         return;
     };
-    if CONTROLLER.load(Ordering::Acquire) != 0 {
+    let controller = CONTROLLER.load(Ordering::Acquire);
+    if controller != 0 && !crate::host::is_off(controller - 1) {
         // SAFETY: the system's live context.
         if std::panic::catch_unwind(|| unsafe { write_ranges(engine, ctx) }).is_ok() {
             return;
@@ -483,11 +479,6 @@ unsafe extern "system" fn upgrade(ctx: *mut u64) {
     if std::panic::catch_unwind(|| unsafe { read_levels(engine, ctx) }).is_err() {
         turn_off("the level pass panicked");
     }
-}
-
-unsafe fn read_at<T: Copy>(base: *const u8, offset: usize) -> T {
-    // SAFETY: forwarded from the caller.
-    unsafe { base.wrapping_add(offset).cast::<T>().read_unaligned() }
 }
 
 fn merge(
@@ -636,7 +627,7 @@ unsafe fn write_ranges(engine: &Engine, ctx: *mut u64) {
 ///
 /// `ctx` is the live context of `upgrade_building_range`.
 unsafe fn write_ranges_into(engine: &Engine, ctx: *mut u64, levels: &mut Vec<(u32, Sizes)>) {
-    let targets = TARGETS.load_full().unwrap_or_default();
+    let targets = TARGETS.load();
     // SAFETY: the system's live context.
     let mut query: Query<'_, UPGRADE_WORDS> = unsafe { engine.query(ctx) };
     while let Some(words) = query.next() {
@@ -651,7 +642,7 @@ unsafe fn write_ranges_into(engine: &Engine, ctx: *mut u64, levels: &mut Vec<(u3
         };
         // SAFETY: the system's live context.
         let id = unsafe { engine.entity(ctx) };
-        let target = match targets.get(&id) {
+        let target = match targets.as_deref().and_then(|targets| targets.get(&id)) {
             Some(&(solved_level, range)) if solved_level == level => range,
             _ => current.map(|v| v * HALF),
         };

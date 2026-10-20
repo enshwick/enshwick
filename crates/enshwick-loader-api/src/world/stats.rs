@@ -4,8 +4,12 @@
 //! order of the game's attribute container.
 
 use crate::ecs::Entity;
+use crate::raw::read_at;
 use crate::world::{ComponentType, World};
 use crate::{Load, Off};
+
+/// The attribute set's flag bit that marks it initialised.
+const SET_INITIALISED: u8 = 1;
 
 /// A value with its maximum, such as health.
 ///
@@ -155,18 +159,17 @@ impl Stats {
         set: &Set<N>,
     ) -> Option<[u32; N]> {
         let data = world.component(entity, set.ty)?.cast::<u8>();
-        let at = |offset: usize| data.wrapping_add(offset);
-        // SAFETY: the entity's live attribute set, read on the game thread,
-        // starts with the id it keeps.
-        let root = unsafe { at(0).cast::<u32>().read_unaligned() };
-        // SAFETY: as above; the values' offset.
-        let offset =
-            usize::from(unsafe { at(self.layout.data_offset).cast::<u16>().read_unaligned() });
-        // SAFETY: as above; the flags.
-        let flags = unsafe { at(self.layout.flags).read() };
-        // SAFETY: as above; how many values it holds.
-        let count = usize::from(unsafe { at(self.layout.count).read() });
-        if root != set.root || flags & 1 == 0 {
+        // SAFETY: the entity's live attribute set, on the game thread, starts
+        // with the id it keeps.
+        let root: u32 = unsafe { read_at(data, 0) };
+        // SAFETY: as above; the set's header holds the values' offset, its
+        // flags and its count at the build's offsets.
+        let offset = usize::from(unsafe { read_at::<u16>(data, self.layout.data_offset) });
+        // SAFETY: as above.
+        let flags: u8 = unsafe { read_at(data, self.layout.flags) };
+        // SAFETY: as above.
+        let count = usize::from(unsafe { read_at::<u8>(data, self.layout.count) });
+        if root != set.root || flags & SET_INITIALISED == 0 {
             return None;
         }
         let mut values = [0u32; N];
@@ -174,8 +177,8 @@ impl Stats {
             if slot >= count {
                 return None;
             }
-            // SAFETY: as above; the set holds `count` values from `offset`.
-            *value = unsafe { at(offset + slot * 4).cast::<u32>().read_unaligned() };
+            // SAFETY: as above; the engine keeps `count` values from `offset`.
+            *value = unsafe { read_at(data, offset + slot * size_of::<u32>()) };
         }
         Some(values)
     }

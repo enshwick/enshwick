@@ -39,6 +39,24 @@ pub fn host() -> Option<Host> {
     HOST.get().copied()
 }
 
+/// Runs a mod's callback for the loader; a panic faults the mod with
+/// `reason`, and `fallback` answers in its place.
+#[inline]
+pub(crate) fn guard<R>(reason: &str, fallback: impl FnOnce() -> R, call: impl FnOnce() -> R) -> R {
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(call)).unwrap_or_else(|_| {
+        fault(reason);
+        fallback()
+    })
+}
+
+#[cold]
+#[inline(never)]
+fn fault(reason: &str) {
+    if let Some(host) = host() {
+        host.fault(reason);
+    }
+}
+
 impl Host {
     /// Wraps the loader's table for the mod `me`.
     ///

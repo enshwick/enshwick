@@ -183,10 +183,8 @@ impl<F: FnPtr> Next<F> {
     ///
     /// # Panics
     ///
-    /// When the hook is not linked: the loader fills the slot before the
-    /// detour first runs, so only a call from outside the chain, such as a
-    /// unit test that calls the detour's body itself, finds it empty. A null
-    /// function pointer would be undefined behaviour, so this panics instead.
+    /// When the loader has not linked the hook, as when a unit test calls the
+    /// detour's body itself.
     ///
     /// # Examples
     ///

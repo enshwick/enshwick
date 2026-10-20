@@ -113,7 +113,7 @@ The mod's log has `off: <reason>` at `warn`, then the loader's
 | `settings: <parse error>`                               | `mod-configs/<id>.toml` does not parse into the settings type          |
 | `hook REWARD: refused by the loader`                    | Another mod holds the function exclusively, or the mod hooked it twice |
 | `service <name> v<version>: missing on this game build` | The publishing mod is absent, off or loads later                       |
-| `... need a newer loader`                               | The loader is older than the ABI minor the feature needs               |
+| `...: needs a newer loader`                             | The loader is older than the ABI minor the feature needs               |
 
 See [ABI reference](abi-reference.md#under-an-older-loader) for the features
 each minor added. A settings file that stops parsing while the game runs does

@@ -282,7 +282,7 @@ one people play on, with a copy of a world:
   mod's commands run without anyone joining;
 - [`enshwick-probe`](https://github.com/themaiby/enshwick/tree/main/mods/enshwick-probe),
   a development mod that is never released, exercises the platform's world
-  API and engine events and logs each check as `PASS` or `FAIL` to
+  API and engine events and logs each check as `PASS`, `FAIL` or `SKIP` to
   `logs/enshwick/mods/probe.log`.
 
 What needs a player, such as hits, levels or a character's stats, waits for

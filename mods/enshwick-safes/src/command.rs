@@ -8,7 +8,8 @@ use enshwick_loader_api::world::{Player, World};
 
 use crate::access::{ACCESS, AllowOutcome, Cell, centre, nearest_own};
 
-/// How far from the player their Safe may be, in metres.
+/// How far from the player their Safe may be, in metres; `texts.toml` says
+/// "4 m" in its replies.
 pub const REACH: f64 = 4.0;
 
 /// The mod's texts in the server's language.

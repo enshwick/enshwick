@@ -13,15 +13,14 @@ const EVERY: Duration = Duration::from_secs(5);
 /// Keeps the hold on a thread of its own, woken when the altars change.
 pub(crate) fn keep(load: &mut Load<'_>) -> Result<(), Off> {
     let hold = Hold::new(&load.data_dir()?);
-    let spawned = std::thread::Builder::new()
+    // Following the altars is what raises `AltarsChanged`.
+    let _altars = load.altars()?;
+    let handle = std::thread::Builder::new()
         .name("flame-altar-count-hold".into())
-        .spawn(move || run(&hold));
-    if let Ok(handle) = spawned {
-        let thread = handle.thread().clone();
-        let _altars = load.altars()?;
-        load.on::<AltarsChanged>(move |()| thread.unpark())?;
-    }
-    Ok(())
+        .spawn(move || run(&hold))
+        .map_err(|e| Off::new(format!("hold thread: {e}")))?;
+    let thread = handle.thread().clone();
+    load.on::<AltarsChanged>(move |()| thread.unpark())
 }
 
 /// The reason a held world must not open with the vanilla grouping.

@@ -99,7 +99,7 @@ subscribers, the move costs one hash lookup per event. On a client the events
 come from the built-in server while it hosts a game, as server events do.
 Engine events need ABI minor 20; under an older loader `on_game` and
 `on_game_event` turn the mod off with
-`engine events need a newer loader (ABI minor 20)`.
+`engine events: needs a newer loader`.
 
 ## Testing
 

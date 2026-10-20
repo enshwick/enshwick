@@ -43,8 +43,8 @@ label_language = "en"
 
 `cost_multiplier` scales the Safe's recipe and applies after a restart.
 `admins_can_open` lets administrators open, remove and rename every Safe, and
-applies while the game runs. `label_language` is the language of the owner's name on a Safe and of the
-`/safe` replies; a change applies after a restart, to Safes named from then
+applies while the game runs. `label_language` is the language of the owner's
+name on a Safe and of the `/safe` replies; a change applies after a restart, to Safes named from then
 on.
 
 Texts are in English and Ukrainian; German, French, Spanish and Polish name

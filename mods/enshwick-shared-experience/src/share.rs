@@ -76,7 +76,8 @@ impl Levels {
 /// The high-water mark after a tick in which the characters online gained at
 /// most `most_gained` and the furthest stands at `furthest` cumulative
 /// experience: the largest gain of the moment counts once, whoever earned it
-/// and however many characters earned it together, and a character already further ahead raises the mark to it.
+/// and however many characters earned it together, and a character already
+/// further ahead raises the mark to it.
 #[must_use]
 pub fn high_water(previous: u64, most_gained: u32, furthest: u64) -> u64 {
     previous

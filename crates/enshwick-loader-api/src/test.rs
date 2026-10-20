@@ -683,18 +683,18 @@ impl FakeHost {
     ///
     /// ```
     /// #[repr(C)]
-    /// struct Zones {
-    ///     count: extern "system" fn() -> u32,
+    /// struct Prices {
+    ///     price: extern "system" fn(item: u32) -> u32,
     /// }
     ///
-    /// extern "system" fn count() -> u32 {
+    /// extern "system" fn price(_item: u32) -> u32 {
     ///     3
     /// }
     ///
-    /// static ZONES: Zones = Zones { count };
+    /// static PRICES: Prices = Prices { price };
     ///
     /// let loader = enshwick_loader_api::test::FakeHost::new()
-    ///     .service("trading-post.prices", 1, (&raw const ZONES).cast())
+    ///     .service("trading-post.prices", 1, (&raw const PRICES).cast())
     ///     .install();
     /// # let _ = loader;
     /// ```

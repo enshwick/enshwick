@@ -25,13 +25,7 @@ where
 {
     // SAFETY: `user` is the leaked `F` this function was registered with.
     let source = unsafe { &*user.cast::<F>() };
-    let text =
-        std::panic::catch_unwind(std::panic::AssertUnwindSafe(source)).unwrap_or_else(|_| {
-            if let Some(host) = crate::host() {
-                host.fault("panic in a status source");
-            }
-            String::new()
-        });
+    let text = crate::host::guard("panic in a status source", String::new, source);
     if out.is_null() {
         return;
     }
@@ -69,21 +63,16 @@ impl Load<'_> {
         F: Fn() -> String + Send + Sync + 'static,
     {
         let host = self.host();
-        let end = core::mem::offset_of!(HostApi, status) + size_of::<usize>();
-        if !host.api().header.covers(end) {
-            return Err(Off::new("status lines need a newer loader"));
-        }
-        let user = Box::into_raw(Box::new(source));
-        let status = (host.api().status)(host.handle(), run_source::<F>, user.cast());
-        if !status.is_ok() {
-            // SAFETY: refused, so the loader keeps no copy of the pointer.
-            drop(unsafe { Box::from_raw(user) });
-            return Err(Off::new(format!(
-                "status source: refused by the loader (status {})",
-                status.0
-            )));
-        }
-        Ok(())
+        crate::load::offered(
+            host.api(),
+            core::mem::offset_of!(HostApi, status),
+            "status lines",
+        )?;
+        crate::load::hand_over(
+            source,
+            |user| (host.api().status)(host.handle(), run_source::<F>, user),
+            "status source",
+        )
     }
 }
 

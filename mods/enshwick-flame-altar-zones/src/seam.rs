@@ -13,10 +13,7 @@
 //! it never allocates.
 
 use arrayvec::ArrayVec;
-use enshwick_loader_api::altars::ZoneCheck;
-
-/// The engine keeps at most 255 zones.
-const MAX_ZONES: usize = 256;
+use enshwick_loader_api::altars::{MAX_ZONES, ZoneCheck};
 
 type Zone = ([i64; 3], [i64; 3]);
 

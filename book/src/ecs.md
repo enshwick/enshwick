@@ -127,8 +127,8 @@ inventory hook.
 ### Positions
 
 World coordinates are 32.32 fixed point: `FIXED_PER_METRE` engine units to
-the metre. `ecs::transform_position` reads a `CurrentTransform` component in
-metres, and `ecs::metres` and `ecs::fixed` convert between the two:
+the metre. `ecs::transform_position`, an `unsafe fn` over a raw component
+pointer, reads a `CurrentTransform` component in metres, and `ecs::metres` and `ecs::fixed` convert between the two:
 
 ```rust
 use enshwick_loader_api::ecs::{FIXED_PER_METRE, fixed, metres};

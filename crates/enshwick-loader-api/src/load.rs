@@ -36,7 +36,7 @@ impl Off {
         }
     }
 
-    fn status(what: &str, status: Status) -> Self {
+    pub(crate) fn status(what: &str, status: Status) -> Self {
         let why = match status {
             Status::MISSING => "missing on this game build",
             Status::AMBIGUOUS => "ambiguous on this game build",
@@ -289,10 +289,11 @@ impl Load<'_> {
     /// ```
     pub fn code(&self) -> Result<&'static [u8], Off> {
         let api = self.api();
-        let end = core::mem::offset_of!(HostApi, code_range) + size_of::<usize>();
-        if !api.header.covers(end) {
-            return Err(Off::new("code search needs a newer loader"));
-        }
+        offered(
+            api,
+            core::mem::offset_of!(HostApi, code_range),
+            "code searches",
+        )?;
         let (mut start, mut len) = (0u64, 0u64);
         let status = (api.code_range)(&raw mut start, &raw mut len);
         ok(status, (), || "code section".to_owned())?;
@@ -367,10 +368,11 @@ impl Load<'_> {
         replacement: &[u8],
     ) -> Result<(), Off> {
         let api = self.api();
-        let end = core::mem::offset_of!(HostApi, patch_code) + size_of::<usize>();
-        if !api.header.covers(end) {
-            return Err(Off::new("code patches need a newer loader"));
-        }
+        offered(
+            api,
+            core::mem::offset_of!(HostApi, patch_code),
+            "code patches",
+        )?;
         if expected.len() != replacement.len() {
             return Err(Off::new(format!(
                 "code patch at {address:#x}: {} bytes expected, {} given",
@@ -421,12 +423,11 @@ impl Load<'_> {
         F: Fn(&mut Registers) + Send + Sync + 'static,
     {
         let api = self.api();
-        let end = core::mem::offset_of!(HostApi, hook_at) + size_of::<usize>();
-        if !api.header.covers(end) {
-            return Err(Off::new(
-                "mid-function hooks need a newer loader (ABI minor 11)",
-            ));
-        }
+        offered(
+            api,
+            core::mem::offset_of!(HostApi, hook_at),
+            "mid-function hooks",
+        )?;
         let user = Box::into_raw(Box::new(MidHook { address, handler }));
         let spec = MidHookSpec {
             address,
@@ -558,8 +559,8 @@ impl Load<'_> {
         })
     }
 
-    /// Reads of the server's world: components, templates, positions and
-    /// players; on a client, of the built-in server while it hosts a game.
+    /// The server's [`World`](crate::world::World): reads, queries and
+    /// requests; on a client, the built-in server's while it hosts a game.
     ///
     /// # Errors
     ///
@@ -659,13 +660,12 @@ impl Load<'_> {
     where
         F: Fn(*const c_void) + Send + Sync + 'static,
     {
-        let user = Box::into_raw(Box::new(handler));
-        let status = self.host.subscribe(event, deliver::<F>, user.cast());
-        if !status.is_ok() {
-            // SAFETY: refused, so the loader keeps no copy of the pointer.
-            drop(unsafe { Box::from_raw(user) });
-        }
-        ok(status, (), || format!("event {}", event.0))
+        let host = self.host;
+        hand_over(
+            handler,
+            |user| host.subscribe(event, deliver::<F>, user),
+            &format!("event {}", event.0),
+        )
     }
 
     /// The reflected engine event type `name`, such as
@@ -758,21 +758,17 @@ impl Load<'_> {
         F: Fn(&crate::game_events::GameEvent<'_>) + Send + Sync + 'static,
     {
         let api = self.api();
-        if !crate::game_events::offered(api) {
-            return Err(Off::new("engine events need a newer loader (ABI minor 20)"));
-        }
-        let user = Box::into_raw(Box::new(handler));
-        let status = (api.game_event)(
-            self.host.handle(),
-            type_hash,
-            deliver_game::<F>,
-            user.cast(),
-        );
-        if !status.is_ok() {
-            // SAFETY: refused, so the loader keeps no copy of the pointer.
-            drop(unsafe { Box::from_raw(user) });
-        }
-        ok(status, (), || format!("engine events of {what}"))
+        offered(
+            api,
+            core::mem::offset_of!(HostApi, game_event),
+            "engine events",
+        )?;
+        let host = self.host.handle();
+        hand_over(
+            handler,
+            |user| (api.game_event)(host, type_hash, deliver_game::<F>, user),
+            &format!("engine events of {what}"),
+        )
     }
 
     /// The mod's own data folder, `mod-data/<id>` beside the game, for state
@@ -851,18 +847,18 @@ impl Load<'_> {
     ///
     /// ```
     /// #[repr(C)]
-    /// struct Zones {
-    ///     count: extern "system" fn() -> u32,
+    /// struct Prices {
+    ///     price: extern "system" fn(item: u32) -> u32,
     /// }
     ///
-    /// extern "system" fn count() -> u32 {
+    /// extern "system" fn price(_item: u32) -> u32 {
     ///     0
     /// }
     ///
-    /// static ZONES: Zones = Zones { count };
+    /// static PRICES: Prices = Prices { price };
     ///
     /// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
-    ///     load.publish("trading-post.prices", 1, &ZONES)
+    ///     load.publish("trading-post.prices", 1, &PRICES)
     /// }
     /// ```
     pub fn publish<T: Sync>(
@@ -896,14 +892,14 @@ impl Load<'_> {
     ///
     /// ```
     /// #[repr(C)]
-    /// struct Zones {
-    ///     count: extern "system" fn() -> u32,
+    /// struct Prices {
+    ///     price: extern "system" fn(item: u32) -> u32,
     /// }
     ///
     /// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
-    ///     // SAFETY: `Zones` is the table `trading-post` publishes as v1.
-    ///     let zones: &'static Zones = unsafe { load.service("trading-post.prices", 1)? };
-    ///     let _ = (zones.count)();
+    ///     // SAFETY: `Prices` is the table `trading-post` publishes as v1.
+    ///     let prices: &'static Prices = unsafe { load.service("trading-post.prices", 1)? };
+    ///     let _ = (prices.price)(0);
     ///     Ok(())
     /// }
     /// ```
@@ -960,15 +956,11 @@ unsafe extern "system" fn deliver<F: Fn(*const c_void)>(
 ) {
     // SAFETY: `user` is the leaked `Box<F>` this function was subscribed with.
     let handler = unsafe { &*user.cast::<F>() };
-    if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| handler(data))).is_err()
-        && let Some(host) = crate::host()
-    {
-        host.fault("panic in an event handler");
-    }
+    crate::host::guard("panic in an event handler", || (), || handler(data));
 }
 
 /// Runs an engine event handler; `user` is the handler boxed by
-/// [`Load::on_game_event`], alive for the process.
+/// `Load::game_events`, alive for the process.
 unsafe extern "system" fn deliver_game<F: Fn(&crate::game_events::GameEvent<'_>)>(
     event: *const crate::abi::GameEventData,
     user: *mut c_void,
@@ -979,11 +971,11 @@ unsafe extern "system" fn deliver_game<F: Fn(&crate::game_events::GameEvent<'_>)
     let Some(event) = (unsafe { crate::game_events::GameEvent::from_raw(event) }) else {
         return;
     };
-    if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| handler(&event))).is_err()
-        && let Some(host) = crate::host()
-    {
-        host.fault("panic in an engine event handler");
-    }
+    crate::host::guard(
+        "panic in an engine event handler",
+        || (),
+        || handler(&event),
+    );
 }
 
 /// A mid-function hook's handler and where it runs, for the fault message.
@@ -1022,6 +1014,32 @@ pub(crate) fn ok<T>(status: Status, value: T, what: impl FnOnce() -> String) -> 
     } else {
         Err(Off::status(&what(), status))
     }
+}
+
+/// An [`Off`] unless the loader's table reaches the entry at `field`, an
+/// offset into [`HostApi`].
+pub(crate) fn offered(api: &HostApi, field: usize, what: &str) -> Result<(), Off> {
+    if api.header.covers(field + size_of::<usize>()) {
+        Ok(())
+    } else {
+        Err(Off::new(format!("{what}: needs a newer loader")))
+    }
+}
+
+/// Hands `value` to the loader through `register` as its user pointer, which
+/// the loader keeps for the life of the process once it accepts it.
+pub(crate) fn hand_over<T>(
+    value: T,
+    register: impl FnOnce(*mut c_void) -> Status,
+    what: &str,
+) -> Result<(), Off> {
+    let user = Box::into_raw(Box::new(value));
+    let status = register(user.cast());
+    if !status.is_ok() {
+        // SAFETY: refused, so the loader keeps no copy of the pointer.
+        drop(unsafe { Box::from_raw(user) });
+    }
+    ok(status, (), || what.to_owned())
 }
 
 #[cfg(test)]

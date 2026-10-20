@@ -288,7 +288,8 @@ impl Containers {
         let read = |hash| unsafe { self.components.component(ctx, entity, hash) };
         read(layout.destroy)?;
         let state = read(layout.empty_state)?;
-        let position = self.position_of(read(layout.transform)?);
+        // SAFETY: the row's live CurrentTransform.
+        let position = unsafe { crate::ecs::transform_position(read(layout.transform)?) };
         // SAFETY: a live InventoryEmptyState holds its flag here.
         let empty = unsafe { read_at::<u8>(state, layout.is_empty) } != 0;
         let area_loot = read(layout.area_loot).map(|data| {
@@ -334,7 +335,8 @@ impl Containers {
             self.components
                 .component(ctx, entity, self.layout.transform)
         }?;
-        Some(self.position_of(data))
+        // SAFETY: the entity's live CurrentTransform.
+        Some(unsafe { crate::ecs::transform_position(data) })
     }
 
     /// Whether `entity` is a player character.
@@ -359,12 +361,6 @@ impl Containers {
                 .component(ctx, entity, self.layout.player_input)
         }
         .is_some()
-    }
-
-    #[expect(clippy::unused_self, reason = "kept beside the other reads")]
-    fn position_of(&self, transform: *mut u8) -> [f64; 3] {
-        // SAFETY: callers pass a live CurrentTransform.
-        unsafe { crate::ecs::transform_position(transform) }
     }
 }
 

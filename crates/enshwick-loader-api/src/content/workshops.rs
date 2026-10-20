@@ -239,9 +239,9 @@ const REFERENCE: usize = 16;
 
 /// The station template with its crafting components moved to `workshop`;
 /// `None` unless it has all three, each of the reflected size.
-/// [`Load::add_workshop`] serves it, with the next three functions; call
-/// them from [`Load::serve`] builders of your own for a station it does not
-/// make.
+/// [`Load::add_workshop`] serves it, with [`clone_station`],
+/// [`list_template`] and [`list_workshop`]; call them from [`Load::serve`]
+/// builders of your own for a station it does not make.
 ///
 /// # Examples
 ///

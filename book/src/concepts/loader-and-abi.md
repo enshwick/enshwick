@@ -54,13 +54,13 @@ Fields go in this order; only `id` and `side` are required:
 
 ```rust
 let manifest = enshwick_loader_api::manifest!(
-    id: "survivors-per-altar",      // 1 to 64 of [a-z0-9-]
+    id: "trading-post",             // 1 to 64 of [a-z0-9-]
     side: BOTH,                     // SERVER, CLIENT or BOTH
     version: "0.2.0",               // the crate's version when left out
     join = true,                    // counts in the join check
-    requires: ["flame-altar-count" => ">=0.2, <1.0"],
-    after: ["flame-altar-zones"],
-    updates: github("themaiby/enshwick", "enshwick-survivors-per-altar"),
+    requires: ["market-stalls" => ">=0.2, <1.0"],
+    after: ["market-stalls"],
+    updates: github("themaiby/enshwick", "enshwick-trading-post"),
     signed_by: ["RWTjqgtfpy3lSOLC4uaUXuvvKSLQKOFf6nUnEytoiFjSzxMEhLnoAdJF"],
     builds: [{
         side: SERVER,

@@ -61,7 +61,7 @@ pub(crate) struct Engine {
 /// # Safety
 ///
 /// A readable `T` lies there.
-unsafe fn read_at<T: Copy>(base: *const u8, offset: usize) -> T {
+pub(crate) unsafe fn read_at<T: Copy>(base: *const u8, offset: usize) -> T {
     // SAFETY: forwarded from the caller.
     unsafe { base.wrapping_add(offset).cast::<T>().read_unaligned() }
 }
@@ -156,12 +156,16 @@ impl Engine {
         }
     }
 
-    /// The entity of the query's current row, 0 before the first.
+    /// The entity of the query's current row, 0 before the first or for a
+    /// null context.
     ///
     /// # Safety
     ///
-    /// `ctx` is a live query context.
+    /// `ctx` is null or a live query context.
     pub(crate) unsafe fn entity(&self, ctx: *mut u64) -> u32 {
+        if ctx.is_null() {
+            return 0;
+        }
         // SAFETY: forwarded from the caller.
         let row = unsafe { self.row(ctx) };
         if row == 0 {
@@ -169,8 +173,14 @@ impl Engine {
         }
         // SAFETY: the first word of a context is its query descriptor.
         let descriptor: *const u8 = unsafe { read_at(ctx.cast(), 0) };
+        if descriptor.is_null() {
+            return 0;
+        }
         // SAFETY: the descriptor holds a pointer to the per-row entity records.
         let records: *const u8 = unsafe { read_at(descriptor, self.entity_records) };
+        if records.is_null() {
+            return 0;
+        }
         let offset = (row as usize - 1) * self.entity_record_size;
         // SAFETY: `row` is a valid 1-based row of this query.
         unsafe { read_at(records, offset) }
@@ -228,9 +238,7 @@ impl Engine {
     /// As for [`Engine::attribute`].
     pub(crate) unsafe fn level(&self, registry: u64, set: *const u8) -> Option<u32> {
         // SAFETY: forwarded from the caller.
-        let word = unsafe { self.attribute_word(registry, set, self.level_attribute) }?;
-        // SAFETY: the attribute's word inside the set's data.
-        Some(unsafe { read_at(word, 0) })
+        unsafe { self.attribute(registry, set, self.level_attribute) }
     }
 
     /// The value of `attribute` in the attribute set `set`, looked up in its
