@@ -149,14 +149,16 @@ pub(crate) fn seal() -> Vec<CodePatch> {
 }
 
 /// What arming does with each patch, given the bytes the hooks replace and
-/// what `current` reads at an address and length now.
+/// what `current` reads at an address and length now. An owner's patches go
+/// in together or not at all: one skipped skips the rest, since a change
+/// made of several patches may be unsafe in part.
 pub(crate) fn check(
     patches: &[CodePatch],
     hooked: &[(usize, usize)],
     off: impl Fn(usize) -> bool,
     current: impl Fn(usize, usize) -> Option<Vec<u8>>,
 ) -> Vec<Verdict> {
-    patches
+    let mut verdicts: Vec<Verdict> = patches
         .iter()
         .map(|patch| {
             if off(patch.owner) {
@@ -175,7 +177,19 @@ pub(crate) fn check(
                 None => Verdict::Skip("the bytes cannot be read".into()),
             }
         })
-        .collect()
+        .collect();
+    let skipped: Vec<usize> = patches
+        .iter()
+        .zip(&verdicts)
+        .filter(|(_, verdict)| matches!(verdict, Verdict::Skip(_)))
+        .map(|(patch, _)| patch.owner)
+        .collect();
+    for (patch, verdict) in patches.iter().zip(&mut verdicts) {
+        if *verdict == Verdict::Write && skipped.contains(&patch.owner) {
+            *verdict = Verdict::Skip("another patch of its owner was skipped".into());
+        }
+    }
+    verdicts
 }
 
 /// The bytes at `address` now, inside the game's code section only, once
@@ -494,6 +508,25 @@ mod tests {
         assert_eq!(verdicts[0], Verdict::Write);
         assert!(matches!(&verdicts[1], Verdict::Skip(why) if why.contains("72")));
         assert!(matches!(&verdicts[2], Verdict::Skip(why) if why.contains("cannot be read")));
+    }
+
+    #[test]
+    fn an_owner_s_patches_go_in_together_or_not_at_all() {
+        let code = [0x83_u8, 0xf8, 0x08, 0x72, 0x05, 0xc3];
+        let base = code.as_ptr().addr();
+        let current = |address: usize, len: usize| {
+            let from = address.checked_sub(base)?;
+            code.get(from..from + len).map(<[u8]>::to_vec)
+        };
+        let patches = [
+            patch(0, base + 2, &[0x08], &[0x10]),
+            patch(0, base + 3, &[0x74], &[0xeb]),
+            patch(1, base + 5, &[0xc3], &[0x90]),
+        ];
+        let verdicts = check(&patches, &[], |_| false, current);
+        assert!(matches!(&verdicts[0], Verdict::Skip(why) if why.contains("another patch")));
+        assert!(matches!(&verdicts[1], Verdict::Skip(why) if why.contains("72")));
+        assert_eq!(verdicts[2], Verdict::Write);
     }
 
     #[test]

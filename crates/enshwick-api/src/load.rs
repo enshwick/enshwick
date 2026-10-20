@@ -341,7 +341,9 @@ impl Load<'_> {
     /// [`Off`] when the loader is too old, the lengths differ, the bytes are
     /// not in the game's code or another patch covers any of them. At arming,
     /// a patch whose bytes no longer read `expected` or that overlaps a hooked
-    /// function's first bytes is skipped and the mod turned off.
+    /// function's first bytes is skipped and the mod turned off. A mod's
+    /// patches go in together: when one is skipped or one of its hooks fails,
+    /// none is written.
     ///
     /// # Examples
     ///
