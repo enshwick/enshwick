@@ -23,7 +23,7 @@ use crate::abi::{
     Header, HostApi, InventoryOp, InventoryOpResult, InventoryRequest, InventoryResult, ItemData,
 };
 use crate::ecs::{Components, Entity};
-use crate::raw::read_at as read;
+use crate::raw::read_at;
 use crate::schedule::Scheduler;
 use crate::world::{ComponentType, World};
 use crate::{Host, Load, Off};
@@ -1198,7 +1198,7 @@ impl Reader<'_> {
             0
         } else {
             // SAFETY: a global entity id in the game's image.
-            unsafe { read::<u32>(core::ptr::with_exposed_provenance(layout.skip), 0) }
+            unsafe { read_at::<u32>(core::ptr::with_exposed_provenance(layout.skip), 0) }
         };
         let mut out = Vec::new();
         self.walk(root, 0, skip, &mut out);
@@ -1211,12 +1211,12 @@ impl Reader<'_> {
             return;
         };
         // SAFETY: a live InventorySetup holds its initialised flag.
-        if unsafe { read::<u8>(setup, layout.initialized) } == 0 {
+        if unsafe { read_at::<u8>(setup, layout.initialized) } == 0 {
             return;
         }
         for i in 0..LINKS {
             // SAFETY: the setup holds 16 links and 16 categories.
-            let link: u32 = unsafe { read(setup, layout.links + i * size_of::<u32>()) };
+            let link: u32 = unsafe { read_at(setup, layout.links + i * size_of::<u32>()) };
             if link == 0 {
                 break;
             }
@@ -1224,7 +1224,7 @@ impl Reader<'_> {
                 continue;
             }
             // SAFETY: as above.
-            let category = Category(unsafe { read(setup, layout.categories + i) });
+            let category = Category(unsafe { read_at(setup, layout.categories + i) });
             if category == Category::VIRTUAL {
                 if depth < MAX_DEPTH {
                     self.walk(Entity(link), depth + 1, skip, out);
@@ -1258,11 +1258,11 @@ impl Reader<'_> {
             at: SlotRef::new(inventory, index),
             category,
             // SAFETY: forwarded from the caller.
-            item: unsafe { read(slots, at) },
+            item: unsafe { read_at(slots, at) },
             // SAFETY: as above.
-            count: unsafe { read(slots, at + layout.stack_count) },
+            count: unsafe { read_at(slots, at + layout.stack_count) },
             // SAFETY: as above.
-            pide: Entity(unsafe { read(slots, at + layout.stack_pide) }),
+            pide: Entity(unsafe { read_at(slots, at + layout.stack_pide) }),
         }
     }
 
@@ -1320,7 +1320,7 @@ impl Reader<'_> {
                 break;
             };
             // SAFETY: OwnerRelationship is the owner's entity id alone.
-            let owner = Entity(unsafe { read(owner, 0) });
+            let owner = Entity(unsafe { read_at(owner, 0) });
             if owner.is_none() || owner == entity {
                 break;
             }
@@ -1345,9 +1345,9 @@ impl Reader<'_> {
         let data = self.component(pide, layout.durability)?;
         Some(Durability {
             // SAFETY: a live NetworkDurability holds both values.
-            current: unsafe { read(data, 0) },
+            current: unsafe { read_at(data, 0) },
             // SAFETY: as above.
-            max: unsafe { read(data, layout.durability_max) },
+            max: unsafe { read_at(data, layout.durability_max) },
         })
     }
 }

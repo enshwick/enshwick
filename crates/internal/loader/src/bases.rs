@@ -29,6 +29,7 @@ use enshwick_loader_api::abi::{AltarLimitFn, HookFlags, Status};
 
 use self::limit::{Aabb, MAX_BASES, MAX_ZONES, Zone, Zones};
 use crate::chains::{LOADER, Link};
+use crate::ecs::read_at;
 use crate::host::Loader;
 
 /// The grouping's first bytes.
@@ -334,14 +335,6 @@ fn next<F: Copy>(slot: &AtomicUsize) -> F {
     // SAFETY: the loader points the slot at the rest of the chain, which has
     // the hooked function's signature, before the link can run.
     unsafe { core::mem::transmute_copy::<usize, F>(&address) }
-}
-
-/// # Safety
-///
-/// A readable `T` lies at `base + offset`.
-unsafe fn read_at<T: Copy>(base: *const u8, offset: usize) -> T {
-    // SAFETY: forwarded from the caller.
-    unsafe { base.wrapping_add(offset).cast::<T>().read_unaligned() }
 }
 
 unsafe extern "system" fn max_altars(balancing: u64, flame_level: u32) -> u8 {

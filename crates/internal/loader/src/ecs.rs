@@ -61,7 +61,7 @@ pub(crate) struct Engine {
 /// # Safety
 ///
 /// A readable `T` lies there.
-unsafe fn read_at<T: Copy>(base: *const u8, offset: usize) -> T {
+pub(crate) unsafe fn read_at<T: Copy>(base: *const u8, offset: usize) -> T {
     // SAFETY: forwarded from the caller.
     unsafe { base.wrapping_add(offset).cast::<T>().read_unaligned() }
 }
@@ -238,9 +238,7 @@ impl Engine {
     /// As for [`Engine::attribute`].
     pub(crate) unsafe fn level(&self, registry: u64, set: *const u8) -> Option<u32> {
         // SAFETY: forwarded from the caller.
-        let word = unsafe { self.attribute_word(registry, set, self.level_attribute) }?;
-        // SAFETY: the attribute's word inside the set's data.
-        Some(unsafe { read_at(word, 0) })
+        unsafe { self.attribute(registry, set, self.level_attribute) }
     }
 
     /// The value of `attribute` in the attribute set `set`, looked up in its

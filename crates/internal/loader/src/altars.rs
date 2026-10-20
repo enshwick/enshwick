@@ -24,7 +24,7 @@ use enshwick_loader_api::abi::{
 
 use self::geometry::Placed;
 use crate::chains::{LOADER, Link};
-use crate::ecs::{Engine, Query};
+use crate::ecs::{Engine, Query, read_at};
 use crate::host::Loader;
 
 const FORGET_AFTER: Duration = Duration::from_secs(2);
@@ -163,7 +163,7 @@ pub(crate) fn open(loader: &Loader, owner: usize) -> Status {
     if loader.delivery.get().is_some() {
         return Status::TOO_LATE;
     }
-    if engine(loader).is_none() {
+    if crate::ecs::engine(loader).is_none() {
         return Status::MISSING;
     }
     let mut openers = OPENERS.lock().unwrap_or_else(PoisonError::into_inner);
@@ -277,10 +277,6 @@ pub(crate) fn forget() {
     CHANGED.store(true, Ordering::Release);
 }
 
-fn engine(loader: &Loader) -> Option<&'static Engine> {
-    crate::ecs::engine(loader)
-}
-
 pub(crate) fn register(owner: usize, callback: ZoneCheckFn, user: *mut c_void) -> Status {
     if SEALED.get().is_some() {
         return Status::TOO_LATE;
@@ -301,7 +297,7 @@ pub(crate) fn link(loader: &'static Loader) {
     if !WANTED.load(Ordering::Acquire) {
         return;
     }
-    if engine(loader).is_none() {
+    if crate::ecs::engine(loader).is_none() {
         crate::log!(WARN, "altars off: this build lacks their engine helpers");
         return;
     }
@@ -484,11 +480,6 @@ unsafe extern "system" fn upgrade(ctx: *mut u64) {
     if std::panic::catch_unwind(|| unsafe { read_levels(engine, ctx) }).is_err() {
         turn_off("the level pass panicked");
     }
-}
-
-unsafe fn read_at<T: Copy>(base: *const u8, offset: usize) -> T {
-    // SAFETY: forwarded from the caller.
-    unsafe { base.wrapping_add(offset).cast::<T>().read_unaligned() }
 }
 
 fn merge(

@@ -15,6 +15,7 @@ use enshwick_loader_api::abi::{
     BedCheck, BedCheckFn, Header, HookFlags, Side, Status, Summon, SummonFn, SurvivorLookup,
     SurvivorLookupFn, SurvivorStatusFn,
 };
+use enshwick_loader_api::altars::cell_of_fixed;
 
 use crate::chains::{LOADER, Link};
 use crate::ecs::Engine;
@@ -523,10 +524,6 @@ unsafe fn read_at<T: Copy>(base: u64, offset: u64) -> T {
     unsafe { (base.wrapping_add(offset) as *const T).read_unaligned() }
 }
 
-fn cells_fixed(position: [i64; 3]) -> [i64; 3] {
-    enshwick_loader_api::altars::cell_of_fixed(position)
-}
-
 /// Asks the registered lookup; `None` for the game's own answer.
 fn ask(call: &SurvivorLookup) -> Option<u32> {
     let registered = SEALED.get()?.lookup?;
@@ -650,7 +647,7 @@ unsafe fn resolve(
             found,
             SurvivorLookup::SPAWN,
             0,
-            cells_fixed(target),
+            cell_of_fixed(target),
         ))?;
         if answer != 0 {
             *MOVING.lock().unwrap_or_else(PoisonError::into_inner) =
@@ -682,7 +679,7 @@ unsafe fn resolve(
             found,
             SurvivorLookup::BED_OWNER,
             0,
-            cells_fixed(position),
+            cell_of_fixed(position),
         ));
     }
     if caller == c.bed_init {
@@ -798,7 +795,9 @@ unsafe fn position_of(engine: &Engine, ctx: *mut u64, entity: u32) -> Option<[i6
         return None;
     }
     // SAFETY: a transform starts with its position.
-    Some(cells_fixed(unsafe { read_at(transform.addr() as u64, 0) }))
+    Some(cell_of_fixed(unsafe {
+        read_at(transform.addr() as u64, 0)
+    }))
 }
 
 /// A survivor's home: its saved spawn position, or where it stands.
@@ -818,7 +817,7 @@ unsafe fn home(saved: u64, transform: u64) -> [i64; 3] {
         return [i64::MIN; 3];
     }
     // SAFETY: a transform starts with its position.
-    cells_fixed(unsafe { read_at(transform, 0) })
+    cell_of_fixed(unsafe { read_at(transform, 0) })
 }
 
 unsafe extern "system" fn update_link(
@@ -991,7 +990,7 @@ unsafe fn summon(request: *mut u8) {
     // SAFETY: as above.
     let template = unsafe { read_at(base, o.spawn_template) };
     // SAFETY: as above.
-    let target = cells_fixed(unsafe { read_at(base, o.spawn_target) });
+    let target = cell_of_fixed(unsafe { read_at(base, o.spawn_target) });
     let call = Summon {
         header: Header::of::<Summon>(),
         item,
