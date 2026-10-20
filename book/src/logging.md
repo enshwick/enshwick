@@ -37,13 +37,13 @@ hook; a line that is kept is formatted on the calling thread.
 
 The loader writes to `logs/enshwick/` beside the game:
 
-| File            | Holds                                                   |
-| --------------- | ------------------------------------------------------- |
-| `all.log`       | every line, the loader's and every mod's                |
-| `loader.log`    | the loader's own lines                                  |
-| `mods/<id>.log` | one mod's lines                                         |
-| `status.log`    | the latest [status summary](#status-summary)            |
-| `crash.log`     | which mod's code was on the stack when the game crashed |
+| File            | Holds                                               |
+| --------------- | --------------------------------------------------- |
+| `all.log`       | every line, the loader's and every mod's            |
+| `loader.log`    | the loader's own lines                              |
+| `mods/<id>.log` | one mod's lines                                     |
+| `status.log`    | the latest [status summary](#status-summary)        |
+| `crash.log`     | each crash, blamed on a mod, the loader or the game |
 
 A line reads `hh:mm:ss.mmmZ level [source] message`, in UTC. The files of the
 previous session are truncated at start. A background thread writes them and
@@ -184,5 +184,8 @@ and status lines stop with it. The summary's list of mods turned off keeps the
 reason, and `/enshwick` marks the mod `(off)`.
 
 A hardware fault, such as an access violation in a mod's code, is not a panic
-and cannot be caught. The loader then writes `crash.log`, naming the mod whose
-code was on the stack, before the game's own crash handling runs.
+and cannot be caught. When it ends the game, the loader writes `crash.log`,
+naming the mod whose code faulted, whose callback it was running, or whose
+code was on the stack, before the game's own crash handling runs; the next
+start shows the line in its log and at the top of `status.log`. See
+[What is in crash.log?](faq.md#what-is-in-crashlog).

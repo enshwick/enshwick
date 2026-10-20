@@ -5,14 +5,14 @@
 Everything is under `logs/enshwick/` in the game's folder (beside
 `enshrouded.exe` or `enshrouded_server.exe`):
 
-| File            | What it holds                                        |
-| --------------- | ---------------------------------------------------- |
-| `all.log`       | Every line, from the loader and every mod            |
-| `loader.log`    | The loader's lines                                   |
-| `mods/<id>.log` | One mod's lines                                      |
-| `status.log`    | The latest status summary                            |
-| `crash.log`     | Faults the loader attributed to a mod or to itself   |
-| `stub.log`      | What the `powrprof.dll` stub did with staged updates |
+| File            | What it holds                                         |
+| --------------- | ----------------------------------------------------- |
+| `all.log`       | Every line, from the loader and every mod             |
+| `loader.log`    | The loader's lines                                    |
+| `mods/<id>.log` | One mod's lines                                       |
+| `status.log`    | The latest status summary                             |
+| `crash.log`     | Crashes, each blamed on a mod, the loader or the game |
+| `stub.log`      | What the `powrprof.dll` stub did with staged updates  |
 
 `all.log`, `loader.log` and the mod logs start empty each session. Each line
 names its time (UTC), level and source:
@@ -32,25 +32,35 @@ log_levels = { flame-altar-zones = "debug" }
 
 ## What is in crash.log?
 
-The loader watches for hardware faults: access violations, illegal or
-privileged instructions, integer division by zero and stack overflows. When
-the faulting address is in a mod's DLL or the loader's, or (except for a stack
-overflow) a return address into one is near the top of the stack, it appends
-one line to `crash.log` and writes the same line to `loader.log`:
+A line for each crash: a hardware fault nothing handled, such as an access
+violation, an illegal or privileged instruction, an integer division by zero
+or a stack overflow, that ends the game. Faults the game or a mod handles and
+survives are never written. The loader writes the line as the game's own
+crash handler starts writing its crash dump, or when no handler is left, and
+the game's crash handling then runs as it would without Enshwick:
 
 ```text
-fault 0xc0000005 at 0x7ffb1a2b3c4d (+0x3c4d in safes), in its code; access 0x0
+2026-10-21 23:45:18Z fault 0xc0000005 at 0x7ffb1a2b3c4d, blamed on safes: in its code (+0x3c4d in safes); reading 0x0
 ```
 
-The parts are the exception code, the address, the offset in the module and
-whose module it is, and `in its code` or
-`in game code called with its code on the stack`. The last value is the
-address the faulting access touched. The loader records at most five faults a
-session and does not handle them: the game's own crash handling runs as it
-would without Enshwick. A fault with no mod or loader code involved is not
-recorded.
+The parts are the time, the exception code, the address, and whom the fault
+is blamed on:
 
-`crash.log` is appended to across sessions, unlike the other logs.
+| Blame                                        | Means                                                                     |
+| -------------------------------------------- | ------------------------------------------------------------------------- |
+| `blamed on <mod>: in its code`               | the fault is in the mod's DLL                                             |
+| `blamed on <mod>: in its <feature> callback` | the loader was running one of the mod's callbacks, such as a command      |
+| `blamed on <mod>: its code is on the stack`  | the fault is in game code a mod's hook or call led to, found by unwinding |
+| `in the loader`                              | the fault is in the loader with no mod's callback running or code near it |
+| `in the game: no mod's code on the stack`    | Enshwick and its mods are not involved                                    |
+
+The offset in brackets is the address inside the DLL that holds it, and the
+last part is what the faulting access read, wrote or ran.
+
+`crash.log` is appended to across sessions, unlike the other logs. The next
+start logs the last crash as a warning and shows it at the top of
+`status.log`; the line waits in `mod-data/enshwick/last-crash.txt` until
+then.
 
 ## What is in status.log?
 
@@ -106,14 +116,14 @@ hosts a game; see [Sides and hosting](concepts/sides-and-hosting.md).
 The mod's log has `off: <reason>` at `warn`, then the loader's
 `off: init returned 3`. Common reasons, as the safe layer words them:
 
-| Reason                                                  | What it means                                                          |
-| ------------------------------------------------------- | ---------------------------------------------------------------------- |
-| `symbol quest.reward: missing on this game build`       | Neither the mod nor the loader pins the symbol for this build          |
-| `constant ecs.context_row: missing on this game build`  | The same for an engine constant                                        |
-| `settings: <parse error>`                               | `mod-configs/<id>.toml` does not parse into the settings type          |
-| `hook REWARD: refused by the loader`                    | Another mod holds the function exclusively, or the mod hooked it twice |
-| `service <name> v<major>: <reason>`                     | No running mod publishes it, or its table lacks or changed a field     |
-| `...: needs a newer loader`                             | The loader is older than the ABI minor the feature needs               |
+| Reason                                                 | What it means                                                          |
+| ------------------------------------------------------ | ---------------------------------------------------------------------- |
+| `symbol quest.reward: missing on this game build`      | Neither the mod nor the loader pins the symbol for this build          |
+| `constant ecs.context_row: missing on this game build` | The same for an engine constant                                        |
+| `settings: <parse error>`                              | `mod-configs/<id>.toml` does not parse into the settings type          |
+| `hook REWARD: refused by the loader`                   | Another mod holds the function exclusively, or the mod hooked it twice |
+| `service <name> v<major>: <reason>`                    | No running mod publishes it, or its table lacks or changed a field     |
+| `...: needs a newer loader`                            | The loader is older than the ABI minor the feature needs               |
 
 See [ABI reference](abi-reference.md#under-an-older-loader) for the features
 each minor added. A settings file that stops parsing while the game runs does

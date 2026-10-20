@@ -121,6 +121,9 @@ thread_local! {
     /// Ticks the callbacks inside the running one took, so each callback
     /// counts its own time alone.
     static INSIDE: Cell<u64> = const { Cell::new(0) };
+    /// The callback this thread runs, for crash blame: the mod's index plus
+    /// one, shifted past the feature; 0 for none.
+    static RUNNING: Cell<u32> = const { Cell::new(0) };
 }
 
 /// Turns callback timing on for `mods` mods; at start, with diagnostics on.
@@ -128,17 +131,47 @@ pub fn start(mods: usize) {
     let _first = BUCKETS.set((0..mods * FEATURES).map(|_| Bucket::default()).collect());
 }
 
-/// Runs mod `owner`'s callback `f` for `feature`, timing it when
-/// diagnostics are on.
+/// Runs mod `owner`'s callback `f` for `feature`, marking it for crash
+/// blame, and timing it when diagnostics are on.
 #[inline]
 pub fn call<R>(owner: usize, feature: Feature, f: impl FnOnce() -> R) -> R {
-    match BUCKETS
+    let marker = u32::try_from(owner)
+        .ok()
+        .and_then(|o| o.checked_add(1))
+        .and_then(|o| o.checked_mul(256))
+        .map_or(0, |o| o | feature as u32);
+    let outer = RUNNING.replace(marker);
+    let result = match BUCKETS
         .get()
         .and_then(|b| b.get(owner * FEATURES + feature as usize))
     {
         None => f(),
         Some(bucket) => timed(bucket, f),
-    }
+    };
+    RUNNING.set(outer);
+    result
+}
+
+/// The mod callback this thread runs, if any: the mod's index and the
+/// feature. Reads a thread-local only, so a crash filter may call it.
+#[must_use]
+pub fn current_callback() -> Option<(usize, Feature)> {
+    decode(marker())
+}
+
+/// The mod callback this thread runs, encoded, 0 for none: for a handler
+/// that keeps it for later, as [`decode`] reads it.
+#[must_use]
+pub fn marker() -> u32 {
+    RUNNING.get()
+}
+
+/// The mod's index and the feature of a [`marker`].
+#[must_use]
+pub fn decode(marker: u32) -> Option<(usize, Feature)> {
+    let owner = usize::try_from((marker >> 8).checked_sub(1)?).ok()?;
+    let feature = *Feature::ALL.get((marker & 0xff) as usize)?;
+    Some((owner, feature))
 }
 
 #[inline(never)]
@@ -488,6 +521,22 @@ mod tests {
             lines[0],
             "survivors 0.2 µs/s: hook f 0.2 µs/s in 10 calls; interaction filter 0.0 µs/s in 2 calls"
         );
+    }
+
+    #[test]
+    fn a_running_callback_is_marked_for_crash_blame() {
+        assert_eq!(current_callback(), None);
+        call(3, Feature::Commands, || {
+            assert_eq!(current_callback(), Some((3, Feature::Commands)));
+            call(5, Feature::ModEvents, || {
+                assert_eq!(current_callback(), Some((5, Feature::ModEvents)));
+            });
+            assert_eq!(current_callback(), Some((3, Feature::Commands)));
+        });
+        assert_eq!(current_callback(), None);
+        call(usize::MAX, Feature::Events, || {
+            assert_eq!(current_callback(), None);
+        });
     }
 
     #[test]
