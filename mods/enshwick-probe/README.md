@@ -28,6 +28,9 @@ Once the world has loaded, and again on `/probe check`:
   event in the next step; that a type off the allow list and a teleport of
   an entity not in the world are refused;
 - that destroy requests refuse entity 0 and an entity not in the world;
+- the clock: a reading, a time an hour past the next turn of day or night
+  that reads back (the turn's event follows), the time put back, a factor of 10 on the speed that the clock's speed shows, and the
+  factor put back; the turns of day and night are logged as they come;
 - a save on demand, followed by `WorldSaved`.
 
 From start it counts every game event by type and logs the counts every

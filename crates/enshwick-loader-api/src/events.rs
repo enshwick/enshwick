@@ -104,6 +104,10 @@ without_data! {
     JoinRefused = JOIN_MISSING;
     /// [`Event::ALTARS_CHANGED`]; [`crate::altars::Altars::list`] lists them.
     AltarsChanged = ALTARS_CHANGED;
+    /// [`Event::DAY_STARTED`]; [`crate::daytime::Clock::now`] reads the clock.
+    DayStarted = DAY_STARTED;
+    /// [`Event::NIGHT_STARTED`].
+    NightStarted = NIGHT_STARTED;
 }
 
 // Each event names its data and the size that data had in the minor that

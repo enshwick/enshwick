@@ -561,6 +561,10 @@ pub(crate) static API: HostApi = HostApi {
     net_send,
     net_ready,
     notify,
+    time_of_day,
+    set_time_of_day,
+    time_speed_control,
+    set_time_speed,
 };
 
 /// A static slice from a pointer and a count, empty for a null pointer.
@@ -922,7 +926,7 @@ extern "system" fn subscribe(
             Ok(found) => found,
             Err(status) => return status,
         };
-        if !(Event::SETTINGS_CHANGED.0..=Event::ALTARS_CHANGED.0).contains(&event.0) {
+        if !(Event::SETTINGS_CHANGED.0..=Event::NIGHT_STARTED.0).contains(&event.0) {
             return Status::MISSING;
         }
         if loader.delivery.get().is_some() {
@@ -1913,6 +1917,45 @@ extern "system" fn notify(me: ModHandle, key: u64, text: Str) -> Status {
             return Status::BAD_ARGS;
         };
         match caller(me).and_then(|loader| crate::notices::send(loader, key, text)) {
+            Ok(()) => Status::OK,
+            Err(status) => status,
+        }
+    })
+}
+
+extern "system" fn time_of_day(
+    me: ModHandle,
+    out: *mut enshwick_loader_api::abi::DaytimeInfo,
+) -> Status {
+    entry("time_of_day", || {
+        match caller(me).and_then(crate::daytime::info) {
+            Ok(info) => put_headed(out, info),
+            Err(status) => status,
+        }
+    })
+}
+
+extern "system" fn set_time_of_day(me: ModHandle, time: i64) -> Status {
+    entry("set_time_of_day", || {
+        match caller(me).and_then(|loader| crate::daytime::set_time(loader, time)) {
+            Ok(()) => Status::OK,
+            Err(status) => status,
+        }
+    })
+}
+
+extern "system" fn time_speed_control(me: ModHandle) -> Status {
+    entry("time_speed_control", || match caller_index(me) {
+        Ok((loader, index)) => crate::daytime::register_speed(loader, index),
+        Err(status) => status,
+    })
+}
+
+extern "system" fn set_time_speed(me: ModHandle, factor: f32) -> Status {
+    entry("set_time_speed", || {
+        match caller_index(me)
+            .and_then(|(loader, index)| crate::daytime::set_speed(loader, index, factor))
+        {
             Ok(()) => Status::OK,
             Err(status) => status,
         }

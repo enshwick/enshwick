@@ -12,7 +12,7 @@ raw table. The exact types and signatures are in the
 | Constant                                                                                            | Value | Meaning                                         |
 | --------------------------------------------------------------------------------------------------- | ----- | ----------------------------------------------- |
 | [`ABI_MAJOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 1     | A loader refuses a mod built for another major. |
-| [`ABI_MINOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 27    | A newer minor only appends.                     |
+| [`ABI_MINOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 28    | A newer minor only appends.                     |
 
 The ABI version is apart from Enshwick Loader's version (such as 0.2.0, see
 [Releasing and updates](releasing.md#versions)): a platform release raises
@@ -131,9 +131,12 @@ id through `Load::subscribe`. See [Events and the scheduler](events.md).
 | 10  | `BUILDING_REMOVED`        | `BuildingRemoved`       | `BuildingData` | the game thread | server |
 | 11  | `JOIN_MISSING`            | `JoinRefused`           | none           | the game thread | client |
 | 12  | `ALTARS_CHANGED`          | `AltarsChanged`         | none           | the game thread | server |
+| 13  | `DAY_STARTED`             | `DayStarted`            | none           | the game thread | server |
+| 14  | `NIGHT_STARTED`           | `NightStarted`          | none           | the game thread | server |
 
 Subscribing needs minor 2; `JOIN_MISSING` came with minor 10 and
-`ALTARS_CHANGED`, raised for mods that opened altars, with minor 15. "Server"
+`ALTARS_CHANGED`, raised for mods that opened altars, with minor 15;
+`DAY_STARTED` and `NIGHT_STARTED` with minor 28. "Server"
 events also reach a client while it hosts a game, solo play included. The
 typed events hand a handler the fields the loader knows, with fields added
 after the event zero; they skip the handler only when the data lacks a field
@@ -222,6 +225,10 @@ marked "init only" are allowed during `enshwick_mod_init` only.
 | `net_send`            | Sends a message on the mod's channel to the server or a player's client; any thread             | 26          |
 | `net_ready`           | Whether a peer takes messages now; any thread                                                   | 26          |
 | `notify`              | Shows a line on a player's screen through the client's loader; server game thread only          | 27          |
+| `time_of_day`         | The clock of the server's world; server game thread only                                        | 28          |
+| `set_time_of_day`     | Sets the time of day; clients follow after the next step; server game thread only               | 28          |
+| `time_speed_control`  | Lets the mod set a factor on the clock's speed; init only                                       | 28          |
+| `set_time_speed`      | Sets the mod's factor on the clock's speed, 0 to 1000; server game thread only                  | 28          |
 
 ## Under an older loader
 
@@ -262,6 +269,7 @@ the mod off with a reason, which the mod's log shows as `off: <reason>`:
 | 25          | craft and build filters         | Off: `craft filters: needs a newer loader` and the like   |
 | 26          | `Load::channel`                 | Off: `mod messages: needs a newer loader`                 |
 | 27          | `World::notify`                 | A chat line                                               |
+| 28          | `Load::clock`, `clock_speed`    | Off: `clock: needs a newer loader` and the like           |
 
 A mod that can do without a feature catches the `Off` and goes on without it
 instead of returning it from `init`.

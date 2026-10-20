@@ -47,6 +47,8 @@ The types are in
 | `SettingsChanged` | none | the mod's settings file changed, or a client's join values changed | loader |
 | `LoaderSettingsChanged` | none | `mod-configs/enshwick.toml` changed | loader |
 | `JoinRefused` | none | the join check kept this client out of a server | game |
+| `DayStarted` | none | the day began in the server's world, by the clock or a time a mod set ([time of day](daytime.md)) | game |
+| `NightStarted` | none | the night began in the server's world | game |
 
 The data:
 

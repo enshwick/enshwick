@@ -6,11 +6,12 @@ use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use crate::abi::{
     AltarInfo, AltarLimitFn, AltarZoneSize, BedCheckFn, BuildCheckFn, BuildInfo, CallerFrame,
-    ComfortFn, CommandCallFn, CraftCheckFn, EntityPlace, Event, EventFn, ExperiencePassFn,
-    GameEventFn, Header, HookSpec, HostApi, InteractionFn, InventoryRequest, InventoryResultFn,
-    ItemData, Level, MidHookFn, MidHookSpec, ModHandle, ModInfo, NetMessageFn, PlayerInfo,
-    RenameCallFn, ResourceKey, ResourcePatchFn, Side, SkillCheckFn, SpawnRequest, Status, StatusFn,
-    Str, SummonFn, SurvivorLookupFn, SurvivorStatusFn, TeleportRequest, ZoneCheckFn,
+    ComfortFn, CommandCallFn, CraftCheckFn, DaytimeInfo, EntityPlace, Event, EventFn,
+    ExperiencePassFn, GameEventFn, Header, HookSpec, HostApi, InteractionFn, InventoryRequest,
+    InventoryResultFn, ItemData, Level, MidHookFn, MidHookSpec, ModHandle, ModInfo, NetMessageFn,
+    PlayerInfo, RenameCallFn, ResourceKey, ResourcePatchFn, Side, SkillCheckFn, SpawnRequest,
+    Status, StatusFn, Str, SummonFn, SurvivorLookupFn, SurvivorStatusFn, TeleportRequest,
+    ZoneCheckFn,
 };
 
 use super::{FakeHost, LinkedHook, ServedResource, SubmittedRequest};
@@ -67,6 +68,10 @@ pub(crate) struct State {
     /// Notices the mod showed: account key and text.
     pub(crate) notices: Vec<(u64, String)>,
     pub(crate) build_filters: Vec<(BuildCheckFn, usize)>,
+    /// The clock `time_of_day` writes, settable while installed.
+    pub(crate) daytime: Option<DaytimeInfo>,
+    /// The mod's factor on the clock's speed, once it asked to change it.
+    pub(crate) clock_speed: Option<f32>,
     /// The world key last handed out, alive until the next one.
     world_key: Option<Box<str>>,
     /// The altars `altars` lists, settable while installed.
@@ -138,6 +143,8 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         teleports: Vec::new(),
         spawns: Vec::new(),
         craft_filters: Vec::new(),
+        daytime: None,
+        clock_speed: None,
         channels: Vec::new(),
         net_sent: Vec::new(),
         notices: Vec::new(),
@@ -1105,6 +1112,51 @@ extern "system" fn spawn(_me: ModHandle, request: *const SpawnRequest, out: *mut
     }
 }
 
+extern "system" fn time_of_day(_me: ModHandle, out: *mut DaytimeInfo) -> Status {
+    let Some(info) = with(None, |s| s.daytime) else {
+        return Status::MISSING;
+    };
+    // SAFETY: the safe layer passes a headed struct for the call.
+    if unsafe { crate::abi::write_headed(out, info) } {
+        Status::OK
+    } else {
+        Status::BAD_ARGS
+    }
+}
+
+extern "system" fn set_time_of_day(_me: ModHandle, time: i64) -> Status {
+    const DAY: i64 = 24 * 3_600_000_000_000;
+    with(Status::MISSING, |s| match s.daytime.as_mut() {
+        Some(info) => {
+            info.time = time.rem_euclid(DAY);
+            let day = (info.day_start..info.day_end).contains(&info.time);
+            info.flags = if day { DaytimeInfo::DAY } else { 0 };
+            Status::OK
+        }
+        None => Status::MISSING,
+    })
+}
+
+extern "system" fn time_speed_control(_me: ModHandle) -> Status {
+    with(Status::MISSING, |s| {
+        s.clock_speed.get_or_insert(1.0);
+        Status::OK
+    })
+}
+
+extern "system" fn set_time_speed(_me: ModHandle, factor: f32) -> Status {
+    if !(0.0..=1000.0).contains(&factor) {
+        return Status::BAD_ARGS;
+    }
+    with(Status::MISSING, |s| match s.clock_speed.as_mut() {
+        Some(speed) => {
+            *speed = factor;
+            Status::OK
+        }
+        None => Status::REFUSED,
+    })
+}
+
 /// table it sees for the process, so it is one static.
 pub(crate) static TABLE: HostApi = HostApi {
     header: Header::of::<HostApi>(),
@@ -1182,4 +1234,8 @@ pub(crate) static TABLE: HostApi = HostApi {
     net_send,
     net_ready,
     notify,
+    time_of_day,
+    set_time_of_day,
+    time_speed_control,
+    set_time_speed,
 };

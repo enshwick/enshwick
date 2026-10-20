@@ -1472,6 +1472,55 @@ impl Installed {
         let _handled = self.raise::<crate::events::AltarsChanged>(&());
     }
 
+    /// Sets the clock the fake's `time_of_day` reports; until then the
+    /// clock is missing, as before a world runs.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_loader_api::abi::{DaytimeInfo, Header};
+    ///
+    /// let loader = enshwick_loader_api::test::FakeHost::new().install();
+    /// loader.set_daytime(DaytimeInfo {
+    ///     header: Header::of::<DaytimeInfo>(),
+    ///     time: 0,
+    ///     day_start: 6 * 3_600_000_000_000,
+    ///     day_end: 18 * 3_600_000_000_000,
+    ///     day_length: 1_800_000_000_000,
+    ///     night_length: 720_000_000_000,
+    ///     speed: 1.0,
+    ///     flags: 0,
+    /// });
+    /// assert_eq!(loader.daytime().map(|info| info.time), Some(0));
+    /// ```
+    pub fn set_daytime(&self, info: crate::abi::DaytimeInfo) {
+        table::with((), |s| s.daytime = Some(info));
+    }
+
+    /// The clock as the mod left it; a time it set moves the clock and its
+    /// day flag.
+    ///
+    /// # Examples
+    ///
+    /// See [`Installed::set_daytime`].
+    #[must_use]
+    pub fn daytime(&self) -> Option<crate::abi::DaytimeInfo> {
+        table::with(None, |s| s.daytime)
+    }
+
+    /// The mod's factor on the clock's speed, once it asked to change it.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick_loader_api::test::FakeHost::new().install();
+    /// assert_eq!(loader.clock_speed(), None);
+    /// ```
+    #[must_use]
+    pub fn clock_speed(&self) -> Option<f32> {
+        table::with(None, |s| s.clock_speed)
+    }
+
     /// Whether the mod opened altars, and whether it controls their zones.
     ///
     /// # Examples
