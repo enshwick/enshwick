@@ -141,6 +141,7 @@ type NodeSpacingFn = unsafe extern "system" fn(node: usize, gap: *const [f32; 2]
 type NodeAlignFn = unsafe extern "system" fn(node: usize, align: *const u16);
 type NodeFloatFn = unsafe extern "system" fn(node: usize, value: f32);
 type NodeStretchFn = unsafe extern "system" fn(node: usize, packed: u64);
+type VisibleFn = unsafe extern "system" fn(mask: u32) -> u8;
 type PanelFn = unsafe extern "system" fn(frame: Ptr, config: *const u8);
 type NavInitFn = unsafe extern "system" fn(nav: Ptr, config: *const u8) -> Ptr;
 type NavInputFn =
@@ -203,6 +204,23 @@ impl Window {
     }
 }
 
+/// The HUD window's own objects, kept in place from its start to its end.
+pub(super) struct HudWindow {
+    object: Buf<0x20>,
+    root: Buf<0x40>,
+    safe: Buf<0x40>,
+}
+
+impl HudWindow {
+    pub(super) const fn new() -> Self {
+        Self {
+            object: Buf::zeroed(),
+            root: Buf::zeroed(),
+            safe: Buf::zeroed(),
+        }
+    }
+}
+
 /// Where the looks the loader uses sit in the look bundle, from reflection.
 #[derive(Debug, Clone, Copy)]
 struct Looks {
@@ -210,6 +228,7 @@ struct Looks {
     styles: [usize; 8],
     title: usize,
     title_size: usize,
+    outline: usize,
     /// Sounds, by `UiWidget::SOUND_*`.
     sounds: [usize; 4],
     setting_off: usize,
@@ -254,11 +273,15 @@ pub(crate) struct Engine {
     sound: SoundFn,
     loca_id: LocaIdFn,
     loca_text: LocaTextFn,
+    hud_visible: VisibleFn,
+    pub(super) hud: u64,
 }
 
 /// Every function the loader calls or hooks, by symbol; each must read its
 /// `<symbol>.bytes` constant.
-const FUNCTIONS: [&str; 34] = [
+const FUNCTIONS: [&str; 36] = [
+    "ui.hud",
+    "ui.hud_visible",
     "ui.popup",
     "ui.window_begin",
     "ui.window_end",
@@ -351,6 +374,7 @@ fn looks(loader: &Loader) -> Option<Looks> {
                 ("keen::FbUiMenuCharacterStyles", "header1"),
             ],
         )?,
+        outline: style(loader, "defaultStyleOutline")?,
         title_size: path(
             loader,
             &[(BUNDLE, "fontSizes"), ("keen::FbUiFontSizes", "caps_large")],
@@ -456,6 +480,8 @@ impl Engine {
             sound: function!("ui.sound", SoundFn),
             loca_id: function!("ui.loca_id", LocaIdFn),
             loca_text: function!("ui.loca_text", LocaTextFn),
+            hud_visible: function!("ui.hud_visible", VisibleFn),
+            hud: loader.address("ui.hud").unwrap_or(0),
         })
     }
 
@@ -816,6 +842,112 @@ impl Engine {
         unsafe { (self.frame_close)(frame.ptr()) };
     }
 
+    /// Whether the game shows HUD elements now: not in a full-screen menu,
+    /// in screenshot mode or in a dialog with a character, as the game's
+    /// status bar asks.
+    ///
+    /// # Safety
+    ///
+    /// Inside a frame, on its thread.
+    pub(super) unsafe fn hud_visible(&self) -> bool {
+        // SAFETY: forwarded from the caller; the game reads the interface
+        // context itself.
+        unsafe { (self.hud_visible)(HUD_MASK) != 0 }
+    }
+
+    /// Starts the HUD window, a layer over the game's HUD that takes no
+    /// input, with a frame over the screen inside its margins.
+    ///
+    /// # Safety
+    ///
+    /// Inside a frame, on its thread, with `hud` kept in place until
+    /// [`Engine::hud_end`]; `name` outlives the frame.
+    pub(super) unsafe fn hud_begin(&self, hud: &mut HudWindow, name: &UiText) {
+        let name = [name.ptr.expose_provenance() as u64, name.len];
+        // SAFETY: the window object and its name, as the game's own HUD
+        // windows pass them: full screen, the HUD's layer 5, flags 0.
+        unsafe { (self.window_begin)(hud.object.ptr(), &raw const name, 1, 5, u32::MAX, 0) };
+        let node = hud.object.read_usize(0x10);
+        // SAFETY: a frame over the window's node.
+        unsafe { (self.frame_from_node)(hud.root.ptr(), node) };
+        // SAFETY: an unnamed frame inside it.
+        unsafe { (self.frame_open)(hud.safe.ptr(), 0) };
+        let safe = hud.safe.read_usize(8);
+        // SAFETY: the frame's node, filling the screen.
+        unsafe { (self.node_stretch)(safe, stretch(1.0, 1.0)) };
+        let margin = [HUD_MARGIN; 4];
+        // SAFETY: the frame's node and its four margins.
+        unsafe { (self.node_padding)(safe, &raw const margin) };
+    }
+
+    /// Ends the HUD window.
+    ///
+    /// # Safety
+    ///
+    /// As for [`Engine::hud_begin`], in the same frame.
+    pub(super) unsafe fn hud_end(&self, hud: &mut HudWindow) {
+        // SAFETY: the frames and window the start opened, innermost first.
+        unsafe { (self.frame_close)(hud.safe.ptr()) };
+        // SAFETY: as above.
+        unsafe { (self.frame_close)(hud.root.ptr()) };
+        // SAFETY: as above.
+        unsafe { (self.window_end)(hud.object.ptr()) };
+    }
+
+    /// Draws a column of HUD items at an anchor of the HUD window: `align`
+    /// is the game's alignment word, `draw` draws the items.
+    ///
+    /// # Safety
+    ///
+    /// Inside the HUD window, on the frame's thread.
+    pub(super) unsafe fn hud_column(&self, align: u16, draw: impl FnOnce()) {
+        let mut column = Buf::<0x40>::zeroed();
+        // SAFETY: an unnamed frame inside the HUD window.
+        unsafe { (self.frame_open)(column.ptr(), 0) };
+        let node = column.read_usize(8);
+        // SAFETY: the column's node and its alignment in the window.
+        unsafe { (self.node_align)(node, &raw const align) };
+        // SAFETY: the column's node and its width.
+        unsafe { (self.node_width)(node, HUD_WIDTH) };
+        let gap = [0.0f32, HUD_GAP];
+        // SAFETY: the column's node, stacking its items.
+        unsafe { (self.node_spacing)(node, &raw const gap, 0) };
+        draw();
+        // SAFETY: the column opened above.
+        unsafe { (self.frame_close)(column.ptr()) };
+    }
+
+    /// Draws a HUD label: body text with the HUD's outline.
+    ///
+    /// # Safety
+    ///
+    /// Inside a HUD column, on the frame's thread; `text` outlives the
+    /// frame.
+    pub(super) unsafe fn hud_label(&self, context: usize, text: &UiText, style: u32, align: u16) {
+        let style = if style == 0 {
+            self.looks.outline
+        } else {
+            self.looks
+                .styles
+                .get(style as usize)
+                .copied()
+                .unwrap_or(self.looks.outline)
+        };
+        let mut label = Buf::<LABEL_SIZE>::zeroed();
+        // SAFETY: a label over `text` in a style of the bundle, wrapped at
+        // the column's width.
+        unsafe { (self.label_new)(label.ptr(), text, Self::bundle(context) + style, 1) };
+        label.u8(LABEL_SHOWN, 1);
+        let node = label.read_usize(8);
+        // SAFETY: the label's node and its alignment in the column.
+        unsafe { (self.node_align)(node, &raw const align) };
+        label.u16(LABEL_ALIGN, align);
+        // SAFETY: the label's node, stretched to the column's width.
+        unsafe { (self.node_stretch)(node, stretch(1.0, 0.0)) };
+        // SAFETY: the label just made.
+        unsafe { (self.label_draw)(label.ptr()) };
+    }
+
     /// Plays interface sound `sound`.
     ///
     /// # Safety
@@ -832,6 +964,12 @@ impl Engine {
 }
 
 const WINDOW_WIDTH: f32 = 900.0;
+/// HUD elements the HUD hides from: full-screen menus, screenshot mode
+/// (0x400) and character dialogs (0x200), as the game's status bar.
+const HUD_MASK: u32 = 0x600;
+const HUD_MARGIN: f32 = 48.0;
+const HUD_WIDTH: f32 = 420.0;
+const HUD_GAP: f32 = 6.0;
 const BAR_HEIGHT: f32 = 20.0;
 const LABEL_SIZE: usize = 0x150;
 const LABEL_ALIGN: usize = 0x38;

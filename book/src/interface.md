@@ -62,7 +62,8 @@ Styles are the game's named ones: `Body`, `Secondary`, `H1` to `H3`,
 `Warning`, `Positive` and `Negative`.
 
 An administrator sees every widget at once with `/enshwick ui-demo`, which
-opens the loader's own demo window on their client.
+opens the loader's own demo window on their client; its last page shows
+samples on the HUD and a marker on the map where the command was typed.
 
 `frame.screen()` says where the player is: the menus, loading, or in game.
 
@@ -70,6 +71,53 @@ A frame copies the texts it is handed, so nothing needs to outlive the call,
 and a frame allocates nothing on the mod's side but its closure's own work.
 A panic in the callback turns the mod off, and the loader closes the window
 it left open.
+
+## The HUD
+
+[`load.on_hud(draw)`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/ui/hud.rs)
+registers a callback that runs once per frame while the game draws its HUD.
+It draws lines and bars at an `Anchor`, a corner or the middle of the top or
+bottom edge; items at one anchor stack in the order drawn, in a column the
+width of a few words. What a frame draws shows that frame only, so an item
+goes away when the mod stops drawing it. The HUD hides with the game's own:
+with the HUD turned off, in full-screen menus, in screenshot mode and in a
+dialog with a character. Body text gets the game's outlined HUD style.
+
+```rust
+use enshwick_loader_api::ui::{Anchor, Label, Style};
+
+fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+    let mut seconds = 120u32;
+    load.on_hud(move |hud| {
+        seconds = seconds.saturating_sub(1);
+        let text = format!("Raid in {}:{:02}", seconds / 60, seconds % 60);
+        hud.text(Anchor::TopRight, Label::new(&text).style(Style::Warning));
+        hud.progress(Anchor::TopRight, seconds as f32 / 120.0);
+    })?;
+    Ok(())
+}
+```
+
+## Map markers
+
+[`Ui::set_markers`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/ui/map.rs)
+shows the mod's markers on the map, at most 256, each with a position in
+metres, a label and one of the game's eight custom marker colours; the next
+call replaces them all, and `clear_markers` takes them off. It works from any
+thread and copies what it is handed. The markers use one of the game's
+custom marker types with a label; the compass does not show them.
+
+```rust
+use enshwick_loader_api::ui::{Marker, MarkerColor, Ui};
+
+fn mark_safes(ui: Ui, safes: &[([f64; 3], String)]) {
+    let markers: Vec<Marker<'_>> = safes
+        .iter()
+        .map(|(at, owner)| Marker::new(*at).label(owner).color(MarkerColor::Green))
+        .collect();
+    let _shown = ui.set_markers(&markers);
+}
+```
 
 ## Dialogs
 
@@ -112,8 +160,9 @@ never run and dialogs show as system message boxes instead.
 
 With the `test` feature, the [fake loader](testing.md) runs frame callbacks
 with `draw_frame`, which returns what they drew as `Drawn` values, and takes
-the player's inputs for the next frame with `input`, such as
-`Input::Click` for the button labelled "Close"; `dialogs` lists the
-dialogs waiting and `answer` answers the oldest. A fake built with
-`.side(Side::CLIENT)` serves the interface; the default server side turns it
-away, as a real server does.
+the player's inputs for the next frame with `input`, such as `Input::Click`
+for the button labelled "Close". `draw_hud` runs the HUD callbacks and
+returns their items with their anchors, `markers` lists the mod's markers,
+`dialogs` lists the dialogs waiting and `answer` answers the oldest. A fake
+built with `.side(Side::CLIENT)` serves the interface; the default server
+side turns it away, as a real server does.

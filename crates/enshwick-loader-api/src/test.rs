@@ -173,6 +173,21 @@ pub enum Drawn {
     Sound(u32),
 }
 
+/// A marker the mod set on the map, as [`Installed::markers`] reports it.
+///
+/// # Examples
+///
+/// See [`Installed::markers`].
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FakeMarker {
+    /// Where, in 32.32 fixed-point metres.
+    pub position: [i64; 3],
+    /// The label.
+    pub label: String,
+    /// The colour, `UiMarker::WHITE` and on.
+    pub color: u32,
+}
+
 /// What the player does to a widget, given with [`Installed::input`].
 ///
 /// # Examples
@@ -2462,6 +2477,56 @@ impl Installed {
             }
         }
         drawn
+    }
+
+    /// Runs the mod's HUD callbacks once and returns what they drew, each
+    /// item with its anchor (`UiWidget::TOP_LEFT` and on), in order.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_loader_api::abi::Side;
+    ///
+    /// let loader = enshwick_loader_api::test::FakeHost::new().side(Side::CLIENT).install();
+    /// assert!(loader.draw_hud().is_empty());
+    /// ```
+    #[must_use]
+    pub fn draw_hud(&self) -> Vec<(u32, Drawn)> {
+        let huds = table::with(Vec::new(), |s| s.huds.clone());
+        let mut drawn = Vec::new();
+        for (token, (callback, user)) in (1u64..).zip(huds) {
+            table::with((), |s| s.hud = Some((token, Vec::new())));
+            let frame = crate::abi::UiFrame {
+                header: Header::of::<crate::abi::UiFrame>(),
+                token,
+                screen: crate::abi::UiFrame::IN_GAME,
+                reserved: 0,
+            };
+            // SAFETY: a callback the mod registered with its own pointer.
+            unsafe {
+                callback(
+                    &raw const frame,
+                    core::ptr::with_exposed_provenance_mut(user),
+                );
+            }
+            if let Some((_, list)) = table::with(None, |s| s.hud.take()) {
+                drawn.extend(list);
+            }
+        }
+        drawn
+    }
+
+    /// The mod's markers on the map, as it set them last.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick_loader_api::test::FakeHost::new().install();
+    /// assert!(loader.markers().is_empty());
+    /// ```
+    #[must_use]
+    pub fn markers(&self) -> Vec<FakeMarker> {
+        table::with(Vec::new(), |s| s.markers.clone())
     }
 
     /// Gives the widget whose text or label is `text` an input from the

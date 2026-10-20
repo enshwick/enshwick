@@ -260,6 +260,20 @@ pub(crate) fn template(loader: &Loader, entity: u32) -> Result<[u8; 16], Status>
 }
 
 /// Every player in game, in slot order.
+/// Where `entity` stands, in 32.32 fixed-point metres, from its
+/// `CurrentTransform`; on the server's game thread.
+pub(crate) fn fixed_position(loader: &Loader, entity: u32) -> Option<[i64; 3]> {
+    let info = loader
+        .reflection
+        .type_info("keen::ecs::CurrentTransform")
+        .ok()?;
+    let hash = type_hash(loader, info.va())?;
+    let data = component(loader, entity, hash).ok()?;
+    // SAFETY: a live CurrentTransform starts with its position, three
+    // fixed-point `i64`, read at once on the game thread.
+    Some(unsafe { data.cast::<[i64; 3]>().read_unaligned() })
+}
+
 pub(crate) fn players(loader: &Loader) -> Result<Vec<PlayerInfo>, Status> {
     let layout = layout(loader).ok_or(Status::MISSING)?;
     let server = server()?;

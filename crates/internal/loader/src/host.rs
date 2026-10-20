@@ -628,6 +628,8 @@ pub(crate) static API: HostApi = HostApi {
     ui_frame,
     ui_widget,
     ui_dialog,
+    ui_hud,
+    ui_markers,
 };
 
 /// A static slice from a pointer and a count, empty for a null pointer.
@@ -2444,6 +2446,42 @@ extern "system" fn ui_widget(
             return Status::BAD_ARGS;
         };
         crate::ui::widget(loader, index, frame, widget)
+    })
+}
+
+extern "system" fn ui_hud(
+    me: ModHandle,
+    callback: api_frame::UiFrameFn,
+    user: *mut core::ffi::c_void,
+) -> Status {
+    entry("ui_hud", || match caller_index(me) {
+        Ok((loader, index)) => crate::ui::register_hud(loader, index, callback, user),
+        Err(status) => status,
+    })
+}
+
+extern "system" fn ui_markers(
+    me: ModHandle,
+    markers: *const api_frame::UiMarker,
+    count: u32,
+) -> Status {
+    entry("ui_markers", || {
+        let (loader, index) = match caller_index(me) {
+            Ok(found) => found,
+            Err(status) => return status,
+        };
+        if loader.side != Side::CLIENT {
+            return Status::MISSING;
+        }
+        let given = if count == 0 {
+            &[][..]
+        } else if markers.is_null() {
+            return Status::BAD_ARGS;
+        } else {
+            // SAFETY: the mod passes `count` markers, valid for the call.
+            unsafe { core::slice::from_raw_parts(markers, count as usize) }
+        };
+        crate::ui::set_markers(index, given)
     })
 }
 

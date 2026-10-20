@@ -12,6 +12,7 @@
 mod demo;
 mod dialog;
 mod engine;
+mod map;
 
 use core::cell::{Cell, RefCell};
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
@@ -23,7 +24,8 @@ use enshwick_loader_api::abi::{
 
 pub(crate) use demo::open as open_demo;
 pub(crate) use dialog::show;
-use engine::{Engine, PopupFn, UiText, Window};
+use engine::{Engine, HudWindow, PopupFn, UiText, Window};
+pub(crate) use map::set as set_markers;
 
 use crate::chains::Next;
 use crate::host::{Loader, Registered};
@@ -35,6 +37,15 @@ static ENGINE: OnceLock<Engine> = OnceLock::new();
 static PENDING: Mutex<Vec<Registered<UiFrameFn>>> = Mutex::new(Vec::new());
 /// The frame callbacks once sealed.
 static FRAMES: OnceLock<Box<[Registered<UiFrameFn>]>> = OnceLock::new();
+/// HUD callbacks while mods initialise.
+static PENDING_HUD: Mutex<Vec<Registered<UiFrameFn>>> = Mutex::new(Vec::new());
+/// The HUD callbacks once sealed.
+static HUDS: OnceLock<Box<[Registered<UiFrameFn>]>> = OnceLock::new();
+// SAFETY: the slot joins the chain of the game's HUD, typed `HudFn`.
+static HUD_NEXT: Next<HudFn> = unsafe { Next::new() };
+type HudFn = unsafe extern "system" fn(arg: *mut u8);
+/// HUD items a frame gathers at most.
+const MAX_HUD_ITEMS: usize = 128;
 static NEXT_TOKEN: AtomicU64 = AtomicU64::new(1);
 /// The thread that draws the interface, once it drew.
 static UI_THREAD: AtomicU32 = AtomicU32::new(0);
@@ -51,6 +62,18 @@ struct Drawing {
     owner: usize,
     context: usize,
     window_open: bool,
+    /// Drawing the HUD: items gather for their anchors.
+    hud: bool,
+}
+
+/// A HUD item a callback drew: anchor, then a label or a bar.
+#[derive(Clone, Copy)]
+struct HudItem {
+    anchor: u32,
+    kind: u32,
+    style: u32,
+    text: UiText,
+    value: f32,
 }
 
 /// Mod texts of the last frames, each frame's in its own buffer.
@@ -103,6 +126,8 @@ thread_local! {
     static DRAWING: Cell<Option<Drawing>> = const { Cell::new(None) };
     static WINDOW: RefCell<Window> = const { RefCell::new(Window::new()) };
     static ARENA: RefCell<Arena> = const { RefCell::new(Arena::new()) };
+    static HUD_ITEMS: RefCell<Vec<HudItem>> = const { RefCell::new(Vec::new()) };
+    static HUD_WINDOW: RefCell<HudWindow> = const { RefCell::new(HudWindow::new()) };
 }
 
 fn thread_id() -> u32 {
@@ -124,6 +149,26 @@ pub(crate) fn register_frame(
         return Status::TOO_LATE;
     }
     PENDING
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .push(Registered::new(owner, callback, user));
+    Status::OK
+}
+
+/// Registers a mod's HUD callback; client only, during init.
+pub(crate) fn register_hud(
+    loader: &Loader,
+    owner: usize,
+    callback: UiFrameFn,
+    user: *mut core::ffi::c_void,
+) -> Status {
+    if loader.side != Side::CLIENT {
+        return Status::MISSING;
+    }
+    if HUDS.get().is_some() {
+        return Status::TOO_LATE;
+    }
+    PENDING_HUD
         .lock()
         .unwrap_or_else(PoisonError::into_inner)
         .push(Registered::new(owner, callback, user));
@@ -177,9 +222,13 @@ pub(crate) fn link(loader: &'static Loader) {
     let frames = crate::host::take(&PENDING);
     let count = frames.len();
     let _sealed = FRAMES.set(frames.into_boxed_slice());
+    let huds = crate::host::take(&PENDING_HUD);
+    let hud_count = huds.len();
+    let _sealed = HUDS.set(huds.into_boxed_slice());
     if loader.side != Side::CLIENT {
         return;
     }
+    map::link(loader);
     let engine = match Engine::resolve(loader) {
         Ok(engine) => engine,
         Err(missing) => {
@@ -188,7 +237,15 @@ pub(crate) fn link(loader: &'static Loader) {
         }
     };
     let popup = engine.popup;
+    let hud = engine.hud;
     let _first = ENGINE.set(engine);
+    loader.link_feature(
+        "HUD",
+        Some(hud),
+        &HUD_NEXT,
+        hud_detour as HudFn,
+        HookFlags::NONE,
+    );
     if loader.link_feature(
         "interface",
         Some(popup),
@@ -196,7 +253,10 @@ pub(crate) fn link(loader: &'static Loader) {
         detour as PopupFn,
         HookFlags::NONE,
     ) {
-        crate::log!(INFO, "interface: {count} frame callbacks from mods");
+        crate::log!(
+            INFO,
+            "interface: {count} frame and {hud_count} HUD callbacks from mods"
+        );
     }
 }
 
@@ -237,6 +297,7 @@ unsafe extern "system" fn detour(state: *mut u8) {
     }
     let drawn = std::panic::catch_unwind(|| {
         UI_THREAD.store(thread_id(), Ordering::Release);
+        map::note(context);
         ARENA.with_borrow_mut(Arena::next_frame);
         frames(engine, context);
         // SAFETY: inside the frame, on its thread, no window open.
@@ -248,6 +309,145 @@ unsafe extern "system" fn detour(state: *mut u8) {
     if drawn.is_err() {
         crate::log!(ERROR, "interface: the loader panicked while drawing");
     }
+}
+
+unsafe extern "system" fn hud_detour(arg: *mut u8) {
+    // SAFETY: forwarded unchanged.
+    unsafe { HUD_NEXT.get()(arg) };
+    let Some(engine) = ENGINE.get() else {
+        return;
+    };
+    let context = engine.context();
+    if context == 0 {
+        return;
+    }
+    let drawn = std::panic::catch_unwind(|| {
+        // SAFETY: inside the frame, after the game's HUD, on its thread.
+        if unsafe { engine.hud_visible() } {
+            hud(engine, context);
+        }
+    });
+    if drawn.is_err() {
+        crate::log!(
+            ERROR,
+            "interface: the loader panicked while drawing the HUD"
+        );
+    }
+}
+
+/// The game's alignment word for a HUD anchor, and the text alignment
+/// inside its column.
+fn anchor_align(anchor: u32) -> (u16, u16) {
+    let horizontal = [1, 2, 3, 1, 2, 3][anchor as usize % 6];
+    let vertical = if anchor < 3 { 1 } else { 3 };
+    (vertical << 8 | horizontal, 0x200 | horizontal)
+}
+
+fn hud(engine: &Engine, context: usize) {
+    let Some(huds) = HUDS.get() else {
+        return;
+    };
+    HUD_ITEMS.with_borrow_mut(Vec::clear);
+    for registered in huds.iter().filter(|r| r.live()) {
+        let token = NEXT_TOKEN.fetch_add(1, Ordering::Relaxed);
+        DRAWING.set(Some(Drawing {
+            token,
+            owner: registered.owner,
+            context,
+            window_open: false,
+            hud: true,
+        }));
+        let frame = UiFrame {
+            header: enshwick_loader_api::abi::Header::of::<UiFrame>(),
+            token,
+            screen: UiFrame::IN_GAME,
+            reserved: 0,
+        };
+        // SAFETY: the mod's callback with its own pointer; it does not unwind.
+        unsafe { (registered.callback)(&raw const frame, registered.user()) };
+        DRAWING.set(None);
+    }
+    HUD_ITEMS.with_borrow_mut(demo::hud_samples);
+    HUD_ITEMS.with_borrow(|items| {
+        if items.is_empty() {
+            return;
+        }
+        let name = copy(&[b"enshwick/hud"]);
+        HUD_WINDOW.with_borrow_mut(|window| {
+            // SAFETY: inside the frame, on its thread; the window object
+            // stays in the thread's storage until it ends below.
+            unsafe { engine.hud_begin(window, &name) };
+            for anchor in 0..6 {
+                if !items.iter().any(|i| i.anchor == anchor) {
+                    continue;
+                }
+                let (column, text) = anchor_align(anchor);
+                let draw_items = || {
+                    for item in items.iter().filter(|i| i.anchor == anchor) {
+                        if item.kind == UiWidget::LABEL {
+                            // SAFETY: inside the HUD column; the text lives
+                            // in the arena.
+                            unsafe { engine.hud_label(context, &item.text, item.style, text) };
+                        } else {
+                            // SAFETY: inside the HUD column.
+                            unsafe { engine.progress(item.value, 0.0, 1.0) };
+                        }
+                    }
+                };
+                // SAFETY: inside the HUD window.
+                unsafe { engine.hud_column(column, draw_items) };
+            }
+            // SAFETY: the window started above.
+            unsafe { engine.hud_end(window) };
+        });
+    });
+}
+
+/// Gathers a HUD callback's widget for its anchor.
+fn gather(raw: &UiWidget) -> Status {
+    if raw.anchor > UiWidget::BOTTOM_RIGHT {
+        return Status::BAD_ARGS;
+    }
+    let item = match raw.kind {
+        UiWidget::LABEL => {
+            let Some(text) = read(raw.text) else {
+                return Status::BAD_ARGS;
+            };
+            HudItem {
+                anchor: raw.anchor,
+                kind: raw.kind,
+                style: raw.style,
+                text: copy(&[text]),
+                value: 0.0,
+            }
+        }
+        UiWidget::PROGRESS => {
+            if !(raw.value.is_finite() && raw.min.is_finite() && raw.max.is_finite())
+                || raw.max <= raw.min
+            {
+                return Status::BAD_ARGS;
+            }
+            HudItem {
+                anchor: raw.anchor,
+                kind: raw.kind,
+                style: 0,
+                text: UiText::EMPTY,
+                value: ((raw.value - raw.min) / (raw.max - raw.min)).clamp(0.0, 1.0),
+            }
+        }
+        _ => return Status::REFUSED,
+    };
+    HUD_ITEMS.with_borrow_mut(|items| {
+        if items.capacity() == 0 {
+            items.reserve(MAX_HUD_ITEMS);
+        }
+        if items.len() < MAX_HUD_ITEMS {
+            items.push(item);
+            Status::OK
+        } else {
+            Status::REFUSED
+        }
+    })
 }
 
 /// The screen for the app state byte.
@@ -271,6 +471,7 @@ fn frames(engine: &Engine, context: usize) {
             owner: registered.owner,
             context,
             window_open: false,
+            hud: false,
         }));
         let frame = UiFrame {
             header: enshwick_loader_api::abi::Header::of::<UiFrame>(),
@@ -303,6 +504,9 @@ pub(crate) fn widget(loader: &Loader, owner: usize, token: u64, raw: &mut UiWidg
         return Status::WRONG_THREAD;
     }
     raw.result = 0;
+    if drawing.hud {
+        return gather(raw);
+    }
     let status = draw(loader, engine, &mut drawing, raw);
     DRAWING.set(Some(drawing));
     status

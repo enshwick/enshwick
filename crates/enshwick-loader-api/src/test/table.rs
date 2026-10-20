@@ -12,7 +12,8 @@ use crate::abi::{
     MidHookFn, MidHookSpec, ModHandle, ModInfo, NetMessageFn, PlayerInfo, RenameCallFn,
     ResourceKey, ResourcePatchFn, Side, SkillCheckFn, SpawnRequest, Status, StatusFn, Str,
     SummonFn, SurvivorLookupFn, SurvivorStatusFn, TeleportRequest, TerrainEdit,
-    TerrainMaterialInfo, UiAnswerFn, UiDialog, UiFrameFn, UiWidget, WeatherFront, ZoneCheckFn,
+    TerrainMaterialInfo, UiAnswerFn, UiDialog, UiFrameFn, UiMarker, UiWidget, WeatherFront,
+    ZoneCheckFn,
 };
 
 use super::{FakeHost, LinkedHook, ServedResource, SubmittedRequest};
@@ -97,6 +98,13 @@ pub(crate) struct State {
     pub(crate) config_schema: Option<String>,
     /// Frame callbacks: callback and pointer.
     pub(crate) frames: Vec<(UiFrameFn, usize)>,
+    /// HUD callbacks: callback and pointer.
+    pub(crate) huds: Vec<(UiFrameFn, usize)>,
+    /// What the HUD drawing now drew, with each item's anchor, while one
+    /// draws.
+    pub(crate) hud: Option<(u64, Vec<(u32, super::Drawn)>)>,
+    /// The mod's markers on the map.
+    pub(crate) markers: Vec<super::FakeMarker>,
     /// The frame drawing now: its token, whether a window is open and what
     /// was drawn.
     pub(crate) frame: Option<(u64, bool, Vec<super::Drawn>)>,
@@ -198,6 +206,9 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         net_sent: Vec::new(),
         notices: Vec::new(),
         frames: Vec::new(),
+        huds: Vec::new(),
+        hud: None,
+        markers: Vec::new(),
         frame: None,
         inputs: Vec::new(),
         dialogs: Vec::new(),
@@ -1639,6 +1650,26 @@ fn input(s: &mut State, text: &str) -> Option<super::Input> {
     Some(s.inputs.remove(at).1)
 }
 
+/// Records a HUD callback's widget; `None` outside a HUD callback.
+fn hud_widget(s: &mut State, frame: u64, w: &UiWidget, label: &str) -> Option<Status> {
+    let (token, list) = s.hud.as_mut()?;
+    if *token != frame {
+        return None;
+    }
+    let drawn = match w.kind {
+        UiWidget::LABEL => super::Drawn::Label {
+            text: label.to_owned(),
+            style: w.style,
+        },
+        UiWidget::PROGRESS => super::Drawn::Progress {
+            fraction: (w.value - w.min) / (w.max - w.min),
+        },
+        _ => return Some(Status::REFUSED),
+    };
+    list.push((w.anchor, drawn));
+    Some(Status::OK)
+}
+
 extern "system" fn ui_widget(_me: ModHandle, frame: u64, widget: *mut UiWidget) -> Status {
     use super::{Drawn, Input};
     // SAFETY: the safe layer passes its own widget, valid for the call.
@@ -1656,6 +1687,9 @@ extern "system" fn ui_widget(_me: ModHandle, frame: u64, widget: *mut UiWidget) 
             .collect()
     };
     with(Status::MISSING, |s| {
+        if let Some(status) = hud_widget(s, frame, w, &label) {
+            return status;
+        }
         let open = match s.frame.as_ref() {
             Some((token, open, _)) if *token == frame => *open,
             _ => return Status::WRONG_THREAD,
@@ -1736,6 +1770,43 @@ extern "system" fn ui_widget(_me: ModHandle, frame: u64, widget: *mut UiWidget) 
             }
             list.push(drawn);
         }
+        Status::OK
+    })
+}
+
+extern "system" fn ui_hud(_me: ModHandle, callback: UiFrameFn, user: *mut c_void) -> Status {
+    with(Status::MISSING, |s| {
+        if s.host.side == Side::SERVER {
+            return Status::MISSING;
+        }
+        s.huds.push((callback, user.expose_provenance()));
+        Status::OK
+    })
+}
+
+extern "system" fn ui_markers(_me: ModHandle, markers: *const UiMarker, count: u32) -> Status {
+    if count as usize > crate::ui::MAX_MARKERS || (markers.is_null() && count > 0) {
+        return Status::BAD_ARGS;
+    }
+    let given = if count == 0 {
+        &[][..]
+    } else {
+        // SAFETY: the safe layer passes `count` markers, valid for the call.
+        unsafe { core::slice::from_raw_parts(markers, count as usize) }
+    };
+    let markers: Vec<super::FakeMarker> = given
+        .iter()
+        .map(|m| super::FakeMarker {
+            position: m.position,
+            label: text(m.label),
+            color: m.color,
+        })
+        .collect();
+    with(Status::MISSING, |s| {
+        if s.host.side == Side::SERVER {
+            return Status::MISSING;
+        }
+        s.markers = markers;
         Status::OK
     })
 }
@@ -1871,4 +1942,6 @@ pub(crate) static TABLE: HostApi = HostApi {
     ui_frame,
     ui_widget,
     ui_dialog,
+    ui_hud,
+    ui_markers,
 };

@@ -1,7 +1,8 @@
 //! `/enshwick ui-demo`: a window of every widget the loader draws, for a
 //! visual check in game. An administrator's command on the server tells the
-//! client's loader to open it; the window has three pages and closes with
-//! its Close button.
+//! client's loader to open it, with where the administrator stood; the
+//! window has four pages, the last one showing samples on the HUD and a
+//! marker on the map, and closes with its Close button.
 
 use core::cell::RefCell;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -14,6 +15,11 @@ use super::engine::{Engine, Window};
 
 /// Asked to open, from the thread that takes the server's chat.
 static OPEN: AtomicBool = AtomicBool::new(false);
+/// Where the administrator stood when they asked, in 32.32 fixed-point
+/// metres.
+static WHERE: Mutex<Option<[i64; 3]>> = Mutex::new(None);
+/// The HUD samples show, and how full their bar is, for the HUD's frame.
+static HUD_SAMPLES: Mutex<Option<f32>> = Mutex::new(None);
 
 /// The demo's widget state.
 struct Demo {
@@ -23,6 +29,8 @@ struct Demo {
     smooth: f32,
     pick: u32,
     answer: Option<&'static str>,
+    hud: bool,
+    marker: bool,
     window: Window,
 }
 
@@ -33,12 +41,45 @@ thread_local! {
 /// The answer to the demo's dialog, waiting for the thread that draws.
 static ANSWER: Mutex<Option<&'static str>> = Mutex::new(None);
 
-/// Opens the demo at its next frame.
-pub(crate) fn open() {
+/// Opens the demo at its next frame; `at` is where the administrator stood.
+pub(crate) fn open(at: Option<[i64; 3]>) {
+    *WHERE.lock().unwrap_or_else(PoisonError::into_inner) = at;
     OPEN.store(true, Ordering::Release);
 }
 
-const PAGES: usize = 3;
+/// The HUD samples while they show, for the HUD's frame: a label at the top
+/// right, a bar under it, and a label at the bottom left.
+pub(super) fn hud_samples(items: &mut Vec<super::HudItem>) {
+    let Some(fill) = *HUD_SAMPLES.lock().unwrap_or_else(PoisonError::into_inner) else {
+        return;
+    };
+    let label = |anchor: u32, words: &[u8], style: u32| super::HudItem {
+        anchor,
+        kind: UiWidget::LABEL,
+        style,
+        text: super::copy(&[words]),
+        value: 0.0,
+    };
+    items.push(label(
+        UiWidget::TOP_RIGHT,
+        b"Enshwick HUD sample",
+        UiWidget::STYLE_BODY,
+    ));
+    items.push(super::HudItem {
+        anchor: UiWidget::TOP_RIGHT,
+        kind: UiWidget::PROGRESS,
+        style: 0,
+        text: super::engine::UiText::EMPTY,
+        value: fill,
+    });
+    items.push(label(
+        UiWidget::BOTTOM_LEFT,
+        b"Bottom left, in the warning style",
+        UiWidget::STYLE_WARNING,
+    ));
+}
+
+const PAGES: usize = 4;
 const OPTIONS: [&[u8]; 3] = [b"First", b"Second", b"Third"];
 
 fn answer_name(raw: Option<u32>) -> &'static str {
@@ -64,6 +105,8 @@ pub(super) unsafe fn draw(engine: &Engine, context: usize) {
             smooth: 0.25,
             pick: 0,
             answer: None,
+            hud: false,
+            marker: false,
             window: Window::new(),
         }));
         crate::log!(INFO, "interface: the demo opened");
@@ -77,7 +120,12 @@ pub(super) unsafe fn draw(engine: &Engine, context: usize) {
         }
         // SAFETY: forwarded from the caller.
         let close = unsafe { page(engine, context, demo) };
+        *HUD_SAMPLES.lock().unwrap_or_else(PoisonError::into_inner) =
+            (demo.hud && !close).then_some(demo.smooth);
         if close {
+            if demo.marker {
+                let _cleared = super::map::set(crate::chains::LOADER, &[]);
+            }
             *slot = None;
             crate::log!(INFO, "interface: the demo closed");
         }
@@ -100,7 +148,8 @@ unsafe fn page(engine: &Engine, context: usize, demo: &mut Demo) -> bool {
     match demo.page {
         0 => text_page(&paint),
         1 => rows_page(&paint, demo),
-        _ => buttons_page(&paint, demo),
+        2 => buttons_page(&paint, demo),
+        _ => hud_page(&paint, demo),
     }
     if demo.page + 1 < PAGES && paint.button(b"Next page", true) {
         demo.page += 1;
@@ -115,7 +164,7 @@ unsafe fn page(engine: &Engine, context: usize, demo: &mut Demo) -> bool {
 }
 
 fn text_page(paint: &Painter<'_>) {
-    paint.label(b"Page 1 of 3: text styles", UiWidget::STYLE_H3, false, true);
+    paint.label(b"Page 1 of 4: text styles", UiWidget::STYLE_H3, false, true);
     for (words, style) in [
         (&b"Body text"[..], UiWidget::STYLE_BODY),
         (b"Secondary text", UiWidget::STYLE_SECONDARY),
@@ -138,7 +187,7 @@ fn text_page(paint: &Painter<'_>) {
 
 fn rows_page(paint: &Painter<'_>, demo: &mut Demo) {
     paint.label(
-        b"Page 2 of 3: settings rows",
+        b"Page 2 of 4: settings rows",
         UiWidget::STYLE_H3,
         false,
         true,
@@ -172,9 +221,53 @@ fn rows_page(paint: &Painter<'_>, demo: &mut Demo) {
     paint.progress(demo.smooth, 0.0, 1.0);
 }
 
+fn hud_page(paint: &Painter<'_>, demo: &mut Demo) {
+    paint.label(
+        b"Page 4 of 4: the HUD and the map",
+        UiWidget::STYLE_H3,
+        false,
+        true,
+    );
+    paint.label(
+        b"Close this window to see the HUD samples: a line and a bar at the top right, a line at the bottom left. They hide with the HUD, in menus and in screenshot mode.",
+        UiWidget::STYLE_SECONDARY,
+        true,
+        false,
+    );
+    if let Some(on) = paint.toggle(b"Show HUD samples", demo.hud, false) {
+        demo.hud = on;
+    }
+    let at = *WHERE.lock().unwrap_or_else(PoisonError::into_inner);
+    let Some(position) = at else {
+        paint.label(
+            b"The server sent no position for a marker.",
+            UiWidget::STYLE_WARNING,
+            true,
+            false,
+        );
+        return;
+    };
+    if let Some(on) = paint.toggle(
+        b"Show a map marker where you typed the command",
+        demo.marker,
+        false,
+    ) {
+        demo.marker = on;
+        let marker = enshwick_loader_api::abi::UiMarker {
+            header: enshwick_loader_api::abi::Header::of::<enshwick_loader_api::abi::UiMarker>(),
+            position,
+            label: enshwick_loader_api::abi::Str::new("Enshwick demo marker"),
+            color: enshwick_loader_api::abi::UiMarker::GREEN,
+            reserved: 0,
+        };
+        let markers: &[_] = if on { &[marker] } else { &[] };
+        let _set = super::map::set(crate::chains::LOADER, markers);
+    }
+}
+
 fn buttons_page(paint: &Painter<'_>, demo: &Demo) {
     paint.label(
-        b"Page 3 of 3: buttons, sounds and the dialog",
+        b"Page 3 of 4: buttons, sounds and the dialog",
         UiWidget::STYLE_H3,
         false,
         true,

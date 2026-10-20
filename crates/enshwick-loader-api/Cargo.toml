@@ -54,6 +54,10 @@ name = "game_settings"
 required-features = ["test"]
 
 [[test]]
+name = "hud"
+required-features = ["test"]
+
+[[test]]
 name = "inventory"
 required-features = ["test"]
 
