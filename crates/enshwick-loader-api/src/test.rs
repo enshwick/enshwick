@@ -1829,6 +1829,33 @@ impl Installed {
         table::with(Vec::new(), |s| s.writes.clone())
     }
 
+    /// The game events the mod raised, `(type hash, bytes)`, in order.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick_loader_api::test::FakeHost::new().install();
+    /// assert!(loader.emits().is_empty());
+    /// ```
+    #[must_use]
+    pub fn emits(&self) -> Vec<(u32, Vec<u8>)> {
+        table::with(Vec::new(), |s| s.emits.clone())
+    }
+
+    /// The teleports the mod asked for, in order; an entity the fake does
+    /// not know is refused.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick_loader_api::test::FakeHost::new().install();
+    /// assert!(loader.teleports().is_empty());
+    /// ```
+    #[must_use]
+    pub fn teleports(&self) -> Vec<crate::abi::TeleportRequest> {
+        table::with(Vec::new(), |s| s.teleports.clone())
+    }
+
     /// How many saves the mod asked for.
     ///
     /// # Examples

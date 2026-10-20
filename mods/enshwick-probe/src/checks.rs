@@ -4,7 +4,9 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
+use enshwick_loader_api::actions::{Actions, Teleport};
 use enshwick_loader_api::ecs::Entity;
+use enshwick_loader_api::game_events::{EventType, RawGameEvent};
 use enshwick_loader_api::schedule::Scheduler;
 use enshwick_loader_api::state::WorldStore;
 use enshwick_loader_api::world::{ComponentType, World, WorldError};
@@ -16,6 +18,8 @@ const SAMPLE: usize = 5;
 const DESTROY_WAIT: Duration = Duration::from_secs(2);
 /// How long a written component may take to reach its replicated copy.
 const REPLICATION_WAIT: Duration = Duration::from_secs(1);
+/// Where the probe pings, far from anything a player would see.
+const PING_AT: [f64; 3] = [-12345.0, -500.0, 777.0];
 
 /// What the probe keeps per world: how often it checked it.
 #[derive(Debug, Default, serde::Deserialize, serde::Serialize)]
@@ -34,6 +38,10 @@ pub(crate) struct Checks {
     scheduler: Scheduler,
     /// Whether the world refused the replicated health as a writable type.
     copies_refused: bool,
+    actions: Actions,
+    died: EventType,
+    /// Set from the ping the probe raised until the game hands it back.
+    ping_sent: AtomicBool,
 }
 
 fn pass(what: &str) {
@@ -57,6 +65,9 @@ impl Checks {
             copies_refused: world
                 .writable_type(load, "keen::ecs::NetworkHealth")
                 .is_err(),
+            actions: load.actions()?,
+            died: load.event_type("keen::ecs::EntityDiedEvent")?,
+            ping_sent: AtomicBool::new(false),
         })
     }
 
@@ -70,6 +81,7 @@ impl Checks {
         self.queries();
         self.stats();
         self.writes();
+        self.actions();
         match self.store.update(|visits| {
             visits.checks += 1;
             visits.checks
@@ -212,6 +224,40 @@ impl Checks {
                 Err(why) => fail(&format!("health of entity {} not put back: {why}", entity.0)),
             }
         });
+    }
+
+    /// Raises a ping and checks two refusals: a type off the allow list and
+    /// a teleport of an entity not in the world.
+    fn actions(&self) {
+        match self.actions.ping(Entity::NONE, PING_AT) {
+            Ok(()) => {
+                self.ping_sent.store(true, Ordering::Release);
+                pass("ping raised; the game should hand it back next step");
+            }
+            Err(why) => fail(&format!("ping: {why}")),
+        }
+        let bytes = vec![0u8; self.died.size() as usize];
+        match self.actions.emit_raw(self.died, &bytes) {
+            Err(WorldError::Refused) => pass("emit refuses a type off the allow list"),
+            other => fail(&format!("emit of a death: {other:?}")),
+        }
+        match self
+            .actions
+            .teleport(Entity(u32::MAX - 1), [0.0; 3], Teleport::new())
+        {
+            Err(WorldError::Gone) => pass("teleport refuses an entity not in the world"),
+            other => fail(&format!("teleport of a missing entity: {other:?}")),
+        }
+    }
+
+    /// Notes a ping the game raised, and whether it is the probe's.
+    pub(crate) fn pinged(&self, event: &RawGameEvent<'_>) {
+        let x = event.read::<i64>(16);
+        if x == Some(enshwick_loader_api::ecs::fixed(PING_AT)[0])
+            && self.ping_sent.swap(false, Ordering::AcqRel)
+        {
+            pass("the game handed back the probe's ping as a game event");
+        }
     }
 
     /// Compares `entity`'s vitals with the health the server replicates.

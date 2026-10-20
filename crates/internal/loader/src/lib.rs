@@ -29,6 +29,8 @@ pub mod diag;
 #[cfg(windows)]
 mod ecs;
 #[cfg(windows)]
+mod emits;
+#[cfg(windows)]
 mod entities;
 #[cfg(windows)]
 mod events;

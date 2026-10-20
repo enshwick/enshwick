@@ -20,6 +20,7 @@
 - [Events and the scheduler](events.md)
 - [Game events](game-events.md)
 - [The world](world.md)
+- [Actions](actions.md)
 - [Altars and bases](altars.md)
 - [Survivors](survivors.md)
 - [Interactions](interactions.md)

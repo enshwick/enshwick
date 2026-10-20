@@ -174,6 +174,9 @@ pub static BUILDS: &[KnownBuild] = &[
             ("server.save_request", 0x7a_db60),
             ("save.path", 0x96_b590),
             ("ecs.component_write", 0x64_6840),
+            ("ecs.event_push", 0x5f_5d00),
+            ("ecs.command_append", 0x5f_2d00),
+            ("world.time", 0x65_1a50),
         ],
         constants: &[
             ("ecs.context_row", 8),
@@ -338,6 +341,12 @@ pub static BUILDS: &[KnownBuild] = &[
             // The entity world's change tracker, which writes outside a
             // system mark against.
             ("ecs.change_tracker", 0xeb_c030),
+            // A command buffer's record list, and the fields of a record
+            // that sets a component: its hash, size and bytes.
+            ("ecs.command_records", 0x10),
+            ("ecs.command_set_hash", 0x0c),
+            ("ecs.command_set_size", 0x4c),
+            ("ecs.command_set_data", 0x6c),
         ],
     },
     KnownBuild {
@@ -443,6 +452,9 @@ pub static BUILDS: &[KnownBuild] = &[
             ("server.save_request", 0xe4_38f0),
             ("save.path", 0x102_2160),
             ("ecs.component_write", 0x9a_5c00),
+            ("ecs.event_push", 0x95_5400),
+            ("ecs.command_append", 0x95_2400),
+            ("world.time", 0x9b_0e10),
         ],
         constants: &[
             ("text.pool_language", 0xd8),
@@ -616,6 +628,12 @@ pub static BUILDS: &[KnownBuild] = &[
             // The entity world's change tracker, which writes outside a
             // system mark against.
             ("ecs.change_tracker", 0xeb_c030),
+            // A command buffer's record list, and the fields of a record
+            // that sets a component: its hash, size and bytes.
+            ("ecs.command_records", 0x10),
+            ("ecs.command_set_hash", 0x0c),
+            ("ecs.command_set_size", 0x4c),
+            ("ecs.command_set_data", 0x6c),
         ],
     },
 ];

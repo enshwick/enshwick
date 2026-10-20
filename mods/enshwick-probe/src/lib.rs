@@ -6,7 +6,7 @@
 //! While on, it counts every game event by type and logs the counts every
 //! minute, logs each typed game event it receives, and runs its checks
 //! once the world has loaded: world key, entity queries, stats, component
-//! writes, a per-world store and a save on demand. `/probe` commands run them again, from the
+//! writes, actions, a per-world store and a save on demand. `/probe` commands run them again, from the
 //! admin tools' command file as well.
 
 mod census;
@@ -80,6 +80,9 @@ impl Mod for Probe {
         log_typed::<Revived>(load);
 
         let checks = Arc::new(Checks::new(load)?);
+        let ping = load.event_type("keen::ecs::UiPingEvent")?;
+        let pinged = Arc::clone(&checks);
+        load.on_raw_game_event(ping, move |event| pinged.pinged(event))?;
         let scheduler = load.scheduler()?;
         let logged = Arc::clone(&census);
         scheduler.every(CENSUS_PERIOD, move || {
