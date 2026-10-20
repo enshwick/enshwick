@@ -14,7 +14,9 @@ permissions:
 
 concurrency:
   group: ci-${{ github.head_ref || github.ref }}
-  cancel-in-progress: true
+  # A release pull request keeps its run: release-please pushes it twice in a row,
+  # and a cancelled run would leave it blocked with no checks.
+  cancel-in-progress: ${{ !startsWith(github.head_ref, 'release-please--') }}
 
 jobs:
   checks:
