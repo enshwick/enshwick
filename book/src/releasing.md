@@ -19,7 +19,7 @@ version `enshwick-loader-api` was built with (see
 `enshwick-loader-api` X.Y needs a loader of the same ABI major, and for each feature
 it uses, a loader whose ABI minor is at least the one that feature lists; under
 an older loader such a feature turns itself off with a note such as
-`mid-function hooks need a newer loader (ABI minor 11)`. Any loader of the
+`mid-function hooks: needs a newer loader`. Any loader of the
 same ABI major loads a mod built against an older `enshwick-loader-api`.
 
 A mod's version is [SemVer](https://semver.org). Leave `version` out of

@@ -51,3 +51,8 @@ chapters! {
     AbiReference => "abi-reference.md",
     Faq => "faq.md",
 }
+
+#[cfg(feature = "test")]
+#[doc = include_str!("../../../book/src/testing.md")]
+#[expect(dead_code, reason = "the doc comment carries the chapter")]
+struct Testing;
