@@ -1,6 +1,6 @@
 [package]
 name = "enshwick-safes"
-version = "0.1.1"
+version = "0.1.2"
 description = "The Safe: a craftable chest only the player who placed it can open"
 keywords = ["enshrouded", "mod", "chest", "safe"]
 categories = ["game-development"]

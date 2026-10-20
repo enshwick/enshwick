@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.5](https://github.com/themaiby/enshwick/compare/enshwick-flame-altar-zones-v0.1.4...enshwick-flame-altar-zones-v0.1.5) (2026-10-20)
+
+
+### Features
+
+* run server mods in games the client hosts ([#61](https://github.com/themaiby/enshwick/issues/61)) ([4c6fe26](https://github.com/themaiby/enshwick/commit/4c6fe269e6137bba6e7190907929fa1b11033744))
+* update sources in manifests and staged updates in the stub ([#57](https://github.com/themaiby/enshwick/issues/57)) ([20e72b1](https://github.com/themaiby/enshwick/commit/20e72b1025765d83f3da861ec46ccbb4a163443c))
+
 ## [0.1.4](https://github.com/themaiby/enshwick/compare/enshwick-flame-altar-zones-v0.1.3...enshwick-flame-altar-zones-v0.1.4) (2026-10-20)
 
 ## [0.1.3](https://github.com/themaiby/enshwick/compare/enshwick-flame-altar-zones-v0.1.2...enshwick-flame-altar-zones-v0.1.3) (2026-10-20)

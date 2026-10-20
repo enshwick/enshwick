@@ -1,6 +1,6 @@
 [package]
 name = "enshwick-macros"
-version = "0.1.1"
+version = "0.1.2"
 description = "Derive and attribute macros for the Enshwick modding API"
 keywords = ["enshrouded", "modding", "derive", "hooks"]
 categories = ["game-development"]
