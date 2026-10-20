@@ -24,7 +24,7 @@ use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::time::Instant;
 
-use enshwick_api::{Load, Off, Registers};
+use enshwick_loader_api::{Load, Off, Registers};
 
 use crate::sys;
 
@@ -254,16 +254,18 @@ pub(crate) fn link(
     let code = load.code()?;
     if exact_waits {
         if !sys::init() {
-            enshwick_api::warn!("exact waits: ntdll has no NtDelayExecution");
+            enshwick_loader_api::warn!("exact waits: ntdll has no NtDelayExecution");
         } else if let Some(site) = find(load, WAIT).map(|at| at + WAIT_AT) {
             if checks(code, site) {
                 load.hook_at(site, |registers| exact(registers.r9, registers.rbx))?;
                 linked.exact = true;
             } else {
-                enshwick_api::warn!("exact waits: the wait at {site:#x} does not read as expected");
+                enshwick_loader_api::warn!(
+                    "exact waits: the wait at {site:#x} does not read as expected"
+                );
             }
         } else {
-            enshwick_api::warn!("exact waits: the event loop's wait was not found");
+            enshwick_loader_api::warn!("exact waits: the event loop's wait was not found");
         }
         if linked.exact
             && let Some(site) = find(load, MESSAGE_WAIT).map(|at| at + WAIT_AT)
@@ -278,7 +280,7 @@ pub(crate) fn link(
             load.hook_at(site, server)?;
             linked.server = true;
         } else {
-            enshwick_api::warn!("the server loop's wait was not found");
+            enshwick_loader_api::warn!("the server loop's wait was not found");
         }
     }
     Ok(linked)
@@ -382,7 +384,7 @@ mod tests {
     fn the_patterns_parse() {
         for pattern in [WAIT, MESSAGE_WAIT, SERVER_WAIT] {
             assert!(
-                enshwick_api::code::Pattern::parse(pattern).is_ok(),
+                enshwick_loader_api::code::Pattern::parse(pattern).is_ok(),
                 "{pattern}"
             );
         }

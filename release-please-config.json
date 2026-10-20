@@ -15,11 +15,10 @@
       "groupName": "enshwick",
       "components": [
         "enshwick-loader",
-        "enshwick-stub",
-        "enshwick-api",
-        "enshwick-macros",
-        "enshwick-reflect",
-        "enshwick-test",
+        "enshwick-loader-stub",
+        "enshwick-loader-api",
+        "enshwick-loader-macros",
+        "enshwick-loader-reflect",
         "cargo-enshwick"
       ],
       "merge": false
@@ -80,17 +79,17 @@
       "package-name": "cargo-enshwick",
       "component": "cargo-enshwick"
     },
-    "crates/enshwick-api": {
-      "package-name": "enshwick-api",
-      "component": "enshwick-api"
+    "crates/enshwick-loader-api": {
+      "package-name": "enshwick-loader-api",
+      "component": "enshwick-loader-api"
     },
-    "crates/enshwick-loader": {
+    "crates/internal/loader": {
       "package-name": "enshwick-loader",
       "component": "enshwick-loader"
     },
-    "crates/enshwick-stub": {
-      "package-name": "enshwick-stub",
-      "component": "enshwick-stub"
+    "crates/internal/stub": {
+      "package-name": "enshwick-loader-stub",
+      "component": "enshwick-loader-stub"
     },
     "mods/enshwick-flame-altar-count": {
       "package-name": "enshwick-flame-altar-count",
@@ -108,13 +107,13 @@
       "package-name": "enshwick-furniture-comfort",
       "component": "enshwick-furniture-comfort"
     },
-    "crates/enshwick-macros": {
-      "package-name": "enshwick-macros",
-      "component": "enshwick-macros"
+    "crates/internal/macros": {
+      "package-name": "enshwick-loader-macros",
+      "component": "enshwick-loader-macros"
     },
-    "crates/enshwick-reflect": {
-      "package-name": "enshwick-reflect",
-      "component": "enshwick-reflect"
+    "crates/internal/reflect": {
+      "package-name": "enshwick-loader-reflect",
+      "component": "enshwick-loader-reflect"
     },
     "mods/enshwick-safes": {
       "package-name": "enshwick-safes",
@@ -128,10 +127,6 @@
       "package-name": "enshwick-area-loot",
       "component": "enshwick-area-loot"
     },
-    "crates/enshwick-test": {
-      "package-name": "enshwick-test",
-      "component": "enshwick-test"
-    },
     "mods/enshwick-updater": {
       "package-name": "enshwick-updater",
       "component": "enshwick-updater"
@@ -144,9 +139,9 @@
       "package-name": "enshwick-shared-experience",
       "component": "enshwick-shared-experience"
     },
-    "mods/enshwick-dev-tools": {
-      "package-name": "enshwick-dev-tools",
-      "component": "enshwick-dev-tools"
+    "mods/enshwick-admin-tools": {
+      "package-name": "enshwick-admin-tools",
+      "component": "enshwick-admin-tools"
     },
     "mods/enshwick-proton-optimizer": {
       "package-name": "enshwick-proton-optimizer",

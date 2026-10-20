@@ -15,7 +15,7 @@ publish.workspace = true
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-enshwick-api.workspace = true
+enshwick-loader-api.workspace = true
 serde.workspace = true
 windows-sys = { workspace = true, features = [
     "Win32_Foundation",
@@ -26,7 +26,7 @@ windows-sys = { workspace = true, features = [
 ] }
 
 [dev-dependencies]
-enshwick-test.workspace = true
+enshwick-loader-api = { workspace = true, features = ["test"] }
 toml.workspace = true
 
 [lints]

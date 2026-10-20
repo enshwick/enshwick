@@ -25,7 +25,7 @@ pub(crate) fn create(dir: &Path, id: &str, side: Side) -> Result<String, String>
 
 /// The crate's files for mod `id`, relative to its root.
 fn files(id: &str, side: Side) -> Result<Vec<(PathBuf, String)>, String> {
-    if !enshwick_api::abi::is_valid_id(id) {
+    if !enshwick_loader_api::abi::is_valid_id(id) {
         return Err(format!(
             "the id {id:?} is not 1 to 64 characters of [a-z0-9-]"
         ));
@@ -40,7 +40,7 @@ fn files(id: &str, side: Side) -> Result<Vec<(PathBuf, String)>, String> {
             .replace("{id}", id)
             .replace("{type}", &type_name(id))
             .replace("{side}", side)
-            .replace("{api}", enshwick_api::VERSION)
+            .replace("{api}", enshwick_loader_api::VERSION)
     };
     Ok(vec![
         ("Cargo.toml".into(), fill(CARGO_TOML)),
@@ -78,7 +78,7 @@ publish = false
 crate-type = ["cdylib"]
 
 [dependencies]
-enshwick-api = { git = "https://github.com/themaiby/enshwick", tag = "enshwick-api-v{api}" }
+enshwick-loader-api = { git = "https://github.com/themaiby/enshwick", tag = "enshwick-loader-api-v{api}" }
 serde = { version = "1", features = ["derive"] }
 
 [profile.release]
@@ -90,10 +90,10 @@ panic = "unwind"
 
 const LIB_RS: &str = r#"//! The {id} mod for Enshrouded.
 
-use enshwick_api::{Load, Mod, Off};
+use enshwick_loader_api::{Load, Mod, Off};
 
 /// {type} settings, in `mod-configs/{id}.toml`.
-#[derive(Debug, serde::Deserialize, serde::Serialize, enshwick_api::Config)]
+#[derive(Debug, serde::Deserialize, serde::Serialize, enshwick_loader_api::Config)]
 #[serde(deny_unknown_fields)]
 struct Settings {
     /// Whether the mod does its work.
@@ -111,8 +111,8 @@ impl Default for Settings {
 pub struct {type};
 
 impl Mod for {type} {
-    fn manifest() -> &'static enshwick_api::abi::Manifest {
-        enshwick_api::manifest!(
+    fn manifest() -> &'static enshwick_loader_api::abi::Manifest {
+        enshwick_loader_api::manifest!(
             id: "{id}",
             side: {side},
             // Players get your releases from the updater once you name where
@@ -125,12 +125,12 @@ impl Mod for {type} {
 
     fn init(load: &mut Load<'_>) -> Result<Self, Off> {
         let settings: Settings = load.config()?;
-        enshwick_api::info!("enabled: {}", settings.enabled);
+        enshwick_loader_api::info!("enabled: {}", settings.enabled);
         Ok(Self)
     }
 }
 
-enshwick_api::declare_mod!({type});
+enshwick_loader_api::declare_mod!({type});
 "#;
 
 const README: &str = "# {id}
@@ -164,7 +164,10 @@ mod tests {
                 .1
         };
         assert!(text("Cargo.toml").contains("name = \"area-loot\""));
-        assert!(text("Cargo.toml").contains(&format!("enshwick-api-v{}", enshwick_api::VERSION)));
+        assert!(text("Cargo.toml").contains(&format!(
+            "enshwick-loader-api-v{}",
+            enshwick_loader_api::VERSION
+        )));
         assert!(text("src/lib.rs").contains("id: \"area-loot\",\n            side: BOTH,"));
         assert!(text("src/lib.rs").contains("// signed_by: [\"RW..."));
         assert!(text("src/lib.rs").contains("declare_mod!(AreaLoot)"));

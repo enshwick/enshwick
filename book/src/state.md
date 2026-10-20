@@ -13,14 +13,14 @@ to edit `mod-data`.
 
 ## The data folder
 
-[`load.data_dir()`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/load.rs)
+[`load.data_dir()`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/load.rs)
 returns the mod's own folder, `mod-data/<id>`, and creates it when missing.
 The path is plain `std::path::PathBuf`; keep it and use it from any thread.
 
 ```rust
-fn init(load: &mut enshwick_api::Load<'_>) -> Result<(), enshwick_api::Off> {
+fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
     let dir = load.data_dir()?;
-    enshwick_api::info!("data in {}", dir.display());
+    enshwick_loader_api::info!("data in {}", dir.display());
     Ok(())
 }
 ```
@@ -30,7 +30,7 @@ game event handler: the game thread waits on the disk otherwise.
 
 ## Store
 
-[`state::Store<T>`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/state.rs)
+[`state::Store<T>`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/state.rs)
 keeps one serde value as `<dir>/<name>.toml`:
 
 - `load()` returns the stored value, or `T::default()` while nothing is stored;
@@ -39,14 +39,14 @@ keeps one serde value as `<dir>/<name>.toml`:
   one, so a crash never leaves half a file.
 
 ```rust
-use enshwick_api::state::Store;
+use enshwick_loader_api::state::Store;
 
 #[derive(Default, serde::Deserialize, serde::Serialize)]
 struct Progress {
     highest_xp: u64,
 }
 
-fn init(load: &mut enshwick_api::Load<'_>) -> Result<(), enshwick_api::Off> {
+fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
     let store: Store<Progress> = Store::new(&load.data_dir()?, "progress");
     let mut progress = store.load()?;
     progress.highest_xp = progress.highest_xp.max(42);
@@ -61,13 +61,13 @@ and the reason. Outside `init`, log them instead.
 
 A mod whose changes let a world grow past what the vanilla game opens safely,
 such as more altars than the game groups into bases, sets a
-[`state::Hold`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/state.rs)
+[`state::Hold`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/state.rs)
 while that is so, and clears it when it is no longer so.
 
 ```rust
-use enshwick_api::state::Hold;
+use enshwick_loader_api::state::Hold;
 
-fn init(load: &mut enshwick_api::Load<'_>) -> Result<(), enshwick_api::Off> {
+fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
     let hold = Hold::new(&load.data_dir()?);
     hold.set("the world has 20 altar zones; the vanilla game groups only 16")?;
     // Later, once the world is back within vanilla limits:

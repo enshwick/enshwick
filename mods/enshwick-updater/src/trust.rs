@@ -5,7 +5,7 @@
 //! join, so the key that server names for it is the one that must have
 //! signed the download.
 
-use enshwick_api::mods::{ModEntry, Updates};
+use enshwick_loader_api::mods::{ModEntry, Updates};
 
 use crate::verify::ENSHWICK_KEY;
 
@@ -104,8 +104,8 @@ fn is_enshwick(updates: Option<&Updates>) -> bool {
 /// # Examples
 ///
 /// ```
-/// use enshwick_api::abi::Side;
-/// use enshwick_api::mods::ModEntry;
+/// use enshwick_loader_api::abi::Side;
+/// use enshwick_loader_api::mods::ModEntry;
 /// use enshwick_updater::trust::{Refusal, for_installed};
 ///
 /// let mut entry = ModEntry {
@@ -158,7 +158,7 @@ pub fn for_missing(
 
 #[cfg(test)]
 mod tests {
-    use enshwick_api::abi::Side;
+    use enshwick_loader_api::abi::Side;
 
     use super::*;
     use crate::verify::{check, key};

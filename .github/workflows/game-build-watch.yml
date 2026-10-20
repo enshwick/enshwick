@@ -1,6 +1,6 @@
 # Asks Steam once a week for the public build of the dedicated server (app
 # 2278520) and opens an issue when the loader's build table has no server row
-# named after it, so a maintainer runs enshwick-pin (crates/enshwick-pin).
+# named after it, so a maintainer runs `cargo enshwick pin` (crates/cargo-enshwick).
 # It downloads no game files and commits nothing. Off until the repository
 # variable GAME_BUILD_WATCH is "true".
 name: game-build-watch
@@ -47,7 +47,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           BUILD: ${{ steps.steam.outputs.build }}
         run: |
-          if grep -q "server ($BUILD)\"" crates/enshwick-loader/src/builds.rs; then
+          if grep -q "server ($BUILD)\"" crates/internal/loader/src/builds.rs; then
             echo "build $BUILD has rows"
             exit 0
           fi
@@ -62,8 +62,8 @@ jobs:
           $BUILD, and the loader's build table has no row for it: until it has,
           the loader leaves that game build vanilla.
 
-          Port the rows with enshwick-pin, following
-          [its README](https://github.com/${GITHUB_REPOSITORY}/blob/main/crates/enshwick-pin/README.md):
+          Port the rows with `cargo enshwick pin`, following
+          [its README](https://github.com/${GITHUB_REPOSITORY}/blob/main/crates/cargo-enshwick/README.md#porting-build-rows-pin):
           download the new server and client with steamcmd, run the tool for
           each executable against the previous one, settle what the report
           lists for a human, and open a pull request with the new rows. Never

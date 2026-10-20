@@ -13,7 +13,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, LazyLock};
 
 use arc_swap::ArcSwap;
-use enshwick_api::ecs::{Components, Ecs, Entity, Worlds};
+use enshwick_loader_api::ecs::{Components, Ecs, Entity, Worlds};
 
 /// A position in half-metre cells.
 pub type Cell = (i64, i64, i64);
@@ -264,7 +264,7 @@ impl Access {
         let transform = unsafe { reads.components.component(ctx, chest, reads.transform) }?;
         let found = self.seen(chest.0, cell(position(transform)));
         if found.is_none() {
-            enshwick_api::warn_every!(
+            enshwick_loader_api::warn_every!(
                 std::time::Duration::from_secs(60),
                 "a Safe has no recorded owner and stays open to all"
             );
@@ -383,7 +383,7 @@ impl Default for Access {
 fn position(transform: *mut u8) -> [f64; 3] {
     // SAFETY: a live CurrentTransform holds three i64 first.
     let fixed = unsafe { transform.cast::<[i64; 3]>().read_unaligned() };
-    enshwick_api::ecs::metres(fixed)
+    enshwick_loader_api::ecs::metres(fixed)
 }
 
 #[cfg(test)]

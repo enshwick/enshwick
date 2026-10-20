@@ -5,8 +5,8 @@
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
-use enshwick_api::ecs::Entity;
-use enshwick_api::loot::{Container, near};
+use enshwick_loader_api::ecs::Entity;
+use enshwick_loader_api::loot::{Container, near};
 
 /// How long a take holds a container: no one else takes from it, and its
 /// emptying starts nothing.
@@ -151,7 +151,7 @@ impl Tracker {
 
 #[cfg(test)]
 mod tests {
-    use enshwick_api::loot::Offer;
+    use enshwick_loader_api::loot::Offer;
 
     use super::*;
 

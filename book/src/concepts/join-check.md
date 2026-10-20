@@ -54,9 +54,9 @@ with the server's value over its own file, which stays as it is. See
 ## Mods the player lacks
 
 When the check keeps a player out, the loader raises
-[`events::JoinMissing`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/events.rs)
+[`events::JoinMissing`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/events.rs)
 on the client after the player closes the note, and
-[`mods::join_missing()`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/mods.rs)
+[`mods::join_missing()`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/mods.rs)
 lists the missing mods with the server's versions and update sources. An
 updater mod offers them from there; see
 [Releasing and updates](../releasing.md).

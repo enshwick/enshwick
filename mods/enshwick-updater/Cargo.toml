@@ -15,7 +15,7 @@ publish.workspace = true
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-enshwick-api.workspace = true
+enshwick-loader-api.workspace = true
 minisign-verify = { version = "0.3.0", default-features = false }
 semver.workspace = true
 serde.workspace = true

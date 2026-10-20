@@ -2,12 +2,12 @@
 
 Two calls add recipes, and one changes them:
 
-- [`Load::add_recipe`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/content/recipes.rs)
+- [`Load::add_recipe`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/content/recipes.rs)
   adds one recipe for a new output, copied from the recipe of a vanilla item;
-- [`Load::derive_recipes`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/content/recipes.rs)
+- [`Load::derive_recipes`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/content/recipes.rs)
   looks at every recipe in the registry and adds a scaled copy of each one
   you pick;
-- [`Load::modify_recipes`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/content/recipes.rs)
+- [`Load::modify_recipes`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/content/recipes.rs)
   changes the output and ingredient counts of the recipes you pick, in place.
 
 All three patch the game's recipe registry, which every mod shares; patches
@@ -17,14 +17,14 @@ their changes add up.
 ## A single recipe
 
 ```rust
-use enshwick_api::content::Guid;
-use enshwick_api::content::recipes::NewRecipe;
+use enshwick_loader_api::content::Guid;
+use enshwick_loader_api::content::recipes::NewRecipe;
 
 const CHEST: Guid = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");
 const SAFE: Guid = Guid::parse("8a3f6e21-5c4b-4d7e-9f10-2b7c5e6a9d31");
 const SAFE_RECIPE: Guid = Guid::parse("4e9d2c17-8b3a-4f65-a1c2-7d5e3b9f0a48");
 
-fn init(load: &mut enshwick_api::Load<'_>) -> Result<(), enshwick_api::Off> {
+fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
     load.add_recipe(NewRecipe {
         guid: SAFE_RECIPE,
         like: CHEST,
@@ -60,9 +60,9 @@ the registry. Return `Some(Derived { .. })` to add a copy of that recipe
 beside it, `None` to leave it alone:
 
 ```rust
-use enshwick_api::content::recipes::{Derived, RecipeView};
+use enshwick_loader_api::content::recipes::{Derived, RecipeView};
 
-fn init(load: &mut enshwick_api::Load<'_>) -> Result<(), enshwick_api::Off> {
+fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
     load.derive_recipes("my-mod", |recipe: &RecipeView<'_>| {
         recipe
             .debug_name()
@@ -77,7 +77,7 @@ it; its output count is the original's times `output`, and its ingredient
 counts are the original's times `cost`. The original stays as it is. The
 copy makes the original's first output only.
 
-[`RecipeView`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/content/recipes.rs)
+[`RecipeView`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/content/recipes.rs)
 shows what a recipe is:
 
 - `guid()`, the recipe's GUID;
@@ -103,9 +103,9 @@ and never change it: saves hold the copies' ids like any other.
 lets it change the recipe's counts in place, with no recipe added:
 
 ```rust
-use enshwick_api::content::recipes::RecipeEdit;
+use enshwick_loader_api::content::recipes::RecipeEdit;
 
-fn init(load: &mut enshwick_api::Load<'_>) -> Result<(), enshwick_api::Off> {
+fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
     load.modify_recipes(|recipe: &mut RecipeEdit<'_>| {
         if recipe.view().debug_name().starts_with("Block_") {
             recipe.scale_output(2);
@@ -114,7 +114,7 @@ fn init(load: &mut enshwick_api::Load<'_>) -> Result<(), enshwick_api::Off> {
 }
 ```
 
-[`RecipeEdit`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/content/recipes.rs)
+[`RecipeEdit`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/content/recipes.rs)
 has:
 
 - `view()`, the recipe as a `RecipeView` reads it now;
@@ -131,19 +131,19 @@ it see its changes. The mod's log says `<n> recipes changed`.
 ## The workshop limit
 
 The game takes at most 512 recipes at one workshop
-([`WORKSHOP_RECIPES`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/content/recipes.rs));
+([`WORKSHOP_RECIPES`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/content/recipes.rs));
 more ends the game. When any mod serves the recipe registry, the loader
 patches the game to lift that limit, on the server and the client alike. If
 it cannot, because the game code does not read as the loader expects, the
 loader logs `workshop recipe limit kept: <reason>` and the limit holds.
 
-[`workshop_limit()`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/content/recipes.rs)
+[`workshop_limit()`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/content/recipes.rs)
 tells which: `usize::MAX` once the limit is lifted, else 512. The answer is
 final before the game first reads the registry, which is when the recipe
 patches run, so both calls follow it:
 
 - while the limit holds, derived copies stop
-  [`RESERVED_FOR_SINGLE`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/content/recipes.rs)
+  [`RESERVED_FOR_SINGLE`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/content/recipes.rs)
   (16) short of 512 at each workshop, which leaves room for single recipes
   from `add_recipe`, and a single recipe is skipped at a workshop that
   already holds 512;

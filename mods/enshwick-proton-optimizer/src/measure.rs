@@ -297,7 +297,7 @@ pub(crate) fn run(wine: bool) {
         let minute = meter.minute();
         if ON.load(Ordering::Relaxed) {
             let text = line(&minute);
-            enshwick_api::info!("measure: {text}");
+            enshwick_loader_api::info!("measure: {text}");
             *LAST.lock().unwrap_or_else(PoisonError::into_inner) = text;
         }
     }

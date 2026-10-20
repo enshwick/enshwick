@@ -7,7 +7,7 @@ whole contract between them.
 
 ## Publishing
 
-[`load.publish(name, version, &TABLE)`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/load.rs)
+[`load.publish(name, version, &TABLE)`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/load.rs)
 publishes a `'static` table during `init`:
 
 ```rust
@@ -22,7 +22,7 @@ extern "system" fn count() -> u32 {
 
 static ZONES: Zones = Zones { count };
 
-fn init(load: &mut enshwick_api::Load<'_>) -> Result<(), enshwick_api::Off> {
+fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
     load.publish("flame-altar-zones.zones", 1, &ZONES)
 }
 ```
@@ -35,7 +35,7 @@ fn init(load: &mut enshwick_api::Load<'_>) -> Result<(), enshwick_api::Off> {
 
 ## Using a service
 
-[`load.service(name, version)`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/load.rs)
+[`load.service(name, version)`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/load.rs)
 returns the table during `init`:
 
 ```rust
@@ -44,10 +44,10 @@ struct Zones {
     count: extern "system" fn() -> u32,
 }
 
-fn init(load: &mut enshwick_api::Load<'_>) -> Result<(), enshwick_api::Off> {
+fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
     // SAFETY: `Zones` is the table `flame-altar-zones` publishes as v1.
     let zones: &'static Zones = unsafe { load.service("flame-altar-zones.zones", 1)? };
-    enshwick_api::info!("{} zones", (zones.count)());
+    enshwick_loader_api::info!("{} zones", (zones.count)());
     Ok(())
 }
 ```
@@ -65,7 +65,7 @@ The publisher's `init` must run before the user's. Declare the publisher in
 the user's manifest:
 
 ```rust
-let manifest = enshwick_api::manifest!(
+let manifest = enshwick_loader_api::manifest!(
     id: "survivors-per-altar",
     side: BOTH,
     join = true,
@@ -90,11 +90,14 @@ The publisher's SemVer version, in `requires`, says which releases of the mod
 publish which service versions; the service version says what the table looks
 like.
 
-## A shared table crate
+## One declaration of the table
 
-Put the table type, its name and its version in a small crate both mods depend
-on, so neither copies the other's declaration. Check the layout at compile
-time there:
+Put the table type, its name and its version in one file that uses nothing
+but `core`, so neither mod copies the other's declaration. In one workspace,
+the publisher keeps it as a module and the user compiles the same file with
+`#[path = "../../<publisher>/src/service.rs"] pub mod <name>;`; across
+repositories, a small crate both depend on does the same. Check the layout at
+compile time there:
 
 ```rust
 #[repr(C)]
@@ -128,8 +131,9 @@ such as `String`, `Vec` or `Box`, and never free across the boundary memory the
 other side allocated.
 
 This is
-[`enshwick-geometry::service`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-geometry/src/service.rs).
+[the zones service](https://github.com/themaiby/enshwick/blob/main/mods/enshwick-flame-altar-zones/src/service.rs).
 [`enshwick-flame-altar-zones`](https://github.com/themaiby/enshwick/tree/main/mods/enshwick-flame-altar-zones)
 publishes it, and
 [`enshwick-survivors-per-altar`](https://github.com/themaiby/enshwick/tree/main/mods/enshwick-survivors-per-altar)
-requires `flame-altar-zones` and reads the altar zones through it.
+compiles the same file, requires `flame-altar-zones` and reads the altar zones
+through it.

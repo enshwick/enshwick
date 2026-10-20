@@ -4,17 +4,17 @@
 roll, on top of the vanilla loot. The item is a vanilla one or one from
 [`add_item`](items.md); the game skips an item its registry does not hold.
 The API is in
-[`loot/drops.rs`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/loot/drops.rs).
+[`loot/drops.rs`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/loot/drops.rs).
 
 ```rust
-use enshwick_api::content::Guid;
-use enshwick_api::loot::{Drop, Kinds, Source};
+use enshwick_loader_api::content::Guid;
+use enshwick_loader_api::loot::{Drop, Kinds, Source};
 
 const STAFF: Guid = Guid::parse("8a3f6e21-5c4b-4d7e-9f10-2b7c5e6a9d31");
 const RING: Guid = Guid::parse("0b1c2d3e-4f50-4617-8293-a4b5c6d7e8f9");
 const AMULET: Guid = Guid::parse("1c2d3e4f-5061-4728-93a4-b5c6d7e8f901");
 
-fn init(load: &mut enshwick_api::Load<'_>) -> Result<(), enshwick_api::Off> {
+fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
     load.add_loot(Drop::new(STAFF.id(), 0.10, Source::bosses()))?;
     load.add_loot(Drop::new(STAFF.id(), 0.02, Source::locked_chests()))?;
     load.add_loot(
@@ -38,7 +38,7 @@ fn init(load: &mut enshwick_api::Load<'_>) -> Result<(), enshwick_api::Off> {
 
 ## A drop
 
-A [`Drop`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/loot/drops.rs)
+A [`Drop`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/loot/drops.rs)
 holds the items, the chance, the count and the source:
 
 - `Drop::new(item, chance, from)` gives one item, `item` being the game id
@@ -71,12 +71,12 @@ and `CONTAINERS` (corpses and chests); `with` joins two sets.
 
 A loot label id is the FNV-1a hash of an enemy or chest type's label
 collection GUID. `Source::matches` tells whether a
-[`Roll`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/loot/drops.rs)
+[`Roll`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/loot/drops.rs)
 comes from a source, which a unit test can check without the game:
 
 ```rust
-use enshwick_api::ecs::Entity;
-use enshwick_api::loot::{Kinds, Roll, Source};
+use enshwick_loader_api::ecs::Entity;
+use enshwick_loader_api::loot::{Kinds, Roll, Source};
 
 let boss = Roll { kind: Kinds::CORPSES, entity: Entity(7), node: 0, labels: 9, boss: true, locked: false };
 assert!(Source::bosses().matches(&boss));

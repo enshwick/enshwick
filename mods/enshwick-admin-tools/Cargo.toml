@@ -1,0 +1,26 @@
+[package]
+name = "enshwick-admin-tools"
+version = "0.1.2"
+description = "Tools for test servers: /admin commands and a command file run as the server console"
+keywords = ["enshrouded", "mod", "server", "testing", "commands"]
+categories = ["game-development"]
+readme = "README.md"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+enshwick-loader-api.workspace = true
+serde.workspace = true
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+enshwick-loader-api = { workspace = true, features = ["test"] }
+toml.workspace = true

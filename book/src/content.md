@@ -29,11 +29,11 @@ same version of it:
 
 ```rust
 # struct MyMod;
-# impl enshwick_api::Mod for MyMod {
-fn manifest() -> &'static enshwick_api::abi::Manifest {
-    enshwick_api::manifest!(id: "my-mod", side: BOTH, join = true)
+# impl enshwick_loader_api::Mod for MyMod {
+fn manifest() -> &'static enshwick_loader_api::abi::Manifest {
+    enshwick_loader_api::manifest!(id: "my-mod", side: BOTH, join = true)
 }
-#     fn init(_: &mut enshwick_api::Load<'_>) -> Result<Self, enshwick_api::Off> { Ok(Self) }
+#     fn init(_: &mut enshwick_loader_api::Load<'_>) -> Result<Self, enshwick_loader_api::Off> { Ok(Self) }
 # }
 ```
 
@@ -52,7 +52,7 @@ first time it reads it.
 
 Every piece of content a mod adds has a GUID that the mod picks once: the
 item, its recipe, the station template, the workshop, each text tag. Write
-them as constants with [`Guid::parse`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/code.rs)
+them as constants with [`Guid::parse`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/code.rs)
 and never change them. Saves hold them: an item stack keeps the item's id,
 which is derived from its GUID, and a placed station keeps its template's
 GUID. A changed GUID orphans everything a player already has.

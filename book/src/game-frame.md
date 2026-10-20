@@ -28,11 +28,11 @@ Decide "not ours" in a few instructions, then forward to `Next`:
 ```rust
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use enshwick_api::Next;
+use enshwick_loader_api::Next;
 
 static ENABLED: AtomicBool = AtomicBool::new(true);
 
-enshwick_api::detour! {
+enshwick_loader_api::detour! {
     static NODE_UNLOCKED: unsafe extern "system" fn(node: u32, bits: *const u64) -> u8 = node_unlocked;
 }
 

@@ -1,6 +1,7 @@
 # Release pull requests and releases per crate.
-# The platform crates (loader, stub, API, macros, reflect, test, cargo-enshwick)
-# share one version and release together as "Enshwick X.Y.Z"; mods keep their own.
+# The platform crates (loader, stub, API, macros, reflect, cargo-enshwick)
+# share one version and release together as "Enshwick Loader X.Y.Z"; mods keep
+# their own.
 # Each mod's release gets its archive with the mod's DLL; the loader's release,
 # the platform release, carries the stub and loader and the full bundle,
 # everything as it goes next to the game.
@@ -125,4 +126,4 @@ jobs:
           tag=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 100 --json tagName \
             --jq '[.[] | select(.tagName | startswith("enshwick-loader-v"))][0].tagName // empty' | tr -d '\r')
           [ -n "$tag" ] || exit 0
-          gh release edit "$tag" --title "Enshwick ${tag##*-v}" --latest --repo "$GITHUB_REPOSITORY"
+          gh release edit "$tag" --title "Enshwick Loader ${tag##*-v}" --latest --repo "$GITHUB_REPOSITORY"

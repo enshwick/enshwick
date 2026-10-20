@@ -11,7 +11,7 @@
 //! alike takes `d / (|c| + |s|)` more on both `rx` and `rz`, which is how a
 //! cluster's growth turns back into a range the engine can use.
 
-use enshwick_geometry::Box3;
+use crate::geometry::Box3;
 
 /// Engine positions are 32.32 fixed point.
 const FIXED_PER_METRE: f64 = 4_294_967_296.0;

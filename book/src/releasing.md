@@ -6,23 +6,24 @@ how an updater installs them, and how releases are signed.
 
 ## Versions
 
-Enshwick itself has one version, such as Enshwick 0.2.0: the loader, the
-`powrprof.dll` stub, `enshwick-api` with its macros, `enshwick-reflect`,
-`enshwick-test` and `cargo-enshwick` always carry the same number and are
-released together. Mods have versions of their own, released apart from the
+Enshwick Loader has one version, such as Enshwick Loader 0.2.0: the loader
+(`enshwick-loader`), the `powrprof.dll` stub (`enshwick-loader-stub`),
+`enshwick-loader-api` with its test fake and its macros
+(`enshwick-loader-macros`), `enshwick-loader-reflect` and `cargo-enshwick`
+always carry the same number and are released together. Mods have versions of their own, released apart from the
 platform and from each other.
 
 Which loader a mod runs under is not read from that version but from the ABI
-version `enshwick-api` was built with (see
+version `enshwick-loader-api` was built with (see
 [ABI reference](abi-reference.md#versions)). A mod built against
-`enshwick-api` X.Y needs a loader of the same ABI major, and for each feature
+`enshwick-loader-api` X.Y needs a loader of the same ABI major, and for each feature
 it uses, a loader whose ABI minor is at least the one that feature lists; under
 an older loader such a feature turns itself off with a note such as
 `mid-function hooks need a newer loader (ABI minor 11)`. Any loader of the
-same ABI major loads a mod built against an older `enshwick-api`.
+same ABI major loads a mod built against an older `enshwick-loader-api`.
 
 A mod's version is [SemVer](https://semver.org). Leave `version` out of
-[`manifest!`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/declare.rs)
+[`manifest!`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/declare.rs)
 and the manifest takes the crate's version (`CARGO_PKG_VERSION`), so the
 version you release is the one the DLL reports. Set `version: "0.3.0"` only
 when the two must differ.
@@ -57,13 +58,14 @@ Mods in this repository follow
 
 The platform crates are linked (the `linked-versions` plugin, group
 `enshwick`): a change to any of them releases all of them at one version,
-each with its own tag, `enshwick-loader-v0.2.0`, `enshwick-api-v0.2.0` and so
-on. The tags keep what relies on them working: `cargo enshwick new` pins
-`enshwick-api-v<version>`, and the updater looks for `enshwick-loader-v*`
+each with its own tag, `enshwick-loader-v0.2.0`,
+`enshwick-loader-api-v0.2.0` and so on. The tags keep what relies on them
+working: `cargo enshwick new` pins `enshwick-loader-api-v<version>`, and the
+updater and the loader's own `updates:` source look for `enshwick-loader-v*`
 releases. The loader's release is the platform release, titled
-`Enshwick <version>` and kept as the repository's latest release. A platform
+`Enshwick Loader <version>` and kept as the repository's latest release. A platform
 release also bumps the patch version of every mod, since they all depend on
-`enshwick-api`.
+`enshwick-loader-api`.
 
 Before 1.0, a `feat` bumps the patch version and a breaking change the minor
 (see
@@ -89,7 +91,7 @@ reports the version of its tag.
 `updates:` in the manifest names the source of new releases:
 
 ```rust
-let manifest = enshwick_api::manifest!(
+let manifest = enshwick_loader_api::manifest!(
     id: "safes",
     side: BOTH,
     join = true,
@@ -182,9 +184,9 @@ is not `https://` (redirects included), and reads at most 4 MiB of it.
 
 ## The list of loaded mods
 
-[`enshwick_api::mods()`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/mods.rs)
+[`enshwick_loader_api::mods()`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/mods.rs)
 lists every loaded mod, the loader first (id `enshwick`), in load order. Each
-[`ModEntry`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/mods.rs)
+[`ModEntry`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/mods.rs)
 has:
 
 | Field       | What it holds                                                                   |
@@ -199,11 +201,11 @@ has:
 | `signed_by` | The author keys the manifest names, checked; empty for none                     |
 
 ```rust
-use enshwick_api::mods::Updates;
+use enshwick_loader_api::mods::Updates;
 
-for entry in enshwick_api::mods() {
+for entry in enshwick_loader_api::mods() {
     if let Some(Updates::GitHub { repository, component }) = &entry.updates {
-        enshwick_api::info!("{} {}: {repository}, tags {component}-v*", entry.id, entry.version);
+        enshwick_loader_api::info!("{} {}: {repository}, tags {component}-v*", entry.id, entry.version);
     }
 }
 ```
@@ -215,7 +217,7 @@ older than ABI minor 5.
 
 A server advertises each running join mod's source in the Steam rule
 `enshwick.src.<id>`, as one line written by
-[`Updates::to_line`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/mods.rs):
+[`Updates::to_line`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/mods.rs):
 `github:<owner/name>:<component>` or `url:<url>`. A line longer than a Steam
 rule holds (127 bytes) is left out. `Updates::parse` reads a line back. A
 running join mod that names author keys also gets the rule
@@ -223,7 +225,7 @@ running join mod that names author keys also gets the rule
 `mods::keys_line` and read back by `mods::parse_keys`.
 
 ```rust
-use enshwick_api::mods::Updates;
+use enshwick_loader_api::mods::Updates;
 
 let safes = Updates::GitHub {
     repository: "themaiby/enshwick".into(),
@@ -236,9 +238,9 @@ assert_eq!(safes.tag_prefix().as_deref(), Some("enshwick-safes-v"));
 When the join check keeps a client out because the server runs join mods the
 client lacks or has in another version, the loader shows the player a note,
 then raises
-[`events::JoinMissing`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/events.rs)
+[`events::JoinMissing`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/events.rs)
 on the client.
-[`mods::join_missing()`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/mods.rs)
+[`mods::join_missing()`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/mods.rs)
 then lists those mods: the server's version, `running` false, the client's
 DLL path when it has the mod (empty otherwise), the source the server
 advertises, else the client's own source for the mod, and in `signed_by` the
@@ -249,14 +251,14 @@ The handler runs on the game thread once the player closed the note. Hand
 downloads to a thread of your own:
 
 ```rust
-use enshwick_api::events::JoinMissing;
+use enshwick_loader_api::events::JoinMissing;
 
-fn init(load: &mut enshwick_api::Load<'_>) -> Result<(), enshwick_api::Off> {
+fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
     load.on::<JoinMissing>(|()| {
-        let missing = enshwick_api::mods::join_missing();
+        let missing = enshwick_loader_api::mods::join_missing();
         std::thread::spawn(move || {
             for entry in missing {
-                enshwick_api::info!("the server runs {} {}", entry.id, entry.version);
+                enshwick_loader_api::info!("the server runs {} {}", entry.id, entry.version);
             }
         });
     })
@@ -346,7 +348,7 @@ Declare the public key, the second line of `my-mod.pub` (`RW...`), in the
 manifest, and publish it where players can compare it, such as your README:
 
 ```rust,ignore
-enshwick_api::manifest!(
+enshwick_loader_api::manifest!(
     id: "my-mod",
     side: BOTH,
     updates: github("you/your-repo", "my-mod"),
@@ -361,7 +363,7 @@ have your mod, and one signed with a stolen key can.
 ## Removed mods and holds
 
 A mod that keeps a world the vanilla game cannot open safely can set a
-[`state::Hold`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/state.rs).
+[`state::Hold`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/state.rs).
 While `mod-data/<id>/hold.txt` exists, the loader stops the game before the
 world loads when that mod does not run: removed, skipped, off, or on a game
 build the loader does not know. Removing such a mod therefore needs the

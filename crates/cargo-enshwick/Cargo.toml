@@ -1,7 +1,7 @@
 [package]
 name = "cargo-enshwick"
 version = "0.2.0"
-description = "Cargo subcommand for Enshwick mods: start a mod, build it and install it into the game"
+description = "Cargo subcommand for Enshwick mods: start a mod, build it, install it into the game and port build rows to a new game build"
 keywords = ["enshrouded", "modding", "cargo", "cli"]
 categories = ["development-tools::cargo-plugins", "game-development"]
 readme = "README.md"
@@ -13,7 +13,10 @@ publish.workspace = true
 
 [dependencies]
 clap = { workspace = true }
-enshwick-api.workspace = true
+enshwick-loader-api.workspace = true
+enshwick-loader-reflect.workspace = true
+iced-x86.workspace = true
+memchr.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 

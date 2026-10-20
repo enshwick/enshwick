@@ -3,17 +3,17 @@
 A mod's settings live in `mod-configs/<id>.toml` beside the game. The loader
 writes the file from the mod's defaults on first start, and the mod reads it
 during `init`. There are two ways to read it: a typed settings struct with
-`#[derive(enshwick_api::Config)]`, or plain serde over a defaults string.
+`#[derive(enshwick_loader_api::Config)]`, or plain serde over a defaults string.
 
 ## Typed settings
 
-Derive `enshwick_api::Config` on a struct with named fields that also derives
+Derive `enshwick_loader_api::Config` on a struct with named fields that also derives
 serde's `Deserialize` and `Serialize` and implements `Default`, and call
-[`load.config()`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/load.rs):
+[`load.config()`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/load.rs):
 
 ```rust
 /// Furniture comfort settings.
-#[derive(Debug, serde::Deserialize, serde::Serialize, enshwick_api::Config)]
+#[derive(Debug, serde::Deserialize, serde::Serialize, enshwick_loader_api::Config)]
 #[serde(deny_unknown_fields)]
 #[config(validate = Settings::check)]
 struct Settings {
@@ -37,9 +37,9 @@ impl Settings {
     }
 }
 
-fn init(load: &mut enshwick_api::Load<'_>) -> Result<(), enshwick_api::Off> {
+fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
     let settings: Settings = load.config()?;
-    enshwick_api::info!("furniture comfort x{}", settings.multiplier);
+    enshwick_loader_api::info!("furniture comfort x{}", settings.multiplier);
     Ok(())
 }
 ```
@@ -77,7 +77,7 @@ is the example above in full.
 
 ## Untyped settings
 
-[`load.settings(DEFAULTS)`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/load.rs)
+[`load.settings(DEFAULTS)`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/load.rs)
 reads the same file into any `serde::Deserialize` type. When the file is
 missing, the loader writes `DEFAULTS` there as is, so write `DEFAULTS` as the
 commented file a player should see, and make sure your type accepts it.
@@ -94,23 +94,23 @@ struct Settings {
     altars_per_flame_level: Vec<u8>,
 }
 
-fn init(load: &mut enshwick_api::Load<'_>) -> Result<(), enshwick_api::Off> {
+fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
     let settings: Settings = load.settings(DEFAULTS)?;
-    enshwick_api::info!("table {:?}", settings.altars_per_flame_level);
+    enshwick_loader_api::info!("table {:?}", settings.altars_per_flame_level);
     Ok(())
 }
 ```
 
 Untyped settings have no validation hook, no join values and no
 `on_config_change`; subscribe to
-[`events::SettingsChanged`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/events.rs)
+[`events::SettingsChanged`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/events.rs)
 and read the file again yourself if you need changes at run time.
 [`enshwick-flame-altar-zones`](https://github.com/themaiby/enshwick/tree/main/mods/enshwick-flame-altar-zones)
 reads its settings this way.
 
 ## Changes while the game runs
 
-[`load.on_config_change(|settings: Settings| ...)`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/load.rs)
+[`load.on_config_change(|settings: Settings| ...)`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/load.rs)
 applies an edited file without a restart:
 
 - the loader looks at every settings file once a second, so the handler runs
@@ -131,7 +131,7 @@ so keep what hooks read in atomics, or swapped whole in an
 use std::sync::atomic::{AtomicU32, Ordering};
 
 /// Comfort settings.
-#[derive(Default, serde::Deserialize, serde::Serialize, enshwick_api::Config)]
+#[derive(Default, serde::Deserialize, serde::Serialize, enshwick_loader_api::Config)]
 struct Settings {
     /// Comfort per piece of furniture, times this factor.
     multiplier: f32,
@@ -140,7 +140,7 @@ struct Settings {
 /// Read by the hook on every call, as `f32` bits.
 static MULTIPLIER: AtomicU32 = AtomicU32::new(0);
 
-fn init(load: &mut enshwick_api::Load<'_>) -> Result<(), enshwick_api::Off> {
+fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
     let settings: Settings = load.config()?;
     MULTIPLIER.store(settings.multiplier.to_bits(), Ordering::Relaxed);
     load.on_config_change(|settings: Settings| {
@@ -159,10 +159,10 @@ Some values must be equal on the server and its players, such as a table the
 client's interface also reads. Mark such a field `#[config(sync)]`:
 
 ```rust
-use enshwick_api::config::Config;
+use enshwick_loader_api::config::Config;
 
 /// Altar settings.
-#[derive(Default, serde::Deserialize, serde::Serialize, enshwick_api::Config)]
+#[derive(Default, serde::Deserialize, serde::Serialize, enshwick_loader_api::Config)]
 struct Settings {
     /// Altars allowed at each Flame level. A joined player runs with the
     /// server's table.

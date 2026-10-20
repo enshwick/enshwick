@@ -11,9 +11,13 @@ mod copies;
 mod cursor;
 mod server;
 mod staffs;
+// The zones service's contract, the very file `flame-altar-zones` publishes
+// it from, so both sides declare one table.
+#[path = "../../enshwick-flame-altar-zones/src/service.rs"]
+pub mod zones_service;
 
-use enshwick_api::abi::Side;
-use enshwick_api::{Load, Mod, Off};
+use enshwick_loader_api::abi::Side;
+use enshwick_loader_api::{Load, Mod, Off};
 
 const DEFAULTS: &str = "\
 # A copy of each survivor at every altar, at most one per altar zone.
@@ -56,8 +60,8 @@ pub struct SurvivorsPerAltar;
 
 impl Mod for SurvivorsPerAltar {
     #[expect(clippy::too_many_lines, reason = "one row per build")]
-    fn manifest() -> &'static enshwick_api::abi::Manifest {
-        enshwick_api::manifest!(
+    fn manifest() -> &'static enshwick_loader_api::abi::Manifest {
+        enshwick_loader_api::manifest!(
             id: "survivors-per-altar",
             side: BOTH,
             join = true,
@@ -197,12 +201,12 @@ impl Mod for SurvivorsPerAltar {
             let merged = match server::link(load, staffs) {
                 Ok(()) => true,
                 Err(off) => {
-                    enshwick_api::warn!("copies stay off in hosted games: {off}");
+                    enshwick_loader_api::warn!("copies stay off in hosted games: {off}");
                     false
                 }
             };
             client::link(load, !merged)?;
-            enshwick_api::info!(
+            enshwick_loader_api::info!(
                 "client half linked; server half {}",
                 if merged {
                     "acts while this client hosts"
@@ -218,7 +222,7 @@ impl Mod for SurvivorsPerAltar {
 /// Adds the copy staffs, files them with their survivors and puts them in
 /// loot.
 fn copy_staffs(load: &mut Load<'_>, settings: &Settings) -> Result<(), Off> {
-    use enshwick_api::loot::{Drop, Source};
+    use enshwick_loader_api::loot::{Drop, Source};
 
     let texts = load.texts(staffs::TEXTS)?;
     staffs::add(load, &texts)?;
@@ -235,7 +239,7 @@ fn copy_staffs(load: &mut Load<'_>, settings: &Settings) -> Result<(), Off> {
             load.add_loot(Drop::one_of(&items, chance, source))?;
         }
     }
-    enshwick_api::info!(
+    enshwick_loader_api::info!(
         "{} copy staffs; in loot from bosses at {}, locked chests at {}",
         items.len(),
         settings.copy_staff_boss_chance,
@@ -244,7 +248,7 @@ fn copy_staffs(load: &mut Load<'_>, settings: &Settings) -> Result<(), Off> {
     Ok(())
 }
 
-enshwick_api::declare_mod!(SurvivorsPerAltar);
+enshwick_loader_api::declare_mod!(SurvivorsPerAltar);
 
 #[cfg(test)]
 mod tests {

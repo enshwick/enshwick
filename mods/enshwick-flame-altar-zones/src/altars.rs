@@ -26,12 +26,12 @@ use std::time::{Duration, Instant};
 
 use arc_swap::ArcSwap;
 use arrayvec::ArrayVec;
-use enshwick_api::abi::Side;
-use enshwick_api::ecs::{Attributes, Ecs, Entity, Worlds};
-use enshwick_api::events::Shutdown;
-use enshwick_api::{Load, Next, Off};
-use enshwick_geometry::{Altar, Box3, clusters};
+use enshwick_loader_api::abi::Side;
+use enshwick_loader_api::ecs::{Attributes, Ecs, Entity, Worlds};
+use enshwick_loader_api::events::Shutdown;
+use enshwick_loader_api::{Load, Next, Off};
 
+use crate::geometry::{Altar, Box3, clusters};
 use crate::zones::{self, Placed};
 
 type ZoneSize = unsafe extern "system" fn(out: *mut f32, balancing: u64, level: u64) -> u64;
@@ -154,13 +154,13 @@ thread_local! {
     static LEVELS_BUFFER: RefCell<Vec<(u32, Sizes)>> = const { RefCell::new(Vec::new()) };
 }
 
-enshwick_api::detour! {
+enshwick_loader_api::detour! {
     static ADD_ZONES: unsafe extern "system" fn(ctx: *mut u64) = add_zones;
 }
 
-enshwick_api::detour! {
+enshwick_loader_api::detour! {
     static UPGRADE: unsafe extern "system" fn(ctx: *mut u64) = upgrade,
-        flags = enshwick_api::abi::HookFlags::EXCLUSIVE;
+        flags = enshwick_loader_api::abi::HookFlags::EXCLUSIVE;
 }
 
 /// Turns a resolved address into a function pointer of type `F`.
@@ -213,7 +213,7 @@ fn forget() {
 
 fn turn_off(why: &str) {
     if !OFF.swap(true, Ordering::AcqRel) {
-        enshwick_api::warn!("altar zones off, vanilla from now on: {why}");
+        enshwick_loader_api::warn!("altar zones off, vanilla from now on: {why}");
     }
 }
 
@@ -307,7 +307,7 @@ unsafe fn observe(engine: &Engine, ctx: *mut u64) {
             };
             if state.built.merge(built.drain(..)) {
                 let ranges: Vec<(u32, &[f32; 3])> = state.built.iter().collect();
-                enshwick_api::info!("zones built from ranges {ranges:?}");
+                enshwick_loader_api::info!("zones built from ranges {ranges:?}");
             }
             if state.placed.merge(placed.drain(..)) {
                 maybe_solve(&mut state);
@@ -438,7 +438,7 @@ fn maybe_solve(state: &mut State) {
         return;
     }
     let levels: Vec<(u32, usize)> = state.levels.iter().map(|(id, s)| (id, s.len())).collect();
-    enshwick_api::info!(
+    enshwick_loader_api::info!(
         "{} altars placed, levelled {levels:?}",
         state.placed.entries.len()
     );
@@ -476,7 +476,7 @@ fn solve(input: &Input) -> Targets {
     for (&id, (placed, sizes)) in input {
         let (Some(turn), Some(centre)) = (zones::turn(placed.orientation), zones::centre(placed))
         else {
-            enshwick_api::warn!("altar {id} is tilted; it keeps its vanilla zone");
+            enshwick_loader_api::warn!("altar {id} is tilted; it keeps its vanilla zone");
             continue;
         };
         let Some(last) = sizes.last() else {
@@ -496,7 +496,9 @@ fn solve(input: &Input) -> Targets {
     let placements = match clusters(&altars) {
         Ok(placements) => placements,
         Err(error) => {
-            enshwick_api::warn!("cluster input rejected: {error}; altars keep vanilla zones");
+            enshwick_loader_api::warn!(
+                "cluster input rejected: {error}; altars keep vanilla zones"
+            );
             return Targets::new();
         }
     };
@@ -510,14 +512,14 @@ fn solve(input: &Input) -> Targets {
         };
         let height = placement.zone.max[1] - placement.zone.min[1];
         let target = zones::grown_range(range, turn, placement.growth, height);
-        enshwick_api::info!(
+        enshwick_loader_api::info!(
             "altar {id} level {level}: cluster {}, growth {} cells, range {range:?} -> {target:?}",
             placement.cluster,
             placement.growth
         );
         targets.insert(id, (level, target));
     }
-    enshwick_api::info!(
+    enshwick_loader_api::info!(
         "solved {} altars in {:?}",
         placements.len(),
         started.elapsed()

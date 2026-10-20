@@ -16,7 +16,7 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 arc-swap.workspace = true
-enshwick-api.workspace = true
+enshwick-loader-api.workspace = true
 serde.workspace = true
 
 [lints]

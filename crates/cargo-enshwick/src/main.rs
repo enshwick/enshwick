@@ -1,4 +1,5 @@
-//! `cargo enshwick`: start an Enshwick mod, build it and install it into the game.
+//! `cargo enshwick`: start an Enshwick mod, build it and install it into the game,
+//! and port the build rows to a new game build.
 
 use std::io::Write as _;
 use std::path::PathBuf;
@@ -9,6 +10,7 @@ use clap::{Parser, Subcommand, ValueEnum};
 mod install;
 mod manifest;
 mod new;
+mod pin;
 
 /// Cargo runs a subcommand as `cargo-enshwick enshwick <args>`.
 #[derive(Debug, Parser)]
@@ -57,6 +59,9 @@ enum Command {
         #[arg(long, short)]
         package: Option<String>,
     },
+    /// Ports the build rows of the loader and the mods in an Enshwick
+    /// checkout to a new game build. Exits with 2 when an entry needs a human.
+    Pin(pin::Args),
 }
 
 /// Where a mod runs, as `manifest!` spells it.
@@ -70,6 +75,16 @@ enum Side {
 fn main() -> ExitCode {
     let Cargo::Enshwick(args) = Cargo::parse();
     let outcome = match args.command {
+        Command::Pin(args) => {
+            return match pin::run(&args) {
+                Ok(true) => ExitCode::SUCCESS,
+                Ok(false) => ExitCode::from(pin::NEEDS_HUMAN),
+                Err(error) => {
+                    let _shown = writeln!(std::io::stderr(), "error: {error}");
+                    ExitCode::FAILURE
+                }
+            };
+        }
         Command::New { id, side, dir } => new::create(&dir, &id, side),
         Command::Install { game, package } => install::install(&game, package.as_deref()),
         Command::Manifest {

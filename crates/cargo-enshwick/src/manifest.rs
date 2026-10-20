@@ -2,7 +2,7 @@
 
 use std::path::Path;
 
-use enshwick_api::abi::{Manifest, ManifestFlags, Relation, Side, Str};
+use enshwick_loader_api::abi::{Manifest, ManifestFlags, Relation, Side, Str};
 
 /// Describes the mod in `dll`; an error when its version is not `expected`.
 pub(crate) fn show(dll: &Path, expected: Option<&str>) -> Result<String, String> {
@@ -87,7 +87,7 @@ fn query(dll: &Path) -> Result<&'static Manifest, String> {
     if module.is_null() {
         return Err(format!("{} could not be loaded", dll.display()));
     }
-    let name = format!("{}\0", enshwick_api::abi::exports::QUERY);
+    let name = format!("{}\0", enshwick_loader_api::abi::exports::QUERY);
     // SAFETY: a loaded module and a NUL-terminated name.
     let query = unsafe { GetProcAddress(module, name.as_ptr()) }
         .ok_or_else(|| format!("{} is not an Enshwick mod", dll.display()))?;
@@ -95,7 +95,7 @@ fn query(dll: &Path) -> Result<&'static Manifest, String> {
     let query: extern "system" fn() -> *const Manifest = unsafe { core::mem::transmute(query) };
     // SAFETY: the export returns its static manifest or null.
     let manifest = unsafe { query().as_ref() }.ok_or("the mod returned no manifest")?;
-    if manifest.header.abi_major != enshwick_api::abi::ABI_MAJOR {
+    if manifest.header.abi_major != enshwick_loader_api::abi::ABI_MAJOR {
         return Err(format!("built for ABI {}", manifest.header.abi_major));
     }
     Ok(manifest)
@@ -112,7 +112,7 @@ mod tests {
 
     #[test]
     fn a_manifest_reads_as_lines() {
-        let manifest = enshwick_api::manifest!(
+        let manifest = enshwick_loader_api::manifest!(
             id: "survivors-per-altar",
             side: BOTH,
             version: "0.2.0",

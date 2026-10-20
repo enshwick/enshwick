@@ -27,9 +27,9 @@ use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
 use arc_swap::ArcSwap;
-use enshwick_api::abi::Side;
-use enshwick_api::state::Hold;
-use enshwick_api::{Load, Next, Off};
+use enshwick_loader_api::abi::Side;
+use enshwick_loader_api::state::Hold;
+use enshwick_loader_api::{Load, Next, Off};
 
 use crate::limit::{self, Aabb, MAX_BASES, MAX_ZONES, VANILLA_ZONES, Zone, Zones};
 
@@ -118,13 +118,13 @@ static ZONES: OnceLock<ArcSwap<Zones>> = OnceLock::new();
 /// How many zones the world has, `u32::MAX` before the first grouping.
 static ZONE_COUNT: AtomicU32 = AtomicU32::new(u32::MAX);
 
-enshwick_api::detour! {
+enshwick_loader_api::detour! {
     static GROUP: unsafe extern "system" fn(bases: *mut u8, world: *mut u8) = group;
 }
-enshwick_api::detour! {
+enshwick_loader_api::detour! {
     static ADD_BASE: unsafe extern "system" fn(bases: *mut u8, zone: *const u8, index: u32) = add_base;
 }
-enshwick_api::detour! {
+enshwick_loader_api::detour! {
     static CHECK: unsafe extern "system" fn(
         flags: *mut u32,
         ctx: *const u8,
@@ -220,7 +220,7 @@ pub(crate) fn link(load: &mut Load<'_>) -> Result<bool, Off> {
     let sites = match Sites::find(load) {
         Ok(sites) => sites,
         Err(off) => {
-            enshwick_api::warn!("the game keeps 16 altars: {off}");
+            enshwick_loader_api::warn!("the game keeps 16 altars: {off}");
             return Ok(false);
         }
     };
@@ -277,12 +277,12 @@ fn keep_hold(hold: &Hold) {
         match done {
             Ok(()) => {
                 set = past;
-                enshwick_api::info!(
+                enshwick_loader_api::info!(
                     "hold {}: {zones} altar zones",
                     if past { "set" } else { "released" }
                 );
             }
-            Err(off) => enshwick_api::warn_every!(Duration::from_secs(600), "hold: {off}"),
+            Err(off) => enshwick_loader_api::warn_every!(Duration::from_secs(600), "hold: {off}"),
         }
     }
 }
@@ -344,11 +344,11 @@ fn group(next: Next<unsafe extern "system" fn(*mut u8, *mut u8)>, bases: *mut u8
     if shape(&current) == shape(&zones) {
         // Only the boxes moved, as when zones grow.
     } else if apart > 0 {
-        enshwick_api::warn!(
+        enshwick_loader_api::warn!(
             "{len} altar zones in {count} bases: {apart} stand apart from every base, since the game holds {MAX_BASES} bases; they allow building but no base features until they touch a base's zone"
         );
     } else {
-        enshwick_api::info!("{len} altar zones in {count} bases");
+        enshwick_loader_api::info!("{len} altar zones in {count} bases");
     }
     known.store(Arc::new(zones));
 }

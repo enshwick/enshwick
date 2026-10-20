@@ -2,9 +2,9 @@
 //! of a Safe lets other players use it, acting on their nearest own Safe
 //! within reach.
 
-use enshwick_api::commands::{CommandContext, Reply};
-use enshwick_api::i18n::{Language, Texts};
-use enshwick_api::world::{Player, World};
+use enshwick_loader_api::commands::{CommandContext, Reply};
+use enshwick_loader_api::i18n::{Language, Texts};
+use enshwick_loader_api::world::{Player, World};
 
 use crate::access::{ACCESS, AllowOutcome, Cell, centre, nearest_own};
 

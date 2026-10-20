@@ -32,13 +32,13 @@ use std::sync::atomic::{AtomicU16, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
-use enshwick_api::abi::{CallerFrame, Side};
-use enshwick_api::ecs::{Ecs, Entity};
-use enshwick_api::events::Shutdown;
-use enshwick_api::{Load, Next, Off};
-use enshwick_geometry::service::{self, AltarZone, ZonesService};
+use enshwick_loader_api::abi::{CallerFrame, Side};
+use enshwick_loader_api::ecs::{Ecs, Entity};
+use enshwick_loader_api::events::Shutdown;
+use enshwick_loader_api::{Load, Next, Off};
 
-use crate::copies::{Copies, Verdict};
+use crate::copies::{Copies, Verdict, Zone};
+use crate::zones_service::{self as service, AltarZone, ZonesService};
 
 type ComponentRead =
     unsafe extern "system" fn(ctx: *mut u64, kind: *const u16, entity: u32) -> *const u8;
@@ -129,24 +129,24 @@ type UpdateFn = unsafe extern "system" fn(*mut u8, *const u32, usize, usize) -> 
 type BedCheckFn = unsafe extern "system" fn(*mut u8) -> u8;
 type SpawnFn = unsafe extern "system" fn(*mut u64, *mut u8) -> u8;
 
-enshwick_api::detour! {
+enshwick_loader_api::detour! {
     static LOOKUP: unsafe extern "system" fn(bases: *mut u8, npc: *const u32) -> u32 = lookup,
-        flags = enshwick_api::abi::HookFlags::CALLER_FRAME;
+        flags = enshwick_loader_api::abi::HookFlags::CALLER_FRAME;
 }
-enshwick_api::detour! {
+enshwick_loader_api::detour! {
     static CURSOR_LOOKUP: unsafe extern "system" fn(bases: *mut u8, npc: *const u32) -> u32 = lookup,
-        flags = enshwick_api::abi::HookFlags::CALLER_FRAME;
+        flags = enshwick_loader_api::abi::HookFlags::CALLER_FRAME;
 }
-enshwick_api::detour! {
+enshwick_loader_api::detour! {
     static SPAWN: unsafe extern "system" fn(ctx: *mut u64, request: *mut u8) -> u8 = spawn;
 }
-enshwick_api::detour! {
+enshwick_loader_api::detour! {
     static MOVE: unsafe extern "system" fn(ctx: *mut *mut u64, b: usize, c: usize, d: usize) -> usize = move_npc;
 }
-enshwick_api::detour! {
+enshwick_loader_api::detour! {
     static UPDATE: unsafe extern "system" fn(bases: *mut u8, npc: *const u32, state: usize, flag: usize) -> usize = update;
 }
-enshwick_api::detour! {
+enshwick_loader_api::detour! {
     static BED_CHECK: unsafe extern "system" fn(ctx: *mut u8) -> u8 = bed_check;
 }
 
@@ -268,7 +268,7 @@ unsafe fn read_at<T: Copy>(base: u64, offset: u64) -> T {
 fn lookup(next: Next<LookupFn>, bases: *mut u8, npc: *const u32) -> u32 {
     // SAFETY: the rest of the chain takes the arguments the game passed.
     let found = unsafe { next.get()(bases, npc) };
-    let (Some(engine), Some(host)) = (ENGINE.get(), enshwick_api::host()) else {
+    let (Some(engine), Some(host)) = (ENGINE.get(), enshwick_loader_api::host()) else {
         return found;
     };
     if npc.is_null() {
@@ -299,7 +299,7 @@ unsafe fn resolve(engine: &Engine, found: u32, npc: u32, caller: u64, frame: &Ca
     if !(spawn || unique || bed || assign || roaming || quiet || cursor) {
         return found;
     }
-    let hosting = enshwick_api::host().is_some_and(|host| host.hosting());
+    let hosting = enshwick_loader_api::host().is_some_and(|host| host.hosting());
     if cursor && !hosting {
         return crate::cursor::answer(false, client_site, 0, found);
     }
@@ -330,7 +330,7 @@ unsafe fn resolve(engine: &Engine, found: u32, npc: u32, caller: u64, frame: &Ca
             shared.moving = Some((npc, copy, Instant::now()));
             return copy;
         }
-        enshwick_api::info!(
+        enshwick_loader_api::info!(
             "survivor {npc:#010x}: a new copy at {:?}",
             cells_fixed(target)
         );
@@ -394,7 +394,9 @@ unsafe fn file_copy(engine: &Engine, shared: &mut Shared, found: u32, npc: u32, 
         }
         Verdict::Remove => {
             let holder = shared.copies.at(npc, home, original);
-            enshwick_api::info!("survivor {npc:#010x}: copy {me} removed, {holder} keeps the slot");
+            enshwick_loader_api::info!(
+                "survivor {npc:#010x}: copy {me} removed, {holder} keeps the slot"
+            );
             if holder == me { original } else { holder }
         }
     }
@@ -463,7 +465,7 @@ unsafe fn assign_or_roam(
             .altar_at(position)
             .and_then(|a| shared.copies.slot(npc, a))
             .unwrap_or(0);
-        enshwick_api::info!("survivor {npc:#010x}: staff gives bed {entity} to {answer}");
+        enshwick_loader_api::info!("survivor {npc:#010x}: staff gives bed {entity} to {answer}");
         return answer;
     }
     // The previous occupant: the copy that really sleeps in this bed.
@@ -522,7 +524,7 @@ unsafe fn calibrate(engine: &Engine, ctx: *mut u64, transform: *const u8) {
         // SAFETY: reading a component of the bed in its live context.
         if unsafe { (engine.component_read)(ctx, &raw const kind, bed) } == transform {
             TRANSFORM_TYPE.store(kind, Ordering::Release);
-            enshwick_api::info!("CurrentTransform is component type {kind}");
+            enshwick_loader_api::info!("CurrentTransform is component type {kind}");
             return;
         }
     }
@@ -560,7 +562,7 @@ fn refresh(engine: &Engine, shared: &mut Shared) {
         shared.copies.set_altars(
             buffer[..count]
                 .iter()
-                .map(|z| (u64::from(z.altar), z.to_box())),
+                .map(|z| (u64::from(z.altar), Zone::new(z.min, z.max))),
         );
     }
     let gone: Vec<u32> = shared
@@ -667,7 +669,7 @@ unsafe fn consume_copy_staff(engine: &Engine, request: *mut u8) {
     };
     refresh(engine, shared);
     if shared.copies.altar_at(at).is_none() {
-        enshwick_api::info!(
+        enshwick_loader_api::info!(
             "copy staff of {} used outside every altar zone: kept",
             staff.key
         );
@@ -675,7 +677,7 @@ unsafe fn consume_copy_staff(engine: &Engine, request: *mut u8) {
     }
     // SAFETY: the request's consume flag, which the spawn reads next.
     unsafe { request.wrapping_add(o.spawn_consume).write(1) };
-    enshwick_api::info!(
+    enshwick_loader_api::info!(
         "copy staff of {} used at {at:?}: taken on success",
         staff.key
     );
