@@ -342,6 +342,29 @@ extern "system" fn mods(
     count: *mut u32,
 ) -> Status {
     let mods = with(Vec::new(), |s| s.host.mods.clone());
+    list(&mods, out, entry_size, capacity, count)
+}
+
+extern "system" fn join_missing(
+    _me: ModHandle,
+    out: *mut ModInfo,
+    entry_size: u32,
+    capacity: u32,
+    count: *mut u32,
+) -> Status {
+    let mods = with(Vec::new(), |s| s.host.join_missing.clone());
+    list(&mods, out, entry_size, capacity, count)
+}
+
+/// Copies up to `capacity` of `mods` to `out`, `entry_size` bytes apart, and
+/// writes how many there are.
+fn list(
+    mods: &[ModInfo],
+    out: *mut ModInfo,
+    entry_size: u32,
+    capacity: u32,
+    count: *mut u32,
+) -> Status {
     let stride = usize::try_from(entry_size).unwrap_or(0);
     let shared = stride.min(size_of::<ModInfo>());
     let capacity = usize::try_from(capacity).unwrap_or(0);
@@ -497,4 +520,5 @@ pub(crate) static TABLE: HostApi = HostApi {
     chat,
     set_label,
     rename_filter,
+    join_missing,
 };

@@ -155,6 +155,7 @@ pub struct FakeHost {
     mods: Vec<ModInfo>,
     hosting: bool,
     server_world: u64,
+    join_missing: Vec<ModInfo>,
     services: HashMap<(String, u32), usize>,
     refused_hooks: HashSet<u64>,
     code: (u64, u64),
@@ -200,6 +201,7 @@ impl FakeHost {
             mods: Vec::new(),
             hosting: false,
             server_world: 0,
+            join_missing: Vec::new(),
             services: HashMap::new(),
             refused_hooks: HashSet::new(),
             code: (0, 0),
@@ -514,6 +516,40 @@ impl FakeHost {
     #[must_use]
     pub fn loaded(mut self, info: ModInfo) -> Self {
         self.mods.push(info);
+        self
+    }
+
+    /// A server mod the last refused join found missing, which
+    /// `enshwick_api::mods::join_missing()` lists, in order.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_api::abi::{Header, ManifestFlags, ModInfo, Side, Str, UpdateSource};
+    ///
+    /// let loader = enshwick_test::FakeHost::new()
+    ///     .join_missing(ModInfo {
+    ///         header: Header::of::<ModInfo>(),
+    ///         id: Str::new("safes"),
+    ///         version: Str::new("0.2.0"),
+    ///         side: Side::BOTH,
+    ///         flags: ManifestFlags::JOIN,
+    ///         off: 1,
+    ///         file: Str::EMPTY,
+    ///         updates: UpdateSource::github("themaiby/enshwick", "enshwick-safes"),
+    ///     })
+    ///     .install();
+    /// // SAFETY: the installed fake's table.
+    /// let api = unsafe { &*loader.api() };
+    /// let mut count = 0;
+    /// let size = u32::try_from(size_of::<ModInfo>()).unwrap();
+    /// let status = (api.join_missing)(loader.handle(), core::ptr::null_mut(), size, 0, &mut count);
+    /// assert!(status.is_ok());
+    /// assert_eq!(count, 1);
+    /// ```
+    #[must_use]
+    pub fn join_missing(mut self, info: ModInfo) -> Self {
+        self.join_missing.push(info);
         self
     }
 

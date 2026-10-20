@@ -444,6 +444,19 @@ for entry in enshwick_api::mods() {
 }
 ```
 
+A server advertises each join mod's source in the Steam rule
+`enshwick.src.<id>`, written by `Updates::to_line` (`github:<owner/name>:<component>`).
+When the join check keeps a client out because the server runs mods the
+client lacks or has in another version, the loader raises
+`events::JoinMissing` on the client, and `enshwick_api::mods::join_missing()`
+lists those mods with the server's versions and sources. The handler runs on
+the game thread, so it hands the work to a thread of its own.
+
+[The updater](../../mods/enshwick-updater) is such a mod. It installs only
+archives signed with minisign by a trusted key, with the release's tag and the
+archive's name in the trusted comment; every release of this repository is
+signed so (`<archive>.minisig`).
+
 ## Rules for code in the game's frame
 
 - Hooks run on game threads, often many times per frame. In the common case they

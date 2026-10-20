@@ -14,7 +14,7 @@ use core::sync::atomic::AtomicUsize;
 pub const ABI_MAJOR: u16 = 1;
 
 /// The minor version of this interface. A newer minor only appends fields.
-pub const ABI_MINOR: u16 = 9;
+pub const ABI_MINOR: u16 = 10;
 
 /// Whether `id` is a valid mod id: 1 to 64 characters of `[a-z0-9-]`.
 ///
@@ -404,6 +404,13 @@ impl Event {
     /// [`BuildingData`] whose entity no longer exists. Raised on the game
     /// thread after the step. Server only.
     pub const BUILDING_REMOVED: Self = Self(10);
+    /// The join check kept this client out of a server that runs join mods
+    /// the client lacks or runs in another version; no data.
+    /// [`HostApi::join_missing`] lists those mods with the versions the
+    /// server runs and where they come from. Raised on the game thread once
+    /// the player closed the loader's note: a handler leaves downloads to a
+    /// thread of its own. Client only. Since minor 10.
+    pub const JOIN_MISSING: Self = Self(11);
 }
 
 /// The data of [`Event::BUILDING_PLACED`] and [`Event::BUILDING_REMOVED`].
@@ -1465,6 +1472,21 @@ pub struct HostApi {
     /// `enshwick_mod_init` only. Since minor 9.
     pub rename_filter:
         extern "system" fn(me: ModHandle, callback: RenameFn, user: *mut c_void) -> Status,
+    /// Up to `capacity` of the server's join mods that the last refused join
+    /// found missing on this client or in another version, and how many
+    /// there are; laid out as [`HostApi::mods`] lays out its entries. Each
+    /// entry has the server's version, [`ManifestFlags::JOIN`], `off` 1, the
+    /// client's DLL path when it has the mod (empty otherwise) and the
+    /// source the server advertises, else the client's own source for the
+    /// mod. The strings stay valid for the process. Empty before a refused
+    /// join; see [`Event::JOIN_MISSING`]. Since minor 10.
+    pub join_missing: extern "system" fn(
+        me: ModHandle,
+        out: *mut ModInfo,
+        entry_size: u32,
+        capacity: u32,
+        count: *mut u32,
+    ) -> Status,
 }
 
 /// The exports a mod DLL provides, by name.
@@ -1522,7 +1544,8 @@ const _: () = {
     assert!(core::mem::offset_of!(HostApi, server_world) == 24 + 29 * 8);
     assert!(core::mem::offset_of!(HostApi, command) == 24 + 30 * 8);
     assert!(core::mem::offset_of!(HostApi, rename_filter) == 24 + 33 * 8);
-    assert!(size_of::<HostApi>() == 24 + 34 * 8);
+    assert!(core::mem::offset_of!(HostApi, join_missing) == 24 + 34 * 8);
+    assert!(size_of::<HostApi>() == 24 + 35 * 8);
     assert!(core::mem::offset_of!(Manifest, updates) == 80);
     assert!(size_of::<UpdateSource>() == 48);
     assert!(size_of::<ResourceKey>() == 24);

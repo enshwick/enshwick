@@ -134,7 +134,7 @@ pub(crate) fn start(stub_abi: u32, missing_forwards: u32) {
     if side == Side::SERVER
         && let Some(game_dir) = loader.mods_dir.parent()
     {
-        crate::advertise::start(game_dir, joined(loader), host::join_values);
+        crate::advertise::start(game_dir, joined(loader), sources(loader), host::join_values);
     }
 }
 
@@ -241,6 +241,20 @@ fn joined(loader: &Loader) -> Vec<(String, String)> {
         .iter()
         .filter(|m| m.joins())
         .map(|m| (m.id.clone(), m.version.clone()))
+        .collect()
+}
+
+/// The update sources of the running join mods, `(id, source line)`.
+fn sources(loader: &Loader) -> Vec<(String, String)> {
+    loader
+        .mods
+        .iter()
+        .filter(|m| m.joins())
+        .filter_map(|m| {
+            // SAFETY: the loader keeps every source's strings for the process.
+            let updates = unsafe { enshwick_api::mods::Updates::from_abi(&m.updates) }?;
+            Some((m.id.clone(), updates.to_line()))
+        })
         .collect()
 }
 

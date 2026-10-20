@@ -84,6 +84,8 @@ without_data! {
     WorldSaved = WORLD_SAVED;
     /// [`Event::SHUTDOWN`].
     Shutdown = SHUTDOWN;
+    /// [`Event::JOIN_MISSING`]; [`crate::mods::join_missing`] lists the mods.
+    JoinMissing = JOIN_MISSING;
 }
 
 with_data! {

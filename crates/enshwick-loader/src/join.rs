@@ -6,6 +6,11 @@
 //! settings files, and with its files' values again on joining a server
 //! without them; the files stay as they are.
 //!
+//! A client kept out tells its mods which of the server's mods it lacks, with
+//! the versions and update sources the server advertises
+//! ([`Event::JOIN_MISSING`](enshwick_api::abi::Event::JOIN_MISSING)), so an
+//! updater can offer them.
+//!
 //! The game asks to change servers with a request that starts with the server's
 //! query `ip:port`. The hook lets the join go ahead and asks the server, over
 //! the Steam query protocol, for its `enshwick` rule.
@@ -13,6 +18,8 @@
 use std::collections::BTreeMap;
 use std::net::{SocketAddr, UdpSocket};
 use std::time::Duration;
+
+use enshwick_api::mods::Updates;
 
 /// The check holds the join, so a server that does not answer is not waited on long.
 const QUERY_TIMEOUT: Duration = Duration::from_secs(2);
@@ -146,6 +153,30 @@ pub fn differences(server: &str, ours: &str) -> Vec<String> {
             _ => None,
         })
         .collect()
+}
+
+/// The server's mods, `(id, version)`, that the client lacks or runs in
+/// another version, from two `id@version,...` lists.
+#[must_use]
+pub fn wanted(server: &str, ours: &str) -> Vec<(String, String)> {
+    let ours: BTreeMap<&str, &str> = ours
+        .split(',')
+        .filter_map(|entry| entry.split_once('@'))
+        .collect();
+    server
+        .split(',')
+        .filter_map(|entry| entry.split_once('@'))
+        .filter(|(id, version)| ours.get(id) != Some(version))
+        .map(|(id, version)| (id.to_owned(), version.to_owned()))
+        .collect()
+}
+
+/// The update source a server advertises for mod `id`; `None` when it
+/// advertises none or one this loader cannot read.
+#[must_use]
+pub fn source(reply: &[u8], id: &str) -> Option<Updates> {
+    let line = rule(reply, &format!("{}.{id}", crate::advertise::RULE_SOURCE))?;
+    Updates::parse(&line)
 }
 
 /// The whole mod list a server advertises across its mod rules.
@@ -340,6 +371,18 @@ mod runtime {
         };
         if blocking {
             show(&text);
+            // Told after the note closes, so an updater's offer follows it.
+            if let Some((_, server_mods)) = &server {
+                let missing: Vec<(String, String, Option<super::Updates>)> =
+                    super::wanted(server_mods, &ours_mods)
+                        .into_iter()
+                        .map(|(id, version)| {
+                            let source = super::source(&reply, &id);
+                            (id, version, source)
+                        })
+                        .collect();
+                crate::host::report_join_missing(&missing);
+            }
         } else {
             // The join goes on; the note must not hold it.
             let spawned = std::thread::Builder::new()
@@ -480,6 +523,36 @@ mod tests {
             [(1, Some("{ y = 2 }".to_owned())), (2, None)]
         );
         assert!(changes([("a", None)], &BTreeMap::new()).is_empty());
+    }
+
+    #[test]
+    fn wanted_mods_are_the_servers_the_client_lacks_or_runs_otherwise() {
+        assert_eq!(
+            wanted("a@1.0.0,b@0.2.0,c@1.0.0", "a@1.0.0,b@0.1.0,d@3.0.0"),
+            [
+                ("b".to_owned(), "0.2.0".to_owned()),
+                ("c".to_owned(), "1.0.0".to_owned()),
+            ]
+        );
+        assert!(wanted("a@1", "a@1").is_empty());
+        assert!(wanted("", "a@1").is_empty());
+    }
+
+    #[test]
+    fn sources_are_read_from_the_rules() {
+        let reply = reply(&[
+            ("enshwick.src.a", "github:themaiby/enshwick:enshwick-a"),
+            ("enshwick.src.b", "nonsense"),
+        ]);
+        assert_eq!(
+            source(&reply, "a"),
+            Some(Updates::GitHub {
+                repository: "themaiby/enshwick".into(),
+                component: "enshwick-a".into(),
+            })
+        );
+        assert_eq!(source(&reply, "b"), None);
+        assert_eq!(source(&reply, "c"), None);
     }
 
     #[test]
