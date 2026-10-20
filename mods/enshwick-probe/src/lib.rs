@@ -143,7 +143,7 @@ impl Mod for Probe {
         load.on::<WorldSaved>(move |()| saved.saved())?;
         load.add_command(
             "probe",
-            "development probe; /probe census|check|vitals <id>|destroy <id>|spawn <id>",
+            "development probe; /probe census|check|vitals <id>|destroy <id>|spawn <id>|notice <text>",
             move |ctx, args| match args {
                 _ if !ctx.is_admin() => "/probe is for administrators".into(),
                 ["census"] => census.lines().join("\n").into(),
@@ -154,7 +154,8 @@ impl Mod for Probe {
                 ["vitals", id] => checks.vitals_of(id).into(),
                 ["destroy", id] => checks.destroy(id).into(),
                 ["spawn", id] => checks.spawn_copy(id).into(),
-                _ => "/probe census|check|vitals <id>|destroy <id>|spawn <id>".into(),
+                ["notice", words @ ..] => checks.notice(&ctx.player, &words.join(" ")).into(),
+                _ => "/probe census|check|vitals <id>|destroy <id>|spawn <id>|notice <text>".into(),
             },
         )?;
         enshwick_loader_api::info!("probe on");

@@ -53,6 +53,8 @@ mod mid;
 #[cfg(windows)]
 mod net;
 #[cfg(windows)]
+mod notices;
+#[cfg(windows)]
 mod patch;
 #[cfg(windows)]
 mod progress;

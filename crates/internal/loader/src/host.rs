@@ -560,6 +560,7 @@ pub(crate) static API: HostApi = HostApi {
     net_channel,
     net_send,
     net_ready,
+    notify,
 };
 
 /// A static slice from a pointer and a count, empty for a null pointer.
@@ -1902,6 +1903,19 @@ extern "system" fn net_ready(me: ModHandle, peer: u64) -> Status {
         Ok(_) if crate::net::ready(peer) => Status::OK,
         Ok(_) => Status::MISSING,
         Err(status) => status,
+    })
+}
+
+extern "system" fn notify(me: ModHandle, key: u64, text: Str) -> Status {
+    entry("notify", || {
+        // SAFETY: the text is borrowed for the call.
+        let Some(text) = (unsafe { text.as_str() }) else {
+            return Status::BAD_ARGS;
+        };
+        match caller(me).and_then(|loader| crate::notices::send(loader, key, text)) {
+            Ok(()) => Status::OK,
+            Err(status) => status,
+        }
     })
 }
 
