@@ -78,8 +78,9 @@ use std::collections::{HashMap, HashSet};
 use std::sync::MutexGuard;
 
 use enshwick_api::abi::{
-    CallerFrame, CommandCall, Event, Fingerprint, Header, HookFlags, HostApi, Level, ModHandle,
-    ModInfo, PlayerInfo, RenameCall, ResourceKey, Side, Status, Str,
+    CallerFrame, CommandCall, Event, Fingerprint, Header, HookFlags, HostApi, InventoryOp,
+    InventoryOpResult, InventoryResult, ItemData, Level, ModHandle, ModInfo, PlayerInfo,
+    RenameCall, ResourceKey, Side, Status, Str,
 };
 use enshwick_api::events::Kind;
 use enshwick_api::{FnPtr, Hook};
@@ -160,6 +161,8 @@ pub struct FakeHost {
     refused_hooks: HashSet<u64>,
     code: (u64, u64),
     workshop_recipes: u32,
+    items: HashMap<u32, ItemData>,
+    no_inventories: bool,
 }
 
 impl Default for FakeHost {
@@ -206,6 +209,8 @@ impl FakeHost {
             refused_hooks: HashSet::new(),
             code: (0, 0),
             workshop_recipes: 512,
+            items: HashMap::new(),
+            no_inventories: false,
         }
     }
 
@@ -626,6 +631,46 @@ impl FakeHost {
         self
     }
 
+    /// The static data of item `item`, for `item_info`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_api::abi::ItemData;
+    ///
+    /// let loader = enshwick_test::FakeHost::new().item(0x5e01, 1, ItemData::HAS_PIDE).install();
+    /// # let _ = loader;
+    /// ```
+    #[must_use]
+    pub fn item(mut self, item: u32, max_stack: u16, flags: u32) -> Self {
+        self.items.insert(
+            item,
+            ItemData {
+                header: Header::of::<ItemData>(),
+                id: item,
+                max_stack,
+                reserved: 0,
+                flags,
+            },
+        );
+        self
+    }
+
+    /// Plays a game build without inventory transactions: `inventory_open`
+    /// answers [`Status::MISSING`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick_test::FakeHost::new().without_inventories().install();
+    /// # let _ = loader;
+    /// ```
+    #[must_use]
+    pub fn without_inventories(mut self) -> Self {
+        self.no_inventories = true;
+        self
+    }
+
     /// Makes this the loader of the process until the returned fake drops.
     ///
     /// Waits while another test of the process holds an installed fake.
@@ -660,6 +705,22 @@ pub struct LinkedHook {
     pub priority: i32,
     /// The hook's flags.
     pub flags: HookFlags,
+}
+
+/// An inventory request the mod submitted, as the loader received it.
+///
+/// # Examples
+///
+/// See [`Installed::inventory_requests`].
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct SubmittedRequest {
+    /// The operations, in order.
+    pub ops: Vec<InventoryOp>,
+    /// `InventoryRequest` flags.
+    pub flags: u32,
+    /// The player credited, 0 for the game's choice.
+    pub actor: u32,
 }
 
 /// A resource the mod serves, as the loader received it.
@@ -811,6 +872,46 @@ impl Installed {
     #[must_use]
     pub fn hooks(&self) -> Vec<LinkedHook> {
         table::with(Vec::new(), |s| s.hooks.clone())
+    }
+
+    /// The addresses the mod placed mid-function hooks at, in order.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick_test::FakeHost::new().install();
+    /// assert!(loader.mid_hooks().is_empty());
+    /// ```
+    #[must_use]
+    pub fn mid_hooks(&self) -> Vec<u64> {
+        table::with(Vec::new(), |s| s.mid_hooks.iter().map(|h| h.0).collect())
+    }
+
+    /// Runs the mod's mid-function hooks at `address` on `registers`, as the
+    /// game reaching that instruction would; returns how many ran.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick_test::FakeHost::new().install();
+    /// let mut registers = enshwick_api::Registers::default();
+    /// assert_eq!(loader.run_at(0x1_4000_1000, &mut registers), 0);
+    /// ```
+    #[must_use = "the count says whether the mod hooks the address"]
+    pub fn run_at(&self, address: u64, registers: &mut enshwick_api::Registers) -> usize {
+        let handlers: Vec<_> = table::with(Vec::new(), |s| {
+            s.mid_hooks
+                .iter()
+                .filter(|h| h.0 == address)
+                .map(|h| (h.1, h.2))
+                .collect()
+        });
+        for &(handler, user) in &handlers {
+            // SAFETY: the registers are valid for the call, and `user` is the
+            // pointer the mod registered the handler with.
+            unsafe { handler(registers, core::ptr::with_exposed_provenance_mut(user)) };
+        }
+        handlers.len()
     }
 
     /// The entry point of `hook` when the mod linked it: call it to run the
@@ -1181,5 +1282,62 @@ impl Installed {
         table::with(Vec::new(), |s| {
             s.published.iter().map(|p| (p.0.clone(), p.1)).collect()
         })
+    }
+
+    /// The inventory requests the mod submitted that are not finished yet, in
+    /// order.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick_test::FakeHost::new().install();
+    /// assert!(loader.inventory_requests().is_empty());
+    /// ```
+    #[must_use]
+    pub fn inventory_requests(&self) -> Vec<SubmittedRequest> {
+        table::with(Vec::new(), |s| {
+            s.inventory_requests
+                .iter()
+                .map(|r| r.request.clone())
+                .collect()
+        })
+    }
+
+    /// Finishes the oldest open inventory request as the game would:
+    /// `outcome` is an `InventoryResult` constant and `ops` a result per
+    /// operation. The mod's callback runs here, as on the game thread.
+    /// Returns false when no request is open.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_api::abi::InventoryResult;
+    ///
+    /// let loader = enshwick_test::FakeHost::new().install();
+    /// assert!(!loader.finish_inventory(InventoryResult::COMMITTED, &[]));
+    /// ```
+    #[must_use = "false means no request was open"]
+    pub fn finish_inventory(&self, outcome: u32, ops: &[InventoryOpResult]) -> bool {
+        let open = table::with(None, |s| {
+            (!s.inventory_requests.is_empty()).then(|| s.inventory_requests.remove(0))
+        });
+        let Some(open) = open else {
+            return false;
+        };
+        let result = InventoryResult {
+            header: Header::of::<InventoryResult>(),
+            outcome,
+            op_count: u32::try_from(ops.len()).unwrap_or(0),
+            ops: ops.as_ptr(),
+        };
+        // SAFETY: the mod's callback with its pointer, handed back once; the
+        // result lives for the call.
+        unsafe {
+            (open.done)(
+                &raw const result,
+                core::ptr::with_exposed_provenance_mut(open.user),
+            );
+        }
+        true
     }
 }

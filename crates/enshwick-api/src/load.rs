@@ -3,7 +3,7 @@
 use core::ffi::c_void;
 use std::borrow::Cow;
 
-use crate::abi::{Event, HostApi, Status, Str};
+use crate::abi::{Event, HookFlags, HostApi, MidHookSpec, Registers, Status, Str};
 use crate::config::Config;
 use crate::hook::{FnPtr, Hook};
 use crate::host::Host;
@@ -380,6 +380,61 @@ impl Load<'_> {
         ok(status, (), || format!("code patch at {address:#x}"))
     }
 
+    /// Runs `handler` before the instruction at `address`, inside a game
+    /// function, with the registers the game code has there.
+    ///
+    /// Writes to any field but `rsp` take effect when the game code goes on.
+    /// Every mod's handler on one address runs, in load order, each seeing the
+    /// writes of the ones before. A panic in `handler` turns the mod off and
+    /// leaves the registers as they were; the game goes on unchanged and the
+    /// handler is skipped from then on.
+    ///
+    /// `address` must start an instruction, and the instructions in the 5
+    /// bytes from it must not be jumped into from elsewhere: the loader
+    /// replaces them with a jump.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] when the loader refuses the hook: a second one of this mod on
+    /// `address`, another mod holding it exclusively, or a loader older than
+    /// ABI minor 11.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// fn init(load: &mut enshwick_api::Load<'_>) -> Result<(), enshwick_api::Off> {
+    ///     // An instruction inside a function, pinned per build in the mod's rows.
+    ///     let site = load.symbol("building.range_check")?;
+    ///     load.hook_at(site, |registers| registers.rax = registers.rax.min(64))
+    /// }
+    /// ```
+    pub fn hook_at<F>(&mut self, address: u64, handler: F) -> Result<(), Off>
+    where
+        F: Fn(&mut Registers) + Send + Sync + 'static,
+    {
+        let api = self.api();
+        let end = core::mem::offset_of!(HostApi, hook_at) + size_of::<usize>();
+        if !api.header.covers(end) {
+            return Err(Off::new(
+                "mid-function hooks need a newer loader (ABI minor 11)",
+            ));
+        }
+        let user = Box::into_raw(Box::new(MidHook { address, handler }));
+        let spec = MidHookSpec {
+            address,
+            handler: run_mid_hook::<F>,
+            user: user.cast(),
+            priority: 0,
+            flags: HookFlags::NONE,
+        };
+        let status = (api.hook_at)(self.host.handle(), &raw const spec);
+        if !status.is_ok() {
+            // SAFETY: refused, so the loader keeps no copy of the pointer.
+            drop(unsafe { Box::from_raw(user) });
+        }
+        ok(status, (), || format!("hook at {address:#x}"))
+    }
+
     /// The mod's settings: its file in `mod-configs/`, created from `defaults` when
     /// missing, parsed into `T`.
     ///
@@ -508,6 +563,21 @@ impl Load<'_> {
     /// See [`World`](crate::world::World).
     pub fn world(&mut self) -> Result<crate::world::World, Off> {
         crate::world::World::resolve(self)
+    }
+
+    /// Inventory reads and transactions in the game server, dedicated or
+    /// hosted by the client; a mod asks for them during `init`.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] under a loader older than ABI minor 12, or when this game
+    /// build lacks a piece of them.
+    ///
+    /// # Examples
+    ///
+    /// See [`Inventories`](crate::inventory::Inventories).
+    pub fn inventories(&mut self) -> Result<crate::inventory::Inventories, Off> {
+        crate::inventory::Inventories::resolve(self)
     }
 
     /// The mod's [`Scheduler`](crate::schedule::Scheduler), which runs work on
@@ -739,6 +809,35 @@ unsafe extern "system" fn deliver<F: Fn(*const c_void)>(
         && let Some(host) = crate::host()
     {
         host.fault("panic in an event handler");
+    }
+}
+
+/// A mid-function hook's handler and where it runs, for the fault message.
+struct MidHook<F> {
+    address: u64,
+    handler: F,
+}
+
+unsafe extern "system" fn run_mid_hook<F: Fn(&mut Registers)>(
+    registers: *mut Registers,
+    user: *mut c_void,
+) {
+    // SAFETY: `user` is the leaked `MidHook<F>` this function was registered with.
+    let hook = unsafe { &*user.cast::<MidHook<F>>() };
+    // SAFETY: the loader passes its saved registers, valid and unaliased for the call.
+    let Some(registers) = (unsafe { registers.as_mut() }) else {
+        return;
+    };
+    // The handler works on a copy, so a panic halfway leaves the game's
+    // registers whole.
+    let mut copy = *registers;
+    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| (hook.handler)(&mut copy))) {
+        Ok(()) => *registers = copy,
+        Err(_) => {
+            if let Some(host) = crate::host() {
+                host.fault(&format!("panic in the hook at {:#x}", hook.address));
+            }
+        }
     }
 }
 

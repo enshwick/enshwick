@@ -102,6 +102,7 @@ pub(crate) fn start(stub_abi: u32, missing_forwards: u32) {
             })
             .collect(),
         chains: Mutex::new(Chains::default()),
+        mids: Mutex::default(),
         services: Mutex::default(),
         caller_frame: read_frame,
         subscriptions: Mutex::default(),
@@ -117,6 +118,7 @@ pub(crate) fn start(stub_abi: u32, missing_forwards: u32) {
     crate::content::seal_and_link(loader);
     // The client runs the server's code while it hosts a game.
     crate::events::link(loader);
+    crate::inventory::link(loader);
     crate::chat::link(loader);
     crate::label::link(loader);
     if side == Side::CLIENT {
@@ -391,36 +393,37 @@ fn initialise(loader: &Loader, order: &[&Library]) {
     }
 }
 
-/// Arms every chain past the mods that are off; a target that fails turns off
-/// the mods linked on it.
+/// Arms every chain and mid-function hook past the mods that are off; an
+/// address that fails turns off the mods hooked on it.
 fn arm(loader: &Loader, frame: Option<FrameSlot>) {
-    let off = |owner: usize| {
-        owner != crate::chains::LOADER
-            && loader
-                .mods
-                .get(owner)
-                .is_none_or(|m| m.off.load(Ordering::Acquire))
-    };
-    let Ok(mut chains) = loader.chains.lock() else {
+    let (Ok(mut chains), Ok(mut mids)) = (loader.chains.lock(), loader.mids.lock()) else {
         return;
     };
     chains.seal();
+    mids.seal();
     let patches = crate::code::seal();
     let patch::Armed {
         failures,
         code: verdicts,
-    } = patch::arm(&mut chains, frame, off, &patches);
-    let armed = chains.len() - failures.len();
+    } = patch::arm(&mut chains, &mids, frame, host::is_off, &patches);
+    let armed = (chains.len() + mids.len()).saturating_sub(failures.len());
     let owners: Vec<(usize, u64)> = failures
         .iter()
         .flat_map(|f| {
-            chains
-                .owners(f.target)
-                .into_iter()
-                .map(move |owner| (owner, f.target))
+            let owners = if f.inside {
+                mids.owners(f.target)
+            } else {
+                chains.owners(f.target)
+            };
+            owners.into_iter().map(move |owner| (owner, f.target))
         })
         .collect();
+    drop(mids);
     drop(chains);
+    crate::inventory::settle(
+        loader,
+        failures.iter().filter(|f| f.inside).map(|f| f.target),
+    );
     for failure in &failures {
         crate::log!(
             ERROR,

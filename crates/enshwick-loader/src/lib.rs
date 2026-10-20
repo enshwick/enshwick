@@ -24,11 +24,15 @@ mod detour;
 mod events;
 #[cfg(windows)]
 mod host;
+#[cfg(windows)]
+mod inventory;
 pub mod join;
 #[cfg(windows)]
 mod label;
 pub mod log;
 pub mod manifest;
+#[cfg(windows)]
+mod mid;
 #[cfg(windows)]
 mod patch;
 pub mod resolve;

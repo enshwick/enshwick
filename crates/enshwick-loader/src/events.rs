@@ -282,6 +282,7 @@ unsafe extern "system" fn step(server: *mut u8) {
         };
         loader.emit(event, None, (&raw const *data).cast());
     }
+    crate::inventory::deliver();
     let step = STEPS.fetch_add(1, Ordering::Relaxed) + 1;
     let tick = TickData {
         header: Header::of::<TickData>(),

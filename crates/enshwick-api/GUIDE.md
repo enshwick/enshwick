@@ -277,6 +277,84 @@ and the server's features act whenever the client hosts:
   server and client halves hook one function, it links one detour there that
   answers for both.
 
+## Inventories
+
+`load.inventories()?` during `init` reads and changes inventories in the
+game server: the dedicated server, or the client while it hosts a game. It is
+`Copy`.
+
+```rust
+use enshwick_api::ecs::Entity;
+use enshwick_api::inventory::{Batch, Op};
+
+let inventories = load.inventories()?;
+// On the game thread, from an event or a scheduled task:
+let stacks = inventories.read().slots(corpse).iter().filter(|s| !s.is_empty()).count();
+inventories.move_all(corpse, player, move |outcome| {
+    enshwick_api::info!("{stacks} stacks: {:?}", outcome.done);
+});
+// A trade, all or nothing:
+let trade = Batch::new()
+    .with(Op::Take { from: player, item: COIN, count: 5 })
+    .with(Op::Give { to: player, item: SWORD, count: 1 });
+let ticket = inventories.submit(&trade, |_| {});
+```
+
+- Reads are synchronous: `slots(root)` follows the inventory's sub-inventories
+  (virtual links included) and lists every slot with its item id, count, item
+  entity (`pide`, for items with durability or a level) and `SlotRef`, the
+  game's `sub-inventory | index << 32`. `count`, `slot`, `root` (the chest or
+  player a slot belongs to) and `durability(pide)` go with it, and
+  `item_info(item)` gives the stack size and flags. `read()` works on the
+  server's game thread between steps; elsewhere it returns nothing.
+  `read_in(ctx)` reads from inside a hooked system, through its context.
+- Changes are requests: `give`, `take`, `destroy_slot`, `move_slot`, `move_all`,
+  or a `Batch` of them through `submit`. Submit from any thread. The loader runs
+  each request inside the game's inventory system as one transaction: if an
+  operation fails, or a give or take falls short without `allow_partial`,
+  the game rolls the transaction back and nothing changes. Moves leave what does
+  not fit in the source, as the game's "take all" does, and count as done.
+- The callback runs on the game thread after a later step, with an `Outcome`:
+  `Committed`, `RolledBack`, `Unavailable`, `TimedOut` or `Refused`, and a
+  result per operation. The returned `Ticket` holds the same outcome for
+  polling. A batch over the limits (64 operations, 16 inventories, the game's
+  op log) is refused before it reaches the game; `Batch::split` cuts it into
+  parts that fit, each all or nothing on its own.
+- The inventory system runs once per player each step, so with nobody online
+  nothing runs and requests time out after 30 seconds. A client that hosts
+  nothing refuses requests (`Unavailable`, delivered once a game runs). A build without the
+  pieces turns the mod off at `load.inventories()`.
+- Moves are silent; `Batch::notify()` shows the actor the game's pickup and
+  inventory-full messages, as its own looting does. Gives always show them.
+
+## Loot containers
+
+`enshwick_api::loot` reads the containers a dead enemy leaves, and other
+containers that dissolve once emptied. The game checks each of them every step
+in the system `loot::SYSTEM`; hook it and walk its rows from the hook:
+
+```rust
+use enshwick_api::loot::{Containers, near};
+
+let containers = Containers::resolve(load)?;
+load.hook(&CHECK, load.system(enshwick_api::loot::SYSTEM)?)?;
+// In the hook, after vanilla ran:
+unsafe { containers.each(ctx, |c| {
+    if c.is_open() && near(spot, c.position, 12.0, 4.0) { /* ... */ }
+}) };
+```
+
+- A `Container` gives the entity, its position, whether it is empty, whether
+  it despawns on its own, its `AreaLootOverride` and its interaction offer: who
+  last opened or looted it and when. `is_enemy_loot()` keeps corpses and enemy
+  loot bags and leaves out chests, quest containers and items a player
+  dropped; `is_open()` adds that it holds something and offers its
+  interaction.
+- `container(ctx, entity)`, `position` and `is_player` read any entity from
+  inside a system. Empty a container with `Inventories::move_all`.
+- On a hosting client the system runs in both worlds: check
+  `Worlds::is_server(ctx)` first.
+
 ## Content: items, recipes, workshops and texts
 
 New game content works on the server and the client alike; the mod runs on
@@ -403,6 +481,39 @@ fn upgrade(next: Next<unsafe extern "system" fn(*mut u64)>, ctx: *mut u64) {
 // in init: load.hook(&UPGRADE, load.system("upgrade_building_range")?)?;
 ```
 
+## Mid-function hooks
+
+When the value to change sits in a register halfway through a function,
+`load.hook_at(address, handler)` runs `handler` before the instruction at
+`address`, with the registers the game code has there:
+
+```rust
+// in init:
+let site = load.symbol("building.range_clamp")?;
+load.hook_at(site, |registers: &mut enshwick_api::Registers| {
+    registers.rax = registers.rax.min(64);
+})?;
+```
+
+- `Registers` holds the 16 general-purpose registers and `rflags`. Writes to
+  any of them but `rsp` take effect when the game code goes on; `rsp` is the
+  stack pointer at `address`, for reading the function's locals.
+- The loader saves and restores `xmm0`-`xmm5` around the handler, but not the
+  upper halves of the `ymm` registers or the x87 state.
+- `address` must start an instruction. The loader replaces the 5 bytes from
+  it with a jump and moves the instructions there; it refuses an address where
+  control leaves within those bytes, or where they overlap another hook's jump,
+  function hooks included. Nothing else may jump into the middle of those
+  bytes, which the loader cannot check: pick an address inside a straight run
+  of instructions.
+- Every mod's handler on one address runs, in load order, each seeing the
+  writes of the ones before. A second handler of one mod on one address is
+  refused.
+- A panic in a handler is caught: its writes are dropped, the mod is turned
+  off and its handlers are skipped from then on. The game goes on unchanged.
+- `Installed::run_at` in `enshwick-test` runs the mod's handlers on chosen
+  registers.
+
 ## Testing a mod
 
 [`enshwick-test`](../enshwick-test) is a fake loader for unit tests. Configure
@@ -424,7 +535,9 @@ A hook's chain continues to its target, so a target set to `address` of a plain
 function stands in for the game's. `logs()`, `faults()`, `hooks()`, `texts()`
 and `resources()` show what the mod asked for; `raise::<events::Tick>(&data)`
 raises an event, and `set_settings` with `SettingsChanged` plays a player's
-edit. A mod initialises once per process, so write one test per mod life and run
+edit. `inventory_requests()` lists the inventory requests and
+`finish_inventory(outcome, results)` answers the oldest as the game would;
+`item` and `without_inventories` set what the build has. A mod initialises once per process, so write one test per mod life and run
 them with `cargo nextest`, which gives each test its own process.
 
 ## Working inside a system
