@@ -75,7 +75,7 @@ pub(crate) fn add_text(id: u32, language: u32, text: &str) -> Status {
 
 /// The text of `id` for `language`: its own, else any-language, else English.
 fn text_for(id: u32, language: u32) -> Option<&'static str> {
-    if let Some(text) = crate::notices::text(id) {
+    if let Some(text) = crate::notices::text(id).or_else(|| crate::ui::text(id)) {
         return Some(text);
     }
     let texts = TEXTS.get()?.get(&id)?;

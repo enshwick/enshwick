@@ -74,6 +74,10 @@ name = "net"
 required-features = ["test"]
 
 [[test]]
+name = "no_ui"
+required-features = ["test"]
+
+[[test]]
 name = "no_inventories"
 required-features = ["test"]
 
@@ -99,6 +103,10 @@ required-features = ["test"]
 
 [[test]]
 name = "terrain"
+required-features = ["test"]
+
+[[test]]
+name = "ui"
 required-features = ["test"]
 
 [[test]]

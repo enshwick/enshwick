@@ -40,6 +40,7 @@ chapters! {
     Progress => "progress.md",
     Commands => "commands.md",
     Messages => "messages.md",
+    Interface => "interface.md",
     State => "state.md",
     Services => "services.md",
     FindingTheGame => "finding-the-game.md",

@@ -12,7 +12,7 @@ use crate::abi::{
     MidHookFn, MidHookSpec, ModHandle, ModInfo, NetMessageFn, PlayerInfo, RenameCallFn,
     ResourceKey, ResourcePatchFn, Side, SkillCheckFn, SpawnRequest, Status, StatusFn, Str,
     SummonFn, SurvivorLookupFn, SurvivorStatusFn, TeleportRequest, TerrainEdit,
-    TerrainMaterialInfo, WeatherFront, ZoneCheckFn,
+    TerrainMaterialInfo, UiAnswerFn, UiDialog, UiFrameFn, UiWidget, WeatherFront, ZoneCheckFn,
 };
 
 use super::{FakeHost, LinkedHook, ServedResource, SubmittedRequest};
@@ -95,6 +95,15 @@ pub(crate) struct State {
     /// The terrain edits the mod asked for.
     pub(crate) terrain_edits: Vec<TerrainEdit>,
     pub(crate) config_schema: Option<String>,
+    /// Frame callbacks: callback and pointer.
+    pub(crate) frames: Vec<(UiFrameFn, usize)>,
+    /// The frame drawing now: its token, whether a window is open and what
+    /// was drawn.
+    pub(crate) frame: Option<(u64, bool, Vec<super::Drawn>)>,
+    /// Inputs waiting for the widget with their text.
+    pub(crate) inputs: Vec<(String, super::Input)>,
+    /// Dialogs waiting for an answer, with where it goes.
+    pub(crate) dialogs: Vec<(super::ShownDialog, UiAnswerFn, usize)>,
     /// The world key last handed out, alive until the next one.
     world_key: Option<Box<str>>,
     /// The altars `altars` lists, settable while installed.
@@ -188,6 +197,10 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         channels: Vec::new(),
         net_sent: Vec::new(),
         notices: Vec::new(),
+        frames: Vec::new(),
+        frame: None,
+        inputs: Vec::new(),
+        dialogs: Vec::new(),
         build_filters: Vec::new(),
         world_key: None,
         altars: Vec::new(),
@@ -1610,6 +1623,151 @@ extern "system" fn terrain_edit(
 }
 
 /// table it sees for the process, so it is one static.
+extern "system" fn ui_frame(_me: ModHandle, callback: UiFrameFn, user: *mut c_void) -> Status {
+    with(Status::MISSING, |s| {
+        if s.host.side == Side::SERVER {
+            return Status::MISSING;
+        }
+        s.frames.push((callback, user.expose_provenance()));
+        Status::OK
+    })
+}
+
+/// The input waiting for the widget labelled `text`, taken.
+fn input(s: &mut State, text: &str) -> Option<super::Input> {
+    let at = s.inputs.iter().position(|(t, _)| t == text)?;
+    Some(s.inputs.remove(at).1)
+}
+
+extern "system" fn ui_widget(_me: ModHandle, frame: u64, widget: *mut UiWidget) -> Status {
+    use super::{Drawn, Input};
+    // SAFETY: the safe layer passes its own widget, valid for the call.
+    let Some(w) = (unsafe { widget.as_mut() }) else {
+        return Status::BAD_ARGS;
+    };
+    let label = text(w.text);
+    let options: Vec<String> = if w.options.is_null() {
+        Vec::new()
+    } else {
+        // SAFETY: the safe layer passes `option_count` texts.
+        unsafe { core::slice::from_raw_parts(w.options, w.option_count as usize) }
+            .iter()
+            .map(|o| text(*o))
+            .collect()
+    };
+    with(Status::MISSING, |s| {
+        let open = match s.frame.as_ref() {
+            Some((token, open, _)) if *token == frame => *open,
+            _ => return Status::WRONG_THREAD,
+        };
+        let read_only = w.flags & UiWidget::READ_ONLY != 0;
+        w.result = 0;
+        let drawn = match w.kind {
+            UiWidget::WINDOW if !open => Drawn::Window {
+                id: label,
+                title: text(w.detail),
+            },
+            UiWidget::END if open => Drawn::End,
+            UiWidget::SOUND => Drawn::Sound(w.style),
+            UiWidget::WINDOW | UiWidget::END => return Status::REFUSED,
+            _ if !open => return Status::REFUSED,
+            UiWidget::LABEL => Drawn::Label {
+                text: label,
+                style: w.style,
+            },
+            UiWidget::BUTTON => {
+                if !read_only && matches!(input(s, &label), Some(Input::Click)) {
+                    w.result = 1;
+                }
+                Drawn::Button {
+                    text: label,
+                    enabled: !read_only,
+                }
+            }
+            UiWidget::TOGGLE => {
+                if let (false, Some(Input::Toggle(on))) = (read_only, input(s, &label)) {
+                    w.index = u32::from(on);
+                    w.result = 1;
+                }
+                Drawn::Toggle {
+                    label,
+                    on: w.index != 0,
+                    read_only,
+                }
+            }
+            UiWidget::SLIDER => {
+                if let (false, Some(Input::Value(value))) = (read_only, input(s, &label)) {
+                    w.value = value.clamp(w.min, w.max);
+                    w.result = 1;
+                }
+                Drawn::Slider {
+                    label,
+                    value: w.value,
+                    min: w.min,
+                    max: w.max,
+                    steps: w.steps,
+                    read_only,
+                }
+            }
+            UiWidget::DROPDOWN => {
+                if let (false, Some(Input::Pick(index))) = (read_only, input(s, &label))
+                    && index < options.len()
+                {
+                    w.index = u32::try_from(index).unwrap_or(0);
+                    w.result = 1;
+                }
+                Drawn::Dropdown {
+                    label,
+                    options,
+                    index: w.index as usize,
+                    read_only,
+                }
+            }
+            UiWidget::PROGRESS => Drawn::Progress {
+                fraction: (w.value - w.min) / (w.max - w.min),
+            },
+            _ => return Status::MISSING,
+        };
+        if let Some((_, open, list)) = s.frame.as_mut() {
+            match drawn {
+                Drawn::Window { .. } => *open = true,
+                Drawn::End => *open = false,
+                _ => {}
+            }
+            list.push(drawn);
+        }
+        Status::OK
+    })
+}
+
+extern "system" fn ui_dialog(
+    _me: ModHandle,
+    dialog: *const UiDialog,
+    callback: UiAnswerFn,
+    user: *mut c_void,
+) -> Status {
+    // SAFETY: the safe layer passes its own dialog, valid for the call.
+    let Some(d) = (unsafe { dialog.as_ref() }) else {
+        return Status::BAD_ARGS;
+    };
+    let shown = super::ShownDialog {
+        title: text(d.title),
+        message: text(d.message),
+        detail: text(d.detail),
+        buttons: d.buttons,
+    };
+    with(Status::MISSING, |s| {
+        if s.host.side == Side::SERVER {
+            return Status::MISSING;
+        }
+        if s.dialogs.len() >= 16 {
+            return Status::REFUSED;
+        }
+        s.dialogs.push((shown, callback, user.expose_provenance()));
+        Status::OK
+    })
+}
+
 pub(crate) static TABLE: HostApi = HostApi {
     header: Header::of::<HostApi>(),
     host_version: Str::new("0.0.0-test"),
@@ -1710,4 +1868,7 @@ pub(crate) static TABLE: HostApi = HostApi {
     item_data_open,
     item_data_get,
     item_data_set,
+    ui_frame,
+    ui_widget,
+    ui_dialog,
 };

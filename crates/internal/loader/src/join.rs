@@ -314,9 +314,7 @@ mod runtime {
     use std::collections::BTreeMap;
     use std::sync::OnceLock;
 
-    use windows_sys::Win32::UI::WindowsAndMessaging::{
-        MB_ICONWARNING, MB_OK, MB_SETFOREGROUND, MB_TOPMOST, MessageBoxW,
-    };
+    use enshwick_loader_api::abi::UiDialog;
 
     pub(crate) type ServerChange =
         unsafe extern "system" fn(provider: *mut u8, request: *const u8) -> u64;
@@ -405,54 +403,44 @@ mod runtime {
         let Some((text, blocking)) = plan.message(&names) else {
             return true;
         };
-        if blocking {
-            let disabled = crate::modlist::disabled();
-            let wanted = server
-                .as_ref()
-                .map(|(_, server_mods)| super::wanted(server_mods, &ours_mods))
-                .unwrap_or_default();
-            match super::off_note(&wanted, disabled) {
-                Some(note) => show(&format!("{text}\n\n{note}")),
-                None => show(&text),
-            }
-            // Told after the note closes, so an updater's offer follows it.
-            // Mods the player turned off are theirs to turn on, not offered.
-            if server.is_some() {
-                let missing: Vec<crate::host::Wanted> = wanted
-                    .into_iter()
-                    .filter(|(id, _)| !disabled.contains(id))
-                    .map(|(id, version)| crate::host::Wanted {
-                        name: super::name(&reply, &id),
-                        source: super::source(&reply, &id),
-                        keys: super::keys(&reply, &id),
-                        id,
-                        version,
-                    })
-                    .collect();
+        if !blocking {
+            // The join goes on, and the note shows over the game.
+            crate::ui::show("Enshwick", &text, "", 1 << UiDialog::OK, |_| {});
+            return true;
+        }
+        let disabled = crate::modlist::disabled();
+        let wanted = server
+            .as_ref()
+            .map(|(_, server_mods)| super::wanted(server_mods, &ours_mods))
+            .unwrap_or_default();
+        let text = match super::off_note(&wanted, disabled) {
+            Some(note) => format!("{text}\n\n{note}"),
+            None => text,
+        };
+        // Mods the player turned off are theirs to turn on, not offered.
+        let missing: Vec<crate::host::Wanted> = if server.is_some() {
+            wanted
+                .into_iter()
+                .filter(|(id, _)| !disabled.contains(id))
+                .map(|(id, version)| crate::host::Wanted {
+                    name: super::name(&reply, &id),
+                    source: super::source(&reply, &id),
+                    keys: super::keys(&reply, &id),
+                    id,
+                    version,
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
+        // The join is refused at once, so the game keeps drawing; the
+        // updater's offer follows once the player closes the note.
+        crate::ui::show("Enshwick", &text, "", 1 << UiDialog::OK, move |_| {
+            if !missing.is_empty() {
                 crate::host::report_join_missing(&missing);
             }
-        } else {
-            // The join goes on; the note must not hold it.
-            let spawned = std::thread::Builder::new()
-                .name("enshwick-join-note".into())
-                .spawn(move || show(&text));
-            drop(spawned);
-        }
-        !blocking
-    }
-
-    fn show(text: &str) {
-        let text: Vec<u16> = text.encode_utf16().chain([0]).collect();
-        let title: Vec<u16> = "Enshwick".encode_utf16().chain([0]).collect();
-        // SAFETY: NUL-terminated strings and no owner window.
-        unsafe {
-            MessageBoxW(
-                core::ptr::null_mut(),
-                text.as_ptr(),
-                title.as_ptr(),
-                MB_OK | MB_ICONWARNING | MB_TOPMOST | MB_SETFOREGROUND,
-            )
-        };
+        });
+        false
     }
 }
 
