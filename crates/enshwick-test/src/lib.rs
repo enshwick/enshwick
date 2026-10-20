@@ -813,6 +813,46 @@ impl Installed {
         table::with(Vec::new(), |s| s.hooks.clone())
     }
 
+    /// The addresses the mod placed mid-function hooks at, in order.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick_test::FakeHost::new().install();
+    /// assert!(loader.mid_hooks().is_empty());
+    /// ```
+    #[must_use]
+    pub fn mid_hooks(&self) -> Vec<u64> {
+        table::with(Vec::new(), |s| s.mid_hooks.iter().map(|h| h.0).collect())
+    }
+
+    /// Runs the mod's mid-function hooks at `address` on `registers`, as the
+    /// game reaching that instruction would; returns how many ran.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick_test::FakeHost::new().install();
+    /// let mut registers = enshwick_api::Registers::default();
+    /// assert_eq!(loader.run_at(0x1_4000_1000, &mut registers), 0);
+    /// ```
+    #[must_use = "the count says whether the mod hooks the address"]
+    pub fn run_at(&self, address: u64, registers: &mut enshwick_api::Registers) -> usize {
+        let handlers: Vec<_> = table::with(Vec::new(), |s| {
+            s.mid_hooks
+                .iter()
+                .filter(|h| h.0 == address)
+                .map(|h| (h.1, h.2))
+                .collect()
+        });
+        for &(handler, user) in &handlers {
+            // SAFETY: the registers are valid for the call, and `user` is the
+            // pointer the mod registered the handler with.
+            unsafe { handler(registers, core::ptr::with_exposed_provenance_mut(user)) };
+        }
+        handlers.len()
+    }
+
     /// The entry point of `hook` when the mod linked it: call it to run the
     /// detour as the game would, its chain continuing to the target.
     ///

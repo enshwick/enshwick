@@ -5,8 +5,9 @@ use core::sync::atomic::Ordering;
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use enshwick_api::abi::{
-    BuildInfo, CallerFrame, CommandFn, Event, EventFn, Header, HookSpec, HostApi, Level, ModHandle,
-    ModInfo, PlayerInfo, RenameFn, ResourceKey, ResourcePatchFn, Status, Str,
+    BuildInfo, CallerFrame, CommandFn, Event, EventFn, Header, HookSpec, HostApi, Level, MidHookFn,
+    MidHookSpec, ModHandle, ModInfo, PlayerInfo, RenameFn, ResourceKey, ResourcePatchFn, Status,
+    Str,
 };
 
 use crate::{FakeHost, LinkedHook, ServedResource};
@@ -17,6 +18,8 @@ pub(crate) struct State {
     pub(crate) logs: Vec<(Level, String)>,
     pub(crate) faults: Vec<String>,
     pub(crate) hooks: Vec<LinkedHook>,
+    /// Mid-function hooks: address, handler and the mod's pointer.
+    pub(crate) mid_hooks: Vec<(u64, MidHookFn, usize)>,
     pub(crate) subscriptions: Vec<(Event, EventFn, usize)>,
     pub(crate) served: Vec<(ServedResource, ResourcePatchFn, usize)>,
     pub(crate) texts: Vec<(u32, u32, String)>,
@@ -50,6 +53,7 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         logs: Vec::new(),
         faults: Vec::new(),
         hooks: Vec::new(),
+        mid_hooks: Vec::new(),
         subscriptions: Vec::new(),
         served: Vec::new(),
         texts: Vec::new(),
@@ -155,6 +159,21 @@ extern "system" fn hook(_me: ModHandle, spec: *const HookSpec) -> Status {
         }
     }
     linked
+}
+
+extern "system" fn hook_at(_me: ModHandle, spec: *const MidHookSpec) -> Status {
+    // SAFETY: the safe layer passes a valid spec for the call; `as_ref` turns away null.
+    let Some(spec) = (unsafe { spec.as_ref() }) else {
+        return Status::BAD_ARGS;
+    };
+    with(Status::MISSING, |s| {
+        if s.host.refused_hooks.contains(&spec.address) {
+            return Status::REFUSED;
+        }
+        s.mid_hooks
+            .push((spec.address, spec.handler, spec.user.expose_provenance()));
+        Status::OK
+    })
 }
 
 extern "system" fn caller_frame(out: *mut CallerFrame) {
@@ -521,4 +540,5 @@ pub(crate) static TABLE: HostApi = HostApi {
     set_label,
     rename_filter,
     join_missing,
+    hook_at,
 };

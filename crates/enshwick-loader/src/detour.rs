@@ -50,6 +50,8 @@ const REACH: usize = 0x7fff_0000 - BLOCK;
 pub(crate) struct Request {
     pub(crate) target: usize,
     pub(crate) detour: usize,
+    /// The target is an instruction inside a function, not its start.
+    pub(crate) inside: bool,
 }
 
 /// A prepared hook: the bytes to write over the target and where the moved
@@ -116,8 +118,8 @@ pub(crate) fn commit(pending: &[&Pending], code: &[Bytes<'_>]) -> bool {
 }
 
 fn prepare_one(request: Request, fresh: &mut Vec<usize>) -> Result<Pending, String> {
-    // SAFETY: the build table or reflection vouches for a function start, and
-    // functions are followed by at least `READ` mapped bytes of code or padding.
+    // SAFETY: the build table, reflection or a mod vouches for an instruction
+    // start, followed by at least `READ` mapped bytes of code or padding.
     let code = unsafe { core::slice::from_raw_parts(request.target as *const u8, READ) };
     let mut decoder = Decoder::with_ip(64, code, request.target as u64, DecoderOptions::NONE);
     let mut instructions: Vec<Instruction> = Vec::new();
@@ -129,9 +131,19 @@ fn prepare_one(request: Request, fresh: &mut Vec<usize>) -> Result<Pending, Stri
         }
         match instruction.flow_control() {
             FlowControl::Return | FlowControl::Interrupt | FlowControl::Exception
-                if stolen + instruction.len() < PATCH =>
+                if !request.inside && stolen + instruction.len() < PATCH =>
             {
                 return Err("the function is shorter than the jump".into());
+            }
+            // Inside a function, bytes after a jump away belong to other code.
+            FlowControl::Return
+            | FlowControl::Interrupt
+            | FlowControl::Exception
+            | FlowControl::UnconditionalBranch
+            | FlowControl::IndirectBranch
+                if request.inside && stolen + instruction.len() < PATCH =>
+            {
+                return Err("control leaves within the bytes of the jump".into());
             }
             _ => {}
         }
@@ -430,6 +442,7 @@ mod tests {
         let pending = prepare(&[Request {
             target,
             detour: (plus_hundred as Unary as *const ()).addr(),
+            inside: false,
         }]);
         let ready: Vec<&Pending> = pending.iter().filter_map(|p| p.as_ref().ok()).collect();
         assert!(commit(&ready, &[]));
@@ -481,6 +494,7 @@ mod tests {
         let pending = prepare(&[Request {
             target: hooked,
             detour: (plus_hundred as Unary as *const ()).addr(),
+            inside: false,
         }]);
         let ready: Vec<&Pending> = pending.iter().filter_map(|p| p.as_ref().ok()).collect();
         assert_eq!(ready[0].span(), (hooked, 5));

@@ -8,7 +8,7 @@ use std::sync::{Mutex, OnceLock};
 use enshwick_api::abi as api_frame;
 use enshwick_api::abi::{
     BuildInfo, Event, EventFn, Header, HookSpec, HostApi, Level, Manifest, ManifestFlags,
-    ModHandle, ModInfo, Side, Status, Str, UpdateKind, UpdateSource,
+    MidHookSpec, ModHandle, ModInfo, Side, Status, Str, UpdateKind, UpdateSource,
 };
 use enshwick_api::mods::Updates;
 use enshwick_reflect::{Fingerprint, Reflection};
@@ -16,6 +16,7 @@ use rustc_hash::FxHashMap;
 
 use crate::builds::KnownBuild;
 use crate::chains::{Chains, Link};
+use crate::mid::{MidLink, Mids};
 
 /// Where the loader's own releases come from.
 const LOADER_UPDATES: UpdateSource = UpdateSource::github("themaiby/enshwick", "enshwick-loader");
@@ -91,6 +92,8 @@ pub(crate) struct Loader {
     pub(crate) mods: Vec<ModRecord>,
     /// Every hook chain.
     pub(crate) chains: Mutex<Chains>,
+    /// Every mid-function hook.
+    pub(crate) mids: Mutex<Mids>,
     /// Published services: `(name, version)` to `(owner, table)`.
     pub(crate) services: Mutex<FxHashMap<(String, u32), (usize, usize)>>,
     /// Reads the caller frame of the running chain.
@@ -249,6 +252,17 @@ fn loader() -> Option<&'static Loader> {
     LOADER.get()
 }
 
+/// Whether the mod at index `owner` is off; the loader's own links never are.
+pub(crate) fn is_off(owner: usize) -> bool {
+    owner != crate::chains::LOADER
+        && loader().is_none_or(|loader| {
+            loader
+                .mods
+                .get(owner)
+                .is_none_or(|m| m.off.load(Ordering::Acquire))
+        })
+}
+
 impl Loader {
     fn record(&self, me: ModHandle) -> Option<(usize, &ModRecord)> {
         let index = me.0.checked_sub(1)?;
@@ -400,6 +414,7 @@ pub(crate) static API: HostApi = HostApi {
     set_label,
     rename_filter,
     join_missing,
+    hook_at,
 };
 
 /// A static slice from a pointer and a count, empty for a null pointer.
@@ -535,6 +550,33 @@ extern "system" fn hook(me: ModHandle, spec: *const HookSpec) -> Status {
     };
     match loader.chains.lock() {
         Ok(mut chains) => chains.add(spec.target, link),
+        Err(_) => Status::REFUSED,
+    }
+}
+
+extern "system" fn hook_at(me: ModHandle, spec: *const MidHookSpec) -> Status {
+    let Some(loader) = loader() else {
+        return Status::BAD_ARGS;
+    };
+    let Some((index, record)) = loader.record(me) else {
+        return Status::BAD_ARGS;
+    };
+    if record.off.load(Ordering::Acquire) {
+        return Status::FAULTED;
+    }
+    // SAFETY: a non-null spec from a mod points at a valid `MidHookSpec`.
+    let Some(spec) = (unsafe { spec.as_ref() }) else {
+        return Status::BAD_ARGS;
+    };
+    let link = MidLink {
+        owner: index,
+        handler: spec.handler,
+        user: spec.user.expose_provenance(),
+        priority: spec.priority,
+        flags: spec.flags,
+    };
+    match loader.mids.lock() {
+        Ok(mut mids) => mids.add(spec.address, link),
         Err(_) => Status::REFUSED,
     }
 }

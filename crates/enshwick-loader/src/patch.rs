@@ -5,6 +5,9 @@
 //! live on separate read-write pages, so rewiring never writes code. A thunk
 //! for a chain that reads the caller frame first stores the stack pointer in a
 //! TLS slot of the thread.
+//!
+//! Mid-function hooks are armed in the same batch: their stubs come from
+//! [`crate::mid`], their jumps from the same detour engine.
 
 use std::sync::atomic::AtomicUsize;
 
@@ -16,6 +19,8 @@ use windows_sys::Win32::System::Threading::{GetCurrentProcess, TlsAlloc, TlsGetV
 
 use crate::chains::Chains;
 use crate::code::{CodePatch, Verdict};
+use crate::detour::{Pending, Request};
+use crate::mid::{Mids, Stubs};
 
 const PAGE: usize = 4096;
 const THUNK: usize = 96;
@@ -81,10 +86,30 @@ impl FrameSlot {
 /// A target that could not be armed, and why.
 #[derive(Debug)]
 pub(crate) struct Failure {
-    /// The game function.
+    /// The game function, or the instruction of a mid-function hook.
     pub(crate) target: u64,
+    /// A mid-function hook's address rather than a chain's function.
+    pub(crate) inside: bool,
     /// For the log.
     pub(crate) reason: String,
+}
+
+impl Failure {
+    fn chain(target: u64, reason: impl Into<String>) -> Self {
+        Self {
+            target,
+            inside: false,
+            reason: reason.into(),
+        }
+    }
+
+    fn site(target: u64, reason: impl Into<String>) -> Self {
+        Self {
+            target,
+            inside: true,
+            reason: reason.into(),
+        }
+    }
 }
 
 /// What arming did.
@@ -97,18 +122,20 @@ pub(crate) struct Armed {
     pub(crate) code: Vec<Verdict>,
 }
 
-/// Detours every chain's target to its thunk, wires the slots and writes the
-/// code patches, all in one batch.
+/// Detours every chain's target to its thunk, wires the slots, jumps from
+/// every mid-function hook's address to its stub and writes the code
+/// patches, all in one batch.
 pub(crate) fn arm(
     chains: &mut Chains,
+    mids: &Mids,
     frame: Option<FrameSlot>,
-    off: impl Fn(usize) -> bool + Copy,
+    off: fn(usize) -> bool,
     patches: &[CodePatch],
 ) -> Armed {
     let count = chains.len();
     if count == 0 {
         let mut armed = Armed::default();
-        armed.code = hook(chains, &[], off, patches, &mut armed.failures);
+        armed.code = hook(chains, mids, &[], off, patches, &mut armed.failures);
         return armed;
     }
     let code_len = (count * THUNK).div_ceil(PAGE) * PAGE;
@@ -124,7 +151,7 @@ pub(crate) fn arm(
     }
     .cast::<u8>();
     if block.is_null() {
-        return unarmed(chains, patches, "no memory for thunks");
+        return unarmed(chains, mids, patches, "no memory for thunks");
     }
     // SAFETY: `block` spans `code_len + data_len` committed bytes.
     let data_start = unsafe { block.add(code_len) };
@@ -147,10 +174,10 @@ pub(crate) fn arm(
             (false, _) => None,
             (true, Some(frame)) => Some(frame.0),
             (true, None) => {
-                failures.push(Failure {
-                    target: chain.target,
-                    reason: "no TLS slot for the caller frame".into(),
-                });
+                failures.push(Failure::chain(
+                    chain.target,
+                    "no TLS slot for the caller frame",
+                ));
                 continue;
             }
         };
@@ -164,26 +191,28 @@ pub(crate) fn arm(
     // SAFETY: the code pages belong to `block`.
     let sealed = unsafe { VirtualProtect(block.cast(), code_len, PAGE_EXECUTE_READ, &raw mut old) };
     if sealed == 0 {
-        return unarmed(chains, patches, "thunk pages not executable");
+        return unarmed(chains, mids, patches, "thunk pages not executable");
     }
     // SAFETY: no preconditions.
     let process = unsafe { GetCurrentProcess() };
     // SAFETY: flushing our own process's freshly written code.
     unsafe { FlushInstructionCache(process, block.cast(), code_len) };
 
-    let code = hook(chains, &thunks, off, patches, &mut failures);
+    let code = hook(chains, mids, &thunks, off, patches, &mut failures);
     Armed { failures, code }
 }
 
 /// Every target failed and every patch left out, for `reason`.
-fn unarmed(chains: &mut Chains, patches: &[CodePatch], reason: &str) -> Armed {
+fn unarmed(chains: &mut Chains, mids: &Mids, patches: &[CodePatch], reason: &str) -> Armed {
     Armed {
         failures: chains
             .iter_mut()
-            .map(|c| Failure {
-                target: c.target,
-                reason: reason.into(),
-            })
+            .map(|c| Failure::chain(c.target, reason))
+            .chain(
+                mids.addresses()
+                    .into_iter()
+                    .map(|a| Failure::site(a, reason)),
+            )
             .collect(),
         code: patches
             .iter()
@@ -193,47 +222,114 @@ fn unarmed(chains: &mut Chains, patches: &[CodePatch], reason: &str) -> Armed {
 }
 
 /// Detours each target to its thunk, wiring the chain's slots before the
-/// target can jump there, and writes the code patches that pass their check.
+/// target can jump there, jumps from each mid-function hook's address to its
+/// stub, and writes the code patches that pass their check.
+///
+/// Every jump is written in one batch. Where two hooks would overwrite the
+/// same bytes, the first keeps them: functions before mid-function hooks.
 fn hook(
     chains: &mut Chains,
+    mids: &Mids,
     thunks: &[(u64, *mut u8)],
-    off: impl Fn(usize) -> bool + Copy,
+    off: fn(usize) -> bool,
     patches: &[CodePatch],
     failures: &mut Vec<Failure>,
 ) -> Vec<Verdict> {
+    let sites = mids.sites(off);
+    let stubs = Stubs::dispatching(&sites);
+    if stubs.is_none() {
+        failures.extend(
+            sites
+                .iter()
+                .map(|site| Failure::site(site.address, "no memory for stubs")),
+        );
+    }
     // Targets are addresses in this 64-bit process, so they fit a usize.
-    let requests: Vec<crate::detour::Request> = thunks
-        .iter()
-        .filter_map(|&(target, code)| {
-            Some(crate::detour::Request {
-                target: usize::try_from(target).ok()?,
-                detour: code.addr(),
+    let functions = thunks.iter().filter_map(|&(target, code)| {
+        Some(Request {
+            target: usize::try_from(target).ok()?,
+            detour: code.addr(),
+            inside: false,
+        })
+    });
+    let inside = stubs.iter().flat_map(|stubs| {
+        sites.iter().enumerate().filter_map(|(i, site)| {
+            Some(Request {
+                target: usize::try_from(site.address).ok()?,
+                detour: stubs.entry(i),
+                inside: true,
             })
         })
-        .collect();
+    });
+    let requests: Vec<Request> = functions.chain(inside).collect();
     let pending = crate::detour::prepare(&requests);
-    let mut ready = Vec::with_capacity(pending.len());
-    for ((target, _), result) in thunks.iter().zip(&pending) {
-        let Some(chain) = chains.iter_mut().find(|c| c.target == *target) else {
-            continue;
-        };
+
+    let mut ready: Vec<(u64, bool, &Pending)> = Vec::with_capacity(pending.len());
+    let mut taken: Vec<(usize, usize)> = Vec::with_capacity(pending.len());
+    for (request, result) in requests.iter().zip(&pending) {
+        let target = request.target as u64;
+        let result = result.as_ref().map_err(Clone::clone).and_then(|hook| {
+            let (start, len) = hook.span();
+            if taken.iter().any(|&(s, l)| s < start + len && start < s + l) {
+                return Err("its bytes overlap another hook's jump".to_owned());
+            }
+            taken.push((start, len));
+            Ok(hook)
+        });
         match result {
+            Ok(hook) if request.inside => {
+                if let (Some(stubs), Some(i)) =
+                    (&stubs, sites.iter().position(|s| s.address == target))
+                {
+                    stubs.finish(i, hook.original);
+                    ready.push((target, true, hook));
+                }
+            }
             Ok(hook) => {
-                chain.original = hook.original;
-                // Wired before the target can jump to its thunk.
-                chain.wire(off);
-                ready.push((chain.target, hook));
+                if let Some(chain) = chains.iter_mut().find(|c| c.target == target) {
+                    chain.original = hook.original;
+                    // Wired before the target can jump to its thunk.
+                    chain.wire(off);
+                    ready.push((target, false, hook));
+                }
             }
             Err(reason) => {
-                chain.head = None;
+                if !request.inside
+                    && let Some(chain) = chains.iter_mut().find(|c| c.target == target)
+                {
+                    chain.head = None;
+                }
                 failures.push(Failure {
-                    target: chain.target,
-                    reason: reason.clone(),
+                    target,
+                    inside: request.inside,
+                    reason,
                 });
             }
         }
     }
-    let hooks: Vec<&crate::detour::Pending> = ready.iter().map(|&(_, hook)| hook).collect();
+    if let Some(stubs) = &stubs
+        && !stubs.seal()
+    {
+        ready.retain(|&(target, inside, _)| {
+            if inside {
+                failures.push(Failure::site(target, "stub pages not executable"));
+            }
+            !inside
+        });
+    }
+    write(chains, &ready, off, patches, failures)
+}
+
+/// Writes the prepared jumps and the code patches that pass their check, all
+/// or none.
+fn write(
+    chains: &mut Chains,
+    ready: &[(u64, bool, &Pending)],
+    off: fn(usize) -> bool,
+    patches: &[CodePatch],
+    failures: &mut Vec<Failure>,
+) -> Vec<Verdict> {
+    let hooks: Vec<&Pending> = ready.iter().map(|&(_, _, hook)| hook).collect();
     let hooked: Vec<(usize, usize)> = hooks.iter().map(|h| h.span()).collect();
     let mut verdicts = crate::code::check(patches, &hooked, off, crate::code::read);
     let writes: Vec<crate::detour::Bytes<'_>> = patches
@@ -245,7 +341,11 @@ fn hook(
             bytes: &p.replacement,
         })
         .collect();
-    let targets: Vec<u64> = ready.iter().map(|&(target, _)| target).collect();
+    let targets: Vec<u64> = ready
+        .iter()
+        .filter(|&&(_, inside, _)| !inside)
+        .map(|&(target, _, _)| target)
+        .collect();
     crate::code::arming(patches, &verdicts, &targets);
     if !crate::detour::commit(&hooks, &writes) {
         crate::code::arming(&[], &[], &[]);
@@ -254,12 +354,13 @@ fn hook(
                 *verdict = Verdict::Skip("the code could not be written".into());
             }
         }
-        for (target, _) in ready {
-            if let Some(chain) = chains.iter_mut().find(|c| c.target == target) {
+        for &(target, inside, _) in ready {
+            if !inside && let Some(chain) = chains.iter_mut().find(|c| c.target == target) {
                 chain.head = None;
             }
             failures.push(Failure {
                 target,
+                inside,
                 reason: "the target could not be written".into(),
             });
         }

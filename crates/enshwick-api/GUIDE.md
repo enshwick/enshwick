@@ -403,6 +403,39 @@ fn upgrade(next: Next<unsafe extern "system" fn(*mut u64)>, ctx: *mut u64) {
 // in init: load.hook(&UPGRADE, load.system("upgrade_building_range")?)?;
 ```
 
+## Mid-function hooks
+
+When the value to change sits in a register halfway through a function,
+`load.hook_at(address, handler)` runs `handler` before the instruction at
+`address`, with the registers the game code has there:
+
+```rust
+// in init:
+let site = load.symbol("building.range_clamp")?;
+load.hook_at(site, |registers: &mut enshwick_api::Registers| {
+    registers.rax = registers.rax.min(64);
+})?;
+```
+
+- `Registers` holds the 16 general-purpose registers and `rflags`. Writes to
+  any of them but `rsp` take effect when the game code goes on; `rsp` is the
+  stack pointer at `address`, for reading the function's locals.
+- The loader saves and restores `xmm0`-`xmm5` around the handler, but not the
+  upper halves of the `ymm` registers or the x87 state.
+- `address` must start an instruction. The loader replaces the 5 bytes from
+  it with a jump and moves the instructions there; it refuses an address where
+  control leaves within those bytes, or where they overlap another hook's jump,
+  function hooks included. Nothing else may jump into the middle of those
+  bytes, which the loader cannot check: pick an address inside a straight run
+  of instructions.
+- Every mod's handler on one address runs, in load order, each seeing the
+  writes of the ones before. A second handler of one mod on one address is
+  refused.
+- A panic in a handler is caught: its writes are dropped, the mod is turned
+  off and its handlers are skipped from then on. The game goes on unchanged.
+- `Installed::run_at` in `enshwick-test` runs the mod's handlers on chosen
+  registers.
+
 ## Testing a mod
 
 [`enshwick-test`](../enshwick-test) is a fake loader for unit tests. Configure

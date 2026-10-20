@@ -30,6 +30,8 @@ mod label;
 pub mod log;
 pub mod manifest;
 #[cfg(windows)]
+mod mid;
+#[cfg(windows)]
 mod patch;
 pub mod resolve;
 pub mod settings;

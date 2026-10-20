@@ -14,7 +14,7 @@ use core::sync::atomic::AtomicUsize;
 pub const ABI_MAJOR: u16 = 1;
 
 /// The minor version of this interface. A newer minor only appends fields.
-pub const ABI_MINOR: u16 = 10;
+pub const ABI_MINOR: u16 = 11;
 
 /// Whether `id` is a valid mod id: 1 to 64 characters of `[a-z0-9-]`.
 ///
@@ -1290,6 +1290,108 @@ impl ModHandle {
     pub const NONE: Self = Self(0);
 }
 
+/// The general-purpose registers and flags at a mid-function hook, as the
+/// interrupted game code had them.
+///
+/// The loader saves them before it calls the handlers of a hook placed with
+/// [`HostApi::hook_at`] and loads them back afterwards, so a handler that
+/// writes a field changes what the game code sees next. `rsp` is read-only:
+/// the stack stays where it was.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_api::abi::Registers;
+///
+/// let mut registers = Registers { rcx: 7, ..Registers::default() };
+/// registers.rax = registers.rcx * 2;
+/// assert_eq!(registers.rax, 14);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Registers {
+    /// `rax`.
+    pub rax: u64,
+    /// `rcx`.
+    pub rcx: u64,
+    /// `rdx`.
+    pub rdx: u64,
+    /// `rbx`.
+    pub rbx: u64,
+    /// The stack pointer at the hooked instruction; writes are ignored.
+    pub rsp: u64,
+    /// `rbp`.
+    pub rbp: u64,
+    /// `rsi`.
+    pub rsi: u64,
+    /// `rdi`.
+    pub rdi: u64,
+    /// `r8`.
+    pub r8: u64,
+    /// `r9`.
+    pub r9: u64,
+    /// `r10`.
+    pub r10: u64,
+    /// `r11`.
+    pub r11: u64,
+    /// `r12`.
+    pub r12: u64,
+    /// `r13`.
+    pub r13: u64,
+    /// `r14`.
+    pub r14: u64,
+    /// `r15`.
+    pub r15: u64,
+    /// `rflags`.
+    pub rflags: u64,
+}
+
+/// A handler of a mid-function hook: the saved registers, writable, and the
+/// pointer it was registered with. It must not unwind.
+pub type MidHookFn = unsafe extern "system" fn(registers: *mut Registers, user: *mut c_void);
+
+/// A request to run a handler at an instruction inside a game function.
+///
+/// Every mod's handler on one address runs, by priority and then load order,
+/// each seeing the writes of the ones before; then the instructions the jump
+/// replaced run and the function goes on.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_api::abi::{HookFlags, MidHookSpec, Registers};
+///
+/// unsafe extern "system" fn handler(registers: *mut Registers, _user: *mut core::ffi::c_void) {
+///     // SAFETY: the loader passes its saved registers, valid for the call.
+///     if let Some(registers) = unsafe { registers.as_mut() } {
+///         registers.rax = 0;
+///     }
+/// }
+///
+/// let spec = MidHookSpec {
+///     address: 0x1_4009_0a6c,
+///     handler,
+///     user: core::ptr::null_mut(),
+///     priority: 0,
+///     flags: HookFlags::NONE,
+/// };
+/// assert_eq!(spec.priority, 0);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct MidHookSpec {
+    /// The absolute address of the instruction to run the handler before.
+    pub address: u64,
+    /// The handler.
+    pub handler: MidHookFn,
+    /// Passed to the handler on every call.
+    pub user: *mut c_void,
+    /// Lower runs earlier; equal priorities run in load order.
+    pub priority: i32,
+    /// [`HookFlags::EXCLUSIVE`] or none.
+    pub flags: HookFlags,
+}
+
 /// The table of services the loader offers a mod.
 ///
 /// Fields are only ever appended; a mod checks [`Header::covers`] before it
@@ -1487,6 +1589,10 @@ pub struct HostApi {
         capacity: u32,
         count: *mut u32,
     ) -> Status,
+    /// Runs a handler before the instruction at an address inside a game
+    /// function, with the registers there; allowed during
+    /// `enshwick_mod_init` only. Since minor 11.
+    pub hook_at: extern "system" fn(me: ModHandle, spec: *const MidHookSpec) -> Status,
 }
 
 /// The exports a mod DLL provides, by name.
@@ -1545,7 +1651,12 @@ const _: () = {
     assert!(core::mem::offset_of!(HostApi, command) == 24 + 30 * 8);
     assert!(core::mem::offset_of!(HostApi, rename_filter) == 24 + 33 * 8);
     assert!(core::mem::offset_of!(HostApi, join_missing) == 24 + 34 * 8);
-    assert!(size_of::<HostApi>() == 24 + 35 * 8);
+    assert!(core::mem::offset_of!(HostApi, hook_at) == 24 + 35 * 8);
+    assert!(size_of::<HostApi>() == 24 + 36 * 8);
+    assert!(size_of::<Registers>() == 17 * 8);
+    assert!(core::mem::offset_of!(Registers, rsp) == 4 * 8);
+    assert!(core::mem::offset_of!(Registers, rflags) == 16 * 8);
+    assert!(size_of::<MidHookSpec>() == 32);
     assert!(core::mem::offset_of!(Manifest, updates) == 80);
     assert!(size_of::<UpdateSource>() == 48);
     assert!(size_of::<ResourceKey>() == 24);

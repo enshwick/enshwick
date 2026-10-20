@@ -73,6 +73,7 @@ pub mod schedule;
 pub mod state;
 pub mod world;
 
+pub use abi::Registers;
 pub use enshwick_macros::Config;
 /// Declares a hook from its body, as [`detour!`] does: the function stays,
 /// and a static [`Hook`] named after it in upper case joins it.
