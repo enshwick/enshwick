@@ -173,9 +173,8 @@ impl World {
     #[must_use]
     pub fn position(&self, entity: Entity) -> Option<[f64; 3]> {
         let data = self.component(entity, self.transform)?;
-        // SAFETY: a live CurrentTransform starts with x, y and z in 32.32 fixed point.
-        let fixed = unsafe { data.cast::<[i64; 3]>().read_unaligned() };
-        Some(crate::ecs::metres(fixed))
+        // SAFETY: the entity's live CurrentTransform, read at once.
+        Some(unsafe { crate::ecs::transform_position(data.cast()) })
     }
 
     /// The item `entity` was placed from, which it keeps across saves.

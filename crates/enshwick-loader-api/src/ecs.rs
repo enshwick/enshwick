@@ -567,6 +567,18 @@ impl Worlds {
     }
 }
 
+/// Engine units per metre: world coordinates are 32.32 fixed point.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::ecs::FIXED_PER_METRE;
+///
+/// let half_metre = (0.5 * FIXED_PER_METRE) as i64;
+/// assert_eq!(half_metre, 1 << 31);
+/// ```
+pub const FIXED_PER_METRE: f64 = 4_294_967_296.0;
+
 /// Metres from the engine's 32.32 fixed-point world coordinates, as
 /// `CurrentTransform` stores them.
 ///
@@ -578,7 +590,55 @@ impl Worlds {
 #[must_use]
 #[expect(clippy::cast_precision_loss, reason = "world coordinates fit an f64")]
 pub fn metres(fixed: [i64; 3]) -> [f64; 3] {
-    fixed.map(|v| v as f64 / 4_294_967_296.0)
+    fixed.map(|v| v as f64 / FIXED_PER_METRE)
+}
+
+/// The engine's 32.32 fixed-point world coordinates from metres, the inverse
+/// of [`metres`]: fractions below a unit are cut toward zero, values past the
+/// range saturate and NaN becomes 0.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::ecs::{fixed, metres};
+///
+/// assert_eq!(fixed([3.0, -0.5, 0.0]), [3_i64 << 32, -(1_i64 << 31), 0]);
+/// assert_eq!(metres(fixed([12.25, 0.0, -7.75])), [12.25, 0.0, -7.75]);
+/// ```
+#[must_use]
+#[expect(
+    clippy::cast_possible_truncation,
+    reason = "a float-to-int cast saturates, as documented"
+)]
+pub fn fixed(metres: [f64; 3]) -> [i64; 3] {
+    metres.map(|m| (m * FIXED_PER_METRE) as i64)
+}
+
+/// The position a `CurrentTransform` component holds, in metres: x, y and z
+/// in 32.32 fixed point come first, y up.
+///
+/// # Safety
+///
+/// `transform` points at a live `CurrentTransform`, such as one
+/// [`Components::component`] or
+/// [`World::component`](crate::world::World::component) returned, read while
+/// it is valid.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::ecs::transform_position;
+///
+/// let transform: [i64; 3] = [2_i64 << 32, 1 << 31, -(3_i64 << 32)];
+/// // SAFETY: three fixed-point coordinates, as a transform starts.
+/// let at = unsafe { transform_position(transform.as_ptr().cast()) };
+/// assert_eq!(at, [2.0, 0.5, -3.0]);
+/// ```
+#[must_use]
+pub unsafe fn transform_position(transform: *const u8) -> [f64; 3] {
+    // SAFETY: a live CurrentTransform starts with three i64, as the caller
+    // guarantees.
+    metres(unsafe { read_at(transform, 0) })
 }
 
 type AttributeFind = unsafe extern "system" fn(out: *mut u64, attribute: u32, registry: u64) -> u64;

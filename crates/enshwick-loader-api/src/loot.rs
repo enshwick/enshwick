@@ -359,10 +359,8 @@ impl Containers {
 
     #[expect(clippy::unused_self, reason = "kept beside the other reads")]
     fn position_of(&self, transform: *mut u8) -> [f64; 3] {
-        // SAFETY: a live CurrentTransform starts with x, y and z in 32.32
-        // fixed point.
-        let fixed = unsafe { transform.cast::<[i64; 3]>().read_unaligned() };
-        crate::ecs::metres(fixed)
+        // SAFETY: callers pass a live CurrentTransform.
+        unsafe { crate::ecs::transform_position(transform) }
     }
 }
 
