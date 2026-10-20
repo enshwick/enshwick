@@ -1,4 +1,4 @@
-# Release pull requests and releases per crate (docs/conventions/repository.md, Releases).
+# Release pull requests and releases per crate.
 # Every release run attaches one player bundle: the stub, the loader and every mod,
 # laid out as they go next to the game.
 name: release-please
