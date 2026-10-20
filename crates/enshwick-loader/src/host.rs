@@ -8,8 +8,9 @@ use std::sync::{Mutex, OnceLock};
 use enshwick_api::abi as api_frame;
 use enshwick_api::abi::{
     BuildInfo, Event, EventFn, Header, HookSpec, HostApi, Level, Manifest, ManifestFlags,
-    ModHandle, ModInfo, Side, Status, Str, UpdateSource,
+    ModHandle, ModInfo, Side, Status, Str, UpdateKind, UpdateSource,
 };
+use enshwick_api::mods::Updates;
 use enshwick_reflect::{Fingerprint, Reflection};
 use rustc_hash::FxHashMap;
 
@@ -166,6 +167,73 @@ pub(crate) fn apply_join_values(values: &BTreeMap<String, String>) {
         crate::log::write(Level::INFO, &record.id, &line);
         loader.emit(Event::SETTINGS_CHANGED, Some(index), core::ptr::null());
     }
+}
+
+/// One of the server's join mods the last refused join found missing.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct Missing {
+    id: &'static str,
+    version: &'static str,
+    file: &'static str,
+    kind: UpdateKind,
+    location: &'static str,
+    component: &'static str,
+}
+
+/// The server's join mods the last refused join found missing.
+static JOIN_MISSING: Mutex<Vec<Missing>> = Mutex::new(Vec::new());
+/// Every string [`HostApi::join_missing`] has handed out, kept for the process.
+static KEPT: Mutex<Vec<&'static str>> = Mutex::new(Vec::new());
+
+/// `text` kept for the process; the same text is kept once.
+fn keep(text: &str) -> &'static str {
+    let Ok(mut kept) = KEPT.lock() else {
+        return "";
+    };
+    if let Some(&held) = kept.iter().find(|held| **held == text) {
+        return held;
+    }
+    let held: &'static str = Box::leak(text.into());
+    kept.push(held);
+    held
+}
+
+/// On a client the join check kept out: records `missing`, the server's
+/// join mods this client lacks or runs in another version as `(id, server
+/// version, source)`, and raises [`Event::JOIN_MISSING`].
+pub(crate) fn report_join_missing(missing: &[(String, String, Option<Updates>)]) {
+    let Some(loader) = loader() else {
+        return;
+    };
+    let entries = missing
+        .iter()
+        .map(|(id, version, source)| {
+            let ours = loader.mods.iter().find(|m| &m.id == id);
+            let file = ours.map_or("", |m| m.file.as_str());
+            // SAFETY: the loader keeps every source's strings for the process.
+            let own = ours.and_then(|m| unsafe { Updates::from_abi(&m.updates) });
+            let (kind, location, component) = match source.clone().or(own) {
+                Some(Updates::GitHub {
+                    repository,
+                    component,
+                }) => (UpdateKind::GITHUB, keep(&repository), keep(&component)),
+                Some(Updates::Url(url)) => (UpdateKind::URL, keep(&url), ""),
+                None => (UpdateKind::NONE, "", ""),
+            };
+            Missing {
+                id: keep(id),
+                version: keep(version),
+                file: keep(file),
+                kind,
+                location,
+                component,
+            }
+        })
+        .collect();
+    if let Ok(mut held) = JOIN_MISSING.lock() {
+        *held = entries;
+    }
+    loader.emit(Event::JOIN_MISSING, None, core::ptr::null());
 }
 
 /// Turns off the loaded mod `id`, if there is one, with `reason`.
@@ -331,6 +399,7 @@ pub(crate) static API: HostApi = HostApi {
     chat,
     set_label,
     rename_filter,
+    join_missing,
 };
 
 /// A static slice from a pointer and a count, empty for a null pointer.
@@ -628,7 +697,7 @@ extern "system" fn subscribe(
     if record.off.load(Ordering::Acquire) {
         return Status::FAULTED;
     }
-    if !(Event::SETTINGS_CHANGED.0..=Event::BUILDING_REMOVED.0).contains(&event.0) {
+    if !(Event::SETTINGS_CHANGED.0..=Event::JOIN_MISSING.0).contains(&event.0) {
         return Status::MISSING;
     }
     if loader.delivery.get().is_some() {
@@ -853,6 +922,62 @@ extern "system" fn mods(
     let infos: Vec<ModInfo> = core::iter::once(loader_info())
         .chain(loader.mods.iter().map(mod_info))
         .collect();
+    // SAFETY: forwarded from the mod's call.
+    unsafe { list(&infos, out, entry_size, capacity, count) }
+}
+
+extern "system" fn join_missing(
+    me: ModHandle,
+    out: *mut ModInfo,
+    entry_size: u32,
+    capacity: u32,
+    count: *mut u32,
+) -> Status {
+    let Some(loader) = loader() else {
+        return Status::BAD_ARGS;
+    };
+    if loader.record(me).is_none() {
+        return Status::BAD_ARGS;
+    }
+    let held = JOIN_MISSING
+        .lock()
+        .map(|held| held.clone())
+        .unwrap_or_default();
+    let infos: Vec<ModInfo> = held
+        .iter()
+        .map(|missing| ModInfo {
+            header: Header::of::<ModInfo>(),
+            id: Str::new(missing.id),
+            version: Str::new(missing.version),
+            side: Side::BOTH,
+            flags: ManifestFlags::JOIN,
+            off: 1,
+            file: Str::new(missing.file),
+            updates: UpdateSource {
+                kind: missing.kind,
+                location: Str::new(missing.location),
+                component: Str::new(missing.component),
+                ..UpdateSource::NONE
+            },
+        })
+        .collect();
+    // SAFETY: forwarded from the mod's call.
+    unsafe { list(&infos, out, entry_size, capacity, count) }
+}
+
+/// Copies up to `capacity` of `infos` to `out`, `entry_size` bytes apart, and
+/// writes how many there are.
+///
+/// # Safety
+///
+/// A non-null `out` has room for `capacity` entries of `entry_size` bytes.
+unsafe fn list(
+    infos: &[ModInfo],
+    out: *mut ModInfo,
+    entry_size: u32,
+    capacity: u32,
+    count: *mut u32,
+) -> Status {
     if !out.is_null() {
         let stride = entry_size as usize;
         if stride < size_of::<Header>() {

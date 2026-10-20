@@ -14,6 +14,7 @@ every mod is a DLL in the `mods/` folder beside it.
 | [Survivors per altar](mods/enshwick-survivors-per-altar) | a copy of each survivor at every altar, with beds of its own altar |
 | [Safes](mods/enshwick-safes)                             | a craftable chest only the player who placed it can use            |
 | [Building yield](mods/enshwick-building-yield)           | bulk recipes for blocks, roofs, overgrowth, decor and furniture    |
+| [Updater](mods/enshwick-updater)                         | signed updates from GitHub releases, installed with your consent   |
 
 ## Install
 

@@ -109,6 +109,10 @@
     "crates/enshwick-test": {
       "package-name": "enshwick-test",
       "component": "enshwick-test"
+    },
+    "mods/enshwick-updater": {
+      "package-name": "enshwick-updater",
+      "component": "enshwick-updater"
     }
   }
 }

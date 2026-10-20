@@ -1,0 +1,33 @@
+[package]
+name = "enshwick-updater"
+version = "0.1.0"
+description = "Updates Enshwick and its mods from signed GitHub releases, with the player's consent"
+keywords = ["enshrouded", "mod", "updater"]
+categories = ["game-development"]
+readme = "README.md"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+enshwick-api.workspace = true
+minisign-verify = { version = "0.3.0", default-features = false }
+semver.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+ureq = { version = "3.4.2", default-features = false, features = ["rustls"] }
+zip = { version = "9.0.5", default-features = false, features = ["deflate-flate2-zlib-rs"] }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { workspace = true, features = ["Win32_UI_WindowsAndMessaging"] }
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+toml.workspace = true
