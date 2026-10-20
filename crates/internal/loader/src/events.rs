@@ -368,6 +368,7 @@ unsafe extern "system" fn set_state(entry: *mut u8, state: u8) {
             if loader.side == Side::CLIENT {
                 end_session();
                 crate::chat::forget();
+                crate::net::forget();
             }
         }
         _ => {}
@@ -402,6 +403,7 @@ unsafe extern "system" fn remove(server: *mut u8, slot: *mut u8) {
         {
             joined.store(0, Ordering::Relaxed);
             let data = player(index, slot, offsets);
+            crate::net::forget_peer(data.key);
             guarded("player removal", || {
                 loader.emit(Event::PLAYER_LEFT, None, (&raw const data).cast());
             });

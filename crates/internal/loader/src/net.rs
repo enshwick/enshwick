@@ -1,0 +1,574 @@
+//! Messages between a join mod's server part and its client part, carried in
+//! chat lines no player sees.
+//!
+//! A client sends a line `/enshwick-net <frame>` into its chat queue; the
+//! server's chat link takes every `/` line before the game posts it, so the
+//! frame never reaches another player. The server sends a frame as a line of
+//! the kind its own replies use, posted to one connection alone; the
+//! client's link on its chat post takes the line where the client posts what
+//! the server sent, before the chat shows it.
+//!
+//! Only clients that announce themselves get frames: a client with the
+//! loader sends a hello with the protocol version when it joins, the server
+//! answers, and from then on both sides send. A vanilla client never says
+//! hello, so it never receives a frame; the join check makes sure a client
+//! that said hello runs the server's join mods.
+//!
+//! A frame is base64 of a small header and up to one line's worth of the
+//! message; a message of up to [`MAX_MESSAGE`] bytes takes up to
+//! [`MAX_PARTS`] frames. Each side keeps a rate per peer and drops what is
+//! over it, counting the drops for the status summary.
+
+use core::ffi::c_void;
+use std::collections::{HashMap, VecDeque};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{Mutex, OnceLock, PoisonError};
+use std::time::Instant;
+
+use base64::Engine as _;
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+use enshwick_loader_api::abi::{Header, NetMessage, NetMessageFn, Status};
+
+use crate::host::{Loader, Registered, take};
+
+/// The chat command that carries frames from clients.
+pub(crate) const COMMAND: &str = "enshwick-net";
+/// The prefix of a frame line, both ways.
+const PREFIX: &str = "/enshwick-net ";
+/// The version of the frame protocol.
+const PROTOCOL: u8 = 1;
+/// The largest message a mod may send, in bytes.
+pub(crate) const MAX_MESSAGE: usize = 4096;
+/// The most frames one message takes.
+const MAX_PARTS: usize = 8;
+/// Message bytes in one frame: a line holds 1024 bytes, less the prefix,
+/// as base64 of the header and the part.
+const PART_BYTES: usize = 720;
+/// The channel of the protocol's own frames.
+const CONTROL: u32 = 0;
+/// Control frames: a client's hello and the server's answer.
+const HELLO: u8 = 1;
+const WELCOME: u8 = 2;
+/// Messages each peer may send per second, and in one burst.
+const RATE: f64 = 20.0;
+const BURST: f64 = 40.0;
+/// Frames waiting to leave at most, per side.
+const MAX_WAITING: usize = 512;
+/// Seconds between a client's hellos until the server answers.
+const HELLO_EVERY: f64 = 5.0;
+
+/// A frame's header: protocol, channel, message id, part and part count.
+const HEADER: usize = 1 + 4 + 2 + 1 + 1;
+
+/// One channel a mod opened.
+#[derive(Debug)]
+struct Channel {
+    id: u32,
+    name: String,
+    handler: Registered<NetMessageFn>,
+}
+
+/// Parts of a message on their way in.
+#[derive(Debug, Default)]
+struct Partial {
+    total: u8,
+    parts: Vec<Option<Vec<u8>>>,
+}
+
+/// A peer's messages on their way in, and its rate.
+#[derive(Debug)]
+struct Peer {
+    partial: HashMap<(u32, u16), Partial>,
+    tokens: f64,
+    seen: Instant,
+}
+
+impl Peer {
+    fn new() -> Self {
+        Self {
+            partial: HashMap::new(),
+            tokens: BURST,
+            seen: Instant::now(),
+        }
+    }
+
+    /// Takes one message from the peer's rate; false when it is spent.
+    fn admit(&mut self) -> bool {
+        let now = Instant::now();
+        let gained = now.duration_since(self.seen).as_secs_f64() * RATE;
+        self.seen = now;
+        self.tokens = (self.tokens + gained).min(BURST);
+        if self.tokens < 1.0 {
+            return false;
+        }
+        self.tokens -= 1.0;
+        true
+    }
+}
+
+/// What the net keeps.
+#[derive(Debug, Default)]
+struct State {
+    /// On the server: peers by account key that said hello. On a client:
+    /// the server, [`NetMessage::SERVER`], once it answered.
+    peers: HashMap<u64, Peer>,
+    /// Lines waiting for the client's chat queue.
+    outbox: VecDeque<String>,
+    /// The id of the next message sent.
+    next_message: u16,
+    /// When the client last said hello.
+    hello_at: Option<Instant>,
+    /// Rates of the peers sending, by key, on the server.
+    sending: HashMap<u64, Peer>,
+}
+
+static PENDING: Mutex<Vec<Channel>> = Mutex::new(Vec::new());
+static CHANNELS: OnceLock<Box<[Channel]>> = OnceLock::new();
+static STATE: Mutex<Option<State>> = Mutex::new(None);
+/// Set while the client's outbox holds anything, so an idle frame takes no
+/// lock.
+static WAITING: AtomicBool = AtomicBool::new(false);
+/// Set on a client while the server it joined advertises Enshwick, which
+/// takes frame lines out of the chat; another server would show them.
+static SERVER_RUNS_ENSHWICK: AtomicBool = AtomicBool::new(false);
+/// Messages dropped: over a rate, too many waiting, or unreadable.
+static DROPPED: AtomicU64 = AtomicU64::new(0);
+
+fn state<R>(f: impl FnOnce(&mut State) -> R) -> R {
+    let mut guard = STATE.lock().unwrap_or_else(PoisonError::into_inner);
+    f(guard.get_or_insert_with(State::default))
+}
+
+/// The id of mod `id`'s channel `name`.
+fn channel_id(id: &str, name: &str) -> u32 {
+    let id = enshwick_loader_reflect::fnv1a32(format!("{id}/{name}").as_bytes());
+    // Zero is the protocol's own.
+    id.max(1)
+}
+
+/// Opens mod `owner`'s channel `name`; its id.
+pub(crate) fn open(
+    loader: &Loader,
+    owner: usize,
+    name: &str,
+    callback: NetMessageFn,
+    user: *mut c_void,
+) -> Result<u32, Status> {
+    if CHANNELS.get().is_some() {
+        return Err(Status::TOO_LATE);
+    }
+    let record = loader.mods.get(owner).ok_or(Status::BAD_ARGS)?;
+    if !record
+        .manifest
+        .flags
+        .contains(enshwick_loader_api::abi::ManifestFlags::JOIN)
+    {
+        return Err(Status::REFUSED);
+    }
+    if name.is_empty() || name.len() > 64 {
+        return Err(Status::BAD_ARGS);
+    }
+    let id = channel_id(&record.id, name);
+    let mut pending = PENDING.lock().unwrap_or_else(PoisonError::into_inner);
+    if pending.iter().any(|c| c.id == id) {
+        return Err(Status::REFUSED);
+    }
+    pending.push(Channel {
+        id,
+        name: format!("{}/{name}", record.id),
+        handler: Registered::new(owner, callback, user),
+    });
+    Ok(id)
+}
+
+/// Seals the channels.
+pub(crate) fn link() {
+    let channels = take(&PENDING);
+    if !channels.is_empty() {
+        let names: Vec<&str> = channels.iter().map(|c| c.name.as_str()).collect();
+        crate::log!(INFO, "mod messages: channels {}", names.join(", "));
+    }
+    let _first = CHANNELS.set(channels.into_boxed_slice());
+}
+
+/// Whether any mod opened a channel.
+fn wanted() -> bool {
+    CHANNELS.get().is_some_and(|c| !c.is_empty())
+}
+
+/// The frames of one message: base64 lines with the prefix.
+fn frames(channel: u32, message: u16, data: &[u8]) -> Vec<String> {
+    let parts: Vec<&[u8]> = if data.is_empty() {
+        vec![&[]]
+    } else {
+        data.chunks(PART_BYTES).collect()
+    };
+    let total = u8::try_from(parts.len()).unwrap_or(u8::MAX);
+    parts
+        .iter()
+        .enumerate()
+        .map(|(index, part)| {
+            let mut bytes = Vec::with_capacity(HEADER + part.len());
+            bytes.push(PROTOCOL);
+            bytes.extend_from_slice(&channel.to_le_bytes());
+            bytes.extend_from_slice(&message.to_le_bytes());
+            bytes.push(u8::try_from(index).unwrap_or(u8::MAX));
+            bytes.push(total);
+            bytes.extend_from_slice(part);
+            format!("{PREFIX}{}", URL_SAFE_NO_PAD.encode(bytes))
+        })
+        .collect()
+}
+
+/// A frame's header and part.
+#[derive(Debug, PartialEq, Eq)]
+struct Frame {
+    channel: u32,
+    message: u16,
+    index: u8,
+    total: u8,
+    part: Vec<u8>,
+}
+
+/// The frame a line carries, after the prefix.
+fn parse(text: &str) -> Option<Frame> {
+    let bytes = URL_SAFE_NO_PAD.decode(text.trim()).ok()?;
+    if bytes.len() < HEADER || bytes[0] != PROTOCOL {
+        return None;
+    }
+    let frame = Frame {
+        channel: u32::from_le_bytes(bytes[1..5].try_into().ok()?),
+        message: u16::from_le_bytes(bytes[5..7].try_into().ok()?),
+        index: bytes[7],
+        total: bytes[8],
+        part: bytes[HEADER..].to_vec(),
+    };
+    let fits = frame.total >= 1
+        && usize::from(frame.total) <= MAX_PARTS
+        && frame.index < frame.total
+        && frame.part.len() <= PART_BYTES;
+    fits.then_some(frame)
+}
+
+/// Adds `frame` from `peer`; the whole message once its last part came.
+fn assemble(peer: &mut Peer, frame: Frame) -> Option<(u32, Vec<u8>)> {
+    let key = (frame.channel, frame.message);
+    if frame.total == 1 {
+        peer.partial.remove(&key);
+        return Some((frame.channel, frame.part));
+    }
+    let partial = peer.partial.entry(key).or_default();
+    if partial.total != frame.total {
+        *partial = Partial {
+            total: frame.total,
+            parts: vec![None; usize::from(frame.total)],
+        };
+    }
+    partial.parts[usize::from(frame.index)] = Some(frame.part);
+    if partial.parts.iter().any(Option::is_none) {
+        if peer.partial.len() > MAX_PARTS * 4 {
+            peer.partial.clear();
+        }
+        return None;
+    }
+    let message = peer.partial.remove(&key)?;
+    Some((
+        frame.channel,
+        message.parts.into_iter().flatten().flatten().collect(),
+    ))
+}
+
+/// Hands a message to the mod that opened its channel.
+fn deliver(channel: u32, peer: u64, data: &[u8]) {
+    let Some(target) = CHANNELS
+        .get()
+        .and_then(|channels| channels.iter().find(|c| c.id == channel))
+    else {
+        dropped();
+        return;
+    };
+    if !target.handler.live() {
+        return;
+    }
+    let message = NetMessage {
+        header: Header::of::<NetMessage>(),
+        channel,
+        reserved: 0,
+        peer,
+        data: data.as_ptr(),
+        size: u32::try_from(data.len()).unwrap_or(0),
+        reserved_tail: 0,
+    };
+    // SAFETY: the handler lives in the mod's DLL, which stays loaded, and
+    // takes the pointer it registered; the safe layer catches its panics.
+    unsafe { (target.handler.callback)(&raw const message, target.handler.user()) };
+}
+
+/// A control frame's message: its kind and the protocol version.
+fn control(kind: u8) -> Vec<u8> {
+    vec![kind, PROTOCOL]
+}
+
+/// Takes a frame line a client sent, on the server's game thread: `args` is
+/// the line after the command name, `key` the client's account key.
+pub(crate) fn server_received(key: u64, args: &str) {
+    if !wanted() || key == 0 {
+        return;
+    }
+    let Some(frame) = parse(args) else {
+        dropped();
+        return;
+    };
+    if frame.channel == CONTROL {
+        if frame.part == control(HELLO) {
+            let fresh = state(|s| s.peers.insert(key, Peer::new()).is_none());
+            if fresh {
+                crate::log!(INFO, "mod messages: the client of {key:016x} said hello");
+            }
+            for line in frames(CONTROL, 0, &control(WELCOME)) {
+                crate::chat::send(key, &line);
+            }
+        }
+        return;
+    }
+    let message = state(|s| {
+        let peer = s.peers.get_mut(&key)?;
+        if frame.index == 0 && !peer.admit() {
+            dropped();
+            return None;
+        }
+        assemble(peer, frame)
+    });
+    if let Some((channel, data)) = message {
+        deliver(channel, key, &data);
+    }
+}
+
+/// Takes a frame line the server sent, on the client; the line's text after
+/// the prefix. False when the line is no frame.
+pub(crate) fn client_received(text: &str) -> bool {
+    let Some(rest) = text.strip_prefix(PREFIX) else {
+        return false;
+    };
+    let Some(frame) = parse(rest) else {
+        dropped();
+        return true;
+    };
+    if frame.channel == CONTROL {
+        if frame.part == control(WELCOME) {
+            let fresh = state(|s| s.peers.insert(NetMessage::SERVER, Peer::new()).is_none());
+            if fresh {
+                crate::log!(INFO, "mod messages: the server answered");
+            }
+        }
+        return true;
+    }
+    let message = state(|s| {
+        s.peers
+            .get_mut(&NetMessage::SERVER)
+            .and_then(|peer| assemble(peer, frame))
+    });
+    if let Some((channel, data)) = message {
+        deliver(channel, NetMessage::SERVER, &data);
+    }
+    true
+}
+
+/// Whether `text` is a frame line, which no chat shows.
+pub(crate) fn is_frame(text: &[u8]) -> bool {
+    text.starts_with(PREFIX.as_bytes())
+}
+
+/// Notes whether the server the client joins advertises Enshwick, and
+/// forgets the last server's state.
+pub(crate) fn joining(runs_enshwick: bool) {
+    forget();
+    SERVER_RUNS_ENSHWICK.store(runs_enshwick, Ordering::Release);
+}
+
+/// Forgets every peer, when the client changes servers or a hosted game
+/// ends.
+pub(crate) fn forget() {
+    let mut guard = STATE.lock().unwrap_or_else(PoisonError::into_inner);
+    *guard = None;
+    WAITING.store(false, Ordering::Release);
+}
+
+/// Forgets a player's client, when the player leaves.
+pub(crate) fn forget_peer(key: u64) {
+    state(|s| {
+        s.peers.remove(&key);
+        s.sending.remove(&key);
+    });
+}
+
+/// Whether `peer` takes messages: on the server, a player's client that said
+/// hello; on a client, the server once it answered ([`NetMessage::SERVER`]).
+pub(crate) fn ready(peer: u64) -> bool {
+    state(|s| s.peers.contains_key(&peer))
+}
+
+/// Sends `data` on `channel` from mod `owner`: to the server for
+/// [`NetMessage::SERVER`], else from the server to the player with account
+/// key `peer`, or to every client that said hello for 0.
+pub(crate) fn send(
+    loader: &Loader,
+    owner: usize,
+    channel: u32,
+    peer: u64,
+    data: &[u8],
+) -> Result<(), Status> {
+    let open = CHANNELS
+        .get()
+        .and_then(|channels| channels.iter().find(|c| c.id == channel));
+    if open.is_none_or(|c| c.handler.owner != owner) {
+        return Err(Status::BAD_ARGS);
+    }
+    if data.len() > MAX_MESSAGE {
+        return Err(Status::BAD_ARGS);
+    }
+    if peer == NetMessage::SERVER {
+        return send_to_server(channel, data);
+    }
+    let serving = crate::world::hosting() || loader.side == enshwick_loader_api::abi::Side::SERVER;
+    if !serving {
+        return Err(Status::WRONG_THREAD);
+    }
+    send_to_clients(channel, peer, data)
+}
+
+fn send_to_clients(channel: u32, peer: u64, data: &[u8]) -> Result<(), Status> {
+    let lines = state(|s| {
+        let keys: Vec<u64> = if peer == 0 {
+            s.peers
+                .keys()
+                .copied()
+                .filter(|&k| k != NetMessage::SERVER)
+                .collect()
+        } else if s.peers.contains_key(&peer) {
+            vec![peer]
+        } else {
+            return Err(Status::MISSING);
+        };
+        let message = s.next_message;
+        s.next_message = s.next_message.wrapping_add(1);
+        let mut out = Vec::new();
+        for key in keys {
+            let rate = s.sending.entry(key).or_insert_with(Peer::new);
+            if !rate.admit() {
+                dropped();
+                continue;
+            }
+            out.extend(frames(channel, message, data).into_iter().map(|l| (key, l)));
+        }
+        Ok(out)
+    })?;
+    for (key, line) in lines {
+        crate::chat::send(key, &line);
+    }
+    Ok(())
+}
+
+fn send_to_server(channel: u32, data: &[u8]) -> Result<(), Status> {
+    state(|s| {
+        if !s.peers.contains_key(&NetMessage::SERVER) {
+            return Err(Status::MISSING);
+        }
+        let rate = s
+            .sending
+            .entry(NetMessage::SERVER)
+            .or_insert_with(Peer::new);
+        if !rate.admit() || s.outbox.len() >= MAX_WAITING {
+            dropped();
+            return Err(Status::REFUSED);
+        }
+        let message = s.next_message;
+        s.next_message = s.next_message.wrapping_add(1);
+        s.outbox.extend(frames(channel, message, data));
+        WAITING.store(true, Ordering::Release);
+        Ok(())
+    })
+}
+
+/// The lines waiting for the client's chat queue, and a hello when the
+/// server has not answered yet; on the client's thread that sends chat.
+pub(crate) fn client_lines() -> Vec<String> {
+    if !wanted() {
+        return Vec::new();
+    }
+    state(|s| {
+        let mut lines = Vec::new();
+        let answered = s.peers.contains_key(&NetMessage::SERVER);
+        let due = s
+            .hello_at
+            .is_none_or(|at| at.elapsed().as_secs_f64() >= HELLO_EVERY);
+        let modded = SERVER_RUNS_ENSHWICK.load(Ordering::Acquire) || crate::world::hosting();
+        if !answered && due && modded {
+            s.hello_at = Some(Instant::now());
+            lines.extend(frames(CONTROL, 0, &control(HELLO)));
+        }
+        if WAITING.swap(false, Ordering::AcqRel) {
+            lines.extend(s.outbox.drain(..));
+        }
+        lines
+    })
+}
+
+/// Counts a dropped message and logs the first and every hundredth.
+fn dropped() {
+    let count = DROPPED.fetch_add(1, Ordering::Relaxed) + 1;
+    if count == 1 || count.is_multiple_of(100) {
+        crate::log!(
+            WARN,
+            "mod messages: {count} dropped, over a rate or unreadable"
+        );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_message_goes_out_in_frames_and_comes_back_whole() {
+        let data: Vec<u8> = (0..2000u32).map(|i| (i % 251) as u8).collect();
+        let lines = frames(7, 3, &data);
+        assert_eq!(lines.len(), 3);
+        assert!(
+            lines
+                .iter()
+                .all(|l| l.len() <= 1024 && is_frame(l.as_bytes()))
+        );
+        let mut peer = Peer::new();
+        let mut whole = None;
+        for line in lines.iter().rev() {
+            let frame = parse(line.strip_prefix(PREFIX).unwrap()).unwrap();
+            whole = assemble(&mut peer, frame);
+        }
+        assert_eq!(whole, Some((7, data)));
+        assert!(peer.partial.is_empty());
+    }
+
+    #[test]
+    fn the_largest_message_fits_its_frames_and_malformed_frames_are_dropped() {
+        assert!(frames(1, 0, &[0; MAX_MESSAGE]).len() <= MAX_PARTS);
+        assert!(parse("not base64 !").is_none());
+        assert!(parse(&URL_SAFE_NO_PAD.encode([9u8; HEADER])).is_none());
+        let mut bad = vec![PROTOCOL, 1, 0, 0, 0, 0, 0, 3, 2];
+        bad.push(0);
+        assert!(parse(&URL_SAFE_NO_PAD.encode(&bad)).is_none());
+    }
+
+    #[test]
+    fn a_peer_s_rate_runs_out_after_its_burst() {
+        let mut peer = Peer::new();
+        let admitted = (0..100).filter(|_| peer.admit()).count();
+        assert!((40..=42).contains(&admitted), "{admitted}");
+    }
+
+    #[test]
+    fn channel_ids_are_per_mod_and_never_the_protocol_s() {
+        assert_ne!(channel_id("a", "x"), channel_id("b", "x"));
+        assert_ne!(channel_id("a", "x"), CONTROL);
+    }
+}

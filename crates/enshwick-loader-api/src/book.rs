@@ -32,6 +32,7 @@ chapters! {
     Vetoes => "vetoes.md",
     Progress => "progress.md",
     Commands => "commands.md",
+    Messages => "messages.md",
     State => "state.md",
     Services => "services.md",
     FindingTheGame => "finding-the-game.md",
@@ -52,7 +53,6 @@ chapters! {
     Releasing => "releasing.md",
     AbiReference => "abi-reference.md",
     Faq => "faq.md",
-    Upgrading => "upgrading.md",
 }
 
 #[cfg(feature = "test")]

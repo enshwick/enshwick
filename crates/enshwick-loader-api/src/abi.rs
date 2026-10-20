@@ -14,7 +14,7 @@ use core::sync::atomic::AtomicUsize;
 pub const ABI_MAJOR: u16 = 1;
 
 /// The minor version of this interface. A newer minor only appends fields.
-pub const ABI_MINOR: u16 = 25;
+pub const ABI_MINOR: u16 = 26;
 
 /// Whether `id` is a valid mod id: 1 to 64 characters of `[a-z0-9-]`.
 ///
@@ -2424,6 +2424,55 @@ pub struct BuildCheck {
 /// registration; returns 1 to let it through, 0 to refuse it.
 pub type BuildCheckFn = unsafe extern "system" fn(call: *const BuildCheck, user: *mut c_void) -> u8;
 
+/// A message on a mod's channel, handed to the handler registered with
+/// [`HostApi::net_channel`].
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::abi::{Header, NetMessage};
+///
+/// let bytes = [1u8, 2, 3];
+/// let message = NetMessage {
+///     header: Header::of::<NetMessage>(),
+///     channel: 0x1234,
+///     reserved: 0,
+///     peer: NetMessage::SERVER,
+///     data: bytes.as_ptr(),
+///     size: 3,
+///     reserved_tail: 0,
+/// };
+/// assert_eq!(message.peer, NetMessage::SERVER);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct NetMessage {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// The channel, as [`HostApi::net_channel`] wrote it.
+    pub channel: u32,
+    /// Zero.
+    pub reserved: u32,
+    /// Who sent it: a player's account key on the server,
+    /// [`NetMessage::SERVER`] on a client.
+    pub peer: u64,
+    /// The message, valid for the call.
+    pub data: *const u8,
+    /// How many bytes `data` holds.
+    pub size: u32,
+    /// Zero.
+    pub reserved_tail: u32,
+}
+
+impl NetMessage {
+    /// The server, as a peer: what a client hears from and sends to.
+    pub const SERVER: u64 = u64::MAX;
+}
+
+/// A mod's handler for messages on its channel: the message and the pointer
+/// given at registration. It must not unwind.
+pub type NetMessageFn = unsafe extern "system" fn(message: *const NetMessage, user: *mut c_void);
+
 /// The table of services the loader offers a mod.
 ///
 /// Fields are only ever appended; a mod checks [`Header::covers`] before it
@@ -2848,6 +2897,38 @@ pub struct HostApi {
     /// shows. Allowed during `enshwick_mod_init` only. Since minor 25.
     pub build_filter:
         extern "system" fn(me: ModHandle, callback: BuildCheckFn, user: *mut c_void) -> Status,
+    /// Opens the mod's channel `name`, 1 to 64 bytes, between its server
+    /// and client parts, and writes its id to `out`; `callback` gets each
+    /// message on it with `user`: on the server's game thread, on a client
+    /// on the thread that takes the server's chat. Join mods only
+    /// ([`Status::REFUSED`] for another), since both ends must run the mod.
+    /// Allowed during `enshwick_mod_init` only. Since minor 26.
+    pub net_channel: extern "system" fn(
+        me: ModHandle,
+        name: Str,
+        callback: NetMessageFn,
+        user: *mut c_void,
+        out: *mut u32,
+    ) -> Status,
+    /// Sends `size` bytes at `data`, at most 4096, on the mod's `channel`:
+    /// to the server for [`NetMessage::SERVER`], else from the server to the
+    /// client of the player with account key `peer`, or to every client
+    /// that runs Enshwick for 0. Any thread. [`Status::MISSING`] while the
+    /// peer cannot take messages, [`Status::REFUSED`] over the peer's rate,
+    /// [`Status::BAD_ARGS`] for too many bytes or another mod's channel.
+    /// Since minor 26.
+    pub net_send: extern "system" fn(
+        me: ModHandle,
+        channel: u32,
+        peer: u64,
+        data: *const u8,
+        size: u32,
+    ) -> Status,
+    /// [`Status::OK`] when `peer` takes messages: a player's client that
+    /// runs Enshwick, on the server; the server, for [`NetMessage::SERVER`]
+    /// on a client. [`Status::MISSING`] otherwise. Any thread. Since minor
+    /// 26.
+    pub net_ready: extern "system" fn(me: ModHandle, peer: u64) -> Status,
 }
 
 /// The exports a mod DLL provides, by name.
@@ -2909,7 +2990,7 @@ const _: () = {
     assert!(core::mem::offset_of!(HostApi, hook_at) == 24 + 35 * 8);
     assert!(core::mem::offset_of!(HostApi, inventory_open) == 24 + 36 * 8);
     assert!(core::mem::offset_of!(HostApi, inventory_submit) == 24 + 38 * 8);
-    assert!(size_of::<HostApi>() == 24 + 69 * 8);
+    assert!(size_of::<HostApi>() == 24 + 72 * 8);
     assert!(size_of::<InventoryOp>() == 32);
     assert!(size_of::<InventoryRequest>() == 32);
     assert!(size_of::<InventoryOpResult>() == 8);
@@ -2942,6 +3023,8 @@ const _: () = {
     assert!(core::mem::offset_of!(HostApi, build_filter) == 24 + 68 * 8);
     assert!(size_of::<CraftCheck>() == 8 + 16);
     assert!(size_of::<BuildCheck>() == 8 + 8 + 24);
+    assert!(core::mem::offset_of!(HostApi, net_ready) == 24 + 71 * 8);
+    assert!(size_of::<NetMessage>() == 8 + 8 + 8 + 8 + 8);
     assert!(size_of::<GameEventData>() == 24);
     // Frozen: written as an array.
     assert!(size_of::<EntityPlace>() == 32);

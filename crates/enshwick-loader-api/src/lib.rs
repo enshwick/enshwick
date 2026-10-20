@@ -86,6 +86,7 @@ pub mod inventory;
 mod load;
 pub mod loot;
 pub mod mods;
+pub mod net;
 pub mod progress;
 pub mod raw;
 pub mod schedule;

@@ -13,6 +13,7 @@ publish.workspace = true
 
 [dependencies]
 enshwick-loader-macros = { path = "../internal/macros", version = "0.4.0" }
+postcard.workspace = true
 serde.workspace = true
 thiserror.workspace = true
 toml.workspace = true
@@ -42,6 +43,10 @@ required-features = ["test"]
 
 [[test]]
 name = "mid_hook"
+required-features = ["test"]
+
+[[test]]
+name = "net"
 required-features = ["test"]
 
 [[test]]
