@@ -11,16 +11,15 @@ use std::sync::atomic::{AtomicU8, Ordering};
 
 use arc_swap::ArcSwap;
 use enshwick_loader_api::abi::Side;
+use enshwick_loader_api::altars::{
+    RAISED_ALTAR_ZONES, VANILLA_ALTAR_ZONES, VANILLA_ALTARS_PER_FLAME_LEVEL,
+};
 use enshwick_loader_api::{Load, Mod, Off};
 
-/// Vanilla `altarsPerFlameLevel` for Flame levels 0 to 11; later levels repeat
-/// the last entry.
-const VANILLA: [u8; 12] = [1, 2, 4, 6, 8, 10, 11, 12, 13, 14, 15, 16];
-/// The most altars with the base limit lifted: a base names its zones in a
-/// 32-bit mask.
-const CAP: u8 = 32;
+/// The most altars with the base limit raised.
+const CAP: u8 = RAISED_ALTAR_ZONES;
 /// The most altars the vanilla grouping takes.
-const VANILLA_CAP: u8 = 16;
+const VANILLA_CAP: u8 = VANILLA_ALTAR_ZONES;
 /// The cap in force: [`CAP`] once the base limit is lifted.
 static IN_FORCE: AtomicU8 = AtomicU8::new(VANILLA_CAP);
 
@@ -57,7 +56,7 @@ impl AltarTable {
     #[must_use]
     pub fn new(levels: &[u16], cap: u8) -> Self {
         let table = if levels.is_empty() {
-            VANILLA.to_vec()
+            VANILLA_ALTARS_PER_FLAME_LEVEL.to_vec()
         } else {
             levels
                 .iter()
@@ -174,7 +173,10 @@ mod tests {
         assert_eq!(table.altars(0), 2);
         assert_eq!(table.altars(1), 4);
         assert_eq!(table.altars(4), 16);
-        let doubled: Vec<u8> = VANILLA.iter().map(|&n| n * 2).collect();
+        let doubled: Vec<u8> = VANILLA_ALTARS_PER_FLAME_LEVEL
+            .iter()
+            .map(|&n| n * 2)
+            .collect();
         assert_eq!(table.table, doubled);
         assert_eq!(table.altars(99), 32);
     }

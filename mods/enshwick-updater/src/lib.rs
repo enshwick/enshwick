@@ -28,7 +28,7 @@ use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, SystemTime};
 
 use enshwick_loader_api::events::JoinRefused;
-use enshwick_loader_api::mods::{ModEntry, Updates};
+use enshwick_loader_api::mods::{LOADER_FILES, LOADER_ID, ModEntry, Updates};
 use enshwick_loader_api::{Load, Mod, Off};
 use semver::Version;
 
@@ -670,11 +670,6 @@ fn taken(id: &str, installed: &[ModEntry]) -> Vec<String> {
     }
     taken
 }
-
-/// The loader's mod id, as it lists itself.
-const LOADER_ID: &str = "enshwick";
-/// The loader's files, relative to the game's folder.
-const LOADER_FILES: [&str; 2] = ["powrprof.dll", "mods/enshwick/enshwick.dll"];
 
 /// Runs `work` on a thread of its own; a panic only ends that thread.
 fn spawn(name: &'static str, work: fn()) {

@@ -211,7 +211,9 @@ for entry in enshwick_loader_api::mods() {
 ```
 
 The list is empty before the loader initialises the mod and under a loader
-older than ABI minor 5.
+older than ABI minor 5. The loader lists itself first, under
+`mods::LOADER_ID`; `mods::LOADER_FILES` names the files it is made of, the
+stub and the loader's DLL, which an update of a mod never writes.
 
 ## A server's sources and the join check
 

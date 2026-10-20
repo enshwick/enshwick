@@ -223,7 +223,11 @@ fn consumes(shared: &Shared, summon: &Summon) -> bool {
     let Some(staff) = crate::staffs::copy_staff(summon.item) else {
         return false;
     };
-    if summon.ammo != 0 || summon.template != staff.template {
+    if summon.ammo != 0
+        || staff
+            .survivor()
+            .is_none_or(|s| summon.template != s.template())
+    {
         return false;
     }
     if shared.copies.altar_at(summon.target).is_none() {

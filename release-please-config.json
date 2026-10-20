@@ -81,7 +81,13 @@
     },
     "crates/enshwick-loader-api": {
       "package-name": "enshwick-loader-api",
-      "component": "enshwick-loader-api"
+      "component": "enshwick-loader-api",
+      "extra-files": [
+        {
+          "type": "generic",
+          "path": "/Cargo.toml"
+        }
+      ]
     },
     "crates/internal/loader": {
       "package-name": "enshwick-loader",

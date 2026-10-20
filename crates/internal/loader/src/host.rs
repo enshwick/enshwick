@@ -10,7 +10,7 @@ use enshwick_loader_api::abi::{
     BuildInfo, Event, EventFn, Header, HookFlags, HookSpec, HostApi, Level, Manifest,
     ManifestFlags, MidHookSpec, ModHandle, ModInfo, Side, Status, Str, UpdateKind, UpdateSource,
 };
-use enshwick_loader_api::mods::Updates;
+use enshwick_loader_api::mods::{LOADER_FILE, Updates};
 use enshwick_loader_reflect::{Fingerprint, Reflection};
 use rustc_hash::FxHashMap;
 
@@ -24,9 +24,6 @@ const LOADER_UPDATES: UpdateSource = UpdateSource::github("themaiby/enshwick", "
 /// The key Enshwick's releases are signed with, the loader's among them;
 /// the public key of `mods/enshwick-updater/keys/enshwick.pub`.
 const LOADER_KEY: &str = "RWTjqgtfpy3lSOLC4uaUXuvvKSLQKOFf6nUnEytoiFjSzxMEhLnoAdJF";
-
-/// The loader's DLL relative to the game's folder.
-const LOADER_FILE: &str = "mods/enshwick/enshwick.dll";
 
 /// A loaded mod.
 #[derive(Debug)]

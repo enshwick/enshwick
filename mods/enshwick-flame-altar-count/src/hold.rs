@@ -3,11 +3,11 @@
 
 use std::time::Duration;
 
+use enshwick_loader_api::altars::VANILLA_ALTAR_ZONES;
 use enshwick_loader_api::events::AltarsChanged;
 use enshwick_loader_api::state::Hold;
 use enshwick_loader_api::{Load, Off};
 
-const VANILLA_ZONES: u32 = 16;
 const EVERY: Duration = Duration::from_secs(5);
 
 /// Keeps the hold on a thread of its own, woken when the altars change.
@@ -35,14 +35,14 @@ fn run(hold: &Hold) {
         let Some(grouping) = enshwick_loader_api::altars::grouping() else {
             continue;
         };
-        let past = grouping.zones > VANILLA_ZONES;
+        let past = grouping.zones > u32::from(VANILLA_ALTAR_ZONES);
         if past == set {
             continue;
         }
         let zones = grouping.zones;
         let done = if past {
             hold.set(&format!(
-                "the world has {zones} altar zones; the vanilla game groups only {VANILLA_ZONES}"
+                "the world has {zones} altar zones; the vanilla game groups only {VANILLA_ALTAR_ZONES}"
             ))
         } else {
             hold.clear()
