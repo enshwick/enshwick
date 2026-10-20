@@ -52,7 +52,7 @@ impl Switch {
     }
 }
 
-/// Proton optimizer settings.
+/// Optimizer settings.
 #[derive(Debug, serde::Deserialize, serde::Serialize, enshwick_loader_api::Config)]
 #[serde(deny_unknown_fields)]
 pub struct Settings {
@@ -143,15 +143,15 @@ fn status() -> String {
 
 /// The mod. Its running state is in statics the hooks read.
 #[derive(Debug)]
-pub struct ProtonOptimizer;
+pub struct Optimizer;
 
-impl Mod for ProtonOptimizer {
+impl Mod for Optimizer {
     fn manifest() -> &'static enshwick_loader_api::abi::Manifest {
         enshwick_loader_api::manifest!(
-            id: "proton-optimizer",
+            id: "optimizer",
             side: BOTH,
-            name: "Proton optimizer",
-            updates: github("themaiby/enshwick", "enshwick-proton-optimizer"),
+            name: "Optimizer",
+            updates: github("themaiby/enshwick", "enshwick-optimizer"),
             signed_by: ["RWTjqgtfpy3lSOLC4uaUXuvvKSLQKOFf6nUnEytoiFjSzxMEhLnoAdJF"],
         )
     }
@@ -189,7 +189,7 @@ impl Mod for ProtonOptimizer {
     fn ready(&'static self, _host: Host) {
         let wine = FOUND.get().is_some_and(|found| found.wine);
         let started = std::thread::Builder::new()
-            .name("enshwick-proton-optimizer".into())
+            .name("enshwick-optimizer".into())
             .spawn(move || measure::run(wine));
         if let Err(e) = started {
             enshwick_loader_api::warn!("measure mode does not run: {e}");
@@ -197,7 +197,7 @@ impl Mod for ProtonOptimizer {
     }
 }
 
-enshwick_loader_api::declare_mod!(ProtonOptimizer);
+enshwick_loader_api::declare_mod!(Optimizer);
 
 #[cfg(test)]
 mod tests {

@@ -1,4 +1,4 @@
-# Proton optimizer
+# Optimizer
 
 Less CPU for a server that runs under Wine or Proton, such as the Docker
 images for Linux hosts, and the numbers to check it. Players notice nothing.
@@ -30,13 +30,13 @@ players spawned under the ground and gliding broke. This mod does not do that.
 On a Windows test server, idle, with `exact_waits = "on"`:
 
 ```text
-info  [proton-optimizer] environment: Windows, not Wine; logical CPUs: 32, the game saw 32 (task workers: Default 10, Background 8, Shader 0)
-info  [proton-optimizer] measure: CPU: process 12.7%, main thread 1.7%, server loop thread 2.5% (100% = one core); server loop 24/s, steps 24.3/s; exact waits 129/s of 359 µs on average; Bad Performance 0
+info  [optimizer] environment: Windows, not Wine; logical CPUs: 32, the game saw 32 (task workers: Default 10, Background 8, Shader 0)
+info  [optimizer] measure: CPU: process 12.7%, main thread 1.7%, server loop thread 2.5% (100% = one core); server loop 24/s, steps 24.3/s; exact waits 129/s of 359 µs on average; Bad Performance 0
 ```
 
 ## Settings
 
-`mod-configs/proton-optimizer.toml`, written on first start:
+`mod-configs/optimizer.toml`, written on first start:
 
 ```toml
 exact_waits = "auto"
@@ -81,7 +81,7 @@ copy of the server, never on the server people play on:
    image and tag.
 2. Start it with `exact_waits = "off"`, let it load, and keep it running 10
    minutes idle, then 10 minutes with one player standing still. Note the
-   `measure:` lines in `logs/enshwick/mods/proton-optimizer.log`.
+   `measure:` lines in `logs/enshwick/mods/optimizer.log`.
 3. Set `exact_waits = "auto"`, restart, repeat. The same for
    `server_wait_cap_ms = 4` against 1, with players online.
 4. Compare the process and thread CPU and the Bad Performance count. On the

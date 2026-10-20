@@ -370,7 +370,7 @@ mod tests {
 
     #[test]
     fn the_log_is_read_on_from_where_it_stopped() {
-        let dir = std::env::temp_dir().join(format!("proton-optimizer-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("optimizer-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("game.log");
         std::fs::write(&path, "one\n").unwrap();

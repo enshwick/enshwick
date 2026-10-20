@@ -1,12 +1,12 @@
 [package]
-name = "enshwick-proton-optimizer"
+name = "enshwick-optimizer"
 version = "0.4.2"
 description = "Exact short waits in the engine's event loop under Wine and Proton, with an environment report and CPU measurements"
 keywords = ["enshrouded", "mod", "wine", "proton", "performance"]
 categories = ["game-development"]
 readme = "README.md"
 authors.workspace = true
-homepage = "https://github.com/themaiby/enshwick/tree/main/mods/enshwick-proton-optimizer"
+homepage = "https://github.com/themaiby/enshwick/tree/main/mods/enshwick-optimizer"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true

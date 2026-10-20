@@ -17,7 +17,7 @@
   "mods/enshwick-shared-experience": "0.4.2",
   "mods/enshwick-area-loot": "0.4.2",
   "mods/enshwick-admin-tools": "0.4.2",
-  "mods/enshwick-proton-optimizer": "0.4.2",
+  "mods/enshwick-optimizer": "0.4.2",
   "mods/enshwick-probe": "0.1.4",
   "examples/market-stalls": "0.1.2",
   "examples/trading-post": "0.1.2",
