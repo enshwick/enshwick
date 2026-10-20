@@ -169,12 +169,19 @@ impl Copies {
     }
 
     /// Every kept copy of `survivor` with its home.
-    pub(crate) fn copies_of(&self, survivor: Survivor) -> Vec<(Entity, [i64; 3])> {
+    pub(crate) fn copies_of(
+        &self,
+        survivor: Survivor,
+    ) -> impl Iterator<Item = (Entity, [i64; 3])> + '_ {
         self.homes
             .iter()
-            .filter(|(_, (s, _))| *s == survivor)
+            .filter(move |(_, (s, _))| *s == survivor)
             .map(|(&e, &(_, home))| (e, home))
-            .collect()
+    }
+
+    /// How many kept copies of `survivor` there are, without collecting them.
+    pub(crate) fn copy_count(&self, survivor: Survivor) -> usize {
+        self.copies_of(survivor).count()
     }
 
     /// Whether any altar zone is known yet.
