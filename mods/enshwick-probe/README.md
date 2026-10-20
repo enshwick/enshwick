@@ -9,7 +9,9 @@ line. Keep it off servers people play on.
 
 Once the world has loaded, and again on `/probe check`:
 
-- the world key, and that a per-world store opens under it;
+- the world key, and that a per-world store opens under it; the store keeps
+  a sample of placed entities, and the next check counts how many keep their
+  id and template across the save and load in between;
 - entity queries: every placed entity, its position against its transform,
   and the entities near it;
 - the vitals of actors with replicated health, against that health, and the

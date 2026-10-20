@@ -25,9 +25,16 @@ const TELEPORT_PEEK: Duration = Duration::from_millis(500);
 
 /// What the probe keeps per world: how often it checked it.
 #[derive(Debug, Default, serde::Deserialize, serde::Serialize)]
+#[serde(default)]
 struct Visits {
     checks: u32,
+    /// Placed entities seen at the last check, with their template's first
+    /// bytes, for telling whether ids stay with entities across loads.
+    seen: Vec<(u32, u64)>,
 }
+
+/// How many placed entities the id comparison keeps.
+const ID_SAMPLE: usize = 500;
 
 /// The checks and what they need.
 #[derive(Debug)]
@@ -95,12 +102,25 @@ impl Checks {
         self.writes();
         self.actions();
         self.spawns();
+        let now: Vec<(u32, u64)> = self
+            .world
+            .entities(self.world.transform_type())
+            .iter()
+            .take(ID_SAMPLE)
+            .filter_map(|placed| {
+                let template = self.world.template(placed.entity)?;
+                let head = u64::from_le_bytes(template[..8].try_into().ok()?);
+                Some((placed.entity.0, head))
+            })
+            .collect();
         match self.store.update(|visits| {
             visits.checks += 1;
-            visits.checks
+            let before = std::mem::replace(&mut visits.seen, now.clone());
+            (visits.checks, before)
         }) {
-            Some(n) if self.store.key() == key => {
+            Some((n, before)) if self.store.key() == key => {
                 pass(&format!("world store open, check {n} of this world"));
+                ids_across_loads(&before, &now);
             }
             _ => fail("world store: not open for the running world"),
         }
@@ -486,6 +506,24 @@ impl Checks {
         }
         format!("{outcome:?}")
     }
+}
+
+/// Logs how many entities of the last check have the same id and template
+/// now: whether entity ids stay with entities across loads.
+fn ids_across_loads(before: &[(u32, u64)], now: &[(u32, u64)]) {
+    if before.is_empty() {
+        enshwick_loader_api::info!("SKIP ids across loads: the first check of this world");
+        return;
+    }
+    let same = before.iter().filter(|seen| now.contains(seen)).count();
+    let moved = before
+        .iter()
+        .filter(|(_, template)| !now.iter().any(|(_, t)| t == template))
+        .count();
+    enshwick_loader_api::info!(
+        "ids across loads: {same} of {} sampled entities keep their id and template ({moved} templates gone)",
+        before.len()
+    );
 }
 
 fn parse(id: &str) -> Option<Entity> {
