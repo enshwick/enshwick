@@ -59,6 +59,7 @@ prereleases = false
 
 - `enabled`: off, the updater never goes online.
 - `check_interval_hours`: hours between checks at start; `0` checks at every
+  start. A check that could not reach every source runs again at the next
   start. The offer of a server's versions does not wait for the interval.
 - `trusted_keys`: public keys accepted for updates besides the ones each
   installed mod names, each the second line of a minisign `.pub` file

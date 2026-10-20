@@ -277,14 +277,18 @@ fn at_start() {
         return;
     }
     let client = Client::new();
-    let offers = match newer(&client, &context, &enshwick_loader_api::mods()) {
-        Ok(offers) => offers,
+    let (offers, answered) = match newer(&client, &context, &enshwick_loader_api::mods()) {
+        Ok(checked) => checked,
         Err(failure) => {
             enshwick_loader_api::warn!("no update check this time: {failure}");
             return;
         }
     };
-    if let Err(e) = std::fs::write(&record, now().to_string()) {
+    // A source that did not answer, such as one offline, is asked again at
+    // the next start rather than after a whole interval.
+    if !answered {
+        enshwick_loader_api::info!("not every source answered: checking again at the next start");
+    } else if let Err(e) = std::fs::write(&record, now().to_string()) {
         enshwick_loader_api::warn!("cannot record the check in {}: {e}", record.display());
     }
     let _busy = BUSY.lock().unwrap_or_else(PoisonError::into_inner);
@@ -464,8 +468,14 @@ fn fetch_document(client: &Client, url: &str) -> Result<Document, String> {
     document::parse(&json).map_err(|e| format!("{url}: {e}"))
 }
 
-/// Newer releases of `mods`, one request per repository or document.
-fn newer(client: &Client, context: &Context, mods: &[ModEntry]) -> Result<Vec<Offer>, Failure> {
+/// Newer releases of `mods`, one request per repository or document, and
+/// whether every source answered.
+fn newer(
+    client: &Client,
+    context: &Context,
+    mods: &[ModEntry],
+) -> Result<(Vec<Offer>, bool), Failure> {
+    let mut answered = true;
     let mut lists: BTreeMap<&str, Vec<release::Release>> = BTreeMap::new();
     let mut documents: BTreeMap<&str, Option<Document>> = BTreeMap::new();
     let mut offers = Vec::new();
@@ -490,7 +500,10 @@ fn newer(client: &Client, context: &Context, mods: &[ModEntry]) -> Result<Vec<Of
             Updates::Url(url) => {
                 let document = documents.entry(url.as_str()).or_insert_with(|| {
                     fetch_document(client, url)
-                        .map_err(|e| enshwick_loader_api::warn!("{e}"))
+                        .map_err(|e| {
+                            answered = false;
+                            enshwick_loader_api::warn!("{e}");
+                        })
                         .ok()
                 });
                 if let Some(pick) = document
@@ -512,11 +525,13 @@ fn newer(client: &Client, context: &Context, mods: &[ModEntry]) -> Result<Vec<Of
         if !lists.contains_key(repository.as_str()) {
             let releases = match client.api(&release::list_url(repository)) {
                 Ok(json) => release::parse(&json).unwrap_or_else(|e| {
+                    answered = false;
                     enshwick_loader_api::warn!("{repository}: {e}");
                     Vec::new()
                 }),
                 Err(Failure::RateLimited) => return Err(Failure::RateLimited),
                 Err(failure) => {
+                    answered = false;
                     enshwick_loader_api::warn!("{repository}: {failure}");
                     Vec::new()
                 }
@@ -539,7 +554,7 @@ fn newer(client: &Client, context: &Context, mods: &[ModEntry]) -> Result<Vec<Of
             });
         }
     }
-    Ok(offers)
+    Ok((offers, answered))
 }
 
 /// `offers` without those already offered this session, which are now
