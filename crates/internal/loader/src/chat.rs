@@ -594,8 +594,18 @@ fn builtin(loader: &Loader, args: &str, player: &PlayerInfo) -> String {
     } else {
         mods.join(", ")
     };
+    let disabled = crate::modlist::disabled();
+    let off = if disabled.is_empty() {
+        String::new()
+    } else {
+        format!(
+            " Off in {}: {}.",
+            crate::modlist::LIST_PATH,
+            disabled.join(", ")
+        )
+    };
     format!(
-        "Enshwick {}: {list}. /enshwick help lists the commands.",
+        "Enshwick {}: {list}.{off} /enshwick help lists the commands.",
         env!("CARGO_PKG_VERSION")
     )
 }

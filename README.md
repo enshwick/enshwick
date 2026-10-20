@@ -66,8 +66,11 @@ mods.
 Players and their server need the same mods: the server advertises its mod set.
 A player's mods the server does not run are turned off for that session, with a
 note; a player who lacks a server mod, or has another version, is told which
-and does not join. To remove a mod,
-delete its DLL from `mods/`; to remove Enshwick Loader, delete `powrprof.dll`.
+and does not join. To turn a mod off, set `enabled = false` for it in
+`mods/enshwick/mods.toml`, which the loader writes on first start with every
+mod it finds; to remove one, delete its DLL from `mods/`; to remove Enshwick
+Loader, delete `powrprof.dll`. A server keeps the exact set that loaded, with
+each DLL's SHA-256, in `mods/enshwick/enshwick.lock`.
 
 On Linux under Proton, add `WINEDLLOVERRIDES="powrprof=n,b" %command%` to the
 game's launch options.

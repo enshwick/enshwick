@@ -24,6 +24,31 @@ and was built for the loader's ABI major. Other DLLs are logged as "not an
 Enshwick mod" and unloaded. The file name is free; the id in the manifest
 names the mod.
 
+## The mod list and the lock
+
+`mods/enshwick/mods.toml` names every mod the loader has found, by id, with
+its file. The loader writes it on first start with every mod turned on, adds
+mods it finds later, and keeps everything else, comments included:
+
+```toml
+[safes]
+enabled = false # off until the next release
+file = "enshwick-safes.dll"
+```
+
+A file whose entry says `enabled = false` is never loaded, so none of its code
+runs; `loader.log` says `enshwick-safes.dll skipped: off in
+mods/enshwick/mods.toml`. Changes take effect at the next start. A list that
+is not valid TOML is left as it is and every mod loads, with a warning.
+`/enshwick` and the status summary name the mods that are off.
+
+`mods/enshwick/enshwick.lock` is written at every start: the loader's version
+and SHA-256, the game build, and each running mod's id, version, file and
+SHA-256, in load order. Copying it with the DLLs sets up the same server
+again, and comparing two locks shows where two servers differ. What changed
+since the last start goes to `loader.log`, such as
+`since the last start: safes 0.3.0 -> 0.3.1`.
+
 ## The ABI
 
 A mod and the loader are built separately, so they talk through a C ABI,

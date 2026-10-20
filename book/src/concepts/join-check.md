@@ -39,7 +39,10 @@ compares the fingerprint with its own:
   restarts, a note lists them, and the player joins.
 - **The server runs join mods the player lacks or has in another version.** A
   note lists each, with the server's version and the player's, and the client
-  does not join. Then the loader raises `JoinRefused` (below).
+  does not join. Then the loader raises `JoinRefused` (below). A mod the
+  player turned off in `mods/enshwick/mods.toml` is named as such, left out of
+  `JoinRefused`'s list so no updater offers it, and is the player's to turn
+  back on.
 - **The same mods, another loader version.** A note says so, and the player
   joins.
 - **The server does not answer the query.** The player joins without a check.
