@@ -64,6 +64,24 @@ impl Player {
         }
     }
 
+    /// Whether the player's name is `name`, ignoring case, as a player types
+    /// another's name in chat.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_loader_api::ecs::Entity;
+    /// use enshwick_loader_api::world::Player;
+    ///
+    /// let player = Player { entity: Entity(2), slot: 0, key: 7, permissions: 0, name: "Émile".into() };
+    /// assert!(player.is_named("éMILE"));
+    /// assert!(!player.is_named("Emile"));
+    /// ```
+    #[must_use]
+    pub fn is_named(&self, name: &str) -> bool {
+        self.name.to_lowercase() == name.to_lowercase()
+    }
+
     /// Whether the server lets the player kick and ban: its administrators.
     ///
     /// # Examples
@@ -211,6 +229,43 @@ impl World {
         let mut info = blank_info();
         let status = (self.host.api().player)(self.host.handle(), entity.0, &raw mut info);
         status.is_ok().then(|| Player::from_info(&info))
+    }
+
+    /// The connected player with the account `key`, the same in every
+    /// session.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// fn owner_name(world: &enshwick_loader_api::world::World, owner: u64) -> Option<String> {
+    ///     world.player_by_key(owner).map(|player| player.name)
+    /// }
+    /// ```
+    #[must_use]
+    pub fn player_by_key(&self, key: u64) -> Option<Player> {
+        self.players().into_iter().find(|player| player.key == key)
+    }
+
+    /// The connected players named `name`, ignoring case; names are
+    /// untrusted and may repeat, so a command that wants one player refuses
+    /// more than one.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// fn find(world: &enshwick_loader_api::world::World, name: &str) -> Result<enshwick_loader_api::world::Player, String> {
+    ///     match <[_; 1]>::try_from(world.players_named(name)) {
+    ///         Ok([player]) => Ok(player),
+    ///         Err(found) if found.is_empty() => Err(format!("no player is named {name}")),
+    ///         Err(_) => Err(format!("several players are named {name}")),
+    ///     }
+    /// }
+    /// ```
+    #[must_use]
+    pub fn players_named(&self, name: &str) -> Vec<Player> {
+        let mut players = self.players();
+        players.retain(|player| player.is_named(name));
+        players
     }
 
     /// Whether the loader offers what was added to the table at `end`.

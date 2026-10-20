@@ -85,6 +85,11 @@ has:
 - `name`, the name the client sent. It is untrusted: a client picks it, and two
   players may share it. Show it, but decide by `key` or `permissions`.
 
+`player_by_key(key)` finds the connected player with an account key, and
+`players_named(name)` the connected players with a name, ignoring case, as a
+command finds the player another typed. Since names repeat, a command that
+wants one player refuses when it gets several.
+
 ## Labels
 
 `world.set_label(entity, text)` names an entity as a player's rename does: the
