@@ -1,6 +1,6 @@
 [package]
 name = "enshwick-pin"
-version = "0.1.0"
+version = "0.1.1"
 description = "Ports the pinned symbols of Enshwick's build rows to a new game build"
 keywords = ["enshrouded", "modding", "signatures", "pe"]
 categories = ["development-tools", "game-development"]

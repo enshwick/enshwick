@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.0](https://github.com/themaiby/enshwick/compare/enshwick-stub-v0.1.2...enshwick-stub-v0.2.0) (2026-10-20)
+
+
+### Other
+
+* **enshwick-stub:** Synchronize enshwick versions
+
 ## [0.1.2](https://github.com/themaiby/enshwick/compare/enshwick-stub-v0.1.1...enshwick-stub-v0.1.2) (2026-10-20)
 
 

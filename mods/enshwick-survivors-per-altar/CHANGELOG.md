@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.6](https://github.com/themaiby/enshwick/compare/enshwick-survivors-per-altar-v0.1.5...enshwick-survivors-per-altar-v0.1.6) (2026-10-20)
+
+
+### Features
+
+* author keys: updates must be signed by the installed version's key ([#81](https://github.com/themaiby/enshwick/issues/81)) ([d9d46f3](https://github.com/themaiby/enshwick/commit/d9d46f38231234e958a8762e6c0fff5b6ddcb5d8))
+
 ## [0.1.5](https://github.com/themaiby/enshwick/compare/enshwick-survivors-per-altar-v0.1.4...enshwick-survivors-per-altar-v0.1.5) (2026-10-20)
 
 

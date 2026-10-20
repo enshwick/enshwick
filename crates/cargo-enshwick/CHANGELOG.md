@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.0](https://github.com/themaiby/enshwick/compare/cargo-enshwick-v0.1.3...cargo-enshwick-v0.2.0) (2026-10-20)
+
+
+### Features
+
+* author keys: updates must be signed by the installed version's key ([#81](https://github.com/themaiby/enshwick/issues/81)) ([d9d46f3](https://github.com/themaiby/enshwick/commit/d9d46f38231234e958a8762e6c0fff5b6ddcb5d8))
+
 ## [0.1.3](https://github.com/themaiby/enshwick/compare/cargo-enshwick-v0.1.2...cargo-enshwick-v0.1.3) (2026-10-20)
 
 ## [0.1.2](https://github.com/themaiby/enshwick/compare/cargo-enshwick-v0.1.1...cargo-enshwick-v0.1.2) (2026-10-20)

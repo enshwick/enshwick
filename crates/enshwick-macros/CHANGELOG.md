@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.0](https://github.com/themaiby/enshwick/compare/enshwick-macros-v0.1.2...enshwick-macros-v0.2.0) (2026-10-20)
+
+
+### Other
+
+* **enshwick-macros:** Synchronize enshwick versions
+
 ## [0.1.2](https://github.com/themaiby/enshwick/compare/enshwick-macros-v0.1.1...enshwick-macros-v0.1.2) (2026-10-20)
 
 
