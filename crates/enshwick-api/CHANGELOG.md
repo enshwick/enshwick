@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.1.4](https://github.com/themaiby/enshwick/compare/enshwick-api-v0.1.3...enshwick-api-v0.1.4) (2026-10-20)
+
+
+### Features
+
+* content and i18n in the API, and the safes mod ([#52](https://github.com/themaiby/enshwick/issues/52)) ([00ae927](https://github.com/themaiby/enshwick/commit/00ae9278664af9209bf1b0fba9137c25527bb397))
+* derived recipes in the API, and the building-yield mod ([#54](https://github.com/themaiby/enshwick/issues/54)) ([150c65c](https://github.com/themaiby/enshwick/commit/150c65c254d11219410b76777b62c776bcc44097))
+* world reads, players and building events on the server ([#50](https://github.com/themaiby/enshwick/issues/50)) ([837192e](https://github.com/themaiby/enshwick/commit/837192e7fa014188adb724555f0db804018e7821))
+
 ## [0.1.3](https://github.com/themaiby/enshwick/compare/enshwick-api-v0.1.2...enshwick-api-v0.1.3) (2026-10-20)
 
 

@@ -1,13 +1,13 @@
 {
-  "crates/cargo-enshwick": "0.1.1",
-  "crates/enshwick-api": "0.1.3",
-  "crates/enshwick-loader": "0.1.4",
+  "crates/cargo-enshwick": "0.1.2",
+  "crates/enshwick-api": "0.1.4",
+  "crates/enshwick-loader": "0.1.5",
   "crates/enshwick-stub": "0.1.1",
-  "mods/enshwick-flame-altar-count": "0.1.3",
-  "mods/enshwick-flame-altar-zones": "0.1.3",
-  "mods/enshwick-survivors-per-altar": "0.1.3",
-  "mods/enshwick-furniture-comfort": "0.1.3",
+  "mods/enshwick-flame-altar-count": "0.1.4",
+  "mods/enshwick-flame-altar-zones": "0.1.4",
+  "mods/enshwick-survivors-per-altar": "0.1.4",
+  "mods/enshwick-furniture-comfort": "0.1.4",
   "crates/enshwick-macros": "0.1.1",
-  "mods/enshwick-safes": "0.1.0",
-  "mods/enshwick-building-yield": "0.1.0"
+  "mods/enshwick-safes": "0.1.1",
+  "mods/enshwick-building-yield": "0.1.1"
 }

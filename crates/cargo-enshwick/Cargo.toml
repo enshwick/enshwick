@@ -1,6 +1,6 @@
 [package]
 name = "cargo-enshwick"
-version = "0.1.1"
+version = "0.1.2"
 description = "Cargo subcommand for Enshwick mods: start a mod, build it and install it into the game"
 keywords = ["enshrouded", "modding", "cargo", "cli"]
 categories = ["development-tools::cargo-plugins", "game-development"]
