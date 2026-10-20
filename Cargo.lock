@@ -73,7 +73,7 @@ dependencies = [
 
 [[package]]
 name = "enshwick-api"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "serde",
  "thiserror",
@@ -82,7 +82,7 @@ dependencies = [
 
 [[package]]
 name = "enshwick-flame-altar-count"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "enshwick-api",
  "serde",
@@ -91,7 +91,7 @@ dependencies = [
 
 [[package]]
 name = "enshwick-flame-altar-zones"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "arc-swap",
  "arrayvec",
@@ -120,7 +120,7 @@ dependencies = [
 
 [[package]]
 name = "enshwick-loader"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "enshwick-api",
  "enshwick-reflect",
@@ -140,14 +140,14 @@ dependencies = [
 
 [[package]]
 name = "enshwick-stub"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "windows-sys",
 ]
 
 [[package]]
 name = "enshwick-survivors-per-altar"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "enshwick-api",
  "enshwick-geometry",
