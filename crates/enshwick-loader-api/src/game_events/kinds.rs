@@ -3,6 +3,7 @@
 
 use crate::ecs::Entity;
 use crate::game_events::{EventType, Field, GameEvent};
+use crate::raw::read_at;
 use crate::world::{ComponentType, World};
 use crate::{Load, Off};
 
@@ -286,11 +287,14 @@ impl Credit {
             })
         };
         let history = "keen::ecs::HitHistory";
+        let source = "keen::ecs::ExperienceSource";
         let size = usize::try_from(load.type_size(history)?).unwrap_or(0);
+        let source_size = usize::try_from(load.type_size(source)?).unwrap_or(0);
         let entries = offset(history, "history")?;
         let entry_size = usize::try_from(load.type_size(Hit::TYPE_NAME)?)
             .unwrap_or(0)
             .max(1);
+        // The ring of hits ends where `targetTransform` starts.
         let slots = offset(history, "targetTransform")?.saturating_sub(entries) / entry_size;
         Ok(Self {
             history: world.component_type(load, history)?,
@@ -299,46 +303,40 @@ impl Credit {
             slots,
             entry_size,
             entry_attacker: offset("keen::ecs::BaseHitEvent", "rootSourceId")?,
-            experience: world.component_type(load, "keen::ecs::ExperienceSource")?,
-            last_player: offset("keen::ecs::ExperienceSource", "lastHitPlayerId")?,
+            experience: world.component_type(load, source)?,
+            last_player: offset(source, "lastHitPlayerId")?,
             world,
         })
         .and_then(|credit: Self| {
-            (credit.last_index + 4 <= size
-                && credit.entries + credit.slots * credit.entry_size <= size)
+            let id = size_of::<u32>();
+            (credit.last_index + id <= size
+                && credit.entries + credit.slots * credit.entry_size <= size
+                && credit.entry_attacker + id <= credit.entry_size
+                && credit.last_player + id <= source_size)
                 .then_some(credit)
-                .ok_or_else(|| Off::new("keen::ecs::HitHistory: an unexpected layout"))
+                .ok_or_else(|| Off::new("kill credit: an unexpected layout"))
         })
     }
 
     /// The attacker of the last hit `entity` took.
     fn killer(&self, entity: Entity) -> Option<Entity> {
         let history = self.world.component(entity, self.history)?.cast::<u8>();
-        // SAFETY: the entity's live HitHistory, read on the game thread.
-        let last: u32 = unsafe {
-            history
-                .wrapping_add(self.last_index)
-                .cast::<u32>()
-                .read_unaligned()
-        };
+        // SAFETY: the entity's live HitHistory, on the game thread; `resolve`
+        // checked that `lastIndex` lies inside it.
+        let last: u32 = unsafe { read_at(history, self.last_index) };
         let last = usize::try_from(last).ok().filter(|&i| i < self.slots)?;
         let at = self.entries + last * self.entry_size + self.entry_attacker;
-        // SAFETY: as above; `at` lies inside the history array.
-        some(Entity(unsafe {
-            history.wrapping_add(at).cast::<u32>().read_unaligned()
-        }))
+        // SAFETY: as above; `resolve` checked that every slot, and the
+        // attacker inside it, lies inside the HitHistory.
+        some(Entity(unsafe { read_at(history, at) }))
     }
 
     /// The last player character that hit `entity`.
     fn killer_player(&self, entity: Entity) -> Option<Entity> {
         let source = self.world.component(entity, self.experience)?.cast::<u8>();
-        // SAFETY: the entity's live ExperienceSource, read on the game thread.
-        some(Entity(unsafe {
-            source
-                .wrapping_add(self.last_player)
-                .cast::<u32>()
-                .read_unaligned()
-        }))
+        // SAFETY: the entity's live ExperienceSource, on the game thread;
+        // `resolve` checked that `lastHitPlayerId` lies inside it.
+        some(Entity(unsafe { read_at(source, self.last_player) }))
     }
 }
 
