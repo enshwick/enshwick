@@ -33,6 +33,13 @@ pub fn level(source: &str) -> Level {
         .map_or(Level::INFO, |s| s.level(source))
 }
 
+/// Whether a line at `level` from `source` would be kept, so a caller can
+/// skip formatting one that would not.
+#[must_use]
+pub fn enabled(level: Level, source: &str) -> bool {
+    level <= self::level(source)
+}
+
 /// Starts the writer in `dir`, truncating the previous session's files:
 /// `all.log` gets every line, `loader.log` the loader's, `mods/<id>.log` each
 /// mod's.
@@ -77,7 +84,7 @@ pub fn write(level: Level, source: &str, message: &str) {
     let Some(lines) = LINES.get() else {
         return;
     };
-    if level > self::level(source) {
+    if !enabled(level, source) {
         return;
     }
     let _sent = lines.send((
@@ -105,17 +112,42 @@ fn format_line(millis: u64, level: Level, source: &str, message: &str) -> String
     line
 }
 
-/// Logs a line from the loader itself.
+/// Logs a line from the loader itself; formats it only when its level is
+/// kept.
 #[macro_export]
 macro_rules! log {
-    ($level:ident, $($arg:tt)+) => {
-        $crate::log::write(::enshwick_loader_api::abi::Level::$level, $crate::settings::LOADER_ID, &::std::format!($($arg)+))
-    };
+    ($level:ident, $($arg:tt)+) => {{
+        let level = ::enshwick_loader_api::abi::Level::$level;
+        if $crate::log::enabled(level, $crate::settings::LOADER_ID) {
+            $crate::log::write(level, $crate::settings::LOADER_ID, &::std::format!($($arg)+));
+        }
+    }};
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_line_below_its_source_s_level_is_not_formatted() {
+        set_levels(Settings {
+            log_level: Level::WARN,
+            log_levels: [("chatty".to_owned(), Level::DEBUG)].into(),
+            ..Settings::default()
+        });
+        assert!(enabled(Level::ERROR, LOADER_ID));
+        assert!(!enabled(Level::INFO, LOADER_ID));
+        assert!(enabled(Level::DEBUG, "chatty"));
+        let formatted = core::cell::Cell::new(false);
+        let costly = || {
+            formatted.set(true);
+            "costly"
+        };
+        crate::log!(DEBUG, "{}", costly());
+        assert!(!formatted.get());
+        crate::log!(ERROR, "{}", costly());
+        assert!(formatted.get());
+    }
 
     #[test]
     fn a_line_names_its_time_level_and_source() {

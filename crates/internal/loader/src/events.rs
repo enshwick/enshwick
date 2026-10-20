@@ -14,7 +14,7 @@
 //! queue what happened; the post-step link raises it on the game thread.
 
 use core::ffi::c_void;
-use std::sync::atomic::{AtomicU32, AtomicU64, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Mutex, OnceLock, PoisonError};
 
 use enshwick_loader_api::abi::{
@@ -106,6 +106,27 @@ static BUILDING: Mutex<Vec<BuildingData>> = Mutex::new(Vec::new());
 static STEPS: AtomicU64 = AtomicU64::new(0);
 /// The handle of the player seen joining in each slot, 0 for none.
 static JOINED: [AtomicU32; MAX_SLOTS] = [const { AtomicU32::new(0) }; MAX_SLOTS];
+/// Set once the loader's own work in a link panicked: from then on the links
+/// only forward, and game events stay silent.
+static OFF: AtomicBool = AtomicBool::new(false);
+
+/// The links' state, unless the events are off.
+fn loaded() -> Option<&'static (&'static Loader, Offsets)> {
+    if OFF.load(Ordering::Relaxed) {
+        return None;
+    }
+    LOADED.get()
+}
+
+/// Runs a link's own work; a panic in it turns the game events off instead
+/// of unwinding into the game, which would end the process.
+fn guarded(link: &str, work: impl FnOnce()) {
+    if std::panic::catch_unwind(std::panic::AssertUnwindSafe(work)).is_err()
+        && !OFF.swap(true, Ordering::Relaxed)
+    {
+        crate::log!(ERROR, "game events off: the {link} link panicked");
+    }
+}
 
 type StepFn = unsafe extern "system" fn(server: *mut u8);
 type StateFn = unsafe extern "system" fn(entry: *mut u8, state: u8);
@@ -249,9 +270,21 @@ fn player(slot_index: usize, slot: *const u8, offsets: &Offsets) -> PlayerData {
 unsafe extern "system" fn step(server: *mut u8) {
     // SAFETY: forwarded unchanged.
     unsafe { next::<StepFn>(&STEP_NEXT)(server) };
-    let Some((loader, offsets)) = LOADED.get() else {
+    let Some((loader, offsets)) = loaded() else {
         return;
     };
+    // SAFETY: the game's server, as passed to the step.
+    guarded("post-step", || unsafe {
+        after_step(loader, offsets, server);
+    });
+}
+
+/// The post-step link's work on the game thread, after the game's step.
+///
+/// # Safety
+///
+/// `server` is the game's server, or null.
+unsafe fn after_step(loader: &'static Loader, offsets: &Offsets, server: *mut u8) {
     // SAFETY: no preconditions.
     let thread = unsafe { windows_sys::Win32::System::Threading::GetCurrentThreadId() };
     let seen = SESSION
@@ -340,17 +373,16 @@ fn end_session() {
 }
 
 unsafe extern "system" fn set_state(entry: *mut u8, state: u8) {
-    let old = LOADED
-        .get()
+    let old = loaded()
         .filter(|_| !entry.is_null())
         // SAFETY: the entry is the game's server instance entry.
         .map(|(_, offsets)| unsafe { read::<u8>(entry, offsets.entry_state) });
     // SAFETY: forwarded unchanged.
     unsafe { next::<StateFn>(&STATE_NEXT)(entry, state) };
-    let (Some((loader, _)), Some(old)) = (LOADED.get(), old) else {
+    let (Some((loader, _)), Some(old)) = (loaded(), old) else {
         return;
     };
-    match state {
+    guarded("server state", || match state {
         STATE_RUN if old != STATE_RUN => loader.emit(Event::WORLD_LOADED, None, core::ptr::null()),
         STATE_SHUTDOWN if old != STATE_SHUTDOWN => {
             loader.emit(Event::SHUTDOWN, None, core::ptr::null());
@@ -360,7 +392,7 @@ unsafe extern "system" fn set_state(entry: *mut u8, state: u8) {
             }
         }
         _ => {}
-    }
+    });
 }
 
 unsafe extern "system" fn save(out: *mut u8, save: *mut u8, context: *mut u8) -> *mut u8 {
@@ -368,14 +400,16 @@ unsafe extern "system" fn save(out: *mut u8, save: *mut u8, context: *mut u8) ->
     let result = unsafe { next::<SaveFn>(&SAVE_NEXT)(out, save, context) };
     // SAFETY: the game wrote its result's first byte through `out`.
     let done = !out.is_null() && unsafe { out.read() } == 0;
-    if done && let Some((loader, _)) = LOADED.get() {
-        loader.emit(Event::WORLD_SAVED, None, core::ptr::null());
+    if done && let Some((loader, _)) = loaded() {
+        guarded("save", || {
+            loader.emit(Event::WORLD_SAVED, None, core::ptr::null());
+        });
     }
     result
 }
 
 unsafe extern "system" fn remove(server: *mut u8, slot: *mut u8) {
-    if let Some((loader, offsets)) = LOADED.get()
+    if let Some((loader, offsets)) = loaded()
         && !server.is_null()
         && !slot.is_null()
     {
@@ -389,7 +423,9 @@ unsafe extern "system" fn remove(server: *mut u8, slot: *mut u8) {
         {
             joined.store(0, Ordering::Relaxed);
             let data = player(index, slot, offsets);
-            loader.emit(Event::PLAYER_LEFT, None, (&raw const data).cast());
+            guarded("player removal", || {
+                loader.emit(Event::PLAYER_LEFT, None, (&raw const data).cast());
+            });
         }
     }
     // SAFETY: forwarded unchanged.
@@ -397,10 +433,12 @@ unsafe extern "system" fn remove(server: *mut u8, slot: *mut u8) {
 }
 
 fn queue(data: BuildingData) {
-    BUILDING
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .push(data);
+    guarded("building", || {
+        BUILDING
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .push(data);
+    });
 }
 
 unsafe extern "system" fn place(
@@ -420,7 +458,7 @@ unsafe extern "system" fn place(
     };
     if entity != 0
         && !context.is_null()
-        && let Some((_, offsets)) = LOADED.get()
+        && let Some((_, offsets)) = loaded()
     {
         queue(BuildingData {
             header: Header::of::<BuildingData>(),
@@ -442,8 +480,7 @@ unsafe extern "system" fn place(
 
 unsafe extern "system" fn pickup(context: *mut u8, target: *const u8, tool: u32) -> u8 {
     // The target is the entity and the mode; read them while the entity lives.
-    let before = LOADED
-        .get()
+    let before = loaded()
         .filter(|_| !context.is_null() && !target.is_null())
         .map(|(_, offsets)| {
             // SAFETY: the target starts with the entity id, then the mode byte.
@@ -482,6 +519,16 @@ unsafe extern "system" fn pickup(context: *mut u8, target: *const u8, tool: u32)
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_panic_in_a_link_s_work_turns_the_events_off_and_stays_inside() {
+        let mut ran = false;
+        guarded("test", || ran = true);
+        assert!(ran && !OFF.load(Ordering::Relaxed));
+        guarded("test", || panic!("a loader bug"));
+        assert!(OFF.load(Ordering::Relaxed));
+        assert!(loaded().is_none());
+    }
 
     #[test]
     fn a_session_follows_its_server_and_thread() {
