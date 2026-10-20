@@ -13,10 +13,10 @@ publish = false
 arc-swap = { version = "1.9.3", default-features = false }
 clap = { version = "4.6.7", default-features = false, features = ["std", "derive", "help", "usage", "error-context", "env"] }
 arrayvec = { version = "0.7.8", default-features = false, features = ["std"] }
-enshwick-api = { path = "crates/enshwick-api", version = "0.1.0" }
-enshwick-reflect = { path = "crates/enshwick-reflect", version = "0.1.0" }
-enshwick-geometry = { path = "crates/enshwick-geometry", version = "0.1.0" }
-enshwick-test = { path = "crates/enshwick-test", version = "0.1.0" }
+enshwick-api = { path = "crates/enshwick-api" }
+enshwick-reflect = { path = "crates/enshwick-reflect" }
+enshwick-geometry = { path = "crates/enshwick-geometry" }
+enshwick-test = { path = "crates/enshwick-test" }
 iced-x86 = { version = "1.21.0", default-features = false, features = ["std", "decoder", "block_encoder", "instr_info"] }
 memchr = { version = "2.8.3", default-features = false, features = ["std"] }
 proptest = { version = "1.12.0", default-features = false, features = ["std"] }

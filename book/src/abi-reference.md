@@ -14,6 +14,10 @@ raw table. The exact types and signatures are in the
 | [`ABI_MAJOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/abi.rs) | 1     | A loader refuses a mod built for another major. |
 | [`ABI_MINOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/abi.rs) | 14    | A newer minor only appends.                     |
 
+The ABI version is apart from Enshwick's version (such as Enshwick 0.2.0, see
+[Releasing and updates](releasing.md#versions)): a platform release raises
+`ABI_MINOR` only when it appends to the ABI.
+
 The policy:
 
 - **Major.** A mod exports `enshwick_mod_abi`, the major it was built for. A

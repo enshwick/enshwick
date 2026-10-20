@@ -1,6 +1,9 @@
 # Release pull requests and releases per crate.
-# Each release gets its own archive: a mod's DLL, or the stub and loader; the
-# loader's release also carries the full bundle, everything as it goes next to the game.
+# The platform crates (loader, stub, API, macros, reflect, test, cargo-enshwick)
+# share one version and release together as "Enshwick X.Y.Z"; mods keep their own.
+# Each mod's release gets its archive with the mod's DLL; the loader's release,
+# the platform release, carries the stub and loader and the full bundle,
+# everything as it goes next to the game.
 # Each archive has a minisign signature beside it, `<archive>.minisig`.
 name: release-please
 
@@ -102,7 +105,7 @@ jobs:
             while read -r tag; do
               component=${tag%-v*}
               case "$component" in
-                enshwick-loader|enshwick-stub) files="enshwick-loader.zip enshwick.zip" ;;
+                enshwick-loader) files="enshwick-loader.zip enshwick.zip" ;;
                 *) [ -f "$component.zip" ] && files="$component.zip" || files="" ;;
               esac
               for file in $files; do
@@ -110,3 +113,16 @@ jobs:
                 gh release upload "$tag" "$file" "$file.minisig" --clobber --repo "$GITHUB_REPOSITORY"
               done
             done
+
+      - name: Platform release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # The other platform crates release with the loader under the same
+          # version; the loader's release is the one players download. It is
+          # named after the platform and stays the latest release, also after a
+          # release of mods alone, so the latest release always has enshwick.zip.
+          tag=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 100 --json tagName \
+            --jq '[.[] | select(.tagName | startswith("enshwick-loader-v"))][0].tagName // empty' | tr -d '\r')
+          [ -n "$tag" ] || exit 0
+          gh release edit "$tag" --title "Enshwick ${tag##*-v}" --latest --repo "$GITHUB_REPOSITORY"
