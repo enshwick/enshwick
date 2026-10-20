@@ -11,6 +11,7 @@ use core::ffi::c_void;
 use crate::abi::{ResourceKey, ResourcePatchFn, Status};
 use crate::{Load, Off};
 
+pub mod icons;
 pub mod items;
 pub mod recipes;
 pub mod workshops;
@@ -151,6 +152,8 @@ pub mod types {
     pub const TEMPLATE_COLLECTION: u32 = 0xd80f_e371;
     /// `WorkshopRegistryResource`, every workshop.
     pub const WORKSHOP_REGISTRY: u32 = 0xa8ea_5924;
+    /// The client's UI image, such as an item icon.
+    pub const UI_IMAGE: u32 = super::icons::UI_IMAGE;
 }
 
 /// A resource blob being edited.

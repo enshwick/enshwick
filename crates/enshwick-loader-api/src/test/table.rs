@@ -134,6 +134,8 @@ pub(crate) struct State {
     /// Item data kinds by full id, and values by kind and entity: the item
     /// and the bytes.
     pub(crate) item_kinds: Vec<String>,
+    /// Content served or put in the fake archive, by hash.
+    pub(crate) content: std::collections::BTreeMap<[u32; 4], Vec<u8>>,
     pub(crate) item_values: std::collections::BTreeMap<(u32, u32), (u32, Vec<u8>)>,
     pub(crate) summon_items: Vec<(u32, u32)>,
     pub(crate) survivor_status: Option<(SurvivorStatusFn, usize)>,
@@ -230,6 +232,7 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         summons: Vec::new(),
         summoned: Vec::new(),
         item_kinds: Vec::new(),
+        content: std::collections::BTreeMap::new(),
         item_values: std::collections::BTreeMap::new(),
         summon_items: Vec::new(),
         survivor_status: None,
@@ -935,6 +938,70 @@ extern "system" fn item_data_set(
         }
         Status::OK
     })
+}
+
+extern "system" fn content_serve(
+    _me: ModHandle,
+    data: *const u8,
+    len: u32,
+    out: *mut [u32; 4],
+) -> Status {
+    if data.is_null() || len == 0 {
+        return Status::BAD_ARGS;
+    }
+    // SAFETY: the safe layer passes `len` bytes at `data`.
+    let bytes = unsafe { core::slice::from_raw_parts(data, len as usize) }.to_vec();
+    let hash = [
+        len,
+        u32::try_from(bytes.len()).unwrap_or(0) ^ 0x5a5a,
+        bytes.iter().map(|&b| u32::from(b)).sum(),
+        1,
+    ];
+    with(Status::MISSING, |s| {
+        s.content.insert(hash, bytes);
+        Status::OK
+    });
+    found(Some(hash), out)
+}
+
+extern "system" fn content_read(
+    _me: ModHandle,
+    hash: *const [u32; 4],
+    out: *mut u8,
+    capacity: u32,
+    len: *mut u32,
+) -> Status {
+    // SAFETY: the safe layer passes a hash for the call.
+    let Some(hash) = (unsafe { hash.as_ref() }).copied() else {
+        return Status::BAD_ARGS;
+    };
+    let Some(data) = with(None, |s| {
+        s.content
+            .get(&hash)
+            .or_else(|| s.host.archive.get(&hash))
+            .cloned()
+    }) else {
+        return Status::MISSING;
+    };
+    let size = u32::try_from(data.len()).unwrap_or(u32::MAX);
+    if !len.is_null() {
+        // SAFETY: the safe layer's length out pointer.
+        unsafe { len.write(size) };
+    }
+    if size > capacity || out.is_null() {
+        return Status::BAD_ARGS;
+    }
+    // SAFETY: the safe layer passes room for `capacity` bytes.
+    unsafe { out.copy_from_nonoverlapping(data.as_ptr(), data.len()) };
+    Status::OK
+}
+
+extern "system" fn icons_ready(_me: ModHandle) -> Status {
+    if with(false, |s| s.host.icons_ready) {
+        Status::OK
+    } else {
+        Status::MISSING
+    }
 }
 
 extern "system" fn summon_item(_me: ModHandle, item: u32, survivor: u32) -> Status {
@@ -1974,4 +2041,7 @@ pub(crate) static TABLE: HostApi = HostApi {
     ui_markers,
     config_check,
     texts,
+    content_serve,
+    content_read,
+    icons_ready,
 };

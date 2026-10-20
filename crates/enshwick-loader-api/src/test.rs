@@ -348,6 +348,8 @@ pub struct FakeHost {
     world_key: Option<String>,
     refused_writes: HashSet<u32>,
     net_peers: HashSet<u64>,
+    icons_ready: bool,
+    archive: std::collections::BTreeMap<[u32; 4], Vec<u8>>,
 }
 
 impl Default for FakeHost {
@@ -401,6 +403,8 @@ impl FakeHost {
             world_key: None,
             refused_writes: HashSet::new(),
             net_peers: HashSet::new(),
+            icons_ready: false,
+            archive: std::collections::BTreeMap::new(),
         }
     }
 
@@ -943,6 +947,36 @@ impl FakeHost {
                 flags,
             },
         );
+        self
+    }
+
+    /// Plays a client that shows served UI images: `icons_ready` answers
+    /// [`Status::OK`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick_loader_api::test::FakeHost::new().icons_ready().install();
+    /// # let _ = loader;
+    /// ```
+    #[must_use]
+    pub fn icons_ready(mut self) -> Self {
+        self.icons_ready = true;
+        self
+    }
+
+    /// Puts content `bytes` under `hash` in the game's archive, for
+    /// `content_read`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick_loader_api::test::FakeHost::new().archive([4, 1, 2, 3], vec![1, 2, 3, 4]).install();
+    /// # let _ = loader;
+    /// ```
+    #[must_use]
+    pub fn archive(mut self, hash: [u32; 4], bytes: Vec<u8>) -> Self {
+        self.archive.insert(hash, bytes);
         self
     }
 
@@ -2054,6 +2088,21 @@ impl Installed {
                     (id, pide, *item, bytes.clone())
                 })
                 .collect()
+        })
+    }
+
+    /// The content the mod served, by hash.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick_loader_api::test::FakeHost::new().install();
+    /// assert!(loader.served_content().is_empty());
+    /// ```
+    #[must_use]
+    pub fn served_content(&self) -> Vec<([u32; 4], Vec<u8>)> {
+        table::with(Vec::new(), |s| {
+            s.content.iter().map(|(h, b)| (*h, b.clone())).collect()
         })
     }
 

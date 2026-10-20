@@ -13,6 +13,9 @@ publish.workspace = true
 
 [dependencies]
 enshwick-loader-macros = { path = "../internal/macros", version = "0.5.0" }
+bcdec_rs.workspace = true
+zune-core.workspace = true
+zune-png.workspace = true
 postcard.workspace = true
 serde.workspace = true
 thiserror.workspace = true
@@ -31,6 +34,14 @@ required-features = ["test"]
 
 [[test]]
 name = "item_data"
+required-features = ["test"]
+
+[[test]]
+name = "icons"
+required-features = ["test"]
+
+[[test]]
+name = "icons_hidden"
 required-features = ["test"]
 
 [[test]]

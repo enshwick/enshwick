@@ -88,6 +88,8 @@ mod survivors;
 #[cfg(windows)]
 mod terrain;
 #[cfg(windows)]
+mod textures;
+#[cfg(windows)]
 mod ui;
 #[cfg(windows)]
 mod vetoes;

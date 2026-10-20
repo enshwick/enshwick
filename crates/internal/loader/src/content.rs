@@ -281,6 +281,18 @@ pub(crate) fn seal_and_link(loader: &'static Loader) {
     }
 }
 
+/// The served resources of type `type_hash` that are new, not a vanilla
+/// one changed, whose mods are on.
+pub(crate) fn new_keys_of_type(type_hash: u32) -> Vec<ResourceKey> {
+    SERVED_LIST.get().map_or_else(Vec::new, |served| {
+        served
+            .iter()
+            .filter(|s| s.key.type_hash == type_hash && s.key != s.base && owner_on(s))
+            .map(|s| s.key)
+            .collect()
+    })
+}
+
 /// What mods serve, for the status summary.
 pub(crate) fn summary() -> crate::diag::Served {
     let served = SERVED_LIST.get().map_or(&[][..], |s| s);

@@ -4,7 +4,8 @@ A mod can add game content: items, recipes, crafting stations, texts, and
 any other game resource. This part of the book covers the high-level calls
 first and the served resources under them last:
 
-- [Items](content/items.md): a new item cloned from a vanilla one;
+- [Items](content/items.md): a new item cloned from a vanilla one, with
+  its own name, icon, tooltip lines and meter;
 - [Recipes](content/recipes.md): single recipes and derived copies of
   vanilla ones;
 - [Workshops](content/workshops.md): a crafting station with a workshop of

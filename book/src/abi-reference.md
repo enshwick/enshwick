@@ -12,7 +12,7 @@ raw table. The exact types and signatures are in the
 | Constant                                                                                            | Value | Meaning                                         |
 | --------------------------------------------------------------------------------------------------- | ----- | ----------------------------------------------- |
 | [`ABI_MAJOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 1     | A loader refuses a mod built for another major. |
-| [`ABI_MINOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 43    | A newer minor only appends.                     |
+| [`ABI_MINOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 44    | A newer minor only appends.                     |
 
 The ABI version is apart from Enshwick Loader's version (such as 0.2.0, see
 [Releasing and updates](releasing.md#versions)): a platform release raises
@@ -272,6 +272,9 @@ marked "init only" are allowed during `enshwick_mod_init` only.
 | `ui_markers`          | Replaces the mod's markers on the client's map; any thread                                      | 40          |
 | `config_check`        | The mod's check of a new settings text before the loader writes it; init only                   | 41          |
 | `texts`               | Hands the loader the mod's texts, for the labels of its settings on the Mods screen             | 43          |
+| `content_serve`       | Serves bytes as game content, a served texture's pixels, and gives their hash; any thread       | 44          |
+| `content_read`        | Copies the game's own content from its archive files; any thread                                | 44          |
+| `icons_ready`         | Whether this client shows the UI images mods serve; any thread                                  | 44          |
 
 ## Under an older loader
 
@@ -330,6 +333,7 @@ the mod off with a reason, which the mod's log shows as `off: <reason>`:
 | 42          | `SummonVerdict::Refuse`         | The use goes on                                           |
 | 42          | `Op::Renew`                     | The batch fails                                           |
 | 43          | texts for the Mods screen       | The settings' keys in words                               |
+| 44          | `Load::add_icon`, item icons    | Off: `icons: needs a newer loader`                        |
 
 A mod that can do without a feature catches the `Off` and goes on without it
 instead of returning it from `init`.

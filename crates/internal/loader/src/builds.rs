@@ -524,6 +524,17 @@ pub static BUILDS: &[KnownBuild] = &[
             ("resource.key_of", 0x106_1800),
             ("text.lookup", 0x11f_8510),
             ("text.lookup_english", 0x11f_80b0),
+            // Mod textures: the resource database's content request, its
+            // completion post and wake-up, the key listing, the UI image
+            // registry's fill and the event signal.
+            ("textures.request", 0x106_5ae0),
+            ("textures.request_ring", 0x106_5c2e),
+            ("textures.request_post", 0x106_5c66),
+            ("textures.request_signal", 0x106_5c88),
+            ("textures.keys", 0x106_4120),
+            ("textures.registry_fill", 0xa4_7c00),
+            ("textures.registry_listed_at", 0xa4_7c06),
+            ("textures.signal", 0xf3_5f10),
             ("chat.post", 0xe5_46e0),
             ("chat.post_return", 0xe4_86cf),
             ("chat.mark_delivered", 0xe8_df20),
@@ -658,6 +669,38 @@ pub static BUILDS: &[KnownBuild] = &[
         ],
         constants: &[
             ("text.pool_language", 0xd8),
+            // The first eight code bytes at each mod textures symbol, and
+            // the layouts they rely on: a content request (0x48 bytes:
+            // buffer, size, hash, completion context, offset), the
+            // requester's completion ring (24-byte records) and the UI
+            // registry's "listed" byte.
+            ("textures.request_bytes", 0x4157_5310_2454_8948),
+            ("textures.request_ring_bytes", 0xd233_0000_0080_8f8b),
+            ("textures.request_post_bytes", 0x490c_8d48_4847_8b48),
+            ("textures.request_signal_bytes", 0x0fc9_8548_084f_8b48),
+            ("textures.keys_bytes", 0x7c89_4818_245c_8948),
+            ("textures.registry_fill_bytes", 0xb980_40ec_8348_5740),
+            ("textures.registry_listed_bytes", 0x4801_0000_36c0_b980),
+            ("textures.signal_bytes", 0x90ec_8148_53dc_8b4c),
+            ("textures.request_size", 0x48),
+            ("textures.request_hash", 0x10),
+            ("textures.request_context", 0x30),
+            ("textures.request_offset", 0x40),
+            ("textures.ring_records", 0x48),
+            ("textures.ring_head", 0x80),
+            ("textures.ring_last", 0x50),
+            ("textures.ring_tail", 0xc0),
+            ("textures.ring_tail_next", 0x100),
+            ("textures.ring_event", 8),
+            ("textures.registry_listed", 0x36c0),
+            // A UI image resource (`UiImage` as the game builds it): its
+            // content hash, size, flags, pixel format and mip levels.
+            ("ui_image.content", 0),
+            ("ui_image.width", 0x28),
+            ("ui_image.height", 0x2c),
+            ("ui_image.flags", 0x30),
+            ("ui_image.format", 0x31),
+            ("ui_image.levels", 0x32),
             ("ecs.context_row", 8),
             ("ecs.descriptor_entity_records", 0x828),
             ("ecs.entity_record_size", 0x10),
