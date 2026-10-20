@@ -6,7 +6,7 @@ use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use crate::abi::{
     AltarInfo, AltarLimitFn, AltarZoneSize, BedCheckFn, BuildInfo, CallerFrame, ComfortFn,
-    CommandFn, Event, EventFn, ExperienceFn, Header, HookSpec, HostApi, InteractionFn,
+    CommandFn, Event, EventFn, ExperienceFn, GameEventFn, Header, HookSpec, HostApi, InteractionFn,
     InventoryDoneFn, InventoryRequest, ItemData, Level, MidHookFn, MidHookSpec, ModHandle, ModInfo,
     PlayerInfo, RenameFn, ResourceKey, ResourcePatchFn, Side, SkillFn, Status, StatusFn, Str,
     SummonFn, SurvivorLookupFn, SurvivorStatusFn, ZoneCheckFn,
@@ -30,6 +30,8 @@ pub(crate) struct State {
     /// Mid-function hooks: address, handler and the mod's pointer.
     pub(crate) mid_hooks: Vec<(u64, MidHookFn, usize)>,
     pub(crate) subscriptions: Vec<(Event, EventFn, usize)>,
+    /// Engine event handlers: type hash (0 for every type), handler, pointer.
+    pub(crate) game_events: Vec<(u32, GameEventFn, usize)>,
     pub(crate) served: Vec<(ServedResource, ResourcePatchFn, usize)>,
     pub(crate) texts: Vec<(u32, u32, String)>,
     pub(crate) code_patches: Vec<(u64, Vec<u8>, Vec<u8>)>,
@@ -90,6 +92,7 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         hooks: Vec::new(),
         mid_hooks: Vec::new(),
         subscriptions: Vec::new(),
+        game_events: Vec::new(),
         served: Vec::new(),
         texts: Vec::new(),
         code_patches: Vec::new(),
@@ -828,6 +831,19 @@ extern "system" fn base_zones(_me: ModHandle, zones: *mut u32, bases: *mut u32) 
     put(bases, base_count)
 }
 
+extern "system" fn game_event(
+    _me: ModHandle,
+    type_hash: u32,
+    callback: GameEventFn,
+    user: *mut c_void,
+) -> Status {
+    with(Status::MISSING, |s| {
+        s.game_events
+            .push((type_hash, callback, user.expose_provenance()));
+        Status::OK
+    })
+}
+
 /// table it sees for the process, so it is one static.
 pub(crate) static TABLE: HostApi = HostApi {
     header: Header::of::<HostApi>(),
@@ -890,4 +906,5 @@ pub(crate) static TABLE: HostApi = HostApi {
     altar_limit,
     raise_base_limit,
     base_zones,
+    game_event,
 };

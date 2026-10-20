@@ -76,6 +76,7 @@ pub mod content;
 mod declare;
 pub mod ecs;
 pub mod events;
+pub mod game_events;
 mod hook;
 mod host;
 pub mod i18n;

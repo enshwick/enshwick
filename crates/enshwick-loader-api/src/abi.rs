@@ -14,7 +14,7 @@ use core::sync::atomic::AtomicUsize;
 pub const ABI_MAJOR: u16 = 1;
 
 /// The minor version of this interface. A newer minor only appends fields.
-pub const ABI_MINOR: u16 = 19;
+pub const ABI_MINOR: u16 = 20;
 
 /// Whether `id` is a valid mod id: 1 to 64 characters of `[a-z0-9-]`.
 ///
@@ -2215,6 +2215,40 @@ pub type ExperienceFn = unsafe extern "system" fn(pass: *mut ExperiencePass, use
 /// registration; returns how many altars that level allows.
 pub type AltarLimitFn = unsafe extern "system" fn(flame_level: u32, user: *mut c_void) -> u8;
 
+/// An engine event handed to a [`GameEventFn`], from the ECS event streams
+/// of the server's systems.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::abi::{GameEventData, Header};
+///
+/// let payload = [0u8; 16];
+/// let died = GameEventData {
+///     header: Header::of::<GameEventData>(),
+///     type_hash: 0xd8ec_982a,
+///     size: 16,
+///     data: payload.as_ptr(),
+/// };
+/// assert_eq!(died.size, 16);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct GameEventData {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// The event's reflected type hash.
+    pub type_hash: u32,
+    /// How many bytes `data` holds: the event type's reflected size.
+    pub size: u32,
+    /// The event as the engine wrote it, valid for the call.
+    pub data: *const u8,
+}
+
+/// A mod's handler for engine events: the event and the pointer given at
+/// subscription. It must not unwind.
+pub type GameEventFn = unsafe extern "system" fn(event: *const GameEventData, user: *mut c_void);
+
 /// The table of services the loader offers a mod.
 ///
 /// Fields are only ever appended; a mod checks [`Header::covers`] before it
@@ -2555,6 +2589,16 @@ pub struct HostApi {
     /// [`Status::MISSING`] before the first one or without the raised limit.
     /// Any thread. Since minor 19.
     pub base_zones: extern "system" fn(me: ModHandle, zones: *mut u32, bases: *mut u32) -> Status,
+    /// Calls `callback` with `user` on every engine event of the reflected
+    /// type whose hash is `type_hash`, or on every engine event for 0, on
+    /// the server's game thread before the systems of the next step run.
+    /// Allowed during `enshwick_mod_init` only. Since minor 20.
+    pub game_event: extern "system" fn(
+        me: ModHandle,
+        type_hash: u32,
+        callback: GameEventFn,
+        user: *mut c_void,
+    ) -> Status,
 }
 
 /// The exports a mod DLL provides, by name.
@@ -2616,7 +2660,7 @@ const _: () = {
     assert!(core::mem::offset_of!(HostApi, hook_at) == 24 + 35 * 8);
     assert!(core::mem::offset_of!(HostApi, inventory_open) == 24 + 36 * 8);
     assert!(core::mem::offset_of!(HostApi, inventory_submit) == 24 + 38 * 8);
-    assert!(size_of::<HostApi>() == 24 + 58 * 8);
+    assert!(size_of::<HostApi>() == 24 + 59 * 8);
     assert!(size_of::<InventoryOp>() == 32);
     assert!(size_of::<InventoryRequest>() == 32);
     assert!(size_of::<InventoryOpResult>() == 8);
@@ -2639,6 +2683,8 @@ const _: () = {
     assert!(core::mem::offset_of!(HostApi, skill_override) == 24 + 52 * 8);
     assert!(core::mem::offset_of!(HostApi, experience_filter) == 24 + 54 * 8);
     assert!(core::mem::offset_of!(HostApi, base_zones) == 24 + 57 * 8);
+    assert!(core::mem::offset_of!(HostApi, game_event) == 24 + 58 * 8);
+    assert!(size_of::<GameEventData>() == 24);
     assert!(size_of::<SkillCheck>() == 20);
     assert!(size_of::<Comfort>() == 28);
     // Frozen: passed as an array.

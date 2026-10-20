@@ -168,6 +168,7 @@ pub static BUILDS: &[KnownBuild] = &[
             ("survivors.spawn", 0x3_e170),
             ("survivors.registry_load", 0x95_f900),
             ("survivors.map_find_slot", 0x94_4290),
+            ("ecs.event_merge", 0x6b_8d20),
         ],
         constants: &[
             ("ecs.context_row", 8),
@@ -300,6 +301,13 @@ pub static BUILDS: &[KnownBuild] = &[
             ("survivors.map_keys", 0x28),
             ("survivors.map_values", 0x40),
             ("survivors.map_count", 0x54),
+            ("ecs.event_streams", 0xeb_9ef0),
+            ("ecs.event_stream_count", 0xeb_9ef8),
+            ("ecs.event_stream_size", 0x18),
+            ("ecs.event_stream_used", 0x10),
+            ("ecs.event_record_size", 6),
+            ("ecs.event_record_header", 8),
+            ("ecs.event_record_align", 8),
         ],
     },
     KnownBuild {
@@ -399,6 +407,7 @@ pub static BUILDS: &[KnownBuild] = &[
             ("survivors.spawn", 0x22_1230),
             ("survivors.registry_load", 0xea_a500),
             ("survivors.map_find_slot", 0xe8_fa70),
+            ("ecs.event_merge", 0xa1_77b0),
         ],
         constants: &[
             ("text.pool_language", 0xd8),
@@ -540,6 +549,13 @@ pub static BUILDS: &[KnownBuild] = &[
             ("survivors.ui_map_count", 0x46_3ee4),
             ("survivors.ui_record_size", 0x928),
             ("survivors.ui_record_status", 0x880),
+            ("ecs.event_streams", 0xeb_9ef0),
+            ("ecs.event_stream_count", 0xeb_9ef8),
+            ("ecs.event_stream_size", 0x18),
+            ("ecs.event_stream_used", 0x10),
+            ("ecs.event_record_size", 6),
+            ("ecs.event_record_header", 8),
+            ("ecs.event_record_align", 8),
         ],
     },
 ];

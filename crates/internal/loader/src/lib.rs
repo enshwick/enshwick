@@ -30,6 +30,8 @@ pub mod diag;
 mod ecs;
 #[cfg(windows)]
 mod events;
+#[cfg(windows)]
+mod game_events;
 pub mod holds;
 #[cfg(windows)]
 mod host;

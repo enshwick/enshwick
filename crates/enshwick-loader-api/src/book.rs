@@ -23,6 +23,7 @@ chapters! {
     Settings => "settings.md",
     Logging => "logging.md",
     Events => "events.md",
+    GameEvents => "game-events.md",
     World => "world.md",
     Altars => "altars.md",
     Survivors => "survivors.md",

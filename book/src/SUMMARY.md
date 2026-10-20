@@ -18,6 +18,7 @@
 - [Settings](settings.md)
 - [Logging and diagnostics](logging.md)
 - [Events and the scheduler](events.md)
+- [Engine events](game-events.md)
 - [The world](world.md)
 - [Altars and bases](altars.md)
 - [Survivors](survivors.md)
