@@ -1,4 +1,4 @@
-# The checks of docs/conventions/repository.md, on every pull request. Branch
+# The checks of CONTRIBUTING.md, on every pull request. Branch
 # protection merges only branches up to date with their base, so the shared
 # branches need no second run after a merge.
 name: ci
@@ -53,7 +53,7 @@ jobs:
           case "$BASE_REF:$HEAD_REF" in
             develop:feature/*|develop:fix/*|develop:chore/*|develop:hotfix/*|develop:release/*|develop:master) ;;
             master:develop|master:release/*|master:hotfix/*|master:release-please--*) ;;
-            *) echo "a pull request from '$HEAD_REF' into '$BASE_REF' does not follow git flow (docs/conventions/repository.md, Git)"; exit 1 ;;
+            *) echo "a pull request from '$HEAD_REF' into '$BASE_REF' does not follow git flow (CONTRIBUTING.md)"; exit 1 ;;
           esac
 
       - name: Commit messages

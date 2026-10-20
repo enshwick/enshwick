@@ -1,9 +1,9 @@
 # Writing a mod
 
-An Enshwick mod is a Rust `cdylib` built against
-[`enshwick-api`](../../crates/enshwick-api). Players drop its DLL into the
-game's `mods/` folder; the loader finds it, reads its manifest, initialises it,
-links its hooks into the game and keeps the game running if the mod fails.
+An Enshwick mod is a Rust `cdylib` built against [`enshwick-api`](.). Players
+drop its DLL into the game's `mods/` folder; the loader finds it, reads its
+manifest, initialises it, links its hooks into the game and keeps the game
+running if the mod fails.
 
 ## A first mod
 
@@ -197,6 +197,6 @@ loads first. Put the table type in a small crate both mods depend on, as
 
 ## Releasing
 
-Name the crate `enshwick-<id>` if it lives in this repository, and follow
-[the conventions](../conventions/). A player installs a mod by copying its DLL
-into `mods/`; mods that count in the join check must match the server's.
+Name the crate `enshwick-<id>` if it lives in this repository, and follow the
+repository's CONTRIBUTING.md. A player installs a mod by copying its DLL into
+`mods/`; mods that count in the join check must match the server's.
