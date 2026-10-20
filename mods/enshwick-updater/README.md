@@ -1,13 +1,13 @@
 # Updater
 
 Keeps Enshwick and its mods up to date, with your say. A short while after
-the game starts, the updater asks GitHub for new releases of every loaded mod
-that names its releases (`updates:` in its manifest), and of the loader
-itself. When there are any, a window lists them, such as
+the game starts, the updater asks for new releases of every loaded mod that
+names where its releases come from (`updates:` in its manifest): GitHub, or a
+document at an `https://` address. It does the same for the loader itself. When there are any, a window lists them, such as
 `safes: 0.1.0 → 0.2.0`, and asks whether to download them. Nothing is
 downloaded without a Yes.
 
-What you accept is downloaded from the mod's GitHub release, checked against
+What you accept is downloaded from the mod's release, checked against
 its [minisign](https://jedisct1.github.io/minisign/) signature and put in
 `mods/.staged/`. It takes effect the next time you start the game: the
 `powrprof.dll` stub moves each file into place before the loader starts and
@@ -63,6 +63,31 @@ minisign -S -s my.key -m my-mod.zip -t "my-mod-v1.2.0 my-mod.zip"
 ```
 
 Players add your public key to `trusted_keys`.
+
+Releases hosted elsewhere need `updates: url("https://example.com/my-mod.json")`
+and a JSON document at that address that lists them:
+
+```json
+{
+  "versions": [
+    {
+      "version": "1.2.0",
+      "url": "https://example.com/my-mod/my-mod-1.2.0.zip",
+      "signature": "https://example.com/my-mod/my-mod-1.2.0.zip.minisig"
+    }
+  ]
+}
+```
+
+Every address is `https://`, versions are SemVer in any order, and the
+archive's name ends in `.zip`. Entries that break a rule are skipped and
+other fields are ignored. The archive holds the DLL at `mods/<file>.dll`, and
+its signature's trusted comment names `<id>-v<version>`, `<id>` being the mod
+id, and the archive's file name:
+
+```sh
+minisign -S -s my.key -m my-mod-1.2.0.zip -t "my-mod-v1.2.0 my-mod-1.2.0.zip"
+```
 
 ## Who needs it
 

@@ -76,7 +76,7 @@ assert!(!manifest.updates.is_null());
 | Source                         | Meaning                                                            |
 | ------------------------------ | ------------------------------------------------------------------ |
 | `github("owner/name", "comp")` | GitHub releases of that repository whose tags are `comp-v<semver>` |
-| `url("https://...")`           | A JSON document at that URL that names the latest release          |
+| `url("https://...")`           | A JSON document at that URL that lists the mod's versions          |
 
 A mod without `updates:` is updated by hand.
 
@@ -87,10 +87,48 @@ source is dropped with a warning such as
 `my_mod.dll: no update source: the update URL "http://..." is not https://`,
 and the mod loads without one.
 
-The updater in this repository reads `github(...)` sources only. A `url(...)`
-source is declared, checked, listed and advertised like the other, but no
-format for its document is defined here yet; it is for an updater of your
-own.
+The updater in this repository reads both. The document a `url(...)` source
+serves is described below.
+
+## The document of a URL source
+
+A `url("https://...")` source is a JSON document that lists the mod's
+versions:
+
+```json
+{
+  "versions": [
+    {
+      "version": "1.2.0",
+      "url": "https://example.com/my-mod/my-mod-1.2.0.zip",
+      "signature": "https://example.com/my-mod/my-mod-1.2.0.zip.minisig"
+    }
+  ]
+}
+```
+
+- `version` is SemVer. A version with a prerelease part, such as
+  `1.3.0-rc.1`, is offered only to players who turn `prereleases` on.
+- `url` is where the archive downloads from. It is an `https://` address
+  whose path ends in a file name with `.zip`, the archive's file name.
+- `signature` is where the archive's minisign signature downloads from, also
+  `https://`.
+- Versions may come in any order. Fields the format does not name are
+  ignored, so a document may carry more, such as release notes.
+- An entry that breaks a rule (a version that is not SemVer, an address that
+  is not `https://`, an archive that is not a `.zip`) is skipped; the other
+  entries still count.
+
+The archive is the same as a GitHub release's: the DLL at `mods/<file>.dll`.
+Its signature's trusted comment names `<id>-v<version>`, `<id>` being the
+mod id from the manifest, and the archive's file name:
+
+```bash
+minisign -S -s my-mod.key -m my-mod-1.2.0.zip -t "my-mod-v1.2.0 my-mod-1.2.0.zip"
+```
+
+The updater asks for the document once per check, refuses any address that
+is not `https://` (redirects included), and reads at most 4 MiB of it.
 
 ## The list of loaded mods
 
@@ -190,19 +228,21 @@ anyway. The stub writes what it moved to `logs/enshwick/stub.log`.
 is such a mod, for players:
 
 - a short while after start, on a thread of its own, it asks each loaded mod's
-  GitHub repository for newer releases, and asks the player before it
-  downloads anything;
+  source (its GitHub repository or its URL source's document) for newer
+  releases, and asks the player before it downloads anything;
 - after a refused join it offers the server's versions of the missing mods,
   from the sources the server advertises;
 - it downloads `<component>.zip` and `<component>.zip.minisig` from the
-  release, checks the signature, and stages the archive's DLLs;
+  GitHub release, or the archive and signature a URL source's document names,
+  checks the signature, and stages the archive's DLLs;
 - it takes only `powrprof.dll` and `mods/*.dll` from an archive, and refuses
   an archive with a path that leaves the game's folder;
 - it never touches settings files.
 
 It installs an archive only when a trusted key signed it and the signature's
 trusted comment names both the release's tag and the archive's file name, so a
-signed archive cannot pass for another release. The trusted keys are
+signed archive cannot pass for another release. For a URL source the tag is
+`<id>-v<version>`. The trusted keys are
 Enshwick's own, which signs every release of this repository, and those in
 `trusted_keys` of `mod-configs/updater.toml`.
 
@@ -216,6 +256,10 @@ A mod outside this repository gets updates from the updater when:
 4. each release carries `my-mod.zip.minisig`, a
    [minisign](https://jedisct1.github.io/minisign/) signature whose trusted
    comment names the tag and the archive.
+
+Releases hosted elsewhere work the same way with `updates: url("https://...")`
+and a [document](#the-document-of-a-url-source) that lists them, the tag in
+the trusted comment being `my-mod-v<semver>`.
 
 Make a key pair once and keep the secret key out of the repository:
 

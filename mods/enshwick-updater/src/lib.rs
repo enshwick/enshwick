@@ -1,15 +1,17 @@
-//! Updates Enshwick and its mods from their GitHub releases, with the
+//! Updates Enshwick and its mods from their signed releases, with the
 //! player's consent.
 //!
 //! At start, on a thread of its own, the updater lists the loaded mods, asks
-//! each mod's GitHub repository for its releases and, when newer ones exist,
-//! asks the player. What the player accepts is downloaded, checked against
+//! each mod's source for its releases (a GitHub repository, or the document
+//! of a `url(...)` source, see [`document`]) and, when newer ones exist, asks
+//! the player. What the player accepts is downloaded, checked against
 //! its minisign signature and staged in `mods/.staged/`, which the
 //! `powrprof.dll` stub moves into place at the next start. When the join
 //! check keeps the player out of a server that runs mods this game lacks or
 //! has in another version, the updater offers the server's versions the
 //! same way. Settings files are never touched.
 
+pub mod document;
 pub mod release;
 pub mod stage;
 pub mod verify;
@@ -27,6 +29,7 @@ use enshwick_api::mods::{ModEntry, Updates};
 use enshwick_api::{Load, Mod, Off};
 use semver::Version;
 
+use crate::document::Document;
 use crate::net::{Client, Failure};
 use crate::release::Pick;
 
@@ -306,25 +309,30 @@ fn server_version(
     entry: &ModEntry,
     installed: &[ModEntry],
 ) -> Result<Offer, String> {
-    let Some(Updates::GitHub {
-        repository,
-        component,
-    }) = &entry.updates
-    else {
-        return Err("no GitHub release source".to_owned());
-    };
     let version = Version::parse(&entry.version).map_err(|e| format!("bad version: {e}"))?;
-    let tag = format!("{component}-v{version}");
-    let json =
-        client
-            .api(&release::tag_url(repository, &tag))
-            .map_err(|failure| match failure {
-                Failure::NotFound => format!("no release {tag} in {repository}"),
-                other => other.to_string(),
-            })?;
-    let releases = release::parse(&json)?;
-    let pick = release::exact(&releases, repository, component, &version)
-        .ok_or_else(|| format!("{tag} has no signed {component}.zip"))?;
+    let pick = match &entry.updates {
+        Some(Updates::GitHub {
+            repository,
+            component,
+        }) => {
+            let tag = format!("{component}-v{version}");
+            let json = client
+                .api(&release::tag_url(repository, &tag))
+                .map_err(|failure| match failure {
+                    Failure::NotFound => format!("no release {tag} in {repository}"),
+                    other => other.to_string(),
+                })?;
+            let releases = release::parse(&json)?;
+            release::exact(&releases, repository, component, &version)
+                .ok_or_else(|| format!("{tag} has no signed {component}.zip"))?
+        }
+        Some(Updates::Url(url)) => {
+            let document = fetch_document(client, url)?;
+            document::exact(&document, &entry.id, &version)
+                .ok_or_else(|| format!("{url} lists no {version} with a signed .zip"))?
+        }
+        None => return Err("no release source".to_owned()),
+    };
     let ours = installed.iter().find(|m| m.id == entry.id);
     Ok(Offer {
         id: entry.id.clone(),
@@ -334,16 +342,25 @@ fn server_version(
     })
 }
 
-/// Newer releases of `mods`, one request per repository.
+/// The document of the `url(...)` source `url`.
+fn fetch_document(client: &Client, url: &str) -> Result<Document, String> {
+    if !document::is_https(url) {
+        return Err(format!("{url} is not an https:// address"));
+    }
+    let json = client.document(url).map_err(|failure| match failure {
+        Failure::NotFound => format!("{url}: not found"),
+        other => other.to_string(),
+    })?;
+    document::parse(&json).map_err(|e| format!("{url}: {e}"))
+}
+
+/// Newer releases of `mods`, one request per repository or document.
 fn newer(client: &Client, context: &Context, mods: &[ModEntry]) -> Result<Vec<Offer>, Failure> {
     let mut lists: BTreeMap<&str, Vec<release::Release>> = BTreeMap::new();
+    let mut documents: BTreeMap<&str, Option<Document>> = BTreeMap::new();
     let mut offers = Vec::new();
     for entry in mods {
-        let Some(Updates::GitHub {
-            repository,
-            component,
-        }) = &entry.updates
-        else {
+        let Some(updates) = &entry.updates else {
             continue;
         };
         let Ok(installed) = Version::parse(&entry.version) else {
@@ -353,6 +370,32 @@ fn newer(client: &Client, context: &Context, mods: &[ModEntry]) -> Result<Vec<Of
             enshwick_api::info!("an update of {} waits for the next start", entry.id);
             continue;
         }
+        let prereleases = context.settings.prereleases;
+        let (repository, component) = match updates {
+            Updates::GitHub {
+                repository,
+                component,
+            } => (repository, component),
+            Updates::Url(url) => {
+                let document = documents.entry(url.as_str()).or_insert_with(|| {
+                    fetch_document(client, url)
+                        .map_err(|e| enshwick_api::warn!("{e}"))
+                        .ok()
+                });
+                if let Some(pick) = document
+                    .as_ref()
+                    .and_then(|d| document::newest(d, &entry.id, &installed, prereleases))
+                {
+                    offers.push(Offer {
+                        id: entry.id.clone(),
+                        from: Some(entry.version.clone()),
+                        file: entry.file.clone(),
+                        pick,
+                    });
+                }
+                continue;
+            }
+        };
         if !lists.contains_key(repository.as_str()) {
             let releases = match client.api(&release::list_url(repository)) {
                 Ok(json) => release::parse(&json).unwrap_or_else(|e| {
@@ -370,7 +413,6 @@ fn newer(client: &Client, context: &Context, mods: &[ModEntry]) -> Result<Vec<Of
         let releases = lists
             .get(repository.as_str())
             .map_or(&[][..], Vec::as_slice);
-        let prereleases = context.settings.prereleases;
         if let Some(pick) =
             release::newest(releases, repository, component, &installed, prereleases)
         {

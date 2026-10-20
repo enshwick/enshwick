@@ -1043,8 +1043,8 @@ impl UpdateKind {
     /// are `<component>-v<semver>`, as release-please writes them for a
     /// workspace.
     pub const GITHUB: Self = Self(1);
-    /// A JSON document at `location`, an `https://` URL, that names the latest
-    /// release; `component` is empty. The updater documents the format.
+    /// A JSON document at `location`, an `https://` URL, that lists the mod's
+    /// versions; `component` is empty. The updater documents the format.
     pub const URL: Self = Self(2);
 }
 
@@ -1111,7 +1111,7 @@ impl UpdateSource {
         }
     }
 
-    /// The JSON document at `url` that names the latest release.
+    /// The JSON document at `url` that lists the mod's versions.
     ///
     /// # Examples
     ///

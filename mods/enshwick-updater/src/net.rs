@@ -1,11 +1,12 @@
-//! HTTPS requests to GitHub: release lists and release files, each within a
-//! time and size limit and without a token.
+//! HTTPS requests: GitHub's release lists, the documents of `url(...)`
+//! sources and release files, each within a time and size limit and without
+//! a token.
 
 use std::time::Duration;
 
 /// How long one request may take, connection to last byte.
 const TIMEOUT: Duration = Duration::from_secs(60);
-/// The most bytes of a release list or one release.
+/// The most bytes of a release list, one release or a source's document.
 const MAX_JSON: u64 = 4 << 20;
 /// The most bytes of a release archive.
 const MAX_ARCHIVE: u64 = 64 << 20;
@@ -34,7 +35,7 @@ impl core::fmt::Display for Failure {
     }
 }
 
-/// An HTTPS client for GitHub.
+/// An HTTPS client for releases.
 #[derive(Debug)]
 pub(crate) struct Client {
     agent: ureq::Agent,
@@ -61,6 +62,19 @@ impl Client {
     /// When the request fails, GitHub refuses it or the reply is too long.
     pub(crate) fn api(&self, url: &str) -> Result<Vec<u8>, Failure> {
         self.get(url, Some("application/vnd.github+json"), MAX_JSON)
+    }
+
+    /// The document of a `url(...)` source.
+    ///
+    /// # Errors
+    ///
+    /// As [`Client::api`]; a host's request limit counts as any other failure.
+    pub(crate) fn document(&self, url: &str) -> Result<Vec<u8>, Failure> {
+        self.get(url, None, MAX_JSON)
+            .map_err(|failure| match failure {
+                Failure::RateLimited => Failure::Other(format!("{url}: too many requests for now")),
+                other => other,
+            })
     }
 
     /// A release archive.
