@@ -6,12 +6,12 @@ use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use crate::abi::{
     ActiveBuff, AltarInfo, AltarLimitFn, AltarZoneSize, BedCheckFn, BuffRequest, BuffTypeInfo,
-    BuildCheckFn, BuildInfo, CallerFrame, ComfortFn, CommandCallFn, CraftCheckFn, DamageFilterFn,
-    DaytimeInfo, EntityPlace, Event, EventFn, ExperiencePassFn, GameEventFn, Header, HookSpec,
-    HostApi, InteractionFn, InventoryRequest, InventoryResultFn, ItemData, KnowledgeInfo, Level,
-    MidHookFn, MidHookSpec, ModHandle, ModInfo, NetMessageFn, PlayerInfo, RenameCallFn,
-    ResourceKey, ResourcePatchFn, Side, SkillCheckFn, SpawnRequest, Status, StatusFn, Str,
-    SummonFn, SurvivorLookupFn, SurvivorStatusFn, TeleportRequest, TerrainEdit,
+    BuildCheckFn, BuildInfo, CallerFrame, ComfortFn, CommandCallFn, ConfigCheckFn, CraftCheckFn,
+    DamageFilterFn, DaytimeInfo, EntityPlace, Event, EventFn, ExperiencePassFn, GameEventFn,
+    Header, HookSpec, HostApi, InteractionFn, InventoryRequest, InventoryResultFn, ItemData,
+    KnowledgeInfo, Level, MidHookFn, MidHookSpec, ModHandle, ModInfo, NetMessageFn, PlayerInfo,
+    RenameCallFn, ResourceKey, ResourcePatchFn, Side, SkillCheckFn, SpawnRequest, Status, StatusFn,
+    Str, SummonFn, SurvivorLookupFn, SurvivorStatusFn, TeleportRequest, TerrainEdit,
     TerrainMaterialInfo, UiAnswerFn, UiDialog, UiFrameFn, UiMarker, UiWidget, WeatherFront,
     ZoneCheckFn,
 };
@@ -105,6 +105,8 @@ pub(crate) struct State {
     pub(crate) hud: Option<(u64, Vec<(u32, super::Drawn)>)>,
     /// The mod's markers on the map.
     pub(crate) markers: Vec<super::FakeMarker>,
+    /// The mod's check of new settings texts.
+    pub(crate) config_check: Option<(ConfigCheckFn, usize)>,
     /// The frame drawing now: its token, whether a window is open and what
     /// was drawn.
     pub(crate) frame: Option<(u64, bool, Vec<super::Drawn>)>,
@@ -209,6 +211,7 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         huds: Vec::new(),
         hud: None,
         markers: Vec::new(),
+        config_check: None,
         frame: None,
         inputs: Vec::new(),
         dialogs: Vec::new(),
@@ -1839,6 +1842,20 @@ extern "system" fn ui_dialog(
     })
 }
 
+extern "system" fn config_check(
+    _me: ModHandle,
+    callback: ConfigCheckFn,
+    user: *mut c_void,
+) -> Status {
+    with(Status::MISSING, |s| {
+        if s.config_check.is_some() {
+            return Status::REFUSED;
+        }
+        s.config_check = Some((callback, user.expose_provenance()));
+        Status::OK
+    })
+}
+
 pub(crate) static TABLE: HostApi = HostApi {
     header: Header::of::<HostApi>(),
     host_version: Str::new("0.0.0-test"),
@@ -1944,4 +1961,5 @@ pub(crate) static TABLE: HostApi = HostApi {
     ui_dialog,
     ui_hud,
     ui_markers,
+    config_check,
 };

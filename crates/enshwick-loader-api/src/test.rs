@@ -2516,6 +2516,41 @@ impl Installed {
         drawn
     }
 
+    /// Runs the mod's check of a new settings text, as the loader does
+    /// before it writes a change: `Ok` when the mod accepts `text`, else
+    /// its reason; `Ok` for a mod without a check.
+    ///
+    /// # Errors
+    ///
+    /// The mod's reason for refusing `text`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick_loader_api::test::FakeHost::new().install();
+    /// assert_eq!(loader.check_settings("x = 1"), Ok(()));
+    /// ```
+    pub fn check_settings(&self, text: &str) -> Result<(), String> {
+        let Some((callback, user)) = table::with(None, |s| s.config_check) else {
+            return Ok(());
+        };
+        let mut why = Str::EMPTY;
+        // SAFETY: the mod's check with its own pointer; the text lives for
+        // the call.
+        let status = unsafe {
+            callback(
+                Str::new(text),
+                &raw mut why,
+                core::ptr::with_exposed_provenance_mut(user),
+            )
+        };
+        if status.is_ok() {
+            return Ok(());
+        }
+        // SAFETY: the reason stays valid until the mod's next call.
+        Err(unsafe { why.as_str() }.unwrap_or("refused").to_owned())
+    }
+
     /// The mod's markers on the map, as it set them last.
     ///
     /// # Examples

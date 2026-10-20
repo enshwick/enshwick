@@ -652,30 +652,12 @@ fn config(loader: &Loader, args: &str, player: &PlayerInfo) -> String {
     };
     match request {
         Request::Set(_, key, value) => {
-            if loader.side == enshwick_loader_api::abi::Side::SERVER
-                && schema
-                    .field(key)
-                    .is_some_and(|f| f.stage == enshwick_loader_api::config::Stage::Client)
-            {
-                return format!("{id} {key} is each player's own: they set it in their game.");
-            }
-            let change = match configure::set(id, &schema, &text, key, value) {
-                Ok(change) => change,
-                Err(reply) => return reply,
-            };
-            if let Err(e) = std::fs::write(&path, &change.text) {
-                return format!("Not changed: mod-configs/{id}.toml: {e}");
-            }
-            crate::watch::wrote(&path);
             let who = String::from_utf8_lossy(&player.name[..usize::from(player.name_len).min(64)])
                 .into_owned();
-            crate::log!(INFO, "{who} set {id} {key} = {}", change.value);
-            loader.emit(
-                enshwick_loader_api::abi::Event::SETTINGS_CHANGED,
-                Some(index),
-                core::ptr::null(),
-            );
-            configure::changed(id, key, &change)
+            match configure::apply(loader, index, key, value, &who) {
+                Ok(change) => configure::changed(id, key, &change),
+                Err(reply) => reply,
+            }
         }
         Request::Get(_, key) => configure::get(id, &schema, &text, key).unwrap_or_else(|e| e),
         _ => configure::list(id, &schema, &text),

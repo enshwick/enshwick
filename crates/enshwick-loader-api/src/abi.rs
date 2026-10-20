@@ -14,7 +14,7 @@ use core::sync::atomic::AtomicUsize;
 pub const ABI_MAJOR: u16 = 1;
 
 /// The minor version of this interface. A newer minor only appends fields.
-pub const ABI_MINOR: u16 = 40;
+pub const ABI_MINOR: u16 = 41;
 
 /// Whether `id` is a valid mod id: 1 to 64 characters of `[a-z0-9-]`.
 ///
@@ -3440,6 +3440,13 @@ impl UiDialog {
 /// not unwind.
 pub type UiAnswerFn = unsafe extern "system" fn(answer: u32, user: *mut c_void);
 
+/// A mod's check of a new text of its settings file, before the loader
+/// writes it: [`Status::OK`] to accept it; else the reason, written to
+/// `why` and valid until the mod's next call, and [`Status::REFUSED`]. It
+/// must not unwind.
+pub type ConfigCheckFn =
+    unsafe extern "system" fn(text: Str, why: *mut Str, user: *mut c_void) -> Status;
+
 /// The table of services the loader offers a mod.
 ///
 /// Fields are only ever appended; a mod checks [`Header::covers`] before it
@@ -4117,6 +4124,12 @@ pub struct HostApi {
     /// markers. Since minor 40.
     pub ui_markers:
         extern "system" fn(me: ModHandle, markers: *const UiMarker, count: u32) -> Status,
+    /// Makes `callback` with `user` the mod's check of a new settings text,
+    /// which the loader runs before it writes a change from `/config` or the
+    /// Mods screen; a refusal keeps the file. Allowed during
+    /// `enshwick_mod_init` only. Since minor 41.
+    pub config_check:
+        extern "system" fn(me: ModHandle, callback: ConfigCheckFn, user: *mut c_void) -> Status,
 }
 
 /// The exports a mod DLL provides, by name.
@@ -4178,7 +4191,7 @@ const _: () = {
     assert!(core::mem::offset_of!(HostApi, hook_at) == 24 + 35 * 8);
     assert!(core::mem::offset_of!(HostApi, inventory_open) == 24 + 36 * 8);
     assert!(core::mem::offset_of!(HostApi, inventory_submit) == 24 + 38 * 8);
-    assert!(size_of::<HostApi>() == 24 + 102 * 8);
+    assert!(size_of::<HostApi>() == 24 + 103 * 8);
     assert!(core::mem::offset_of!(HostApi, config_schema) == 24 + 92 * 8);
     assert!(core::mem::offset_of!(HostApi, time_of_day) == 24 + 73 * 8);
     assert!(core::mem::offset_of!(HostApi, set_time_speed) == 24 + 76 * 8);
@@ -4245,6 +4258,7 @@ const _: () = {
     assert!(size_of::<UiFrame>() == 24);
     assert!(size_of::<UiWidget>() == 8 + 16 + 32 + 8 + 32);
     assert!(size_of::<UiMarker>() == 8 + 24 + 16 + 8);
+    assert!(core::mem::offset_of!(HostApi, config_check) == 24 + 102 * 8);
     assert!(size_of::<UiDialog>() == 8 + 48 + 8);
     assert!(size_of::<GameEventData>() == 24);
     // Frozen: written as an array.

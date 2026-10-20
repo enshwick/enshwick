@@ -501,6 +501,7 @@ impl Load<'_> {
     /// ```
     pub fn config<T: Config>(&mut self) -> Result<T, Off> {
         self.host.config_schema(&T::schema().to_text());
+        self.config_check::<T>();
         let settings: T = read_config(self.host)?;
         let _first = STARTED.set(settings.values(Stage::Startup).unwrap_or_default());
         Ok(settings)
@@ -941,6 +942,58 @@ fn hold_startup<T: Config>(settings: &mut T) {
 /// The mod's settings as `T`, parsed and validated, with the server's join
 /// values over the file's while this client is joined to a server that has
 /// them.
+/// The reason a mod's check refused a settings text, kept until its next
+/// check.
+static CHECK_WHY: std::sync::Mutex<String> = std::sync::Mutex::new(String::new());
+
+/// Parses and validates `text` as the mod's settings, for the loader's
+/// check before it writes a change.
+unsafe extern "system" fn check_text<T: Config>(
+    text: Str,
+    why: *mut Str,
+    _user: *mut c_void,
+) -> Status {
+    crate::host::guard(
+        "panic in the settings check",
+        || Status::REFUSED,
+        || {
+            // SAFETY: the loader passes the text for the call.
+            let text = unsafe { text.as_str() }.unwrap_or("");
+            let checked = toml::from_str::<T>(text)
+                .map_err(|e| e.message().to_owned())
+                .and_then(|settings| settings.validate());
+            let Err(reason) = checked else {
+                return Status::OK;
+            };
+            let mut kept = CHECK_WHY
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            *kept = reason;
+            if !why.is_null() {
+                // SAFETY: the loader's out pointer; the reason stays in
+                // `CHECK_WHY` until the next check.
+                unsafe { why.write(Str::new(&kept)) };
+            }
+            Status::REFUSED
+        },
+    )
+}
+
+impl Load<'_> {
+    /// Hands the loader the mod's check of new settings texts, when it
+    /// takes one.
+    fn config_check<T: Config>(&self) {
+        let api = self.api();
+        if api
+            .header
+            .covers(core::mem::offset_of!(HostApi, config_check) + size_of::<usize>())
+        {
+            let _checked =
+                (api.config_check)(self.host.handle(), check_text::<T>, core::ptr::null_mut());
+        }
+    }
+}
+
 fn read_config<T: Config>(host: Host) -> Result<T, Off> {
     let text = host.settings_text(&T::template())?;
     let settings: T =

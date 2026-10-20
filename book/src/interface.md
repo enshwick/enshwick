@@ -156,6 +156,15 @@ The buttons are the game's: `Ok`, `Cancel`, `Retry`, `Ignore`, `Reset`,
 When the loader cannot link the interface on a game build, frame callbacks
 never run and dialogs show as system message boxes instead.
 
+## The Mods screen
+
+The loader adds a "Mods" entry to the title screen's main menu and to the
+pause menu, beside Settings. It opens a screen of the loader's own that lists
+every mod and shows the settings of each mod that derives `Config`, as the
+game's settings rows, with nothing to write in the mod; see
+[Settings](settings.md#the-schema-and-config). Back, Escape or the gamepad's B
+steps back from a mod's settings to the list, and from the list out.
+
 ## Testing
 
 With the `test` feature, the [fake loader](testing.md) runs frame callbacks

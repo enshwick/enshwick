@@ -142,6 +142,11 @@ type NodeAlignFn = unsafe extern "system" fn(node: usize, align: *const u16);
 type NodeFloatFn = unsafe extern "system" fn(node: usize, value: f32);
 type NodeStretchFn = unsafe extern "system" fn(node: usize, packed: u64);
 type VisibleFn = unsafe extern "system" fn(mask: u32) -> u8;
+type MainEntryFn = unsafe extern "system" fn(menu: usize, entry: *const u8) -> u8;
+type PauseEntryFn =
+    unsafe extern "system" fn(text: *const UiText, enabled: u8, attention: u8) -> u8;
+type ActionNewFn = unsafe extern "system" fn(spec: *mut u8, action: u8, flag: u8) -> *mut u8;
+type ActionQueryFn = unsafe extern "system" fn(spec: *const u8, out: *mut u8, modality: u16) -> u8;
 type PanelFn = unsafe extern "system" fn(frame: Ptr, config: *const u8);
 type NavInitFn = unsafe extern "system" fn(nav: Ptr, config: *const u8) -> Ptr;
 type NavInputFn =
@@ -190,6 +195,8 @@ pub(super) struct Window {
     panel: Buf<0x40>,
     nav: Buf<0x300>,
     saved_nav: usize,
+    layer: u32,
+    gap: f32,
 }
 
 impl Window {
@@ -200,7 +207,28 @@ impl Window {
             panel: Buf::zeroed(),
             nav: Buf::zeroed(),
             saved_nav: 0,
+            layer: 0x1f,
+            gap: 30.0,
         }
+    }
+
+    /// A full screen of the loader's own on `layer`, its rows `gap` apart.
+    pub(super) const fn screen(layer: u32, gap: f32) -> Self {
+        let mut window = Self::new();
+        window.layer = layer;
+        window.gap = gap;
+        window
+    }
+
+    /// The panel's node id, for actions bound to the window.
+    pub(super) fn node_id(&self) -> u64 {
+        let node = self.panel.read_usize(8);
+        if node == 0 {
+            return 0;
+        }
+        // SAFETY: a node the game made for the panel in the last frame; its
+        // id sits at +0x30.
+        unsafe { crate::world::read::<u64>(node, 0x30) }
     }
 }
 
@@ -275,11 +303,23 @@ pub(crate) struct Engine {
     loca_text: LocaTextFn,
     hud_visible: VisibleFn,
     pub(super) hud: u64,
+    main_entry: MainEntryFn,
+    pause_entry: PauseEntryFn,
+    action_new: ActionNewFn,
+    action_query: ActionQueryFn,
+    pub(super) main_menu_site: u64,
+    pub(super) pause_menu_site: u64,
 }
 
 /// Every function the loader calls or hooks, by symbol; each must read its
 /// `<symbol>.bytes` constant.
-const FUNCTIONS: [&str; 36] = [
+const FUNCTIONS: [&str; 42] = [
+    "ui.main_entry",
+    "ui.pause_entry",
+    "ui.action_new",
+    "ui.action_query",
+    "ui.main_menu_site",
+    "ui.pause_menu_site",
     "ui.hud",
     "ui.hud_visible",
     "ui.popup",
@@ -482,6 +522,12 @@ impl Engine {
             loca_text: function!("ui.loca_text", LocaTextFn),
             hud_visible: function!("ui.hud_visible", VisibleFn),
             hud: loader.address("ui.hud").unwrap_or(0),
+            main_entry: function!("ui.main_entry", MainEntryFn),
+            pause_entry: function!("ui.pause_entry", PauseEntryFn),
+            action_new: function!("ui.action_new", ActionNewFn),
+            action_query: function!("ui.action_query", ActionQueryFn),
+            main_menu_site: loader.address("ui.main_menu_site").unwrap_or(0),
+            pause_menu_site: loader.address("ui.pause_menu_site").unwrap_or(0),
         })
     }
 
@@ -554,8 +600,17 @@ impl Engine {
         window.saved_nav = Self::nav(context);
         let name = [name.ptr.expose_provenance() as u64, name.len];
         // SAFETY: the window object and its name, as the popup passes them:
-        // full screen, layer 0x1f, all input, flags 1.
-        unsafe { (self.window_begin)(window.object.ptr(), &raw const name, 1, 0x1f, u32::MAX, 1) };
+        // full screen, its layer, all input, flags 1.
+        unsafe {
+            (self.window_begin)(
+                window.object.ptr(),
+                &raw const name,
+                1,
+                window.layer,
+                u32::MAX,
+                1,
+            );
+        }
         let node = window.object.read_usize(0x10);
         // SAFETY: a frame over the window's node.
         unsafe { (self.frame_from_node)(window.backdrop.ptr(), node) };
@@ -570,7 +625,7 @@ impl Engine {
         let padding = [90.0f32, 60.0, 90.0, 60.0];
         // SAFETY: the panel's node and four edges.
         unsafe { (self.node_padding)(panel, &raw const padding) };
-        let gap = [0.0f32, 30.0];
+        let gap = [0.0f32, window.gap];
         // SAFETY: the panel's node and its gap between children.
         unsafe { (self.node_spacing)(panel, &raw const gap, 0) };
         let centre: u16 = 0x202;
@@ -757,6 +812,7 @@ impl Engine {
         (min, max): (f32, f32),
         steps: u32,
         read_only: bool,
+        on_release: bool,
     ) -> Option<f32> {
         let mut config = Buf::<0x120>::zeroed();
         // SAFETY: the slider's constructor fills its defaults.
@@ -765,6 +821,7 @@ impl Engine {
         config.f32(0x34, max);
         config.u8(0x38, 1);
         config.u8(0x39, u8::from(read_only));
+        config.u8(0x3a, u8::from(on_release));
         config.u32(0x4c, slider_format(min, max, steps));
         if (2..=MAX_STOPS).contains(&steps) {
             for (i, slot) in (0..steps).zip((0xa0..).step_by(4)) {
@@ -946,6 +1003,50 @@ impl Engine {
         unsafe { (self.node_stretch)(node, stretch(1.0, 0.0)) };
         // SAFETY: the label just made.
         unsafe { (self.label_draw)(label.ptr()) };
+    }
+
+    /// Draws one more entry of the title screen's main menu, after its
+    /// Settings, with `text`; true when clicked.
+    ///
+    /// # Safety
+    ///
+    /// In the main menu's drawing, at the loader's hook before its Credits
+    /// entry; `menu` is the menu state there; `text` outlives the frame.
+    pub(super) unsafe fn main_menu_entry(&self, menu: usize, text: &UiText) -> bool {
+        let mut entry = Buf::<0x20>::zeroed();
+        entry.text(0, text);
+        entry.u32(0x18, 1);
+        // SAFETY: forwarded from the caller; the entry as the menu's own
+        // Settings entry is built: label, normal font.
+        unsafe { (self.main_entry)(menu, entry.ptr()) != 0 }
+    }
+
+    /// Draws one more entry of the pause menu, after its Settings, with
+    /// `text`; true when clicked.
+    ///
+    /// # Safety
+    ///
+    /// In the pause menu's drawing, at the loader's hook after its Settings
+    /// entry; `text` outlives the frame.
+    pub(super) unsafe fn pause_menu_entry(&self, text: &UiText) -> bool {
+        // SAFETY: forwarded from the caller; enabled, no attention badge.
+        unsafe { (self.pause_entry)(text, 1, 0) != 0 }
+    }
+
+    /// Whether the player pressed Back (Escape, B) this frame, taking the
+    /// press so nothing else acts on it; `node` binds the action to a window.
+    ///
+    /// # Safety
+    ///
+    /// Inside a frame, on its thread.
+    pub(super) unsafe fn back_pressed(&self, node: u64) -> bool {
+        let mut spec = Buf::<0x50>::zeroed();
+        // SAFETY: the action spec for Back (1), as the pause menu builds it.
+        unsafe { (self.action_new)(spec.ptr(), 1, 1) };
+        spec.u64(0x40, node);
+        spec.u8(0x1b, 1);
+        // SAFETY: the spec just built, no details out, the menus' modality.
+        unsafe { (self.action_query)(spec.ptr(), core::ptr::null_mut(), 0x10) != 0 }
     }
 
     /// Plays interface sound `sound`.

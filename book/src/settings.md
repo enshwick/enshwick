@@ -124,6 +124,22 @@ admin-tools' command file:
 | `/config <mod> <key>`         | one setting with its default and description                                 |
 | `/config <mod> <key> <value>` | checks the value, writes it to `mod-configs/<mod>.toml` keeping the comments |
 
+Players change them in game too, on the Mods screen: a "Mods" entry in the
+title screen's main menu and in the pause menu, beside Settings, lists the
+mods with their names, versions, descriptions and authors, and shows each
+mod's settings as the game's own rows, built from the schema: a toggle for
+`bool`, a slider for a number with a range (in stops for whole numbers up to
+32 values), a dropdown for `choices`, and the value with the file's name for
+the rest (text, lists, tables, numbers without a range). The label is the key
+in words, the doc comment shows under it, `startup` rows say "after a
+restart", and while the client is joined to a server that sets a mod's `sync`
+values, those rows show the server's values and take no changes. A change is
+written at once, as the game applies its own settings.
+
+Before either writes, the loader runs the mod's own check: `load.config()`
+hands it over, and it parses the new file and runs the type's `validate`; a
+refusal keeps the file and shows its reason.
+
 A value is TOML (`5`, `true`, `"text"`, `[1, 2]`); text settings also take
 plain words. After a write the loader raises the mod's settings event at once:
 `runtime` and `sync` values apply through `on_config_change` (joined players
