@@ -102,6 +102,12 @@ reason of the form `<what>: <why>`, such as
 `Err(Off)`, or `FAULTED` when it panicked; the loader logs
 `off: init returned 3` or `off: init returned 6` under the mod's id.
 
+Every host function answers a mod that is off with `FAULTED`, and a handle
+the loader never gave out with `BAD_ARGS`. A panic in the loader's own code
+behind a host function never reaches the mod: the call returns `REFUSED`
+(or zero for a function that returns a value) and the loader logs the
+fault.
+
 ## Events
 
 A mod subscribes with
