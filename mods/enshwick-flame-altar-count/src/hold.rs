@@ -55,7 +55,9 @@ fn run(hold: &Hold) {
                     if past { "set" } else { "released" }
                 );
             }
-            Err(off) => enshwick_loader_api::warn_every!(Duration::from_secs(600), "hold: {off}"),
+            Err(error) => {
+                enshwick_loader_api::warn_every!(Duration::from_secs(600), "hold: {error}");
+            }
         }
     }
 }
