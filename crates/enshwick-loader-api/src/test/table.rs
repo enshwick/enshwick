@@ -5,10 +5,10 @@ use core::sync::atomic::Ordering;
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use crate::abi::{
-    AltarInfo, AltarZoneSize, BuildInfo, CallerFrame, CommandFn, Event, EventFn, Header, HookSpec,
-    HostApi, InventoryDoneFn, InventoryRequest, ItemData, Level, MidHookFn, MidHookSpec, ModHandle,
-    ModInfo, PlayerInfo, RenameFn, ResourceKey, ResourcePatchFn, Side, Status, StatusFn, Str,
-    ZoneCheckFn,
+    AltarInfo, AltarZoneSize, BedCheckFn, BuildInfo, CallerFrame, CommandFn, Event, EventFn,
+    Header, HookSpec, HostApi, InventoryDoneFn, InventoryRequest, ItemData, Level, MidHookFn,
+    MidHookSpec, ModHandle, ModInfo, PlayerInfo, RenameFn, ResourceKey, ResourcePatchFn, Side,
+    Status, StatusFn, Str, SummonFn, SurvivorLookupFn, SurvivorStatusFn, ZoneCheckFn,
 };
 
 use super::{FakeHost, LinkedHook, ServedResource, SubmittedRequest};
@@ -51,6 +51,11 @@ pub(crate) struct State {
     /// The zone sizes the mod set last.
     pub(crate) zone_sizes: Vec<AltarZoneSize>,
     pub(crate) zone_filters: Vec<(ZoneCheckFn, usize)>,
+    pub(crate) survivor_lookup: Option<(SurvivorLookupFn, usize)>,
+    pub(crate) bed_checks: Vec<(BedCheckFn, usize)>,
+    pub(crate) summons: Vec<(SummonFn, usize)>,
+    pub(crate) summon_items: Vec<(u32, u32)>,
+    pub(crate) survivor_status: Option<(SurvivorStatusFn, usize)>,
     /// The reply `run_command` last handed out, alive until the next call.
     run_out: Option<Box<str>>,
     /// The settings text last handed out, alive until the next call.
@@ -96,6 +101,11 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         zone_control: false,
         zone_sizes: Vec::new(),
         zone_filters: Vec::new(),
+        survivor_lookup: None,
+        bed_checks: Vec::new(),
+        summons: Vec::new(),
+        summon_items: Vec::new(),
+        survivor_status: None,
         run_out: None,
         settings: None,
     });
@@ -671,6 +681,59 @@ extern "system" fn zone_check_filter(
     })
 }
 
+extern "system" fn survivor_lookup(
+    _me: ModHandle,
+    callback: SurvivorLookupFn,
+    user: *mut c_void,
+) -> Status {
+    with(Status::MISSING, |s| {
+        if s.survivor_lookup.is_some() {
+            return Status::REFUSED;
+        }
+        s.survivor_lookup = Some((callback, user.expose_provenance()));
+        Status::OK
+    })
+}
+
+extern "system" fn survivor_bed_check(
+    _me: ModHandle,
+    callback: BedCheckFn,
+    user: *mut c_void,
+) -> Status {
+    with(Status::MISSING, |s| {
+        s.bed_checks.push((callback, user.expose_provenance()));
+        Status::OK
+    })
+}
+
+extern "system" fn summon_filter(_me: ModHandle, callback: SummonFn, user: *mut c_void) -> Status {
+    with(Status::MISSING, |s| {
+        s.summons.push((callback, user.expose_provenance()));
+        Status::OK
+    })
+}
+
+extern "system" fn summon_item(_me: ModHandle, item: u32, survivor: u32) -> Status {
+    with(Status::MISSING, |s| {
+        s.summon_items.push((item, survivor));
+        Status::OK
+    })
+}
+
+extern "system" fn survivor_status(
+    _me: ModHandle,
+    callback: SurvivorStatusFn,
+    user: *mut c_void,
+) -> Status {
+    with(Status::MISSING, |s| {
+        if s.host.side != Side::CLIENT || s.survivor_status.is_some() {
+            return Status::REFUSED;
+        }
+        s.survivor_status = Some((callback, user.expose_provenance()));
+        Status::OK
+    })
+}
+
 /// table it sees for the process, so it is one static.
 pub(crate) static TABLE: HostApi = HostApi {
     header: Header::of::<HostApi>(),
@@ -721,4 +784,9 @@ pub(crate) static TABLE: HostApi = HostApi {
     altar_zones_control,
     set_altar_zones,
     zone_check_filter,
+    survivor_lookup,
+    survivor_bed_check,
+    summon_filter,
+    summon_item,
+    survivor_status,
 };

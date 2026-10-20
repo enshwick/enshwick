@@ -1,19 +1,17 @@
 //! Copy staffs: one item per workshop survivor, a clone of the survivor's
 //! summoning staff that the game takes when it is used.
 //!
-//! The game knows which survivor a staff summons from its item registry's map
-//! of staff items to survivors, built once per game from `NpcCollection`, one
-//! item per survivor. A link after that build files each copy staff beside its
-//! vanilla staff, so the cursor, the unlock check and the placement treat both
-//! alike, on the server and the client. The spawn link in `server` then marks
-//! a copy staff's use as consuming, which makes the game take one staff in
-//! the same transaction as the spawn or move, and only when that works.
+//! The platform files each copy staff as a staff of its survivor, so the game
+//! treats it as the vanilla staff on the server and the client. The policy
+//! then marks a copy staff's use as consuming, which makes the game take one
+//! staff in the same transaction as the spawn or move, and only when that
+//! works.
 
 use enshwick_loader_api::content::Guid;
 use enshwick_loader_api::content::items::NewItem;
 use enshwick_loader_api::i18n::Texts;
-use enshwick_loader_api::raw::read_at;
-use enshwick_loader_api::{Load, Next, Off};
+use enshwick_loader_api::survivors::SurvivorId;
+use enshwick_loader_api::{Load, Off};
 
 /// The mod's texts, per language.
 pub(crate) const TEXTS: &str = include_str!("texts.toml");
@@ -134,123 +132,13 @@ pub(crate) fn add(load: &mut Load<'_>, texts: &Texts) -> Result<(), Off> {
     Ok(())
 }
 
-type RegistryLoadFn = unsafe extern "system" fn(registry: *mut u8);
-type FindSlotFn = unsafe extern "system" fn(map: *mut u8, key: *const u32) -> u64;
-
-enshwick_loader_api::detour! {
-    static REGISTRY_LOAD: unsafe extern "system" fn(registry: *mut u8) = registry_load;
-}
-
-/// The staff item map inside the survivor registry.
-#[derive(Debug)]
-struct ItemMap {
-    find_slot: FindSlotFn,
-    loaded: usize,
-    at: usize,
-    bits: usize,
-    capacity: usize,
-    keys: usize,
-    values: usize,
-    count: usize,
-}
-
-static ITEM_MAP: std::sync::OnceLock<ItemMap> = std::sync::OnceLock::new();
-
-/// Files the copy staffs in the survivor registry each time the game builds
-/// it.
-pub(crate) fn link(load: &mut Load<'_>) -> Result<(), Off> {
-    let size = |name| {
-        load.constant(name)
-            .map(|v| usize::try_from(v).unwrap_or(usize::MAX))
-    };
-    let find_slot = load.symbol("survivors.map_find_slot")?;
-    let map = ItemMap {
-        // SAFETY: the mod pins this id to the map's find-or-free-slot.
-        find_slot: unsafe { crate::server::function(find_slot) },
-        loaded: size("survivors.registry_loaded")?,
-        at: size("survivors.registry_item_map")?,
-        bits: size("survivors.map_bits")?,
-        capacity: size("survivors.map_capacity")?,
-        keys: size("survivors.map_keys")?,
-        values: size("survivors.map_values")?,
-        count: size("survivors.map_count")?,
-    };
-    let _first = ITEM_MAP.set(map);
-    load.hook(&REGISTRY_LOAD, load.symbol("survivors.registry_load")?)
-}
-
-fn registry_load(next: Next<RegistryLoadFn>, registry: *mut u8) {
-    let map = ITEM_MAP.get().filter(|_| !registry.is_null());
-    // The game calls this often and builds only once: a registry that holds
-    // its collection already is left as it is.
-    // SAFETY: the registry's collection pointer, null until it is built.
-    let built = map.is_some_and(|m| unsafe { read_at::<usize>(registry, m.loaded) } != 0);
-    // SAFETY: the rest of the chain takes the registry the game passed.
-    unsafe { next.get()(registry) };
-    let Some(map) = map.filter(|_| !built) else {
-        return;
-    };
-    let mut filed = 0;
+/// Files every copy staff as a staff of its survivor, beside its vanilla
+/// staff, so the cursor, the unlock check and the placement treat both alike.
+pub(crate) fn file(load: &mut Load<'_>) -> Result<(), Off> {
     for staff in STAFFS {
-        // SAFETY: the registry is built; its item map lies at `map.at`.
-        if unsafe {
-            file(
-                map,
-                registry.wrapping_add(map.at),
-                staff.copy.id(),
-                staff.npc,
-            )
-        } {
-            filed += 1;
-        }
+        load.file_summon_item(staff.copy.id(), SurvivorId(staff.npc))?;
     }
-    enshwick_loader_api::info!("filed {filed} copy staffs in the survivor registry");
-}
-
-/// Maps `item` to `npc` in the game's map at `table`, as its own build does:
-/// the game's find-or-free-slot, which grows the table as needed, then the
-/// bit, key and value.
-///
-/// # Safety
-///
-/// `table` is the live staff item map, not used by another thread.
-unsafe fn file(map: &ItemMap, table: *mut u8, item: u32, npc: u32) -> bool {
-    // SAFETY: the game's own slot search on its map.
-    let slot = unsafe { (map.find_slot)(table, &raw const item) };
-    // SAFETY: the map's header fields, read again after a possible growth.
-    let capacity: u64 = unsafe { read_at(table, map.capacity) };
-    if slot >= capacity {
-        return false;
-    }
-    let Ok(slot) = usize::try_from(slot) else {
-        return false;
-    };
-    // SAFETY: as above.
-    let bits: *mut u64 = unsafe { read_at(table, map.bits) };
-    // SAFETY: as above.
-    let keys: *mut u32 = unsafe { read_at(table, map.keys) };
-    // SAFETY: as above.
-    let values: *mut u32 = unsafe { read_at(table, map.values) };
-    let word = bits.wrapping_add(slot >> 6);
-    let bit = 1u64 << (slot & 63);
-    // SAFETY: the slot is below the capacity, so its bit word exists.
-    let used = unsafe { word.read() } & bit != 0;
-    if !used {
-        // SAFETY: as above.
-        let marked = unsafe { word.read() } | bit;
-        // SAFETY: as above.
-        unsafe { word.write(marked) };
-        // SAFETY: the map's entry count.
-        let count: u32 = unsafe { read_at(table, map.count) };
-        let at = table.wrapping_add(map.count);
-        // SAFETY: as above.
-        unsafe { at.cast::<[u8; 4]>().write((count + 1).to_le_bytes()) };
-        // SAFETY: the slot's key.
-        unsafe { keys.wrapping_add(slot).write(item) };
-    }
-    // SAFETY: the slot's value.
-    unsafe { values.wrapping_add(slot).write(npc) };
-    true
+    Ok(())
 }
 
 #[cfg(test)]
@@ -305,38 +193,5 @@ mod tests {
                 assert!(!fill(template, "Balthazar").contains('{'));
             }
         }
-    }
-
-    #[test]
-    fn filing_marks_a_free_slot_and_overwrites_a_used_one() {
-        unsafe extern "system" fn find(_map: *mut u8, key: *const u32) -> u64 {
-            // SAFETY: the test passes a live key.
-            u64::from(unsafe { key.read() } & 127)
-        }
-        let mut bits = [0u64; 2];
-        let mut keys = [0u32; 128];
-        let mut values = [0u32; 128];
-        let mut table = [0u8; 0x60];
-        table[0x08..0x10].copy_from_slice(&(bits.as_mut_ptr() as u64).to_le_bytes());
-        table[0x10..0x18].copy_from_slice(&128u64.to_le_bytes());
-        table[0x28..0x30].copy_from_slice(&(keys.as_mut_ptr() as u64).to_le_bytes());
-        table[0x40..0x48].copy_from_slice(&(values.as_mut_ptr() as u64).to_le_bytes());
-        let map = ItemMap {
-            find_slot: find,
-            loaded: 0x20,
-            at: 0,
-            bits: 0x08,
-            capacity: 0x10,
-            keys: 0x28,
-            values: 0x40,
-            count: 0x54,
-        };
-        // SAFETY: a table laid out as the game's, owned by the test.
-        assert!(unsafe { file(&map, table.as_mut_ptr(), 70, 5) });
-        // SAFETY: as above.
-        assert!(unsafe { file(&map, table.as_mut_ptr(), 70, 6) });
-        assert_eq!(bits[1], 1 << 6);
-        assert_eq!((keys[70], values[70]), (70, 6));
-        assert_eq!(u32::from_le_bytes(table[0x54..0x58].try_into().unwrap()), 1);
     }
 }

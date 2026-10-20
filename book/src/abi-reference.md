@@ -12,7 +12,7 @@ raw table. The exact types and signatures are in the
 | Constant                                                                                            | Value | Meaning                                         |
 | --------------------------------------------------------------------------------------------------- | ----- | ----------------------------------------------- |
 | [`ABI_MAJOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 1     | A loader refuses a mod built for another major. |
-| [`ABI_MINOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 15    | A newer minor only appends.                     |
+| [`ABI_MINOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 16    | A newer minor only appends.                     |
 
 The ABI version is apart from Enshwick Loader's version (such as 0.2.0, see
 [Releasing and updates](releasing.md#versions)): a platform release raises
@@ -189,6 +189,11 @@ marked "init only" are allowed during `enshwick_mod_init` only.
 | `altar_zones_control` | Makes the mod the one that sizes altar zones, one mod at a time; init only                      | 15          |
 | `set_altar_zones`     | Replaces the sizes the controlling mod gives altar zones; any thread                            | 15          |
 | `zone_check_filter`   | Calls a filter when the game refuses a placement outside a single building zone; init only      | 15          |
+| `survivor_lookup`     | Answers the game's survivor lookups, one mod at a time; init only                               | 16          |
+| `survivor_bed_check`  | Calls a filter after a survivor's own bed check kept its bed; init only                         | 16          |
+| `summon_filter`       | Calls a filter before a summoning staff spawns or moves a survivor; init only                   | 16          |
+| `summon_item`         | Files an item as a survivor's summoning staff; init only                                        | 16          |
+| `survivor_status`     | Merges the client's survivor menu statuses, one mod at a time; init only                        | 16          |
 
 ## Under an older loader
 
@@ -217,6 +222,7 @@ the mod off with a reason, which the mod's log shows as `off: <reason>`:
 | 13          | `commands::run`                 | `Err(RunError::NoLoader)`                                    |
 | 14          | `ModEntry::signed_by`           | Empty                                                        |
 | 15          | altars and zone checks          | Off: `altars need a newer loader`                            |
+| 16          | survivors                       | Off: `the survivor lookup needs a newer loader`              |
 
 A mod that can do without a feature catches the `Off` and goes on without it
 instead of returning it from `init`.
