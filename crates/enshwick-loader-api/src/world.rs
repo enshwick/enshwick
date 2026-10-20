@@ -223,10 +223,11 @@ pub struct World {
 impl World {
     pub(crate) fn resolve(load: &Load<'_>) -> Result<Self, Off> {
         let host = load.host();
-        let end = core::mem::offset_of!(HostApi, players) + size_of::<usize>();
-        if !host.api().header.covers(end) {
-            return Err(Off::new("world reads need a newer loader"));
-        }
+        crate::load::offered(
+            host.api(),
+            core::mem::offset_of!(HostApi, players),
+            "world reads",
+        )?;
         let mut world = Self {
             host,
             transform: ComponentType(0),

@@ -284,12 +284,8 @@ where
         name: text_of(call.name).to_owned(),
     };
     let args = split_args(text_of(call.args));
-    let reply = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| handler(&ctx, &args)));
-    let reply = reply.unwrap_or_else(|_| {
-        if let Some(host) = crate::host() {
-            host.fault("panic in a command handler");
-        }
-        Reply::none()
+    let reply = crate::host::guard("panic in a command handler", Reply::none, || {
+        handler(&ctx, &args)
     });
     if out.is_null() {
         return;
@@ -319,15 +315,11 @@ where
         player: (call.known != 0).then(|| Player::from_info(&call.player)),
         text: text_of(call.text).to_owned(),
     };
-    if let Ok(allowed) = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| handler(&rename)))
-    {
-        u8::from(allowed)
-    } else {
-        if let Some(host) = crate::host() {
-            host.fault("panic in a rename filter");
-        }
-        1
-    }
+    u8::from(crate::host::guard(
+        "panic in a rename filter",
+        || true,
+        || handler(&rename),
+    ))
 }
 
 impl Load<'_> {
@@ -364,27 +356,24 @@ impl Load<'_> {
             )));
         }
         let host = self.host();
-        let end = core::mem::offset_of!(HostApi, command) + size_of::<usize>();
-        if !host.api().header.covers(end) {
-            return Err(Off::new("chat commands need a newer loader"));
-        }
-        let user = Box::into_raw(Box::new(handler));
-        let status = (host.api().command)(
-            host.handle(),
-            Str::new(name),
-            Str::new(help),
-            run_command::<F>,
-            user.cast(),
-        );
-        if !status.is_ok() {
-            // SAFETY: refused, so the loader keeps no copy of the pointer.
-            drop(unsafe { Box::from_raw(user) });
-            return Err(Off::new(format!(
-                "command /{name}: refused by the loader (status {}; taken by another mod?)",
-                status.0
-            )));
-        }
-        Ok(())
+        crate::load::offered(
+            host.api(),
+            core::mem::offset_of!(HostApi, command),
+            "chat commands",
+        )?;
+        crate::load::hand_over(
+            handler,
+            |user| {
+                (host.api().command)(
+                    host.handle(),
+                    Str::new(name),
+                    Str::new(help),
+                    run_command::<F>,
+                    user,
+                )
+            },
+            &format!("command /{name}"),
+        )
     }
 
     /// Runs `filter` before the server applies a player's rename of any
@@ -409,21 +398,16 @@ impl Load<'_> {
         F: Fn(&Rename) -> bool + Send + Sync + 'static,
     {
         let host = self.host();
-        let end = core::mem::offset_of!(HostApi, rename_filter) + size_of::<usize>();
-        if !host.api().header.covers(end) {
-            return Err(Off::new("rename filters need a newer loader"));
-        }
-        let user = Box::into_raw(Box::new(filter));
-        let status = (host.api().rename_filter)(host.handle(), run_filter::<F>, user.cast());
-        if !status.is_ok() {
-            // SAFETY: refused, so the loader keeps no copy of the pointer.
-            drop(unsafe { Box::from_raw(user) });
-            return Err(Off::new(format!(
-                "rename filter: refused by the loader (status {})",
-                status.0
-            )));
-        }
-        Ok(())
+        crate::load::offered(
+            host.api(),
+            core::mem::offset_of!(HostApi, rename_filter),
+            "rename filters",
+        )?;
+        crate::load::hand_over(
+            filter,
+            |user| (host.api().rename_filter)(host.handle(), run_filter::<F>, user),
+            "rename filter",
+        )
     }
 }
 

@@ -823,14 +823,13 @@ unsafe extern "system" fn deliver(result: *const InventoryResult, user: *mut c_v
             || Outcome::not_run(Done::Unavailable),
             |r| Outcome::from_raw(&r),
         );
-    let ran = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        pending.complete(&outcome);
-    }));
-    if ran.is_err()
-        && let Some(host) = crate::host()
-    {
-        host.fault("panic in an inventory callback");
-    }
+    crate::host::guard(
+        "panic in an inventory callback",
+        || (),
+        || {
+            pending.complete(&outcome);
+        },
+    );
 }
 
 /// Reflected layouts the reads use.
@@ -884,10 +883,11 @@ pub struct Inventories {
 impl Inventories {
     pub(crate) fn resolve(load: &mut Load<'_>) -> Result<Self, Off> {
         let host = load.host();
-        let end = core::mem::offset_of!(HostApi, inventory_submit) + size_of::<usize>();
-        if !host.api().header.covers(end) {
-            return Err(Off::new("inventories need a newer loader (ABI minor 12)"));
-        }
+        crate::load::offered(
+            host.api(),
+            core::mem::offset_of!(HostApi, inventory_submit),
+            "inventories",
+        )?;
         let scheduler = load.scheduler()?;
         let status = (host.api().inventory_open)(host.handle());
         if !status.is_ok() {

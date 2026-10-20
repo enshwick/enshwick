@@ -125,13 +125,7 @@ where
     };
     // SAFETY: `user` is the leaked `F` this function was registered with.
     let handler = unsafe { &*user.cast::<F>() };
-    let answer = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| handler(&call)))
-        .unwrap_or_else(|_| {
-            if let Some(host) = crate::host() {
-                host.fault("panic in a skill override");
-            }
-            None
-        });
+    let answer = crate::host::guard("panic in a skill override", || None, || handler(&call));
     match answer {
         None => 0,
         Some(true) => 1,
@@ -154,12 +148,11 @@ where
     };
     // SAFETY: `user` is the leaked `F` this function was registered with.
     let handler = unsafe { &*user.cast::<F>() };
-    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| handler(&call))).unwrap_or_else(|_| {
-        if let Some(host) = crate::host() {
-            host.fault("panic in a comfort filter");
-        }
-        call.value
-    })
+    crate::host::guard(
+        "panic in a comfort filter",
+        || call.value,
+        || handler(&call),
+    )
 }
 
 unsafe extern "system" fn run_experience<F>(pass: *mut ExperiencePass, user: *mut c_void)
@@ -183,18 +176,11 @@ where
     };
     // SAFETY: `user` is the leaked `F` this function was registered with.
     let handler = unsafe { &*user.cast::<F>() };
-    if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| handler(rows, &levels))).is_err()
-        && let Some(host) = crate::host()
-    {
-        host.fault("panic in an experience filter");
-    }
-}
-
-fn refused(what: &str, status: crate::abi::Status) -> Off {
-    Off::new(format!(
-        "{what} refused by the loader (status {})",
-        status.0
-    ))
+    crate::host::guard(
+        "panic in an experience filter",
+        || (),
+        || handler(rows, &levels),
+    );
 }
 
 impl Load<'_> {
@@ -216,18 +202,16 @@ impl Load<'_> {
         F: Fn(&SkillCheck) -> Option<bool> + Send + Sync + 'static,
     {
         let host = self.host();
-        let end = core::mem::offset_of!(HostApi, skill_override) + size_of::<usize>();
-        if !host.api().header.covers(end) {
-            return Err(Off::new("skill overrides need a newer loader"));
-        }
-        let user = Box::into_raw(Box::new(handler));
-        let status = (host.api().skill_override)(host.handle(), node, run_skill::<F>, user.cast());
-        if status.is_ok() {
-            return Ok(());
-        }
-        // SAFETY: refused, so the loader keeps no copy of the pointer.
-        drop(unsafe { Box::from_raw(user) });
-        Err(refused("the skill override", status))
+        crate::load::offered(
+            host.api(),
+            core::mem::offset_of!(HostApi, skill_override),
+            "skill overrides",
+        )?;
+        crate::load::hand_over(
+            handler,
+            |user| (host.api().skill_override)(host.handle(), node, run_skill::<F>, user),
+            "the skill override",
+        )
     }
 
     /// Changes the comfort each provider registers in a base: `filter`
@@ -250,18 +234,16 @@ impl Load<'_> {
         F: Fn(&Comfort) -> i32 + Send + Sync + 'static,
     {
         let host = self.host();
-        let end = core::mem::offset_of!(HostApi, comfort_filter) + size_of::<usize>();
-        if !host.api().header.covers(end) {
-            return Err(Off::new("comfort filters need a newer loader"));
-        }
-        let user = Box::into_raw(Box::new(filter));
-        let status = (host.api().comfort_filter)(host.handle(), run_comfort::<F>, user.cast());
-        if status.is_ok() {
-            return Ok(());
-        }
-        // SAFETY: refused, so the loader keeps no copy of the pointer.
-        drop(unsafe { Box::from_raw(user) });
-        Err(refused("the comfort filter", status))
+        crate::load::offered(
+            host.api(),
+            core::mem::offset_of!(HostApi, comfort_filter),
+            "comfort filters",
+        )?;
+        crate::load::hand_over(
+            filter,
+            |user| (host.api().comfort_filter)(host.handle(), run_comfort::<F>, user),
+            "the comfort filter",
+        )
     }
 
     /// Runs `filter` on every spawned character's experience before the
@@ -290,18 +272,15 @@ impl Load<'_> {
         F: Fn(&mut [ExperienceRow], &Levels) + Send + Sync + 'static,
     {
         let host = self.host();
-        let end = core::mem::offset_of!(HostApi, experience_filter) + size_of::<usize>();
-        if !host.api().header.covers(end) {
-            return Err(Off::new("experience filters need a newer loader"));
-        }
-        let user = Box::into_raw(Box::new(filter));
-        let status =
-            (host.api().experience_filter)(host.handle(), run_experience::<F>, user.cast());
-        if status.is_ok() {
-            return Ok(());
-        }
-        // SAFETY: refused, so the loader keeps no copy of the pointer.
-        drop(unsafe { Box::from_raw(user) });
-        Err(refused("the experience filter", status))
+        crate::load::offered(
+            host.api(),
+            core::mem::offset_of!(HostApi, experience_filter),
+            "experience filters",
+        )?;
+        crate::load::hand_over(
+            filter,
+            |user| (host.api().experience_filter)(host.handle(), run_experience::<F>, user),
+            "the experience filter",
+        )
     }
 }

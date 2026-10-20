@@ -15,7 +15,7 @@ mod kinds;
 
 use core::marker::PhantomData;
 
-use crate::abi::{GameEventData, HostApi, Str};
+use crate::abi::{GameEventData, Str};
 use crate::ecs::Entity;
 use crate::{Load, Off};
 
@@ -358,12 +358,6 @@ impl<'a> GameEvent<'a> {
             bytes,
         })
     }
-}
-
-/// Whether the loader offers engine events.
-pub(crate) fn offered(api: &HostApi) -> bool {
-    api.header
-        .covers(core::mem::offset_of!(HostApi, game_event) + size_of::<usize>())
 }
 
 #[cfg(test)]
