@@ -1,0 +1,293 @@
+//! New recipes: a vanilla recipe copied for a new output, with its
+//! ingredients scaled.
+
+use super::{Blob, Guid, types};
+use crate::{Load, Off};
+
+/// The game's recipe registry resource.
+pub const RECIPE_REGISTRY: Guid = Guid::parse("5e57de0f-280c-4559-8191-f02c1ba656e2");
+
+/// A new recipe for [`Load::add_recipe`].
+///
+/// # Examples
+///
+/// See [`Load::add_recipe`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct NewRecipe {
+    /// The new recipe's GUID; its game id is [`Guid::id`].
+    pub guid: Guid,
+    /// The item whose recipe is copied: same workshop, unlock and duration.
+    pub like: Guid,
+    /// The item the recipe makes.
+    pub output: Guid,
+    /// How many it makes.
+    pub output_count: u32,
+    /// The copied recipe's ingredient counts times this.
+    pub cost: u32,
+}
+
+/// Where the fields a recipe edit touches sit, from the game's reflection.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct RecipeLayout {
+    /// `RecipeRegistryResource.recipes`.
+    pub recipes: usize,
+    /// `RecipeInfo` size.
+    pub recipe: usize,
+    /// `RecipeInfo.recipeGuid`.
+    pub guid: usize,
+    /// `RecipeInfo.recipeId`.
+    pub id: usize,
+    /// `RecipeInfo.input`.
+    pub input: usize,
+    /// `RecipeInfo.output`.
+    pub output: usize,
+    /// `RecipeInfo.completionRequirementQuery`, whose flag id comes first.
+    pub completion: usize,
+    /// The array and string headers inside a `RecipeInfo`.
+    pub relative: [usize; 4],
+    /// `RecipeInputResource` size.
+    pub input_size: usize,
+    /// `RecipeItemStackResource` size.
+    pub stack_size: usize,
+    /// `RecipeItemStackResource.item`.
+    pub stack_item: usize,
+    /// `RecipeItemStackResource.count`.
+    pub stack_count: usize,
+}
+
+impl RecipeLayout {
+    /// The layout on the running build.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] when a field or type is not reflected.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// fn init(load: &mut enshwick_api::Load<'_>) -> Result<(), enshwick_api::Off> {
+    ///     let layout = enshwick_api::content::recipes::RecipeLayout::resolve(load)?;
+    ///     assert_eq!(layout.recipe, 0xa8);
+    ///     Ok(())
+    /// }
+    /// ```
+    pub fn resolve(load: &Load<'_>) -> Result<Self, Off> {
+        let wide = |v: u64| usize::try_from(v).unwrap_or(usize::MAX);
+        let recipe = |name: &str| load.field_offset("keen::RecipeInfo", name).map(wide);
+        let stack = |name: &str| {
+            load.field_offset("keen::RecipeItemStackResource", name)
+                .map(wide)
+        };
+        let size = |ty: &str| load.type_size(ty).map(|s| s as usize);
+        Ok(Self {
+            recipes: load
+                .field_offset("keen::RecipeRegistryResource", "recipes")
+                .map(wide)?,
+            recipe: size("keen::RecipeInfo")?,
+            guid: recipe("recipeGuid")?,
+            id: recipe("recipeId")?,
+            input: recipe("input")?,
+            output: recipe("output")?,
+            completion: recipe("completionRequirementQuery")?,
+            relative: [
+                recipe("input")?,
+                recipe("output")?,
+                recipe("requiredProps")?,
+                recipe("debugName")?,
+            ],
+            input_size: size("keen::RecipeInputResource")?,
+            stack_size: size("keen::RecipeItemStackResource")?,
+            stack_item: stack("item")?,
+            stack_count: stack("count")?,
+        })
+    }
+}
+
+/// The recipe registry with `recipe` after the others.
+#[must_use]
+pub fn add_recipe_to(
+    layout: &RecipeLayout,
+    registry: &[u8],
+    recipe: &NewRecipe,
+) -> Option<Vec<u8>> {
+    let mut registry = Blob::new(registry);
+    let (start, count) = registry.array(layout.recipes)?;
+    let like = (0..usize::try_from(count).ok()?)
+        .map(|i| start + i * layout.recipe)
+        .find(|&at| makes(layout, &registry, at, recipe.like))?;
+    let template = registry.bytes().get(like..like + layout.recipe)?.to_vec();
+    let inputs = scaled_inputs(layout, &registry, like, recipe.cost)?;
+    let index = registry.grow_array(
+        layout.recipes,
+        layout.recipe,
+        8,
+        &layout.relative,
+        &[(template, Some(like))],
+    )?;
+    let (start, _) = registry.array(layout.recipes)?;
+    let at = start + usize::try_from(index).ok()? * layout.recipe;
+    let id = recipe.guid.id().to_le_bytes();
+    let mut output = vec![0u8; layout.stack_size];
+    output.get_mut(..16)?.copy_from_slice(&recipe.output.0);
+    output
+        .get_mut(layout.stack_item..layout.stack_item + 4)?
+        .copy_from_slice(&recipe.output.id().to_le_bytes());
+    output
+        .get_mut(layout.stack_count..layout.stack_count + 4)?
+        .copy_from_slice(&recipe.output_count.to_le_bytes());
+    let input_count = u32::try_from(inputs.len() / layout.input_size.max(1)).ok()?;
+    let inputs_at = registry.append(&inputs, 8);
+    let output_at = registry.append(&output, 8);
+    let written = registry.write(at + layout.guid, &recipe.guid.0)
+        && registry.write(at + layout.id, &id)
+        // The recipe's completion flag is its own id.
+        && registry.write(at + layout.completion, &id)
+        && registry.set_array(at + layout.input, inputs_at, input_count)
+        && registry.set_array(at + layout.output, output_at, 1);
+    written.then(|| registry.into_bytes())
+}
+
+/// Whether the recipe at `at` makes `item`.
+fn makes(layout: &RecipeLayout, registry: &Blob, at: usize, item: Guid) -> bool {
+    let Some((outputs, count)) = registry.array(at + layout.output) else {
+        return false;
+    };
+    (0..count as usize).any(|i| {
+        let stack = outputs + i * layout.stack_size;
+        registry.bytes().get(stack..stack + 16) == Some(&item.0[..])
+    })
+}
+
+/// The recipe's inputs with every count times `cost`; an input's item stack
+/// comes first in it.
+fn scaled_inputs(layout: &RecipeLayout, registry: &Blob, at: usize, cost: u32) -> Option<Vec<u8>> {
+    let (inputs, count) = registry.array(at + layout.input)?;
+    let mut bytes = registry
+        .bytes()
+        .get(inputs..inputs + usize::try_from(count).ok()? * layout.input_size)?
+        .to_vec();
+    for input in bytes.chunks_mut(layout.input_size.max(1)) {
+        let field = input.get_mut(layout.stack_count..layout.stack_count + 4)?;
+        let count = u32::from_le_bytes(field.try_into().ok()?);
+        field.copy_from_slice(&count.saturating_mul(cost).to_le_bytes());
+    }
+    Some(bytes)
+}
+
+impl Load<'_> {
+    /// Adds a recipe to the game, on the server and the client alike: a copy
+    /// of the recipe that makes `like`, at the same workshop and unlocked with
+    /// it, making `output` instead, beside recipes other mods add.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] when the loader is too old or the recipe layout is not
+    /// reflected; a `like` with no recipe turns the mod off when the game
+    /// first reads the registry.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_api::content::Guid;
+    /// use enshwick_api::content::recipes::NewRecipe;
+    ///
+    /// fn init(load: &mut enshwick_api::Load<'_>) -> Result<(), enshwick_api::Off> {
+    ///     load.add_recipe(NewRecipe {
+    ///         guid: Guid::parse("4e9d2c17-8b3a-4f65-a1c2-7d5e3b9f0a48"),
+    ///         like: Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d"),
+    ///         output: Guid::parse("8a3f6e21-5c4b-4d7e-9f10-2b7c5e6a9d31"),
+    ///         output_count: 1,
+    ///         cost: 2,
+    ///     })
+    /// }
+    /// ```
+    pub fn add_recipe(&mut self, recipe: NewRecipe) -> Result<(), Off> {
+        let layout = RecipeLayout::resolve(self)?;
+        let registry = RECIPE_REGISTRY.key(types::RECIPE_REGISTRY);
+        self.serve(registry, registry, move |base| {
+            add_recipe_to(&layout, base, &recipe)
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const LAYOUT: RecipeLayout = RecipeLayout {
+        recipes: 8,
+        recipe: 0xa8,
+        guid: 0,
+        id: 0x10,
+        input: 0x28,
+        output: 0x30,
+        completion: 0x5c,
+        relative: [0x28, 0x30, 0x40, 0x78],
+        input_size: 48,
+        stack_size: 24,
+        stack_item: 0x10,
+        stack_count: 0x14,
+    };
+    const CHEST: Guid = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");
+    const SAFE: Guid = Guid::parse("8a3f6e21-5c4b-4d7e-9f10-2b7c5e6a9d31");
+    const RECIPE: Guid = Guid::parse("4e9d2c17-8b3a-4f65-a1c2-7d5e3b9f0a48");
+
+    fn u32_at(bytes: &[u8], at: usize) -> u32 {
+        u32::from_le_bytes(bytes[at..at + 4].try_into().unwrap())
+    }
+
+    #[test]
+    fn the_copy_costs_more_and_makes_the_new_output() {
+        let mut blob = Blob::new(&[0u8; 16]);
+        let recipe = blob.append(&[0; 0xa8], 8);
+        let mut input = vec![0u8; 48];
+        input[0x14..0x18].copy_from_slice(&5u32.to_le_bytes());
+        let input_at = blob.append(&input, 8);
+        let mut output = vec![0u8; 24];
+        output[..16].copy_from_slice(&CHEST.0);
+        let output_at = blob.append(&output, 8);
+        let name_at = blob.append(b"Chest\0", 1);
+        assert!(blob.set_array(recipe + 0x28, input_at, 1));
+        assert!(blob.set_array(recipe + 0x30, output_at, 1));
+        assert!(blob.set_array(recipe + 0x78, name_at, 5));
+        assert!(blob.set_array(8, recipe, 1));
+
+        let new = NewRecipe {
+            guid: RECIPE,
+            like: CHEST,
+            output: SAFE,
+            output_count: 1,
+            cost: 2,
+        };
+        let built = Blob::new(&add_recipe_to(&LAYOUT, blob.bytes(), &new).unwrap());
+        let (recipes, count) = built.array(8).unwrap();
+        assert_eq!(count, 2);
+        let copy = recipes + 0xa8;
+        assert_eq!(&built.bytes()[copy..copy + 16], &RECIPE.0);
+        assert_eq!(u32_at(built.bytes(), copy + 0x10), RECIPE.id());
+        assert_eq!(u32_at(built.bytes(), copy + 0x5c), RECIPE.id());
+        let (inputs, _) = built.array(copy + 0x28).unwrap();
+        assert_eq!(u32_at(built.bytes(), inputs + 0x14), 10);
+        let (outputs, _) = built.array(copy + 0x30).unwrap();
+        assert_eq!(&built.bytes()[outputs..outputs + 16], &SAFE.0);
+        assert_eq!(u32_at(built.bytes(), outputs + 0x10), SAFE.id());
+        let (name, len) = built.array(copy + 0x78).unwrap();
+        assert_eq!(&built.bytes()[name..name + len as usize], b"Chest");
+        let (inputs, _) = built.array(recipes + 0x28).unwrap();
+        assert_eq!(u32_at(built.bytes(), inputs + 0x14), 5);
+    }
+
+    #[test]
+    fn an_item_without_a_recipe_builds_nothing() {
+        let mut blob = Blob::new(&[0u8; 16]);
+        assert!(blob.set_array(8, 16, 0));
+        let new = NewRecipe {
+            guid: RECIPE,
+            like: CHEST,
+            output: SAFE,
+            output_count: 1,
+            cost: 1,
+        };
+        assert!(add_recipe_to(&LAYOUT, blob.bytes(), &new).is_none());
+    }
+}

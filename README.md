@@ -12,6 +12,7 @@ every mod is a DLL in the `mods/` folder beside it.
 | [Flame altar count](mods/enshwick-flame-altar-count)     | how many altars each Flame level allows, twice vanilla by default  |
 | [Furniture comfort](mods/enshwick-furniture-comfort)     | more comfort from furniture, twice vanilla by default              |
 | [Survivors per altar](mods/enshwick-survivors-per-altar) | a copy of each survivor at every altar, with beds of its own altar |
+| [Safes](mods/enshwick-safes)                             | a craftable chest only the player who placed it can use            |
 
 ## Install
 

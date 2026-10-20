@@ -97,6 +97,10 @@
     "crates/enshwick-macros": {
       "package-name": "enshwick-macros",
       "component": "enshwick-macros"
+    },
+    "mods/enshwick-safes": {
+      "package-name": "enshwick-safes",
+      "component": "enshwick-safes"
     }
   }
 }

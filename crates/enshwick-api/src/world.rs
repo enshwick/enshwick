@@ -24,6 +24,18 @@ use crate::{Host, Load, Off};
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct ComponentType(u32);
 
+impl ComponentType {
+    /// The type's hash, as [`Components`](crate::ecs::Components) takes it.
+    ///
+    /// # Examples
+    ///
+    /// See [`ComponentType`].
+    #[must_use]
+    pub const fn hash(self) -> u32 {
+        self.0
+    }
+}
+
 /// A connected player, as the server sees them.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Player {

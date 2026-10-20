@@ -225,6 +225,8 @@ pub(crate) static API: HostApi = HostApi {
     entity_template,
     player,
     players,
+    serve_resource,
+    add_text,
 };
 
 /// A static slice from a pointer and a count, empty for a null pointer.
@@ -616,6 +618,42 @@ extern "system" fn players(
         }
     }
     put(count, total)
+}
+
+extern "system" fn serve_resource(
+    me: ModHandle,
+    key: *const api_frame::ResourceKey,
+    base: *const api_frame::ResourceKey,
+    patch: api_frame::ResourcePatchFn,
+    user: *mut core::ffi::c_void,
+) -> Status {
+    let Some(loader) = loader() else {
+        return Status::BAD_ARGS;
+    };
+    let Some((index, record)) = loader.record(me) else {
+        return Status::BAD_ARGS;
+    };
+    if record.off.load(Ordering::Acquire) {
+        return Status::FAULTED;
+    }
+    // SAFETY: non-null keys from a mod point at valid keys for the call.
+    let (Some(key), Some(base)) = (unsafe { key.as_ref() }, unsafe { base.as_ref() }) else {
+        return Status::BAD_ARGS;
+    };
+    crate::content::register(index, *key, *base, patch, user)
+}
+
+extern "system" fn add_text(me: ModHandle, id: u32, language: u32, text: Str) -> Status {
+    let (Some(loader), Some(text)) = (loader(), self::text(text)) else {
+        return Status::BAD_ARGS;
+    };
+    match loader.record(me) {
+        Some((_, record)) if !record.off.load(Ordering::Acquire) => {
+            crate::content::add_text(id, language, text)
+        }
+        Some(_) => Status::FAULTED,
+        None => Status::BAD_ARGS,
+    }
 }
 
 /// Mod handles start at 1; 0 is no mod.

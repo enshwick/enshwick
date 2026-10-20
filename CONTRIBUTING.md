@@ -19,6 +19,13 @@ and the ones they cannot, are in this file:
   `<type>(<scope>): <subject>`, and becomes the squashed commit;
 - code follows [code-style.md](CONTRIBUTING.md), unsafe code included.
 
+What a mod needs and another mod could use goes into `enshwick-api`, not into
+the mod: events, world reads, content such as items and recipes, texts. A mod
+keeps only what is its own. The API covers common needs at a high level and
+always leaves the lower levels open (served resources, component reads,
+detours on any function), so no mod is blocked by what the API lacks yet.
+Resources several mods may change compose: their patches run in turn.
+
 Never add game code or data: no decompiled code, no dumps, no binaries. Engine
 facts go in documents as addresses and names, with the game build they were
 found on.

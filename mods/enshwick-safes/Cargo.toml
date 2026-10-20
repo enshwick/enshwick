@@ -1,0 +1,26 @@
+[package]
+name = "enshwick-safes"
+version = "0.1.0"
+description = "The Safe: a craftable chest only the player who placed it can open"
+keywords = ["enshrouded", "mod", "chest", "safe"]
+categories = ["game-development"]
+readme = "README.md"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+arc-swap.workspace = true
+enshwick-api.workspace = true
+serde.workspace = true
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+toml.workspace = true

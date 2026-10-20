@@ -196,6 +196,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "enshwick-safes"
+version = "0.1.0"
+dependencies = [
+ "arc-swap",
+ "enshwick-api",
+ "serde",
+ "toml",
+]
+
+[[package]]
 name = "enshwick-stub"
 version = "0.1.1"
 dependencies = [
