@@ -6,7 +6,7 @@ each comfort category counts, as in vanilla.
 
 ## Settings
 
-`mods/furniture-comfort.toml`, written on first start:
+`mod-configs/furniture-comfort.toml`, written on first start:
 
 ```toml
 multiplier = 2.0

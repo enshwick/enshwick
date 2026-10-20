@@ -15,7 +15,7 @@ Altars that stand apart keep their vanilla zones.
 
 ## Settings
 
-`mods/flame-altar-zones.toml`, written on first start:
+`mod-configs/flame-altar-zones.toml`, written on first start:
 
 ```toml
 clusters = true

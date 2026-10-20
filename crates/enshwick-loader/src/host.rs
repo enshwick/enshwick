@@ -44,6 +44,8 @@ pub(crate) struct Loader {
     pub(crate) reflection: Reflection<'static>,
     /// The `mods` folder.
     pub(crate) mods_dir: PathBuf,
+    /// The `mod-configs` folder.
+    pub(crate) configs_dir: PathBuf,
     /// Loaded mods, in load order; handle `n` is index `n - 1`.
     pub(crate) mods: Vec<ModRecord>,
     /// Every hook chain.
@@ -324,7 +326,11 @@ extern "system" fn settings(me: ModHandle, defaults: Str, out: *mut Str) -> Stat
     let Some((_, record)) = loader.record(me) else {
         return Status::BAD_ARGS;
     };
-    let path = loader.mods_dir.join(format!("{}.toml", record.id));
+    let path = loader.configs_dir.join(format!("{}.toml", record.id));
+    let old = loader.mods_dir.join(format!("{}.toml", record.id));
+    if !path.exists() && old.exists() && std::fs::rename(&old, &path).is_ok() {
+        crate::log::write(Level::INFO, &record.id, "settings moved to mod-configs");
+    }
     let content = std::fs::read_to_string(&path).unwrap_or_else(|_| {
         if std::fs::write(&path, defaults).is_err() {
             crate::log::write(
