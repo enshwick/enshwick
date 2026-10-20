@@ -2010,14 +2010,19 @@ pub type SummonFn = unsafe extern "system" fn(summon: *const Summon, user: *mut 
 
 /// The client's survivor menu merging the statuses of every entity of one
 /// survivor: the survivor, `count` status bytes at `statuses`, valid for the
-/// call, and the pointer given at registration; returns 0x100 or-ed with the
-/// byte to show, or 0 to leave the game's.
+/// call, and the pointer given at registration; returns
+/// [`SURVIVOR_STATUS_SET`] or-ed with the byte to show, or 0 to leave the
+/// game's.
 pub type SurvivorStatusFn = unsafe extern "system" fn(
     survivor: u32,
     statuses: *const u8,
     count: usize,
     user: *mut c_void,
 ) -> u32;
+
+/// The bit of a [`SurvivorStatusFn`] answer that says its low byte is the
+/// status to show.
+pub const SURVIVOR_STATUS_SET: u32 = 0x100;
 
 /// A player about to interact with an entity, as
 /// [`HostApi::interaction_filter`] hands it on: open it, move items in or out
@@ -2118,10 +2123,17 @@ impl SkillCheck {
     pub const OTHER: u32 = 0;
     /// The building fly mode gate, on both sides.
     pub const FLY_MODE: u32 = 1;
+    /// A [`SkillCheckFn`] answer: the game's own.
+    pub const VANILLA: u8 = 0;
+    /// A [`SkillCheckFn`] answer: the skill counts as unlocked.
+    pub const UNLOCKED: u8 = 1;
+    /// A [`SkillCheckFn`] answer: the skill counts as locked.
+    pub const LOCKED: u8 = 2;
 }
 
 /// A skill override: the check and the pointer given at registration;
-/// returns 0 for the game's answer, 1 for unlocked, 2 for locked.
+/// returns [`SkillCheck::VANILLA`], [`SkillCheck::UNLOCKED`] or
+/// [`SkillCheck::LOCKED`].
 pub type SkillCheckFn =
     unsafe extern "system" fn(check: *const SkillCheck, user: *mut c_void) -> u8;
 

@@ -122,15 +122,18 @@ mod tests {
             })
         };
 
-        assert_eq!(ask(AIRBORNE_ARCHITECT, RawCheck::FLY_MODE), 1);
+        assert_eq!(
+            ask(AIRBORNE_ARCHITECT, RawCheck::FLY_MODE),
+            RawCheck::UNLOCKED
+        );
         assert_eq!(
             ask(AIRBORNE_ARCHITECT, RawCheck::OTHER),
-            0,
+            RawCheck::VANILLA,
             "another caller stays vanilla"
         );
         assert_eq!(
             ask(0xa667_75b7, RawCheck::FLY_MODE),
-            0,
+            RawCheck::VANILLA,
             "another node stays vanilla"
         );
 
@@ -138,7 +141,7 @@ mod tests {
         assert_eq!(loader.raise::<events::SettingsChanged>(&()), 1);
         assert_eq!(
             ask(AIRBORNE_ARCHITECT, RawCheck::FLY_MODE),
-            0,
+            RawCheck::VANILLA,
             "the server turned it off"
         );
 
@@ -146,7 +149,7 @@ mod tests {
         assert_eq!(loader.raise::<events::SettingsChanged>(&()), 1);
         assert_eq!(
             ask(AIRBORNE_ARCHITECT, RawCheck::FLY_MODE),
-            1,
+            RawCheck::UNLOCKED,
             "the file's value again"
         );
         assert!(loader.faults().is_empty());

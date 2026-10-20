@@ -127,9 +127,9 @@ where
     let handler = unsafe { &*user.cast::<F>() };
     let answer = crate::host::guard("panic in a skill override", || None, || handler(&call));
     match answer {
-        None => 0,
-        Some(true) => 1,
-        Some(false) => 2,
+        None => RawSkillCheck::VANILLA,
+        Some(true) => RawSkillCheck::UNLOCKED,
+        Some(false) => RawSkillCheck::LOCKED,
     }
 }
 

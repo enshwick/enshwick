@@ -21,6 +21,7 @@ use crate::host::Loader;
 /// `Level` and `PlayerTracking`, each with its change tracking (two stamps,
 /// entity record, type and flags, tracker), then `BalancingRegistry`,
 /// `BasicPlayerInfos`, `AttributeRegistry` and the `LevelUpEvent` writer.
+/// Found on the 1.0 build 1269579, server and client.
 const WORDS: usize = 24;
 const EXPERIENCE: usize = 2;
 const STAMP_A: usize = 3;
@@ -277,8 +278,8 @@ unsafe fn override_skill(node: u32, bits: *const u64, tree: *const u8) -> u8 {
         // SAFETY: the callback lives in the mod's DLL and takes the pointer
         // it registered; the check is valid for the call.
         match unsafe { (r.callback)(&raw const check, user) } {
-            1 => return 1,
-            2 => return 0,
+            SkillCheck::UNLOCKED => return 1,
+            SkillCheck::LOCKED => return 0,
             _ => {}
         }
     }

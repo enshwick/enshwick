@@ -331,7 +331,7 @@ where
         || None,
         || handler(SurvivorId(survivor), statuses),
     );
-    shown.map_or(0, |byte| 0x100 | u32::from(byte))
+    shown.map_or(0, |byte| crate::abi::SURVIVOR_STATUS_SET | u32::from(byte))
 }
 
 type Register<R> = extern "system" fn(crate::abi::ModHandle, R, *mut c_void) -> crate::abi::Status;

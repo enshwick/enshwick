@@ -16,6 +16,7 @@ use crate::ecs::{Components, Engine};
 use crate::host::{Loader, Registered, take};
 
 /// The offer result the game writes when it does not offer an interaction.
+/// Found on the 1.0 build 1269579, server and client.
 const NOT_OFFERED: u8 = 6;
 const RING: usize = 4;
 /// How many steps apart the players are read again.
