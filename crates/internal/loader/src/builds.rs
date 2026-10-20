@@ -173,6 +173,7 @@ pub static BUILDS: &[KnownBuild] = &[
             ("ecs.destroy_request", 0x5f_4b50),
             ("server.save_request", 0x7a_db60),
             ("save.path", 0x96_b590),
+            ("ecs.component_write", 0x64_6840),
         ],
         constants: &[
             ("ecs.context_row", 8),
@@ -334,6 +335,9 @@ pub static BUILDS: &[KnownBuild] = &[
             ("attribute.level", 0x724b_f568),
             ("attribute.experience", 0x8dcd_daf4),
             ("attribute.experience_needed_slot", 2),
+            // The entity world's change tracker, which writes outside a
+            // system mark against.
+            ("ecs.change_tracker", 0xeb_c030),
         ],
     },
     KnownBuild {
@@ -438,6 +442,7 @@ pub static BUILDS: &[KnownBuild] = &[
             ("ecs.destroy_request", 0x95_4250),
             ("server.save_request", 0xe4_38f0),
             ("save.path", 0x102_2160),
+            ("ecs.component_write", 0x9a_5c00),
         ],
         constants: &[
             ("text.pool_language", 0xd8),
@@ -608,6 +613,9 @@ pub static BUILDS: &[KnownBuild] = &[
             ("attribute.level", 0x724b_f568),
             ("attribute.experience", 0x8dcd_daf4),
             ("attribute.experience_needed_slot", 2),
+            // The entity world's change tracker, which writes outside a
+            // system mark against.
+            ("ecs.change_tracker", 0xeb_c030),
         ],
     },
 ];

@@ -246,12 +246,7 @@ impl EventType {
 impl EventType {
     /// The `T` at `offset` of this type, inside its size.
     pub(crate) fn field_at<T: Scalar>(self, offset: u64) -> Option<Field<T>> {
-        let end = offset.checked_add(size_of::<T>() as u64)?;
-        (end <= u64::from(self.size)).then_some(Field {
-            type_hash: self.hash,
-            offset: u32::try_from(offset).ok()?,
-            _value: PhantomData,
-        })
+        Field::within(self.hash, self.size, offset)
     }
 }
 
@@ -272,6 +267,11 @@ pub trait Scalar: sealed::Sealed + Copy + 'static {
     /// The value from the first `size_of::<Self>()` bytes of `bytes`.
     #[doc(hidden)]
     fn from_bytes(bytes: &[u8]) -> Option<Self>;
+
+    /// Writes the value to the first `size_of::<Self>()` bytes of `bytes`;
+    /// false when they are too few.
+    #[doc(hidden)]
+    fn to_bytes(self, bytes: &mut [u8]) -> bool;
 }
 
 macro_rules! scalars {
@@ -281,6 +281,13 @@ macro_rules! scalars {
         impl Scalar for $ty {
             fn from_bytes(bytes: &[u8]) -> Option<Self> {
                 Some(<$ty>::from_le_bytes(bytes.get(..size_of::<$ty>())?.try_into().ok()?))
+            }
+
+            fn to_bytes(self, bytes: &mut [u8]) -> bool {
+                bytes
+                    .get_mut(..size_of::<$ty>())
+                    .map(|out| out.copy_from_slice(&self.to_le_bytes()))
+                    .is_some()
             }
         }
     )*};
@@ -294,6 +301,10 @@ impl Scalar for bool {
     fn from_bytes(bytes: &[u8]) -> Option<Self> {
         bytes.first().map(|&b| b != 0)
     }
+
+    fn to_bytes(self, bytes: &mut [u8]) -> bool {
+        u8::from(self).to_bytes(bytes)
+    }
 }
 
 impl sealed::Sealed for Entity {}
@@ -302,9 +313,14 @@ impl Scalar for Entity {
     fn from_bytes(bytes: &[u8]) -> Option<Self> {
         u32::from_bytes(bytes).map(Entity)
     }
+
+    fn to_bytes(self, bytes: &mut [u8]) -> bool {
+        self.0.to_bytes(bytes)
+    }
 }
 
-/// A field of one event type, resolved by name for the running build.
+/// A field of one reflected type, an event or a component, resolved by name
+/// for the running build.
 ///
 /// # Examples
 ///
@@ -324,8 +340,31 @@ impl<T> Clone for Field<T> {
 
 impl<T> Copy for Field<T> {}
 
+impl<T: Scalar> Field<T> {
+    /// The `T` at `offset` of the type `type_hash` whose values are `size`
+    /// bytes, when it lies inside them.
+    pub(crate) fn within(type_hash: u32, size: u32, offset: u64) -> Option<Self> {
+        let end = offset.checked_add(size_of::<T>() as u64)?;
+        (end <= u64::from(size)).then_some(Self {
+            type_hash,
+            offset: u32::try_from(offset).ok()?,
+            _value: PhantomData,
+        })
+    }
+
+    /// The field's value in `bytes`, a value of its type.
+    pub(crate) fn read(self, bytes: &[u8]) -> Option<T> {
+        T::from_bytes(bytes.get(usize::try_from(self.offset).ok()?..)?)
+    }
+
+    /// The hash of the type the field belongs to.
+    pub(crate) const fn type_hash(self) -> u32 {
+        self.type_hash
+    }
+}
+
 impl<T> Field<T> {
-    /// The field's offset in its event.
+    /// The field's offset in its type.
     ///
     /// # Examples
     ///
@@ -401,7 +440,7 @@ impl<'a> RawGameEvent<'a> {
         if field.type_hash != self.type_hash {
             return None;
         }
-        T::from_bytes(self.bytes.get(usize::try_from(field.offset).ok()?..)?)
+        field.read(self.bytes)
     }
 
     /// The `T` at `offset`, for layouts reflection does not name, such as an
@@ -470,5 +509,18 @@ mod tests {
         assert_eq!(f32::from_bytes(&bytes[4..]), Some(1.0));
         assert_eq!(bool::from_bytes(&bytes[4..]), Some(false));
         assert_eq!(u64::from_bytes(&bytes[1..]), None);
+    }
+
+    #[test]
+    fn scalars_write_little_endian_and_only_inside_the_bytes() {
+        let mut bytes = [0u8; 6];
+        assert!(0x0403_0201u32.to_bytes(&mut bytes));
+        assert!(true.to_bytes(&mut bytes[4..]));
+        assert!(!1u16.to_bytes(&mut bytes[5..]));
+        assert_eq!(bytes, [1, 2, 3, 4, 1, 0]);
+        let field = Field::<i16>::within(9, 6, 4).unwrap();
+        assert!((-2i16).to_bytes(&mut bytes[4..]));
+        assert_eq!(field.read(&bytes), Some(-2));
+        assert!(Field::<u32>::within(9, 6, 4).is_none());
     }
 }

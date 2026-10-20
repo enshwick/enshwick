@@ -1,5 +1,6 @@
 //! The server's world: components, templates, positions and players,
-//! entity queries, labels, chat lines, destroy requests and saves. Most calls
+//! component writes, entity queries, labels, chat lines, destroy requests and
+//! saves. Most calls
 //! belong on the server's game thread, from a game event or a
 //! [`Scheduler`](crate::schedule::Scheduler) task, and each says what it does
 //! elsewhere. On a client the server is the built-in one, while it hosts a
@@ -11,6 +12,7 @@ use core::ffi::c_void;
 
 use crate::abi::{EntityPlace, Header, HostApi, PlayerInfo, Status, Str};
 use crate::ecs::Entity;
+use crate::game_events::{Field, Scalar};
 use crate::{Host, Load, Off};
 
 pub use stats::{Meter, Progress, Vitals};
@@ -41,6 +43,94 @@ impl ComponentType {
         self.0
     }
 }
+
+/// A reflected component type a mod may write, resolved once at init with
+/// [`World::writable_type`]: one the server owns, not a copy the game keeps
+/// for clients.
+///
+/// # Examples
+///
+/// ```
+/// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+///     let world = load.world()?;
+///     let flags = world.writable_type(load, "keen::ecs::CombatFlags")?;
+///     assert_eq!(flags.name(), "keen::ecs::CombatFlags");
+///     Ok(())
+/// }
+/// ```
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct WritableType {
+    ty: ComponentType,
+    size: u32,
+    name: &'static str,
+}
+
+impl WritableType {
+    /// The component type, for reads.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// fn readable(world: &enshwick_loader_api::world::World, flags: enshwick_loader_api::world::WritableType, entity: enshwick_loader_api::ecs::Entity) -> bool {
+    ///     world.component(entity, flags.ty()).is_some()
+    /// }
+    /// ```
+    #[must_use]
+    pub const fn ty(self) -> ComponentType {
+        self.ty
+    }
+
+    /// The reflected size: the bytes [`World::update`] hands out.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+    ///     let flags = load.world()?.writable_type(load, "keen::ecs::CombatFlags")?;
+    ///     enshwick_loader_api::debug!("{} is {} bytes", flags.name(), flags.size());
+    ///     Ok(())
+    /// }
+    /// ```
+    #[must_use]
+    pub const fn size(self) -> u32 {
+        self.size
+    }
+
+    /// The reflected name.
+    ///
+    /// # Examples
+    ///
+    /// See [`WritableType`].
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        self.name
+    }
+
+    /// The field `name` of this type, read and written as a `T` with
+    /// [`World::get`] and [`World::set`].
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] when the field is not reflected on this build, or a `T` at
+    /// its offset would reach past the type's end.
+    ///
+    /// # Examples
+    ///
+    /// See [`World::set`].
+    pub fn field<T: Scalar>(self, load: &Load<'_>, name: &str) -> Result<Field<T>, Off> {
+        let offset = load.field_offset(self.name, name)?;
+        Field::within(self.ty.0, self.size, offset).ok_or_else(|| {
+            Off::new(format!(
+                "field {}.{name}: past the end of the type",
+                self.name
+            ))
+        })
+    }
+}
+
+/// Name prefixes of the components the game derives for clients from the
+/// server's own, overwriting them every step.
+const DERIVED: [&str; 2] = ["keen::ecs::Network", "keen::ecs::Client"];
 
 /// A connected player, as the server sees them.
 ///
@@ -163,10 +253,15 @@ pub enum WorldError {
     /// The loader is too old, or this game build lacks the piece.
     #[error("not available on this loader or game build")]
     Missing,
-    /// The world refused: a player's character, or a save before the world
-    /// has loaded.
+    /// The world refused: a player's character, a save before the world
+    /// has loaded, a write that would kill, or a copy the game keeps for
+    /// clients.
     #[error("refused by the world")]
     Refused,
+    /// The entity is in the world but lacks the component, such as a chest
+    /// asked for its stamina.
+    #[error("the entity lacks the component")]
+    Lacks,
 }
 
 impl WorldError {
@@ -275,6 +370,169 @@ impl World {
         let mut out: *const c_void = core::ptr::null();
         let status = (self.host.api().component)(self.host.handle(), entity.0, ty.0, &raw mut out);
         (status == Status::OK && !out.is_null()).then_some(out)
+    }
+
+    /// The component type named `name` for writes, such as
+    /// `keen::ecs::CombatFlags`: one the server owns. The `Network*` and
+    /// `Client*` copies the game keeps for clients are refused, since the
+    /// game overwrites them from the server's own every step.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] for a copy the game keeps for clients, or a type not
+    /// reflected on this build.
+    ///
+    /// # Examples
+    ///
+    /// See [`WritableType`].
+    pub fn writable_type(&self, load: &Load<'_>, name: &'static str) -> Result<WritableType, Off> {
+        if DERIVED.iter().any(|prefix| name.starts_with(prefix)) {
+            return Err(Off::new(format!(
+                "component type {name}: a copy the game keeps for clients; write the server's own"
+            )));
+        }
+        Ok(WritableType {
+            ty: self.component_type(load, name)?,
+            size: load.type_size(name)?,
+            name,
+        })
+    }
+
+    /// Lets `write` change `entity`'s component of type `ty`, its reflected
+    /// bytes, and marks it changed the game's way, so the game sends it to
+    /// clients and saves it; returns what `write` returns. On the game
+    /// thread only.
+    ///
+    /// # Errors
+    ///
+    /// [`WorldError::Gone`] for an entity not in the world,
+    /// [`WorldError::Lacks`] when it lacks the component,
+    /// [`WorldError::Refused`] for a type the loader will not write,
+    /// [`WorldError::WrongThread`] off the game thread and
+    /// [`WorldError::Missing`] under a loader older than ABI minor 22 or on
+    /// a build without writes.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+    ///     let world = load.world()?;
+    ///     let flags = world.writable_type(load, "keen::ecs::CombatFlags")?;
+    ///     load.add_command("immune", "makes your character immune", move |ctx, _args| {
+    ///         // `immune` is the first byte of `CombatFlags`.
+    ///         match world.update(ctx.player.entity, flags, |bytes| bytes[0] = 1) {
+    ///             Ok(()) => "immune".into(),
+    ///             Err(why) => format!("not immune: {why}").into(),
+    ///         }
+    ///     })
+    /// }
+    /// ```
+    pub fn update<R>(
+        &self,
+        entity: Entity,
+        ty: WritableType,
+        write: impl FnOnce(&mut [u8]) -> R,
+    ) -> Result<R, WorldError> {
+        let data = self.component_mut(entity, ty.ty)?;
+        let len = usize::try_from(ty.size).map_err(|_| WorldError::Missing)?;
+        // SAFETY: the entity's live component of the reflected size, which
+        // the loader handed out for writing, used before the game thread
+        // returns to the game.
+        let bytes = unsafe { core::slice::from_raw_parts_mut(data.cast::<u8>(), len) };
+        Ok(write(bytes))
+    }
+
+    /// The value of `field` in `entity`'s component; `None` when the entity
+    /// lacks it or off the game thread.
+    ///
+    /// # Examples
+    ///
+    /// See [`World::set`].
+    #[must_use]
+    pub fn get<T: Scalar>(&self, entity: Entity, field: Field<T>) -> Option<T> {
+        let data = self.component(entity, ComponentType(field.type_hash()))?;
+        let at = usize::try_from(field.offset()).ok()?;
+        let mut bytes = [0u8; 8];
+        let len = size_of::<T>().min(bytes.len());
+        // SAFETY: the field lies inside the component, as resolution checked,
+        // and the component is live until the game thread moves on.
+        unsafe {
+            core::ptr::copy_nonoverlapping(
+                data.cast::<u8>().wrapping_add(at),
+                bytes.as_mut_ptr(),
+                len,
+            );
+        };
+        T::from_bytes(&bytes[..len])
+    }
+
+    /// Writes `value` to `field` in `entity`'s component, marked changed the
+    /// game's way. On the game thread only.
+    ///
+    /// # Errors
+    ///
+    /// As for [`World::update`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+    ///     let world = load.world()?;
+    ///     let faction = world.writable_type(load, "keen::ecs::Faction")?;
+    ///     let value = faction.field::<u8>(load, "faction")?;
+    ///     load.add_command("befriend", "makes an entity a player ally", move |_ctx, args| {
+    ///         let Some(id) = args.first().and_then(|id| id.parse().ok()) else {
+    ///             return "/befriend <entity>".into();
+    ///         };
+    ///         let entity = enshwick_loader_api::ecs::Entity(id);
+    ///         let before = world.get(entity, value);
+    ///         match world.set(entity, value, 11) {
+    ///             Ok(()) => format!("faction {before:?} -> 11").into(),
+    ///             Err(why) => format!("{why}").into(),
+    ///         }
+    ///     })
+    /// }
+    /// ```
+    pub fn set<T: Scalar>(
+        &self,
+        entity: Entity,
+        field: Field<T>,
+        value: T,
+    ) -> Result<(), WorldError> {
+        let data = self.component_mut(entity, ComponentType(field.type_hash()))?;
+        let at = usize::try_from(field.offset()).map_err(|_| WorldError::Missing)?;
+        let mut bytes = [0u8; 8];
+        let len = size_of::<T>().min(bytes.len());
+        if !value.to_bytes(&mut bytes[..len]) {
+            return Err(WorldError::Missing);
+        }
+        // SAFETY: the field lies inside the component, as resolution checked;
+        // the loader handed the component out for writing.
+        unsafe {
+            core::ptr::copy_nonoverlapping(bytes.as_ptr(), data.cast::<u8>().wrapping_add(at), len);
+        };
+        Ok(())
+    }
+
+    /// The writable data of `entity`'s component of type `ty`, marked
+    /// changed.
+    pub(crate) fn component_mut(
+        &self,
+        entity: Entity,
+        ty: ComponentType,
+    ) -> Result<*mut c_void, WorldError> {
+        if !self.offers(core::mem::offset_of!(HostApi, component_write)) {
+            return Err(WorldError::Missing);
+        }
+        let mut out: *mut c_void = core::ptr::null_mut();
+        let status =
+            (self.host.api().component_write)(self.host.handle(), entity.0, ty.0, &raw mut out);
+        match WorldError::from_status(status, true) {
+            Ok(()) if !out.is_null() => Ok(out),
+            Ok(()) => Err(WorldError::Missing),
+            Err(WorldError::Gone) if self.template(entity).is_some() => Err(WorldError::Lacks),
+            Err(why) => Err(why),
+        }
     }
 
     /// `entity`'s position in metres.
@@ -473,6 +731,109 @@ impl World {
     #[must_use]
     pub fn vitals(&self, entity: Entity) -> Option<Vitals> {
         self.stats?.vitals(self, entity)
+    }
+
+    /// Sets `entity`'s health to `value`, kept between 1 and its maximum, so
+    /// a write never kills; returns the health it now has. The game sends it
+    /// to clients and regenerates from it as from any other value. On the
+    /// game thread only.
+    ///
+    /// # Errors
+    ///
+    /// [`WorldError::Refused`] for an entity already dead: death and revival
+    /// stay the game's; otherwise as for [`World::update`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+    ///     let world = load.world()?;
+    ///     load.add_command("full", "restores your health", move |ctx, _args| {
+    ///         let max = world.vitals(ctx.player.entity).map_or(0, |v| v.health.max);
+    ///         match world.set_health(ctx.player.entity, max) {
+    ///             Ok(health) => format!("{} of {} health", health.current, health.max).into(),
+    ///             Err(why) => format!("{why}").into(),
+    ///         }
+    ///     })
+    /// }
+    /// ```
+    pub fn set_health(&self, entity: Entity, value: i32) -> Result<Meter, WorldError> {
+        self.write_stat(entity, stats::Pool::Health, |_| value)
+    }
+
+    /// Adds `amount` to `entity`'s health, kept between 1 and its maximum: a
+    /// negative amount takes health but never kills. Returns the health it
+    /// now has. On the game thread only.
+    ///
+    /// # Errors
+    ///
+    /// As for [`World::set_health`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_loader_api::game_events::LevelGained;
+    ///
+    /// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+    ///     let world = load.world()?;
+    ///     load.on_game::<LevelGained>(move |gained| {
+    ///         let _healed = world.heal(gained.player, 50);
+    ///     })
+    /// }
+    /// ```
+    pub fn heal(&self, entity: Entity, amount: i32) -> Result<Meter, WorldError> {
+        self.write_stat(entity, stats::Pool::Health, |current| {
+            current.saturating_add(amount)
+        })
+    }
+
+    /// Sets `entity`'s stamina to `value`, kept between 0 and its maximum;
+    /// returns the stamina it now has. On the game thread only.
+    ///
+    /// # Errors
+    ///
+    /// [`WorldError::Lacks`] for an entity without stamina; otherwise as for
+    /// [`World::update`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// fn refresh(world: &enshwick_loader_api::world::World, player: &enshwick_loader_api::world::Player) {
+    ///     let max = world.vitals(player.entity).and_then(|v| v.stamina).map_or(0, |s| s.max);
+    ///     let _refreshed = world.set_stamina(player.entity, max);
+    /// }
+    /// ```
+    pub fn set_stamina(&self, entity: Entity, value: i32) -> Result<Meter, WorldError> {
+        self.write_stat(entity, stats::Pool::Stamina, |_| value)
+    }
+
+    /// Sets `entity`'s mana to `value`, kept between 0 and its maximum;
+    /// returns the mana it now has. On the game thread only.
+    ///
+    /// # Errors
+    ///
+    /// As for [`World::set_stamina`], for mana.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// fn drain(world: &enshwick_loader_api::world::World, player: &enshwick_loader_api::world::Player) {
+    ///     let _drained = world.set_mana(player.entity, 0);
+    /// }
+    /// ```
+    pub fn set_mana(&self, entity: Entity, value: i32) -> Result<Meter, WorldError> {
+        self.write_stat(entity, stats::Pool::Mana, |_| value)
+    }
+
+    fn write_stat(
+        &self,
+        entity: Entity,
+        pool: stats::Pool,
+        change: impl FnOnce(i32) -> i32,
+    ) -> Result<Meter, WorldError> {
+        self.stats
+            .ok_or(WorldError::Missing)?
+            .write(self, entity, pool, change)
     }
 
     /// `entity`'s level and experience; `None` for an entity without them,

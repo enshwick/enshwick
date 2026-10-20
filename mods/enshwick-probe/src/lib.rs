@@ -5,8 +5,8 @@
 //! Off until `enabled = true` in `mod-configs/probe.toml`; read at start.
 //! While on, it counts every game event by type and logs the counts every
 //! minute, logs each typed game event it receives, and runs its checks
-//! once the world has loaded: world key, entity queries, stats, a per-world
-//! store and a save on demand. `/probe` commands run them again, from the
+//! once the world has loaded: world key, entity queries, stats, component
+//! writes, a per-world store and a save on demand. `/probe` commands run them again, from the
 //! admin tools' command file as well.
 
 mod census;

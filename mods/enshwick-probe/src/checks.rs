@@ -14,6 +14,8 @@ use enshwick_loader_api::{Load, Off};
 const SAMPLE: usize = 5;
 /// How long a destroyed entity may take to leave the world.
 const DESTROY_WAIT: Duration = Duration::from_secs(2);
+/// How long a written component may take to reach its replicated copy.
+const REPLICATION_WAIT: Duration = Duration::from_secs(1);
 
 /// What the probe keeps per world: how often it checked it.
 #[derive(Debug, Default, serde::Deserialize, serde::Serialize)]
@@ -30,6 +32,8 @@ pub(crate) struct Checks {
     store: WorldStore<Visits>,
     save_asked: AtomicBool,
     scheduler: Scheduler,
+    /// Whether the world refused the replicated health as a writable type.
+    copies_refused: bool,
 }
 
 fn pass(what: &str) {
@@ -50,6 +54,9 @@ impl Checks {
             world,
             save_asked: AtomicBool::new(false),
             scheduler: load.scheduler()?,
+            copies_refused: world
+                .writable_type(load, "keen::ecs::NetworkHealth")
+                .is_err(),
         })
     }
 
@@ -62,6 +69,7 @@ impl Checks {
         }
         self.queries();
         self.stats();
+        self.writes();
         match self.store.update(|visits| {
             visits.checks += 1;
             visits.checks
@@ -133,6 +141,77 @@ impl Checks {
             },
             None => enshwick_loader_api::info!("SKIP progress: no character in the world"),
         }
+    }
+
+    /// Writes an actor's health one below what it has, checks the read back
+    /// and the replicated copy a moment later, then puts it back.
+    fn writes(&self) {
+        if self.copies_refused {
+            pass("writes: the replicated health is refused as a writable type");
+        } else {
+            fail("writes: the replicated health is writable");
+        }
+        let actor = self
+            .world
+            .entities(self.network_health)
+            .into_iter()
+            .map(|placed| placed.entity)
+            .find(|&entity| {
+                self.world
+                    .vitals(entity)
+                    .is_some_and(|v| v.health.current > 1)
+            });
+        let Some(entity) = actor else {
+            enshwick_loader_api::info!("SKIP writes: no living actor with replicated health");
+            return;
+        };
+        let Some(before) = self.world.vitals(entity).map(|v| v.health) else {
+            return;
+        };
+        let target = before.current - 1;
+        match self.world.set_health(entity, target) {
+            Ok(written) if written.current == target => pass(&format!(
+                "set_health of entity {} to {target}: {written:?}",
+                entity.0
+            )),
+            other => {
+                fail(&format!(
+                    "set_health of entity {} to {target}: {other:?}",
+                    entity.0
+                ));
+                return;
+            }
+        }
+        match self.world.heal(entity, i32::MIN) {
+            Ok(written) if written.current == 1 => {
+                pass("heal by i32::MIN keeps health at 1");
+            }
+            other => fail(&format!("heal by i32::MIN: {other:?}")),
+        }
+        let _back_to_target = self.world.set_health(entity, target);
+        let world = self.world;
+        let network_health = self.network_health;
+        self.scheduler.after(REPLICATION_WAIT, move || {
+            let replicated = world.component(entity, network_health).map(|data| {
+                // SAFETY: NetworkHealth is health then its maximum, two u32,
+                // read at once on the game thread.
+                unsafe { data.cast::<[u32; 2]>().read_unaligned() }
+            });
+            match replicated {
+                Some([health, _]) if health == target.cast_unsigned() => pass(&format!(
+                    "the replicated health of entity {} follows the write: {health}",
+                    entity.0
+                )),
+                other => fail(&format!(
+                    "the replicated health of entity {} after the write: {other:?}, expected {target}",
+                    entity.0
+                )),
+            }
+            match world.set_health(entity, before.current) {
+                Ok(_) => pass(&format!("health of entity {} put back", entity.0)),
+                Err(why) => fail(&format!("health of entity {} not put back: {why}", entity.0)),
+            }
+        });
     }
 
     /// Compares `entity`'s vitals with the health the server replicates.

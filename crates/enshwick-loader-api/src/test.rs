@@ -216,6 +216,7 @@ pub struct FakeHost {
     foreign_commands: HashMap<String, String>,
     placed: Vec<(u32, EntityPlace)>,
     world_key: Option<String>,
+    refused_writes: HashSet<u32>,
 }
 
 impl Default for FakeHost {
@@ -267,6 +268,7 @@ impl FakeHost {
             foreign_commands: HashMap::new(),
             placed: Vec::new(),
             world_key: None,
+            refused_writes: HashSet::new(),
         }
     }
 
@@ -513,6 +515,21 @@ impl FakeHost {
     ) -> Self {
         self.components
             .insert((entity, type_hash), data.expose_provenance());
+        self
+    }
+
+    /// Refuses component writes of type `type_hash`, as the loader refuses
+    /// the copies the game keeps for clients.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick_loader_api::test::FakeHost::new().refuse_write(0x216e_b5f9).install();
+    /// # let _ = loader;
+    /// ```
+    #[must_use]
+    pub fn refuse_write(mut self, type_hash: u32) -> Self {
+        self.refused_writes.insert(type_hash);
         self
     }
 
@@ -1796,6 +1813,20 @@ impl Installed {
     #[must_use]
     pub fn destroyed(&self) -> Vec<u32> {
         table::with(Vec::new(), |s| s.destroyed.clone())
+    }
+
+    /// The components the mod asked to write, `(entity, type hash)`, in
+    /// order; the fake hands out the data [`FakeHost::component`] gave.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick_loader_api::test::FakeHost::new().install();
+    /// assert!(loader.writes().is_empty());
+    /// ```
+    #[must_use]
+    pub fn writes(&self) -> Vec<(u32, u32)> {
+        table::with(Vec::new(), |s| s.writes.clone())
     }
 
     /// How many saves the mod asked for.

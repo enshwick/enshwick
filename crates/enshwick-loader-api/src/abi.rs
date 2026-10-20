@@ -14,7 +14,7 @@ use core::sync::atomic::AtomicUsize;
 pub const ABI_MAJOR: u16 = 1;
 
 /// The minor version of this interface. A newer minor only appends fields.
-pub const ABI_MINOR: u16 = 21;
+pub const ABI_MINOR: u16 = 22;
 
 /// Whether `id` is a valid mod id: 1 to 64 characters of `[a-z0-9-]`.
 ///
@@ -2662,6 +2662,19 @@ pub struct HostApi {
     /// [`Status::MISSING`] before the server has read or written the world.
     /// Any thread. Since minor 21.
     pub world_key: extern "system" fn(me: ModHandle, out: *mut Str) -> Status,
+    /// A writable pointer to `entity`'s component of the reflected type
+    /// `type_hash`, valid until the game thread returns to the game; the
+    /// loader marks the component changed, as the game's own writes do, so
+    /// the game sends it to clients and saves it. [`Status::REFUSED`] for a
+    /// copy the game keeps for clients (`Network*`, `Client*`), which it
+    /// overwrites; [`Status::MISSING`] when the entity lacks the component.
+    /// On the server's game thread only. Since minor 22.
+    pub component_write: extern "system" fn(
+        me: ModHandle,
+        entity: u32,
+        type_hash: u32,
+        out: *mut *mut c_void,
+    ) -> Status,
 }
 
 /// The exports a mod DLL provides, by name.
@@ -2723,7 +2736,7 @@ const _: () = {
     assert!(core::mem::offset_of!(HostApi, hook_at) == 24 + 35 * 8);
     assert!(core::mem::offset_of!(HostApi, inventory_open) == 24 + 36 * 8);
     assert!(core::mem::offset_of!(HostApi, inventory_submit) == 24 + 38 * 8);
-    assert!(size_of::<HostApi>() == 24 + 63 * 8);
+    assert!(size_of::<HostApi>() == 24 + 64 * 8);
     assert!(size_of::<InventoryOp>() == 32);
     assert!(size_of::<InventoryRequest>() == 32);
     assert!(size_of::<InventoryOpResult>() == 8);
@@ -2748,6 +2761,7 @@ const _: () = {
     assert!(core::mem::offset_of!(HostApi, base_zones) == 24 + 57 * 8);
     assert!(core::mem::offset_of!(HostApi, game_event) == 24 + 58 * 8);
     assert!(core::mem::offset_of!(HostApi, world_key) == 24 + 62 * 8);
+    assert!(core::mem::offset_of!(HostApi, component_write) == 24 + 63 * 8);
     assert!(size_of::<GameEventData>() == 24);
     // Frozen: written as an array.
     assert!(size_of::<EntityPlace>() == 32);

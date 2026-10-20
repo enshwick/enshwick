@@ -180,8 +180,9 @@ fn entity_world(layout: &Layout, server: usize) -> Option<usize> {
     (world != 0).then(|| world + layout.entity_world)
 }
 
-/// A component's data pointer, or why not.
-pub(crate) fn component(loader: &Loader, entity: u32, hash: u32) -> Result<*const c_void, Status> {
+/// The server's entity world and the registry's index of the component
+/// type `hash`, when the caller is on the game thread.
+pub(crate) fn type_index(loader: &Loader, hash: u32) -> Result<(usize, *const u16), Status> {
     let layout = layout(loader).ok_or(Status::MISSING)?;
     let world = entity_world(layout, server()?).ok_or(Status::MISSING)?;
     // SAFETY: the entity world starts with its component registry.
@@ -203,6 +204,13 @@ pub(crate) fn component(loader: &Loader, entity: u32, hash: u32) -> Result<*cons
         })
         .find(|index| !index.is_null())
         .ok_or(Status::MISSING)?;
+    Ok((world, index))
+}
+
+/// A component's data pointer, or why not.
+pub(crate) fn component(loader: &Loader, entity: u32, hash: u32) -> Result<*const c_void, Status> {
+    let layout = layout(loader).ok_or(Status::MISSING)?;
+    let (world, index) = type_index(loader, hash)?;
     let mut out = [0usize; 2];
     // SAFETY: as above; `index` points into the registry.
     unsafe {

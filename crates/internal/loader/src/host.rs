@@ -551,6 +551,7 @@ pub(crate) static API: HostApi = HostApi {
     destroy,
     save_world,
     world_key,
+    component_write,
 };
 
 /// A static slice from a pointer and a count, empty for a null pointer.
@@ -1732,6 +1733,21 @@ extern "system" fn world_key(me: ModHandle, out: *mut Str) -> Status {
             crate::saves::world_key(loader).map_or(Status::MISSING, |key| put(out, Str::new(key)))
         }
         Err(status) => status,
+    })
+}
+
+extern "system" fn component_write(
+    me: ModHandle,
+    entity: u32,
+    type_hash: u32,
+    out: *mut *mut core::ffi::c_void,
+) -> Status {
+    entry("component_write", || {
+        match caller(me).and_then(|loader| crate::writes::component_mut(loader, entity, type_hash))
+        {
+            Ok(data) => put(out, data),
+            Err(status) => status,
+        }
     })
 }
 
