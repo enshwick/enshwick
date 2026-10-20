@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/themaiby/enshwick/compare/enshwick-survivors-per-altar-v0.2.0...enshwick-survivors-per-altar-v0.2.1) (2026-10-20)
+
+
+### Bug Fixes
+
+* **survivors-per-altar:** require flame-altar-zones across 0.x ([#93](https://github.com/themaiby/enshwick/issues/93)) ([4a00ead](https://github.com/themaiby/enshwick/commit/4a00eada80d4dc70065fca8dcba6f43f4bb3bb02))
+
 ## [0.2.0](https://github.com/themaiby/enshwick/compare/enshwick-survivors-per-altar-v0.1.6...enshwick-survivors-per-altar-v0.2.0) (2026-10-20)
 
 

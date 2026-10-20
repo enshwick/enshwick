@@ -1,5 +1,7 @@
 # Changelog
 
+## [0.2.1](https://github.com/themaiby/enshwick/compare/enshwick-build-camera-v0.2.0...enshwick-build-camera-v0.2.1) (2026-10-20)
+
 ## [0.2.0](https://github.com/themaiby/enshwick/compare/enshwick-build-camera-v0.1.2...enshwick-build-camera-v0.2.0) (2026-10-20)
 
 

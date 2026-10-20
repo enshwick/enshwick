@@ -1,6 +1,6 @@
 [package]
 name = "enshwick-loader-macros"
-version = "0.3.0"
+version = "0.3.1"
 description = "Internal, not for mods: the macros enshwick-loader-api re-exports"
 keywords = ["enshrouded", "modding", "derive", "hooks"]
 categories = ["game-development"]

@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.1](https://github.com/themaiby/enshwick/compare/enshwick-loader-v0.3.0...enshwick-loader-v0.3.1) (2026-10-20)
+
+
+### Bug Fixes
+
+* **loader:** audit fixes for arming, events and logging ([#91](https://github.com/themaiby/enshwick/issues/91)) ([8dbb83e](https://github.com/themaiby/enshwick/commit/8dbb83e9d5ba67f5806302b19ac794926fa02a16))
+
 ## [0.3.0](https://github.com/themaiby/enshwick/compare/enshwick-loader-v0.2.0...enshwick-loader-v0.3.0) (2026-10-20)
 
 
