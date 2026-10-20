@@ -1,0 +1,269 @@
+//! The engine helpers the altar links use: walking a system's query, the
+//! current row's entity, change marks, attribute reads and zone sizes.
+
+use crate::host::Loader;
+
+type IteratorInit = unsafe extern "system" fn(ctx: *mut u64, iterator: *mut u64, size: u64);
+type IteratorNext = unsafe extern "system" fn(ctx: *mut u64, iterator: *mut u64, size: u64) -> u64;
+type MarkChanged = unsafe extern "system" fn(
+    tracker: u64,
+    stamp_a: u64,
+    stamp_b: u64,
+    entity: u64,
+    type_index: u16,
+    flags: u8,
+);
+type AttributeFind = unsafe extern "system" fn(out: *mut u64, attribute: u32, registry: u64) -> u64;
+type ZoneSize = unsafe extern "system" fn(out: *mut f32, balancing: u64, level: u64) -> u64;
+
+/// The engine functions and layout on the running build.
+#[derive(Debug)]
+pub(super) struct Engine {
+    init: IteratorInit,
+    next: IteratorNext,
+    mark: MarkChanged,
+    find: AttributeFind,
+    zone_size: ZoneSize,
+    context_row: usize,
+    entity_records: usize,
+    entity_record_size: usize,
+    entity_world: usize,
+    level_flags: usize,
+    level_data: usize,
+    attribute_slot: usize,
+    level_attribute: u32,
+}
+
+/// Reads a `T` at `offset` bytes past `base`.
+///
+/// # Safety
+///
+/// A readable `T` lies there.
+unsafe fn read_at<T: Copy>(base: *const u8, offset: usize) -> T {
+    // SAFETY: forwarded from the caller.
+    unsafe { base.wrapping_add(offset).cast::<T>().read_unaligned() }
+}
+
+impl Engine {
+    /// The helpers on this build, if the table has them all.
+    pub(super) fn resolve(loader: &Loader) -> Option<Self> {
+        let function = |name: &str| {
+            loader
+                .build
+                .symbol(name)
+                .and_then(|rva| usize::try_from(loader.base + rva).ok())
+        };
+        let size = |name: &str| {
+            loader
+                .build
+                .constant(name)
+                .and_then(|v| usize::try_from(v).ok())
+        };
+        let (init, next, mark, find, zone_size) = (
+            function("ecs.iterator_init")?,
+            function("ecs.iterator_next")?,
+            function("ecs.mark_changed")?,
+            function("ecs.attribute_find")?,
+            function("balancing.zone_size")?,
+        );
+        Some(Self {
+            // SAFETY: each symbol is the game function with this signature
+            // on this build.
+            init: unsafe { core::mem::transmute::<usize, IteratorInit>(init) },
+            // SAFETY: as above.
+            next: unsafe { core::mem::transmute::<usize, IteratorNext>(next) },
+            // SAFETY: as above.
+            mark: unsafe { core::mem::transmute::<usize, MarkChanged>(mark) },
+            // SAFETY: as above.
+            find: unsafe { core::mem::transmute::<usize, AttributeFind>(find) },
+            // SAFETY: as above.
+            zone_size: unsafe { core::mem::transmute::<usize, ZoneSize>(zone_size) },
+            context_row: size("ecs.context_row")?,
+            entity_records: size("ecs.descriptor_entity_records")?,
+            entity_record_size: size("ecs.entity_record_size")?,
+            entity_world: size("ecs.context_entity_world")?,
+            level_flags: size("ecs.level_flags")?,
+            level_data: size("ecs.level_data_offset")?,
+            attribute_slot: size("ecs.attribute_slot")?,
+            level_attribute: u32::try_from(loader.build.constant("altar.level_attribute")?).ok()?,
+        })
+    }
+
+    /// Walks the system's query from its first row.
+    ///
+    /// # Safety
+    ///
+    /// `ctx` is the live query context of the hooked system and `N` matches
+    /// its iterator.
+    pub(super) unsafe fn query<const N: usize>(&self, ctx: *mut u64) -> Query<'_, N> {
+        let mut words = [0u64; N];
+        // SAFETY: the caller passes a live context and a matching size.
+        unsafe { (self.init)(ctx, words.as_mut_ptr(), (N * 8) as u64) };
+        Query {
+            engine: self,
+            ctx,
+            words,
+        }
+    }
+
+    /// The 1-based row the query is on, 0 before the first.
+    ///
+    /// # Safety
+    ///
+    /// `ctx` is a live query context.
+    pub(super) unsafe fn row(&self, ctx: *mut u64) -> u32 {
+        // SAFETY: the row counter lies inside a live context.
+        unsafe { read_at(ctx.cast(), self.context_row) }
+    }
+
+    /// Moves the query's row counter.
+    ///
+    /// # Safety
+    ///
+    /// `ctx` is a live query context.
+    pub(super) unsafe fn set_row(&self, ctx: *mut u64, row: u32) {
+        // SAFETY: the row counter lies inside a live context.
+        unsafe {
+            ctx.cast::<u8>()
+                .wrapping_add(self.context_row)
+                .cast::<u32>()
+                .write_unaligned(row);
+        }
+    }
+
+    /// The entity of the query's current row, 0 before the first.
+    ///
+    /// # Safety
+    ///
+    /// `ctx` is a live query context.
+    pub(super) unsafe fn entity(&self, ctx: *mut u64) -> u32 {
+        // SAFETY: forwarded from the caller.
+        let row = unsafe { self.row(ctx) };
+        if row == 0 {
+            return 0;
+        }
+        // SAFETY: the first word of a context is its query descriptor.
+        let descriptor: *const u8 = unsafe { read_at(ctx.cast(), 0) };
+        // SAFETY: the descriptor holds a pointer to the per-row entity records.
+        let records: *const u8 = unsafe { read_at(descriptor, self.entity_records) };
+        let offset = (row as usize - 1) * self.entity_record_size;
+        // SAFETY: `row` is a valid 1-based row of this query.
+        unsafe { read_at(records, offset) }
+    }
+
+    /// Whether `ctx` belongs to the entity world `world`, 0 for none.
+    ///
+    /// # Safety
+    ///
+    /// `ctx` is a live system context.
+    pub(super) unsafe fn is_world(&self, ctx: *mut u64, world: u64) -> bool {
+        if world == 0 || ctx.is_null() {
+            return false;
+        }
+        // SAFETY: the first word of a context is its query descriptor.
+        let descriptor: *const u8 = unsafe { read_at(ctx.cast(), 0) };
+        if descriptor.is_null() {
+            return false;
+        }
+        // SAFETY: the descriptor points at its entity world here.
+        let own: u64 = unsafe { read_at(descriptor, self.entity_world) };
+        own == world
+    }
+
+    /// Marks a written component changed, so replication sends it.
+    ///
+    /// # Safety
+    ///
+    /// The words come from the current row of a live query that writes the
+    /// component.
+    pub(super) unsafe fn mark_changed(
+        &self,
+        tracker: u64,
+        stamp_a: u64,
+        stamp_b: u64,
+        entity: u64,
+        kind: u64,
+    ) {
+        if tracker == 0 {
+            return;
+        }
+        #[expect(
+            clippy::cast_possible_truncation,
+            reason = "the engine packs the type and flags"
+        )]
+        let (type_index, flags) = (kind as u16, (kind >> 16) as u8);
+        // SAFETY: forwarded from the caller.
+        unsafe { (self.mark)(tracker, stamp_a, stamp_b, entity, type_index, flags) };
+    }
+
+    /// The level attribute of the `Level` set `set`, looked up in the row's
+    /// attribute `registry`.
+    ///
+    /// # Safety
+    ///
+    /// `set` is a live attribute set and `registry` its row's registry word.
+    pub(super) unsafe fn level(&self, registry: u64, set: *const u8) -> Option<u32> {
+        if set.is_null() {
+            return None;
+        }
+        // SAFETY: the set's flags; bit 0 marks it initialised.
+        let flags: u8 = unsafe { read_at(set, self.level_flags) };
+        if flags & 1 == 0 {
+            return None;
+        }
+        let mut found = [0u64; 2];
+        // SAFETY: the row's attribute registry, inside its system.
+        unsafe { (self.find)(found.as_mut_ptr(), self.level_attribute, registry) };
+        let definition =
+            core::ptr::with_exposed_provenance::<u8>(usize::try_from(found[1]).unwrap_or(0));
+        if found[0] & 0xff != 0 || definition.is_null() {
+            return None;
+        }
+        // SAFETY: a found definition starts with its set id.
+        let definition_set: u32 = unsafe { read_at(definition, 0) };
+        // SAFETY: so does the set.
+        let set_id: u32 = unsafe { read_at(set, 0) };
+        if definition_set != set_id {
+            return None;
+        }
+        // SAFETY: the definition's slot.
+        let slot = usize::from(unsafe { read_at::<u16>(definition, self.attribute_slot) });
+        // SAFETY: the set's data offset.
+        let data = usize::from(unsafe { read_at::<u16>(set, self.level_data) });
+        // SAFETY: the attribute's word inside the set's data.
+        Some(unsafe { read_at(set, data + slot * 4) })
+    }
+
+    /// The full zone size of an altar at `level`, `None` when the balancing
+    /// data has none.
+    ///
+    /// # Safety
+    ///
+    /// `balancing` is the balancing registry word of a live row.
+    pub(super) unsafe fn zone_size(&self, balancing: u64, level: usize) -> Option<[f32; 3]> {
+        let mut out = [0f32; 4];
+        // SAFETY: the row's balancing registry; `out` has room for the three
+        // floats and the valid byte.
+        unsafe { (self.zone_size)(out.as_mut_ptr(), balancing, level as u64) };
+        // SAFETY: the valid byte at 0xc of `out`.
+        let valid = unsafe { read_at::<u8>(out.as_ptr().cast(), 0xc) } != 0;
+        valid.then_some([out[0], out[1], out[2]])
+    }
+}
+
+/// A walk over a system's query; each row's iterator words.
+#[derive(Debug)]
+pub(super) struct Query<'e, const N: usize> {
+    engine: &'e Engine,
+    ctx: *mut u64,
+    words: [u64; N],
+}
+
+impl<const N: usize> Query<'_, N> {
+    /// Moves to the next row and returns its words, or `None` at the end.
+    pub(super) fn next(&mut self) -> Option<&[u64; N]> {
+        // SAFETY: the query was created from a live context and a matching size.
+        let more = unsafe { (self.engine.next)(self.ctx, self.words.as_mut_ptr(), (N * 8) as u64) };
+        (more & 0xff != 0).then_some(&self.words)
+    }
+}

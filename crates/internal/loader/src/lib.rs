@@ -7,6 +7,8 @@
 //! the game for a world vanilla cannot open.
 
 pub mod advertise;
+#[cfg(windows)]
+mod altars;
 pub mod builds;
 pub mod chains;
 #[cfg(windows)]

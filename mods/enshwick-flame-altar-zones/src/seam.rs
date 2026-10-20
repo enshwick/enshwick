@@ -2,121 +2,32 @@
 //!
 //! Vanilla accepts an object only when both corners of its box lie in one zone.
 //! Inside a cluster that is too strict: an object may sit across two members'
-//! zones. The hook accepts a box that the union of the zones covers whole.
+//! zones. The check accepts a box that the union of the zones covers whole.
 //! Zones that together cover a connected box overlap or touch, and the engine
 //! groups touching zones into one base, so a covered box always lies in a
 //! single base.
 //!
-//! Coordinates are the engine's 32.32 fixed point. A zone is half-open,
-//! `min - margin <= p < max + margin`, like the engine's point test; the
-//! object's box is closed, its corners included, like vanilla's two-corner
-//! test. The check runs while a player aims a piece, so it never allocates.
-
-use std::sync::OnceLock;
+//! A zone is half-open, `min - margin <= p < max + margin`, like the engine's
+//! point test; the object's box is closed, its corners included, like
+//! vanilla's two-corner test. The check runs while a player aims a piece, so
+//! it never allocates.
 
 use arrayvec::ArrayVec;
-use enshwick_loader_api::ecs::FIXED_PER_METRE;
-use enshwick_loader_api::raw::read_at;
-use enshwick_loader_api::{Load, Next, Off};
+use enshwick_loader_api::altars::ZoneCheck;
 
 /// The engine keeps at most 255 zones.
 const MAX_ZONES: usize = 256;
 
 type Zone = ([i64; 3], [i64; 3]);
 
-/// Where the engine keeps the zone list and an object's corners.
-#[derive(Debug)]
-struct Layout {
-    entries: usize,
-    count: usize,
-    entry_size: usize,
-    entry_shape: usize,
-    entry_ignored: usize,
-    corner_size: usize,
-}
-
-static LAYOUT: OnceLock<Layout> = OnceLock::new();
-
-enshwick_loader_api::detour! {
-    static SEAM: unsafe extern "system" fn(zones: *const u8, corners: *const i64, margin: f32) -> u8 = seam;
-}
-
-/// Links the seam check.
-pub(crate) fn link(load: &mut Load<'_>) -> Result<(), Off> {
-    let size = |name| {
-        load.constant(name)
-            .map(|v| usize::try_from(v).unwrap_or(usize::MAX))
-    };
-    let _first = LAYOUT.set(Layout {
-        entries: size("building.zone_list_entries")?,
-        count: size("building.zone_list_count")?,
-        entry_size: size("building.zone_entry_size")?,
-        entry_shape: size("building.zone_entry_shape")?,
-        entry_ignored: size("building.zone_entry_ignored")?,
-        corner_size: size("building.corner_size")?,
-    });
-    load.hook(&SEAM, load.symbol("building.seam_check")?)
-}
-
-fn seam(
-    next: Next<unsafe extern "system" fn(*const u8, *const i64, f32) -> u8>,
-    zones: *const u8,
-    corners: *const i64,
-    margin: f32,
-) -> u8 {
-    // SAFETY: the rest of the chain takes the arguments the game passed.
-    let vanilla = unsafe { next.get()(zones, corners, margin) };
-    if vanilla != 0 {
-        return vanilla;
-    }
-    let Some(layout) = LAYOUT.get() else {
-        return vanilla;
-    };
-    // SAFETY: the game passes its zone list and an object's two corners.
-    u8::from(unsafe { across(layout, zones, corners, margin) })
-}
-
-/// # Safety
-///
-/// `list` is the engine's zone list and `corners` two corner points.
-#[expect(clippy::cast_possible_truncation, reason = "margins are a few metres")]
-unsafe fn across(layout: &Layout, list: *const u8, corners: *const i64, margin: f32) -> bool {
-    // SAFETY: the list holds its entries pointer and count at these offsets.
-    let entries: *const u8 = unsafe { read_at(list, layout.entries) };
-    // SAFETY: as above.
-    let count: usize = unsafe { read_at(list, layout.count) };
-    if entries.is_null() || count > MAX_ZONES {
-        return false;
-    }
+/// Whether the union of the check's zones covers the object.
+#[must_use]
+pub(crate) fn accepts(check: &ZoneCheck<'_>) -> bool {
     let mut zones: ArrayVec<Zone, MAX_ZONES> = ArrayVec::new();
-    for i in 0..count {
-        let entry = entries.wrapping_add(i * layout.entry_size);
-        // SAFETY: `i < count` entries of `entry_size` bytes.
-        let ignored: u8 = unsafe { read_at(entry, layout.entry_ignored) };
-        // SAFETY: as above.
-        let shape: u8 = unsafe { read_at(entry, layout.entry_shape) };
-        if ignored != 0 || shape != 0 {
-            continue;
-        }
-        // SAFETY: an entry starts with min and max as six i64.
-        let bounds: [i64; 6] = unsafe { read_at(entry, 0) };
-        zones.push((
-            [bounds[0], bounds[1], bounds[2]],
-            [bounds[3], bounds[4], bounds[5]],
-        ));
+    for zone in check.zones.iter().take(MAX_ZONES) {
+        zones.push((zone.min, zone.max));
     }
-    // SAFETY: the game passes two corners of three i64 each.
-    let low: [i64; 3] = unsafe { read_at(corners.cast(), 0) };
-    // SAFETY: as above.
-    let high: [i64; 3] = unsafe { read_at(corners.cast(), layout.corner_size) };
-    let low_corner = [0, 1, 2].map(|a| low[a].min(high[a]));
-    let high_corner = [0, 1, 2].map(|a| low[a].max(high[a]));
-    covered(
-        low_corner,
-        high_corner,
-        &zones,
-        (f64::from(margin) * FIXED_PER_METRE) as i64,
-    )
+    covered(check.object.min, check.object.max, &zones, check.margin)
 }
 
 /// Whether the closed box `[low, high]` lies within the union of the half-open

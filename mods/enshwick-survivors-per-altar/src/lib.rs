@@ -11,10 +11,6 @@ mod copies;
 mod cursor;
 mod server;
 mod staffs;
-// The zones service's contract, the very file `flame-altar-zones` publishes
-// it from, so both sides declare one table.
-#[path = "../../enshwick-flame-altar-zones/src/service.rs"]
-pub mod zones_service;
 
 use enshwick_loader_api::abi::Side;
 use enshwick_loader_api::{Load, Mod, Off};
@@ -76,7 +72,6 @@ impl Mod for SurvivorsPerAltar {
             id: "survivors-per-altar",
             side: BOTH,
             join = true,
-            requires: ["flame-altar-zones" => ">=0.1, <1.0"],
             updates: github("themaiby/enshwick", "enshwick-survivors-per-altar"),
             signed_by: ["RWTjqgtfpy3lSOLC4uaUXuvvKSLQKOFf6nUnEytoiFjSzxMEhLnoAdJF"],
             builds: [
@@ -259,9 +254,6 @@ fn copy_staffs(load: &mut Load<'_>, settings: &Settings) -> Result<(), Off> {
 }
 
 enshwick_loader_api::declare_mod!(SurvivorsPerAltar);
-
-#[cfg(test)]
-mod requires;
 
 #[cfg(test)]
 mod tests {

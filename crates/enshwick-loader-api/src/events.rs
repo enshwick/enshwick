@@ -102,6 +102,8 @@ without_data! {
     Shutdown = SHUTDOWN;
     /// [`Event::JOIN_MISSING`]; [`crate::mods::join_missing`] lists the mods.
     JoinMissing = JOIN_MISSING;
+    /// [`Event::ALTARS_CHANGED`]; [`crate::altars::Altars::list`] lists them.
+    AltarsChanged = ALTARS_CHANGED;
 }
 
 // Each event names its data and the size that data had in the minor that

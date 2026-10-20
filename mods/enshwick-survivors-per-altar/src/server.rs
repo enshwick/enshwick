@@ -33,12 +33,12 @@ use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 use enshwick_loader_api::abi::{CallerFrame, Side};
+use enshwick_loader_api::altars::Altars;
 use enshwick_loader_api::ecs::{Ecs, Entity};
 use enshwick_loader_api::events::Shutdown;
 use enshwick_loader_api::{Load, Next, Off};
 
 use crate::copies::{Copies, Verdict, Zone};
-use crate::zones_service::{self as service, AltarZone, ZonesService};
 
 type ComponentRead =
     unsafe extern "system" fn(ctx: *mut u64, kind: *const u16, entity: u32) -> *const u8;
@@ -47,7 +47,6 @@ const REFRESH: Duration = Duration::from_secs(2);
 const FORGET_AFTER: Duration = Duration::from_secs(3);
 const MOVE_WINDOW: Duration = Duration::from_secs(2);
 const TYPE_SEARCH: u16 = 4096;
-const MAX_ZONES: usize = 256;
 
 /// Where the lookup returns to, per caller.
 #[derive(Debug)]
@@ -95,7 +94,7 @@ struct Engine {
     component_read: ComponentRead,
     callers: Callers,
     offsets: Offsets,
-    zones: &'static ZonesService,
+    altars: Altars,
 }
 
 static ENGINE: OnceLock<Engine> = OnceLock::new();
@@ -165,6 +164,7 @@ pub(crate) unsafe fn function<F: Copy>(address: u64) -> F {
 
 /// Links every server hook.
 pub(crate) fn link(load: &mut Load<'_>, staffs: bool) -> Result<(), Off> {
+    let altars = load.altars()?;
     let client = load.host().build().side == Side::CLIENT;
     let symbol = |name| load.symbol(name);
     let constant = |name| load.constant(name);
@@ -218,8 +218,6 @@ pub(crate) fn link(load: &mut Load<'_>, staffs: bool) -> Result<(), Off> {
         spawn_ammo_item: size("survivors.spawn_ammo_item")?,
         spawn_consume: size("survivors.spawn_consume")?,
     };
-    // SAFETY: `ZonesService` is the table `flame-altar-zones` publishes.
-    let zones: &'static ZonesService = unsafe { load.service(service::NAME, service::VERSION)? };
     let component_read = symbol("ecs.component_read")?;
     let engine = Engine {
         ecs: Ecs::resolve(load)?,
@@ -227,7 +225,7 @@ pub(crate) fn link(load: &mut Load<'_>, staffs: bool) -> Result<(), Off> {
         component_read: unsafe { function(component_read) },
         callers,
         offsets,
-        zones,
+        altars,
     };
     if let Ok(mut shared) = SHARED.lock() {
         *shared = Some(Shared::default());
@@ -560,14 +558,21 @@ fn refresh(engine: &Engine, shared: &mut Shared) {
         return;
     }
     shared.refreshed = Some(Instant::now());
-    let mut buffer = [AltarZone::default(); MAX_ZONES];
-    let count = (engine.zones.zones)(buffer.as_mut_ptr(), MAX_ZONES).min(MAX_ZONES);
-    if count > 0 {
-        shared.copies.set_altars(
-            buffer[..count]
-                .iter()
-                .map(|z| (u64::from(z.altar), Zone::new(z.min, z.max))),
-        );
+    let altars = engine.altars.list();
+    if !altars.is_empty() {
+        shared
+            .copies
+            .set_altars(
+                altars
+                    .iter()
+                    .filter(|altar| !altar.zone.is_empty())
+                    .map(|altar| {
+                        (
+                            u64::from(altar.entity.0),
+                            Zone::new(altar.zone.min, altar.zone.max),
+                        )
+                    }),
+            );
     }
     let gone: Vec<u32> = shared
         .seen
@@ -586,16 +591,12 @@ fn refresh(engine: &Engine, shared: &mut Shared) {
 /// # Safety
 ///
 /// Non-null pointers are the copy's saved state and transform.
-#[expect(
-    clippy::cast_possible_truncation,
-    reason = "world coordinates fit in i64 cells"
-)]
 unsafe fn home(saved: *const u8, transform: *const u8) -> [i64; 3] {
     if !saved.is_null() {
         // SAFETY: the saved state starts with the spawn position in metres.
         let spawn: [f32; 3] = unsafe { saved.cast::<[f32; 3]>().read_unaligned() };
         if spawn.iter().any(|&v| v.to_bits() != 0) {
-            return spawn.map(|m| (f64::from(m) * 2.0).floor() as i64);
+            return enshwick_loader_api::altars::cell_of_metres(spawn.map(f64::from));
         }
     }
     if transform.is_null() {
@@ -607,7 +608,7 @@ unsafe fn home(saved: *const u8, transform: *const u8) -> [i64; 3] {
 
 /// 32.32 fixed-point metres to whole 0.5 m cells.
 fn cells_fixed(position: [i64; 3]) -> [i64; 3] {
-    position.map(|v| v >> 31)
+    enshwick_loader_api::altars::cell_of_fixed(position)
 }
 
 /// Keeps the survivor record on the original: skips the update right after the

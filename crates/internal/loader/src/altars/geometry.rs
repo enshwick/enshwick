@@ -1,4 +1,4 @@
-//! Between the engine's altars and the cluster geometry.
+//! How the engine builds an altar's zone.
 //!
 //! The engine builds an altar's zone from its trigger shape: the centre is the
 //! altar's position plus a quarter metre along its local X and Z, and the box is
@@ -9,9 +9,9 @@
 //!
 //! The geometry works in whole 0.5 m cells. Growing the bound by `d` on X and Z
 //! alike takes `d / (|c| + |s|)` more on both `rx` and `rz`, which is how a
-//! cluster's growth turns back into a range the engine can use.
+//! mod's growth turns back into a range the engine can use.
 
-use crate::geometry::Box3;
+use enshwick_loader_api::abi::Bounds;
 
 const CELLS_PER_METRE: f64 = 2.0;
 /// How far an orientation may stray from a pure turn about the vertical.
@@ -84,13 +84,16 @@ pub(crate) fn bound(range: [f32; 3], (cos, sin): (f64, f64)) -> [f64; 3] {
     clippy::cast_possible_truncation,
     reason = "world coordinates fit in i64 cells"
 )]
-pub(crate) fn cells(centre: [f64; 3], range: [f32; 3], turn: (f64, f64)) -> Box3 {
+pub(crate) fn cells(centre: [f64; 3], range: [f32; 3], turn: (f64, f64)) -> Bounds {
     let half = bound(range, turn);
     let edge = |axis: usize, sign: f64| (centre[axis] + sign * half[axis]) * CELLS_PER_METRE;
     // A hair of slack keeps exact grid values from rounding outwards.
     let min = |axis| (edge(axis, -1.0) + 1e-6).floor() as i64;
     let max = |axis| (edge(axis, 1.0) - 1e-6).ceil() as i64;
-    Box3::new([min(0), min(1), min(2)], [max(0), max(1), max(2)])
+    Bounds {
+        min: [min(0), min(1), min(2)],
+        max: [max(0), max(1), max(2)],
+    }
 }
 
 /// The range that grows the bound of `range` by `growth` cells on X and Z and
@@ -157,13 +160,25 @@ mod tests {
     #[test]
     fn a_level_1_zone_is_80_cells_wide() {
         let zone = cells([3637.0, 860.5, 1340.0], [20.0, 20.0, 20.0], (1.0, 0.0));
-        assert_eq!(zone, Box3::new([7234, 1681, 2640], [7314, 1761, 2720]));
+        assert_eq!(
+            zone,
+            Bounds {
+                min: [7234, 1681, 2640],
+                max: [7314, 1761, 2720]
+            }
+        );
     }
 
     #[test]
     fn a_quarter_turn_swaps_the_axes() {
         let zone = cells([0.0, 0.0, 0.0], [10.0, 5.0, 20.0], (0.0, 1.0));
-        assert_eq!(zone, Box3::new([-40, -10, -20], [40, 10, 20]));
+        assert_eq!(
+            zone,
+            Bounds {
+                min: [-40, -10, -20],
+                max: [40, 10, 20]
+            }
+        );
     }
 
     #[test]

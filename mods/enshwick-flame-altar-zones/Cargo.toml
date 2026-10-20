@@ -15,13 +15,13 @@ publish.workspace = true
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-arc-swap.workspace = true
 arrayvec.workspace = true
 enshwick-loader-api.workspace = true
 serde.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
+enshwick-loader-api = { workspace = true, features = ["test"] }
 proptest.workspace = true
 toml.workspace = true
 

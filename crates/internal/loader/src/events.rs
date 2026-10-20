@@ -318,6 +318,7 @@ unsafe fn after_step(loader: &'static Loader, offsets: &Offsets, server: *mut u8
         loader.emit(event, None, (&raw const *data).cast());
     }
     crate::inventory::deliver();
+    crate::altars::after_step(loader);
     let step = STEPS.fetch_add(1, Ordering::Relaxed) + 1;
     let tick = TickData {
         header: Header::of::<TickData>(),
@@ -361,6 +362,7 @@ fn end_session() {
         .unwrap_or_else(PoisonError::into_inner)
         .stop();
     crate::world::release();
+    crate::altars::forget();
     forget_joined();
     BUILDING
         .lock()
