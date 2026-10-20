@@ -73,8 +73,9 @@ The loader answers `/enshwick` itself:
 | `/enshwick` | the loader version and every mod with its version, `(off)` for mods turned off |
 | `/enshwick help` | every command of a running mod, with its mod id and help line |
 | `/enshwick status` | administrators only: a short [status summary](logging.md#status-summary), and a fresh `status.log` |
+| `/config <mod> [key] [value]` | administrators only: read and change a mod's settings; see [The schema and `/config`](settings.md#the-schema-and-config) |
 
-A `/` command no one has gets `Unknown command /name. /enshwick help lists
+No mod may register `enshwick` or `config`. A `/` command no one has gets `Unknown command /name. /enshwick help lists
 the commands.`
 
 ## Running a command line

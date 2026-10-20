@@ -212,6 +212,18 @@ impl Host {
         Ok(text.to_owned())
     }
 
+    /// Hands the loader this mod's settings schema; nothing under a loader
+    /// older than ABI minor 35.
+    pub(crate) fn config_schema(&self, schema: &str) {
+        let end = core::mem::offset_of!(HostApi, config_schema) + size_of::<usize>();
+        if self.api.header.covers(end) {
+            let status = (self.api.config_schema)(self.me, Str::new(schema));
+            if !status.is_ok() {
+                crate::warn!("the loader refused the settings schema ({})", status.0);
+            }
+        }
+    }
+
     /// Reports this mod's join values, `synced`, and returns the server's to
     /// run with over them; `None` when there are none or under a loader older
     /// than ABI minor 6.

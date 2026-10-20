@@ -50,6 +50,8 @@ pub(crate) struct ModRecord {
     pub(crate) server_synced: Mutex<Option<String>>,
     /// The text `sync` last handed to the mod, alive until its next call.
     pub(crate) sync_out: Mutex<String>,
+    /// The settings schema the mod handed the loader.
+    pub(crate) schema: Mutex<Option<enshwick_loader_api::config::Schema>>,
 }
 
 impl ModRecord {
@@ -580,6 +582,7 @@ pub(crate) static API: HostApi = HostApi {
     set_weather,
     terrain_materials,
     terrain_edit,
+    config_schema,
 };
 
 /// A static slice from a pointer and a count, empty for a null pointer.
@@ -1351,6 +1354,25 @@ unsafe fn list<T: Copy>(
         }
     }
     put(count, u32::try_from(infos.len()).unwrap_or(u32::MAX))
+}
+
+extern "system" fn config_schema(me: ModHandle, schema: Str) -> Status {
+    entry("config_schema", || {
+        let (Some(loader), Some(schema)) = (loader(), text(schema)) else {
+            return Status::BAD_ARGS;
+        };
+        let Some((_, record)) = loader.record(me) else {
+            return Status::BAD_ARGS;
+        };
+        let Ok(schema) = enshwick_loader_api::config::Schema::parse(schema) else {
+            return Status::BAD_ARGS;
+        };
+        let Ok(mut slot) = record.schema.lock() else {
+            return Status::REFUSED;
+        };
+        *slot = Some(schema);
+        Status::OK
+    })
 }
 
 extern "system" fn sync(me: ModHandle, synced: Str, out: *mut Str) -> Status {

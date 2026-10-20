@@ -2,7 +2,9 @@
 //! which re-exports them.
 
 use proc_macro::TokenStream;
+use proc_macro2::Span;
 use quote::quote;
+use syn::spanned::Spanned as _;
 use syn::{
     Attribute, Data, DeriveInput, Expr, Fields, FnArg, GenericArgument, Ident, ItemFn, Lit, Meta,
     Pat, PathArguments, Type, parse_macro_input,
@@ -12,67 +14,156 @@ use syn::{
 ///
 /// The settings file a player sees on first start is generated from the type:
 /// the struct's doc comment heads the file, each field's doc comment precedes
-/// its key, and each value comes from `Default`. `#[config(validate = path)]`
-/// names a `fn(&Self) -> Result<(), String>` that checks parsed values.
+/// its key, and each value comes from `Default`. Struct attributes:
+/// `#[config(validate = path)]` names a `fn(&Self) -> Result<(), String>`
+/// that checks parsed values, `#[config(text = "key")]` the text key of the
+/// set's translated title.
 ///
-/// `#[config(sync)]` on a field marks a join value, one the server and its
-/// players must agree on: the derive implements `synced` and `merge_synced`
-/// over the marked fields, and a joined client runs with the server's values.
+/// Field attributes: one stage of `startup`, `runtime` (the default),
+/// `client` and `sync`; `range = a..=b`, `a..` or `..=b`; `choices = [..]`;
+/// `text = "key"`, the text key of the field's translated label. The derive
+/// implements `schema`, `values`, `merge_values` and a `validate` that checks
+/// ranges and choices before the struct's own check.
 #[proc_macro_derive(Config, attributes(config))]
 pub fn derive_config(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
-    let name = &input.ident;
-    let mut validate: Option<syn::Path> = None;
-    for attr in input.attrs.iter().filter(|a| a.path().is_ident("config")) {
-        let parsed = attr.parse_nested_meta(|meta| {
+    expand_config(&input).unwrap_or_else(|e| e.to_compile_error().into())
+}
+
+/// What a field's `#[config(...)]` says.
+#[derive(Default)]
+struct FieldConfig {
+    stage: Option<Ident>,
+    min: Option<Expr>,
+    max: Option<Expr>,
+    choices: Option<syn::ExprArray>,
+    text: Option<syn::LitStr>,
+}
+
+/// The stages a field may name, as `enshwick_loader_api::config::Stage` variants.
+const STAGES: [(&str, &str); 4] = [
+    ("startup", "Startup"),
+    ("runtime", "Runtime"),
+    ("client", "Client"),
+    ("sync", "Sync"),
+];
+
+fn field_config(attrs: &[Attribute]) -> syn::Result<FieldConfig> {
+    let mut config = FieldConfig::default();
+    for attr in attrs.iter().filter(|a| a.path().is_ident("config")) {
+        attr.parse_nested_meta(|meta| {
+            if let Some((_, variant)) = STAGES.iter().find(|(name, _)| meta.path.is_ident(name)) {
+                if config.stage.is_some() {
+                    return Err(meta.error("a field has one stage"));
+                }
+                config.stage = Some(Ident::new(variant, meta.path.span()));
+                Ok(())
+            } else if meta.path.is_ident("range") {
+                let range: syn::ExprRange = meta.value()?.parse()?;
+                if matches!(range.limits, syn::RangeLimits::HalfOpen(_)) && range.end.is_some() {
+                    return Err(meta.error("a range includes its end: write `a..=b`"));
+                }
+                config.min = range.start.map(|e| *e);
+                config.max = range.end.map(|e| *e);
+                Ok(())
+            } else if meta.path.is_ident("choices") {
+                config.choices = Some(meta.value()?.parse()?);
+                Ok(())
+            } else if meta.path.is_ident("text") {
+                config.text = Some(meta.value()?.parse()?);
+                Ok(())
+            } else {
+                Err(meta.error(
+                    "expected `startup`, `runtime`, `client`, `sync`, `range = a..=b`, `choices = [..]` or `text = \"key\"`",
+                ))
+            }
+        })?;
+    }
+    Ok(config)
+}
+
+/// The struct's `validate` path and the text key of its title.
+fn struct_config(attrs: &[Attribute]) -> syn::Result<(Option<syn::Path>, String)> {
+    let mut validate = None;
+    let mut title = String::from("config");
+    for attr in attrs.iter().filter(|a| a.path().is_ident("config")) {
+        attr.parse_nested_meta(|meta| {
             if meta.path.is_ident("validate") {
                 validate = Some(meta.value()?.parse()?);
                 Ok(())
+            } else if meta.path.is_ident("text") {
+                title = meta.value()?.parse::<syn::LitStr>()?.value();
+                Ok(())
             } else {
-                Err(meta.error("expected `validate = path`"))
+                Err(meta.error("expected `validate = path` or `text = \"key\"`"))
             }
-        });
-        if let Err(e) = parsed {
-            return e.to_compile_error().into();
-        }
+        })?;
     }
-    let validate = validate.map(|path| {
-        quote! {
-            fn validate(&self) -> ::core::result::Result<(), ::std::string::String> {
-                #path(self)
-            }
-        }
-    });
+    Ok((validate, title))
+}
+
+fn expand_config(input: &DeriveInput) -> syn::Result<TokenStream> {
+    let name = &input.ident;
+    let (validate, title) = struct_config(&input.attrs)?;
+    let own_check = validate.map(|path| quote!(#path(self)?;));
     let Data::Struct(data) = &input.data else {
-        return syn::Error::new_spanned(name, "Config is derived for structs only")
-            .to_compile_error()
-            .into();
+        return Err(syn::Error::new_spanned(
+            name,
+            "Config is derived for structs only",
+        ));
     };
     let Fields::Named(fields) = &data.fields else {
-        return syn::Error::new_spanned(name, "Config needs named fields")
-            .to_compile_error()
-            .into();
+        return Err(syn::Error::new_spanned(name, "Config needs named fields"));
     };
-    let mut synced = Vec::new();
+    let mut entries = Vec::new();
+    let mut described = Vec::new();
+    let mut staged: Vec<(Ident, &syn::Field)> = Vec::new();
     for field in &fields.named {
-        match is_synced(&field.attrs) {
-            Ok(true) => synced.push(field),
-            Ok(false) => {}
-            Err(e) => return e.to_compile_error().into(),
-        }
-    }
-    let sync = sync_methods(&synced);
-    let header = comment(&input.attrs);
-    let entries = fields.named.iter().filter_map(|field| {
-        let ident = field.ident.as_ref()?;
+        let Some(ident) = field.ident.as_ref() else {
+            continue;
+        };
+        let config = field_config(&field.attrs)?;
+        let stage = config
+            .stage
+            .unwrap_or_else(|| Ident::new("Runtime", Span::call_site()));
         let key = ident.to_string();
         let doc = comment(&field.attrs);
-        Some(quote! {
+        let note = if stage == "Startup" {
+            "# Takes effect at the next start.\n"
+        } else {
+            ""
+        };
+        entries.push(quote! {
             text.push_str(#doc);
+            text.push_str(#note);
             text.push_str(&::enshwick_loader_api::config::__entry(#key, &defaults.#ident));
-        })
-    });
-    quote! {
+        });
+        let bound = |e: &Option<Expr>| {
+            e.as_ref().map_or_else(
+                || quote!(::core::option::Option::None),
+                |e| quote!(::core::option::Option::Some((#e) as f64)),
+            )
+        };
+        let (min, max) = (bound(&config.min), bound(&config.max));
+        let choices = config.choices.map(|c| quote!(.with_choices(&#c)));
+        let plain = doc_text(&field.attrs);
+        let text = config.text.map(|t| t.value()).unwrap_or_default();
+        described.push(quote! {
+            ::enshwick_loader_api::config::Field::new(
+                #key,
+                ::enshwick_loader_api::config::Stage::#stage,
+                &defaults.#ident,
+            )
+            .with_range(#min, #max)
+            #choices
+            .with_doc(#plain, #text)
+        });
+        staged.push((stage, field));
+    }
+    let header = comment(&input.attrs);
+    let header_text = doc_text(&input.attrs);
+    let values = stage_methods(&staged);
+    Ok(quote! {
         impl ::enshwick_loader_api::config::Config for #name {
             fn template() -> ::std::string::String {
                 let defaults = <Self as ::core::default::Default>::default();
@@ -84,12 +175,94 @@ pub fn derive_config(input: TokenStream) -> TokenStream {
                 text
             }
 
-            #validate
+            fn schema() -> ::enshwick_loader_api::config::Schema {
+                let defaults = <Self as ::core::default::Default>::default();
+                ::enshwick_loader_api::config::Schema::new(
+                    #header_text,
+                    #title,
+                    ::std::vec![#(#described),*],
+                )
+            }
 
-            #sync
+            fn validate(&self) -> ::core::result::Result<(), ::std::string::String> {
+                ::enshwick_loader_api::config::__check(
+                    &<Self as ::enshwick_loader_api::config::Config>::schema(),
+                    self,
+                )?;
+                #own_check
+                ::core::result::Result::Ok(())
+            }
+
+            #values
         }
     }
-    .into()
+    .into())
+}
+
+/// `values` and `merge_values` over the fields of each stage that has any.
+fn stage_methods(staged: &[(Ident, &syn::Field)]) -> impl quote::ToTokens {
+    let mut value_arms = Vec::new();
+    let mut merge_arms = Vec::new();
+    for (_, variant) in STAGES {
+        let fields: Vec<&syn::Field> = staged
+            .iter()
+            .filter(|(stage, _)| stage == variant)
+            .map(|(_, field)| *field)
+            .collect();
+        if fields.is_empty() {
+            continue;
+        }
+        let variant = Ident::new(variant, Span::call_site());
+        let idents: Vec<&Ident> = fields.iter().filter_map(|f| f.ident.as_ref()).collect();
+        let keys: Vec<String> = idents.iter().map(ToString::to_string).collect();
+        let types: Vec<&Type> = fields.iter().map(|f| &f.ty).collect();
+        let locals: Vec<Ident> = idents
+            .iter()
+            .map(|ident| quote::format_ident!("__{}", ident))
+            .collect();
+        value_arms.push(quote! {
+            ::enshwick_loader_api::config::Stage::#variant => {
+                let mut table = ::enshwick_loader_api::config::__Values::default();
+                #(table.put(#keys, &self.#idents);)*
+                ::core::option::Option::Some(table.finish())
+            }
+        });
+        merge_arms.push(quote! {
+            ::enshwick_loader_api::config::Stage::#variant => {
+                let table = ::enshwick_loader_api::config::__Values::parse(values)?;
+                #(let #locals = table.take::<#types>(#keys)?;)*
+                #(
+                    if let ::core::option::Option::Some(value) = #locals {
+                        self.#idents = value;
+                    }
+                )*
+                ::core::result::Result::Ok(())
+            }
+        });
+    }
+    quote! {
+        fn values(
+            &self,
+            stage: ::enshwick_loader_api::config::Stage,
+        ) -> ::core::option::Option<::std::string::String> {
+            match stage {
+                #(#value_arms)*
+                _ => ::core::option::Option::None,
+            }
+        }
+
+        fn merge_values(
+            &mut self,
+            stage: ::enshwick_loader_api::config::Stage,
+            values: &str,
+        ) -> ::core::result::Result<(), ::std::string::String> {
+            let _ = values;
+            match stage {
+                #(#merge_arms)*
+                _ => ::core::result::Result::Ok(()),
+            }
+        }
+    }
 }
 
 /// Declares a hook from its body: the function stays, and
@@ -197,60 +370,16 @@ fn next_is_unsafe(arg: &FnArg) -> Option<bool> {
     }
 }
 
-/// Whether a field carries `#[config(sync)]`.
-fn is_synced(attrs: &[Attribute]) -> syn::Result<bool> {
-    let mut synced = false;
-    for attr in attrs.iter().filter(|a| a.path().is_ident("config")) {
-        attr.parse_nested_meta(|meta| {
-            if meta.path.is_ident("sync") {
-                synced = true;
-                Ok(())
-            } else {
-                Err(meta.error("expected `sync`"))
-            }
-        })?;
-    }
-    Ok(synced)
+/// The doc comment of `attrs` as plain text, lines joined by spaces.
+fn doc_text(attrs: &[Attribute]) -> String {
+    doc_lines(attrs)
+        .map(|line| line.trim().to_owned())
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
-/// `synced` and `merge_synced` over the join value fields, none when there
-/// are none.
-fn sync_methods(fields: &[&syn::Field]) -> Option<impl quote::ToTokens> {
-    if fields.is_empty() {
-        return None;
-    }
-    let idents: Vec<&Ident> = fields.iter().filter_map(|f| f.ident.as_ref()).collect();
-    let keys: Vec<String> = idents.iter().map(ToString::to_string).collect();
-    let types = fields.iter().map(|f| &f.ty);
-    let locals: Vec<Ident> = idents
-        .iter()
-        .map(|ident| quote::format_ident!("__{}", ident))
-        .collect();
-    Some(quote! {
-        fn synced(&self) -> ::core::option::Option<::std::string::String> {
-            let mut table = ::enshwick_loader_api::config::__Synced::default();
-            #(table.put(#keys, &self.#idents);)*
-            ::core::option::Option::Some(table.finish())
-        }
-
-        fn merge_synced(
-            &mut self,
-            synced: &str,
-        ) -> ::core::result::Result<(), ::std::string::String> {
-            let table = ::enshwick_loader_api::config::__Synced::parse(synced)?;
-            #(let #locals = table.take::<#types>(#keys)?;)*
-            #(
-                if let ::core::option::Option::Some(value) = #locals {
-                    self.#idents = value;
-                }
-            )*
-            ::core::result::Result::Ok(())
-        }
-    })
-}
-
-/// The doc comment of `attrs` as TOML comment lines.
-fn comment(attrs: &[Attribute]) -> String {
+/// The lines of the doc comment of `attrs`.
+fn doc_lines(attrs: &[Attribute]) -> impl Iterator<Item = String> + '_ {
     attrs
         .iter()
         .filter(|a| a.path().is_ident("doc"))
@@ -264,10 +393,14 @@ fn comment(attrs: &[Attribute]) -> String {
             },
             _ => None,
         })
-        .fold(String::new(), |mut text, line| {
-            text.push('#');
-            text.push_str(line.trim_end());
-            text.push('\n');
-            text
-        })
+}
+
+/// The doc comment of `attrs` as TOML comment lines.
+fn comment(attrs: &[Attribute]) -> String {
+    doc_lines(attrs).fold(String::new(), |mut text, line| {
+        text.push('#');
+        text.push_str(line.trim_end());
+        text.push('\n');
+        text
+    })
 }

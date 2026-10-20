@@ -32,7 +32,7 @@ struct Settings {
     /// share a base, and an altar that would start a 17th base is refused.
     /// Vanilla: [1, 2, 4, 6, 8, 10, 11, 12, 13, 14, 15, 16]
     /// A joined player runs with the server's table.
-    #[config(sync)]
+    #[config(sync, text = "config.altars")]
     altars_per_flame_level: Vec<u16>,
 }
 

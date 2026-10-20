@@ -51,14 +51,18 @@ const SCRATCH: &str = "incoming";
 struct Settings {
     /// Look for updates at start, and offer a server's versions when it runs
     /// mods this game lacks. Off: the updater never goes online.
+    #[config(client)]
     enabled: bool,
     /// Hours between checks at start; 0 checks at every start.
+    #[config(client, range = 0..=8760)]
     check_interval_hours: u32,
     /// Public keys accepted for updates besides the ones each installed mod
     /// names: the second line of a minisign .pub file, such as "RWQ...".
     /// For an author who changed keys; add only keys of authors you trust.
+    #[config(client)]
     trusted_keys: Vec<String>,
     /// Offer prereleases too.
+    #[config(client)]
     prereleases: bool,
 }
 

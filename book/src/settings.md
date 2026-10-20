@@ -15,25 +15,15 @@ serde's `Deserialize` and `Serialize` and implements `Default`, and call
 /// Furniture comfort settings.
 #[derive(Debug, serde::Deserialize, serde::Serialize, enshwick_loader_api::Config)]
 #[serde(deny_unknown_fields)]
-#[config(validate = Settings::check)]
 struct Settings {
     /// Comfort each piece of furniture gives inside a base, times this factor.
+    #[config(runtime, range = 0.0..=100.0)]
     multiplier: f32,
 }
 
 impl Default for Settings {
     fn default() -> Self {
         Self { multiplier: 2.0 }
-    }
-}
-
-impl Settings {
-    fn check(&self) -> Result<(), String> {
-        if self.multiplier.is_finite() && self.multiplier >= 0.0 {
-            Ok(())
-        } else {
-            Err("multiplier must be a number of zero or more".into())
-        }
     }
 }
 
@@ -63,9 +53,82 @@ multiplier = 2.0
 `Settings::template()` returns that text, so a unit test can check that the
 defaults parse.
 
-`#[config(validate = path)]` names a `fn(&Self) -> Result<(), String>`. At
-init, an error turns the mod off with the message; at run time it skips the
-changed file.
+Every read checks each field's `range` and `choices` (below), then
+`#[config(validate = path)]`, a `fn(&Self) -> Result<(), String>` for checks of
+your own. At init, an error turns the mod off with the message, such as
+`settings: multiplier is 0 to 100`; at run time it skips the changed file.
+
+## Stages, ranges and texts
+
+Each field says when a change takes effect, which values it takes and how a
+settings menu names it:
+
+| Attribute        | Meaning                                                                                                                          |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `startup`        | Read once at start. `on_config_change` gets the values the mod started with; a change waits for a restart, and the file says so  |
+| `runtime`        | The default: applied while the game runs, through `on_config_change`                                                             |
+| `client`         | Each player's own: never sent to or taken from a server; `/config` on a dedicated server leaves it alone                         |
+| `sync`           | The server's value: a joined client runs with it ([Join values](#join-values))                                                   |
+| `range = a..=b`  | Numbers from `a` to `b`; `a..` and `..=b` leave one end open. Constants work, as in `0.0..=MAX`                                  |
+| `choices = [..]` | One of these values; any type serde writes, such as an enum's variants                                                           |
+| `text = "key"`   | The key of the field's label in the mod's [texts](content/texts.md), `config.<field>` by default; its description is `<key>.doc` |
+
+A field takes one stage; two fail the build. On the struct,
+`#[config(text = "key")]` names the key of the set's title, `config` by
+default. The field's doc comment is its English description wherever no
+translation exists.
+
+```rust
+use enshwick_loader_api::config::{Config, Stage};
+
+/// Safe settings.
+#[derive(serde::Deserialize, serde::Serialize, enshwick_loader_api::Config)]
+struct Settings {
+    /// The Safe costs the wooden chest's ingredients times this.
+    #[config(startup, range = 1..=100)]
+    cost_multiplier: u32,
+    /// When the safe opens for administrators.
+    #[config(choices = ["never", "always"])]
+    admins: String,
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Self { cost_multiplier: 1, admins: "never".into() }
+    }
+}
+
+let schema = Settings::schema();
+let cost = schema.field("cost_multiplier").ok_or("no field")?;
+assert_eq!(cost.stage, Stage::Startup);
+assert_eq!(cost.accepts(), "1 to 100");
+assert!(Settings::template().contains("# Takes effect at the next start."));
+# Ok::<(), &str>(())
+```
+
+## The schema and `/config`
+
+[`Config::schema()`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/config.rs)
+describes every field: key, stage, type, default, range, choices, doc comment
+and text key. `load.config()` hands it to the loader, which keeps it for the
+process; it is the description a settings menu builds on, and what the
+loader checks values against before it writes them.
+
+Administrators change settings in the chat, or from a console line such as
+admin-tools' command file:
+
+| Command                       | Answer                                                                       |
+| ----------------------------- | ---------------------------------------------------------------------------- |
+| `/config`                     | the mods that describe their settings                                        |
+| `/config <mod>`               | each setting with its value, what it takes and when a change applies         |
+| `/config <mod> <key>`         | one setting with its default and description                                 |
+| `/config <mod> <key> <value>` | checks the value, writes it to `mod-configs/<mod>.toml` keeping the comments |
+
+A value is TOML (`5`, `true`, `"text"`, `[1, 2]`); text settings also take
+plain words. After a write the loader raises the mod's settings event at once:
+`runtime` and `sync` values apply through `on_config_change` (joined players
+get `sync` values when they join again), and `startup` values answer
+`restart needed`. `client` values are refused on a dedicated server.
 
 A file that does not parse turns the mod off at init with serde's message. Add
 `#[serde(deny_unknown_fields)]` so a misspelt key does the same instead of
@@ -101,12 +164,10 @@ fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_
 }
 ```
 
-Untyped settings have no validation hook, no join values and no
-`on_config_change`; subscribe to
+Untyped settings have no validation hook, no join values, no schema for
+`/config` and no `on_config_change`; subscribe to
 [`events::SettingsChanged`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/events.rs)
 and read the file again yourself if you need changes at run time.
-[`enshwick-flame-altar-zones`](https://github.com/themaiby/enshwick/tree/main/mods/enshwick-flame-altar-zones)
-reads its settings this way.
 
 ## Changes while the game runs
 

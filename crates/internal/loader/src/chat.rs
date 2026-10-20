@@ -138,7 +138,11 @@ pub(crate) fn register(
     if SEALED.load(Ordering::Acquire) {
         return Status::TOO_LATE;
     }
-    if !is_valid_name(name) || name == LOADER_ID || name == crate::net::COMMAND {
+    if !is_valid_name(name)
+        || name == LOADER_ID
+        || name == crate::configure::COMMAND
+        || name == crate::net::COMMAND
+    {
         return Status::BAD_ARGS;
     }
     let mut commands = COMMANDS.lock().unwrap_or_else(PoisonError::into_inner);
@@ -468,6 +472,8 @@ fn dispatch(loader: &Loader, line: &str, to: To) {
     crate::log!(DEBUG, "{who} ({key:016x}) typed /{name}");
     let reply = if name == LOADER_ID {
         builtin(loader, args, &player)
+    } else if name == crate::configure::COMMAND {
+        config(loader, args, &player)
     } else {
         match find(loader, &name) {
             Some(command) => run(&command, args, &player),
@@ -500,6 +506,9 @@ pub(crate) fn run_console(loader: &Loader, line: &str) -> Result<String, Status>
     let player = console();
     if name == LOADER_ID {
         return Ok(builtin(loader, args, &player));
+    }
+    if name == crate::configure::COMMAND {
+        return Ok(config(loader, args, &player));
     }
     let command = find(loader, &name).ok_or(Status::MISSING)?;
     Ok(run(&command, args, &player))
@@ -580,10 +589,80 @@ fn builtin(loader: &Loader, args: &str, player: &PlayerInfo) -> String {
     )
 }
 
+/// `/config`, for administrators: read and change mods' settings.
+fn config(loader: &Loader, args: &str, player: &PlayerInfo) -> String {
+    use crate::configure::{self, Request};
+
+    if player.permissions & PlayerInfo::CAN_KICK_BAN == 0 {
+        return "Only administrators use /config.".to_owned();
+    }
+    let request = configure::parse(args);
+    let id = match request {
+        Request::Mods => {
+            let with: Vec<&str> = loader
+                .mods
+                .iter()
+                .filter(|m| m.schema.lock().is_ok_and(|s| s.is_some()))
+                .map(|m| m.id.as_str())
+                .collect();
+            return if with.is_empty() {
+                "No mod describes its settings.".to_owned()
+            } else {
+                format!(
+                    "Mods with settings: {}. /config <mod> lists a mod's.",
+                    with.join(", ")
+                )
+            };
+        }
+        Request::List(id) | Request::Get(id, _) | Request::Set(id, _, _) => id,
+    };
+    let Some((index, record)) = loader.mods.iter().enumerate().find(|(_, m)| m.id == id) else {
+        return format!("No mod {id} is loaded. /config lists the mods with settings.");
+    };
+    let Some(schema) = record.schema.lock().ok().and_then(|s| s.clone()) else {
+        return format!("{id} does not describe its settings; edit mod-configs/{id}.toml.");
+    };
+    let path = loader.configs_dir.join(format!("{id}.toml"));
+    let Ok(text) = std::fs::read_to_string(&path) else {
+        return format!("mod-configs/{id}.toml is missing; restart to write it.");
+    };
+    match request {
+        Request::Set(_, key, value) => {
+            if loader.side == enshwick_loader_api::abi::Side::SERVER
+                && schema
+                    .field(key)
+                    .is_some_and(|f| f.stage == enshwick_loader_api::config::Stage::Client)
+            {
+                return format!("{id} {key} is each player's own: they set it in their game.");
+            }
+            let change = match configure::set(id, &schema, &text, key, value) {
+                Ok(change) => change,
+                Err(reply) => return reply,
+            };
+            if let Err(e) = std::fs::write(&path, &change.text) {
+                return format!("Not changed: mod-configs/{id}.toml: {e}");
+            }
+            crate::watch::wrote(&path);
+            let who = String::from_utf8_lossy(&player.name[..usize::from(player.name_len).min(64)])
+                .into_owned();
+            crate::log!(INFO, "{who} set {id} {key} = {}", change.value);
+            loader.emit(
+                enshwick_loader_api::abi::Event::SETTINGS_CHANGED,
+                Some(index),
+                core::ptr::null(),
+            );
+            configure::changed(id, key, &change)
+        }
+        Request::Get(_, key) => configure::get(id, &schema, &text, key).unwrap_or_else(|e| e),
+        _ => configure::list(id, &schema, &text),
+    }
+}
+
 fn help(loader: &Loader, commands: &[Command]) -> String {
     let mut lines = vec![
         "/enshwick: the mods running; /enshwick help: this list; /enshwick status: the status (administrators)"
             .to_owned(),
+        crate::configure::HELP.to_owned(),
     ];
     lines.extend(commands.iter().filter_map(|c| {
         let record = loader.mods.get(c.owner)?;

@@ -97,6 +97,10 @@ use enshwick_loader_api::{Load, Mod, Off};
 #[serde(deny_unknown_fields)]
 struct Settings {
     /// Whether the mod does its work.
+    // `startup` (needs a restart), `runtime` (applied by on_config_change),
+    // `client` (each player's own) or `sync` (the server's value), and for
+    // numbers `range = 1..=10`, for lists of values `choices = [..]`.
+    #[config(runtime)]
     enabled: bool,
 }
 

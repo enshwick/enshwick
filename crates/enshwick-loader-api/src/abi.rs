@@ -14,7 +14,7 @@ use core::sync::atomic::AtomicUsize;
 pub const ABI_MAJOR: u16 = 1;
 
 /// The minor version of this interface. A newer minor only appends fields.
-pub const ABI_MINOR: u16 = 34;
+pub const ABI_MINOR: u16 = 35;
 
 /// Whether `id` is a valid mod id: 1 to 64 characters of `[a-z0-9-]`.
 ///
@@ -3601,6 +3601,12 @@ pub struct HostApi {
     /// thread only. Since minor 34.
     pub terrain_edit:
         extern "system" fn(me: ModHandle, edit: *const TerrainEdit, amount: *mut f32) -> Status,
+    /// Hands the loader the mod's settings schema, `schema`, the TOML text
+    /// of a [`config::Schema`](crate::config::Schema); a later call replaces
+    /// it. The loader answers `/config` from it and checks values against it
+    /// before it writes them. [`Status::BAD_ARGS`] for text that is not a
+    /// schema. Any time. Since minor 35.
+    pub config_schema: extern "system" fn(me: ModHandle, schema: Str) -> Status,
 }
 
 /// The exports a mod DLL provides, by name.
@@ -3662,7 +3668,8 @@ const _: () = {
     assert!(core::mem::offset_of!(HostApi, hook_at) == 24 + 35 * 8);
     assert!(core::mem::offset_of!(HostApi, inventory_open) == 24 + 36 * 8);
     assert!(core::mem::offset_of!(HostApi, inventory_submit) == 24 + 38 * 8);
-    assert!(size_of::<HostApi>() == 24 + 92 * 8);
+    assert!(size_of::<HostApi>() == 24 + 93 * 8);
+    assert!(core::mem::offset_of!(HostApi, config_schema) == 24 + 92 * 8);
     assert!(core::mem::offset_of!(HostApi, time_of_day) == 24 + 73 * 8);
     assert!(core::mem::offset_of!(HostApi, set_time_speed) == 24 + 76 * 8);
     assert!(size_of::<DaytimeInfo>() == 8 + 5 * 8 + 8);

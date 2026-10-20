@@ -21,6 +21,7 @@ mod chat;
 mod clones;
 #[cfg(windows)]
 mod code;
+pub mod configure;
 #[cfg(windows)]
 mod content;
 #[cfg(windows)]
