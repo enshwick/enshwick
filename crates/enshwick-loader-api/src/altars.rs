@@ -493,6 +493,9 @@ impl ZoneControl {
     }
 }
 
+/// The most zones a [`ZoneCheck`] carries; the engine keeps at most 255.
+pub const MAX_ZONES: usize = 256;
+
 /// A placement the game refused because the object does not lie in a single
 /// building zone; see [`Load::on_zone_check`]. Coordinates are 32.32
 /// fixed-point metres.

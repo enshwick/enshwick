@@ -21,6 +21,7 @@ use enshwick_loader_api::abi::{
     AltarInfo, AltarZoneSize, Bounds, Event, Header, HookFlags, Side, Status, ZoneCheck,
     ZoneCheckFn,
 };
+use enshwick_loader_api::altars::MAX_ZONES;
 
 use self::geometry::Placed;
 use crate::chains::{LOADER, Link};
@@ -54,8 +55,6 @@ const SHAPE_RANGE: usize = 4;
 const HALF: f32 = 0.5;
 /// The most levels an altar reports; the engine has far fewer.
 const MAX_LEVELS: usize = 16;
-/// The engine keeps at most 255 zones.
-const MAX_ZONES: usize = 256;
 
 type Sizes = ArrayVec<[f32; 3], MAX_LEVELS>;
 
