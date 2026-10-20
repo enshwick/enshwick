@@ -14,6 +14,9 @@ Once the world has loaded, and again on `/probe check`:
   and the entities near it;
 - the vitals of actors with replicated health, against that health, and the
   progress of a character;
+- component writes: the replicated health is refused as a writable type; an
+  actor's health is set one lower, healed by the most negative amount (it
+  stays at 1), its replicated copy checked a second later, and put back;
 - that destroy requests refuse entity 0 and an entity not in the world;
 - a save on demand, followed by `WorldSaved`.
 

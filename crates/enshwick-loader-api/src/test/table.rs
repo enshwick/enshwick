@@ -50,6 +50,8 @@ pub(crate) struct State {
     pub(crate) destroyed: Vec<u32>,
     /// How many saves the mod asked for.
     pub(crate) saves: usize,
+    /// The components the mod asked to write, `(entity, type hash)`.
+    pub(crate) writes: Vec<(u32, u32)>,
     /// The world key last handed out, alive until the next one.
     world_key: Option<Box<str>>,
     /// The altars `altars` lists, settable while installed.
@@ -116,6 +118,7 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         console: Vec::new(),
         destroyed: Vec::new(),
         saves: 0,
+        writes: Vec::new(),
         world_key: None,
         altars: Vec::new(),
         altars_opened: false,
@@ -912,6 +915,31 @@ extern "system" fn world_key(_me: ModHandle, out: *mut Str) -> Status {
     })
 }
 
+extern "system" fn component_write(
+    _me: ModHandle,
+    entity: u32,
+    type_hash: u32,
+    out: *mut *mut c_void,
+) -> Status {
+    let address = with(Err(Status::MISSING), |s| {
+        if s.host.refused_writes.contains(&type_hash) {
+            return Err(Status::REFUSED);
+        }
+        let address = s
+            .host
+            .components
+            .get(&(entity, type_hash))
+            .copied()
+            .ok_or(Status::MISSING)?;
+        s.writes.push((entity, type_hash));
+        Ok(address)
+    });
+    match address {
+        Ok(address) => put(out, core::ptr::with_exposed_provenance_mut(address)),
+        Err(status) => status,
+    }
+}
+
 /// table it sees for the process, so it is one static.
 pub(crate) static TABLE: HostApi = HostApi {
     header: Header::of::<HostApi>(),
@@ -979,4 +1007,5 @@ pub(crate) static TABLE: HostApi = HostApi {
     destroy,
     save_world,
     world_key,
+    component_write,
 };

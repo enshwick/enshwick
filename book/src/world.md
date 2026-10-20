@@ -3,8 +3,8 @@
 [`load.world()`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/load.rs)
 returns a
 [`World`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/world.rs):
-reads of the server's world, character stats, entity queries, labels, chat
-lines, destroy requests and saves. It is `Copy`; get
+reads of the server's world, component writes, character stats, entity
+queries, labels, chat lines, destroy requests and saves. It is `Copy`; get
 it during `init` and move it into handlers and tasks.
 
 ```rust
@@ -93,6 +93,76 @@ fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_
 Both read the entity's attribute sets as the game keeps them. On a game build
 without the layout they need, they return `None`, and `load.world()` still
 works.
+
+`set_health(entity, value)`, `set_stamina(entity, value)` and
+`set_mana(entity, value)` set the current value and return the `Meter` the
+entity now has; `heal(entity, amount)` adds to its health, and takes from it
+for a negative amount. The value stays between a floor and the maximum, which
+the game derives from gear and buffs and the writes leave alone:
+
+| Stat | Floor | Refused when |
+| --- | --- | --- |
+| Health | 1: a write never kills | the entity is dead (`WorldError::Refused`): death and revival stay the game's |
+| Stamina | 0 | the entity has no stamina (`WorldError::Lacks`) |
+| Mana | 0 | the entity has no mana (`WorldError::Lacks`) |
+
+```rust
+use enshwick_loader_api::game_events::LevelGained;
+
+fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+    let world = load.world()?;
+    // A level up restores the character's health.
+    load.on_game::<LevelGained>(move |gained| {
+        let max = world.vitals(gained.player).map_or(0, |v| v.health.max);
+        if let Err(why) = world.set_health(gained.player, max) {
+            enshwick_loader_api::debug!("no heal: {why}");
+        }
+    })
+}
+```
+
+The game sends the new value to the clients and regenerates from it as from
+any other.
+
+## Writing components
+
+A write goes to the component the server owns, and the loader marks it
+changed the way the game's own writes do, so the game sends it to clients and
+saves it with the world. The copies the game keeps for clients, the
+`Network*` and `Client*` components, are never written: the game overwrites
+them from the server's own every step, so `writable_type` refuses them.
+
+| Call | Does |
+| --- | --- |
+| `writable_type(load, name)` | a component type to write, such as `keen::ecs::CombatFlags`; call at init |
+| `update(entity, ty, \|bytes\| ..)` | hands the component's reflected bytes to the closure, marked changed |
+| `ty.field::<T>(load, name)` | a typed field of the type, resolved by name for the running build |
+| `get(entity, field)` | the field's value, `None` when the entity lacks the component |
+| `set(entity, field, value)` | writes the field, marked changed |
+
+```rust
+fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+    let world = load.world()?;
+    let flags = world.writable_type(load, "keen::ecs::CombatFlags")?;
+    let immune = flags.field::<bool>(load, "immune")?;
+    load.add_command("immune", "toggles your character's immunity", move |ctx, _args| {
+        let entity = ctx.player.entity;
+        let now = !world.get(entity, immune).unwrap_or(false);
+        match world.set(entity, immune, now) {
+            Ok(()) => format!("immune: {now}").into(),
+            Err(why) => format!("{why}").into(),
+        }
+    })
+}
+```
+
+Writes work where reads work, on the game thread, and need ABI minor 22. They
+fail with a `WorldError`: `Gone` for an entity not in the world, `Lacks` when
+it lacks the component, `Refused` for a type the loader will not write,
+`WrongThread` off the game thread and `Missing` under an older loader. A field
+of an engine type means what the engine makes of it: a write the engine does
+not expect, such as a value its systems keep elsewhere, may be overwritten or
+do nothing, so check a new write on a test server first.
 
 ## Finding entities
 

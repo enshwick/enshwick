@@ -64,6 +64,10 @@ required-features = ["test"]
 name = "worlds"
 required-features = ["test"]
 
+[[test]]
+name = "writes"
+required-features = ["test"]
+
 [lints]
 workspace = true
 

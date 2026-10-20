@@ -402,6 +402,25 @@ impl<'a> Reflection<'a> {
         }
     }
 
+    /// Every type name found, in no set order.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use enshwick_loader_reflect::{Image, Layout, Reflection};
+    ///
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// let bytes = std::fs::read("enshrouded_server.exe")?;
+    /// let image = Image::parse(&bytes, Layout::File, None)?;
+    /// let reflection = Reflection::scan(&image);
+    /// assert!(reflection.type_names().any(|name| name == "keen::ecs::Health"));
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn type_names(&self) -> impl Iterator<Item = &'a str> + '_ {
+        self.types.keys().copied()
+    }
+
     /// How many distinct type names were found.
     ///
     /// # Examples

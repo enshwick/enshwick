@@ -1,11 +1,11 @@
 //! Character stats: health, stamina, mana, level and experience, read from
-//! their attribute set components. A set keeps the id of its first
-//! attribute, the values' offset, flags and count, then the values in the
-//! order of the game's attribute container.
+//! their attribute set components and written to them. A set keeps the id
+//! of its first attribute, the values' offset, flags and count, then the
+//! values in the order of the game's attribute container.
 
 use crate::ecs::Entity;
 use crate::raw::read_at;
-use crate::world::{ComponentType, World};
+use crate::world::{ComponentType, World, WorldError};
 use crate::{Load, Off};
 
 /// The attribute set's flag bit that marks it initialised.
@@ -60,6 +60,14 @@ pub struct Vitals {
     pub stamina: Option<Meter>,
     /// Mana, for characters and the actors that have it.
     pub mana: Option<Meter>,
+}
+
+/// Which current value a write sets.
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum Pool {
+    Health,
+    Stamina,
+    Mana,
 }
 
 /// A character's level and experience, from [`World::progress`].
@@ -181,6 +189,51 @@ impl Stats {
             *value = unsafe { read_at(data, offset + slot * size_of::<u32>()) };
         }
         Some(values)
+    }
+
+    /// Sets the current value of `pool` on `entity` to what `change` makes
+    /// of it, kept between the pool's floor and its maximum: 1 for health,
+    /// so a write never kills, 0 for stamina and mana. Health of an entity
+    /// already dead is refused: death and revival stay the game's.
+    pub(crate) fn write(
+        &self,
+        world: &World,
+        entity: Entity,
+        pool: Pool,
+        change: impl FnOnce(i32) -> i32,
+    ) -> Result<Meter, WorldError> {
+        let (set, floor) = match pool {
+            Pool::Health => (&self.health, 1),
+            Pool::Stamina => (&self.stamina, 0),
+            Pool::Mana => (&self.mana, 0),
+        };
+        let data = world.component_mut(entity, set.ty)?.cast::<u8>();
+        // SAFETY: the entity's live attribute set, handed out for writing on
+        // the game thread, starts with the id it keeps and holds its header
+        // at the build's offsets.
+        let root: u32 = unsafe { read_at(data, 0) };
+        // SAFETY: as above.
+        let offset = usize::from(unsafe { read_at::<u16>(data, self.layout.data_offset) });
+        // SAFETY: as above.
+        let flags: u8 = unsafe { read_at(data, self.layout.flags) };
+        // SAFETY: as above.
+        let count = usize::from(unsafe { read_at::<u8>(data, self.layout.count) });
+        let [current_slot, max_slot] = set.slots;
+        if root != set.root || flags & SET_INITIALISED == 0 || max_slot >= count {
+            return Err(WorldError::Lacks);
+        }
+        let value = |slot: usize| data.wrapping_add(offset + slot * size_of::<u32>());
+        // SAFETY: the engine keeps `count` values from `offset`.
+        let current = unsafe { value(current_slot).cast::<i32>().read_unaligned() };
+        // SAFETY: as above.
+        let max = unsafe { value(max_slot).cast::<i32>().read_unaligned() };
+        if matches!(pool, Pool::Health) && current <= 0 {
+            return Err(WorldError::Refused);
+        }
+        let new = change(current).clamp(floor, max.max(floor));
+        // SAFETY: as above; the set was handed out for writing.
+        unsafe { value(current_slot).cast::<i32>().write_unaligned(new) };
+        Ok(Meter { current: new, max })
     }
 
     pub(crate) fn vitals(&self, world: &World, entity: Entity) -> Option<Vitals> {

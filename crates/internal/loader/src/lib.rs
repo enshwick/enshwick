@@ -66,6 +66,8 @@ mod survivors;
 mod watch;
 #[cfg(windows)]
 mod world;
+#[cfg(windows)]
+mod writes;
 
 /// Starts the loader; called once by the `powrprof.dll` stub.
 ///
