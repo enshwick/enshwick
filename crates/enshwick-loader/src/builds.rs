@@ -162,32 +162,86 @@ pub static BUILDS: &[KnownBuild] = &[
         name: "1.0 client (1269579)",
         side: Side::CLIENT,
         fingerprint: Fingerprint::new(guid(b"69f0e9573b32c24a8838d3fff550824c"), 410),
-        checks: &[("add_buildzones_client", 0x32_88e0)],
+        // The client holds the whole server, run on its `GameServer` thread
+        // while it hosts a game: the server's symbols have twins here and its
+        // constants hold unchanged.
+        checks: &[
+            ("add_buildzones_client", 0x32_88e0),
+            ("add_buildzones_server", 0x32_8df0),
+            ("upgrade_building_range", 0x27_f030),
+        ],
         symbols: &[
             ("ecs.iterator_init", 0x9b_ab60),
             ("ecs.iterator_next", 0x9b_5a50),
             ("ecs.attribute_find", 0x121_bea0),
             ("ecs.mark_changed", 0x9c_5df0),
+            ("ecs.component_read", 0x21_2f60),
             ("ecs.template_guid", 0x9b_3220),
             ("balancing.zone_size", 0xe7_2e50),
             ("building.seam_check", 0xe8_99f0),
             ("building.max_altars", 0xe7_d070),
+            ("npc.lookup", 0x46_98b0),
+            ("npc.lookup_cursor", 0x46_9860),
+            ("npc.move", 0x44_f040),
+            ("npc.update", 0x46_bf80),
+            ("npc.bed_check", 0x45_0e20),
+            ("comfort.base_register", 0x46_6040),
+            ("server.post_step", 0xe4_c620),
+            ("server.set_state", 0xe4_2fe0),
+            ("server.save_step", 0xe4_d9d0),
+            ("server.player_remove", 0xe3_84d0),
+            ("ecs.type_index", 0x9a_5080),
+            ("ecs.component_read_raw", 0x9a_5ec0),
+            ("ecs.entity_slot", 0x9a_8070),
+            ("ecs.slot_root", 0xe8_0c10),
+            ("building.spawn_prop", 0x48_5a80),
+            ("building.pickup", 0x48_9300),
             ("net.server_change", 0x107_d200),
             ("resource.open", 0x106_34f0),
             ("resource.resolve", 0x106_3000),
             ("resource.key_of", 0x106_1800),
             ("text.lookup", 0x11f_8510),
             ("text.lookup_english", 0x11f_80b0),
-            ("npc.lookup_cursor", 0x46_9860),
         ],
         constants: &[
             ("text.pool_language", 0xd8),
+            ("ecs.context_row", 8),
+            ("ecs.descriptor_entity_records", 0x828),
+            ("ecs.entity_record_size", 0x10),
+            ("ecs.level_data_offset", 4),
+            ("ecs.level_flags", 6),
+            ("ecs.attribute_slot", 0xc),
+            ("altar.level_attribute", 0x724b_f568),
             ("building.zone_list_entries", 0x10),
             ("building.zone_list_count", 0x18),
             ("building.zone_entry_size", 0x48),
             ("building.zone_entry_shape", 0x44),
             ("building.zone_entry_ignored", 0x46),
             ("building.corner_size", 0x18),
+            ("server.entry_state", 0x18),
+            ("server.player_slots", 0x1e0),
+            ("server.player_slot_size", 0x148),
+            ("server.player_slot_count", 16),
+            ("server.player_slot_state", 0x0a),
+            ("server.player_slot_entity", 0x18),
+            ("server.player_slot_key", 0x48),
+            ("server.player_slot_name", 0x20),
+            ("server.world", 0x1d0),
+            ("server.player_infos", 0x1d8),
+            ("server.permission_table", 0x498),
+            ("server.permission_entry_size", 0xa0),
+            ("server.permission_mask", 0x9d),
+            ("world.entities", 0xe1_5dc0),
+            ("ecs.registry_type_map", 0x30),
+            ("ecs.registry_type_map_fallback", 0x88),
+            ("ecs.entity_map", 0x148),
+            ("ecs.entity_map_capacity", 0x158),
+            ("ecs.entity_records", 0x188),
+            ("ecs.record_template", 0x28),
+            ("ecs.context_entity_world", 0x30),
+            ("reflect.type_hash", 0x90),
+            ("building.ctx_player", 0x14c),
+            ("building.ctx_replay", 0x151),
         ],
     },
 ];
@@ -221,5 +275,17 @@ mod tests {
         assert_eq!(found.symbol("npc.lookup"), Some(0x20_2e80));
         assert_eq!(found.symbol("npc.nope"), None);
         assert!(find(Side::CLIENT, server.fingerprint).is_none());
+    }
+
+    #[test]
+    fn the_client_row_carries_every_server_constant_and_engine_symbol() {
+        let (server, client) = (&BUILDS[0], &BUILDS[1]);
+        for &(id, value) in server.constants {
+            assert_eq!(client.constant(id), Some(value), "{id}");
+        }
+        for &(id, _) in server.symbols {
+            assert!(client.symbol(id).is_some(), "{id}");
+        }
+        assert_eq!(client.symbol("npc.lookup"), Some(0x46_98b0));
     }
 }

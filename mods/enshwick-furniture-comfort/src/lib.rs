@@ -4,7 +4,8 @@
 //! category, and the base keeps the best per category; a player's comfort is
 //! the sum. The hook scales what each provider registers. It runs on the
 //! server, which decides comfort, so players without the mod see the higher
-//! comfort and rested time too; only item tooltips keep vanilla numbers.
+//! comfort and rested time too; only item tooltips keep vanilla numbers. A
+//! client loads it for the games it hosts, where its built-in server decides.
 
 use std::sync::atomic::{AtomicU32, Ordering};
 

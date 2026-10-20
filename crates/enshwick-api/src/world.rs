@@ -1,7 +1,8 @@
 //! Reads of the server's world: components, templates, positions and
 //! players. Call them on the server's game thread, from a game event or a
 //! [`Scheduler`](crate::schedule::Scheduler) task; elsewhere they return
-//! `None` or nothing.
+//! `None` or nothing. On a client the server is the built-in one, while it
+//! hosts a game.
 
 use core::ffi::c_void;
 

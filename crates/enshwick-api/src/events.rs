@@ -1,7 +1,10 @@
 //! Typed loader events for [`Load::on`](crate::Load::on).
 //!
 //! Game events are raised on the server's game thread: keep handlers short,
-//! and leave slow work to a thread of the mod's own.
+//! and leave slow work to a thread of the mod's own. On a client they come
+//! from the built-in server while it hosts a game, solo play included; each
+//! hosted game starts with [`WorldLoaded`] and ends with [`Shutdown`], so
+//! state of one game is reset there.
 
 use core::ffi::c_void;
 

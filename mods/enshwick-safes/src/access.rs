@@ -13,7 +13,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, LazyLock};
 
 use arc_swap::ArcSwap;
-use enshwick_api::ecs::{Components, Ecs, Entity};
+use enshwick_api::ecs::{Components, Ecs, Entity, Worlds};
 
 /// A position in half-metre cells.
 pub type Cell = (i64, i64, i64);
@@ -81,6 +81,8 @@ pub struct Reads {
     pub ecs: Ecs,
     /// Component reads inside systems.
     pub components: Components,
+    /// Tells the server's world from a hosting client's own.
+    pub worlds: Worlds,
     /// The `UsedItem` component's hash.
     pub used_item: u32,
     /// The `CurrentTransform` component's hash.
@@ -169,6 +171,13 @@ impl Access {
             .load()
             .get(&chest)
             .is_some_and(|&(owner, _)| !self.may_use(owner, player))
+    }
+
+    /// Forgets the Safes and players of a hosted game that stopped; their
+    /// entities mean nothing in the next. Owners stay.
+    pub fn forget_session(&self) {
+        self.safes.store(Arc::new(HashMap::new()));
+        self.players.store(Arc::new(HashMap::new()));
     }
 
     /// Records a Safe just placed by the player with `key`.

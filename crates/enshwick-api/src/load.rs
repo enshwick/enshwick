@@ -496,7 +496,7 @@ impl Load<'_> {
     }
 
     /// Reads of the server's world: components, templates, positions and
-    /// players.
+    /// players; on a client, of the built-in server while it hosts a game.
     ///
     /// # Errors
     ///
@@ -511,19 +511,17 @@ impl Load<'_> {
     }
 
     /// The mod's [`Scheduler`](crate::schedule::Scheduler), which runs work on
-    /// the server's game thread after each simulation step.
+    /// the server's game thread after each simulation step: the dedicated
+    /// server's, or the built-in server's while a client hosts a game.
     ///
     /// # Errors
     ///
-    /// [`Off`] on a client, or when the loader raises no ticks.
+    /// [`Off`] when the loader raises no ticks.
     ///
     /// # Examples
     ///
     /// See [`Scheduler`](crate::schedule::Scheduler).
     pub fn scheduler(&mut self) -> Result<crate::schedule::Scheduler, Off> {
-        if self.host.build().side != crate::abi::Side::SERVER {
-            return Err(Off::new("the scheduler runs on the server's game thread"));
-        }
         let (scheduler, created) = crate::schedule::Scheduler::get();
         if created {
             self.on::<crate::events::Tick>(move |_| scheduler.run_due())?;

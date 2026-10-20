@@ -1,6 +1,10 @@
 //! Reads of the server's world for mods: components, templates and players.
 //! Every read happens on the game thread, between steps or inside a game
 //! event, where no ECS system runs; elsewhere it is refused.
+//!
+//! The game thread is the dedicated server's, or on a client that hosts a
+//! game the built-in server's `GameServer` thread; each hosted game has its
+//! own server and thread, captured by the post-step link.
 
 use core::ffi::c_void;
 use std::sync::OnceLock;
@@ -14,6 +18,40 @@ use crate::host::Loader;
 pub(crate) static SERVER: AtomicUsize = AtomicUsize::new(0);
 /// The game thread's id, seen by the post-step hook.
 pub(crate) static GAME_THREAD: AtomicU32 = AtomicU32::new(0);
+/// The server's entity world, seen by the post-step hook.
+static SERVER_WORLD: AtomicUsize = AtomicUsize::new(0);
+
+/// Records the server seen after a step on `thread`, and its entity world
+/// from `world_offset` and `entities`.
+pub(crate) fn capture(server: usize, thread: u32, world_offset: usize, entities: usize) {
+    SERVER.store(server, Ordering::Release);
+    GAME_THREAD.store(thread, Ordering::Release);
+    let world = if server == 0 {
+        0
+    } else {
+        // SAFETY: the server holds its world pointer, read on its own thread.
+        unsafe { read::<usize>(server, world_offset) }
+    };
+    let entity_world = if world == 0 { 0 } else { world + entities };
+    SERVER_WORLD.store(entity_world, Ordering::Release);
+}
+
+/// Forgets the server of a hosted game that stopped.
+pub(crate) fn release() {
+    SERVER_WORLD.store(0, Ordering::Release);
+    SERVER.store(0, Ordering::Release);
+    GAME_THREAD.store(0, Ordering::Release);
+}
+
+/// Whether a server has been seen and not released.
+pub(crate) fn hosting() -> bool {
+    SERVER.load(Ordering::Acquire) != 0
+}
+
+/// The running server's entity world, 0 for none.
+pub(crate) fn server_world() -> u64 {
+    SERVER_WORLD.load(Ordering::Acquire) as u64
+}
 
 type TypeIndex = unsafe extern "system" fn(map: *const u8, hash: *const u32) -> *const u16;
 type ReadComponent = unsafe extern "system" fn(

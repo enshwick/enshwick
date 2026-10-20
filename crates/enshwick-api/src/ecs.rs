@@ -5,7 +5,8 @@
 //! and marks written components changed so replication follows them. Every
 //! address and offset comes from the loader for the running build.
 
-use crate::{Load, Off};
+use crate::abi::Side;
+use crate::{Host, Load, Off};
 
 type IteratorInit = unsafe extern "system" fn(ctx: *mut u64, iterator: *mut u64, size: u64);
 type IteratorNext = unsafe extern "system" fn(ctx: *mut u64, iterator: *mut u64, size: u64) -> u64;
@@ -444,6 +445,122 @@ impl Components {
         )]
         let (error, root) = (out[0] as u8, out[1] as u32);
         (error == 0 && root != 0).then_some(Entity(root))
+    }
+}
+
+/// Whether a system context of `context_world` belongs to the server's world,
+/// in a game binary of side `process` whose running server, if any, has the
+/// entity world `server_world` (0 for none).
+///
+/// The dedicated server has no other world. A client that hosts a game runs
+/// two: its own and the built-in server's, whose systems share the same
+/// functions, so a hook shared by both tells them apart by the context's
+/// entity world.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_api::abi::Side;
+/// use enshwick_api::ecs::server_role;
+///
+/// assert!(server_role(Side::SERVER, 0x10, 0));
+/// assert!(server_role(Side::CLIENT, 0x20, 0x20));
+/// assert!(!server_role(Side::CLIENT, 0x10, 0x20));
+/// assert!(!server_role(Side::CLIENT, 0, 0));
+/// ```
+#[must_use]
+pub fn server_role(process: Side, context_world: u64, server_world: u64) -> bool {
+    process == Side::SERVER || (server_world != 0 && context_world == server_world)
+}
+
+/// Tells the server's world from the client's inside a hooked system.
+///
+/// On a client that hosts a game, functions such as cursor checks run for
+/// both worlds; a server feature acts only in the server's. On the dedicated
+/// server every context is the server's, without a read.
+///
+/// # Examples
+///
+/// ```
+/// fn init(load: &mut enshwick_api::Load<'_>) -> Result<enshwick_api::ecs::Worlds, enshwick_api::Off> {
+///     enshwick_api::ecs::Worlds::resolve(load)
+/// }
+/// ```
+#[derive(Clone, Copy, Debug)]
+pub struct Worlds {
+    host: Host,
+    side: Side,
+    entity_world: usize,
+}
+
+impl Worlds {
+    /// Resolves the test for the running build.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] when the loader lacks the context layout for this build.
+    ///
+    /// # Examples
+    ///
+    /// See [`Worlds`].
+    pub fn resolve(load: &Load<'_>) -> Result<Self, Off> {
+        let host = load.host();
+        let entity_world = load.constant("ecs.context_entity_world")?;
+        Ok(Self {
+            host,
+            side: host.build().side,
+            entity_world: usize::try_from(entity_world).unwrap_or(usize::MAX),
+        })
+    }
+
+    /// Whether this process runs a game server now; see
+    /// [`Host::hosting`](crate::Host::hosting).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// fn acts(worlds: &enshwick_api::ecs::Worlds) -> bool {
+    ///     worlds.hosting()
+    /// }
+    /// ```
+    #[must_use]
+    pub fn hosting(&self) -> bool {
+        self.side == Side::SERVER || self.host.hosting()
+    }
+
+    /// Whether `ctx`, a system context, belongs to the server's world: always
+    /// on the dedicated server; on a client, only for the built-in server's
+    /// systems while it hosts a game, from its first step.
+    ///
+    /// # Safety
+    ///
+    /// `ctx` is the live context of a running system, or null.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// unsafe fn mine(worlds: &enshwick_api::ecs::Worlds, ctx: *mut u64) -> bool {
+    ///     // SAFETY: called from a system's hook with its context.
+    ///     unsafe { worlds.is_server(ctx) }
+    /// }
+    /// ```
+    #[must_use]
+    pub unsafe fn is_server(&self, ctx: *mut u64) -> bool {
+        if self.side == Side::SERVER {
+            return true;
+        }
+        let server_world = self.host.server_world();
+        if server_world == 0 || ctx.is_null() {
+            return false;
+        }
+        // SAFETY: the first word of a context is its query descriptor.
+        let descriptor: *const u8 = unsafe { read_at(ctx.cast(), 0) };
+        if descriptor.is_null() {
+            return false;
+        }
+        // SAFETY: the descriptor points at its entity world here.
+        let world: u64 = unsafe { read_at(descriptor, self.entity_world) };
+        server_role(self.side, world, server_world)
     }
 }
 

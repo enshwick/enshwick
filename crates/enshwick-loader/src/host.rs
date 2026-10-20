@@ -325,6 +325,8 @@ pub(crate) static API: HostApi = HostApi {
     code_range,
     patch_code,
     workshop_recipes,
+    hosting,
+    server_world,
 };
 
 /// A static slice from a pointer and a count, empty for a null pointer.
@@ -888,6 +890,16 @@ extern "system" fn sync(me: ModHandle, synced: Str, out: *mut Str) -> Status {
     *slot = server;
     // The text stays in the record until the mod's next call.
     put(out, Str::new(slot.as_str()))
+}
+
+extern "system" fn hosting() -> u8 {
+    loader().map_or(0, |loader| {
+        u8::from(loader.side == Side::SERVER || crate::world::hosting())
+    })
+}
+
+extern "system" fn server_world() -> u64 {
+    crate::world::server_world()
 }
 
 /// Mod handles start at 1; 0 is no mod.

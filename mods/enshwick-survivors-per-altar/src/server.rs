@@ -20,6 +20,11 @@
 //! Callers are told apart by the return address of the lookup, from the caller
 //! frame the loader records; their frames hold the components of the entity
 //! they work on. Every other caller gets the vanilla answer.
+//!
+//! A client links this half too, for the games it hosts: every caller but the
+//! cursor is a server system, which runs only then, and the cursor's lookup is
+//! answered for both of the host's worlds here (see `cursor`). What a game
+//! taught the hooks is dropped when it stops.
 
 use std::cell::Cell;
 use std::collections::BTreeMap;
@@ -27,8 +32,9 @@ use std::sync::atomic::{AtomicU16, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
-use enshwick_api::abi::CallerFrame;
+use enshwick_api::abi::{CallerFrame, Side};
 use enshwick_api::ecs::{Ecs, Entity};
+use enshwick_api::events::Shutdown;
 use enshwick_api::{Load, Next, Off};
 use enshwick_geometry::service::{self, AltarZone, ZonesService};
 
@@ -51,6 +57,8 @@ struct Callers {
     bed: u64,
     bed_init: u64,
     cursor: [u64; 2],
+    /// The cursor site the client alone is quieted at; 0 on the server.
+    client_cursor: u64,
     assign: [u64; 2],
     roaming: u64,
 }
@@ -147,6 +155,7 @@ unsafe fn function<F: Copy>(address: u64) -> F {
 
 /// Links every server hook.
 pub(crate) fn link(load: &mut Load<'_>) -> Result<(), Off> {
+    let client = load.host().build().side == Side::CLIENT;
     let symbol = |name| load.symbol(name);
     let constant = |name| load.constant(name);
     let size = |name| {
@@ -165,6 +174,11 @@ pub(crate) fn link(load: &mut Load<'_>) -> Result<(), Off> {
             symbol("survivors.cursor_return_a")?,
             symbol("survivors.cursor_return_b")?,
         ],
+        client_cursor: if client {
+            symbol("survivors.cursor_return")?
+        } else {
+            0
+        },
         assign: [
             symbol("survivors.assign_return_a")?,
             symbol("survivors.assign_return_b")?,
@@ -209,7 +223,21 @@ pub(crate) fn link(load: &mut Load<'_>) -> Result<(), Off> {
     load.hook(&CURSOR_LOOKUP, load.symbol("npc.lookup_cursor")?)?;
     load.hook(&MOVE, load.symbol("npc.move")?)?;
     load.hook(&UPDATE, load.symbol("npc.update")?)?;
-    load.hook(&BED_CHECK, load.symbol("npc.bed_check")?)
+    load.hook(&BED_CHECK, load.symbol("npc.bed_check")?)?;
+    if client {
+        // Entities belong to one hosted game; the next starts clean.
+        load.on::<Shutdown>(|()| forget())?;
+    }
+    Ok(())
+}
+
+/// Drops what a hosted game taught the hooks.
+fn forget() {
+    if let Ok(mut shared) = SHARED.lock() {
+        *shared = Some(Shared::default());
+    }
+    TRANSFORM_TYPE.store(u16::MAX, Ordering::Release);
+    NPC_COMMON_TYPE.store(u16::MAX, Ordering::Release);
 }
 
 /// Reads a `T` at `offset` bytes past `base`.
@@ -250,9 +278,15 @@ unsafe fn resolve(engine: &Engine, found: u32, npc: u32, caller: u64, frame: &Ca
     let bed = caller == c.bed;
     let assign = c.assign.contains(&caller);
     let roaming = caller == c.roaming;
-    let quiet = caller == c.bed_init || c.cursor.contains(&caller);
-    if !(spawn || unique || bed || assign || roaming || quiet) {
+    let client_site = c.client_cursor != 0 && caller == c.client_cursor;
+    let cursor = client_site || c.cursor.contains(&caller);
+    let quiet = caller == c.bed_init;
+    if !(spawn || unique || bed || assign || roaming || quiet || cursor) {
         return found;
+    }
+    let hosting = enshwick_api::host().is_some_and(|host| host.hosting());
+    if cursor && !hosting {
+        return crate::cursor::answer(false, client_site, 0, found);
     }
     let Ok(mut slot) = SHARED.lock() else {
         return found;
@@ -261,6 +295,10 @@ unsafe fn resolve(engine: &Engine, found: u32, npc: u32, caller: u64, frame: &Ca
         return found;
     };
     refresh(engine, shared);
+    if cursor {
+        let copies = shared.copies.copies_of(npc).len();
+        return crate::cursor::answer(true, client_site, copies, found);
+    }
     let stack = frame.stack();
     let o = &engine.offsets;
 

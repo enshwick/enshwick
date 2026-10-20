@@ -3,14 +3,14 @@
 //! losing any to overlap, no zone ever shrinks, and pieces can be built across
 //! the seams between members.
 //!
-//! The zones are solved on the server, which the game trusts for them; the seam
-//! check runs on both sides, since the client predicts placement.
+//! The zones are solved on the server, which the game trusts for them, and by
+//! a client's built-in server while it hosts a game; the seam check runs on
+//! both sides, since the client predicts placement.
 
 mod altars;
 mod seam;
 mod zones;
 
-use enshwick_api::abi::Side;
 use enshwick_api::{Load, Mod, Off};
 use enshwick_geometry::service::{self, AltarZone, ZonesService};
 
@@ -68,7 +68,7 @@ impl Mod for FlameAltarZones {
         if settings.building_across_seams {
             seam::link(load)?;
         }
-        if settings.clusters && load.host().build().side == Side::SERVER {
+        if settings.clusters {
             altars::link(load)?;
             load.publish(service::NAME, service::VERSION, &ZONES)?;
         }

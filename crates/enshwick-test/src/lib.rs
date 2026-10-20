@@ -153,6 +153,8 @@ pub struct FakeHost {
     templates: HashMap<u32, [u8; 16]>,
     players: Vec<PlayerInfo>,
     mods: Vec<ModInfo>,
+    hosting: bool,
+    server_world: u64,
     services: HashMap<(String, u32), usize>,
     refused_hooks: HashSet<u64>,
     code: (u64, u64),
@@ -196,6 +198,8 @@ impl FakeHost {
             templates: HashMap::new(),
             players: Vec::new(),
             mods: Vec::new(),
+            hosting: false,
+            server_world: 0,
             services: HashMap::new(),
             refused_hooks: HashSet::new(),
             code: (0, 0),
@@ -211,6 +215,38 @@ impl FakeHost {
     #[must_use]
     pub fn side(mut self, side: Side) -> Self {
         self.side = side;
+        self
+    }
+
+    /// Whether a client hosts a game now; the dedicated server always runs
+    /// one.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_api::abi::Side;
+    ///
+    /// let loader = enshwick_test::FakeHost::new().side(Side::CLIENT).hosting(true).install();
+    /// # let _ = loader;
+    /// ```
+    #[must_use]
+    pub fn hosting(mut self, hosting: bool) -> Self {
+        self.hosting = hosting;
+        self
+    }
+
+    /// The entity world of the running server, which a system context of
+    /// that world holds; 0 for none.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick_test::FakeHost::new().server_world(0x2000).install();
+    /// # let _ = loader;
+    /// ```
+    #[must_use]
+    pub fn server_world(mut self, world: u64) -> Self {
+        self.server_world = world;
         self
     }
 

@@ -14,6 +14,9 @@
 //! The engine runs a system once per batch of entities, several times a tick,
 //! so no single pass sees every altar; passes merge into what is known, and an
 //! altar no pass has seen for a while is forgotten.
+//!
+//! On a client both hooks act only for the built-in server's world while it
+//! hosts a game, and what a game taught them is dropped when it stops.
 
 use std::cell::RefCell;
 use std::collections::BTreeMap;
@@ -23,7 +26,9 @@ use std::time::{Duration, Instant};
 
 use arc_swap::ArcSwap;
 use arrayvec::ArrayVec;
-use enshwick_api::ecs::{Attributes, Ecs, Entity};
+use enshwick_api::abi::Side;
+use enshwick_api::ecs::{Attributes, Ecs, Entity, Worlds};
+use enshwick_api::events::Shutdown;
 use enshwick_api::{Load, Next, Off};
 use enshwick_geometry::{Altar, Box3, clusters};
 
@@ -66,6 +71,7 @@ const HALF: f32 = 0.5;
 struct Engine {
     ecs: Ecs,
     attributes: Attributes,
+    worlds: Worlds,
     zone_size: ZoneSize,
     level_attribute: u32,
 }
@@ -174,6 +180,7 @@ pub(crate) fn link(load: &mut Load<'_>) -> Result<(), Off> {
     let engine = Engine {
         ecs: Ecs::resolve(load)?,
         attributes: Attributes::resolve(load)?,
+        worlds: Worlds::resolve(load)?,
         // SAFETY: the loader pins this id to the zone size lookup.
         zone_size: unsafe { function(zone_size) },
         level_attribute: u32::try_from(load.constant("altar.level_attribute")?)
@@ -182,7 +189,26 @@ pub(crate) fn link(load: &mut Load<'_>) -> Result<(), Off> {
     let _first = ENGINE.set(engine);
     let _targets = TARGETS.set(ArcSwap::from_pointee(Targets::new()));
     load.hook(&ADD_ZONES, load.system("add_buildzones_server")?)?;
-    load.hook(&UPGRADE, load.system("upgrade_building_range")?)
+    load.hook(&UPGRADE, load.system("upgrade_building_range")?)?;
+    // Entity ids belong to one game; a client may host another next. The
+    // dedicated server keeps its solution through the final save.
+    if load.host().build().side == Side::CLIENT {
+        load.on::<Shutdown>(|()| forget())?;
+    }
+    Ok(())
+}
+
+/// Drops everything a game taught the passes.
+fn forget() {
+    if let Ok(mut state) = STATE.lock() {
+        state.placed = Seen::new();
+        state.levels = Seen::new();
+        state.built = Seen::new();
+        state.solved = None;
+    }
+    if let Some(targets) = TARGETS.get() {
+        targets.store(Arc::new(Targets::new()));
+    }
 }
 
 fn turn_off(why: &str) {
@@ -198,6 +224,8 @@ fn add_zones(next: Next<unsafe extern "system" fn(*mut u64)>, ctx: *mut u64) {
         return;
     }
     if let Some(engine) = ENGINE.get()
+        // SAFETY: the system's live context.
+        && unsafe { engine.worlds.is_server(ctx) }
         // SAFETY: called with the system's live context, after vanilla ran.
         && std::panic::catch_unwind(|| unsafe { observe(engine, ctx) }).is_err()
     {
@@ -208,6 +236,8 @@ fn add_zones(next: Next<unsafe extern "system" fn(*mut u64)>, ctx: *mut u64) {
 fn upgrade(next: Next<unsafe extern "system" fn(*mut u64)>, ctx: *mut u64) {
     if !OFF.load(Ordering::Acquire)
         && let Some(engine) = ENGINE.get()
+        // SAFETY: the system's live context.
+        && unsafe { engine.worlds.is_server(ctx) }
     {
         // SAFETY: called with the system's live context.
         if std::panic::catch_unwind(|| unsafe { write_ranges(engine, ctx) }).is_ok() {

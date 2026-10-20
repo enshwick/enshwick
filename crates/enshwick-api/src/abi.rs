@@ -14,7 +14,7 @@ use core::sync::atomic::AtomicUsize;
 pub const ABI_MAJOR: u16 = 1;
 
 /// The minor version of this interface. A newer minor only appends fields.
-pub const ABI_MINOR: u16 = 7;
+pub const ABI_MINOR: u16 = 8;
 
 /// Whether `id` is a valid mod id: 1 to 64 characters of `[a-z0-9-]`.
 ///
@@ -261,7 +261,8 @@ impl Status {
 pub struct Side(pub u8);
 
 impl Side {
-    /// The dedicated server.
+    /// The dedicated server; as a mod's side, server features, which the
+    /// client also loads to run while it hosts a game (solo play included).
     pub const SERVER: Self = Self(1);
     /// The game client.
     pub const CLIENT: Self = Self(2);
@@ -1341,6 +1342,14 @@ pub struct HostApi {
     /// game's own list size, or [`u32::MAX`] once the loader has lifted that
     /// limit at arming. Since minor 7.
     pub workshop_recipes: extern "system" fn() -> u32,
+    /// 1 while this process runs a game server: always on the dedicated
+    /// server, on the client while it hosts a game, solo play included.
+    /// Since minor 8.
+    pub hosting: extern "system" fn() -> u8,
+    /// The entity world of the game server this process runs, the value a
+    /// system context of that world holds at `ecs.context_entity_world`; 0
+    /// while none runs or before its first step. Since minor 8.
+    pub server_world: extern "system" fn() -> u64,
 }
 
 /// The exports a mod DLL provides, by name.
@@ -1394,7 +1403,9 @@ const _: () = {
     assert!(core::mem::offset_of!(HostApi, sync) == 24 + 24 * 8);
     assert!(core::mem::offset_of!(HostApi, code_range) == 24 + 25 * 8);
     assert!(core::mem::offset_of!(HostApi, workshop_recipes) == 24 + 27 * 8);
-    assert!(size_of::<HostApi>() == 24 + 28 * 8);
+    assert!(core::mem::offset_of!(HostApi, hosting) == 24 + 28 * 8);
+    assert!(core::mem::offset_of!(HostApi, server_world) == 24 + 29 * 8);
+    assert!(size_of::<HostApi>() == 24 + 30 * 8);
     assert!(core::mem::offset_of!(Manifest, updates) == 80);
     assert!(size_of::<UpdateSource>() == 48);
     assert!(size_of::<ResourceKey>() == 24);
