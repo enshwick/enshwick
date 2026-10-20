@@ -14,7 +14,7 @@ use core::sync::atomic::AtomicUsize;
 pub const ABI_MAJOR: u16 = 1;
 
 /// The minor version of this interface. A newer minor only appends fields.
-pub const ABI_MINOR: u16 = 22;
+pub const ABI_MINOR: u16 = 23;
 
 /// Whether `id` is a valid mod id: 1 to 64 characters of `[a-z0-9-]`.
 ///
@@ -2286,6 +2286,47 @@ pub struct EntityPlace {
     pub position: [i64; 3],
 }
 
+/// A request to move an entity, for [`HostApi::teleport`].
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::abi::{Header, TeleportRequest};
+///
+/// let to_spawn = TeleportRequest {
+///     header: Header::of::<TeleportRequest>(),
+///     entity: 2,
+///     flags: TeleportRequest::BEST_SPAWN,
+///     position: [100 << 32, 40 << 32, -(20 << 32)],
+///     orientation: [0.0, 0.0, 0.0, 1.0],
+/// };
+/// assert_eq!(to_spawn.flags, TeleportRequest::BEST_SPAWN);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct TeleportRequest {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// The entity to move.
+    pub entity: u32,
+    /// [`TeleportRequest::BEST_SPAWN`], [`TeleportRequest::ORIENTED`] or
+    /// none.
+    pub flags: u32,
+    /// Where to, in 32.32 fixed-point metres.
+    pub position: [i64; 3],
+    /// The orientation to arrive in, a quaternion `x, y, z, w`, with
+    /// [`TeleportRequest::ORIENTED`]; otherwise the entity keeps its own.
+    pub orientation: [f32; 4],
+}
+
+impl TeleportRequest {
+    /// The game looks for a free spot near `position` to stand on, as it
+    /// does for respawns.
+    pub const BEST_SPAWN: u32 = 1;
+    /// The entity arrives facing `orientation`.
+    pub const ORIENTED: u32 = 2;
+}
+
 /// The table of services the loader offers a mod.
 ///
 /// Fields are only ever appended; a mod checks [`Header::covers`] before it
@@ -2675,6 +2716,21 @@ pub struct HostApi {
         type_hash: u32,
         out: *mut *mut c_void,
     ) -> Status,
+    /// Raises the game event at `data`, `size` bytes of the reflected type
+    /// `type_hash`, its whole layout; the loader stamps it with the game
+    /// time and the systems of the next step see it. Only types the loader
+    /// allows, which the server's own systems raise: [`Status::REFUSED`]
+    /// for any other or when the step's stream is full,
+    /// [`Status::BAD_ARGS`] for a size that is not the type's. On the
+    /// server's game thread only. Since minor 23.
+    pub emit:
+        extern "system" fn(me: ModHandle, type_hash: u32, data: *const u8, size: u32) -> Status,
+    /// Asks the server to move an entity as its admin teleport does, after
+    /// the next step; [`Status::MISSING`] for an entity not in the world,
+    /// [`Status::REFUSED`] for one the game's teleport does not move, as a
+    /// prop: it moves actors and characters.
+    /// On the server's game thread only. Since minor 23.
+    pub teleport: extern "system" fn(me: ModHandle, request: *const TeleportRequest) -> Status,
 }
 
 /// The exports a mod DLL provides, by name.
@@ -2736,7 +2792,7 @@ const _: () = {
     assert!(core::mem::offset_of!(HostApi, hook_at) == 24 + 35 * 8);
     assert!(core::mem::offset_of!(HostApi, inventory_open) == 24 + 36 * 8);
     assert!(core::mem::offset_of!(HostApi, inventory_submit) == 24 + 38 * 8);
-    assert!(size_of::<HostApi>() == 24 + 64 * 8);
+    assert!(size_of::<HostApi>() == 24 + 66 * 8);
     assert!(size_of::<InventoryOp>() == 32);
     assert!(size_of::<InventoryRequest>() == 32);
     assert!(size_of::<InventoryOpResult>() == 8);
@@ -2762,6 +2818,8 @@ const _: () = {
     assert!(core::mem::offset_of!(HostApi, game_event) == 24 + 58 * 8);
     assert!(core::mem::offset_of!(HostApi, world_key) == 24 + 62 * 8);
     assert!(core::mem::offset_of!(HostApi, component_write) == 24 + 63 * 8);
+    assert!(core::mem::offset_of!(HostApi, teleport) == 24 + 65 * 8);
+    assert!(size_of::<TeleportRequest>() == 8 + 8 + 24 + 16);
     assert!(size_of::<GameEventData>() == 24);
     // Frozen: written as an array.
     assert!(size_of::<EntityPlace>() == 32);

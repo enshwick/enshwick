@@ -552,6 +552,8 @@ pub(crate) static API: HostApi = HostApi {
     save_world,
     world_key,
     component_write,
+    emit,
+    teleport,
 };
 
 /// A static slice from a pointer and a count, empty for a null pointer.
@@ -1746,6 +1748,45 @@ extern "system" fn component_write(
         match caller(me).and_then(|loader| crate::writes::component_mut(loader, entity, type_hash))
         {
             Ok(data) => put(out, data),
+            Err(status) => status,
+        }
+    })
+}
+
+extern "system" fn emit(me: ModHandle, type_hash: u32, data: *const u8, size: u32) -> Status {
+    entry("emit", || {
+        if data.is_null() {
+            return Status::BAD_ARGS;
+        }
+        let Ok(len) = usize::try_from(size) else {
+            return Status::BAD_ARGS;
+        };
+        // SAFETY: the caller passes `size` bytes at `data`, valid for the call.
+        let bytes = unsafe { core::slice::from_raw_parts(data, len) };
+        match caller(me).and_then(|loader| crate::emits::emit(loader, type_hash, bytes)) {
+            Ok(()) => Status::OK,
+            Err(status) => status,
+        }
+    })
+}
+
+extern "system" fn teleport(
+    me: ModHandle,
+    request: *const enshwick_loader_api::abi::TeleportRequest,
+) -> Status {
+    entry("teleport", || {
+        // SAFETY: the caller passes null or a request with its header; an
+        // all-zero request is valid.
+        let Some(request) = (unsafe {
+            enshwick_loader_api::abi::read_headed(
+                request,
+                size_of::<enshwick_loader_api::abi::TeleportRequest>(),
+            )
+        }) else {
+            return Status::BAD_ARGS;
+        };
+        match caller(me).and_then(|loader| crate::emits::teleport(loader, &request)) {
+            Ok(()) => Status::OK,
             Err(status) => status,
         }
     })

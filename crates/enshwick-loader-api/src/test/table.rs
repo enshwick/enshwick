@@ -9,7 +9,8 @@ use crate::abi::{
     CommandCallFn, EntityPlace, Event, EventFn, ExperiencePassFn, GameEventFn, Header, HookSpec,
     HostApi, InteractionFn, InventoryRequest, InventoryResultFn, ItemData, Level, MidHookFn,
     MidHookSpec, ModHandle, ModInfo, PlayerInfo, RenameCallFn, ResourceKey, ResourcePatchFn, Side,
-    SkillCheckFn, Status, StatusFn, Str, SummonFn, SurvivorLookupFn, SurvivorStatusFn, ZoneCheckFn,
+    SkillCheckFn, Status, StatusFn, Str, SummonFn, SurvivorLookupFn, SurvivorStatusFn,
+    TeleportRequest, ZoneCheckFn,
 };
 
 use super::{FakeHost, LinkedHook, ServedResource, SubmittedRequest};
@@ -52,6 +53,10 @@ pub(crate) struct State {
     pub(crate) saves: usize,
     /// The components the mod asked to write, `(entity, type hash)`.
     pub(crate) writes: Vec<(u32, u32)>,
+    /// The game events the mod raised: type hash and bytes.
+    pub(crate) emits: Vec<(u32, Vec<u8>)>,
+    /// The teleports the mod asked for.
+    pub(crate) teleports: Vec<TeleportRequest>,
     /// The world key last handed out, alive until the next one.
     world_key: Option<Box<str>>,
     /// The altars `altars` lists, settable while installed.
@@ -119,6 +124,8 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         destroyed: Vec::new(),
         saves: 0,
         writes: Vec::new(),
+        emits: Vec::new(),
+        teleports: Vec::new(),
         world_key: None,
         altars: Vec::new(),
         altars_opened: false,
@@ -940,6 +947,38 @@ extern "system" fn component_write(
     }
 }
 
+extern "system" fn emit(_me: ModHandle, type_hash: u32, data: *const u8, size: u32) -> Status {
+    if data.is_null() {
+        return Status::BAD_ARGS;
+    }
+    // SAFETY: the safe layer passes `size` bytes at `data` for the call.
+    let bytes = unsafe { core::slice::from_raw_parts(data, size as usize) }.to_vec();
+    with(Status::MISSING, |s| {
+        s.emits.push((type_hash, bytes));
+        Status::OK
+    })
+}
+
+extern "system" fn teleport(_me: ModHandle, request: *const TeleportRequest) -> Status {
+    // SAFETY: the safe layer passes a valid request for the call.
+    let Some(request) = (unsafe { request.as_ref() }).copied() else {
+        return Status::BAD_ARGS;
+    };
+    with(Status::MISSING, |s| {
+        if !s.host.templates.contains_key(&request.entity)
+            && !s
+                .host
+                .placed
+                .iter()
+                .any(|(_, p)| p.entity == request.entity)
+        {
+            return Status::MISSING;
+        }
+        s.teleports.push(request);
+        Status::OK
+    })
+}
+
 /// table it sees for the process, so it is one static.
 pub(crate) static TABLE: HostApi = HostApi {
     header: Header::of::<HostApi>(),
@@ -1008,4 +1047,6 @@ pub(crate) static TABLE: HostApi = HostApi {
     save_world,
     world_key,
     component_write,
+    emit,
+    teleport,
 };

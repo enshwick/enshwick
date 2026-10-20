@@ -17,6 +17,9 @@ Once the world has loaded, and again on `/probe check`:
 - component writes: the replicated health is refused as a writable type; an
   actor's health is set one lower, healed by the most negative amount (it
   stays at 1), its replicated copy checked a second later, and put back;
+- actions: a ping far from anything, which the game must hand back as a game
+  event in the next step; that a type off the allow list and a teleport of
+  an entity not in the world are refused;
 - that destroy requests refuse entity 0 and an entity not in the world;
 - a save on demand, followed by `WorldSaved`.
 
