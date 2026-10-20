@@ -5,7 +5,7 @@ name: ci
 
 on:
   pull_request:
-    branches: [master, develop]
+    branches: [main]
     types: [opened, edited, synchronize, reopened]
   workflow_dispatch:
 
@@ -51,9 +51,8 @@ jobs:
           BASE_REF: ${{ github.base_ref }}
         run: |
           case "$BASE_REF:$HEAD_REF" in
-            develop:feature/*|develop:fix/*|develop:chore/*|develop:hotfix/*|develop:release/*|develop:master) ;;
-            master:develop|master:release/*|master:hotfix/*|master:release-please--*) ;;
-            *) echo "a pull request from '$HEAD_REF' into '$BASE_REF' does not follow git flow (CONTRIBUTING.md)"; exit 1 ;;
+            main:feature/*|main:fix/*|main:chore/*|main:release-please--*) ;;
+            *) echo "a pull request from '$HEAD_REF' into '$BASE_REF' does not follow the branch rules (CONTRIBUTING.md)"; exit 1 ;;
           esac
 
       - name: Commit messages

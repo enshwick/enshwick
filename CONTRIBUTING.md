@@ -14,8 +14,8 @@ The hooks check formatting, spelling, Markdown and commit messages before a
 commit, and clippy, tests and cargo-deny before a push. The rules they enforce,
 and the ones they cannot, are in this file:
 
-- branch from `develop` as `feature/<slug>`, `fix/<slug>` or `chore/<slug>` and
-  open a pull request into `develop`; its title is a conventional commit,
+- branch from `main` as `feature/<slug>`, `fix/<slug>` or `chore/<slug>` and
+  open a pull request into `main`; its title is a conventional commit,
   `<type>(<scope>): <subject>`, and becomes the squashed commit;
 - code follows [code-style.md](CONTRIBUTING.md), unsafe code included.
 
