@@ -177,9 +177,15 @@ impl Mod for BuildingMaterials {
         carry_over_old_settings(load)?;
         let settings: Settings = load.config()?;
         settings.apply();
-        // A joined player gets the server's values here; the patch reads
-        // them each time the game builds the registry.
-        load.on_config_change(|settings: Settings| settings.apply())?;
+        // The loader builds the recipe registry once and keeps it: values
+        // that arrive later, an edited file or a server's join values, reach
+        // the recipes only if the registry is built after them.
+        load.on_config_change(|settings: Settings| {
+            settings.apply();
+            enshwick_loader_api::info!(
+                "recipes already built keep their counts until the next start"
+            );
+        })?;
         load.modify_recipes(scale)?;
         Ok(Self)
     }
