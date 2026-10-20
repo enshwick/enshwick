@@ -85,6 +85,8 @@ mod vetoes;
 #[cfg(windows)]
 mod watch;
 #[cfg(windows)]
+mod weather;
+#[cfg(windows)]
 mod world;
 #[cfg(windows)]
 mod writes;

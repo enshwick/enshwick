@@ -8,7 +8,7 @@
 
 use core::ffi::c_void;
 
-use crate::abi::{BuildingData, Event, KnowledgeData, PlayerData, QuestData, TickData};
+use crate::abi::{BuildingData, ChunkData, Event, KnowledgeData, PlayerData, QuestData, TickData};
 
 mod sealed {
     pub trait Sealed {}
@@ -125,6 +125,10 @@ with_data! {
     KnowledgeChanged = KNOWLEDGE_CHANGED: KnowledgeData, size_of::<KnowledgeData>();
     /// [`Event::QUEST_COMPLETED`].
     QuestCompleted = QUEST_COMPLETED: QuestData, size_of::<QuestData>();
+    /// [`Event::CHUNK_LOADED`].
+    ChunkLoaded = CHUNK_LOADED: ChunkData, size_of::<ChunkData>();
+    /// [`Event::CHUNK_UNLOADED`].
+    ChunkUnloaded = CHUNK_UNLOADED: ChunkData, size_of::<ChunkData>();
     /// [`Event::BUILDING_REMOVED`].
     BuildingRemoved = BUILDING_REMOVED: BuildingData, size_of::<BuildingData>();
 }

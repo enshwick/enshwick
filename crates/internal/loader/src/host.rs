@@ -575,6 +575,9 @@ pub(crate) static API: HostApi = HostApi {
     knowledge,
     grant_knowledge,
     quests,
+    weather_at,
+    weather_fronts,
+    set_weather,
 };
 
 /// A static slice from a pointer and a count, empty for a null pointer.
@@ -936,7 +939,7 @@ extern "system" fn subscribe(
             Ok(found) => found,
             Err(status) => return status,
         };
-        if !(Event::SETTINGS_CHANGED.0..=Event::QUEST_COMPLETED.0).contains(&event.0) {
+        if !(Event::SETTINGS_CHANGED.0..=Event::CHUNK_UNLOADED.0).contains(&event.0) {
             return Status::MISSING;
         }
         if loader.delivery.get().is_some() {
@@ -2142,6 +2145,56 @@ extern "system" fn quests(me: ModHandle, out: *mut u32, capacity: u32, count: *m
                 }
                 put(count, u32::try_from(ids.len()).unwrap_or(u32::MAX))
             }
+            Err(status) => status,
+        }
+    })
+}
+
+extern "system" fn weather_at(
+    me: ModHandle,
+    position: *const [i64; 3],
+    out: *mut [f32; 4],
+) -> Status {
+    entry("weather_at", || {
+        // SAFETY: the caller passes null or a position valid for the call.
+        let Some(position) = (unsafe { position.as_ref() }).copied() else {
+            return Status::BAD_ARGS;
+        };
+        match caller(me).and_then(|loader| crate::weather::sample(loader, position)) {
+            Ok(weights) => put(out, weights),
+            Err(status) => status,
+        }
+    })
+}
+
+extern "system" fn weather_fronts(
+    me: ModHandle,
+    out: *mut enshwick_loader_api::abi::WeatherFront,
+    capacity: u32,
+    count: *mut u32,
+) -> Status {
+    entry("weather_fronts", || {
+        match caller(me).and_then(crate::weather::fronts) {
+            Ok(fronts) => {
+                if !out.is_null() {
+                    for (i, front) in fronts.iter().take(capacity as usize).enumerate() {
+                        // SAFETY: the caller passes room for `capacity` fronts.
+                        let slot = unsafe { out.add(i) };
+                        // SAFETY: as above.
+                        unsafe { slot.write(*front) };
+                    }
+                }
+                put(count, u32::try_from(fronts.len()).unwrap_or(u32::MAX))
+            }
+            Err(status) => status,
+        }
+    })
+}
+
+extern "system" fn set_weather(me: ModHandle, effect: u32, duration: i64) -> Status {
+    entry("set_weather", || {
+        match caller(me).and_then(|loader| crate::weather::set(loader, effect, duration)) {
+            Ok(()) => Status::OK,
             Err(status) => status,
         }
     })

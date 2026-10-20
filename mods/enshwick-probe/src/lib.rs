@@ -16,6 +16,7 @@ mod clock;
 mod damage;
 mod knowledge;
 mod settings;
+mod weather;
 
 use std::ops::ControlFlow;
 use std::sync::Arc;
@@ -77,6 +78,10 @@ fn extras(load: &mut Load<'_>, scheduler: Scheduler) -> Vec<Check> {
     match knowledge::KnowledgeChecks::new(load, scheduler) {
         Ok(knowledge) => extras.push(Box::new(move || knowledge.run())),
         Err(off) => enshwick_loader_api::warn!("FAIL knowledge: {off}"),
+    }
+    match weather::WeatherChecks::new(load, scheduler) {
+        Ok(weather) => extras.push(Box::new(move || weather.run())),
+        Err(off) => enshwick_loader_api::warn!("FAIL weather: {off}"),
     }
     extras
 }

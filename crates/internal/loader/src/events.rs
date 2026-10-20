@@ -287,6 +287,7 @@ unsafe fn after_step(loader: &'static Loader, offsets: &Offsets, server: *mut u8
     crate::altars::after_step(loader);
     crate::daytime::after_step(loader);
     crate::knowledge::after_step(loader);
+    crate::weather::after_step(loader);
     let step = STEPS.fetch_add(1, Ordering::Relaxed) + 1;
     crate::interactions::after_step(loader, step);
     let tick = TickData {
@@ -344,6 +345,7 @@ fn end_session() {
     crate::saves::forget();
     crate::daytime::forget();
     crate::knowledge::forget();
+    crate::weather::forget();
     forget_joined();
     BUILDING
         .lock()

@@ -1639,6 +1639,31 @@ impl Installed {
         table::with(Vec::new(), |s| s.grants.clone())
     }
 
+    /// Sets the weather the fake reports: the weights everywhere (clear,
+    /// rain, snow, blizzard) and the fronts; until then no world runs.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick_loader_api::test::FakeHost::new().install();
+    /// loader.set_weather([1.0, 0.0, 0.0, 0.0], &[]);
+    /// assert!(loader.forecasts().is_empty());
+    /// ```
+    pub fn set_weather(&self, weights: [f32; 4], fronts: &[crate::abi::WeatherFront]) {
+        table::with((), |s| s.weather = Some((weights, fronts.to_vec())));
+    }
+
+    /// The weather the mod started: effect (`u32::MAX` for the game's
+    /// choice) and duration in game nanoseconds.
+    ///
+    /// # Examples
+    ///
+    /// See [`Installed::set_weather`].
+    #[must_use]
+    pub fn forecasts(&self) -> Vec<(u32, i64)> {
+        table::with(Vec::new(), |s| s.forecasts.clone())
+    }
+
     /// Whether the mod opened altars, and whether it controls their zones.
     ///
     /// # Examples

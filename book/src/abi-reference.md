@@ -12,7 +12,7 @@ raw table. The exact types and signatures are in the
 | Constant                                                                                            | Value | Meaning                                         |
 | --------------------------------------------------------------------------------------------------- | ----- | ----------------------------------------------- |
 | [`ABI_MAJOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 1     | A loader refuses a mod built for another major. |
-| [`ABI_MINOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 32    | A newer minor only appends.                     |
+| [`ABI_MINOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 33    | A newer minor only appends.                     |
 
 The ABI version is apart from Enshwick Loader's version (such as 0.2.0, see
 [Releasing and updates](releasing.md#versions)): a platform release raises
@@ -135,14 +135,23 @@ id through `Load::subscribe`. See [Events and the scheduler](events.md).
 | 14 | `NIGHT_STARTED`           | `NightStarted`          | none            | the game thread | server |
 | 15 | `KNOWLEDGE_CHANGED`       | `KnowledgeChanged`      | `KnowledgeData` | the game thread | server |
 | 16 | `QUEST_COMPLETED`         | `QuestCompleted`        | `QuestData`     | the game thread | server |
+| 17 | `CHUNK_LOADED`            | `ChunkLoaded`           | `ChunkData`     | the game thread | server |
+| 18 | `CHUNK_UNLOADED`          | `ChunkUnloaded`         | `ChunkData`     | the game thread | server |
 
 Subscribing needs minor 2; `JOIN_MISSING` came with minor 10 and
 `ALTARS_CHANGED`, raised for mods that opened altars, with minor 15;
 `DAY_STARTED` and `NIGHT_STARTED` with minor 28; `KNOWLEDGE_CHANGED` and
-`QUEST_COMPLETED` with minor 32. "Server" events also reach a client while it
-hosts a game, solo play included. The typed events hand a handler the fields
-the loader knows, with fields added after the event zero; they skip the
-handler only when the data lacks a field the event came with.
+`QUEST_COMPLETED` with minor 32; `CHUNK_LOADED` and `CHUNK_UNLOADED` with
+minor 33. "Server" events also reach a client while it hosts a game, solo
+play included. The typed events hand a handler the fields the loader knows,
+with fields added after the event zero; they skip the handler only when the
+data lacks a field the event came with.
+`ALTARS_CHANGED`, raised for mods that opened altars, with minor 15;
+`CHUNK_LOADED` and `CHUNK_UNLOADED` with minor 33. "Server"
+events also reach a client while it hosts a game, solo play included. The
+typed events hand a handler the fields the loader knows, with fields added
+after the event zero; they skip the handler only when the data lacks a field
+the event came with.
 
 ## The host table
 
@@ -241,6 +250,9 @@ marked "init only" are allowed during `enshwick_mod_init` only.
 | `knowledge`           | A knowledge value of a player or the world; server game thread only                             | 32          |
 | `grant_knowledge`     | Grants knowledge as the game does, applied the next step; server game thread only               | 32          |
 | `quests`              | The quest ids of the running game; server game thread only                                      | 32          |
+| `weather_at`          | How clear, rainy, snowy and stormy it is at a place; server game thread only                    | 33          |
+| `weather_fronts`      | The current weather fronts of the server's world; server game thread only                       | 33          |
+| `set_weather`         | Starts new weather in every layer, or lets the game choose; server game thread only             | 33          |
 
 ## Under an older loader
 
@@ -286,6 +298,7 @@ the mod off with a reason, which the mod's log shows as `off: <reason>`:
 | 30          | `Load::on_damage`               | Off: `damage filters: needs a newer loader`               |
 | 31          | `Load::buffs`                   | Off: `buffs: needs a newer loader`                        |
 | 32          | `Load::knowledge`               | Off: `knowledge: needs a newer loader`                    |
+| 33          | `Load::weather`                 | Off: `weather: needs a newer loader`                      |
 
 A mod that can do without a feature catches the `Off` and goes on without it
 instead of returning it from `init`.

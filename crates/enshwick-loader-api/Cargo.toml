@@ -98,6 +98,10 @@ name = "vetoes"
 required-features = ["test"]
 
 [[test]]
+name = "weather"
+required-features = ["test"]
+
+[[test]]
 name = "worlds"
 required-features = ["test"]
 

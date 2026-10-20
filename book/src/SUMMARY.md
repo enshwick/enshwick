@@ -23,6 +23,7 @@
 - [Actions](actions.md)
 - [Time of day](daytime.md)
 - [Game settings](game-settings.md)
+- [Weather and chunks](weather.md)
 - [Altars and bases](altars.md)
 - [Survivors](survivors.md)
 - [Interactions](interactions.md)

@@ -51,6 +51,8 @@ The types are in
 | `NightStarted` | none | the night began in the server's world | game |
 | `KnowledgeChanged` | `KnowledgeData` (`entity`, `id`, `value`) | a knowledge value of a player (or the world, entity 0) changed ([knowledge](knowledge.md)) | game |
 | `QuestCompleted` | `QuestData` (`entity`, `quest`) | a player completed a quest and got its rewards | game |
+| `ChunkLoaded` | `ChunkData` (`index`, `x`, `z`, `size`) | a 256 m chunk of the server's world loaded as players came near; its entities exist now ([weather and the world's chunks](weather.md)) | game |
+| `ChunkUnloaded` | `ChunkData` | a chunk unloaded once no player was near; its entities are gone | game |
 
 The data:
 
