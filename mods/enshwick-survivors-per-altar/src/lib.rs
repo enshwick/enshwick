@@ -54,6 +54,24 @@ struct Settings {
     copy_staff_locked_chest_chance: f64,
 }
 
+impl Settings {
+    /// Refuses chances outside 0 to 1, such as `10` typed for 10 %.
+    fn check(&self) -> Result<(), String> {
+        for (name, chance) in [
+            ("copy_staff_boss_chance", self.copy_staff_boss_chance),
+            (
+                "copy_staff_locked_chest_chance",
+                self.copy_staff_locked_chest_chance,
+            ),
+        ] {
+            if !(0.0..=1.0).contains(&chance) {
+                return Err(format!("{name} must be a number from 0 to 1, not {chance}"));
+            }
+        }
+        Ok(())
+    }
+}
+
 /// The mod's state.
 #[derive(Debug)]
 pub struct SurvivorsPerAltar;
@@ -187,6 +205,7 @@ impl Mod for SurvivorsPerAltar {
 
     fn init(load: &mut Load<'_>) -> Result<Self, Off> {
         let settings: Settings = load.settings(DEFAULTS)?;
+        settings.check().map_err(Off::new)?;
         if !settings.per_altar {
             return Err(Off::new("per_altar is off in the settings"));
         }
@@ -265,5 +284,19 @@ mod tests {
         let old: Settings = toml::from_str("per_altar = true\n").unwrap();
         assert!(old.copy_staffs);
         assert!((old.copy_staff_locked_chest_chance - 0.02).abs() < f64::EPSILON);
+        assert!(settings.check().is_ok());
+    }
+
+    #[test]
+    fn chances_outside_zero_to_one_are_refused() {
+        for bad in ["10", "-0.5", "nan", "inf"] {
+            let text = format!(
+                "per_altar = true
+copy_staff_boss_chance = {bad}
+"
+            );
+            let settings: Settings = toml::from_str(&text).unwrap();
+            assert!(settings.check().is_err(), "{bad}");
+        }
     }
 }
