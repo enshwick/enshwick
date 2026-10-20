@@ -198,6 +198,9 @@ pub static BUILDS: &[KnownBuild] = &[
             ("weather.free", 0xa1_4e50),
             ("weather.spawn", 0xa1_6120),
             ("chunks.step", 0x6b_ee40),
+            ("terrain.add", 0xa3_1840),
+            ("terrain.dig", 0xa3_11f0),
+            ("terrain.flatten", 0xa3_0ef0),
         ],
         constants: &[
             ("ecs.context_row", 8),
@@ -462,6 +465,13 @@ pub static BUILDS: &[KnownBuild] = &[
             ("chunks.width", 0x10),
             ("chunks.height", 0x14),
             ("chunks.index", 0x30),
+            // The server holds its voxel world (its allocator first) and
+            // voxel editor here; the game object its terraforming registry,
+            // which holds its resource once loaded.
+            ("terrain.voxel_world", 0x1770),
+            ("terrain.editor", 0x1778),
+            ("terrain.registry", 0x258),
+            ("terrain.registry_resource", 0x38),
         ],
     },
     KnownBuild {
@@ -591,6 +601,9 @@ pub static BUILDS: &[KnownBuild] = &[
             ("weather.free", 0xa9_b560),
             ("weather.spawn", 0xa9_c700),
             ("chunks.step", 0xa1_d8d0),
+            ("terrain.add", 0xa8_4d10),
+            ("terrain.dig", 0xa8_46c0),
+            ("terrain.flatten", 0xa8_43c0),
             ("chat.receive_return_a", 0x84_0b59),
             ("chat.receive_return_b", 0x86_9b1b),
             ("chat.client_send", 0x86_64d0),
@@ -868,6 +881,13 @@ pub static BUILDS: &[KnownBuild] = &[
             ("chunks.width", 0x10),
             ("chunks.height", 0x14),
             ("chunks.index", 0x30),
+            // The server holds its voxel world (its allocator first) and
+            // voxel editor here; the game object its terraforming registry,
+            // which holds its resource once loaded.
+            ("terrain.voxel_world", 0x1770),
+            ("terrain.editor", 0x1778),
+            ("terrain.registry", 0x258),
+            ("terrain.registry_resource", 0x38),
             // The client's own chat: the game client holds it here.
             ("chat.client_store", 0xf8),
         ],

@@ -11,7 +11,8 @@ use crate::abi::{
     HostApi, InteractionFn, InventoryRequest, InventoryResultFn, ItemData, KnowledgeInfo, Level,
     MidHookFn, MidHookSpec, ModHandle, ModInfo, NetMessageFn, PlayerInfo, RenameCallFn,
     ResourceKey, ResourcePatchFn, Side, SkillCheckFn, SpawnRequest, Status, StatusFn, Str,
-    SummonFn, SurvivorLookupFn, SurvivorStatusFn, TeleportRequest, WeatherFront, ZoneCheckFn,
+    SummonFn, SurvivorLookupFn, SurvivorStatusFn, TeleportRequest, TerrainEdit,
+    TerrainMaterialInfo, WeatherFront, ZoneCheckFn,
 };
 
 use super::{FakeHost, LinkedHook, ServedResource, SubmittedRequest};
@@ -89,6 +90,10 @@ pub(crate) struct State {
     pub(crate) weather: Option<([f32; 4], Vec<WeatherFront>)>,
     /// The weather the mod started: effect and duration.
     pub(crate) forecasts: Vec<(u32, i64)>,
+    /// The terrain materials, once a world runs.
+    pub(crate) terrain: Option<Vec<TerrainMaterialInfo>>,
+    /// The terrain edits the mod asked for.
+    pub(crate) terrain_edits: Vec<TerrainEdit>,
     /// The world key last handed out, alive until the next one.
     world_key: Option<Box<str>>,
     /// The altars `altars` lists, settable while installed.
@@ -171,6 +176,8 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         quests: Vec::new(),
         weather: None,
         forecasts: Vec::new(),
+        terrain: None,
+        terrain_edits: Vec::new(),
         channels: Vec::new(),
         net_sent: Vec::new(),
         notices: Vec::new(),
@@ -1441,6 +1448,57 @@ extern "system" fn set_weather(_me: ModHandle, effect: u32, duration: i64) -> St
     })
 }
 
+extern "system" fn terrain_materials(
+    _me: ModHandle,
+    out: *mut TerrainMaterialInfo,
+    capacity: u32,
+    count: *mut u32,
+) -> Status {
+    let Some(materials) = with(None, |s| s.terrain.clone()) else {
+        return Status::MISSING;
+    };
+    if count.is_null() {
+        return Status::BAD_ARGS;
+    }
+    if !out.is_null() {
+        for (i, material) in materials.iter().take(capacity as usize).enumerate() {
+            // SAFETY: the safe layer passes room for `capacity` entries.
+            let slot = unsafe { out.add(i) };
+            // SAFETY: as above.
+            unsafe { slot.write(*material) };
+        }
+    }
+    // SAFETY: checked above.
+    unsafe { count.write(u32::try_from(materials.len()).unwrap_or(u32::MAX)) };
+    Status::OK
+}
+
+extern "system" fn terrain_edit(
+    _me: ModHandle,
+    edit: *const TerrainEdit,
+    amount: *mut f32,
+) -> Status {
+    // SAFETY: the safe layer passes a valid edit for the call.
+    let Some(edit) = (unsafe { edit.as_ref() }).copied() else {
+        return Status::BAD_ARGS;
+    };
+    if amount.is_null() {
+        return Status::BAD_ARGS;
+    }
+    if !(edit.radius > 0.0 && edit.radius <= 16.0) || edit.position.iter().any(|a| *a < 0.0) {
+        return Status::BAD_ARGS;
+    }
+    with(Status::MISSING, |s| {
+        if s.terrain.is_none() {
+            return Status::MISSING;
+        }
+        s.terrain_edits.push(edit);
+        // SAFETY: checked above; the fake moves one cubic metre per edit.
+        unsafe { amount.write(1.0) };
+        Status::OK
+    })
+}
+
 /// table it sees for the process, so it is one static.
 pub(crate) static TABLE: HostApi = HostApi {
     header: Header::of::<HostApi>(),
@@ -1535,4 +1593,6 @@ pub(crate) static TABLE: HostApi = HostApi {
     weather_at,
     weather_fronts,
     set_weather,
+    terrain_materials,
+    terrain_edit,
 };

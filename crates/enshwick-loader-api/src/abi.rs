@@ -14,7 +14,7 @@ use core::sync::atomic::AtomicUsize;
 pub const ABI_MAJOR: u16 = 1;
 
 /// The minor version of this interface. A newer minor only appends fields.
-pub const ABI_MINOR: u16 = 33;
+pub const ABI_MINOR: u16 = 34;
 
 /// Whether `id` is a valid mod id: 1 to 64 characters of `[a-z0-9-]`.
 ///
@@ -2901,6 +2901,113 @@ impl WeatherFront {
     pub const BLIZZARD: u32 = 2;
 }
 
+/// A terrain material of the running game, written by
+/// [`HostApi::terrain_materials`].
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::abi::{Header, TerrainMaterialInfo};
+///
+/// let dirt = TerrainMaterialInfo {
+///     header: Header::of::<TerrainMaterialInfo>(),
+///     id: 1,
+///     flags: TerrainMaterialInfo::FLATTENS,
+///     hardness: 0,
+///     reserved: 0,
+///     item: 0x0d9b_7a1c,
+///     health: 100,
+/// };
+/// assert_eq!(dirt.flags & TerrainMaterialInfo::FLATTENS, TerrainMaterialInfo::FLATTENS);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TerrainMaterialInfo {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// The material's voxel id, 1 to 127.
+    pub id: u8,
+    /// [`TerrainMaterialInfo::FLATTENS`] or none.
+    pub flags: u8,
+    /// How hard it is to dig, the game's hardness category from 0.
+    pub hardness: u8,
+    /// Zero.
+    pub reserved: u8,
+    /// The item digging it yields, as an item id.
+    pub item: u32,
+    /// The health a voxel of it has against tools.
+    pub health: i32,
+}
+
+impl TerrainMaterialInfo {
+    /// A player's tool can flatten it.
+    pub const FLATTENS: u8 = 1;
+}
+
+/// A terrain edit, for [`HostApi::terrain_edit`].
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::abi::{Header, TerrainEdit};
+///
+/// let hole = TerrainEdit {
+///     header: Header::of::<TerrainEdit>(),
+///     kind: TerrainEdit::DIG,
+///     shape: TerrainEdit::ROUND,
+///     flags: 0,
+///     material: 0,
+///     position: [100.0, 40.0, 100.0],
+///     radius: 3.0,
+///     height: 0.0,
+///     protect: [0; 16],
+/// };
+/// assert_eq!(hole.kind, TerrainEdit::DIG);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct TerrainEdit {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// [`TerrainEdit::ADD`], [`TerrainEdit::DIG`] or
+    /// [`TerrainEdit::FLATTEN`].
+    pub kind: u32,
+    /// [`TerrainEdit::ROUND`] or [`TerrainEdit::SQUARE`].
+    pub shape: u32,
+    /// [`TerrainEdit::DRY_RUN`] or none.
+    pub flags: u32,
+    /// The terrain material added or filled with, 1 to 127; unused by a
+    /// dig.
+    pub material: u32,
+    /// Where, in metres; every axis 0 or more.
+    pub position: [f32; 3],
+    /// How far it reaches, in metres, above 0 and up to 16: a mound's or a
+    /// flattened disc's radius, a dug sphere's.
+    pub radius: f32,
+    /// A mound's height at its middle, in metres, above 0 and up to 16;
+    /// unused otherwise.
+    pub height: f32,
+    /// Terrain materials a dig leaves, a bit for each id (bit `id % 8` of
+    /// byte `id / 8`): the dig stops at the first shell that meets one.
+    pub protect: [u8; 16],
+}
+
+impl TerrainEdit {
+    /// Adds a mound of a material, as a player's shovel does.
+    pub const ADD: u32 = 0;
+    /// Digs out terrain, as a pickaxe does, without its cost.
+    pub const DIG: u32 = 1;
+    /// Flattens the ground to the level of the position, filling with a
+    /// material.
+    pub const FLATTEN: u32 = 2;
+    /// A disc or a sphere.
+    pub const ROUND: u32 = 0;
+    /// A square or a cube.
+    pub const SQUARE: u32 = 1;
+    /// Counts what the edit would change and changes nothing.
+    pub const DRY_RUN: u32 = 1;
+}
+
 /// The table of services the loader offers a mod.
 ///
 /// Fields are only ever appended; a mod checks [`Header::covers`] before it
@@ -3478,6 +3585,22 @@ pub struct HostApi {
     /// game's own for 0; `u32::MAX` lets the game choose anew. Clients
     /// follow. On the server's game thread only. Since minor 33.
     pub set_weather: extern "system" fn(me: ModHandle, effect: u32, duration: i64) -> Status,
+    /// Up to `capacity` terrain materials of the running game, and how many
+    /// there are. On the server's game thread only. Since minor 34.
+    pub terrain_materials: extern "system" fn(
+        me: ModHandle,
+        out: *mut TerrainMaterialInfo,
+        capacity: u32,
+        count: *mut u32,
+    ) -> Status,
+    /// Runs a terrain edit in the server's world as the game's terraforming
+    /// does, and writes the volume it changed in cubic metres (for a
+    /// flatten, 1 when anything changed) to `amount`; clients see it and
+    /// the save keeps it. Building voxels are left alone.
+    /// [`Status::BAD_ARGS`] for an edit out of range. On the server's game
+    /// thread only. Since minor 34.
+    pub terrain_edit:
+        extern "system" fn(me: ModHandle, edit: *const TerrainEdit, amount: *mut f32) -> Status,
 }
 
 /// The exports a mod DLL provides, by name.
@@ -3539,7 +3662,7 @@ const _: () = {
     assert!(core::mem::offset_of!(HostApi, hook_at) == 24 + 35 * 8);
     assert!(core::mem::offset_of!(HostApi, inventory_open) == 24 + 36 * 8);
     assert!(core::mem::offset_of!(HostApi, inventory_submit) == 24 + 38 * 8);
-    assert!(size_of::<HostApi>() == 24 + 90 * 8);
+    assert!(size_of::<HostApi>() == 24 + 92 * 8);
     assert!(core::mem::offset_of!(HostApi, time_of_day) == 24 + 73 * 8);
     assert!(core::mem::offset_of!(HostApi, set_time_speed) == 24 + 76 * 8);
     assert!(size_of::<DaytimeInfo>() == 8 + 5 * 8 + 8);
@@ -3562,6 +3685,10 @@ const _: () = {
     // Frozen: written as an array.
     assert!(size_of::<WeatherFront>() == 8 + 8 + 24 + 8 + 8);
     assert!(size_of::<ChunkData>() == 8 + 16);
+    assert!(core::mem::offset_of!(HostApi, terrain_materials) == 24 + 90 * 8);
+    // Frozen: written as an array.
+    assert!(size_of::<TerrainMaterialInfo>() == 8 + 12);
+    assert!(size_of::<TerrainEdit>() == 8 + 16 + 12 + 8 + 16);
     assert!(size_of::<InventoryOp>() == 32);
     assert!(size_of::<InventoryRequest>() == 32);
     assert!(size_of::<InventoryOpResult>() == 8);

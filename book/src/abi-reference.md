@@ -12,7 +12,7 @@ raw table. The exact types and signatures are in the
 | Constant                                                                                            | Value | Meaning                                         |
 | --------------------------------------------------------------------------------------------------- | ----- | ----------------------------------------------- |
 | [`ABI_MAJOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 1     | A loader refuses a mod built for another major. |
-| [`ABI_MINOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 33    | A newer minor only appends.                     |
+| [`ABI_MINOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 34    | A newer minor only appends.                     |
 
 The ABI version is apart from Enshwick Loader's version (such as 0.2.0, see
 [Releasing and updates](releasing.md#versions)): a platform release raises
@@ -253,6 +253,8 @@ marked "init only" are allowed during `enshwick_mod_init` only.
 | `weather_at`          | How clear, rainy, snowy and stormy it is at a place; server game thread only                    | 33          |
 | `weather_fronts`      | The current weather fronts of the server's world; server game thread only                       | 33          |
 | `set_weather`         | Starts new weather in every layer, or lets the game choose; server game thread only             | 33          |
+| `terrain_materials`   | The terrain materials of the running game; server game thread only                              | 34          |
+| `terrain_edit`        | Adds, digs or flattens ground as the game's terraforming does; server game thread only          | 34          |
 
 ## Under an older loader
 
@@ -299,6 +301,7 @@ the mod off with a reason, which the mod's log shows as `off: <reason>`:
 | 31          | `Load::buffs`                   | Off: `buffs: needs a newer loader`                        |
 | 32          | `Load::knowledge`               | Off: `knowledge: needs a newer loader`                    |
 | 33          | `Load::weather`                 | Off: `weather: needs a newer loader`                      |
+| 34          | `Load::terrain`                 | Off: `terrain: needs a newer loader`                      |
 
 A mod that can do without a feature catches the `Off` and goes on without it
 instead of returning it from `init`.
