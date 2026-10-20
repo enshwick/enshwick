@@ -18,6 +18,7 @@ every mod is a DLL in the `mods/` folder beside it.
 | [Build camera](mods/enshwick-build-camera)               | the building fly mode for every player, without the skill          |
 | [Shared experience](mods/enshwick-shared-experience)     | every character keeps up with the one furthest ahead in experience |
 | [Area loot](mods/enshwick-area-loot)                     | emptying one enemy corpse takes the loot of the others around it   |
+| [Dev tools](mods/enshwick-dev-tools)                     | administrator commands and a command file for test servers         |
 
 ## Install
 

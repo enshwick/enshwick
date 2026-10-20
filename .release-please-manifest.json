@@ -14,5 +14,6 @@
   "mods/enshwick-updater": "0.1.0",
   "mods/enshwick-build-camera": "0.1.0",
   "mods/enshwick-shared-experience": "0.1.0",
-  "mods/enshwick-area-loot": "0.1.0"
+  "mods/enshwick-area-loot": "0.1.0",
+  "mods/enshwick-dev-tools": "0.1.0"
 }
