@@ -124,13 +124,19 @@ impl RawStats {
         ]));
         let flags = byte(self.flags);
         let count = usize::from(byte(self.count));
-        let values: Vec<i32> = (0..count)
-            .filter_map(|slot| {
-                let at = offset + slot * 4;
-                let b = bytes.get(at..at + 4)?;
-                Some(i32::from_le_bytes([b[0], b[1], b[2], b[3]]))
-            })
-            .collect();
+        let initialised = root == u32::try_from(set.root).unwrap_or(0) && flags & 1 != 0;
+        let values: Vec<i32> = if initialised {
+            (0..count)
+                .map(|slot| {
+                    let value = data.cast::<u8>().wrapping_add(offset + slot * 4);
+                    // SAFETY: an initialised set keeps `count` values from
+                    // `offset`, as the API's own stat reads rely on.
+                    unsafe { value.cast::<i32>().read_unaligned() }
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
         let _infallible = write!(
             text,
             "\n  {}: root {root:#010x} (the API expects {:#010x}), values at +{offset:#x}, flags {flags:#x}, \
