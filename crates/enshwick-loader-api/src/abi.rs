@@ -983,7 +983,7 @@ impl Relation {
 ///
 /// let zones = Dependency {
 ///     id: Str::new("flame-altar-zones"),
-///     range: Str::new("^0.1"),
+///     range: Str::new(">=0.1, <1.0"),
 ///     relation: Relation::REQUIRES,
 /// };
 /// assert_eq!(zones.relation, Relation::REQUIRES);
@@ -993,7 +993,7 @@ impl Relation {
 pub struct Dependency {
     /// The other mod's id.
     pub id: Str,
-    /// A Cargo-style version requirement, such as `^0.1`; empty for any.
+    /// A Cargo-style version requirement, such as `>=0.1, <1.0`; empty for any.
     pub range: Str,
     /// How the two relate.
     pub relation: Relation,

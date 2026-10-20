@@ -155,14 +155,14 @@ join check: no"
             side: BOTH,
             version: "0.2.0",
             join = true,
-            requires: ["flame-altar-zones" => "^0.1"],
+            requires: ["flame-altar-zones" => ">=0.1, <1.0"],
             after: ["flame-altar-count"],
             signed_by: ["RWTjqgtfpy3lSOLC4uaUXuvvKSLQKOFf6nUnEytoiFjSzxMEhLnoAdJF"],
         );
         assert_eq!(
             describe(manifest),
             "id: survivors-per-altar\nversion: 0.2.0\nside: both\njoin check: yes\n\
-             requires: flame-altar-zones ^0.1\nafter: flame-altar-count\n\
+             requires: flame-altar-zones >=0.1, <1.0\nafter: flame-altar-count\n\
              signed by: RWTjqgtfpy3lSOLC4uaUXuvvKSLQKOFf6nUnEytoiFjSzxMEhLnoAdJF"
         );
     }
