@@ -1,11 +1,11 @@
-# Release pull requests and releases per crate (docs/conventions/repository.md, Releases).
-# Every release run attaches one player bundle: the stub, the loader and every mod,
-# laid out as they go next to the game.
+# Release pull requests and releases per crate.
+# Each release gets its own archive: a mod's DLL, or the stub and loader; the
+# loader's release also carries the full bundle, everything as it goes next to the game.
 name: release-please
 
 on:
   push:
-    branches: [master]
+    branches: [main]
 
 permissions:
   contents: write
@@ -25,7 +25,7 @@ jobs:
         with:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
-          target-branch: master
+          target-branch: main
 
   bundle:
     needs: release-please
@@ -44,17 +44,25 @@ jobs:
       - name: Build
         run: cargo build --release --workspace --locked
 
-      - name: Bundle
+      - name: Archives
         run: |
-          mkdir -p bundle/mods/enshwick
-          cp target/release/powrprof.dll bundle/
-          cp target/release/enshwick.dll bundle/mods/enshwick/
-          for dll in target/release/enshwick_*.dll; do
-            name=$(basename "$dll" .dll)
-            cp "$dll" "bundle/mods/$(echo "$name" | tr '_' '-').dll"
+          pack() { (cd "$1" && 7z a -tzip "../$2" . > /dev/null); }
+          mkdir -p all/mods/enshwick loader/mods/enshwick
+          for dir in all loader; do
+            cp target/release/powrprof.dll "$dir/"
+            cp target/release/enshwick.dll "$dir/mods/enshwick/"
+            cp LICENSE "$dir/"
           done
-          cp LICENSE bundle/
-          (cd bundle && 7z a -tzip ../enshwick.zip . > /dev/null)
+          for dll in target/release/enshwick_*.dll; do
+            name=$(basename "$dll" .dll | tr '_' '-')
+            mkdir -p "$name/mods"
+            cp "$dll" "$name/mods/$name.dll"
+            cp LICENSE "$name/"
+            cp "$dll" "all/mods/$name.dll"
+            pack "$name" "$name.zip"
+          done
+          pack loader enshwick-loader.zip
+          pack all enshwick.zip
 
       - name: Attach
         env:
@@ -62,7 +70,14 @@ jobs:
           OUTPUTS: ${{ needs.release-please.outputs.all }}
         run: |
           # jq on Windows ends lines with CRLF; the tags must not keep the CR.
-          echo "$OUTPUTS" | jq -r 'to_entries[] | select(.key | endswith("--tag_name")) | .value' | tr -d '\r' |
+          echo "$OUTPUTS" | jq -r 'to_entries[] | select(.key | endswith("--tag_name")) | .value' | tr -d '' |
             while read -r tag; do
-              gh release upload "$tag" enshwick.zip --clobber --repo "$GITHUB_REPOSITORY"
+              component=${tag%-v*}
+              case "$component" in
+                enshwick-loader|enshwick-stub) files="enshwick-loader.zip enshwick.zip" ;;
+                *) [ -f "$component.zip" ] && files="$component.zip" || files="" ;;
+              esac
+              for file in $files; do
+                gh release upload "$tag" "$file" --clobber --repo "$GITHUB_REPOSITORY"
+              done
             done

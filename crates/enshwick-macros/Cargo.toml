@@ -1,0 +1,22 @@
+[package]
+name = "enshwick-macros"
+version = "0.1.0"
+description = "Derive macros for the Enshwick modding API"
+keywords = ["enshrouded", "modding", "derive"]
+categories = ["game-development"]
+readme = "README.md"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lib]
+proc-macro = true
+
+[dependencies]
+quote = { version = "1.0.47", default-features = false, features = ["proc-macro"] }
+syn = { version = "3.0.9", default-features = false, features = ["derive", "parsing", "printing", "proc-macro"] }
+
+[lints]
+workspace = true

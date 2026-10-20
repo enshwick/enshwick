@@ -75,6 +75,7 @@ dependencies = [
 name = "enshwick-api"
 version = "0.1.1"
 dependencies = [
+ "enshwick-macros",
  "serde",
  "thiserror",
  "toml",
@@ -128,6 +129,14 @@ dependencies = [
  "rustc-hash",
  "semver",
  "windows-sys",
+]
+
+[[package]]
+name = "enshwick-macros"
+version = "0.1.0"
+dependencies = [
+ "quote",
+ "syn 3.0.9",
 ]
 
 [[package]]

@@ -1,4 +1,4 @@
-//! `mods/enshwick.log`: one file for the loader and every mod.
+//! `logs/enshwick/` (`all.log`, `loader.log`, `mods/<id>.log`): one file for the loader and every mod.
 //!
 //! Callers only format a line and send it down a channel; a background thread
 //! owns the file, so a hook never waits on the disk.
@@ -12,23 +12,40 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use enshwick_api::abi::Level;
 
-static LINES: OnceLock<Sender<String>> = OnceLock::new();
+static LINES: OnceLock<Sender<(String, String)>> = OnceLock::new();
 
-/// Starts the writer on `path`, truncating the previous session's log.
-pub fn open(path: &Path) {
-    let Ok(mut file) = std::fs::File::create(path) else {
+/// Starts the writer in `dir`, truncating the previous session's files:
+/// `all.log` gets every line, `loader.log` the loader's, `mods/<id>.log` each
+/// mod's.
+pub fn open(dir: &Path) {
+    let mods = dir.join("mods");
+    if std::fs::create_dir_all(&mods).is_err() {
+        return;
+    }
+    let Ok(mut all) = std::fs::File::create(dir.join("all.log")) else {
         return;
     };
-    let (send, receive) = channel::<String>();
+    let dir = dir.to_path_buf();
+    let (send, receive) = channel::<(String, String)>();
     let started = std::thread::Builder::new()
         .name("enshwick-log".into())
         .spawn(move || {
-            for line in receive {
-                if file.write_all(line.as_bytes()).is_err() {
-                    break;
-                }
+            let mut files: std::collections::HashMap<String, Option<std::fs::File>> =
+                std::collections::HashMap::new();
+            for (source, line) in receive {
+                let _all = all.write_all(line.as_bytes()).and_then(|()| all.flush());
+                let file = files.entry(source).or_insert_with_key(|source| {
+                    let path = if source == "enshwick" {
+                        dir.join("loader.log")
+                    } else {
+                        mods.join(format!("{source}.log"))
+                    };
+                    std::fs::File::create(path).ok()
+                });
                 // Flush per line: after a crash the last lines are the useful ones.
-                let _flushed = file.flush();
+                if let Some(file) = file {
+                    let _own = file.write_all(line.as_bytes()).and_then(|()| file.flush());
+                }
             }
         });
     if started.is_ok() {
@@ -41,7 +58,10 @@ pub fn write(level: Level, source: &str, message: &str) {
     let Some(lines) = LINES.get() else {
         return;
     };
-    let _sent = lines.send(format_line(now(), level, source, message));
+    let _sent = lines.send((
+        source.to_owned(),
+        format_line(now(), level, source, message),
+    ));
 }
 
 fn now() -> u64 {
