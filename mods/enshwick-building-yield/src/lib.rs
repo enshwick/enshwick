@@ -46,7 +46,7 @@ pub fn bulk_workbench() -> NewWorkshop {
 
 /// Building yield settings.
 #[derive(Debug, serde::Deserialize, serde::Serialize, enshwick_api::Config)]
-#[serde(deny_unknown_fields)]
+#[serde(default, deny_unknown_fields)]
 #[config(validate = Settings::check)]
 #[expect(
     clippy::struct_excessive_bools,
@@ -214,6 +214,20 @@ mod tests {
         assert_eq!(settings.multiplier, 2);
         assert!(settings.own_workbench);
         assert!(settings.validate().is_ok());
+    }
+
+    #[test]
+    fn a_settings_file_from_before_the_workbench_still_parses() {
+        let settings: Settings = toml::from_str(
+            "multiplier = 3
+blocks = true
+overgrowth = true
+decor = false
+",
+        )
+        .unwrap();
+        assert_eq!(settings.multiplier, 3);
+        assert!(settings.own_workbench);
     }
 
     #[test]
