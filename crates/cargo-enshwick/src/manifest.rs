@@ -83,7 +83,7 @@ fn describe(manifest: &Manifest) -> String {
 /// `raw` is null or points at a manifest readable for the size its header
 /// says, with static strings and lists.
 unsafe fn copy(raw: *const Manifest) -> Result<Manifest, String> {
-    // The fields every minor has; `builds` and later came after.
+    // Every minor has the fields before `builds`.
     const REQUIRED: usize = core::mem::offset_of!(Manifest, builds);
     // SAFETY: forwarded from the caller; an all-zero manifest is valid.
     let manifest = unsafe { enshwick_loader_api::abi::read_headed(raw, REQUIRED) }
