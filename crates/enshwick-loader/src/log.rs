@@ -12,7 +12,22 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use enshwick_api::abi::Level;
 
+use crate::settings::{LOADER_ID, Settings};
+
 static LINES: OnceLock<Sender<(String, String)>> = OnceLock::new();
+static LEVELS: OnceLock<Settings> = OnceLock::new();
+
+/// Keeps lines up to the levels in `settings`; the first call wins, and
+/// before it every source keeps `info`.
+pub fn set_levels(settings: Settings) {
+    let _first = LEVELS.set(settings);
+}
+
+/// The most detailed level kept for lines from `source`.
+#[must_use]
+pub fn level(source: &str) -> Level {
+    LEVELS.get().map_or(Level::INFO, |s| s.level(source))
+}
 
 /// Starts the writer in `dir`, truncating the previous session's files:
 /// `all.log` gets every line, `loader.log` the loader's, `mods/<id>.log` each
@@ -35,7 +50,7 @@ pub fn open(dir: &Path) {
             for (source, line) in receive {
                 let _all = all.write_all(line.as_bytes()).and_then(|()| all.flush());
                 let file = files.entry(source).or_insert_with_key(|source| {
-                    let path = if source == "enshwick" {
+                    let path = if source == LOADER_ID {
                         dir.join("loader.log")
                     } else {
                         mods.join(format!("{source}.log"))
@@ -58,6 +73,9 @@ pub fn write(level: Level, source: &str, message: &str) {
     let Some(lines) = LINES.get() else {
         return;
     };
+    if level > self::level(source) {
+        return;
+    }
     let _sent = lines.send((
         source.to_owned(),
         format_line(now(), level, source, message),
@@ -73,12 +91,7 @@ fn now() -> u64 {
 fn format_line(millis: u64, level: Level, source: &str, message: &str) -> String {
     let secs = millis / 1000;
     let (h, m, s) = (secs / 3600 % 24, secs / 60 % 60, secs % 60);
-    let level = match level {
-        Level::ERROR => "error",
-        Level::WARN => "warn",
-        Level::INFO => "info",
-        _ => "debug",
-    };
+    let level = level.name();
     let mut line = String::with_capacity(32 + source.len() + message.len());
     let _formatted = writeln!(
         line,
@@ -92,7 +105,7 @@ fn format_line(millis: u64, level: Level, source: &str, message: &str) -> String
 #[macro_export]
 macro_rules! log {
     ($level:ident, $($arg:tt)+) => {
-        $crate::log::write(::enshwick_api::abi::Level::$level, "enshwick", &::std::format!($($arg)+))
+        $crate::log::write(::enshwick_api::abi::Level::$level, $crate::settings::LOADER_ID, &::std::format!($($arg)+))
     };
 }
 

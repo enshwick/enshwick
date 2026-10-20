@@ -128,6 +128,8 @@ dependencies = [
  "minhook",
  "rustc-hash",
  "semver",
+ "serde",
+ "toml",
  "windows-sys",
 ]
 

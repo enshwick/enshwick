@@ -118,6 +118,29 @@ impl Host {
         (self.api.log)(self.me, level, Str::new(message));
     }
 
+    /// The most detailed level the loader keeps for this mod's lines, from
+    /// `mod-configs/enshwick.toml`; [`Level::DEBUG`] under a loader older
+    /// than ABI minor 1.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_api::abi::Level;
+    ///
+    /// if let Some(host) = enshwick_api::host() {
+    ///     let verbose = host.log_level() >= Level::DEBUG;
+    /// }
+    /// ```
+    #[must_use]
+    pub fn log_level(&self) -> Level {
+        let end = core::mem::offset_of!(HostApi, log_level) + size_of::<usize>();
+        if self.api.header.covers(end) {
+            (self.api.log_level)(self.me)
+        } else {
+            Level::DEBUG
+        }
+    }
+
     /// Reports that this mod failed at run time. The loader unlinks every hook
     /// of the mod, so the game runs vanilla where the mod was.
     ///

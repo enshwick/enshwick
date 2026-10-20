@@ -29,6 +29,9 @@ pub unsafe fn parse(manifest: &Manifest) -> Result<Candidate, String> {
     if !enshwick_api::abi::is_valid_id(id) {
         return Err(format!("the id {id:?} is not [a-z0-9-]+"));
     }
+    if id == crate::settings::LOADER_ID {
+        return Err(format!("the id {id:?} is the loader's own"));
+    }
     // SAFETY: as above.
     let version = unsafe { manifest.version.as_str() }.ok_or("the version is not UTF-8")?;
     let version: Version = version
@@ -132,6 +135,9 @@ mod tests {
         // SAFETY: static data.
         let version = unsafe { parse(&manifest("ok", "one")) }.unwrap_err();
         assert!(version.starts_with("version"), "{version}");
+        // SAFETY: static data.
+        let loader = unsafe { parse(&manifest("enshwick", "0.1.0")) }.unwrap_err();
+        assert!(loader.contains("loader's own"), "{loader}");
         let mut other = manifest("ok", "0.1.0");
         other.header.abi_major = 2;
         // SAFETY: static data.
