@@ -625,7 +625,7 @@ impl Load<'_> {
         self.subscribe(E::EVENT, move |raw| {
             // SAFETY: the loader passes this event's data, valid for the call.
             if let Some(data) = unsafe { E::data(raw) } {
-                handler(data);
+                handler(&data);
             }
         })
     }

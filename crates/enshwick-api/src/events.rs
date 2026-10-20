@@ -19,16 +19,16 @@ pub trait Kind: sealed::Sealed + 'static {
     /// The raw event.
     const EVENT: Event;
     /// What a handler gets: an ABI struct, or `()` for events without data.
-    type Data: 'static;
+    type Data: Copy + 'static;
 
     /// The event's data from the raw pointer the loader passes; `None` when
-    /// it is missing or shorter than this crate's struct.
+    /// it is missing. Fields an older loader does not know are zero.
     ///
     /// # Safety
     ///
     /// `raw` is the pointer the loader passed with [`Kind::EVENT`], valid for
     /// the handler's call.
-    unsafe fn data<'a>(raw: *const c_void) -> Option<&'a Self::Data>;
+    unsafe fn data(raw: *const c_void) -> Option<Self::Data>;
 }
 
 macro_rules! without_data {
@@ -43,15 +43,15 @@ macro_rules! without_data {
             const EVENT: Event = Event::$event;
             type Data = ();
 
-            unsafe fn data<'a>(_raw: *const c_void) -> Option<&'a ()> {
-                Some(&())
+            unsafe fn data(_raw: *const c_void) -> Option<()> {
+                Some(())
             }
         }
     )*};
 }
 
 macro_rules! with_data {
-    ($($(#[$doc:meta])* $name:ident = $event:ident: $data:ty;)*) => {$(
+    ($($(#[$doc:meta])* $name:ident = $event:ident: $data:ty, $born:expr;)*) => {$(
         $(#[$doc])*
         #[derive(Debug, Clone, Copy)]
         pub struct $name;
@@ -62,11 +62,10 @@ macro_rules! with_data {
             const EVENT: Event = Event::$event;
             type Data = $data;
 
-            unsafe fn data<'a>(raw: *const c_void) -> Option<&'a $data> {
+            unsafe fn data(raw: *const c_void) -> Option<$data> {
                 // SAFETY: the caller passes the loader's pointer for this event,
-                // which starts with a header.
-                let data = unsafe { raw.cast::<$data>().as_ref() }?;
-                data.header.covers(size_of::<$data>()).then_some(data)
+                // which starts with a header; an all-zero struct is valid.
+                unsafe { crate::abi::read_headed(raw.cast::<$data>(), $born) }
             }
         }
     )*};
@@ -88,17 +87,19 @@ without_data! {
     JoinMissing = JOIN_MISSING;
 }
 
+// Each event names its data and the size that data had in the minor that
+// added the event: a field appended later is zero under an older loader.
 with_data! {
     /// [`Event::TICK`].
-    Tick = TICK: TickData;
+    Tick = TICK: TickData, size_of::<TickData>();
     /// [`Event::PLAYER_JOINED`].
-    PlayerJoined = PLAYER_JOINED: PlayerData;
+    PlayerJoined = PLAYER_JOINED: PlayerData, size_of::<PlayerData>();
     /// [`Event::PLAYER_LEFT`].
-    PlayerLeft = PLAYER_LEFT: PlayerData;
+    PlayerLeft = PLAYER_LEFT: PlayerData, size_of::<PlayerData>();
     /// [`Event::BUILDING_PLACED`].
-    BuildingPlaced = BUILDING_PLACED: BuildingData;
+    BuildingPlaced = BUILDING_PLACED: BuildingData, size_of::<BuildingData>();
     /// [`Event::BUILDING_REMOVED`].
-    BuildingRemoved = BUILDING_REMOVED: BuildingData;
+    BuildingRemoved = BUILDING_REMOVED: BuildingData, size_of::<BuildingData>();
 }
 
 #[cfg(test)]
@@ -107,7 +108,7 @@ mod tests {
     use crate::abi::Header;
 
     #[test]
-    fn data_is_read_only_when_it_is_whole() {
+    fn data_is_read_only_when_it_has_every_field_of_its_minor() {
         let player = PlayerData {
             header: Header::of::<PlayerData>(),
             slot: 2,
@@ -126,5 +127,28 @@ mod tests {
         assert!(unsafe { PlayerJoined::data((&raw const short).cast()) }.is_none());
         // SAFETY: no data is read.
         assert!(unsafe { WorldSaved::data(core::ptr::null()) }.is_some());
+    }
+
+    #[test]
+    fn data_from_a_newer_loader_is_read() {
+        #[repr(C)]
+        struct Newer {
+            player: PlayerData,
+            appended: u64,
+        }
+        let mut newer = Newer {
+            player: PlayerData {
+                header: Header::of::<PlayerData>(),
+                slot: 2,
+                entity: 9,
+                key: 1,
+            },
+            appended: 5,
+        };
+        newer.player.header.size = u32::try_from(size_of::<Newer>()).unwrap();
+        // SAFETY: a valid player, as long as its header says.
+        let joined = unsafe { PlayerJoined::data((&raw const newer).cast()) }.unwrap();
+        assert_eq!((joined.entity, joined.key), (9, 1));
+        assert_eq!(newer.appended, 5);
     }
 }

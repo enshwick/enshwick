@@ -815,9 +815,13 @@ unsafe extern "system" fn deliver(result: *const InventoryResult, user: *mut c_v
     }
     // SAFETY: `user` is the leaked `Pending` of `submit`, handed back once.
     let pending = unsafe { Box::from_raw(user.cast::<Pending>()) };
-    // SAFETY: the loader's result, valid for the call.
-    let outcome = unsafe { result.as_ref() }
-        .map_or_else(|| Outcome::not_run(Done::Unavailable), Outcome::from_raw);
+    // SAFETY: the loader's result, valid for the call; an all-zero result is
+    // valid. Every field is there since minor 12.
+    let outcome = unsafe { crate::abi::read_headed(result, size_of::<InventoryResult>()) }
+        .map_or_else(
+            || Outcome::not_run(Done::Unavailable),
+            |r| Outcome::from_raw(&r),
+        );
     let ran = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         pending.complete(&outcome);
     }));
