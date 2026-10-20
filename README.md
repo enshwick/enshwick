@@ -44,7 +44,7 @@ game's launch options.
 ## For mod authors
 
 Mods are written in Rust against [`enshwick-api`](crates/enshwick-api); start
-with [the modding guide](crates/enshwick-api/GUIDE.md);
+with [the modding book](book/src/SUMMARY.md);
 [`cargo enshwick`](crates/cargo-enshwick) starts a mod and installs it into the
 game. Contributions follow
 [CONTRIBUTING.md](CONTRIBUTING.md).

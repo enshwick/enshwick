@@ -17,7 +17,10 @@ and the ones they cannot, are in this file:
 - branch from `main` as `feature/<slug>`, `fix/<slug>` or `chore/<slug>` and
   open a pull request into `main`; its title is a conventional commit,
   `<type>(<scope>): <subject>`, and becomes the squashed commit;
-- code follows [code-style.md](CONTRIBUTING.md), unsafe code included.
+- code follows [code-style.md](CONTRIBUTING.md), unsafe code included;
+- what mod authors need to know goes into [the modding book](book/src/SUMMARY.md)
+  with the change; `bun run check:book` checks its structure, and its Rust
+  examples run with `cargo test --doc --workspace`.
 
 What a mod needs and another mod could use goes into `enshwick-api`, not into
 the mod: events, world reads, content such as items and recipes, texts. A mod

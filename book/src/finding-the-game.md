@@ -1,0 +1,169 @@
+# Finding the game
+
+Addresses in the game change with every update, so a mod never hard-codes one.
+It asks the loader during `init`, by name, and the loader answers for the build
+that runs. Every lookup returns `Result<_, Off>`: a mod that cannot find what
+it needs returns the `Off` with `?` and stays off, and the game runs vanilla
+where it would have acted.
+
+| Call | Finds | Survives updates |
+| --- | --- | --- |
+| `load.system(name)` | an ECS system's update function, by its reflected name | yes |
+| `load.field_offset(type, field)` | a field's offset in a reflected type | yes |
+| `load.type_size(type)` | a reflected type's size | yes |
+| `load.find_code(pattern)` | the one place in the game's code that matches a byte pattern | while those bytes stay |
+| `load.symbol(id)` | an engine function or address pinned per build | needs a new row |
+| `load.constant(id)` | an engine offset, size or value pinned per build | needs a new row |
+
+## Reflection: systems, fields and sizes
+
+The game describes its ECS systems and many types about itself. The loader
+reads that reflection at start, so these lookups keep working after an update
+without anyone touching the mod:
+
+```rust
+fn init(load: &mut enshwick_api::Load<'_>) -> Result<(), enshwick_api::Off> {
+    let system = load.system("upgrade_building_range")?;
+    let range_x = load.field_offset("keen::ecs::TriggerShape", "rangeX")?;
+    let size = load.type_size("keen::ecs::TriggerShape")?;
+    enshwick_api::info!("system at {system:#x}, rangeX at +{range_x}, {size} bytes");
+    Ok(())
+}
+```
+
+`system` returns the absolute address of the update function, ready for
+[`load.hook`](hooks.md). A name that is missing or matches more than one
+system or type gives an `Off` that says so.
+
+## Pinned symbols and constants
+
+Engine helpers that reflection does not describe are pinned per build under a
+symbolic id, such as `npc.lookup` or `ecs.context_row`:
+
+```rust
+fn init(load: &mut enshwick_api::Load<'_>) -> Result<(), enshwick_api::Off> {
+    let lookup = load.symbol("npc.lookup")?;
+    let row = load.constant("ecs.context_row")?;
+    enshwick_api::info!("lookup at {lookup:#x}, row word at +{row}");
+    Ok(())
+}
+```
+
+`symbol` looks in the mod's own build rows first, then in the loader's table,
+and returns an absolute address: the row holds an offset from the game's image
+base, and the loader adds the base. `constant` looks in the same two places and
+returns the value as it is.
+
+The loader's table, in
+[`builds.rs`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader/src/builds.rs),
+holds what several mods share: the ECS iterator, component reads, chat, labels,
+inventories and so on. Ids a single mod uses go in that mod's rows.
+
+## Build rows in the manifest
+
+A mod pins its own ids with `builds:` in [`manifest!`](getting-started.md):
+
+```rust
+let manifest = enshwick_api::manifest!(
+    id: "my-mod",
+    side: BOTH,
+    builds: [
+        {
+            side: SERVER,
+            guid: "1c129660cd6efc4f9f0b21652d5ff2bf",
+            age: 387,
+            symbols: ["my-mod.spawn_return" => 0x4_05cb],
+            constants: ["my-mod.bed_offset" => 0x48],
+        },
+        {
+            side: CLIENT,
+            guid: "69f0e9573b32c24a8838d3fff550824c",
+            age: 410,
+            symbols: ["my-mod.spawn_return" => 0x22_368b],
+        },
+    ],
+);
+assert_eq!(manifest.build_count, 2);
+```
+
+- `side` is the binary the row is for: `SERVER` for the dedicated server,
+  `CLIENT` for the game. The game's binary holds twins of the server's
+  functions, which run while it hosts a game, so a mod with server hooks pins
+  them in a `CLIENT` row as well (see
+  [Sides and hosting](concepts/sides-and-hosting.md)).
+- `guid` and `age` identify the build: the GUID, as 32 lowercase hex digits,
+  and the age of the CodeView record in the executable. The game's version
+  string repeats across builds; this pair does not. The loader logs both when
+  it meets a build it does not know.
+- `symbols` map an id to an offset from the image base; `constants` map an id
+  to a value. `constants` may be left out.
+
+A row applies only when its side and both parts of its fingerprint match the
+running binary. Rows for other builds are ignored, so a mod can carry rows for
+several builds at once.
+
+[`enshwick-survivors-per-altar`](https://github.com/themaiby/enshwick/tree/main/mods/enshwick-survivors-per-altar)
+pins the call sites it tells apart and the offsets it reads in rows for both
+binaries;
+[`enshwick-shared-experience`](https://github.com/themaiby/enshwick/tree/main/mods/enshwick-shared-experience)
+pins two game functions the same way.
+
+## When the build is unknown or an id is missing
+
+- **Unknown build.** The loader identifies the binary by its fingerprint and
+  looks it up in its own table. On a build it does not know, it logs the
+  fingerprint and loads nothing: no mod runs and the game is vanilla. The
+  loader also checks a few systems of each row against reflection, and loads
+  nothing when they disagree. A mod's own rows cannot make an unknown build
+  known. A mod that set a [hold](state.md) stops the game instead, so a world
+  that needs the mod is not opened without it.
+- **Missing id.** On a known build, an id that neither the mod's rows nor the
+  loader's table pins gives `Off` with "missing on this game build". Only the
+  mod that asked turns off; the others load.
+
+Find every address before registering anything, as
+[`enshwick-flame-altar-count`](https://github.com/themaiby/enshwick/blob/main/mods/enshwick-flame-altar-count/src/bases.rs)
+does, so a miss leaves the game untouched rather than half changed.
+
+## Code patterns
+
+`load.find_code(pattern)` searches the game's code section for a byte pattern
+and returns the absolute address of the one place it matches. It survives an
+update that leaves those bytes alone, without a new row.
+
+```rust
+fn init(load: &mut enshwick_api::Load<'_>) -> Result<(), enshwick_api::Off> {
+    let site = load.find_code("B9 00 02 00 00 66 3B C1 0F 84 ?? ?? ?? ??")?;
+    enshwick_api::info!("check at {site:#x}");
+    Ok(())
+}
+```
+
+- A pattern is hex bytes separated by spaces, two digits each, with `??` (or
+  `?`) for a byte that may be anything, such as a jump's displacement or a
+  field offset that moves between builds.
+- It needs at least one fixed byte.
+- It must match exactly once. No match and more than one match both give `Off`,
+  so a pattern never lands on the wrong place. Make it long enough to be unique.
+
+[`code::Pattern`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/code.rs)
+is the same parser and search, for use on any slice: `parse`, `matches`,
+`find_all` and `find_unique`. `load.code()` returns the game's code section as
+a `&'static [u8]` that starts at its absolute address, for a mod that reads
+the bytes around a match:
+
+```rust
+fn init(load: &mut enshwick_api::Load<'_>) -> Result<(), enshwick_api::Off> {
+    let code = load.code()?;
+    let pattern = enshwick_api::code::Pattern::parse("E8 ?? ?? ?? ?? 84 C0")
+        .map_err(|e| enshwick_api::Off::new(e.to_string()))?;
+    let calls = pattern.find_all(code).count();
+    enshwick_api::info!("{calls} calls followed by a test of al");
+    Ok(())
+}
+```
+
+Patterns find places to [patch](code-patches.md) and to
+[hook mid-function](mid-function-hooks.md), as well as functions to
+[hook](hooks.md). Never put game code itself in a mod's source beyond the short
+patterns it searches for.

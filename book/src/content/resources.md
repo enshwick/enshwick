@@ -1,0 +1,171 @@
+# Served resources
+
+Items, recipes and workshops are built on one lower-level call,
+[`Load::serve`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/content.rs).
+It serves any game resource, new or changed, as if it came from the game's
+archive. Reach for it when the high-level calls do not cover what you need.
+
+## Keys and bases
+
+A resource is named by a
+[`ResourceKey`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/abi.rs):
+a GUID, a type hash and a part.
+[`Guid::key(type_hash)`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/content.rs)
+makes the key of part 0, and
+[`content::types`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/content.rs)
+holds the type hashes mods commonly serve: `ITEM_INFO`, `ITEM_REGISTRY`,
+`RECIPE_REGISTRY`, `TEMPLATE`, `TEMPLATE_COLLECTION` and
+`WORKSHOP_REGISTRY`.
+
+`load.serve(key, base, builder)` serves `key`, built by `builder` from the
+bytes of the resource `base`:
+
+- with `key` and `base` different, it is a new resource, such as a new item
+  cloned from a vanilla one;
+- with them equal, it is a changed vanilla resource, such as the item
+  registry with one more entry.
+
+```rust
+use enshwick_api::content::{Blob, Guid, types};
+
+const CHEST: Guid = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");
+const SAFE: Guid = Guid::parse("5afe5afe-0000-4000-8000-000000000001");
+
+fn init(load: &mut enshwick_api::Load<'_>) -> Result<(), enshwick_api::Off> {
+    load.serve(SAFE.key(types::ITEM_INFO), CHEST.key(types::ITEM_INFO), |chest| {
+        let mut item = Blob::new(chest);
+        // Offsets for illustration: a real mod reads them from reflection.
+        let written = item.write(0, &SAFE.id().to_le_bytes()) && item.write(4, &SAFE.0);
+        written.then(|| item.into_bytes())
+    })
+}
+```
+
+Field offsets change between game builds; read them with
+`load.field_offset(type, field)` and `load.type_size(type)` during `init`,
+as [`ItemLayout::resolve`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/ecs.rs)
+does, and move them into the builder. See
+[Finding the game](../finding-the-game.md).
+
+## When the builder runs
+
+`serve` only registers the builder; call it during `init`. The game builds
+the resource the first time it reads it, on whatever thread it reads it, and
+keeps the result for the life of the process. So the builder:
+
+- is `Fn(&[u8]) -> Option<Vec<u8>> + Send + Sync + 'static`: move what it
+  needs into it;
+- runs at most once per resource, not per read;
+- returns `None` when the base does not read as expected. That turns the mod
+  off. A panic in the builder counts the same.
+
+When the game has no `base` in its archive, the served key stays missing and
+the builder never runs.
+
+## Patches from several mods compose
+
+Several mods may serve one key. Each builder is a patch, and the loader runs
+the patches in load order, each on the result of the one before. This is how
+two mods both add an item to the item registry: each builder sees the
+registry with the earlier mods' items already in it, and adds its own.
+Write builders to expect that: find entries by what they are, never by a
+fixed index or count.
+
+The rules:
+
+- every mod serving one key must name the same `base`; a mod that names
+  another base for a key already served is refused, and `serve` returns
+  `Err(Off)`;
+- a patch that fails turns its mod off and is skipped; the next patch runs
+  on the result so far;
+- when every patch fails, the resource reads as missing;
+- the patches of a mod already turned off are skipped.
+
+The loader's log names each built resource and the mods that built it:
+`served resource <type>:<guid> built by safes, building-yield, <n> bytes`.
+The [status summary](../logging.md) counts what mods serve, what was built
+and what failed.
+
+## Editing blobs
+
+Game resources are blobs: plain data whose arrays and strings are offsets
+relative to the field that holds them. Growing an array in place would break
+every offset after it.
+[`content::Blob`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/content.rs)
+edits a blob safely, by moving a grown array to the end and correcting the
+offsets that move with it.
+
+| Method | What it does |
+| --- | --- |
+| `Blob::new(base)` | A copy of `base` to edit. |
+| `bytes()`, `into_bytes()` | The bytes as edited, borrowed or owned. |
+| `read_u32(at)` | The `u32` at `at`, `None` past the end. |
+| `write(at, bytes)` | Writes `bytes` at `at`; `false` when they do not fit. |
+| `array(field)` | The array whose header is at `field`: where its elements start and how many there are. |
+| `set_array(field, start, count)` | Points the header at `field` to `count` elements at `start`. |
+| `append(data, align)` | Appends `data` at the next multiple of `align` and returns where. |
+| `grow_array(field, size, align, relative, extra)` | Moves the array at `field`, of `size`-byte elements, to the end with `extra` elements after the old ones; returns the index of the first extra one. |
+
+An array or string header is 8 bytes: a signed 32-bit offset from the header
+itself, then a 32-bit count.
+
+`grow_array` takes two lists that keep offsets right:
+
+- `relative` lists the offsets, inside one element, of the element's own
+  array and string headers. As elements move, their headers are corrected
+  so they still point at their data;
+- each extra element comes with `Some(offset)` when its bytes were copied
+  from that offset in the blob, so its headers are corrected the same way,
+  or `None` when its headers are empty or set later with `set_array`.
+
+```rust
+use enshwick_api::content::Blob;
+
+// A root with one array header at 0: two u32 elements right after it.
+let mut base = vec![8, 0, 0, 0, 2, 0, 0, 0];
+base.extend_from_slice(&[1, 0, 0, 0, 2, 0, 0, 0]);
+let mut blob = Blob::new(&base);
+
+let first = blob.grow_array(0, 4, 4, &[], &[(vec![3, 0, 0, 0], None)]);
+assert_eq!(first, Some(2));
+let (start, count) = blob.array(0).unwrap();
+assert_eq!(count, 3);
+assert_eq!(blob.read_u32(start + 8), Some(3));
+
+// A string for a new element: append the text, then point a header at it.
+let text = blob.append(b"Safe\0", 1);
+let header = blob.append(&[0; 8], 4);
+assert!(blob.set_array(header, text, 4));
+assert_eq!(blob.array(header), Some((text, 4)));
+```
+
+The API's own
+[`items.rs`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/content/items.rs),
+[`recipes.rs`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/content/recipes.rs)
+and
+[`workshops.rs`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/content/workshops.rs)
+are worked examples: each builds its resources with `Blob` alone.
+
+## One text for one tag
+
+[`Load::add_text(tag, language, text)`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/content.rs)
+is the low-level text call: the client shows `text` wherever the game asks
+for the `LocaTag` `tag` in `language`, a
+[`Language`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/i18n.rs)
+number. A served item whose name field holds `tag` shows that text as its
+name.
+
+```rust
+use enshwick_api::content::Guid;
+use enshwick_api::i18n::Language;
+
+const SAFE_NAME: Guid = Guid::parse("b7c1d2e3-4f50-4a61-8b72-c3d4e5f60718");
+
+fn init(load: &mut enshwick_api::Load<'_>) -> Result<(), enshwick_api::Off> {
+    load.add_text(SAFE_NAME, Language::FALLBACK.0, "Safe")?;
+    load.add_text(SAFE_NAME, Language::DE_DE.0, "Tresor")
+}
+```
+
+Most mods use [`add_texts`](texts.md) instead, which gives many tags their
+texts in every language from the mod's texts file.

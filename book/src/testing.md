@@ -1,0 +1,266 @@
+# Testing
+
+[`enshwick-test`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-test/src/lib.rs) is a
+fake loader for a mod's unit tests. You tell it what the game and the loader
+would answer, start the mod through the same exports the real loader calls,
+then check what the mod asked for and what its hooks and handlers do.
+
+The crates are not on crates.io; add it as a dev-dependency from the
+repository, at the tag of the release you want, as `cargo enshwick new` does
+for `enshwick-api`:
+
+```toml
+[dev-dependencies]
+enshwick-test = { git = "https://github.com/themaiby/enshwick", tag = "enshwick-test-v0.1.0" }
+```
+
+## The shape of a test
+
+1. Build a [`FakeHost`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-test/src/lib.rs)
+   with what the game would answer: symbols, settings text, the side.
+2. Call `install()`. You get an
+   [`Installed`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-test/src/lib.rs)
+   fake, which is the loader of the process until it drops.
+3. Start the mod with `start(enshwick_mod_init, enshwick_mod_ready)`, the two
+   exports [`declare_mod!`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/declare.rs)
+   writes. `start` runs `init`, and runs `ready` only when `init` returns
+   `Status::OK`.
+4. Check the outcome: the status, the logs, the hooks it linked. Call a detour
+   or raise an event as the game would.
+
+A full test of a mod with a hook, settings and a settings change:
+
+```rust
+use std::sync::atomic::{AtomicU32, Ordering};
+
+use enshwick_api::abi::{Level, Status};
+use enshwick_api::{Load, Mod, Next, Off, events, hook};
+
+/// Bonus settings.
+#[derive(Default, serde::Deserialize, serde::Serialize, enshwick_api::Config)]
+struct Settings {
+    /// Added to every quest reward.
+    bonus: u32,
+}
+
+static BONUS: AtomicU32 = AtomicU32::new(0);
+
+struct Bonus;
+
+#[hook]
+fn reward(next: Next<extern "system" fn(u32) -> u32>, base: u32) -> u32 {
+    next.get()(base) + BONUS.load(Ordering::Relaxed)
+}
+
+impl Mod for Bonus {
+    fn manifest() -> &'static enshwick_api::abi::Manifest {
+        enshwick_api::manifest!(id: "bonus", side: SERVER)
+    }
+
+    fn init(load: &mut Load<'_>) -> Result<Self, Off> {
+        let settings: Settings = load.config()?;
+        BONUS.store(settings.bonus, Ordering::Relaxed);
+        load.on_config_change(|settings: Settings| {
+            BONUS.store(settings.bonus, Ordering::Relaxed);
+        })?;
+        load.hook(&REWARD, load.symbol("quest.reward")?)?;
+        Ok(Self)
+    }
+}
+
+enshwick_api::declare_mod!(Bonus);
+
+// Stands in for the game's function: the hook's chain ends here.
+extern "system" fn vanilla(base: u32) -> u32 {
+    base
+}
+
+let loader = enshwick_test::FakeHost::new()
+    .symbol("quest.reward", enshwick_test::address(vanilla as extern "system" fn(u32) -> u32))
+    .settings("bonus = 5\n")
+    .install();
+// SAFETY: the exports of `declare_mod!` above.
+let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+assert_eq!(status, Status::OK);
+assert_eq!(loader.hooks().len(), 1);
+
+let reward = loader.detour(&REWARD).ok_or("not linked")?;
+assert_eq!(reward(10), 15);
+
+// A player edits the settings file; the loader then raises SettingsChanged.
+loader.set_settings("bonus = 7\n");
+assert_eq!(loader.raise::<events::SettingsChanged>(&()), 1);
+assert_eq!(reward(10), 17);
+assert_eq!(loader.logs(), [(Level::INFO, "settings reloaded".to_owned())]);
+assert!(loader.faults().is_empty());
+# Ok::<(), &str>(())
+```
+
+A hook's chain continues to its target address. Give the target as
+[`address`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-test/src/lib.rs)
+of a plain `extern "system"` function with the game function's signature, and
+that function plays the original.
+
+## What the fake answers
+
+Lookups you did not configure answer `Status::MISSING`, as a game build without
+them would. Settings default to the mod's own defaults, as on first start; the
+side defaults to `Side::SERVER` and the log level to `Level::INFO`.
+
+A test of the path where the game build lacks what the mod needs:
+
+```rust
+use enshwick_api::abi::{Level, Status};
+use enshwick_api::{Load, Mod, Off};
+
+struct Picky;
+
+impl Mod for Picky {
+    fn manifest() -> &'static enshwick_api::abi::Manifest {
+        enshwick_api::manifest!(id: "picky", side: SERVER)
+    }
+
+    fn init(load: &mut Load<'_>) -> Result<Self, Off> {
+        load.symbol("quest.reward")?;
+        Ok(Self)
+    }
+}
+
+enshwick_api::declare_mod!(Picky);
+
+let loader = enshwick_test::FakeHost::new().install();
+// SAFETY: the exports of `declare_mod!` above.
+let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+assert_eq!(status, Status::REFUSED);
+assert_eq!(
+    loader.logs(),
+    [(Level::WARN, "off: symbol quest.reward: missing on this game build".to_owned())]
+);
+```
+
+## Builder methods
+
+Every method of `FakeHost` takes and returns the builder.
+
+| Method                               | What it sets                                                                          |
+| ------------------------------------ | ------------------------------------------------------------------------------------- |
+| `side(side)`                         | The side the game runs as; `Side::SERVER` by default.                                 |
+| `hosting(bool)`                      | Whether a client hosts a game now.                                                    |
+| `server_world(world)`                | The entity world of the running server; 0 for none.                                   |
+| `base(address)`                      | The game's image base.                                                                |
+| `fingerprint(fingerprint)`           | The game build's fingerprint.                                                         |
+| `handle(handle)`                     | The handle the mod receives; `ModHandle(1)` by default.                               |
+| `symbol(name, address)`              | What `Load::symbol(name)` finds.                                                      |
+| `system(name, address)`              | What `Load::system(name)` finds.                                                      |
+| `constant(name, value)`              | What `Load::constant(name)` finds.                                                    |
+| `field_offset(type, field, offset)`  | What `Load::field_offset` finds.                                                      |
+| `type_size(type, size)`              | What `Load::type_size` finds.                                                         |
+| `type_hash(type, hash)`              | The ECS type hash of a component type.                                                |
+| `settings(text)`                     | The text of the mod's settings file.                                                  |
+| `data_dir(path)`                     | The path `Load::data_dir` returns; `mod-data/test` by default. Nothing is created.    |
+| `log_level(level)`                   | The most detailed level kept for the mod's lines.                                     |
+| `caller_frame(frame)`                | The caller's context a hook with `HookFlags::CALLER_FRAME` reads.                     |
+| `component(entity, type_hash, data)` | A component of an entity, by address; it must stay valid while the fake is installed. |
+| `template(entity, guid)`             | The template GUID of an entity.                                                       |
+| `player(info)`                       | A connected player with a character in the world.                                     |
+| `loaded(info)`                       | A loaded mod that `enshwick_api::mods()` lists.                                       |
+| `join_missing(info)`                 | A server mod that `enshwick_api::mods::join_missing()` lists.                         |
+| `foreign_command(name, reply)`       | The reply of a command another mod or the loader answers, for `commands::run`.        |
+| `service(name, version, table)`      | A service another mod publishes; the table must stay valid while installed.           |
+| `refuse_hook(target)`                | Refuses hooks on a target, as when another mod holds it exclusively.                  |
+| `code(bytes)`                        | The game's code section, for pattern searches.                                        |
+| `workshop_recipes(limit)`            | The most recipes one workshop takes; 512 by default, `u32::MAX` for lifted.           |
+| `item(item, max_stack, flags)`       | The static data of an item, for `item_info`.                                          |
+| `without_inventories()`              | A build without inventory transactions: `inventory_open` answers `Status::MISSING`.   |
+
+`install()` ends the builder.
+
+## What the installed fake shows
+
+Starting the mod:
+
+| Method               | What it does                                                     |
+| -------------------- | ---------------------------------------------------------------- |
+| `start(init, ready)` | Runs `init`, then `ready` when `init` returned `Status::OK`.     |
+| `init(init)`         | Runs `init` alone; returns its status.                           |
+| `ready(ready)`       | Runs `ready` alone, after a successful `init`.                   |
+| `api()`, `handle()`  | The table and handle the mod is given, for calls to the raw ABI. |
+
+All three start methods are `unsafe`: pass the exports of one `declare_mod!`.
+
+What the mod asked for, each in order:
+
+| Method                 | Returns                                                                |
+| ---------------------- | ---------------------------------------------------------------------- |
+| `logs()`               | `(Level, String)` lines the mod logged, at the levels the loader kept. |
+| `faults()`             | The faults the mod reported, such as a panic in a hook.                |
+| `hooks()`              | The hooks linked, as `LinkedHook { target, detour, priority, flags }`. |
+| `mid_hooks()`          | The addresses of mid-function hooks.                                   |
+| `subscriptions()`      | The events subscribed to.                                              |
+| `resources()`          | The resources served, as `ServedResource { key, base }`.               |
+| `code_patches()`       | `(address, expected, replacement)` of each code patch.                 |
+| `texts()`              | `(tag, language, text)` of each text added.                            |
+| `commands()`           | `(name, help)` of each chat command registered.                        |
+| `console()`            | The command lines run as the console with `commands::run`.             |
+| `chat()`               | `(account key, text)` of each chat line sent; key 0 for everyone.      |
+| `labels()`             | `(entity, text)` of each label set.                                    |
+| `published()`          | `(name, version)` of each service published.                           |
+| `status()`             | The lines the mod's status sources give now.                           |
+| `settings_defaults()`  | The defaults the mod passed each time it read its settings.            |
+| `reported_synced()`    | The join values the mod reported each time it read its settings.       |
+| `inventory_requests()` | The inventory requests not finished yet, as `SubmittedRequest`.        |
+
+Playing the game:
+
+| Method                            | What it does                                                                |
+| --------------------------------- | --------------------------------------------------------------------------- |
+| `detour(&HOOK)`                   | The hook's entry point when the mod linked it; call it as the game would.   |
+| `run_at(address, &mut registers)` | Runs the mid-function hooks at an address; returns how many ran.            |
+| `raise::<E>(&data)`               | Raises an event to the mod's handlers on this thread; returns how many ran. |
+| `raise_raw(event, data)`          | The same for a raw `Event` id; `unsafe`.                                    |
+| `set_settings(text)`              | Replaces the settings file's text; raise `SettingsChanged` after it.        |
+| `set_server_synced(values)`       | Sets the joined server's join values; raise `SettingsChanged` after it.     |
+| `command(name, &player, args)`    | Runs the mod's chat command; its reply, or `None` without such a command.   |
+| `rename(entity, player, text)`    | Asks the mod's rename filters; whether every filter lets it through.        |
+| `build_resource(&key, base)`      | Builds a served resource from base bytes with the mod's patch.              |
+| `finish_inventory(outcome, ops)`  | Finishes the oldest open inventory request; false when none is open.        |
+
+Mid-function hooks run on registers you set up:
+
+```rust
+let loader = enshwick_test::FakeHost::new().install();
+let mut registers = enshwick_api::Registers { rcx: 7, ..Default::default() };
+assert_eq!(loader.run_at(0x1_4000_1000, &mut registers), 0);
+```
+
+An inventory request stays open until the test finishes it. `outcome` is an
+`InventoryResult` constant and `ops` holds one result per operation; the mod's
+callback runs inside the call, as on the game thread:
+
+```rust
+use enshwick_api::abi::{InventoryOpResult, InventoryResult};
+
+let loader = enshwick_test::FakeHost::new().item(0x5e01, 20, 0).install();
+assert!(loader.inventory_requests().is_empty());
+let done = [InventoryOpResult { error: 0, remaining: 0 }];
+assert!(!loader.finish_inventory(InventoryResult::COMMITTED, &done));
+```
+
+## One mod life per process
+
+A mod initialises once per process, as in the game: its state and the table it
+talks to are process-wide. So write one test per mod life, and run the tests
+with [`cargo nextest`](https://nexte.st), which gives each test its own
+process:
+
+```bash
+cargo nextest run
+```
+
+Under `cargo test` the tests of one binary share a process. The fake then
+serves one test at a time: `install` waits while another test holds an
+installed fake. A second test in the same process still sees the mod's state
+from the first, so it cannot start the mod again.
+
+Dropping the `Installed` fake uninstalls it; calls the mod makes afterwards
+answer `Status::MISSING` and are not recorded.
