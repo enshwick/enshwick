@@ -14,7 +14,7 @@ use core::sync::atomic::AtomicUsize;
 pub const ABI_MAJOR: u16 = 1;
 
 /// The minor version of this interface. A newer minor only appends fields.
-pub const ABI_MINOR: u16 = 12;
+pub const ABI_MINOR: u16 = 13;
 
 /// Whether `id` is a valid mod id: 1 to 64 characters of `[a-z0-9-]`.
 ///
@@ -609,6 +609,11 @@ pub struct CommandCall {
 /// reply stays valid until the handler runs again; empty for none.
 pub type CommandFn =
     unsafe extern "system" fn(call: *const CommandCall, user: *mut c_void, reply: *mut Str);
+
+/// A mod's status source: the pointer given at registration and where to
+/// write the mod's lines for the loader's status summary. The text stays
+/// valid until the source runs again; empty for none.
+pub type StatusFn = unsafe extern "system" fn(user: *mut c_void, out: *mut Str);
 
 /// A player renaming an entity, handed to the filters registered with
 /// [`HostApi::rename_filter`] before the game applies it.
@@ -1818,6 +1823,17 @@ pub struct HostApi {
         done: InventoryDoneFn,
         user: *mut c_void,
     ) -> Status,
+    /// Adds `callback` with `user` to the mod's status sources: the loader
+    /// calls it, on a thread of its own or the game thread, whenever it
+    /// writes its status summary (`logs/enshwick/status.log`, `/enshwick
+    /// status`) and shows its lines under the mod. Since minor 13.
+    pub status: extern "system" fn(me: ModHandle, callback: StatusFn, user: *mut c_void) -> Status,
+    /// Runs the chat command line `line` (`/name args`) as the server's
+    /// console, an administrator with no character, and writes its reply
+    /// to `out`, valid until the next call on this thread. On the server's
+    /// game thread only; [`Status::MISSING`] when no command has the name.
+    /// Since minor 13.
+    pub run_command: extern "system" fn(me: ModHandle, line: Str, out: *mut Str) -> Status,
 }
 
 /// The exports a mod DLL provides, by name.
@@ -1879,7 +1895,7 @@ const _: () = {
     assert!(core::mem::offset_of!(HostApi, hook_at) == 24 + 35 * 8);
     assert!(core::mem::offset_of!(HostApi, inventory_open) == 24 + 36 * 8);
     assert!(core::mem::offset_of!(HostApi, inventory_submit) == 24 + 38 * 8);
-    assert!(size_of::<HostApi>() == 24 + 39 * 8);
+    assert!(size_of::<HostApi>() == 24 + 41 * 8);
     assert!(size_of::<InventoryOp>() == 32);
     assert!(size_of::<InventoryRequest>() == 32);
     assert!(size_of::<InventoryOpResult>() == 8);
@@ -1889,6 +1905,8 @@ const _: () = {
     assert!(core::mem::offset_of!(Registers, rsp) == 4 * 8);
     assert!(core::mem::offset_of!(Registers, rflags) == 16 * 8);
     assert!(size_of::<MidHookSpec>() == 32);
+    assert!(core::mem::offset_of!(HostApi, status) == 24 + 39 * 8);
+    assert!(core::mem::offset_of!(HostApi, run_command) == 24 + 40 * 8);
     assert!(core::mem::offset_of!(Manifest, updates) == 80);
     assert!(size_of::<UpdateSource>() == 48);
     assert!(size_of::<ResourceKey>() == 24);

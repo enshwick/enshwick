@@ -2,13 +2,17 @@
 //! the line out of everyone's chat and hands it to the mod that registered
 //! `name` with [`Load::command`]; the mod's reply goes to that player only.
 //!
-//! The loader answers `/enshwick` itself: the mods and versions running, and
-//! with `/enshwick help` every command with its line of help.
+//! The loader answers `/enshwick` itself: the mods and versions running,
+//! with `/enshwick help` every command with its line of help, and with
+//! `/enshwick status` (administrators) a short status summary.
+//!
+//! [`run`] runs a command line as the server's console, for tools that
+//! drive the server without a player, such as a command file.
 
 use core::ffi::c_void;
 use std::cell::RefCell;
 
-use crate::abi::{CommandCall, HostApi, RenameCall, Str};
+use crate::abi::{CommandCall, HostApi, RenameCall, Status, Str};
 use crate::ecs::Entity;
 use crate::world::Player;
 use crate::{Load, Off};
@@ -165,6 +169,78 @@ pub struct Rename {
     pub player: Option<Player>,
     /// The new name the client sent.
     pub text: String,
+}
+
+/// Why [`run`] ran no command.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RunError {
+    /// The line does not start with `/name`.
+    NotACommand,
+    /// No mod and not the loader answers that name.
+    Unknown,
+    /// Not on the server's game thread, or no server runs.
+    NotOnGameThread,
+    /// The loader is older than the API or not there (a unit test).
+    NoLoader,
+    /// The loader refused for another reason, with its status.
+    Refused(u32),
+}
+
+impl core::fmt::Display for RunError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::NotACommand => f.write_str("not a command: commands start with /"),
+            Self::Unknown => f.write_str("no mod has that command"),
+            Self::NotOnGameThread => f.write_str("commands run on the server's game thread only"),
+            Self::NoLoader => f.write_str("commands need a newer loader"),
+            Self::Refused(status) => write!(f, "refused by the loader (status {status})"),
+        }
+    }
+}
+
+impl std::error::Error for RunError {}
+
+/// Runs the chat command line `line`, such as `/enshwick status`, as the
+/// server's console: an administrator with no character (entity 0, account
+/// key 0). Returns the reply the command gave.
+///
+/// Call it on the server's game thread, from a scheduled task or a game
+/// event, where command handlers expect to run.
+///
+/// # Errors
+///
+/// [`RunError`] when the line is no command, no one has its name, the call
+/// is not on the game thread or the loader cannot run commands.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_api::commands::{RunError, run};
+///
+/// // Outside the game no loader answers.
+/// assert_eq!(run("hello"), Err(RunError::NotACommand));
+/// assert_eq!(run("/enshwick status"), Err(RunError::NoLoader));
+/// ```
+pub fn run(line: &str) -> Result<Reply, RunError> {
+    if parse_line(line).is_none() {
+        return Err(RunError::NotACommand);
+    }
+    let host = crate::host().ok_or(RunError::NoLoader)?;
+    let end = core::mem::offset_of!(HostApi, run_command) + size_of::<usize>();
+    if !host.api().header.covers(end) {
+        return Err(RunError::NoLoader);
+    }
+    let mut out = Str::EMPTY;
+    let status = (host.api().run_command)(host.handle(), Str::new(line), &raw mut out);
+    match status {
+        Status::OK => {
+            // SAFETY: the reply stays valid until the next call on this thread.
+            Ok(Reply::from(unsafe { out.as_str() }.unwrap_or("")))
+        }
+        Status::MISSING => Err(RunError::Unknown),
+        Status::WRONG_THREAD => Err(RunError::NotOnGameThread),
+        other => Err(RunError::Refused(other.0)),
+    }
 }
 
 thread_local! {

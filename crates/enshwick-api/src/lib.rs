@@ -73,6 +73,7 @@ pub mod loot;
 pub mod mods;
 pub mod schedule;
 pub mod state;
+pub mod status;
 pub mod world;
 
 pub use abi::Registers;

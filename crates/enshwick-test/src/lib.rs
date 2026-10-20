@@ -113,6 +113,48 @@ pub fn address<F: FnPtr>(function: F) -> u64 {
     address as u64
 }
 
+/// The server's console as a player: an administrator with no character.
+pub(crate) fn console() -> PlayerInfo {
+    let mut name = [0u8; 64];
+    name[..7].copy_from_slice(b"console");
+    PlayerInfo {
+        header: Header::of::<PlayerInfo>(),
+        slot: u32::MAX,
+        entity: 0,
+        key: 0,
+        permissions: PlayerInfo::CAN_KICK_BAN,
+        name_len: 7,
+        name,
+    }
+}
+
+/// Calls a command handler the mod registered; its reply.
+pub(crate) fn run_handler(
+    callback: enshwick_api::abi::CommandFn,
+    user: usize,
+    name: &str,
+    player: &PlayerInfo,
+    args: &str,
+) -> String {
+    let call = CommandCall {
+        header: Header::of::<CommandCall>(),
+        player: *player,
+        name: Str::new(name),
+        args: Str::new(args),
+    };
+    let mut reply = Str::EMPTY;
+    // SAFETY: a valid call; `user` is the pointer the mod registered with.
+    unsafe {
+        callback(
+            &raw const call,
+            core::ptr::with_exposed_provenance_mut(user),
+            &raw mut reply,
+        );
+    };
+    // SAFETY: the reply stays valid until the handler runs again.
+    unsafe { reply.as_str() }.unwrap_or("").to_owned()
+}
+
 /// What the fake loader answers: a builder, installed with
 /// [`FakeHost::install`].
 ///
@@ -163,6 +205,7 @@ pub struct FakeHost {
     workshop_recipes: u32,
     items: HashMap<u32, ItemData>,
     no_inventories: bool,
+    foreign_commands: HashMap<String, String>,
 }
 
 impl Default for FakeHost {
@@ -211,6 +254,7 @@ impl FakeHost {
             workshop_recipes: 512,
             items: HashMap::new(),
             no_inventories: false,
+            foreign_commands: HashMap::new(),
         }
     }
 
@@ -555,6 +599,25 @@ impl FakeHost {
     #[must_use]
     pub fn join_missing(mut self, info: ModInfo) -> Self {
         self.join_missing.push(info);
+        self
+    }
+
+    /// The reply of the command `/name`, which another mod or the loader
+    /// answers, when the mod runs it as the console with
+    /// `enshwick_api::commands::run`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick_test::FakeHost::new()
+    ///     .foreign_command("enshwick", "Enshwick 0.0.0-test: no mods")
+    ///     .install();
+    /// # let _ = loader;
+    /// ```
+    #[must_use]
+    pub fn foreign_command(mut self, name: &str, reply: &str) -> Self {
+        self.foreign_commands
+            .insert(name.to_owned(), reply.to_owned());
         self
     }
 
@@ -1170,23 +1233,46 @@ impl Installed {
         let (callback, user) = table::with(None, |s| {
             s.commands.iter().find(|c| c.0 == name).map(|c| (c.2, c.3))
         })?;
-        let call = CommandCall {
-            header: Header::of::<CommandCall>(),
-            player: *player,
-            name: Str::new(name),
-            args: Str::new(args),
-        };
-        let mut reply = Str::EMPTY;
-        // SAFETY: a valid call; `user` is the pointer the mod registered with.
-        unsafe {
-            callback(
-                &raw const call,
-                core::ptr::with_exposed_provenance_mut(user),
-                &raw mut reply,
-            );
-        };
-        // SAFETY: the reply stays valid until the handler runs again.
-        Some(unsafe { reply.as_str() }.unwrap_or("").to_owned())
+        Some(run_handler(callback, user, name, player, args))
+    }
+
+    /// The command lines the mod ran as the console with
+    /// `enshwick_api::commands::run`, in order.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick_test::FakeHost::new().install();
+    /// assert!(loader.console().is_empty());
+    /// ```
+    #[must_use]
+    pub fn console(&self) -> Vec<String> {
+        table::with(Vec::new(), |s| s.console.clone())
+    }
+
+    /// The lines the mod's status sources give now, each source's text in
+    /// registration order.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick_test::FakeHost::new().install();
+    /// assert!(loader.status().is_empty());
+    /// ```
+    #[must_use]
+    pub fn status(&self) -> Vec<String> {
+        let sources = table::with(Vec::new(), |s| s.status_sources.clone());
+        sources
+            .into_iter()
+            .map(|(callback, user)| {
+                let mut out = Str::EMPTY;
+                // SAFETY: `user` is the pointer the mod registered with; a
+                // writable out pointer.
+                unsafe { callback(core::ptr::with_exposed_provenance_mut(user), &raw mut out) };
+                // SAFETY: the text stays valid until the source runs again.
+                unsafe { out.as_str() }.unwrap_or("").to_owned()
+            })
+            .collect()
     }
 
     /// The commands the mod registered, as `(name, help)`, in order.
