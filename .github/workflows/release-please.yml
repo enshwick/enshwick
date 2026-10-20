@@ -16,6 +16,12 @@ permissions:
   contents: write
   pull-requests: write
 
+# Two merges in a row must not build and upload at once: the later run could
+# edit the platform release before the earlier one has attached its archives.
+concurrency:
+  group: release-please
+  cancel-in-progress: false
+
 jobs:
   release-please:
     runs-on: ubuntu-latest
@@ -58,17 +64,25 @@ jobs:
             cp target/release/enshwick.dll "$dir/mods/enshwick/"
             cp LICENSE "$dir/"
           done
-          # Mods are the crates under mods/; other DLLs in target, such as
-          # proc macros, stay out.
-          for dir in mods/*/; do
-            name=$(basename "$dir")
-            dll="target/release/$(echo "$name" | tr '-' '_').dll"
+          # Mods are the packages under mods/; other DLLs in target, such as
+          # proc macros, stay out. Each archive is named after the package,
+          # which is the release component, and the DLL after the library
+          # target, whatever the folder is called. jq on Windows ends lines
+          # with CRLF.
+          cargo metadata --no-deps --format-version 1 --locked |
+            jq -r '.workspace_root as $root | .packages[]
+              | select(.manifest_path | ltrimstr($root) | gsub("\\\\"; "/") | startswith("/mods/"))
+              | [.name, (.targets[] | select(.kind | index("cdylib")) | .name)] | @tsv' |
+            tr -d '\r' > "$RUNNER_TEMP/mods.tsv"
+          [ -s "$RUNNER_TEMP/mods.tsv" ] || { echo "cargo metadata lists no mods"; exit 1; }
+          while IFS=$'\t' read -r name lib; do
+            dll="target/release/$lib.dll"
             mkdir -p "$name/mods"
             cp "$dll" "$name/mods/$name.dll"
             cp LICENSE "$name/"
             cp "$dll" "all/mods/$name.dll"
             pack "$name" "$name.zip"
-          done
+          done < "$RUNNER_TEMP/mods.tsv"
           pack loader enshwick-loader.zip
           pack all enshwick.zip
 
@@ -81,8 +95,9 @@ jobs:
           tags=$(echo "$OUTPUTS" | jq -r 'to_entries[] | select(.key | endswith("--tag_name")) | .value' | tr -d '\r')
           for tag in $tags; do
             component=${tag%-v*}
-            [ -d "mods/$component" ] || continue
-            target/release/cargo-enshwick enshwick manifest "target/release/$(echo "$component" | tr '-' '_').dll" --expect-version "${tag##*-v}"
+            lib=$(awk -F '\t' -v c="$component" '$1 == c { print $2 }' "$RUNNER_TEMP/mods.tsv")
+            [ -n "$lib" ] || continue
+            target/release/cargo-enshwick enshwick manifest "target/release/$lib.dll" --expect-version "${tag##*-v}"
           done
 
       - name: Signing tool
