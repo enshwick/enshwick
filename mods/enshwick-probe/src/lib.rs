@@ -1,6 +1,6 @@
 //! Development only, never shipped: exercises the platform API on a test
 //! server without a player and logs what it sees to
-//! `logs/enshwick/mods/probe.log`, each check as a `PASS` or `FAIL` line.
+//! `logs/enshwick/mods/probe.log`, each check as a `PASS`, `FAIL` or `SKIP` line.
 //!
 //! Off until `enabled = true` in `mod-configs/probe.toml`; read at start.
 //! While on, it counts every engine event by type and logs the counts every
@@ -98,7 +98,8 @@ impl Mod for Probe {
         load.command(
             "probe",
             "development probe; /probe census|check|vitals <id>|destroy <id>",
-            move |_ctx, args| match args {
+            move |ctx, args| match args {
+                _ if !ctx.is_admin() => "/probe is for administrators".into(),
                 ["census"] => census.lines().join("\n").into(),
                 ["check"] => {
                     checks.run();
