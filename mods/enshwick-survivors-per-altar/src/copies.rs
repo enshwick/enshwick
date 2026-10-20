@@ -53,6 +53,9 @@ pub(crate) struct Copies {
     slots: BTreeMap<(Survivor, AltarKey), Entity>,
     /// Each kept entity's survivor and home.
     homes: BTreeMap<Entity, (Survivor, [i64; 3])>,
+    /// How many kept entities each survivor has, so the lookups that ask on
+    /// every frame never walk `homes`.
+    counts: BTreeMap<Survivor, usize>,
 }
 
 impl Copies {
@@ -128,7 +131,7 @@ impl Copies {
         original: Entity,
     ) -> Verdict {
         let altar = self.altar_at(home);
-        self.homes.insert(entity, (survivor, home));
+        self.set_home(entity, survivor, home);
         // A copy moved away keeps no slot behind it.
         self.slots
             .retain(|(s, a), e| !(*s == survivor && *e == entity && Some(*a) != altar));
@@ -136,7 +139,7 @@ impl Copies {
             if entity == original || original == 0 {
                 return Verdict::Keep;
             }
-            self.homes.remove(&entity);
+            self.drop_home(entity);
             return Verdict::Remove;
         };
         match self.slots.get(&(survivor, altar)) {
@@ -151,7 +154,7 @@ impl Copies {
                 Verdict::Keep
             }
             Some(_) => {
-                self.homes.remove(&entity);
+                self.drop_home(entity);
                 Verdict::Remove
             }
         }
@@ -160,7 +163,7 @@ impl Copies {
     /// Forgets an entity the game destroyed.
     pub(crate) fn forget(&mut self, entity: Entity) {
         self.slots.retain(|_, e| *e != entity);
-        self.homes.remove(&entity);
+        self.drop_home(entity);
     }
 
     /// The copy in an altar's slot.
@@ -179,9 +182,31 @@ impl Copies {
             .map(|(&e, &(_, home))| (e, home))
     }
 
-    /// How many kept copies of `survivor` there are, without collecting them.
+    /// How many kept copies of `survivor` there are.
     pub(crate) fn copy_count(&self, survivor: Survivor) -> usize {
-        self.copies_of(survivor).count()
+        self.counts.get(&survivor).copied().unwrap_or(0)
+    }
+
+    fn set_home(&mut self, entity: Entity, survivor: Survivor, home: [i64; 3]) {
+        if let Some((old, _)) = self.homes.insert(entity, (survivor, home)) {
+            self.uncount(old);
+        }
+        *self.counts.entry(survivor).or_default() += 1;
+    }
+
+    fn drop_home(&mut self, entity: Entity) {
+        if let Some((survivor, _)) = self.homes.remove(&entity) {
+            self.uncount(survivor);
+        }
+    }
+
+    fn uncount(&mut self, survivor: Survivor) {
+        if let Some(count) = self.counts.get_mut(&survivor) {
+            *count -= 1;
+            if *count == 0 {
+                self.counts.remove(&survivor);
+            }
+        }
     }
 
     /// Whether any altar zone is known yet.
@@ -304,5 +329,22 @@ mod tests {
         copies.observe(SMITH, 11, [90, 10, 10], 10);
         copies.forget(11);
         assert_eq!(copies.for_spawn(SMITH, [90, 10, 10], 10), None);
+    }
+
+    #[test]
+    fn the_copy_count_follows_every_change() {
+        let mut copies = two_altars();
+        let counted = |c: &Copies| (c.copy_count(SMITH), c.copies_of(SMITH).count());
+        copies.observe(SMITH, 10, [10, 10, 10], 10);
+        copies.observe(SMITH, 11, [90, 10, 10], 10);
+        copies.observe(SMITH, 11, [91, 10, 10], 10);
+        assert_eq!(counted(&copies), (2, 2));
+        assert_eq!(copies.observe(SMITH, 12, [95, 10, 10], 10), Verdict::Remove);
+        assert_eq!(counted(&copies), (2, 2));
+        copies.forget(11);
+        copies.forget(11);
+        assert_eq!(counted(&copies), (1, 1));
+        copies.forget(10);
+        assert_eq!(counted(&copies), (0, 0));
     }
 }
