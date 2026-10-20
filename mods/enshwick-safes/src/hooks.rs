@@ -1,4 +1,5 @@
-//! The server's links that refuse a Safe to everyone but its owner: the Open
+//! The server's links that refuse a Safe to everyone but its owner and the
+//! players they allowed (who never dismantle it): the Open
 //! offer, item moves and sorting, base stock for crafting and building,
 //! dismantling, and the upgrade and Quick Stash switches. Each refusal takes
 //! the game's own path for a refused action, so nothing moves and nothing is
@@ -14,7 +15,7 @@ use std::sync::OnceLock;
 use enshwick_api::ecs::Entity;
 use enshwick_api::{Load, Next, Off};
 
-use crate::access::{ACCESS, Reads};
+use crate::access::{ACCESS, Action, Reads};
 
 /// Offsets into the game's action and cursor data, from the manifest.
 #[derive(Clone, Copy, Debug)]
@@ -114,7 +115,7 @@ fn offer(
         // SAFETY: the offer test runs inside its system, on its thread.
         let player = unsafe { reads.ecs.entity(ctx) };
         // SAFETY: as above.
-        if !unsafe { ACCESS.allowed(reads, ctx, Entity(candidate), player) } {
+        if !unsafe { ACCESS.allowed(reads, ctx, Entity(candidate), player, Action::Use) } {
             // SAFETY: the out record is 0x14 bytes.
             unsafe { not_offered(out) };
             return out;
@@ -163,7 +164,7 @@ fn may_touch(ctx: *mut u64, state: *mut u8, chests: &[u32], slots: &[u64]) -> bo
         .map(|&chest| Entity(chest))
         .chain(roots)
         // SAFETY: as above.
-        .all(|chest| unsafe { ACCESS.allowed(reads, ctx, chest, player) })
+        .all(|chest| unsafe { ACCESS.allowed(reads, ctx, chest, player, Action::Use) })
 }
 
 fn transfer(next: Next<ActionFn>, ctx: *mut u64, state: *mut u8) {
@@ -343,7 +344,7 @@ fn dismantle(
     )]
     let chest = Entity(id as u32);
     // SAFETY: as above.
-    if unsafe { ACCESS.allowed(reads, system, chest, player) } {
+    if unsafe { ACCESS.allowed(reads, system, chest, player, Action::Remove) } {
         method
     } else {
         0
@@ -401,7 +402,8 @@ unsafe fn refuse_pending(
     let deposit_target: u32 = unsafe { read(input, layout.deposit_target) };
     if deposit_version != deposit_done {
         // SAFETY: inside the system, on its thread.
-        let allowed = unsafe { ACCESS.allowed(reads, ctx, Entity(deposit_target), player) };
+        let allowed =
+            unsafe { ACCESS.allowed(reads, ctx, Entity(deposit_target), player, Action::Use) };
         if !allowed {
             // SAFETY: the consumed record is server-only; no client sees it change.
             unsafe { write(consumed, layout.consumed_deposit, deposit_version) };
