@@ -121,6 +121,7 @@ mod tests {
                 file: Str::new("mods/enshwick/enshwick.dll"),
                 updates: UpdateSource::github("themaiby/enshwick", "enshwick-loader"),
                 signed_by: [Str::new(KEY), Str::new("RWnot-a-key")],
+                ..ModInfo::EMPTY
             })
             .install();
         // SAFETY: the exports of `declare_mod!` above.

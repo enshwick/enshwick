@@ -117,6 +117,7 @@ fn is_enshwick(updates: Option<&Updates>) -> bool {
 ///     file: "mods/their_mod.dll".into(),
 ///     updates: None,
 ///     signed_by: Vec::new(),
+///     ..ModEntry::default()
 /// };
 /// assert_eq!(for_installed(&entry, &[]), Err(Refusal::Unsigned));
 /// entry.signed_by = vec!["RWTjqgtfpy3lSOLC4uaUXuvvKSLQKOFf6nUnEytoiFjSzxMEhLnoAdJF".into()];
@@ -178,6 +179,7 @@ mod tests {
             file: "mods/enshwick_safes.dll".into(),
             updates,
             signed_by: signed_by.iter().map(|&k| k.to_owned()).collect(),
+            ..ModEntry::default()
         }
     }
 

@@ -159,6 +159,7 @@ impl Mod for BuildingMaterials {
         enshwick_loader_api::manifest!(
             id: "building-materials",
             side: BOTH,
+            name: "Building materials",
             join = true,
             updates: github("themaiby/enshwick", "enshwick-building-materials"),
             signed_by: ["RWTjqgtfpy3lSOLC4uaUXuvvKSLQKOFf6nUnEytoiFjSzxMEhLnoAdJF"],

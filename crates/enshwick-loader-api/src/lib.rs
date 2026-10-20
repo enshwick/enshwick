@@ -181,6 +181,76 @@ pub mod __private {
         out
     }
 
+    /// The first non-empty text of `texts`, or empty.
+    #[must_use]
+    pub const fn first_text(texts: &[&'static str]) -> &'static str {
+        let mut i = 0;
+        while i < texts.len() {
+            if !texts[i].is_empty() {
+                return texts[i];
+            }
+            i += 1;
+        }
+        ""
+    }
+
+    /// The authors `authors:` names, else Cargo's `authors`, separated by
+    /// `:`, trimmed and without empty names.
+    const fn author_names<const N: usize>(
+        given: &[&'static str],
+        cargo: &'static str,
+    ) -> ([crate::abi::Str; N], usize) {
+        let mut out = [crate::abi::Str::EMPTY; N];
+        let mut count = 0;
+        if !given.is_empty() {
+            while count < given.len() {
+                assert!(!given[count].is_empty(), "an author's name is empty");
+                if count < N {
+                    out[count] = crate::abi::Str::new(given[count]);
+                }
+                count += 1;
+            }
+            return (out, count);
+        }
+        let mut rest = cargo.as_bytes();
+        while !rest.is_empty() {
+            let mut cut = 0;
+            while cut < rest.len() && rest[cut] != b':' {
+                cut += 1;
+            }
+            let (name, tail) = rest.split_at(cut);
+            // Cut at an ASCII byte and trimmed of ASCII, so still UTF-8.
+            if let Ok(name) = core::str::from_utf8(name.trim_ascii())
+                && !name.is_empty()
+            {
+                if count < N {
+                    out[count] = crate::abi::Str::new(name);
+                }
+                count += 1;
+            }
+            rest = match tail.split_first() {
+                Some((_, after)) => after,
+                None => tail,
+            };
+        }
+        (out, count)
+    }
+
+    /// How many authors [`authors`] finds.
+    #[must_use]
+    pub const fn author_count(given: &[&'static str], cargo: &'static str) -> usize {
+        author_names::<0>(given, cargo).1
+    }
+
+    /// The authors' names for the manifest.
+    #[must_use]
+    pub const fn authors<const N: usize>(
+        given: &[&'static str],
+        cargo: &'static str,
+    ) -> [crate::abi::Str; N] {
+        author_names::<N>(given, cargo).0
+    }
+
     #[must_use]
     pub const fn or_default<T: Copy>(given: &[T], default: T) -> T {
         match given {

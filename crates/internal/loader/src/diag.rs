@@ -183,8 +183,14 @@ impl HookStat {
 pub struct ModStatus {
     /// The mod id.
     pub id: String,
+    /// The name players read; empty for none.
+    pub name: String,
     /// Its version.
     pub version: String,
+    /// Authors, licence and homepage, as `Meta::credits` writes them.
+    pub credits: String,
+    /// Notes on its relations, such as a recommended mod that is missing.
+    pub notes: Vec<String>,
     /// Whether it runs.
     pub running: bool,
     /// The lines its status sources gave.
@@ -261,7 +267,14 @@ impl Summary {
         let _w = writeln!(out, "\nmods: {running} of {} running", self.mods.len());
         for m in &self.mods {
             let off = if m.running { "" } else { " (off)" };
-            let _w = writeln!(out, "  {} {}{off}", m.id, m.version);
+            let name = enshwick_loader_api::mods::label(&m.name, &m.id);
+            let _w = writeln!(out, "  {name} {}{off}", m.version);
+            if !m.credits.is_empty() {
+                let _w = writeln!(out, "    {}", m.credits);
+            }
+            for note in &m.notes {
+                let _w = writeln!(out, "    note: {note}");
+            }
             for line in &m.lines {
                 let _w = writeln!(out, "    {line}");
             }
@@ -409,13 +422,19 @@ mod tests {
             mods: vec![
                 ModStatus {
                     id: "flame-altar-zones".into(),
+                    name: "Flame Altar Zones".into(),
                     version: "0.1.4".into(),
+                    credits: "by themaiby; MIT".into(),
+                    notes: vec!["recommends flame-altar-count, which is not loaded".into()],
                     running: true,
                     lines: vec!["3 zones merged".into()],
                 },
                 ModStatus {
                     id: "safes".into(),
+                    name: String::new(),
                     version: "0.1.1".into(),
+                    credits: String::new(),
+                    notes: Vec::new(),
                     running: false,
                     lines: Vec::new(),
                 },
@@ -464,7 +483,10 @@ mod tests {
         assert!(text.starts_with("Enshwick 0.1.5 status at 12:30:00Z\n"));
         assert!(text.contains("up 2h 03m"));
         assert!(text.contains("mods: 1 of 2 running"));
-        assert!(text.contains("  flame-altar-zones 0.1.4\n    3 zones merged\n"));
+        assert!(text.contains(
+            "  Flame Altar Zones (flame-altar-zones) 0.1.4\n    by themaiby; MIT\n    \
+             note: recommends flame-altar-count, which is not loaded\n    3 zones merged\n"
+        ));
         assert!(text.contains("  safes 0.1.1 (off)\n"));
         assert!(text.contains("12:13:20Z safes: panic in a command handler"));
         assert!(text.contains("4 resources served (4 built, 0 failed), 12 texts"));

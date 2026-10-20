@@ -14,7 +14,7 @@ use core::sync::atomic::AtomicUsize;
 pub const ABI_MAJOR: u16 = 1;
 
 /// The minor version of this interface. A newer minor only appends fields.
-pub const ABI_MINOR: u16 = 35;
+pub const ABI_MINOR: u16 = 36;
 
 /// Whether `id` is a valid mod id: 1 to 64 characters of `[a-z0-9-]`.
 ///
@@ -1059,7 +1059,7 @@ unsafe impl Sync for BuildRow {}
 /// ```
 /// use enshwick_loader_api::abi::Relation;
 ///
-/// assert_ne!(Relation::REQUIRES, Relation::CONFLICTS);
+/// assert_ne!(Relation::REQUIRES, Relation::BREAKS);
 /// ```
 #[repr(transparent)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -1070,8 +1070,14 @@ impl Relation {
     pub const REQUIRES: Self = Self(0);
     /// When the other mod is present, it loads first; it may be absent.
     pub const AFTER: Self = Self(1);
-    /// The two mods never load together.
-    pub const CONFLICTS: Self = Self(2);
+    /// This mod does not work beside the other mod in the version range (any
+    /// version when the range is empty): when that one loads, this one is
+    /// skipped.
+    pub const BREAKS: Self = Self(2);
+    /// This mod works better beside the other mod in the version range: it
+    /// loads first when present, and the loader notes when it is missing or
+    /// in another version.
+    pub const RECOMMENDS: Self = Self(3);
 }
 
 /// A relation to another mod, by id and SemVer range.
@@ -1259,6 +1265,12 @@ impl UpdateSource {
 ///     build_count: 0,
 ///     updates: core::ptr::null(),
 ///     signed_by: [Str::EMPTY; 2],
+///     name: Str::new("Flame Altar Count"),
+///     description: Str::EMPTY,
+///     authors: core::ptr::null(),
+///     author_count: 0,
+///     license: Str::new("MIT"),
+///     homepage: Str::EMPTY,
 /// };
 /// assert!(manifest.flags.contains(ManifestFlags::JOIN));
 /// ```
@@ -1290,6 +1302,21 @@ pub struct Manifest {
     /// updater installs a new release of the mod only when one of them
     /// signed it. Two, so an author can rotate keys. Since minor 14.
     pub signed_by: [Str; 2],
+    /// The name players read, such as `Survivors per Altar`; empty for the
+    /// id. Since minor 36.
+    pub name: Str,
+    /// One sentence on what the mod does. Since minor 36.
+    pub description: Str,
+    /// The authors' names. Since minor 36.
+    pub authors: *const Str,
+    /// How many names `authors` points at. Since minor 36.
+    pub author_count: usize,
+    /// An SPDX licence expression, such as `MIT OR Apache-2.0`. Since minor
+    /// 36.
+    pub license: Str,
+    /// Where players read about the mod, an `https://` address. Since minor
+    /// 36.
+    pub homepage: Str,
 }
 
 // SAFETY: a manifest is immutable static data; its pointers refer to statics.
@@ -1457,6 +1484,12 @@ impl CallerFrame {
 ///     file: Str::new("mods/enshwick_safes.dll"),
 ///     updates: UpdateSource::github("themaiby/enshwick", "enshwick-safes"),
 ///     signed_by: [Str::new("RWTjqgtfpy3lSOLC4uaUXuvvKSLQKOFf6nUnEytoiFjSzxMEhLnoAdJF"), Str::EMPTY],
+///     name: Str::new("Safes"),
+///     description: Str::EMPTY,
+///     authors: core::ptr::null(),
+///     author_count: 0,
+///     license: Str::new("MIT"),
+///     homepage: Str::EMPTY,
 /// };
 /// assert_eq!(safes.off, 0);
 /// ```
@@ -1485,7 +1518,57 @@ pub struct ModInfo {
     /// strings for none. In [`HostApi::join_missing`], the keys the server
     /// advertises for the mod. Since minor 14.
     pub signed_by: [Str; 2],
+    /// The manifest's human metadata, as in [`Manifest`]; in
+    /// [`HostApi::join_missing`], the name the server advertises and empty
+    /// strings for the rest. Since minor 36.
+    pub name: Str,
+    /// One sentence on what the mod does. Since minor 36.
+    pub description: Str,
+    /// The authors' names. Since minor 36.
+    pub authors: *const Str,
+    /// How many names `authors` points at. Since minor 36.
+    pub author_count: usize,
+    /// An SPDX licence expression. Since minor 36.
+    pub license: Str,
+    /// Where players read about the mod. Since minor 36.
+    pub homepage: Str,
 }
+
+impl ModInfo {
+    /// A listing with every field empty, to fill with `..ModInfo::EMPTY`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_loader_api::abi::{ModInfo, Str};
+    ///
+    /// let safes = ModInfo { id: Str::new("safes"), ..ModInfo::EMPTY };
+    /// assert!(safes.version.is_empty());
+    /// ```
+    pub const EMPTY: Self = Self {
+        header: Header::of::<Self>(),
+        id: Str::EMPTY,
+        version: Str::EMPTY,
+        side: Side(0),
+        flags: ManifestFlags::NONE,
+        off: 0,
+        file: Str::EMPTY,
+        updates: UpdateSource::NONE,
+        signed_by: [Str::EMPTY; 2],
+        name: Str::EMPTY,
+        description: Str::EMPTY,
+        authors: core::ptr::null(),
+        author_count: 0,
+        license: Str::EMPTY,
+        homepage: Str::EMPTY,
+    };
+}
+
+// SAFETY: a listing's strings and its author list stay valid and unchanged
+// for the life of the process, as `Str` itself is shared.
+unsafe impl Send for ModInfo {}
+// SAFETY: as above.
+unsafe impl Sync for ModInfo {}
 
 /// An opaque handle the loader gives each mod; every call names its caller
 /// with it.
@@ -3748,6 +3831,8 @@ const _: () = {
     assert!(size_of::<AltarZoneSize>() == 24);
     assert!(size_of::<ZoneCheck>() == 8 + 16 + 48 + 8);
     assert!(core::mem::offset_of!(Manifest, updates) == 80);
+    assert!(core::mem::offset_of!(Manifest, name) == 120);
+    assert!(size_of::<Manifest>() == 120 + 16 * 4 + 16);
     assert!(size_of::<UpdateSource>() == 48);
     assert!(size_of::<ResourceKey>() == 24);
 };

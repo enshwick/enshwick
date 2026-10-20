@@ -150,6 +150,7 @@ impl Mod for ProtonOptimizer {
         enshwick_loader_api::manifest!(
             id: "proton-optimizer",
             side: BOTH,
+            name: "Proton optimizer",
             updates: github("themaiby/enshwick", "enshwick-proton-optimizer"),
             signed_by: ["RWTjqgtfpy3lSOLC4uaUXuvvKSLQKOFf6nUnEytoiFjSzxMEhLnoAdJF"],
         )

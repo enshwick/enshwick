@@ -57,9 +57,16 @@ let manifest = enshwick_loader_api::manifest!(
     id: "trading-post",             // 1 to 64 of [a-z0-9-]
     side: BOTH,                     // SERVER, CLIENT or BOTH
     version: "0.2.0",               // the crate's version when left out
+    name: "Trading post",           // what players read; the id when left out
+    description: "Trade with travelling merchants",
+    authors: ["Your Name"],
+    license: "MIT OR Apache-2.0",
+    homepage: "https://github.com/you/trading-post",
     join = true,                    // counts in the join check
     requires: ["market-stalls" => ">=0.2, <1.0"],
     after: ["market-stalls"],
+    recommends: ["caravans" => ">=0.3, <1.0"],
+    breaks: ["old-market" => "<0.5"],
     updates: github("themaiby/enshwick", "enshwick-trading-post"),
     signed_by: ["RWTjqgtfpy3lSOLC4uaUXuvvKSLQKOFf6nUnEytoiFjSzxMEhLnoAdJF"],
     builds: [{
@@ -70,7 +77,8 @@ let manifest = enshwick_loader_api::manifest!(
         constants: ["survivors.bed_id" => 0x48],
     }],
 );
-# assert_eq!(manifest.dependency_count, 2);
+# assert_eq!(manifest.dependency_count, 4);
+# assert_eq!(manifest.author_count, 1);
 ```
 
 - `id` names the mod in logs, its settings file `mod-configs/<id>.toml` and
@@ -79,9 +87,20 @@ let manifest = enshwick_loader_api::manifest!(
 - `side`: see [Sides and hosting](sides-and-hosting.md).
 - `version` is SemVer. Leave it out so the DLL reports the version you
   release; the loader names it in every message about the mod.
+- `name`, `description`, `authors`, `license` and `homepage` are what players
+  read: in `/enshwick <mod id>`, the status summary, the join check's notes and
+  the updater's questions. Each but `name` comes from the crate's
+  `Cargo.toml` when left out (`homepage` falls back to `repository`); a mod
+  without a name is shown by its id.
 - `join = true`: see [The join check](join-check.md).
 - `requires` names mods that must be present in a Cargo-style version range;
   they load first. `after` names mods that load first when present.
+- `recommends` names mods that work well beside this one: they load first when
+  present, and the loader notes in `loader.log` and the status summary when
+  one is missing or outside its range. The mod loads either way.
+- `breaks` names mods this one does not work beside, in a version range (`""`
+  for any): when one of them loads, this mod is skipped with
+  `does not work beside <id> <version>; remove one of them`.
 - `updates` says where new releases come from, `github(...)` or
   `url("https://...")`; see [Releasing and updates](../releasing.md).
 - `signed_by` names the minisign public keys (one, or two while you change

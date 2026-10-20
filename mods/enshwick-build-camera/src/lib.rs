@@ -66,6 +66,7 @@ impl Mod for BuildCamera {
         enshwick_loader_api::manifest!(
             id: "build-camera",
             side: BOTH,
+            name: "Build camera",
             join = true,
             updates: github("themaiby/enshwick", "enshwick-build-camera"),
             signed_by: ["RWTjqgtfpy3lSOLC4uaUXuvvKSLQKOFf6nUnEytoiFjSzxMEhLnoAdJF"],

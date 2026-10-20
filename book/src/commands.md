@@ -70,7 +70,8 @@ The loader answers `/enshwick` itself:
 
 | Command | Answer |
 | --- | --- |
-| `/enshwick` | the loader version and every mod with its version, `(off)` for mods turned off |
+| `/enshwick` | the loader version and every mod with its name and version, `(off)` for mods turned off |
+| `/enshwick <mod id>` | what the mod is: name, version, description, authors, licence, homepage, and notes such as a recommended mod that is missing |
 | `/enshwick help` | every command of a running mod, with its mod id and help line |
 | `/enshwick status` | administrators only: a short [status summary](logging.md#status-summary), and a fresh `status.log` |
 | `/config <mod> [key] [value]` | administrators only: read and change a mod's settings; see [The schema and `/config`](settings.md#the-schema-and-config) |

@@ -107,24 +107,7 @@ pub(crate) fn start(stub_abi: u32, missing_forwards: u32) {
         configs_dir: mods_dir.with_file_name("mod-configs"),
         data_dir,
         mods_dir,
-        mods: plan
-            .order
-            .iter()
-            .map(|&i| ModRecord {
-                id: candidates[i].id.clone(),
-                version: candidates[i].version.to_string(),
-                file: format!("mods/{}", libraries[i].file),
-                updates: updates_of(&libraries[i]),
-                signed_by: signed_by_of(&libraries[i]),
-                manifest: libraries[i].manifest,
-                off: AtomicBool::new(false),
-                settings: Mutex::new(None),
-                synced: Mutex::new(None),
-                server_synced: Mutex::new(None),
-                sync_out: Mutex::new(String::new()),
-                schema: Mutex::new(None),
-            })
-            .collect(),
+        mods: records(&libraries, &candidates, &plan),
         chains: Mutex::new(Chains::default()),
         mids: Mutex::default(),
         services: Mutex::default(),
@@ -167,11 +150,51 @@ pub(crate) fn start(stub_abi: u32, missing_forwards: u32) {
         crate::advertise::start(
             game_dir,
             joined(loader),
-            sources(loader),
-            keys(loader),
+            crate::advertise::Lines {
+                sources: sources(loader),
+                keys: keys(loader),
+                names: names(loader),
+            },
             host::join_values,
         );
     }
+}
+
+/// The records of the mods `plan` loads, in load order, with their notes
+/// logged.
+fn records(
+    libraries: &[Library],
+    candidates: &[Candidate],
+    plan: &resolve::Plan,
+) -> Vec<ModRecord> {
+    let notes = resolve::notes(candidates, plan);
+    for (index, note) in &notes {
+        crate::log!(INFO, "{} {note}", candidates[*index].id);
+    }
+    plan.order
+        .iter()
+        .map(|&i| ModRecord {
+            id: candidates[i].id.clone(),
+            version: candidates[i].version.to_string(),
+            file: format!("mods/{}", libraries[i].file),
+            updates: updates_of(&libraries[i]),
+            signed_by: signed_by_of(&libraries[i]),
+            manifest: libraries[i].manifest,
+            // SAFETY: the manifest is static data inside its loaded DLL.
+            meta: unsafe { crate::manifest::meta(libraries[i].manifest) },
+            notes: notes
+                .iter()
+                .filter(|(index, _)| *index == i)
+                .map(|(_, note)| note.clone())
+                .collect(),
+            off: AtomicBool::new(false),
+            settings: Mutex::new(None),
+            synced: Mutex::new(None),
+            server_synced: Mutex::new(None),
+            sync_out: Mutex::new(String::new()),
+            schema: Mutex::new(None),
+        })
+        .collect()
 }
 
 /// Waits until this process shows a window or `limit` passes; how long it
@@ -254,7 +277,13 @@ fn link_join(loader: &Loader) {
     let Some(rva) = loader.build.symbol("net.server_change") else {
         return;
     };
-    crate::join::set_ours(joined(loader));
+    let names = loader
+        .mods
+        .iter()
+        .filter(|m| !m.meta.name.is_empty())
+        .map(|m| (m.id.clone(), m.meta.name.clone()))
+        .collect();
+    crate::join::set_ours(joined(loader), names);
     let status = loader.link(
         loader.base + rva,
         &crate::join::NEXT,
@@ -302,6 +331,16 @@ fn keys(loader: &Loader) -> Vec<(String, String)> {
             let keys = unsafe { enshwick_loader_api::mods::keys_from_abi(&m.signed_by) };
             (!keys.is_empty()).then(|| (m.id.clone(), enshwick_loader_api::mods::keys_line(&keys)))
         })
+        .collect()
+}
+
+/// The names of the running join mods that declare one, `(id, name)`.
+fn names(loader: &Loader) -> Vec<(String, String)> {
+    loader
+        .mods
+        .iter()
+        .filter(|m| m.joins() && !m.meta.name.is_empty())
+        .map(|m| (m.id.clone(), m.meta.name.clone()))
         .collect()
 }
 

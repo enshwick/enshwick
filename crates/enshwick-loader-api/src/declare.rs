@@ -3,19 +3,33 @@
 /// Builds a mod's static [`Manifest`](crate::abi::Manifest).
 ///
 /// `id` is `[a-z0-9-]+` and names the DLL and the settings file; `side` is
-/// `SERVER`, `CLIENT` or `BOTH`. Optional, in this order: `version: "x.y.z"`
-/// (the crate's version when omitted), `join = true` (the
-/// mod counts in the join check), `requires: ["id" => "range", ...]`,
-/// `after: ["id", ...]`,
-/// `updates: github("owner/name", "component")` or `updates: url("https://...")`,
-/// where new releases come from (see [`UpdateSource`](crate::abi::UpdateSource)),
-/// `signed_by: ["RW...", ...]`, the minisign public keys (one, or two while
-/// rotating) the author signs releases with, which an updater requires of
-/// every new release, and
-/// `builds: [{ side, guid, age, symbols: ["id" => rva], constants: ["id" => value] }]`,
-/// symbols and constants the mod pins itself for those game builds. The loader
-/// names the version in every message about the mod: a missing or mismatched
-/// dependency, or a server with a different mod set.
+/// `SERVER`, `CLIENT` or `BOTH`. Optional, in this order:
+///
+/// - `version: "x.y.z"`, the crate's version when omitted;
+/// - `name: "..."`, what players read (the id when omitted),
+///   `description: "..."`, `authors: ["...", ...]`, `license: "..."` and
+///   `homepage: "https://..."`, each taken from the crate's `Cargo.toml`
+///   (`description`, `authors`, `license`, `homepage` or else `repository`)
+///   when omitted;
+/// - `join = true`: the mod counts in the join check;
+/// - `requires: ["id" => "range", ...]`: mods that must load first, in a
+///   Cargo-style version range (`""` for any);
+/// - `after: ["id", ...]`: mods that load first when present;
+/// - `recommends: ["id" => "range", ...]`: mods that load first when present
+///   and that the loader notes as missing otherwise;
+/// - `breaks: ["id" => "range", ...]`: mods this one does not work beside in
+///   that range; the loader skips this mod when one of them loads;
+/// - `updates: github("owner/name", "component")` or
+///   `updates: url("https://...")`, where new releases come from (see
+///   [`UpdateSource`](crate::abi::UpdateSource));
+/// - `signed_by: ["RW...", ...]`, the minisign public keys (one, or two while
+///   rotating) the author signs releases with, which an updater requires of
+///   every new release;
+/// - `builds: [{ side, guid, age, symbols: ["id" => rva], constants: ["id" => value] }]`,
+///   symbols and constants the mod pins itself for those game builds.
+///
+/// The loader names the mod and its version in every message about it: a
+/// missing or mismatched dependency, or a server with a different mod set.
 ///
 /// # Examples
 ///
@@ -23,8 +37,11 @@
 /// let manifest = enshwick_loader_api::manifest!(
 ///     id: "survivors-per-altar",
 ///     side: BOTH,
+///     name: "Survivors per Altar",
+///     authors: ["themaiby"],
 ///     join = true,
 ///     requires: ["flame-altar-zones" => ">=0.1, <1.0"],
+///     breaks: ["old-survivors" => "<0.3"],
 ///     updates: github("themaiby/enshwick", "enshwick-survivors-per-altar"),
 ///     signed_by: ["RWTjqgtfpy3lSOLC4uaUXuvvKSLQKOFf6nUnEytoiFjSzxMEhLnoAdJF"],
 ///     builds: [{
@@ -35,8 +52,13 @@
 ///         constants: ["survivors.bed_id" => 0x48],
 ///     }],
 /// );
-/// assert_eq!(manifest.dependency_count, 1);
+/// assert_eq!(manifest.dependency_count, 2);
 /// assert_eq!(manifest.build_count, 1);
+/// assert_eq!(manifest.author_count, 1);
+/// // SAFETY: static strings.
+/// assert_eq!(unsafe { manifest.name.as_str() }, Some("Survivors per Altar"));
+/// // SAFETY: as above; the license comes from this crate's Cargo.toml.
+/// assert_eq!(unsafe { manifest.license.as_str() }, Some("MIT"));
 /// assert!(!manifest.updates.is_null());
 /// assert!(!manifest.signed_by[0].is_empty() && manifest.signed_by[1].is_empty());
 ///
@@ -67,9 +89,16 @@ macro_rules! manifest {
         id: $id:literal,
         side: $side:ident
         $(, version: $version:literal)?
+        $(, name: $name:literal)?
+        $(, description: $description:literal)?
+        $(, authors: [$($author:literal),* $(,)?])?
+        $(, license: $license:literal)?
+        $(, homepage: $homepage:literal)?
         $(, join = $join:expr)?
         $(, requires: [$($req:literal => $range:literal),* $(,)?])?
         $(, after: [$($after:literal),* $(,)?])?
+        $(, recommends: [$($rec:literal => $rec_range:literal),* $(,)?])?
+        $(, breaks: [$($breaks:literal => $breaks_range:literal),* $(,)?])?
         $(, updates: $source:ident($($source_arg:literal),* $(,)?))?
         $(, signed_by: [$($key:literal),* $(,)?])?
         $(, builds: [$({
@@ -93,7 +122,25 @@ macro_rules! manifest {
                 range: $crate::abi::Str::EMPTY,
                 relation: $crate::abi::Relation::AFTER,
             },)*)?
+            $($($crate::abi::Dependency {
+                id: $crate::abi::Str::new($rec),
+                range: $crate::abi::Str::new($rec_range),
+                relation: $crate::abi::Relation::RECOMMENDS,
+            },)*)?
+            $($($crate::abi::Dependency {
+                id: $crate::abi::Str::new($breaks),
+                range: $crate::abi::Str::new($breaks_range),
+                relation: $crate::abi::Relation::BREAKS,
+            },)*)?
         ];
+        const AUTHOR_COUNT: usize = $crate::__private::author_count(
+            &[$($($author),*)?],
+            env!("CARGO_PKG_AUTHORS"),
+        );
+        static AUTHORS: [$crate::abi::Str; AUTHOR_COUNT] = $crate::__private::authors(
+            &[$($($author),*)?],
+            env!("CARGO_PKG_AUTHORS"),
+        );
         static BUILDS: &[$crate::abi::BuildRow] = &[
             $($($crate::abi::BuildRow {
                 side: $crate::abi::Side::$bside,
@@ -126,6 +173,18 @@ macro_rules! manifest {
             build_count: BUILDS.len(),
             updates: $crate::__private::first_or_null(UPDATES),
             signed_by: $crate::__private::signed_by(&[$($($key),*)?]),
+            name: $crate::abi::Str::new($crate::__private::first_text(&[$($name)?])),
+            description: $crate::abi::Str::new($crate::__private::first_text(
+                &[$($description,)? env!("CARGO_PKG_DESCRIPTION")],
+            )),
+            authors: AUTHORS.as_ptr(),
+            author_count: AUTHOR_COUNT,
+            license: $crate::abi::Str::new($crate::__private::first_text(
+                &[$($license,)? env!("CARGO_PKG_LICENSE")],
+            )),
+            homepage: $crate::abi::Str::new($crate::__private::first_text(
+                &[$($homepage,)? env!("CARGO_PKG_HOMEPAGE"), env!("CARGO_PKG_REPOSITORY")],
+            )),
         };
         &MANIFEST
     }};

@@ -125,6 +125,8 @@ fn context() -> Option<Arc<Context>> {
 pub struct Offer {
     /// The mod id.
     pub id: String,
+    /// The name players read; empty for none.
+    pub name: String,
     /// The version this game has; `None` when it lacks the mod.
     pub from: Option<String>,
     /// The mod's DLL as the loader lists it; empty when the game lacks it.
@@ -139,7 +141,7 @@ pub struct Offer {
 }
 
 impl Offer {
-    /// The offer's line in a question: `id: from → to`.
+    /// The offer's line in a question: `Name (id): from → to`.
     ///
     /// # Examples
     ///
@@ -150,6 +152,7 @@ impl Offer {
     ///
     /// let offer = Offer {
     ///     id: "safes".into(),
+    ///     name: "Safes".into(),
     ///     from: Some("0.1.0".into()),
     ///     file: "mods/enshwick-safes.dll".into(),
     ///     pick: Pick {
@@ -162,7 +165,7 @@ impl Offer {
     ///     source: "github.com/themaiby/enshwick".into(),
     ///     trust: Err(Refusal::Unsigned),
     /// };
-    /// assert_eq!(offer.line(), "safes: 0.1.0 \u{2192} 0.2.0");
+    /// assert_eq!(offer.line(), "Safes (safes): 0.1.0 \u{2192} 0.2.0");
     /// ```
     ///
     /// A version older than the installed one says so:
@@ -173,6 +176,7 @@ impl Offer {
     /// # use enshwick_updater::trust::Refusal;
     /// # let offer = Offer {
     /// #     id: "safes".into(),
+    /// #     name: String::new(),
     /// #     from: Some("0.3.0".into()),
     /// #     file: String::new(),
     /// #     pick: Pick {
@@ -196,11 +200,16 @@ impl Offer {
             .is_some_and(|from| self.pick.version < from);
         format!(
             "{}: {} \u{2192} {}{}",
-            self.id,
+            self.label(),
             self.from.as_deref().unwrap_or("not installed"),
             self.pick.version,
             if older { " (older)" } else { "" }
         )
+    }
+
+    /// `Name (id)`, or the id when the mod names none.
+    fn label(&self) -> String {
+        enshwick_loader_api::mods::label(&self.name, &self.id)
     }
 
     fn key(&self) -> String {
@@ -214,7 +223,9 @@ impl Offer {
         let keys = self.trust.as_ref().map_or(&[][..], Trust::keys).join(", ");
         format!(
             "{} {}\n    from {}\n    author key {keys}",
-            self.id, self.pick.version, self.source
+            self.label(),
+            self.pick.version,
+            self.source
         )
     }
 }
@@ -349,7 +360,7 @@ fn after_refused_join() {
             Ok(offer) => offers.push(offer),
             Err(why) => {
                 enshwick_loader_api::warn!("{} {}: {why}", entry.id, entry.version);
-                unavailable.push(format!("{} {}: {why}", entry.id, entry.version));
+                unavailable.push(format!("{} {}: {why}", entry.label(), entry.version));
             }
         }
     }
@@ -452,6 +463,7 @@ fn server_version(
     };
     Ok(Offer {
         id: entry.id.clone(),
+        name: ours.map_or_else(|| entry.name.clone(), |m| m.name.clone()),
         from: ours.map(|m| m.version.clone()),
         file: ours.map(|m| m.file.clone()).unwrap_or_default(),
         pick,
@@ -516,6 +528,7 @@ fn newer(
                 {
                     offers.push(Offer {
                         id: entry.id.clone(),
+                        name: entry.name.clone(),
                         from: Some(entry.version.clone()),
                         file: entry.file.clone(),
                         pick,
@@ -550,6 +563,7 @@ fn newer(
         {
             offers.push(Offer {
                 id: entry.id.clone(),
+                name: entry.name.clone(),
                 from: Some(entry.version.clone()),
                 file: entry.file.clone(),
                 pick,
@@ -706,6 +720,7 @@ impl Mod for Updater {
         enshwick_loader_api::manifest!(
             id: "updater",
             side: CLIENT,
+            name: "Updater",
             updates: github("themaiby/enshwick", "enshwick-updater"),
             signed_by: ["RWTjqgtfpy3lSOLC4uaUXuvvKSLQKOFf6nUnEytoiFjSzxMEhLnoAdJF"],
         )
@@ -753,6 +768,7 @@ mod tests {
             file: file.into(),
             updates: None,
             signed_by: Vec::new(),
+            ..ModEntry::default()
         }
     }
 
@@ -817,6 +833,7 @@ mod tests {
     fn offer(id: &str, version: Version) -> Offer {
         Offer {
             id: id.into(),
+            name: String::new(),
             from: None,
             file: String::new(),
             pick: Pick {

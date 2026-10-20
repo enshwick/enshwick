@@ -12,7 +12,7 @@ raw table. The exact types and signatures are in the
 | Constant                                                                                            | Value | Meaning                                         |
 | --------------------------------------------------------------------------------------------------- | ----- | ----------------------------------------------- |
 | [`ABI_MAJOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 1     | A loader refuses a mod built for another major. |
-| [`ABI_MINOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 35    | A newer minor only appends.                     |
+| [`ABI_MINOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 36    | A newer minor only appends.                     |
 
 The ABI version is apart from Enshwick Loader's version (such as 0.2.0, see
 [Releasing and updates](releasing.md#versions)): a platform release raises
@@ -65,10 +65,15 @@ builds:
 | `version`      | SemVer                                                                                            | 0           |
 | `side`         | `SERVER` (1), `CLIENT` (2) or `BOTH` (3)                                                          | 0           |
 | `flags`        | `ManifestFlags::JOIN` (1) when the mod counts in the join check                                   | 0           |
-| `dependencies` | `Dependency { id, range, relation }`; relation `REQUIRES` (0), `AFTER` (1) or `CONFLICTS` (2)     | 0           |
+| `dependencies` | `Dependency { id, range, relation }`; `REQUIRES` (0), `AFTER` (1), `BREAKS` (2), `RECOMMENDS` (3) | 0           |
 | `builds`       | `BuildRow { side, fingerprint, symbols, constants }`: symbols and constants pinned per game build | 0           |
 | `updates`      | `UpdateSource { kind, location, component }`, or null; kind `NONE`, `GITHUB` or `URL`             | 5           |
 | `signed_by`    | Two `Str`: the author's minisign public keys (`RW...`); empty strings for none                    | 14          |
+| `name`         | What players read; empty for the id                                                               | 36          |
+| `description`  | One sentence on what the mod does                                                                 | 36          |
+| `authors`      | `*const Str` and `author_count`: the authors' names                                               | 36          |
+| `license`      | An SPDX licence expression                                                                        | 36          |
+| `homepage`     | Where players read about the mod                                                                  | 36          |
 
 The loader skips a mod whose manifest has another major, an invalid id, the
 loader's own id `enshwick`, a version that is not SemVer, an unknown side, or a
@@ -304,6 +309,7 @@ the mod off with a reason, which the mod's log shows as `off: <reason>`:
 | 33          | `Load::weather`                 | Off: `weather: needs a newer loader`                      |
 | 34          | `Load::terrain`                 | Off: `terrain: needs a newer loader`                      |
 | 35          | settings schema                 | `/config` does not know the mod's settings                |
+| 36          | `ModEntry` name and credits     | Empty                                                     |
 
 A mod that can do without a feature catches the `Off` and goes on without it
 instead of returning it from `init`.
