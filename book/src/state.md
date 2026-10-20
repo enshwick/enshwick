@@ -43,8 +43,10 @@ struct Bounties {
 
 fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
     let bounties = load.world_store::<Bounties>("bounties")?;
-    load.on::<enshwick_loader_api::events::PlayerJoined>(move |_| {
-        let _paid = bounties.update(|b| b.paid += 1);
+    load.on_game::<enshwick_loader_api::game_events::Died>(move |died| {
+        if died.killer_player.is_some() {
+            let _paid = bounties.update(|b| b.paid += 1);
+        }
     })
 }
 ```

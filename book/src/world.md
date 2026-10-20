@@ -3,8 +3,8 @@
 [`load.world()`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/load.rs)
 returns a
 [`World`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/world.rs):
-reads of the server's world, entity queries, labels, chat lines, destroy
-requests and saves. It is `Copy`; get
+reads of the server's world, character stats, entity queries, labels, chat
+lines, destroy requests and saves. It is `Copy`; get
 it during `init` and move it into handlers and tasks.
 
 ```rust
@@ -67,6 +67,32 @@ fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_
     })
 }
 ```
+
+## Stats
+
+`vitals(entity)` returns its health, stamina and mana, each a `Meter` with
+`current` and `max`, buffs and gear included; `progress(entity)` a
+character's `level`, `experience` toward the next level and
+`experience_needed` for it. Health is there for every entity that has
+vitals; stamina and mana only for those that have them, such as characters.
+
+```rust
+use enshwick_loader_api::events::PlayerJoined;
+
+fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+    let world = load.world()?;
+    load.on::<PlayerJoined>(move |joined| {
+        let entity = enshwick_loader_api::ecs::Entity(joined.entity);
+        if let (Some(vitals), Some(progress)) = (world.vitals(entity), world.progress(entity)) {
+            enshwick_loader_api::info!("level {} with {} health", progress.level, vitals.health.current);
+        }
+    })
+}
+```
+
+Both read the entity's attribute sets as the game keeps them. On a game build
+without the layout they need, they return `None`, and `load.world()` still
+works.
 
 ## Finding entities
 

@@ -322,6 +322,18 @@ pub static BUILDS: &[KnownBuild] = &[
             ("save.path_data", 8),
             ("save.path_lengths", 0x830),
             ("save.path_parts", 4),
+            // Attribute sets by the id of their first attribute, which a set
+            // keeps, and the slots of the attributes read from them.
+            ("ecs.attribute_count", 7),
+            ("attribute.health", 0x8eb8_4995),
+            ("attribute.health_max_slot", 7),
+            ("attribute.stamina", 0x04b6_aa8b),
+            ("attribute.stamina_max_slot", 2),
+            ("attribute.mana", 0x6aa2_574e),
+            ("attribute.mana_max_slot", 1),
+            ("attribute.level", 0x724b_f568),
+            ("attribute.experience", 0x8dcd_daf4),
+            ("attribute.experience_needed_slot", 2),
         ],
     },
     KnownBuild {
@@ -584,6 +596,18 @@ pub static BUILDS: &[KnownBuild] = &[
             ("save.path_data", 8),
             ("save.path_lengths", 0x830),
             ("save.path_parts", 4),
+            // Attribute sets by the id of their first attribute, which a set
+            // keeps, and the slots of the attributes read from them.
+            ("ecs.attribute_count", 7),
+            ("attribute.health", 0x8eb8_4995),
+            ("attribute.health_max_slot", 7),
+            ("attribute.stamina", 0x04b6_aa8b),
+            ("attribute.stamina_max_slot", 2),
+            ("attribute.mana", 0x6aa2_574e),
+            ("attribute.mana_max_slot", 1),
+            ("attribute.level", 0x724b_f568),
+            ("attribute.experience", 0x8dcd_daf4),
+            ("attribute.experience_needed_slot", 2),
         ],
     },
 ];

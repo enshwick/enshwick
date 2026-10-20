@@ -49,6 +49,10 @@ name = "players"
 required-features = ["test"]
 
 [[test]]
+name = "stats"
+required-features = ["test"]
+
+[[test]]
 name = "symbols"
 required-features = ["test"]
 
