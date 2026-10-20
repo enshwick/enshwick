@@ -66,6 +66,7 @@ impl Mod for AreaLoot {
             id: "area-loot",
             side: SERVER,
             updates: github("themaiby/enshwick", "enshwick-area-loot"),
+            signed_by: ["RWTjqgtfpy3lSOLC4uaUXuvvKSLQKOFf6nUnEytoiFjSzxMEhLnoAdJF"],
         )
     }
 

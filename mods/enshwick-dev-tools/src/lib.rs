@@ -74,6 +74,7 @@ impl Mod for DevTools {
             id: "dev-tools",
             side: SERVER,
             updates: github("themaiby/enshwick", "enshwick-dev-tools"),
+            signed_by: ["RWTjqgtfpy3lSOLC4uaUXuvvKSLQKOFf6nUnEytoiFjSzxMEhLnoAdJF"],
         )
     }
 

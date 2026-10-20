@@ -280,6 +280,7 @@ impl Mod for SharedExperience {
             id: "shared-experience",
             side: SERVER,
             updates: github("themaiby/enshwick", "enshwick-shared-experience"),
+            signed_by: ["RWTjqgtfpy3lSOLC4uaUXuvvKSLQKOFf6nUnEytoiFjSzxMEhLnoAdJF"],
             builds: [
                 {
                     side: SERVER,
