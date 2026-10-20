@@ -75,23 +75,20 @@ writes its save on a thread it spawns from the `WorldSaved` handler.
 
 - Every `unsafe` block names its invariant in a `// SAFETY:` comment: why the
   pointer is valid, why the type is right, why the thread is allowed.
-- Raw reads of game memory go through one typed helper per mod, with the
-  invariant on the helper, rather than pointer casts spread through the code:
+- Raw reads and writes of game memory go through `raw::read_at` and
+  `raw::write_at`, with the invariant at each call, rather than pointer casts
+  spread through the code. Both copy the value unaligned and make no
+  reference into game memory:
 
 ```rust
-/// Reads a `T` at `offset` bytes past `base`.
-///
-/// # Safety
-///
-/// A readable `T` lies there.
-unsafe fn read_at<T: Copy>(base: *const u8, offset: usize) -> T {
-    // SAFETY: forwarded from the caller.
-    unsafe { base.wrapping_add(offset).cast::<T>().read_unaligned() }
-}
+use enshwick_loader_api::raw::{read_at, write_at};
 
-let bytes = [1u8, 0, 0, 0, 2, 0];
+let mut bytes = [1u8, 0, 0, 0, 2, 0];
 // SAFETY: a `u16` lies at offset 4.
 assert_eq!(unsafe { read_at::<u16>(bytes.as_ptr(), 4) }, 2);
+// SAFETY: as above.
+unsafe { write_at(bytes.as_mut_ptr(), 4, 7_u16) };
+assert_eq!(bytes[4], 7);
 ```
 
 - Offsets come from the loader, never from literals in the code: reflection

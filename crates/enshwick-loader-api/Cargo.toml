@@ -41,6 +41,14 @@ name = "no_inventories"
 required-features = ["test"]
 
 [[test]]
+name = "players"
+required-features = ["test"]
+
+[[test]]
+name = "symbols"
+required-features = ["test"]
+
+[[test]]
 name = "worlds"
 required-features = ["test"]
 

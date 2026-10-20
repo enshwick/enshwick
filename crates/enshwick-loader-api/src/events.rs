@@ -15,6 +15,15 @@ mod sealed {
 }
 
 /// An event with its data type; implemented by the types in this module only.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::abi::Event;
+/// use enshwick_loader_api::events::{Kind, PlayerJoined};
+///
+/// assert!(PlayerJoined::EVENT == Event::PLAYER_JOINED);
+/// ```
 pub trait Kind: sealed::Sealed + 'static {
     /// The raw event.
     const EVENT: Event;
@@ -34,6 +43,10 @@ pub trait Kind: sealed::Sealed + 'static {
 macro_rules! without_data {
     ($($(#[$doc:meta])* $name:ident = $event:ident;)*) => {$(
         $(#[$doc])*
+        ///
+        /// # Examples
+        ///
+        /// See [`Load::on`](crate::Load::on).
         #[derive(Debug, Clone, Copy)]
         pub struct $name;
 
@@ -53,6 +66,10 @@ macro_rules! without_data {
 macro_rules! with_data {
     ($($(#[$doc:meta])* $name:ident = $event:ident: $data:ty, $born:expr;)*) => {$(
         $(#[$doc])*
+        ///
+        /// # Examples
+        ///
+        /// See [`Load::on`](crate::Load::on).
         #[derive(Debug, Clone, Copy)]
         pub struct $name;
 

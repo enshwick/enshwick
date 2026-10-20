@@ -469,7 +469,7 @@ fn label_seen(
                 .map(|safe| safe.owner_name.clone())
                 .unwrap_or_default();
             if name.is_empty()
-                && let Some(online) = world.players().into_iter().find(|p| p.key == owner)
+                && let Some(online) = world.player_by_key(owner)
             {
                 name = online.name;
                 ACCESS.change(at, |safe| safe.owner_name.clone_from(&name));

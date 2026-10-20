@@ -132,7 +132,9 @@ impl Load<'_> {
     ///
     /// # Errors
     ///
-    /// [`Off`] when neither the mod nor the loader pins the id for this build.
+    /// [`Off`] when neither the mod nor the loader pins the id for this build,
+    /// or the address it names is null, so a mod that turns the address into
+    /// a function pointer never makes a null one.
     ///
     /// # Examples
     ///
@@ -146,7 +148,11 @@ impl Load<'_> {
     pub fn symbol(&self, name: &str) -> Result<u64, Off> {
         let mut out = 0;
         let status = (self.api().symbol)(self.host.handle(), Str::new(name), &raw mut out);
-        ok(status, out, || format!("symbol {name}"))
+        let address = ok(status, out, || format!("symbol {name}"))?;
+        if address == 0 {
+            return Err(Off::new(format!("symbol {name}: null on this game build")));
+        }
+        Ok(address)
     }
 
     /// An engine constant of the running build, such as a field offset that
@@ -594,9 +600,11 @@ impl Load<'_> {
     ///
     /// See [`Scheduler`](crate::schedule::Scheduler).
     pub fn scheduler(&mut self) -> Result<crate::schedule::Scheduler, Off> {
-        let (scheduler, created) = crate::schedule::Scheduler::get();
-        if created {
-            self.on::<crate::events::Tick>(move |_| scheduler.run_due())?;
+        let (scheduler, subscribe) = crate::schedule::Scheduler::get();
+        if subscribe && let Err(off) = self.on::<crate::events::Tick>(move |_| scheduler.run_due())
+        {
+            scheduler.unsubscribed();
+            return Err(off);
         }
         Ok(scheduler)
     }
@@ -843,7 +851,8 @@ unsafe extern "system" fn run_mid_hook<F: Fn(&mut Registers)>(
     }
 }
 
-fn ok<T>(status: Status, value: T, what: impl FnOnce() -> String) -> Result<T, Off> {
+/// `value` when `status` is OK, otherwise an [`Off`] naming `what` and why.
+pub(crate) fn ok<T>(status: Status, value: T, what: impl FnOnce() -> String) -> Result<T, Off> {
     if status.is_ok() {
         Ok(value)
     } else {
@@ -872,6 +881,17 @@ mod tests {
                 .then_some(())
                 .ok_or_else(|| "a long table".to_owned())
         }
+    }
+
+    #[test]
+    fn a_failed_call_names_what_failed_and_why() {
+        use crate::abi::Status;
+        assert_eq!(super::ok(Status::OK, 3, || unreachable!()), Ok(3));
+        let off = super::ok(Status::MISSING, (), || "component type keen::X".to_owned());
+        assert_eq!(
+            off.unwrap_err().to_string(),
+            "component type keen::X: missing on this game build"
+        );
     }
 
     #[test]

@@ -12,9 +12,19 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock, PoisonError};
 
 use crate::ecs::{Components, Entity};
+use crate::raw::read_at;
 use crate::{Load, Next, Off};
 
 /// What a container is, for [`Source::kinds`].
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::loot::Kinds;
+///
+/// let containers = Kinds::CORPSES.with(Kinds::CHESTS);
+/// assert!(containers.contains(Kinds::CORPSES) && !containers.contains(Kinds::DESTROYED));
+/// ```
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub struct Kinds(u8);
 
@@ -59,6 +69,10 @@ impl Kinds {
 }
 
 /// One roll of a container's loot, as the filters see it.
+///
+/// # Examples
+///
+/// See [`Source`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Roll {
     /// What the container is.
@@ -88,6 +102,7 @@ pub struct Roll {
 /// assert!(Source::bosses().matches(&boss));
 /// assert!(!Source::locked_chests().matches(&boss));
 /// assert!(Source::kinds(Kinds::CORPSES).with_labels(&[9]).matches(&boss));
+/// assert!(!Source::kinds(Kinds::CONTAINERS).with_nodes(&[3]).matches(&boss));
 /// ```
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Source {
@@ -105,6 +120,10 @@ pub struct Source {
 
 impl Source {
     /// Every container of `kinds`.
+    ///
+    /// # Examples
+    ///
+    /// See [`Source`].
     #[must_use]
     pub const fn kinds(kinds: Kinds) -> Self {
         Self {
@@ -117,6 +136,10 @@ impl Source {
     }
 
     /// Every boss's corpse.
+    ///
+    /// # Examples
+    ///
+    /// See [`Source`].
     #[must_use]
     pub const fn bosses() -> Self {
         let mut source = Self::kinds(Kinds::CORPSES);
@@ -125,6 +148,10 @@ impl Source {
     }
 
     /// Every chest that needs a key or a lockpick.
+    ///
+    /// # Examples
+    ///
+    /// See [`Source`].
     #[must_use]
     pub const fn locked_chests() -> Self {
         let mut source = Self::kinds(Kinds::CHESTS);
@@ -133,6 +160,10 @@ impl Source {
     }
 
     /// The same, limited to the loot label ids `labels`.
+    ///
+    /// # Examples
+    ///
+    /// See [`Source`].
     #[must_use]
     pub fn with_labels(mut self, labels: &[u32]) -> Self {
         self.labels.extend_from_slice(labels);
@@ -140,6 +171,10 @@ impl Source {
     }
 
     /// The same, limited to the world nodes `nodes`.
+    ///
+    /// # Examples
+    ///
+    /// See [`Source`].
     #[must_use]
     pub fn with_nodes(mut self, nodes: &[u32]) -> Self {
         self.nodes.extend_from_slice(nodes);
@@ -191,6 +226,10 @@ pub struct Drop {
 
 impl Drop {
     /// One `item` at `chance` per roll of a container `from` matches.
+    ///
+    /// # Examples
+    ///
+    /// See [`Drop`].
     #[must_use]
     pub fn new(item: u32, chance: f64, from: Source) -> Self {
         Self::one_of(&[item], chance, from)
@@ -198,6 +237,10 @@ impl Drop {
 
     /// One of `items`, each as likely, at `chance` per roll of a container
     /// `from` matches: the chance is that of any of them.
+    ///
+    /// # Examples
+    ///
+    /// See [`Drop`].
     #[must_use]
     pub fn one_of(items: &[u32], chance: f64, from: Source) -> Self {
         Self {
@@ -209,6 +252,10 @@ impl Drop {
     }
 
     /// The same with `min` to `max` items per drop.
+    ///
+    /// # Examples
+    ///
+    /// See [`Drop`].
     #[must_use]
     pub const fn count(mut self, min: u16, max: u16) -> Self {
         self.count = [min, max];
@@ -341,16 +388,6 @@ fn dice() -> &'static Dice {
             now as u64 ^ u64::from(std::process::id()).rotate_left(32),
         ))
     })
-}
-
-/// Reads a `T` at `offset` bytes past `base`.
-///
-/// # Safety
-///
-/// A readable `T` lies there.
-unsafe fn read_at<T: Copy>(base: *const u8, offset: usize) -> T {
-    // SAFETY: forwarded from the caller.
-    unsafe { base.wrapping_add(offset).cast::<T>().read_unaligned() }
 }
 
 /// # Safety

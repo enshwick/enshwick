@@ -164,10 +164,11 @@ pub mod types {
 /// let mut base = vec![8, 0, 0, 0, 2, 0, 0, 0];
 /// base.extend_from_slice(&[1, 0, 0, 0, 2, 0, 0, 0]);
 /// let mut blob = Blob::new(&base);
-/// blob.grow_array(0, 4, 4, &[], &[(vec![3, 0, 0, 0], None)]).unwrap();
-/// let (start, count) = blob.array(0).unwrap();
+/// blob.grow_array(0, 4, 4, &[], &[(vec![3, 0, 0, 0], None)]).ok_or("not an array")?;
+/// let (start, count) = blob.array(0).ok_or("not an array")?;
 /// assert_eq!(count, 3);
 /// assert_eq!(blob.read_u32(start + 8), Some(3));
+/// # Ok::<(), &str>(())
 /// ```
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Blob(Vec<u8>);
@@ -403,11 +404,7 @@ impl Load<'_> {
             language,
             crate::abi::Str::new(text),
         );
-        if status.is_ok() {
-            Ok(())
-        } else {
-            Err(Off::new(format!("add text: status {}", status.0)))
-        }
+        crate::load::ok(status, (), || "add text".to_owned())
     }
 
     /// Serves the resource `key`, built by `builder` from the resource
@@ -457,13 +454,11 @@ impl Load<'_> {
             patch,
             user.cast(),
         );
-        if status.is_ok() {
-            Ok(())
-        } else {
+        if !status.is_ok() {
             // SAFETY: refused, so the loader keeps no copy of the pointer.
             drop(unsafe { Box::from_raw(user) });
-            Err(Off::new(format!("serve resource: status {}", status.0)))
         }
+        crate::load::ok(status, (), || "serve resource".to_owned())
     }
 }
 

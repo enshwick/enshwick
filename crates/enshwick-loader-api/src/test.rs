@@ -599,10 +599,11 @@ impl FakeHost {
     /// // SAFETY: the installed fake's table.
     /// let api = unsafe { &*loader.api() };
     /// let mut count = 0;
-    /// let size = u32::try_from(size_of::<ModInfo>()).unwrap();
+    /// let size = u32::try_from(size_of::<ModInfo>())?;
     /// let status = (api.join_missing)(loader.handle(), core::ptr::null_mut(), size, 0, &mut count);
     /// assert!(status.is_ok());
     /// assert_eq!(count, 1);
+    /// # Ok::<(), core::num::TryFromIntError>(())
     /// ```
     #[must_use]
     pub fn join_missing(mut self, info: ModInfo) -> Self {

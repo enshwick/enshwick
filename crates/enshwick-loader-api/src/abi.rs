@@ -133,8 +133,9 @@ impl Header {
 /// let mut old = TickData { header: Header::of::<TickData>(), step: 7 };
 /// old.header.size = 8;
 /// // SAFETY: a valid tick; an all-zero tick is valid.
-/// let tick = unsafe { read_headed(&raw const old, 8) }.unwrap();
+/// let tick = unsafe { read_headed(&raw const old, 8) }.ok_or("too short")?;
 /// assert_eq!(tick.step, 0);
+/// # Ok::<(), &str>(())
 /// ```
 #[must_use]
 pub unsafe fn read_headed<T: Copy>(raw: *const T, required: usize) -> Option<T> {
@@ -560,6 +561,12 @@ impl BuildingData {
 
 /// A connected player, from [`HostApi::player`] or [`HostApi::players`].
 ///
+/// Unlike other structs with a [`Header`], its layout is frozen and it never
+/// grows: [`CommandCall`] and [`RenameCall`] carry it before fields of their
+/// own, and [`HostApi::players`] writes an array of it with no entry size.
+/// Player data a later minor adds goes into a new struct. The caller still
+/// starts each one it passes with [`Header::of`].
+///
 /// # Examples
 ///
 /// ```
@@ -976,7 +983,7 @@ impl Relation {
 ///
 /// let zones = Dependency {
 ///     id: Str::new("flame-altar-zones"),
-///     range: Str::new("^0.1"),
+///     range: Str::new(">=0.1, <1.0"),
 ///     relation: Relation::REQUIRES,
 /// };
 /// assert_eq!(zones.relation, Relation::REQUIRES);
@@ -986,7 +993,7 @@ impl Relation {
 pub struct Dependency {
     /// The other mod's id.
     pub id: Str,
-    /// A Cargo-style version requirement, such as `^0.1`; empty for any.
+    /// A Cargo-style version requirement, such as `>=0.1, <1.0`; empty for any.
     pub range: Str,
     /// How the two relate.
     pub relation: Relation,
@@ -2007,6 +2014,9 @@ const _: () = {
     assert!(size_of::<InventoryOpResult>() == 8);
     assert!(size_of::<InventoryResult>() == 24);
     assert!(size_of::<ItemData>() == 20);
+    // Frozen: embedded in calls and written as an array.
+    assert!(size_of::<PlayerInfo>() == 96);
+    assert!(core::mem::offset_of!(PlayerInfo, name) == 26);
     assert!(size_of::<Registers>() == 17 * 8);
     assert!(core::mem::offset_of!(Registers, rsp) == 4 * 8);
     assert!(core::mem::offset_of!(Registers, rflags) == 16 * 8);

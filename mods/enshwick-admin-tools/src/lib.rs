@@ -219,11 +219,7 @@ fn give(tools: &Tools, ctx: &CommandContext, item: u32, count: u32, to: Option<&
         return "giving items needs the inventory API, which this game build lacks".to_owned();
     };
     let player = match to {
-        Some(name) => tools
-            .world
-            .players()
-            .into_iter()
-            .find(|p| p.name.eq_ignore_ascii_case(name)),
+        Some(name) => tools.world.players_named(name).into_iter().next(),
         None if ctx.player.entity.0 != 0 => Some(ctx.player.clone()),
         None => {
             return "the console names the player: /admin give <item> <count> <player>".to_owned();

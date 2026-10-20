@@ -20,6 +20,7 @@ mod drops;
 pub use drops::{Drop, Kinds, Roll, Source};
 
 use crate::ecs::{Components, Ecs, Entity};
+use crate::raw::read_at;
 use crate::{Load, Off};
 
 /// The system that checks every loot container each step, for
@@ -31,6 +32,10 @@ pub const SYSTEM: &str = "destroy_inventory_on_loot";
 const ROW_WORDS: usize = 9;
 
 /// The last interaction a player started with a container.
+///
+/// # Examples
+///
+/// See [`Container`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Offer {
     /// The entity that last opened or looted the container; none before
@@ -358,21 +363,9 @@ impl Containers {
 
     #[expect(clippy::unused_self, reason = "kept beside the other reads")]
     fn position_of(&self, transform: *mut u8) -> [f64; 3] {
-        // SAFETY: a live CurrentTransform starts with x, y and z in 32.32
-        // fixed point.
-        let fixed = unsafe { transform.cast::<[i64; 3]>().read_unaligned() };
-        crate::ecs::metres(fixed)
+        // SAFETY: callers pass a live CurrentTransform.
+        unsafe { crate::ecs::transform_position(transform) }
     }
-}
-
-/// Reads a `T` at `offset` bytes past `base`.
-///
-/// # Safety
-///
-/// A readable `T` lies there.
-unsafe fn read_at<T: Copy>(base: *const u8, offset: usize) -> T {
-    // SAFETY: forwarded from the caller.
-    unsafe { base.wrapping_add(offset).cast::<T>().read_unaligned() }
 }
 
 #[cfg(test)]

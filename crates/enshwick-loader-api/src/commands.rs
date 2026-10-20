@@ -161,6 +161,10 @@ impl CommandContext {
 }
 
 /// A player's rename of an entity, for [`Load::on_rename`].
+///
+/// # Examples
+///
+/// See [`Load::on_rename`].
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Rename {
     /// The entity being renamed.
@@ -172,6 +176,14 @@ pub struct Rename {
 }
 
 /// Why [`run`] ran no command.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::commands::{RunError, run};
+///
+/// assert_eq!(run("no slash").unwrap_err(), RunError::NotACommand);
+/// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RunError {
     /// The line does not start with `/name`.

@@ -6,7 +6,7 @@
 
 use core::ffi::c_void;
 
-use crate::abi::{HostApi, PlayerInfo, Status, Str};
+use crate::abi::{Header, HostApi, PlayerInfo, Status, Str};
 use crate::ecs::Entity;
 use crate::{Host, Load, Off};
 
@@ -38,6 +38,10 @@ impl ComponentType {
 }
 
 /// A connected player, as the server sees them.
+///
+/// # Examples
+///
+/// See [`World`].
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Player {
     /// The player character's entity.
@@ -64,6 +68,24 @@ impl Player {
         }
     }
 
+    /// Whether the player's name is `name`, ignoring case, as a player types
+    /// another's name in chat.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_loader_api::ecs::Entity;
+    /// use enshwick_loader_api::world::Player;
+    ///
+    /// let player = Player { entity: Entity(2), slot: 0, key: 7, permissions: 0, name: "Émile".into() };
+    /// assert!(player.is_named("éMILE"));
+    /// assert!(!player.is_named("Emile"));
+    /// ```
+    #[must_use]
+    pub fn is_named(&self, name: &str) -> bool {
+        self.name.to_lowercase() == name.to_lowercase()
+    }
+
     /// Whether the server lets the player kick and ban: its administrators.
     ///
     /// # Examples
@@ -72,6 +94,20 @@ impl Player {
     #[must_use]
     pub const fn is_admin(&self) -> bool {
         self.permissions & PlayerInfo::CAN_KICK_BAN != 0
+    }
+}
+
+/// A [`PlayerInfo`] for the loader to fill, its header naming this build's
+/// layout.
+fn blank_info() -> PlayerInfo {
+    PlayerInfo {
+        header: Header::of::<PlayerInfo>(),
+        slot: 0,
+        entity: 0,
+        key: 0,
+        permissions: 0,
+        name_len: 0,
+        name: [0; 64],
     }
 }
 
@@ -128,14 +164,9 @@ impl World {
     pub fn component_type(&self, _load: &Load<'_>, name: &str) -> Result<ComponentType, Off> {
         let mut hash = 0;
         let status = (self.host.api().type_hash)(Str::new(name), &raw mut hash);
-        if status.is_ok() {
-            Ok(ComponentType(hash))
-        } else {
-            Err(Off::new(format!(
-                "component type {name}: status {}",
-                status.0
-            )))
-        }
+        crate::load::ok(status, ComponentType(hash), || {
+            format!("component type {name}")
+        })
     }
 
     /// A pointer to `entity`'s component of type `ty`, valid until the game
@@ -159,9 +190,8 @@ impl World {
     #[must_use]
     pub fn position(&self, entity: Entity) -> Option<[f64; 3]> {
         let data = self.component(entity, self.transform)?;
-        // SAFETY: a live CurrentTransform starts with x, y and z in 32.32 fixed point.
-        let fixed = unsafe { data.cast::<[i64; 3]>().read_unaligned() };
-        Some(crate::ecs::metres(fixed))
+        // SAFETY: the entity's live CurrentTransform, read at once.
+        Some(unsafe { crate::ecs::transform_position(data.cast()) })
     }
 
     /// The item `entity` was placed from, which it keeps across saves.
@@ -195,10 +225,46 @@ impl World {
     /// See [`World`].
     #[must_use]
     pub fn player(&self, entity: Entity) -> Option<Player> {
-        // SAFETY: plain data, valid when zeroed.
-        let mut info: PlayerInfo = unsafe { core::mem::zeroed() };
+        let mut info = blank_info();
         let status = (self.host.api().player)(self.host.handle(), entity.0, &raw mut info);
         status.is_ok().then(|| Player::from_info(&info))
+    }
+
+    /// The connected player with the account `key`, the same in every
+    /// session.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// fn owner_name(world: &enshwick_loader_api::world::World, owner: u64) -> Option<String> {
+    ///     world.player_by_key(owner).map(|player| player.name)
+    /// }
+    /// ```
+    #[must_use]
+    pub fn player_by_key(&self, key: u64) -> Option<Player> {
+        self.players().into_iter().find(|player| player.key == key)
+    }
+
+    /// The connected players named `name`, ignoring case; names are
+    /// untrusted and may repeat, so a command that wants one player refuses
+    /// more than one.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// fn find(world: &enshwick_loader_api::world::World, name: &str) -> Result<enshwick_loader_api::world::Player, String> {
+    ///     match <[_; 1]>::try_from(world.players_named(name)) {
+    ///         Ok([player]) => Ok(player),
+    ///         Err(found) if found.is_empty() => Err(format!("no player is named {name}")),
+    ///         Err(_) => Err(format!("several players are named {name}")),
+    ///     }
+    /// }
+    /// ```
+    #[must_use]
+    pub fn players_named(&self, name: &str) -> Vec<Player> {
+        let mut players = self.players();
+        players.retain(|player| player.is_named(name));
+        players
     }
 
     /// Whether the loader offers what was added to the table at `end`.
@@ -282,8 +348,7 @@ impl World {
     #[must_use]
     pub fn players(&self) -> Vec<Player> {
         const MAX: usize = 64;
-        // SAFETY: plain data, valid when zeroed.
-        let mut infos: [PlayerInfo; MAX] = unsafe { core::mem::zeroed() };
+        let mut infos = [blank_info(); MAX];
         let mut count = 0u32;
         let status = (self.host.api().players)(
             self.host.handle(),

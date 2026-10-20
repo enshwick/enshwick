@@ -134,12 +134,7 @@ fn allow(
     here: &str,
     save: &impl Fn(),
 ) -> String {
-    let wanted = name.to_lowercase();
-    let matching: Vec<Player> = world
-        .players()
-        .into_iter()
-        .filter(|p| p.name.to_lowercase() == wanted)
-        .collect();
+    let matching = world.players_named(name);
     let target = match matching.as_slice() {
         [] => return phrases.say("command.no_player", &[("name", name)]),
         [one] => one,

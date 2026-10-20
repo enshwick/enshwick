@@ -13,8 +13,6 @@
 
 use crate::geometry::Box3;
 
-/// Engine positions are 32.32 fixed point.
-const FIXED_PER_METRE: f64 = 4_294_967_296.0;
 const CELLS_PER_METRE: f64 = 2.0;
 /// How far an orientation may stray from a pure turn about the vertical.
 const TILT_TOLERANCE: f32 = 1e-3;
@@ -49,10 +47,6 @@ pub(crate) fn turn(orientation: [f32; 4]) -> Option<(f64, f64)> {
 /// The zone centre in metres.
 #[must_use]
 #[expect(
-    clippy::cast_precision_loss,
-    reason = "positions are far below 2^53 fixed-point units"
-)]
-#[expect(
     clippy::many_single_char_names,
     reason = "quaternion components and the rotation keep their usual names"
 )]
@@ -73,7 +67,7 @@ pub(crate) fn centre(placed: &Placed) -> Option<[f64; 3]> {
         ]
     };
     let shift = rotate([0.25, 0.0, 0.25]);
-    let p = placed.position.map(|v| v as f64 / FIXED_PER_METRE);
+    let p = enshwick_loader_api::ecs::metres(placed.position);
     Some([p[0] + shift[0], p[1] + shift[1], p[2] + shift[2]])
 }
 
@@ -124,6 +118,7 @@ pub(crate) fn grown_range(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use enshwick_loader_api::ecs::FIXED_PER_METRE;
 
     const UPRIGHT: [f32; 4] = [0.0, 0.0, 0.0, 1.0];
     /// Half a turn about the vertical, as one live altar has it.

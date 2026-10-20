@@ -124,6 +124,20 @@ fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_
 reads a chest's `UsedItem` and position this way, and finds slot roots in its
 inventory hook.
 
+### Positions
+
+World coordinates are 32.32 fixed point: `FIXED_PER_METRE` engine units to
+the metre. `ecs::transform_position` reads a `CurrentTransform` component in
+metres, and `ecs::metres` and `ecs::fixed` convert between the two:
+
+```rust
+use enshwick_loader_api::ecs::{FIXED_PER_METRE, fixed, metres};
+
+let at = fixed([10.5, 2.0, -4.0]);
+assert_eq!(at[0], (10.5 * FIXED_PER_METRE) as i64);
+assert_eq!(metres(at), [10.5, 2.0, -4.0]);
+```
+
 ## Attribute sets: `Attributes`
 
 Components such as `Level` and `Experience` hold attributes looked up by hash

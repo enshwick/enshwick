@@ -12,6 +12,7 @@
 use enshwick_loader_api::content::Guid;
 use enshwick_loader_api::content::items::NewItem;
 use enshwick_loader_api::i18n::Texts;
+use enshwick_loader_api::raw::read_at;
 use enshwick_loader_api::{Load, Next, Off};
 
 /// The mod's texts, per language.
@@ -176,16 +177,6 @@ pub(crate) fn link(load: &mut Load<'_>) -> Result<(), Off> {
     };
     let _first = ITEM_MAP.set(map);
     load.hook(&REGISTRY_LOAD, load.symbol("survivors.registry_load")?)
-}
-
-/// Reads a `T` at `offset` bytes past `base`.
-///
-/// # Safety
-///
-/// A readable `T` lies there.
-unsafe fn read_at<T: Copy>(base: *const u8, offset: usize) -> T {
-    // SAFETY: forwarded from the caller.
-    unsafe { base.wrapping_add(offset).cast::<T>().read_unaligned() }
 }
 
 fn registry_load(next: Next<RegistryLoadFn>, registry: *mut u8) {

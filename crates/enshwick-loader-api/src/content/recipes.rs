@@ -69,6 +69,10 @@ pub struct NewRecipe {
 }
 
 /// Where the fields a recipe edit touches sit, from the game's reflection.
+///
+/// # Examples
+///
+/// See [`RecipeLayout::resolve`] and [`add_recipe_to`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct RecipeLayout {
     /// `RecipeRegistryResource.recipes`.
@@ -159,7 +163,29 @@ fn fnv1a(bytes: &[u8]) -> u32 {
 }
 
 /// The recipe registry with `recipe` after the others, unless its workshop
-/// already holds `limit` recipes.
+/// already holds `limit` recipes. [`Load::add_recipe`] serves it with
+/// [`workshop_limit`]; call it from a [`Load::serve`] builder of your own to
+/// combine it with other edits.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::content::recipes::{
+///     NewRecipe, RECIPE_REGISTRY, RecipeLayout, add_recipe_to, workshop_limit,
+/// };
+/// use enshwick_loader_api::content::types;
+///
+/// fn init(
+///     load: &mut enshwick_loader_api::Load<'_>,
+///     recipe: NewRecipe,
+/// ) -> Result<(), enshwick_loader_api::Off> {
+///     let layout = RecipeLayout::resolve(load)?;
+///     let registry = RECIPE_REGISTRY.key(types::RECIPE_REGISTRY);
+///     load.serve(registry, registry, move |base| {
+///         add_recipe_to(&layout, base, &recipe, workshop_limit())
+///     })
+/// }
+/// ```
 #[must_use]
 pub fn add_recipe_to(
     layout: &RecipeLayout,
@@ -268,6 +294,10 @@ fn scaled_inputs(layout: &RecipeLayout, registry: &Blob, at: usize, cost: u32) -
 }
 
 /// A vanilla recipe as [`Load::derive_recipes`] shows it.
+///
+/// # Examples
+///
+/// See [`Load::derive_recipes`].
 #[derive(Clone, Copy, Debug)]
 pub struct RecipeView<'a> {
     blob: &'a Blob,
@@ -327,6 +357,10 @@ impl RecipeView<'_> {
 }
 
 /// How a derived recipe differs from the vanilla one it copies.
+///
+/// # Examples
+///
+/// See [`Load::derive_recipes`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Derived {
     /// The vanilla output count times this.
@@ -340,6 +374,18 @@ pub struct Derived {
 
 /// A derived recipe's GUID: the vanilla one marked with the mod's salt, so it
 /// stays the same across starts and differs between mods.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::content::Guid;
+/// use enshwick_loader_api::content::recipes::derived_guid;
+///
+/// let vanilla = Guid::parse("5e57de0f-280c-4559-8191-f02c1ba656e2");
+/// assert_eq!(derived_guid(vanilla, 7), derived_guid(vanilla, 7));
+/// assert_ne!(derived_guid(vanilla, 7), derived_guid(vanilla, 8));
+/// assert_ne!(derived_guid(vanilla, 7), vanilla);
+/// ```
 #[must_use]
 pub fn derived_guid(base: Guid, salt: u32) -> Guid {
     let mut guid = base.0;
@@ -357,7 +403,31 @@ pub fn derived_guid(base: Guid, salt: u32) -> Guid {
 
 /// The recipe registry with a derived copy after the others for each vanilla
 /// recipe `choose` picks. With a workshop `limit` other than [`usize::MAX`],
-/// copies stop [`RESERVED_FOR_SINGLE`] short of it.
+/// copies stop [`RESERVED_FOR_SINGLE`] short of it. [`Load::derive_recipes`]
+/// serves it; `salt` is the hash it makes of its own salt.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::content::recipes::{
+///     Derived, RECIPE_REGISTRY, RecipeLayout, derive_recipes_in, workshop_limit,
+/// };
+/// use enshwick_loader_api::content::types;
+///
+/// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+///     let layout = RecipeLayout::resolve(load)?;
+///     let registry = RECIPE_REGISTRY.key(types::RECIPE_REGISTRY);
+///     load.serve(registry, registry, move |base| {
+///         derive_recipes_in(&layout, base, 0x5afe, workshop_limit(), &|recipe| {
+///             recipe.debug_name().starts_with("Block_").then_some(Derived {
+///                 output: 2,
+///                 cost: 1,
+///                 workshop: None,
+///             })
+///         })
+///     })
+/// }
+/// ```
 #[must_use]
 pub fn derive_recipes_in(
     layout: &RecipeLayout,
@@ -448,6 +518,10 @@ pub fn derive_recipes_in(
 
 /// A recipe in the registry as [`Load::modify_recipes`] shows it, with its
 /// counts open to change in place.
+///
+/// # Examples
+///
+/// See [`Load::modify_recipes`].
 #[derive(Debug)]
 pub struct RecipeEdit<'a> {
     blob: &'a mut Blob,
@@ -509,7 +583,25 @@ impl RecipeEdit<'_> {
 }
 
 /// The recipe registry with `modify` called on each recipe in turn; the
-/// second value is how many recipes it changed.
+/// second value is how many recipes it changed. [`Load::modify_recipes`]
+/// serves it.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::content::recipes::{RECIPE_REGISTRY, RecipeLayout, modify_recipes_in};
+/// use enshwick_loader_api::content::types;
+///
+/// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+///     let layout = RecipeLayout::resolve(load)?;
+///     let registry = RECIPE_REGISTRY.key(types::RECIPE_REGISTRY);
+///     load.serve(registry, registry, move |base| {
+///         let (built, changed) = modify_recipes_in(&layout, base, &|recipe| recipe.scale_output(2))?;
+///         enshwick_loader_api::info!("{changed} recipes doubled");
+///         Some(built)
+///     })
+/// }
+/// ```
 #[must_use]
 pub fn modify_recipes_in(
     layout: &RecipeLayout,
