@@ -15,6 +15,7 @@
 use std::sync::OnceLock;
 
 use arrayvec::ArrayVec;
+use enshwick_loader_api::raw::read_at;
 use enshwick_loader_api::{Load, Next, Off};
 
 /// The engine keeps at most 255 zones.
@@ -73,16 +74,6 @@ fn seam(
     };
     // SAFETY: the game passes its zone list and an object's two corners.
     u8::from(unsafe { across(layout, zones, corners, margin) })
-}
-
-/// Reads a `T` at `offset` bytes past `base`.
-///
-/// # Safety
-///
-/// A readable `T` lies there.
-unsafe fn read_at<T: Copy>(base: *const u8, offset: usize) -> T {
-    // SAFETY: forwarded from the caller.
-    unsafe { base.wrapping_add(offset).cast::<T>().read_unaligned() }
 }
 
 /// # Safety

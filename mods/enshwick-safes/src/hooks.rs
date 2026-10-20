@@ -13,6 +13,7 @@ use std::cell::RefCell;
 use std::sync::OnceLock;
 
 use enshwick_loader_api::ecs::Entity;
+use enshwick_loader_api::raw::{read_at as read, write_at as write};
 use enshwick_loader_api::{Load, Next, Off};
 
 use crate::access::{ACCESS, Action, Reads};
@@ -47,26 +48,6 @@ static READS: OnceLock<(Reads, Layout)> = OnceLock::new();
 const NOT_OFFERED: u8 = 6;
 /// Copies of the base stock per thread; callers use one result at a time.
 const RING: usize = 4;
-
-/// Reads `T` at `base + offset`.
-///
-/// # Safety
-///
-/// A readable `T` lies there.
-unsafe fn read<T: Copy>(base: *const u8, offset: usize) -> T {
-    // SAFETY: forwarded from the caller.
-    unsafe { base.wrapping_add(offset).cast::<T>().read_unaligned() }
-}
-
-/// Writes `value` at `base + offset`.
-///
-/// # Safety
-///
-/// A writable `T` lies there.
-unsafe fn write<T: Copy>(base: *mut u8, offset: usize, value: T) {
-    // SAFETY: forwarded from the caller.
-    unsafe { base.wrapping_add(offset).cast::<T>().write_unaligned(value) };
-}
 
 /// Writes the game's own result for an interaction it does not offer.
 ///

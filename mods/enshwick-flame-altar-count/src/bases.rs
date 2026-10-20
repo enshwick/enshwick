@@ -30,6 +30,7 @@ use std::time::Duration;
 use arc_swap::ArcSwap;
 use enshwick_loader_api::abi::Side;
 use enshwick_loader_api::events::Shutdown;
+use enshwick_loader_api::raw::read_at;
 use enshwick_loader_api::state::Hold;
 use enshwick_loader_api::{Load, Next, Off};
 
@@ -137,16 +138,6 @@ enshwick_loader_api::detour! {
         mode: u64,
         extra: u64,
     ) = check;
-}
-
-/// Reads a `T` at `base + offset`.
-///
-/// # Safety
-///
-/// `base + offset` is readable for a `T`.
-unsafe fn read_at<T: Copy>(base: *const u8, offset: usize) -> T {
-    // SAFETY: forwarded from the caller.
-    unsafe { base.wrapping_add(offset).cast::<T>().read_unaligned() }
 }
 
 /// Every site, found before anything is registered, so a miss leaves the

@@ -29,6 +29,7 @@ use arrayvec::ArrayVec;
 use enshwick_loader_api::abi::Side;
 use enshwick_loader_api::ecs::{Attributes, Ecs, Entity, Worlds};
 use enshwick_loader_api::events::Shutdown;
+use enshwick_loader_api::raw::read_at;
 use enshwick_loader_api::{Load, Next, Off};
 
 use crate::geometry::{Altar, Box3, clusters};
@@ -250,16 +251,6 @@ fn upgrade(next: Next<unsafe extern "system" fn(*mut u64)>, ctx: *mut u64) {
     }
     // SAFETY: the original system takes its own context.
     unsafe { next.get()(ctx) };
-}
-
-/// Reads a `T` at `offset` bytes past `base`.
-///
-/// # Safety
-///
-/// A readable `T` lies there.
-unsafe fn read_at<T: Copy>(base: *const u8, offset: usize) -> T {
-    // SAFETY: forwarded from the caller.
-    unsafe { base.wrapping_add(offset).cast::<T>().read_unaligned() }
 }
 
 /// Learns positions and orientations, after vanilla built the zones.
