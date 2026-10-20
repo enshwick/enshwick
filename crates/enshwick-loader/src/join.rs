@@ -1,5 +1,7 @@
 //! The client's join check: before it joins a server, it compares the server's
-//! mod set with its own and warns when they differ.
+//! mod set with its own. Mods the server does not run are turned off on the
+//! client, with a note; when the server runs mods the client lacks, or in
+//! another version, the client says which and does not join.
 //!
 //! The game asks to change servers with a request that starts with the server's
 //! query `ip:port`. The hook lets the join go ahead and asks the server, over
@@ -9,7 +11,90 @@ use std::collections::BTreeMap;
 use std::net::{SocketAddr, UdpSocket};
 use std::time::Duration;
 
-const QUERY_TIMEOUT: Duration = Duration::from_secs(3);
+/// The check holds the join, so a server that does not answer is not waited on long.
+const QUERY_TIMEOUT: Duration = Duration::from_secs(2);
+
+/// What the client does when it joins.
+#[derive(Debug, Default, PartialEq, Eq)]
+pub struct Plan {
+    /// The client's mods the server does not run: turned off, with a note.
+    pub turn_off: Vec<String>,
+    /// The server's mods the client lacks or runs in another version: the
+    /// client does not join.
+    pub missing: Vec<String>,
+    /// The mods match but the loader versions differ.
+    pub other_loader: bool,
+}
+
+impl Plan {
+    /// The note for the player, if any; `blocking` when the client stays out.
+    #[must_use]
+    pub fn message(&self) -> Option<(String, bool)> {
+        if !self.missing.is_empty() {
+            return Some((
+                format!(
+                    "This server runs Enshwick mods you do not have in its version:\n\n{}\n\nInstall the server's versions to join.",
+                    self.missing.join("\n")
+                ),
+                true,
+            ));
+        }
+        if !self.turn_off.is_empty() {
+            return Some((
+                format!(
+                    "This server does not run these Enshwick mods, so they are off until you restart the game:\n\n{}",
+                    self.turn_off.join("\n")
+                ),
+                false,
+            ));
+        }
+        self.other_loader.then(|| {
+            (
+                "This server runs Enshwick with the same mods but another loader version. Install the server's release, or things may not work.".to_owned(),
+                false,
+            )
+        })
+    }
+}
+
+/// The plan for joining a server that advertises `server` (fingerprint and
+/// mod list), or no Enshwick at all.
+#[must_use]
+pub fn plan(ours: &str, ours_mods: &str, server: Option<(&str, &str)>) -> Plan {
+    let ids = |list: &str| -> Vec<String> {
+        list.split(',')
+            .filter_map(|entry| entry.split_once('@').map(|(id, _)| id.to_owned()))
+            .collect()
+    };
+    match server {
+        Some((fingerprint, _)) if fingerprint == ours => Plan::default(),
+        None => Plan {
+            turn_off: ids(ours_mods),
+            ..Plan::default()
+        },
+        Some((_, mods)) => {
+            let theirs = ids(mods);
+            let turn_off: Vec<String> = ids(ours_mods)
+                .into_iter()
+                .filter(|id| !theirs.contains(id))
+                .collect();
+            let missing: Vec<String> = differences(mods, ours_mods)
+                .into_iter()
+                .filter(|line| {
+                    !turn_off
+                        .iter()
+                        .any(|id| line.starts_with(&format!("{id}: yours")))
+                })
+                .collect();
+            let other_loader = missing.is_empty() && turn_off.is_empty();
+            Plan {
+                turn_off,
+                missing,
+                other_loader,
+            }
+        }
+    }
+}
 
 /// What to tell the player, or `None` when the mod sets match.
 #[must_use]
@@ -58,6 +143,16 @@ pub fn differences(server: &str, ours: &str) -> Vec<String> {
             _ => None,
         })
         .collect()
+}
+
+/// The whole mod list a server advertises across its mod rules.
+#[must_use]
+pub fn mod_rules_value(reply: &[u8]) -> String {
+    (0..crate::advertise::MOD_RULES)
+        .map_while(|i| rule(reply, &crate::advertise::rule_name(i)))
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>()
+        .join(",")
 }
 
 /// The `ip:port` at the start of a server change request.
@@ -140,11 +235,12 @@ mod runtime {
     pub(crate) unsafe extern "system" fn detour(provider: *mut u8, request: *const u8) -> u64 {
         if !request.is_null() {
             // SAFETY: the request holds at least the address bytes.
-            let bytes = unsafe { std::slice::from_raw_parts(request, ADDRESS_BYTES) }.to_vec();
-            let spawned = std::thread::Builder::new()
-                .name("enshwick-join".into())
-                .spawn(move || drop(std::panic::catch_unwind(|| check(&bytes))));
-            drop(spawned);
+            let bytes = unsafe { std::slice::from_raw_parts(request, ADDRESS_BYTES) };
+            let allowed = std::panic::catch_unwind(|| check(bytes)).unwrap_or(true);
+            if !allowed {
+                crate::log!(WARN, "join refused: the server runs mods this client lacks");
+                return 0;
+            }
         }
         let next = NEXT.load(Ordering::Acquire);
         // SAFETY: the loader points the slot at the rest of the chain, which has
@@ -154,25 +250,48 @@ mod runtime {
         unsafe { next(provider, request) }
     }
 
-    fn check(request: &[u8]) {
+    /// Compares mod sets, turns off what the server lacks and tells the
+    /// player; false when the client must not join.
+    fn check(request: &[u8]) -> bool {
         let (Some(address), Some((ours, ours_mods))) = (super::address(request), OURS.get()) else {
-            return;
+            return true;
         };
         let reply = super::query_rules(address).ok();
-        let server = reply.as_deref().and_then(|r| {
-            Some((
-                super::rule(r, super::super::advertise::RULE)?,
-                super::rule(r, super::super::advertise::RULE_MODS).unwrap_or_default(),
-            ))
-        });
+        let Some(reply) = reply else {
+            // A server that does not answer the query: nothing to compare.
+            crate::log!(INFO, "joining {address}: no rules answer");
+            return true;
+        };
+        let server = super::rule(&reply, super::super::advertise::RULE)
+            .map(|fingerprint| (fingerprint, super::mod_rules_value(&reply)));
         crate::log!(INFO, "joining {address}: server {server:?}, ours {ours}");
-        let Some(text) = super::verdict(
+        let plan = super::plan(
             ours,
             ours_mods,
             server.as_ref().map(|(f, m)| (f.as_str(), m.as_str())),
-        ) else {
-            return;
+        );
+        for id in &plan.turn_off {
+            crate::host::turn_off_mod(
+                id,
+                "the server does not run it; restart the game to use it again",
+            );
+        }
+        let Some((text, blocking)) = plan.message() else {
+            return true;
         };
+        if blocking {
+            show(&text);
+        } else {
+            // The join goes on; the note must not hold it.
+            let spawned = std::thread::Builder::new()
+                .name("enshwick-join-note".into())
+                .spawn(move || show(&text));
+            drop(spawned);
+        }
+        !blocking
+    }
+
+    fn show(text: &str) {
         let text: Vec<u16> = text.encode_utf16().chain([0]).collect();
         let title: Vec<u16> = "Enshwick".encode_utf16().chain([0]).collect();
         // SAFETY: NUL-terminated strings and no owner window.
@@ -213,6 +332,45 @@ mod tests {
                 .contains("no Enshwick mods")
         );
         assert_eq!(verdict("ab", "", None), None);
+    }
+
+    #[test]
+    fn mods_the_server_lacks_are_turned_off_and_only_the_rest_warn() {
+        assert_eq!(
+            plan("ab", "a@1,b@1", Some(("ab", "a@1,b@1"))),
+            Plan::default()
+        );
+        let none = plan("ab", "a@1,b@1", None);
+        assert_eq!(none.turn_off, ["a", "b"]);
+        assert_eq!(none.message().map(|(_, blocking)| blocking), Some(false));
+        let extra = plan("ab", "a@1,b@1", Some(("cd", "a@1")));
+        assert_eq!(extra.turn_off, ["b"]);
+        assert!(extra.missing.is_empty());
+        let missing = plan("ab", "a@1", Some(("cd", "a@2,c@1")));
+        assert!(missing.turn_off.is_empty());
+        let (text, blocking) = missing.message().unwrap();
+        assert!(blocking);
+        assert!(
+            text.contains("a: server 2, yours 1") && text.contains("c: server 1, not installed")
+        );
+        assert!(plan("ab", "a@1", Some(("cd", "a@1"))).other_loader);
+    }
+
+    #[test]
+    fn the_mod_list_is_read_across_rules() {
+        let mut reply = vec![0xff, 0xff, 0xff, 0xff, b'E', 3, 0];
+        for part in [
+            "enshwick.mods",
+            "a@1,b@1",
+            "enshwick.mods.1",
+            "c@1",
+            "enshwick",
+            "x",
+        ] {
+            reply.extend_from_slice(part.as_bytes());
+            reply.push(0);
+        }
+        assert_eq!(mod_rules_value(&reply), "a@1,b@1,c@1");
     }
 
     #[test]
