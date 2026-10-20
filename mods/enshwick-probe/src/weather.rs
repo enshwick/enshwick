@@ -14,6 +14,8 @@ use enshwick_loader_api::{Load, Off};
 const RAIN: Duration = Duration::from_mins(2);
 /// How long after a change the probe looks again.
 const SETTLE: Duration = Duration::from_secs(1);
+/// How long the checks take from their start.
+pub(crate) const SPAN: Duration = SETTLE.saturating_mul(2);
 
 /// The weather checks.
 #[derive(Debug, Clone, Copy)]

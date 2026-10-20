@@ -30,7 +30,8 @@ Once the world has loaded, and again on `/probe check`:
 - that destroy requests refuse entity 0 and an entity not in the world;
 - the clock: a reading, a time an hour past the next turn of day or night
   that reads back (the turn's event follows), the time put back, a factor of 10 on the speed that the clock's speed shows, and the
-  factor put back; the turns of day and night are logged as they come;
+  factor put back; the turns of day and night are logged as they come; these
+  run once the weather checks are done, since moving the clock ends the fronts;
 - game settings: a typed read, the perk cost raised by a half that reads
   back with the preset custom, a night of zero refused, and the settings put
   back;
