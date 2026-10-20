@@ -371,6 +371,33 @@ unsafe { containers.each(ctx, |c| {
 - On a hosting client the system runs in both worlds: check
   `Worlds::is_server(ctx)` first.
 
+### Mod items in random loot
+
+`load.add_loot(drop)` puts an item, vanilla or from `add_item`, into random
+loot with an exact chance per roll, on top of the vanilla loot:
+
+```rust
+use enshwick_api::loot::{Drop, Kinds, Source};
+
+load.add_loot(Drop::new(STAFF.id(), 0.10, Source::bosses()))?;
+load.add_loot(Drop::new(STAFF.id(), 0.02, Source::locked_chests()))?;
+load.add_loot(Drop::one_of(&[RING.id(), AMULET.id()], 0.01, Source::kinds(Kinds::CORPSES)).count(1, 2))?;
+```
+
+- The game rolls a container's loot once, when a player first opens it:
+  world chests and enemy corpses. Each matching drop then rolls its own
+  chance and adds its stack in the same transaction as the vanilla loot, so
+  it is saved and replicated with it. Containers rolled before stay as they
+  were.
+- `Source` filters by kind (`Kinds::CORPSES`, `CHESTS`, `DESTROYED`), bosses
+  only, chests that need a key or a lockpick only, loot label ids (the
+  FNV-1a hash of an enemy or chest type's label collection GUID) and world
+  nodes. `Drop::one_of` gives one of several items, each as likely.
+- `Kinds::DESTROYED` covers destroyed objects and pickup spawners, which roll
+  a single item: a hit there takes the place of that item.
+- A full container keeps what fits. Loot rolls on the server, the dedicated
+  one or a client's while it hosts.
+
 ## Content: items, recipes, workshops and texts
 
 New game content works on the server and the client alike; the mod runs on

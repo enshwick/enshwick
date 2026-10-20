@@ -11,6 +11,13 @@
 //! On a client that hosts a game the system also runs in the client's own
 //! world; [`Worlds::is_server`](crate::ecs::Worlds::is_server) tells the two
 //! apart.
+//!
+//! [`Load::add_loot`] puts a mod item into random loot with an exact chance,
+//! filtered by [`Source`]: corpses, bosses, chests, locked chests, loot labels.
+
+mod drops;
+
+pub use drops::{Drop, Kinds, Roll, Source};
 
 use crate::ecs::{Components, Ecs, Entity};
 use crate::{Load, Off};
