@@ -9,6 +9,7 @@
 //! writes, actions, spawns, a per-world store and a save on demand. `/probe` commands run them again, from the
 //! admin tools' command file as well.
 
+mod affixes;
 mod buffs;
 mod census;
 mod checks;
@@ -42,7 +43,7 @@ const CENSUS_PERIOD: Duration = Duration::from_secs(60);
 /// How long after the world loads the checks run.
 const CHECK_DELAY: Duration = Duration::from_secs(10);
 /// The commands, for `/enshwick help` and a malformed `/probe`.
-const HELP: &str = "/probe census|check|vitals <id>|vitals me [shown values]|teleport me [dx dy dz]|destroy <id>|spawn <id>|notice <text>";
+const HELP: &str = "/probe census|check|vitals <id>|vitals me [shown values]|teleport me [dx dy dz]|destroy <id>|spawn <id>|notice <text>|stat <id> <value|off>|stats|affix";
 
 /// Probe settings, read at start.
 #[derive(Debug, Default, serde::Deserialize, serde::Serialize, enshwick_loader_api::Config)]
@@ -67,7 +68,7 @@ struct Settings {
 }
 
 /// A check of a single feature, run after the general ones.
-type Check = Box<dyn Fn() + Send + Sync>;
+pub(crate) type Check = Box<dyn Fn() + Send + Sync>;
 
 /// The checks of single features whose part of the API this build has.
 fn extras(load: &mut Load<'_>, scheduler: Scheduler) -> Vec<Check> {
@@ -149,6 +150,7 @@ fn commands(
     census: Arc<Census>,
     checks: Arc<Checks>,
     run_all: Arc<dyn Fn() + Send + Sync>,
+    affix_checks: Option<Arc<affixes::AffixChecks>>,
 ) -> Result<(), Off> {
     let raw_stats = raw_stats::RawStats::new(load)
         .inspect_err(|off| enshwick_loader_api::warn!("FAIL raw stats: {off}"))
@@ -171,6 +173,9 @@ fn commands(
         ["destroy", id] => checks.destroy(id).into(),
         ["spawn", id] => checks.spawn_copy(id).into(),
         ["notice", words @ ..] => checks.notice(&ctx.player, &words.join(" ")).into(),
+        [word @ ("stat" | "stats" | "affix"), rest @ ..] => {
+            affixes::command(affix_checks.as_deref(), &ctx.player, word, rest).into()
+        }
         _ => HELP.into(),
     })
 }
@@ -238,7 +243,9 @@ impl Mod for Probe {
             }
             ControlFlow::Continue(())
         });
-        let extras: Arc<[Check]> = extras(load, scheduler).into();
+        let mut extras = extras(load, scheduler);
+        let affix_checks = affixes::AffixChecks::register(load, &mut extras);
+        let extras: Arc<[Check]> = extras.into();
         let run_all = {
             let checks = Arc::clone(&checks);
             move || {
@@ -256,7 +263,7 @@ impl Mod for Probe {
         })?;
         let saved = Arc::clone(&checks);
         load.on::<WorldSaved>(move |()| saved.saved())?;
-        commands(load, census, checks, run_all)?;
+        commands(load, census, checks, run_all, affix_checks)?;
         enshwick_loader_api::info!("probe on");
         Ok(Self)
     }

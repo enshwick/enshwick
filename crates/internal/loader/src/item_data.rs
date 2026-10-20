@@ -107,6 +107,13 @@ pub(crate) fn get_platform_kind(id: &str, pide: u32, item: u32) -> Option<Box<[u
     get(kind_of(id)?, pide, item).ok()
 }
 
+/// Sets the item stats of the item `pide` holding `item`, as a mod's set
+/// would.
+pub(crate) fn set_platform(pide: u32, item: u32, value: &[u8]) -> Result<(), Status> {
+    let kind = kind_of(enshwick_loader_api::stats::ITEM_KIND).ok_or(Status::MISSING)?;
+    set(kind, pide, item, value)
+}
+
 /// The item stats of the item `pide` holding `item`.
 pub(crate) fn get_platform(pide: u32, item: u32) -> Option<Box<[u8]>> {
     get_platform_kind(enshwick_loader_api::stats::ITEM_KIND, pide, item)

@@ -665,6 +665,10 @@ pub(crate) static API: HostApi = HostApi {
     stats_changed,
     stat_sources,
     stat_watch,
+    affix_open,
+    affix_roll,
+    item_lines,
+    affix_info,
     ui_frame,
     ui_widget,
     ui_dialog,
@@ -2163,6 +2167,93 @@ extern "system" fn stat_watch(me: ModHandle, entity: u32, watch: u8) -> Status {
         }
         match crate::stats::watch(entity, watch != 0) {
             Ok(()) => Status::OK,
+            Err(status) => status,
+        }
+    })
+}
+
+extern "system" fn affix_open(
+    me: ModHandle,
+    id: Str,
+    def: *const api_frame::AffixDefData,
+    out: *mut api_frame::StatRef,
+) -> Status {
+    entry("affix_open", || {
+        let Some(id) = text(id) else {
+            return Status::BAD_ARGS;
+        };
+        // SAFETY: the caller passes a valid definition for the call.
+        let Some(def) = (unsafe { def.as_ref() }) else {
+            return Status::BAD_ARGS;
+        };
+        match caller_index(me)
+            .and_then(|(loader, index)| crate::stats::open_affix(loader, index, id, def))
+        {
+            Ok(affix) => put(out, affix),
+            Err(status) => status,
+        }
+    })
+}
+
+extern "system" fn affix_roll(
+    me: ModHandle,
+    roll: *const api_frame::AffixRoll,
+    count: *mut u32,
+) -> Status {
+    entry("affix_roll", || {
+        let loader = match caller(me) {
+            Ok(loader) => loader,
+            Err(status) => return status,
+        };
+        // SAFETY: the caller passes a valid request for the call.
+        let Some(roll) = (unsafe { roll.as_ref() }) else {
+            return Status::BAD_ARGS;
+        };
+        match crate::stats::roll(loader, roll) {
+            Ok(rolled) => put(count, rolled),
+            Err(status) => status,
+        }
+    })
+}
+
+extern "system" fn item_lines(
+    me: ModHandle,
+    pide: u32,
+    item: u32,
+    out: *mut api_frame::ItemLine,
+    capacity: u32,
+    count: *mut u32,
+) -> Status {
+    entry("item_lines", || {
+        if let Err(status) = caller(me) {
+            return status;
+        }
+        match crate::stats::item_lines(pide, item) {
+            Ok(lines) => put_list(&lines, out, capacity, count),
+            Err(status) => status,
+        }
+    })
+}
+
+extern "system" fn affix_info(
+    me: ModHandle,
+    affix: u32,
+    text: *mut Str,
+    rarity: *mut u8,
+) -> Status {
+    entry("affix_info", || {
+        if let Err(status) = caller(me) {
+            return status;
+        }
+        match crate::stats::affix_info(affix) {
+            Ok((name, rare)) => {
+                let status = put(text, name);
+                if status.is_ok() {
+                    put(rarity, rare)
+                } else {
+                    status
+                }
+            }
             Err(status) => status,
         }
     })

@@ -134,6 +134,7 @@ mod tests {
                         Modifier::new(luck, Op::Multiply, 2.0).to_item(),
                         Modifier::new(fire, Op::Add, 0.3).to_item(),
                     ],
+                    ..ItemStats::default()
                 },
             )
             .unwrap();

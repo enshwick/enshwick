@@ -12,7 +12,7 @@ raw table. The exact types and signatures are in the
 | Constant                                                                                            | Value | Meaning                                         |
 | --------------------------------------------------------------------------------------------------- | ----- | ----------------------------------------------- |
 | [`ABI_MAJOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 1     | A loader refuses a mod built for another major. |
-| [`ABI_MINOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 47    | A newer minor only appends.                     |
+| [`ABI_MINOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 48    | A newer minor only appends.                     |
 
 The ABI version is apart from Enshwick Loader's version (such as 0.2.0, see
 [Releasing and updates](releasing.md#versions)): a platform release raises
@@ -281,6 +281,10 @@ marked "init only" are allowed during `enshwick_mod_init` only.
 | `define_event`        | Defines a mod event named after the mod, with its layout; init only                             | 47          |
 | `subscribe_event`     | Calls a handler on every mod event of a name whose layout serves the handler's; init only       | 47          |
 | `send_event`          | Hands a mod event the mod defined to its subscribers on this thread; any thread                 | 47          |
+| `affix_open`          | Defines an affix in the mod's namespace; init only                                              | 48          |
+| `affix_roll`          | Rolls affixes onto an item and keeps them; server game thread only                              | 48          |
+| `item_lines`          | The lines of what an item gives, own modifiers then affixes; any thread                         | 48          |
+| `affix_info`          | An affix's text key and rarity; any thread                                                      | 48          |
 
 ## Under an older loader
 
@@ -344,6 +348,8 @@ the mod off with a reason, which the mod's log shows as `off: <reason>`:
 | 45          | `Damage::attacker`              | The hit's source                                          |
 | 46          | world settings                  | Startup values stay until a restart                       |
 | 47          | services, mod events            | Off: `services and mod events: needs a newer loader`      |
+| 48          | `Load::affix` and affixes       | Off: `affixes: needs a newer loader`                      |
+| 48          | `ItemInfo::category`            | 0                                                         |
 
 A mod that can do without a feature catches the `Off` and goes on without it
 instead of returning it from `init`.

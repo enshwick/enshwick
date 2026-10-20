@@ -175,6 +175,10 @@ pub struct ItemInfo {
     pub max_stack: u16,
     /// `ItemInfo` flags, see [`ItemData`].
     pub flags: u32,
+    /// The game's `ItemCategory`: 1 equipment (armour and rings), 2
+    /// weapons, 3 tools, and so on; 0 under a loader older than ABI minor
+    /// 48.
+    pub category: u8,
 }
 
 impl ItemInfo {
@@ -1092,7 +1096,8 @@ impl Inventories {
             header: Header::of::<ItemData>(),
             id: 0,
             max_stack: 0,
-            reserved: 0,
+            category: 0,
+            rarity: 0,
             flags: 0,
         };
         let status = (self.host.api().item_info)(self.host.handle(), item, &raw mut out);
@@ -1100,6 +1105,7 @@ impl Inventories {
             id: out.id,
             max_stack: out.max_stack,
             flags: out.flags,
+            category: out.category,
         })
     }
 
