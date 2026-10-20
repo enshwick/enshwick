@@ -117,6 +117,10 @@
     "mods/enshwick-build-camera": {
       "package-name": "enshwick-build-camera",
       "component": "enshwick-build-camera"
+    },
+    "mods/enshwick-shared-experience": {
+      "package-name": "enshwick-shared-experience",
+      "component": "enshwick-shared-experience"
     }
   }
 }

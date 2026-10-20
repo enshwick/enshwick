@@ -1,0 +1,26 @@
+[package]
+name = "enshwick-shared-experience"
+version = "0.1.0"
+description = "Every character on a server keeps up with the one furthest ahead in experience"
+keywords = ["enshrouded", "mod", "experience", "level"]
+categories = ["game-development"]
+readme = "README.md"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+enshwick-api.workspace = true
+serde.workspace = true
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+toml.workspace = true
+enshwick-test.workspace = true

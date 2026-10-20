@@ -580,7 +580,7 @@ pub fn metres(fixed: [i64; 3]) -> [f64; 3] {
 
 type AttributeFind = unsafe extern "system" fn(out: *mut u64, attribute: u32, registry: u64) -> u64;
 
-/// Reads of attribute sets: components such as `Level` whose values are
+/// Reads and writes of attribute sets: components such as `Level` whose values are
 /// attributes looked up by hash in the row's attribute registry.
 ///
 /// # Examples
@@ -642,6 +642,45 @@ impl Attributes {
     /// ```
     #[must_use]
     pub unsafe fn value(&self, registry: u64, set: *const u8, attribute: u32) -> Option<u32> {
+        // SAFETY: forwarded from the caller.
+        let word = unsafe { self.word(registry, set, attribute) }?;
+        // SAFETY: the attribute's word inside the set's data.
+        Some(unsafe { word.cast::<u32>().read_unaligned() })
+    }
+
+    /// Writes `value` to `attribute` in the attribute set `set`; false when the
+    /// set is not initialised or does not hold the attribute, and nothing was
+    /// written. A component clients see needs its change mark as well
+    /// ([`Ecs::mark_changed`]) for replication to send it.
+    ///
+    /// # Safety
+    ///
+    /// As for [`Attributes::value`], and the hooked system writes `set`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// unsafe fn reset(a: &enshwick_api::ecs::Attributes, registry: u64, set: *mut u8) -> bool {
+    ///     // SAFETY: a set the hooked system writes, and its row's registry.
+    ///     unsafe { a.set(registry, set, 0x1d7d_d102, 0) }
+    /// }
+    /// ```
+    pub unsafe fn set(&self, registry: u64, set: *mut u8, attribute: u32, value: u32) -> bool {
+        // SAFETY: forwarded from the caller.
+        let Some(word) = (unsafe { self.word(registry, set, attribute) }) else {
+            return false;
+        };
+        // SAFETY: the attribute's word inside a set the system writes.
+        unsafe { word.cast_mut().cast::<u32>().write_unaligned(value) };
+        true
+    }
+
+    /// The address of `attribute`'s word in the set, if it holds it.
+    ///
+    /// # Safety
+    ///
+    /// As for [`Attributes::value`].
+    unsafe fn word(&self, registry: u64, set: *const u8, attribute: u32) -> Option<*const u8> {
         if set.is_null() {
             return None;
         }
@@ -669,7 +708,6 @@ impl Attributes {
         let slot = usize::from(unsafe { read_at::<u16>(definition, self.slot) });
         // SAFETY: the set's data offset.
         let data = usize::from(unsafe { read_at::<u16>(set, self.data_offset) });
-        // SAFETY: the attribute's word inside the set's data.
-        Some(unsafe { read_at::<u32>(set, data + slot * 4) })
+        Some(set.wrapping_add(data + slot * 4))
     }
 }
