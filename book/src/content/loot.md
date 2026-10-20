@@ -6,73 +6,36 @@ containers that dissolve once emptied. It reads only; empty a container
 through [Inventories](../inventories.md). To put items into the loot a
 container rolls, see [Random loot](random-loot.md).
 
-## The system and the hook
+## Each check of the containers
 
 The game checks every such container each step in one ECS system,
 [`loot::SYSTEM`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/loot.rs)
-(`destroy_inventory_on_loot`), on a worker thread. Hook it, let vanilla run,
-then walk its rows with
-[`Containers::each`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/loot.rs):
+(`destroy_inventory_on_loot`), on a worker thread.
+[`load.on_loot_pass`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/loot.rs)
+runs a handler after each run of it in the server's world, with a `LootPass`
+that walks that run's containers and reads any entity as one:
 
 ```rust
-use std::sync::OnceLock;
+use enshwick_loader_api::loot::near;
 
-use enshwick_loader_api::ecs::Worlds;
-use enshwick_loader_api::loot::{Containers, SYSTEM, near};
-use enshwick_loader_api::{Load, Next, Off};
-
-struct Reads {
-    containers: Containers,
-    worlds: Worlds,
-}
-
-static READS: OnceLock<Reads> = OnceLock::new();
-
-enshwick_loader_api::detour! {
-    static CHECK: unsafe extern "system" fn(ctx: *mut u64) = check;
-}
-
-fn check(next: Next<unsafe extern "system" fn(*mut u64)>, ctx: *mut u64) {
-    // SAFETY: the original system takes its own context.
-    unsafe { next.get()(ctx) };
-    let Some(reads) = READS.get() else { return };
-    // SAFETY: the system's live context, on its thread.
-    if !unsafe { reads.worlds.is_server(ctx) } {
-        return;
-    }
-    let spot = [0.0, 0.0, 0.0];
-    let mut open = 0;
-    // SAFETY: as above, during the hook.
-    unsafe {
-        reads.containers.each(ctx, |c| {
+fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+    load.on_loot_pass(|pass| {
+        let spot = [0.0, 0.0, 0.0];
+        let mut open = 0;
+        pass.each(|c| {
             if c.is_open() && near(spot, c.position, 12.0, 4.0) {
                 open += 1;
             }
         });
-    }
-    let _ = open;
-}
-
-fn init(load: &mut Load<'_>) -> Result<(), Off> {
-    let reads = Reads {
-        containers: Containers::resolve(load)?,
-        worlds: Worlds::resolve(load)?,
-    };
-    let _ = READS.set(reads);
-    load.hook(&CHECK, load.system(SYSTEM)?)
+        let _ = open;
+    })
 }
 ```
 
-[`Containers::resolve`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/ecs.rs)
-finds the components and fields it reads in the game's reflection, during
-`init`; it returns `Err(Off)` when the loader or the game lacks a piece.
-`Containers` is `Copy`; keep it in a static the hook can reach.
-
-The reads are `unsafe`: `ctx` must be the live context of the hooked system,
-used on its thread during the hook. `each` leaves the system's row where it
-found it, so the walk does not disturb vanilla. Keep the hook short; it runs
-every step. See [ECS inside systems](../ecs.md) and
-[Code in the game's frame](../game-frame.md).
+`each` leaves the system's row where it found it, so the walk does not
+disturb vanilla. Keep the handler short; it runs every step. A mod that walks
+another system with the same reads uses the unsafe `Containers` from that
+system's own hook; see [ECS inside systems](../ecs.md).
 
 ## Reading one container
 

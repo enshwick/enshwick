@@ -368,6 +368,130 @@ impl Containers {
     }
 }
 
+/// The loot containers of one run of [`SYSTEM`], for [`Load::on_loot_pass`];
+/// valid only during the call.
+///
+/// # Examples
+///
+/// See [`Load::on_loot_pass`].
+#[derive(Debug)]
+pub struct LootPass<'a> {
+    containers: &'a Containers,
+    ctx: *mut u64,
+}
+
+impl LootPass<'_> {
+    /// Calls `f` with every loot container this run checks, in its order.
+    ///
+    /// # Examples
+    ///
+    /// See [`Load::on_loot_pass`].
+    pub fn each(&self, f: impl FnMut(&Container)) {
+        // SAFETY: the system's live context, during its hook.
+        unsafe { self.containers.each(self.ctx, f) };
+    }
+
+    /// `entity` read as a loot container; `None` when it is not one or gone.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// fn full(pass: &enshwick_loader_api::loot::LootPass<'_>, e: enshwick_loader_api::ecs::Entity) -> bool {
+    ///     pass.container(e).is_some_and(|c| !c.empty)
+    /// }
+    /// ```
+    #[must_use]
+    pub fn container(&self, entity: Entity) -> Option<Container> {
+        // SAFETY: as for `each`.
+        unsafe { self.containers.container(self.ctx, entity) }
+    }
+
+    /// `entity`'s position in metres.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// fn here(pass: &enshwick_loader_api::loot::LootPass<'_>, e: enshwick_loader_api::ecs::Entity) -> bool {
+    ///     pass.position(e).is_some()
+    /// }
+    /// ```
+    #[must_use]
+    pub fn position(&self, entity: Entity) -> Option<[f64; 3]> {
+        // SAFETY: as for `each`.
+        unsafe { self.containers.position(self.ctx, entity) }
+    }
+
+    /// Whether `entity` is a player character.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// fn by_player(pass: &enshwick_loader_api::loot::LootPass<'_>, e: enshwick_loader_api::ecs::Entity) -> bool {
+    ///     pass.is_player(e)
+    /// }
+    /// ```
+    #[must_use]
+    pub fn is_player(&self, entity: Entity) -> bool {
+        // SAFETY: as for `each`.
+        unsafe { self.containers.is_player(self.ctx, entity) }
+    }
+}
+
+type PassHandler = Box<dyn Fn(&LootPass<'_>) + Send + Sync>;
+
+static PASS: std::sync::OnceLock<(Containers, crate::ecs::Worlds, PassHandler)> =
+    std::sync::OnceLock::new();
+
+crate::detour! {
+    static CHECK: unsafe extern "system" fn(ctx: *mut u64) = after_check;
+}
+
+fn after_check(next: crate::Next<unsafe extern "system" fn(*mut u64)>, ctx: *mut u64) {
+    // SAFETY: the original system takes its own context.
+    unsafe { next.get()(ctx) };
+    if let Some((containers, worlds, handler)) = PASS.get()
+        // SAFETY: the system's live context.
+        && unsafe { worlds.is_server(ctx) }
+    {
+        handler(&LootPass { containers, ctx });
+    }
+}
+
+impl Load<'_> {
+    /// Runs `handler` after every run of the game's loot container check in
+    /// the server's world, on the worker thread that runs it, with that run's
+    /// containers. One handler per mod.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] for a second handler, or when the loader or the game lacks a
+    /// piece.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+    ///     load.on_loot_pass(|pass| {
+    ///         let mut emptied = 0;
+    ///         pass.each(|container| emptied += usize::from(container.empty));
+    ///         let _ = emptied;
+    ///     })
+    /// }
+    /// ```
+    pub fn on_loot_pass<F>(&mut self, handler: F) -> Result<(), Off>
+    where
+        F: Fn(&LootPass<'_>) + Send + Sync + 'static,
+    {
+        let containers = Containers::resolve(self)?;
+        let worlds = crate::ecs::Worlds::resolve(self)?;
+        if PASS.set((containers, worlds, Box::new(handler))).is_err() {
+            return Err(Off::new("one loot pass handler per mod"));
+        }
+        let system = self.system(SYSTEM)?;
+        self.hook(&CHECK, system)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
