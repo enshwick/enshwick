@@ -80,7 +80,7 @@ fn node_unlocked(next: Next<NodeUnlocked>, node: u32, bits: *const u64, tree: *c
 /// Applies `settings` to the running hook.
 fn apply(settings: &Settings) {
     let was = ENABLED.swap(settings.enabled, Ordering::Relaxed);
-    if was != settings.enabled || !settings.enabled {
+    if was != settings.enabled {
         enshwick_loader_api::info!(
             "fly mode without the skill: {}",
             if settings.enabled { "on" } else { "off" }
