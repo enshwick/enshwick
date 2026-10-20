@@ -26,14 +26,20 @@ const fn locked_chest_chance() -> f64 {
     0.02
 }
 
+const fn full_charges() -> u16 {
+    3
+}
+
 /// Survivors per altar settings, in `mod-configs/survivors-per-altar.toml`.
 #[derive(Debug, serde::Deserialize, serde::Serialize, enshwick_loader_api::Config)]
 #[serde(deny_unknown_fields)]
+#[config(validate = Settings::check)]
 struct Settings {
     /// A copy of each survivor at every altar, at most one per altar zone.
     #[config(startup)]
     per_altar: bool,
-    /// Copy staffs: one per workshop survivor, used up when it places or moves a copy.
+    /// Copy staffs: one per workshop survivor; each copy it places or moves
+    /// spends a charge, and the last charge uses the staff up.
     #[serde(default = "yes")]
     #[config(startup)]
     copy_staffs: bool,
@@ -45,6 +51,46 @@ struct Settings {
     #[serde(default = "locked_chest_chance")]
     #[config(startup)]
     copy_staff_locked_chest_chance: f64,
+    /// The charges a copy staff holds when full.
+    #[serde(default = "full_charges")]
+    #[config(startup, range = 1..=100)]
+    copy_staff_charges: u16,
+    /// The fewest charges a dropped staff holds, at random up to
+    /// the full count; 0 drops every staff full.
+    #[serde(default)]
+    #[config(startup, range = 0..=100)]
+    copy_staff_charges_min: u16,
+}
+
+/// How many charges a staff holds when full, and the fewest a dropped one
+/// holds.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct Charges {
+    pub(crate) full: u16,
+    pub(crate) min: u16,
+}
+
+impl Settings {
+    /// Refuses a fewest count above the full one.
+    fn check(&self) -> Result<(), String> {
+        if self.copy_staff_charges_min > self.copy_staff_charges {
+            return Err(format!(
+                "copy_staff_charges_min ({}) is above copy_staff_charges ({})",
+                self.copy_staff_charges_min, self.copy_staff_charges
+            ));
+        }
+        Ok(())
+    }
+
+    /// The staffs' charges.
+    fn charges(&self) -> Charges {
+        let full = self.copy_staff_charges.max(1);
+        let min = match self.copy_staff_charges_min {
+            0 => full,
+            min => min.min(full),
+        };
+        Charges { full, min }
+    }
 }
 
 impl Default for Settings {
@@ -54,6 +100,8 @@ impl Default for Settings {
             copy_staffs: yes(),
             copy_staff_boss_chance: boss_chance(),
             copy_staff_locked_chest_chance: locked_chest_chance(),
+            copy_staff_charges: full_charges(),
+            copy_staff_charges_min: 0,
         }
     }
 }
@@ -119,7 +167,8 @@ fn copy_staffs(load: &mut Load<'_>, settings: &Settings) -> Result<(), Off> {
     use enshwick_loader_api::loot::{Drop, Source};
 
     let texts = load.texts(staffs::TEXTS)?;
-    staffs::add(load, &texts)?;
+    let charges = settings.charges();
+    staffs::add(load, &texts, charges.full)?;
     staffs::file(load)?;
     let items = staffs::copy_ids();
     let boss = chance("copy_staff_boss_chance", settings.copy_staff_boss_chance);
@@ -129,12 +178,18 @@ fn copy_staffs(load: &mut Load<'_>, settings: &Settings) -> Result<(), Off> {
     );
     for (chance, source) in [(boss, Source::bosses()), (locked, Source::locked_chests())] {
         if chance > 0.0 {
-            load.add_loot(Drop::one_of(&items, chance, source))?;
+            load.add_loot(Drop::one_of(&items, chance, source).meter(
+                charges.min,
+                charges.full,
+                charges.full,
+            ))?;
         }
     }
     enshwick_loader_api::info!(
-        "{} copy staffs; in loot from bosses at {}, locked chests at {}",
+        "{} copy staffs of {} to {} charges; in loot from bosses at {}, locked chests at {}",
         items.len(),
+        charges.min,
+        charges.full,
         boss,
         locked
     );
@@ -157,6 +212,21 @@ mod tests {
         let old: Settings = toml::from_str("per_altar = true\n").unwrap();
         assert!(old.copy_staffs);
         assert!((old.copy_staff_locked_chest_chance - 0.02).abs() < f64::EPSILON);
+        assert_eq!(settings.charges(), Charges { full: 3, min: 3 });
+        assert_eq!(old.charges(), Charges { full: 3, min: 3 });
+    }
+
+    #[test]
+    fn a_dropped_staff_holds_from_the_fewest_to_full_charges() {
+        let with = |full, min| Settings {
+            copy_staff_charges: full,
+            copy_staff_charges_min: min,
+            ..Settings::default()
+        };
+        assert_eq!(with(5, 0).charges(), Charges { full: 5, min: 5 });
+        assert_eq!(with(5, 2).charges(), Charges { full: 5, min: 2 });
+        assert!(with(5, 2).check().is_ok());
+        assert!(with(5, 6).check().is_err());
     }
 
     #[test]

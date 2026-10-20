@@ -1,20 +1,26 @@
 //! Copy staffs: one item per workshop survivor, a clone of the survivor's
-//! summoning staff that the game takes when it is used.
+//! summoning staff with charges of its own.
 //!
 //! The platform files each copy staff as a staff of its survivor, so the game
-//! treats it as the vanilla staff on the server and the client. The policy
-//! then marks a copy staff's use as consuming, which makes the game take one
-//! staff in the same transaction as the spawn or move, and only when that
-//! works.
+//! treats it as the vanilla staff on the server and the client. Each staff
+//! keeps its charges in its meter, which the game saves and draws as a bar.
+//! The policy spends one per use that works and marks the use of the last
+//! charge as consuming, which makes the game take the staff in the same
+//! transaction as the spawn or move, and only when that works.
 
 use enshwick_loader_api::content::Guid;
-use enshwick_loader_api::content::items::NewItem;
+use enshwick_loader_api::content::items::{Meter, NewItem, Stat, StatFormat};
 use enshwick_loader_api::i18n::Texts;
 use enshwick_loader_api::survivors::WorkshopSurvivor;
 use enshwick_loader_api::{Load, Off};
 
 /// The mod's texts, per language.
 pub(crate) const TEXTS: &str = include_str!("texts.toml");
+
+/// The template of every copy staff's own entity, which keeps its charges.
+const STAFF_ENTITY: Guid = Guid::parse("79250fcb-6170-4767-bfbb-2745e36e905a");
+/// The tag of the tooltip line with a staff's full charges.
+const FULL_CHARGES: Guid = Guid::parse("f8146c9e-74b6-4b65-8a02-2975f56d5882");
 
 /// A workshop survivor and its copy staff.
 #[derive(Debug)]
@@ -90,8 +96,19 @@ fn fill(template: &str, survivor: &str) -> String {
     template.replace("{survivor}", survivor)
 }
 
-/// Adds every copy staff and its texts.
-pub(crate) fn add(load: &mut Load<'_>, texts: &Texts) -> Result<(), Off> {
+/// Adds every copy staff and its texts; a full staff holds `charges`.
+pub(crate) fn add(load: &mut Load<'_>, texts: &Texts, charges: u16) -> Result<(), Off> {
+    load.add_texts(texts, &[("copy.full_charges", FULL_CHARGES)])?;
+    let meter = Meter {
+        template: STAFF_ENTITY,
+        max: charges,
+        start: charges,
+    };
+    let full = Stat {
+        label: FULL_CHARGES,
+        value: i32::from(charges),
+        format: StatFormat::Number,
+    };
     for staff in STAFFS {
         let vanilla = staff.survivor_or_off()?.staff();
         let survivor_key = format!("survivor.{}", staff.key);
@@ -111,6 +128,8 @@ pub(crate) fn add(load: &mut Load<'_>, texts: &Texts) -> Result<(), Off> {
         load.add_item(NewItem {
             name: Some(staff.name),
             description: Some(staff.description),
+            meter: Some(meter),
+            stats: vec![full],
             ..NewItem::new(
                 staff.copy,
                 vanilla,
@@ -173,6 +192,12 @@ mod tests {
                 assert!(template.contains("{survivor}"), "{key} {language:?}");
                 assert!(!fill(template, "Balthazar").contains('{'));
             }
+            assert!(
+                texts
+                    .translations("copy.full_charges")
+                    .any(|(l, _)| l == language),
+                "{language:?}"
+            );
         }
     }
 }
