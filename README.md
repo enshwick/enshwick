@@ -6,12 +6,12 @@ every mod is a DLL in the `mods/` folder beside it.
 
 ## Mods
 
-| Mod                                                     | What it does                                                       |
-| ------------------------------------------------------- | ------------------------------------------------------------------ |
-| [Flame altar zones](docs/mods/flame-altar-zones.md)     | touching altar zones grow together and can be built across         |
-| [Flame altar count](docs/mods/flame-altar-count.md)     | how many altars each Flame level allows, twice vanilla by default  |
-| [Furniture comfort](docs/mods/furniture-comfort.md)     | more comfort from furniture, twice vanilla by default              |
-| [Survivors per altar](docs/mods/survivors-per-altar.md) | a copy of each survivor at every altar, with beds of its own altar |
+| Mod                                                      | What it does                                                       |
+| -------------------------------------------------------- | ------------------------------------------------------------------ |
+| [Flame altar zones](mods/enshwick-flame-altar-zones)     | touching altar zones grow together and can be built across         |
+| [Flame altar count](mods/enshwick-flame-altar-count)     | how many altars each Flame level allows, twice vanilla by default  |
+| [Furniture comfort](mods/enshwick-furniture-comfort)     | more comfort from furniture, twice vanilla by default              |
+| [Survivors per altar](mods/enshwick-survivors-per-altar) | a copy of each survivor at every altar, with beds of its own altar |
 
 ## Install
 
@@ -21,7 +21,8 @@ every mod is a DLL in the `mods/` folder beside it.
    `enshrouded_server.exe` (servers). You get `powrprof.dll` there and a `mods`
    folder beside it.
 3. Start the game or the server. Each mod writes its settings to
-   `mods/<mod>.toml` on first start; the log is `mods/enshwick.log`.
+   `mod-configs/<id>.toml` on first start; the log is `logs/enshwick/`
+   (`all.log`, `loader.log`, `mods/<id>.log`).
 
 Players and their server need the same mods: the server advertises its mod set
 and a player with a different one is warned before joining. To remove a mod,
@@ -33,9 +34,8 @@ game's launch options.
 ## For mod authors
 
 Mods are written in Rust against [`enshwick-api`](crates/enshwick-api); start
-with [the modding guide](docs/modding/guide.md). How the repository is laid out,
-checked and released: [docs/conventions/](docs/conventions/). Contributions
-follow [CONTRIBUTING.md](CONTRIBUTING.md).
+with [the modding guide](crates/enshwick-api/GUIDE.md). Contributions follow
+[CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 

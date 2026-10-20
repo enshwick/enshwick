@@ -10,15 +10,18 @@ use std::sync::atomic::{AtomicU32, Ordering};
 
 use enshwick_api::{Load, Mod, Next, Off};
 
-const DEFAULTS: &str = "\
-# Comfort each piece of furniture gives inside a base, times this factor.
-multiplier = 2.0
-";
-
-#[derive(Debug, serde::Deserialize)]
+/// Furniture comfort settings.
+#[derive(Debug, serde::Deserialize, serde::Serialize, enshwick_api::Config)]
 #[serde(deny_unknown_fields)]
 struct Settings {
+    /// Comfort each piece of furniture gives inside a base, times this factor.
     multiplier: f32,
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Self { multiplier: 2.0 }
+    }
 }
 
 /// The factor, as `f32` bits, read on every registration.
@@ -68,7 +71,7 @@ impl Mod for FurnitureComfort {
     }
 
     fn init(load: &mut Load<'_>) -> Result<Self, Off> {
-        let settings: Settings = load.settings(DEFAULTS)?;
+        let settings: Settings = load.config()?;
         if !settings.multiplier.is_finite() || settings.multiplier < 0.0 {
             return Err(Off::new("multiplier must be a number of zero or more"));
         }
@@ -95,7 +98,8 @@ mod tests {
 
     #[test]
     fn the_default_settings_parse() {
-        let settings: Settings = toml::from_str(DEFAULTS).unwrap();
+        use enshwick_api::config::Config;
+        let settings: Settings = toml::from_str(&Settings::template()).unwrap();
         assert!((settings.multiplier - 2.0).abs() < f32::EPSILON);
     }
 }

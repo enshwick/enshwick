@@ -6,6 +6,6 @@ DLL in `mods/`, resolves their dependencies, initialises them, arms their hook
 chains and answers their calls. On a game build it does not know, the game runs
 vanilla.
 
-Its log is `mods/enshwick.log`.
+Its log is `logs/enshwick/` (`all.log`, `loader.log`, `mods/<id>.log`).
 
 Licensed under [MIT](../../LICENSE).

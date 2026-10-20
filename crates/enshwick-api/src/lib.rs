@@ -50,12 +50,15 @@
 //! ```
 
 pub mod abi;
+pub mod config;
 mod declare;
 pub mod ecs;
 mod hook;
 mod host;
 mod load;
+pub mod state;
 
+pub use enshwick_macros::Config;
 pub use hook::{FnPtr, Hook, Next};
 pub use host::{Host, host};
 pub use load::{Load, Mod, Off};
