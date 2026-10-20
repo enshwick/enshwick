@@ -1840,7 +1840,18 @@ impl Installed {
     /// use enshwick_loader_api::abi::{Header, Summon};
     ///
     /// let loader = enshwick_loader_api::test::FakeHost::new().install();
-    /// let summon = Summon { header: Header::of::<Summon>(), item: 1, ammo: 0, template: [0; 16], target: [0; 3] };
+    /// let summon = Summon {
+    ///     header: Header::of::<Summon>(),
+    ///     item: 1,
+    ///     ammo: 0,
+    ///     template: [0; 16],
+    ///     target: [0; 3],
+    ///     slot: 0,
+    ///     pide: 0,
+    ///     meter: [0; 2],
+    ///     consumed: 0,
+    ///     reserved: [0; 3],
+    /// };
     /// assert!(!loader.summon(&summon));
     /// ```
     #[must_use]
@@ -1851,6 +1862,40 @@ impl Installed {
             // SAFETY: a valid summon; `user` is the mod's pointer.
             unsafe { callback(summon, user) != 0 }
         })
+    }
+
+    /// Tells the mod's summon handlers that a use worked, as the game does
+    /// after the spawn or move; returns how many handlers ran.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_loader_api::abi::{Header, Summon};
+    ///
+    /// let loader = enshwick_loader_api::test::FakeHost::new().install();
+    /// let summon = Summon {
+    ///     header: Header::of::<Summon>(),
+    ///     item: 1,
+    ///     ammo: 0,
+    ///     template: [0; 16],
+    ///     target: [0; 3],
+    ///     slot: 0,
+    ///     pide: 0,
+    ///     meter: [0; 2],
+    ///     consumed: 1,
+    ///     reserved: [0; 3],
+    /// };
+    /// assert_eq!(loader.summoned(&summon), 0);
+    /// ```
+    #[must_use]
+    pub fn summoned(&self, summon: &Summon) -> usize {
+        let handlers = table::with(Vec::new(), |s| s.summoned.clone());
+        for &(callback, user) in &handlers {
+            let user = core::ptr::with_exposed_provenance_mut(user);
+            // SAFETY: a valid summon; `user` is the mod's pointer.
+            unsafe { callback(summon, user) };
+        }
+        handlers.len()
     }
 
     /// The items the mod filed as summoning staffs, as `(item, survivor)`.

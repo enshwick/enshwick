@@ -17,7 +17,7 @@
 
 mod drops;
 
-pub use drops::{Drop, Kinds, Roll, Source};
+pub use drops::{Drop, Kinds, MeterRoll, Roll, Source};
 
 use crate::ecs::{Components, Ecs, Entity};
 use crate::raw::read_at;

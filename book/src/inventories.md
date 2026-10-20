@@ -76,7 +76,8 @@ Both return a
 | `count(root, item)` | How many of item id `item` the inventory holds. |
 | `slot(slot_ref)` | What one slot holds, with `Category::UNKNOWN`. |
 | `root(slot_ref)` | The inventory a slot belongs to at the root, the chest or player; `None` when its sub-inventory has no owner. |
-| `durability(pide)` | An item entity's `Durability`, `current` and `max`, as clients see it. |
+| `durability(pide)` | An item entity's durability as clients see it: a `Bar` with `current` and `max`. |
+| `meter(pide)` | An item entity's [meter](content/items.md#meters), a `Bar`; `None` for an item without one. |
 
 A [`Slot`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/inventory.rs)
 holds `at` (its `SlotRef`), `category` (equipment, currency, ordinary
@@ -109,6 +110,10 @@ One operation each:
 | `move_slot(slot, to, amount, done)` | Moves a stack, or `Some(amount)` of it, into an inventory's free or matching slots. |
 | `move_all(from, to, done)` | Moves every stack of one inventory into another, as the game's "take all" does. |
 
+`Op::Give` in a batch also takes a `fill`: how full each new item's
+[meter](content/items.md#meters) starts, as a `Fill`. `Fill::of(count, max)`
+gives `count` of `max`; `None` keeps the template's start.
+
 Moves leave what does not fit in the source. `move_all` leaves the source's
 action bar, equipment and locked slots where they are;
 `Op::MoveAll { include_special: true, .. }` in a batch moves them too.
@@ -132,7 +137,7 @@ fn trade(inventories: &Inventories, player: Entity) {
     // 5 coins out, a sword in, or neither.
     let batch = Batch::new()
         .with(Op::Take { from: player, item: COIN, count: 5 })
-        .with(Op::Give { to: player, item: SWORD, count: 1 });
+        .with(Op::Give { to: player, item: SWORD, count: 1, fill: None });
     let _ticket = inventories.submit(&batch, |outcome| {
         enshwick_loader_api::info!("trade: {:?}", outcome.done);
     });

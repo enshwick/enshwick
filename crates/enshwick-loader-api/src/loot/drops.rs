@@ -12,6 +12,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock, PoisonError};
 
 use crate::ecs::{Components, Entity};
+use crate::inventory::Fill;
 use crate::raw::read_at;
 use crate::{Load, Next, Off};
 
@@ -220,8 +221,34 @@ pub struct Drop {
     pub chance: f64,
     /// How many, at least and at most; each count in between is as likely.
     pub count: [u16; 2],
+    /// How full each dropped item's meter starts (see
+    /// [`Meter`](crate::content::items::Meter)); `None` for its template's
+    /// start.
+    pub meter: Option<MeterRoll>,
     /// Where it may drop.
     pub from: Source,
+}
+
+/// How full a dropped item's meter starts, for [`Drop::meter`]: `min` to
+/// `max` of `of`, each count in between as likely.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::loot::MeterRoll;
+///
+/// let charges = MeterRoll { min: 1, max: 5, of: 5 };
+/// assert!(charges.min <= charges.max && charges.max <= charges.of);
+/// ```
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct MeterRoll {
+    /// The fewest.
+    pub min: u16,
+    /// The most.
+    pub max: u16,
+    /// The meter's maximum, as its [`Meter`](crate::content::items::Meter)
+    /// says.
+    pub of: u16,
 }
 
 impl Drop {
@@ -247,6 +274,7 @@ impl Drop {
             items: items.to_vec(),
             chance,
             count: [1, 1],
+            meter: None,
             from,
         }
     }
@@ -259,6 +287,23 @@ impl Drop {
     #[must_use]
     pub const fn count(mut self, min: u16, max: u16) -> Self {
         self.count = [min, max];
+        self
+    }
+
+    /// The same with each dropped item's meter starting at `min` to `max`
+    /// of `of`, each count as likely: charges rolled as the item drops.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_loader_api::loot::{Drop, MeterRoll, Source};
+    ///
+    /// let drop = Drop::new(0x5e01, 0.1, Source::bosses()).meter(1, 5, 5);
+    /// assert_eq!(drop.meter, Some(MeterRoll { min: 1, max: 5, of: 5 }));
+    /// ```
+    #[must_use]
+    pub const fn meter(mut self, min: u16, max: u16, of: u16) -> Self {
+        self.meter = Some(MeterRoll { min, max, of });
         self
     }
 
@@ -280,20 +325,31 @@ impl Drop {
                 self.items
             )));
         }
+        if let Some(MeterRoll { min, max, of }) = self.meter
+            && (min > max || max > of || of == 0)
+        {
+            return Err(Off::new(format!(
+                "loot drop {:?}: meter {min}..{max} of {of} does not fit",
+                self.items
+            )));
+        }
         Ok(())
     }
 
-    /// The item and how many to add when `dice` draws this roll; `None`
-    /// when it misses.
-    fn draw(&self, dice: &Dice) -> Option<(u32, u16)> {
+    /// The item, how many to add and their meter's fill when `dice` draws
+    /// this roll; `None` when it misses.
+    fn draw(&self, dice: &Dice) -> Option<(u32, u16, Option<Fill>)> {
         if dice.unit() >= self.chance {
             return None;
         }
         let pick = |n: u64| usize::try_from(dice.next() % n.max(1)).unwrap_or(0);
+        let between = |min: u16, max: u16| {
+            min + u16::try_from(pick(u64::from(max.saturating_sub(min)) + 1)).unwrap_or(0)
+        };
         let item = *self.items.get(pick(self.items.len() as u64))?;
         let [min, max] = self.count;
-        let extra = u16::try_from(pick(u64::from(max - min) + 1)).unwrap_or(0);
-        Some((item, min + extra))
+        let fill = self.meter.map(|m| Fill::of(between(m.min, m.max), m.of));
+        Some((item, between(min, max), fill))
     }
 }
 
@@ -490,12 +546,18 @@ fn after_roll(
     let drops = DROPS.lock().unwrap_or_else(PoisonError::into_inner);
     let absent = [0u8; 16];
     for drop in drops.iter().filter(|d| d.from.matches(&roll)) {
-        let Some((item, count)) = drop.draw(dice()) else {
+        let Some((item, count, fill)) = drop.draw(dice()) else {
             continue;
         };
+        let mut extra = absent;
+        if let Some(fill) = fill {
+            extra[..4].copy_from_slice(&fill.fraction().to_le_bytes());
+            extra[4] = 1;
+        }
         let mut added = [0u64; 2];
         // SAFETY: the game's add into the transaction the roll filled, with
-        // no level, rarity or extra; a full container keeps what fits.
+        // no level or rarity; its last option is the new items' fuel fill. A
+        // full container keeps what fits.
         unsafe {
             (engine.give)(
                 &raw mut added,
@@ -506,7 +568,7 @@ fn after_roll(
                 i32::from(count),
                 &raw const absent,
                 &raw const absent,
-                &raw const absent,
+                &raw const extra,
             )
         };
         crate::debug!(
@@ -546,7 +608,7 @@ fn after_roll_one(
         locked: false,
     };
     let drops = DROPS.lock().unwrap_or_else(PoisonError::into_inner);
-    let Some((item, count)) = drops
+    let Some((item, count, _)) = drops
         .iter()
         .filter(|d| d.from.matches(&roll))
         .find_map(|d| d.draw(dice()))
@@ -673,7 +735,49 @@ mod tests {
         assert!(Drop::new(7, 1.5, from.clone()).check().is_err());
         assert!(Drop::new(7, f64::NAN, from.clone()).check().is_err());
         assert!(Drop::new(7, 0.5, from.clone()).count(0, 1).check().is_err());
-        assert!(Drop::new(7, 0.5, from).count(3, 2).check().is_err());
+        assert!(Drop::new(7, 0.5, from.clone()).count(3, 2).check().is_err());
+        assert!(
+            Drop::new(7, 0.5, from.clone())
+                .meter(1, 5, 5)
+                .check()
+                .is_ok()
+        );
+        assert!(
+            Drop::new(7, 0.5, from.clone())
+                .meter(3, 2, 5)
+                .check()
+                .is_err()
+        );
+        assert!(
+            Drop::new(7, 0.5, from.clone())
+                .meter(1, 6, 5)
+                .check()
+                .is_err()
+        );
+        assert!(Drop::new(7, 0.5, from).meter(0, 0, 0).check().is_err());
+    }
+
+    #[test]
+    fn meters_roll_every_count_between_their_bounds() {
+        let dice = Dice(AtomicU64::new(3));
+        let drop = Drop::new(7, 1.0, Source::bosses()).meter(2, 4, 5);
+        let mut seen = [0usize; 6];
+        for _ in 0..30_000 {
+            let (_, _, fill) = drop.draw(&dice).unwrap();
+            let charges = (5.0 * fill.unwrap().fraction() + 0.5).floor();
+            #[expect(
+                clippy::cast_possible_truncation,
+                clippy::cast_sign_loss,
+                reason = "0 to 5"
+            )]
+            let charges = charges as usize;
+            seen[charges] += 1;
+        }
+        assert_eq!((seen[0], seen[1], seen[5]), (0, 0, 0));
+        assert!(
+            seen[2..5].iter().all(|&n| (9_000..11_000).contains(&n)),
+            "{seen:?}"
+        );
     }
 
     #[test]
@@ -682,8 +786,8 @@ mod tests {
         let drop = Drop::new(7, 0.1, Source::bosses()).count(2, 4);
         let mut hits = 0;
         for _ in 0..100_000 {
-            if let Some((item, n)) = drop.draw(&dice) {
-                assert_eq!(item, 7);
+            if let Some((item, n, fill)) = drop.draw(&dice) {
+                assert_eq!((item, fill), (7, None));
                 assert!((2..=4).contains(&n));
                 hits += 1;
             }
@@ -693,7 +797,7 @@ mod tests {
         let always = Drop::new(7, 1.0, Source::bosses());
         for _ in 0..1000 {
             assert_eq!(never.draw(&dice), None);
-            assert_eq!(always.draw(&dice), Some((7, 1)));
+            assert_eq!(always.draw(&dice), Some((7, 1, None)));
         }
     }
 
@@ -703,7 +807,7 @@ mod tests {
         let drop = Drop::one_of(&[1, 2, 3], 1.0, Source::bosses());
         let mut seen = [0usize; 3];
         for _ in 0..30_000 {
-            let (item, _) = drop.draw(&dice).unwrap();
+            let (item, _, _) = drop.draw(&dice).unwrap();
             seen[item as usize - 1] += 1;
         }
         assert!(

@@ -329,7 +329,9 @@ pub static BUILDS: &[KnownBuild] = &[
             ("survivors.npc_common", 0x300),
             ("survivors.npc_state", 0x450),
             ("survivors.spawn_template", 0x08),
+            ("survivors.spawn_used_slot", 0x90),
             ("survivors.spawn_used_item", 0x98),
+            ("survivors.spawn_used_pide", 0x9c),
             ("survivors.spawn_ammo_item", 0xac),
             ("survivors.spawn_consume", 0xe0),
             ("survivors.registry_loaded", 0x20),
@@ -368,6 +370,8 @@ pub static BUILDS: &[KnownBuild] = &[
             ("attribute.level", 0x724b_f568),
             ("attribute.experience", 0x8dcd_daf4),
             ("attribute.experience_needed_slot", 2),
+            ("attribute.fuel", 0x05b0_bf75),
+            ("attribute.fuel_max_slot", 1),
             // The entity world's change tracker, which writes outside a
             // system mark against.
             ("ecs.change_tracker", 0xeb_c030),
@@ -737,7 +741,9 @@ pub static BUILDS: &[KnownBuild] = &[
             ("survivors.npc_common", 0x300),
             ("survivors.npc_state", 0x450),
             ("survivors.spawn_template", 0x08),
+            ("survivors.spawn_used_slot", 0x90),
             ("survivors.spawn_used_item", 0x98),
+            ("survivors.spawn_used_pide", 0x9c),
             ("survivors.spawn_ammo_item", 0xac),
             ("survivors.spawn_consume", 0xe0),
             ("survivors.registry_loaded", 0x20),
@@ -784,6 +790,8 @@ pub static BUILDS: &[KnownBuild] = &[
             ("attribute.level", 0x724b_f568),
             ("attribute.experience", 0x8dcd_daf4),
             ("attribute.experience_needed_slot", 2),
+            ("attribute.fuel", 0x05b0_bf75),
+            ("attribute.fuel_max_slot", 1),
             // The entity world's change tracker, which writes outside a
             // system mark against.
             ("ecs.change_tracker", 0xeb_c030),

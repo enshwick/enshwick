@@ -124,6 +124,12 @@ fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_
 The game sends the new value to the clients and regenerates from it as from
 any other.
 
+`item_meter(pide)` reads the [meter](content/items.md#meters) of an item's
+own entity, a `Meter` with the count and its maximum, and
+`change_item_meter(pide, change)` sets it to what `change` makes of the
+count, kept between 0 and the maximum. The game saves it with the world and
+shows it on the item's slot.
+
 ## Writing components
 
 A write goes to the component the server owns, and the loader marks it

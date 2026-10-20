@@ -109,6 +109,7 @@ pub(crate) struct State {
     pub(crate) survivor_lookup: Option<(SurvivorLookupFn, usize)>,
     pub(crate) bed_checks: Vec<(BedCheckFn, usize)>,
     pub(crate) summons: Vec<(SummonFn, usize)>,
+    pub(crate) summoned: Vec<(SummonFn, usize)>,
     pub(crate) summon_items: Vec<(u32, u32)>,
     pub(crate) survivor_status: Option<(SurvivorStatusFn, usize)>,
     pub(crate) interaction_filters: Vec<(InteractionFn, usize)>,
@@ -193,6 +194,7 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         survivor_lookup: None,
         bed_checks: Vec::new(),
         summons: Vec::new(),
+        summoned: Vec::new(),
         summon_items: Vec::new(),
         survivor_status: None,
         interaction_filters: Vec::new(),
@@ -809,6 +811,13 @@ extern "system" fn survivor_bed_check(
 extern "system" fn summon_filter(_me: ModHandle, callback: SummonFn, user: *mut c_void) -> Status {
     with(Status::MISSING, |s| {
         s.summons.push((callback, user.expose_provenance()));
+        Status::OK
+    })
+}
+
+extern "system" fn summoned(_me: ModHandle, callback: SummonFn, user: *mut c_void) -> Status {
+    with(Status::MISSING, |s| {
+        s.summoned.push((callback, user.expose_provenance()));
         Status::OK
     })
 }
@@ -1612,4 +1621,5 @@ pub(crate) static TABLE: HostApi = HostApi {
     terrain_materials,
     terrain_edit,
     config_schema,
+    summoned,
 };

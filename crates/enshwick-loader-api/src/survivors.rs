@@ -28,6 +28,7 @@ use crate::abi::{
 };
 use crate::content::Guid;
 use crate::ecs::Entity;
+use crate::inventory::{Bar, SlotRef};
 use crate::{Load, Off};
 
 mod workshop;
@@ -193,12 +194,14 @@ pub struct BedCheck {
     pub bed_at: [i64; 3],
 }
 
-/// A summoning staff's use, from [`Load::on_summon`].
+/// A summoning staff's use, from [`Load::on_summon`] and
+/// [`Load::on_summoned`].
 ///
 /// # Examples
 ///
 /// See [`Load::on_summon`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct Summon {
     /// The item used.
     pub item: u32,
@@ -208,6 +211,33 @@ pub struct Summon {
     pub template: Guid,
     /// The target cell.
     pub target: [i64; 3],
+    /// The slot the used item lies in.
+    pub slot: SlotRef,
+    /// The used item's own entity; [`Entity::NONE`] for an item without
+    /// one.
+    pub pide: Entity,
+    /// The used item's meter (see [`Meter`](crate::content::items::Meter))
+    /// as clients see it; `None` for an item without one.
+    pub meter: Option<Bar>,
+    /// In [`Load::on_summoned`]: whether the use took the item.
+    pub consumed: bool,
+}
+
+impl Summon {
+    /// The use as the loader hands it on.
+    fn from_raw(raw: &RawSummon) -> Self {
+        let [current, max] = raw.meter;
+        Self {
+            item: raw.item,
+            ammo: raw.ammo,
+            template: Guid(raw.template),
+            target: raw.target,
+            slot: SlotRef(raw.slot),
+            pide: Entity(raw.pide),
+            meter: (max != 0).then_some(Bar { current, max }),
+            consumed: raw.consumed != 0,
+        }
+    }
 }
 
 unsafe extern "system" fn run_lookup<F>(
@@ -293,24 +323,44 @@ where
     u8::from(keep)
 }
 
+/// The loader's summon, read as far as its header says it reaches.
+///
+/// # Safety
+///
+/// `summon` is null or valid for the call.
+unsafe fn read_summon(summon: *const RawSummon) -> Option<Summon> {
+    // SAFETY: forwarded from the caller; the fields up to the target are
+    // there since minor 16, the rest read as zero when the loader is older.
+    let raw = unsafe { crate::abi::read_headed(summon, core::mem::offset_of!(RawSummon, slot)) }?;
+    Some(Summon::from_raw(&raw))
+}
+
 unsafe extern "system" fn run_summon<F>(summon: *const RawSummon, user: *mut c_void) -> u8
 where
     F: Fn(&Summon) -> bool,
 {
     // SAFETY: the loader passes a valid summon for the duration of the call.
-    let Some(summon) = (unsafe { summon.as_ref() }) else {
+    let Some(call) = (unsafe { read_summon(summon) }) else {
         return 0;
-    };
-    let call = Summon {
-        item: summon.item,
-        ammo: summon.ammo,
-        template: Guid(summon.template),
-        target: summon.target,
     };
     // SAFETY: `user` is the leaked `F` this function was registered with.
     let handler = unsafe { &*user.cast::<F>() };
     let consume = crate::host::guard("panic in a summon filter", || false, || handler(&call));
     u8::from(consume)
+}
+
+unsafe extern "system" fn run_summoned<F>(summon: *const RawSummon, user: *mut c_void) -> u8
+where
+    F: Fn(&Summon),
+{
+    // SAFETY: the loader passes a valid summon for the duration of the call.
+    let Some(call) = (unsafe { read_summon(summon) }) else {
+        return 0;
+    };
+    // SAFETY: `user` is the leaked `F` this function was registered with.
+    let handler = unsafe { &*user.cast::<F>() };
+    crate::host::guard("panic in a summon handler", || (), || handler(&call));
+    0
 }
 
 unsafe extern "system" fn run_status<F>(
@@ -445,6 +495,44 @@ impl Load<'_> {
         )
     }
 
+    /// Runs `handler` after a summoning staff's use spawned or moved a
+    /// survivor, with [`Summon::consumed`] saying whether it took the item:
+    /// the place to spend a charge of a staff with a meter. On the thread
+    /// of the use, inside the game's step: hand game work to the
+    /// [`Scheduler`](crate::schedule::Scheduler).
+    ///
+    /// # Errors
+    ///
+    /// As for [`Load::on_survivor_bed_check`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+    ///     let (world, scheduler) = (load.world()?, load.scheduler()?);
+    ///     load.on_summoned(move |summon| {
+    ///         if summon.meter.is_some() && !summon.consumed {
+    ///             let pide = summon.pide;
+    ///             scheduler.next_tick(move || {
+    ///                 let _spent = world.change_item_meter(pide, |charges| charges - 1);
+    ///             });
+    ///         }
+    ///     })
+    /// }
+    /// ```
+    pub fn on_summoned<F>(&mut self, handler: F) -> Result<(), Off>
+    where
+        F: Fn(&Summon) + Send + Sync + 'static,
+    {
+        self.register(
+            core::mem::offset_of!(HostApi, summoned),
+            "the summon handler",
+            |api| api.summoned,
+            run_summoned::<F> as crate::abi::SummonFn,
+            handler,
+        )
+    }
+
     /// Files item `item` as a summoning staff of `survivor`, so the game
     /// treats it as that survivor's staff on both sides: the cursor, the
     /// unlock check and the placement.
@@ -512,5 +600,48 @@ impl Load<'_> {
             run_status::<F> as crate::abi::SurvivorStatusFn,
             merge,
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::abi::Header;
+
+    fn raw(pide: u32, meter: [u16; 2]) -> RawSummon {
+        RawSummon {
+            header: Header::of::<RawSummon>(),
+            item: 7,
+            ammo: 0,
+            template: [1; 16],
+            target: [1, 2, 3],
+            slot: 0x3_0000_0041,
+            pide,
+            meter,
+            consumed: 1,
+            reserved: [0; 3],
+        }
+    }
+
+    #[test]
+    fn a_use_names_its_item_and_meter() {
+        let use_ = Summon::from_raw(&raw(900, [2, 3]));
+        assert_eq!(
+            (use_.slot.inventory(), use_.slot.index()),
+            (Entity(0x41), 3)
+        );
+        assert_eq!(use_.pide, Entity(900));
+        assert_eq!(use_.meter, Some(Bar { current: 2, max: 3 }));
+        assert!(use_.consumed);
+        assert_eq!(Summon::from_raw(&raw(0, [0; 2])).meter, None);
+    }
+
+    #[test]
+    fn an_older_loader_s_use_reads_without_the_item() {
+        let mut old = raw(900, [2, 3]);
+        old.header.size = u32::try_from(core::mem::offset_of!(RawSummon, slot)).unwrap();
+        // SAFETY: a valid summon, its header naming the older size.
+        let use_ = unsafe { read_summon(&raw const old) }.unwrap();
+        assert_eq!((use_.item, use_.pide, use_.meter), (7, Entity::NONE, None));
     }
 }

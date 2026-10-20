@@ -1,5 +1,6 @@
-//! Character stats: health, stamina, mana, level and experience, read from
-//! their attribute set components and written to them. A set keeps the id
+//! Character stats: health, stamina, mana, level and experience, and the
+//! meter of an item's own entity, read from their attribute set components
+//! and written to them. A set keeps the id
 //! of its first attribute, the values' offset, flags and count, then the
 //! values in the order of the game's attribute container.
 
@@ -68,6 +69,8 @@ pub(crate) enum Pool {
     Health,
     Stamina,
     Mana,
+    /// An item entity's meter, the game's fuel.
+    Meter,
 }
 
 /// A character's level and experience, from [`World::progress`].
@@ -112,6 +115,8 @@ pub(crate) struct Stats {
     mana: Set<2>,
     level: Set<1>,
     experience: Set<2>,
+    /// `Fuel` on an item's own entity; `None` on a build without its rows.
+    meter: Option<Set<2>>,
 }
 
 impl Stats {
@@ -155,6 +160,14 @@ impl Stats {
                 root: value("attribute.experience")?,
                 slots: [0, slot("attribute.experience_needed_slot")?],
             },
+            meter: (|| {
+                Ok::<_, Off>(Set {
+                    ty: set("keen::ecs::Fuel")?,
+                    root: value("attribute.fuel")?,
+                    slots: [0, slot("attribute.fuel_max_slot")?],
+                })
+            })()
+            .ok(),
         })
     }
 
@@ -206,6 +219,7 @@ impl Stats {
             Pool::Health => (&self.health, 1),
             Pool::Stamina => (&self.stamina, 0),
             Pool::Mana => (&self.mana, 0),
+            Pool::Meter => (self.meter.as_ref().ok_or(WorldError::Missing)?, 0),
         };
         let data = world.component_mut(entity, set.ty)?.cast::<u8>();
         // SAFETY: the entity's live attribute set, handed out for writing on
@@ -245,6 +259,14 @@ impl Stats {
             health: meter(self.read(world, entity, &self.health)?),
             stamina: self.read(world, entity, &self.stamina).map(meter),
             mana: self.read(world, entity, &self.mana).map(meter),
+        })
+    }
+
+    pub(crate) fn meter(&self, world: &World, pide: Entity) -> Option<Meter> {
+        let [current, max] = self.read(world, pide, self.meter.as_ref()?)?;
+        Some(Meter {
+            current: current.cast_signed(),
+            max: max.cast_signed(),
         })
     }
 

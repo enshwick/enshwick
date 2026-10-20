@@ -426,11 +426,9 @@ pub fn list_workshop(
 /// The station item as a plain new item.
 fn item_of(new: &NewWorkshop) -> NewItem {
     NewItem {
-        guid: new.item,
-        like: new.like.item,
         name: new.name,
         description: new.description,
-        debug_name: new.debug_name.clone(),
+        ..NewItem::new(new.item, new.like.item, new.debug_name.clone())
     }
 }
 
@@ -544,6 +542,10 @@ mod tests {
         object: 4,
         name: 0x48,
         description: 0x68,
+        flags: 0x78,
+        pid_entity: 0x80,
+        ui_values: 0x90,
+        ui_value: [0x28, 0, 4, 8, 0x24],
         refs: 0,
         names: 0x38,
     };

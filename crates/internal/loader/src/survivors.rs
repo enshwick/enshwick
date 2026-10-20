@@ -65,7 +65,9 @@ struct Offsets {
     npc_common: u64,
     npc_state: u64,
     spawn_template: u64,
+    spawn_used_slot: u64,
     spawn_used_item: u64,
+    spawn_used_pide: u64,
     spawn_ammo_item: u64,
     spawn_consume: u64,
 }
@@ -109,6 +111,7 @@ static MENU: OnceLock<Option<Menu>> = OnceLock::new();
 static LOOKUP: Mutex<Option<Registered<SurvivorLookupFn>>> = Mutex::new(None);
 static BED_CHECKS: Mutex<Vec<Registered<BedCheckFn>>> = Mutex::new(Vec::new());
 static SUMMONS: Mutex<Vec<Registered<SummonFn>>> = Mutex::new(Vec::new());
+static SUMMONED: Mutex<Vec<Registered<SummonFn>>> = Mutex::new(Vec::new());
 static ITEMS: Mutex<Vec<(u32, u32)>> = Mutex::new(Vec::new());
 static STATUS: Mutex<Option<Registered<SurvivorStatusFn>>> = Mutex::new(None);
 
@@ -117,6 +120,7 @@ struct Sealed {
     lookup: Option<Registered<SurvivorLookupFn>>,
     bed_checks: Box<[Registered<BedCheckFn>]>,
     summons: Box<[Registered<SummonFn>]>,
+    summoned: Box<[Registered<SummonFn>]>,
     items: Box<[(u32, u32)]>,
     status: Option<Registered<SurvivorStatusFn>>,
 }
@@ -224,7 +228,9 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
                     npc_common: c("npc_common")?,
                     npc_state: c("npc_state")?,
                     spawn_template: c("spawn_template")?,
+                    spawn_used_slot: c("spawn_used_slot")?,
                     spawn_used_item: c("spawn_used_item")?,
+                    spawn_used_pide: c("spawn_used_pide")?,
                     spawn_ammo_item: c("spawn_ammo_item")?,
                     spawn_consume: c("spawn_consume")?,
                 },
@@ -334,6 +340,25 @@ pub(crate) fn register_summon(
     Status::OK
 }
 
+pub(crate) fn register_summoned(
+    loader: &Loader,
+    owner: usize,
+    callback: SummonFn,
+    user: *mut c_void,
+) -> Status {
+    if too_late(loader) {
+        return Status::TOO_LATE;
+    }
+    if layout(loader).is_none() || symbol(loader, "survivors.spawn").is_none() {
+        return Status::MISSING;
+    }
+    SUMMONED
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .push(Registered::new(owner, callback, user));
+    Status::OK
+}
+
 pub(crate) fn register_item(loader: &Loader, item: u32, survivor: u32) -> Status {
     if too_late(loader) {
         return Status::TOO_LATE;
@@ -375,13 +400,14 @@ pub(crate) fn link(loader: &'static Loader) {
         lookup: LOOKUP.lock().unwrap_or_else(PoisonError::into_inner).take(),
         bed_checks: take(&BED_CHECKS).into_boxed_slice(),
         summons: take(&SUMMONS).into_boxed_slice(),
+        summoned: take(&SUMMONED).into_boxed_slice(),
         items: take(&ITEMS).into_boxed_slice(),
         status: STATUS.lock().unwrap_or_else(PoisonError::into_inner).take(),
     };
     let (lookup, beds, summons, items, status) = (
         sealed.lookup.is_some(),
         !sealed.bed_checks.is_empty(),
-        !sealed.summons.is_empty(),
+        !sealed.summons.is_empty() || !sealed.summoned.is_empty(),
         !sealed.items.is_empty(),
         sealed.status.is_some(),
     );
@@ -916,26 +942,51 @@ unsafe fn bed_kept(ctx: u64) -> bool {
 }
 
 unsafe extern "system" fn spawn_link(ctx: *mut u64, request: *mut u8) -> u8 {
-    if !request.is_null() {
-        // SAFETY: the game's spawn request, before the spawn reads it.
-        let _done = std::panic::catch_unwind(|| unsafe { summon(request) });
-    }
+    // SAFETY: the game's spawn request, before the spawn reads it.
+    let call = (!request.is_null())
+        .then(|| std::panic::catch_unwind(|| unsafe { summon(request) }).ok())
+        .flatten()
+        .flatten();
     // SAFETY: the rest of the chain takes the arguments the game passed.
-    unsafe { SPAWN_NEXT.get()(ctx, request) }
+    let done = unsafe { SPAWN_NEXT.get()(ctx, request) };
+    if done != 0
+        && let Some(call) = call
+    {
+        let _done = std::panic::catch_unwind(|| summoned(call));
+    }
+    done
 }
 
-/// Asks the summon filters and marks the request consuming when one says so.
+/// The `NetworkFuel` type hash, a used item's meter as clients see it.
+static FUEL_TYPE: OnceLock<Option<u32>> = OnceLock::new();
+
+/// The meter of the item entity `pide`, `[current, max]`, or zeros.
+fn meter(loader: &Loader, pide: u32) -> [u16; 2] {
+    let ty = FUEL_TYPE.get_or_init(|| {
+        let info = loader.reflection.type_info("keen::ecs::NetworkFuel").ok()?;
+        crate::world::type_hash(loader, info.va())
+    });
+    let Some(data) = ty.and_then(|ty| crate::world::component(loader, pide, ty).ok()) else {
+        return [0; 2];
+    };
+    // SAFETY: a live NetworkFuel, two u16 read as one aligned word, which
+    // only its network system writes.
+    let both: u32 = unsafe { data.cast::<u32>().read() };
+    let [a, b, c, d] = both.to_le_bytes();
+    [u16::from_le_bytes([a, b]), u16::from_le_bytes([c, d])]
+}
+
+/// Asks the summon filters and marks the request consuming when one says
+/// so; returns the use, for the handlers after a spawn that worked.
 ///
 /// # Safety
 ///
 /// `request` is the live spawn request.
-unsafe fn summon(request: *mut u8) {
+unsafe fn summon(request: *mut u8) -> Option<Summon> {
     let (Some(loader), Some(sealed)) = (LOADED.get(), SEALED.get()) else {
-        return;
+        return None;
     };
-    let Some(layout) = layout(loader) else {
-        return;
-    };
+    let layout = layout(loader)?;
     let o = &layout.offsets;
     let base = request.addr() as u64;
     // SAFETY: the request holds these fields at these offsets.
@@ -946,12 +997,25 @@ unsafe fn summon(request: *mut u8) {
     let template = unsafe { read_at(base, o.spawn_template) };
     // SAFETY: as above.
     let target = cell_of_fixed(unsafe { read_at(base, o.spawn_target) });
-    let call = Summon {
+    // SAFETY: as above: the used item's `ItemInstanceInfo`.
+    let slot = unsafe { read_at(base, o.spawn_used_slot) };
+    // SAFETY: as above.
+    let pide: u32 = unsafe { read_at(base, o.spawn_used_pide) };
+    let mut call = Summon {
         header: Header::of::<Summon>(),
         item,
         ammo,
         template,
         target,
+        slot,
+        pide,
+        meter: if pide == 0 {
+            [0; 2]
+        } else {
+            meter(loader, pide)
+        },
+        consumed: 0,
+        reserved: [0; 3],
     };
     let consume = sealed
         .summons
@@ -963,13 +1027,30 @@ unsafe fn summon(request: *mut u8) {
             // pointer it registered; the summon is valid for the call.
             unsafe { (r.callback)(&raw const call, user) != 0 }
         });
+    let at = usize::try_from(o.spawn_consume).unwrap_or(0);
     if consume {
         // SAFETY: the request's consume flag, which the spawn reads next.
-        unsafe {
-            request
-                .wrapping_add(usize::try_from(o.spawn_consume).unwrap_or(0))
-                .write(1);
-        };
+        unsafe { request.wrapping_add(at).write(1) };
+    }
+    // SAFETY: as above; a filter of the game's may have set it too.
+    call.consumed = unsafe { request.wrapping_add(at).read() };
+    Some(call)
+}
+
+/// Tells the handlers that a use spawned or moved a survivor.
+fn summoned(call: Summon) {
+    let Some(sealed) = SEALED.get() else {
+        return;
+    };
+    for r in sealed
+        .summoned
+        .iter()
+        .filter(|r| !crate::host::is_off(r.owner))
+    {
+        let user = core::ptr::with_exposed_provenance_mut(r.user);
+        // SAFETY: the callback lives in the mod's DLL and takes the pointer
+        // it registered; the summon is valid for the call.
+        unsafe { (r.callback)(&raw const call, user) };
     }
 }
 

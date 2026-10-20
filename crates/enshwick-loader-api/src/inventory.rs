@@ -209,20 +209,71 @@ impl ItemInfo {
     }
 }
 
-/// An item's durability, as clients see it.
+/// A value with its maximum on an item's own entity, as the item's slot
+/// shows it: its durability, or its meter (see
+/// [`Meter`](crate::content::items::Meter)).
 ///
 /// # Examples
 ///
 /// ```
-/// let worn = enshwick_loader_api::inventory::Durability { current: 40, max: 160 };
+/// let worn = enshwick_loader_api::inventory::Bar { current: 40, max: 160 };
 /// assert!(worn.current < worn.max);
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct Durability {
+pub struct Bar {
     /// What is left.
     pub current: u16,
-    /// When new.
+    /// When full.
     pub max: u16,
+}
+
+/// How full a new item's meter starts, for [`Op::Give`]: a fraction from 0
+/// to 1 in steps of 1/65535. The game makes the item's count `max` times
+/// the fill, rounded to the nearest whole count.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::inventory::Fill;
+///
+/// let three_of_five = Fill::of(3, 5);
+/// assert!((three_of_five.fraction() - 0.6).abs() < 1e-4);
+/// assert_eq!(Fill::of(7, 5), Fill::FULL);
+/// ```
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct Fill(pub u16);
+
+impl Fill {
+    /// Empty.
+    pub const EMPTY: Self = Self(0);
+    /// Full.
+    pub const FULL: Self = Self(u16::MAX);
+
+    /// The fill that makes the game give `count` of `max`; full when `count`
+    /// is `max` or more, empty when `max` is 0.
+    ///
+    /// # Examples
+    ///
+    /// See [`Fill`].
+    #[must_use]
+    pub fn of(count: u16, max: u16) -> Self {
+        if max == 0 {
+            return Self::EMPTY;
+        }
+        let parts = u32::from(count.min(max)) * u32::from(u16::MAX);
+        let max = u32::from(max);
+        Self(u16::try_from((parts + max / 2) / max).unwrap_or(u16::MAX))
+    }
+
+    /// The fill as a fraction from 0 to 1.
+    ///
+    /// # Examples
+    ///
+    /// See [`Fill`].
+    #[must_use]
+    pub fn fraction(self) -> f32 {
+        f32::from(self.0) / f32::from(u16::MAX)
+    }
 }
 
 /// One change in a [`Batch`].
@@ -246,6 +297,9 @@ pub enum Op {
         item: u32,
         /// How many.
         count: u32,
+        /// How full each new item's meter starts; `None` for its
+        /// template's start. Items without a meter ignore it.
+        fill: Option<Fill>,
     },
     /// Removes items, from whichever stacks hold them.
     Take {
@@ -284,12 +338,22 @@ impl Op {
     fn raw(&self) -> InventoryOp {
         let entity = |e: Entity| u64::from(e.0);
         match *self {
-            Self::Give { to, item, count } => InventoryOp {
-                kind: InventoryOp::GIVE,
-                target: entity(to),
+            Self::Give {
+                to,
                 item,
                 count,
-                ..InventoryOp::default()
+                fill,
+            } => InventoryOp {
+                kind: InventoryOp::GIVE,
+                flags: if fill.is_some() {
+                    InventoryOp::FILLED
+                } else {
+                    0
+                },
+                target: entity(to),
+                other: fill.map_or(0, |f| u64::from(f.fraction().to_bits())),
+                item,
+                count,
             },
             Self::Take { from, item, count } => InventoryOp {
                 kind: InventoryOp::TAKE,
@@ -352,7 +416,9 @@ impl Op {
     /// Whether the operation names what it needs.
     fn is_valid(&self) -> bool {
         match *self {
-            Self::Give { to: e, item, count }
+            Self::Give {
+                to: e, item, count, ..
+            }
             | Self::Take {
                 from: e,
                 item,
@@ -407,7 +473,7 @@ pub enum BatchError {
 /// let player = Entity(2);
 /// let trade = Batch::new()
 ///     .with(Op::Take { from: player, item: 0x0c01, count: 5 })
-///     .with(Op::Give { to: player, item: 0x5e01, count: 1 });
+///     .with(Op::Give { to: player, item: 0x5e01, count: 1, fill: None });
 /// assert_eq!(trade.check(), Ok(()));
 /// ```
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -463,7 +529,7 @@ impl Batch {
     /// use enshwick_loader_api::inventory::{Batch, Op};
     ///
     /// // As many as fit.
-    /// let _ = Batch::new().with(Op::Give { to: Entity(2), item: 7, count: 500 }).allow_partial();
+    /// let _ = Batch::new().with(Op::Give { to: Entity(2), item: 7, count: 500, fill: None }).allow_partial();
     /// ```
     #[must_use]
     pub const fn allow_partial(mut self) -> Self {
@@ -838,6 +904,7 @@ struct Layout {
     setup: ComponentType,
     inventory: ComponentType,
     durability: ComponentType,
+    fuel: ComponentType,
     owner: ComponentType,
     links: usize,
     categories: usize,
@@ -846,6 +913,7 @@ struct Layout {
     stack_count: usize,
     stack_pide: usize,
     durability_max: usize,
+    fuel_max: usize,
     /// The game's entity that inventory walks skip.
     skip: usize,
 }
@@ -906,6 +974,7 @@ impl Inventories {
             setup: world.component_type(load, "keen::ecs::InventorySetup")?,
             inventory: world.component_type(load, "keen::ecs::Inventory")?,
             durability: world.component_type(load, "keen::ecs::NetworkDurability")?,
+            fuel: world.component_type(load, "keen::ecs::NetworkFuel")?,
             owner: world.component_type(load, "keen::ecs::OwnerRelationship")?,
             links: offset("keen::ecs::InventorySetup", "linksEntities")?,
             categories: offset("keen::ecs::InventorySetup", "linksCategories")?,
@@ -915,6 +984,7 @@ impl Inventories {
             stack_count: offset("keen::ItemStack", "data")?,
             stack_pide: offset("keen::ItemStack", "data")? + size_of::<u32>(),
             durability_max: offset("keen::ecs::NetworkDurability", "durabilityMax")?,
+            fuel_max: offset("keen::ecs::NetworkFuel", "fuelMax")?,
             skip: usize::try_from(load.symbol("inventory.skip_entity")?)
                 .map_err(|_| Off::new("inventory.skip_entity"))?,
         };
@@ -1001,7 +1071,7 @@ impl Inventories {
     /// fn trade(inventories: &Inventories, player: Entity) {
     ///     let batch = Batch::new()
     ///         .with(Op::Take { from: player, item: 0x0c01, count: 5 })
-    ///         .with(Op::Give { to: player, item: 0x5e01, count: 1 });
+    ///         .with(Op::Give { to: player, item: 0x5e01, count: 1, fill: None });
     ///     let _ticket = inventories.submit(&batch, |outcome| {
     ///         enshwick_loader_api::info!("trade: {:?}", outcome.done);
     ///     });
@@ -1068,7 +1138,15 @@ impl Inventories {
         count: u32,
         done: impl FnOnce(&Outcome) + Send + 'static,
     ) -> Ticket {
-        self.submit(&Batch::new().with(Op::Give { to, item, count }), done)
+        self.submit(
+            &Batch::new().with(Op::Give {
+                to,
+                item,
+                count,
+                fill: None,
+            }),
+            done,
+        )
     }
 
     /// Takes `count` items `item` from the inventory `from`, all or nothing.
@@ -1330,7 +1408,7 @@ impl Reader<'_> {
         climbed.then_some(entity)
     }
 
-    /// The durability of an item's own entity, its PIDE.
+    /// The durability of an item's own entity, its PIDE, as clients see it.
     ///
     /// # Examples
     ///
@@ -1340,14 +1418,35 @@ impl Reader<'_> {
     /// }
     /// ```
     #[must_use]
-    pub fn durability(&self, pide: Entity) -> Option<Durability> {
+    pub fn durability(&self, pide: Entity) -> Option<Bar> {
         let layout = &self.inventories.layout;
-        let data = self.component(pide, layout.durability)?;
-        Some(Durability {
-            // SAFETY: a live NetworkDurability holds both values.
+        self.bar(pide, layout.durability, layout.durability_max)
+    }
+
+    /// The meter of an item's own entity (see
+    /// [`Meter`](crate::content::items::Meter)), as clients see it; `None`
+    /// for an item without one.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// fn charges(reader: &enshwick_loader_api::inventory::Reader<'_>, slot: &enshwick_loader_api::inventory::Slot) -> u16 {
+    ///     reader.meter(slot.pide).map_or(0, |m| m.current)
+    /// }
+    /// ```
+    #[must_use]
+    pub fn meter(&self, pide: Entity) -> Option<Bar> {
+        let layout = &self.inventories.layout;
+        self.bar(pide, layout.fuel, layout.fuel_max)
+    }
+
+    fn bar(&self, pide: Entity, ty: ComponentType, max: usize) -> Option<Bar> {
+        let data = self.component(pide, ty)?;
+        Some(Bar {
+            // SAFETY: a live NetworkDurability or NetworkFuel holds both values.
             current: unsafe { read_at(data, 0) },
             // SAFETY: as above.
-            max: unsafe { read_at(data, layout.durability_max) },
+            max: unsafe { read_at(data, max) },
         })
     }
 }
@@ -1369,6 +1468,7 @@ mod tests {
             to: Entity(to),
             item: 7,
             count: 1,
+            fill: None,
         }
     }
 
@@ -1392,6 +1492,7 @@ mod tests {
             to: Entity(2),
             item: 7,
             count: 0,
+            fill: None,
         };
         assert_eq!(Batch::new().with(zero).check(), Err(BatchError::Malformed));
         let mut many = Batch::new();

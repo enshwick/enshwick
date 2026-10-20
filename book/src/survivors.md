@@ -54,7 +54,14 @@ entity, the bed, the survivor's home cell and the bed's cell.
 of the survivor, on both sides, so the game treats it as that survivor's
 staff. `load.on_summon` runs before a staff spawns or moves a survivor;
 returning `true` makes the use take the item, in the same transaction and only
-when the spawn or move works.
+when the spawn or move works. `load.on_summoned` runs after a use that worked.
+
+A `Summon` names the used item: its id, its `slot`, its own entity `pide`
+and, for an item with a [meter](content/items.md#meters), the `meter` as
+clients see it; after the use, `consumed` says whether the game took it. A
+staff with charges takes the item on its last charge from `on_summon` and
+spends one in `on_summoned` otherwise. Both run inside the game's step, on
+the thread of the use: hand world writes to the [scheduler](events.md#the-scheduler).
 
 `survivors::WORKSHOP_SURVIVORS` lists the game's workshop survivors, each with
 its id, its vanilla staff and the template the staff places;
@@ -68,7 +75,19 @@ fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_
     let smith = WorkshopSurvivor::find("blacksmith")
         .ok_or_else(|| enshwick_loader_api::Off::new("no blacksmith"))?;
     load.add_summon_item(MY_STAFF, smith.id())?;
-    load.on_summon(|summon| summon.item == MY_STAFF && summon.ammo == 0)
+    // The last charge takes the staff; the others are spent after the use.
+    load.on_summon(|summon| {
+        summon.item == MY_STAFF && summon.meter.is_none_or(|charges| charges.current <= 1)
+    })?;
+    let (world, scheduler) = (load.world()?, load.scheduler()?);
+    load.on_summoned(move |summon| {
+        if summon.item == MY_STAFF && !summon.consumed {
+            let staff = summon.pide;
+            scheduler.next_tick(move || {
+                let _spent = world.change_item_meter(staff, |charges| charges - 1);
+            });
+        }
+    })
 }
 ```
 

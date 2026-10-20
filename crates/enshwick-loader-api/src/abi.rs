@@ -14,7 +14,7 @@ use core::sync::atomic::AtomicUsize;
 pub const ABI_MAJOR: u16 = 1;
 
 /// The minor version of this interface. A newer minor only appends fields.
-pub const ABI_MINOR: u16 = 36;
+pub const ABI_MINOR: u16 = 37;
 
 /// Whether `id` is a valid mod id: 1 to 64 characters of `[a-z0-9-]`.
 ///
@@ -1719,7 +1719,9 @@ pub struct InventoryOp {
     /// The inventory entity, or for slot operations the slot reference
     /// (`sub-inventory | index << 32`).
     pub target: u64,
-    /// The destination inventory entity of a move; 0 otherwise.
+    /// The destination inventory entity of a move; for a give with
+    /// [`InventoryOp::FILLED`], the bits of the `f32` fill each new item's
+    /// meter starts with; 0 otherwise.
     pub other: u64,
     /// The item id of a give or take.
     pub item: u32,
@@ -1743,6 +1745,9 @@ impl InventoryOp {
     /// For [`InventoryOp::MOVE_ALL`]: also move the source's action bar,
     /// equipment and locked slots.
     pub const INCLUDE_SPECIAL: u32 = 1;
+    /// For [`InventoryOp::GIVE`]: `other` holds the fill of each new item's
+    /// meter, the game's own per-item fuel fill. Since minor 37.
+    pub const FILLED: u32 = 2;
 }
 
 /// Inventory operations to run in one transaction, for
@@ -1894,6 +1899,9 @@ impl ItemData {
     pub const IS_CONTAINER: u32 = 1 << 2;
     /// The item is a blueprint.
     pub const IS_BLUEPRINT: u32 = 1 << 3;
+    /// Each item keeps a count the game shows as a bar on its slot, as the
+    /// water pouch keeps its water (the game's fuel).
+    pub const USES_FUEL: u32 = 1 << 13;
 }
 
 /// A box of whole cells or of 32.32 fixed-point metres, as its user says:
@@ -2156,15 +2164,27 @@ pub struct BedCheck {
 pub type BedCheckFn = unsafe extern "system" fn(check: *const BedCheck, user: *mut c_void) -> u8;
 
 /// A summoning staff's use about to spawn or move a survivor, as
-/// [`HostApi::summon_filter`] hands it on.
+/// [`HostApi::summon_filter`] hands it on, and once it worked, as
+/// [`HostApi::summoned`] does.
 ///
 /// # Examples
 ///
 /// ```
 /// use enshwick_loader_api::abi::{Header, Summon};
 ///
-/// let summon = Summon { header: Header::of::<Summon>(), item: 0x5e01, ammo: 0, template: [0; 16], target: [0; 3] };
-/// assert_eq!(summon.ammo, 0);
+/// let summon = Summon {
+///     header: Header::of::<Summon>(),
+///     item: 0x5e01,
+///     ammo: 0,
+///     template: [0; 16],
+///     target: [0; 3],
+///     slot: 0x3_0000_0041,
+///     pide: 900,
+///     meter: [2, 3],
+///     consumed: 0,
+///     reserved: [0; 3],
+/// };
+/// assert_eq!(summon.meter, [2, 3]);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
@@ -2179,6 +2199,19 @@ pub struct Summon {
     pub template: [u8; 16],
     /// The target cell.
     pub target: [i64; 3],
+    /// The slot the used item lies in, `sub-inventory | index << 32`.
+    /// Since minor 37.
+    pub slot: u64,
+    /// The used item's own entity, 0 for an item without one. Since minor
+    /// 37.
+    pub pide: u32,
+    /// The used item's meter as clients see it, current and maximum;
+    /// `[0, 0]` for an item without one. Since minor 37.
+    pub meter: [u16; 2],
+    /// After the use: 1 when it took the item. Since minor 37.
+    pub consumed: u8,
+    /// Zero.
+    pub reserved: [u8; 3],
 }
 
 /// A summon filter: returns 1 to make the game take the item in the same
@@ -3690,6 +3723,12 @@ pub struct HostApi {
     /// before it writes them. [`Status::BAD_ARGS`] for text that is not a
     /// schema. Any time. Since minor 35.
     pub config_schema: extern "system" fn(me: ModHandle, schema: Str) -> Status,
+    /// Calls `callback` with `user` after a summoning staff's use spawned or
+    /// moved a survivor, with [`Summon::consumed`] set; its return value is
+    /// ignored. On the thread of the use, as [`HostApi::summon_filter`].
+    /// Allowed during `enshwick_mod_init` only. Since minor 37.
+    pub summoned:
+        extern "system" fn(me: ModHandle, callback: SummonFn, user: *mut c_void) -> Status,
 }
 
 /// The exports a mod DLL provides, by name.
@@ -3751,7 +3790,7 @@ const _: () = {
     assert!(core::mem::offset_of!(HostApi, hook_at) == 24 + 35 * 8);
     assert!(core::mem::offset_of!(HostApi, inventory_open) == 24 + 36 * 8);
     assert!(core::mem::offset_of!(HostApi, inventory_submit) == 24 + 38 * 8);
-    assert!(size_of::<HostApi>() == 24 + 93 * 8);
+    assert!(size_of::<HostApi>() == 24 + 94 * 8);
     assert!(core::mem::offset_of!(HostApi, config_schema) == 24 + 92 * 8);
     assert!(core::mem::offset_of!(HostApi, time_of_day) == 24 + 73 * 8);
     assert!(core::mem::offset_of!(HostApi, set_time_speed) == 24 + 76 * 8);
@@ -3825,7 +3864,7 @@ const _: () = {
     assert!(size_of::<Interaction>() == 8 + 16 + 8 + 24);
     assert!(size_of::<SurvivorLookup>() == 8 + 16 + 24 + 16);
     assert!(size_of::<BedCheck>() == 8 + 12 + 4 + 48);
-    assert!(size_of::<Summon>() == 8 + 8 + 16 + 24);
+    assert!(size_of::<Summon>() == 8 + 8 + 16 + 24 + 8 + 4 + 4 + 4 + 4);
     assert!(size_of::<Bounds>() == 48);
     assert!(size_of::<AltarInfo>() == 16 + 17 * 48 + 24);
     assert!(size_of::<AltarZoneSize>() == 24);

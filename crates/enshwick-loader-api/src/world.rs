@@ -886,6 +886,49 @@ impl World {
         self.write_stat(entity, stats::Pool::Mana, |_| value)
     }
 
+    /// The meter of an item's own entity, its PIDE (see
+    /// [`Meter`](crate::content::items::Meter)): the count it holds and
+    /// its maximum. `None` for an entity without one, off the game thread,
+    /// or on a build without the reads.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// fn charges(world: &enshwick_loader_api::world::World, slot: &enshwick_loader_api::inventory::Slot) -> i32 {
+    ///     world.item_meter(slot.pide).map_or(0, |m| m.current)
+    /// }
+    /// ```
+    #[must_use]
+    pub fn item_meter(&self, pide: Entity) -> Option<Meter> {
+        self.stats?.meter(self, pide)
+    }
+
+    /// Sets the meter of an item's own entity to what `change` makes of it,
+    /// kept between 0 and its maximum, and returns it. The game saves it
+    /// with the world and shows it on the item's slot. On the game thread
+    /// only.
+    ///
+    /// # Errors
+    ///
+    /// [`WorldError::Lacks`] for an entity without a meter;
+    /// [`WorldError::Missing`] on a build without the writes; otherwise as
+    /// for [`World::update`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// fn spend(world: &enshwick_loader_api::world::World, pide: enshwick_loader_api::ecs::Entity) -> bool {
+    ///     world.change_item_meter(pide, |charges| charges - 1).is_ok()
+    /// }
+    /// ```
+    pub fn change_item_meter(
+        &self,
+        pide: Entity,
+        change: impl FnOnce(i32) -> i32,
+    ) -> Result<Meter, WorldError> {
+        self.write_stat(pide, stats::Pool::Meter, change)
+    }
+
     fn write_stat(
         &self,
         entity: Entity,
