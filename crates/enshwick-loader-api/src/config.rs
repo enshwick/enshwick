@@ -398,6 +398,10 @@ pub struct Field {
     /// The key of its translated label in the mod's texts; the description
     /// is under this key with `.doc` appended.
     pub text: String,
+    /// A secret, such as a password: never sent to a client, and changed in
+    /// the file only.
+    #[serde(default, skip_serializing_if = "core::ops::Not::not")]
+    pub secret: bool,
 }
 
 impl Field {
@@ -471,6 +475,22 @@ impl Field {
         if !text.is_empty() {
             text.clone_into(&mut self.text);
         }
+        self
+    }
+
+    /// The field marked secret, or not.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_loader_api::config::{Field, Stage};
+    ///
+    /// let field = Field::new("password", Stage::Runtime, "").with_secret(true);
+    /// assert!(field.secret);
+    /// ```
+    #[must_use]
+    pub const fn with_secret(mut self, secret: bool) -> Self {
+        self.secret = secret;
         self
     }
 
