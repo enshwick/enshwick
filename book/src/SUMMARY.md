@@ -58,3 +58,4 @@
 
 - [ABI reference](abi-reference.md)
 - [FAQ and troubleshooting](faq.md)
+- [Upgrading from 0.3](upgrading.md)

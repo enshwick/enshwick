@@ -50,6 +50,7 @@ chapters! {
     Releasing => "releasing.md",
     AbiReference => "abi-reference.md",
     Faq => "faq.md",
+    Upgrading => "upgrading.md",
 }
 
 #[cfg(feature = "test")]
