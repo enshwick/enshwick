@@ -1,6 +1,6 @@
 [package]
 name = "enshwick-building-yield"
-version = "0.1.1"
+version = "0.1.2"
 description = "Bulk recipes for building blocks, roofs, overgrowth, decor and furniture: twice the output for the same cost"
 keywords = ["enshrouded", "mod", "building", "recipes"]
 categories = ["game-development"]

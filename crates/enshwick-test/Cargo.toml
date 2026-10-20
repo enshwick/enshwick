@@ -1,6 +1,6 @@
 [package]
 name = "enshwick-test"
-version = "0.1.0"
+version = "0.1.1"
 description = "A fake Enshwick loader for unit tests of Enshrouded mods"
 keywords = ["enshrouded", "modding", "testing", "fake"]
 categories = ["game-development", "development-tools::testing"]

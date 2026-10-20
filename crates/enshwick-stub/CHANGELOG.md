@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.2](https://github.com/themaiby/enshwick/compare/enshwick-stub-v0.1.1...enshwick-stub-v0.1.2) (2026-10-20)
+
+
+### Features
+
+* update sources in manifests and staged updates in the stub ([#57](https://github.com/themaiby/enshwick/issues/57)) ([20e72b1](https://github.com/themaiby/enshwick/commit/20e72b1025765d83f3da861ec46ccbb4a163443c))
+
 ## [0.1.1](https://github.com/themaiby/enshwick/compare/enshwick-stub-v0.1.0...enshwick-stub-v0.1.1) (2026-10-19)
 
 

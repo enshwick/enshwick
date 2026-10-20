@@ -49,7 +49,7 @@ checksum = "fc652a48c352aef3ea3aed32080501cf3ef6ed5da78602a020c991775b0aff04"
 
 [[package]]
 name = "cargo-enshwick"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "clap",
  "enshwick-api",
@@ -155,7 +155,7 @@ dependencies = [
 
 [[package]]
 name = "enshwick-api"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "enshwick-macros",
  "serde",
@@ -165,7 +165,7 @@ dependencies = [
 
 [[package]]
 name = "enshwick-area-loot"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "enshwick-api",
  "serde",
@@ -174,7 +174,7 @@ dependencies = [
 
 [[package]]
 name = "enshwick-build-camera"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "enshwick-api",
  "enshwick-test",
@@ -184,7 +184,7 @@ dependencies = [
 
 [[package]]
 name = "enshwick-building-yield"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "enshwick-api",
  "serde",
@@ -193,7 +193,7 @@ dependencies = [
 
 [[package]]
 name = "enshwick-dev-tools"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "enshwick-api",
  "enshwick-test",
@@ -203,7 +203,7 @@ dependencies = [
 
 [[package]]
 name = "enshwick-flame-altar-count"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "arc-swap",
  "enshwick-api",
@@ -213,7 +213,7 @@ dependencies = [
 
 [[package]]
 name = "enshwick-flame-altar-zones"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "arc-swap",
  "arrayvec",
@@ -225,7 +225,7 @@ dependencies = [
 
 [[package]]
 name = "enshwick-furniture-comfort"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "enshwick-api",
  "serde",
@@ -242,7 +242,7 @@ dependencies = [
 
 [[package]]
 name = "enshwick-loader"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "arc-swap",
  "enshwick-api",
@@ -257,7 +257,7 @@ dependencies = [
 
 [[package]]
 name = "enshwick-macros"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "quote",
  "syn",
@@ -273,7 +273,7 @@ dependencies = [
 
 [[package]]
 name = "enshwick-safes"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "arc-swap",
  "enshwick-api",
@@ -283,7 +283,7 @@ dependencies = [
 
 [[package]]
 name = "enshwick-shared-experience"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "enshwick-api",
  "enshwick-test",
@@ -293,14 +293,14 @@ dependencies = [
 
 [[package]]
 name = "enshwick-stub"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "windows-sys 0.61.2",
 ]
 
 [[package]]
 name = "enshwick-survivors-per-altar"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "enshwick-api",
  "enshwick-geometry",
@@ -310,7 +310,7 @@ dependencies = [
 
 [[package]]
 name = "enshwick-test"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "enshwick-api",
  "serde",
@@ -318,7 +318,7 @@ dependencies = [
 
 [[package]]
 name = "enshwick-updater"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "enshwick-api",
  "minisign-verify",
