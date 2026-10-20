@@ -84,8 +84,8 @@ use std::collections::{HashMap, HashSet};
 use std::sync::MutexGuard;
 
 use crate::abi::{
-    AltarInfo, AltarZoneSize, BedCheck, Bounds, CallerFrame, Comfort, CommandCall, Event,
-    ExperiencePass, ExperienceRow, Fingerprint, Header, HookFlags, HostApi, Interaction,
+    AltarInfo, AltarZoneSize, BedCheck, Bounds, CallerFrame, Comfort, CommandCall, EntityPlace,
+    Event, ExperiencePass, ExperienceRow, Fingerprint, Header, HookFlags, HostApi, Interaction,
     InventoryOp, InventoryOpResult, InventoryResult, ItemData, Level, ModHandle, ModInfo,
     PlayerInfo, RenameCall, ResourceKey, Side, SkillCheck, Status, Str, Summon, SurvivorLookup,
     ZoneCheck,
@@ -214,6 +214,8 @@ pub struct FakeHost {
     items: HashMap<u32, ItemData>,
     no_inventories: bool,
     foreign_commands: HashMap<String, String>,
+    placed: Vec<(u32, EntityPlace)>,
+    world_key: Option<String>,
 }
 
 impl Default for FakeHost {
@@ -263,6 +265,8 @@ impl FakeHost {
             items: HashMap::new(),
             no_inventories: false,
             foreign_commands: HashMap::new(),
+            placed: Vec::new(),
+            world_key: None,
         }
     }
 
@@ -509,6 +513,46 @@ impl FakeHost {
     ) -> Self {
         self.components
             .insert((entity, type_hash), data.expose_provenance());
+        self
+    }
+
+    /// An entity in the world with a component of type `type_hash`, at
+    /// `position` in metres, for [`World::entities`](crate::world::World::entities)
+    /// and [`World::near`](crate::world::World::near).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick_loader_api::test::FakeHost::new()
+    ///     .placed(0x027a_c564, 4096, [1.0, 2.0, 3.0])
+    ///     .install();
+    /// # let _ = loader;
+    /// ```
+    #[must_use]
+    pub fn placed(mut self, type_hash: u32, entity: u32, position: [f64; 3]) -> Self {
+        self.placed.push((
+            type_hash,
+            EntityPlace {
+                entity,
+                reserved: 0,
+                position: crate::ecs::fixed(position),
+            },
+        ));
+        self
+    }
+
+    /// The key of the world the server runs, for
+    /// [`World::key`](crate::world::World::key) and world stores.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick_loader_api::test::FakeHost::new().world_key("world0-1a2b3c4d").install();
+    /// # let _ = loader;
+    /// ```
+    #[must_use]
+    pub fn world_key(mut self, key: &str) -> Self {
+        self.world_key = Some(key.to_owned());
         self
     }
 
@@ -1736,6 +1780,32 @@ impl Installed {
     #[must_use]
     pub fn labels(&self) -> Vec<(u32, String)> {
         table::with(Vec::new(), |s| s.labels.clone())
+    }
+
+    /// The entities the mod asked the world to destroy, in order.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick_loader_api::test::FakeHost::new().install();
+    /// assert!(loader.destroyed().is_empty());
+    /// ```
+    #[must_use]
+    pub fn destroyed(&self) -> Vec<u32> {
+        table::with(Vec::new(), |s| s.destroyed.clone())
+    }
+
+    /// How many saves the mod asked for.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick_loader_api::test::FakeHost::new().install();
+    /// assert_eq!(loader.saves(), 0);
+    /// ```
+    #[must_use]
+    pub fn saves(&self) -> usize {
+        table::with(0, |s| s.saves)
     }
 
     /// Asks the mod's rename filters about `player` renaming `entity` to

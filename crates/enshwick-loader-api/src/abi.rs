@@ -14,7 +14,7 @@ use core::sync::atomic::AtomicUsize;
 pub const ABI_MAJOR: u16 = 1;
 
 /// The minor version of this interface. A newer minor only appends fields.
-pub const ABI_MINOR: u16 = 20;
+pub const ABI_MINOR: u16 = 21;
 
 /// Whether `id` is a valid mod id: 1 to 64 characters of `[a-z0-9-]`.
 ///
@@ -2249,6 +2249,30 @@ pub struct GameEventData {
 /// subscription. It must not unwind.
 pub type GameEventFn = unsafe extern "system" fn(event: *const GameEventData, user: *mut c_void);
 
+/// An entity placed in the world, from [`HostApi::entities`].
+///
+/// Like [`PlayerInfo`], its layout is frozen: [`HostApi::entities`] writes
+/// an array of it with no entry size.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::abi::EntityPlace;
+///
+/// let chest = EntityPlace { entity: 4096, reserved: 0, position: [1 << 32, 0, 0] };
+/// assert_eq!(chest.position[0] >> 32, 1);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub struct EntityPlace {
+    /// The entity.
+    pub entity: u32,
+    /// Zero.
+    pub reserved: u32,
+    /// Where it is, in 32.32 fixed-point metres.
+    pub position: [i64; 3],
+}
+
 /// The table of services the loader offers a mod.
 ///
 /// Fields are only ever appended; a mod checks [`Header::covers`] before it
@@ -2599,6 +2623,32 @@ pub struct HostApi {
         callback: GameEventFn,
         user: *mut c_void,
     ) -> Status,
+    /// Up to `capacity` entities of the server's world that have a component
+    /// of the reflected type `type_hash` and a place in the world, and how
+    /// many there are. On the server's game thread only. Since minor 21.
+    pub entities: extern "system" fn(
+        me: ModHandle,
+        type_hash: u32,
+        out: *mut EntityPlace,
+        capacity: u32,
+        count: *mut u32,
+    ) -> Status,
+    /// Asks the server to destroy `entity` after the systems of the next
+    /// step; [`Status::REFUSED`] for a player's character,
+    /// [`Status::MISSING`] for an entity not in the world. On the server's
+    /// game thread only. Since minor 21.
+    pub destroy: extern "system" fn(me: ModHandle, entity: u32) -> Status,
+    /// Asks the server to save the world now, as its timed saves do;
+    /// [`Event::WORLD_SAVED`] follows once the save is on disk. A save under
+    /// way counts as asked; [`Status::REFUSED`] while the world may not be
+    /// saved, as before it has loaded. On the server's game thread only.
+    /// Since minor 21.
+    pub save_world: extern "system" fn(me: ModHandle) -> Status,
+    /// Writes the key of the world the server runs: its save file's name and
+    /// a hash of its folder, `[a-z0-9_-]`, valid for the process.
+    /// [`Status::MISSING`] before the server has read or written the world.
+    /// Any thread. Since minor 21.
+    pub world_key: extern "system" fn(me: ModHandle, out: *mut Str) -> Status,
 }
 
 /// The exports a mod DLL provides, by name.
@@ -2660,7 +2710,7 @@ const _: () = {
     assert!(core::mem::offset_of!(HostApi, hook_at) == 24 + 35 * 8);
     assert!(core::mem::offset_of!(HostApi, inventory_open) == 24 + 36 * 8);
     assert!(core::mem::offset_of!(HostApi, inventory_submit) == 24 + 38 * 8);
-    assert!(size_of::<HostApi>() == 24 + 59 * 8);
+    assert!(size_of::<HostApi>() == 24 + 63 * 8);
     assert!(size_of::<InventoryOp>() == 32);
     assert!(size_of::<InventoryRequest>() == 32);
     assert!(size_of::<InventoryOpResult>() == 8);
@@ -2684,7 +2734,10 @@ const _: () = {
     assert!(core::mem::offset_of!(HostApi, experience_filter) == 24 + 54 * 8);
     assert!(core::mem::offset_of!(HostApi, base_zones) == 24 + 57 * 8);
     assert!(core::mem::offset_of!(HostApi, game_event) == 24 + 58 * 8);
+    assert!(core::mem::offset_of!(HostApi, world_key) == 24 + 62 * 8);
     assert!(size_of::<GameEventData>() == 24);
+    // Frozen: written as an array.
+    assert!(size_of::<EntityPlace>() == 32);
     assert!(size_of::<SkillCheck>() == 20);
     assert!(size_of::<Comfort>() == 28);
     // Frozen: passed as an array.

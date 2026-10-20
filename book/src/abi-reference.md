@@ -12,7 +12,7 @@ raw table. The exact types and signatures are in the
 | Constant                                                                                            | Value | Meaning                                         |
 | --------------------------------------------------------------------------------------------------- | ----- | ----------------------------------------------- |
 | [`ABI_MAJOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 1     | A loader refuses a mod built for another major. |
-| [`ABI_MINOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 20    | A newer minor only appends.                     |
+| [`ABI_MINOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 21    | A newer minor only appends.                     |
 
 The ABI version is apart from Enshwick Loader's version (such as 0.2.0, see
 [Releasing and updates](releasing.md#versions)): a platform release raises
@@ -202,6 +202,10 @@ marked "init only" are allowed during `enshwick_mod_init` only.
 | `raise_base_limit`    | Lets the game group 32 altar zones in its 16 bases; init only; `MISSING` on an unknown build    | 19          |
 | `base_zones`          | The zones and bases of the last grouping, while the raised limit is in force                    | 19          |
 | `game_event`          | Calls a handler on every engine event of a reflected type, or of all; init only                 | 20          |
+| `entities`            | The entities with a component and a place in the world; server game thread only                 | 21          |
+| `destroy`             | Asks the server to destroy an entity after the next step; server game thread only               | 21          |
+| `save_world`          | Asks the server to save the world now; server game thread only                                  | 21          |
+| `world_key`           | The key of the world the server runs: its save file's name and a folder hash                    | 21          |
 
 ## Under an older loader
 
@@ -235,6 +239,7 @@ the mod off with a reason, which the mod's log shows as `off: <reason>`:
 | 18          | skills, comfort, experience     | Off: `skill overrides need a newer loader` and the like      |
 | 19          | altar limit and bases           | Off: `altars need a newer loader`                            |
 | 20          | engine events                   | Off: `engine events need a newer loader (ABI minor 20)`      |
+| 21          | entity queries, destroy, saves  | Empty, `None` or `WorldError::Missing`                       |
 
 A mod that can do without a feature catches the `Off` and goes on without it
 instead of returning it from `init`.
