@@ -61,6 +61,10 @@
     }
   ],
   "packages": {
+    "crates/cargo-enshwick": {
+      "package-name": "cargo-enshwick",
+      "component": "cargo-enshwick"
+    },
     "crates/enshwick-api": {
       "package-name": "enshwick-api",
       "component": "enshwick-api"
