@@ -24,22 +24,32 @@ use enshwick_loader_api::mods::Updates;
 /// The check holds the join, so a server that does not answer is not waited on long.
 const QUERY_TIMEOUT: Duration = Duration::from_secs(2);
 
+/// The names players read, by mod id: the client's own and those the server
+/// advertises.
+pub type Names = BTreeMap<String, String>;
+
+/// `Name (id)` of mod `id`, or the id when `names` has none.
+fn label(names: &Names, id: &str) -> String {
+    enshwick_loader_api::mods::label(names.get(id).map_or("", String::as_str), id)
+}
+
 /// What the client does when it joins.
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct Plan {
     /// The client's mods the server does not run: turned off, with a note.
     pub turn_off: Vec<String>,
-    /// The server's mods the client lacks or runs in another version: the
-    /// client does not join.
+    /// The server's mods the client lacks or runs in another version, as
+    /// lines for the note: the client does not join.
     pub missing: Vec<String>,
     /// The mods match but the loader versions differ.
     pub other_loader: bool,
 }
 
 impl Plan {
-    /// The note for the player, if any; `blocking` when the client stays out.
+    /// The note for the player, if any, naming mods by `names`; `blocking`
+    /// when the client stays out.
     #[must_use]
-    pub fn message(&self) -> Option<(String, bool)> {
+    pub fn message(&self, names: &Names) -> Option<(String, bool)> {
         if !self.missing.is_empty() {
             return Some((
                 format!(
@@ -50,10 +60,11 @@ impl Plan {
             ));
         }
         if !self.turn_off.is_empty() {
+            let lines: Vec<String> = self.turn_off.iter().map(|id| label(names, id)).collect();
             return Some((
                 format!(
                     "This server does not run these Enshwick mods, so they are off until you restart the game:\n\n{}",
-                    self.turn_off.join("\n")
+                    lines.join("\n")
                 ),
                 false,
             ));
@@ -68,9 +79,9 @@ impl Plan {
 }
 
 /// The plan for joining a server that advertises `server` (fingerprint and
-/// mod list), or no Enshwick at all.
+/// mod list), or no Enshwick at all; notes name mods by `names`.
 #[must_use]
-pub fn plan(ours: &str, ours_mods: &str, server: Option<(&str, &str)>) -> Plan {
+pub fn plan(ours: &str, ours_mods: &str, server: Option<(&str, &str)>, names: &Names) -> Plan {
     let ids = |list: &str| -> Vec<String> {
         list.split(',')
             .filter_map(|entry| entry.split_once('@').map(|(id, _)| id.to_owned()))
@@ -88,13 +99,10 @@ pub fn plan(ours: &str, ours_mods: &str, server: Option<(&str, &str)>) -> Plan {
                 .into_iter()
                 .filter(|id| !theirs.contains(id))
                 .collect();
-            let missing: Vec<String> = differences(mods, ours_mods)
+            let missing: Vec<String> = differences(mods, ours_mods, names)
                 .into_iter()
-                .filter(|line| {
-                    !turn_off
-                        .iter()
-                        .any(|id| line.starts_with(&format!("{id}: yours")))
-                })
+                .filter(|(_, on_server, _)| *on_server)
+                .map(|(_, _, line)| line)
                 .collect();
             let other_loader = missing.is_empty() && turn_off.is_empty();
             Plan {
@@ -106,33 +114,11 @@ pub fn plan(ours: &str, ours_mods: &str, server: Option<(&str, &str)>) -> Plan {
     }
 }
 
-/// What to tell the player, or `None` when the mod sets match.
+/// One entry per mod whose version differs between two `id@version,...`
+/// lists: its id, whether the server runs it, and a line naming it by
+/// `names` and both versions.
 #[must_use]
-pub fn verdict(ours: &str, ours_mods: &str, server: Option<(&str, &str)>) -> Option<String> {
-    match server {
-        Some((fingerprint, _)) if fingerprint == ours => None,
-        Some((_, mods)) => {
-            let lines = differences(mods, ours_mods);
-            Some(if lines.is_empty() {
-                "This server runs Enshwick with the same mods but another loader version, or more mods than it can list. Install the server's release, or things may not work.".to_owned()
-            } else {
-                format!(
-                    "This server runs different Enshwick mods:\n\n{}\n\nInstall the server's versions, or things may not work.",
-                    lines.join("\n")
-                )
-            })
-        }
-        None if ours_mods.is_empty() => None,
-        None => Some(format!(
-            "This server runs no Enshwick mods, and yours ({ours_mods}) change the game for both sides. Things may not work as expected."
-        )),
-    }
-}
-
-/// One line per mod whose version differs between two `id@version,...` lists,
-/// naming both versions.
-#[must_use]
-pub fn differences(server: &str, ours: &str) -> Vec<String> {
+pub fn differences(server: &str, ours: &str, names: &Names) -> Vec<(String, bool, String)> {
     let parse = |list: &str| -> BTreeMap<String, String> {
         list.split(',')
             .filter_map(|entry| entry.split_once('@'))
@@ -144,13 +130,17 @@ pub fn differences(server: &str, ours: &str) -> Vec<String> {
     ids.sort();
     ids.dedup();
     ids.into_iter()
-        .filter_map(|id| match (server.get(id), ours.get(id)) {
-            (Some(theirs), Some(mine)) if theirs != mine => {
-                Some(format!("{id}: server {theirs}, yours {mine}"))
-            }
-            (Some(theirs), None) => Some(format!("{id}: server {theirs}, not installed")),
-            (None, Some(mine)) => Some(format!("{id}: yours {mine}, not on the server")),
-            _ => None,
+        .filter_map(|id| {
+            let name = label(names, id);
+            let line = match (server.get(id), ours.get(id)) {
+                (Some(theirs), Some(mine)) if theirs != mine => {
+                    format!("{name}: server {theirs}, yours {mine}")
+                }
+                (Some(theirs), None) => format!("{name}: server {theirs}, not installed"),
+                (None, Some(mine)) => format!("{name}: yours {mine}, not on the server"),
+                _ => return None,
+            };
+            Some((id.clone(), server.contains_key(id), line))
         })
         .collect()
 }
@@ -177,6 +167,12 @@ pub fn wanted(server: &str, ours: &str) -> Vec<(String, String)> {
 pub fn source(reply: &[u8], id: &str) -> Option<Updates> {
     let line = rule(reply, &format!("{}.{id}", crate::advertise::RULE_SOURCE))?;
     Updates::parse(&line)
+}
+
+/// The name a server advertises for mod `id`; empty when it advertises none.
+#[must_use]
+pub fn name(reply: &[u8], id: &str) -> String {
+    rule(reply, &format!("{}.{id}", crate::advertise::RULE_NAME)).unwrap_or_default()
 }
 
 /// The author keys a server advertises for mod `id`; empty when it
@@ -313,11 +309,12 @@ mod runtime {
     /// The request holds the address in its first 0x40 bytes.
     const ADDRESS_BYTES: usize = 0x40;
 
-    static OURS: OnceLock<Vec<(String, String)>> = OnceLock::new();
+    static OURS: OnceLock<(Vec<(String, String)>, super::Names)> = OnceLock::new();
 
-    /// Sets the client's own join mods, `(id, version)`.
-    pub(crate) fn set_ours(mods: Vec<(String, String)>) {
-        let _first = OURS.set(mods);
+    /// Sets the client's own join mods, `(id, version)`, and the names of
+    /// all its mods.
+    pub(crate) fn set_ours(mods: Vec<(String, String)>, names: super::Names) {
+        let _first = OURS.set((mods, names));
     }
 
     /// The loader's link on `server_change`.
@@ -338,7 +335,7 @@ mod runtime {
     /// Compares mod sets, turns off what the server lacks, takes the server's
     /// join values and tells the player; false when the client must not join.
     fn check(request: &[u8]) -> bool {
-        let (Some(address), Some(mods)) = (super::address(request), OURS.get()) else {
+        let (Some(address), Some((mods, own_names))) = (super::address(request), OURS.get()) else {
             return true;
         };
         let reply = super::query_rules(address).ok();
@@ -362,10 +359,20 @@ mod runtime {
         let ours = crate::advertise::fingerprint(env!("CARGO_PKG_VERSION"), mods, &values);
         let ours_mods = crate::advertise::mod_list(mods);
         crate::log!(INFO, "joining {address}: server {server:?}, ours {ours}");
+        let mut names = own_names.clone();
+        if let Some((_, server_mods)) = &server {
+            for (id, _) in super::wanted(server_mods, "") {
+                let name = super::name(&reply, &id);
+                if !name.is_empty() {
+                    names.entry(id).or_insert(name);
+                }
+            }
+        }
         let plan = super::plan(
             &ours,
             &ours_mods,
             server.as_ref().map(|(f, m)| (f.as_str(), m.as_str())),
+            &names,
         );
         if plan.missing.is_empty() {
             crate::host::apply_join_values(&values);
@@ -376,7 +383,7 @@ mod runtime {
                 "the server does not run it; restart the game to use it again",
             );
         }
-        let Some((text, blocking)) = plan.message() else {
+        let Some((text, blocking)) = plan.message(&names) else {
             return true;
         };
         if blocking {
@@ -385,10 +392,12 @@ mod runtime {
             if let Some((_, server_mods)) = &server {
                 let missing: Vec<crate::host::Wanted> = super::wanted(server_mods, &ours_mods)
                     .into_iter()
-                    .map(|(id, version)| {
-                        let source = super::source(&reply, &id);
-                        let keys = super::keys(&reply, &id);
-                        (id, version, source, keys)
+                    .map(|(id, version)| crate::host::Wanted {
+                        name: super::name(&reply, &id),
+                        source: super::source(&reply, &id),
+                        keys: super::keys(&reply, &id),
+                        id,
+                        version,
                     })
                     .collect();
                 crate::host::report_join_missing(&missing);
@@ -426,46 +435,31 @@ mod tests {
     use super::*;
 
     #[test]
-    fn matching_sets_say_nothing_and_others_explain() {
-        assert_eq!(verdict("ab", "a@1", Some(("ab", "a@1"))), None);
-        assert!(
-            verdict("ab", "a@1", Some(("cd", "a@2")))
-                .unwrap()
-                .contains("a: server 2, yours 1")
-        );
-        assert!(
-            verdict("ab", "a@1", Some(("cd", "a@1")))
-                .unwrap()
-                .contains("another loader version")
-        );
-        assert!(
-            verdict("ab", "a@1", None)
-                .unwrap()
-                .contains("no Enshwick mods")
-        );
-        assert_eq!(verdict("ab", "", None), None);
-    }
-
-    #[test]
     fn mods_the_server_lacks_are_turned_off_and_only_the_rest_warn() {
+        let names = Names::from([("c".to_owned(), "Cats".to_owned())]);
         assert_eq!(
-            plan("ab", "a@1,b@1", Some(("ab", "a@1,b@1"))),
+            plan("ab", "a@1,b@1", Some(("ab", "a@1,b@1")), &names),
             Plan::default()
         );
-        let none = plan("ab", "a@1,b@1", None);
+        let none = plan("ab", "a@1,b@1", None, &names);
         assert_eq!(none.turn_off, ["a", "b"]);
-        assert_eq!(none.message().map(|(_, blocking)| blocking), Some(false));
-        let extra = plan("ab", "a@1,b@1", Some(("cd", "a@1")));
+        assert_eq!(
+            none.message(&names).map(|(_, blocking)| blocking),
+            Some(false)
+        );
+        let extra = plan("ab", "a@1,b@1", Some(("cd", "a@1")), &names);
         assert_eq!(extra.turn_off, ["b"]);
         assert!(extra.missing.is_empty());
-        let missing = plan("ab", "a@1", Some(("cd", "a@2,c@1")));
+        let missing = plan("ab", "a@1", Some(("cd", "a@2,c@1")), &names);
         assert!(missing.turn_off.is_empty());
-        let (text, blocking) = missing.message().unwrap();
+        let (text, blocking) = missing.message(&names).unwrap();
         assert!(blocking);
         assert!(
-            text.contains("a: server 2, yours 1") && text.contains("c: server 1, not installed")
+            text.contains("a: server 2, yours 1")
+                && text.contains("Cats (c): server 1, not installed"),
+            "{text}"
         );
-        assert!(plan("ab", "a@1", Some(("cd", "a@1"))).other_loader);
+        assert!(plan("ab", "a@1", Some(("cd", "a@1")), &names).other_loader);
     }
 
     #[test]
@@ -576,15 +570,21 @@ mod tests {
 
     #[test]
     fn differences_name_both_versions() {
+        let names = Names::from([("d".to_owned(), "Dogs".to_owned())]);
+        let lines: Vec<(bool, String)> =
+            differences("a@1.0.0,b@0.2.0,c@1.0.0", "a@1.0.0,b@0.1.0,d@3.0.0", &names)
+                .into_iter()
+                .map(|(_, on_server, line)| (on_server, line))
+                .collect();
         assert_eq!(
-            differences("a@1.0.0,b@0.2.0,c@1.0.0", "a@1.0.0,b@0.1.0,d@3.0.0"),
+            lines,
             [
-                "b: server 0.2.0, yours 0.1.0",
-                "c: server 1.0.0, not installed",
-                "d: yours 3.0.0, not on the server",
+                (true, "b: server 0.2.0, yours 0.1.0".to_owned()),
+                (true, "c: server 1.0.0, not installed".to_owned()),
+                (false, "Dogs (d): yours 3.0.0, not on the server".to_owned()),
             ]
         );
-        assert!(differences("", "").is_empty());
+        assert!(differences("", "", &names).is_empty());
     }
 
     #[test]

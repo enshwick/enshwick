@@ -137,7 +137,7 @@ fn vetoes(load: &mut Load<'_>, settings: &Settings) {
 
 impl Mod for Probe {
     fn manifest() -> &'static enshwick_loader_api::abi::Manifest {
-        enshwick_loader_api::manifest!(id: "probe", side: SERVER)
+        enshwick_loader_api::manifest!(id: "probe", side: SERVER, name: "Probe")
     }
 
     fn init(load: &mut Load<'_>) -> Result<Self, Off> {

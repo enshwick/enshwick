@@ -117,6 +117,7 @@ impl Mod for AltarCount {
         enshwick_loader_api::manifest!(
             id: "flame-altar-count",
             side: BOTH,
+            name: "Flame altar count",
             join = true,
             updates: github("themaiby/enshwick", "enshwick-flame-altar-count"),
             signed_by: ["RWTjqgtfpy3lSOLC4uaUXuvvKSLQKOFf6nUnEytoiFjSzxMEhLnoAdJF"],

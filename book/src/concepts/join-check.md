@@ -20,7 +20,9 @@ running join mods (the ones that are on):
 - `enshwick.src.<id>`: a mod's update source, `github:<owner/name>:<component>`
   or `url:<url>`;
 - `enshwick.key.<id>`: the author keys a mod declares with `signed_by:`, the
-  `RW...` lines separated by a space.
+  `RW...` lines separated by a space;
+- `enshwick.name.<id>`: a mod's name, so a client's notes name a mod it lacks
+  as players know it.
 
 The loader sets the name and rules again now and then, since the game sets its
 name once at start and the join values may change with the settings. A client

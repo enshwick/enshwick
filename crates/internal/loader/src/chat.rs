@@ -553,7 +553,8 @@ fn run(command: &Command, args: &str, player: &PlayerInfo) -> String {
 }
 
 /// `/enshwick`: the mods running; `/enshwick help`: every command;
-/// `/enshwick status`: the status summary, for administrators.
+/// `/enshwick <mod id>`: what the mod is; `/enshwick status`: the status
+/// summary, for administrators.
 fn builtin(loader: &Loader, args: &str, player: &PlayerInfo) -> String {
     if args.eq_ignore_ascii_case("status") {
         if player.permissions & PlayerInfo::CAN_KICK_BAN == 0 {
@@ -566,6 +567,16 @@ fn builtin(loader: &Loader, args: &str, player: &PlayerInfo) -> String {
     if args.eq_ignore_ascii_case("help") {
         return help(loader, &commands);
     }
+    if !args.is_empty() {
+        return loader
+            .mods
+            .iter()
+            .find(|m| m.id.eq_ignore_ascii_case(args))
+            .map_or_else(
+                || format!("No mod {args} is loaded. /enshwick lists the mods."),
+                about,
+            );
+    }
     let mods: Vec<String> = loader
         .mods
         .iter()
@@ -575,7 +586,7 @@ fn builtin(loader: &Loader, args: &str, player: &PlayerInfo) -> String {
             } else {
                 ""
             };
-            format!("{} {}{off}", m.id, m.version)
+            format!("{} {}{off}", m.label(), m.version)
         })
         .collect();
     let list = if mods.is_empty() {
@@ -658,9 +669,28 @@ fn config(loader: &Loader, args: &str, player: &PlayerInfo) -> String {
     }
 }
 
+/// What `record` is, for `/enshwick <mod id>`.
+fn about(record: &crate::host::ModRecord) -> String {
+    let off = if record.off.load(Ordering::Acquire) {
+        " (off)"
+    } else {
+        ""
+    };
+    let mut lines = vec![format!("{} {}{off}", record.label(), record.version)];
+    if !record.meta.description.is_empty() {
+        lines.push(record.meta.description.clone());
+    }
+    let credits = record.meta.credits();
+    if !credits.is_empty() {
+        lines.push(credits);
+    }
+    lines.extend(record.notes.iter().cloned());
+    lines.join("\n")
+}
+
 fn help(loader: &Loader, commands: &[Command]) -> String {
     let mut lines = vec![
-        "/enshwick: the mods running; /enshwick help: this list; /enshwick status: the status (administrators)"
+        "/enshwick: the mods running; /enshwick <mod id>: what a mod is; /enshwick help: this list; /enshwick status: the status (administrators)"
             .to_owned(),
         crate::configure::HELP.to_owned(),
     ];

@@ -32,6 +32,29 @@ fn describe(manifest: &Manifest) -> String {
     let mut lines = vec![
         format!("id: {}", text(&manifest.id)),
         format!("version: {}", text(&manifest.version)),
+    ];
+    let meta_end = core::mem::offset_of!(Manifest, homepage) + size_of::<Str>();
+    if manifest.header.covers(meta_end) {
+        let authors = if manifest.authors.is_null() {
+            &[][..]
+        } else {
+            // SAFETY: the manifest points at `author_count` static names.
+            unsafe { core::slice::from_raw_parts(manifest.authors, manifest.author_count) }
+        };
+        let authors: Vec<String> = authors.iter().map(text).collect();
+        for (key, value) in [
+            ("name", text(&manifest.name)),
+            ("description", text(&manifest.description)),
+            ("authors", authors.join(", ")),
+            ("license", text(&manifest.license)),
+            ("homepage", text(&manifest.homepage)),
+        ] {
+            if !value.is_empty() {
+                lines.push(format!("{key}: {value}"));
+            }
+        }
+    }
+    lines.extend([
         format!("side: {side}"),
         format!(
             "join check: {}",
@@ -41,7 +64,7 @@ fn describe(manifest: &Manifest) -> String {
                 "no"
             }
         ),
-    ];
+    ]);
     let dependencies = if manifest.dependencies.is_null() {
         &[][..]
     } else {
@@ -52,7 +75,8 @@ fn describe(manifest: &Manifest) -> String {
         let relation = match dependency.relation {
             Relation::REQUIRES => "requires",
             Relation::AFTER => "after",
-            Relation::CONFLICTS => "conflicts",
+            Relation::BREAKS => "breaks",
+            Relation::RECOMMENDS => "recommends",
             _ => "unknown relation",
         };
         let range = text(&dependency.range);
@@ -154,15 +178,26 @@ join check: no"
             id: "survivors-per-altar",
             side: BOTH,
             version: "0.2.0",
+            name: "Survivors per Altar",
+            description: "More survivors per altar",
+            authors: ["themaiby", "a friend"],
+            license: "MIT",
+            homepage: "https://github.com/themaiby/enshwick",
             join = true,
             requires: ["flame-altar-zones" => ">=0.1, <1.0"],
             after: ["flame-altar-count"],
+            recommends: ["flame-altar-count" => ""],
+            breaks: ["old-survivors" => "<0.3"],
             signed_by: ["RWTjqgtfpy3lSOLC4uaUXuvvKSLQKOFf6nUnEytoiFjSzxMEhLnoAdJF"],
         );
         assert_eq!(
             describe(manifest),
-            "id: survivors-per-altar\nversion: 0.2.0\nside: both\njoin check: yes\n\
+            "id: survivors-per-altar\nversion: 0.2.0\nname: Survivors per Altar\n\
+             description: More survivors per altar\nauthors: themaiby, a friend\n\
+             license: MIT\nhomepage: https://github.com/themaiby/enshwick\n\
+             side: both\njoin check: yes\n\
              requires: flame-altar-zones >=0.1, <1.0\nafter: flame-altar-count\n\
+             recommends: flame-altar-count\nbreaks: old-survivors <0.3\n\
              signed by: RWTjqgtfpy3lSOLC4uaUXuvvKSLQKOFf6nUnEytoiFjSzxMEhLnoAdJF"
         );
     }

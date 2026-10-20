@@ -2,7 +2,7 @@
 //! updater.
 
 use crate::Host;
-use crate::abi::{Header, HostApi, ManifestFlags, ModInfo, Side, Str, UpdateKind, UpdateSource};
+use crate::abi::{HostApi, ManifestFlags, ModInfo, Side, Str, UpdateKind, UpdateSource};
 
 /// Where a mod's new releases come from, as its manifest declares with
 /// `updates:`.
@@ -336,6 +336,86 @@ pub struct ModEntry {
     /// none or under a loader older than ABI minor 14. In [`join_missing`],
     /// the keys the server advertises for the mod.
     pub signed_by: Vec<String>,
+    /// The name players read; empty when the manifest names none. In
+    /// [`join_missing`], the name the server advertises.
+    pub name: String,
+    /// One sentence on what the mod does; empty for none.
+    pub description: String,
+    /// The authors' names.
+    pub authors: Vec<String>,
+    /// An SPDX licence expression; empty for none.
+    pub license: String,
+    /// Where players read about the mod; empty for none.
+    pub homepage: String,
+}
+
+impl Default for ModEntry {
+    /// An entry with every field empty and no side, to fill with
+    /// `..ModEntry::default()`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_loader_api::mods::ModEntry;
+    ///
+    /// let safes = ModEntry { id: "safes".into(), ..ModEntry::default() };
+    /// assert_eq!(safes.label(), "safes");
+    /// ```
+    fn default() -> Self {
+        Self {
+            id: String::new(),
+            version: String::new(),
+            side: Side(0),
+            join: false,
+            running: false,
+            file: String::new(),
+            updates: None,
+            signed_by: Vec::new(),
+            name: String::new(),
+            description: String::new(),
+            authors: Vec::new(),
+            license: String::new(),
+            homepage: String::new(),
+        }
+    }
+}
+
+impl ModEntry {
+    /// How messages to players name the mod: `Name (id)`, or the id alone
+    /// when the manifest names none.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// for entry in enshwick_loader_api::mods() {
+    ///     enshwick_loader_api::info!("{} {}", entry.label(), entry.version);
+    /// }
+    /// ```
+    #[must_use]
+    pub fn label(&self) -> String {
+        label(&self.name, &self.id)
+    }
+}
+
+/// How messages to players name mod `id` called `name`: `Name (id)`, or the
+/// id alone when the name is empty or the id itself.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::mods::label;
+///
+/// assert_eq!(label("Safes", "safes"), "Safes (safes)");
+/// assert_eq!(label("", "safes"), "safes");
+/// assert_eq!(label("safes", "safes"), "safes");
+/// ```
+#[must_use]
+pub fn label(name: &str, id: &str) -> String {
+    if name.is_empty() || name == id {
+        id.to_owned()
+    } else {
+        format!("{name} ({id})")
+    }
 }
 
 /// Every loaded mod, the loader first, in load order.
@@ -437,18 +517,7 @@ impl Host {
         if !status.is_ok() {
             return Vec::new();
         }
-        let blank = ModInfo {
-            header: Header::of::<ModInfo>(),
-            id: Str::EMPTY,
-            version: Str::EMPTY,
-            side: Side(0),
-            flags: ManifestFlags::NONE,
-            off: 0,
-            file: Str::EMPTY,
-            updates: UpdateSource::NONE,
-            signed_by: [Str::EMPTY; 2],
-        };
-        let mut infos = vec![blank; count as usize];
+        let mut infos = vec![ModInfo::EMPTY; count as usize];
         let capacity = u32::try_from(infos.len()).unwrap_or(u32::MAX);
         let status = list(
             self.handle(),
@@ -502,6 +571,26 @@ unsafe fn entry(info: &ModInfo) -> Option<ModEntry> {
     } else {
         Vec::new()
     };
+    let meta_end = core::mem::offset_of!(ModInfo, homepage) + size_of::<Str>();
+    // SAFETY: as above.
+    let text = |s: &Str| unsafe { s.as_str() }.unwrap_or_default().to_owned();
+    let (name, description, authors, license, homepage) = if info.header.covers(meta_end) {
+        let authors = if info.authors.is_null() {
+            &[][..]
+        } else {
+            // SAFETY: the loader points at `author_count` strings it keeps.
+            unsafe { core::slice::from_raw_parts(info.authors, info.author_count) }
+        };
+        (
+            text(&info.name),
+            text(&info.description),
+            authors.iter().map(text).collect(),
+            text(&info.license),
+            text(&info.homepage),
+        )
+    } else {
+        Default::default()
+    };
     Some(ModEntry {
         id: id.to_owned(),
         version: version.to_owned(),
@@ -511,12 +600,18 @@ unsafe fn entry(info: &ModInfo) -> Option<ModEntry> {
         file: file.to_owned(),
         updates,
         signed_by,
+        name,
+        description,
+        authors,
+        license,
+        homepage,
     })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::abi::Header;
 
     #[test]
     fn abi_sources_read_back() {
@@ -577,6 +672,12 @@ mod tests {
             file: Str::new("mods/enshwick_safes.dll"),
             updates: UpdateSource::NONE,
             signed_by: [Str::new(KEY), Str::new("RWnot-a-key")],
+            name: Str::new("Safes"),
+            description: Str::new("A chest only its owner opens"),
+            authors: AUTHORS.as_ptr(),
+            author_count: AUTHORS.len(),
+            license: Str::new("MIT"),
+            homepage: Str::EMPTY,
         };
         // SAFETY: static strings.
         let entry = unsafe { entry(&info) }.unwrap();
@@ -585,7 +686,12 @@ mod tests {
         assert_eq!(entry.updates, None);
         assert_eq!(entry.file, "mods/enshwick_safes.dll");
         assert_eq!(entry.signed_by, [KEY]);
+        assert_eq!(entry.label(), "Safes (safes)");
+        assert_eq!(entry.authors, ["themaiby", "someone"]);
+        assert_eq!(entry.license, "MIT");
     }
+
+    static AUTHORS: [Str; 2] = [Str::new("themaiby"), Str::new("someone")];
 
     #[test]
     fn an_entry_of_an_older_minor_has_no_keys() {
@@ -599,11 +705,18 @@ mod tests {
             file: Str::new("mods/enshwick_safes.dll"),
             updates: UpdateSource::NONE,
             signed_by: [Str::new(KEY), Str::EMPTY],
+            name: Str::new("Safes"),
+            description: Str::EMPTY,
+            authors: core::ptr::null(),
+            author_count: 0,
+            license: Str::EMPTY,
+            homepage: Str::EMPTY,
         };
         info.header.size = u32::try_from(core::mem::offset_of!(ModInfo, signed_by)).unwrap();
         // SAFETY: static strings.
         let entry = unsafe { entry(&info) }.unwrap();
         assert!(entry.signed_by.is_empty());
+        assert!(entry.name.is_empty());
     }
 
     const KEY: &str = "RWTjqgtfpy3lSOLC4uaUXuvvKSLQKOFf6nUnEytoiFjSzxMEhLnoAdJF";

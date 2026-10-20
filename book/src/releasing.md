@@ -189,16 +189,18 @@ lists every loaded mod, the loader first (id `enshwick`), in load order. Each
 [`ModEntry`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/mods.rs)
 has:
 
-| Field       | What it holds                                                                   |
-| ----------- | ------------------------------------------------------------------------------- |
-| `id`        | The mod id                                                                      |
-| `version`   | Its SemVer version                                                              |
-| `side`      | The sides it runs on                                                            |
-| `join`      | Whether it counts in the join check                                             |
-| `running`   | Not refused at init and not faulted since                                       |
-| `file`      | The DLL's path relative to the game's folder, such as `mods/enshwick_safes.dll` |
-| `updates`   | `Some(Updates::GitHub { .. })`, `Some(Updates::Url(..))` or `None`              |
-| `signed_by` | The author keys the manifest names, checked; empty for none                     |
+| Field                                           | What it holds                                                                   |
+| ----------------------------------------------- | ------------------------------------------------------------------------------- |
+| `id`                                            | The mod id                                                                      |
+| `version`                                       | Its SemVer version                                                              |
+| `side`                                          | The sides it runs on                                                            |
+| `join`                                          | Whether it counts in the join check                                             |
+| `running`                                       | Not refused at init and not faulted since                                       |
+| `file`                                          | The DLL's path relative to the game's folder, such as `mods/enshwick_safes.dll` |
+| `updates`                                       | `Some(Updates::GitHub { .. })`, `Some(Updates::Url(..))` or `None`              |
+| `signed_by`                                     | The author keys the manifest names, checked; empty for none                     |
+| `name`                                          | What players read; `entry.label()` gives `Name (id)`, or the id without a name  |
+| `description`, `authors`, `license`, `homepage` | The manifest's credits; empty for none                                          |
 
 ```rust
 use enshwick_loader_api::mods::Updates;

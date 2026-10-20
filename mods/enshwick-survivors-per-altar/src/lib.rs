@@ -78,6 +78,7 @@ impl Mod for SurvivorsPerAltar {
         enshwick_loader_api::manifest!(
             id: "survivors-per-altar",
             side: BOTH,
+            name: "Survivors per altar",
             join = true,
             updates: github("themaiby/enshwick", "enshwick-survivors-per-altar"),
             signed_by: ["RWTjqgtfpy3lSOLC4uaUXuvvKSLQKOFf6nUnEytoiFjSzxMEhLnoAdJF"],

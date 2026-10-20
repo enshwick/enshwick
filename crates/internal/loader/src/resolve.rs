@@ -95,7 +95,7 @@ pub fn resolve(candidates: &[Candidate], side: Side) -> Plan {
     while !pending.is_empty() {
         let ready = pending.iter().position(|&i| {
             candidates[i].dependencies.iter().all(|d| {
-                d.relation == Relation::CONFLICTS
+                d.relation == Relation::BREAKS
                     || by_id
                         .get(d.id.as_str())
                         .is_none_or(|&j| placed[j] || skipped.contains_key(&j))
@@ -144,14 +144,61 @@ fn unmet(
                     ));
                 }
             }
-            // The later of two conflicting mods gives way.
-            Relation::CONFLICTS if other.is_some_and(|j| j < me) => {
-                return Some(format!("conflicts with {}", dependency.id));
+            // The mod that declares the break gives way.
+            Relation::BREAKS => {
+                if let Some(j) = other.filter(|&j| j != me)
+                    && dependency
+                        .range
+                        .as_ref()
+                        .is_none_or(|range| range.matches(&candidates[j].version))
+                {
+                    return Some(format!(
+                        "does not work beside {} {}; remove one of them",
+                        dependency.id, candidates[j].version
+                    ));
+                }
             }
             _ => {}
         }
     }
     None
+}
+
+/// Notes on the mods of `plan` whose recommended mods are missing or in
+/// another version: the candidate's index and the note.
+#[must_use]
+pub fn notes(candidates: &[Candidate], plan: &Plan) -> Vec<(usize, String)> {
+    let loaded = |id: &str| {
+        plan.order
+            .iter()
+            .map(|&j| &candidates[j])
+            .find(|c| c.id == id)
+    };
+    plan.order
+        .iter()
+        .flat_map(|&i| {
+            candidates[i]
+                .dependencies
+                .iter()
+                .filter(|d| d.relation == Relation::RECOMMENDS)
+                .filter_map(move |d| {
+                    let wanted = d
+                        .range
+                        .as_ref()
+                        .map_or_else(|| d.id.clone(), |range| format!("{} {range}", d.id));
+                    match loaded(&d.id) {
+                        None => Some(format!("recommends {wanted}, which is not loaded")),
+                        Some(other)
+                            if d.range.as_ref().is_some_and(|r| !r.matches(&other.version)) =>
+                        {
+                            Some(format!("recommends {wanted}, found {}", other.version))
+                        }
+                        Some(_) => None,
+                    }
+                    .map(|note| (i, note))
+                })
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -226,22 +273,62 @@ mod tests {
     }
 
     #[test]
-    fn sides_duplicates_and_conflicts() {
+    fn sides_duplicates_and_breaks() {
         let mods = [
             candidate("ui", "1.0.0", Side::CLIENT, &[]),
             candidate("a", "1.0.0", Side::SERVER, &[]),
             candidate("a", "2.0.0", Side::SERVER, &[]),
-            candidate(
-                "b",
-                "1.0.0",
-                Side::SERVER,
-                &[("a", "", Relation::CONFLICTS)],
-            ),
+            candidate("b", "1.0.0", Side::SERVER, &[("a", "", Relation::BREAKS)]),
         ];
         let plan = resolve(&mods, Side::SERVER);
         assert_eq!(plan.order, [1]);
         let reasons: Vec<usize> = plan.skipped.iter().map(|(i, _)| *i).collect();
         assert_eq!(reasons, [0, 2, 3]);
+        assert_eq!(
+            plan.skipped[2].1,
+            "does not work beside a 1.0.0; remove one of them"
+        );
+    }
+
+    #[test]
+    fn breaks_only_in_their_range_and_once_per_pair() {
+        let mods = [
+            candidate("a", "1.2.0", Side::BOTH, &[("b", "<1.0", Relation::BREAKS)]),
+            candidate("b", "1.0.0", Side::BOTH, &[("a", "", Relation::BREAKS)]),
+            candidate("c", "0.1.0", Side::BOTH, &[("a", "<1.0", Relation::BREAKS)]),
+        ];
+        let plan = resolve(&mods, Side::SERVER);
+        // `a` allows b 1.0, so b, which breaks every a, gives way; c allows a 1.2.
+        assert_eq!(plan.order, [0, 2]);
+        assert_eq!(plan.skipped.len(), 1);
+        assert_eq!(plan.skipped[0].0, 1);
+    }
+
+    #[test]
+    fn recommendations_order_and_note() {
+        let mods = [
+            candidate(
+                "a",
+                "1.0.0",
+                Side::BOTH,
+                &[
+                    ("b", "^2", Relation::RECOMMENDS),
+                    ("gone", "", Relation::RECOMMENDS),
+                    ("c", "", Relation::RECOMMENDS),
+                ],
+            ),
+            candidate("b", "1.0.0", Side::BOTH, &[]),
+            candidate("c", "1.0.0", Side::BOTH, &[]),
+        ];
+        let plan = resolve(&mods, Side::SERVER);
+        assert_eq!(plan.order, [1, 2, 0]);
+        assert_eq!(
+            notes(&mods, &plan),
+            [
+                (0, "recommends b ^2, found 1.0.0".into()),
+                (0, "recommends gone, which is not loaded".into()),
+            ]
+        );
     }
 
     #[test]

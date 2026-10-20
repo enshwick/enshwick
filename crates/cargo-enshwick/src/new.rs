@@ -39,6 +39,7 @@ fn files(id: &str, side: Side) -> Result<Vec<(PathBuf, String)>, String> {
         template
             .replace("{id}", id)
             .replace("{type}", &type_name(id))
+            .replace("{name}", &display_name(id))
             .replace("{side}", side)
             .replace("{api}", enshwick_loader_api::VERSION)
     };
@@ -48,6 +49,16 @@ fn files(id: &str, side: Side) -> Result<Vec<(PathBuf, String)>, String> {
         ("README.md".into(), fill(README)),
         (".gitignore".into(), "/target\n".into()),
     ])
+}
+
+/// `flame-altar-zones` as `Flame altar zones`, the name players read until
+/// the author picks one.
+fn display_name(id: &str) -> String {
+    let words = id.replace('-', " ");
+    let mut chars = words.trim().chars();
+    chars.next().map_or_else(String::new, |first| {
+        first.to_ascii_uppercase().to_string() + chars.as_str()
+    })
 }
 
 /// `flame-altar-zones` as `FlameAltarZones`; ids starting with a digit get `Mod`.
@@ -72,6 +83,12 @@ const CARGO_TOML: &str = r#"[package]
 name = "{id}"
 version = "0.1.0"
 edition = "2024"
+# The loader shows these to players: in `/enshwick {id}`, the status summary
+# and the updater's notes.
+description = "What {name} does, in one sentence"
+authors = ["Your Name"]
+license = "MIT OR Apache-2.0"
+homepage = "https://github.com/you/your-repo"
 publish = false
 
 [lib]
@@ -119,6 +136,13 @@ impl Mod for {type} {
         enshwick_loader_api::manifest!(
             id: "{id}",
             side: {side},
+            // What players read; description, authors, license and homepage
+            // come from Cargo.toml.
+            name: "{name}",
+            // Mods this one works better with, and mods it does not work
+            // beside, each with a version range ("" for any):
+            // recommends: ["other-mod" => ">=0.2, <1.0"],
+            // breaks: ["old-mod" => "<0.3"],
             // Players get your releases from the updater once you name where
             // they come from and the minisign key you sign them with; see
             // "Releasing and updates" in the modding book.
@@ -175,11 +199,15 @@ mod tests {
         assert!(text("src/lib.rs").contains("id: \"area-loot\",\n            side: BOTH,"));
         assert!(text("src/lib.rs").contains("// signed_by: [\"RW..."));
         assert!(text("src/lib.rs").contains("declare_mod!(AreaLoot)"));
-        assert!(
-            !files
-                .iter()
-                .any(|(_, text)| text.contains("{type}") || text.contains("{id}"))
-        );
+        assert!(!files.iter().any(|(_, text)| text.contains("{type}")
+            || text.contains("{id}")
+            || text.contains("{name}")));
+    }
+
+    #[test]
+    fn ids_become_names() {
+        assert_eq!(display_name("flame-altar-zones"), "Flame altar zones");
+        assert_eq!(display_name("2x-loot"), "2x loot");
     }
 
     #[test]

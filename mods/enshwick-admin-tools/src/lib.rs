@@ -84,6 +84,7 @@ impl Mod for AdminTools {
         enshwick_loader_api::manifest!(
             id: "admin-tools",
             side: SERVER,
+            name: "Admin tools",
             updates: github("themaiby/enshwick", "enshwick-admin-tools"),
             signed_by: ["RWTjqgtfpy3lSOLC4uaUXuvvKSLQKOFf6nUnEytoiFjSzxMEhLnoAdJF"],
         )

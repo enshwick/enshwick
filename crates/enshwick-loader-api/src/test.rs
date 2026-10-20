@@ -651,6 +651,7 @@ impl FakeHost {
     ///         file: Str::new("mods/enshwick/enshwick.dll"),
     ///         updates: UpdateSource::NONE,
     ///         signed_by: [Str::new("RWTjqgtfpy3lSOLC4uaUXuvvKSLQKOFf6nUnEytoiFjSzxMEhLnoAdJF"), Str::EMPTY],
+    ///         ..ModInfo::EMPTY
     ///     })
     ///     .install();
     /// # let _ = loader;
@@ -680,6 +681,7 @@ impl FakeHost {
     ///         file: Str::EMPTY,
     ///         updates: UpdateSource::github("themaiby/enshwick", "enshwick-safes"),
     ///         signed_by: [Str::new("RWTjqgtfpy3lSOLC4uaUXuvvKSLQKOFf6nUnEytoiFjSzxMEhLnoAdJF"), Str::EMPTY],
+    ///         ..ModInfo::EMPTY
     ///     })
     ///     .install();
     /// // SAFETY: the installed fake's table.

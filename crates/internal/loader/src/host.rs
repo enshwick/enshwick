@@ -40,6 +40,10 @@ pub(crate) struct ModRecord {
     pub(crate) signed_by: [Str; 2],
     /// Its static manifest, inside its DLL.
     pub(crate) manifest: &'static Manifest,
+    /// What its manifest tells players about it.
+    pub(crate) meta: crate::manifest::Meta,
+    /// Notes on its relations, such as a recommended mod that is missing.
+    pub(crate) notes: Vec<String>,
     /// Set when the mod is off: refused at init or faulted later.
     pub(crate) off: AtomicBool,
     /// The settings text last handed to the mod, alive until its next call.
@@ -55,6 +59,11 @@ pub(crate) struct ModRecord {
 }
 
 impl ModRecord {
+    /// `Name (id)`, or the id when the manifest names none.
+    pub(crate) fn label(&self) -> String {
+        self.meta.label(&self.id)
+    }
+
     /// Whether the mod runs and counts in the join check.
     pub(crate) fn joins(&self) -> bool {
         !self.off.load(Ordering::Acquire) && self.manifest.flags.contains(ManifestFlags::JOIN)
@@ -181,6 +190,7 @@ pub(crate) fn apply_join_values(values: &BTreeMap<String, String>) {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct Missing {
     id: &'static str,
+    name: &'static str,
     version: &'static str,
     file: &'static str,
     kind: UpdateKind,
@@ -208,9 +218,20 @@ fn keep(text: &str) -> &'static str {
 }
 
 /// One of the server's join mods the join check found missing on this
-/// client: its id, the server's version, and the update source and author
-/// keys the server advertises.
-pub(crate) type Wanted = (String, String, Option<Updates>, Vec<String>);
+/// client, as the server advertises it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct Wanted {
+    /// The mod id.
+    pub(crate) id: String,
+    /// The name players read; empty for none.
+    pub(crate) name: String,
+    /// The server's version.
+    pub(crate) version: String,
+    /// Where the server's version comes from.
+    pub(crate) source: Option<Updates>,
+    /// The keys its author signs releases with.
+    pub(crate) keys: Vec<String>,
+}
 
 /// On a client the join check kept out: records `missing`, the server's
 /// join mods this client lacks or runs in another version, and raises
@@ -221,7 +242,14 @@ pub(crate) fn report_join_missing(missing: &[Wanted]) {
     };
     let entries = missing
         .iter()
-        .map(|(id, version, source, keys)| {
+        .map(|wanted| {
+            let Wanted {
+                id,
+                name,
+                version,
+                source,
+                keys,
+            } = wanted;
             let ours = loader.mods.iter().find(|m| &m.id == id);
             let file = ours.map_or("", |m| m.file.as_str());
             // SAFETY: the loader keeps every source's strings for the process.
@@ -240,6 +268,7 @@ pub(crate) fn report_join_missing(missing: &[Wanted]) {
             }
             Missing {
                 id: keep(id),
+                name: keep(name),
                 version: keep(version),
                 file: keep(file),
                 kind,
@@ -1242,8 +1271,17 @@ fn loader_info() -> ModInfo {
         file: Str::new(LOADER_FILE),
         updates: LOADER_UPDATES,
         signed_by: [Str::new(LOADER_KEY), Str::EMPTY],
+        name: Str::new("Enshwick"),
+        description: Str::new("The mod loader and modding API for Enshrouded"),
+        authors: LOADER_AUTHORS.as_ptr(),
+        author_count: LOADER_AUTHORS.len(),
+        license: Str::new(env!("CARGO_PKG_LICENSE")),
+        homepage: Str::new(env!("CARGO_PKG_REPOSITORY")),
     }
 }
+
+/// The loader's authors, as its listing names them.
+static LOADER_AUTHORS: [Str; 1] = [Str::new("themaiby")];
 
 /// The listing entry of a loaded mod; its strings live as long as the loader.
 fn mod_info(record: &'static ModRecord) -> ModInfo {
@@ -1257,6 +1295,12 @@ fn mod_info(record: &'static ModRecord) -> ModInfo {
         file: Str::new(&record.file),
         updates: record.updates,
         signed_by: record.signed_by,
+        name: record.manifest.name,
+        description: record.manifest.description,
+        authors: record.manifest.authors,
+        author_count: record.manifest.author_count,
+        license: record.manifest.license,
+        homepage: record.manifest.homepage,
     }
 }
 
@@ -1317,6 +1361,8 @@ extern "system" fn join_missing(
                     ..UpdateSource::NONE
                 },
                 signed_by: missing.keys.map(Str::new),
+                name: Str::new(missing.name),
+                ..ModInfo::EMPTY
             })
             .collect();
         // SAFETY: forwarded from the mod's call.

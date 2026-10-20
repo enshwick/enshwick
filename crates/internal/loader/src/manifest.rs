@@ -159,6 +159,85 @@ pub unsafe fn signed_by(manifest: &Manifest) -> ([Str; 2], Vec<String>) {
     (keys, refused)
 }
 
+/// What a manifest tells players about its mod.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Meta {
+    /// The name players read; empty for none.
+    pub name: String,
+    /// One sentence on what the mod does.
+    pub description: String,
+    /// The authors' names.
+    pub authors: Vec<String>,
+    /// An SPDX licence expression.
+    pub license: String,
+    /// Where players read about the mod.
+    pub homepage: String,
+}
+
+impl Meta {
+    /// `Name (id)`, or the id when the manifest names none.
+    #[must_use]
+    pub fn label(&self, id: &str) -> String {
+        enshwick_loader_api::mods::label(&self.name, id)
+    }
+
+    /// `by A, B; MIT; https://...`: what is known of authors, licence and
+    /// homepage, empty when nothing is.
+    #[must_use]
+    pub fn credits(&self) -> String {
+        let mut parts = Vec::new();
+        if !self.authors.is_empty() {
+            parts.push(format!("by {}", self.authors.join(", ")));
+        }
+        if !self.license.is_empty() {
+            parts.push(self.license.clone());
+        }
+        if !self.homepage.is_empty() {
+            parts.push(self.homepage.clone());
+        }
+        parts.join("; ")
+    }
+}
+
+/// The metadata `manifest` declares; empty for a manifest older than ABI
+/// minor 36. Text that is not UTF-8, or a homepage that is not an address,
+/// is left out.
+///
+/// # Safety
+///
+/// `manifest` and every pointer and string in it are valid for the call.
+#[must_use]
+pub unsafe fn meta(manifest: &Manifest) -> Meta {
+    let end = core::mem::offset_of!(Manifest, homepage) + size_of::<Str>();
+    if !manifest.header.covers(end) {
+        return Meta::default();
+    }
+    // SAFETY: forwarded from the caller.
+    let text = |s: &Str| unsafe { s.as_str() }.unwrap_or_default().trim().to_owned();
+    let authors = if manifest.authors.is_null() {
+        &[][..]
+    } else {
+        // SAFETY: the manifest points at `author_count` names.
+        unsafe { core::slice::from_raw_parts(manifest.authors, manifest.author_count) }
+    };
+    let homepage = text(&manifest.homepage);
+    Meta {
+        name: text(&manifest.name),
+        description: text(&manifest.description),
+        authors: authors
+            .iter()
+            .map(text)
+            .filter(|name| !name.is_empty())
+            .collect(),
+        license: text(&manifest.license),
+        homepage: if homepage.starts_with("https://") || homepage.starts_with("http://") {
+            homepage
+        } else {
+            String::new()
+        },
+    }
+}
+
 /// Whether `text` is a GitHub `owner/name`.
 fn is_repository(text: &str) -> bool {
     let part = |p: &str| {
@@ -199,7 +278,7 @@ unsafe fn dependency(raw: &Dependency) -> Result<resolve::Dependency, String> {
     };
     if !matches!(
         raw.relation,
-        Relation::REQUIRES | Relation::AFTER | Relation::CONFLICTS
+        Relation::REQUIRES | Relation::AFTER | Relation::BREAKS | Relation::RECOMMENDS
     ) {
         return Err(format!("unknown relation {} to {id}", raw.relation.0));
     }
@@ -235,7 +314,36 @@ mod tests {
             build_count: 0,
             updates: core::ptr::null(),
             signed_by: [Str::EMPTY; 2],
+            name: Str::EMPTY,
+            description: Str::EMPTY,
+            authors: core::ptr::null(),
+            author_count: 0,
+            license: Str::EMPTY,
+            homepage: Str::EMPTY,
         }
+    }
+
+    static AUTHORS: [Str; 2] = [Str::new("themaiby"), Str::new(" ")];
+
+    #[test]
+    fn metadata_is_read_and_cleaned() {
+        let mut m = manifest("safes", "0.1.0");
+        m.name = Str::new("Safes");
+        m.description = Str::new(" A chest only its owner opens ");
+        m.authors = AUTHORS.as_ptr();
+        m.author_count = AUTHORS.len();
+        m.license = Str::new("MIT");
+        m.homepage = Str::new("github.com/themaiby/enshwick");
+        // SAFETY: static data.
+        let meta = unsafe { meta(&m) };
+        assert_eq!(meta.label("safes"), "Safes (safes)");
+        assert_eq!(meta.description, "A chest only its owner opens");
+        assert_eq!(meta.authors, ["themaiby"]);
+        assert!(meta.homepage.is_empty());
+        assert_eq!(meta.credits(), "by themaiby; MIT");
+        m.header.size = u32::try_from(core::mem::offset_of!(Manifest, name)).unwrap();
+        // SAFETY: static data.
+        assert_eq!(unsafe { super::meta(&m) }, Meta::default());
     }
 
     const KEY: &str = "RWTjqgtfpy3lSOLC4uaUXuvvKSLQKOFf6nUnEytoiFjSzxMEhLnoAdJF";

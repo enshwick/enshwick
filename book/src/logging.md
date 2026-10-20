@@ -86,7 +86,9 @@ after start, then every `status_minutes`, and whenever an administrator types
 `/enshwick status`. Each write replaces the last. It lists:
 
 - the loader and game versions, and whether this process hosts a game;
-- every mod with its version and whether it runs, with the lines the mod adds;
+- every mod with its name, version and whether it runs, its authors, licence
+  and homepage, notes such as a recommended mod that is missing, and the lines
+  the mod adds;
 - the mods turned off, and why;
 - what mods serve and patch;
 - the number of hooked functions, and with `diagnostics` their calls.

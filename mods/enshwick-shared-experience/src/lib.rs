@@ -123,6 +123,7 @@ impl Mod for SharedExperience {
         enshwick_loader_api::manifest!(
             id: "shared-experience",
             side: SERVER,
+            name: "Shared experience",
             updates: github("themaiby/enshwick", "enshwick-shared-experience"),
             signed_by: ["RWTjqgtfpy3lSOLC4uaUXuvvKSLQKOFf6nUnEytoiFjSzxMEhLnoAdJF"],
         )

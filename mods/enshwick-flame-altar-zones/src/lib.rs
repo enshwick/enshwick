@@ -48,6 +48,7 @@ impl Mod for FlameAltarZones {
         enshwick_loader_api::manifest!(
             id: "flame-altar-zones",
             side: BOTH,
+            name: "Flame altar zones",
             join = true,
             updates: github("themaiby/enshwick", "enshwick-flame-altar-zones"),
             signed_by: ["RWTjqgtfpy3lSOLC4uaUXuvvKSLQKOFf6nUnEytoiFjSzxMEhLnoAdJF"],
