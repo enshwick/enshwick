@@ -7,6 +7,10 @@ running if the mod fails.
 
 ## A first mod
 
+[`cargo enshwick new <id>`](../cargo-enshwick) writes this crate for you, and
+`cargo enshwick install --game <game folder>` builds it and copies it into the
+game. By hand:
+
 ```toml
 # Cargo.toml
 [package]

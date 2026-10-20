@@ -1,0 +1,173 @@
+//! `cargo enshwick new`: a mod crate that builds and loads as it is.
+
+use std::path::{Path, PathBuf};
+
+use crate::Side;
+
+/// Creates the crate for mod `id` in `<dir>/<id>`; what was made, for the user.
+pub(crate) fn create(dir: &Path, id: &str, side: Side) -> Result<String, String> {
+    let root = dir.join(id);
+    if root.exists() {
+        return Err(format!("{} already exists", root.display()));
+    }
+    for (path, text) in files(id, side)? {
+        let path = root.join(path);
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| format!("{}: {e}", parent.display()))?;
+        }
+        std::fs::write(&path, text).map_err(|e| format!("{}: {e}", path.display()))?;
+    }
+    Ok(format!(
+        "created mod `{id}` in {}; `cargo enshwick install --game <game folder>` puts it into the game",
+        root.display()
+    ))
+}
+
+/// The crate's files for mod `id`, relative to its root.
+fn files(id: &str, side: Side) -> Result<Vec<(PathBuf, String)>, String> {
+    if !enshwick_api::abi::is_valid_id(id) {
+        return Err(format!(
+            "the id {id:?} is not 1 to 64 characters of [a-z0-9-]"
+        ));
+    }
+    let side = match side {
+        Side::Server => "SERVER",
+        Side::Client => "CLIENT",
+        Side::Both => "BOTH",
+    };
+    let fill = |template: &str| {
+        template
+            .replace("{id}", id)
+            .replace("{type}", &type_name(id))
+            .replace("{side}", side)
+            .replace("{api}", enshwick_api::VERSION)
+    };
+    Ok(vec![
+        ("Cargo.toml".into(), fill(CARGO_TOML)),
+        ("src/lib.rs".into(), fill(LIB_RS)),
+        ("README.md".into(), fill(README)),
+        (".gitignore".into(), "/target\n".into()),
+    ])
+}
+
+/// `flame-altar-zones` as `FlameAltarZones`; ids starting with a digit get `Mod`.
+fn type_name(id: &str) -> String {
+    let mut name: String = id
+        .split('-')
+        .filter(|part| !part.is_empty())
+        .map(|part| {
+            let mut chars = part.chars();
+            chars.next().map_or_else(String::new, |first| {
+                first.to_ascii_uppercase().to_string() + chars.as_str()
+            })
+        })
+        .collect();
+    if !name.starts_with(|c: char| c.is_ascii_alphabetic()) {
+        name.insert_str(0, "Mod");
+    }
+    name
+}
+
+const CARGO_TOML: &str = r#"[package]
+name = "{id}"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+enshwick-api = { git = "https://github.com/themaiby/enshwick", tag = "enshwick-api-v{api}" }
+serde = { version = "1", features = ["derive"] }
+
+[profile.release]
+lto = "fat"
+codegen-units = 1
+# Unwinding stays on: every detour catches panics and falls back to vanilla.
+panic = "unwind"
+"#;
+
+const LIB_RS: &str = r#"//! The {id} mod for Enshrouded.
+
+use enshwick_api::{Load, Mod, Off};
+
+/// {type} settings, in `mod-configs/{id}.toml`.
+#[derive(Debug, serde::Deserialize, serde::Serialize, enshwick_api::Config)]
+#[serde(deny_unknown_fields)]
+struct Settings {
+    /// Whether the mod does its work.
+    enabled: bool,
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Self { enabled: true }
+    }
+}
+
+/// The mod's state.
+#[derive(Debug)]
+pub struct {type};
+
+impl Mod for {type} {
+    fn manifest() -> &'static enshwick_api::abi::Manifest {
+        enshwick_api::manifest!(id: "{id}", side: {side})
+    }
+
+    fn init(load: &mut Load<'_>) -> Result<Self, Off> {
+        let settings: Settings = load.config()?;
+        enshwick_api::info!("enabled: {}", settings.enabled);
+        Ok(Self)
+    }
+}
+
+enshwick_api::declare_mod!({type});
+"#;
+
+const README: &str = "# {id}
+
+An Enshrouded mod for the [Enshwick](https://github.com/themaiby/enshwick) loader.
+
+`cargo enshwick install --game <game folder>` builds it and copies it into the
+game's `mods/` folder. Its settings are `mod-configs/{id}.toml`, written on first
+start; its log is `logs/enshwick/mods/{id}.log`.
+";
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ids_become_type_names() {
+        assert_eq!(type_name("flame-altar-zones"), "FlameAltarZones");
+        assert_eq!(type_name("safes"), "Safes");
+        assert_eq!(type_name("2x-loot"), "Mod2xLoot");
+    }
+
+    #[test]
+    fn the_files_name_the_mod_everywhere() {
+        let files = files("area-loot", Side::Both).unwrap();
+        let text = |name: &str| {
+            &files
+                .iter()
+                .find(|(path, _)| path == Path::new(name))
+                .unwrap()
+                .1
+        };
+        assert!(text("Cargo.toml").contains("name = \"area-loot\""));
+        assert!(text("Cargo.toml").contains(&format!("enshwick-api-v{}", enshwick_api::VERSION)));
+        assert!(text("src/lib.rs").contains("manifest!(id: \"area-loot\", side: BOTH)"));
+        assert!(text("src/lib.rs").contains("declare_mod!(AreaLoot)"));
+        assert!(
+            !files
+                .iter()
+                .any(|(_, text)| text.contains("{type}") || text.contains("{id}"))
+        );
+    }
+
+    #[test]
+    fn a_bad_id_is_refused() {
+        assert!(files("Area Loot", Side::Server).is_err());
+    }
+}

@@ -49,6 +49,9 @@
 //! enshwick_api::declare_mod!(Hello);
 //! ```
 
+/// The version of this crate, which a mod's generated `Cargo.toml` pins.
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+
 pub mod abi;
 pub mod config;
 mod declare;

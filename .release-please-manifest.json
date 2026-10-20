@@ -1,4 +1,5 @@
 {
+  "crates/cargo-enshwick": "0.1.0",
   "crates/enshwick-api": "0.1.2",
   "crates/enshwick-loader": "0.1.3",
   "crates/enshwick-stub": "0.1.1",
