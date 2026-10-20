@@ -6,9 +6,9 @@
 //! answers from the settings table instead. The table is a join value: a
 //! client joined to a server runs with the server's.
 //!
-//! The game groups only 16 altar zones into bases; [`bases`] lifts that to 32
-//! zones and keeps the bases at 16. When its code is not found, the table
-//! stays capped at 16.
+//! The game groups only 16 altar zones into bases; the `bases` module lifts
+//! that to 32 zones and keeps the bases at 16. When its code is not found, the
+//! table stays capped at 16.
 
 mod bases;
 mod limit;
