@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.2.0](https://github.com/themaiby/enshwick/compare/enshwick-api-v0.1.5...enshwick-api-v0.2.0) (2026-10-20)
+
+
+### ⚠ BREAKING CHANGES
+
+* building materials x2 doubles vanilla building recipe outputs ([#82](https://github.com/themaiby/enshwick/issues/82))
+
+### Features
+
+* author keys: updates must be signed by the installed version's key ([#81](https://github.com/themaiby/enshwick/issues/81)) ([d9d46f3](https://github.com/themaiby/enshwick/commit/d9d46f38231234e958a8762e6c0fff5b6ddcb5d8))
+* building materials x2 doubles vanilla building recipe outputs ([#82](https://github.com/themaiby/enshwick/issues/82)) ([5f6ee1f](https://github.com/themaiby/enshwick/commit/5f6ee1ff583a7bbddaf580e6f0c764e47558ba85))
+* **updater:** read url(...) sources from a documented JSON format ([#77](https://github.com/themaiby/enshwick/issues/77)) ([a05aa2e](https://github.com/themaiby/enshwick/commit/a05aa2ed0c2838a5b3ff6a7adc2d06329d99eed1))
+
+
+### Bug Fixes
+
+* load manifests and structs of an older or newer minor ([#76](https://github.com/themaiby/enshwick/issues/76)) ([4bd2e9f](https://github.com/themaiby/enshwick/commit/4bd2e9f04dc529c7036f02fec682c12310f0a31d))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * enshwick-macros bumped from 0.1.2 to 0.2.0
+
 ## [0.1.5](https://github.com/themaiby/enshwick/compare/enshwick-api-v0.1.4...enshwick-api-v0.1.5) (2026-10-20)
 
 
