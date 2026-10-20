@@ -1,6 +1,6 @@
 [package]
 name = "enshwick-loader"
-version = "0.1.4"
+version = "0.1.5"
 description = "The Enshwick loader: finds the game build, loads mods and links their hooks inside Enshrouded"
 keywords = ["enshrouded", "modding", "loader", "hooks"]
 categories = ["game-development"]
