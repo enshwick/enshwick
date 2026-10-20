@@ -1,0 +1,72 @@
+# Asks Steam once a week for the public build of the dedicated server (app
+# 2278520) and opens an issue when the loader's build table has no server row
+# named after it, so a maintainer runs enshwick-pin (crates/enshwick-pin).
+# It downloads no game files and commits nothing. Off until the repository
+# variable GAME_BUILD_WATCH is "true".
+name: game-build-watch
+
+on:
+  schedule:
+    - cron: '23 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: game-build-watch
+  cancel-in-progress: false
+
+jobs:
+  watch:
+    if: vars.GAME_BUILD_WATCH == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Public build of the dedicated server
+        id: steam
+        run: |
+          dir="$RUNNER_TEMP/steamcmd"
+          mkdir -p "$dir"
+          curl -fsSL https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz | tar -xz -C "$dir"
+          "$dir/steamcmd.sh" +login anonymous +app_info_update 1 +app_info_print 2278520 +quit > "$RUNNER_TEMP/info.vdf"
+          build=$(awk '/"branches"/ { b = 1 } b && /"public"/ { p = 1 } p && /"buildid"/ { gsub(/"/, "", $2); print $2; exit }' "$RUNNER_TEMP/info.vdf")
+          case "$build" in
+            '' | *[!0-9]*) echo "steamcmd printed no public build id"; exit 1 ;;
+          esac
+          echo "build=$build" >> "$GITHUB_OUTPUT"
+
+      - name: Open an issue for a build without rows
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BUILD: ${{ steps.steam.outputs.build }}
+        run: |
+          if grep -q "server ($BUILD)\"" crates/enshwick-loader/src/builds.rs; then
+            echo "build $BUILD has rows"
+            exit 0
+          fi
+          title="Dedicated server build $BUILD has no build rows"
+          open=$(gh issue list --state open --search "\"$title\" in:title" --json number --jq length)
+          if [ "$open" != "0" ]; then
+            echo "an issue for build $BUILD is open"
+            exit 0
+          fi
+          cat > "$RUNNER_TEMP/body.md" <<EOF
+          Steam's public branch of the dedicated server (app 2278520) is at build
+          $BUILD, and the loader's build table has no row for it: until it has,
+          the loader leaves that game build vanilla.
+
+          Port the rows with enshwick-pin, following
+          [its README](https://github.com/${GITHUB_REPOSITORY}/blob/main/crates/enshwick-pin/README.md):
+          download the new server and client with steamcmd, run the tool for
+          each executable against the previous one, settle what the report
+          lists for a human, and open a pull request with the new rows. Never
+          commit game files.
+          EOF
+          gh issue create --title "$title" --body-file "$RUNNER_TEMP/body.md"
