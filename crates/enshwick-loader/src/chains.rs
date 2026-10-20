@@ -119,6 +119,11 @@ impl Chains {
         self.chains.values_mut()
     }
 
+    /// Every chain.
+    pub fn iter(&self) -> impl Iterator<Item = &Chain> {
+        self.chains.values()
+    }
+
     /// Marks the chains armed: no more links.
     pub fn seal(&mut self) {
         self.armed = true;

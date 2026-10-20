@@ -7,6 +7,9 @@
 //! name, or to the loader's own `/enshwick`, and the answer is posted for
 //! that player alone, marked as delivered for every other connection. Lines
 //! mods send from any thread wait in a queue that the post-step drains.
+//!
+//! Mods may also run a command line as the server's console, an
+//! administrator with no character, on the game thread.
 
 use core::ffi::c_void;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -314,29 +317,62 @@ fn dispatch(loader: &Loader, line: &str, to: To) {
         String::from_utf8_lossy(&player.name[..usize::from(player.name_len).min(64)]).into_owned();
     crate::log!(DEBUG, "{who} ({key:016x}) typed /{name}");
     let reply = if name == LOADER_ID {
-        builtin(loader, args)
+        builtin(loader, args, &player)
     } else {
-        run(loader, &name, args, &player)
+        match find(loader, &name) {
+            Some(command) => run(&command, args, &player),
+            None => format!("Unknown command /{name}. /enshwick help lists the commands."),
+        }
     };
     queue(to, &reply);
 }
 
-/// Runs a mod's command; a short answer when none has the name.
-fn run(loader: &Loader, name: &str, args: &str, player: &PlayerInfo) -> String {
+/// The server's console as a player: an administrator with no character.
+fn console() -> PlayerInfo {
+    let mut name = [0u8; 64];
+    name[..7].copy_from_slice(b"console");
+    PlayerInfo {
+        header: Header::of::<PlayerInfo>(),
+        slot: u32::MAX,
+        entity: 0,
+        key: 0,
+        permissions: PlayerInfo::CAN_KICK_BAN,
+        name_len: 7,
+        name,
+    }
+}
+
+/// Runs `line` as the server's console, on the game thread; the reply.
+pub(crate) fn run_console(loader: &Loader, line: &str) -> Result<String, Status> {
+    crate::world::server().map_err(|_| Status::WRONG_THREAD)?;
+    let (name, args) = parse_line(line).ok_or(Status::BAD_ARGS)?;
+    crate::log!(DEBUG, "the console runs /{name}");
+    let player = console();
+    if name == LOADER_ID {
+        return Ok(builtin(loader, args, &player));
+    }
+    let command = find(loader, &name).ok_or(Status::MISSING)?;
+    Ok(run(&command, args, &player))
+}
+
+/// The running mod's command `name`.
+fn find(loader: &Loader, name: &str) -> Option<Command> {
     let command = COMMANDS
         .lock()
         .unwrap_or_else(PoisonError::into_inner)
         .iter()
         .find(|c| c.name == name)
         .cloned();
-    let Some(command) = command.filter(|c| {
+    command.filter(|c| {
         loader
             .mods
             .get(c.owner)
             .is_some_and(|m| !m.off.load(Ordering::Acquire))
-    }) else {
-        return format!("Unknown command /{name}. /enshwick help lists the commands.");
-    };
+    })
+}
+
+/// Runs a mod's command for `player`; its reply.
+fn run(command: &Command, args: &str, player: &PlayerInfo) -> String {
     let call = CommandCall {
         header: Header::of::<CommandCall>(),
         player: *player,
@@ -357,8 +393,16 @@ fn run(loader: &Loader, name: &str, args: &str, player: &PlayerInfo) -> String {
     unsafe { reply.as_str() }.unwrap_or("").to_owned()
 }
 
-/// `/enshwick`: the mods running; `/enshwick help`: every command.
-fn builtin(loader: &Loader, args: &str) -> String {
+/// `/enshwick`: the mods running; `/enshwick help`: every command;
+/// `/enshwick status`: the status summary, for administrators.
+fn builtin(loader: &Loader, args: &str, player: &PlayerInfo) -> String {
+    if args.eq_ignore_ascii_case("status") {
+        if player.permissions & PlayerInfo::CAN_KICK_BAN == 0 {
+            return "Only administrators see the status.".to_owned();
+        }
+        crate::status::request();
+        return crate::status::summary(loader).short();
+    }
     let commands = COMMANDS.lock().unwrap_or_else(PoisonError::into_inner);
     if args.eq_ignore_ascii_case("help") {
         return help(loader, &commands);
@@ -387,7 +431,10 @@ fn builtin(loader: &Loader, args: &str) -> String {
 }
 
 fn help(loader: &Loader, commands: &[Command]) -> String {
-    let mut lines = vec!["/enshwick: the mods running; /enshwick help: this list".to_owned()];
+    let mut lines = vec![
+        "/enshwick: the mods running; /enshwick help: this list; /enshwick status: the status (administrators)"
+            .to_owned(),
+    ];
     lines.extend(commands.iter().filter_map(|c| {
         let record = loader.mods.get(c.owner)?;
         (!record.off.load(Ordering::Acquire))

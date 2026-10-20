@@ -78,6 +78,7 @@ fn changed(loader: &Loader, owner: Option<usize>) {
     let path = loader.configs_dir.join(format!("{LOADER_ID}.toml"));
     match Settings::read(&path) {
         (settings, None) => {
+            crate::diag::configure(&settings);
             crate::log::set_levels(settings);
             crate::log!(INFO, "loader settings reloaded");
             loader.emit(Event::LOADER_SETTINGS_CHANGED, None, core::ptr::null());

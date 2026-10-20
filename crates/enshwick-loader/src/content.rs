@@ -275,6 +275,23 @@ pub(crate) fn seal_and_link(loader: &'static Loader) {
     }
 }
 
+/// What mods serve, for the status summary.
+pub(crate) fn summary() -> crate::diag::Served {
+    let served = SERVED_LIST.get().map_or(&[][..], |s| s);
+    let (mut built, mut failed) = (0, 0);
+    for entry in served {
+        let state = entry.state.lock().unwrap_or_else(PoisonError::into_inner);
+        built += usize::from(state.built.is_some());
+        failed += usize::from(state.failed);
+    }
+    crate::diag::Served {
+        resources: served.len(),
+        built,
+        failed,
+        texts: TEXTS.get().map_or(0, |t| t.values().map(Vec::len).sum()),
+    }
+}
+
 /// The vanilla template to read for `key`, a cloned template no mod serves.
 fn alias(key: &ResourceKey) -> Option<ResourceKey> {
     if key.type_hash != enshwick_api::content::types::TEMPLATE {

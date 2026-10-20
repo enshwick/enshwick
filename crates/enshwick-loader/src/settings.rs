@@ -9,10 +9,11 @@ use enshwick_api::config::Config as _;
 /// The id the loader logs and keeps settings under; no mod may take it.
 pub const LOADER_ID: &str = "enshwick";
 
+/// Minutes between status summaries by default.
+pub const STATUS_MINUTES: u32 = 10;
+
 /// Enshwick loader settings.
-#[derive(
-    Debug, Default, PartialEq, Eq, serde::Deserialize, serde::Serialize, enshwick_api::Config,
-)]
+#[derive(Debug, PartialEq, Eq, serde::Deserialize, serde::Serialize, enshwick_api::Config)]
 #[serde(default, deny_unknown_fields)]
 pub struct Settings {
     /// The most detailed lines kept in `logs/enshwick`: "error", "warn", "info" or "debug".
@@ -20,6 +21,27 @@ pub struct Settings {
     /// The same per mod id, over `log_level`; "enshwick" is the loader itself.
     /// For example: `log_levels = { survivors-per-altar = "debug" }`
     pub log_levels: BTreeMap<String, Level>,
+    /// Count the calls of every hooked game function for the status summary.
+    /// A few instructions per call; read at start.
+    pub diagnostics: bool,
+    /// With diagnostics, also time every 256th call of each hooked function.
+    /// Read at start.
+    pub diagnostics_timing: bool,
+    /// Minutes between status summaries in `logs/enshwick/status.log`;
+    /// 0 writes one only for `/enshwick status`.
+    pub status_minutes: u32,
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Self {
+            log_level: Level::default(),
+            log_levels: BTreeMap::new(),
+            diagnostics: false,
+            diagnostics_timing: false,
+            status_minutes: STATUS_MINUTES,
+        }
+    }
 }
 
 impl Settings {
@@ -65,6 +87,21 @@ mod tests {
         let settings: Settings = toml::from_str(&Settings::template()).unwrap();
         assert_eq!(settings, Settings::default());
         assert_eq!(settings.level("any-mod"), Level::INFO);
+        assert!(!settings.diagnostics);
+        assert_eq!(settings.status_minutes, STATUS_MINUTES);
+    }
+
+    #[test]
+    fn diagnostics_are_turned_on_in_the_file() {
+        let settings: Settings = toml::from_str(
+            "diagnostics = true
+status_minutes = 0
+",
+        )
+        .unwrap();
+        assert!(settings.diagnostics);
+        assert!(!settings.diagnostics_timing);
+        assert_eq!(settings.status_minutes, 0);
     }
 
     #[test]
