@@ -125,6 +125,7 @@ pub(crate) fn start(stub_abi: u32, missing_forwards: u32) {
     crate::label::link(loader);
     crate::altars::link(loader);
     crate::survivors::link(loader);
+    crate::interactions::link(loader);
     if side == Side::CLIENT {
         link_join(loader);
         let waited = wait_for_window(CLIENT_ARM_DELAY);

@@ -6,9 +6,9 @@ use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use crate::abi::{
     AltarInfo, AltarZoneSize, BedCheckFn, BuildInfo, CallerFrame, CommandFn, Event, EventFn,
-    Header, HookSpec, HostApi, InventoryDoneFn, InventoryRequest, ItemData, Level, MidHookFn,
-    MidHookSpec, ModHandle, ModInfo, PlayerInfo, RenameFn, ResourceKey, ResourcePatchFn, Side,
-    Status, StatusFn, Str, SummonFn, SurvivorLookupFn, SurvivorStatusFn, ZoneCheckFn,
+    Header, HookSpec, HostApi, InteractionFn, InventoryDoneFn, InventoryRequest, ItemData, Level,
+    MidHookFn, MidHookSpec, ModHandle, ModInfo, PlayerInfo, RenameFn, ResourceKey, ResourcePatchFn,
+    Side, Status, StatusFn, Str, SummonFn, SurvivorLookupFn, SurvivorStatusFn, ZoneCheckFn,
 };
 
 use super::{FakeHost, LinkedHook, ServedResource, SubmittedRequest};
@@ -56,6 +56,7 @@ pub(crate) struct State {
     pub(crate) summons: Vec<(SummonFn, usize)>,
     pub(crate) summon_items: Vec<(u32, u32)>,
     pub(crate) survivor_status: Option<(SurvivorStatusFn, usize)>,
+    pub(crate) interaction_filters: Vec<(InteractionFn, usize)>,
     /// The reply `run_command` last handed out, alive until the next call.
     run_out: Option<Box<str>>,
     /// The settings text last handed out, alive until the next call.
@@ -106,6 +107,7 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         summons: Vec::new(),
         summon_items: Vec::new(),
         survivor_status: None,
+        interaction_filters: Vec::new(),
         run_out: None,
         settings: None,
     });
@@ -734,6 +736,18 @@ extern "system" fn survivor_status(
     })
 }
 
+extern "system" fn interaction_filter(
+    _me: ModHandle,
+    callback: InteractionFn,
+    user: *mut c_void,
+) -> Status {
+    with(Status::MISSING, |s| {
+        s.interaction_filters
+            .push((callback, user.expose_provenance()));
+        Status::OK
+    })
+}
+
 /// table it sees for the process, so it is one static.
 pub(crate) static TABLE: HostApi = HostApi {
     header: Header::of::<HostApi>(),
@@ -789,4 +803,5 @@ pub(crate) static TABLE: HostApi = HostApi {
     summon_filter,
     summon_item,
     survivor_status,
+    interaction_filter,
 };

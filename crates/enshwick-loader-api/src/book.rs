@@ -26,6 +26,7 @@ chapters! {
     World => "world.md",
     Altars => "altars.md",
     Survivors => "survivors.md",
+    Interactions => "interactions.md",
     Commands => "commands.md",
     State => "state.md",
     Services => "services.md",

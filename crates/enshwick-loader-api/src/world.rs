@@ -133,6 +133,7 @@ pub struct World {
     host: Host,
     transform: ComponentType,
     used_item: ComponentType,
+    label: Option<ComponentType>,
 }
 
 impl World {
@@ -146,9 +147,13 @@ impl World {
             host,
             transform: ComponentType(0),
             used_item: ComponentType(0),
+            label: None,
         };
         world.transform = world.component_type(load, "keen::ecs::CurrentTransform")?;
         world.used_item = world.component_type(load, "keen::ecs::UsedItem")?;
+        world.label = world
+            .component_type(load, "keen::ecs::CustomPlayerString")
+            .ok();
         Ok(world)
     }
 
@@ -204,6 +209,28 @@ impl World {
         let data = self.component(entity, self.used_item)?.cast::<u32>();
         // SAFETY: UsedItem is the item id alone.
         Some(unsafe { data.read_unaligned() })
+    }
+
+    /// Whether `entity` carries a name a player or [`World::set_label`] gave
+    /// it; `None` when the world cannot tell.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_loader_api::ecs::Entity;
+    ///
+    /// fn unnamed(world: &enshwick_loader_api::world::World, chest: Entity) -> bool {
+    ///     world.has_label(chest) == Some(false)
+    /// }
+    /// ```
+    #[must_use]
+    pub fn has_label(&self, entity: Entity) -> Option<bool> {
+        let label = self.label?;
+        let Some(data) = self.component(entity, label) else {
+            return Some(false);
+        };
+        // SAFETY: a live CustomPlayerString is its string id; 0 for none.
+        Some(unsafe { data.cast::<u64>().read_unaligned() } != 0)
     }
 
     /// `entity`'s template GUID, in file order.

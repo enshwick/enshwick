@@ -13,7 +13,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, LazyLock};
 
 use arc_swap::ArcSwap;
-use enshwick_loader_api::ecs::{Components, Ecs, Entity, Worlds};
+use enshwick_loader_api::ecs::Entity;
+use enshwick_loader_api::interactions::{Interaction, Kind};
 
 /// A position in half-metre cells.
 pub type Cell = (i64, i64, i64);
@@ -199,23 +200,6 @@ pub struct Access {
 /// The one set of snapshots.
 pub static ACCESS: LazyLock<Access> = LazyLock::new(Access::new);
 
-/// Component hashes and reads the checks use.
-#[derive(Clone, Copy, Debug)]
-pub struct Reads {
-    /// The current row's entity: the acting player.
-    pub ecs: Ecs,
-    /// Component reads inside systems.
-    pub components: Components,
-    /// Tells the server's world from a hosting client's own.
-    pub worlds: Worlds,
-    /// The `UsedItem` component's hash.
-    pub used_item: u32,
-    /// The `CurrentTransform` component's hash.
-    pub transform: u32,
-    /// The Safe item's id.
-    pub safe_item: u32,
-}
-
 impl Access {
     /// No Safes, no players; administrators may open.
     #[must_use]
@@ -241,28 +225,25 @@ impl Access {
     }
 
     /// The owner of `chest` and the cell it is kept at, when it is a Safe
-    /// with a known owner, learning it on first sight.
-    ///
-    /// # Safety
-    ///
-    /// `ctx` is the live context of the hooked system, used on its thread.
+    /// with a known owner, learning it on first sight from the item it was
+    /// placed from and where it stands.
     #[must_use]
-    pub unsafe fn owner(&self, reads: &Reads, ctx: *mut u64, chest: Entity) -> Option<(u64, Cell)> {
+    pub fn owner(
+        &self,
+        chest: Entity,
+        item: Option<u32>,
+        position: Option<[f64; 3]>,
+    ) -> Option<(u64, Cell)> {
         if chest.is_none() {
             return None;
         }
         if let Some(&known) = self.safes.load().get(&chest.0) {
             return Some(known);
         }
-        // SAFETY: forwarded from the caller.
-        let item = unsafe { reads.components.component(ctx, chest, reads.used_item) }?;
-        // SAFETY: UsedItem is the item id alone.
-        if unsafe { item.cast::<u32>().read_unaligned() } != reads.safe_item {
+        if item? != crate::content::SAFE.id() {
             return None;
         }
-        // SAFETY: as above.
-        let transform = unsafe { reads.components.component(ctx, chest, reads.transform) }?;
-        let found = self.seen(chest.0, cell(position(transform)));
+        let found = self.seen(chest.0, cell(position?));
         if found.is_none() {
             enshwick_loader_api::warn_every!(
                 std::time::Duration::from_secs(60),
@@ -284,24 +265,12 @@ impl Access {
         Some(found)
     }
 
-    /// Whether `player` may do `action` with `chest`: true for anything but a
-    /// Safe they may not.
-    ///
-    /// # Safety
-    ///
-    /// As for [`Access::owner`].
+    /// Whether the interaction's player may do `action` with its target:
+    /// true for anything but a Safe they may not.
     #[must_use]
-    pub unsafe fn allowed(
-        &self,
-        reads: &Reads,
-        ctx: *mut u64,
-        chest: Entity,
-        player: Entity,
-        action: Action,
-    ) -> bool {
-        // SAFETY: forwarded from the caller.
-        match unsafe { self.owner(reads, ctx, chest) } {
-            Some((owner, at)) => self.may(owner, at, player, action),
+    pub fn allowed(&self, interaction: &Interaction, action: Action) -> bool {
+        match self.owner(interaction.target, interaction.item, interaction.position) {
+            Some((owner, at)) => self.may(owner, at, interaction.player, action),
             None => true,
         }
     }
@@ -373,16 +342,26 @@ impl Access {
     }
 }
 
+/// The platform's question about an interaction: a Safe is refused to
+/// everyone but its owner and the players they allowed, who never dismantle
+/// it; nobody upgrades a Safe, which would turn it into an ordinary chest;
+/// base stock leaves out the Safes this session has seen refused.
+#[must_use]
+pub fn filter(interaction: &Interaction) -> bool {
+    match interaction.kind {
+        Kind::Stock => !ACCESS.refused_seen(interaction.target.0, interaction.player),
+        Kind::Upgrade => ACCESS
+            .owner(interaction.target, interaction.item, interaction.position)
+            .is_none(),
+        Kind::Dismantle => ACCESS.allowed(interaction, Action::Remove),
+        _ => ACCESS.allowed(interaction, Action::Use),
+    }
+}
+
 impl Default for Access {
     fn default() -> Self {
         Self::new()
     }
-}
-
-/// A transform's position: x, y and z in 32.32 fixed point first.
-fn position(transform: *mut u8) -> [f64; 3] {
-    // SAFETY: a live CurrentTransform.
-    unsafe { enshwick_loader_api::ecs::transform_position(transform) }
 }
 
 #[cfg(test)]
@@ -483,5 +462,34 @@ mod tests {
         assert!(!access.refused_seen(500, Entity(12)));
         assert!(access.owners.load().is_empty());
         assert_eq!(access.change((0, 0, 0), |_| ()), None);
+    }
+
+    #[test]
+    fn interactions_follow_the_rules_of_a_safe() {
+        ACCESS
+            .players
+            .store(Arc::new(HashMap::from([(10, OWNER), (12, STRANGER)])));
+        let at = centre((40, 2, 40));
+        let ask = |kind, player, item: Option<u32>| {
+            filter(&Interaction {
+                kind,
+                player: Entity(player),
+                target: Entity(700),
+                item,
+                position: item.map(|_| at),
+            })
+        };
+        let safe = Some(crate::content::SAFE.id());
+        // Unknown and not seen yet: open to all.
+        assert!(ask(Kind::Open, 12, None));
+        ACCESS.placed(700, (40, 2, 40), OWNER.key, "Ann");
+        assert!(ask(Kind::Open, 10, safe));
+        assert!(!ask(Kind::Open, 12, safe));
+        assert!(!ask(Kind::Move, 12, None), "known from the session");
+        assert!(!ask(Kind::Stock, 12, None));
+        assert!(ask(Kind::Dismantle, 10, safe));
+        assert!(!ask(Kind::Upgrade, 10, safe), "nobody upgrades a Safe");
+        assert!(ACCESS.removed(700));
+        assert!(ask(Kind::Upgrade, 10, Some(1)), "another piece upgrades");
     }
 }

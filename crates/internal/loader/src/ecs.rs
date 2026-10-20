@@ -303,3 +303,126 @@ impl<const N: usize> Query<'_, N> {
         (more & 0xff != 0).then_some(&self.words)
     }
 }
+
+type TypeIndex = unsafe extern "system" fn(map: *const u8, hash: *const u32) -> *const u16;
+type ReadComponent = unsafe extern "system" fn(
+    out: *mut [usize; 2],
+    world: *const u8,
+    index: *const u16,
+    entity: u32,
+);
+type SlotRoot = unsafe extern "system" fn(
+    out: *mut [u64; 2],
+    slot: u64,
+    owner_index: u64,
+    ctx: *mut u64,
+) -> *mut [u64; 2];
+
+/// Component reads by type hash from inside a running system, and the walk
+/// from an item slot to the inventory that holds it.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct Components {
+    type_index: TypeIndex,
+    read: ReadComponent,
+    slot_root: SlotRoot,
+    entity_world: usize,
+    registry_maps: [usize; 2],
+}
+
+impl Components {
+    /// The reads on this build, if the table has them all.
+    pub(crate) fn resolve(loader: &Loader) -> Option<Self> {
+        let function = |name: &str| {
+            loader
+                .build
+                .symbol(name)
+                .and_then(|rva| usize::try_from(loader.base + rva).ok())
+        };
+        let size = |name: &str| {
+            loader
+                .build
+                .constant(name)
+                .and_then(|v| usize::try_from(v).ok())
+        };
+        let (type_index, read, slot_root) = (
+            function("ecs.type_index")?,
+            function("ecs.component_read_raw")?,
+            function("ecs.slot_root")?,
+        );
+        Some(Self {
+            // SAFETY: each symbol is the game function with this signature
+            // on this build.
+            type_index: unsafe { core::mem::transmute::<usize, TypeIndex>(type_index) },
+            // SAFETY: as above.
+            read: unsafe { core::mem::transmute::<usize, ReadComponent>(read) },
+            // SAFETY: as above.
+            slot_root: unsafe { core::mem::transmute::<usize, SlotRoot>(slot_root) },
+            entity_world: size("ecs.context_entity_world")?,
+            registry_maps: [
+                size("ecs.registry_type_map")?,
+                size("ecs.registry_type_map_fallback")?,
+            ],
+        })
+    }
+
+    /// `entity`'s component of type `hash`, or `None` when it has none.
+    ///
+    /// # Safety
+    ///
+    /// `ctx` is the live context of a running system, used on its thread.
+    pub(crate) unsafe fn component(
+        &self,
+        ctx: *mut u64,
+        entity: u32,
+        hash: u32,
+    ) -> Option<*mut u8> {
+        if ctx.is_null() || entity == 0 {
+            return None;
+        }
+        // SAFETY: the first word of a context is its query descriptor, which
+        // points at the entity world.
+        let descriptor: *const u8 = unsafe { read_at(ctx.cast(), 0) };
+        if descriptor.is_null() {
+            return None;
+        }
+        // SAFETY: as above.
+        let world: *const u8 = unsafe { read_at(descriptor, self.entity_world) };
+        if world.is_null() {
+            return None;
+        }
+        // SAFETY: the entity world starts with its component registry.
+        let registry: *const u8 = unsafe { read_at(world, 0) };
+        let index = self.registry_maps.iter().find_map(|&map| {
+            // SAFETY: the registry's type maps; lookups do not change them.
+            let index = unsafe { (self.type_index)(registry.wrapping_add(map), &raw const hash) };
+            (!index.is_null()).then_some(index)
+        })?;
+        let mut out = [0usize; 2];
+        // SAFETY: a read with no side effects, from inside a running system.
+        unsafe { (self.read)(&raw mut out, world, index, entity) };
+        (out[0] != 0).then(|| core::ptr::with_exposed_provenance_mut(out[0]))
+    }
+
+    /// The inventory an item slot belongs to at the root.
+    ///
+    /// # Safety
+    ///
+    /// As for [`Components::component`]; `owner_index` comes from the same
+    /// system.
+    pub(crate) unsafe fn slot_root(
+        &self,
+        ctx: *mut u64,
+        slot: u64,
+        owner_index: u64,
+    ) -> Option<u32> {
+        let mut out = [0u64; 2];
+        // SAFETY: the game's walk up `OwnerRelationship`, inside its system.
+        unsafe { (self.slot_root)(&raw mut out, slot, owner_index, ctx) };
+        #[expect(
+            clippy::cast_possible_truncation,
+            reason = "the error is the low byte, the root a u32"
+        )]
+        let (error, root) = (out[0] as u8, out[1] as u32);
+        (error == 0 && root != 0).then_some(root)
+    }
+}

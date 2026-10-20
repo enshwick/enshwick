@@ -15,7 +15,6 @@
 pub mod access;
 pub mod command;
 pub mod content;
-mod hooks;
 
 use std::collections::{HashMap, HashSet};
 use std::sync::Mutex;
@@ -25,16 +24,16 @@ use std::time::Duration;
 use enshwick_loader_api::abi::BuildingData;
 use enshwick_loader_api::abi::Side;
 use enshwick_loader_api::commands::Rename;
-use enshwick_loader_api::ecs::{Components, Ecs, Entity, Worlds};
+use enshwick_loader_api::ecs::Entity;
 use enshwick_loader_api::events::{
     BuildingPlaced, BuildingRemoved, PlayerJoined, PlayerLeft, Shutdown, WorldSaved,
 };
 use enshwick_loader_api::i18n::Language;
 use enshwick_loader_api::state::Store;
-use enshwick_loader_api::world::{ComponentType, World};
+use enshwick_loader_api::world::World;
 use enshwick_loader_api::{Load, Mod, Off};
 
-use crate::access::{ACCESS, Action, Allowed, Cell, Reads, Safe, Seen, permits};
+use crate::access::{ACCESS, Action, Allowed, Cell, Safe, Seen, permits};
 use crate::command::Phrases;
 
 /// Safe settings.
@@ -189,72 +188,6 @@ impl Mod for Safes {
             join = true,
             updates: github("themaiby/enshwick", "enshwick-safes"),
             signed_by: ["RWTjqgtfpy3lSOLC4uaUXuvvKSLQKOFf6nUnEytoiFjSzxMEhLnoAdJF"],
-            builds: [
-                {
-                    side: SERVER,
-                    guid: "1c129660cd6efc4f9f0b21652d5ff2bf",
-                    age: 387,
-                    symbols: [
-                        "safes.offer_test" => 0x9_e270,
-                        "safes.transfer" => 0x19_81f0,
-                        "safes.sort" => 0x19_8cf0,
-                        "safes.base_stock" => 0x20_1800,
-                        "safes.dismantle_method" => 0x9_67f0,
-                        "safes.inventory_actions" => 0x19_f540,
-                    ],
-                    constants: [
-                        "safes.state_input" => 0x10,
-                        "safes.state_owner_index" => 0x178,
-                        "safes.transfer_source" => 0x0c,
-                        "safes.transfer_target" => 0x10,
-                        "safes.transfer_source_slot" => 0x14,
-                        "safes.transfer_target_slot" => 0x1c,
-                        "safes.sort_target" => 0x74,
-                        "safes.object_id" => 0x10,
-                        "safes.object_kind" => 0x18,
-                        "safes.deposit_target" => 0x100,
-                        "safes.deposit_version" => 0x108,
-                        "safes.consumed_deposit" => 0x48,
-                        "safes.upgrade_target" => 0x10c,
-                        "safes.upgrade_version" => 0x144,
-                        "safes.consumed_upgrade" => 0x4c,
-                    ],
-                },
-                {
-                    // The built-in server's twins. The client's cursor context
-                    // is 0x10 larger, but the dismantle hook reads only the
-                    // object and the context's first word, which hold.
-                    side: CLIENT,
-                    guid: "69f0e9573b32c24a8838d3fff550824c",
-                    age: 410,
-                    symbols: [
-                        "safes.offer_test" => 0x2a_0850,
-                        "safes.transfer" => 0x3f_62e0,
-                        "safes.sort" => 0x3f_6de0,
-                        "safes.base_stock" => 0x46_82e0,
-                        "safes.base_stock_ui_return" => 0x2b_884b,
-                        "safes.dismantle_method" => 0x28_a170,
-                        "safes.inventory_actions" => 0x3f_d610,
-                    ],
-                    constants: [
-                        "safes.state_input" => 0x10,
-                        "safes.state_owner_index" => 0x178,
-                        "safes.transfer_source" => 0x0c,
-                        "safes.transfer_target" => 0x10,
-                        "safes.transfer_source_slot" => 0x14,
-                        "safes.transfer_target_slot" => 0x1c,
-                        "safes.sort_target" => 0x74,
-                        "safes.object_id" => 0x10,
-                        "safes.object_kind" => 0x18,
-                        "safes.deposit_target" => 0x100,
-                        "safes.deposit_version" => 0x108,
-                        "safes.consumed_deposit" => 0x48,
-                        "safes.upgrade_target" => 0x10c,
-                        "safes.upgrade_version" => 0x144,
-                        "safes.consumed_upgrade" => 0x4c,
-                    ],
-                },
-            ],
         )
     }
 
@@ -291,55 +224,13 @@ impl Mod for Safes {
 fn guard(load: &mut Load<'_>, phrases: &'static Phrases) -> Result<(), Off> {
     let world = load.world()?;
     let client = load.host().build().side == Side::CLIENT;
-    let reads = Reads {
-        ecs: Ecs::resolve(load)?,
-        components: Components::resolve(load)?,
-        worlds: Worlds::resolve(load)?,
-        used_item: world.component_type(load, "keen::ecs::UsedItem")?.hash(),
-        transform: world
-            .component_type(load, "keen::ecs::CurrentTransform")?
-            .hash(),
-        safe_item: content::SAFE.id(),
-    };
-    let constant = |name: &str| {
-        load.constant(name)
-            .map(|v| usize::try_from(v).unwrap_or(usize::MAX))
-    };
-    let layout = hooks::Layout {
-        state_input: constant("safes.state_input")?,
-        state_owner_index: constant("safes.state_owner_index")?,
-        transfer_source: constant("safes.transfer_source")?,
-        transfer_target: constant("safes.transfer_target")?,
-        transfer_source_slot: constant("safes.transfer_source_slot")?,
-        transfer_target_slot: constant("safes.transfer_target_slot")?,
-        sort_target: constant("safes.sort_target")?,
-        object_id: constant("safes.object_id")?,
-        object_kind: constant("safes.object_kind")?,
-        deposit_target: constant("safes.deposit_target")?,
-        deposit_version: constant("safes.deposit_version")?,
-        consumed_deposit: constant("safes.consumed_deposit")?,
-        upgrade_target: constant("safes.upgrade_target")?,
-        upgrade_version: constant("safes.upgrade_version")?,
-        consumed_upgrade: constant("safes.consumed_upgrade")?,
-        // The client's own interface asks for base stock directly from here.
-        stock_ui_return: if client {
-            load.symbol("safes.base_stock_ui_return")?
-        } else {
-            0
-        },
-        player_input: world.component_type(load, "keen::ecs::PlayerInput")?.hash(),
-        consumed_input: world
-            .component_type(load, "keen::ecs::ServerConsumedPlayerInput")?
-            .hash(),
-    };
-
     let store: &'static Store<Owners> =
         Box::leak(Box::new(Store::new(&load.data_dir()?, "owners")));
     let owners = store.load()?.into_map();
     enshwick_loader_api::info!("{} Safe owners loaded", owners.len());
     ACCESS.load_owners(owners);
 
-    hooks::link(load, reads, layout)?;
+    load.on_interaction(access::filter)?;
     track_players(load, world)?;
     load.on::<BuildingPlaced>(move |placed| {
         if placed.item == content::SAFE.id() {
@@ -445,7 +336,6 @@ fn label_seen(
     phrases: &'static Phrases,
     store: &'static Store<Owners>,
 ) -> Result<(), Off> {
-    let label_type: ComponentType = world.component_type(load, "keen::ecs::CustomPlayerString")?;
     let mut done: HashSet<u32> = HashSet::new();
     load.scheduler()?.every(Duration::from_secs(2), move || {
         let safes = ACCESS.safes.load();
@@ -454,10 +344,7 @@ fn label_seen(
             if done.contains(&entity) {
                 continue;
             }
-            let named = world
-                .component(Entity(entity), label_type)
-                // SAFETY: a live CustomPlayerString is its string id.
-                .is_some_and(|id| unsafe { id.cast::<u64>().read_unaligned() } != 0);
+            let named = world.has_label(Entity(entity)) == Some(true);
             if named {
                 done.insert(entity);
                 continue;

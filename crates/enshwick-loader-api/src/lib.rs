@@ -79,6 +79,7 @@ pub mod events;
 mod hook;
 mod host;
 pub mod i18n;
+pub mod interactions;
 pub mod inventory;
 mod load;
 pub mod loot;

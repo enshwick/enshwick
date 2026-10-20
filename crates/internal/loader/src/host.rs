@@ -448,6 +448,7 @@ pub(crate) static API: HostApi = HostApi {
     summon_filter,
     summon_item,
     survivor_status,
+    interaction_filter,
 };
 
 /// A static slice from a pointer and a count, empty for a null pointer.
@@ -1369,6 +1370,17 @@ extern "system" fn survivor_status(
 ) -> Status {
     match caller_index(me) {
         Some((loader, index)) => crate::survivors::register_status(loader, index, callback, user),
+        None => Status::BAD_ARGS,
+    }
+}
+
+extern "system" fn interaction_filter(
+    me: ModHandle,
+    callback: api_frame::InteractionFn,
+    user: *mut core::ffi::c_void,
+) -> Status {
+    match caller_index(me) {
+        Some((loader, index)) => crate::interactions::register(loader, index, callback, user),
         None => Status::BAD_ARGS,
     }
 }
