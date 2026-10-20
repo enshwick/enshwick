@@ -11,6 +11,10 @@
 //! [`Ui::dialog`] queues a dialog in the game's own style, from any thread;
 //! [`Ui::ask`] waits for the answer on a thread of the mod's own.
 //!
+//! [`Load::on_hud`] draws lines and bars on the HUD each frame, at an
+//! [`Anchor`], hidden with the game's HUD; [`Ui::set_markers`] shows the
+//! mod's markers on the map until it sets others.
+//!
 //! Everything here is client only: [`Load::ui`] and [`Load::on_frame`] turn
 //! a mod's server part away with [`Off`].
 //!
@@ -45,6 +49,12 @@ use std::sync::Mutex;
 
 use crate::abi::{Header, HostApi, Status, Str, UiDialog, UiFrame, UiWidget};
 use crate::{Host, Load, Off};
+
+mod hud;
+mod map;
+
+pub use hud::{Anchor, Hud};
+pub use map::{MAX_MARKERS, Marker, MarkerColor};
 
 /// The most options a [`Dropdown`] shows.
 pub const MAX_OPTIONS: usize = 64;

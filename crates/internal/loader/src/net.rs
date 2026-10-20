@@ -344,15 +344,28 @@ pub(crate) fn item_data(key: u64, records: &[u8]) {
 }
 
 /// Tells the client of the player with account key `key` to open the
-/// interface demo.
-pub(crate) fn ui_demo(key: u64) -> Result<(), Status> {
+/// interface demo, with where the player stands.
+pub(crate) fn ui_demo(key: u64, at: Option<[i64; 3]>) -> Result<(), Status> {
     if !ready(key) {
         return Err(Status::MISSING);
     }
-    for line in frames(CONTROL, 0, &control(UI_DEMO)) {
+    let mut data = control(UI_DEMO);
+    for axis in at.iter().flatten() {
+        data.extend_from_slice(&axis.to_le_bytes());
+    }
+    for line in frames(CONTROL, 0, &data) {
         crate::chat::send(key, &line);
     }
     Ok(())
+}
+
+/// The position a demo frame carries: three little-endian `i64`.
+fn demo_position(bytes: &[u8]) -> Option<[i64; 3]> {
+    let (axes, _) = bytes.as_chunks::<8>();
+    match axes {
+        [x, y, z, ..] => Some([x, y, z].map(|a| i64::from_le_bytes(*a))),
+        _ => None,
+    }
 }
 
 /// Takes a frame line a client sent, on the server's game thread: `args` is
@@ -418,8 +431,8 @@ pub(crate) fn client_received(text: &str) -> bool {
             && let Ok(text) = core::str::from_utf8(text)
         {
             crate::notices::queue(u32::from_le_bytes(*entity), text);
-        } else if frame.part == control(UI_DEMO) {
-            crate::ui::open_demo();
+        } else if let Some(rest) = frame.part.strip_prefix(control(UI_DEMO).as_slice()) {
+            crate::ui::open_demo(demo_position(rest));
         }
         return true;
     }
@@ -586,6 +599,17 @@ fn dropped() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_demo_frame_carries_a_position_or_none() {
+        let mut data = Vec::new();
+        for axis in [1i64 << 32, -5, 7] {
+            data.extend_from_slice(&axis.to_le_bytes());
+        }
+        assert_eq!(demo_position(&data), Some([1 << 32, -5, 7]));
+        assert_eq!(demo_position(&data[..16]), None);
+        assert_eq!(demo_position(&[]), None);
+    }
 
     #[test]
     fn a_message_goes_out_in_frames_and_comes_back_whole() {

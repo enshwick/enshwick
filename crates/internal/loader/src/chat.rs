@@ -564,7 +564,7 @@ fn builtin(loader: &Loader, args: &str, player: &PlayerInfo) -> String {
         return crate::status::summary(loader).short();
     }
     if args.eq_ignore_ascii_case("ui-demo") {
-        return ui_demo(player);
+        return ui_demo(loader, player);
     }
     let commands = COMMANDS.lock().unwrap_or_else(PoisonError::into_inner);
     if args.eq_ignore_ascii_case("help") {
@@ -703,14 +703,17 @@ fn about(record: &crate::host::ModRecord) -> String {
 
 /// `/enshwick ui-demo`: opens the interface demo on the administrator's
 /// own client.
-fn ui_demo(player: &PlayerInfo) -> String {
+fn ui_demo(loader: &Loader, player: &PlayerInfo) -> String {
     if player.permissions & PlayerInfo::CAN_KICK_BAN == 0 {
         return "Only administrators open the interface demo.".to_owned();
     }
     if player.key == 0 {
         return "The interface demo opens on a player's client.".to_owned();
     }
-    match crate::net::ui_demo(player.key) {
+    match crate::net::ui_demo(
+        player.key,
+        crate::world::fixed_position(loader, player.entity),
+    ) {
         Ok(()) => "Opening the interface demo.".to_owned(),
         Err(_) => "Your client does not run Enshwick, or has not answered yet.".to_owned(),
     }

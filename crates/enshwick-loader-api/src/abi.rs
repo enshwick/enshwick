@@ -14,7 +14,7 @@ use core::sync::atomic::AtomicUsize;
 pub const ABI_MAJOR: u16 = 1;
 
 /// The minor version of this interface. A newer minor only appends fields.
-pub const ABI_MINOR: u16 = 39;
+pub const ABI_MINOR: u16 = 40;
 
 /// Whether `id` is a valid mod id: 1 to 64 characters of `[a-z0-9-]`.
 ///
@@ -3219,6 +3219,11 @@ pub struct UiWidget {
     pub max: f32,
     /// Out: 1 when a button was clicked or a value changed this frame.
     pub result: u32,
+    /// Where a HUD widget shows: [`UiWidget::TOP_LEFT`] to
+    /// [`UiWidget::BOTTOM_RIGHT`]; read in a HUD callback only.
+    pub anchor: u32,
+    /// Zero.
+    pub reserved: u32,
 }
 
 impl UiWidget {
@@ -3295,7 +3300,74 @@ impl UiWidget {
         min: 0.0,
         max: 0.0,
         result: 0,
+        anchor: 0,
+        reserved: 0,
     };
+
+    /// The HUD's top left corner.
+    pub const TOP_LEFT: u32 = 0;
+    /// The HUD's top edge, centred.
+    pub const TOP_CENTER: u32 = 1;
+    /// The HUD's top right corner.
+    pub const TOP_RIGHT: u32 = 2;
+    /// The HUD's bottom left corner.
+    pub const BOTTOM_LEFT: u32 = 3;
+    /// The HUD's bottom edge, centred.
+    pub const BOTTOM_CENTER: u32 = 4;
+    /// The HUD's bottom right corner.
+    pub const BOTTOM_RIGHT: u32 = 5;
+}
+
+/// A marker on the client's map, one of the set [`HostApi::ui_markers`]
+/// hands over.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::abi::{Header, Str, UiMarker};
+///
+/// let marker = UiMarker {
+///     header: Header::of::<UiMarker>(),
+///     position: [100 << 32, 40 << 32, -(20 << 32)],
+///     label: Str::new("Safe of Bob"),
+///     color: UiMarker::GREEN,
+///     reserved: 0,
+/// };
+/// assert_eq!(marker.color, 2);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct UiMarker {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// Where, in 32.32 fixed-point metres, y up.
+    pub position: [i64; 3],
+    /// The label the map shows beside the icon.
+    pub label: Str,
+    /// The colour, one of the game's custom marker colours,
+    /// [`UiMarker::WHITE`] to [`UiMarker::BLACK`].
+    pub color: u32,
+    /// Zero.
+    pub reserved: u32,
+}
+
+impl UiMarker {
+    /// White.
+    pub const WHITE: u32 = 0;
+    /// Red.
+    pub const RED: u32 = 1;
+    /// Green.
+    pub const GREEN: u32 = 2;
+    /// Blue.
+    pub const BLUE: u32 = 3;
+    /// Yellow.
+    pub const YELLOW: u32 = 4;
+    /// Purple.
+    pub const PURPLE: u32 = 5;
+    /// Turquoise.
+    pub const TURQUOISE: u32 = 6;
+    /// Black.
+    pub const BLACK: u32 = 7;
 }
 
 /// A dialog in the game's own style, queued with [`HostApi::ui_dialog`].
@@ -4033,6 +4105,18 @@ pub struct HostApi {
         callback: UiAnswerFn,
         user: *mut c_void,
     ) -> Status,
+    /// Calls `callback` with `user` once per frame while the game draws its
+    /// HUD in game, hidden with it; the callback draws labels and bars with
+    /// [`HostApi::ui_widget`] at their `anchor`. Client only
+    /// ([`Status::MISSING`] on a server). Allowed during
+    /// `enshwick_mod_init` only. Since minor 40.
+    pub ui_hud: extern "system" fn(me: ModHandle, callback: UiFrameFn, user: *mut c_void) -> Status,
+    /// Replaces the mod's markers on the client's map with the `count` at
+    /// `markers`, copied; none clears them. Any thread. Client only
+    /// ([`Status::MISSING`] on a server); [`Status::BAD_ARGS`] past 256
+    /// markers. Since minor 40.
+    pub ui_markers:
+        extern "system" fn(me: ModHandle, markers: *const UiMarker, count: u32) -> Status,
 }
 
 /// The exports a mod DLL provides, by name.
@@ -4094,7 +4178,7 @@ const _: () = {
     assert!(core::mem::offset_of!(HostApi, hook_at) == 24 + 35 * 8);
     assert!(core::mem::offset_of!(HostApi, inventory_open) == 24 + 36 * 8);
     assert!(core::mem::offset_of!(HostApi, inventory_submit) == 24 + 38 * 8);
-    assert!(size_of::<HostApi>() == 24 + 100 * 8);
+    assert!(size_of::<HostApi>() == 24 + 102 * 8);
     assert!(core::mem::offset_of!(HostApi, config_schema) == 24 + 92 * 8);
     assert!(core::mem::offset_of!(HostApi, time_of_day) == 24 + 73 * 8);
     assert!(core::mem::offset_of!(HostApi, set_time_speed) == 24 + 76 * 8);
@@ -4159,7 +4243,8 @@ const _: () = {
     assert!(core::mem::offset_of!(HostApi, notify) == 24 + 72 * 8);
     assert!(core::mem::offset_of!(HostApi, ui_dialog) == 24 + 99 * 8);
     assert!(size_of::<UiFrame>() == 24);
-    assert!(size_of::<UiWidget>() == 8 + 16 + 32 + 8 + 24);
+    assert!(size_of::<UiWidget>() == 8 + 16 + 32 + 8 + 32);
+    assert!(size_of::<UiMarker>() == 8 + 24 + 16 + 8);
     assert!(size_of::<UiDialog>() == 8 + 48 + 8);
     assert!(size_of::<GameEventData>() == 24);
     // Frozen: written as an array.

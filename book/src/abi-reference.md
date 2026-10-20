@@ -12,7 +12,7 @@ raw table. The exact types and signatures are in the
 | Constant                                                                                            | Value | Meaning                                         |
 | --------------------------------------------------------------------------------------------------- | ----- | ----------------------------------------------- |
 | [`ABI_MAJOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 1     | A loader refuses a mod built for another major. |
-| [`ABI_MINOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 39    | A newer minor only appends.                     |
+| [`ABI_MINOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 40    | A newer minor only appends.                     |
 
 The ABI version is apart from Enshwick Loader's version (such as 0.2.0, see
 [Releasing and updates](releasing.md#versions)): a platform release raises
@@ -268,6 +268,8 @@ marked "init only" are allowed during `enshwick_mod_init` only.
 | `ui_frame`            | Calls a callback each frame of the client's interface; init only                                | 39          |
 | `ui_widget`           | Draws a window, label, button, row, bar or sound in the mod's frame callback                    | 39          |
 | `ui_dialog`           | Queues a dialog in the game's style, answered on the thread that draws                          | 39          |
+| `ui_hud`              | Calls a callback each frame the game draws its HUD; init only                                   | 40          |
+| `ui_markers`          | Replaces the mod's markers on the client's map; any thread                                      | 40          |
 
 ## Under an older loader
 
@@ -321,6 +323,7 @@ the mod off with a reason, which the mod's log shows as `off: <reason>`:
 | 37          | `Summon` item and meter         | `Entity::NONE` and `None`                                 |
 | 38          | `Load::item_data`               | Off: `item data: needs a newer loader`                    |
 | 39          | `Load::ui`, `Load::on_frame`    | Off: `the interface: needs a newer loader`                |
+| 40          | `Load::on_hud`, markers         | Off, or `UiError::Unavailable`                            |
 
 A mod that can do without a feature catches the `Off` and goes on without it
 instead of returning it from `init`.
