@@ -1,0 +1,21 @@
+[package]
+name = "enshwick-test"
+version = "0.1.0"
+description = "A fake Enshwick loader for unit tests of Enshrouded mods"
+keywords = ["enshrouded", "modding", "testing", "fake"]
+categories = ["game-development", "development-tools::testing"]
+readme = "README.md"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+enshwick-api.workspace = true
+
+[dev-dependencies]
+serde = { workspace = true, features = ["derive"] }
+
+[lints]
+workspace = true

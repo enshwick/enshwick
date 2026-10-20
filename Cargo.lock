@@ -121,6 +121,7 @@ name = "enshwick-api"
 version = "0.1.4"
 dependencies = [
  "enshwick-macros",
+ "enshwick-test",
  "serde",
  "thiserror",
  "toml",
@@ -229,6 +230,14 @@ dependencies = [
  "enshwick-geometry",
  "serde",
  "toml",
+]
+
+[[package]]
+name = "enshwick-test"
+version = "0.1.0"
+dependencies = [
+ "enshwick-api",
+ "serde",
 ]
 
 [[package]]

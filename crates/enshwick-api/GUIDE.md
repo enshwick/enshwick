@@ -253,8 +253,8 @@ mod that asks for it.
 
 ## Hooks
 
-`detour!` declares a link: a static `Hook` and an entry point that catches
-panics. `load.hook(&HOOK, address)` puts it into the chain of that function.
+`detour!` (or `#[hook]`, below) declares a link: a static `Hook` and an entry
+point that catches panics. `load.hook(&HOOK, address)` puts it into the chain of that function.
 
 - The body receives a `Next` and the function's arguments. Call
   `next.get()(args)` to continue to the next link or the original; skip it to
@@ -271,6 +271,45 @@ panics. `load.hook(&HOOK, address)` puts it into the chain of that function.
 - A panic in a body is caught: the mod reports a fault, the loader unlinks every
   link of that mod by rewiring slots, and the call continues to the rest of the
   chain. The game never crashes for it.
+
+`#[hook]` writes the same declaration from the body, naming the static after the
+function in upper case:
+
+```rust
+use enshwick_api::{Next, abi::HookFlags, hook};
+
+#[hook(priority = 5, flags = HookFlags::EXCLUSIVE)]
+fn upgrade(next: Next<unsafe extern "system" fn(*mut u64)>, ctx: *mut u64) {
+    // SAFETY: the original takes the same context.
+    unsafe { next.get()(ctx) }
+}
+
+// in init: load.hook(&UPGRADE, load.system("upgrade_building_range")?)?;
+```
+
+## Testing a mod
+
+[`enshwick-test`](../enshwick-test) is a fake loader for unit tests. Configure
+what the game would answer, start the mod through its exports, then look at
+what it did:
+
+```rust
+let loader = enshwick_test::FakeHost::new()
+    .symbol("building.max_altars", enshwick_test::address(vanilla as extern "system" fn(u64, u32) -> u8))
+    .settings("altars = 16\n")
+    .install();
+// SAFETY: the exports of `declare_mod!`.
+assert_eq!(unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) }, Status::OK);
+let max_altars = loader.detour(&MAX_ALTARS).unwrap();
+assert_eq!(max_altars(0, 3), 16);
+```
+
+A hook's chain continues to its target, so a target set to `address` of a plain
+function stands in for the game's. `logs()`, `faults()`, `hooks()`, `texts()`
+and `resources()` show what the mod asked for; `raise::<events::Tick>(&data)`
+raises an event, and `set_settings` with `SettingsChanged` plays a player's
+edit. A mod initialises once per process, so write one test per mod life and run
+them with `cargo nextest`, which gives each test its own process.
 
 ## Working inside a system
 
