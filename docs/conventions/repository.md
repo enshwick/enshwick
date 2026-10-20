@@ -97,14 +97,15 @@ runs them before and after. Pure logic also runs under Miri in CI.
 Work follows git flow, and every change reaches a shared branch through a pull
 request; nothing is pushed to `develop` or `master` directly.
 
-| Branch           | From      | Into                | Holds                                                        |
-| ---------------- | --------- | ------------------- | ------------------------------------------------------------ |
-| `master`         |           |                     | released code; every commit on it is released or about to be |
-| `develop`        |           |                     | the next release; the default branch                         |
-| `feature/<slug>` | `develop` | `develop`           | a feature                                                    |
-| `fix/<slug>`     | `develop` | `develop`           | a fix for unreleased or released code                        |
-| `chore/<slug>`   | `develop` | `develop`           | docs, CI, build, refactoring, tests                          |
-| `hotfix/<slug>`  | `master`  | `master`, `develop` | an urgent fix for a release                                  |
+| Branch              | From      | Into                | Holds                                                        |
+| ------------------- | --------- | ------------------- | ------------------------------------------------------------ |
+| `master`            |           |                     | released code; every commit on it is released or about to be |
+| `develop`           |           |                     | the next release; the default branch                         |
+| `feature/<slug>`    | `develop` | `develop`           | a feature                                                    |
+| `fix/<slug>`        | `develop` | `develop`           | a fix for unreleased or released code                        |
+| `chore/<slug>`      | `develop` | `develop`           | docs, CI, build, refactoring, tests                          |
+| `release/<version>` | `develop` | `master`, `develop` | a release: `master` merged in, then into `master`            |
+| `hotfix/<slug>`     | `master`  | `master`, `develop` | an urgent fix for a release                                  |
 
 - Both shared branches are protected for everyone, administrators included: a
   pull request with every CI check green on a branch up to date with its base,
@@ -115,11 +116,11 @@ request; nothing is pushed to `develop` or `master` directly.
   so it is a conventional commit, `<type>(<scope>): <subject>`, checked by CI;
   its description says what changes and how it was tested. One pull request is
   one coherent change.
-- A release is a pull request from `develop` into `master`, merged with a merge
-  commit, as git flow does, so each conventional commit reaches release-please
-  and the merge is signed. `master` alone allows merge commits; `develop` stays
-  linear. After a release, `master` is merged back into `develop` by pull
-  request.
+- A release is a `release/<version>` branch from `develop` with `master` merged
+  into it by a signed merge commit, then a pull request into `master` merged
+  with a merge commit, as git flow does, so each conventional commit reaches
+  release-please. `master` alone allows merge commits; `develop` stays linear
+  and gets the release back by a squashed pull request.
 - Commits on a branch follow the same form, checked by the `commit-msg` hook:
   the type is one of `feat`, `fix`, `perf`, `refactor`, `docs`, `test`, `build`,
   `ci`, `chore` or `revert`, the scope is the crate or mod id, or an area such
