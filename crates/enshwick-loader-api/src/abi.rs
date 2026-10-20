@@ -14,7 +14,7 @@ use core::sync::atomic::AtomicUsize;
 pub const ABI_MAJOR: u16 = 1;
 
 /// The minor version of this interface. A newer minor only appends fields.
-pub const ABI_MINOR: u16 = 41;
+pub const ABI_MINOR: u16 = 42;
 
 /// Whether `id` is a valid mod id: 1 to 64 characters of `[a-z0-9-]`.
 ///
@@ -1745,6 +1745,11 @@ impl InventoryOp {
     /// For [`InventoryOp::MOVE_ALL`]: also move the source's action bar,
     /// equipment and locked slots.
     pub const INCLUDE_SPECIAL: u32 = 1;
+    /// Replaces the stack in slot `target` with `count` new items `item`,
+    /// each with its own entity, given to the inventory in `other`'s low
+    /// half and asked for the same slot; `other`'s high half holds the
+    /// `f32` fill of their meter. Since minor 42.
+    pub const RENEW: u32 = 6;
     /// For [`InventoryOp::GIVE`]: `other` holds the fill of each new item's
     /// meter, the game's own per-item fuel fill. Since minor 37.
     pub const FILLED: u32 = 2;
@@ -2214,8 +2219,17 @@ pub struct Summon {
     pub reserved: [u8; 3],
 }
 
-/// A summon filter: returns 1 to make the game take the item in the same
-/// transaction, and only when the spawn or move works.
+impl Summon {
+    /// A filter's answer: the use takes the item.
+    pub const TAKE: u8 = 1;
+    /// A filter's answer: the use is refused; nothing spawns, moves or is
+    /// taken. Since minor 42.
+    pub const REFUSE: u8 = 2;
+}
+
+/// A summon filter: returns [`Summon::TAKE`] to make the game take the
+/// item in the same transaction, and only when the spawn or move works,
+/// [`Summon::REFUSE`] to refuse the use, or 0 to leave it.
 pub type SummonFn = unsafe extern "system" fn(summon: *const Summon, user: *mut c_void) -> u8;
 
 /// The client's survivor menu merging the statuses of every entity of one

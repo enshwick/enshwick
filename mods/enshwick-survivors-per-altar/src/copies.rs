@@ -37,6 +37,28 @@ impl Zone {
     }
 }
 
+/// What a copy staff's use does.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum CopyStaff {
+    /// Places a new copy: the altar has none.
+    Place,
+    /// Moves the altar's copy to the target, free.
+    Move(Entity),
+    /// Refused, nothing spent.
+    Refuse(Refusal),
+}
+
+/// Why a copy staff's use is refused.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Refusal {
+    /// The target lies outside every altar zone.
+    OutsideZones,
+    /// The original stands at the target's altar.
+    OriginalThere,
+    /// The survivor has as many entities as there are altars.
+    Full,
+}
+
 /// What to do with an entity the uniqueness pass sees.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Verdict {
@@ -97,6 +119,35 @@ impl Copies {
         match self.altar_at(target) {
             Some(altar) => self.slots.get(&(survivor, altar)).copied(),
             None => (original != 0).then_some(original),
+        }
+    }
+
+    /// What a copy staff of `survivor` used at `target` does; `original` is
+    /// the entity the game's own record names, 0 when unknown.
+    pub(crate) fn copy_staff(
+        &self,
+        survivor: Survivor,
+        target: [i64; 3],
+        original: Entity,
+    ) -> CopyStaff {
+        let Some(altar) = self.altar_at(target) else {
+            return CopyStaff::Refuse(Refusal::OutsideZones);
+        };
+        let original_home = self
+            .homes
+            .get(&original)
+            .filter(|_| original != 0)
+            .and_then(|(_, home)| self.altar_at(*home));
+        if original_home == Some(altar) {
+            return CopyStaff::Refuse(Refusal::OriginalThere);
+        }
+        match self.slots.get(&(survivor, altar)) {
+            Some(&e) if e == original => CopyStaff::Refuse(Refusal::OriginalThere),
+            Some(&e) => CopyStaff::Move(e),
+            None if self.copy_count(survivor) >= self.altars.len() => {
+                CopyStaff::Refuse(Refusal::Full)
+            }
+            None => CopyStaff::Place,
         }
     }
 
@@ -254,6 +305,52 @@ mod tests {
         assert_eq!(copies.for_spawn(SMITH, [90, 10, 10], 10), None);
         // Outside every zone the staff moves the original, as vanilla does.
         assert_eq!(copies.for_spawn(SMITH, [500, 10, 10], 10), Some(10));
+    }
+
+    #[test]
+    fn a_copy_staff_places_moves_or_is_refused() {
+        let mut copies = Copies::default();
+        copies.set_altars([(1, zone(0)), (2, zone(80)), (3, zone(160))]);
+        copies.observe(SMITH, 10, [10, 10, 10], 10);
+        copies.observe(SMITH, 11, [90, 10, 10], 10);
+        // An altar without a copy: a new one.
+        assert_eq!(
+            copies.copy_staff(SMITH, [170, 10, 10], 10),
+            CopyStaff::Place
+        );
+        // An altar with a copy: that copy moves, free.
+        assert_eq!(
+            copies.copy_staff(SMITH, [95, 10, 10], 10),
+            CopyStaff::Move(11)
+        );
+        // Where the original stands: refused.
+        assert_eq!(
+            copies.copy_staff(SMITH, [20, 10, 10], 10),
+            CopyStaff::Refuse(Refusal::OriginalThere)
+        );
+        assert_eq!(
+            copies.copy_staff(SMITH, [900, 10, 10], 10),
+            CopyStaff::Refuse(Refusal::OutsideZones)
+        );
+        // Every altar taken counts the original: one entity per altar.
+        copies.observe(SMITH, 12, [170, 10, 10], 10);
+        assert_eq!(copies.copy_count(SMITH), 3);
+        assert_eq!(
+            copies.copy_staff(SMITH, [175, 10, 10], 10),
+            CopyStaff::Move(12)
+        );
+    }
+
+    #[test]
+    fn a_copy_staff_is_refused_once_the_survivor_has_one_per_altar() {
+        let mut copies = two_altars();
+        // The original out in the world, a copy at each altar.
+        copies.observe(SMITH, 10, [900, 10, 10], 10);
+        copies.observe(SMITH, 11, [10, 10, 10], 10);
+        assert_eq!(
+            copies.copy_staff(SMITH, [90, 10, 10], 10),
+            CopyStaff::Refuse(Refusal::Full)
+        );
     }
 
     #[test]

@@ -6,6 +6,7 @@
 //! lock: only the uniqueness pass, which files copies, writes. Altar zones
 //! are read when the altars change, never in a lookup.
 
+use std::cell::Cell;
 use std::collections::BTreeMap;
 use std::sync::{PoisonError, RwLock};
 use std::time::{Duration, Instant};
@@ -14,19 +15,49 @@ use enshwick_loader_api::abi::Side;
 use enshwick_loader_api::altars::Altars;
 use enshwick_loader_api::ecs::Entity;
 use enshwick_loader_api::events::{AltarsChanged, ShutdownStarted};
-use enshwick_loader_api::inventory::Bar;
-use enshwick_loader_api::survivors::{Answer, BedCheck, Lookup, Purpose, Summon};
+use enshwick_loader_api::inventory::{Bar, Batch, Fill, Inventories, Op, SlotRef};
+use enshwick_loader_api::survivors::{
+    Answer, BedCheck, Lookup, Purpose, Summon, SummonVerdict, WorkshopSurvivor,
+};
 use enshwick_loader_api::{Load, Off};
 
-use crate::copies::{Copies, Verdict, Zone};
+use crate::Charges;
+use crate::copies::{Copies, CopyStaff, Verdict, Zone};
 
 /// How often the uniqueness pass lets go of copies it no longer sees.
 const SWEEP: Duration = Duration::from_secs(2);
 const FORGET_AFTER: Duration = Duration::from_secs(3);
 
+/// How the staffs behave, from the settings.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Staffs {
+    /// The copy staffs' charges; `None` without copy staffs.
+    pub(crate) copy: Option<Charges>,
+    /// Whether the survivor's own staff places and moves copies, as before
+    /// copy staffs.
+    pub(crate) vanilla_places: bool,
+}
+
+/// A staff's use under way on this thread: its survivor and what the spawn
+/// lookup answers, set by the summon filter and read by the lookup and the
+/// handler after the use, all inside the game's spawn.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct Plan {
+    survivor: u32,
+    answer: Answer,
+    /// A copy staff placing a new copy, which spends a charge.
+    places: bool,
+}
+
+thread_local! {
+    static PLAN: Cell<Option<Plan>> = const { Cell::new(None) };
+}
+
 #[derive(Debug)]
 struct Shared {
     copies: Copies,
+    /// Each survivor's original, the entity the game's record names.
+    originals: BTreeMap<u32, u32>,
     /// When the uniqueness pass last saw each copy.
     seen: BTreeMap<u32, Instant>,
     swept: Instant,
@@ -36,6 +67,7 @@ impl Shared {
     fn new() -> Self {
         Self {
             copies: Copies::default(),
+            originals: BTreeMap::new(),
             seen: BTreeMap::new(),
             swept: Instant::now(),
         }
@@ -44,7 +76,7 @@ impl Shared {
 
 static SHARED: RwLock<Option<Shared>> = RwLock::new(None);
 
-pub(crate) fn link(load: &mut Load<'_>, staffs: bool) -> Result<(), Off> {
+pub(crate) fn link(load: &mut Load<'_>, staffs: Staffs) -> Result<(), Off> {
     let altars = load.altars()?;
     forget();
     load.on::<AltarsChanged>(move |()| read_altars(altars))?;
@@ -56,15 +88,25 @@ pub(crate) fn link(load: &mut Load<'_>, staffs: bool) -> Result<(), Off> {
         .unwrap_or(Answer::Vanilla)
     })?;
     load.on_survivor_bed_check(|check| read(|shared| keeps(shared, check)).unwrap_or(true))?;
-    if staffs {
-        load.on_summon(|summon| read(|shared| consumes(shared, summon)).unwrap_or(false))?;
+    load.on_summon(move |summon| {
+        PLAN.with(|plan| plan.set(None));
+        read(|shared| judge(shared, summon, staffs)).unwrap_or(SummonVerdict::Allow)
+    })?;
+    if let Some(charges) = staffs.copy {
         let (world, scheduler) = (load.world()?, load.scheduler()?);
+        let inventories = load.inventories().ok();
         load.on_summoned(move |summon| {
-            if !read(|shared| spends_charge(shared, summon)).unwrap_or(false) {
+            let placed = PLAN.with(Cell::take).is_some_and(|plan| plan.places);
+            if !placed || summon.consumed {
                 return;
             }
-            let staff = summon.pide;
-            scheduler.next_tick(move || spend(&world, staff));
+            let (staff, slot, item) = (summon.pide, summon.slot, summon.item);
+            if summon.meter.is_some() {
+                scheduler.next_tick(move || spend(&world, staff));
+            } else if let Some(inventories) = inventories {
+                // A staff from before charges: one spent of a full one.
+                scheduler.next_tick(move || renew_spent(&inventories, slot, item, charges));
+            }
         })?;
     }
     if load.host().build().side == Side::CLIENT {
@@ -135,6 +177,9 @@ fn answer_reading(shared: &Shared, lookup: &Lookup) -> Answer {
         }
         Purpose::Uniqueness { .. } => Answer::Vanilla,
         Purpose::Spawn { target } => {
+            if let Some(plan) = PLAN.with(Cell::get).filter(|p| p.survivor == npc) {
+                return plan.answer;
+            }
             if let Some(copy) = shared.copies.for_spawn(npc, target, found) {
                 return Answer::Entity(Entity(copy));
             }
@@ -185,6 +230,9 @@ fn file_copy(
     now: Instant,
 ) -> Answer {
     shared.seen.insert(me, now);
+    if found != 0 {
+        shared.originals.insert(npc, found);
+    }
     // Right after a load the zones are not known yet: keep every copy until
     // they are, or each would look like one outside the zones.
     if !shared.copies.knows_altars() {
@@ -236,62 +284,104 @@ fn spend(world: &enshwick_loader_api::world::World, staff: Entity) {
     }
 }
 
-/// The copy staff a use at an altar spends: a copy staff placing its own
-/// survivor, inside an altar zone. The staff's effect spawn, which carries
-/// the same item, is left alone, and so is a use outside every altar zone,
-/// where the copy would not stay.
-fn staff_used(shared: &Shared, summon: &Summon) -> Option<&'static crate::staffs::Staff> {
-    let staff = crate::staffs::copy_staff(summon.item)?;
-    if summon.ammo != 0
-        || staff
+/// Gives a staff from before charges, which just placed a copy, its meter:
+/// a full staff's charges less the one spent.
+fn renew_spent(inventories: &Inventories, slot: SlotRef, item: u32, charges: Charges) {
+    let Some(root) = inventories.read().root(slot) else {
+        return;
+    };
+    let renew = Op::Renew {
+        slot,
+        root,
+        item,
+        count: 1,
+        fill: Fill::of(charges.full.saturating_sub(1), charges.full),
+    };
+    inventories.submit(&Batch::new().with(renew), |outcome| {
+        enshwick_loader_api::info!("copy staff renewed after a use: {:?}", outcome.done);
+    });
+}
+
+/// Whether placing a copy takes the whole staff: its last charge. A staff
+/// from before charges, without a meter, counts as full.
+pub(crate) fn last_charge(meter: Option<Bar>, full: u16) -> bool {
+    meter.map_or(full, |charges| charges.current) <= 1
+}
+
+/// What a staff's use does, and the plan the spawn lookup and the handler
+/// after the use follow.
+fn judge(shared: &Shared, summon: &Summon, staffs: Staffs) -> SummonVerdict {
+    if summon.ammo != 0 {
+        return SummonVerdict::Allow;
+    }
+    let survivor = summon.template.id();
+    let original = shared.originals.get(&survivor).copied().unwrap_or(0);
+    if let (Some(charges), Some(staff)) = (staffs.copy, crate::staffs::copy_staff(summon.item)) {
+        // The staff's effect spawn carries the same item; only the survivor
+        // itself is planned.
+        if staff
             .survivor()
             .is_none_or(|s| summon.template != s.template())
-    {
-        return None;
-    }
-    if shared.copies.altar_at(summon.target).is_none() {
-        enshwick_loader_api::info!(
-            "copy staff of {} used outside every altar zone: kept",
-            staff.key
-        );
-        return None;
-    }
-    Some(staff)
-}
-
-/// Whether a use takes the whole staff: its last charge, or a staff from
-/// before charges, which has no meter. Any other use keeps the staff and
-/// spends a charge once it worked.
-pub(crate) fn last_charge(meter: Option<Bar>) -> bool {
-    meter.is_none_or(|charges| charges.current <= 1)
-}
-
-/// Marks a copy staff's use at an altar on its last charge as consuming, so
-/// the game takes the staff in the same transaction as the spawn or move,
-/// and only when that works.
-fn consumes(shared: &Shared, summon: &Summon) -> bool {
-    let Some(staff) = staff_used(shared, summon) else {
-        return false;
-    };
-    let last = last_charge(summon.meter);
-    enshwick_loader_api::info!(
-        "copy staff of {} used at {:?} with {:?} charges: {}",
-        staff.key,
-        summon.target,
-        summon.meter.map(|m| m.current),
-        if last {
-            "taken on success"
-        } else {
-            "a charge spent on success"
+        {
+            return SummonVerdict::Allow;
         }
-    );
-    last
-}
-
-/// Whether a use that worked spends a charge: one at an altar that kept the
-/// staff.
-fn spends_charge(shared: &Shared, summon: &Summon) -> bool {
-    !summon.consumed && summon.meter.is_some() && staff_used(shared, summon).is_some()
+        let (answer, places) = match shared.copies.copy_staff(survivor, summon.target, original) {
+            CopyStaff::Refuse(why) => {
+                enshwick_loader_api::info!(
+                    "copy staff of {} at {:?}: refused, {why:?}",
+                    staff.key,
+                    summon.target
+                );
+                return SummonVerdict::Refuse;
+            }
+            CopyStaff::Move(copy) => (Answer::Entity(Entity(copy)), false),
+            CopyStaff::Place => (Answer::Nobody, true),
+        };
+        PLAN.with(|plan| {
+            plan.set(Some(Plan {
+                survivor,
+                answer,
+                places,
+            }));
+        });
+        let take = places && last_charge(summon.meter, charges.full);
+        enshwick_loader_api::info!(
+            "copy staff of {} at {:?} with {:?} charges: {}",
+            staff.key,
+            summon.target,
+            summon.meter.map(|m| m.current),
+            match (places, take) {
+                (false, _) => "moves the copy there, free",
+                (true, true) => "places a copy, its last charge",
+                (true, false) => "places a copy, a charge spent",
+            }
+        );
+        return if take {
+            SummonVerdict::Take
+        } else {
+            SummonVerdict::Allow
+        };
+    }
+    // The survivor's own staff moves the original, as in vanilla; a copy at
+    // the target's altar then gives way to it.
+    let vanilla =
+        WorkshopSurvivor::by_staff(summon.item).is_some_and(|s| summon.template == s.template());
+    if vanilla && !staffs.vanilla_places {
+        // Always the original, however many copies stand in the world.
+        let answer = if original == 0 {
+            Answer::Vanilla
+        } else {
+            Answer::Entity(Entity(original))
+        };
+        PLAN.with(|plan| {
+            plan.set(Some(Plan {
+                survivor,
+                answer,
+                places: false,
+            }));
+        });
+    }
+    SummonVerdict::Allow
 }
 
 /// Lets go of copies the uniqueness pass no longer sees.
@@ -316,13 +406,14 @@ mod tests {
     #[test]
     fn only_the_last_charge_takes_the_staff() {
         let charges = |current| Some(Bar { current, max: 3 });
-        assert!(!last_charge(charges(3)));
-        assert!(!last_charge(charges(2)));
-        assert!(last_charge(charges(1)));
-        assert!(last_charge(charges(0)), "an empty staff goes on its use");
+        assert!(!last_charge(charges(3), 3));
+        assert!(!last_charge(charges(2), 3));
+        assert!(last_charge(charges(1), 3));
+        assert!(last_charge(charges(0), 3), "an empty staff goes on its use");
         assert!(
-            last_charge(None),
-            "a staff from before charges is used once"
+            !last_charge(None, 3),
+            "a staff from before charges counts as full"
         );
+        assert!(last_charge(None, 1), "one charge in all: its use takes it");
     }
 }

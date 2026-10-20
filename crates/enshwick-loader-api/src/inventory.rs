@@ -322,6 +322,23 @@ pub enum Op {
         /// How many; `None` for the whole stack.
         amount: Option<u16>,
     },
+    /// Replaces the stack in a slot with new items, each with its own entity
+    /// and its meter at `fill`, asked for the same slot: gives an item that
+    /// lost its entity, such as one from before its mod gave it a
+    /// [`Meter`](crate::content::items::Meter), a fresh one.
+    Renew {
+        /// The stack.
+        slot: SlotRef,
+        /// The inventory the slot belongs to, at its root
+        /// ([`Reader::root`]).
+        root: Entity,
+        /// The new items' id.
+        item: u32,
+        /// How many.
+        count: u32,
+        /// Their meter's fill.
+        fill: Fill,
+    },
     /// Moves every stack of one inventory into another, as "take all" does.
     /// What does not fit stays in the source.
     MoveAll {
@@ -374,6 +391,20 @@ impl Op {
                 count: amount.map_or(0, u32::from),
                 ..InventoryOp::default()
             },
+            Self::Renew {
+                slot,
+                root,
+                item,
+                count,
+                fill,
+            } => InventoryOp {
+                kind: InventoryOp::RENEW,
+                flags: InventoryOp::FILLED,
+                target: slot.0,
+                other: entity(root) | u64::from(fill.fraction().to_bits()) << 32,
+                item,
+                count,
+            },
             Self::MoveAll {
                 from,
                 to,
@@ -396,6 +427,7 @@ impl Op {
     const fn cost(&self) -> u32 {
         match self {
             Self::Give { .. } | Self::Take { .. } => 16,
+            Self::Renew { .. } => 17,
             Self::DestroySlot(_) => 1,
             Self::MoveSlot { .. } => 4,
             Self::MoveAll { .. } => 256,
@@ -408,6 +440,7 @@ impl Op {
             Self::Give { to, .. } => [to, Entity::NONE],
             Self::Take { from, .. } => [from, Entity::NONE],
             Self::DestroySlot(slot) => [slot.inventory(), Entity::NONE],
+            Self::Renew { root, .. } => [root, Entity::NONE],
             Self::MoveSlot { slot, to, .. } => [slot.inventory(), to],
             Self::MoveAll { from, to, .. } => [from, to],
         }
@@ -425,6 +458,19 @@ impl Op {
                 count,
             } => !e.is_none() && item != 0 && count != 0 && i32::try_from(count).is_ok(),
             Self::DestroySlot(slot) => !slot.inventory().is_none(),
+            Self::Renew {
+                slot,
+                root,
+                item,
+                count,
+                ..
+            } => {
+                !slot.inventory().is_none()
+                    && !root.is_none()
+                    && item != 0
+                    && count != 0
+                    && i32::try_from(count).is_ok()
+            }
             Self::MoveSlot { slot, to, amount } => {
                 !slot.inventory().is_none() && !to.is_none() && amount != Some(0)
             }
@@ -1226,6 +1272,50 @@ impl Inventories {
         };
         self.submit(&Batch::new().with(all), done)
     }
+
+    /// Renews every stack of `items` in the inventory `root` that has no
+    /// entity of its own, each with its meter at `fill`, in one
+    /// transaction ([`Op::Renew`]): items from before their mod gave them a
+    /// meter get one at once. Reads on the game thread, as
+    /// [`Inventories::read`]; `None` when nothing needs it, without calling
+    /// `done`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_loader_api::events::PlayerJoined;
+    /// use enshwick_loader_api::inventory::Fill;
+    ///
+    /// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+    ///     const STAFF: u32 = 0x5e01;
+    ///     let inventories = load.inventories()?;
+    ///     load.on::<PlayerJoined>(move |joined| {
+    ///         let player = enshwick_loader_api::ecs::Entity(joined.entity);
+    ///         let _renewed = inventories.renew(player, &[STAFF], Fill::FULL, |_| {});
+    ///     })
+    /// }
+    /// ```
+    pub fn renew(
+        &self,
+        root: Entity,
+        items: &[u32],
+        fill: Fill,
+        done: impl FnOnce(&Outcome) + Send + 'static,
+    ) -> Option<Ticket> {
+        let mut batch = Batch::new();
+        for slot in self.read().slots(root) {
+            if !slot.is_empty() && slot.pide.is_none() && items.contains(&slot.item) {
+                batch.push(Op::Renew {
+                    slot: slot.at,
+                    root,
+                    item: slot.item,
+                    count: slot.count,
+                    fill,
+                });
+            }
+        }
+        (!batch.ops().is_empty()).then(|| self.submit(&batch, done))
+    }
 }
 
 /// Synchronous inventory reads; get one from [`Inventories::read`] or
@@ -1486,6 +1576,32 @@ mod tests {
         assert_eq!(Batch::new().check(), Err(BatchError::Empty));
         assert_eq!(
             Batch::new().with(all(5, 5)).check(),
+            Err(BatchError::Malformed)
+        );
+        let renew = Op::Renew {
+            slot: SlotRef::new(Entity(41), 2),
+            root: Entity(40),
+            item: 7,
+            count: 1,
+            fill: Fill::FULL,
+        };
+        assert_eq!(Batch::new().with(renew).check(), Ok(()));
+        let raw = renew.raw();
+        assert_eq!(
+            (raw.kind, raw.target, raw.other & 0xffff_ffff),
+            (InventoryOp::RENEW, SlotRef::new(Entity(41), 2).0, 40)
+        );
+        assert_eq!(raw.other >> 32, u64::from(1.0f32.to_bits()));
+        assert_eq!(
+            Batch::new()
+                .with(Op::Renew {
+                    slot: SlotRef::new(Entity(41), 2),
+                    root: Entity::NONE,
+                    item: 7,
+                    count: 1,
+                    fill: Fill::FULL,
+                })
+                .check(),
             Err(BatchError::Malformed)
         );
         let zero = Op::Give {

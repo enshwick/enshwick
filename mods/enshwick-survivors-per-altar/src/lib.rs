@@ -2,13 +2,14 @@
 //! most N copies of a survivor, each copy stands inside a zone, works there and
 //! sleeps in a bed of its own altar.
 //!
-//! A summoning staff used in an altar zone without a copy places one there; in
-//! a zone with a copy it moves that copy. The original survivor, the one the
-//! game's own record names, is never touched.
+//! A copy staff places a copy at an altar without one and moves the copy an
+//! altar has; the survivor's own staff moves the original, as in vanilla, and
+//! a copy where it arrives gives way.
 
 mod copies;
 mod cursor;
 mod policy;
+mod renew;
 mod staffs;
 
 use enshwick_loader_api::abi::Side;
@@ -38,8 +39,9 @@ struct Settings {
     /// A copy of each survivor at every altar, at most one per altar zone.
     #[config(startup)]
     per_altar: bool,
-    /// Copy staffs: one per workshop survivor; each copy it places or moves
-    /// spends a charge, and the last charge uses the staff up.
+    /// Copy staffs: one per workshop survivor. Each new copy it places
+    /// spends a charge and the last charge uses the staff up; moving the
+    /// copy an altar has is free.
     #[serde(default = "yes")]
     #[config(startup)]
     copy_staffs: bool,
@@ -60,6 +62,12 @@ struct Settings {
     #[serde(default)]
     #[config(startup, range = 0..=100)]
     copy_staff_charges_min: u16,
+    /// Whether the survivor's own staff places a copy at an altar without
+    /// one and moves the copy an altar has, as before copy staffs; off, it
+    /// moves the survivor itself, as in vanilla.
+    #[serde(default)]
+    #[config(startup)]
+    vanilla_staff_places_copies: bool,
 }
 
 /// How many charges a staff holds when full, and the fewest a dropped one
@@ -102,6 +110,7 @@ impl Default for Settings {
             copy_staff_locked_chest_chance: locked_chest_chance(),
             copy_staff_charges: full_charges(),
             copy_staff_charges_min: 0,
+            vanilla_staff_places_copies: false,
         }
     }
 }
@@ -138,12 +147,18 @@ impl Mod for SurvivorsPerAltar {
         if !settings.per_altar {
             return Err(Off::new("per_altar is off in the settings"));
         }
-        let staffs = settings.copy_staffs;
-        if staffs {
+        if settings.copy_staffs {
             copy_staffs(load, &settings)?;
         }
+        let staffs = policy::Staffs {
+            copy: settings.copy_staffs.then(|| settings.charges()),
+            vanilla_places: settings.vanilla_staff_places_copies,
+        };
         if load.host().build().side == Side::SERVER {
             policy::link(load, staffs)?;
+            if settings.copy_staffs {
+                renew::link(load)?;
+            }
         } else {
             // The policy acts in the games this client hosts, and for its own
             // cursor.
@@ -314,6 +329,68 @@ copy_staffs = false
             !loader.survivor_bed_check(&check),
             "a bed at another altar is cleared"
         );
+        assert!(loader.faults().is_empty());
+    }
+
+    #[test]
+    fn the_survivor_s_own_staff_moves_the_original_and_its_copy_gives_way() {
+        use enshwick_loader_api::abi::{AltarInfo, Bounds, Header, Status, Summon, SurvivorLookup};
+        use enshwick_loader_api::survivors::WORKSHOP_SURVIVORS;
+
+        let loader = enshwick_loader_api::test::FakeHost::new()
+            .settings("per_altar = true\ncopy_staffs = false\n")
+            .install();
+        // SAFETY: the exports of `declare_mod!` above.
+        let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+        assert_eq!(status, Status::OK);
+        let altar = |entity, x| {
+            let mut info = AltarInfo::EMPTY;
+            info.entity = entity;
+            info.zone = Bounds {
+                min: [x, 0, 0],
+                max: [x + 80, 80, 80],
+            };
+            info
+        };
+        loader.set_altars(&[altar(1, 0), altar(2, 100), altar(3, 200)]);
+        let smith = &WORKSHOP_SURVIVORS[0];
+        let survivor = smith.id().0;
+        let ask = |purpose, entity, cell| {
+            loader.survivor_lookup(survivor, 10, purpose, entity, cell, &[])
+        };
+        let unique = SurvivorLookup::UNIQUENESS;
+        // The original at altar 1, copies at altars 2 and 3.
+        assert_eq!(ask(unique, 10, [10, 0, 10]), Some(10));
+        assert_eq!(ask(unique, 11, [120, 0, 10]), Some(11));
+        assert_eq!(ask(unique, 12, [220, 0, 10]), Some(12));
+        // The survivor's own staff aimed at altar 2.
+        let summon = Summon {
+            header: Header::of::<Summon>(),
+            item: smith.staff().id(),
+            ammo: 0,
+            template: smith.template().0,
+            target: [130, 0, 10],
+            slot: 0,
+            pide: 0,
+            meter: [0; 2],
+            consumed: 0,
+            reserved: [0; 3],
+        };
+        assert_eq!(loader.summon(&summon), 0, "allowed, nothing taken");
+        assert_eq!(
+            ask(SurvivorLookup::SPAWN, 0, [130, 0, 10]),
+            Some(10),
+            "the original moves, not the copy there"
+        );
+        // The original now stands at altar 2: the copy there gives way, the
+        // one at altar 3 stays.
+        assert_eq!(ask(unique, 10, [130, 0, 10]), Some(10));
+        assert_eq!(
+            ask(unique, 11, [120, 0, 10]),
+            Some(10),
+            "copy 11 is removed"
+        );
+        assert_eq!(ask(unique, 12, [220, 0, 10]), Some(12));
         assert!(loader.faults().is_empty());
     }
 }

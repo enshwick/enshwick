@@ -52,9 +52,11 @@ entity, the bed, the survivor's home cell and the bed's cell.
 
 `load.add_summon_item(item, survivor)` files a mod item as a summoning staff
 of the survivor, on both sides, so the game treats it as that survivor's
-staff. `load.on_summon` runs before a staff spawns or moves a survivor;
-returning `true` makes the use take the item, in the same transaction and only
-when the spawn or move works. `load.on_summoned` runs after a use that worked.
+staff. `load.on_summon` runs before a staff spawns or moves a survivor and
+returns a `SummonVerdict`: `Take` makes the use take the item, in the same
+transaction and only when the spawn or move works; `Refuse` refuses the use,
+and nothing spawns, moves or is taken; `Allow` leaves it to the game.
+`load.on_summoned` runs after a use that worked.
 
 A `Summon` names the used item: its id, its `slot`, its own entity `pide`
 and, for an item with a [meter](content/items.md#meters), the `meter` as
@@ -68,7 +70,7 @@ its id, its vanilla staff and the template the staff places;
 `WorkshopSurvivor::find("blacksmith")` picks one by its short name.
 
 ```rust
-use enshwick_loader_api::survivors::WorkshopSurvivor;
+use enshwick_loader_api::survivors::{SummonVerdict, WorkshopSurvivor};
 
 fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
     const MY_STAFF: u32 = 0x5e01;
@@ -77,7 +79,12 @@ fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_
     load.add_summon_item(MY_STAFF, smith.id())?;
     // The last charge takes the staff; the others are spent after the use.
     load.on_summon(|summon| {
-        summon.item == MY_STAFF && summon.meter.is_none_or(|charges| charges.current <= 1)
+        let last = summon.meter.is_none_or(|charges| charges.current <= 1);
+        if summon.item == MY_STAFF && last {
+            SummonVerdict::Take
+        } else {
+            SummonVerdict::Allow
+        }
     })?;
     let (world, scheduler) = (load.world()?, load.scheduler()?);
     load.on_summoned(move |summon| {

@@ -118,6 +118,12 @@ Moves leave what does not fit in the source. `move_all` leaves the source's
 action bar, equipment and locked slots where they are;
 `Op::MoveAll { include_special: true, .. }` in a batch moves them too.
 
+`Op::Renew` replaces a stack with new items, each with its own entity and
+its [meter](content/items.md#meters) at a fill, asked for the same slot: an
+item from before its mod gave it a meter gets one at once.
+`renew(root, items, fill, done)` renews every such stack of `items` in an
+inventory in one transaction, and returns `None` when none needs it.
+
 ### Batches
 
 [`Batch`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/inventory.rs)

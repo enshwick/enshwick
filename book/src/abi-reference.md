@@ -12,7 +12,7 @@ raw table. The exact types and signatures are in the
 | Constant                                                                                            | Value | Meaning                                         |
 | --------------------------------------------------------------------------------------------------- | ----- | ----------------------------------------------- |
 | [`ABI_MAJOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 1     | A loader refuses a mod built for another major. |
-| [`ABI_MINOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 41    | A newer minor only appends.                     |
+| [`ABI_MINOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 42    | A newer minor only appends.                     |
 
 The ABI version is apart from Enshwick Loader's version (such as 0.2.0, see
 [Releasing and updates](releasing.md#versions)): a platform release raises
@@ -326,6 +326,8 @@ the mod off with a reason, which the mod's log shows as `off: <reason>`:
 | 39          | `Load::ui`, `Load::on_frame`    | Off: `the interface: needs a newer loader`                |
 | 40          | `Load::on_hud`, markers         | Off, or `UiError::Unavailable`                            |
 | 41          | settings check                  | Changes are checked against the schema only               |
+| 42          | `SummonVerdict::Refuse`         | The use goes on                                           |
+| 42          | `Op::Renew`                     | The batch fails                                           |
 
 A mod that can do without a feature catches the `Off` and goes on without it
 instead of returning it from `init`.

@@ -5,26 +5,34 @@ can have a copy at every Flame Altar: a cluster of N altars holds at most N
 copies of a survivor, one per altar zone, and a copy always stands inside a
 zone.
 
-- The survivor's summoning staff, used in an altar zone without a copy, places a
-  new copy there; in a zone that has one, it moves that copy.
+- The survivor's own summoning staff works as in vanilla: it moves the
+  survivor itself, the original, however many copies stand in the world. In
+  an altar zone that holds a copy, the original moves in and that copy is
+  removed: one survivor per zone. Copies elsewhere stay where they are.
+- Copy staffs make copies: one per workshop survivor, such as "Copy staff:
+  Oswald Anders". At an altar zone:
+  - without a copy and without the original, it places a new copy there and
+    spends a charge;
+  - with a copy, it moves that copy to where it is aimed, free;
+  - where the original stands, it is refused and spends nothing;
+  - outside every altar zone, it is refused and spends nothing.
+
+  A survivor never has more entities, the original included, than there are
+  altars: a cluster of N altars holds at most N.
 - Each copy works where it stands and sleeps in a bed of its own altar. A bed at
   another altar is never given to it, and a bed it held from elsewhere is
   cleared.
 - The survivor menu shows the worst status of the copies, so "no bed" means some
   copy still needs one.
-- The original survivor is never touched; removing the mod lets the game remove
-  the copies.
-- Copy staffs: one per workshop survivor, such as "Copy staff: Oswald Anders".
-  It does what the survivor's staff does at an altar, places a copy or moves
-  the one there. Each use that works spends a charge, and the last charge
-  uses the staff up; outside every altar zone nothing is spent. A staff holds
-  3 charges when full, shown as a bar on its slot, and its tooltip names how
-  many it holds when full. Bosses drop one at 10 %, chests that need a key or
+- Removing the mod lets the game remove the copies.
+- A copy staff holds 3 charges when full, shown as a bar on its slot, and its
+  tooltip names how many it holds when full; the last charge uses the staff
+  up when it places a copy. Bosses drop one at 10 %, chests that need a key or
   a lockpick hold one at 2 %, a random survivor's each time; a dropped staff
   is full, or holds a random count when `copy_staff_charges_min` is above 0.
-  A staff from before charges gets full charges once the game next checks the
-  inventory that holds it; one used before that is used up. Removing the mod
-  removes the staffs from inventories.
+  A staff from before charges gets full charges when the world loads, when
+  its player joins and, in a chest, within a minute. Removing the mod removes
+  the staffs from inventories.
 
 ## Settings
 
@@ -41,6 +49,9 @@ copy_staff_charges_min = 0
 # From 0 to 1; 0 turns that source off.
 copy_staff_boss_chance = 0.10
 copy_staff_locked_chest_chance = 0.02
+# true: the survivor's own staff places a copy at an altar without one and
+# moves the copy an altar has, as before copy staffs.
+vanilla_staff_places_copies = false
 ```
 
 ## Who needs it
