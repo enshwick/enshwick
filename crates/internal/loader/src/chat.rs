@@ -563,6 +563,9 @@ fn builtin(loader: &Loader, args: &str, player: &PlayerInfo) -> String {
         crate::status::request();
         return crate::status::summary(loader).short();
     }
+    if args.eq_ignore_ascii_case("ui-demo") {
+        return ui_demo(player);
+    }
     let commands = COMMANDS.lock().unwrap_or_else(PoisonError::into_inner);
     if args.eq_ignore_ascii_case("help") {
         return help(loader, &commands);
@@ -698,9 +701,24 @@ fn about(record: &crate::host::ModRecord) -> String {
     lines.join("\n")
 }
 
+/// `/enshwick ui-demo`: opens the interface demo on the administrator's
+/// own client.
+fn ui_demo(player: &PlayerInfo) -> String {
+    if player.permissions & PlayerInfo::CAN_KICK_BAN == 0 {
+        return "Only administrators open the interface demo.".to_owned();
+    }
+    if player.key == 0 {
+        return "The interface demo opens on a player's client.".to_owned();
+    }
+    match crate::net::ui_demo(player.key) {
+        Ok(()) => "Opening the interface demo.".to_owned(),
+        Err(_) => "Your client does not run Enshwick, or has not answered yet.".to_owned(),
+    }
+}
+
 fn help(loader: &Loader, commands: &[Command]) -> String {
     let mut lines = vec![
-        "/enshwick: the mods running; /enshwick <mod id>: what a mod is; /enshwick help: this list; /enshwick status: the status (administrators)"
+        "/enshwick: the mods running; /enshwick <mod id>: what a mod is; /enshwick help: this list; /enshwick status: the status (administrators); /enshwick ui-demo: every interface widget on your screen (administrators)"
             .to_owned(),
         crate::configure::HELP.to_owned(),
     ];

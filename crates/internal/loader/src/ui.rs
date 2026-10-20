@@ -9,6 +9,7 @@
 //! shows. Texts a mod hands in are copied into a per-frame arena, kept for a
 //! few frames, since the game may read them after the call.
 
+mod demo;
 mod dialog;
 mod engine;
 
@@ -20,6 +21,7 @@ use enshwick_loader_api::abi::{
     HookFlags, Side, Status, Str, UiAnswerFn, UiDialog, UiFrame, UiFrameFn, UiWidget,
 };
 
+pub(crate) use demo::open as open_demo;
 pub(crate) use dialog::show;
 use engine::{Engine, PopupFn, UiText, Window};
 
@@ -237,6 +239,8 @@ unsafe extern "system" fn detour(state: *mut u8) {
         UI_THREAD.store(thread_id(), Ordering::Release);
         ARENA.with_borrow_mut(Arena::next_frame);
         frames(engine, context);
+        // SAFETY: inside the frame, on its thread, no window open.
+        unsafe { demo::draw(engine, context) };
         // SAFETY: inside the frame, on its thread, no popup of the game's
         // showing; the slot is the popup's chain.
         unsafe { dialog::draw(NEXT.get(), context) };
@@ -302,6 +306,85 @@ pub(crate) fn widget(loader: &Loader, owner: usize, token: u64, raw: &mut UiWidg
     let status = draw(loader, engine, &mut drawing, raw);
     DRAWING.set(Some(drawing));
     status
+}
+
+/// The loader's own drawing inside a window it opened: the engine's widgets
+/// with texts copied into the frame's arena, safe to call once made.
+pub(super) struct Painter<'a> {
+    engine: &'a Engine,
+    context: usize,
+}
+
+impl<'a> Painter<'a> {
+    /// # Safety
+    ///
+    /// Used only inside a window started in the frame being drawn, on its
+    /// thread, until that window ends.
+    pub(super) unsafe fn new(engine: &'a Engine, context: usize) -> Self {
+        Self { engine, context }
+    }
+
+    pub(super) fn label(&self, text: &[u8], style: u32, wrap: bool, center: bool) {
+        let text = copy(&[text]);
+        // SAFETY: inside the window, by the contract of `new`; the text
+        // lives in the arena.
+        unsafe { self.engine.label(self.context, &text, style, wrap, center) };
+    }
+
+    pub(super) fn button(&self, text: &[u8], enabled: bool) -> bool {
+        let text = copy(&[text]);
+        // SAFETY: as above.
+        unsafe { self.engine.button(&text, enabled) }
+    }
+
+    pub(super) fn toggle(&self, label: &[u8], on: bool, read_only: bool) -> Option<bool> {
+        let label = copy(&[label]);
+        // SAFETY: as above.
+        unsafe { self.engine.toggle(self.context, &label, on, read_only) }
+    }
+
+    pub(super) fn slider(
+        &self,
+        label: &[u8],
+        value: f32,
+        range: (f32, f32),
+        steps: u32,
+        read_only: bool,
+    ) -> Option<f32> {
+        let label = copy(&[label]);
+        // SAFETY: as above.
+        unsafe { self.engine.slider(&label, value, range, steps, read_only) }
+    }
+
+    pub(super) fn dropdown(
+        &self,
+        label: &[u8],
+        options: &[&[u8]],
+        index: u32,
+        read_only: bool,
+    ) -> Option<u32> {
+        let mut texts = [UiText::EMPTY; enshwick_loader_api::ui::MAX_OPTIONS];
+        for (slot, option) in texts.iter_mut().zip(options) {
+            *slot = copy(&[option]);
+        }
+        let count = options.len().min(texts.len());
+        let label = copy(&[label]);
+        // SAFETY: as above.
+        unsafe {
+            self.engine
+                .dropdown(&label, &texts[..count], index, read_only)
+        }
+    }
+
+    pub(super) fn progress(&self, value: f32, min: f32, max: f32) {
+        // SAFETY: as above.
+        unsafe { self.engine.progress(value, min, max) };
+    }
+
+    pub(super) fn sound(&self, sound: u32) {
+        // SAFETY: as above.
+        unsafe { self.engine.sound(self.context, sound) };
+    }
 }
 
 fn read(value: Str) -> Option<&'static [u8]> {
