@@ -98,6 +98,7 @@ pub mod schedule;
 pub mod state;
 pub mod status;
 pub mod survivors;
+pub mod terrain;
 #[cfg(feature = "test")]
 pub mod test;
 pub mod vetoes;

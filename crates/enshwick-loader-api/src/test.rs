@@ -1664,6 +1664,30 @@ impl Installed {
         table::with(Vec::new(), |s| s.forecasts.clone())
     }
 
+    /// Sets the terrain materials the fake lists; until then no world runs.
+    /// Every edit the mod asks for is recorded and moves one cubic metre.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick_loader_api::test::FakeHost::new().install();
+    /// loader.set_terrain(&[]);
+    /// assert!(loader.terrain_edits().is_empty());
+    /// ```
+    pub fn set_terrain(&self, materials: &[crate::abi::TerrainMaterialInfo]) {
+        table::with((), |s| s.terrain = Some(materials.to_vec()));
+    }
+
+    /// The terrain edits the mod asked for, in order.
+    ///
+    /// # Examples
+    ///
+    /// See [`Installed::set_terrain`].
+    #[must_use]
+    pub fn terrain_edits(&self) -> Vec<crate::abi::TerrainEdit> {
+        table::with(Vec::new(), |s| s.terrain_edits.clone())
+    }
+
     /// Whether the mod opened altars, and whether it controls their zones.
     ///
     /// # Examples

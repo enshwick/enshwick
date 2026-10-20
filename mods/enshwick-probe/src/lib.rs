@@ -16,6 +16,7 @@ mod clock;
 mod damage;
 mod knowledge;
 mod settings;
+mod terrain;
 mod weather;
 
 use std::ops::ControlFlow;
@@ -82,6 +83,10 @@ fn extras(load: &mut Load<'_>, scheduler: Scheduler) -> Vec<Check> {
     match weather::WeatherChecks::new(load, scheduler) {
         Ok(weather) => extras.push(Box::new(move || weather.run())),
         Err(off) => enshwick_loader_api::warn!("FAIL weather: {off}"),
+    }
+    match terrain::TerrainChecks::new(load) {
+        Ok(terrain) => extras.push(Box::new(move || terrain.run())),
+        Err(off) => enshwick_loader_api::warn!("FAIL terrain: {off}"),
     }
     extras
 }

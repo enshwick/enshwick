@@ -44,6 +44,9 @@ Once the world has loaded, and again on `/probe check`:
 - weather: a reading at the first placed entity and the fronts; rain for two
   minutes that shows in the fronts, then clear skies, then the game's own
   choice again; chunk loads and unloads are logged as they come;
+- terrain: the materials, a dry dig at the first placed entity, a mound
+  added 40 metres above it and dug away again, and a radius of 100 metres
+  refused;
 - a save on demand, followed by `WorldSaved`.
 
 From start it counts the damage its damage filter sees by cause, and every

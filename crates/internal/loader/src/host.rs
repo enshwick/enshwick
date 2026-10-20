@@ -578,6 +578,8 @@ pub(crate) static API: HostApi = HostApi {
     weather_at,
     weather_fronts,
     set_weather,
+    terrain_materials,
+    terrain_edit,
 };
 
 /// A static slice from a pointer and a count, empty for a null pointer.
@@ -2195,6 +2197,53 @@ extern "system" fn set_weather(me: ModHandle, effect: u32, duration: i64) -> Sta
     entry("set_weather", || {
         match caller(me).and_then(|loader| crate::weather::set(loader, effect, duration)) {
             Ok(()) => Status::OK,
+            Err(status) => status,
+        }
+    })
+}
+
+extern "system" fn terrain_materials(
+    me: ModHandle,
+    out: *mut enshwick_loader_api::abi::TerrainMaterialInfo,
+    capacity: u32,
+    count: *mut u32,
+) -> Status {
+    entry("terrain_materials", || {
+        match caller(me).and_then(crate::terrain::materials) {
+            Ok(materials) => {
+                if !out.is_null() {
+                    for (i, material) in materials.iter().take(capacity as usize).enumerate() {
+                        // SAFETY: the caller passes room for `capacity` entries.
+                        let slot = unsafe { out.add(i) };
+                        // SAFETY: as above.
+                        unsafe { slot.write(*material) };
+                    }
+                }
+                put(count, u32::try_from(materials.len()).unwrap_or(u32::MAX))
+            }
+            Err(status) => status,
+        }
+    })
+}
+
+extern "system" fn terrain_edit(
+    me: ModHandle,
+    edit: *const enshwick_loader_api::abi::TerrainEdit,
+    amount: *mut f32,
+) -> Status {
+    entry("terrain_edit", || {
+        // SAFETY: the caller passes null or an edit with its header; an
+        // all-zero edit is valid.
+        let Some(edit) = (unsafe {
+            enshwick_loader_api::abi::read_headed(
+                edit,
+                size_of::<enshwick_loader_api::abi::TerrainEdit>(),
+            )
+        }) else {
+            return Status::BAD_ARGS;
+        };
+        match caller(me).and_then(|loader| crate::terrain::edit(loader, &edit)) {
+            Ok(changed) => put(amount, changed),
             Err(status) => status,
         }
     })

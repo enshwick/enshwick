@@ -81,6 +81,8 @@ mod status;
 #[cfg(windows)]
 mod survivors;
 #[cfg(windows)]
+mod terrain;
+#[cfg(windows)]
 mod vetoes;
 #[cfg(windows)]
 mod watch;
