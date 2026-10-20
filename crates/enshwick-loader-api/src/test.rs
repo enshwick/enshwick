@@ -958,10 +958,28 @@ impl FakeHost {
                 header: Header::of::<ItemData>(),
                 id: item,
                 max_stack,
-                reserved: 0,
+                category: 0,
+                rarity: 0,
                 flags,
             },
         );
+        self
+    }
+
+    /// Puts item `item`, set with [`FakeHost::item`], in the game's
+    /// `ItemCategory` numbered `category`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let host = enshwick_loader_api::test::FakeHost::new().item(0x5e01, 1, 0).item_category(0x5e01, 1);
+    /// let _loader = host.install();
+    /// ```
+    #[must_use]
+    pub fn item_category(mut self, item: u32, category: u8) -> Self {
+        if let Some(data) = self.items.get_mut(&item) {
+            data.category = category;
+        }
         self
     }
 

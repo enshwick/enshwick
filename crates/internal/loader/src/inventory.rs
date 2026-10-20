@@ -138,6 +138,8 @@ struct Executor {
     copies: Vec<(usize, usize)>,
     item_max_stack: usize,
     item_flags: usize,
+    item_category: usize,
+    item_rarity: usize,
     /// The descriptor and the transaction, allocated once; one transaction
     /// runs at a time.
     scratch: usize,
@@ -381,6 +383,8 @@ fn build(loader: &Loader) -> Option<Executor> {
         copies,
         item_max_stack: field("maxStackSize")?,
         item_flags: field("flags")?,
+        item_category: field("category")?,
+        item_rarity: field("rarity")?,
         scratch: 0,
         check_world: loader.side != Side::SERVER,
         entity_world: constant("ecs.context_entity_world")?,
@@ -623,7 +627,10 @@ pub(crate) fn item_info(loader: &Loader, item: u32) -> Result<ItemData, Status> 
         id: item,
         // SAFETY: a live ItemInfo holds these fields.
         max_stack: unsafe { read(info + executor.item_max_stack) },
-        reserved: 0,
+        // SAFETY: as above.
+        category: unsafe { read(info + executor.item_category) },
+        // SAFETY: as above.
+        rarity: unsafe { read(info + executor.item_rarity) },
         // SAFETY: as above.
         flags: unsafe { read(info + executor.item_flags) },
     })

@@ -274,7 +274,7 @@ pub(crate) fn with<R>(default: R, f: impl FnOnce(&mut State) -> R) -> R {
 }
 
 /// Writes `value` through `out`, which the safe layer passes valid or null.
-fn put<T>(out: *mut T, value: T) -> Status {
+pub(crate) fn put<T>(out: *mut T, value: T) -> Status {
     // SAFETY: the safe layer passes a valid out pointer; `as_mut` turns away null.
     match unsafe { out.as_mut() } {
         Some(slot) => {
@@ -2176,4 +2176,8 @@ pub(crate) static TABLE: HostApi = HostApi {
     define_event,
     subscribe_event,
     send_event,
+    affix_open: super::stats::affix_open,
+    affix_roll: super::stats::affix_roll,
+    item_lines: super::stats::item_lines,
+    affix_info: super::stats::affix_info,
 };

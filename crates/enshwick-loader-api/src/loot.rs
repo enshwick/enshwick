@@ -17,6 +17,7 @@
 
 mod drops;
 
+pub(crate) use drops::watch_rolls;
 pub use drops::{Drop, Kinds, MeterRoll, Roll, Source};
 
 use crate::ecs::{Components, Ecs, Entity};

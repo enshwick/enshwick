@@ -9,7 +9,7 @@
 //! item's place at its chance.
 
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Mutex, OnceLock, PoisonError};
+use std::sync::{Arc, Mutex, OnceLock, PoisonError};
 
 use crate::ecs::{Components, Entity};
 use crate::inventory::Fill;
@@ -432,6 +432,8 @@ struct Engine {
 
 static ENGINE: OnceLock<Engine> = OnceLock::new();
 static DROPS: Mutex<Vec<Drop>> = Mutex::new(Vec::new());
+/// The queues of the rolls watchers asked to hear of.
+static WATCHERS: Mutex<Vec<Arc<Mutex<Vec<Roll>>>>> = Mutex::new(Vec::new());
 static DICE: OnceLock<Dice> = OnceLock::new();
 
 fn dice() -> &'static Dice {
@@ -543,6 +545,16 @@ fn after_roll(
     }
     // SAFETY: the live arguments of the roll, on its thread.
     let (roll, _) = unsafe { engine.roll(txn, request) };
+    for watcher in WATCHERS
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .iter()
+    {
+        watcher
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .push(roll);
+    }
     let drops = DROPS.lock().unwrap_or_else(PoisonError::into_inner);
     let absent = [0u8; 16];
     for drop in drops.iter().filter(|d| d.from.matches(&roll)) {
@@ -627,6 +639,29 @@ fn after_roll_one(
     ret
 }
 
+/// Links the roll of containers' loot once.
+fn link_roll(load: &mut Load<'_>) -> Result<(), Off> {
+    if ENGINE.get().is_none() {
+        let engine = Engine::resolve(load)?;
+        load.hook(&ROLL, load.symbol("loot.roll")?)?;
+        let _first = ENGINE.set(engine);
+    }
+    Ok(())
+}
+
+/// A queue that gets every container roll the game commits from now on, on
+/// the roll's worker thread; the caller drains it on the game thread, where
+/// the rolled items have their entities.
+pub(crate) fn watch_rolls(load: &mut Load<'_>) -> Result<Arc<Mutex<Vec<Roll>>>, Off> {
+    link_roll(load)?;
+    let queue = Arc::new(Mutex::new(Vec::new()));
+    WATCHERS
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .push(Arc::clone(&queue));
+    Ok(queue)
+}
+
 impl Load<'_> {
     /// Adds a mod item to random loot on the server, the dedicated one or a
     /// client's while it hosts: each roll of a container `drop.from` matches
@@ -657,11 +692,7 @@ impl Load<'_> {
     /// ```
     pub fn add_loot(&mut self, drop: Drop) -> Result<(), Off> {
         drop.check()?;
-        if ENGINE.get().is_none() {
-            let engine = Engine::resolve(self)?;
-            self.hook(&ROLL, self.symbol("loot.roll")?)?;
-            let _first = ENGINE.set(engine);
-        }
+        link_roll(self)?;
         let single = drop.from.kinds.contains(Kinds::DESTROYED);
         let mut drops = DROPS.lock().unwrap_or_else(PoisonError::into_inner);
         let linked = drops

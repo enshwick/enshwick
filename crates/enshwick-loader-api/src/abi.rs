@@ -14,7 +14,7 @@ use core::sync::atomic::AtomicUsize;
 pub const ABI_MAJOR: u16 = 1;
 
 /// The minor version of this interface. A newer minor only appends fields.
-pub const ABI_MINOR: u16 = 47;
+pub const ABI_MINOR: u16 = 48;
 
 /// Whether `id` is a valid mod id: 1 to 64 characters of `[a-z0-9-]`.
 ///
@@ -1882,7 +1882,8 @@ pub type InventoryResultFn =
 ///     header: Header::of::<ItemData>(),
 ///     id: 7,
 ///     max_stack: 1,
-///     reserved: 0,
+///     category: 2,
+///     rarity: 0,
 ///     flags: ItemData::HAS_PIDE,
 /// };
 /// assert_ne!(sword.flags & ItemData::HAS_PIDE, 0);
@@ -1896,8 +1897,11 @@ pub struct ItemData {
     pub id: u32,
     /// How many fit one stack.
     pub max_stack: u16,
-    /// Zero.
-    pub reserved: u16,
+    /// The game's `ItemCategory`: 1 equipment, 2 weapons, 3 tools and so
+    /// on. Since minor 48; zero before.
+    pub category: u8,
+    /// The game's `ItemRarity` of the type. Since minor 48; zero before.
+    pub rarity: u8,
     /// `ItemInfo` flags: [`ItemData::HAS_PIDE`] and the others on this type.
     pub flags: u32,
 }
@@ -3032,6 +3036,131 @@ pub struct StatSource {
     pub id: u32,
     /// The item id, 0, or the index of the mod that set the modifier.
     pub owner: u32,
+}
+
+/// An affix's definition, for [`HostApi::affix_open`].
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::abi::{AffixDefData, AffixModifierData, Header, StatModifierData, Str};
+///
+/// let ranges = [AffixModifierData { stat: 0, op: StatModifierData::ADD, reserved: [0; 3], min: 10.0, max: 30.0, step: 1.0 }];
+/// let sturdy = AffixDefData {
+///     header: Header::of::<AffixDefData>(),
+///     text: Str::new("affix.sturdy"),
+///     group: Str::EMPTY,
+///     modifiers: ranges.as_ptr(),
+///     modifier_count: 1,
+///     weight: 100,
+///     categories: 1 << 1,
+///     rarity: 0,
+///     reserved: [0; 3],
+/// };
+/// assert_eq!(sturdy.modifier_count, 1);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct AffixDefData {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// The text key that names the affix, in its mod's texts.
+    pub text: Str,
+    /// Affixes of one group never roll together on an item; empty for none.
+    pub group: Str,
+    /// Its modifiers' ranges.
+    pub modifiers: *const AffixModifierData,
+    /// How many.
+    pub modifier_count: u32,
+    /// How likely it rolls against the others.
+    pub weight: u32,
+    /// The item categories it rolls on, a bit per `ItemCategory`.
+    pub categories: u32,
+    /// Its rarity, 0 (common) to 4 (legendary).
+    pub rarity: u8,
+    /// Zero.
+    pub reserved: [u8; 3],
+}
+
+/// One modifier of an affix with the range its value rolls in; read as
+/// arrays.
+///
+/// # Examples
+///
+/// See [`AffixDefData`].
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct AffixModifierData {
+    /// The stat's index.
+    pub stat: u32,
+    /// The operation, as [`StatModifierData::op`].
+    pub op: u8,
+    /// Zero.
+    pub reserved: [u8; 3],
+    /// The least value.
+    pub min: f32,
+    /// The greatest value.
+    pub max: f32,
+    /// The value rolls in steps of this from `min`; 0 for any value.
+    pub step: f32,
+}
+
+/// Rolls affixes onto an item, for [`HostApi::affix_roll`].
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::abi::{AffixRoll, Header};
+///
+/// let roll = AffixRoll { header: Header::of::<AffixRoll>(), pide: 900, item: 7, min: 1, max: 2, max_rarity: 4, flags: AffixRoll::ONCE, seed: 42 };
+/// assert!(roll.min <= roll.max);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct AffixRoll {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// The item's entity.
+    pub pide: u32,
+    /// The item id it holds.
+    pub item: u32,
+    /// The fewest affixes.
+    pub min: u8,
+    /// The most affixes.
+    pub max: u8,
+    /// The rarest an affix may be, 0 to 4.
+    pub max_rarity: u8,
+    /// [`AffixRoll::ONCE`].
+    pub flags: u8,
+    /// The seed of the roll: the same seed, item and affixes give the same
+    /// result.
+    pub seed: u64,
+}
+
+impl AffixRoll {
+    /// Rolls only an item that never rolled; others answer
+    /// [`Status::REFUSED`].
+    pub const ONCE: u8 = 1;
+}
+
+/// One line of what an item gives, written by [`HostApi::item_lines`] as an
+/// array.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::abi::{ItemLine, StatModifierData};
+///
+/// let line = ItemLine { modifier: StatModifierData { stat: 0, op: StatModifierData::ADD, reserved: [0; 3], value: 20.0 }, affix: 0 };
+/// assert_eq!(line.affix, 0);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct ItemLine {
+    /// The modifier.
+    pub modifier: StatModifierData,
+    /// The index of the affix it comes from, plus one; 0 for the item's own.
+    pub affix: u32,
 }
 
 impl StatSource {
@@ -4493,6 +4622,37 @@ pub struct HostApi {
     /// initialised. [`Status::REFUSED`] for an event another mod defined.
     /// Any thread. Since minor 47.
     pub send_event: extern "system" fn(me: ModHandle, event: u32, data: *const c_void) -> Status,
+    /// Defines the affix `id` in the mod's namespace with `def` and writes
+    /// its index and key to `out`. Allowed during `enshwick_mod_init` only.
+    /// Since minor 48.
+    pub affix_open: extern "system" fn(
+        me: ModHandle,
+        id: Str,
+        def: *const AffixDefData,
+        out: *mut StatRef,
+    ) -> Status,
+    /// Rolls affixes onto an item from every mod's affixes that fit its
+    /// category, replacing those it had, and writes how many to `count`;
+    /// [`Status::REFUSED`] for a [`AffixRoll::ONCE`] roll of an item that
+    /// rolled before, or off the server. On the server's game thread only.
+    /// Since minor 48.
+    pub affix_roll:
+        extern "system" fn(me: ModHandle, roll: *const AffixRoll, count: *mut u32) -> Status,
+    /// Writes up to `capacity` lines of what the item gives, its own
+    /// modifiers first and then each affix's, and how many to `count`. On a
+    /// client, from what the server sent. Any thread. Since minor 48.
+    pub item_lines: extern "system" fn(
+        me: ModHandle,
+        pide: u32,
+        item: u32,
+        out: *mut ItemLine,
+        capacity: u32,
+        count: *mut u32,
+    ) -> Status,
+    /// Writes the text key and rarity of affix `affix` (an index) to `text`
+    /// and `rarity`. Any thread. Since minor 48.
+    pub affix_info:
+        extern "system" fn(me: ModHandle, affix: u32, text: *mut Str, rarity: *mut u8) -> Status,
 }
 
 /// One field of a service table or mod event, as its layout hash sees it.
@@ -4696,6 +4856,13 @@ const _: () = {
     assert!(core::mem::offset_of!(HostApi, hook_at) == 24 + 35 * 8);
     assert!(core::mem::offset_of!(HostApi, inventory_open) == 24 + 36 * 8);
     assert!(core::mem::offset_of!(HostApi, inventory_submit) == 24 + 38 * 8);
+    assert!(size_of::<HostApi>() == 24 + 122 * 8);
+    assert!(core::mem::offset_of!(HostApi, affix_open) == 24 + 118 * 8);
+    assert!(size_of::<AffixDefData>() == 8 + 32 + 8 + 16);
+    // Frozen: read and written as arrays.
+    assert!(size_of::<AffixModifierData>() == 20);
+    assert!(size_of::<ItemLine>() == 16);
+    assert!(size_of::<AffixRoll>() == 8 + 12 + 4 + 8);
     assert!(core::mem::offset_of!(HostApi, stat_open) == 24 + 107 * 8);
     assert!(size_of::<StatDefData>() == 8 + 16 + 16);
     // Frozen: written as arrays.
@@ -4704,7 +4871,6 @@ const _: () = {
     assert!(size_of::<StatSource>() == 20);
     assert!(size_of::<StatModify>() == 8 + 8 + 12 + 4 + 8);
     assert!(size_of::<StatChange>() == 8 + 24);
-    assert!(size_of::<HostApi>() == 24 + 118 * 8);
     assert!(core::mem::offset_of!(HostApi, define_event) == 24 + 115 * 8);
     // Frozen: written as an array.
     assert!(size_of::<LayoutField>() == 24);

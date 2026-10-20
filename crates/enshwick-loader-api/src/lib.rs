@@ -67,6 +67,7 @@ extern crate self as enshwick_loader_api;
 
 pub mod abi;
 pub mod actions;
+pub mod affixes;
 pub mod altars;
 #[cfg(doctest)]
 mod book;

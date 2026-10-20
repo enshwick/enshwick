@@ -5,11 +5,12 @@ use core::ffi::c_void;
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::abi::{
-    Header, ModHandle, StatChange, StatChangeFn, StatDefData, StatModifierData, StatModify,
-    StatRef, StatSource, Status, Str,
+    AffixDefData, AffixRoll, Header, ItemLine, ModHandle, StatChange, StatChangeFn, StatDefData,
+    StatModifierData, StatModify, StatRef, StatSource, Status, Str,
 };
+use crate::affixes::{AffixDef, AffixKey, Candidate, Rarity, RollRules, lines_of, reroll};
 use crate::item_data::ItemInstance;
-use crate::stats::{ItemStats, Op, StatDef, aggregate, builtin, key_of};
+use crate::stats::{ItemStats, Op, Stat, StatDef, StatKey, aggregate, builtin, key_of};
 
 use super::table::with;
 
@@ -35,6 +36,8 @@ pub(crate) struct FakeStats {
     pub(crate) worn: BTreeMap<u32, Vec<ItemInstance>>,
     /// The values the last settle raised, by entity and stat.
     settled: BTreeMap<(u32, u32), f32>,
+    /// Affixes by full id, in the order they were defined.
+    affixes: Vec<(Box<str>, AffixDef)>,
 }
 
 impl FakeStats {
@@ -169,35 +172,18 @@ fn sources(s: &mut super::table::State, entity: u32, stat: u32) -> Vec<StatSourc
         .get(&entity)
         .cloned()
         .unwrap_or_default();
-    let kind = s
-        .item_kinds
-        .iter()
-        .position(|k| k == crate::stats::ITEM_KIND);
     let mut out = Vec::new();
     let mut items = worn;
     items.sort_unstable();
     for item in items {
-        let record = kind
-            .and_then(|kind| s.item_values.get(&(u32::try_from(kind).ok()?, item.pide.0)))
-            .filter(|(held, _)| *held == item.item)
-            .and_then(|(_, bytes)| postcard::from_bytes::<ItemStats>(bytes).ok())
-            .unwrap_or_default();
-        for m in record.modifiers {
-            let Some(index) = s
-                .stats
-                .kinds
-                .iter()
-                .position(|k| key_of(&k.id) == m.stat)
-                .and_then(|i| u32::try_from(i).ok())
-            else {
-                continue;
-            };
+        let record = record(s, item);
+        for line in item_lines_of(s, &record) {
             out.push(StatSource {
                 kind: StatSource::ITEM,
-                op: m.op.to_raw(),
+                op: line.modifier.op,
                 reserved: 0,
-                stat: index,
-                value: m.value,
+                stat: line.modifier.stat,
+                value: line.modifier.value,
                 id: item.pide.0,
                 owner: item.item,
             });
@@ -422,4 +408,179 @@ pub(crate) fn modifiers() -> Vec<(u32, u32, u32, u8, f32, u32, u64)> {
             .map(|(&(e, k, st), &(op, v, f, d))| (e, k, st, op, v, f, d))
             .collect()
     })
+}
+
+/// The item stats `item` keeps.
+fn record(s: &super::table::State, item: ItemInstance) -> ItemStats {
+    s.item_kinds
+        .iter()
+        .position(|k| k == crate::stats::ITEM_KIND)
+        .and_then(|kind| s.item_values.get(&(u32::try_from(kind).ok()?, item.pide.0)))
+        .filter(|(held, _)| *held == item.item)
+        .and_then(|(_, bytes)| postcard::from_bytes::<ItemStats>(bytes).ok())
+        .unwrap_or_default()
+}
+
+fn pool(stats: &FakeStats) -> Vec<Candidate<'_>> {
+    stats
+        .affixes
+        .iter()
+        .map(|(id, def)| Candidate {
+            key: AffixKey::of(id),
+            def,
+        })
+        .collect()
+}
+
+fn item_lines_of(s: &super::table::State, record: &ItemStats) -> Vec<ItemLine> {
+    let kinds = &s.stats.kinds;
+    let stat = |key: StatKey| {
+        kinds
+            .iter()
+            .position(|k| key_of(&k.id) == key)
+            .and_then(|i| u32::try_from(i).ok())
+    };
+    lines_of(record, &pool(&s.stats), stat)
+}
+
+pub(crate) extern "system" fn affix_open(
+    _me: ModHandle,
+    id: Str,
+    def: *const AffixDefData,
+    out: *mut StatRef,
+) -> Status {
+    // SAFETY: strings are borrowed for the call.
+    let Some(id) = unsafe { id.as_str() }.and_then(full) else {
+        return Status::BAD_ARGS;
+    };
+    // SAFETY: the safe layer passes a valid definition.
+    let Some(data) = (unsafe { def.as_ref() }) else {
+        return Status::BAD_ARGS;
+    };
+    let opened = with(Err(Status::MISSING), |s| {
+        let stats = state_stats(s);
+        let stat = |index: u32| {
+            let kind = stats.kinds.get(index as usize)?;
+            Some(Stat::from_ref(StatRef {
+                index,
+                key: key_of(&kind.id).0,
+            }))
+        };
+        // SAFETY: the definition's text and ranges are borrowed for the call.
+        let Some(parsed) = (unsafe { AffixDef::from_data(data, stat) }) else {
+            return Err(Status::BAD_ARGS);
+        };
+        if !id.starts_with("fake:") || stats.affixes.iter().any(|(known, _)| **known == *id) {
+            return Err(Status::REFUSED);
+        }
+        stats.affixes.push((id.clone().into_boxed_str(), parsed));
+        u32::try_from(stats.affixes.len() - 1).map_err(|_| Status::REFUSED)
+    });
+    match opened {
+        Ok(index) => super::table::put(
+            out,
+            StatRef {
+                index,
+                key: AffixKey::of(&id).0,
+            },
+        ),
+        Err(status) => status,
+    }
+}
+
+pub(crate) extern "system" fn affix_roll(
+    _me: ModHandle,
+    roll: *const AffixRoll,
+    count: *mut u32,
+) -> Status {
+    // SAFETY: the safe layer passes a valid request.
+    let Some(roll) = (unsafe { roll.as_ref() }) else {
+        return Status::BAD_ARGS;
+    };
+    let item = ItemInstance {
+        pide: crate::ecs::Entity(roll.pide),
+        item: roll.item,
+    };
+    let next = with(Err(Status::MISSING), |s| {
+        let category = s.host.items.get(&roll.item).map_or(0, |i| i.category);
+        let rules = RollRules::new(roll.min, roll.max)
+            .max_rarity(Rarity::from_raw(roll.max_rarity).unwrap_or(Rarity::Legendary));
+        let current = record(s, item);
+        let once = roll.flags & AffixRoll::ONCE != 0;
+        reroll(
+            &current,
+            &pool(state_stats(s)),
+            category,
+            rules,
+            roll.seed,
+            once,
+        )
+        .ok_or(Status::REFUSED)
+    });
+    let next = match next {
+        Ok(next) => next,
+        Err(status) => return status,
+    };
+    let rolled = u32::try_from(next.affixes.len()).unwrap_or(0);
+    let Ok(bytes) = postcard::to_allocvec(&next) else {
+        return Status::REFUSED;
+    };
+    let stored = with(None, |s| {
+        let at = s
+            .item_kinds
+            .iter()
+            .position(|k| k == crate::stats::ITEM_KIND)
+            .unwrap_or_else(|| {
+                s.item_kinds.push(crate::stats::ITEM_KIND.to_owned());
+                s.item_kinds.len() - 1
+            });
+        s.item_values
+            .insert((u32::try_from(at).ok()?, roll.pide), (roll.item, bytes));
+        Some(())
+    });
+    if stored.is_none() {
+        return Status::MISSING;
+    }
+    super::table::put(count, rolled)
+}
+
+pub(crate) extern "system" fn item_lines(
+    _me: ModHandle,
+    pide: u32,
+    item: u32,
+    out: *mut ItemLine,
+    capacity: u32,
+    count: *mut u32,
+) -> Status {
+    let lines = with(Vec::new(), |s| {
+        let item = ItemInstance {
+            pide: crate::ecs::Entity(pide),
+            item,
+        };
+        let record = record(s, item);
+        item_lines_of(s, &record)
+    });
+    super::table::put_list(&lines, out, capacity, count)
+}
+
+pub(crate) extern "system" fn affix_info(
+    _me: ModHandle,
+    affix: u32,
+    text: *mut Str,
+    rarity: *mut u8,
+) -> Status {
+    let found = with(None, |s| {
+        let (_, def) = s.stats.affixes.get(affix as usize)?;
+        // The fake keeps its affixes while installed.
+        Some((Str::new(&def.text), def.rarity.to_raw()))
+    });
+    let Some((name, rare)) = found else {
+        return Status::MISSING;
+    };
+    let status = super::table::put(text, name);
+    if status.is_ok() {
+        super::table::put(rarity, rare)
+    } else {
+        status
+    }
 }

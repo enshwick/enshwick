@@ -16,6 +16,7 @@ enshwick-loader-macros = { path = "../internal/macros", version = "0.5.0" }
 bcdec_rs.workspace = true
 zune-core.workspace = true
 zune-png.workspace = true
+fastrand.workspace = true
 postcard.workspace = true
 serde.workspace = true
 thiserror.workspace = true
@@ -30,6 +31,10 @@ test = []
 
 [[test]]
 name = "actions"
+required-features = ["test"]
+
+[[test]]
+name = "affixes"
 required-features = ["test"]
 
 [[test]]

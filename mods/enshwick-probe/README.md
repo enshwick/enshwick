@@ -49,6 +49,9 @@ Once the world has loaded, and again on `/probe check`:
   modifiers, both read back a second later (the maximum through the
   entity's vitals), then removed, the maximum back where it was; stat
   changes are logged as they come;
+- affixes: the first weapon or armour in any container rolled two affixes
+  from a seed and again the same, its lines named, and its old stats put
+  back (skipped when no such item is found, or no player was online yet);
 - terrain: the materials, a dry dig at the first placed entity, a mound
   added 40 metres above it and dug away again, and a radius of 100 metres
   refused;
@@ -75,6 +78,9 @@ From the chat as an administrator, or through the admin tools' command file
 | `/probe destroy <id>`           | asks the world to destroy an entity; on a copy of a world only                                                                                         |
 | `/probe spawn <id>`             | spawns a copy of an entity above it and follows it as above                                                                                            |
 | `/probe notice <text>`          | shows the text on your screen, or in chat without Enshwick                                                                                             |
+| `/probe stat <id> <value>`      | adds `value` to stat `id` on you (`off` removes it); no id lists them                                                                                  |
+| `/probe stats`                  | your stats that differ from the defaults, and their sources                                                                                            |
+| `/probe affix`                  | rolls one to three affixes anew on everything you wear                                                                                                 |
 
 ## Settings
 

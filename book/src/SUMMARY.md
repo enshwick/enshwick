@@ -61,6 +61,7 @@
 - [Inventories](inventories.md)
 - [Item data](item-data.md)
 - [Stats](stats.md)
+- [Affixes](affixes.md)
 
 # Shipping
 

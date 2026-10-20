@@ -132,9 +132,10 @@ follow.
 ## Tooltips
 
 What an item gives is item data, so a client that runs Enshwick knows every
-item's `ItemStats`, and `stats.info(stat)` names each line's text key and
-format. Per-item tooltip lines need a client hook of their own; until it
-lands, a mod item that always gives the same can show it with
+item's `ItemStats`: [`affixes.lines(item)`](affixes.md#what-an-item-rolled)
+lists it a modifier per line, and `stats.info(stat)` names each line's text
+key and format. Per-item tooltip lines need a client hook of their own;
+until it lands, a mod item that always gives the same can show it with
 [tooltip lines](content/items.md#tooltip-lines) on its type.
 
 ## Testing

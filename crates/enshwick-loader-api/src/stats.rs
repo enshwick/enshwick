@@ -570,7 +570,19 @@ impl Stat {
         self.index
     }
 
-    const fn of(stat: StatRef) -> Self {
+    /// The kind the loader handed out as `stat`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_loader_api::abi::StatRef;
+    /// use enshwick_loader_api::stats::{Stat, StatKey};
+    ///
+    /// let stat = Stat::from_ref(StatRef { index: 3, key: 0x1234 });
+    /// assert_eq!((stat.index(), stat.key()), (3, StatKey(0x1234)));
+    /// ```
+    #[must_use]
+    pub const fn from_ref(stat: StatRef) -> Self {
         Self {
             index: stat.index,
             key: StatKey(stat.key),
@@ -764,7 +776,8 @@ pub struct ItemModifier {
 }
 
 /// What a single item gives the entity that wears it, kept as its item data
-/// of kind [`ITEM_KIND`].
+/// of kind [`ITEM_KIND`]: modifiers of its own and the
+/// [affixes](crate::affixes) it rolled.
 ///
 /// # Examples
 ///
@@ -773,6 +786,7 @@ pub struct ItemModifier {
 ///
 /// let ring = ItemStats {
 ///     modifiers: vec![ItemModifier { stat: key_of("enshwick:resistance_fire"), op: Op::Add, value: 0.1 }],
+///     ..ItemStats::default()
 /// };
 /// let bytes = postcard::to_allocvec(&ring)?;
 /// assert_eq!(postcard::from_bytes::<ItemStats>(&bytes)?, ring);
@@ -782,6 +796,11 @@ pub struct ItemModifier {
 pub struct ItemStats {
     /// The modifiers, in the order they apply.
     pub modifiers: Vec<ItemModifier>,
+    /// The affixes it rolled, which apply after its own modifiers.
+    pub affixes: Vec<crate::affixes::Rolled>,
+    /// Whether it rolled affixes, even none; an item rolls once unless a mod
+    /// rolls it again on purpose.
+    pub rolled: bool,
 }
 
 /// How long a modifier a mod sets on an entity lasts.
@@ -1179,7 +1198,7 @@ where
     let handler = unsafe { &*user.cast::<F>() };
     let change = StatChange {
         entity: Entity(change.entity),
-        stat: Stat::of(change.stat),
+        stat: Stat::from_ref(change.stat),
         old: change.old,
         new: change.new,
     };
@@ -1198,7 +1217,7 @@ impl Load<'_> {
         let def_ptr = data.as_ref().map_or(core::ptr::null(), core::ptr::from_ref);
         let mut out = StatRef::default();
         let status = (host.api().stat_open)(host.handle(), Str::new(id), def_ptr, &raw mut out);
-        crate::load::ok(status, Stat::of(out), || format!("stat {id:?}"))
+        crate::load::ok(status, Stat::from_ref(out), || format!("stat {id:?}"))
     }
 
     /// Defines the mod's stat kind `name` (`<mod>:<name>`, or the full id in
@@ -1431,6 +1450,7 @@ mod tests {
                     value: -3.0,
                 },
             ],
+            ..ItemStats::default()
         };
         let bytes = postcard::to_allocvec(&stats).unwrap();
         assert!(bytes.len() < 32);
