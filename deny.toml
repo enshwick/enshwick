@@ -8,6 +8,12 @@ unmaintained = "workspace"
 [licenses]
 allow = ["MIT", "Apache-2.0", "BSD-2-Clause", "BSD-3-Clause", "ISC", "Zlib", "Unicode-3.0"]
 confidence-threshold = 0.9
+# Each exception with its reason.
+exceptions = [
+    # Mozilla's root certificates, which the updater's TLS checks GitHub
+    # against; CDLA-Permissive-2.0 only asks to keep the license text.
+    { allow = ["CDLA-Permissive-2.0"], crate = "webpki-roots" },
+]
 
 [bans]
 multiple-versions = "deny"
