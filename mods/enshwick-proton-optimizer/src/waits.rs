@@ -86,7 +86,8 @@ pub(crate) static PASSES: AtomicU64 = AtomicU64::new(0);
 pub(crate) static CAPPED: AtomicU64 = AtomicU64::new(0);
 /// Simulation steps.
 pub(crate) static STEPS: AtomicU64 = AtomicU64::new(0);
-/// The thread of the server's game loop, 0 before its first pass.
+/// The thread of the server's game loop, 0 before its first pass; it follows
+/// the loop to a new thread, as when a client hosts another game.
 pub(crate) static SERVER_THREAD: AtomicU32 = AtomicU32::new(0);
 
 /// Which waits were found and hooked.
@@ -180,8 +181,9 @@ fn exact(ms: u64, left_ns: u64) {
 /// The server loop's wait, `r9` in ns.
 fn server(registers: &mut Registers) {
     PASSES.fetch_add(1, Ordering::Relaxed);
-    if SERVER_THREAD.load(Ordering::Relaxed) == 0 {
-        SERVER_THREAD.store(sys::current_thread(), Ordering::Relaxed);
+    let me = sys::current_thread();
+    if SERVER_THREAD.load(Ordering::Relaxed) != me {
+        SERVER_THREAD.store(me, Ordering::Relaxed);
     }
     let cap = CAP_NS.load(Ordering::Relaxed);
     if cap <= VANILLA_SERVER_WAIT_NS || registers.r9 != VANILLA_SERVER_WAIT_NS {
