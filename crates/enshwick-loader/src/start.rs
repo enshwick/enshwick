@@ -9,8 +9,9 @@ use enshwick_api::abi::{ABI_MAJOR, HostApi, Manifest, ModHandle, Side, Status, e
 use enshwick_reflect::{Image, Layout, Reflection};
 use windows_sys::Win32::Foundation::{FreeLibrary, HMODULE};
 use windows_sys::Win32::System::LibraryLoader::{
-    GetModuleFileNameW, GetModuleHandleW, GetProcAddress, LOAD_WITH_ALTERED_SEARCH_PATH,
-    LoadLibraryExW,
+    GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+    GetModuleFileNameW, GetModuleHandleExW, GetModuleHandleW, GetProcAddress,
+    LOAD_WITH_ALTERED_SEARCH_PATH, LoadLibraryExW,
 };
 
 use crate::chains::Chains;
@@ -35,6 +36,8 @@ type Export = unsafe extern "system" fn() -> isize;
 /// A mod DLL with its exports.
 struct Library {
     file: String,
+    /// Where the DLL is mapped, for crash attribution.
+    range: Option<(usize, usize)>,
     manifest: &'static Manifest,
     init: InitFn,
     ready: ReadyFn,
@@ -100,6 +103,7 @@ pub(crate) fn start(stub_abi: u32, missing_forwards: u32) {
         return;
     };
     let order: Vec<&Library> = plan.order.iter().map(|&i| &libraries[i]).collect();
+    attribute_crashes(loader, &order);
     initialise(loader, &order);
     loader.seal_subscriptions();
     if side == Side::SERVER {
@@ -116,6 +120,38 @@ pub(crate) fn start(stub_abi: u32, missing_forwards: u32) {
         && let Some(game_dir) = loader.mods_dir.parent()
     {
         crate::advertise::start(game_dir, &joined(loader));
+    }
+}
+
+/// Names the mod or the loader in `crash.log` when a fault involves its code.
+fn attribute_crashes(loader: &Loader, order: &[&Library]) {
+    let mut modules: Vec<(String, usize, usize)> = order
+        .iter()
+        .zip(&loader.mods)
+        .filter_map(|(library, record)| library.range.map(|(s, e)| (record.id.clone(), s, e)))
+        .collect();
+    let mut own: HMODULE = core::ptr::null_mut();
+    // SAFETY: an address inside this DLL; the handle is not counted.
+    let found = unsafe {
+        GetModuleHandleExW(
+            GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+            (attribute_crashes as *const ()).cast(),
+            &raw mut own,
+        )
+    };
+    if found != 0
+        && let Some((start, end)) = crate::crash::range_of(own)
+    {
+        modules.push((crate::settings::LOADER_ID.to_owned(), start, end));
+    }
+    if let Some(game_dir) = loader.mods_dir.parent() {
+        crate::crash::install(
+            modules,
+            game_dir
+                .join("logs")
+                .join(crate::settings::LOADER_ID)
+                .join("crash.log"),
+        );
     }
 }
 
@@ -488,6 +524,7 @@ fn exports_of(module: HMODULE, file: &str) -> Option<Library> {
     let manifest = unsafe { query().as_ref::<'static>() }?;
     Some(Library {
         file: file.to_owned(),
+        range: crate::crash::range_of(module),
         manifest,
         init,
         ready,
