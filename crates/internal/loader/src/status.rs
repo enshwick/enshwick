@@ -65,12 +65,12 @@ fn lines_of(sources: &[Source], owner: usize) -> Vec<String> {
             let mut out = Str::EMPTY;
             // SAFETY: the source lives in the mod's DLL, which stays loaded;
             // the safe layer catches its panics.
-            unsafe {
+            crate::profile::call(source.owner, crate::profile::Feature::Status, || unsafe {
                 (source.callback)(
                     core::ptr::with_exposed_provenance_mut(source.user),
                     &raw mut out,
                 );
-            };
+            });
             // SAFETY: the text stays valid until the source runs again.
             let text = unsafe { out.as_str() }.unwrap_or("");
             text.lines()
@@ -168,6 +168,8 @@ pub(crate) fn summary(loader: &Loader) -> Summary {
         hooks,
         timed: crate::diag::timing(),
         tsc_hz: crate::patch::tsc_hz(),
+        costs: cost_lines(loader, 10, 4),
+        conflicts: conflicts(loader),
     }
 }
 
@@ -201,4 +203,209 @@ pub(crate) fn start(loader: &'static Loader) {
     if let Err(e) = started {
         crate::log!(WARN, "no status summaries: {e}");
     }
+}
+
+/// The readings a profile window starts from: when, every timed thunk's
+/// counter by address, and the callback buckets.
+#[derive(Debug, Default)]
+struct Baseline {
+    at: Option<Instant>,
+    hops: rustc_hash::FxHashMap<usize, crate::profile::Reading>,
+    buckets: Vec<(u64, u64)>,
+}
+
+static BASELINE: Mutex<Baseline> = Mutex::new(Baseline {
+    at: None,
+    hops: rustc_hash::FxHashMap::with_hasher(rustc_hash::FxBuildHasher),
+    buckets: Vec::new(),
+});
+
+/// Every chain with timed thunks, as the profile reads it, since `base`.
+fn chain_readings(
+    loader: &Loader,
+    chains: &crate::chains::Chains,
+    base: &Baseline,
+) -> Vec<crate::profile::ChainReading> {
+    use crate::profile::{ChainReading, LinkReading, Reading};
+    let read = |hop: &crate::chains::Hop| {
+        let key = core::ptr::from_ref(hop.counter).addr();
+        let now = Reading::of(hop.counter);
+        base.hops.get(&key).map_or(now, |&b| now.since(b))
+    };
+    chains
+        .iter()
+        .filter(|c| c.head.is_some())
+        .filter_map(|chain| {
+            let original = read(chain.original_hop.as_ref()?);
+            let links = chain
+                .running_order()
+                .into_iter()
+                .filter_map(|link| {
+                    Some(LinkReading {
+                        owner: link.owner,
+                        live: !crate::host::is_off(link.owner),
+                        reading: read(link.hop.as_ref()?),
+                    })
+                })
+                .collect();
+            Some(ChainReading {
+                name: hook_name(loader, chain.target),
+                links,
+                original,
+            })
+        })
+        .collect()
+}
+
+/// Starts a new profile window now.
+pub(crate) fn reset_profile(loader: &Loader) {
+    let mut hops = rustc_hash::FxHashMap::default();
+    if let Ok(chains) = loader.chains.lock() {
+        for chain in chains.iter() {
+            let all = chain
+                .links
+                .iter()
+                .filter_map(|l| l.hop)
+                .chain(chain.original_hop);
+            for hop in all {
+                hops.insert(
+                    core::ptr::from_ref(hop.counter).addr(),
+                    crate::profile::Reading::of(hop.counter),
+                );
+            }
+        }
+    }
+    *BASELINE.lock().unwrap_or_else(PoisonError::into_inner) = Baseline {
+        at: Some(Instant::now()),
+        hops,
+        buckets: crate::profile::buckets(),
+    };
+}
+
+/// The costs of every mod in the profile window, its length, and whether it
+/// started at a reset; `None` without diagnostics.
+pub(crate) fn costs(loader: &Loader) -> Option<(Vec<crate::profile::Cost>, Duration, bool)> {
+    if !crate::diag::counting() {
+        return None;
+    }
+    let base = BASELINE.lock().unwrap_or_else(PoisonError::into_inner);
+    let chains = match loader.chains.lock() {
+        Ok(chains) => chain_readings(loader, &chains, &base),
+        Err(_) => Vec::new(),
+    };
+    let name = |owner: usize| {
+        if owner == crate::chains::LOADER {
+            LOADER_ID.to_owned()
+        } else {
+            loader
+                .mods
+                .get(owner)
+                .map_or_else(|| "?".to_owned(), |m| m.id.clone())
+        }
+    };
+    let costs = crate::profile::costs(&chains, &crate::profile::buckets(), &base.buckets, name);
+    let since = base.at.or_else(|| STARTED.get().copied())?;
+    Some((costs, since.elapsed(), base.at.is_some()))
+}
+
+/// The cost lines for the status summary and the chat, with a header.
+pub(crate) fn cost_lines(loader: &Loader, mods: usize, items: usize) -> Vec<String> {
+    let Some((costs, window, reset)) = costs(loader) else {
+        return vec![
+            "per-mod costs need diagnostics = true in mod-configs/enshwick.toml (hook links also diagnostics_timing = true); read at start"
+                .to_owned(),
+        ];
+    };
+    let Some(hz) = crate::patch::tsc_hz() else {
+        return vec!["per-mod costs: measuring, ask again in a second".to_owned()];
+    };
+    let since = if reset {
+        "since /enshwick profile reset"
+    } else {
+        "since start"
+    };
+    let mut lines = vec![format!(
+        "per-mod costs over {} ({since}), work per second of time:",
+        crate::diag::duration(window)
+    )];
+    let rendered = crate::profile::render(&costs, hz, window, mods, items);
+    if rendered.is_empty() {
+        lines.push("no mod has cost anything yet".to_owned());
+    }
+    lines.extend(rendered);
+    lines
+}
+
+/// The conflict report: functions, features and resources several mods
+/// share, or one holds against another.
+pub(crate) fn conflicts(loader: &Loader) -> Vec<String> {
+    use crate::conflicts::{HookLink, Hooked};
+    let name = |owner: usize| {
+        if owner == crate::chains::LOADER {
+            LOADER_ID.to_owned()
+        } else {
+            loader
+                .mods
+                .get(owner)
+                .map_or_else(|| "?".to_owned(), |m| m.id.clone())
+        }
+    };
+    let mut hooks: Vec<Hooked> = match loader.chains.lock() {
+        Ok(chains) => {
+            let mut hooks: Vec<Hooked> = chains
+                .iter()
+                .map(|chain| Hooked {
+                    name: hook_name(loader, chain.target),
+                    links: chain
+                        .running_order()
+                        .into_iter()
+                        .map(|l| HookLink {
+                            owner: name(l.owner),
+                            priority: l.priority,
+                            exclusive: l
+                                .flags
+                                .contains(enshwick_loader_api::abi::HookFlags::EXCLUSIVE),
+                            caller_frame: l
+                                .flags
+                                .contains(enshwick_loader_api::abi::HookFlags::CALLER_FRAME),
+                        })
+                        .collect(),
+                    refused: chains
+                        .refused()
+                        .iter()
+                        .filter(|r| r.target == chain.target)
+                        .map(|r| (name(r.owner), r.holder.map(name)))
+                        .collect(),
+                })
+                .collect();
+            hooks.sort_by(|a, b| a.name.cmp(&b.name));
+            hooks
+        }
+        Err(_) => Vec::new(),
+    };
+    if let Ok(mids) = loader.mids.lock() {
+        for address in mids.addresses() {
+            let owners = mids.owners(address);
+            if owners.len() >= 2 {
+                hooks.push(Hooked {
+                    name: format!("inside {}", hook_name(loader, address)),
+                    links: owners
+                        .into_iter()
+                        .map(|o| HookLink {
+                            owner: name(o),
+                            priority: 0,
+                            exclusive: false,
+                            caller_frame: false,
+                        })
+                        .collect(),
+                    refused: Vec::new(),
+                });
+            }
+        }
+    }
+    let resources: Vec<(String, Vec<String>)> = crate::content::shared()
+        .into_iter()
+        .map(|(key, owners)| (key, owners.into_iter().map(name).collect()))
+        .collect();
+    crate::conflicts::report(&hooks, &crate::conflicts::claims(), &resources, name)
 }

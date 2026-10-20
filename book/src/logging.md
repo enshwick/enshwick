@@ -92,7 +92,9 @@ after start, then every `status_minutes`, and whenever an administrator types
   the mod adds;
 - the mods turned off, and why;
 - what mods serve and patch;
-- the number of hooked functions, and with `diagnostics` their calls.
+- the number of hooked functions, and with `diagnostics` their calls;
+- with `diagnostics`, what each mod costs ([Per-mod costs](#per-mod-costs));
+- where mods meet ([Conflicts](#conflicts)).
 
 `/enshwick status` also answers the administrator in the chat with a short
 form of it.
@@ -124,6 +126,48 @@ whole chain with the original.
 
 Both are read at start, since the thunks are written once. Without them the
 thunks count nothing and a hooked call runs as before.
+
+## Per-mod costs
+
+With `diagnostics = true` the loader also times every call it makes into a
+mod: event, game event and mod event handlers, commands, messages, interface
+frames, filters and vetoes, survivor and altar callbacks, stat changes,
+inventory results, status lines, resource patches and migrations. A
+callback's time leaves out the callbacks it causes in other mods, which count
+for those. With `diagnostics_timing = true` as well, every link and every
+original has a timed thunk in front of it, and a link's own time is its
+thunk's less the rest of the chain's, so a mod pays only for its own link
+even when several mods hook one function. Timing a callback costs about
+14 ns; with `diagnostics` off it costs nothing measurable.
+
+The summary lists the ten costliest mods, each with its work per second of
+time and its four costliest items; the loader's own links count under
+`enshwick`, with the callbacks they make into mods inside them:
+
+```text
+per-mod costs over 1m 00s (since start), work per second of time:
+  enshwick 0.92 ms/s: hook comfort.base_register 0.39 ms/s in 366110 calls; hook server.post_step 0.18 ms/s in 1456 calls
+  furniture-comfort 52.9 µs/s: progress filters 51.8 µs/s in 366110 calls; events 1.1 µs/s in 1 calls
+```
+
+An administrator asks for the five costliest with `/enshwick profile`, and
+starts counting anew with `/enshwick profile reset`, such as before trying
+something in game.
+
+## Conflicts
+
+The summary and `/enshwick conflicts` (administrators) list where mods meet:
+
+| Line                                                      | Means                                                           |
+| --------------------------------------------------------- | --------------------------------------------------------------- |
+| `hook <function>: a (priority 0) then b (priority 5)`     | both link the function, in that running order, each calling on  |
+| `hook <function>: ...; b refused, a holds it exclusively` | `a` linked it with `EXCLUSIVE`, and `b`'s link was refused      |
+| `<filter>: a, b, chained in load order`                   | both filter it, such as interactions or damage; each may refuse |
+| `skill override: a, b, asked in load order`               | the first answer decides                                        |
+| `<feature>: a holds it; refused: b`                       | one mod at a time, such as the altar limit or a command name    |
+| `the item registry: patched by a then b`                  | both change one resource, each patch on the one before          |
+
+`conflicts: none` means no two mods share anything.
 
 ## Faults
 

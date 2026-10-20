@@ -373,7 +373,11 @@ fn hud(engine: &Engine, context: usize) {
             reserved: 0,
         };
         // SAFETY: the mod's callback with its own pointer; it does not unwind.
-        unsafe { (registered.callback)(&raw const frame, registered.user()) };
+        crate::profile::call(
+            registered.owner,
+            crate::profile::Feature::Interface,
+            || unsafe { (registered.callback)(&raw const frame, registered.user()) },
+        );
         DRAWING.set(None);
     }
     HUD_ITEMS.with_borrow_mut(demo::hud_samples);
@@ -489,7 +493,11 @@ fn frames(engine: &Engine, context: usize) {
             reserved: 0,
         };
         // SAFETY: the mod's callback with its own pointer; it does not unwind.
-        unsafe { (registered.callback)(&raw const frame, registered.user()) };
+        crate::profile::call(
+            registered.owner,
+            crate::profile::Feature::Interface,
+            || unsafe { (registered.callback)(&raw const frame, registered.user()) },
+        );
         let left = DRAWING.take();
         if let Some(drawing) = left
             && drawing.window_open

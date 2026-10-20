@@ -301,12 +301,16 @@ fn deliver(loader: &Loader) {
             }) {
                 // SAFETY: the handler lives in the mod's DLL, which stays
                 // loaded; the safe layer catches its panics.
-                unsafe {
-                    (subscriber.callback)(
-                        &raw const data,
-                        core::ptr::with_exposed_provenance_mut(subscriber.user),
-                    );
-                }
+                crate::profile::call(
+                    subscriber.owner,
+                    crate::profile::Feature::GameEvents,
+                    || unsafe {
+                        (subscriber.callback)(
+                            &raw const data,
+                            core::ptr::with_exposed_provenance_mut(subscriber.user),
+                        );
+                    },
+                );
             }
         }
         batch.events.clear();

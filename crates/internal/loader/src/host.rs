@@ -407,6 +407,7 @@ impl Loader {
             next: next.slot(),
             priority: i32::MIN,
             flags,
+            hop: None,
         };
         self.chains
             .lock()
@@ -502,13 +503,17 @@ impl Loader {
         }) {
             // SAFETY: the handler lives in the mod's DLL, which stays loaded;
             // the safe layer catches its panics.
-            unsafe {
-                (subscription.callback)(
-                    event,
-                    data,
-                    core::ptr::with_exposed_provenance_mut(subscription.user),
-                );
-            }
+            crate::profile::call(
+                subscription.owner,
+                crate::profile::Feature::Events,
+                || unsafe {
+                    (subscription.callback)(
+                        event,
+                        data,
+                        core::ptr::with_exposed_provenance_mut(subscription.user),
+                    );
+                },
+            );
         }
     }
 
@@ -839,6 +844,7 @@ extern "system" fn hook(me: ModHandle, spec: *const HookSpec) -> Status {
             next,
             priority: spec.priority,
             flags: spec.flags,
+            hop: None,
         };
         match loader.chains.lock() {
             Ok(mut chains) => chains.add(spec.target, link),
@@ -1694,7 +1700,12 @@ extern "system" fn command(
             Ok(found) => found,
             Err(status) => return status,
         };
-        let status = crate::chat::register(index, name, help, callback, user);
+        let status = crate::conflicts::note(
+            format!("command /{name}"),
+            index,
+            crate::conflicts::Mode::Exclusive,
+            crate::chat::register(index, name, help, callback, user),
+        );
         if status.is_ok() {
             crate::log::write(Level::DEBUG, &record.id, &format!("command /{name}"));
         }
@@ -1736,7 +1747,12 @@ extern "system" fn rename_filter(
             Ok(found) => found,
             Err(status) => return status,
         };
-        crate::label::register(index, callback, user)
+        crate::conflicts::note(
+            "rename filter",
+            index,
+            crate::conflicts::Mode::Chained,
+            crate::label::register(index, callback, user),
+        )
     })
 }
 
@@ -1816,7 +1832,12 @@ extern "system" fn altar_zones_control(me: ModHandle) -> Status {
             Ok(found) => found,
             Err(status) => return status,
         };
-        crate::altars::control(loader, index)
+        crate::conflicts::note(
+            "altar zones",
+            index,
+            crate::conflicts::Mode::Exclusive,
+            crate::altars::control(loader, index),
+        )
     })
 }
 
@@ -1852,7 +1873,12 @@ extern "system" fn zone_check_filter(
             Ok(found) => found,
             Err(status) => return status,
         };
-        crate::altars::register(index, callback, user)
+        crate::conflicts::note(
+            "altar zone check",
+            index,
+            crate::conflicts::Mode::Chained,
+            crate::altars::register(index, callback, user),
+        )
     })
 }
 
@@ -1862,7 +1888,12 @@ extern "system" fn survivor_lookup(
     user: *mut core::ffi::c_void,
 ) -> Status {
     entry("survivor_lookup", || match caller_index(me) {
-        Ok((loader, index)) => crate::survivors::register_lookup(loader, index, callback, user),
+        Ok((loader, index)) => crate::conflicts::note(
+            "survivor lookup",
+            index,
+            crate::conflicts::Mode::Exclusive,
+            crate::survivors::register_lookup(loader, index, callback, user),
+        ),
         Err(status) => status,
     })
 }
@@ -1873,7 +1904,12 @@ extern "system" fn survivor_bed_check(
     user: *mut core::ffi::c_void,
 ) -> Status {
     entry("survivor_bed_check", || match caller_index(me) {
-        Ok((loader, index)) => crate::survivors::register_bed_check(loader, index, callback, user),
+        Ok((loader, index)) => crate::conflicts::note(
+            "bed check",
+            index,
+            crate::conflicts::Mode::Chained,
+            crate::survivors::register_bed_check(loader, index, callback, user),
+        ),
         Err(status) => status,
     })
 }
@@ -1884,7 +1920,12 @@ extern "system" fn summon_filter(
     user: *mut core::ffi::c_void,
 ) -> Status {
     entry("summon_filter", || match caller_index(me) {
-        Ok((loader, index)) => crate::survivors::register_summon(loader, index, callback, user),
+        Ok((loader, index)) => crate::conflicts::note(
+            "summon filter",
+            index,
+            crate::conflicts::Mode::Chained,
+            crate::survivors::register_summon(loader, index, callback, user),
+        ),
         Err(status) => status,
     })
 }
@@ -2290,7 +2331,12 @@ extern "system" fn survivor_status(
     user: *mut core::ffi::c_void,
 ) -> Status {
     entry("survivor_status", || match caller_index(me) {
-        Ok((loader, index)) => crate::survivors::register_status(loader, index, callback, user),
+        Ok((loader, index)) => crate::conflicts::note(
+            "survivor status",
+            index,
+            crate::conflicts::Mode::Exclusive,
+            crate::survivors::register_status(loader, index, callback, user),
+        ),
         Err(status) => status,
     })
 }
@@ -2301,7 +2347,12 @@ extern "system" fn interaction_filter(
     user: *mut core::ffi::c_void,
 ) -> Status {
     entry("interaction_filter", || match caller_index(me) {
-        Ok((loader, index)) => crate::interactions::register(loader, index, callback, user),
+        Ok((loader, index)) => crate::conflicts::note(
+            "interaction filter",
+            index,
+            crate::conflicts::Mode::Chained,
+            crate::interactions::register(loader, index, callback, user),
+        ),
         Err(status) => status,
     })
 }
@@ -2313,7 +2364,12 @@ extern "system" fn skill_override(
     user: *mut core::ffi::c_void,
 ) -> Status {
     entry("skill_override", || match caller_index(me) {
-        Ok((loader, index)) => crate::progress::register_skill(loader, index, node, callback, user),
+        Ok((loader, index)) => crate::conflicts::note(
+            "skill override",
+            index,
+            crate::conflicts::Mode::FirstAnswers,
+            crate::progress::register_skill(loader, index, node, callback, user),
+        ),
         Err(status) => status,
     })
 }
@@ -2324,7 +2380,12 @@ extern "system" fn comfort_filter(
     user: *mut core::ffi::c_void,
 ) -> Status {
     entry("comfort_filter", || match caller_index(me) {
-        Ok((loader, index)) => crate::progress::register_comfort(loader, index, callback, user),
+        Ok((loader, index)) => crate::conflicts::note(
+            "comfort filter",
+            index,
+            crate::conflicts::Mode::Chained,
+            crate::progress::register_comfort(loader, index, callback, user),
+        ),
         Err(status) => status,
     })
 }
@@ -2335,7 +2396,12 @@ extern "system" fn experience_filter(
     user: *mut core::ffi::c_void,
 ) -> Status {
     entry("experience_filter", || match caller_index(me) {
-        Ok((loader, index)) => crate::progress::register_experience(loader, index, callback, user),
+        Ok((loader, index)) => crate::conflicts::note(
+            "experience filter",
+            index,
+            crate::conflicts::Mode::Chained,
+            crate::progress::register_experience(loader, index, callback, user),
+        ),
         Err(status) => status,
     })
 }
@@ -2346,7 +2412,12 @@ extern "system" fn altar_limit(
     user: *mut core::ffi::c_void,
 ) -> Status {
     entry("altar_limit", || match caller_index(me) {
-        Ok((loader, index)) => crate::bases::register_limit(loader, index, callback, user),
+        Ok((loader, index)) => crate::conflicts::note(
+            "altar limit",
+            index,
+            crate::conflicts::Mode::Exclusive,
+            crate::bases::register_limit(loader, index, callback, user),
+        ),
         Err(status) => status,
     })
 }
@@ -2523,7 +2594,12 @@ extern "system" fn craft_filter(
     user: *mut core::ffi::c_void,
 ) -> Status {
     entry("craft_filter", || match caller_index(me) {
-        Ok((loader, index)) => crate::vetoes::register_craft(loader, index, callback, user),
+        Ok((loader, index)) => crate::conflicts::note(
+            "crafting veto",
+            index,
+            crate::conflicts::Mode::Chained,
+            crate::vetoes::register_craft(loader, index, callback, user),
+        ),
         Err(status) => status,
     })
 }
@@ -2534,7 +2610,12 @@ extern "system" fn build_filter(
     user: *mut core::ffi::c_void,
 ) -> Status {
     entry("build_filter", || match caller_index(me) {
-        Ok((loader, index)) => crate::vetoes::register_build(loader, index, callback, user),
+        Ok((loader, index)) => crate::conflicts::note(
+            "building veto",
+            index,
+            crate::conflicts::Mode::Chained,
+            crate::vetoes::register_build(loader, index, callback, user),
+        ),
         Err(status) => status,
     })
 }
@@ -2637,7 +2718,12 @@ extern "system" fn set_time_of_day(me: ModHandle, time: i64) -> Status {
 
 extern "system" fn time_speed_control(me: ModHandle) -> Status {
     entry("time_speed_control", || match caller_index(me) {
-        Ok((loader, index)) => crate::daytime::register_speed(loader, index),
+        Ok((loader, index)) => crate::conflicts::note(
+            "time speed",
+            index,
+            crate::conflicts::Mode::Exclusive,
+            crate::daytime::register_speed(loader, index),
+        ),
         Err(status) => status,
     })
 }
@@ -2698,7 +2784,12 @@ extern "system" fn damage_filter(
     user: *mut core::ffi::c_void,
 ) -> Status {
     entry("damage_filter", || match caller_index(me) {
-        Ok((loader, index)) => crate::damage::register(loader, index, callback, user),
+        Ok((loader, index)) => crate::conflicts::note(
+            "damage filter",
+            index,
+            crate::conflicts::Mode::Chained,
+            crate::damage::register(loader, index, callback, user),
+        ),
         Err(status) => status,
     })
 }

@@ -129,7 +129,9 @@ fn filter(check: &mut DamageCheck) {
     for f in filters.iter().filter(|f| f.live()) {
         // SAFETY: the callback lives in the mod's DLL, which stays loaded,
         // and takes the pointer it registered; the check is valid for it.
-        unsafe { (f.callback)(&raw mut *check, f.user()) };
+        crate::profile::call(f.owner, crate::profile::Feature::Damage, || unsafe {
+            (f.callback)(&raw mut *check, f.user());
+        });
     }
 }
 

@@ -762,7 +762,9 @@ unsafe fn check(
     filters.iter().filter(|f| f.live()).any(|f| {
         // SAFETY: the callback lives in the mod's DLL, which stays loaded,
         // and takes the pointer it registered; the call is valid for it.
-        unsafe { (f.callback)(&raw const call, f.user()) != 0 }
+        crate::profile::call(f.owner, crate::profile::Feature::Altars, || unsafe {
+            (f.callback)(&raw const call, f.user()) != 0
+        })
     })
 }
 

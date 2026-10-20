@@ -13,11 +13,14 @@
 //! its slot, one locked increment. With timing, every 256th call goes the
 //! long way: the thunk gives the chain a frame of its own, with the caller's
 //! stack arguments copied into it and unwind data registered for it, and
-//! adds the time-stamp counter ticks the call took to the counter. Without
-//! diagnostics the thunks are the plain ones and count nothing.
+//! adds the time-stamp counter ticks the call took to the counter. Timing
+//! also puts a timed thunk in front of every link and every original, which
+//! a link's `next` slot points at, so each link's own time is its thunk's
+//! less the next one's. Without diagnostics the thunks are the plain ones
+//! and count nothing.
 
 use std::sync::OnceLock;
-use std::sync::atomic::{AtomicU64, AtomicUsize};
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use windows_sys::Win32::System::Diagnostics::Debug::{
     FlushInstructionCache, IMAGE_RUNTIME_FUNCTION_ENTRY, RtlAddFunctionTable,
@@ -27,7 +30,8 @@ use windows_sys::Win32::System::Memory::{
 };
 use windows_sys::Win32::System::Threading::{GetCurrentProcess, TlsAlloc, TlsGetValue};
 
-use crate::chains::Chains;
+pub(crate) use crate::chains::Counter;
+use crate::chains::{Chains, Hop};
 use crate::code::{CodePatch, Verdict};
 use crate::detour::{Pending, Request};
 use crate::mid::{Mids, Stubs};
@@ -108,18 +112,6 @@ impl FrameSlot {
     }
 }
 
-/// A hooked function's counters, beside its slot; its thunk writes them.
-#[repr(C)]
-#[derive(Debug, Default)]
-pub(crate) struct Counter {
-    /// Calls since arming.
-    pub(crate) calls: AtomicU64,
-    /// Timed calls.
-    pub(crate) samples: AtomicU64,
-    /// Time-stamp counter ticks of the timed calls.
-    pub(crate) ticks: AtomicU64,
-}
-
 /// What thunks count.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Count {
@@ -140,6 +132,15 @@ impl Count {
             Self::Calls
         } else {
             Self::Off
+        }
+    }
+
+    /// How many timed thunks the links and originals of `chains` take.
+    fn hops(self, chains: &Chains) -> usize {
+        if self == Self::Timed {
+            chains.iter().map(|c| c.links.len() + 1).sum()
+        } else {
+            0
         }
     }
 
@@ -234,21 +235,13 @@ pub(crate) fn arm(
         return armed;
     }
     let thunk = counting.thunk();
-    let code_len = (count * thunk).div_ceil(PAGE) * PAGE;
-    let slots_len = count * size_of::<usize>();
-    let counters_len = count * size_of::<Counter>();
-    let functions_len = count * size_of::<RuntimeFunction>();
+    let hops = counting.hops(chains);
+    let code_len = (count * thunk + hops * TIMED_THUNK).div_ceil(PAGE) * PAGE;
+    let slots_len = (count + hops) * size_of::<usize>();
+    let counters_len = (count + hops) * size_of::<Counter>();
+    let functions_len = (count + hops) * size_of::<RuntimeFunction>();
     let data_len = (slots_len + counters_len + functions_len + UNWIND.len()).div_ceil(PAGE) * PAGE;
-    // SAFETY: a fresh reservation; null on failure.
-    let block = unsafe {
-        VirtualAlloc(
-            core::ptr::null(),
-            code_len + data_len,
-            MEM_RESERVE | MEM_COMMIT,
-            PAGE_READWRITE,
-        )
-    }
-    .cast::<u8>();
+    let block = reserve(code_len + data_len);
     if block.is_null() {
         return unarmed(chains, mids, patches, "no memory for thunks");
     }
@@ -281,7 +274,12 @@ pub(crate) fn arm(
     let mut failures = Vec::new();
     let mut thunks = Vec::with_capacity(count);
     let mut counters = Vec::new();
-    let mut functions = 0u32;
+    let mut table = Table {
+        base: block,
+        entries: function_base,
+        unwind,
+        count: 0,
+    };
     for (i, chain) in chains.iter_mut().enumerate() {
         // SAFETY: `i < count`, inside the data pages.
         let slot_ptr = unsafe { data.add(i) };
@@ -312,25 +310,26 @@ pub(crate) fn arm(
         // SAFETY: `code` has `thunk` writable bytes; the slot and the counter
         // are within ±2 GiB.
         let written = unsafe { write_thunk(code, thunk, slot, frame_index, counter) };
-        if let Some((timed, end)) = written.timed {
-            let offset = |at: usize| u32::try_from(code.addr() + at - block.addr()).unwrap_or(0);
-            // SAFETY: one entry per chain fits the function table.
-            let entry = unsafe { function_base.add(functions as usize) };
-            // SAFETY: as above, writable.
-            unsafe {
-                entry.write(RuntimeFunction {
-                    begin: offset(timed),
-                    end: offset(end),
-                    unwind: u32::try_from(unwind.addr() - block.addr()).unwrap_or(0),
-                });
-            };
-            functions += 1;
-        }
+        // SAFETY: one entry per thunk fits the table, all inside `block`.
+        unsafe { table.add(code, &written) };
         chain.head = Some(slot);
         thunks.push((chain.target, code));
     }
-    // SAFETY: `functions` entries written above, in memory never freed.
-    unsafe { register_unwind(block, function_base, functions) };
+    if hops > 0 {
+        let hop_code = Hops {
+            // SAFETY: the hops' thunks follow the heads', inside the code pages.
+            code: unsafe { block.add(count * thunk) },
+            // SAFETY: the hops' slots follow the heads', inside the data pages.
+            slots: unsafe { data.add(count) },
+            // SAFETY: as above, for the counters.
+            counters: unsafe { counter_base.add(count) },
+            count: hops,
+        };
+        // SAFETY: the hop areas hold `hops` entries each, never freed.
+        unsafe { hop_code.arm(chains, &mut table) };
+    }
+    // SAFETY: the entries written above, in memory never freed.
+    unsafe { register_unwind(block, function_base, table.count) };
     if counting != Count::Off {
         let _first = COUNTERS.set(counters.into_boxed_slice());
         let _first = ARMED_AT.set((rdtsc(), std::time::Instant::now()));
@@ -349,6 +348,111 @@ pub(crate) fn arm(
 
     let code = hook(chains, mids, &thunks, off, patches, &mut failures);
     Armed { failures, code }
+}
+
+/// `len` bytes of fresh read-write memory; null when there is none.
+fn reserve(len: usize) -> *mut u8 {
+    // SAFETY: a fresh reservation; null on failure.
+    unsafe {
+        VirtualAlloc(
+            core::ptr::null(),
+            len,
+            MEM_RESERVE | MEM_COMMIT,
+            PAGE_READWRITE,
+        )
+    }
+    .cast::<u8>()
+}
+
+/// The function table of the timed calls, filled as thunks are written.
+struct Table {
+    base: *mut u8,
+    entries: *mut RuntimeFunction,
+    unwind: *mut u8,
+    count: u32,
+}
+
+impl Table {
+    /// Adds the timed call of the thunk at `code`, if it has one.
+    ///
+    /// # Safety
+    ///
+    /// The table has room for one more entry, and `code` and the unwind data
+    /// lie inside the block at `base`.
+    unsafe fn add(&mut self, code: *mut u8, written: &Written) {
+        let Some((timed, end)) = written.timed else {
+            return;
+        };
+        let offset = |at: usize| u32::try_from(at - self.base.addr()).unwrap_or(0);
+        // SAFETY: the caller guarantees room for this entry.
+        let entry = unsafe { self.entries.add(self.count as usize) };
+        // SAFETY: as above, writable.
+        unsafe {
+            entry.write(RuntimeFunction {
+                begin: offset(code.addr() + timed),
+                end: offset(code.addr() + end),
+                unwind: offset(self.unwind.addr()),
+            });
+        };
+        self.count += 1;
+    }
+}
+
+/// The timed thunks in front of every link and original: their code, slots
+/// and counters.
+struct Hops {
+    code: *mut u8,
+    slots: *mut AtomicUsize,
+    counters: *mut Counter,
+    count: usize,
+}
+
+impl Hops {
+    /// Writes a hop for every link and original of `chains`, in that order.
+    ///
+    /// # Safety
+    ///
+    /// The areas hold `count` thunks, slots and counters, committed, zeroed,
+    /// writable and never freed, within ±2 GiB of each other, and `table`
+    /// has room for `count` more entries.
+    unsafe fn arm(&self, chains: &mut Chains, table: &mut Table) {
+        let mut next = 0;
+        let mut hop = |detour: usize| -> Option<Hop> {
+            let i = next;
+            if i >= self.count {
+                return None;
+            }
+            next += 1;
+            // SAFETY: `i < count`, inside the slot area.
+            let slot_ptr = unsafe { self.slots.add(i) };
+            // SAFETY: committed, zeroed, aligned and never freed.
+            let slot: &'static AtomicUsize = unsafe { &*slot_ptr };
+            // SAFETY: `i < count`, inside the counter area.
+            let counter_ptr = unsafe { self.counters.add(i) };
+            // SAFETY: as for the slot; zero is a valid counter.
+            let counter: &'static Counter = unsafe { &*counter_ptr };
+            // SAFETY: `i < count`, inside the code area.
+            let code = unsafe { self.code.add(i * TIMED_THUNK) };
+            slot.store(detour, Ordering::Relaxed);
+            // SAFETY: `code` has `TIMED_THUNK` writable bytes; the slot and
+            // the counter are within ±2 GiB.
+            let written =
+                unsafe { write_thunk(code, TIMED_THUNK, slot, None, Some((counter, true))) };
+            // SAFETY: the caller guarantees room in the table.
+            unsafe { table.add(code, &written) };
+            Some(Hop {
+                entry: code.addr(),
+                slot,
+                counter,
+            })
+        };
+        for chain in chains.iter_mut() {
+            for link in &mut chain.links {
+                link.hop = hop(link.detour);
+            }
+            chain.original_hop = hop(0);
+        }
+    }
 }
 
 /// Registers the unwind data of the timed calls, so a stack walk or an
@@ -705,6 +809,8 @@ fn slot_offset(slot: usize, next_instruction: usize) -> i32 {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::atomic::AtomicU64;
+
     use super::*;
 
     #[test]
@@ -805,8 +911,7 @@ mod tests {
 
         /// The thunk, timed or only counting, jumping to `target`.
         fn thunk(&self, target: usize, timed: bool) -> usize {
-            self.slot()
-                .store(target, core::sync::atomic::Ordering::Release);
+            self.slot().store(target, Ordering::Release);
             // SAFETY: the page has `TIMED_THUNK` bytes before the slot.
             let written = unsafe {
                 write_thunk(
@@ -851,7 +956,7 @@ mod tests {
             assert_eq!(call(1, 1, 1, 1, 1, 1, 1, i), 28 + 8 * i);
         }
         let counter = page.counter();
-        let load = |value: &AtomicU64| value.load(core::sync::atomic::Ordering::Relaxed);
+        let load = |value: &AtomicU64| value.load(Ordering::Relaxed);
         assert_eq!(load(&counter.calls), 600);
         // The 256th and the 512th.
         assert_eq!(load(&counter.samples), 2);
@@ -870,10 +975,7 @@ mod tests {
         for _ in 0..512 {
             assert!((call(3.0) - 1.5).abs() < f64::EPSILON);
         }
-        let samples = page
-            .counter()
-            .samples
-            .load(core::sync::atomic::Ordering::Relaxed);
+        let samples = page.counter().samples.load(Ordering::Relaxed);
         assert_eq!(samples, 2);
     }
 
@@ -887,14 +989,8 @@ mod tests {
             assert_eq!(call(1, 0, 0, 0, 0, 0, 0, 1), 9);
         }
         let counter = page.counter();
-        assert_eq!(
-            counter.calls.load(core::sync::atomic::Ordering::Relaxed),
-            300
-        );
-        assert_eq!(
-            counter.samples.load(core::sync::atomic::Ordering::Relaxed),
-            0
-        );
+        assert_eq!(counter.calls.load(Ordering::Relaxed), 300);
+        assert_eq!(counter.samples.load(Ordering::Relaxed), 0);
     }
 
     #[test]
@@ -913,6 +1009,7 @@ mod tests {
             next: &NEXT,
             priority: 0,
             flags: HookFlags::NONE,
+            hop: None,
         };
         let _ = chains.add(0x10, link(LOADER));
         let _ = chains.add(0x10, link(2));

@@ -392,12 +392,16 @@ pub(crate) fn send(sender: usize, id: u32, data: *const core::ffi::c_void) -> St
         // SAFETY: the handler lives in the mod's DLL, which stays loaded; the
         // seal checked the sender's layout starts with the subscriber's, and
         // the safe layer catches the handler's panics.
-        unsafe {
-            (subscriber.callback)(
-                data,
-                core::ptr::with_exposed_provenance_mut(subscriber.user),
-            );
-        }
+        crate::profile::call(
+            subscriber.owner,
+            crate::profile::Feature::ModEvents,
+            || unsafe {
+                (subscriber.callback)(
+                    data,
+                    core::ptr::with_exposed_provenance_mut(subscriber.user),
+                );
+            },
+        );
     }
     Status::OK
 }

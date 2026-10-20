@@ -244,6 +244,10 @@ pub struct Summary {
     pub timed: bool,
     /// The time-stamp counter's rate, once measured.
     pub tsc_hz: Option<f64>,
+    /// What each mod costs, a header and a line per mod.
+    pub costs: Vec<String>,
+    /// Hooks, features and resources mods share, a line each.
+    pub conflicts: Vec<String>,
 }
 
 impl Summary {
@@ -330,7 +334,37 @@ services and events:"
             }
             Some(hooks) => self.render_hooks(&mut out, hooks),
         }
+        self.render_costs_and_conflicts(&mut out);
         out
+    }
+
+    fn render_costs_and_conflicts(&self, out: &mut String) {
+        if let Some((header, lines)) = self.costs.split_first() {
+            let _w = writeln!(
+                out,
+                "
+{header}"
+            );
+            for line in lines {
+                let _w = writeln!(out, "  {line}");
+            }
+        }
+        if self.conflicts.is_empty() {
+            let _w = writeln!(
+                out,
+                "
+conflicts: none, no two mods share a hook, feature or resource"
+            );
+        } else {
+            let _w = writeln!(
+                out,
+                "
+conflicts:"
+            );
+            for line in &self.conflicts {
+                let _w = writeln!(out, "  {line}");
+            }
+        }
     }
 
     fn render_hooks(&self, out: &mut String, hooks: &[HookStat]) {
@@ -396,7 +430,8 @@ fn clock(at: u64) -> String {
 }
 
 /// `3d 4h`, `2h 03m`, `5m 07s` or `9s`.
-fn duration(d: Duration) -> String {
+#[must_use]
+pub fn duration(d: Duration) -> String {
     let s = d.as_secs();
     match s {
         0..60 => format!("{s}s"),
@@ -499,6 +534,11 @@ mod tests {
             ]),
             timed: true,
             tsc_hz: Some(3e9),
+            costs: vec![
+                "per-mod costs over 2h 03m (since start), work per second of time:".into(),
+                "safes 0.20 ms/s: interaction filter 0.20 ms/s in 100 calls".into(),
+            ],
+            conflicts: vec!["interaction filter: safes, survivors, chained".into()],
         }
     }
 
@@ -520,6 +560,17 @@ mod tests {
 "
         ));
         assert!(text.contains("4 resources served (4 built, 0 failed), 12 texts"));
+        assert!(text.contains(
+            "
+per-mod costs over 2h 03m (since start), work per second of time:
+  safes 0.20 ms/s"
+        ));
+        assert!(text.contains(
+            "
+conflicts:
+  interaction filter: safes, survivors, chained
+"
+        ));
         assert!(text.contains("one in 256 timed"));
         let busy = text.find("building.max_altars").unwrap();
         let quiet = text.find("chat.post").unwrap();

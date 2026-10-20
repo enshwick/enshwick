@@ -416,15 +416,16 @@ mod live {
         let mut out = Str::EMPTY;
         // SAFETY: the map lives in the mod's DLL, which stays loaded; the
         // input is valid for the call and the safe layer catches panics.
-        let status = unsafe {
-            (reg.map)(
-                core::ptr::with_exposed_provenance_mut(reg.user),
-                migration,
-                step,
-                Str::new(input),
-                &raw mut out,
-            )
-        };
+        let status =
+            crate::profile::call(reg.owner, crate::profile::Feature::Migrations, || unsafe {
+                (reg.map)(
+                    core::ptr::with_exposed_provenance_mut(reg.user),
+                    migration,
+                    step,
+                    Str::new(input),
+                    &raw mut out,
+                )
+            });
         // SAFETY: the text stays valid until the mod's next map call.
         let text = unsafe { out.as_str() }.unwrap_or_default().to_owned();
         if status.is_ok() {

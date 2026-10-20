@@ -302,6 +302,41 @@ pub(crate) fn new_keys_of_type(type_hash: u32) -> Vec<ResourceKey> {
     })
 }
 
+/// Every served resource several mods patch: its key in words and the
+/// patching mods, in the order their patches run.
+pub(crate) fn shared() -> Vec<(String, Vec<usize>)> {
+    let served = SERVED_LIST.get().map_or(&[][..], |s| s);
+    served
+        .iter()
+        .filter_map(|entry| {
+            let mut owners: Vec<usize> = Vec::new();
+            for patch in &entry.patches {
+                if !owners.contains(&patch.owner) {
+                    owners.push(patch.owner);
+                }
+            }
+            (owners.len() >= 2).then(|| (key_name(&entry.key), owners))
+        })
+        .collect()
+}
+
+/// A resource key in words: the registries by name, others as type and
+/// GUID.
+fn key_name(key: &ResourceKey) -> String {
+    use enshwick_loader_api::content::types;
+    let kind = match key.type_hash {
+        types::ITEM_REGISTRY => return "the item registry".to_owned(),
+        types::RECIPE_REGISTRY => return "the recipe registry".to_owned(),
+        types::WORKSHOP_REGISTRY => return "the workshop registry".to_owned(),
+        types::TEMPLATE_COLLECTION => "template collection",
+        types::ITEM_INFO => "item",
+        types::TEMPLATE => "template",
+        types::UI_IMAGE => "image",
+        _ => "resource",
+    };
+    format!("{kind} {}", enshwick_loader_api::content::Guid(key.guid))
+}
+
 /// What mods serve, for the status summary.
 pub(crate) fn summary() -> crate::diag::Served {
     let served = SERVED_LIST.get().map_or(&[][..], |s| s);
@@ -472,15 +507,16 @@ fn build(entry: &Served, database: *mut u8) -> Option<(usize, usize)> {
     for patch in entry.patches.iter().filter(|p| mod_on(p.owner)) {
         let (mut built, mut built_len) = (core::ptr::null::<u8>(), 0usize);
         // SAFETY: the mod's patch function with the bytes so far, valid for the call.
-        let status = unsafe {
-            (patch.apply)(
-                core::ptr::with_exposed_provenance(current),
-                current_len,
-                core::ptr::with_exposed_provenance_mut(patch.user),
-                &raw mut built,
-                &raw mut built_len,
-            )
-        };
+        let status =
+            crate::profile::call(patch.owner, crate::profile::Feature::Resources, || unsafe {
+                (patch.apply)(
+                    core::ptr::with_exposed_provenance(current),
+                    current_len,
+                    core::ptr::with_exposed_provenance_mut(patch.user),
+                    &raw mut built,
+                    &raw mut built_len,
+                )
+            });
         if status != Status::OK || built.is_null() {
             if let Some(loader) = LOADED.get() {
                 loader.turn_off(
