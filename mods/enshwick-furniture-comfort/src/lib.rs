@@ -16,7 +16,8 @@ use enshwick_loader_api::{Load, Mod, Next, Off};
 #[serde(deny_unknown_fields)]
 #[config(validate = Settings::check)]
 struct Settings {
-    /// Comfort each piece of furniture gives inside a base, times this factor.
+    /// Comfort each piece of furniture gives inside a base, times this factor,
+    /// from 0 to 100.
     multiplier: f32,
 }
 
@@ -28,13 +29,19 @@ impl Default for Settings {
 
 impl Settings {
     fn check(&self) -> Result<(), String> {
-        if self.multiplier.is_finite() && self.multiplier >= 0.0 {
+        if (0.0..=MAX_MULTIPLIER).contains(&self.multiplier) {
             Ok(())
         } else {
-            Err("multiplier must be a number of zero or more".into())
+            Err(format!(
+                "multiplier must be a number from 0 to {MAX_MULTIPLIER}"
+            ))
         }
     }
 }
+
+/// The largest factor: the game sums the comfort of every category into one
+/// number, which a larger factor could overflow.
+const MAX_MULTIPLIER: f32 = 100.0;
 
 /// The factor, as `f32` bits, read on every registration.
 static MULTIPLIER: AtomicU32 = AtomicU32::new(0x3f80_0000);
@@ -121,6 +128,15 @@ mod tests {
         assert!((settings.multiplier - 2.0).abs() < f32::EPSILON);
         assert!(settings.validate().is_ok());
         assert!(Settings { multiplier: -1.0 }.validate().is_err());
+        assert!(Settings { multiplier: 100.0 }.validate().is_ok());
+        assert!(Settings { multiplier: 1e9 }.validate().is_err());
+        assert!(
+            Settings {
+                multiplier: f32::INFINITY
+            }
+            .validate()
+            .is_err()
+        );
         assert!(
             Settings {
                 multiplier: f32::NAN
