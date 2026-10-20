@@ -1577,6 +1577,38 @@ impl Installed {
         check
     }
 
+    /// Sets the buff types the fake knows and the entities that hold buffs,
+    /// with none yet; a buff the mod gives starts with the duration asked,
+    /// or the type's, and one it removes goes at once.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_loader_api::abi::{BuffTypeInfo, Header};
+    ///
+    /// let loader = enshwick_loader_api::test::FakeHost::new().install();
+    /// let ty = BuffTypeInfo { header: Header::of::<BuffTypeInfo>(), id: 7, slot: 1, flags: 0, name: 0, duration: 60_000_000_000 };
+    /// loader.set_buffs(&[ty], &[2]);
+    /// assert_eq!(loader.buffs_of(2), Some(Vec::new()));
+    /// ```
+    pub fn set_buffs(&self, types: &[crate::abi::BuffTypeInfo], holders: &[u32]) {
+        table::with((), |s| {
+            s.buff_types = types.to_vec();
+            s.buffs = holders.iter().map(|&e| (e, Vec::new())).collect();
+        });
+    }
+
+    /// The buffs `entity` holds as the mod left them; `None` for one that
+    /// holds no buffs.
+    ///
+    /// # Examples
+    ///
+    /// See [`Installed::set_buffs`].
+    #[must_use]
+    pub fn buffs_of(&self, entity: u32) -> Option<Vec<crate::abi::ActiveBuff>> {
+        table::with(None, |s| s.buffs.get(&entity).cloned())
+    }
+
     /// Whether the mod opened altars, and whether it controls their zones.
     ///
     /// # Examples

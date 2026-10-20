@@ -38,6 +38,10 @@ name = "damage"
 required-features = ["test"]
 
 [[test]]
+name = "buffs"
+required-features = ["test"]
+
+[[test]]
 name = "game_events"
 required-features = ["test"]
 

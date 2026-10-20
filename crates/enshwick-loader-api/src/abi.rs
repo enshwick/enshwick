@@ -14,7 +14,7 @@ use core::sync::atomic::AtomicUsize;
 pub const ABI_MAJOR: u16 = 1;
 
 /// The minor version of this interface. A newer minor only appends fields.
-pub const ABI_MINOR: u16 = 30;
+pub const ABI_MINOR: u16 = 31;
 
 /// Whether `id` is a valid mod id: 1 to 64 characters of `[a-z0-9-]`.
 ///
@@ -2590,6 +2590,131 @@ impl DamageCheck {
 /// given at registration. It runs on the game's worker threads.
 pub type DamageFilterFn = unsafe extern "system" fn(check: *mut DamageCheck, user: *mut c_void);
 
+/// A buff or debuff type of the running game, written by
+/// [`HostApi::buff_types`].
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::abi::{BuffTypeInfo, Header};
+///
+/// let rested = BuffTypeInfo {
+///     header: Header::of::<BuffTypeInfo>(),
+///     id: 0xcdbe_3e80,
+///     slot: BuffTypeInfo::RESTED,
+///     flags: BuffTypeInfo::SAVED,
+///     name: 1_237_250_642,
+///     duration: 5_000_000_000,
+/// };
+/// assert_eq!(rested.slot, BuffTypeInfo::RESTED);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct BuffTypeInfo {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// The type's id: FNV-1a 32 of its GUID's bytes.
+    pub id: u32,
+    /// Where an entity holds it: [`BuffTypeInfo::FOOD`],
+    /// [`BuffTypeInfo::BUFF`], [`BuffTypeInfo::DEBUFF`],
+    /// [`BuffTypeInfo::RESTED`] or [`BuffTypeInfo::TERRAIN`].
+    pub slot: u16,
+    /// [`BuffTypeInfo::SAVED`], [`BuffTypeInfo::HIDDEN`] or none.
+    pub flags: u16,
+    /// The `LocaTag` of its name, which a client shows.
+    pub name: u32,
+    /// How long it lasts by default, in game nanoseconds.
+    pub duration: i64,
+}
+
+impl BuffTypeInfo {
+    /// A food buff.
+    pub const FOOD: u16 = 0;
+    /// A buff.
+    pub const BUFF: u16 = 1;
+    /// A debuff.
+    pub const DEBUFF: u16 = 2;
+    /// Rested.
+    pub const RESTED: u16 = 3;
+    /// A debuff of the ground the entity stands in.
+    pub const TERRAIN: u16 = 4;
+    /// The game saves it with the character.
+    pub const SAVED: u16 = 1;
+    /// The game shows it nowhere.
+    pub const HIDDEN: u16 = 2;
+}
+
+/// A buff an entity has, written by [`HostApi::buffs`].
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::abi::{ActiveBuff, Header};
+///
+/// let fed = ActiveBuff {
+///     header: Header::of::<ActiveBuff>(),
+///     id: 7,
+///     entity: 4100,
+///     slot: 0,
+///     level: 0,
+///     duration: 600_000_000_000,
+///     remaining: 120_000_000_000,
+/// };
+/// assert!(fed.remaining < fed.duration);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ActiveBuff {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// Its type's id.
+    pub id: u32,
+    /// The buff's own entity, which carries its effect.
+    pub entity: u32,
+    /// Where the entity holds it, as [`BuffTypeInfo::slot`].
+    pub slot: u32,
+    /// Its level; 0 for none.
+    pub level: u32,
+    /// How long it lasts in all, in game nanoseconds.
+    pub duration: i64,
+    /// How long it has left, in game nanoseconds.
+    pub remaining: i64,
+}
+
+/// A buff to give an entity, for [`HostApi::apply_buff`].
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::abi::{BuffRequest, Header};
+///
+/// let request = BuffRequest {
+///     header: Header::of::<BuffRequest>(),
+///     entity: 2,
+///     id: 7,
+///     level: 0,
+///     reserved: 0,
+///     duration: 0,
+/// };
+/// assert_eq!(request.duration, 0, "the type's own duration");
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct BuffRequest {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// The entity to give it.
+    pub entity: u32,
+    /// The type's id.
+    pub id: u32,
+    /// Its level, 1 to 255; 0 for none.
+    pub level: u32,
+    /// Zero.
+    pub reserved: u32,
+    /// How long it lasts, in game nanoseconds; 0 for the type's own.
+    pub duration: i64,
+}
+
 /// The table of services the loader offers a mod.
 ///
 /// Fields are only ever appended; a mod checks [`Header::covers`] before it
@@ -3092,6 +3217,38 @@ pub struct HostApi {
     /// Since minor 30.
     pub damage_filter:
         extern "system" fn(me: ModHandle, callback: DamageFilterFn, user: *mut c_void) -> Status,
+    /// Up to `capacity` buff and debuff types of the running game, and how
+    /// many there are. On the server's game thread only. Since minor 31.
+    pub buff_types: extern "system" fn(
+        me: ModHandle,
+        out: *mut BuffTypeInfo,
+        capacity: u32,
+        count: *mut u32,
+    ) -> Status,
+    /// Up to `capacity` buffs `entity` has, and how many there are;
+    /// [`Status::MISSING`] for an entity that holds no buffs. On the
+    /// server's game thread only. Since minor 31.
+    pub buffs: extern "system" fn(
+        me: ModHandle,
+        entity: u32,
+        out: *mut ActiveBuff,
+        capacity: u32,
+        count: *mut u32,
+    ) -> Status,
+    /// Gives an entity a buff, as the game restores a character's saved
+    /// buffs: at once, for the duration asked. One the entity has already
+    /// is renewed to that duration. [`Status::MISSING`] for an entity that
+    /// holds no buffs, [`Status::BAD_ARGS`] for an unknown type,
+    /// [`Status::REFUSED`] for a type removed in this step, which the game
+    /// clears only in the next. On the server's game thread only. Since
+    /// minor 31.
+    pub apply_buff: extern "system" fn(me: ModHandle, request: *const BuffRequest) -> Status,
+    /// Removes every buff of type `id` from `entity`, as the game cleanses
+    /// one: it goes in the next step. Writes 1 to `removed` when the entity
+    /// had it, else 0; [`Status::MISSING`] for an entity that holds no
+    /// buffs. On the server's game thread only. Since minor 31.
+    pub remove_buff:
+        extern "system" fn(me: ModHandle, entity: u32, id: u32, removed: *mut u8) -> Status,
 }
 
 /// The exports a mod DLL provides, by name.
@@ -3153,13 +3310,19 @@ const _: () = {
     assert!(core::mem::offset_of!(HostApi, hook_at) == 24 + 35 * 8);
     assert!(core::mem::offset_of!(HostApi, inventory_open) == 24 + 36 * 8);
     assert!(core::mem::offset_of!(HostApi, inventory_submit) == 24 + 38 * 8);
-    assert!(size_of::<HostApi>() == 24 + 80 * 8);
+    assert!(size_of::<HostApi>() == 24 + 84 * 8);
     assert!(core::mem::offset_of!(HostApi, time_of_day) == 24 + 73 * 8);
     assert!(core::mem::offset_of!(HostApi, set_time_speed) == 24 + 76 * 8);
     assert!(size_of::<DaytimeInfo>() == 8 + 5 * 8 + 8);
     assert!(core::mem::offset_of!(HostApi, game_settings) == 24 + 77 * 8);
     assert!(core::mem::offset_of!(HostApi, damage_filter) == 24 + 79 * 8);
     assert!(size_of::<DamageCheck>() == 8 + 16 + 13 * 4 + 4);
+    assert!(core::mem::offset_of!(HostApi, buff_types) == 24 + 80 * 8);
+    assert!(core::mem::offset_of!(HostApi, remove_buff) == 24 + 83 * 8);
+    // Frozen: written as arrays.
+    assert!(size_of::<BuffTypeInfo>() == 8 + 12 + 4 + 8);
+    assert!(size_of::<ActiveBuff>() == 8 + 16 + 16);
+    assert!(size_of::<BuffRequest>() == 8 + 16 + 8);
     assert!(size_of::<InventoryOp>() == 32);
     assert!(size_of::<InventoryRequest>() == 32);
     assert!(size_of::<InventoryOpResult>() == 8);

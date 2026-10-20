@@ -568,6 +568,10 @@ pub(crate) static API: HostApi = HostApi {
     game_settings,
     set_game_settings,
     damage_filter,
+    buff_types,
+    buffs,
+    apply_buff,
+    remove_buff,
 };
 
 /// A static slice from a pointer and a count, empty for a null pointer.
@@ -2012,6 +2016,82 @@ extern "system" fn damage_filter(
     entry("damage_filter", || match caller_index(me) {
         Ok((loader, index)) => crate::damage::register(loader, index, callback, user),
         Err(status) => status,
+    })
+}
+
+/// Writes up to `capacity` of `items` to `out` and their number to `count`.
+fn put_list<T: Copy>(items: &[T], out: *mut T, capacity: u32, count: *mut u32) -> Status {
+    let Ok(total) = u32::try_from(items.len()) else {
+        return Status::BAD_ARGS;
+    };
+    if !out.is_null() {
+        for (i, item) in items.iter().take(capacity as usize).enumerate() {
+            // SAFETY: the caller passes room for `capacity` entries at `out`.
+            let slot = unsafe { out.add(i) };
+            // SAFETY: as above.
+            unsafe { slot.write(*item) };
+        }
+    }
+    put(count, total)
+}
+
+extern "system" fn buff_types(
+    me: ModHandle,
+    out: *mut enshwick_loader_api::abi::BuffTypeInfo,
+    capacity: u32,
+    count: *mut u32,
+) -> Status {
+    entry("buff_types", || {
+        match caller(me).and_then(crate::buffs::types) {
+            Ok(types) => put_list(&types, out, capacity, count),
+            Err(status) => status,
+        }
+    })
+}
+
+extern "system" fn buffs(
+    me: ModHandle,
+    entity: u32,
+    out: *mut enshwick_loader_api::abi::ActiveBuff,
+    capacity: u32,
+    count: *mut u32,
+) -> Status {
+    entry("buffs", || {
+        match caller(me).and_then(|loader| crate::buffs::of(loader, entity)) {
+            Ok(list) => put_list(&list, out, capacity, count),
+            Err(status) => status,
+        }
+    })
+}
+
+extern "system" fn apply_buff(
+    me: ModHandle,
+    request: *const enshwick_loader_api::abi::BuffRequest,
+) -> Status {
+    entry("apply_buff", || {
+        // SAFETY: the caller passes null or a request with its header; an
+        // all-zero request is valid.
+        let Some(request) = (unsafe {
+            enshwick_loader_api::abi::read_headed(
+                request,
+                size_of::<enshwick_loader_api::abi::BuffRequest>(),
+            )
+        }) else {
+            return Status::BAD_ARGS;
+        };
+        match caller(me).and_then(|loader| crate::buffs::apply(loader, &request)) {
+            Ok(()) => Status::OK,
+            Err(status) => status,
+        }
+    })
+}
+
+extern "system" fn remove_buff(me: ModHandle, entity: u32, id: u32, removed: *mut u8) -> Status {
+    entry("remove_buff", || {
+        match caller(me).and_then(|loader| crate::buffs::remove(loader, entity, id)) {
+            Ok(had) => put(removed, u8::from(had)),
+            Err(status) => status,
+        }
     })
 }
 
