@@ -354,23 +354,31 @@ fn pixels_of(
 }
 
 /// Builds the icon's UI image from the vanilla one in `base`: makes its
-/// pixels, serves them as content and names them.
-fn build(layout: &ImageLayout, base: &[u8], pixels: Pixels) -> Option<Vec<u8>> {
-    let host = crate::host()?;
-    let api = host.api();
-    let image = Blob::new(base);
-    let (rgba, width, height) = pixels_of(api, host.handle(), layout, &image, pixels)?;
-    let mut hash = [0u32; 4];
-    let status = (api.content_serve)(
-        host.handle(),
-        rgba.as_ptr(),
-        u32::try_from(rgba.len()).ok()?,
-        &raw mut hash,
-    );
-    if !status.is_ok() {
-        return None;
+/// pixels, serves them as content and names them. When the pixels cannot be
+/// made, the vanilla image itself: the icon shows the vanilla picture and
+/// the mod stays on.
+fn build(layout: &ImageLayout, base: &[u8], pixels: Pixels) -> Vec<u8> {
+    let built = (|| {
+        let host = crate::host()?;
+        let api = host.api();
+        let image = Blob::new(base);
+        let (rgba, width, height) = pixels_of(api, host.handle(), layout, &image, pixels)?;
+        let mut hash = [0u32; 4];
+        let status = (api.content_serve)(
+            host.handle(),
+            rgba.as_ptr(),
+            u32::try_from(rgba.len()).ok()?,
+            &raw mut hash,
+        );
+        if !status.is_ok() {
+            return None;
+        }
+        clone_image(layout, base, hash, width, height)
+    })();
+    if built.is_none() {
+        crate::warn!("an icon's pixels could not be made: it shows the vanilla picture");
     }
-    clone_image(layout, base, hash, width, height)
+    built.unwrap_or_else(|| base.to_vec())
 }
 
 /// Whether this client shows served icons now.
@@ -419,7 +427,7 @@ impl Load<'_> {
         self.serve(
             icon.guid.key(UI_IMAGE),
             icon.like.key(UI_IMAGE),
-            move |base| build(&layout, base, icon.pixels),
+            move |base| Some(build(&layout, base, icon.pixels)),
         )
     }
 }
