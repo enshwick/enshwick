@@ -8,10 +8,20 @@
 //!
 //! Mid-function hooks are armed in the same batch: their stubs come from
 //! [`crate::mid`], their jumps from the same detour engine.
+//!
+//! With diagnostics on, each thunk also counts its calls in a counter beside
+//! its slot, one locked increment. With timing, every 256th call goes the
+//! long way: the thunk gives the chain a frame of its own, with the caller's
+//! stack arguments copied into it and unwind data registered for it, and
+//! adds the time-stamp counter ticks the call took to the counter. Without
+//! diagnostics the thunks are the plain ones and count nothing.
 
-use std::sync::atomic::AtomicUsize;
+use std::sync::OnceLock;
+use std::sync::atomic::{AtomicU64, AtomicUsize};
 
-use windows_sys::Win32::System::Diagnostics::Debug::FlushInstructionCache;
+use windows_sys::Win32::System::Diagnostics::Debug::{
+    FlushInstructionCache, IMAGE_RUNTIME_FUNCTION_ENTRY, RtlAddFunctionTable,
+};
 use windows_sys::Win32::System::Memory::{
     MEM_COMMIT, MEM_RESERVE, PAGE_EXECUTE_READ, PAGE_READWRITE, VirtualAlloc, VirtualProtect,
 };
@@ -24,6 +34,21 @@ use crate::mid::{Mids, Stubs};
 
 const PAGE: usize = 4096;
 const THUNK: usize = 96;
+/// A thunk that times every 256th call.
+const TIMED_THUNK: usize = 512;
+/// Stack arguments a timed call copies: the fifth to the sixteenth.
+const STACK_ARGS: u32 = 12;
+/// The timed call's frame: home space, the copied arguments, the start time
+/// and the saved result, keeping the call 16-byte aligned.
+const FRAME: u32 = 0x20 + STACK_ARGS * 8 + 16 + 8;
+const START: u32 = 0x20 + STACK_ARGS * 8;
+const SAVED_RESULT: u32 = START + 8;
+/// `sub rsp, imm32`, the timed call's prolog.
+const PROLOG: u8 = 7;
+/// Unwind data of the timed call: version 1, the prolog, two codes for
+/// `UWOP_ALLOC_LARGE` with the frame size in 8-byte units.
+#[expect(clippy::cast_possible_truncation, reason = "the frame is under 2 KiB")]
+const UNWIND: [u8; 8] = [0x01, PROLOG, 2, 0, PROLOG, 0x01, (FRAME / 8) as u8, 0];
 /// `TEB.TlsSlots` on x64; the first 64 TLS indices live there.
 const TEB_TLS_SLOTS: u32 = 0x1480;
 const TLS_INLINE_SLOTS: u32 = 64;
@@ -83,6 +108,75 @@ impl FrameSlot {
     }
 }
 
+/// A hooked function's counters, beside its slot; its thunk writes them.
+#[repr(C)]
+#[derive(Debug, Default)]
+pub(crate) struct Counter {
+    /// Calls since arming.
+    pub(crate) calls: AtomicU64,
+    /// Timed calls.
+    pub(crate) samples: AtomicU64,
+    /// Time-stamp counter ticks of the timed calls.
+    pub(crate) ticks: AtomicU64,
+}
+
+/// What thunks count.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Count {
+    /// Nothing: the plain thunk.
+    Off,
+    /// Calls.
+    Calls,
+    /// Calls, and the time of every 256th.
+    Timed,
+}
+
+impl Count {
+    /// What the settings read at start ask for.
+    pub(crate) fn from_settings() -> Self {
+        if crate::diag::timing() {
+            Self::Timed
+        } else if crate::diag::counting() {
+            Self::Calls
+        } else {
+            Self::Off
+        }
+    }
+
+    const fn thunk(self) -> usize {
+        match self {
+            Self::Off | Self::Calls => THUNK,
+            Self::Timed => TIMED_THUNK,
+        }
+    }
+}
+
+/// Each armed function's counters, by target, once armed with counting.
+static COUNTERS: OnceLock<Box<[(u64, &'static Counter)]>> = OnceLock::new();
+/// The time-stamp counter and the clock when the hooks were armed, to measure
+/// the counter's rate.
+static ARMED_AT: OnceLock<(u64, std::time::Instant)> = OnceLock::new();
+
+/// Each armed function's counters, by target; empty without counting.
+pub(crate) fn counters() -> &'static [(u64, &'static Counter)] {
+    COUNTERS.get().map_or(&[], |c| c)
+}
+
+/// The time-stamp counter's rate in ticks a second, measured since arming;
+/// `None` before a second has passed.
+#[expect(clippy::cast_precision_loss, reason = "a rate for people to read")]
+pub(crate) fn tsc_hz() -> Option<f64> {
+    let &(ticks, at) = ARMED_AT.get()?;
+    let seconds = at.elapsed().as_secs_f64();
+    let now = rdtsc();
+    (seconds >= 1.0).then(|| now.wrapping_sub(ticks) as f64 / seconds)
+}
+
+fn rdtsc() -> u64 {
+    // SAFETY: `rdtsc` has no preconditions on x86-64.
+    unsafe { core::arch::x86_64::_rdtsc() }
+}
+
 /// A target that could not be armed, and why.
 #[derive(Debug)]
 pub(crate) struct Failure {
@@ -131,6 +225,7 @@ pub(crate) fn arm(
     frame: Option<FrameSlot>,
     off: fn(usize) -> bool,
     patches: &[CodePatch],
+    counting: Count,
 ) -> Armed {
     let count = chains.len();
     if count == 0 {
@@ -138,8 +233,12 @@ pub(crate) fn arm(
         armed.code = hook(chains, mids, &[], off, patches, &mut armed.failures);
         return armed;
     }
-    let code_len = (count * THUNK).div_ceil(PAGE) * PAGE;
-    let data_len = (count * size_of::<usize>()).div_ceil(PAGE) * PAGE;
+    let thunk = counting.thunk();
+    let code_len = (count * thunk).div_ceil(PAGE) * PAGE;
+    let slots_len = count * size_of::<usize>();
+    let counters_len = count * size_of::<Counter>();
+    let functions_len = count * size_of::<RuntimeFunction>();
+    let data_len = (slots_len + counters_len + functions_len + UNWIND.len()).div_ceil(PAGE) * PAGE;
     // SAFETY: a fresh reservation; null on failure.
     let block = unsafe {
         VirtualAlloc(
@@ -160,16 +259,36 @@ pub(crate) fn arm(
         reason = "the data pages start on a page boundary"
     )]
     let data = data_start.cast::<AtomicUsize>();
+    // SAFETY: inside the data pages, after the slots.
+    let counter_start = unsafe { data_start.add(slots_len) };
+    #[expect(
+        clippy::cast_ptr_alignment,
+        reason = "the slots end on an 8-byte boundary"
+    )]
+    let counter_base = counter_start.cast::<Counter>();
+    // SAFETY: inside the data pages, after the counters.
+    let function_start = unsafe { data_start.add(slots_len + counters_len) };
+    #[expect(
+        clippy::cast_ptr_alignment,
+        reason = "the counters end on an 8-byte boundary"
+    )]
+    let function_base = function_start.cast::<RuntimeFunction>();
+    // SAFETY: inside the data pages, after the function table.
+    let unwind = unsafe { data_start.add(slots_len + counters_len + functions_len) };
+    // SAFETY: `UNWIND.len()` bytes of the data pages are left for it.
+    unsafe { unwind.copy_from_nonoverlapping(UNWIND.as_ptr(), UNWIND.len()) };
 
     let mut failures = Vec::new();
     let mut thunks = Vec::with_capacity(count);
+    let mut counters = Vec::new();
+    let mut functions = 0u32;
     for (i, chain) in chains.iter_mut().enumerate() {
         // SAFETY: `i < count`, inside the data pages.
         let slot_ptr = unsafe { data.add(i) };
         // SAFETY: committed, zeroed and aligned memory that is never freed.
         let slot: &'static AtomicUsize = unsafe { &*slot_ptr };
         // SAFETY: `i < count`, inside the code pages.
-        let code = unsafe { block.add(i * THUNK) };
+        let code = unsafe { block.add(i * thunk) };
         let frame_index = match (chain.wants_caller_frame(), frame) {
             (false, _) => None,
             (true, Some(frame)) => Some(frame.0),
@@ -181,10 +300,40 @@ pub(crate) fn arm(
                 continue;
             }
         };
-        // SAFETY: `code` has `THUNK` writable bytes; `slot` is within ±2 GiB.
-        unsafe { write_thunk(code, slot, frame_index) };
+        let counter = (counting != Count::Off).then(|| {
+            // SAFETY: `i < count`, inside the counter area.
+            let counter_ptr = unsafe { counter_base.add(i) };
+            // SAFETY: committed, zeroed and aligned memory that is never
+            // freed; zero is a valid counter.
+            let counter: &'static Counter = unsafe { &*counter_ptr };
+            counters.push((chain.target, counter));
+            (counter, counting == Count::Timed)
+        });
+        // SAFETY: `code` has `thunk` writable bytes; the slot and the counter
+        // are within ±2 GiB.
+        let written = unsafe { write_thunk(code, thunk, slot, frame_index, counter) };
+        if let Some((timed, end)) = written.timed {
+            let offset = |at: usize| u32::try_from(code.addr() + at - block.addr()).unwrap_or(0);
+            // SAFETY: one entry per chain fits the function table.
+            let entry = unsafe { function_base.add(functions as usize) };
+            // SAFETY: as above, writable.
+            unsafe {
+                entry.write(RuntimeFunction {
+                    begin: offset(timed),
+                    end: offset(end),
+                    unwind: u32::try_from(unwind.addr() - block.addr()).unwrap_or(0),
+                });
+            };
+            functions += 1;
+        }
         chain.head = Some(slot);
         thunks.push((chain.target, code));
+    }
+    // SAFETY: `functions` entries written above, in memory never freed.
+    unsafe { register_unwind(block, function_base, functions) };
+    if counting != Count::Off {
+        let _first = COUNTERS.set(counters.into_boxed_slice());
+        let _first = ARMED_AT.set((rdtsc(), std::time::Instant::now()));
     }
 
     let mut old = 0;
@@ -200,6 +349,30 @@ pub(crate) fn arm(
 
     let code = hook(chains, mids, &thunks, off, patches, &mut failures);
     Armed { failures, code }
+}
+
+/// Registers the unwind data of the timed calls, so a stack walk or an
+/// exception passes through their frames.
+///
+/// # Safety
+///
+/// `table` holds `count` sorted entries naming code and unwind data inside
+/// the block at `base`, all of it never freed.
+unsafe fn register_unwind(base: *mut u8, table: *const RuntimeFunction, count: u32) {
+    if count == 0 {
+        return;
+    }
+    // SAFETY: forwarded from the caller.
+    let added = unsafe {
+        RtlAddFunctionTable(
+            table.cast::<IMAGE_RUNTIME_FUNCTION_ENTRY>(),
+            count,
+            base.addr() as u64,
+        )
+    };
+    if !added {
+        crate::log!(WARN, "timed hook calls have no unwind data");
+    }
 }
 
 /// Every target failed and every patch left out, for `reason`.
@@ -375,29 +548,141 @@ fn write(
     verdicts
 }
 
-/// Writes `mov gs:[TlsSlots + index * 8], reg` for each saved register, then
-/// `jmp [rip + slot]`.
+/// An entry of a function table for `RtlAddFunctionTable`: offsets from
+/// the table's base.
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+struct RuntimeFunction {
+    begin: u32,
+    end: u32,
+    unwind: u32,
+}
+
+/// What [`write_thunk`] wrote.
+#[derive(Clone, Copy, Debug, Default)]
+struct Written {
+    /// The timed call's start and end in the thunk, when it has one.
+    timed: Option<(usize, usize)>,
+}
+
+/// Machine code with rip-relative operands, written for one address.
+struct Asm {
+    at: usize,
+    bytes: Vec<u8>,
+}
+
+impl Asm {
+    fn emit(&mut self, bytes: &[u8]) {
+        self.bytes.extend_from_slice(bytes);
+    }
+
+    /// `prefix`, the displacement from the instruction's end to `target`,
+    /// then `tail`.
+    fn rip(&mut self, prefix: &[u8], target: usize, tail: &[u8]) {
+        let end = self.at + self.bytes.len() + prefix.len() + 4 + tail.len();
+        self.emit(prefix);
+        self.emit(&slot_offset(target, end).to_le_bytes());
+        self.emit(tail);
+    }
+
+    /// `op [rsp + displacement]` with a 32-bit displacement.
+    fn stack(&mut self, op: &[u8], displacement: u32) {
+        self.emit(op);
+        self.emit(&[0x24]);
+        self.emit(&displacement.to_le_bytes());
+    }
+
+    /// `rdtsc` into `rax` as one 64-bit value; `rdx` is lost.
+    fn ticks(&mut self) {
+        self.emit(&[0x0f, 0x31]); // rdtsc
+        self.emit(&[0x48, 0xc1, 0xe2, 0x20]); // shl rdx, 32
+        self.emit(&[0x48, 0x09, 0xd0]); // or rax, rdx
+    }
+
+    fn len(&self) -> usize {
+        self.bytes.len()
+    }
+}
+
+/// Writes the thunk: `mov gs:[TlsSlots + index * 8], reg` for each saved
+/// register of a frame chain, `lock inc [calls]` when counting, then `jmp
+/// [rip + slot]`; when timing, every 256th call takes the timed call instead.
 ///
 /// # Safety
 ///
-/// `code` has `THUNK` writable bytes and `slot` lies within ±2 GiB of it.
-unsafe fn write_thunk(code: *mut u8, slot: &AtomicUsize, frame: Option<[u32; 9]>) {
-    let mut bytes = [0xcc_u8; THUNK];
-    let mut at = 0;
+/// `code` has `len` writable bytes, and `slot` and the counter lie within
+/// ±2 GiB of it.
+unsafe fn write_thunk(
+    code: *mut u8,
+    len: usize,
+    slot: &AtomicUsize,
+    frame: Option<[u32; 9]>,
+    counter: Option<(&Counter, bool)>,
+) -> Written {
+    let slot = core::ptr::from_ref(slot).addr();
+    let mut asm = Asm {
+        at: code.addr(),
+        bytes: Vec::with_capacity(len),
+    };
     if let Some(indices) = frame {
         for (&(rex, modrm), index) in SAVED.iter().zip(indices) {
             let displacement = TEB_TLS_SLOTS + index * 8;
-            bytes[at..at + 5].copy_from_slice(&[0x65, rex, 0x89, modrm, 0x25]);
-            bytes[at + 5..at + 9].copy_from_slice(&displacement.to_le_bytes());
-            at += 9;
+            asm.emit(&[0x65, rex, 0x89, modrm, 0x25]);
+            asm.emit(&displacement.to_le_bytes());
         }
     }
-    bytes[at..at + 2].copy_from_slice(&[0xff, 0x25]);
-    let next_instruction = code.addr() + at + 6;
-    let relative = slot_offset(core::ptr::from_ref(slot).addr(), next_instruction);
-    bytes[at + 2..at + 6].copy_from_slice(&relative.to_le_bytes());
-    // SAFETY: the caller guarantees `THUNK` writable bytes at `code`.
-    unsafe { code.copy_from_nonoverlapping(bytes.as_ptr(), THUNK) };
+    let mut written = Written::default();
+    match counter {
+        None => asm.rip(&[0xff, 0x25], slot, &[]), // jmp [rip + slot]
+        Some((counter, timed)) => {
+            let calls = core::ptr::from_ref(&counter.calls).addr();
+            asm.rip(&[0xf0, 0x48, 0xff, 0x05], calls, &[]); // lock inc qword [calls]
+            if timed {
+                asm.rip(&[0xf6, 0x05], calls, &[0xff]); // test byte [calls], 0xff
+                asm.emit(&[0x74, 0x06]); // jz to the timed call
+            }
+            asm.rip(&[0xff, 0x25], slot, &[]); // jmp [rip + slot]
+            if timed {
+                let start = asm.len();
+                timed_call(&mut asm, slot, counter);
+                written.timed = Some((start, asm.len()));
+            }
+        }
+    }
+    let mut bytes = asm.bytes;
+    bytes.resize(len, 0xcc);
+    // SAFETY: the caller guarantees `len` writable bytes at `code`.
+    unsafe { code.copy_from_nonoverlapping(bytes.as_ptr(), len) };
+    written
+}
+
+/// The timed call: a frame with the caller's stack arguments, the chain
+/// called through its slot between two time stamps, the ticks added to the
+/// counter. Keeps every argument register and the result in `rax` and
+/// `xmm0`; uses `rax`, `rdx` and `r10`, which carry no argument here.
+fn timed_call(asm: &mut Asm, slot: usize, counter: &Counter) {
+    asm.emit(&[0x48, 0x81, 0xec]); // sub rsp, FRAME
+    asm.emit(&FRAME.to_le_bytes());
+    for i in 0..STACK_ARGS {
+        asm.stack(&[0x48, 0x8b, 0x84], FRAME + 0x28 + i * 8); // mov rax, [caller's argument]
+        asm.stack(&[0x48, 0x89, 0x84], 0x20 + i * 8); // mov [our argument], rax
+    }
+    asm.emit(&[0x4c, 0x8b, 0xd2]); // mov r10, rdx
+    asm.ticks();
+    asm.stack(&[0x48, 0x89, 0x84], START); // mov [rsp + START], rax
+    asm.emit(&[0x4c, 0x89, 0xd2]); // mov rdx, r10
+    asm.rip(&[0xff, 0x15], slot, &[]); // call [rip + slot]
+    asm.stack(&[0x48, 0x89, 0x84], SAVED_RESULT); // mov [rsp + SAVED_RESULT], rax
+    asm.ticks();
+    asm.stack(&[0x48, 0x2b, 0x84], START); // sub rax, [rsp + START]
+    let ticks = core::ptr::from_ref(&counter.ticks).addr();
+    let samples = core::ptr::from_ref(&counter.samples).addr();
+    asm.rip(&[0xf0, 0x48, 0x01, 0x05], ticks, &[]); // lock add [ticks], rax
+    asm.rip(&[0xf0, 0x48, 0xff, 0x05], samples, &[]); // lock inc qword [samples]
+    asm.stack(&[0x48, 0x8b, 0x84], SAVED_RESULT); // mov rax, [rsp + SAVED_RESULT]
+    asm.emit(&[0x48, 0x81, 0xc4]); // add rsp, FRAME
+    asm.emit(&FRAME.to_le_bytes());
+    asm.emit(&[0xc3]); // ret
 }
 
 fn slot_offset(slot: usize, next_instruction: usize) -> i32 {
@@ -415,7 +700,7 @@ mod tests {
         let mut code = [0u8; THUNK];
         let base = code.as_mut_ptr();
         // SAFETY: a local buffer of `THUNK` bytes; the slot is on the same stack.
-        unsafe { write_thunk(base, &slot, None) };
+        unsafe { write_thunk(base, THUNK, &slot, None, None) };
         assert_eq!(code[..2], [0xff, 0x25]);
         let relative = i32::from_le_bytes(code[2..6].try_into().unwrap());
         let target = (base.addr() + 6).wrapping_add_signed(relative as isize);
@@ -430,8 +715,10 @@ mod tests {
         unsafe {
             write_thunk(
                 code.as_mut_ptr(),
+                THUNK,
                 &slot,
                 Some([3, 4, 5, 6, 7, 8, 9, 10, 11]),
+                None,
             );
         }
         assert_eq!(code[..5], [0x65, 0x48, 0x89, 0x24, 0x25]);
@@ -446,5 +733,161 @@ mod tests {
             0x1480 + 80
         );
         assert_eq!(code[81..83], [0xff, 0x25]);
+    }
+
+    #[test]
+    fn a_counting_frame_thunk_still_fits() {
+        let slot = AtomicUsize::new(0);
+        let counter = Counter::default();
+        let mut code = [0u8; THUNK];
+        // SAFETY: as above.
+        let written = unsafe {
+            write_thunk(
+                code.as_mut_ptr(),
+                THUNK,
+                &slot,
+                Some([3, 4, 5, 6, 7, 8, 9, 10, 11]),
+                Some((&counter, false)),
+            )
+        };
+        assert!(written.timed.is_none());
+        assert_eq!(code[81..85], [0xf0, 0x48, 0xff, 0x05]);
+        assert_eq!(code[89..91], [0xff, 0x25]);
+    }
+
+    /// Executable memory: a thunk at the start, its slot and counter after it.
+    struct Page {
+        base: *mut u64,
+    }
+
+    impl Page {
+        fn new() -> Self {
+            // SAFETY: a fresh allocation, written before it runs.
+            let base = unsafe {
+                VirtualAlloc(
+                    core::ptr::null(),
+                    PAGE,
+                    MEM_RESERVE | MEM_COMMIT,
+                    windows_sys::Win32::System::Memory::PAGE_EXECUTE_READWRITE,
+                )
+            }
+            .cast::<u64>();
+            assert!(!base.is_null());
+            Self { base }
+        }
+
+        fn slot(&self) -> &'static AtomicUsize {
+            // SAFETY: inside the page.
+            let slot = unsafe { self.base.add(TIMED_THUNK / 8) }.cast::<AtomicUsize>();
+            // SAFETY: an aligned word of the page, which is never freed.
+            unsafe { &*slot }
+        }
+
+        fn counter(&self) -> &'static Counter {
+            // SAFETY: inside the page.
+            let counter = unsafe { self.base.add(TIMED_THUNK / 8 + 1) }.cast::<Counter>();
+            // SAFETY: aligned words of the page, which is never freed.
+            unsafe { &*counter }
+        }
+
+        /// The thunk, timed or only counting, jumping to `target`.
+        fn thunk(&self, target: usize, timed: bool) -> usize {
+            self.slot()
+                .store(target, core::sync::atomic::Ordering::Release);
+            // SAFETY: the page has `TIMED_THUNK` bytes before the slot.
+            let written = unsafe {
+                write_thunk(
+                    self.base.cast(),
+                    TIMED_THUNK,
+                    self.slot(),
+                    None,
+                    Some((self.counter(), timed)),
+                )
+            };
+            assert_eq!(written.timed.is_some(), timed);
+            self.base.addr()
+        }
+    }
+
+    type Eight = extern "system" fn(u64, u64, u64, u64, u64, u64, u64, u64) -> u64;
+
+    extern "system" fn weigh(
+        w1: u64,
+        w2: u64,
+        w3: u64,
+        w4: u64,
+        w5: u64,
+        w6: u64,
+        w7: u64,
+        w8: u64,
+    ) -> u64 {
+        w1 + 2 * w2 + 3 * w3 + 4 * w4 + 5 * w5 + 6 * w6 + 7 * w7 + 8 * w8
+    }
+
+    extern "system" fn halve(value: f64) -> f64 {
+        value / 2.0
+    }
+
+    #[test]
+    fn a_timed_thunk_counts_every_call_and_times_one_in_256() {
+        let page = Page::new();
+        let thunk = page.thunk((weigh as Eight as *const ()).addr(), true);
+        // SAFETY: the thunk forwards to `weigh`, with its signature.
+        let call = unsafe { core::mem::transmute::<usize, Eight>(thunk) };
+        for i in 0..600 {
+            assert_eq!(call(1, 1, 1, 1, 1, 1, 1, i), 28 + 8 * i);
+        }
+        let counter = page.counter();
+        let load = |value: &AtomicU64| value.load(core::sync::atomic::Ordering::Relaxed);
+        assert_eq!(load(&counter.calls), 600);
+        // The 256th and the 512th.
+        assert_eq!(load(&counter.samples), 2);
+        assert!(load(&counter.ticks) > 0);
+    }
+
+    #[test]
+    fn a_timed_call_keeps_a_floating_point_result() {
+        let page = Page::new();
+        let thunk = page.thunk(
+            (halve as extern "system" fn(f64) -> f64 as *const ()).addr(),
+            true,
+        );
+        // SAFETY: the thunk forwards to `halve`, with its signature.
+        let call = unsafe { core::mem::transmute::<usize, extern "system" fn(f64) -> f64>(thunk) };
+        for _ in 0..512 {
+            assert!((call(3.0) - 1.5).abs() < f64::EPSILON);
+        }
+        let samples = page
+            .counter()
+            .samples
+            .load(core::sync::atomic::Ordering::Relaxed);
+        assert_eq!(samples, 2);
+    }
+
+    #[test]
+    fn a_counting_thunk_counts_without_timing() {
+        let page = Page::new();
+        let thunk = page.thunk((weigh as Eight as *const ()).addr(), false);
+        // SAFETY: the thunk forwards to `weigh`, with its signature.
+        let call = unsafe { core::mem::transmute::<usize, Eight>(thunk) };
+        for _ in 0..300 {
+            assert_eq!(call(1, 0, 0, 0, 0, 0, 0, 1), 9);
+        }
+        let counter = page.counter();
+        assert_eq!(
+            counter.calls.load(core::sync::atomic::Ordering::Relaxed),
+            300
+        );
+        assert_eq!(
+            counter.samples.load(core::sync::atomic::Ordering::Relaxed),
+            0
+        );
+    }
+
+    #[test]
+    fn the_unwind_data_describes_the_frame() {
+        assert_eq!(FRAME % 16, 8);
+        assert_eq!(u32::from(UNWIND[6]) * 8, FRAME);
+        assert_eq!(UNWIND[1], PROLOG);
     }
 }

@@ -192,6 +192,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "enshwick-dev-tools"
+version = "0.1.0"
+dependencies = [
+ "enshwick-api",
+ "enshwick-test",
+ "serde",
+ "toml",
+]
+
+[[package]]
 name = "enshwick-flame-altar-count"
 version = "0.1.4"
 dependencies = [

@@ -141,6 +141,7 @@ pub(crate) fn start(stub_abi: u32, missing_forwards: u32) {
     crate::holds::enforce(&loader.data_dir, &running, false);
     ready(loader, &order);
     crate::watch::start(loader);
+    crate::status::start(loader);
     if side == Side::SERVER
         && let Some(game_dir) = loader.mods_dir.parent()
     {
@@ -279,6 +280,8 @@ fn begin(stub_abi: u32, missing_forwards: u32) -> Option<PathBuf> {
         .join("mod-configs")
         .join(format!("{}.toml", crate::settings::LOADER_ID));
     let (settings, problem) = crate::settings::Settings::read(&settings_file);
+    crate::status::mark_start();
+    crate::diag::configure(&settings);
     log::set_levels(settings);
     log::open(&game_dir.join("logs").join(crate::settings::LOADER_ID));
     crate::log!(INFO, "Enshwick {} starting", env!("CARGO_PKG_VERSION"));
@@ -416,7 +419,14 @@ fn arm(loader: &Loader, frame: Option<FrameSlot>) {
     let patch::Armed {
         failures,
         code: verdicts,
-    } = patch::arm(&mut chains, &mids, frame, host::is_off, &patches);
+    } = patch::arm(
+        &mut chains,
+        &mids,
+        frame,
+        host::is_off,
+        &patches,
+        patch::Count::from_settings(),
+    );
     let armed = (chains.len() + mids.len()).saturating_sub(failures.len());
     let owners: Vec<(usize, u64)> = failures
         .iter()
@@ -450,6 +460,11 @@ fn arm(loader: &Loader, frame: Option<FrameSlot>) {
         );
     }
     crate::log!(INFO, "{armed} hook targets armed");
+    if crate::diag::timing() {
+        crate::log!(INFO, "diagnostics on: hook calls counted, one in 256 timed");
+    } else if crate::diag::counting() {
+        crate::log!(INFO, "diagnostics on: hook calls counted");
+    }
     report_patches(loader, &patches, &verdicts);
 }
 
@@ -460,6 +475,15 @@ fn report_patches(
     patches: &[crate::code::CodePatch],
     verdicts: &[crate::code::Verdict],
 ) {
+    let mut tally = crate::diag::Patches::default();
+    for verdict in verdicts {
+        match verdict {
+            crate::code::Verdict::Write => tally.written += 1,
+            crate::code::Verdict::Off => tally.off += 1,
+            crate::code::Verdict::Skip(_) => tally.skipped += 1,
+        }
+    }
+    crate::diag::record_patches(tally);
     for (patch, verdict) in patches.iter().zip(verdicts) {
         let owner = loader
             .mods

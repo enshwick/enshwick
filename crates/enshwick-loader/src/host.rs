@@ -278,6 +278,7 @@ impl Loader {
             return;
         }
         crate::log::write(Level::ERROR, &record.id, &format!("off: {reason}"));
+        crate::diag::turned_off(&record.id, reason);
         if let Ok(chains) = self.chains.lock() {
             chains.rewire(|owner| {
                 owner != crate::chains::LOADER
@@ -418,6 +419,8 @@ pub(crate) static API: HostApi = HostApi {
     inventory_open,
     item_info,
     inventory_submit,
+    status,
+    run_command,
 };
 
 /// A static slice from a pointer and a count, empty for a null pointer.
@@ -484,7 +487,10 @@ extern "system" fn symbol(me: ModHandle, name: Str, out: *mut u64) -> Status {
     };
     loader
         .resolve_symbol(index, name)
-        .map_or(Status::MISSING, |address| put(out, address))
+        .map_or(Status::MISSING, |address| {
+            crate::diag::name(address, name);
+            put(out, address)
+        })
 }
 
 fn lookup(error: &enshwick_reflect::LookupError) -> Status {
@@ -499,7 +505,10 @@ extern "system" fn system(name: Str, out: *mut u64) -> Status {
         return Status::BAD_ARGS;
     };
     match loader.reflection.system(name) {
-        Ok(found) if found.entry() != 0 => put(out, found.entry()),
+        Ok(found) if found.entry() != 0 => {
+            crate::diag::name(found.entry(), name);
+            put(out, found.entry())
+        }
         Ok(_) => Status::MISSING,
         Err(error) => lookup(&error),
     }
@@ -1172,6 +1181,43 @@ extern "system" fn rename_filter(
         return Status::FAULTED;
     }
     crate::label::register(index, callback, user)
+}
+
+extern "system" fn status(
+    me: ModHandle,
+    callback: api_frame::StatusFn,
+    user: *mut core::ffi::c_void,
+) -> Status {
+    let Some((index, record)) = loader().and_then(|loader| loader.record(me)) else {
+        return Status::BAD_ARGS;
+    };
+    if record.off.load(Ordering::Acquire) {
+        return Status::FAULTED;
+    }
+    crate::status::register(index, callback, user)
+}
+
+thread_local! {
+    /// The reply `run_command` last handed out on this thread.
+    static CONSOLE_REPLY: core::cell::RefCell<String> = const { core::cell::RefCell::new(String::new()) };
+}
+
+extern "system" fn run_command(me: ModHandle, line: Str, out: *mut Str) -> Status {
+    let Some(line) = text(line) else {
+        return Status::BAD_ARGS;
+    };
+    let loader = match caller(me) {
+        Ok(loader) => loader,
+        Err(status) => return status,
+    };
+    match crate::chat::run_console(loader, line) {
+        Ok(reply) => CONSOLE_REPLY.with_borrow_mut(|kept| {
+            *kept = reply;
+            // The text stays in this thread's buffer until its next call.
+            put(out, Str::new(kept))
+        }),
+        Err(status) => status,
+    }
 }
 
 /// Mod handles start at 1; 0 is no mod.

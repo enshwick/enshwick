@@ -7,7 +7,7 @@ use std::sync::{Mutex, MutexGuard, PoisonError};
 use enshwick_api::abi::{
     BuildInfo, CallerFrame, CommandFn, Event, EventFn, Header, HookSpec, HostApi, InventoryDoneFn,
     InventoryRequest, ItemData, Level, MidHookFn, MidHookSpec, ModHandle, ModInfo, PlayerInfo,
-    RenameFn, ResourceKey, ResourcePatchFn, Side, Status, Str,
+    RenameFn, ResourceKey, ResourcePatchFn, Side, Status, StatusFn, Str,
 };
 
 use crate::{FakeHost, LinkedHook, ServedResource, SubmittedRequest};
@@ -39,6 +39,11 @@ pub(crate) struct State {
     pub(crate) labels: Vec<(u32, String)>,
     pub(crate) rename_filters: Vec<(RenameFn, usize)>,
     pub(crate) inventory_requests: Vec<OpenRequest>,
+    pub(crate) status_sources: Vec<(StatusFn, usize)>,
+    /// The command lines the mod ran as the console, in order.
+    pub(crate) console: Vec<String>,
+    /// The reply `run_command` last handed out, alive until the next call.
+    run_out: Option<Box<str>>,
     /// The settings text last handed out, alive until the next call.
     settings: Option<Box<str>>,
     /// The join values last handed out, alive until the next call.
@@ -75,6 +80,9 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         chat: Vec::new(),
         labels: Vec::new(),
         rename_filters: Vec::new(),
+        status_sources: Vec::new(),
+        console: Vec::new(),
+        run_out: None,
         settings: None,
     });
     turn
@@ -509,6 +517,39 @@ extern "system" fn rename_filter(_me: ModHandle, callback: RenameFn, user: *mut 
     })
 }
 
+extern "system" fn status(_me: ModHandle, callback: StatusFn, user: *mut c_void) -> Status {
+    with(Status::MISSING, |s| {
+        s.status_sources.push((callback, user.expose_provenance()));
+        Status::OK
+    })
+}
+
+extern "system" fn run_command(_me: ModHandle, line: Str, out: *mut Str) -> Status {
+    let line = text(line);
+    let Some((name, args)) = enshwick_api::commands::parse_line(&line) else {
+        return Status::BAD_ARGS;
+    };
+    let args = args.to_owned();
+    with((), |s| s.console.push(line.clone()));
+    let own = with(None, |s| {
+        s.commands.iter().find(|c| c.0 == name).map(|c| (c.2, c.3))
+    });
+    let reply = match own {
+        // The mod's own command, run with the table unlocked: it may call back.
+        Some((callback, user)) => {
+            crate::run_handler(callback, user, &name, &crate::console(), &args)
+        }
+        None => match with(None, |s| s.host.foreign_commands.get(&name).cloned()) {
+            Some(reply) => reply,
+            None => return Status::MISSING,
+        },
+    };
+    with(Status::MISSING, |s| {
+        let kept = s.run_out.insert(reply.into_boxed_str());
+        put(out, Str::new(kept))
+    })
+}
+
 /// The table every installed fake answers through; a mod keeps the first
 extern "system" fn inventory_open(_me: ModHandle) -> Status {
     with(Status::MISSING, |s| {
@@ -600,4 +641,6 @@ pub(crate) static TABLE: HostApi = HostApi {
     inventory_open,
     item_info,
     inventory_submit,
+    status,
+    run_command,
 };

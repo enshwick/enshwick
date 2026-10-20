@@ -219,13 +219,29 @@ load.command("safe", "allow, deny or list players at your nearest Safe", move |c
 
 A name is 1 to 32 of `[a-z0-9-]` and belongs to one mod: a name another mod
 holds, or `enshwick`, is refused at init. The loader answers `/enshwick`
-itself with the mods and versions running, and `/enshwick help` with every
-command and its help line; an unknown `/` command gets a short answer.
+itself with the mods and versions running, `/enshwick help` with every
+command and its help line, and `/enshwick status` (administrators) with a
+short [status summary](#status-and-diagnostics); an unknown `/` command gets a short answer.
 Commands, labels and rename filters work on the dedicated server and on a
 client while it hosts a game.
 
 `world.broadcast(text)` sends a line to everyone and `world.tell(&player, text)`
 to one player, from any thread; the server posts them after the next step.
+
+`commands::run(line)` runs a command line as the server's console, an
+administrator with no character (entity 0, account key 0), and returns its
+reply; any mod's command and the loader's own work. Call it on the game
+thread, from a scheduled task or a game event.
+[Dev tools](../../mods/enshwick-dev-tools) runs the lines of a command file
+this way:
+
+```rust
+let scheduler = load.scheduler()?;
+scheduler.next_tick(|| match enshwick_api::commands::run("/enshwick status") {
+    Ok(reply) => enshwick_api::info!("{}", reply.text()),
+    Err(why) => enshwick_api::warn!("not run: {why}"),
+});
+```
 
 ## Labels
 
@@ -626,6 +642,34 @@ signed so (`<archive>.minisig`).
   of game memory go through one typed helper.
 - Never free memory across the boundary with the loader; strings it passes are
   borrowed for the call.
+
+## Status and diagnostics
+
+The loader writes a status summary to `logs/enshwick/status.log` a minute
+after start, then every `status_minutes` (10 by default, 0 for on demand
+only), and whenever an administrator types `/enshwick status`, who gets a few
+lines of it in the chat. It lists every mod with its version and whether it
+runs, the mods turned off and why, what mods serve and patch, and the hooked
+functions.
+
+A mod adds its own lines with `load.status(|| String)`. The closure runs only
+when the summary is written, on a loader thread or the game thread, never in
+a hook; keep what it reports in atomics and read them there.
+
+```rust
+static MERGED: AtomicU64 = AtomicU64::new(0);
+
+load.status(|| format!("{} zones merged", MERGED.load(Ordering::Relaxed)))?;
+```
+
+With `diagnostics = true` in `mod-configs/enshwick.toml` the loader counts
+the calls of every hooked function, one locked increment in its thunk, and
+the summary lists them, busiest first, with the mods linked on each. Add
+`diagnostics_timing = true` and every 256th call is timed as well; the
+summary shows the mean time of the whole chain with the original. A timed
+call passes on the stack arguments up to the sixteenth, enough for every
+function with at most 16 arguments. Both are read at start; without them the thunks count nothing and
+a hooked call runs as before.
 
 ## Logging
 

@@ -125,6 +125,10 @@
     "mods/enshwick-shared-experience": {
       "package-name": "enshwick-shared-experience",
       "component": "enshwick-shared-experience"
+    },
+    "mods/enshwick-dev-tools": {
+      "package-name": "enshwick-dev-tools",
+      "component": "enshwick-dev-tools"
     }
   }
 }
