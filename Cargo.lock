@@ -264,6 +264,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "enshwick-pin"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "enshwick-reflect",
+ "iced-x86",
+ "memchr",
+]
+
+[[package]]
 name = "enshwick-proton-optimizer"
 version = "0.1.0"
 dependencies = [

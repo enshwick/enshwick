@@ -108,6 +108,14 @@ binaries;
 [`enshwick-shared-experience`](https://github.com/themaiby/enshwick/tree/main/mods/enshwick-shared-experience)
 pins two game functions the same way.
 
+When the game updates, the rows of the new build come from
+[`enshwick-pin`](https://github.com/themaiby/enshwick/tree/main/crates/enshwick-pin):
+given the old and the new executable, it finds every pinned symbol of the
+loader's table and of each mod's rows again and writes the new rows next to
+the old ones. What it cannot place for sure it leaves out with a `// pin:`
+note, for a human to settle. Rows that pin the start of a function or a call
+site port best; an address in the middle of code that changed does not.
+
 ## When the build is unknown or an id is missing
 
 - **Unknown build.** The loader identifies the binary by its fingerprint and
