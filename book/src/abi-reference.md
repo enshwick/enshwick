@@ -121,15 +121,15 @@ id through `Load::subscribe`. See [Events and the scheduler](events.md).
 | --- | ------------------------- | ----------------------- | -------------- | --------------- | ------ |
 | 1   | `SETTINGS_CHANGED`        | `SettingsChanged`       | none           | a loader thread | both   |
 | 2   | `LOADER_SETTINGS_CHANGED` | `LoaderSettingsChanged` | none           | a loader thread | both   |
-| 3   | `TICK`                    | `Tick`                  | `TickData`     | the game thread | server |
+| 3   | `TICK`                    | `Ticked`                | `TickData`     | the game thread | server |
 | 4   | `WORLD_LOADED`            | `WorldLoaded`           | none           | the game thread | server |
 | 5   | `WORLD_SAVED`             | `WorldSaved`            | none           | the game thread | server |
 | 6   | `PLAYER_JOINED`           | `PlayerJoined`          | `PlayerData`   | the game thread | server |
 | 7   | `PLAYER_LEFT`             | `PlayerLeft`            | `PlayerData`   | the game thread | server |
-| 8   | `SHUTDOWN`                | `Shutdown`              | none           | the game thread | server |
+| 8   | `SHUTDOWN`                | `ShutdownStarted`       | none           | the game thread | server |
 | 9   | `BUILDING_PLACED`         | `BuildingPlaced`        | `BuildingData` | the game thread | server |
 | 10  | `BUILDING_REMOVED`        | `BuildingRemoved`       | `BuildingData` | the game thread | server |
-| 11  | `JOIN_MISSING`            | `JoinMissing`           | none           | the game thread | client |
+| 11  | `JOIN_MISSING`            | `JoinRefused`           | none           | the game thread | client |
 | 12  | `ALTARS_CHANGED`          | `AltarsChanged`         | none           | the game thread | server |
 
 Subscribing needs minor 2; `JOIN_MISSING` came with minor 10 and
@@ -207,7 +207,7 @@ marked "init only" are allowed during `enshwick_mod_init` only.
 | `altar_limit`         | Decides how many altars each Flame level allows, one mod at a time; init only                   | 19          |
 | `raise_base_limit`    | Lets the game group 32 altar zones in its 16 bases; init only; `MISSING` on an unknown build    | 19          |
 | `base_zones`          | The zones and bases of the last grouping, while the raised limit is in force                    | 19          |
-| `game_event`          | Calls a handler on every engine event of a reflected type, or of all; init only                 | 20          |
+| `game_event`          | Calls a handler on every game event of a reflected type, or of all; init only                   | 20          |
 | `entities`            | The entities with a component and a place in the world; server game thread only                 | 21          |
 | `destroy`             | Asks the server to destroy an entity after the next step; server game thread only               | 21          |
 | `save_world`          | Asks the server to save the world now; server game thread only                                  | 21          |
@@ -244,7 +244,7 @@ the mod off with a reason, which the mod's log shows as `off: <reason>`:
 | 17          | interaction filters             | Off: `interaction filters: needs a newer loader`          |
 | 18          | skills, comfort, experience     | Off: `skill overrides: needs a newer loader` and the like |
 | 19          | altar limit and bases           | Off: `altars: needs a newer loader`                       |
-| 20          | engine events                   | Off: `engine events: needs a newer loader`                |
+| 20          | game events                     | Off: `game events: needs a newer loader`                  |
 | 21          | entity queries, destroy, saves  | Empty, `None` or `WorldError::Missing`                    |
 
 A mod that can do without a feature catches the `Off` and goes on without it

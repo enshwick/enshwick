@@ -10,8 +10,8 @@ use crate::chains::Next;
 use crate::host::{Registered, take};
 
 use enshwick_loader_api::abi::{
-    Comfort, ComfortFn, ExperienceFn, ExperiencePass, ExperienceRow, Header, HookFlags, Side,
-    SkillCheck, SkillFn, Status,
+    Comfort, ComfortFn, ExperiencePass, ExperiencePassFn, ExperienceRow, Header, HookFlags, Side,
+    SkillCheck, SkillCheckFn, Status,
 };
 
 use crate::ecs::Engine;
@@ -34,9 +34,9 @@ const REGISTRY: usize = 22;
 
 #[derive(Debug, Default)]
 struct Sealed {
-    skills: Box<[(u32, Registered<SkillFn>)]>,
+    skills: Box<[(u32, Registered<SkillCheckFn>)]>,
     comfort: Box<[Registered<ComfortFn>]>,
-    experience: Box<[Registered<ExperienceFn>]>,
+    experience: Box<[Registered<ExperiencePassFn>]>,
 }
 
 /// The engine pieces experience needs.
@@ -50,9 +50,9 @@ struct Levels {
     need: u32,
 }
 
-static SKILLS: Mutex<Vec<(u32, Registered<SkillFn>)>> = Mutex::new(Vec::new());
+static SKILLS: Mutex<Vec<(u32, Registered<SkillCheckFn>)>> = Mutex::new(Vec::new());
 static COMFORT: Mutex<Vec<Registered<ComfortFn>>> = Mutex::new(Vec::new());
-static EXPERIENCE_FILTERS: Mutex<Vec<Registered<ExperienceFn>>> = Mutex::new(Vec::new());
+static EXPERIENCE_FILTERS: Mutex<Vec<Registered<ExperiencePassFn>>> = Mutex::new(Vec::new());
 static SEALED: OnceLock<Sealed> = OnceLock::new();
 static LOADED: OnceLock<&'static Loader> = OnceLock::new();
 /// Where the fly mode gate's call returns to; 0 when the build lacks it.
@@ -118,7 +118,7 @@ pub(crate) fn register_skill(
     loader: &Loader,
     owner: usize,
     node: u32,
-    callback: SkillFn,
+    callback: SkillCheckFn,
     user: *mut c_void,
 ) -> Status {
     if too_late(loader) {
@@ -156,7 +156,7 @@ pub(crate) fn register_comfort(
 pub(crate) fn register_experience(
     loader: &Loader,
     owner: usize,
-    callback: ExperienceFn,
+    callback: ExperiencePassFn,
     user: *mut c_void,
 ) -> Status {
     if too_late(loader) {

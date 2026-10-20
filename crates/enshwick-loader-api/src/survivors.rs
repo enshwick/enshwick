@@ -51,14 +51,14 @@ pub struct SurvivorId(pub u32);
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum Purpose {
-    /// The pass that keeps one entity per survivor looks at `me`, whose home
-    /// is `home`. Answer `me` to keep it, another entity to have the game
-    /// remove `me`, or [`Answer::Nobody`] when there is no entity yet. After
+    /// The pass that keeps one entity per survivor looks at `entity`, whose
+    /// home is `home`. Answer `entity` to keep it, another entity to have the
+    /// game remove `entity`, or [`Answer::Nobody`] when there is no entity yet. After
     /// an answer that keeps another entity than the game's, the survivor's
     /// record stays on the game's own.
     Uniqueness {
         /// The entity looked at.
-        me: Entity,
+        entity: Entity,
         /// Its saved spawn cell, or where it stands.
         home: [i64; 3],
     },
@@ -91,11 +91,11 @@ pub enum Purpose {
         /// Its cell.
         bed_at: [i64; 3],
     },
-    /// A survivor's idle behaviour: `me` stands at `at`; answer the entity
+    /// A survivor's idle behaviour: `entity` stands at `at`; answer the entity
     /// whose base it keeps to.
     Roaming {
         /// The survivor's entity.
-        me: Entity,
+        entity: Entity,
         /// Where it stands.
         at: [i64; 3],
     },
@@ -218,23 +218,26 @@ where
     let Some(call) = (unsafe { call.as_ref() }) else {
         return 0;
     };
-    let me = Entity(call.entity);
+    let entity = Entity(call.entity);
     let purpose = match call.purpose {
         RawLookup::UNIQUENESS => Purpose::Uniqueness {
-            me,
+            entity,
             home: call.cell,
         },
         RawLookup::SPAWN => Purpose::Spawn { target: call.cell },
         RawLookup::BED_OWNER => Purpose::BedOwner { bed_at: call.cell },
         RawLookup::ASSIGN_BED => Purpose::AssignBed {
-            bed: me,
+            bed: entity,
             bed_at: call.cell,
         },
         RawLookup::PREVIOUS_OCCUPANT => Purpose::PreviousOccupant {
-            bed: me,
+            bed: entity,
             bed_at: call.cell,
         },
-        RawLookup::ROAMING => Purpose::Roaming { me, at: call.cell },
+        RawLookup::ROAMING => Purpose::Roaming {
+            entity,
+            at: call.cell,
+        },
         RawLookup::BED_BINDING => Purpose::BedBinding,
         RawLookup::CURSOR => Purpose::Cursor,
         _ => return 0,
@@ -453,10 +456,10 @@ impl Load<'_> {
     /// use enshwick_loader_api::survivors::SurvivorId;
     ///
     /// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
-    ///     load.file_summon_item(0x5e01, SurvivorId(1_201_801_546))
+    ///     load.add_summon_item(0x5e01, SurvivorId(1_201_801_546))
     /// }
     /// ```
-    pub fn file_summon_item(&mut self, item: u32, survivor: SurvivorId) -> Result<(), Off> {
+    pub fn add_summon_item(&mut self, item: u32, survivor: SurvivorId) -> Result<(), Off> {
         let host = self.host();
         crate::load::offered(
             host.api(),

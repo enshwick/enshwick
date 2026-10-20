@@ -238,7 +238,7 @@ assert_eq!(safes.tag_prefix().as_deref(), Some("enshwick-safes-v"));
 When the join check keeps a client out because the server runs join mods the
 client lacks or has in another version, the loader shows the player a note,
 then raises
-[`events::JoinMissing`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/events.rs)
+[`events::JoinRefused`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/events.rs)
 on the client.
 [`mods::join_missing()`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/mods.rs)
 then lists those mods: the server's version, `running` false, the client's
@@ -251,10 +251,10 @@ The handler runs on the game thread once the player closed the note. Hand
 downloads to a thread of your own:
 
 ```rust
-use enshwick_loader_api::events::JoinMissing;
+use enshwick_loader_api::events::JoinRefused;
 
 fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
-    load.on::<JoinMissing>(|()| {
+    load.on::<JoinRefused>(|()| {
         let missing = enshwick_loader_api::mods::join_missing();
         std::thread::spawn(move || {
             for entry in missing {

@@ -136,7 +136,7 @@ pub(crate) fn add(load: &mut Load<'_>, texts: &Texts) -> Result<(), Off> {
 /// staff, so the cursor, the unlock check and the placement treat both alike.
 pub(crate) fn file(load: &mut Load<'_>) -> Result<(), Off> {
     for staff in STAFFS {
-        load.file_summon_item(staff.copy.id(), SurvivorId(staff.npc))?;
+        load.add_summon_item(staff.copy.id(), SurvivorId(staff.npc))?;
     }
     Ok(())
 }

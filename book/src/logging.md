@@ -95,7 +95,7 @@ after start, then every `status_minutes`, and whenever an administrator types
 form of it.
 
 A mod adds its own lines with
-[`load.status(|| ...)`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/status.rs).
+[`load.add_status(|| ...)`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/status.rs).
 The closure returns a `String`; each non-empty line shows under the mod. It
 runs only when the summary is written, on a loader thread or the game thread,
 never inside a hook, and only while the mod runs. Keep what it reports in
@@ -107,7 +107,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 static MERGED: AtomicU64 = AtomicU64::new(0);
 
 fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
-    load.status(|| format!("{} zones merged", MERGED.load(Ordering::Relaxed)))
+    load.add_status(|| format!("{} zones merged", MERGED.load(Ordering::Relaxed)))
 }
 ```
 

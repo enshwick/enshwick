@@ -188,7 +188,7 @@ pub(crate) fn link(loader: &'static Loader) {
         (events.is_empty() || wants(events) || session).then(|| loader.address(symbol).unwrap_or(0))
     };
     let none = HookFlags::NONE;
-    let feature = "game events";
+    let feature = "server events";
     if let Some(target) = link(&[], "server.post_step") {
         loader.link_feature(feature, Some(target), &STEP_NEXT, step, none);
     }

@@ -138,7 +138,7 @@ pub(crate) fn console() -> PlayerInfo {
 
 /// Calls a command handler the mod registered; its reply.
 pub(crate) fn run_handler(
-    callback: crate::abi::CommandFn,
+    callback: crate::abi::CommandCallFn,
     user: usize,
     name: &str,
     player: &PlayerInfo,
@@ -1073,8 +1073,8 @@ impl Installed {
     ///
     /// let loader = enshwick_loader_api::test::FakeHost::new().install();
     /// let tick = TickData { header: Header::of::<TickData>(), step: 1 };
-    /// assert_eq!(loader.raise::<events::Tick>(&tick), 0);
-    /// assert_eq!(loader.raise::<events::Shutdown>(&()), 0);
+    /// assert_eq!(loader.raise::<events::Ticked>(&tick), 0);
+    /// assert_eq!(loader.raise::<events::ShutdownStarted>(&()), 0);
     /// ```
     #[must_use = "the count says whether the mod handles the event"]
     pub fn raise<E: Kind>(&self, data: &E::Data) -> usize {
@@ -1117,7 +1117,7 @@ impl Installed {
         handlers.len()
     }
 
-    /// The engine event types the mod asked for, by hash, 0 for every type.
+    /// The game event types the mod asked for, by hash, 0 for every type.
     ///
     /// # Examples
     ///
@@ -1130,7 +1130,7 @@ impl Installed {
         table::with(Vec::new(), |s| s.game_events.iter().map(|g| g.0).collect())
     }
 
-    /// Hands the engine event of `type_hash` with `bytes` to every handler of
+    /// Hands the game event of `type_hash` with `bytes` to every handler of
     /// the mod for that type or for every type, on this thread; returns how
     /// many ran.
     ///

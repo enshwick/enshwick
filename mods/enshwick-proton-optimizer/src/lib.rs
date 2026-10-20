@@ -189,13 +189,13 @@ impl Mod for ProtonOptimizer {
             linked.message,
             linked.server
         );
-        load.on::<events::Tick>(|_| waits::stepped())?;
+        load.on::<events::Ticked>(|_| waits::stepped())?;
         let _first = FOUND.set(Found {
             wine,
             summary: format!("environment: {summary}"),
             linked,
         });
-        load.status(status)?;
+        load.add_status(status)?;
         load.on_config_change(|settings: Settings| apply(&settings))?;
         apply(&settings);
         Ok(Self)
@@ -333,7 +333,7 @@ mod tests {
         assert_eq!(loader.run_at(server, &mut registers), 1);
         assert_eq!(registers.r9, 1_000_000);
         assert_eq!(
-            loader.raise::<events::Tick>(&enshwick_loader_api::abi::TickData {
+            loader.raise::<events::Ticked>(&enshwick_loader_api::abi::TickData {
                 header: enshwick_loader_api::abi::Header::of::<enshwick_loader_api::abi::TickData>(
                 ),
                 step: 1

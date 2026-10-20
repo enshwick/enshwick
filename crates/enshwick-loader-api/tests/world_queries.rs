@@ -6,7 +6,7 @@ mod tests {
 
     use enshwick_loader_api::abi::{Header, PlayerInfo, Status};
     use enshwick_loader_api::ecs::Entity;
-    use enshwick_loader_api::events::{Shutdown, WorldLoaded, WorldSaved};
+    use enshwick_loader_api::events::{ShutdownStarted, WorldLoaded, WorldSaved};
     use enshwick_loader_api::state::WorldStore;
     use enshwick_loader_api::world::{ComponentType, World, WorldError};
     use enshwick_loader_api::{Load, Mod, Off};
@@ -92,7 +92,7 @@ mod tests {
         assert_eq!(loader.raise::<WorldLoaded>(&()), 1);
         assert_eq!(store.update(|v| v.count = 3), Some(()));
         assert_eq!(loader.raise::<WorldSaved>(&()), 1);
-        assert_eq!(loader.raise::<Shutdown>(&()), 1);
+        assert_eq!(loader.raise::<ShutdownStarted>(&()), 1);
         assert_eq!(store.key(), None);
         let file = data.join("worlds/world0-1a2b3c4d/visits.toml");
         let text = std::fs::read_to_string(&file).unwrap();

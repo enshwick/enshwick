@@ -10,7 +10,7 @@ sees a `Lookup` with the survivor, the game's own answer and a `Purpose`:
 
 | Purpose            | Who asks                                     | What the mod answers                           |
 | ------------------ | -------------------------------------------- | ---------------------------------------------- |
-| `Uniqueness`       | The pass that keeps one entity per survivor  | `me` to keep it, another entity to remove `me` |
+| `Uniqueness`       | The pass that keeps one entity per survivor  | `entity` to keep it, another one to remove it  |
 | `Spawn`            | A summoning staff used at `target`           | The entity to move there, or `Nobody` to spawn |
 | `BedOwner`         | A bed at `bed_at` binding its sleeper        | The entity that may sleep there                |
 | `AssignBed`        | A player giving a bed with the staff         | The entity that gets it                        |
@@ -50,7 +50,7 @@ entity, the bed, the survivor's home cell and the bed's cell.
 
 ## Summoning staffs
 
-`load.file_summon_item(item, survivor)` files a mod item as a summoning staff
+`load.add_summon_item(item, survivor)` files a mod item as a summoning staff
 of the survivor, on both sides, so the game treats it as that survivor's
 staff. `load.on_summon` runs before a staff spawns or moves a survivor;
 returning `true` makes the use take the item, in the same transaction and only
@@ -61,7 +61,7 @@ use enshwick_loader_api::survivors::SurvivorId;
 
 fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
     const MY_STAFF: u32 = 0x5e01;
-    load.file_summon_item(MY_STAFF, SurvivorId(1_201_801_546))?;
+    load.add_summon_item(MY_STAFF, SurvivorId(1_201_801_546))?;
     load.on_summon(|summon| summon.item == MY_STAFF && summon.ammo == 0)
 }
 ```

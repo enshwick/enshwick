@@ -58,7 +58,7 @@ A summary the loader writes a minute after start, then every
 `status_minutes` (10 by default, 0 for on demand only), and when an
 administrator types `/enshwick status`. Each write replaces the last. It lists
 the game build, every mod with its version and whether it runs, the lines each
-running mod adds with `load.status`, the mods turned off and why, what mods
+running mod adds with `load.add_status`, the mods turned off and why, what mods
 serve and patch, and the hooked functions. With `diagnostics = true` in
 `mod-configs/enshwick.toml` it also counts the calls of every hooked function.
 

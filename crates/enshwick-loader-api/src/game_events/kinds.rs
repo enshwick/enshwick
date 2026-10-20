@@ -1,8 +1,8 @@
-//! Typed engine events: a struct per event with its fields read for the
+//! Typed game events: a struct per event with its fields read for the
 //! running build, for [`Load::on_game`](crate::Load::on_game).
 
 use crate::ecs::Entity;
-use crate::game_events::{EventType, Field, GameEvent};
+use crate::game_events::{EventType, Field, RawGameEvent};
 use crate::raw::read_at;
 use crate::world::{ComponentType, World};
 use crate::{Load, Off};
@@ -11,15 +11,15 @@ mod sealed {
     pub trait Sealed {}
 }
 
-/// An engine event with a typed form; implemented by the types in this
+/// A game event with a typed form; implemented by the types in this
 /// module only.
 ///
 /// # Examples
 ///
 /// ```
-/// use enshwick_loader_api::game_events::{Died, Typed};
+/// use enshwick_loader_api::game_events::{Died, Kind};
 ///
-/// fn watch<E: Typed + core::fmt::Debug>(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+/// fn watch<E: Kind + core::fmt::Debug>(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
 ///     load.on_game::<E>(|event| enshwick_loader_api::debug!("{event:?}"))
 /// }
 ///
@@ -27,7 +27,7 @@ mod sealed {
 ///     watch::<Died>(load)
 /// }
 /// ```
-pub trait Typed: sealed::Sealed + Sized + 'static {
+pub trait Kind: sealed::Sealed + Sized + 'static {
     /// The reflected engine type the event comes from.
     const TYPE_NAME: &'static str;
 
@@ -46,10 +46,10 @@ fn some(entity: Entity) -> Option<Entity> {
 /// Subscribes `handler` to the events `decode` turns into an `E`.
 fn on<E, D, F>(load: &mut Load<'_>, ty: EventType, decode: D, handler: F) -> Result<(), Off>
 where
-    D: Fn(&GameEvent<'_>) -> Option<E> + Send + Sync + 'static,
+    D: Fn(&RawGameEvent<'_>) -> Option<E> + Send + Sync + 'static,
     F: Fn(&E) + Send + Sync + 'static,
 {
-    load.on_game_event(ty, move |event| {
+    load.on_raw_game_event(ty, move |event| {
         if let Some(typed) = decode(event) {
             handler(&typed);
         }
@@ -192,7 +192,7 @@ pub struct Hit {
 
 impl sealed::Sealed for Hit {}
 
-impl Typed for Hit {
+impl Kind for Hit {
     const TYPE_NAME: &'static str = "keen::ecs::HitEvent";
 
     fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
@@ -340,7 +340,7 @@ impl Credit {
     }
 }
 
-impl Typed for Died {
+impl Kind for Died {
     const TYPE_NAME: &'static str = "keen::ecs::EntityDiedEvent";
 
     fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
@@ -373,24 +373,24 @@ impl Typed for Died {
 /// # Examples
 ///
 /// ```
-/// use enshwick_loader_api::game_events::LevelUp;
+/// use enshwick_loader_api::game_events::LevelGained;
 ///
 /// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
-///     load.on_game::<LevelUp>(|up| enshwick_loader_api::info!("entity {} reached level {}", up.player.0, up.level))
+///     load.on_game::<LevelGained>(|up| enshwick_loader_api::info!("entity {} reached level {}", up.player.0, up.level))
 /// }
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[non_exhaustive]
-pub struct LevelUp {
+pub struct LevelGained {
     /// The player's character.
     pub player: Entity,
     /// The level reached.
     pub level: u32,
 }
 
-impl sealed::Sealed for LevelUp {}
+impl sealed::Sealed for LevelGained {}
 
-impl Typed for LevelUp {
+impl Kind for LevelGained {
     const TYPE_NAME: &'static str = "keen::ecs::LevelUpEvent";
 
     fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
@@ -419,14 +419,14 @@ impl Typed for LevelUp {
 /// # Examples
 ///
 /// ```
-/// use enshwick_loader_api::game_events::XpSource;
+/// use enshwick_loader_api::game_events::ExperienceSource;
 ///
-/// assert_eq!(XpSource::from_raw(4), XpSource::Combat);
-/// assert_eq!(XpSource::from_raw(40), XpSource::Other(40));
+/// assert_eq!(ExperienceSource::from_raw(4), ExperienceSource::Combat);
+/// assert_eq!(ExperienceSource::from_raw(40), ExperienceSource::Other(40));
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[non_exhaustive]
-pub enum XpSource {
+pub enum ExperienceSource {
     /// No source given.
     None,
     /// Exploring.
@@ -445,12 +445,12 @@ pub enum XpSource {
     Other(u8),
 }
 
-impl XpSource {
+impl ExperienceSource {
     /// The source the engine's value names.
     ///
     /// # Examples
     ///
-    /// See [`XpSource`].
+    /// See [`ExperienceSource`].
     #[must_use]
     pub const fn from_raw(value: u8) -> Self {
         match value {
@@ -471,30 +471,30 @@ impl XpSource {
 /// # Examples
 ///
 /// ```
-/// use enshwick_loader_api::game_events::{XpGained, XpSource};
+/// use enshwick_loader_api::game_events::{ExperienceGained, ExperienceSource};
 ///
 /// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
-///     load.on_game::<XpGained>(|xp| {
-///         if xp.source == XpSource::Combat {
-///             enshwick_loader_api::debug!("{} experience for a kill", xp.amount);
+///     load.on_game::<ExperienceGained>(|gained| {
+///         if gained.source == ExperienceSource::Combat {
+///             enshwick_loader_api::debug!("{} experience for a kill", gained.amount);
 ///         }
 ///     })
 /// }
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[non_exhaustive]
-pub struct XpGained {
+pub struct ExperienceGained {
     /// The player's character.
     pub player: Entity,
     /// How much.
     pub amount: u32,
     /// Where from.
-    pub source: XpSource,
+    pub source: ExperienceSource,
 }
 
-impl sealed::Sealed for XpGained {}
+impl sealed::Sealed for ExperienceGained {}
 
-impl Typed for XpGained {
+impl Kind for ExperienceGained {
     const TYPE_NAME: &'static str = "keen::ecs::XPGainedEvent";
 
     fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
@@ -512,7 +512,7 @@ impl Typed for XpGained {
                 Some(Self {
                     player: e.get(player)?,
                     amount: e.get(amount)?,
-                    source: XpSource::from_raw(e.get(source)?),
+                    source: ExperienceSource::from_raw(e.get(source)?),
                 })
             },
             handler,
@@ -547,7 +547,7 @@ pub struct CraftRequested {
 
 impl sealed::Sealed for CraftRequested {}
 
-impl Typed for CraftRequested {
+impl Kind for CraftRequested {
     const TYPE_NAME: &'static str = "keen::ecs::CraftRecipeEvent";
 
     fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
@@ -597,7 +597,7 @@ pub struct Crafted {
 
 impl sealed::Sealed for Crafted {}
 
-impl Typed for Crafted {
+impl Kind for Crafted {
     const TYPE_NAME: &'static str = "keen::ecs::CraftRecipeSuccessEvent";
 
     fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
@@ -646,7 +646,7 @@ pub struct Interacted {
 
 impl sealed::Sealed for Interacted {}
 
-impl Typed for Interacted {
+impl Kind for Interacted {
     const TYPE_NAME: &'static str = "keen::ecs::AcceptOfferedInteractionEvent";
 
     fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
@@ -723,7 +723,7 @@ impl BlockFields {
         })
     }
 
-    fn read(&self, e: &GameEvent<'_>) -> Option<Block> {
+    fn read(&self, e: &RawGameEvent<'_>) -> Option<Block> {
         let vector = |fields: [Field<f32>; 3]| -> Option<[f32; 3]> {
             Some([e.get(fields[0])?, e.get(fields[1])?, e.get(fields[2])?])
         };
@@ -760,7 +760,7 @@ pub struct Built {
 
 impl sealed::Sealed for Built {}
 
-impl Typed for Built {
+impl Kind for Built {
     const TYPE_NAME: &'static str = "keen::ecs::BuildingPlaceEvent";
 
     fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
@@ -804,7 +804,7 @@ pub struct TornDown {
 
 impl sealed::Sealed for TornDown {}
 
-impl Typed for TornDown {
+impl Kind for TornDown {
     const TYPE_NAME: &'static str = "keen::ecs::BuildingTearDownEvent";
 
     fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
@@ -848,7 +848,7 @@ pub struct PickedUp {
 
 impl sealed::Sealed for PickedUp {}
 
-impl Typed for PickedUp {
+impl Kind for PickedUp {
     const TYPE_NAME: &'static str = "keen::ecs::BuildingPickUpEvent";
 
     fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
@@ -877,13 +877,13 @@ impl Typed for PickedUp {
 /// # Examples
 ///
 /// ```
-/// use enshwick_loader_api::game_events::AltarActionKind;
+/// use enshwick_loader_api::game_events::AltarAction;
 ///
-/// assert_eq!(AltarActionKind::from_raw(1), AltarActionKind::Reclaim);
+/// assert_eq!(AltarAction::from_raw(1), AltarAction::Reclaim);
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[non_exhaustive]
-pub enum AltarActionKind {
+pub enum AltarAction {
     /// Abandoned the base.
     Abandon,
     /// Reclaimed an abandoned base.
@@ -896,12 +896,12 @@ pub enum AltarActionKind {
     Other(u8),
 }
 
-impl AltarActionKind {
+impl AltarAction {
     /// The action the engine's value names.
     ///
     /// # Examples
     ///
-    /// See [`AltarActionKind`].
+    /// See [`AltarAction`].
     #[must_use]
     pub const fn from_raw(value: u8) -> Self {
         match value {
@@ -919,26 +919,26 @@ impl AltarActionKind {
 /// # Examples
 ///
 /// ```
-/// use enshwick_loader_api::game_events::AltarAction;
+/// use enshwick_loader_api::game_events::AltarUsed;
 ///
 /// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
-///     load.on_game::<AltarAction>(|action| enshwick_loader_api::info!("{:?} at altar {:?}", action.kind, action.altar))
+///     load.on_game::<AltarUsed>(|used| enshwick_loader_api::info!("{:?} at altar {:?}", used.action, used.altar))
 /// }
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[non_exhaustive]
-pub struct AltarAction {
+pub struct AltarUsed {
     /// The player's character.
     pub player: Entity,
     /// The altar's base entity.
     pub altar: Entity,
     /// What was done.
-    pub kind: AltarActionKind,
+    pub action: AltarAction,
 }
 
-impl sealed::Sealed for AltarAction {}
+impl sealed::Sealed for AltarUsed {}
 
-impl Typed for AltarAction {
+impl Kind for AltarUsed {
     const TYPE_NAME: &'static str = "keen::ecs::FlameAltarEvent";
 
     fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
@@ -956,7 +956,7 @@ impl Typed for AltarAction {
                 Some(Self {
                     player: e.get(player)?,
                     altar: e.get(altar)?,
-                    kind: AltarActionKind::from_raw(e.get(kind)?),
+                    action: AltarAction::from_raw(e.get(kind)?),
                 })
             },
             handler,
@@ -988,7 +988,7 @@ pub struct LootOpened {
 
 impl sealed::Sealed for LootOpened {}
 
-impl Typed for LootOpened {
+impl Kind for LootOpened {
     const TYPE_NAME: &'static str = "keen::ecs::LootInteractionEvent";
 
     fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
@@ -1037,7 +1037,7 @@ pub struct EquipmentChanged {
 
 impl sealed::Sealed for EquipmentChanged {}
 
-impl Typed for EquipmentChanged {
+impl Kind for EquipmentChanged {
     const TYPE_NAME: &'static str = "keen::ecs::HandleEquipmentSlotChangedEvent";
 
     fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
@@ -1083,7 +1083,7 @@ pub struct Revived {
 
 impl sealed::Sealed for Revived {}
 
-impl Typed for Revived {
+impl Kind for Revived {
     const TYPE_NAME: &'static str = "keen::ecs::RevivedPlayerEvent";
 
     fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>

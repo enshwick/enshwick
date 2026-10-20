@@ -12,7 +12,7 @@ use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 use enshwick_loader_api::abi::Side;
-use enshwick_loader_api::events::{Shutdown, WorldLoaded, WorldSaved};
+use enshwick_loader_api::events::{ShutdownStarted, WorldLoaded, WorldSaved};
 use enshwick_loader_api::progress::ExperienceRow;
 use enshwick_loader_api::state::Store;
 use enshwick_loader_api::{Load, Mod, Off};
@@ -98,8 +98,8 @@ fn write(store: &Store<Saved>) {
     let saved = Saved {
         high_water: HIGH_WATER.load(Ordering::Relaxed),
     };
-    if let Err(off) = store.save(&saved) {
-        enshwick_loader_api::warn!("experience mark not saved: {off}");
+    if let Err(error) = store.save(&saved) {
+        enshwick_loader_api::warn!("experience mark not saved: {error}");
     }
 }
 
@@ -137,11 +137,11 @@ impl Mod for SharedExperience {
             HIGH_WATER.store(store.load()?.high_water, Ordering::Relaxed);
             load.on::<WorldSaved>(move |()| save(store))?;
             // The process may end soon after: write before returning.
-            load.on::<Shutdown>(move |()| write(store))?;
+            load.on::<ShutdownStarted>(move |()| write(store))?;
         } else {
             // A hosted game starts from the characters in it, its host among
             // them; the next game may be another world.
-            load.on::<Shutdown>(|()| HIGH_WATER.store(0, Ordering::Relaxed))?;
+            load.on::<ShutdownStarted>(|()| HIGH_WATER.store(0, Ordering::Relaxed))?;
         }
         load.on::<WorldLoaded>(|()| {
             enshwick_loader_api::info!("experience mark {}", HIGH_WATER.load(Ordering::Relaxed));
@@ -206,7 +206,7 @@ mod tests {
         assert_eq!(rows[0].gained, 40);
         assert_eq!(rows[1].gained, 40, "the trailing character catches up");
 
-        assert_eq!(loader.raise::<Shutdown>(&()), 1);
+        assert_eq!(loader.raise::<ShutdownStarted>(&()), 1);
         let text = std::fs::read_to_string(dir.join("experience.toml")).unwrap();
         assert_eq!(toml::from_str::<Saved>(&text).unwrap().high_water, 40);
         let _cleaned = std::fs::remove_dir_all(&dir);

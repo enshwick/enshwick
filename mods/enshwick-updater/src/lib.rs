@@ -27,7 +27,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, SystemTime};
 
-use enshwick_loader_api::events::JoinMissing;
+use enshwick_loader_api::events::JoinRefused;
 use enshwick_loader_api::mods::{ModEntry, Updates};
 use enshwick_loader_api::{Load, Mod, Off};
 use semver::Version;
@@ -726,7 +726,7 @@ impl Mod for Updater {
             set_context(settings, &game_dir, &data_dir);
         })?;
         if load
-            .on::<JoinMissing>(|()| spawn("enshwick-updater-join", after_refused_join))
+            .on::<JoinRefused>(|()| spawn("enshwick-updater-join", after_refused_join))
             .is_err()
         {
             enshwick_loader_api::warn!(

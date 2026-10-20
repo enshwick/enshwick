@@ -59,7 +59,7 @@ pub(crate) fn link(load: &mut Load<'_>) -> Result<(), Off> {
     *tracker() = Some(Tracker::default());
     load.on_loot_pass(check)?;
     // Entity ids belong to one game.
-    load.on::<enshwick_loader_api::events::Shutdown>(|()| {
+    load.on::<enshwick_loader_api::events::ShutdownStarted>(|()| {
         GAME.fetch_add(1, Ordering::AcqRel);
         if let Some(t) = tracker().as_mut() {
             t.clear();

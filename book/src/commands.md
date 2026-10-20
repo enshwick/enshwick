@@ -9,14 +9,14 @@ and on a client while it hosts a game.
 
 ## Registering a command
 
-[`load.command(name, help, handler)`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/commands.rs)
+[`load.add_command(name, help, handler)`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/commands.rs)
 registers `/name` with a line of help:
 
 ```rust
 use enshwick_loader_api::commands::Reply;
 
 fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
-    load.command("safe", "allow, deny or list players at your nearest Safe", |ctx, args| {
+    load.add_command("safe", "allow, deny or list players at your nearest Safe", |ctx, args| {
         match args {
             ["list"] => Reply::from(format!("{} asked for the list", ctx.player.name)),
             _ => Reply::from("/safe allow <player>, /safe deny <player>, /safe list"),
@@ -29,7 +29,7 @@ fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_
 - A name is 1 to 32 characters of `[a-z0-9-]`
   ([`commands::is_valid_name`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/commands.rs)).
   A malformed name, `enshwick`, or a name another mod holds is refused:
-  `load.command` returns `Err(Off)`.
+  `load.add_command` returns `Err(Off)`.
 - The player may type the name in any case: `/Safe` runs `/safe`.
 
 ## The handler

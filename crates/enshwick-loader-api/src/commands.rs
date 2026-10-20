@@ -1,6 +1,6 @@
 //! Chat commands: a player types `/name args` in the chat, the server keeps
 //! the line out of everyone's chat and hands it to the mod that registered
-//! `name` with [`Load::command`]; the mod's reply goes to that player only.
+//! `name` with [`Load::add_command`]; the mod's reply goes to that player only.
 //!
 //! The loader answers `/enshwick` itself: the mods and versions running,
 //! with `/enshwick help` every command with its line of help, and with
@@ -341,13 +341,13 @@ impl Load<'_> {
     /// use enshwick_loader_api::commands::Reply;
     ///
     /// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
-    ///     load.command("hello", "greets you", |ctx, args| match args {
+    ///     load.add_command("hello", "greets you", |ctx, args| match args {
     ///         [] => Reply::from(format!("Hello, {}", ctx.player.name)),
     ///         [name, ..] => Reply::from(format!("Hello, {name}")),
     ///     })
     /// }
     /// ```
-    pub fn command<F>(&mut self, name: &str, help: &str, handler: F) -> Result<(), Off>
+    pub fn add_command<F>(&mut self, name: &str, help: &str, handler: F) -> Result<(), Off>
     where
         F: Fn(&CommandContext, &[&str]) -> Reply + Send + Sync + 'static,
     {
