@@ -194,6 +194,56 @@ built-in server's while it hosts:
   for a read-only pointer to any reflected component;
 - `player(entity)` and `players()`: slot, a per-account `key`, permission bits
   (`is_admin()`) and the name the client sent, which is untrusted.
+- `set_label(entity, text)`, `broadcast(text)` and `tell(&player, text)`: see
+  [Labels](#labels) and [Chat commands](#chat-commands).
+
+## Chat commands
+
+`load.command(name, help, handler)` registers `/name` on the server. When a
+player types `/name words...`, the line never reaches anyone's chat: the
+loader runs `handler(ctx, args)` on the game thread, where world reads work,
+with the player who typed it (`ctx.player`, `ctx.is_admin()`) and the words
+after the name. The `Reply` it returns goes to that player alone, a chat line
+per text line; `Reply::none()` sends nothing.
+
+```rust
+use enshwick_api::commands::Reply;
+
+load.command("safe", "allow, deny or list players at your nearest Safe", move |ctx, args| {
+    match args {
+        ["list"] => Reply::from(format!("{} asked for the list", ctx.player.name)),
+        _ => Reply::from("/safe allow <player>, /safe deny <player>, /safe list"),
+    }
+})?;
+```
+
+A name is 1 to 32 of `[a-z0-9-]` and belongs to one mod: a name another mod
+holds, or `enshwick`, is refused at init. The loader answers `/enshwick`
+itself with the mods and versions running, and `/enshwick help` with every
+command and its help line; an unknown `/` command gets a short answer.
+Commands, labels and rename filters work on the dedicated server and on a
+client while it hosts a game.
+
+`world.broadcast(text)` sends a line to everyone and `world.tell(&player, text)`
+to one player, from any thread; the server posts them after the next step.
+
+## Labels
+
+`world.set_label(entity, text)` names an entity as a player's rename does: the
+game shows the name on hover, sends it to every client, vanilla ones included,
+and saves it with the world. It keeps 255 bytes; an empty text removes the
+name. Call it on the game thread.
+
+The game checks no permission when a player renames something.
+`load.on_rename(|rename| ...)` runs before every rename on the server, with the
+entity, the player (`None` when the server cannot tell) and the new text;
+returning `false` refuses it, and the entity keeps its name.
+
+```rust
+load.on_rename(move |rename| {
+    rename.player.as_ref().is_some_and(|player| player.is_admin())
+})?;
+```
 
 ## Scheduling
 

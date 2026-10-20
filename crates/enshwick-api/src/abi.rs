@@ -14,7 +14,7 @@ use core::sync::atomic::AtomicUsize;
 pub const ABI_MAJOR: u16 = 1;
 
 /// The minor version of this interface. A newer minor only appends fields.
-pub const ABI_MINOR: u16 = 8;
+pub const ABI_MINOR: u16 = 9;
 
 /// Whether `id` is a valid mod id: 1 to 64 characters of `[a-z0-9-]`.
 ///
@@ -558,6 +558,95 @@ pub struct PlayerData {
 /// A mod's handler for an [`Event`]: the event, its data (null for events
 /// without data, valid for the call) and the pointer given at subscription.
 pub type EventFn = unsafe extern "system" fn(event: Event, data: *const c_void, user: *mut c_void);
+
+/// A chat command a player typed, handed to the mod that registered its name
+/// with [`HostApi::command`].
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_api::abi::{CommandCall, Header, PlayerInfo, Str};
+///
+/// let call = CommandCall {
+///     header: Header::of::<CommandCall>(),
+///     player: PlayerInfo {
+///         header: Header::of::<PlayerInfo>(),
+///         slot: 0,
+///         entity: 2,
+///         key: 7,
+///         permissions: 0,
+///         name_len: 0,
+///         name: [0; 64],
+///     },
+///     name: Str::new("safe"),
+///     args: Str::new("allow Ann"),
+/// };
+/// // SAFETY: `args` borrows a `'static` string.
+/// assert_eq!(unsafe { call.args.as_str() }, Some("allow Ann"));
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct CommandCall {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// The player who typed it.
+    pub player: PlayerInfo,
+    /// The command's name, without the `/`.
+    pub name: Str,
+    /// The rest of the line after the name, trimmed; valid for the call.
+    pub args: Str,
+}
+
+/// A mod's handler for a chat command: the call, the pointer given at
+/// registration, and where to write the reply for the typing player. The
+/// reply stays valid until the handler runs again; empty for none.
+pub type CommandFn =
+    unsafe extern "system" fn(call: *const CommandCall, user: *mut c_void, reply: *mut Str);
+
+/// A player renaming an entity, handed to the filters registered with
+/// [`HostApi::rename_filter`] before the game applies it.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_api::abi::{Header, PlayerInfo, RenameCall, Str};
+///
+/// let call = RenameCall {
+///     header: Header::of::<RenameCall>(),
+///     entity: 4096,
+///     known: 0,
+///     player: PlayerInfo {
+///         header: Header::of::<PlayerInfo>(),
+///         slot: 0,
+///         entity: 0,
+///         key: 0,
+///         permissions: 0,
+///         name_len: 0,
+///         name: [0; 64],
+///     },
+///     text: Str::new("Tools"),
+/// };
+/// assert_eq!(call.known, 0);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct RenameCall {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// The entity being renamed.
+    pub entity: u32,
+    /// 1 when `player` holds the renaming player, 0 when the loader could
+    /// not tell who sent the rename.
+    pub known: u8,
+    /// The renaming player, when `known` is 1.
+    pub player: PlayerInfo,
+    /// The new name as the client sent it; valid for the call.
+    pub text: Str,
+}
+
+/// A mod's rename filter: the call and the pointer given at registration;
+/// returns 1 to let the rename through, 0 to refuse it.
+pub type RenameFn = unsafe extern "system" fn(call: *const RenameCall, user: *mut c_void) -> u8;
 
 /// A game resource's key: its GUID in memory order, its type hash and part.
 ///
@@ -1350,6 +1439,32 @@ pub struct HostApi {
     /// system context of that world holds at `ecs.context_entity_world`; 0
     /// while none runs or before its first step. Since minor 8.
     pub server_world: extern "system" fn() -> u64,
+    /// Registers the chat command `/name`, `[a-z0-9-]`, 1 to 32 characters,
+    /// with a line of help for `/enshwick help`; the server calls `callback`
+    /// with `user` on its game thread when a player types it. A name another
+    /// mod or the loader holds is refused. Allowed during
+    /// `enshwick_mod_init` only. Since minor 9.
+    pub command: extern "system" fn(
+        me: ModHandle,
+        name: Str,
+        help: Str,
+        callback: CommandFn,
+        user: *mut c_void,
+    ) -> Status,
+    /// Sends `text` to the chat of the player whose account key is `to`, or of
+    /// everyone for 0, from any thread; the server posts it after the next
+    /// step. Lines past 1024 bytes are cut. Since minor 9.
+    pub chat: extern "system" fn(me: ModHandle, to: u64, text: Str) -> Status,
+    /// Gives `entity` the name `text`, as a player's rename does: shown on
+    /// hover, sent to every client and saved with the world; cut at 255
+    /// bytes, removed when empty. On the server's game thread only. Since
+    /// minor 9.
+    pub set_label: extern "system" fn(me: ModHandle, entity: u32, text: Str) -> Status,
+    /// Calls `callback` with `user` before the server applies a player's
+    /// rename of an entity; any filter returning 0 refuses it. Allowed during
+    /// `enshwick_mod_init` only. Since minor 9.
+    pub rename_filter:
+        extern "system" fn(me: ModHandle, callback: RenameFn, user: *mut c_void) -> Status,
 }
 
 /// The exports a mod DLL provides, by name.
@@ -1405,7 +1520,9 @@ const _: () = {
     assert!(core::mem::offset_of!(HostApi, workshop_recipes) == 24 + 27 * 8);
     assert!(core::mem::offset_of!(HostApi, hosting) == 24 + 28 * 8);
     assert!(core::mem::offset_of!(HostApi, server_world) == 24 + 29 * 8);
-    assert!(size_of::<HostApi>() == 24 + 30 * 8);
+    assert!(core::mem::offset_of!(HostApi, command) == 24 + 30 * 8);
+    assert!(core::mem::offset_of!(HostApi, rename_filter) == 24 + 33 * 8);
+    assert!(size_of::<HostApi>() == 24 + 34 * 8);
     assert!(core::mem::offset_of!(Manifest, updates) == 80);
     assert!(size_of::<UpdateSource>() == 48);
     assert!(size_of::<ResourceKey>() == 24);

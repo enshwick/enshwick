@@ -86,6 +86,7 @@ struct Layout {
     slot_entity: usize,
     slot_key: usize,
     slot_name: usize,
+    slot_machine: usize,
 }
 
 static LAYOUT: OnceLock<Option<Layout>> = OnceLock::new();
@@ -142,6 +143,7 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
                 slot_entity: constant("server.player_slot_entity")?,
                 slot_key: constant("server.player_slot_key")?,
                 slot_name: constant("server.player_slot_name")?,
+                slot_machine: constant("server.player_slot_machine")?,
             })
         })
         .as_ref()
@@ -152,13 +154,13 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
 /// # Safety
 ///
 /// The address holds a readable `T`.
-unsafe fn read<T: Copy>(base: usize, offset: usize) -> T {
+pub(crate) unsafe fn read<T: Copy>(base: usize, offset: usize) -> T {
     // SAFETY: forwarded from the caller.
     unsafe { core::ptr::with_exposed_provenance::<T>(base.wrapping_add(offset)).read_unaligned() }
 }
 
 /// The server, when the caller is on the game thread.
-fn server() -> Result<usize, Status> {
+pub(crate) fn server() -> Result<usize, Status> {
     let server = SERVER.load(Ordering::Acquire);
     if server == 0 {
         return Err(Status::MISSING);
@@ -266,6 +268,25 @@ pub(crate) fn players(loader: &Loader) -> Result<Vec<PlayerInfo>, Status> {
             let entity: u32 = unsafe { read(slot, layout.slot_entity) };
             (handle != 0 && state == SLOT_IN_GAME && entity != 0)
                 .then(|| player_at(layout, slot, index, entity, infos))
+        })
+        .collect())
+}
+
+/// The machine handle of each player in game, by account key: the handle
+/// the server's network code names a connection by.
+pub(crate) fn machines(loader: &Loader) -> Result<Vec<(u64, u32)>, Status> {
+    let layout = layout(loader).ok_or(Status::MISSING)?;
+    let server = server()?;
+    Ok((0..layout.slot_count)
+        .filter_map(|index| {
+            let slot = server + layout.slots + index * layout.slot_size;
+            // SAFETY: the server holds `slot_count` player slots.
+            let handle: u32 = unsafe { read(slot, 0) };
+            // SAFETY: as above.
+            let machine: u32 = unsafe { read(slot, layout.slot_machine) };
+            // SAFETY: as above.
+            let key: u64 = unsafe { read(slot, layout.slot_key) };
+            (handle != 0 && machine != 0).then_some((key, machine))
         })
         .collect())
 }

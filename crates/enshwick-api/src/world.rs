@@ -1,5 +1,5 @@
 //! Reads of the server's world: components, templates, positions and
-//! players. Call them on the server's game thread, from a game event or a
+//! players; entity labels and chat lines. Call them on the server's game thread, from a game event or a
 //! [`Scheduler`](crate::schedule::Scheduler) task; elsewhere they return
 //! `None` or nothing. On a client the server is the built-in one, while it
 //! hosts a game.
@@ -53,7 +53,7 @@ pub struct Player {
 }
 
 impl Player {
-    fn from_info(info: &PlayerInfo) -> Self {
+    pub(crate) fn from_info(info: &PlayerInfo) -> Self {
         let name = &info.name[..usize::from(info.name_len).min(info.name.len())];
         Self {
             entity: Entity(info.entity),
@@ -199,6 +199,75 @@ impl World {
         let mut info: PlayerInfo = unsafe { core::mem::zeroed() };
         let status = (self.host.api().player)(self.host.handle(), entity.0, &raw mut info);
         status.is_ok().then(|| Player::from_info(&info))
+    }
+
+    /// Whether the loader offers what was added to the table at `end`.
+    fn offers(&self, end: usize) -> bool {
+        self.host.api().header.covers(end + size_of::<usize>())
+    }
+
+    /// Gives `entity` the name `text`, as a player's rename does: the game
+    /// shows it on hover, sends it to every client and saves it with the
+    /// world. The game keeps 255 bytes; an empty text removes the name. On
+    /// the game thread only; `false` elsewhere or when the entity is gone.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_api::events::BuildingPlaced;
+    ///
+    /// fn init(load: &mut enshwick_api::Load<'_>) -> Result<(), enshwick_api::Off> {
+    ///     let world = load.world()?;
+    ///     load.on::<BuildingPlaced>(move |placed| {
+    ///         if let Some(player) = world.player(enshwick_api::ecs::Entity(placed.player)) {
+    ///             let label = format!("Built by {}", player.name);
+    ///             let _labelled = world.set_label(enshwick_api::ecs::Entity(placed.entity), &label);
+    ///         }
+    ///     })
+    /// }
+    /// ```
+    #[must_use]
+    pub fn set_label(&self, entity: Entity, text: &str) -> bool {
+        if !self.offers(core::mem::offset_of!(HostApi, set_label)) {
+            return false;
+        }
+        (self.host.api().set_label)(self.host.handle(), entity.0, Str::new(text)).is_ok()
+    }
+
+    /// Sends `text` to every player's chat, after the next step; callable
+    /// from any thread. Each line becomes a message of its own.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// fn announce(world: &enshwick_api::world::World) {
+    ///     world.broadcast("The server restarts in five minutes");
+    /// }
+    /// ```
+    pub fn broadcast(&self, text: &str) {
+        self.chat(0, text);
+    }
+
+    /// Sends `text` to `player`'s chat alone, after the next step; callable
+    /// from any thread.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// fn welcome(world: &enshwick_api::world::World, player: &enshwick_api::world::Player) {
+    ///     world.tell(player, "Welcome back");
+    /// }
+    /// ```
+    pub fn tell(&self, player: &Player, text: &str) {
+        if player.key != 0 {
+            self.chat(player.key, text);
+        }
+    }
+
+    fn chat(&self, to: u64, text: &str) {
+        if self.offers(core::mem::offset_of!(HostApi, chat)) {
+            let _queued = (self.host.api().chat)(self.host.handle(), to, Str::new(text));
+        }
     }
 
     /// Every connected player with a character in the world.

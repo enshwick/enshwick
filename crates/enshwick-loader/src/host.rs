@@ -327,6 +327,10 @@ pub(crate) static API: HostApi = HostApi {
     workshop_recipes,
     hosting,
     server_world,
+    command,
+    chat,
+    set_label,
+    rename_filter,
 };
 
 /// A static slice from a pointer and a count, empty for a null pointer.
@@ -900,6 +904,63 @@ extern "system" fn hosting() -> u8 {
 
 extern "system" fn server_world() -> u64 {
     crate::world::server_world()
+}
+
+extern "system" fn command(
+    me: ModHandle,
+    name: Str,
+    help: Str,
+    callback: api_frame::CommandFn,
+    user: *mut core::ffi::c_void,
+) -> Status {
+    let (Some(name), Some(help)) = (text(name), text(help)) else {
+        return Status::BAD_ARGS;
+    };
+    let Some((index, record)) = loader().and_then(|loader| loader.record(me)) else {
+        return Status::BAD_ARGS;
+    };
+    if record.off.load(Ordering::Acquire) {
+        return Status::FAULTED;
+    }
+    let status = crate::chat::register(index, name, help, callback, user);
+    if status.is_ok() {
+        crate::log::write(Level::DEBUG, &record.id, &format!("command /{name}"));
+    }
+    status
+}
+
+extern "system" fn chat(me: ModHandle, to: u64, message: Str) -> Status {
+    let Some(message) = text(message) else {
+        return Status::BAD_ARGS;
+    };
+    match caller(me) {
+        Ok(_) => crate::chat::send(to, message),
+        Err(status) => status,
+    }
+}
+
+extern "system" fn set_label(me: ModHandle, entity: u32, label: Str) -> Status {
+    let Some(label) = text(label) else {
+        return Status::BAD_ARGS;
+    };
+    match caller(me) {
+        Ok(loader) => crate::label::set(loader, entity, label),
+        Err(status) => status,
+    }
+}
+
+extern "system" fn rename_filter(
+    me: ModHandle,
+    callback: api_frame::RenameFn,
+    user: *mut core::ffi::c_void,
+) -> Status {
+    let Some((index, record)) = loader().and_then(|loader| loader.record(me)) else {
+        return Status::BAD_ARGS;
+    };
+    if record.off.load(Ordering::Acquire) {
+        return Status::FAULTED;
+    }
+    crate::label::register(index, callback, user)
 }
 
 /// Mod handles start at 1; 0 is no mod.
