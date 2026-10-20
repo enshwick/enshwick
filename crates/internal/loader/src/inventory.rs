@@ -561,11 +561,31 @@ fn valid(op: &InventoryOp) -> bool {
                 && (op.kind == InventoryOp::TAKE || fill(op).is_some())
         }
         InventoryOp::DESTROY_SLOT => op.target & 0xffff_ffff != 0,
+        InventoryOp::RENEW => {
+            op.target & 0xffff_ffff != 0
+                && op.other & 0xffff_ffff != 0
+                && op.item != 0
+                && op.count != 0
+                && i32::try_from(op.count).is_ok()
+                && fill(&renew_give(op)).is_some()
+        }
         InventoryOp::MOVE_SLOT => {
             op.target & 0xffff_ffff != 0 && entity(op.other) && u16::try_from(op.count).is_ok()
         }
         InventoryOp::MOVE_ALL => entity(op.target) && entity(op.other) && op.target != op.other,
         _ => false,
+    }
+}
+
+/// The give a renewal makes: its inventory and fill from `other`.
+fn renew_give(op: &InventoryOp) -> InventoryOp {
+    InventoryOp {
+        kind: InventoryOp::GIVE,
+        flags: InventoryOp::FILLED,
+        target: op.other & 0xffff_ffff,
+        other: op.other >> 32,
+        item: op.item,
+        count: op.count,
     }
 }
 
@@ -830,6 +850,10 @@ unsafe fn touched(
                 touched.push(root(op.target));
                 continue;
             }
+            InventoryOp::RENEW => {
+                touched.extend([root(op.target), (op.other & 0xffff_ffff) as u32]);
+                continue;
+            }
             InventoryOp::MOVE_SLOT => root(op.target),
             _ => op.target as u32,
         };
@@ -921,6 +945,29 @@ unsafe fn apply(executor: &Executor, txn: *mut u8, op: &InventoryOp) -> Inventor
         InventoryOp::DESTROY_SLOT => {
             // SAFETY: the game's destroy of one stack.
             unsafe { (executor.destroy)(out, txn, op.target) };
+        }
+        InventoryOp::RENEW => {
+            // SAFETY: the game's destroy of one stack.
+            unsafe { (executor.destroy)(out, txn, op.target) };
+            if res[0] as u8 == 0 {
+                let give = renew_give(op);
+                let fill = fill(&give).unwrap_or(absent);
+                // SAFETY: the game's add, asked for the slot just emptied,
+                // with the new items' fuel fill.
+                unsafe {
+                    (executor.give)(
+                        out,
+                        txn,
+                        give.target as u32,
+                        op.target,
+                        give.item,
+                        give.count.cast_signed(),
+                        &raw const absent,
+                        &raw const absent,
+                        &raw const fill,
+                    )
+                };
+            }
         }
         InventoryOp::MOVE_SLOT if op.count == 0 => {
             // SAFETY: the whole stack, a remainder back to the source.

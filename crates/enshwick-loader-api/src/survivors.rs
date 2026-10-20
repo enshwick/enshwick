@@ -335,9 +335,26 @@ unsafe fn read_summon(summon: *const RawSummon) -> Option<Summon> {
     Some(Summon::from_raw(&raw))
 }
 
+/// What a summon filter makes of a staff's use, from [`Load::on_summon`].
+///
+/// # Examples
+///
+/// See [`Load::on_summon`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum SummonVerdict {
+    /// The use goes on as the game decides.
+    Allow,
+    /// The use takes the staff, in the same transaction as the spawn or
+    /// move and only when that works.
+    Take,
+    /// The use is refused: nothing spawns, moves or is taken.
+    Refuse,
+}
+
 unsafe extern "system" fn run_summon<F>(summon: *const RawSummon, user: *mut c_void) -> u8
 where
-    F: Fn(&Summon) -> bool,
+    F: Fn(&Summon) -> SummonVerdict,
 {
     // SAFETY: the loader passes a valid summon for the duration of the call.
     let Some(call) = (unsafe { read_summon(summon) }) else {
@@ -345,8 +362,16 @@ where
     };
     // SAFETY: `user` is the leaked `F` this function was registered with.
     let handler = unsafe { &*user.cast::<F>() };
-    let consume = crate::host::guard("panic in a summon filter", || false, || handler(&call));
-    u8::from(consume)
+    let verdict = crate::host::guard(
+        "panic in a summon filter",
+        || SummonVerdict::Allow,
+        || handler(&call),
+    );
+    match verdict {
+        SummonVerdict::Allow => 0,
+        SummonVerdict::Take => RawSummon::TAKE,
+        SummonVerdict::Refuse => RawSummon::REFUSE,
+    }
 }
 
 unsafe extern "system" fn run_summoned<F>(summon: *const RawSummon, user: *mut c_void) -> u8
@@ -466,9 +491,11 @@ impl Load<'_> {
         )
     }
 
-    /// Runs `filter` before a summoning staff spawns or moves a survivor;
-    /// returning `true` makes the use take the item, in the same transaction
-    /// and only when the spawn or move works. Server's game thread.
+    /// Runs `filter` before a summoning staff spawns or moves a survivor:
+    /// [`SummonVerdict::Take`] makes the use take the item, in the same
+    /// transaction and only when the spawn or move works;
+    /// [`SummonVerdict::Refuse`] refuses the use, and nothing spawns, moves
+    /// or is taken. On the thread of the use, inside the game's step.
     ///
     /// # Errors
     ///
@@ -477,14 +504,22 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
+    /// use enshwick_loader_api::survivors::SummonVerdict;
+    ///
     /// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
     ///     const MY_STAFF: u32 = 0x5e01;
-    ///     load.on_summon(|summon| summon.item == MY_STAFF && summon.ammo == 0)
+    ///     load.on_summon(|summon| {
+    ///         if summon.item == MY_STAFF && summon.ammo == 0 {
+    ///             SummonVerdict::Take
+    ///         } else {
+    ///             SummonVerdict::Allow
+    ///         }
+    ///     })
     /// }
     /// ```
     pub fn on_summon<F>(&mut self, filter: F) -> Result<(), Off>
     where
-        F: Fn(&Summon) -> bool + Send + Sync + 'static,
+        F: Fn(&Summon) -> SummonVerdict + Send + Sync + 'static,
     {
         self.register(
             core::mem::offset_of!(HostApi, summon_filter),

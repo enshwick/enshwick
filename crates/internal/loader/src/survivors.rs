@@ -943,10 +943,17 @@ unsafe fn bed_kept(ctx: u64) -> bool {
 
 unsafe extern "system" fn spawn_link(ctx: *mut u64, request: *mut u8) -> u8 {
     // SAFETY: the game's spawn request, before the spawn reads it.
-    let call = (!request.is_null())
+    let asked = (!request.is_null())
         .then(|| std::panic::catch_unwind(|| unsafe { summon(request) }).ok())
         .flatten()
         .flatten();
+    let call = match asked {
+        // A refused use spawns, moves and takes nothing, as a spawn the game
+        // turns down itself.
+        Some(Asked::Refused) => return 0,
+        Some(Asked::Use(call)) => Some(call),
+        None => None,
+    };
     // SAFETY: the rest of the chain takes the arguments the game passed.
     let done = unsafe { SPAWN_NEXT.get()(ctx, request) };
     if done != 0
@@ -955,6 +962,14 @@ unsafe extern "system" fn spawn_link(ctx: *mut u64, request: *mut u8) -> u8 {
         let _done = std::panic::catch_unwind(|| summoned(call));
     }
     done
+}
+
+/// What the summon filters made of a use.
+enum Asked {
+    /// The use goes on.
+    Use(Summon),
+    /// A filter refused it.
+    Refused,
 }
 
 /// The `NetworkFuel` type hash, a used item's meter as clients see it.
@@ -977,12 +992,13 @@ fn meter(loader: &Loader, pide: u32) -> [u16; 2] {
 }
 
 /// Asks the summon filters and marks the request consuming when one says
-/// so; returns the use, for the handlers after a spawn that worked.
+/// so; returns the use, for the handlers after a spawn that worked, or that
+/// a filter refused it.
 ///
 /// # Safety
 ///
 /// `request` is the live spawn request.
-unsafe fn summon(request: *mut u8) -> Option<Summon> {
+unsafe fn summon(request: *mut u8) -> Option<Asked> {
     let (Some(loader), Some(sealed)) = (LOADED.get(), SEALED.get()) else {
         return None;
     };
@@ -1017,16 +1033,21 @@ unsafe fn summon(request: *mut u8) -> Option<Summon> {
         consumed: 0,
         reserved: [0; 3],
     };
-    let consume = sealed
+    let mut consume = false;
+    for r in sealed
         .summons
         .iter()
         .filter(|r| !crate::host::is_off(r.owner))
-        .any(|r| {
-            let user = core::ptr::with_exposed_provenance_mut(r.user);
-            // SAFETY: the callback lives in the mod's DLL and takes the
-            // pointer it registered; the summon is valid for the call.
-            unsafe { (r.callback)(&raw const call, user) != 0 }
-        });
+    {
+        let user = core::ptr::with_exposed_provenance_mut(r.user);
+        // SAFETY: the callback lives in the mod's DLL and takes the pointer
+        // it registered; the summon is valid for the call.
+        match unsafe { (r.callback)(&raw const call, user) } {
+            Summon::REFUSE => return Some(Asked::Refused),
+            0 => {}
+            _ => consume = true,
+        }
+    }
     let at = usize::try_from(o.spawn_consume).unwrap_or(0);
     if consume {
         // SAFETY: the request's consume flag, which the spawn reads next.
@@ -1034,7 +1055,7 @@ unsafe fn summon(request: *mut u8) -> Option<Summon> {
     }
     // SAFETY: as above; a filter of the game's may have set it too.
     call.consumed = unsafe { request.wrapping_add(at).read() };
-    Some(call)
+    Some(Asked::Use(call))
 }
 
 /// Tells the handlers that a use spawned or moved a survivor.

@@ -1961,8 +1961,9 @@ impl Installed {
         })
     }
 
-    /// Asks the mod's summon filters as the game would; whether one makes
-    /// the use take the item.
+    /// Asks the mod's summon filters as the game would: [`Summon::REFUSE`]
+    /// when one refuses the use, [`Summon::TAKE`] when one makes it take
+    /// the item, else 0.
     ///
     /// # Examples
     ///
@@ -1982,16 +1983,22 @@ impl Installed {
     ///     consumed: 0,
     ///     reserved: [0; 3],
     /// };
-    /// assert!(!loader.summon(&summon));
+    /// assert_eq!(loader.summon(&summon), 0);
     /// ```
     #[must_use]
-    pub fn summon(&self, summon: &Summon) -> bool {
+    pub fn summon(&self, summon: &Summon) -> u8 {
         let filters = table::with(Vec::new(), |s| s.summons.clone());
-        filters.iter().any(|&(callback, user)| {
+        let mut verdict = 0;
+        for &(callback, user) in &filters {
             let user = core::ptr::with_exposed_provenance_mut(user);
             // SAFETY: a valid summon; `user` is the mod's pointer.
-            unsafe { callback(summon, user) != 0 }
-        })
+            match unsafe { callback(summon, user) } {
+                Summon::REFUSE => return Summon::REFUSE,
+                0 => {}
+                _ => verdict = Summon::TAKE,
+            }
+        }
+        verdict
     }
 
     /// Tells the mod's summon handlers that a use worked, as the game does
