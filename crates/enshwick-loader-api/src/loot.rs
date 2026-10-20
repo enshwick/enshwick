@@ -20,6 +20,7 @@ mod drops;
 pub use drops::{Drop, Kinds, Roll, Source};
 
 use crate::ecs::{Components, Ecs, Entity};
+use crate::raw::read_at;
 use crate::{Load, Off};
 
 /// The system that checks every loot container each step, for
@@ -363,16 +364,6 @@ impl Containers {
         let fixed = unsafe { transform.cast::<[i64; 3]>().read_unaligned() };
         crate::ecs::metres(fixed)
     }
-}
-
-/// Reads a `T` at `offset` bytes past `base`.
-///
-/// # Safety
-///
-/// A readable `T` lies there.
-unsafe fn read_at<T: Copy>(base: *const u8, offset: usize) -> T {
-    // SAFETY: forwarded from the caller.
-    unsafe { base.wrapping_add(offset).cast::<T>().read_unaligned() }
 }
 
 #[cfg(test)]

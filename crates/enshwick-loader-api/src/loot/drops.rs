@@ -12,6 +12,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock, PoisonError};
 
 use crate::ecs::{Components, Entity};
+use crate::raw::read_at;
 use crate::{Load, Next, Off};
 
 /// What a container is, for [`Source::kinds`].
@@ -341,16 +342,6 @@ fn dice() -> &'static Dice {
             now as u64 ^ u64::from(std::process::id()).rotate_left(32),
         ))
     })
-}
-
-/// Reads a `T` at `offset` bytes past `base`.
-///
-/// # Safety
-///
-/// A readable `T` lies there.
-unsafe fn read_at<T: Copy>(base: *const u8, offset: usize) -> T {
-    // SAFETY: forwarded from the caller.
-    unsafe { base.wrapping_add(offset).cast::<T>().read_unaligned() }
 }
 
 /// # Safety

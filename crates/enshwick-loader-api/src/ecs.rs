@@ -6,6 +6,7 @@
 //! address and offset comes from the loader for the running build.
 
 use crate::abi::Side;
+use crate::raw::read_at;
 use crate::{Host, Load, Off};
 
 type IteratorInit = unsafe extern "system" fn(ctx: *mut u64, iterator: *mut u64, size: u64);
@@ -74,16 +75,6 @@ unsafe fn function<F: Copy>(address: u64) -> F {
     // SAFETY: the caller guarantees the type; `F` is a function pointer the size
     // of `usize`.
     unsafe { core::mem::transmute_copy(&address) }
-}
-
-/// Reads a `T` at `offset` bytes past `base`.
-///
-/// # Safety
-///
-/// A readable `T` lies there.
-unsafe fn read_at<T: Copy>(base: *const u8, offset: usize) -> T {
-    // SAFETY: forwarded from the caller.
-    unsafe { base.wrapping_add(offset).cast::<T>().read_unaligned() }
 }
 
 impl Ecs {

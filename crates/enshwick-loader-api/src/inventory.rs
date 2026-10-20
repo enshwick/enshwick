@@ -23,6 +23,7 @@ use crate::abi::{
     Header, HostApi, InventoryOp, InventoryOpResult, InventoryRequest, InventoryResult, ItemData,
 };
 use crate::ecs::{Components, Entity};
+use crate::raw::read_at as read;
 use crate::schedule::Scheduler;
 use crate::world::{ComponentType, World};
 use crate::{Host, Load, Off};
@@ -1147,16 +1148,6 @@ impl Inventories {
         };
         self.submit(&Batch::new().with(all), done)
     }
-}
-
-/// Reads `T` at `offset` bytes past `base`.
-///
-/// # Safety
-///
-/// The address holds a readable `T`.
-unsafe fn read<T: Copy>(base: *const u8, offset: usize) -> T {
-    // SAFETY: forwarded from the caller.
-    unsafe { base.wrapping_add(offset).cast::<T>().read_unaligned() }
 }
 
 /// Synchronous inventory reads; get one from [`Inventories::read`] or
