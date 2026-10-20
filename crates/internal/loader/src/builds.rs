@@ -654,6 +654,7 @@ pub static BUILDS: &[KnownBuild] = &[
             ("ui.action_query", 0xd8_f6f0),
             ("ui.main_menu_site", 0xc1_a7e0),
             ("ui.pause_menu_site", 0xcc_1a87),
+            ("ui.world_settings_site", 0xb8_32bb),
         ],
         constants: &[
             ("text.pool_language", 0xd8),
@@ -982,6 +983,7 @@ pub static BUILDS: &[KnownBuild] = &[
             ("ui.action_query.bytes", 0xc8ec_8148_5741_5340),
             ("ui.main_menu_site.bytes", 0x0001_4824_44c7_c033),
             ("ui.pause_menu_site.bytes", 0x4c01_b59a_0a05_8b48),
+            ("ui.world_settings_site.bytes", 0xe800_0017_588d_8d48),
         ],
     },
 ];
@@ -1040,7 +1042,7 @@ mod tests {
                 checked += 1;
             }
         }
-        assert!(checked >= 41);
+        assert!(checked >= 42);
         let reflection = enshwick_loader_reflect::Reflection::scan(&image);
         for (ty, field, offset) in [
             ("keen::FbUiBundle", "namedStyles", 0x10a0c),
