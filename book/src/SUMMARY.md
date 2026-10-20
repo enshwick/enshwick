@@ -21,6 +21,7 @@
 - [The world](world.md)
 - [Altars and bases](altars.md)
 - [Survivors](survivors.md)
+- [Interactions](interactions.md)
 - [Commands and chat](commands.md)
 - [State and data folders](state.md)
 - [Services between mods](services.md)

@@ -14,7 +14,7 @@ use core::sync::atomic::AtomicUsize;
 pub const ABI_MAJOR: u16 = 1;
 
 /// The minor version of this interface. A newer minor only appends fields.
-pub const ABI_MINOR: u16 = 16;
+pub const ABI_MINOR: u16 = 17;
 
 /// Whether `id` is a valid mod id: 1 to 64 characters of `[a-z0-9-]`.
 ///
@@ -2019,6 +2019,74 @@ pub type SurvivorStatusFn = unsafe extern "system" fn(
     user: *mut c_void,
 ) -> u32;
 
+/// A player about to interact with an entity, as
+/// [`HostApi::interaction_filter`] hands it on: open it, move items in or out
+/// of it, sort it, craft or build from it, dismantle it, or flip its Quick
+/// Stash or upgrade switch.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::abi::{Header, Interaction};
+///
+/// let call = Interaction {
+///     header: Header::of::<Interaction>(),
+///     kind: Interaction::OPEN,
+///     player: 4096,
+///     target: 5000,
+///     item: 0x5e01,
+///     known: 1,
+///     reserved: [0; 3],
+///     position: [1.0, 2.0, 3.0],
+/// };
+/// assert_eq!(call.kind, Interaction::OPEN);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct Interaction {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// What the player does; one of the constants on this type.
+    pub kind: u32,
+    /// The player's character entity.
+    pub player: u32,
+    /// The entity they act on: a chest, a placed piece, the inventory a slot
+    /// belongs to.
+    pub target: u32,
+    /// The item the target was placed from (`UsedItem`), 0 when unknown.
+    pub item: u32,
+    /// 1 when `item` and `position` were read from the target.
+    pub known: u8,
+    /// Zero.
+    pub reserved: [u8; 3],
+    /// Where the target stands, in metres, when `known`.
+    pub position: [f64; 3],
+}
+
+impl Interaction {
+    /// The game offers to open the target.
+    pub const OPEN: u32 = 1;
+    /// Items move out of or into the target.
+    pub const MOVE: u32 = 2;
+    /// The target's inventory is sorted.
+    pub const SORT: u32 = 3;
+    /// The target lends its stock to crafting or building nearby; asked
+    /// without the target's item or position.
+    pub const STOCK: u32 = 4;
+    /// The cursor offers to pick up or tear down the target.
+    pub const DISMANTLE: u32 = 5;
+    /// The player flips the target's Quick Stash switch.
+    pub const QUICK_STASH: u32 = 6;
+    /// The player upgrades the target into another piece.
+    pub const UPGRADE: u32 = 7;
+}
+
+/// A mod's interaction filter: the call and the pointer given at
+/// registration; returns 0 to refuse, which the game handles as its own
+/// refusal, so nothing moves and nothing is lost.
+pub type InteractionFn =
+    unsafe extern "system" fn(call: *const Interaction, user: *mut c_void) -> u8;
+
 /// The table of services the loader offers a mod.
 ///
 /// Fields are only ever appended; a mod checks [`Header::covers`] before it
@@ -2315,6 +2383,13 @@ pub struct HostApi {
     /// at a time. Allowed during `enshwick_mod_init` only. Since minor 16.
     pub survivor_status:
         extern "system" fn(me: ModHandle, callback: SurvivorStatusFn, user: *mut c_void) -> Status,
+    /// Calls `callback` with `user` before a player's interaction that
+    /// [`Interaction`] names; any filter returning 0 refuses it. Runs in the
+    /// server's world only, on the thread of the system that checks it.
+    /// Allowed during `enshwick_mod_init` only; [`Status::MISSING`] on a
+    /// build that lacks a piece. Since minor 17.
+    pub interaction_filter:
+        extern "system" fn(me: ModHandle, callback: InteractionFn, user: *mut c_void) -> Status,
 }
 
 /// The exports a mod DLL provides, by name.
@@ -2376,7 +2451,7 @@ const _: () = {
     assert!(core::mem::offset_of!(HostApi, hook_at) == 24 + 35 * 8);
     assert!(core::mem::offset_of!(HostApi, inventory_open) == 24 + 36 * 8);
     assert!(core::mem::offset_of!(HostApi, inventory_submit) == 24 + 38 * 8);
-    assert!(size_of::<HostApi>() == 24 + 51 * 8);
+    assert!(size_of::<HostApi>() == 24 + 52 * 8);
     assert!(size_of::<InventoryOp>() == 32);
     assert!(size_of::<InventoryRequest>() == 32);
     assert!(size_of::<InventoryOpResult>() == 8);
@@ -2395,6 +2470,8 @@ const _: () = {
     assert!(core::mem::offset_of!(HostApi, zone_check_filter) == 24 + 45 * 8);
     assert!(core::mem::offset_of!(HostApi, survivor_lookup) == 24 + 46 * 8);
     assert!(core::mem::offset_of!(HostApi, survivor_status) == 24 + 50 * 8);
+    assert!(core::mem::offset_of!(HostApi, interaction_filter) == 24 + 51 * 8);
+    assert!(size_of::<Interaction>() == 8 + 16 + 8 + 24);
     assert!(size_of::<SurvivorLookup>() == 8 + 16 + 24 + 16);
     assert!(size_of::<BedCheck>() == 8 + 12 + 4 + 48);
     assert!(size_of::<Summon>() == 8 + 8 + 16 + 24);

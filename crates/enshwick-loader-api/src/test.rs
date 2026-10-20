@@ -85,9 +85,9 @@ use std::sync::MutexGuard;
 
 use crate::abi::{
     AltarInfo, AltarZoneSize, BedCheck, Bounds, CallerFrame, CommandCall, Event, Fingerprint,
-    Header, HookFlags, HostApi, InventoryOp, InventoryOpResult, InventoryResult, ItemData, Level,
-    ModHandle, ModInfo, PlayerInfo, RenameCall, ResourceKey, Side, Status, Str, Summon,
-    SurvivorLookup, ZoneCheck,
+    Header, HookFlags, HostApi, Interaction, InventoryOp, InventoryOpResult, InventoryResult,
+    ItemData, Level, ModHandle, ModInfo, PlayerInfo, RenameCall, ResourceKey, Side, Status, Str,
+    Summon, SurvivorLookup, ZoneCheck,
 };
 use crate::events::Kind;
 use crate::{FnPtr, Hook};
@@ -1511,6 +1511,37 @@ impl Installed {
         // SAFETY: valid statuses for the call; `user` is the mod's pointer.
         let answer = unsafe { callback(survivor, statuses.as_ptr(), statuses.len(), user) };
         (answer & 0x100 != 0).then(|| answer.to_le_bytes()[0])
+    }
+
+    /// Asks the mod's interaction filters about `call` as the loader would;
+    /// whether every one allows it.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_loader_api::abi::{Header, Interaction};
+    ///
+    /// let loader = enshwick_loader_api::test::FakeHost::new().install();
+    /// let call = Interaction {
+    ///     header: Header::of::<Interaction>(),
+    ///     kind: Interaction::OPEN,
+    ///     player: 1,
+    ///     target: 2,
+    ///     item: 0,
+    ///     known: 0,
+    ///     reserved: [0; 3],
+    ///     position: [0.0; 3],
+    /// };
+    /// assert!(loader.interaction(&call));
+    /// ```
+    #[must_use]
+    pub fn interaction(&self, call: &Interaction) -> bool {
+        let filters = table::with(Vec::new(), |s| s.interaction_filters.clone());
+        filters.iter().all(|&(callback, user)| {
+            let user = core::ptr::with_exposed_provenance_mut(user);
+            // SAFETY: a valid call; `user` is the mod's pointer.
+            unsafe { callback(call, user) != 0 }
+        })
     }
 
     /// The labels the mod set, as `(entity, text)`, in order.

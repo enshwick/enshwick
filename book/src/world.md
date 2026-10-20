@@ -97,6 +97,8 @@ game shows the name on hover, sends it to every client, vanilla ones included,
 and saves it with the world. The game keeps 255 bytes; an empty text removes
 the name. It works on the game thread only, and returns `false` elsewhere or
 when the entity is gone.
+`world.has_label(entity)` tells whether an entity already carries such a
+name.
 
 ```rust
 use enshwick_loader_api::ecs::Entity;

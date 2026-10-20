@@ -32,6 +32,8 @@ pub mod holds;
 #[cfg(windows)]
 mod host;
 #[cfg(windows)]
+mod interactions;
+#[cfg(windows)]
 mod inventory;
 pub mod join;
 #[cfg(windows)]
