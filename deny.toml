@@ -12,10 +12,7 @@ confidence-threshold = 0.9
 [bans]
 multiple-versions = "deny"
 # Duplicates allowed on purpose, each with its reason.
-skip = [
-    # minhook pulls tracing, whose attributes still use syn 2.
-    { crate = "syn@2", reason = "through minhook and tracing-attributes; goes with the own hook engine" },
-]
+skip = []
 allow-wildcard-paths = true
 wildcards = "deny"
 
