@@ -270,3 +270,20 @@ from the first, so it cannot start the mod again.
 
 Dropping the `Installed` fake uninstalls it; calls the mod makes afterwards
 answer `Status::MISSING` and are not recorded.
+
+## On a test server
+
+The fake answers what you tell it; only the game says whether an engine
+fact holds on the running build. Run a dedicated server of your own, never
+one people play on, with a copy of a world:
+
+- [`enshwick-admin-tools`](https://github.com/themaiby/enshwick/tree/main/mods/enshwick-admin-tools)
+  runs each line appended to its command file as the server console, so a
+  mod's commands run without anyone joining;
+- [`enshwick-probe`](https://github.com/themaiby/enshwick/tree/main/mods/enshwick-probe),
+  a development mod that is never released, exercises the platform's world
+  API and engine events and logs each check as `PASS` or `FAIL` to
+  `logs/enshwick/mods/probe.log`.
+
+What needs a player, such as hits, levels or a character's stats, waits for
+a client that joins the server or hosts the game.

@@ -75,8 +75,10 @@ fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_
 - Field types are the integers, `f32`, `f64`, `bool` and `Entity`.
 
 `load.on_every_game_event(|event| ...)` receives every event of every type,
-for finding out what the game raises. Each event is copied for the mod, so
-leave it to development builds.
+for finding out what the game raises; the
+[probe](https://github.com/themaiby/enshwick/tree/main/mods/enshwick-probe)
+uses it to count them. Each event is copied for the mod, so leave it to
+development builds.
 
 ## When and where
 

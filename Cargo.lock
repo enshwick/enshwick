@@ -273,6 +273,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "enshwick-probe"
+version = "0.1.0"
+dependencies = [
+ "enshwick-loader-api",
+ "serde",
+]
+
+[[package]]
 name = "enshwick-proton-optimizer"
 version = "0.2.1"
 dependencies = [
