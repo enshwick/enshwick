@@ -12,6 +12,10 @@ use enshwick_loader_api::{Load, Off};
 const SETTLE: Duration = Duration::from_secs(2);
 /// The factor the probe sets on the clock's speed.
 const FACTOR: f32 = 10.0;
+/// How long after the other checks start the clock checks do: moving the
+/// clock moves the world forward, which ends whatever lasts in game time,
+/// such as the weather check's fronts.
+const START: Duration = crate::weather::SPAN.saturating_add(Duration::from_secs(1));
 
 /// The clock checks.
 #[derive(Debug, Clone, Copy)]
@@ -32,10 +36,14 @@ impl ClockChecks {
         })
     }
 
-    /// Reads the clock, moves it across the turn of day or night, reads it
-    /// back, puts it back,
-    /// then speeds it up and checks the speed.
+    /// Starts the checks once the timed checks of other features are done.
     pub(crate) fn run(self) {
+        self.scheduler.after(START, move || self.check());
+    }
+
+    /// Reads the clock, moves it across the turn of day or night, reads it
+    /// back, puts it back, then speeds it up and checks the speed.
+    fn check(self) {
         let Some(before) = self.clock.now() else {
             enshwick_loader_api::warn!("FAIL clock: no reading");
             return;
@@ -94,5 +102,15 @@ impl ClockChecks {
                     other => enshwick_loader_api::warn!("FAIL clock speed back reads {other:?}"),
                 });
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_clock_moves_after_the_weather_check_is_done() {
+        assert!(START > crate::weather::SPAN);
     }
 }

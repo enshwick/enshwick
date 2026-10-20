@@ -259,7 +259,9 @@ impl Weather {
     /// where a layer has them and clear skies elsewhere, for `lasting` of
     /// game time or the game's own for `None`; [`Forecast::Any`] lets the
     /// game pick anew. The game places the fronts itself, as for its own.
-    /// Clients follow, and the next save keeps it.
+    /// Clients follow, and the next save keeps it. Moving the clock forward
+    /// with [`Clock::set_hours`](crate::daytime::Clock::set_hours) uses up
+    /// the time the fronts have, and the game picks new ones.
     ///
     /// # Errors
     ///
