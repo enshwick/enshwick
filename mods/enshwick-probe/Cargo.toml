@@ -1,0 +1,26 @@
+[package]
+name = "enshwick-probe"
+version = "0.1.0"
+description = "Development only, never shipped: exercises the platform API on a test server and logs what it sees"
+keywords = ["enshrouded", "mod", "server", "testing"]
+categories = ["game-development"]
+readme = "README.md"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+enshwick-loader-api.workspace = true
+serde.workspace = true
+
+[lints]
+workspace = true
+
+# Development only: no release and no place in the release archives.
+[package.metadata.enshwick]
+release = false

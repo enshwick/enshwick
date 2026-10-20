@@ -68,10 +68,12 @@ jobs:
           # proc macros, stay out. Each archive is named after the package,
           # which is the release component, and the DLL after the library
           # target, whatever the folder is called. jq on Windows ends lines
-          # with CRLF.
+          # with CRLF. A development mod marks itself
+          # `[package.metadata.enshwick] release = false` and stays out.
           cargo metadata --no-deps --format-version 1 --locked |
             jq -r '.workspace_root as $root | .packages[]
               | select(.manifest_path | ltrimstr($root) | gsub("\\\\"; "/") | startswith("/mods/"))
+              | select(.metadata.enshwick.release != false)
               | [.name, (.targets[] | select(.kind | index("cdylib")) | .name)] | @tsv' |
             tr -d '\r' > "$RUNNER_TEMP/mods.tsv"
           [ -s "$RUNNER_TEMP/mods.tsv" ] || { echo "cargo metadata lists no mods"; exit 1; }
