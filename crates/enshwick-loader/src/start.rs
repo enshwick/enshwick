@@ -77,6 +77,7 @@ pub(crate) fn start(stub_abi: u32, missing_forwards: u32) {
         build: game.build,
         reflection: game.reflection,
         configs_dir: mods_dir.with_file_name("mod-configs"),
+        data_dir: mods_dir.with_file_name("mod-data"),
         mods_dir,
         mods: plan
             .order

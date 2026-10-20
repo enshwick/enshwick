@@ -56,6 +56,7 @@ pub mod ecs;
 mod hook;
 mod host;
 mod load;
+pub mod state;
 
 pub use enshwick_macros::Config;
 pub use hook::{FnPtr, Hook, Next};
