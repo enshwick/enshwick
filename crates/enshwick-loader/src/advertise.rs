@@ -2,7 +2,8 @@
 //!
 //! Once the dedicated server has logged on to Steam, the loader appends
 //! `[enshwick <fingerprint>]` to its Steam name and sets the rules `enshwick`
-//! (the fingerprint) and `enshwick.mods` (the mods that count, `id@version`).
+//! (the fingerprint) and `enshwick.mods`, `enshwick.mods.1`, ... (the mods that
+//! count, `id@version`, split to fit Steam's rule length).
 //! Players see it before they join, with or without mods, and a modded client
 //! compares it with its own. The game sets its name once at start, so the
 //! loader sets it again now and then.
@@ -14,8 +15,10 @@ const RULE_LIMIT: usize = 127;
 
 /// The rule that carries the fingerprint.
 pub const RULE: &str = "enshwick";
-/// The rule that lists the mods.
+/// The rule that lists the mods; further parts are `enshwick.mods.1` and on.
 pub const RULE_MODS: &str = "enshwick.mods";
+/// The most rules the mod list spreads over.
+pub const MOD_RULES: usize = 16;
 
 /// The fingerprint of a mod set: FNV-1a over the loader version and every
 /// `id@version`, sorted, as eight hex digits.
@@ -30,7 +33,7 @@ pub fn fingerprint(loader_version: &str, mods: &[(String, String)]) -> String {
     format!("{:08x}", enshwick_reflect::fnv1a32(text.as_bytes()))
 }
 
-/// The mod list for the `enshwick.mods` rule, cut to Steam's limit.
+/// The whole mod list, `id@version` sorted and joined by commas.
 #[must_use]
 pub fn mod_list(mods: &[(String, String)]) -> String {
     let mut entries: Vec<String> = mods
@@ -38,18 +41,46 @@ pub fn mod_list(mods: &[(String, String)]) -> String {
         .map(|(id, version)| format!("{id}@{version}"))
         .collect();
     entries.sort();
-    let mut list = String::new();
-    for entry in entries {
-        let extra = usize::from(!list.is_empty()) + entry.len();
-        if list.len() + extra > RULE_LIMIT {
+    entries.join(",")
+}
+
+/// The mod list as rules, each value within Steam's limit:
+/// `enshwick.mods`, then `enshwick.mods.1` and on, at most [`MOD_RULES`].
+#[must_use]
+pub fn mod_rules(mods: &[(String, String)]) -> Vec<(String, String)> {
+    let mut parts: Vec<String> = vec![String::new()];
+    for entry in mod_list(mods).split(',').filter(|e| !e.is_empty()) {
+        let Some(last) = parts.last_mut() else {
             break;
+        };
+        if !last.is_empty() && last.len() + 1 + entry.len() > RULE_LIMIT {
+            if parts.len() == MOD_RULES {
+                break;
+            }
+            parts.push(String::new());
         }
-        if !list.is_empty() {
-            list.push(',');
+        if let Some(last) = parts.last_mut() {
+            if !last.is_empty() {
+                last.push(',');
+            }
+            last.push_str(entry);
         }
-        list.push_str(&entry);
     }
-    list
+    parts
+        .into_iter()
+        .enumerate()
+        .map(|(i, value)| (rule_name(i), value))
+        .collect()
+}
+
+/// The name of mod list rule `index`.
+#[must_use]
+pub fn rule_name(index: usize) -> String {
+    if index == 0 {
+        RULE_MODS.to_owned()
+    } else {
+        format!("{RULE_MODS}.{index}")
+    }
 }
 
 /// `name` with the fingerprint appended, shortened to fit Steam's limit.
@@ -123,18 +154,18 @@ mod runtime {
             .unwrap_or_else(|| "Enshrouded Server".to_owned());
         let fingerprint = super::fingerprint(env!("CARGO_PKG_VERSION"), mods);
         let name = super::server_name(&configured, &fingerprint);
-        let list = super::mod_list(mods);
+        let rules = super::mod_rules(mods);
         let spawned = std::thread::Builder::new()
             .name("enshwick-advertise".into())
             .spawn(move || {
-                if std::panic::catch_unwind(|| run(&name, &fingerprint, &list)).is_err() {
+                if std::panic::catch_unwind(|| run(&name, &fingerprint, &rules)).is_err() {
                     crate::log!(WARN, "mod set advertisement stopped: it panicked");
                 }
             });
         drop(spawned);
     }
 
-    fn run(name: &str, fingerprint: &str, list: &str) {
+    fn run(name: &str, fingerprint: &str, rules: &[(String, String)]) {
         let Some(api) = Api::load() else {
             crate::log!(
                 WARN,
@@ -142,12 +173,20 @@ mod runtime {
             );
             return;
         };
-        let (Ok(name), Ok(rule), Ok(value), Ok(rule_mods), Ok(mods)) = (
+        let rules: Option<Vec<(CString, CString)>> = rules
+            .iter()
+            .map(|(key, value)| {
+                Some((
+                    CString::new(key.as_str()).ok()?,
+                    CString::new(value.as_str()).ok()?,
+                ))
+            })
+            .collect();
+        let (Ok(name), Ok(rule), Ok(value), Some(rules)) = (
             CString::new(name),
             CString::new(super::RULE),
             CString::new(fingerprint),
-            CString::new(super::RULE_MODS),
-            CString::new(list),
+            rules,
         ) else {
             crate::log!(WARN, "mod set advertisement off: a value holds a NUL");
             return;
@@ -169,19 +208,25 @@ mod runtime {
             }
             std::thread::sleep(POLL);
         };
+        let listed: Vec<String> = rules
+            .iter()
+            .map(|(_, value)| value.to_string_lossy().into_owned())
+            .collect();
         crate::log!(
             INFO,
             "advertising \"{}\", mods {}",
             name.to_string_lossy(),
-            mods.to_string_lossy()
+            listed.join(",")
         );
         loop {
             // SAFETY: the logged-on interface and NUL-terminated strings.
             unsafe { (api.set_name)(server, name.as_ptr()) };
             // SAFETY: as above.
             unsafe { (api.set_key_value)(server, rule.as_ptr(), value.as_ptr()) };
-            // SAFETY: as above.
-            unsafe { (api.set_key_value)(server, rule_mods.as_ptr(), mods.as_ptr()) };
+            for (key, value) in &rules {
+                // SAFETY: as above.
+                unsafe { (api.set_key_value)(server, key.as_ptr(), value.as_ptr()) };
+            }
             std::thread::sleep(REASSERT);
         }
     }
@@ -267,12 +312,24 @@ mod tests {
     }
 
     #[test]
-    fn the_mod_list_is_sorted_and_fits() {
+    fn the_mod_list_is_sorted_and_spread_over_rules_that_fit() {
         assert_eq!(mod_list(&mods()), "count@0.2.0,zones@0.1.0");
+        assert_eq!(
+            mod_rules(&mods()),
+            [(
+                "enshwick.mods".to_owned(),
+                "count@0.2.0,zones@0.1.0".to_owned()
+            )]
+        );
         let many: Vec<(String, String)> = (0..40)
             .map(|i| (format!("mod-{i:02}"), "1.0.0".into()))
             .collect();
-        assert!(mod_list(&many).len() <= RULE_LIMIT);
+        let rules = mod_rules(&many);
+        assert!(rules.len() > 1);
+        assert!(rules.iter().all(|(_, value)| value.len() <= RULE_LIMIT));
+        assert_eq!(rules[1].0, "enshwick.mods.1");
+        let joined: Vec<&str> = rules.iter().map(|(_, v)| v.as_str()).collect();
+        assert_eq!(joined.join(","), mod_list(&many));
     }
 
     #[test]

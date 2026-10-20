@@ -84,6 +84,15 @@ pub(crate) fn install(loader: Loader) -> Option<&'static Loader> {
     LOADER.get()
 }
 
+/// Turns off the loaded mod `id`, if there is one, with `reason`.
+pub(crate) fn turn_off_mod(id: &str, reason: &str) {
+    if let Some(loader) = loader()
+        && let Some(index) = loader.mods.iter().position(|m| m.id == id)
+    {
+        loader.turn_off(index, reason);
+    }
+}
+
 fn loader() -> Option<&'static Loader> {
     LOADER.get()
 }
