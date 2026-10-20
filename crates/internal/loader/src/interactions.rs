@@ -554,16 +554,27 @@ unsafe fn filter_stock(lists: *mut [u64; 4], player: u32) {
         // SAFETY: no context: the call carries no item or position.
         !allowed(&unsafe { interaction(Interaction::STOCK, player, id, core::ptr::null_mut()) })
     };
-    if !stock.iter().chain(fuel).any(|&id| refused(id)) {
+    let Some(first) = stock.iter().chain(fuel).position(|&id| refused(id)) else {
         return;
-    }
+    };
     // Never filter in place: every player reads the same arrays.
     STOCK.with_borrow_mut(|(turn, ring)| {
         let copies = &mut ring[*turn % RING];
         *turn = turn.wrapping_add(1);
+        let mut index = 0;
         for (copy, (source, at)) in copies.iter_mut().zip([(stock, 0), (fuel, 2)]) {
             copy.clear();
-            copy.extend(source.iter().copied().filter(|&id| !refused(id)));
+            for &id in source {
+                let keep = match index.cmp(&first) {
+                    core::cmp::Ordering::Less => true,
+                    core::cmp::Ordering::Equal => false,
+                    core::cmp::Ordering::Greater => !refused(id),
+                };
+                index += 1;
+                if keep {
+                    copy.push(id);
+                }
+            }
             found[at] = copy.as_ptr().expose_provenance() as u64;
             found[at + 1] = copy.len() as u64;
         }
@@ -636,10 +647,11 @@ unsafe fn refuse_pending(ctx: *mut u64) {
     if !unsafe { server_world(loader, engine, ctx) } {
         return;
     }
-    let Some(players) = PLAYERS.load_full() else {
+    let players = PLAYERS.load();
+    let Some(players) = players.as_deref() else {
         return;
     };
-    for &player in players.iter() {
+    for &player in players {
         // SAFETY: the system's context, at its entry on its thread.
         let input = unsafe { components.component(ctx, player, layout.player_input) };
         // SAFETY: as above.

@@ -464,7 +464,8 @@ unsafe extern "system" fn upgrade(ctx: *mut u64) {
         unsafe { next::<SystemFn>(&UPGRADE_NEXT)(ctx) };
         return;
     };
-    if CONTROLLER.load(Ordering::Acquire) != 0 {
+    let controller = CONTROLLER.load(Ordering::Acquire);
+    if controller != 0 && !crate::host::is_off(controller - 1) {
         // SAFETY: the system's live context.
         if std::panic::catch_unwind(|| unsafe { write_ranges(engine, ctx) }).is_ok() {
             return;
@@ -636,7 +637,7 @@ unsafe fn write_ranges(engine: &Engine, ctx: *mut u64) {
 ///
 /// `ctx` is the live context of `upgrade_building_range`.
 unsafe fn write_ranges_into(engine: &Engine, ctx: *mut u64, levels: &mut Vec<(u32, Sizes)>) {
-    let targets = TARGETS.load_full().unwrap_or_default();
+    let targets = TARGETS.load();
     // SAFETY: the system's live context.
     let mut query: Query<'_, UPGRADE_WORDS> = unsafe { engine.query(ctx) };
     while let Some(words) = query.next() {
@@ -651,7 +652,7 @@ unsafe fn write_ranges_into(engine: &Engine, ctx: *mut u64, levels: &mut Vec<(u3
         };
         // SAFETY: the system's live context.
         let id = unsafe { engine.entity(ctx) };
-        let target = match targets.get(&id) {
+        let target = match targets.as_deref().and_then(|targets| targets.get(&id)) {
             Some(&(solved_level, range)) if solved_level == level => range,
             _ => current.map(|v| v * HALF),
         };

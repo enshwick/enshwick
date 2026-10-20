@@ -6,8 +6,7 @@
 //! records; their frames hold the components of the entity they work on.
 
 use core::ffi::c_void;
-use std::cell::Cell;
-use std::collections::BTreeMap;
+use std::cell::{Cell, RefCell};
 use std::sync::atomic::{AtomicBool, AtomicU16, AtomicUsize, Ordering};
 use std::sync::{Mutex, OnceLock, PoisonError};
 use std::time::{Duration, Instant};
@@ -137,11 +136,16 @@ static NPC_COMMON_TYPE: AtomicU16 = AtomicU16::new(u16::MAX);
 static MOVING: Mutex<Option<(u32, u32, Instant)>> = Mutex::new(None);
 static MOVE_ACTIVE: AtomicBool = AtomicBool::new(false);
 
+/// Each copy's survivor id, row order and status, and one survivor's statuses.
+type StatusRows = (Vec<(u32, u32, u8)>, Vec<u8>);
+
 thread_local! {
     /// Set when the uniqueness pass kept another entity than the game's: the
     /// record update that follows on this thread must not take it. It names
     /// the survivor, so an update of another survivor is never skipped.
     static SKIP_UPDATE: Cell<Option<u32>> = const { Cell::new(None) };
+    /// The menu pass's rows and one survivor's statuses, kept between frames.
+    static STATUS_ROWS: RefCell<StatusRows> = const { RefCell::new((Vec::new(), Vec::new())) };
 }
 
 static LOOKUP_NEXT: AtomicUsize = AtomicUsize::new(0);
@@ -1076,7 +1080,6 @@ unsafe fn file(map: &ItemMap, table: *mut u8, item: u32, survivor: u32) -> bool 
     let used = unsafe { word.read() } & bit != 0;
     if !used {
         // SAFETY: as above.
-        // SAFETY: as above.
         let marked = unsafe { word.read() } | bit;
         // SAFETY: as above.
         unsafe { word.write(marked) };
@@ -1125,48 +1128,55 @@ unsafe fn merge_statuses(ctx: *mut u64) {
     if crate::host::is_off(merge.owner) {
         return;
     }
-    let mut statuses: BTreeMap<u32, Vec<u8>> = BTreeMap::new();
-    let mut play_data = 0u64;
-    // SAFETY: the system's live context and its iterator size.
-    let mut query = unsafe { engine.query::<UI_WORDS>(ctx) };
-    while let Some(words) = query.next() {
-        let state = words[UI_STATE];
-        // SAFETY: the current row's template.
-        let guid = unsafe { (menu.template)(ctx) };
-        if state == 0 || guid.is_null() {
-            continue;
+    STATUS_ROWS.with_borrow_mut(|(rows, bits)| {
+        rows.clear();
+        let mut play_data = 0u64;
+        // SAFETY: the system's live context and its iterator size.
+        let mut query = unsafe { engine.query::<UI_WORDS>(ctx) };
+        while let Some(words) = query.next() {
+            let state = words[UI_STATE];
+            // SAFETY: the current row's template.
+            let guid = unsafe { (menu.template)(ctx) };
+            if state == 0 || guid.is_null() {
+                continue;
+            }
+            play_data = words[UI_PLAY_DATA];
+            // SAFETY: the row's `ClientActiveNpcState` status bits.
+            let status: u8 = unsafe { read_at(state, menu.state_status as u64) };
+            // SAFETY: a template GUID is 16 bytes.
+            let guid = unsafe { guid.read() };
+            if guid.iter().all(|&b| b == 0) {
+                continue;
+            }
+            let id = enshwick_loader_api::content::Guid(guid).id();
+            let order = u32::try_from(rows.len()).unwrap_or(u32::MAX);
+            rows.push((id, order, status));
         }
-        play_data = words[UI_PLAY_DATA];
-        // SAFETY: the row's `ClientActiveNpcState` status bits.
-        let bits: u8 = unsafe { read_at(state, menu.state_status as u64) };
-        // SAFETY: a template GUID is 16 bytes.
-        let guid = unsafe { guid.read() };
-        if guid.iter().all(|&b| b == 0) {
-            continue;
+        if play_data == 0 {
+            return;
         }
-        let id = enshwick_loader_api::content::Guid(guid).id();
-        statuses.entry(id).or_default().push(bits);
-    }
-    if play_data == 0 {
-        return;
-    }
-    let user = core::ptr::with_exposed_provenance_mut(merge.user);
-    for (id, bits) in statuses {
-        // SAFETY: the callback lives in the mod's DLL and takes the pointer
-        // it registered; the statuses are valid for the call.
-        let answer = unsafe { (merge.callback)(id, bits.as_ptr(), bits.len(), user) };
-        if answer & 0x100 == 0 {
-            continue;
+        rows.sort_unstable();
+        let user = core::ptr::with_exposed_provenance_mut(merge.user);
+        for group in rows.chunk_by(|a, b| a.0 == b.0) {
+            let id = group[0].0;
+            bits.clear();
+            bits.extend(group.iter().map(|&(_, _, status)| status));
+            // SAFETY: the callback lives in the mod's DLL and takes the
+            // pointer it registered; the statuses are valid for the call.
+            let answer = unsafe { (merge.callback)(id, bits.as_ptr(), bits.len(), user) };
+            if answer & 0x100 == 0 {
+                continue;
+            }
+            // SAFETY: the play data's survivor record map.
+            if let Some(record) = unsafe { record(menu, play_data, id) } {
+                // SAFETY: the record's status byte, which the menu reads.
+                unsafe {
+                    (record.wrapping_add(menu.record_status as u64) as *mut u8)
+                        .write(answer.to_le_bytes()[0]);
+                };
+            }
         }
-        // SAFETY: the play data's survivor record map.
-        if let Some(record) = unsafe { record(menu, play_data, id) } {
-            // SAFETY: the record's status byte, which the menu reads.
-            unsafe {
-                (record.wrapping_add(menu.record_status as u64) as *mut u8)
-                    .write(answer.to_le_bytes()[0]);
-            };
-        }
-    }
+    });
 }
 
 /// The menu record of survivor `id`, found as vanilla finds it.
