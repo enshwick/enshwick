@@ -243,9 +243,11 @@ pub(crate) fn seal_and_link(loader: &'static Loader) {
         .filter(|guid| !served.iter().any(|s| s.key.guid == **guid))
         .count();
     let recorded = aliases.len();
+    let renames = crate::migrations::renamed(loader);
+    let _first = RENAMES.set(renames);
     if SERVED_LIST.set(served.into_boxed_slice()).is_err()
         || ALIASES.set(aliases).is_err()
-        || count + recorded == 0
+        || count + recorded + renames.len() == 0
     {
         return;
     }
@@ -273,6 +275,13 @@ pub(crate) fn seal_and_link(loader: &'static Loader) {
         none,
     );
     crate::log!(INFO, "{count} resources served by mods");
+    if !renames.is_empty() {
+        crate::log!(
+            INFO,
+            "{} renamed resources read under their new GUIDs",
+            renames.len()
+        );
+    }
     if orphans > 0 {
         crate::log!(
             INFO,
@@ -323,6 +332,23 @@ fn alias(key: &ResourceKey) -> Option<ResourceKey> {
 }
 
 static LOADED: OnceLock<&'static Loader> = OnceLock::new();
+/// Content mods renamed, old GUID to new, from their migrations.
+static RENAMES: OnceLock<&'static rustc_hash::FxHashMap<[u8; 16], [u8; 16]>> = OnceLock::new();
+
+/// The key `key` was renamed to by a mod's migration.
+fn renamed(key: &ResourceKey) -> Option<ResourceKey> {
+    let new = RENAMES.get()?.get(&key.guid)?;
+    Some(ResourceKey { guid: *new, ..*key })
+}
+
+/// The served resource at `key` whose mods are on, with its index.
+fn find(key: &ResourceKey) -> Option<(usize, &'static Served)> {
+    SERVED_LIST
+        .get()?
+        .iter()
+        .enumerate()
+        .find(|(_, s)| s.key == *key && owner_on(s))
+}
 
 /// The game's recipe registry.
 fn recipe_registry() -> ResourceKey {
@@ -363,14 +389,17 @@ unsafe extern "system" fn open(
 ) -> *mut u32 {
     // SAFETY: the game passes a key it owns for the call.
     let wanted = unsafe { key.as_ref() };
-    let found = wanted.and_then(|wanted| {
-        SERVED_LIST
-            .get()?
-            .iter()
-            .enumerate()
-            .find(|(_, s)| s.key == *wanted && owner_on(s))
-    });
+    let mut found = wanted.and_then(find);
+    let mut new = None;
+    if found.is_none() {
+        new = wanted.and_then(renamed);
+        found = new.as_ref().and_then(find);
+    }
     let Some((index, entry)) = found else {
+        if let Some(new) = new {
+            // SAFETY: the game's open with a key of ours, valid for the call.
+            return unsafe { OPEN_NEXT.get()(out, database, &raw const new) };
+        }
         if let Some(vanilla) = wanted.and_then(alias) {
             // SAFETY: the game's open with a key of ours, valid for the call.
             return unsafe { OPEN_NEXT.get()(out, database, &raw const vanilla) };

@@ -16,9 +16,9 @@ enshwick_loader_api::debug!("bed {} checked", 1210);
 
 For lines that may repeat:
 
-| Macro | Logs |
-| --- | --- |
-| `info_once!`, `warn_once!` | the first time this call site runs, never again |
+| Macro                                                   | Logs                                                                                           |
+| ------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `info_once!`, `warn_once!`                              | the first time this call site runs, never again                                                |
 | `warn_every!(period, ...)`, `error_every!(period, ...)` | at most once per `period` from this call site, adding how many lines it skipped since the last |
 
 ```rust
@@ -37,13 +37,13 @@ hook; a line that is kept is formatted on the calling thread.
 
 The loader writes to `logs/enshwick/` beside the game:
 
-| File | Holds |
-| --- | --- |
-| `all.log` | every line, the loader's and every mod's |
-| `loader.log` | the loader's own lines |
-| `mods/<id>.log` | one mod's lines |
-| `status.log` | the latest [status summary](#status-summary) |
-| `crash.log` | which mod's code was on the stack when the game crashed |
+| File            | Holds                                                   |
+| --------------- | ------------------------------------------------------- |
+| `all.log`       | every line, the loader's and every mod's                |
+| `loader.log`    | the loader's own lines                                  |
+| `mods/<id>.log` | one mod's lines                                         |
+| `status.log`    | the latest [status summary](#status-summary)            |
+| `crash.log`     | which mod's code was on the stack when the game crashed |
 
 A line reads `hh:mm:ss.mmmZ level [source] message`, in UTC. The files of the
 previous session are truncated at start. A background thread writes them and
@@ -67,13 +67,14 @@ second later, and every mod's level follows without a restart.
 
 The keys of `mod-configs/enshwick.toml`:
 
-| Key | Default | Meaning |
-| --- | --- | --- |
-| `log_level` | `"info"` | the most detailed lines kept |
-| `log_levels` | empty | `log_level` per mod id |
-| `status_minutes` | `10` | minutes between status summaries; `0` writes one only on request |
-| `diagnostics` | `false` | count the calls of every hooked function; read at start |
-| `diagnostics_timing` | `false` | with `diagnostics`, also time every 256th call; read at start |
+| Key                  | Default  | Meaning                                                          |
+| -------------------- | -------- | ---------------------------------------------------------------- |
+| `log_level`          | `"info"` | the most detailed lines kept                                     |
+| `log_levels`         | empty    | `log_level` per mod id                                           |
+| `status_minutes`     | `10`     | minutes between status summaries; `0` writes one only on request |
+| `diagnostics`        | `false`  | count the calls of every hooked function; read at start          |
+| `diagnostics_timing` | `false`  | with `diagnostics`, also time every 256th call; read at start    |
+| `migrations_dry_run` | `false`  | only log what mods' [migrations](migrations.md) would change     |
 
 The file rejects unknown keys. A file that does not parse at start is logged
 and the loader runs with the defaults; a change that does not parse is logged

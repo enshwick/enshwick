@@ -212,6 +212,7 @@ What the mod asked for, each in order:
 | `published()`          | `(name, major)` of each service published.                             |
 | `defined_events()`     | The names of the mod events defined.                                   |
 | `sent_events()`        | The names of the mod events sent.                                      |
+| `migrations()`         | The ids of the migrations declared.                                    |
 | `status()`             | The lines the mod's status sources give now.                           |
 | `settings_defaults()`  | The defaults the mod passed each time it read its settings.            |
 | `reported_synced()`    | The join values the mod reported each time it read its settings.       |
@@ -227,6 +228,8 @@ Playing the game:
 | `raise_raw(event, data)`          | The same for a raw `Event` id; `unsafe`.                                    |
 | `raise_game_event(hash, bytes)`   | Hands a game event to the mod's handlers; returns how many ran.             |
 | `send_mod_event(&event)`          | Sends another mod's event to the mod's handlers; returns how many ran.      |
+| `migrate_settings(text)`          | Runs the mod's migrations' settings steps on a settings text.               |
+| `migrate_store(name, text)`       | Runs their store steps on a world store; the name and text it ends with.    |
 | `set_settings(text)`              | Replaces the settings file's text; raise `SettingsChanged` after it.        |
 | `set_server_synced(values)`       | Sets the joined server's join values; raise `SettingsChanged` after it.     |
 | `command(name, &player, args)`    | Runs the mod's chat command; its reply, or `None` without such a command.   |

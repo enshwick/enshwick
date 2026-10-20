@@ -64,6 +64,9 @@ With an icon it serves the icon's UI image too. Everything else in the
 `ItemInfo` is the vanilla item's, so a cloned chest places the same vanilla
 chest.
 
+An item whose GUID changed keeps the stacks saved with the old one through a
+[migration](../migrations.md): `rename_content(old, new)` adds it under both.
+
 The item exists once the game reads it, but nobody has one yet. Players get
 it from a [recipe](recipes.md), loot, or a mod's
 [`give`](../inventories.md).

@@ -12,7 +12,7 @@ raw table. The exact types and signatures are in the
 | Constant                                                                                            | Value | Meaning                                         |
 | --------------------------------------------------------------------------------------------------- | ----- | ----------------------------------------------- |
 | [`ABI_MAJOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 1     | A loader refuses a mod built for another major. |
-| [`ABI_MINOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 48    | A newer minor only appends.                     |
+| [`ABI_MINOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 49    | A newer minor only appends.                     |
 
 The ABI version is apart from Enshwick Loader's version (such as 0.2.0, see
 [Releasing and updates](releasing.md#versions)): a platform release raises
@@ -285,6 +285,7 @@ marked "init only" are allowed during `enshwick_mod_init` only.
 | `affix_roll`          | Rolls affixes onto an item and keeps them; server game thread only                              | 48          |
 | `item_lines`          | The lines of what an item gives, own modifiers then affixes; any thread                         | 48          |
 | `affix_info`          | An affix's text key and rarity; any thread                                                      | 48          |
+| `migrate`             | Registers the mod's migrations and runs them on its settings file; init only                    | 49          |
 
 ## Under an older loader
 
@@ -350,6 +351,7 @@ the mod off with a reason, which the mod's log shows as `off: <reason>`:
 | 47          | services, mod events            | Off: `services and mod events: needs a newer loader`      |
 | 48          | `Load::affix` and affixes       | Off: `affixes: needs a newer loader`                      |
 | 48          | `ItemInfo::category`            | 0                                                         |
+| 49          | `Load::migrate`                 | Off: `migrations: needs a newer loader`                   |
 
 A mod that can do without a feature catches the `Off` and goes on without it
 instead of returning it from `init`.

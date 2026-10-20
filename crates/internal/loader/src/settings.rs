@@ -32,6 +32,9 @@ pub struct Settings {
     /// Minutes between status summaries in `logs/enshwick/status.log`;
     /// 0 writes one only for `/enshwick status`.
     pub status_minutes: u32,
+    /// Only log what mods' migrations would change, without changing their
+    /// files or recording them in mod-data/enshwick/migrations.toml.
+    pub migrations_dry_run: bool,
 }
 
 impl Default for Settings {
@@ -42,6 +45,7 @@ impl Default for Settings {
             diagnostics: false,
             diagnostics_timing: false,
             status_minutes: STATUS_MINUTES,
+            migrations_dry_run: false,
         }
     }
 }

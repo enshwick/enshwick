@@ -199,6 +199,10 @@ plain words. After a write the loader raises the mod's settings event at once:
 get `sync` values at once), and `startup` values apply when the world loads
 again. `client` values are refused on a dedicated server.
 
+When a new version renames or changes a setting, declare a
+[migration](migrations.md): the loader carries old files and every world's
+settings over once.
+
 A file that does not parse turns the mod off at init with serde's message. Add
 `#[serde(deny_unknown_fields)]` so a misspelt key does the same instead of
 being ignored. Add `#[serde(default)]` if a file written by an older version of
