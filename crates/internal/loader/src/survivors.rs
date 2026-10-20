@@ -515,7 +515,11 @@ fn ask(call: &SurvivorLookup) -> Option<u32> {
     let user = core::ptr::with_exposed_provenance_mut(registered.user);
     // SAFETY: the callback lives in the mod's DLL, which stays loaded, and
     // takes the pointer it registered; the call and `out` are valid for it.
-    let answered = unsafe { (registered.callback)(call, user, &raw mut out) };
+    let answered = crate::profile::call(
+        registered.owner,
+        crate::profile::Feature::Survivors,
+        || unsafe { (registered.callback)(call, user, &raw mut out) },
+    );
     (answered != 0).then_some(out)
 }
 
@@ -937,7 +941,9 @@ unsafe fn bed_kept(ctx: u64) -> bool {
             let user = core::ptr::with_exposed_provenance_mut(r.user);
             // SAFETY: the callback lives in the mod's DLL and takes the
             // pointer it registered; the check is valid for the call.
-            unsafe { (r.callback)(&raw const check, user) != 0 }
+            crate::profile::call(r.owner, crate::profile::Feature::Survivors, || unsafe {
+                (r.callback)(&raw const check, user) != 0
+            })
         })
 }
 
@@ -1042,7 +1048,9 @@ unsafe fn summon(request: *mut u8) -> Option<Asked> {
         let user = core::ptr::with_exposed_provenance_mut(r.user);
         // SAFETY: the callback lives in the mod's DLL and takes the pointer
         // it registered; the summon is valid for the call.
-        match unsafe { (r.callback)(&raw const call, user) } {
+        match crate::profile::call(r.owner, crate::profile::Feature::Survivors, || unsafe {
+            (r.callback)(&raw const call, user)
+        }) {
             Summon::REFUSE => return Some(Asked::Refused),
             0 => {}
             _ => consume = true,
@@ -1071,7 +1079,9 @@ fn summoned(call: Summon) {
         let user = core::ptr::with_exposed_provenance_mut(r.user);
         // SAFETY: the callback lives in the mod's DLL and takes the pointer
         // it registered; the summon is valid for the call.
-        unsafe { (r.callback)(&raw const call, user) };
+        crate::profile::call(r.owner, crate::profile::Feature::Survivors, || unsafe {
+            (r.callback)(&raw const call, user)
+        });
     }
 }
 
@@ -1219,7 +1229,10 @@ unsafe fn merge_statuses(ctx: *mut u64) {
             bits.extend(group.iter().map(|&(_, _, status)| status));
             // SAFETY: the callback lives in the mod's DLL and takes the
             // pointer it registered; the statuses are valid for the call.
-            let answer = unsafe { (merge.callback)(id, bits.as_ptr(), bits.len(), user) };
+            let answer =
+                crate::profile::call(merge.owner, crate::profile::Feature::Survivors, || unsafe {
+                    (merge.callback)(id, bits.as_ptr(), bits.len(), user)
+                });
             if answer & enshwick_loader_api::abi::SURVIVOR_STATUS_SET == 0 {
                 continue;
             }

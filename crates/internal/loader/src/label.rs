@@ -307,7 +307,10 @@ unsafe fn refused(text: *const [usize; 2]) -> bool {
             let user = core::ptr::with_exposed_provenance_mut(f.user);
             // SAFETY: the filter lives in the mod's DLL, which stays loaded;
             // the safe layer catches its panics.
-            let allowed = unsafe { (f.callback)(&raw const call, user) };
+            let allowed =
+                crate::profile::call(f.owner, crate::profile::Feature::Renames, || unsafe {
+                    (f.callback)(&raw const call, user)
+                });
             allowed == 0
         });
     if refused {

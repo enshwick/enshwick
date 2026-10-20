@@ -900,7 +900,9 @@ pub(crate) fn after_step(loader: &Loader, step: u64) {
             // SAFETY: the handler lives in the mod's DLL, which stays loaded,
             // and takes the pointer it registered; the change is valid for
             // the call; the safe layer catches its panics.
-            unsafe { (handler.callback)(change, handler.user()) };
+            crate::profile::call(handler.owner, crate::profile::Feature::Stats, || unsafe {
+                (handler.callback)(change, handler.user());
+            });
         }
     }
 }

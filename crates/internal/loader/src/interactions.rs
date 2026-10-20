@@ -235,7 +235,9 @@ fn allowed(call: &Interaction) -> bool {
     filters.iter().filter(|f| f.live()).all(|f| {
         // SAFETY: the callback lives in the mod's DLL, which stays loaded,
         // and takes the pointer it registered; the call is valid for it.
-        unsafe { (f.callback)(call, f.user()) != 0 }
+        crate::profile::call(f.owner, crate::profile::Feature::Interactions, || unsafe {
+            (f.callback)(call, f.user()) != 0
+        })
     })
 }
 

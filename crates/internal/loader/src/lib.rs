@@ -22,6 +22,7 @@ mod clones;
 #[cfg(windows)]
 mod code;
 pub mod configure;
+pub mod conflicts;
 #[cfg(windows)]
 mod content;
 #[cfg(windows)]
@@ -71,6 +72,8 @@ mod net;
 mod notices;
 #[cfg(windows)]
 mod patch;
+#[cfg(target_arch = "x86_64")]
+pub mod profile;
 #[cfg(windows)]
 mod progress;
 pub mod remote;

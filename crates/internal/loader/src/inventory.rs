@@ -666,12 +666,16 @@ pub(crate) fn deliver() {
         };
         // SAFETY: the mod's callback with its pointer; the safe layer catches
         // its panics. The result lives for the call.
-        unsafe {
-            (result.done)(
-                &raw const data,
-                core::ptr::with_exposed_provenance_mut(result.user),
-            );
-        }
+        crate::profile::call(
+            result.owner,
+            crate::profile::Feature::Inventory,
+            || unsafe {
+                (result.done)(
+                    &raw const data,
+                    core::ptr::with_exposed_provenance_mut(result.user),
+                );
+            },
+        );
     }
 }
 

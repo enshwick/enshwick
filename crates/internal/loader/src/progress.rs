@@ -277,7 +277,9 @@ unsafe fn override_skill(node: u32, bits: *const u64, tree: *const u8) -> u8 {
         let user = core::ptr::with_exposed_provenance_mut(r.user);
         // SAFETY: the callback lives in the mod's DLL and takes the pointer
         // it registered; the check is valid for the call.
-        match unsafe { (r.callback)(&raw const check, user) } {
+        match crate::profile::call(r.owner, crate::profile::Feature::Progress, || unsafe {
+            (r.callback)(&raw const check, user)
+        }) {
             SkillCheck::UNLOCKED => return 1,
             SkillCheck::LOCKED => return 0,
             _ => {}
@@ -313,7 +315,9 @@ unsafe extern "system" fn register(
                 let user = core::ptr::with_exposed_provenance_mut(r.user);
                 // SAFETY: the callback lives in the mod's DLL and takes the
                 // pointer it registered; the call is valid for it.
-                unsafe { (r.callback)(&raw const call, user) }
+                crate::profile::call(r.owner, crate::profile::Feature::Progress, || unsafe {
+                    (r.callback)(&raw const call, user)
+                })
             })
     });
     // SAFETY: the rest of the chain takes the arguments the game passed.
@@ -405,7 +409,9 @@ unsafe fn experience(loader: &Loader, engine: &Engine, ctx: *mut u64) {
                 let user = core::ptr::with_exposed_provenance_mut(r.user);
                 // SAFETY: the callback lives in the mod's DLL and takes the
                 // pointer it registered; the pass is valid for the call.
-                unsafe { (r.callback)(&raw mut pass, user) };
+                crate::profile::call(r.owner, crate::profile::Feature::Progress, || unsafe {
+                    (r.callback)(&raw mut pass, user);
+                });
             }
             if rows.iter().zip(before.iter()).all(|(r, b)| r.gained == *b) {
                 return;

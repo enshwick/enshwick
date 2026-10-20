@@ -365,7 +365,9 @@ unsafe extern "system" fn max_altars(balancing: u64, flame_level: u32) -> u8 {
         let user = core::ptr::with_exposed_provenance_mut(limit.user);
         // SAFETY: the callback lives in the mod's DLL and takes the pointer it
         // registered.
-        return unsafe { (limit.callback)(flame_level, user) };
+        return crate::profile::call(limit.owner, crate::profile::Feature::Altars, || unsafe {
+            (limit.callback)(flame_level, user)
+        });
     }
     // SAFETY: the rest of the chain takes the arguments the game passed.
     unsafe { MAX_ALTARS_NEXT.get()(balancing, flame_level) }

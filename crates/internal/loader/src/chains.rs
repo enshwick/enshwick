@@ -7,7 +7,7 @@
 //! runs never touches code.
 
 use core::marker::PhantomData;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 
 use enshwick_loader_api::abi::{HookFlags, Status};
 use rustc_hash::FxHashMap;
@@ -80,6 +80,53 @@ impl<F: Copy> Next<F> {
     }
 }
 
+/// Calls through a thunk, beside its slot; the thunk writes them.
+#[repr(C)]
+#[derive(Debug, Default)]
+pub struct Counter {
+    /// Calls since arming.
+    pub calls: AtomicU64,
+    /// Timed calls.
+    pub samples: AtomicU64,
+    /// Time-stamp counter ticks of the timed calls.
+    pub ticks: AtomicU64,
+}
+
+impl Counter {
+    /// The ticks every call took, estimated from the timed ones; `None`
+    /// before the first timed call.
+    #[must_use]
+    #[expect(clippy::cast_precision_loss, reason = "an estimate for people to read")]
+    pub fn estimate(calls: u64, samples: u64, ticks: u64) -> Option<f64> {
+        (samples > 0).then(|| ticks as f64 / samples as f64 * calls as f64)
+    }
+}
+
+/// A timed thunk in front of a link or the original, so each link's own
+/// time can be told from the rest of the chain's: calls go to `entry`,
+/// which jumps through `slot`, and `counter` keeps its calls and times.
+#[derive(Debug, Clone, Copy)]
+pub struct Hop {
+    /// Where calls into the link or the original go.
+    pub entry: usize,
+    /// The thunk's slot: the link's detour, or the original.
+    pub slot: &'static AtomicUsize,
+    /// The thunk's counter.
+    pub counter: &'static Counter,
+}
+
+/// A link a target refused, for the conflict report.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Refusal {
+    /// The game function.
+    pub target: u64,
+    /// The mod that asked.
+    pub owner: usize,
+    /// The mod that holds the target exclusively, or `None` for the asking
+    /// mod's own second link.
+    pub holder: Option<usize>,
+}
+
 /// One mod's link on a target.
 #[derive(Debug)]
 pub struct Link {
@@ -93,6 +140,16 @@ pub struct Link {
     pub priority: i32,
     /// Hook flags.
     pub flags: HookFlags,
+    /// The timed thunk in front of the link, with timing on.
+    pub hop: Option<Hop>,
+}
+
+impl Link {
+    /// Where calls into the link go: its timed thunk, or its detour.
+    #[must_use]
+    pub fn entry(&self) -> usize {
+        self.hop.map_or(self.detour, |hop| hop.entry)
+    }
 }
 
 /// Every link on one game function.
@@ -106,6 +163,8 @@ pub struct Chain {
     pub head: Option<&'static AtomicUsize>,
     /// The original function's trampoline; set when the chain is armed.
     pub original: usize,
+    /// The timed thunk in front of the original, with timing on.
+    pub original_hop: Option<Hop>,
 }
 
 impl Chain {
@@ -118,7 +177,8 @@ impl Chain {
     }
 
     /// Links in running order: by priority, then registration order.
-    fn running_order(&self) -> Vec<&Link> {
+    #[must_use]
+    pub fn running_order(&self) -> Vec<&Link> {
         let mut links: Vec<&Link> = self.links.iter().collect();
         links.sort_by_key(|l| l.priority);
         links
@@ -128,11 +188,18 @@ impl Chain {
     /// `faulted`, ending at the original.
     pub fn wire(&self, faulted: impl Fn(usize) -> bool) {
         let links = self.running_order();
+        let original = match self.original_hop {
+            Some(hop) => {
+                hop.slot.store(self.original, Ordering::Release);
+                hop.entry
+            }
+            None => self.original,
+        };
         let after = |from: usize| {
             links[from..]
                 .iter()
                 .find(|l| !faulted(l.owner))
-                .map_or(self.original, |l| l.detour)
+                .map_or(original, |l| l.entry())
         };
         if let Some(head) = self.head {
             head.store(after(0), Ordering::Release);
@@ -146,8 +213,9 @@ impl Chain {
 /// Every chain, keyed by target.
 #[derive(Debug, Default)]
 pub struct Chains {
-    chains: FxHashMap<u64, Chain>,
+    by_target: FxHashMap<u64, Chain>,
     armed: bool,
+    refused: Vec<Refusal>,
 }
 
 impl Chains {
@@ -162,18 +230,25 @@ impl Chains {
         if target == 0 || link.detour == 0 {
             return Status::BAD_ARGS;
         }
-        let chain = self.chains.entry(target).or_insert_with(|| Chain {
+        let chain = self.by_target.entry(target).or_insert_with(|| Chain {
             target,
             links: Vec::new(),
             head: None,
             original: 0,
+            original_hop: None,
         });
-        let clash = chain.links.iter().any(|l| {
+        let clash = chain.links.iter().find(|l| {
             l.owner == link.owner
                 || l.flags.contains(HookFlags::EXCLUSIVE)
                 || link.flags.contains(HookFlags::EXCLUSIVE)
         });
-        if clash {
+        if let Some(held) = clash {
+            let holder = (held.owner != link.owner).then_some(held.owner);
+            self.refused.push(Refusal {
+                target,
+                owner: link.owner,
+                holder,
+            });
             return Status::REFUSED;
         }
         chain.links.push(link);
@@ -182,12 +257,12 @@ impl Chains {
 
     /// Every chain, for arming.
     pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut Chain> {
-        self.chains.values_mut()
+        self.by_target.values_mut()
     }
 
     /// Every chain.
     pub fn iter(&self) -> impl Iterator<Item = &Chain> {
-        self.chains.values()
+        self.by_target.values()
     }
 
     /// Marks the chains armed: no more links.
@@ -197,7 +272,7 @@ impl Chains {
 
     /// Rewires every chain past the links of faulted mods.
     pub fn rewire(&self, faulted: impl Fn(usize) -> bool + Copy) {
-        for chain in self.chains.values() {
+        for chain in self.by_target.values() {
             if chain.head.is_some() {
                 chain.wire(faulted);
             }
@@ -207,22 +282,28 @@ impl Chains {
     /// The mods linked on `target`.
     #[must_use]
     pub fn owners(&self, target: u64) -> Vec<usize> {
-        self.chains
+        self.by_target
             .get(&target)
             .map(|c| c.links.iter().map(|l| l.owner).collect())
             .unwrap_or_default()
     }
 
+    /// The links targets refused, in order.
+    #[must_use]
+    pub fn refused(&self) -> &[Refusal] {
+        &self.refused
+    }
+
     /// How many targets have links.
     #[must_use]
     pub fn len(&self) -> usize {
-        self.chains.len()
+        self.by_target.len()
     }
 
     /// Whether no target has a link.
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.chains.is_empty()
+        self.by_target.is_empty()
     }
 }
 
@@ -244,6 +325,7 @@ mod tests {
             next: slot(),
             priority,
             flags,
+            hop: None,
         }
     }
 
@@ -273,7 +355,7 @@ mod tests {
             chain.wire(|_| false);
         }
         chains.seal();
-        let chain = &chains.chains[&0x10];
+        let chain = &chains.by_target[&0x10];
         assert_eq!(value(head), 0xb);
         assert_eq!(value(chain.links[1].next), 0xa);
         assert_eq!(value(chain.links[0].next), 0xc);
@@ -320,5 +402,65 @@ mod tests {
             Status::BAD_ARGS
         );
         assert_eq!(chains.len(), 2);
+        assert_eq!(
+            chains.refused(),
+            [
+                Refusal {
+                    target: 0x10,
+                    owner: 1,
+                    holder: Some(0)
+                },
+                Refusal {
+                    target: 0x20,
+                    owner: 1,
+                    holder: None
+                },
+                Refusal {
+                    target: 0x20,
+                    owner: 2,
+                    holder: Some(1)
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn timed_thunks_stand_in_front_of_links_and_the_original() {
+        static COUNTER: Counter = Counter {
+            calls: AtomicU64::new(0),
+            samples: AtomicU64::new(0),
+            ticks: AtomicU64::new(0),
+        };
+        let mut chains = Chains::default();
+        let mut first = link(0, 0xa, 0, HookFlags::NONE);
+        let first_slot = slot();
+        first.hop = Some(Hop {
+            entry: 0x1a,
+            slot: first_slot,
+            counter: &COUNTER,
+        });
+        assert_eq!(chains.add(0x30, first), Status::OK);
+        assert_eq!(
+            chains.add(0x30, link(1, 0xb, 1, HookFlags::NONE)),
+            Status::OK
+        );
+        let (head, original_slot) = (slot(), slot());
+        for chain in chains.iter_mut() {
+            chain.head = Some(head);
+            chain.original = 0xff;
+            chain.original_hop = Some(Hop {
+                entry: 0x1f,
+                slot: original_slot,
+                counter: &COUNTER,
+            });
+            chain.wire(|_| false);
+        }
+        let chain = &chains.by_target[&0x30];
+        assert_eq!(value(head), 0x1a);
+        assert_eq!(value(chain.links[0].next), 0xb);
+        assert_eq!(value(chain.links[1].next), 0x1f);
+        assert_eq!(value(original_slot), 0xff);
+        assert_eq!(Counter::estimate(1000, 4, 400), Some(100_000.0));
+        assert_eq!(Counter::estimate(1000, 0, 0), None);
     }
 }

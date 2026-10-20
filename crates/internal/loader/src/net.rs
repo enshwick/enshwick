@@ -302,7 +302,11 @@ fn deliver(channel: u32, peer: u64, data: &[u8]) {
     };
     // SAFETY: the handler lives in the mod's DLL, which stays loaded, and
     // takes the pointer it registered; the safe layer catches its panics.
-    unsafe { (target.handler.callback)(&raw const message, target.handler.user()) };
+    crate::profile::call(
+        target.handler.owner,
+        crate::profile::Feature::Messages,
+        || unsafe { (target.handler.callback)(&raw const message, target.handler.user()) },
+    );
 }
 
 /// A control frame's message: its kind and the protocol version.

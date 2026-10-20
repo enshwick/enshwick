@@ -126,6 +126,9 @@ pub(crate) fn start(stub_abi: u32, missing_forwards: u32) {
     let Some(loader) = host::install(loader) else {
         return;
     };
+    if crate::diag::counting() {
+        crate::profile::start(loader.mods.len());
+    }
     let order: Vec<&Library> = plan.order.iter().map(|&i| &libraries[i]).collect();
     attribute_crashes(loader, &order);
     initialise(loader, &order);

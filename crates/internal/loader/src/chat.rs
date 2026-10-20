@@ -541,13 +541,17 @@ fn run(command: &Command, args: &str, player: &PlayerInfo) -> String {
     let mut reply = Str::EMPTY;
     // SAFETY: the handler lives in the mod's DLL, which stays loaded; the
     // safe layer catches its panics.
-    unsafe {
-        (command.callback)(
-            &raw const call,
-            core::ptr::with_exposed_provenance_mut(command.user),
-            &raw mut reply,
-        );
-    };
+    crate::profile::call(
+        command.owner,
+        crate::profile::Feature::Commands,
+        || unsafe {
+            (command.callback)(
+                &raw const call,
+                core::ptr::with_exposed_provenance_mut(command.user),
+                &raw mut reply,
+            );
+        },
+    );
     // SAFETY: the reply stays valid until the handler runs again.
     unsafe { reply.as_str() }.unwrap_or("").to_owned()
 }
@@ -562,6 +566,34 @@ fn builtin(loader: &Loader, args: &str, player: &PlayerInfo) -> String {
         }
         crate::status::request();
         return crate::status::summary(loader).short();
+    }
+    if let Some(rest) = word(args, "profile") {
+        if player.permissions & PlayerInfo::CAN_KICK_BAN == 0 {
+            return "Only administrators see what mods cost.".to_owned();
+        }
+        if rest.eq_ignore_ascii_case("reset") {
+            crate::status::reset_profile(loader);
+            return "Per-mod costs count from now: /enshwick profile shows them.".to_owned();
+        }
+        let mut lines = crate::status::cost_lines(loader, 5, 2);
+        lines.push("Full list: logs/enshwick/status.log after /enshwick status.".to_owned());
+        return lines.join(
+            "
+",
+        );
+    }
+    if args.eq_ignore_ascii_case("conflicts") {
+        if player.permissions & PlayerInfo::CAN_KICK_BAN == 0 {
+            return "Only administrators see the conflicts.".to_owned();
+        }
+        let lines = crate::status::conflicts(loader);
+        if lines.is_empty() {
+            return "No two mods share a hook, feature or resource.".to_owned();
+        }
+        return lines.join(
+            "
+",
+        );
     }
     if args.eq_ignore_ascii_case("ui-demo") {
         return ui_demo(loader, player);
@@ -684,6 +716,13 @@ fn about(record: &crate::host::ModRecord) -> String {
     lines.join("\n")
 }
 
+/// The rest of `args` after the word `name`, or `None` when it starts with
+/// another.
+fn word<'a>(args: &'a str, name: &str) -> Option<&'a str> {
+    let (first, rest) = args.split_once(' ').unwrap_or((args, ""));
+    first.eq_ignore_ascii_case(name).then(|| rest.trim())
+}
+
 /// `/enshwick ui-demo`: opens the interface demo on the administrator's
 /// own client.
 fn ui_demo(loader: &Loader, player: &PlayerInfo) -> String {
@@ -704,7 +743,7 @@ fn ui_demo(loader: &Loader, player: &PlayerInfo) -> String {
 
 fn help(loader: &Loader, commands: &[Command]) -> String {
     let mut lines = vec![
-        "/enshwick: the mods running; /enshwick <mod id>: what a mod is; /enshwick help: this list; /enshwick status: the status (administrators); /enshwick ui-demo: every interface widget on your screen (administrators)"
+        "/enshwick: the mods running; /enshwick <mod id>: what a mod is; /enshwick help: this list; /enshwick status: the status (administrators); /enshwick profile [reset]: what each mod costs (administrators); /enshwick conflicts: hooks, filters and resources mods share (administrators); /enshwick ui-demo: every interface widget on your screen (administrators)"
             .to_owned(),
         crate::configure::HELP.to_owned(),
     ];

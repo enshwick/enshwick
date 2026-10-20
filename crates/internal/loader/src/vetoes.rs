@@ -207,7 +207,9 @@ pub(crate) unsafe fn screen(type_hash: u32, payload: *mut u8, size: usize) {
     let allowed = filters.iter().filter(|f| f.live()).all(|f| {
         // SAFETY: the callback lives in the mod's DLL, which stays loaded,
         // and takes the pointer it registered; the call is valid for it.
-        unsafe { (f.callback)(&raw const call, f.user()) != 0 }
+        crate::profile::call(f.owner, crate::profile::Feature::Vetoes, || unsafe {
+            (f.callback)(&raw const call, f.user()) != 0
+        })
     });
     if !allowed {
         // SAFETY: as for the reads; the streams are the loader's to change
@@ -292,7 +294,9 @@ unsafe fn refuse(flags: *mut u32, cursor: *mut u8, placement: *mut u8, transform
     let allowed = filters.iter().filter(|f| f.live()).all(|f| {
         // SAFETY: the callback lives in the mod's DLL, which stays loaded,
         // and takes the pointer it registered; the call is valid for it.
-        unsafe { (f.callback)(&raw const call, f.user()) != 0 }
+        crate::profile::call(f.owner, crate::profile::Feature::Vetoes, || unsafe {
+            (f.callback)(&raw const call, f.user()) != 0
+        })
     });
     if !allowed {
         // SAFETY: the game's flags word, which its building systems read.

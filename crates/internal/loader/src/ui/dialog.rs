@@ -42,7 +42,11 @@ impl Answerer {
             Self::Mod(registered) => {
                 if registered.live() {
                     // SAFETY: the mod's callback with its own pointer, once.
-                    unsafe { (registered.callback)(raw, registered.user()) };
+                    crate::profile::call(
+                        registered.owner,
+                        crate::profile::Feature::Interface,
+                        || unsafe { (registered.callback)(raw, registered.user()) },
+                    );
                 }
             }
             Self::Loader(callback) => callback((raw != UiDialog::CLOSED).then_some(raw)),
