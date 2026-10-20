@@ -452,6 +452,9 @@ pub(crate) static API: HostApi = HostApi {
     skill_override,
     comfort_filter,
     experience_filter,
+    altar_limit,
+    raise_base_limit,
+    base_zones,
 };
 
 /// A static slice from a pointer and a count, empty for a null pointer.
@@ -1424,6 +1427,38 @@ extern "system" fn experience_filter(
         }
         None => Status::BAD_ARGS,
     }
+}
+
+extern "system" fn altar_limit(
+    me: ModHandle,
+    callback: api_frame::AltarLimitFn,
+    user: *mut core::ffi::c_void,
+) -> Status {
+    match caller_index(me) {
+        Some((loader, index)) => crate::bases::register_limit(loader, index, callback, user),
+        None => Status::BAD_ARGS,
+    }
+}
+
+extern "system" fn raise_base_limit(me: ModHandle) -> Status {
+    match caller_index(me) {
+        Some((loader, index)) => crate::bases::raise(loader, index),
+        None => Status::BAD_ARGS,
+    }
+}
+
+extern "system" fn base_zones(me: ModHandle, zones: *mut u32, bases: *mut u32) -> Status {
+    if caller_index(me).is_none() {
+        return Status::BAD_ARGS;
+    }
+    let Some((zone_count, base_count)) = crate::bases::zones() else {
+        return Status::MISSING;
+    };
+    let status = put(zones, zone_count);
+    if !status.is_ok() {
+        return status;
+    }
+    put(bases, base_count)
 }
 
 /// The loader and the index of the calling mod, unless it is unknown or off.

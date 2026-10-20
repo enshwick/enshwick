@@ -9,8 +9,6 @@
 
 /// The most bases the game holds.
 pub(crate) const MAX_BASES: u32 = 16;
-/// The most zones the vanilla grouping takes.
-pub(crate) const VANILLA_ZONES: u32 = 16;
 /// The most zones one base mask names.
 pub(crate) const MAX_ZONES: usize = 32;
 /// Slack around a candidate altar's zone, in metres: the cursor leans

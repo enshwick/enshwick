@@ -115,7 +115,7 @@ pub(crate) fn text(base: u64) -> Option<(usize, usize)> {
 }
 
 /// The game's code section as bytes.
-fn text_bytes(base: u64) -> Option<&'static [u8]> {
+pub(crate) fn text_bytes(base: u64) -> Option<&'static [u8]> {
     let (start, len) = text(base)?;
     // SAFETY: the code section is mapped readable for the life of the process.
     Some(unsafe { core::slice::from_raw_parts(start as *const u8, len) })
@@ -252,7 +252,7 @@ fn stop_replacement() -> [u8; STOP_LEN] {
 }
 
 /// The one offset in `code` where `pattern` matches, or why not.
-fn find(code: &[u8], pattern: &str) -> Result<usize, String> {
+pub(crate) fn find(code: &[u8], pattern: &str) -> Result<usize, String> {
     let parsed = Pattern::parse(pattern).map_err(|e| e.to_string())?;
     parsed
         .find_unique(code)

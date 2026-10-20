@@ -46,7 +46,7 @@ patches is written, since a change made of several patches may be unsafe in
 part. A mod that returns `Off` from `init` after asking for patches gets none
 of them.
 
-[`enshwick-flame-altar-count`](https://github.com/themaiby/enshwick/blob/main/mods/enshwick-flame-altar-count/src/bases.rs)
+[the loader's base limit](https://github.com/themaiby/enshwick/blob/main/crates/internal/loader/src/bases.rs)
 widens the game's base grouping from 16 to 32 zones with six patches
 and three hooks, all found by patterns before any is registered. A
 miss there logs a warning and leaves the game at 16 altars.

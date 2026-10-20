@@ -366,6 +366,7 @@ fn end_session() {
     crate::altars::forget();
     crate::survivors::forget();
     crate::interactions::forget();
+    crate::bases::forget();
     forget_joined();
     BUILDING
         .lock()
