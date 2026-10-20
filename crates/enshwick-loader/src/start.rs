@@ -102,6 +102,9 @@ pub(crate) fn start(stub_abi: u32, missing_forwards: u32) {
     let order: Vec<&Library> = plan.order.iter().map(|&i| &libraries[i]).collect();
     initialise(loader, &order);
     loader.seal_subscriptions();
+    if side == Side::SERVER {
+        crate::events::link(loader);
+    }
     if side == Side::CLIENT {
         link_join(loader);
         std::thread::sleep(CLIENT_ARM_DELAY);

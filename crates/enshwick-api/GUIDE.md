@@ -146,11 +146,25 @@ instead of being ignored.
 
 ## Events
 
-`load.subscribe(Event::..., |data| ...)` runs a handler each time the loader
+`load.on::<events::Kind>(|data| ...)` runs a handler each time the loader
 raises the event, on the thread that raises it, until the mod is off; a panic in
-the handler turns the mod off. Subscribe during `init`. Events so far:
-`SETTINGS_CHANGED` (the mod's file, which `on_config_change` wraps) and
-`LOADER_SETTINGS_CHANGED` (`mod-configs/enshwick.toml`, log levels among them).
+the handler turns the mod off. Subscribe during `init`; the loader hooks the game
+for an event only when some mod subscribed to it.
+
+| Event | Data | When |
+| --- | --- | --- |
+| `Tick` | `TickData` (`step`) | after each simulation step on the server's game thread: about 20 a second with nobody online, 60 with players |
+| `WorldLoaded` | none | the world is loaded and the server runs |
+| `WorldSaved` | none | a save finished writing to disk |
+| `PlayerJoined` | `PlayerData` (`slot`, `entity`, `key`) | a player's character entered the world |
+| `PlayerLeft` | `PlayerData` | a player who joined is leaving; the character is still there |
+| `Shutdown` | none | an orderly stop begins, with the world and players alive; the final save follows |
+| `SettingsChanged` | none | the mod's settings file changed; `on_config_change` wraps it |
+| `LoaderSettingsChanged` | none | `mod-configs/enshwick.toml` changed |
+
+Game events come from the server only, and from its game thread: keep handlers
+short. `key` is the same for the same player account in every session.
+`load.subscribe(Event, |raw| ...)` is the untyped form.
 
 ## State between sessions
 

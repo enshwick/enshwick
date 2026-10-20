@@ -373,6 +373,69 @@ impl Event {
     /// The loader's settings changed, log levels among them; no data. Raised
     /// on a loader thread.
     pub const LOADER_SETTINGS_CHANGED: Self = Self(2);
+    /// A simulation step ran; data is a [`TickData`]. Raised on the server's
+    /// game thread after the step, about 20 times a second with nobody online
+    /// and 60 with players, from before [`Event::WORLD_LOADED`]. Server only.
+    pub const TICK: Self = Self(3);
+    /// The world finished loading and the server runs; no data. Raised on the
+    /// game thread. Server only.
+    pub const WORLD_LOADED: Self = Self(4);
+    /// A save of the world finished writing to disk; no data. Raised on the
+    /// game thread; the final save runs after [`Event::SHUTDOWN`]. Server only.
+    pub const WORLD_SAVED: Self = Self(5);
+    /// A player's character entered the world; data is a [`PlayerData`].
+    /// Raised on the game thread. Server only.
+    pub const PLAYER_JOINED: Self = Self(6);
+    /// A player who joined is leaving, with their character still in the
+    /// world; data is a [`PlayerData`]. Raised on the game thread. Server only.
+    pub const PLAYER_LEFT: Self = Self(7);
+    /// The server begins an orderly stop with the world and players still
+    /// alive; no data. Raised on the game thread; a killed process raises
+    /// nothing. Server only.
+    pub const SHUTDOWN: Self = Self(8);
+}
+
+/// The data of [`Event::TICK`].
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_api::abi::{Header, TickData};
+///
+/// let tick = TickData { header: Header::of::<TickData>(), step: 1 };
+/// assert_eq!(tick.step, 1);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct TickData {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// Steps since the loader started counting, from 1.
+    pub step: u64,
+}
+
+/// The data of [`Event::PLAYER_JOINED`] and [`Event::PLAYER_LEFT`].
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_api::abi::{Header, PlayerData};
+///
+/// let player = PlayerData { header: Header::of::<PlayerData>(), slot: 0, entity: 7, key: 42 };
+/// assert_eq!(player.entity, 7);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct PlayerData {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// The server's player slot, 0 to 15, while the player is connected.
+    pub slot: u32,
+    /// The player character's entity id.
+    pub entity: u32,
+    /// The same number for the same player account in every session: a hash
+    /// the game makes of the online id.
+    pub key: u64,
 }
 
 /// A mod's handler for an [`Event`]: the event, its data (null for events
