@@ -1,0 +1,202 @@
+//! Work for the server's game thread: on the next step, after a delay, or
+//! repeatedly. Tasks run after a simulation step, where the game's own server
+//! code runs, so they may call into the game.
+
+use std::ops::ControlFlow;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Mutex, OnceLock, PoisonError};
+use std::time::{Duration, Instant};
+
+/// A task: when it is due, its period when it repeats, and what it runs.
+struct Task {
+    due: Instant,
+    period: Option<Duration>,
+    run: Box<dyn FnMut() -> ControlFlow<()> + Send>,
+}
+
+#[derive(Default)]
+struct Queue {
+    /// Set while `tasks` holds anything, so an idle step takes no lock.
+    pending: AtomicBool,
+    tasks: Mutex<Vec<Task>>,
+}
+
+static QUEUE: OnceLock<Queue> = OnceLock::new();
+
+/// Puts work on the server's game thread; get it from
+/// [`Load::scheduler`](crate::Load::scheduler). Copy it anywhere, including
+/// other threads.
+///
+/// # Examples
+///
+/// ```
+/// use std::ops::ControlFlow;
+/// use std::time::Duration;
+///
+/// fn init(load: &mut enshwick_api::Load<'_>) -> Result<(), enshwick_api::Off> {
+///     let scheduler = load.scheduler()?;
+///     scheduler.after(Duration::from_secs(5), || enshwick_api::info!("five seconds in"));
+///     scheduler.every(Duration::from_secs(60), || {
+///         enshwick_api::info!("a minute passed");
+///         ControlFlow::Continue(())
+///     });
+///     Ok(())
+/// }
+/// ```
+#[derive(Clone, Copy)]
+pub struct Scheduler {
+    queue: &'static Queue,
+}
+
+impl core::fmt::Debug for Scheduler {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("Scheduler")
+            .field("pending", &self.queue.pending.load(Ordering::Relaxed))
+            .finish()
+    }
+}
+
+impl Scheduler {
+    /// The mod's scheduler, and whether this call created it.
+    pub(crate) fn get() -> (Self, bool) {
+        let mut created = false;
+        let queue = QUEUE.get_or_init(|| {
+            created = true;
+            Queue::default()
+        });
+        (Self { queue }, created)
+    }
+
+    /// Runs `task` after the next simulation step.
+    ///
+    /// # Examples
+    ///
+    /// See [`Scheduler`].
+    pub fn next_tick(self, task: impl FnOnce() + Send + 'static) {
+        self.after(Duration::ZERO, task);
+    }
+
+    /// Runs `task` after the first step at least `delay` from now.
+    ///
+    /// # Examples
+    ///
+    /// See [`Scheduler`].
+    pub fn after(self, delay: Duration, task: impl FnOnce() + Send + 'static) {
+        let mut task = Some(task);
+        self.push(delay, None, move || {
+            if let Some(task) = task.take() {
+                task();
+            }
+            ControlFlow::Break(())
+        });
+    }
+
+    /// Runs `task` about every `period`, the first time a period from now,
+    /// until it returns [`ControlFlow::Break`].
+    ///
+    /// # Examples
+    ///
+    /// See [`Scheduler`].
+    pub fn every(self, period: Duration, task: impl FnMut() -> ControlFlow<()> + Send + 'static) {
+        self.push(period, Some(period), task);
+    }
+
+    fn push(
+        self,
+        delay: Duration,
+        period: Option<Duration>,
+        run: impl FnMut() -> ControlFlow<()> + Send + 'static,
+    ) {
+        let task = Task {
+            due: Instant::now() + delay,
+            period,
+            run: Box::new(run),
+        };
+        let mut tasks = self
+            .queue
+            .tasks
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        tasks.push(task);
+        self.queue.pending.store(true, Ordering::Release);
+    }
+
+    /// Runs the tasks that are due; called after each step.
+    pub(crate) fn run_due(self) {
+        if !self.queue.pending.load(Ordering::Acquire) {
+            return;
+        }
+        let now = Instant::now();
+        let due: Vec<Task> = {
+            let mut tasks = self
+                .queue
+                .tasks
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner);
+            let (due, waiting) = std::mem::take(&mut *tasks)
+                .into_iter()
+                .partition(|task| task.due <= now);
+            *tasks = waiting;
+            due
+        };
+        // Outside the lock: a task may schedule more.
+        let again: Vec<Task> = due
+            .into_iter()
+            .filter_map(|mut task| match ((task.run)(), task.period) {
+                (ControlFlow::Continue(()), Some(period)) => {
+                    task.due = now + period;
+                    Some(task)
+                }
+                _ => None,
+            })
+            .collect();
+        let mut tasks = self
+            .queue
+            .tasks
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        tasks.extend(again);
+        self.queue
+            .pending
+            .store(!tasks.is_empty(), Ordering::Release);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+    use std::sync::atomic::AtomicU32;
+
+    use super::*;
+
+    #[test]
+    fn tasks_run_when_due_and_repeat_until_they_stop() {
+        let (scheduler, _) = Scheduler::get();
+        let once = Arc::new(AtomicU32::new(0));
+        let repeated = Arc::new(AtomicU32::new(0));
+        let later = Arc::new(AtomicU32::new(0));
+        let count = Arc::clone(&once);
+        scheduler.next_tick(move || {
+            count.fetch_add(1, Ordering::Relaxed);
+        });
+        let count = Arc::clone(&repeated);
+        scheduler.every(Duration::ZERO, move || {
+            if count.fetch_add(1, Ordering::Relaxed) + 1 < 3 {
+                ControlFlow::Continue(())
+            } else {
+                ControlFlow::Break(())
+            }
+        });
+        let count = Arc::clone(&later);
+        scheduler.after(Duration::from_secs(3600), move || {
+            count.fetch_add(1, Ordering::Relaxed);
+        });
+        for _ in 0..5 {
+            scheduler.run_due();
+        }
+        assert_eq!(once.load(Ordering::Relaxed), 1);
+        assert_eq!(repeated.load(Ordering::Relaxed), 3);
+        assert_eq!(later.load(Ordering::Relaxed), 0);
+        assert!(scheduler.queue.pending.load(Ordering::Relaxed));
+    }
+}

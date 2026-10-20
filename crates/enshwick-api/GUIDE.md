@@ -166,6 +166,14 @@ Game events come from the server only, and from its game thread: keep handlers
 short. `key` is the same for the same player account in every session.
 `load.subscribe(Event, |raw| ...)` is the untyped form.
 
+## Scheduling
+
+`load.scheduler()?` on the server returns a `Copy` handle that puts work on the
+game thread after a simulation step: `next_tick(f)`, `after(delay, f)` and
+`every(period, f)`, where `f` returns `ControlFlow::Continue(())` to keep
+repeating. Call it from any thread; tasks run where the game's server code runs,
+so they may call into the game. An idle step costs one atomic load.
+
 ## State between sessions
 
 `load.data_dir()` is the mod's own folder, `mod-data/<id>`. `state::Store<T>`

@@ -60,6 +60,7 @@ pub mod events;
 mod hook;
 mod host;
 mod load;
+pub mod schedule;
 pub mod state;
 
 pub use enshwick_macros::Config;
