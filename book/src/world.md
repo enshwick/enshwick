@@ -108,7 +108,7 @@ from a command or a timer, not on every step.
 fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
     let world = load.world()?;
     let beds = world.component_type(load, "keen::ecs::NpcBed")?;
-    load.command("beds", "counts the beds", move |_ctx, _args| {
+    load.add_command("beds", "counts the beds", move |_ctx, _args| {
         format!("{} beds", world.entities(beds).len()).into()
     })
 }

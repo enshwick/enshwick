@@ -472,12 +472,12 @@ impl ZoneControl {
     ///
     /// # Errors
     ///
-    /// [`Off`] when the loader refuses the call.
+    /// [`SetSizesError`] when the loader refuses the call.
     ///
     /// # Examples
     ///
     /// See [`ZoneControl`].
-    pub fn set(&self, sizes: &[ZoneSize]) -> Result<(), Off> {
+    pub fn set(&self, sizes: &[ZoneSize]) -> Result<(), SetSizesError> {
         let raw: Vec<AltarZoneSize> = sizes
             .iter()
             .map(|size| AltarZoneSize {
@@ -489,8 +489,35 @@ impl ZoneControl {
             })
             .collect();
         let status = (self.host.api().set_altar_zones)(self.host.handle(), raw.as_ptr(), raw.len());
-        crate::load::ok(status, (), || "altar zone sizes".to_owned())
+        match status {
+            crate::abi::Status::OK => Ok(()),
+            crate::abi::Status::FAULTED => Err(SetSizesError::TurnedOff),
+            other => Err(SetSizesError::Refused(other.0)),
+        }
     }
+}
+
+/// Why the loader did not take the sizes given to [`ZoneControl::set`].
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::altars::SetSizesError;
+///
+/// assert_eq!(
+///     SetSizesError::Refused(3).to_string(),
+///     "altar zone sizes refused by the loader (status 3)"
+/// );
+/// ```
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
+#[non_exhaustive]
+pub enum SetSizesError {
+    /// The mod is turned off, so its sizes no longer apply.
+    #[error("altar zone sizes not taken: the mod is turned off")]
+    TurnedOff,
+    /// The loader refused for another reason, with its status.
+    #[error("altar zone sizes refused by the loader (status {0})")]
+    Refused(u32),
 }
 
 /// The most zones a [`ZoneCheck`] carries; the engine keeps at most 255.

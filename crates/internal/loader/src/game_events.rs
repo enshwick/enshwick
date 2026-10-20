@@ -1,4 +1,4 @@
-//! Engine events for mods: every ECS event the server's systems write goes
+//! Game events for mods: every ECS event the server's systems write goes
 //! into an event stream, and the engine moves the streams into its event
 //! queues at the start of each step, on the game thread, before any system
 //! runs. The loader links that move, copies the events a mod subscribed to
@@ -136,13 +136,13 @@ pub(crate) fn link(loader: &'static Loader) {
         })
     })();
     let Some(layout) = layout else {
-        crate::log!(WARN, "engine events off: this build has no event layout");
+        crate::log!(WARN, "game events off: this build has no event layout");
         return;
     };
     let _first = LOADED.set((loader, layout));
     let target = loader.address("ecs.event_merge");
-    if loader.link_feature("engine events", target, &MERGE_NEXT, merge, HookFlags::NONE) {
-        crate::log!(INFO, "engine events: {count} subscriptions");
+    if loader.link_feature("game events", target, &MERGE_NEXT, merge, HookFlags::NONE) {
+        crate::log!(INFO, "game events: {count} subscriptions");
     }
 }
 
@@ -162,13 +162,13 @@ unsafe extern "system" fn merge(entity_world: *mut u8) {
     }
 }
 
-/// Runs the link's own work; a panic in it turns engine events off instead of
+/// Runs the link's own work; a panic in it turns game events off instead of
 /// unwinding into the game.
 fn guarded(work: impl FnOnce()) {
     if std::panic::catch_unwind(std::panic::AssertUnwindSafe(work)).is_err()
         && !OFF.swap(true, Ordering::Relaxed)
     {
-        crate::log!(ERROR, "engine events off: the event link panicked");
+        crate::log!(ERROR, "game events off: the event link panicked");
     }
 }
 

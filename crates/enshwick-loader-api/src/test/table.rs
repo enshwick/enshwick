@@ -6,10 +6,10 @@ use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use crate::abi::{
     AltarInfo, AltarLimitFn, AltarZoneSize, BedCheckFn, BuildInfo, CallerFrame, ComfortFn,
-    CommandFn, EntityPlace, Event, EventFn, ExperienceFn, GameEventFn, Header, HookSpec, HostApi,
-    InteractionFn, InventoryDoneFn, InventoryRequest, ItemData, Level, MidHookFn, MidHookSpec,
-    ModHandle, ModInfo, PlayerInfo, RenameFn, ResourceKey, ResourcePatchFn, Side, SkillFn, Status,
-    StatusFn, Str, SummonFn, SurvivorLookupFn, SurvivorStatusFn, ZoneCheckFn,
+    CommandCallFn, EntityPlace, Event, EventFn, ExperiencePassFn, GameEventFn, Header, HookSpec,
+    HostApi, InteractionFn, InventoryRequest, InventoryResultFn, ItemData, Level, MidHookFn,
+    MidHookSpec, ModHandle, ModInfo, PlayerInfo, RenameCallFn, ResourceKey, ResourcePatchFn, Side,
+    SkillCheckFn, Status, StatusFn, Str, SummonFn, SurvivorLookupFn, SurvivorStatusFn, ZoneCheckFn,
 };
 
 use super::{FakeHost, LinkedHook, ServedResource, SubmittedRequest};
@@ -17,7 +17,7 @@ use super::{FakeHost, LinkedHook, ServedResource, SubmittedRequest};
 /// A submitted inventory request and where its result goes.
 pub(crate) struct OpenRequest {
     pub(crate) request: SubmittedRequest,
-    pub(crate) done: InventoryDoneFn,
+    pub(crate) done: InventoryResultFn,
     pub(crate) user: usize,
 }
 
@@ -30,7 +30,7 @@ pub(crate) struct State {
     /// Mid-function hooks: address, handler and the mod's pointer.
     pub(crate) mid_hooks: Vec<(u64, MidHookFn, usize)>,
     pub(crate) subscriptions: Vec<(Event, EventFn, usize)>,
-    /// Engine event handlers: type hash (0 for every type), handler, pointer.
+    /// Game event handlers: type hash (0 for every type), handler, pointer.
     pub(crate) game_events: Vec<(u32, GameEventFn, usize)>,
     pub(crate) served: Vec<(ServedResource, ResourcePatchFn, usize)>,
     pub(crate) texts: Vec<(u32, u32, String)>,
@@ -38,10 +38,10 @@ pub(crate) struct State {
     pub(crate) published: Vec<(String, u32, usize)>,
     pub(crate) defaults: Vec<String>,
     pub(crate) synced: Vec<String>,
-    pub(crate) commands: Vec<(String, String, CommandFn, usize)>,
+    pub(crate) commands: Vec<(String, String, CommandCallFn, usize)>,
     pub(crate) chat: Vec<(u64, String)>,
     pub(crate) labels: Vec<(u32, String)>,
-    pub(crate) rename_filters: Vec<(RenameFn, usize)>,
+    pub(crate) rename_filters: Vec<(RenameCallFn, usize)>,
     pub(crate) inventory_requests: Vec<OpenRequest>,
     pub(crate) status_sources: Vec<(StatusFn, usize)>,
     /// The command lines the mod ran as the console, in order.
@@ -67,9 +67,9 @@ pub(crate) struct State {
     pub(crate) summon_items: Vec<(u32, u32)>,
     pub(crate) survivor_status: Option<(SurvivorStatusFn, usize)>,
     pub(crate) interaction_filters: Vec<(InteractionFn, usize)>,
-    pub(crate) skills: Vec<(u32, SkillFn, usize)>,
+    pub(crate) skills: Vec<(u32, SkillCheckFn, usize)>,
     pub(crate) comfort_filters: Vec<(ComfortFn, usize)>,
-    pub(crate) experience_filters: Vec<(ExperienceFn, usize)>,
+    pub(crate) experience_filters: Vec<(ExperiencePassFn, usize)>,
     pub(crate) altar_limit: Option<(AltarLimitFn, usize)>,
     pub(crate) base_limit_raised: bool,
     pub(crate) grouping: Option<(u32, u32)>,
@@ -532,7 +532,7 @@ extern "system" fn command(
     _me: ModHandle,
     name: Str,
     help: Str,
-    callback: CommandFn,
+    callback: CommandCallFn,
     user: *mut c_void,
 ) -> Status {
     let (name, help) = (text(name), text(help));
@@ -562,7 +562,11 @@ extern "system" fn set_label(_me: ModHandle, entity: u32, value: Str) -> Status 
     })
 }
 
-extern "system" fn rename_filter(_me: ModHandle, callback: RenameFn, user: *mut c_void) -> Status {
+extern "system" fn rename_filter(
+    _me: ModHandle,
+    callback: RenameCallFn,
+    user: *mut c_void,
+) -> Status {
     with(Status::MISSING, |s| {
         s.rename_filters.push((callback, user.expose_provenance()));
         Status::OK
@@ -620,7 +624,7 @@ extern "system" fn item_info(_me: ModHandle, item: u32, out: *mut ItemData) -> S
 extern "system" fn inventory_submit(
     _me: ModHandle,
     request: *const InventoryRequest,
-    done: InventoryDoneFn,
+    done: InventoryResultFn,
     user: *mut c_void,
 ) -> Status {
     // SAFETY: the safe layer passes a valid request for the call; `as_ref`
@@ -777,7 +781,7 @@ extern "system" fn interaction_filter(
 extern "system" fn skill_override(
     _me: ModHandle,
     node: u32,
-    callback: SkillFn,
+    callback: SkillCheckFn,
     user: *mut c_void,
 ) -> Status {
     with(Status::MISSING, |s| {
@@ -799,7 +803,7 @@ extern "system" fn comfort_filter(
 
 extern "system" fn experience_filter(
     _me: ModHandle,
-    callback: ExperienceFn,
+    callback: ExperiencePassFn,
     user: *mut c_void,
 ) -> Status {
     with(Status::MISSING, |s| {

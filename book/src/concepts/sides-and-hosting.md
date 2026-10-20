@@ -22,9 +22,9 @@ client hosts:
 
 - game events, the world reads, the scheduler, inventories and chat commands
   serve the built-in server from its first step until the game stops;
-- each hosted game starts with `WorldLoaded` and ends with `Shutdown`. The next
+- each hosted game starts with `WorldLoaded` and ends with `ShutdownStarted`. The next
   game has a new server, a new thread and new entities, so reset state tied to
-  one game, such as entity ids, on `Shutdown`;
+  one game, such as entity ids, on `ShutdownStarted`;
 - while no game is hosted, the server features rest: the world reads return
   nothing and no game events come.
 

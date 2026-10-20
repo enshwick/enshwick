@@ -25,8 +25,8 @@ use std::sync::{Mutex, OnceLock, PoisonError};
 use std::time::{Duration, Instant};
 
 use enshwick_loader_api::abi::{
-    Header, HookFlags, InventoryDoneFn, InventoryOp, InventoryOpResult, InventoryRequest,
-    InventoryResult, ItemData, Registers, Side, Status,
+    Header, HookFlags, InventoryOp, InventoryOpResult, InventoryRequest, InventoryResult,
+    InventoryResultFn, ItemData, Registers, Side, Status,
 };
 
 use crate::chains::LOADER;
@@ -155,7 +155,7 @@ struct Request {
     flags: u32,
     actor: u32,
     ops: Vec<InventoryOp>,
-    done: InventoryDoneFn,
+    done: InventoryResultFn,
     user: usize,
     queued: Instant,
 }
@@ -164,7 +164,7 @@ struct Request {
 #[derive(Debug)]
 struct Finished {
     owner: usize,
-    done: InventoryDoneFn,
+    done: InventoryResultFn,
     user: usize,
     outcome: u32,
     results: Vec<InventoryOpResult>,
@@ -516,7 +516,7 @@ pub(crate) fn submit(
     loader: &Loader,
     owner: usize,
     request: &InventoryRequest,
-    done: InventoryDoneFn,
+    done: InventoryResultFn,
     user: *mut c_void,
 ) -> Status {
     if executor(loader).is_none() || !WANTED.load(Ordering::Acquire) {

@@ -138,7 +138,7 @@ pub(crate) fn console() -> PlayerInfo {
 
 /// Calls a command handler the mod registered; its reply.
 pub(crate) fn run_handler(
-    callback: crate::abi::CommandFn,
+    callback: crate::abi::CommandCallFn,
     user: usize,
     name: &str,
     player: &PlayerInfo,
@@ -1073,8 +1073,8 @@ impl Installed {
     ///
     /// let loader = enshwick_loader_api::test::FakeHost::new().install();
     /// let tick = TickData { header: Header::of::<TickData>(), step: 1 };
-    /// assert_eq!(loader.raise::<events::Tick>(&tick), 0);
-    /// assert_eq!(loader.raise::<events::Shutdown>(&()), 0);
+    /// assert_eq!(loader.raise::<events::Ticked>(&tick), 0);
+    /// assert_eq!(loader.raise::<events::ShutdownStarted>(&()), 0);
     /// ```
     #[must_use = "the count says whether the mod handles the event"]
     pub fn raise<E: Kind>(&self, data: &E::Data) -> usize {
@@ -1117,7 +1117,7 @@ impl Installed {
         handlers.len()
     }
 
-    /// The engine event types the mod asked for, by hash, 0 for every type.
+    /// The game event types the mod asked for, by hash, 0 for every type.
     ///
     /// # Examples
     ///
@@ -1130,7 +1130,7 @@ impl Installed {
         table::with(Vec::new(), |s| s.game_events.iter().map(|g| g.0).collect())
     }
 
-    /// Hands the engine event of `type_hash` with `bytes` to every handler of
+    /// Hands the game event of `type_hash` with `bytes` to every handler of
     /// the mod for that type or for every type, on this thread; returns how
     /// many ran.
     ///
@@ -1608,7 +1608,7 @@ impl Installed {
         let user = core::ptr::with_exposed_provenance_mut(user);
         // SAFETY: valid statuses for the call; `user` is the mod's pointer.
         let answer = unsafe { callback(survivor, statuses.as_ptr(), statuses.len(), user) };
-        (answer & 0x100 != 0).then(|| answer.to_le_bytes()[0])
+        (answer & crate::abi::SURVIVOR_STATUS_SET != 0).then(|| answer.to_le_bytes()[0])
     }
 
     /// Asks the mod's interaction filters about `call` as the loader would;
@@ -1643,7 +1643,8 @@ impl Installed {
     }
 
     /// Asks the mod's skill overrides about `check` as the loader would: the
-    /// first answer for the node, 0 for none, 1 unlocked, 2 locked.
+    /// first answer for the node, [`SkillCheck::VANILLA`] for none, else
+    /// [`SkillCheck::UNLOCKED`] or [`SkillCheck::LOCKED`].
     ///
     /// # Examples
     ///
@@ -1652,7 +1653,7 @@ impl Installed {
     ///
     /// let loader = enshwick_loader_api::test::FakeHost::new().install();
     /// let check = SkillCheck { header: Header::of::<SkillCheck>(), node: 7, gate: SkillCheck::OTHER, unlocked: 0, reserved: [0; 3] };
-    /// assert_eq!(loader.skill(&check), 0);
+    /// assert_eq!(loader.skill(&check), SkillCheck::VANILLA);
     /// ```
     #[must_use]
     pub fn skill(&self, check: &SkillCheck) -> u8 {
@@ -1665,8 +1666,8 @@ impl Installed {
                 // SAFETY: a valid check; `user` is the mod's pointer.
                 unsafe { callback(check, user) }
             })
-            .find(|&answer| answer != 0)
-            .unwrap_or(0)
+            .find(|&answer| answer != SkillCheck::VANILLA)
+            .unwrap_or(SkillCheck::VANILLA)
     }
 
     /// Runs the mod's comfort filters on `comfort` as the loader would; the

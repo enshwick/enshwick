@@ -11,7 +11,7 @@ mod tests {
         InventoryOp, InventoryOpResult, InventoryResult, ItemData, Status, TickData,
     };
     use enshwick_loader_api::ecs::Entity;
-    use enshwick_loader_api::events::Tick;
+    use enshwick_loader_api::events::Ticked;
     use enshwick_loader_api::inventory::{
         Batch, BatchError, Category, Done, Inventories, Outcome, SlotRef,
     };
@@ -170,7 +170,7 @@ mod tests {
             header: enshwick_loader_api::abi::Header::of::<TickData>(),
             step: 1,
         };
-        assert_eq!(loader.raise::<Tick>(&tick), 1);
+        assert_eq!(loader.raise::<Ticked>(&tick), 1);
         assert_eq!(
             refused.outcome().map(|o| o.done),
             Some(Done::Refused(BatchError::Empty))

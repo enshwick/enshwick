@@ -77,19 +77,21 @@ use enshwick_loader_api::state::Store;
 
 #[derive(Default, serde::Deserialize, serde::Serialize)]
 struct Progress {
-    highest_xp: u64,
+    highest_experience: u64,
 }
 
 fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
     let store: Store<Progress> = Store::new(&load.data_dir()?, "progress");
     let mut progress = store.load()?;
-    progress.highest_xp = progress.highest_xp.max(42);
-    store.save(&progress)
+    progress.highest_experience = progress.highest_experience.max(42);
+    store.save(&progress)?;
+    Ok(())
 }
 ```
 
-Errors come back as `Off`, so `?` in `init` turns the mod off with the path
-and the reason. Outside `init`, log them instead.
+Errors come back as a `StoreError` naming the file and the reason. It
+converts into `Off`, so `?` in `init` turns the mod off with that text; outside
+`init`, log it instead. `Hold` and `WorldStore::flush` return the same error.
 
 ## Holds
 
@@ -105,7 +107,8 @@ fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_
     let hold = Hold::new(&load.data_dir()?);
     hold.set("the world has 20 altar zones; the vanilla game groups only 16")?;
     // Later, once the world is back within vanilla limits:
-    hold.clear()
+    hold.clear()?;
+    Ok(())
 }
 ```
 

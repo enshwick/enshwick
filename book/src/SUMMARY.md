@@ -18,7 +18,7 @@
 - [Settings](settings.md)
 - [Logging and diagnostics](logging.md)
 - [Events and the scheduler](events.md)
-- [Engine events](game-events.md)
+- [Game events](game-events.md)
 - [The world](world.md)
 - [Altars and bases](altars.md)
 - [Survivors](survivors.md)
@@ -58,3 +58,4 @@
 
 - [ABI reference](abi-reference.md)
 - [FAQ and troubleshooting](faq.md)
+- [Upgrading from 0.3](upgrading.md)

@@ -1,9 +1,9 @@
 //! Typed loader events for [`Load::on`](crate::Load::on).
 //!
-//! Game events are raised on the server's game thread: keep handlers short,
+//! Events from the server are raised on its game thread: keep handlers short,
 //! and leave slow work to a thread of the mod's own. On a client they come
 //! from the built-in server while it hosts a game, solo play included; each
-//! hosted game starts with [`WorldLoaded`] and ends with [`Shutdown`], so
+//! hosted game starts with [`WorldLoaded`] and ends with [`ShutdownStarted`], so
 //! state of one game is reset there.
 
 use core::ffi::c_void;
@@ -99,9 +99,9 @@ without_data! {
     /// [`Event::WORLD_SAVED`].
     WorldSaved = WORLD_SAVED;
     /// [`Event::SHUTDOWN`].
-    Shutdown = SHUTDOWN;
+    ShutdownStarted = SHUTDOWN;
     /// [`Event::JOIN_MISSING`]; [`crate::mods::join_missing`] lists the mods.
-    JoinMissing = JOIN_MISSING;
+    JoinRefused = JOIN_MISSING;
     /// [`Event::ALTARS_CHANGED`]; [`crate::altars::Altars::list`] lists them.
     AltarsChanged = ALTARS_CHANGED;
 }
@@ -110,7 +110,7 @@ without_data! {
 // added the event: a field appended later is zero under an older loader.
 with_data! {
     /// [`Event::TICK`].
-    Tick = TICK: TickData, size_of::<TickData>();
+    Ticked = TICK: TickData, size_of::<TickData>();
     /// [`Event::PLAYER_JOINED`].
     PlayerJoined = PLAYER_JOINED: PlayerData, size_of::<PlayerData>();
     /// [`Event::PLAYER_LEFT`].

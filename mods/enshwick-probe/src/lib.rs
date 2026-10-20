@@ -3,8 +3,8 @@
 //! `logs/enshwick/mods/probe.log`, each check as a `PASS`, `FAIL` or `SKIP` line.
 //!
 //! Off until `enabled = true` in `mod-configs/probe.toml`; read at start.
-//! While on, it counts every engine event by type and logs the counts every
-//! minute, logs each typed engine event it receives, and runs its checks
+//! While on, it counts every game event by type and logs the counts every
+//! minute, logs each typed game event it receives, and runs its checks
 //! once the world has loaded: world key, entity queries, stats, a per-world
 //! store and a save on demand. `/probe` commands run them again, from the
 //! admin tools' command file as well.
@@ -18,8 +18,8 @@ use std::time::Duration;
 
 use enshwick_loader_api::events::{WorldLoaded, WorldSaved};
 use enshwick_loader_api::game_events::{
-    AltarAction, Built, CraftRequested, Crafted, Died, EquipmentChanged, Hit, Interacted, LevelUp,
-    LootOpened, PickedUp, Revived, TornDown, Typed, XpGained,
+    AltarUsed, Built, CraftRequested, Crafted, Died, EquipmentChanged, ExperienceGained, Hit,
+    Interacted, Kind, LevelGained, LootOpened, PickedUp, Revived, TornDown,
 };
 use enshwick_loader_api::{Load, Mod, Off};
 
@@ -44,7 +44,7 @@ struct Settings {
 pub struct Probe;
 
 /// Logs every event of kind `E`, or that its fields are missing.
-fn log_typed<E: Typed + core::fmt::Debug>(load: &mut Load<'_>) {
+fn log_typed<E: Kind + core::fmt::Debug>(load: &mut Load<'_>) {
     match load.on_game::<E>(|event| enshwick_loader_api::info!("event: {event:?}")) {
         Ok(()) => enshwick_loader_api::info!("PASS typed {} resolves", E::TYPE_NAME),
         Err(off) => enshwick_loader_api::warn!("FAIL typed {}: {off}", E::TYPE_NAME),
@@ -63,18 +63,18 @@ impl Mod for Probe {
         }
         let census = Arc::new(Census::new(load));
         let counted = Arc::clone(&census);
-        load.on_every_game_event(move |event| counted.count(event))?;
+        load.on_every_raw_game_event(move |event| counted.count(event))?;
         log_typed::<Hit>(load);
         log_typed::<Died>(load);
-        log_typed::<LevelUp>(load);
-        log_typed::<XpGained>(load);
+        log_typed::<LevelGained>(load);
+        log_typed::<ExperienceGained>(load);
         log_typed::<CraftRequested>(load);
         log_typed::<Crafted>(load);
         log_typed::<Interacted>(load);
         log_typed::<Built>(load);
         log_typed::<TornDown>(load);
         log_typed::<PickedUp>(load);
-        log_typed::<AltarAction>(load);
+        log_typed::<AltarUsed>(load);
         log_typed::<LootOpened>(load);
         log_typed::<EquipmentChanged>(load);
         log_typed::<Revived>(load);
@@ -95,7 +95,7 @@ impl Mod for Probe {
         })?;
         let saved = Arc::clone(&checks);
         load.on::<WorldSaved>(move |()| saved.saved())?;
-        load.command(
+        load.add_command(
             "probe",
             "development probe; /probe census|check|vitals <id>|destroy <id>",
             move |ctx, args| match args {

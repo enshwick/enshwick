@@ -1,7 +1,7 @@
-//! Engine events: the ECS events the server's systems raise, such as a hit,
+//! Game events: the ECS events the server's systems raise, such as a hit,
 //! a death or a level gained, observed by reflected type.
 //!
-//! Every engine event passes the event streams the engine moves at the
+//! Every game event passes the event streams the engine moves at the
 //! start of each simulation step. The loader copies the ones a mod asked for
 //! and hands them over on the server's game thread, before the systems of
 //! the step run, so the entities an event names are still in the world and
@@ -20,16 +20,16 @@ use crate::ecs::Entity;
 use crate::{Load, Off};
 
 pub use kinds::{
-    AltarAction, AltarActionKind, AttackCategories, Block, Built, CraftRequested, Crafted,
-    DamageTypes, Died, EquipmentChanged, Hit, Interacted, LevelUp, LootOpened, PickedUp, Revived,
-    TornDown, Typed, XpGained, XpSource,
+    AltarAction, AltarUsed, AttackCategories, Block, Built, CraftRequested, Crafted, DamageTypes,
+    Died, EquipmentChanged, ExperienceGained, ExperienceSource, Hit, Interacted, Kind, LevelGained,
+    LootOpened, PickedUp, Revived, TornDown,
 };
 
 mod sealed {
     pub trait Sealed {}
 }
 
-/// A reflected engine event type, resolved once at init.
+/// A reflected game event type, resolved once at init.
 ///
 /// # Examples
 ///
@@ -67,14 +67,14 @@ impl EventType {
         self.name
     }
 
-    /// The reflected type hash, which [`GameEvent::type_hash`] carries.
+    /// The reflected type hash, which [`RawGameEvent::type_hash`] carries.
     ///
     /// # Examples
     ///
     /// ```
     /// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
     ///     let died = load.event_type("keen::ecs::EntityDiedEvent")?.hash();
-    ///     load.on_every_game_event(move |event| {
+    ///     load.on_every_raw_game_event(move |event| {
     ///         if event.type_hash() == died {
     ///             enshwick_loader_api::debug!("an entity died");
     ///         }
@@ -116,7 +116,7 @@ impl EventType {
     /// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
     ///     let died = load.event_type("keen::ecs::EntityDiedEvent")?;
     ///     let dead = died.field::<Entity>(load, "deadEntityId")?;
-    ///     load.on_game_event(died, move |event| {
+    ///     load.on_raw_game_event(died, move |event| {
     ///         if let Some(entity) = event.get(dead) {
     ///             enshwick_loader_api::info!("entity {} died", entity.0);
     ///         }
@@ -263,27 +263,27 @@ impl<T> Field<T> {
     }
 }
 
-/// One engine event, valid for the handler's call.
+/// One game event, valid for the handler's call.
 ///
 /// # Examples
 ///
 /// See [`EventType::field`].
 #[derive(Clone, Copy, Debug)]
-pub struct GameEvent<'a> {
+pub struct RawGameEvent<'a> {
     type_hash: u32,
     bytes: &'a [u8],
 }
 
-impl<'a> GameEvent<'a> {
+impl<'a> RawGameEvent<'a> {
     /// An event of `type_hash` with `bytes`, as a mod's tests make one.
     ///
     /// # Examples
     ///
     /// ```
-    /// use enshwick_loader_api::game_events::GameEvent;
+    /// use enshwick_loader_api::game_events::RawGameEvent;
     ///
     /// let bytes = [0u8; 16];
-    /// let event = GameEvent::new(0xd8ec_982a, &bytes);
+    /// let event = RawGameEvent::new(0xd8ec_982a, &bytes);
     /// assert_eq!(event.bytes().len(), 16);
     /// ```
     #[must_use]
@@ -305,7 +305,7 @@ impl<'a> GameEvent<'a> {
     ///
     /// # Examples
     ///
-    /// See [`GameEvent::new`].
+    /// See [`RawGameEvent::new`].
     #[must_use]
     pub const fn bytes(&self) -> &'a [u8] {
         self.bytes
@@ -331,12 +331,12 @@ impl<'a> GameEvent<'a> {
     /// # Examples
     ///
     /// ```
-    /// use enshwick_loader_api::game_events::GameEvent;
+    /// use enshwick_loader_api::game_events::RawGameEvent;
     ///
     /// let mut bytes = [0u8; 16];
     /// bytes[8] = 7;
-    /// assert_eq!(GameEvent::new(1, &bytes).read::<u32>(8), Some(7));
-    /// assert_eq!(GameEvent::new(1, &bytes).read::<u64>(12), None);
+    /// assert_eq!(RawGameEvent::new(1, &bytes).read::<u32>(8), Some(7));
+    /// assert_eq!(RawGameEvent::new(1, &bytes).read::<u64>(12), None);
     /// ```
     #[must_use]
     pub fn read<T: Scalar>(&self, offset: usize) -> Option<T> {
@@ -378,9 +378,9 @@ mod tests {
         };
         let mut bytes = [0u8; 12];
         bytes[8..].copy_from_slice(&42u32.to_le_bytes());
-        assert_eq!(GameEvent::new(5, &bytes).get(field), Some(42));
-        assert_eq!(GameEvent::new(6, &bytes).get(field), None);
-        assert_eq!(GameEvent::new(5, &bytes[..10]).get(field), None);
+        assert_eq!(RawGameEvent::new(5, &bytes).get(field), Some(42));
+        assert_eq!(RawGameEvent::new(6, &bytes).get(field), None);
+        assert_eq!(RawGameEvent::new(5, &bytes[..10]).get(field), None);
     }
 
     #[test]

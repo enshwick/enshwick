@@ -123,4 +123,4 @@ puts the pieces of this chapter together:
    goes on to the next only when the batch committed and a
    [read](../inventories.md#reads) in the callback shows the last one empty.
    A full inventory stops it.
-6. On `Shutdown` it clears the tracker: entity ids belong to one game.
+6. On `ShutdownStarted` it clears the tracker: entity ids belong to one game.

@@ -310,17 +310,17 @@ pub fn mods() -> Vec<ModEntry> {
 /// The server's join mods that the last refused join found missing on this
 /// client or in another version: the server's version, `running` false, the
 /// client's DLL path when it has the mod and where the server's version
-/// comes from. Read it on [`JoinMissing`](crate::events::JoinMissing).
+/// comes from. Read it on [`JoinRefused`](crate::events::JoinRefused).
 ///
 /// Empty before a refused join and under a loader older than ABI minor 10.
 ///
 /// # Examples
 ///
 /// ```
-/// use enshwick_loader_api::events::JoinMissing;
+/// use enshwick_loader_api::events::JoinRefused;
 ///
 /// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
-///     load.on::<JoinMissing>(|()| {
+///     load.on::<JoinRefused>(|()| {
 ///         for entry in enshwick_loader_api::mods::join_missing() {
 ///             enshwick_loader_api::info!("the server runs {} {}", entry.id, entry.version);
 ///         }

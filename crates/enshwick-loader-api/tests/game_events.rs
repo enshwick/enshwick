@@ -1,4 +1,4 @@
-//! Engine events reach a mod's handlers by type, with fields read by name.
+//! Game events reach a mod's handlers by type, with fields read by name.
 
 #[cfg(test)]
 mod tests {
@@ -26,12 +26,12 @@ mod tests {
             let dead = died.field::<Entity>(load, "deadEntityId")?;
             assert!(died.field::<u32>(load, "nope").is_err());
             assert!(died.field::<u64>(load, "late").is_err());
-            load.on_game_event(died, move |event| {
+            load.on_raw_game_event(died, move |event| {
                 if let Some(entity) = event.get(dead) {
                     DEAD.lock().unwrap().push(entity);
                 }
             })?;
-            load.on_every_game_event(|event| EVERY.lock().unwrap().push(event.type_hash()))?;
+            load.on_every_raw_game_event(|event| EVERY.lock().unwrap().push(event.type_hash()))?;
             Ok(Self)
         }
     }

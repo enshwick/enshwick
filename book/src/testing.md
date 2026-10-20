@@ -206,7 +206,7 @@ What the mod asked for, each in order:
 | `console()`            | The command lines run as the console with `commands::run`.             |
 | `chat()`               | `(account key, text)` of each chat line sent; key 0 for everyone.      |
 | `labels()`             | `(entity, text)` of each label set.                                    |
-| `game_event_types()`   | The engine event types asked for, by hash; 0 for every type.           |
+| `game_event_types()`   | The game event types asked for, by hash; 0 for every type.             |
 | `destroyed()`          | The entities the mod asked the world to destroy.                       |
 | `saves()`              | How many saves the mod asked for.                                      |
 | `published()`          | `(name, version)` of each service published.                           |
@@ -223,7 +223,7 @@ Playing the game:
 | `run_at(address, &mut registers)` | Runs the mid-function hooks at an address; returns how many ran.            |
 | `raise::<E>(&data)`               | Raises an event to the mod's handlers on this thread; returns how many ran. |
 | `raise_raw(event, data)`          | The same for a raw `Event` id; `unsafe`.                                    |
-| `raise_game_event(hash, bytes)`   | Hands an engine event to the mod's handlers; returns how many ran.          |
+| `raise_game_event(hash, bytes)`   | Hands a game event to the mod's handlers; returns how many ran.             |
 | `set_settings(text)`              | Replaces the settings file's text; raise `SettingsChanged` after it.        |
 | `set_server_synced(values)`       | Sets the joined server's join values; raise `SettingsChanged` after it.     |
 | `command(name, &player, args)`    | Runs the mod's chat command; its reply, or `None` without such a command.   |
@@ -282,7 +282,7 @@ one people play on, with a copy of a world:
   mod's commands run without anyone joining;
 - [`enshwick-probe`](https://github.com/themaiby/enshwick/tree/main/mods/enshwick-probe),
   a development mod that is never released, exercises the platform's world
-  API and engine events and logs each check as `PASS`, `FAIL` or `SKIP` to
+  API and game events and logs each check as `PASS`, `FAIL` or `SKIP` to
   `logs/enshwick/mods/probe.log`.
 
 What needs a player, such as hits, levels or a character's stats, waits for

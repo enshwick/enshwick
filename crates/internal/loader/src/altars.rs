@@ -32,14 +32,17 @@ use crate::host::{Loader, Registered};
 const FORGET_AFTER: Duration = Duration::from_secs(2);
 /// `add_buildzones_server`'s iterator: context, `BaseIdComponent`,
 /// `CurrentTransform`, `TriggerShape`, `BuildZoneSystem`.
+/// Found on the 1.0 build 1269579, server and client.
 const ZONES_WORDS: usize = 5;
 const ZONES_TRANSFORM: usize = 2;
 const ZONES_SHAPE: usize = 3;
 /// `CurrentTransform`: position at 0, orientation at 0x18.
+/// Found on the 1.0 build 1269579, server and client.
 const TRANSFORM_ORIENTATION: usize = 0x18;
 /// `upgrade_building_range`'s iterator: context, `Level`, `TriggerShape`, two
 /// stamps, entity record, type and flags, tracker, `BalancingRegistry`,
 /// `AttributeRegistry`.
+/// Found on the 1.0 build 1269579, server and client.
 const UPGRADE_WORDS: usize = 10;
 const UPGRADE_LEVEL: usize = 1;
 const UPGRADE_SHAPE: usize = 2;
@@ -51,8 +54,10 @@ const UPGRADE_TRACKER: usize = 7;
 const UPGRADE_BALANCING: usize = 8;
 const UPGRADE_ATTRIBUTES: usize = 9;
 /// `TriggerShape`: half extents at 4.
+/// Found on the 1.0 build 1269579, server and client.
 const SHAPE_RANGE: usize = 4;
 /// Vanilla writes half the level's size.
+/// Found on the 1.0 build 1269579, server and client.
 const HALF: f32 = 0.5;
 /// The most levels an altar reports; the engine has far fewer.
 const MAX_LEVELS: usize = 16;

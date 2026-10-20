@@ -1,12 +1,12 @@
-//! Engine events counted by type.
+//! Game events counted by type.
 
 use std::collections::BTreeMap;
 use std::sync::{Mutex, PoisonError};
 
 use enshwick_loader_api::Load;
-use enshwick_loader_api::game_events::GameEvent;
+use enshwick_loader_api::game_events::RawGameEvent;
 
-/// Engine event types the census names; others show by hash.
+/// Game event types the census names; others show by hash.
 const NAMES: &[&str] = &[
     "keen::ecs::HitEvent",
     "keen::ecs::EntityDiedEvent",
@@ -71,7 +71,7 @@ const NAMES: &[&str] = &[
     "keen::ecs::StartPlaySongEvent",
 ];
 
-/// Counts of engine events by type hash, with the names the census knows.
+/// Counts of game events by type hash, with the names the census knows.
 #[derive(Debug)]
 pub(crate) struct Census {
     names: BTreeMap<u32, &'static str>,
@@ -92,7 +92,7 @@ impl Census {
     }
 
     /// Counts `event`.
-    pub(crate) fn count(&self, event: &GameEvent<'_>) {
+    pub(crate) fn count(&self, event: &RawGameEvent<'_>) {
         let mut seen = self.seen.lock().unwrap_or_else(PoisonError::into_inner);
         let entry = seen.entry(event.type_hash()).or_default();
         entry.0 += 1;
@@ -103,7 +103,7 @@ impl Census {
     pub(crate) fn lines(&self) -> Vec<String> {
         let seen = self.seen.lock().unwrap_or_else(PoisonError::into_inner);
         if seen.is_empty() {
-            return vec!["no engine events yet".to_owned()];
+            return vec!["no game events yet".to_owned()];
         }
         seen.iter()
             .map(|(hash, (count, size))| match self.names.get(hash) {

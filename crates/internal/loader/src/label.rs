@@ -12,7 +12,9 @@ use core::ffi::c_void;
 use std::sync::atomic::Ordering;
 use std::sync::{Mutex, OnceLock, PoisonError};
 
-use enshwick_loader_api::abi::{Header, HookFlags, PlayerInfo, RenameCall, RenameFn, Status, Str};
+use enshwick_loader_api::abi::{
+    Header, HookFlags, PlayerInfo, RenameCall, RenameCallFn, Status, Str,
+};
 
 use crate::chains::Next;
 use crate::host::Loader;
@@ -60,7 +62,7 @@ struct Layout {
 #[derive(Debug, Clone, Copy)]
 struct Filter {
     owner: usize,
-    callback: RenameFn,
+    callback: RenameCallFn,
     user: usize,
 }
 
@@ -112,7 +114,7 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
 }
 
 /// Registers mod `owner`'s rename filter.
-pub(crate) fn register(owner: usize, callback: RenameFn, user: *mut c_void) -> Status {
+pub(crate) fn register(owner: usize, callback: RenameCallFn, user: *mut c_void) -> Status {
     if SEALED.get().is_some() {
         return Status::TOO_LATE;
     }

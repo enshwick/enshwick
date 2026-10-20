@@ -13,7 +13,7 @@ use std::time::{Duration, Instant};
 use enshwick_loader_api::abi::Side;
 use enshwick_loader_api::altars::Altars;
 use enshwick_loader_api::ecs::Entity;
-use enshwick_loader_api::events::{AltarsChanged, Shutdown};
+use enshwick_loader_api::events::{AltarsChanged, ShutdownStarted};
 use enshwick_loader_api::survivors::{Answer, BedCheck, Lookup, Purpose, Summon};
 use enshwick_loader_api::{Load, Off};
 
@@ -60,7 +60,7 @@ pub(crate) fn link(load: &mut Load<'_>, staffs: bool) -> Result<(), Off> {
     }
     if load.host().build().side == Side::CLIENT {
         // Entities belong to one hosted game; the next starts clean.
-        load.on::<Shutdown>(|()| forget())?;
+        load.on::<ShutdownStarted>(|()| forget())?;
     }
     Ok(())
 }
@@ -104,12 +104,12 @@ fn answer(shared: &mut Shared, lookup: &Lookup) -> Answer {
     let npc = lookup.survivor.0;
     let found = lookup.vanilla.map_or(0, |e| e.0);
     match lookup.purpose {
-        Purpose::Uniqueness { me, home } => {
+        Purpose::Uniqueness { entity, home } => {
             let now = Instant::now();
             if now.duration_since(shared.swept) >= SWEEP {
                 sweep(shared, now);
             }
-            file_copy(shared, npc, found, me.0, home, now)
+            file_copy(shared, npc, found, entity.0, home, now)
         }
         _ => answer_reading(shared, lookup),
     }

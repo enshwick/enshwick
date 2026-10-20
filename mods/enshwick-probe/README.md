@@ -17,8 +17,8 @@ Once the world has loaded, and again on `/probe check`:
 - that destroy requests refuse entity 0 and an entity not in the world;
 - a save on demand, followed by `WorldSaved`.
 
-From start it counts every engine event by type and logs the counts every
-minute, and logs each typed engine event it receives; a typed event whose
+From start it counts every game event by type and logs the counts every
+minute, and logs each typed game event it receives; a typed event whose
 fields this game build lacks shows as `FAIL typed <type>`.
 
 ## Commands
@@ -26,12 +26,12 @@ fields this game build lacks shows as `FAIL typed <type>`.
 From the chat as an administrator, or through the admin tools' command file
 (`mod-data/admin-tools/commands.txt`):
 
-| Command               | What it does                                                         |
-| --------------------- | -------------------------------------------------------------------- |
-| `/probe census`       | the engine events counted so far, by type                            |
-| `/probe check`        | runs the checks again                                                |
-| `/probe vitals <id>`  | an entity's vitals and progress, against its replicated health       |
-| `/probe destroy <id>` | asks the world to destroy an entity; on a copy of a world only       |
+| Command               | What it does                                                   |
+| --------------------- | -------------------------------------------------------------- |
+| `/probe census`       | the game events counted so far, by type                        |
+| `/probe check`        | runs the checks again                                          |
+| `/probe vitals <id>`  | an entity's vitals and progress, against its replicated health |
+| `/probe destroy <id>` | asks the world to destroy an entity; on a copy of a world only |
 
 ## Settings
 

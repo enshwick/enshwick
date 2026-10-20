@@ -10,8 +10,8 @@ use crate::chains::Next;
 use crate::host::{Registered, take};
 
 use enshwick_loader_api::abi::{
-    Comfort, ComfortFn, ExperienceFn, ExperiencePass, ExperienceRow, Header, HookFlags, Side,
-    SkillCheck, SkillFn, Status,
+    Comfort, ComfortFn, ExperiencePass, ExperiencePassFn, ExperienceRow, Header, HookFlags, Side,
+    SkillCheck, SkillCheckFn, Status,
 };
 
 use crate::ecs::Engine;
@@ -21,6 +21,7 @@ use crate::host::Loader;
 /// `Level` and `PlayerTracking`, each with its change tracking (two stamps,
 /// entity record, type and flags, tracker), then `BalancingRegistry`,
 /// `BasicPlayerInfos`, `AttributeRegistry` and the `LevelUpEvent` writer.
+/// Found on the 1.0 build 1269579, server and client.
 const WORDS: usize = 24;
 const EXPERIENCE: usize = 2;
 const STAMP_A: usize = 3;
@@ -34,9 +35,9 @@ const REGISTRY: usize = 22;
 
 #[derive(Debug, Default)]
 struct Sealed {
-    skills: Box<[(u32, Registered<SkillFn>)]>,
+    skills: Box<[(u32, Registered<SkillCheckFn>)]>,
     comfort: Box<[Registered<ComfortFn>]>,
-    experience: Box<[Registered<ExperienceFn>]>,
+    experience: Box<[Registered<ExperiencePassFn>]>,
 }
 
 /// The engine pieces experience needs.
@@ -50,9 +51,9 @@ struct Levels {
     need: u32,
 }
 
-static SKILLS: Mutex<Vec<(u32, Registered<SkillFn>)>> = Mutex::new(Vec::new());
+static SKILLS: Mutex<Vec<(u32, Registered<SkillCheckFn>)>> = Mutex::new(Vec::new());
 static COMFORT: Mutex<Vec<Registered<ComfortFn>>> = Mutex::new(Vec::new());
-static EXPERIENCE_FILTERS: Mutex<Vec<Registered<ExperienceFn>>> = Mutex::new(Vec::new());
+static EXPERIENCE_FILTERS: Mutex<Vec<Registered<ExperiencePassFn>>> = Mutex::new(Vec::new());
 static SEALED: OnceLock<Sealed> = OnceLock::new();
 static LOADED: OnceLock<&'static Loader> = OnceLock::new();
 /// Where the fly mode gate's call returns to; 0 when the build lacks it.
@@ -118,7 +119,7 @@ pub(crate) fn register_skill(
     loader: &Loader,
     owner: usize,
     node: u32,
-    callback: SkillFn,
+    callback: SkillCheckFn,
     user: *mut c_void,
 ) -> Status {
     if too_late(loader) {
@@ -156,7 +157,7 @@ pub(crate) fn register_comfort(
 pub(crate) fn register_experience(
     loader: &Loader,
     owner: usize,
-    callback: ExperienceFn,
+    callback: ExperiencePassFn,
     user: *mut c_void,
 ) -> Status {
     if too_late(loader) {
@@ -277,8 +278,8 @@ unsafe fn override_skill(node: u32, bits: *const u64, tree: *const u8) -> u8 {
         // SAFETY: the callback lives in the mod's DLL and takes the pointer
         // it registered; the check is valid for the call.
         match unsafe { (r.callback)(&raw const check, user) } {
-            1 => return 1,
-            2 => return 0,
+            SkillCheck::UNLOCKED => return 1,
+            SkillCheck::LOCKED => return 0,
             _ => {}
         }
     }

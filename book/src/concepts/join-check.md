@@ -37,7 +37,7 @@ compares the fingerprint with its own:
   restarts, a note lists them, and the player joins.
 - **The server runs join mods the player lacks or has in another version.** A
   note lists each, with the server's version and the player's, and the client
-  does not join. Then the loader raises `JoinMissing` (below).
+  does not join. Then the loader raises `JoinRefused` (below).
 - **The same mods, another loader version.** A note says so, and the player
   joins.
 - **The server does not answer the query.** The player joins without a check.
@@ -54,7 +54,7 @@ with the server's value over its own file, which stays as it is. See
 ## Mods the player lacks
 
 When the check keeps a player out, the loader raises
-[`events::JoinMissing`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/events.rs)
+[`events::JoinRefused`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/events.rs)
 on the client after the player closes the note, and
 [`mods::join_missing()`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/mods.rs)
 lists the missing mods with the server's versions and update sources. An

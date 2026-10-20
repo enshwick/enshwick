@@ -36,17 +36,17 @@ The types are in
 
 | Event | Data | When | Thread |
 | --- | --- | --- | --- |
-| `Tick` | `TickData` (`step`) | after each simulation step: about 20 a second with nobody online, 60 with players; from before `WorldLoaded` | game |
+| `Ticked` | `TickData` (`step`) | after each simulation step: about 20 a second with nobody online, 60 with players; from before `WorldLoaded` | game |
 | `WorldLoaded` | none | the world finished loading and the server runs | game |
 | `WorldSaved` | none | a save of the world finished writing to disk | game |
 | `PlayerJoined` | `PlayerData` (`slot`, `entity`, `key`) | a player's character entered the world | game |
 | `PlayerLeft` | `PlayerData` | a player who joined is leaving; the character is still in the world | game |
-| `Shutdown` | none | an orderly stop begins, with the world and players alive; the final save follows | game |
+| `ShutdownStarted` | none | an orderly stop begins, with the world and players alive; the final save follows | game |
 | `BuildingPlaced` | `BuildingData` | a player placed a building piece or prop; raised after the step that placed it | game |
 | `BuildingRemoved` | `BuildingData` | a player picked up or tore down a placed piece; the entity no longer exists | game |
 | `SettingsChanged` | none | the mod's settings file changed, or a client's join values changed | loader |
 | `LoaderSettingsChanged` | none | `mod-configs/enshwick.toml` changed | loader |
-| `JoinMissing` | none | the join check kept this client out of a server | game |
+| `JoinRefused` | none | the join check kept this client out of a server | game |
 
 The data:
 
@@ -64,7 +64,7 @@ The data:
 [Settings](settings.md). The loader re-reads log levels on
 `LoaderSettingsChanged` for every mod by itself.
 
-`JoinMissing` is raised on the client, once the player closed the loader's
+`JoinRefused` is raised on the client, once the player closed the loader's
 note about mods the server runs and the client lacks or runs in another
 version.
 [`mods::join_missing()`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/mods.rs)
@@ -73,24 +73,24 @@ the game thread, so hand downloads to a thread of your own, as
 [`enshwick-updater`](https://github.com/themaiby/enshwick/tree/main/mods/enshwick-updater)
 does.
 
-## Engine events
+## Game events
 
 Beyond these, a mod observes the game's own ECS events, such as hits, deaths
-and levels gained; see [Engine events](game-events.md).
+and levels gained; see [Game events](game-events.md).
 
-## Server-only game events
+## Events from the server
 
-Every event from `Tick` to `BuildingRemoved` comes from the server, on its
+Every event from `Ticked` to `BuildingRemoved` comes from the server, on its
 game thread. Keep handlers short: the game waits for them. Leave slow work,
 such as file or network access, to a thread of your own.
 
 On a client they come from the built-in server while the client hosts a game,
 solo play included, and from nothing otherwise. Each hosted game starts with
-`WorldLoaded` and ends with `Shutdown`. The next game has a new server and new
-entities, so reset state tied to one game, such as entity ids, on `Shutdown`.
+`WorldLoaded` and ends with `ShutdownStarted`. The next game has a new server and new
+entities, so reset state tied to one game, such as entity ids, on `ShutdownStarted`.
 See [Sides and hosting](concepts/sides-and-hosting.md).
 
-A killed process raises no `Shutdown`.
+A killed process raises no `ShutdownStarted`.
 
 ## The scheduler
 
@@ -120,7 +120,7 @@ fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_
 }
 ```
 
-- Get the scheduler during `init`: it subscribes to `Tick` for you.
+- Get the scheduler during `init`: it subscribes to `Ticked` for you.
 - Then copy it anywhere and schedule from any thread, a hook or a background
   thread included.
 - Tasks run where the game's server code runs, so they may call into the game,

@@ -81,13 +81,16 @@ const CURSOR_ALTAR: &str = "80 7F 43 00 0F B6 9D A0 01 00 00 74 ?? F6 C3 10 75 ?
 const CURSOR_BALANCING_AT: usize = 35;
 const CURSOR_SPAN: usize = 0x400;
 /// The cursor's "too many altars" bit.
+/// Found on the 1.0 build 1269579, server and client.
 const MAX_ALTARS_REACHED: u32 = 0x40;
 /// The item flag that marks an altar.
+/// Found on the 1.0 build 1269579, server and client.
 const ITEM_ALTAR: usize = 0x43;
 
 /// The bases object: the count, each base 0x130 apart with its members mask
 /// at +0x140 and the zone boxes at +0x1330, 0x20 bytes each with the low
 /// corner at 0 and the high one at 0x10.
+/// Found on the 1.0 build 1269579, server and client.
 const BASE_COUNT: usize = 0x24;
 const BASE_STRIDE: usize = 0x130;
 const BASE_MEMBERS: usize = 0x140;
@@ -96,6 +99,7 @@ const ZONE_LIST_LEN: usize = 0x1338;
 const ZONE_SIZE: usize = 0x20;
 const ZONE_HIGH: usize = 0x10;
 /// The game lists at most 255 zones.
+/// Found on the 1.0 build 1269579, server and client.
 const MAX_LISTED: usize = 0xff;
 
 #[derive(Debug, Clone)]

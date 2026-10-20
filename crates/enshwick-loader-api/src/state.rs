@@ -5,6 +5,67 @@ use std::path::{Path, PathBuf};
 
 use crate::Off;
 
+/// Why a [`Store`], [`WorldStore`] or [`Hold`] could not read or write its
+/// file at run time.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::state::StoreError;
+///
+/// fn report(error: &StoreError) -> String {
+///     format!("kept in memory: {error}")
+/// }
+/// ```
+#[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
+pub enum StoreError {
+    /// The file could not be read, written or removed.
+    #[error("cannot read or write {}: {source}", path.display())]
+    #[non_exhaustive]
+    Io {
+        /// The file.
+        path: PathBuf,
+        /// What the system answered.
+        #[source]
+        source: std::io::Error,
+    },
+    /// The file does not parse into the stored type.
+    #[error("{} does not parse: {message}", path.display())]
+    #[non_exhaustive]
+    Parse {
+        /// The file.
+        path: PathBuf,
+        /// What the parser said.
+        message: String,
+    },
+    /// The value cannot be written as TOML.
+    #[error("the value for {} does not serialise: {message}", path.display())]
+    #[non_exhaustive]
+    Serialize {
+        /// The file.
+        path: PathBuf,
+        /// What the serialiser said.
+        message: String,
+    },
+}
+
+impl StoreError {
+    fn io(path: &Path, source: std::io::Error) -> Self {
+        Self::Io {
+            path: path.to_owned(),
+            source,
+        }
+    }
+}
+
+/// A store's error at init turns the mod off with its text.
+impl From<StoreError> for Off {
+    fn from(error: StoreError) -> Self {
+        Self::new(error.to_string())
+    }
+}
+
 /// A value kept in a TOML file under the mod's data folder, written atomically
 /// so a crash never leaves half a file.
 ///
@@ -15,14 +76,14 @@ use crate::Off;
 ///
 /// #[derive(Default, serde::Deserialize, serde::Serialize, PartialEq, Debug)]
 /// struct Progress {
-///     highest_xp: u64,
+///     highest_experience: u64,
 /// }
 ///
 /// # fn main() -> Result<(), enshwick_loader_api::Off> {
 /// let dir = std::env::temp_dir().join("enshwick-store-doc");
 /// let store: Store<Progress> = Store::new(&dir, "progress");
-/// store.save(&Progress { highest_xp: 42 })?;
-/// assert_eq!(store.load()?.highest_xp, 42);
+/// store.save(&Progress { highest_experience: 42 })?;
+/// assert_eq!(store.load()?.highest_experience, 42);
 /// # Ok(())
 /// # }
 /// ```
@@ -51,17 +112,20 @@ impl<T: serde::de::DeserializeOwned + serde::Serialize + Default> Store<T> {
     ///
     /// # Errors
     ///
-    /// [`Off`] when the file exists but does not parse into `T`.
+    /// [`StoreError`] when the file exists but cannot be read or does not
+    /// parse into `T`.
     ///
     /// # Examples
     ///
     /// See [`Store`].
-    pub fn load(&self) -> Result<T, Off> {
+    pub fn load(&self) -> Result<T, StoreError> {
         match std::fs::read_to_string(&self.path) {
-            Ok(text) => toml::from_str(&text)
-                .map_err(|e| Off::new(format!("state {}: {}", self.path.display(), e.message()))),
+            Ok(text) => toml::from_str(&text).map_err(|e| StoreError::Parse {
+                path: self.path.clone(),
+                message: e.message().to_owned(),
+            }),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(T::default()),
-            Err(e) => Err(Off::new(format!("state {}: {e}", self.path.display()))),
+            Err(e) => Err(StoreError::io(&self.path, e)),
         }
     }
 
@@ -69,31 +133,35 @@ impl<T: serde::de::DeserializeOwned + serde::Serialize + Default> Store<T> {
     ///
     /// # Errors
     ///
-    /// [`Off`] when the value cannot be serialised or the file written.
+    /// [`StoreError`] when the value cannot be serialised or the file
+    /// written.
     ///
     /// # Examples
     ///
     /// See [`Store`].
-    pub fn save(&self, value: &T) -> Result<(), Off> {
+    pub fn save(&self, value: &T) -> Result<(), StoreError> {
         write_atomically(&self.path, &self.text(value)?)
     }
 
     /// `value` as the file's text.
-    fn text(&self, value: &T) -> Result<String, Off> {
-        toml::to_string(value).map_err(|e| Off::new(format!("state {}: {e}", self.path.display())))
+    fn text(&self, value: &T) -> Result<String, StoreError> {
+        toml::to_string(value).map_err(|e| StoreError::Serialize {
+            path: self.path.clone(),
+            message: e.to_string(),
+        })
     }
 }
 
 /// Writes `text` to `path`: to a temporary file first, then renamed over the
 /// old one.
-fn write_atomically(path: &Path, text: &str) -> Result<(), Off> {
+fn write_atomically(path: &Path, text: &str) -> Result<(), StoreError> {
     if let Some(dir) = path.parent() {
-        std::fs::create_dir_all(dir).map_err(|e| Off::new(format!("state: {e}")))?;
+        std::fs::create_dir_all(dir).map_err(|e| StoreError::io(dir, e))?;
     }
     let temporary = path.with_extension("toml.tmp");
     std::fs::write(&temporary, text)
         .and_then(|()| std::fs::rename(&temporary, path))
-        .map_err(|e| Off::new(format!("state {}: {e}", path.display())))
+        .map_err(|e| StoreError::io(path, e))
 }
 
 /// The file a [`Hold`] keeps in its mod's data folder.
@@ -123,7 +191,7 @@ pub const HOLD_FILE: &str = "hold.txt";
 /// );
 /// hold.clear()?;
 /// assert!(holds(&data).is_empty());
-/// # Ok::<(), enshwick_loader_api::Off>(())
+/// # Ok::<(), enshwick_loader_api::state::StoreError>(())
 /// ```
 #[derive(Debug, Clone)]
 pub struct Hold {
@@ -149,34 +217,34 @@ impl Hold {
     ///
     /// # Errors
     ///
-    /// [`Off`] when the file cannot be written.
+    /// [`StoreError`] when the file cannot be written.
     ///
     /// # Examples
     ///
     /// See [`Hold`].
-    pub fn set(&self, reason: &str) -> Result<(), Off> {
+    pub fn set(&self, reason: &str) -> Result<(), StoreError> {
         if let Some(dir) = self.path.parent() {
-            std::fs::create_dir_all(dir).map_err(|e| Off::new(format!("hold: {e}")))?;
+            std::fs::create_dir_all(dir).map_err(|e| StoreError::io(dir, e))?;
         }
         let temporary = self.path.with_extension("txt.tmp");
         std::fs::write(&temporary, reason.lines().next().unwrap_or_default())
             .and_then(|()| std::fs::rename(&temporary, &self.path))
-            .map_err(|e| Off::new(format!("hold {}: {e}", self.path.display())))
+            .map_err(|e| StoreError::io(&self.path, e))
     }
 
     /// Releases the hold; nothing happens when it is not set.
     ///
     /// # Errors
     ///
-    /// [`Off`] when the file exists and cannot be removed.
+    /// [`StoreError`] when the file exists and cannot be removed.
     ///
     /// # Examples
     ///
     /// See [`Hold`].
-    pub fn clear(&self) -> Result<(), Off> {
+    pub fn clear(&self) -> Result<(), StoreError> {
         match std::fs::remove_file(&self.path) {
             Err(e) if e.kind() != std::io::ErrorKind::NotFound => {
-                Err(Off::new(format!("hold {}: {e}", self.path.display())))
+                Err(StoreError::io(&self.path, e))
             }
             _ => Ok(()),
         }
@@ -350,9 +418,9 @@ where
     ///
     /// # Errors
     ///
-    /// [`Off`] when the open world's file cannot be written or the new one
-    /// does not parse.
-    pub(crate) fn open(&self, key: &str) -> Result<(), Off> {
+    /// [`StoreError`] when the open world's file cannot be written or the
+    /// new one does not parse.
+    pub(crate) fn open(&self, key: &str) -> Result<(), StoreError> {
         self.close()?;
         let mut slot = self.lock();
         let store = Store::new(&slot.worlds.join(key), &slot.name);
@@ -370,8 +438,8 @@ where
     ///
     /// # Errors
     ///
-    /// [`Off`] when the file cannot be written; the store stays open.
-    pub(crate) fn close(&self) -> Result<(), Off> {
+    /// [`StoreError`] when the file cannot be written; the store stays open.
+    pub(crate) fn close(&self) -> Result<(), StoreError> {
         drop(self.wait_for_writes());
         self.flush()?;
         self.lock().open = None;
@@ -383,7 +451,7 @@ where
     ///
     /// # Errors
     ///
-    /// [`Off`] when the value cannot be written.
+    /// [`StoreError`] when the value cannot be written.
     ///
     /// # Examples
     ///
@@ -391,12 +459,12 @@ where
     /// # #[derive(Default, serde::Deserialize, serde::Serialize)]
     /// # struct Bounties { paid: u64 }
     /// fn now(store: &enshwick_loader_api::state::WorldStore<Bounties>) {
-    ///     if let Err(off) = store.flush() {
-    ///         enshwick_loader_api::warn!("{off}");
+    ///     if let Err(error) = store.flush() {
+    ///         enshwick_loader_api::warn!("{error}");
     ///     }
     /// }
     /// ```
-    pub fn flush(&self) -> Result<(), Off> {
+    pub fn flush(&self) -> Result<(), StoreError> {
         let mut slot = self.lock();
         if let Some(open) = slot.open.as_mut().filter(|open| open.changed) {
             open.store.save(&open.value)?;
@@ -414,8 +482,8 @@ where
         };
         let text = match open.store.text(&open.value) {
             Ok(text) => text,
-            Err(off) => {
-                crate::error!("{off}");
+            Err(error) => {
+                crate::error!("{error}");
                 return;
             }
         };
@@ -425,8 +493,8 @@ where
         let spawned = std::thread::Builder::new()
             .name("world-store".to_owned())
             .spawn(move || {
-                if let Err(off) = write_atomically(&path, &text) {
-                    crate::error!("{off}");
+                if let Err(error) = write_atomically(&path, &text) {
+                    crate::error!("{error}");
                 }
             });
         match spawned {

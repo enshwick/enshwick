@@ -602,7 +602,8 @@ impl Load<'_> {
     /// See [`Scheduler`](crate::schedule::Scheduler).
     pub fn scheduler(&mut self) -> Result<crate::schedule::Scheduler, Off> {
         let (scheduler, subscribe) = crate::schedule::Scheduler::get();
-        if subscribe && let Err(off) = self.on::<crate::events::Tick>(move |_| scheduler.run_due())
+        if subscribe
+            && let Err(off) = self.on::<crate::events::Ticked>(move |_| scheduler.run_due())
         {
             scheduler.unsubscribed();
             return Err(off);
@@ -668,9 +669,9 @@ impl Load<'_> {
         )
     }
 
-    /// The reflected engine event type `name`, such as
+    /// The reflected game event type `name`, such as
     /// `keen::ecs::EntityDiedEvent`, for
-    /// [`on_game_event`](Self::on_game_event).
+    /// [`on_raw_game_event`](Self::on_raw_game_event).
     ///
     /// # Errors
     ///
@@ -683,7 +684,7 @@ impl Load<'_> {
         crate::game_events::EventType::resolve(self, name)
     }
 
-    /// Calls `handler` on every engine event of type `ty`, on the server's
+    /// Calls `handler` on every game event of type `ty`, on the server's
     /// game thread before the systems of the next step run; see
     /// [`game_events`](crate::game_events). A panic in `handler` turns the
     /// mod off.
@@ -695,18 +696,18 @@ impl Load<'_> {
     /// # Examples
     ///
     /// See [`EventType::field`](crate::game_events::EventType::field).
-    pub fn on_game_event<F>(
+    pub fn on_raw_game_event<F>(
         &mut self,
         ty: crate::game_events::EventType,
         handler: F,
     ) -> Result<(), Off>
     where
-        F: Fn(&crate::game_events::GameEvent<'_>) + Send + Sync + 'static,
+        F: Fn(&crate::game_events::RawGameEvent<'_>) + Send + Sync + 'static,
     {
         self.game_events(ty.hash(), ty.name(), handler)
     }
 
-    /// Calls `handler` on every engine event of kind `E`, typed; see
+    /// Calls `handler` on every game event of kind `E`, typed; see
     /// [`game_events`](crate::game_events). A panic in `handler` turns the
     /// mod off.
     ///
@@ -718,20 +719,20 @@ impl Load<'_> {
     /// # Examples
     ///
     /// See [`Died`](crate::game_events::Died).
-    pub fn on_game<E: crate::game_events::Typed>(
+    pub fn on_game<E: crate::game_events::Kind>(
         &mut self,
         handler: impl Fn(&E) + Send + Sync + 'static,
     ) -> Result<(), Off> {
         E::subscribe(self, handler)
     }
 
-    /// Calls `handler` on every engine event of every type, for finding out
+    /// Calls `handler` on every game event of every type, for finding out
     /// what the game raises. Each event is copied for the mod, so leave this
     /// to development builds.
     ///
     /// # Errors
     ///
-    /// As for [`on_game_event`](Self::on_game_event).
+    /// As for [`on_raw_game_event`](Self::on_raw_game_event).
     ///
     /// # Examples
     ///
@@ -741,33 +742,33 @@ impl Load<'_> {
     /// static SEEN: AtomicU64 = AtomicU64::new(0);
     ///
     /// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
-    ///     load.on_every_game_event(|_event| {
+    ///     load.on_every_raw_game_event(|_event| {
     ///         SEEN.fetch_add(1, Ordering::Relaxed);
     ///     })
     /// }
     /// ```
-    pub fn on_every_game_event<F>(&mut self, handler: F) -> Result<(), Off>
+    pub fn on_every_raw_game_event<F>(&mut self, handler: F) -> Result<(), Off>
     where
-        F: Fn(&crate::game_events::GameEvent<'_>) + Send + Sync + 'static,
+        F: Fn(&crate::game_events::RawGameEvent<'_>) + Send + Sync + 'static,
     {
         self.game_events(0, "every type", handler)
     }
 
     fn game_events<F>(&mut self, type_hash: u32, what: &str, handler: F) -> Result<(), Off>
     where
-        F: Fn(&crate::game_events::GameEvent<'_>) + Send + Sync + 'static,
+        F: Fn(&crate::game_events::RawGameEvent<'_>) + Send + Sync + 'static,
     {
         let api = self.api();
         offered(
             api,
             core::mem::offset_of!(HostApi, game_event),
-            "engine events",
+            "game events",
         )?;
         let host = self.host.handle();
         hand_over(
             handler,
             |user| (api.game_event)(host, type_hash, deliver_game::<F>, user),
-            &format!("engine events of {what}"),
+            &format!("game events of {what}"),
         )
     }
 
@@ -817,8 +818,8 @@ impl Load<'_> {
         let opened = store.clone();
         self.on::<crate::events::WorldLoaded>(move |()| match crate::world::world_key(host) {
             Some(key) => {
-                if let Err(off) = opened.open(&key) {
-                    crate::error!("world store kept shut: {off}");
+                if let Err(error) = opened.open(&key) {
+                    crate::error!("world store kept shut: {error}");
                 }
             }
             None => crate::warn!("world store kept shut: the loader names no world"),
@@ -826,9 +827,9 @@ impl Load<'_> {
         let saved = store.clone();
         self.on::<crate::events::WorldSaved>(move |()| saved.flush_in_background())?;
         let closed = store.clone();
-        self.on::<crate::events::Shutdown>(move |()| {
-            if let Err(off) = closed.close() {
-                crate::error!("{off}");
+        self.on::<crate::events::ShutdownStarted>(move |()| {
+            if let Err(error) = closed.close() {
+                crate::error!("{error}");
             }
         })?;
         Ok(store)
@@ -959,23 +960,19 @@ unsafe extern "system" fn deliver<F: Fn(*const c_void)>(
     crate::host::guard("panic in an event handler", || (), || handler(data));
 }
 
-/// Runs an engine event handler; `user` is the handler boxed by
+/// Runs a game event handler; `user` is the handler boxed by
 /// `Load::game_events`, alive for the process.
-unsafe extern "system" fn deliver_game<F: Fn(&crate::game_events::GameEvent<'_>)>(
+unsafe extern "system" fn deliver_game<F: Fn(&crate::game_events::RawGameEvent<'_>)>(
     event: *const crate::abi::GameEventData,
     user: *mut c_void,
 ) {
     // SAFETY: `user` is the leaked `Box<F>` this function was registered with.
     let handler = unsafe { &*user.cast::<F>() };
     // SAFETY: the loader passes its event, valid for the call.
-    let Some(event) = (unsafe { crate::game_events::GameEvent::from_raw(event) }) else {
+    let Some(event) = (unsafe { crate::game_events::RawGameEvent::from_raw(event) }) else {
         return;
     };
-    crate::host::guard(
-        "panic in an engine event handler",
-        || (),
-        || handler(&event),
-    );
+    crate::host::guard("panic in a game event handler", || (), || handler(&event));
 }
 
 /// A mid-function hook's handler and where it runs, for the fault message.

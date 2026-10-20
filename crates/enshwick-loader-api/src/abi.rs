@@ -713,7 +713,7 @@ pub struct CommandCall {
 /// A mod's handler for a chat command: the call, the pointer given at
 /// registration, and where to write the reply for the typing player. The
 /// reply stays valid until the handler runs again; empty for none.
-pub type CommandFn =
+pub type CommandCallFn =
     unsafe extern "system" fn(call: *const CommandCall, user: *mut c_void, reply: *mut Str);
 
 /// A mod's status source: the pointer given at registration and where to
@@ -764,7 +764,7 @@ pub struct RenameCall {
 
 /// A mod's rename filter: the call and the pointer given at registration;
 /// returns 1 to let the rename through, 0 to refuse it.
-pub type RenameFn = unsafe extern "system" fn(call: *const RenameCall, user: *mut c_void) -> u8;
+pub type RenameCallFn = unsafe extern "system" fn(call: *const RenameCall, user: *mut c_void) -> u8;
 
 /// A game resource's key: its GUID in memory order, its type hash and part.
 ///
@@ -1637,7 +1637,7 @@ impl InventoryOpResult {
 }
 
 /// What became of an [`InventoryRequest`], passed to its
-/// [`InventoryDoneFn`].
+/// [`InventoryResultFn`].
 ///
 /// # Examples
 ///
@@ -1676,7 +1676,7 @@ impl InventoryResult {
 
 /// Receives the [`InventoryResult`] of a request, on the server's game thread
 /// after a simulation step; it must not unwind.
-pub type InventoryDoneFn =
+pub type InventoryResultFn =
     unsafe extern "system" fn(result: *const InventoryResult, user: *mut c_void);
 
 /// An item's static data, from [`HostApi::item_info`].
@@ -2010,14 +2010,19 @@ pub type SummonFn = unsafe extern "system" fn(summon: *const Summon, user: *mut 
 
 /// The client's survivor menu merging the statuses of every entity of one
 /// survivor: the survivor, `count` status bytes at `statuses`, valid for the
-/// call, and the pointer given at registration; returns 0x100 or-ed with the
-/// byte to show, or 0 to leave the game's.
+/// call, and the pointer given at registration; returns
+/// [`SURVIVOR_STATUS_SET`] or-ed with the byte to show, or 0 to leave the
+/// game's.
 pub type SurvivorStatusFn = unsafe extern "system" fn(
     survivor: u32,
     statuses: *const u8,
     count: usize,
     user: *mut c_void,
 ) -> u32;
+
+/// The bit of a [`SurvivorStatusFn`] answer that says its low byte is the
+/// status to show.
+pub const SURVIVOR_STATUS_SET: u32 = 0x100;
 
 /// A player about to interact with an entity, as
 /// [`HostApi::interaction_filter`] hands it on: open it, move items in or out
@@ -2118,11 +2123,19 @@ impl SkillCheck {
     pub const OTHER: u32 = 0;
     /// The building fly mode gate, on both sides.
     pub const FLY_MODE: u32 = 1;
+    /// A [`SkillCheckFn`] answer: the game's own.
+    pub const VANILLA: u8 = 0;
+    /// A [`SkillCheckFn`] answer: the skill counts as unlocked.
+    pub const UNLOCKED: u8 = 1;
+    /// A [`SkillCheckFn`] answer: the skill counts as locked.
+    pub const LOCKED: u8 = 2;
 }
 
 /// A skill override: the check and the pointer given at registration;
-/// returns 0 for the game's answer, 1 for unlocked, 2 for locked.
-pub type SkillFn = unsafe extern "system" fn(check: *const SkillCheck, user: *mut c_void) -> u8;
+/// returns [`SkillCheck::VANILLA`], [`SkillCheck::UNLOCKED`] or
+/// [`SkillCheck::LOCKED`].
+pub type SkillCheckFn =
+    unsafe extern "system" fn(check: *const SkillCheck, user: *mut c_void) -> u8;
 
 /// A comfort provider in a base registering its comfort for its category,
 /// as [`HostApi::comfort_filter`] hands it on.
@@ -2209,13 +2222,13 @@ pub struct ExperiencePass {
 }
 
 /// An experience filter: the pass and the pointer given at registration.
-pub type ExperienceFn = unsafe extern "system" fn(pass: *mut ExperiencePass, user: *mut c_void);
+pub type ExperiencePassFn = unsafe extern "system" fn(pass: *mut ExperiencePass, user: *mut c_void);
 
 /// A mod's altar limit: the Flame level and the pointer given at
 /// registration; returns how many altars that level allows.
 pub type AltarLimitFn = unsafe extern "system" fn(flame_level: u32, user: *mut c_void) -> u8;
 
-/// An engine event handed to a [`GameEventFn`], from the ECS event streams
+/// A game event handed to a [`GameEventFn`], from the ECS event streams
 /// of the server's systems.
 ///
 /// # Examples
@@ -2245,7 +2258,7 @@ pub struct GameEventData {
     pub data: *const u8,
 }
 
-/// A mod's handler for engine events: the event and the pointer given at
+/// A mod's handler for game events: the event and the pointer given at
 /// subscription. It must not unwind.
 pub type GameEventFn = unsafe extern "system" fn(event: *const GameEventData, user: *mut c_void);
 
@@ -2439,7 +2452,7 @@ pub struct HostApi {
         me: ModHandle,
         name: Str,
         help: Str,
-        callback: CommandFn,
+        callback: CommandCallFn,
         user: *mut c_void,
     ) -> Status,
     /// Sends `text` to the chat of the player whose account key is `to`, or of
@@ -2455,7 +2468,7 @@ pub struct HostApi {
     /// rename of an entity; any filter returning 0 refuses it. Allowed during
     /// `enshwick_mod_init` only. Since minor 9.
     pub rename_filter:
-        extern "system" fn(me: ModHandle, callback: RenameFn, user: *mut c_void) -> Status,
+        extern "system" fn(me: ModHandle, callback: RenameCallFn, user: *mut c_void) -> Status,
     /// Up to `capacity` of the server's join mods that the last refused join
     /// found missing on this client or in another version, and how many
     /// there are; laid out as [`HostApi::mods`] lays out its entries. Each
@@ -2493,7 +2506,7 @@ pub struct HostApi {
     pub inventory_submit: extern "system" fn(
         me: ModHandle,
         request: *const InventoryRequest,
-        done: InventoryDoneFn,
+        done: InventoryResultFn,
         user: *mut c_void,
     ) -> Status,
     /// Adds `callback` with `user` to the mod's status sources: the loader
@@ -2583,7 +2596,7 @@ pub struct HostApi {
     pub skill_override: extern "system" fn(
         me: ModHandle,
         node: u32,
-        callback: SkillFn,
+        callback: SkillCheckFn,
         user: *mut c_void,
     ) -> Status,
     /// Calls `callback` with `user` when a comfort provider registers its
@@ -2597,7 +2610,7 @@ pub struct HostApi {
     /// order. Server's worker threads. Allowed during `enshwick_mod_init`
     /// only. Since minor 18.
     pub experience_filter:
-        extern "system" fn(me: ModHandle, callback: ExperienceFn, user: *mut c_void) -> Status,
+        extern "system" fn(me: ModHandle, callback: ExperiencePassFn, user: *mut c_void) -> Status,
     /// Makes `callback` with `user` decide how many altars each Flame level
     /// allows, on both sides; one mod at a time. Allowed during
     /// `enshwick_mod_init` only. Since minor 19.
@@ -2613,8 +2626,8 @@ pub struct HostApi {
     /// [`Status::MISSING`] before the first one or without the raised limit.
     /// Any thread. Since minor 19.
     pub base_zones: extern "system" fn(me: ModHandle, zones: *mut u32, bases: *mut u32) -> Status,
-    /// Calls `callback` with `user` on every engine event of the reflected
-    /// type whose hash is `type_hash`, or on every engine event for 0, on
+    /// Calls `callback` with `user` on every game event of the reflected
+    /// type whose hash is `type_hash`, or on every game event for 0, on
     /// the server's game thread before the systems of the next step run.
     /// Allowed during `enshwick_mod_init` only. Since minor 20.
     pub game_event: extern "system" fn(

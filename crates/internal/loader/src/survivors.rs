@@ -26,6 +26,7 @@ const MOVE_WINDOW: Duration = Duration::from_secs(2);
 const TYPE_SEARCH: u16 = 4096;
 /// `ui_npc_status`'s iterator: a header, `ClientActiveNpcState`,
 /// `NetworkComfort`, `RenderTransform`, UI offsets, `UiPlayData`.
+/// Found on the 1.0 build 1269579, server and client.
 const UI_WORDS: usize = 6;
 const UI_STATE: usize = 1;
 const UI_PLAY_DATA: usize = 5;
@@ -1117,7 +1118,7 @@ unsafe fn merge_statuses(ctx: *mut u64) {
             // SAFETY: the callback lives in the mod's DLL and takes the
             // pointer it registered; the statuses are valid for the call.
             let answer = unsafe { (merge.callback)(id, bits.as_ptr(), bits.len(), user) };
-            if answer & 0x100 == 0 {
+            if answer & enshwick_loader_api::abi::SURVIVOR_STATUS_SET == 0 {
                 continue;
             }
             // SAFETY: the play data's survivor record map.

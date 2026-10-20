@@ -77,8 +77,8 @@ fn maybe_solve(state: &mut State, control: ZoneControl) {
             state.solving = false;
             match solved {
                 Ok(sizes) => {
-                    if let Err(off) = control.set(&sizes) {
-                        enshwick_loader_api::warn!("{off}");
+                    if let Err(error) = control.set(&sizes) {
+                        enshwick_loader_api::warn!("{error}");
                     }
                     state.solved = Some(input);
                     // The altars may have moved on while this ran.

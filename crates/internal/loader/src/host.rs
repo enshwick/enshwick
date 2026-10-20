@@ -1182,7 +1182,7 @@ extern "system" fn item_info(me: ModHandle, item: u32, out: *mut api_frame::Item
 extern "system" fn inventory_submit(
     me: ModHandle,
     request: *const api_frame::InventoryRequest,
-    done: api_frame::InventoryDoneFn,
+    done: api_frame::InventoryResultFn,
     user: *mut core::ffi::c_void,
 ) -> Status {
     entry("inventory_submit", || {
@@ -1369,7 +1369,7 @@ extern "system" fn command(
     me: ModHandle,
     name: Str,
     help: Str,
-    callback: api_frame::CommandFn,
+    callback: api_frame::CommandCallFn,
     user: *mut core::ffi::c_void,
 ) -> Status {
     entry("command", || {
@@ -1414,7 +1414,7 @@ extern "system" fn set_label(me: ModHandle, entity: u32, label: Str) -> Status {
 
 extern "system" fn rename_filter(
     me: ModHandle,
-    callback: api_frame::RenameFn,
+    callback: api_frame::RenameCallFn,
     user: *mut core::ffi::c_void,
 ) -> Status {
     entry("rename_filter", || {
@@ -1607,7 +1607,7 @@ extern "system" fn interaction_filter(
 extern "system" fn skill_override(
     me: ModHandle,
     node: u32,
-    callback: api_frame::SkillFn,
+    callback: api_frame::SkillCheckFn,
     user: *mut core::ffi::c_void,
 ) -> Status {
     entry("skill_override", || match caller_index(me) {
@@ -1629,7 +1629,7 @@ extern "system" fn comfort_filter(
 
 extern "system" fn experience_filter(
     me: ModHandle,
-    callback: api_frame::ExperienceFn,
+    callback: api_frame::ExperiencePassFn,
     user: *mut core::ffi::c_void,
 ) -> Status {
     entry("experience_filter", || match caller_index(me) {

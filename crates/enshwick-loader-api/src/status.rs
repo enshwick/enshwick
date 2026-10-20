@@ -4,7 +4,7 @@
 //!
 //! The loader fills the summary with what it knows of every mod: version,
 //! whether it runs, why it was turned off, its hooks and their calls. A mod
-//! adds its own counters with [`Load::status`]: a closure returning a few
+//! adds its own counters with [`Load::add_status`]: a closure returning a few
 //! lines, called only when the summary is written, so keeping the numbers
 //! (atomics, say) is the only cost while the game runs.
 
@@ -55,10 +55,10 @@ impl Load<'_> {
     /// static MERGED: AtomicU64 = AtomicU64::new(0);
     ///
     /// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
-    ///     load.status(|| format!("{} zones merged", MERGED.load(Ordering::Relaxed)))
+    ///     load.add_status(|| format!("{} zones merged", MERGED.load(Ordering::Relaxed)))
     /// }
     /// ```
-    pub fn status<F>(&mut self, source: F) -> Result<(), Off>
+    pub fn add_status<F>(&mut self, source: F) -> Result<(), Off>
     where
         F: Fn() -> String + Send + Sync + 'static,
     {

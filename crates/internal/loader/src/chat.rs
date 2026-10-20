@@ -16,7 +16,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock, PoisonError};
 
 use enshwick_loader_api::abi::{
-    CommandCall, CommandFn, Header, HookFlags, PlayerInfo, Status, Str,
+    CommandCall, CommandCallFn, Header, HookFlags, PlayerInfo, Status, Str,
 };
 use enshwick_loader_api::commands::{is_valid_name, parse_line};
 
@@ -40,7 +40,7 @@ struct Command {
     owner: usize,
     name: String,
     help: String,
-    callback: CommandFn,
+    callback: CommandCallFn,
     user: usize,
 }
 
@@ -104,7 +104,7 @@ pub(crate) fn register(
     owner: usize,
     name: &str,
     help: &str,
-    callback: CommandFn,
+    callback: CommandCallFn,
     user: *mut c_void,
 ) -> Status {
     if SEALED.load(Ordering::Acquire) {

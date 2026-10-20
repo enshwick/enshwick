@@ -110,17 +110,17 @@ impl Mod for AdminTools {
             game,
         });
         let old = Arc::clone(&tools);
-        load.command(
+        load.add_command(
             "admin",
             "test-server tools for administrators; /admin help",
             move |ctx, args| admin(&tools, ctx, args),
         )?;
-        load.command(
+        load.add_command(
             "dev",
             "the old name of /admin, gone in the next release",
             move |ctx, args| renamed(&admin(&old, ctx, args)),
         )?;
-        load.status(|| {
+        load.add_status(|| {
             let state = if ENABLED.load(Ordering::Acquire) {
                 "on"
             } else {

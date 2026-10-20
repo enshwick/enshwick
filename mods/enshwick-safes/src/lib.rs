@@ -26,7 +26,7 @@ use enshwick_loader_api::abi::Side;
 use enshwick_loader_api::commands::Rename;
 use enshwick_loader_api::ecs::Entity;
 use enshwick_loader_api::events::{
-    BuildingPlaced, BuildingRemoved, PlayerJoined, PlayerLeft, Shutdown, WorldSaved,
+    BuildingPlaced, BuildingRemoved, PlayerJoined, PlayerLeft, ShutdownStarted, WorldSaved,
 };
 use enshwick_loader_api::i18n::Language;
 use enshwick_loader_api::state::Store;
@@ -167,8 +167,8 @@ fn save(store: &'static Store<Owners>) {
             // Read under the lock: the last write is always the newest map,
             // never an older copy whose thread happened to run last.
             let owners = Owners::from_map(&ACCESS.owners.load());
-            if let Err(off) = store.save(&owners) {
-                enshwick_loader_api::warn!("owners not saved: {off}");
+            if let Err(error) = store.save(&owners) {
+                enshwick_loader_api::warn!("owners not saved: {error}");
             }
         });
     if spawned.is_err() {
@@ -247,7 +247,7 @@ fn guard(load: &mut Load<'_>, phrases: &'static Phrases) -> Result<(), Off> {
     load.on::<WorldSaved>(move |()| save(store))?;
     if client {
         // Entities and players belong to one hosted game; owners stay.
-        load.on::<Shutdown>(|()| ACCESS.forget_session())?;
+        load.on::<ShutdownStarted>(|()| ACCESS.forget_session())?;
         enshwick_loader_api::info!("the Safe's checks act while this client hosts a game");
     }
     load.on_config_change(|settings: Settings| {
@@ -257,7 +257,7 @@ fn guard(load: &mut Load<'_>, phrases: &'static Phrases) -> Result<(), Off> {
     })?;
     label_seen(load, world, phrases, store)?;
     load.on_rename(move |rename| may_rename(world, rename))?;
-    load.command(
+    load.add_command(
         "safe",
         &phrases.say("command.help", &[]),
         move |ctx, args| command::run(&world, phrases, ctx, args, || save(store)),
