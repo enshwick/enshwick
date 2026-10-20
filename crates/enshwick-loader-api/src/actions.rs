@@ -377,7 +377,9 @@ impl Actions {
     /// # Errors
     ///
     /// [`WorldError::Gone`] for an entity not in the world or without a
-    /// place, [`WorldError::WrongThread`] off the game thread and
+    /// place, [`WorldError::Refused`] for one the game's teleport does not
+    /// move, such as a prop (it moves actors and characters),
+    /// [`WorldError::WrongThread`] off the game thread and
     /// [`WorldError::Missing`] on a build without teleports.
     ///
     /// # Examples

@@ -11,7 +11,9 @@
 //! A teleport is the game's admin teleport: a request in the entity world's
 //! first command buffer that gives the entity a `Teleport` component after
 //! the next step; the game's `teleport` system then moves the entity, counts
-//! the teleport for the clients and removes the component.
+//! the teleport for the clients and removes the component. That system moves
+//! only entities that count their teleports, actors and characters, so the
+//! loader refuses any other.
 
 use std::sync::OnceLock;
 
@@ -80,6 +82,8 @@ struct Layout {
     world_entities: usize,
     teleport: Option<TeleportLayout>,
     transform: u32,
+    /// `TeleportCount`, which the game's teleport counts up on what it moves.
+    teleport_count: u32,
 }
 
 static LAYOUT: OnceLock<Option<Layout>> = OnceLock::new();
@@ -147,6 +151,7 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
                 world_entities: loader.offset("world.entities")?,
                 teleport,
                 transform: hash_of("keen::ecs::CurrentTransform")?,
+                teleport_count: hash_of("keen::ecs::TeleportCount")?,
             })
         })
         .as_ref()
@@ -215,6 +220,11 @@ pub(crate) fn teleport(loader: &Loader, request: &TeleportRequest) -> Result<(),
         return Err(Status::BAD_ARGS);
     }
     let current = crate::world::component(loader, request.entity, layout.transform)?;
+    // The game's teleport moves only what counts its teleports, actors and
+    // characters; a prop would keep the component and stay.
+    if crate::world::component(loader, request.entity, layout.teleport_count).is_err() {
+        return Err(Status::REFUSED);
+    }
     let orientation: [f32; 4] = if request.flags & TeleportRequest::ORIENTED == 0 {
         // SAFETY: a live CurrentTransform is a WorldTransform.
         unsafe { crate::world::read(current.addr(), teleport.current_orientation) }

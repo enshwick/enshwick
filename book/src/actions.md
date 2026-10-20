@@ -69,7 +69,9 @@ teleport does: after the next step the entity jumps to `position`, in metres,
 and clients see it arrive. `Teleport::new()` keeps the entity's orientation;
 `.best_spawn()` lets the game look for a free spot nearby to stand on, as it
 does for respawns, and `.facing_yaw(radians)` turns the entity on arrival.
-It fails with `Gone` for an entity not in the world or without a place.
+It fails with `Gone` for an entity not in the world or without a place, and
+with `Refused` for one the game's teleport does not move: it moves actors and
+characters, not props.
 
 Every call works on the server's game thread, from a game event, a
 [scheduler](events.md#the-scheduler) task or a [command](commands.md); on a

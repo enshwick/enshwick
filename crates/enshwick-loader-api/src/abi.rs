@@ -2726,7 +2726,9 @@ pub struct HostApi {
     pub emit:
         extern "system" fn(me: ModHandle, type_hash: u32, data: *const u8, size: u32) -> Status,
     /// Asks the server to move an entity as its admin teleport does, after
-    /// the next step; [`Status::MISSING`] for an entity not in the world.
+    /// the next step; [`Status::MISSING`] for an entity not in the world,
+    /// [`Status::REFUSED`] for one the game's teleport does not move, as a
+    /// prop: it moves actors and characters.
     /// On the server's game thread only. Since minor 23.
     pub teleport: extern "system" fn(me: ModHandle, request: *const TeleportRequest) -> Status,
 }
