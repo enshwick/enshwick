@@ -139,6 +139,17 @@ values on a loader thread. A file that no longer parses or validates is logged
 and skipped, and the running values stay. Keep what a hook reads in atomics or
 an `ArcSwap`, so the handler can replace it under a running game.
 
+Some values must be equal on the server and its players, such as a table the
+client's interface also reads. Mark such a field `#[config(sync)]`: the server
+advertises the join values of each join mod in its Steam rules
+(`enshwick.sync.<id>`), and they count in the mod set's fingerprint. A client
+that joins calls the mod's `on_config_change` handler with its settings and the
+server's join values over them; its file stays as it is. Joining a server
+without them calls the handler with the file's values again. Apply join values
+in `on_config_change`: a mod without a handler runs with its file's values
+until the next start. A server's edited join values reach players when they
+next join.
+
 `Load::settings(DEFAULTS)` returns the mod's `mod-configs/<id>.toml`, written
 from `DEFAULTS` on first start, parsed with serde into your type. Write
 `DEFAULTS` as the commented file a player should see, and use

@@ -1,7 +1,10 @@
 //! The client's join check: before it joins a server, it compares the server's
 //! mod set with its own. Mods the server does not run are turned off on the
 //! client, with a note; when the server runs mods the client lacks, or in
-//! another version, the client says which and does not join.
+//! another version, the client says which and does not join. A client that
+//! joins runs its join mods with the server's join values over its own
+//! settings files, and with its files' values again on joining a server
+//! without them; the files stay as they are.
 //!
 //! The game asks to change servers with a request that starts with the server's
 //! query `ip:port`. The hook lets the join go ahead and asks the server, over
@@ -155,6 +158,48 @@ pub fn mod_rules_value(reply: &[u8]) -> String {
         .join(",")
 }
 
+/// The join values a server advertises for mod `id` across its rules, `None`
+/// when it advertises none.
+#[must_use]
+pub fn sync_value(reply: &[u8], id: &str) -> Option<String> {
+    let base = format!("{}.{id}", crate::advertise::RULE_SYNC);
+    let value: String = (0..crate::advertise::SYNC_RULES)
+        .map_while(|i| rule(reply, &crate::advertise::part_name(&base, i)))
+        .collect();
+    (!value.is_empty()).then_some(value)
+}
+
+/// The join values a server advertises for each of the mods `ids`.
+#[must_use]
+pub fn server_values<'a>(
+    reply: &[u8],
+    ids: impl IntoIterator<Item = &'a str>,
+) -> BTreeMap<String, String> {
+    ids.into_iter()
+        .filter_map(|id| Some((id.to_owned(), sync_value(reply, id)?)))
+        .collect()
+}
+
+/// The mods whose join values change on joining a server with `incoming`,
+/// from each mod's id (empty for a mod that does not join) and the server
+/// values it runs with now: the mod's index and the values it runs with
+/// next, `None` for its settings file's.
+#[must_use]
+pub fn changes<'a>(
+    current: impl IntoIterator<Item = (&'a str, Option<&'a str>)>,
+    incoming: &BTreeMap<String, String>,
+) -> Vec<(usize, Option<String>)> {
+    current
+        .into_iter()
+        .enumerate()
+        .filter(|(_, (id, _))| !id.is_empty())
+        .filter_map(|(index, (id, held))| {
+            let next = incoming.get(id).map(String::as_str);
+            (next != held).then(|| (index, next.map(str::to_owned)))
+        })
+        .collect()
+}
+
 /// The `ip:port` at the start of a server change request.
 #[must_use]
 pub fn address(request: &[u8]) -> Option<SocketAddr> {
@@ -210,6 +255,7 @@ pub(crate) use runtime::{NEXT, detour};
 
 #[cfg(windows)]
 mod runtime {
+    use std::collections::BTreeMap;
     use std::sync::OnceLock;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -224,11 +270,11 @@ mod runtime {
     /// The request holds the address in its first 0x40 bytes.
     const ADDRESS_BYTES: usize = 0x40;
 
-    static OURS: OnceLock<(String, String)> = OnceLock::new();
+    static OURS: OnceLock<Vec<(String, String)>> = OnceLock::new();
 
-    /// Sets the client's own fingerprint and mod list.
-    pub(crate) fn set_ours(fingerprint: String, mods: String) {
-        let _first = OURS.set((fingerprint, mods));
+    /// Sets the client's own join mods, `(id, version)`.
+    pub(crate) fn set_ours(mods: Vec<(String, String)>) {
+        let _first = OURS.set(mods);
     }
 
     /// The loader's link on `server_change`.
@@ -250,26 +296,39 @@ mod runtime {
         unsafe { next(provider, request) }
     }
 
-    /// Compares mod sets, turns off what the server lacks and tells the
-    /// player; false when the client must not join.
+    /// Compares mod sets, turns off what the server lacks, takes the server's
+    /// join values and tells the player; false when the client must not join.
     fn check(request: &[u8]) -> bool {
-        let (Some(address), Some((ours, ours_mods))) = (super::address(request), OURS.get()) else {
+        let (Some(address), Some(mods)) = (super::address(request), OURS.get()) else {
             return true;
         };
         let reply = super::query_rules(address).ok();
         let Some(reply) = reply else {
             // A server that does not answer the query: nothing to compare.
             crate::log!(INFO, "joining {address}: no rules answer");
+            crate::host::apply_join_values(&BTreeMap::new());
             return true;
         };
-        let server = super::rule(&reply, super::super::advertise::RULE)
+        let server = super::rule(&reply, crate::advertise::RULE)
             .map(|fingerprint| (fingerprint, super::mod_rules_value(&reply)));
+        // The client runs with the server's join values, so its own
+        // fingerprint counts them.
+        let values = if server.is_some() {
+            super::server_values(&reply, mods.iter().map(|(id, _)| id.as_str()))
+        } else {
+            BTreeMap::new()
+        };
+        let ours = crate::advertise::fingerprint(env!("CARGO_PKG_VERSION"), mods, &values);
+        let ours_mods = crate::advertise::mod_list(mods);
         crate::log!(INFO, "joining {address}: server {server:?}, ours {ours}");
         let plan = super::plan(
-            ours,
-            ours_mods,
+            &ours,
+            &ours_mods,
             server.as_ref().map(|(f, m)| (f.as_str(), m.as_str())),
         );
+        if plan.missing.is_empty() {
+            crate::host::apply_join_values(&values);
+        }
         for id in &plan.turn_off {
             crate::host::turn_off_mod(
                 id,
@@ -371,6 +430,56 @@ mod tests {
             reply.push(0);
         }
         assert_eq!(mod_rules_value(&reply), "a@1,b@1,c@1");
+    }
+
+    fn reply(rules: &[(&str, &str)]) -> Vec<u8> {
+        let mut reply = vec![0xff, 0xff, 0xff, 0xff, b'E', 0, 0];
+        for (key, value) in rules {
+            for part in [key, value] {
+                reply.extend_from_slice(part.as_bytes());
+                reply.push(0);
+            }
+        }
+        reply
+    }
+
+    #[test]
+    fn join_values_are_read_across_rules_per_mod() {
+        let advertised = crate::advertise::sync_rules("count", &"x".repeat(200)).unwrap();
+        let mut rules: Vec<(&str, &str)> = advertised
+            .iter()
+            .map(|(k, v)| (k.as_str(), v.as_str()))
+            .collect();
+        rules.push(("enshwick.sync.zones", "{ a = 1 }"));
+        rules.push(("enshwick.sync.gone", ""));
+        let reply = reply(&rules);
+        assert_eq!(sync_value(&reply, "count"), Some("x".repeat(200)));
+        assert_eq!(sync_value(&reply, "gone"), None);
+        assert_eq!(sync_value(&reply, "missing"), None);
+        assert_eq!(
+            server_values(&reply, ["zones", "gone", "other"]),
+            BTreeMap::from([("zones".to_owned(), "{ a = 1 }".to_owned())])
+        );
+    }
+
+    #[test]
+    fn only_mods_whose_join_values_change_are_told() {
+        let incoming = BTreeMap::from([
+            ("a".to_owned(), "{ x = 1 }".to_owned()),
+            ("b".to_owned(), "{ y = 2 }".to_owned()),
+        ]);
+        let current = [
+            ("a", Some("{ x = 1 }")),
+            ("b", None),
+            ("c", Some("{ z = 3 }")),
+            ("", None),
+            ("d", None),
+        ];
+        assert_eq!(
+            changes(current, &incoming),
+            [(1, Some("{ y = 2 }".to_owned())), (2, None)]
+        );
+        assert!(changes([("a", None)], &BTreeMap::new()).is_empty());
     }
 
     #[test]

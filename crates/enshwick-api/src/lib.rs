@@ -52,6 +52,10 @@
 /// The version of this crate, which a mod's generated `Cargo.toml` pins.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
+// The derive names this crate by its path, as mods see it.
+#[cfg(test)]
+extern crate self as enshwick_api;
+
 pub mod abi;
 pub mod config;
 pub mod content;

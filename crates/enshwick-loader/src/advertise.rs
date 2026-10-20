@@ -3,10 +3,16 @@
 //! Once the dedicated server has logged on to Steam, the loader appends
 //! `[enshwick <fingerprint>]` to its Steam name and sets the rules `enshwick`
 //! (the fingerprint) and `enshwick.mods`, `enshwick.mods.1`, ... (the mods that
-//! count, `id@version`, split to fit Steam's rule length).
+//! count, `id@version`, split to fit Steam's rule length), and for each join
+//! mod with join values `enshwick.sync.<id>`, `enshwick.sync.<id>.1`, ...
+//! (its values as an inline TOML table, split the same way).
 //! Players see it before they join, with or without mods, and a modded client
 //! compares it with its own. The game sets its name once at start, so the
-//! loader sets it again now and then.
+//! loader sets it again now and then, and with it the join values, which a
+//! settings change may have changed.
+
+use std::collections::BTreeMap;
+use std::fmt::Write as _;
 
 /// Steam keeps at most 63 bytes of a server name.
 const NAME_LIMIT: usize = 63;
@@ -19,18 +25,121 @@ pub const RULE: &str = "enshwick";
 pub const RULE_MODS: &str = "enshwick.mods";
 /// The most rules the mod list spreads over.
 pub const MOD_RULES: usize = 16;
+/// The prefix of a mod's join value rules, `enshwick.sync.<id>`.
+pub const RULE_SYNC: &str = "enshwick.sync";
+/// The most rules one mod's join values spread over.
+pub const SYNC_RULES: usize = 8;
 
-/// The fingerprint of a mod set: FNV-1a over the loader version and every
-/// `id@version`, sorted, as eight hex digits.
+/// The fingerprint of a mod set: FNV-1a over the loader version, every
+/// `id@version` and every mod's join values, sorted, as eight hex digits.
+/// Without join values it is the fingerprint older loaders compute.
 #[must_use]
-pub fn fingerprint(loader_version: &str, mods: &[(String, String)]) -> String {
+pub fn fingerprint(
+    loader_version: &str,
+    mods: &[(String, String)],
+    synced: &BTreeMap<String, String>,
+) -> String {
     let mut entries: Vec<String> = mods
         .iter()
         .map(|(id, version)| format!("{id}@{version}"))
         .collect();
     entries.sort();
-    let text = format!("enshwick@{loader_version}\n{}", entries.join("\n"));
+    let mut text = format!("enshwick@{loader_version}\n{}", entries.join("\n"));
+    for (id, values) in synced {
+        let _written = write!(text, "\nsync {id} {values}");
+    }
     format!("{:08x}", enshwick_reflect::fnv1a32(text.as_bytes()))
+}
+
+/// `value` cut into parts of at most [`RULE_LIMIT`] bytes, on character
+/// boundaries; one empty part for an empty value.
+#[must_use]
+pub fn split(value: &str) -> Vec<&str> {
+    let mut parts = Vec::new();
+    let mut rest = value;
+    while rest.len() > RULE_LIMIT {
+        let mut cut = RULE_LIMIT;
+        while !rest.is_char_boundary(cut) {
+            cut -= 1;
+        }
+        let (part, tail) = rest.split_at(cut);
+        parts.push(part);
+        rest = tail;
+    }
+    parts.push(rest);
+    parts
+}
+
+/// The join value rules of mod `id`: `enshwick.sync.<id>`, then `.1` and on;
+/// `None` when the values need more than [`SYNC_RULES`] rules.
+#[must_use]
+pub fn sync_rules(id: &str, values: &str) -> Option<Vec<(String, String)>> {
+    let parts = split(values);
+    (parts.len() <= SYNC_RULES).then(|| {
+        let base = format!("{RULE_SYNC}.{id}");
+        parts
+            .into_iter()
+            .enumerate()
+            .map(|(i, part)| (part_name(&base, i), part.to_owned()))
+            .collect()
+    })
+}
+
+/// What a server advertises at a moment: its Steam name, the fingerprint and
+/// every rule, and the mods whose join values were too long to advertise.
+#[derive(Debug, PartialEq, Eq)]
+pub struct Advert {
+    /// The server name with the fingerprint.
+    pub name: String,
+    /// The fingerprint, the value of [`RULE`].
+    pub fingerprint: String,
+    /// The mod list and join value rules.
+    pub rules: Vec<(String, String)>,
+    /// Mods whose join values need more than [`SYNC_RULES`] rules; they are
+    /// left out of the rules and the fingerprint.
+    pub too_long: Vec<String>,
+}
+
+impl Advert {
+    /// The advert of a server named `configured` running `mods` with the join
+    /// values `synced`.
+    #[must_use]
+    pub fn new(
+        loader_version: &str,
+        configured: &str,
+        mods: &[(String, String)],
+        synced: &BTreeMap<String, String>,
+    ) -> Self {
+        let mut fit = BTreeMap::new();
+        let mut rules = mod_rules(mods);
+        let mut too_long = Vec::new();
+        for (id, values) in synced {
+            match sync_rules(id, values) {
+                Some(parts) => {
+                    rules.extend(parts);
+                    fit.insert(id.clone(), values.clone());
+                }
+                None => too_long.push(id.clone()),
+            }
+        }
+        let fingerprint = fingerprint(loader_version, mods, &fit);
+        Self {
+            name: server_name(configured, &fingerprint),
+            fingerprint,
+            rules,
+            too_long,
+        }
+    }
+}
+
+/// The name of part `index` of the rules named `base`.
+#[must_use]
+pub fn part_name(base: &str, index: usize) -> String {
+    if index == 0 {
+        base.to_owned()
+    } else {
+        format!("{base}.{index}")
+    }
 }
 
 /// The whole mod list, `id@version` sorted and joined by commas.
@@ -76,11 +185,7 @@ pub fn mod_rules(mods: &[(String, String)]) -> Vec<(String, String)> {
 /// The name of mod list rule `index`.
 #[must_use]
 pub fn rule_name(index: usize) -> String {
-    if index == 0 {
-        RULE_MODS.to_owned()
-    } else {
-        format!("{RULE_MODS}.{index}")
-    }
+    part_name(RULE_MODS, index)
 }
 
 /// `name` with the fingerprint appended, shortened to fit Steam's limit.
@@ -129,6 +234,7 @@ pub(crate) use runtime::start;
 
 #[cfg(windows)]
 mod runtime {
+    use std::collections::BTreeMap;
     use std::ffi::{CString, c_void};
     use std::path::Path;
     use std::time::{Duration, Instant};
@@ -146,49 +252,32 @@ mod runtime {
     const GIVE_UP: Duration = Duration::from_secs(300);
     const REASSERT: Duration = Duration::from_secs(60);
 
+    /// The join values of the running join mods, by id; read each time the
+    /// advertisement is set.
+    pub(crate) type Synced = fn() -> BTreeMap<String, String>;
+
     /// Starts the thread that advertises the mod set.
-    pub(crate) fn start(game_dir: &Path, mods: &[(String, String)]) {
+    pub(crate) fn start(game_dir: &Path, mods: Vec<(String, String)>, synced: Synced) {
         let config = std::fs::read_to_string(game_dir.join("enshrouded_server.json")).ok();
         let configured = config
             .and_then(|json| super::configured_name(&json))
             .unwrap_or_else(|| "Enshrouded Server".to_owned());
-        let fingerprint = super::fingerprint(env!("CARGO_PKG_VERSION"), mods);
-        let name = super::server_name(&configured, &fingerprint);
-        let rules = super::mod_rules(mods);
         let spawned = std::thread::Builder::new()
             .name("enshwick-advertise".into())
             .spawn(move || {
-                if std::panic::catch_unwind(|| run(&name, &fingerprint, &rules)).is_err() {
+                if std::panic::catch_unwind(|| run(&configured, &mods, synced)).is_err() {
                     crate::log!(WARN, "mod set advertisement stopped: it panicked");
                 }
             });
         drop(spawned);
     }
 
-    fn run(name: &str, fingerprint: &str, rules: &[(String, String)]) {
+    fn run(configured: &str, mods: &[(String, String)], synced: Synced) {
         let Some(api) = Api::load() else {
             crate::log!(
                 WARN,
                 "mod set advertisement off: steam_api64.dll lacks the game server API"
             );
-            return;
-        };
-        let rules: Option<Vec<(CString, CString)>> = rules
-            .iter()
-            .map(|(key, value)| {
-                Some((
-                    CString::new(key.as_str()).ok()?,
-                    CString::new(value.as_str()).ok()?,
-                ))
-            })
-            .collect();
-        let (Ok(name), Ok(rule), Ok(value), Some(rules)) = (
-            CString::new(name),
-            CString::new(super::RULE),
-            CString::new(fingerprint),
-            rules,
-        ) else {
-            crate::log!(WARN, "mod set advertisement off: a value holds a NUL");
             return;
         };
         let started = Instant::now();
@@ -208,26 +297,66 @@ mod runtime {
             }
             std::thread::sleep(POLL);
         };
-        let listed: Vec<String> = rules
+        let mut last: Option<super::Advert> = None;
+        loop {
+            let advert = super::Advert::new(env!("CARGO_PKG_VERSION"), configured, mods, &synced());
+            let mut stale = Vec::new();
+            if last.as_ref() != Some(&advert) {
+                describe(&advert);
+                // Rules no longer advertised are emptied, which reads as absent.
+                stale = last
+                    .iter()
+                    .flat_map(|old| &old.rules)
+                    .filter(|(key, _)| advert.rules.iter().all(|(k, _)| k != key))
+                    .map(|(key, _)| (key.clone(), String::new()))
+                    .collect();
+            }
+            let pairs = [(super::RULE.to_owned(), advert.fingerprint.clone())]
+                .into_iter()
+                .chain(stale)
+                .chain(advert.rules.iter().cloned());
+            if let Ok(name) = CString::new(advert.name.as_str()) {
+                // SAFETY: the logged-on interface and a NUL-terminated string.
+                unsafe { (api.set_name)(server, name.as_ptr()) };
+            }
+            for (key, value) in pairs {
+                let (Ok(key), Ok(value)) = (CString::new(key), CString::new(value)) else {
+                    continue;
+                };
+                // SAFETY: the logged-on interface and NUL-terminated strings.
+                unsafe { (api.set_key_value)(server, key.as_ptr(), value.as_ptr()) };
+            }
+            last = Some(advert);
+            std::thread::sleep(REASSERT);
+        }
+    }
+
+    /// Logs what the server now advertises.
+    fn describe(advert: &super::Advert) {
+        let mods: Vec<&str> = advert
+            .rules
             .iter()
-            .map(|(_, value)| value.to_string_lossy().into_owned())
+            .filter(|(key, _)| key.starts_with(super::RULE_MODS))
+            .map(|(_, value)| value.as_str())
+            .collect();
+        let synced: Vec<&str> = advert
+            .rules
+            .iter()
+            .filter_map(|(key, _)| key.strip_prefix(super::RULE_SYNC)?.strip_prefix('.'))
+            .filter(|rest| !rest.contains('.'))
             .collect();
         crate::log!(
             INFO,
-            "advertising \"{}\", mods {}",
-            name.to_string_lossy(),
-            listed.join(",")
+            "advertising \"{}\", mods {}, join values of [{}]",
+            advert.name,
+            mods.join(","),
+            synced.join(", ")
         );
-        loop {
-            // SAFETY: the logged-on interface and NUL-terminated strings.
-            unsafe { (api.set_name)(server, name.as_ptr()) };
-            // SAFETY: as above.
-            unsafe { (api.set_key_value)(server, rule.as_ptr(), value.as_ptr()) };
-            for (key, value) in &rules {
-                // SAFETY: as above.
-                unsafe { (api.set_key_value)(server, key.as_ptr(), value.as_ptr()) };
-            }
-            std::thread::sleep(REASSERT);
+        for id in &advert.too_long {
+            crate::log!(
+                WARN,
+                "the join values of {id} are too long to advertise; players keep their own"
+            );
         }
     }
 
@@ -290,11 +419,72 @@ mod tests {
         let mut reversed = mods();
         reversed.reverse();
         assert_eq!(
-            fingerprint("0.1.0", &mods()),
-            fingerprint("0.1.0", &reversed)
+            fingerprint("0.1.0", &mods(), &none()),
+            fingerprint("0.1.0", &reversed, &none())
         );
-        assert_ne!(fingerprint("0.1.0", &mods()), fingerprint("0.1.1", &mods()));
-        assert_eq!(fingerprint("0.1.0", &mods()).len(), 8);
+        assert_ne!(
+            fingerprint("0.1.0", &mods(), &none()),
+            fingerprint("0.1.1", &mods(), &none())
+        );
+        assert_eq!(fingerprint("0.1.0", &mods(), &none()).len(), 8);
+    }
+
+    fn none() -> BTreeMap<String, String> {
+        BTreeMap::new()
+    }
+
+    fn synced(values: &str) -> BTreeMap<String, String> {
+        BTreeMap::from([("count".to_owned(), values.to_owned())])
+    }
+
+    #[test]
+    fn join_values_count_in_the_fingerprint() {
+        let plain = fingerprint("0.1.0", &mods(), &none());
+        let two = fingerprint("0.1.0", &mods(), &synced("{ a = [2] }"));
+        assert_ne!(plain, two);
+        assert_ne!(two, fingerprint("0.1.0", &mods(), &synced("{ a = [3] }")));
+        assert_eq!(two, fingerprint("0.1.0", &mods(), &synced("{ a = [2] }")));
+    }
+
+    #[test]
+    fn values_split_on_character_boundaries_within_the_limit() {
+        assert_eq!(split(""), [""]);
+        assert_eq!(split("{ a = 1 }"), ["{ a = 1 }"]);
+        let long = format!("{{ name = '{}' }}", "ї".repeat(150));
+        let parts = split(&long);
+        assert_eq!(parts.len(), 3);
+        assert!(parts.iter().all(|part| part.len() <= RULE_LIMIT));
+        assert_eq!(parts.concat(), long);
+    }
+
+    #[test]
+    fn join_values_are_rules_per_mod_or_left_out_when_too_long() {
+        let rules = sync_rules("count", &"x".repeat(200)).unwrap();
+        let names: Vec<&str> = rules.iter().map(|(name, _)| name.as_str()).collect();
+        assert_eq!(names, ["enshwick.sync.count", "enshwick.sync.count.1"]);
+        assert_eq!(
+            sync_rules("count", &"x".repeat(SYNC_RULES * RULE_LIMIT + 1)),
+            None
+        );
+
+        let advert = Advert::new("0.1.0", "Homelab", &mods(), &synced("{ a = [2] }"));
+        assert_eq!(
+            advert.rules,
+            [
+                (
+                    "enshwick.mods".to_owned(),
+                    "count@0.2.0,zones@0.1.0".to_owned()
+                ),
+                ("enshwick.sync.count".to_owned(), "{ a = [2] }".to_owned()),
+            ]
+        );
+        assert_eq!(
+            advert.name,
+            format!("Homelab [enshwick {}]", advert.fingerprint)
+        );
+        let huge = Advert::new("0.1.0", "Homelab", &mods(), &synced(&"x".repeat(2000)));
+        assert_eq!(huge.too_long, ["count"]);
+        assert_eq!(huge.fingerprint, fingerprint("0.1.0", &mods(), &none()));
     }
 
     #[test]

@@ -298,6 +298,10 @@ impl Load<'_> {
     /// [`Config::template`](crate::config::Config::template) when missing, parsed
     /// and checked with [`Config::validate`](crate::config::Config::validate).
     ///
+    /// On a server, the fields marked `#[config(sync)]` are reported to the
+    /// loader, which advertises them to players; see
+    /// [`on_config_change`](Self::on_config_change) for the client's side.
+    ///
     /// # Errors
     ///
     /// [`Off`] when the file does not parse into `T` or a value is refused.
@@ -323,6 +327,13 @@ impl Load<'_> {
     /// Calls `handler` with the mod's settings each time `mod-configs/<id>.toml`
     /// changes, on a loader thread. A file that no longer parses or validates
     /// is logged and skipped, and the running values stay.
+    ///
+    /// On a client, it also runs when the join values change: on joining a
+    /// server, `handler` gets the settings with the server's
+    /// [`synced`](Config::synced) fields over the file's (the file stays as
+    /// it is), and on joining a server without them, the file's values again.
+    /// A mod with join values applies them here; without a handler it runs
+    /// with the file's values until the next start.
     ///
     /// # Errors
     ///
@@ -569,7 +580,9 @@ impl Load<'_> {
     }
 }
 
-/// The mod's settings as `T`, parsed and validated.
+/// The mod's settings as `T`, parsed and validated, with the server's join
+/// values over the file's while this client is joined to a server that has
+/// them.
 fn read_config<T: Config>(host: Host) -> Result<T, Off> {
     let text = host.settings_text(&T::template())?;
     let settings: T =
@@ -577,7 +590,27 @@ fn read_config<T: Config>(host: Host) -> Result<T, Off> {
     settings
         .validate()
         .map_err(|why| Off::new(format!("settings: {why}")))?;
-    Ok(settings)
+    let Some(server) = settings.synced().and_then(|local| host.sync(&local)) else {
+        return Ok(settings);
+    };
+    match with_server::<T>(&text, &server) {
+        Ok(joined) => {
+            crate::info!("the server's join values apply over the settings file: {server}");
+            Ok(joined)
+        }
+        Err(why) => {
+            crate::warn!("the server's join values are refused, the file's apply: {why}");
+            Ok(settings)
+        }
+    }
+}
+
+/// The settings in `text` with the join values `server` over them, checked.
+fn with_server<T: Config>(text: &str, server: &str) -> Result<T, String> {
+    let mut joined: T = toml::from_str(text).map_err(|e| e.message().to_owned())?;
+    joined.merge_synced(server)?;
+    joined.validate()?;
+    Ok(joined)
 }
 
 /// Runs a subscribed handler; `user` is the handler boxed by
@@ -601,5 +634,38 @@ fn ok<T>(status: Status, value: T, what: impl FnOnce() -> String) -> Result<T, O
         Ok(value)
     } else {
         Err(Off::status(&what(), status))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::with_server;
+
+    /// Test settings.
+    #[derive(Debug, Default, serde::Deserialize, serde::Serialize, crate::Config)]
+    #[config(validate = Settings::check)]
+    struct Settings {
+        /// A join value.
+        #[config(sync)]
+        table: Vec<u8>,
+        /// This side's own.
+        local: u8,
+    }
+
+    impl Settings {
+        fn check(&self) -> Result<(), String> {
+            (self.table.len() < 4)
+                .then_some(())
+                .ok_or_else(|| "a long table".to_owned())
+        }
+    }
+
+    #[test]
+    fn the_server_values_apply_over_the_file_and_are_checked() {
+        let file = "table = [1]\nlocal = 5\n";
+        let joined: Settings = with_server(file, "{ table = [2, 4] }").unwrap();
+        assert_eq!((joined.table.as_slice(), joined.local), (&[2, 4][..], 5));
+        assert!(with_server::<Settings>(file, "{ table = [1, 2, 3, 4] }").is_err());
+        assert!(with_server::<Settings>(file, "{ table = 'x' }").is_err());
     }
 }

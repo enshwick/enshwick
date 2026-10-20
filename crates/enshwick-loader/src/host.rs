@@ -1,5 +1,6 @@
 //! The loader's side of the API: its state and the `HostApi` table.
 
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
@@ -38,6 +39,19 @@ pub(crate) struct ModRecord {
     pub(crate) off: AtomicBool,
     /// The settings text last handed to the mod, alive until its next call.
     pub(crate) settings: Mutex<Option<String>>,
+    /// The join values the mod last reported, as its settings file holds them.
+    pub(crate) synced: Mutex<Option<String>>,
+    /// On a client, the joined server's join values for the mod.
+    pub(crate) server_synced: Mutex<Option<String>>,
+    /// The text `sync` last handed to the mod, alive until its next call.
+    pub(crate) sync_out: Mutex<String>,
+}
+
+impl ModRecord {
+    /// Whether the mod runs and counts in the join check.
+    pub(crate) fn joins(&self) -> bool {
+        !self.off.load(Ordering::Acquire) && self.manifest.flags.contains(ManifestFlags::JOIN)
+    }
 }
 
 /// A mod's handler for one event.
@@ -92,6 +106,66 @@ static LOADER: OnceLock<Loader> = OnceLock::new();
 pub(crate) fn install(loader: Loader) -> Option<&'static Loader> {
     LOADER.set(loader).ok()?;
     LOADER.get()
+}
+
+/// The join values of the running join mods, by id, as their settings files
+/// hold them.
+pub(crate) fn join_values() -> BTreeMap<String, String> {
+    let Some(loader) = loader() else {
+        return BTreeMap::new();
+    };
+    loader
+        .mods
+        .iter()
+        .filter(|m| m.joins())
+        .filter_map(|m| Some((m.id.clone(), m.synced.lock().ok()?.clone()?)))
+        .collect()
+}
+
+/// On a client joining a server: makes `values`, the server's join values by
+/// mod id, the ones each join mod runs with, and raises
+/// [`Event::SETTINGS_CHANGED`] for every mod whose values change, so its
+/// handler reads its settings again. A mod the server sends none for runs
+/// with its file's.
+pub(crate) fn apply_join_values(values: &BTreeMap<String, String>) {
+    let Some(loader) = loader() else {
+        return;
+    };
+    let current: Vec<(String, Option<String>)> = loader
+        .mods
+        .iter()
+        .map(|m| {
+            let held = m.server_synced.lock().ok().and_then(|held| held.clone());
+            (
+                if m.joins() {
+                    m.id.clone()
+                } else {
+                    String::new()
+                },
+                held,
+            )
+        })
+        .collect();
+    let changes = crate::join::changes(
+        current
+            .iter()
+            .map(|(id, held)| (id.as_str(), held.as_deref())),
+        values,
+    );
+    for (index, now) in changes {
+        let Some(record) = loader.mods.get(index) else {
+            continue;
+        };
+        if let Ok(mut held) = record.server_synced.lock() {
+            held.clone_from(&now);
+        }
+        let line = match &now {
+            Some(values) => format!("the server's join values apply: {values}"),
+            None => "the settings file's join values apply again".to_owned(),
+        };
+        crate::log::write(Level::INFO, &record.id, &line);
+        loader.emit(Event::SETTINGS_CHANGED, Some(index), core::ptr::null());
+    }
 }
 
 /// Turns off the loaded mod `id`, if there is one, with `reason`.
@@ -247,6 +321,7 @@ pub(crate) static API: HostApi = HostApi {
     serve_resource,
     add_text,
     mods,
+    sync,
 };
 
 /// A static slice from a pointer and a count, empty for a null pointer.
@@ -737,6 +812,30 @@ extern "system" fn mods(
         }
     }
     put(count, u32::try_from(infos.len()).unwrap_or(u32::MAX))
+}
+
+extern "system" fn sync(me: ModHandle, synced: Str, out: *mut Str) -> Status {
+    let (Some(loader), Some(synced)) = (loader(), text(synced)) else {
+        return Status::BAD_ARGS;
+    };
+    let Some((_, record)) = loader.record(me) else {
+        return Status::BAD_ARGS;
+    };
+    if let Ok(mut reported) = record.synced.lock() {
+        *reported = (!synced.is_empty()).then(|| synced.to_owned());
+    }
+    let server = record
+        .server_synced
+        .lock()
+        .ok()
+        .and_then(|held| held.clone())
+        .unwrap_or_default();
+    let Ok(mut slot) = record.sync_out.lock() else {
+        return Status::REFUSED;
+    };
+    *slot = server;
+    // The text stays in the record until the mod's next call.
+    put(out, Str::new(slot.as_str()))
 }
 
 /// Mod handles start at 1; 0 is no mod.

@@ -22,8 +22,11 @@ pub(crate) struct State {
     pub(crate) texts: Vec<(u32, u32, String)>,
     pub(crate) published: Vec<(String, u32, usize)>,
     pub(crate) defaults: Vec<String>,
+    pub(crate) synced: Vec<String>,
     /// The settings text last handed out, alive until the next call.
     settings: Option<Box<str>>,
+    /// The join values last handed out, alive until the next call.
+    sync_out: Option<Box<str>>,
 }
 
 static STATE: Mutex<Option<State>> = Mutex::new(None);
@@ -47,6 +50,8 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         texts: Vec::new(),
         published: Vec::new(),
         defaults: Vec::new(),
+        synced: Vec::new(),
+        sync_out: None,
         settings: None,
     });
     turn
@@ -343,6 +348,19 @@ extern "system" fn mods(
     put(count, u32::try_from(mods.len()).unwrap_or(u32::MAX))
 }
 
+extern "system" fn sync(_me: ModHandle, synced: Str, out: *mut Str) -> Status {
+    let synced = text(synced);
+    let served = with(Str::EMPTY, |s| {
+        s.synced.push(synced);
+        let served: Box<str> = s.host.server_synced.clone().unwrap_or_default().into();
+        // The heap text stays where it is while the box lives in the state.
+        let view = Str::new(&served);
+        s.sync_out = Some(served);
+        view
+    });
+    put(out, served)
+}
+
 /// The table every installed fake answers through; a mod keeps the first
 /// table it sees for the process, so it is one static.
 pub(crate) static TABLE: HostApi = HostApi {
@@ -372,4 +390,5 @@ pub(crate) static TABLE: HostApi = HostApi {
     serve_resource,
     add_text,
     mods,
+    sync,
 };

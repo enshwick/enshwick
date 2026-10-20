@@ -14,7 +14,7 @@ use core::sync::atomic::AtomicUsize;
 pub const ABI_MAJOR: u16 = 1;
 
 /// The minor version of this interface. A newer minor only appends fields.
-pub const ABI_MINOR: u16 = 5;
+pub const ABI_MINOR: u16 = 6;
 
 /// Whether `id` is a valid mod id: 1 to 64 characters of `[a-z0-9-]`.
 ///
@@ -1314,6 +1314,13 @@ pub struct HostApi {
         capacity: u32,
         count: *mut u32,
     ) -> Status,
+    /// Reports the mod's join values as its settings file holds them,
+    /// `synced` (an inline TOML table), and writes the values to run with
+    /// over them: the server's while this client is joined to a server that
+    /// advertises values for the mod, else an empty string. A server
+    /// advertises the `synced` of each join mod. The text written stays valid
+    /// until the mod's next call to `sync`. Since minor 6.
+    pub sync: extern "system" fn(me: ModHandle, synced: Str, out: *mut Str) -> Status,
 }
 
 /// The exports a mod DLL provides, by name.
@@ -1364,7 +1371,8 @@ const _: () = {
     assert!(core::mem::offset_of!(HostApi, serve_resource) == 24 + 21 * 8);
     assert!(core::mem::offset_of!(HostApi, add_text) == 24 + 22 * 8);
     assert!(core::mem::offset_of!(HostApi, mods) == 24 + 23 * 8);
-    assert!(size_of::<HostApi>() == 24 + 24 * 8);
+    assert!(core::mem::offset_of!(HostApi, sync) == 24 + 24 * 8);
+    assert!(size_of::<HostApi>() == 24 + 25 * 8);
     assert!(core::mem::offset_of!(Manifest, updates) == 80);
     assert!(size_of::<UpdateSource>() == 48);
     assert!(size_of::<ResourceKey>() == 24);

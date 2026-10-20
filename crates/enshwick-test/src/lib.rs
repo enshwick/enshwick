@@ -145,6 +145,7 @@ pub struct FakeHost {
     type_sizes: HashMap<String, u32>,
     type_hashes: HashMap<String, u32>,
     settings: Option<String>,
+    server_synced: Option<String>,
     data_dir: String,
     log_level: Level,
     caller_frame: CallerFrame,
@@ -185,6 +186,7 @@ impl FakeHost {
             type_sizes: HashMap::new(),
             type_hashes: HashMap::new(),
             settings: None,
+            server_synced: None,
             data_dir: "mod-data/test".to_owned(),
             log_level: Level::INFO,
             caller_frame: CallerFrame::default(),
@@ -805,6 +807,34 @@ impl Installed {
     /// ```
     pub fn set_settings(&self, text: &str) {
         table::with((), |s| s.host.settings = Some(text.to_owned()));
+    }
+
+    /// Sets the join values of the server this client joined, which the mod
+    /// gets over its file's on its next read, or `None` for none, as after
+    /// joining a server without them; raise
+    /// [`events::SettingsChanged`](enshwick_api::events::SettingsChanged)
+    /// after it, as the loader does.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick_test::FakeHost::new().install();
+    /// loader.set_server_synced(Some("{ altars = [2, 4] }"));
+    /// assert!(loader.reported_synced().is_empty());
+    /// ```
+    pub fn set_server_synced(&self, synced: Option<&str>) {
+        table::with((), |s| s.host.server_synced = synced.map(str::to_owned));
+    }
+
+    /// The join values the mod reported each time it read its settings, as
+    /// its file holds them.
+    ///
+    /// # Examples
+    ///
+    /// See [`Installed::set_server_synced`].
+    #[must_use]
+    pub fn reported_synced(&self) -> Vec<String> {
+        table::with(Vec::new(), |s| s.synced.clone())
     }
 
     /// The defaults the mod passed each time it read its settings.

@@ -121,7 +121,6 @@ name = "enshwick-api"
 version = "0.1.4"
 dependencies = [
  "enshwick-macros",
- "enshwick-test",
  "serde",
  "thiserror",
  "toml",
@@ -140,6 +139,7 @@ dependencies = [
 name = "enshwick-flame-altar-count"
 version = "0.1.4"
 dependencies = [
+ "arc-swap",
  "enshwick-api",
  "serde",
  "toml",
