@@ -130,7 +130,7 @@ site port best; an address in the middle of code that changed does not.
   mod that asked turns off; the others load.
 
 Find every address before registering anything, as
-[`enshwick-flame-altar-count`](https://github.com/themaiby/enshwick/blob/main/mods/enshwick-flame-altar-count/src/bases.rs)
+[the loader's base limit](https://github.com/themaiby/enshwick/blob/main/crates/internal/loader/src/bases.rs)
 does, so a miss leaves the game untouched rather than half changed.
 
 ## Code patterns

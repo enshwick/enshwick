@@ -652,6 +652,130 @@ impl Load<'_> {
     }
 }
 
+/// How many altar zones and bases the game's last grouping found, from
+/// [`grouping`].
+///
+/// # Examples
+///
+/// See [`grouping`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Grouping {
+    /// Altar zones in the world.
+    pub zones: u32,
+    /// Bases they form.
+    pub bases: u32,
+}
+
+/// The game's last grouping of altar zones into bases, while the raised base
+/// limit ([`Load::raise_base_limit`]) is in force; `None` before the first
+/// grouping. Any thread.
+///
+/// # Examples
+///
+/// ```
+/// let past_vanilla = enshwick_loader_api::altars::grouping().is_some_and(|g| g.zones > 16);
+/// # let _ = past_vanilla;
+/// ```
+#[must_use]
+pub fn grouping() -> Option<Grouping> {
+    let host = crate::host()?;
+    let end = core::mem::offset_of!(HostApi, base_zones) + size_of::<usize>();
+    if !host.api().header.covers(end) {
+        return None;
+    }
+    let (mut zones, mut bases) = (0u32, 0u32);
+    let status = (host.api().base_zones)(host.handle(), &raw mut zones, &raw mut bases);
+    status.is_ok().then_some(Grouping { zones, bases })
+}
+
+unsafe extern "system" fn run_limit<F>(flame_level: u32, user: *mut c_void) -> u8
+where
+    F: Fn(u32) -> u8,
+{
+    // SAFETY: `user` is the leaked `F` this function was registered with.
+    let limit = unsafe { &*user.cast::<F>() };
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| limit(flame_level))).unwrap_or_else(
+        |_| {
+            if let Some(host) = crate::host() {
+                host.fault("panic in an altar limit");
+            }
+            16
+        },
+    )
+}
+
+impl Load<'_> {
+    /// Makes `limit` decide how many altars each Flame level allows, on both
+    /// sides; one mod at a time. Values past 16 need
+    /// [`Load::raise_base_limit`] to group.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] after init, when another mod decides, on a build that lacks
+    /// the lookup, or with a loader older than the API.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+    ///     load.on_altar_limit(|level| u8::try_from(2 + 2 * level).unwrap_or(16).min(16))
+    /// }
+    /// ```
+    pub fn on_altar_limit<F>(&mut self, limit: F) -> Result<(), Off>
+    where
+        F: Fn(u32) -> u8 + Send + Sync + 'static,
+    {
+        let host = self.host();
+        covered(host, core::mem::offset_of!(HostApi, altar_limit))?;
+        let user = Box::into_raw(Box::new(limit));
+        let status = (host.api().altar_limit)(host.handle(), run_limit::<F>, user.cast());
+        if status.is_ok() {
+            return Ok(());
+        }
+        // SAFETY: refused, so the loader keeps no copy of the pointer.
+        drop(unsafe { Box::from_raw(user) });
+        Err(Off::new(format!(
+            "the altar limit refused by the loader (status {}; another mod decides?)",
+            status.0
+        )))
+    }
+
+    /// Lets the game group 32 altar zones into its 16 bases, refusing an
+    /// altar that would start a 17th base; `Ok(false)` when this build's code
+    /// is not the one the platform knows and the game keeps 16. The patches
+    /// count as the mod's own: one the game refuses at arming turns the mod
+    /// off.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] after init or with a loader older than the API.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+    ///     let cap = if load.raise_base_limit()? { 32 } else { 16 };
+    ///     enshwick_loader_api::info!("up to {cap} altar zones");
+    ///     Ok(())
+    /// }
+    /// ```
+    pub fn raise_base_limit(&mut self) -> Result<bool, Off> {
+        let host = self.host();
+        covered(host, core::mem::offset_of!(HostApi, raise_base_limit))?;
+        let status = (host.api().raise_base_limit)(host.handle());
+        if status.is_ok() {
+            Ok(true)
+        } else if status == crate::abi::Status::MISSING {
+            Ok(false)
+        } else {
+            Err(Off::new(format!(
+                "the base limit refused by the loader (status {})",
+                status.0
+            )))
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

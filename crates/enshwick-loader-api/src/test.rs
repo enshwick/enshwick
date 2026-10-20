@@ -1633,6 +1633,47 @@ impl Installed {
         }
     }
 
+    /// Asks the mod's altar limit about `flame_level`; `None` without one.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick_loader_api::test::FakeHost::new().install();
+    /// assert_eq!(loader.altar_limit(3), None);
+    /// ```
+    #[must_use]
+    pub fn altar_limit(&self, flame_level: u32) -> Option<u8> {
+        let (callback, user) = table::with(None, |s| s.altar_limit)?;
+        let user = core::ptr::with_exposed_provenance_mut(user);
+        // SAFETY: `user` is the mod's pointer.
+        Some(unsafe { callback(flame_level, user) })
+    }
+
+    /// Whether the mod raised the base limit.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick_loader_api::test::FakeHost::new().install();
+    /// assert!(!loader.base_limit_raised());
+    /// ```
+    #[must_use]
+    pub fn base_limit_raised(&self) -> bool {
+        table::with(false, |s| s.base_limit_raised)
+    }
+
+    /// Makes the last grouping find `zones` altar zones in `bases` bases.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick_loader_api::test::FakeHost::new().install();
+    /// loader.set_grouping(17, 16);
+    /// ```
+    pub fn set_grouping(&self, zones: u32, bases: u32) {
+        table::with((), |s| s.grouping = Some((zones, bases)));
+    }
+
     /// The labels the mod set, as `(entity, text)`, in order.
     ///
     /// # Examples

@@ -9,6 +9,8 @@
 pub mod advertise;
 #[cfg(windows)]
 mod altars;
+#[cfg(windows)]
+mod bases;
 pub mod builds;
 pub mod chains;
 #[cfg(windows)]

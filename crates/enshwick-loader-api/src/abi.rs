@@ -14,7 +14,7 @@ use core::sync::atomic::AtomicUsize;
 pub const ABI_MAJOR: u16 = 1;
 
 /// The minor version of this interface. A newer minor only appends fields.
-pub const ABI_MINOR: u16 = 18;
+pub const ABI_MINOR: u16 = 19;
 
 /// Whether `id` is a valid mod id: 1 to 64 characters of `[a-z0-9-]`.
 ///
@@ -2211,6 +2211,10 @@ pub struct ExperiencePass {
 /// An experience filter: the pass and the pointer given at registration.
 pub type ExperienceFn = unsafe extern "system" fn(pass: *mut ExperiencePass, user: *mut c_void);
 
+/// A mod's altar limit: the Flame level and the pointer given at
+/// registration; returns how many altars that level allows.
+pub type AltarLimitFn = unsafe extern "system" fn(flame_level: u32, user: *mut c_void) -> u8;
+
 /// The table of services the loader offers a mod.
 ///
 /// Fields are only ever appended; a mod checks [`Header::covers`] before it
@@ -2536,6 +2540,21 @@ pub struct HostApi {
     /// only. Since minor 18.
     pub experience_filter:
         extern "system" fn(me: ModHandle, callback: ExperienceFn, user: *mut c_void) -> Status,
+    /// Makes `callback` with `user` decide how many altars each Flame level
+    /// allows, on both sides; one mod at a time. Allowed during
+    /// `enshwick_mod_init` only. Since minor 19.
+    pub altar_limit:
+        extern "system" fn(me: ModHandle, callback: AltarLimitFn, user: *mut c_void) -> Status,
+    /// Lets the game group 32 altar zones into its 16 bases instead of 16
+    /// zones, refusing an altar that would start a 17th base; the patches
+    /// count as the mod's own. [`Status::MISSING`] when this build's code is
+    /// not the one the loader knows: the game keeps 16. Allowed during
+    /// `enshwick_mod_init` only. Since minor 19.
+    pub raise_base_limit: extern "system" fn(me: ModHandle) -> Status,
+    /// Writes how many altar zones and bases the game's last grouping found;
+    /// [`Status::MISSING`] before the first one or without the raised limit.
+    /// Any thread. Since minor 19.
+    pub base_zones: extern "system" fn(me: ModHandle, zones: *mut u32, bases: *mut u32) -> Status,
 }
 
 /// The exports a mod DLL provides, by name.
@@ -2597,7 +2616,7 @@ const _: () = {
     assert!(core::mem::offset_of!(HostApi, hook_at) == 24 + 35 * 8);
     assert!(core::mem::offset_of!(HostApi, inventory_open) == 24 + 36 * 8);
     assert!(core::mem::offset_of!(HostApi, inventory_submit) == 24 + 38 * 8);
-    assert!(size_of::<HostApi>() == 24 + 55 * 8);
+    assert!(size_of::<HostApi>() == 24 + 58 * 8);
     assert!(size_of::<InventoryOp>() == 32);
     assert!(size_of::<InventoryRequest>() == 32);
     assert!(size_of::<InventoryOpResult>() == 8);
@@ -2619,6 +2638,7 @@ const _: () = {
     assert!(core::mem::offset_of!(HostApi, interaction_filter) == 24 + 51 * 8);
     assert!(core::mem::offset_of!(HostApi, skill_override) == 24 + 52 * 8);
     assert!(core::mem::offset_of!(HostApi, experience_filter) == 24 + 54 * 8);
+    assert!(core::mem::offset_of!(HostApi, base_zones) == 24 + 57 * 8);
     assert!(size_of::<SkillCheck>() == 20);
     assert!(size_of::<Comfort>() == 28);
     // Frozen: passed as an array.

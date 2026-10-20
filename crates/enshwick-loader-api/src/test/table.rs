@@ -5,11 +5,11 @@ use core::sync::atomic::Ordering;
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use crate::abi::{
-    AltarInfo, AltarZoneSize, BedCheckFn, BuildInfo, CallerFrame, ComfortFn, CommandFn, Event,
-    EventFn, ExperienceFn, Header, HookSpec, HostApi, InteractionFn, InventoryDoneFn,
-    InventoryRequest, ItemData, Level, MidHookFn, MidHookSpec, ModHandle, ModInfo, PlayerInfo,
-    RenameFn, ResourceKey, ResourcePatchFn, Side, SkillFn, Status, StatusFn, Str, SummonFn,
-    SurvivorLookupFn, SurvivorStatusFn, ZoneCheckFn,
+    AltarInfo, AltarLimitFn, AltarZoneSize, BedCheckFn, BuildInfo, CallerFrame, ComfortFn,
+    CommandFn, Event, EventFn, ExperienceFn, Header, HookSpec, HostApi, InteractionFn,
+    InventoryDoneFn, InventoryRequest, ItemData, Level, MidHookFn, MidHookSpec, ModHandle, ModInfo,
+    PlayerInfo, RenameFn, ResourceKey, ResourcePatchFn, Side, SkillFn, Status, StatusFn, Str,
+    SummonFn, SurvivorLookupFn, SurvivorStatusFn, ZoneCheckFn,
 };
 
 use super::{FakeHost, LinkedHook, ServedResource, SubmittedRequest};
@@ -61,6 +61,9 @@ pub(crate) struct State {
     pub(crate) skills: Vec<(u32, SkillFn, usize)>,
     pub(crate) comfort_filters: Vec<(ComfortFn, usize)>,
     pub(crate) experience_filters: Vec<(ExperienceFn, usize)>,
+    pub(crate) altar_limit: Option<(AltarLimitFn, usize)>,
+    pub(crate) base_limit_raised: bool,
+    pub(crate) grouping: Option<(u32, u32)>,
     /// The reply `run_command` last handed out, alive until the next call.
     run_out: Option<Box<str>>,
     /// The settings text last handed out, alive until the next call.
@@ -115,6 +118,9 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         skills: Vec::new(),
         comfort_filters: Vec::new(),
         experience_filters: Vec::new(),
+        altar_limit: None,
+        base_limit_raised: false,
+        grouping: None,
         run_out: None,
         settings: None,
     });
@@ -790,6 +796,38 @@ extern "system" fn experience_filter(
     })
 }
 
+extern "system" fn altar_limit(
+    _me: ModHandle,
+    callback: AltarLimitFn,
+    user: *mut c_void,
+) -> Status {
+    with(Status::MISSING, |s| {
+        if s.altar_limit.is_some() {
+            return Status::REFUSED;
+        }
+        s.altar_limit = Some((callback, user.expose_provenance()));
+        Status::OK
+    })
+}
+
+extern "system" fn raise_base_limit(_me: ModHandle) -> Status {
+    with(Status::MISSING, |s| {
+        s.base_limit_raised = true;
+        Status::OK
+    })
+}
+
+extern "system" fn base_zones(_me: ModHandle, zones: *mut u32, bases: *mut u32) -> Status {
+    let Some((zone_count, base_count)) = with(None, |s| s.grouping) else {
+        return Status::MISSING;
+    };
+    let status = put(zones, zone_count);
+    if !status.is_ok() {
+        return status;
+    }
+    put(bases, base_count)
+}
+
 /// table it sees for the process, so it is one static.
 pub(crate) static TABLE: HostApi = HostApi {
     header: Header::of::<HostApi>(),
@@ -849,4 +887,7 @@ pub(crate) static TABLE: HostApi = HostApi {
     skill_override,
     comfort_filter,
     experience_filter,
+    altar_limit,
+    raise_base_limit,
+    base_zones,
 };

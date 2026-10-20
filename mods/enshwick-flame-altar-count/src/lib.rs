@@ -1,23 +1,17 @@
 //! How many Flame Altars each Flame level allows, up to 32 in 16 bases.
 //!
-//! The game asks one function, `max_altars(balancing, flame_level)`, which
-//! reads `altarsPerFlameLevel` and caps it at 16. The cursor check that refuses
-//! an altar past the limit and the client's interface both ask it, so the hook
-//! answers from the settings table instead. The table is a join value: a
-//! client joined to a server runs with the server's.
-//!
-//! The game groups only 16 altar zones into bases; the `bases` module lifts
-//! that to 32 zones and keeps the bases at 16. When its code is not found, the
-//! table stays capped at 16.
+//! The table is a join value: a client joined to a server runs with the
+//! server's. The platform raises the game's grouping to 32 altar zones in its
+//! 16 bases; where it cannot, the table stays capped at 16.
 
-mod bases;
-mod limit;
+mod hold;
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU8, Ordering};
 
 use arc_swap::ArcSwap;
-use enshwick_loader_api::{Load, Mod, Next, Off};
+use enshwick_loader_api::abi::Side;
+use enshwick_loader_api::{Load, Mod, Off};
 
 /// Vanilla `altarsPerFlameLevel` for Flame levels 0 to 11; later levels repeat
 /// the last entry.
@@ -119,22 +113,6 @@ pub struct AltarCount {
     table: ArcSwap<AltarTable>,
 }
 
-enshwick_loader_api::detour! {
-    static MAX_ALTARS: unsafe extern "system" fn(balancing: u64, flame_level: u32) -> u8 = max_altars;
-}
-
-fn max_altars(
-    next: Next<unsafe extern "system" fn(u64, u32) -> u8>,
-    balancing: u64,
-    flame_level: u32,
-) -> u8 {
-    match AltarCount::instance() {
-        Some(count) => count.table.load().altars(flame_level),
-        // SAFETY: the original takes the arguments the game passed.
-        None => unsafe { next.get()(balancing, flame_level) },
-    }
-}
-
 impl Mod for AltarCount {
     fn manifest() -> &'static enshwick_loader_api::abi::Manifest {
         enshwick_loader_api::manifest!(
@@ -148,11 +126,26 @@ impl Mod for AltarCount {
 
     fn init(load: &mut Load<'_>) -> Result<Self, Off> {
         let settings: Settings = load.config()?;
-        if bases::link(load)? {
+        let server = load.host().build().side == Side::SERVER;
+        if load.raise_base_limit()? {
             IN_FORCE.store(CAP, Ordering::Relaxed);
+            if server {
+                hold::keep(load)?;
+            }
+        } else {
+            // A world held for its altars must not open with the vanilla
+            // grouping: off, the loader stops the server for the hold.
+            if server && let Some(reason) = hold::reason(load)? {
+                return Err(Off::new(format!(
+                    "{reason}, and this build's grouping is not the one the platform knows"
+                )));
+            }
+            enshwick_loader_api::warn!("the game keeps 16 altar zones in bases");
         }
         let table = AltarTable::from_settings(&settings);
-        load.hook(&MAX_ALTARS, load.symbol("building.max_altars")?)?;
+        load.on_altar_limit(|level| {
+            AltarCount::instance().map_or(VANILLA_CAP, |count| count.table.load().altars(level))
+        })?;
         load.on_config_change(|settings: Settings| {
             if let Some(count) = AltarCount::instance() {
                 count
@@ -211,5 +204,19 @@ mod tests {
             AltarTable::new(&local.altars_per_flame_level, CAP).altars(3),
             12
         );
+    }
+
+    #[test]
+    fn the_table_answers_the_limit_with_the_base_limit_raised() {
+        let loader = enshwick_loader_api::test::FakeHost::new()
+            .side(Side::CLIENT)
+            .install();
+        // SAFETY: the exports of `declare_mod!` above.
+        let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+        assert_eq!(status, enshwick_loader_api::abi::Status::OK);
+        assert!(loader.base_limit_raised());
+        assert_eq!(loader.altar_limit(1), Some(4));
+        assert_eq!(loader.altar_limit(11), Some(32));
+        assert!(loader.faults().is_empty());
     }
 }
