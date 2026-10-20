@@ -8,7 +8,6 @@
 
 use std::sync::atomic::AtomicUsize;
 
-use minhook::MinHook;
 use windows_sys::Win32::System::Diagnostics::Debug::FlushInstructionCache;
 use windows_sys::Win32::System::Memory::{
     MEM_COMMIT, MEM_RESERVE, PAGE_EXECUTE_READ, PAGE_READWRITE, VirtualAlloc, VirtualProtect,
@@ -172,38 +171,62 @@ pub(crate) fn arm(
     // SAFETY: flushing our own process's freshly written code.
     unsafe { FlushInstructionCache(process, block.cast(), code_len) };
 
-    for chain in chains.iter_mut() {
-        let Some(&(_, code)) = thunks.iter().find(|(t, _)| *t == chain.target) else {
+    hook(chains, &thunks, off, &mut failures);
+    failures
+}
+
+/// Detours each target to its thunk, wiring the chain's slots before the
+/// target can jump there.
+fn hook(
+    chains: &mut Chains,
+    thunks: &[(u64, *mut u8)],
+    off: impl Fn(usize) -> bool + Copy,
+    failures: &mut Vec<Failure>,
+) {
+    // Targets are addresses in this 64-bit process, so they fit a usize.
+    let requests: Vec<crate::detour::Request> = thunks
+        .iter()
+        .filter_map(|&(target, code)| {
+            Some(crate::detour::Request {
+                target: usize::try_from(target).ok()?,
+                detour: code.addr(),
+            })
+        })
+        .collect();
+    let pending = crate::detour::prepare(&requests);
+    let mut ready = Vec::with_capacity(pending.len());
+    for ((target, _), result) in thunks.iter().zip(&pending) {
+        let Some(chain) = chains.iter_mut().find(|c| c.target == *target) else {
             continue;
         };
-        let target = chain.target as *mut core::ffi::c_void;
-        // SAFETY: `target` is a function start the build table or reflection
-        // vouches for; `code` is a thunk with the same calling convention.
-        match unsafe { MinHook::create_hook(target, code.cast()) } {
-            Ok(original) => {
-                chain.original = original.addr();
+        match result {
+            Ok(hook) => {
+                chain.original = hook.original;
+                // Wired before the target can jump to its thunk.
                 chain.wire(off);
-                // SAFETY: the hook was just created and its slots are wired.
-                if let Err(error) = unsafe { MinHook::enable_hook(target) } {
-                    // SAFETY: undoes the hook created above.
-                    let _removed = unsafe { MinHook::remove_hook(target) };
-                    chain.head = None;
-                    failures.push(Failure {
-                        target: chain.target,
-                        reason: format!("{error:?}"),
-                    });
-                }
+                ready.push((chain.target, hook));
             }
-            Err(error) => {
+            Err(reason) => {
                 chain.head = None;
                 failures.push(Failure {
                     target: chain.target,
-                    reason: format!("{error:?}"),
+                    reason: reason.clone(),
                 });
             }
         }
     }
-    failures
+    let hooks: Vec<&crate::detour::Pending> = ready.iter().map(|&(_, hook)| hook).collect();
+    if !crate::detour::commit(&hooks) {
+        for (target, _) in ready {
+            if let Some(chain) = chains.iter_mut().find(|c| c.target == target) {
+                chain.head = None;
+            }
+            failures.push(Failure {
+                target,
+                reason: "the target could not be written".into(),
+            });
+        }
+    }
 }
 
 /// Writes `mov gs:[TlsSlots + index * 8], reg` for each saved register, then
