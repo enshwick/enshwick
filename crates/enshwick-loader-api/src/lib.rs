@@ -94,6 +94,7 @@ pub mod status;
 pub mod survivors;
 #[cfg(feature = "test")]
 pub mod test;
+pub mod vetoes;
 pub mod world;
 
 pub use abi::Registers;

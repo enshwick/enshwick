@@ -5,12 +5,12 @@ use core::sync::atomic::Ordering;
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use crate::abi::{
-    AltarInfo, AltarLimitFn, AltarZoneSize, BedCheckFn, BuildInfo, CallerFrame, ComfortFn,
-    CommandCallFn, EntityPlace, Event, EventFn, ExperiencePassFn, GameEventFn, Header, HookSpec,
-    HostApi, InteractionFn, InventoryRequest, InventoryResultFn, ItemData, Level, MidHookFn,
-    MidHookSpec, ModHandle, ModInfo, PlayerInfo, RenameCallFn, ResourceKey, ResourcePatchFn, Side,
-    SkillCheckFn, SpawnRequest, Status, StatusFn, Str, SummonFn, SurvivorLookupFn,
-    SurvivorStatusFn, TeleportRequest, ZoneCheckFn,
+    AltarInfo, AltarLimitFn, AltarZoneSize, BedCheckFn, BuildCheckFn, BuildInfo, CallerFrame,
+    ComfortFn, CommandCallFn, CraftCheckFn, EntityPlace, Event, EventFn, ExperiencePassFn,
+    GameEventFn, Header, HookSpec, HostApi, InteractionFn, InventoryRequest, InventoryResultFn,
+    ItemData, Level, MidHookFn, MidHookSpec, ModHandle, ModInfo, PlayerInfo, RenameCallFn,
+    ResourceKey, ResourcePatchFn, Side, SkillCheckFn, SpawnRequest, Status, StatusFn, Str,
+    SummonFn, SurvivorLookupFn, SurvivorStatusFn, TeleportRequest, ZoneCheckFn,
 };
 
 use super::{FakeHost, LinkedHook, ServedResource, SubmittedRequest};
@@ -59,6 +59,8 @@ pub(crate) struct State {
     pub(crate) teleports: Vec<TeleportRequest>,
     /// The spawns the mod asked for, with the ids handed out.
     pub(crate) spawns: Vec<(u32, SpawnRequest)>,
+    pub(crate) craft_filters: Vec<(CraftCheckFn, usize)>,
+    pub(crate) build_filters: Vec<(BuildCheckFn, usize)>,
     /// The world key last handed out, alive until the next one.
     world_key: Option<Box<str>>,
     /// The altars `altars` lists, settable while installed.
@@ -129,6 +131,8 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         emits: Vec::new(),
         teleports: Vec::new(),
         spawns: Vec::new(),
+        craft_filters: Vec::new(),
+        build_filters: Vec::new(),
         world_key: None,
         altars: Vec::new(),
         altars_opened: false,
@@ -982,6 +986,28 @@ extern "system" fn teleport(_me: ModHandle, request: *const TeleportRequest) -> 
     })
 }
 
+extern "system" fn craft_filter(
+    _me: ModHandle,
+    callback: CraftCheckFn,
+    user: *mut c_void,
+) -> Status {
+    with(Status::MISSING, |s| {
+        s.craft_filters.push((callback, user.expose_provenance()));
+        Status::OK
+    })
+}
+
+extern "system" fn build_filter(
+    _me: ModHandle,
+    callback: BuildCheckFn,
+    user: *mut c_void,
+) -> Status {
+    with(Status::MISSING, |s| {
+        s.build_filters.push((callback, user.expose_provenance()));
+        Status::OK
+    })
+}
+
 /// The first entity id the fake hands out for a spawn.
 const FIRST_SPAWNED: u32 = 0x10_0000;
 
@@ -1075,4 +1101,6 @@ pub(crate) static TABLE: HostApi = HostApi {
     emit,
     teleport,
     spawn,
+    craft_filter,
+    build_filter,
 };

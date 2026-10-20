@@ -178,6 +178,7 @@ pub static BUILDS: &[KnownBuild] = &[
             ("ecs.command_append", 0x5f_2d00),
             ("world.time", 0x65_1a50),
             ("ecs.spawn_request", 0x5f_40d0),
+            ("building.cursor_check", 0x9_b040),
         ],
         constants: &[
             ("ecs.context_row", 8),
@@ -348,6 +349,10 @@ pub static BUILDS: &[KnownBuild] = &[
             ("ecs.command_set_hash", 0x0c),
             ("ecs.command_set_size", 0x4c),
             ("ecs.command_set_data", 0x6c),
+            // The cursor check's placement holds the placed item's static
+            // data here; the flag it sets without building permission.
+            ("building.cursor_item_info", 0x60),
+            ("building.cursor_no_permission", 0x4000),
         ],
     },
     KnownBuild {
@@ -457,6 +462,7 @@ pub static BUILDS: &[KnownBuild] = &[
             ("ecs.command_append", 0x95_2400),
             ("world.time", 0x9b_0e10),
             ("ecs.spawn_request", 0x95_37d0),
+            ("building.cursor_check", 0x29_7370),
         ],
         constants: &[
             ("text.pool_language", 0xd8),
@@ -636,6 +642,10 @@ pub static BUILDS: &[KnownBuild] = &[
             ("ecs.command_set_hash", 0x0c),
             ("ecs.command_set_size", 0x4c),
             ("ecs.command_set_data", 0x6c),
+            // The cursor check's placement holds the placed item's static
+            // data here; the flag it sets without building permission.
+            ("building.cursor_item_info", 0x60),
+            ("building.cursor_no_permission", 0x4000),
         ],
     },
 ];

@@ -14,7 +14,7 @@ use core::sync::atomic::AtomicUsize;
 pub const ABI_MAJOR: u16 = 1;
 
 /// The minor version of this interface. A newer minor only appends fields.
-pub const ABI_MINOR: u16 = 24;
+pub const ABI_MINOR: u16 = 25;
 
 /// Whether `id` is a valid mod id: 1 to 64 characters of `[a-z0-9-]`.
 ///
@@ -2366,6 +2366,64 @@ pub struct SpawnRequest {
     pub lifetime_ns: u64,
 }
 
+/// A player's craft request, handed to the filters registered with
+/// [`HostApi::craft_filter`] before the server crafts.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::abi::{CraftCheck, Header};
+///
+/// let craft = CraftCheck { header: Header::of::<CraftCheck>(), player: 2, station: 0, recipe: 0x51, amount: 3 };
+/// assert_eq!(craft.station, 0);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct CraftCheck {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// The crafting player's character.
+    pub player: u32,
+    /// The station, or 0 for crafting by hand.
+    pub station: u32,
+    /// The recipe id.
+    pub recipe: u32,
+    /// How many.
+    pub amount: u32,
+}
+
+/// A mod's craft filter: the request and the pointer given at registration;
+/// returns 1 to let it through, 0 to refuse it.
+pub type CraftCheckFn = unsafe extern "system" fn(call: *const CraftCheck, user: *mut c_void) -> u8;
+
+/// A placement the game's cursor check allows, handed to the filters
+/// registered with [`HostApi::build_filter`].
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::abi::{BuildCheck, Header};
+///
+/// let wall = BuildCheck { header: Header::of::<BuildCheck>(), player: 2, item: 0x1d, position: [0; 3] };
+/// assert_eq!(wall.item, 0x1d);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct BuildCheck {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// The building player's character.
+    pub player: u32,
+    /// The item placed: a building block, a prop or another placeable.
+    pub item: u32,
+    /// Where, in 32.32 fixed-point metres.
+    pub position: [i64; 3],
+}
+
+/// A mod's build filter: the placement and the pointer given at
+/// registration; returns 1 to let it through, 0 to refuse it.
+pub type BuildCheckFn = unsafe extern "system" fn(call: *const BuildCheck, user: *mut c_void) -> u8;
+
 /// The table of services the loader offers a mod.
 ///
 /// Fields are only ever appended; a mod checks [`Header::covers`] before it
@@ -2777,6 +2835,19 @@ pub struct HostApi {
     /// server's game thread only. Since minor 24.
     pub spawn:
         extern "system" fn(me: ModHandle, request: *const SpawnRequest, out: *mut u32) -> Status,
+    /// Calls `callback` with `user` on each player's craft request in the
+    /// server's world, on the game thread before the crafting system reads
+    /// it; any filter returning 0 refuses it, and nothing is made or taken.
+    /// Allowed during `enshwick_mod_init` only. Since minor 25.
+    pub craft_filter:
+        extern "system" fn(me: ModHandle, callback: CraftCheckFn, user: *mut c_void) -> Status,
+    /// Calls `callback` with `user` after the game's cursor check allows a
+    /// placement; any filter returning 0 refuses it as the game refuses a
+    /// placement without permission. Runs on both sides, on the cursor
+    /// systems' worker threads: the server's check decides, a client's
+    /// shows. Allowed during `enshwick_mod_init` only. Since minor 25.
+    pub build_filter:
+        extern "system" fn(me: ModHandle, callback: BuildCheckFn, user: *mut c_void) -> Status,
 }
 
 /// The exports a mod DLL provides, by name.
@@ -2838,7 +2909,7 @@ const _: () = {
     assert!(core::mem::offset_of!(HostApi, hook_at) == 24 + 35 * 8);
     assert!(core::mem::offset_of!(HostApi, inventory_open) == 24 + 36 * 8);
     assert!(core::mem::offset_of!(HostApi, inventory_submit) == 24 + 38 * 8);
-    assert!(size_of::<HostApi>() == 24 + 67 * 8);
+    assert!(size_of::<HostApi>() == 24 + 69 * 8);
     assert!(size_of::<InventoryOp>() == 32);
     assert!(size_of::<InventoryRequest>() == 32);
     assert!(size_of::<InventoryOpResult>() == 8);
@@ -2868,6 +2939,9 @@ const _: () = {
     assert!(size_of::<TeleportRequest>() == 8 + 8 + 24 + 16);
     assert!(core::mem::offset_of!(HostApi, spawn) == 24 + 66 * 8);
     assert!(size_of::<SpawnRequest>() == 8 + 16 + 24 + 16 + 8 + 8);
+    assert!(core::mem::offset_of!(HostApi, build_filter) == 24 + 68 * 8);
+    assert!(size_of::<CraftCheck>() == 8 + 16);
+    assert!(size_of::<BuildCheck>() == 8 + 8 + 24);
     assert!(size_of::<GameEventData>() == 24);
     // Frozen: written as an array.
     assert!(size_of::<EntityPlace>() == 32);
