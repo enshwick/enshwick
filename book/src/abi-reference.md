@@ -12,7 +12,7 @@ raw table. The exact types and signatures are in the
 | Constant                                                                                            | Value | Meaning                                         |
 | --------------------------------------------------------------------------------------------------- | ----- | ----------------------------------------------- |
 | [`ABI_MAJOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 1     | A loader refuses a mod built for another major. |
-| [`ABI_MINOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 14    | A newer minor only appends.                     |
+| [`ABI_MINOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 15    | A newer minor only appends.                     |
 
 The ABI version is apart from Enshwick Loader's version (such as 0.2.0, see
 [Releasing and updates](releasing.md#versions)): a platform release raises
@@ -124,8 +124,10 @@ id through `Load::subscribe`. See [Events and the scheduler](events.md).
 | 9   | `BUILDING_PLACED`         | `BuildingPlaced`        | `BuildingData` | the game thread | server |
 | 10  | `BUILDING_REMOVED`        | `BuildingRemoved`       | `BuildingData` | the game thread | server |
 | 11  | `JOIN_MISSING`            | `JoinMissing`           | none           | the game thread | client |
+| 12  | `ALTARS_CHANGED`          | `AltarsChanged`         | none           | the game thread | server |
 
-Subscribing needs minor 2; `JOIN_MISSING` came with minor 10. "Server"
+Subscribing needs minor 2; `JOIN_MISSING` came with minor 10 and
+`ALTARS_CHANGED`, raised for mods that opened altars, with minor 15. "Server"
 events also reach a client while it hosts a game, solo play included. The
 typed events hand a handler the fields the loader knows, with fields added
 after the event zero; they skip the handler only when the data lacks a field
@@ -137,51 +139,56 @@ the event came with.
 is the table of functions the loader passes to `enshwick_mod_init`. Fields
 marked "init only" are allowed during `enshwick_mod_init` only.
 
-| Field              | What it does                                                                                    | Since minor |
-| ------------------ | ----------------------------------------------------------------------------------------------- | ----------- |
-| `header`           | Size and version of the table                                                                   | 0           |
-| `host_version`     | The loader's own version                                                                        | 0           |
-| `build`            | Writes the running game's side, image base and build fingerprint                                | 0           |
-| `symbol`           | Resolves a symbolic id for the running build: the mod's own rows first, then the loader's table | 0           |
-| `system`           | Resolves an ECS system's update function by its reflected name                                  | 0           |
-| `field_offset`     | Resolves a field's offset in a reflected type                                                   | 0           |
-| `type_size`        | Resolves a reflected type's size                                                                | 0           |
-| `hook`             | Links a detour into a function's chain; init only                                               | 0           |
-| `caller_frame`     | Writes the game caller's context at entry of the current chain, for `HookFlags::CALLER_FRAME`   | 0           |
-| `fault`            | Reports a run-time failure; the loader unlinks the mod and turns it off                         | 0           |
-| `log`              | Writes a line to the log under the mod's id                                                     | 0           |
-| `settings`         | The text of the mod's settings file, written from the defaults when missing                     | 0           |
-| `publish`          | Publishes a versioned table of functions for other mods                                         | 0           |
-| `service`          | Finds a table another mod published                                                             | 0           |
-| `constant`         | Resolves an engine constant of the running build by its symbolic id                             | 0           |
-| `data_dir`         | The mod's data folder, `mod-data/<id>`, created on first use                                    | 0           |
-| `log_level`        | The most detailed level kept for the mod's lines                                                | 1           |
-| `subscribe`        | Calls a handler on every occurrence of an event; init only                                      | 2           |
-| `type_hash`        | The ECS type hash of a reflected component type                                                 | 3           |
-| `component`        | A read-only pointer to an entity's component; server game thread only                           | 3           |
-| `entity_template`  | The template GUID of an entity; server game thread only                                         | 3           |
-| `player`           | The connected player whose character is an entity; server game thread only                      | 3           |
-| `players`          | The connected players with characters in the world; server game thread only                     | 3           |
-| `serve_resource`   | Serves a resource built from a base resource by a patch function; init only, one mod per key    | 4           |
-| `add_text`         | Adds the text of a `LocaTag` in a language; init only                                           | 4           |
-| `mods`             | The loaded mods, the loader first                                                               | 5           |
-| `sync`             | Reports the mod's join values and returns the joined server's values to run with                | 6           |
-| `code_range`       | Where the game's code section is loaded and its length                                          | 7           |
-| `patch_code`       | Replaces bytes of game code that must read as expected at arming; init only                     | 7           |
-| `workshop_recipes` | The most recipes one workshop takes: 512, or `u32::MAX` once the loader lifted the limit        | 7           |
-| `hosting`          | 1 while this process runs a game server                                                         | 8           |
-| `server_world`     | The entity world of the game server this process runs; 0 for none                               | 8           |
-| `command`          | Registers a chat command with a line of help; init only                                         | 9           |
-| `chat`             | Sends a chat line to one player or everyone, from any thread                                    | 9           |
-| `set_label`        | Gives an entity a name, as a player's rename does; server game thread only                      | 9           |
-| `rename_filter`    | Calls a filter before the server applies a player's rename; init only                           | 9           |
-| `join_missing`     | The server's join mods the last refused join found missing on this client                       | 10          |
-| `hook_at`          | Runs a handler before an instruction inside a game function; init only                          | 11          |
-| `inventory_open`   | Asks for inventory transactions and item data; init only; `MISSING` on a build that lacks them  | 12          |
-| `item_info`        | Writes an item's static data; any thread                                                        | 12          |
-| `inventory_submit` | Queues an inventory transaction, from any thread; the result comes on the game thread           | 12          |
-| `status`           | Adds a source of lines for the loader's status summary                                          | 13          |
-| `run_command`      | Runs a chat command line as the server's console; server game thread only                       | 13          |
+| Field                 | What it does                                                                                    | Since minor |
+| --------------------- | ----------------------------------------------------------------------------------------------- | ----------- |
+| `header`              | Size and version of the table                                                                   | 0           |
+| `host_version`        | The loader's own version                                                                        | 0           |
+| `build`               | Writes the running game's side, image base and build fingerprint                                | 0           |
+| `symbol`              | Resolves a symbolic id for the running build: the mod's own rows first, then the loader's table | 0           |
+| `system`              | Resolves an ECS system's update function by its reflected name                                  | 0           |
+| `field_offset`        | Resolves a field's offset in a reflected type                                                   | 0           |
+| `type_size`           | Resolves a reflected type's size                                                                | 0           |
+| `hook`                | Links a detour into a function's chain; init only                                               | 0           |
+| `caller_frame`        | Writes the game caller's context at entry of the current chain, for `HookFlags::CALLER_FRAME`   | 0           |
+| `fault`               | Reports a run-time failure; the loader unlinks the mod and turns it off                         | 0           |
+| `log`                 | Writes a line to the log under the mod's id                                                     | 0           |
+| `settings`            | The text of the mod's settings file, written from the defaults when missing                     | 0           |
+| `publish`             | Publishes a versioned table of functions for other mods                                         | 0           |
+| `service`             | Finds a table another mod published                                                             | 0           |
+| `constant`            | Resolves an engine constant of the running build by its symbolic id                             | 0           |
+| `data_dir`            | The mod's data folder, `mod-data/<id>`, created on first use                                    | 0           |
+| `log_level`           | The most detailed level kept for the mod's lines                                                | 1           |
+| `subscribe`           | Calls a handler on every occurrence of an event; init only                                      | 2           |
+| `type_hash`           | The ECS type hash of a reflected component type                                                 | 3           |
+| `component`           | A read-only pointer to an entity's component; server game thread only                           | 3           |
+| `entity_template`     | The template GUID of an entity; server game thread only                                         | 3           |
+| `player`              | The connected player whose character is an entity; server game thread only                      | 3           |
+| `players`             | The connected players with characters in the world; server game thread only                     | 3           |
+| `serve_resource`      | Serves a resource built from a base resource by a patch function; init only, one mod per key    | 4           |
+| `add_text`            | Adds the text of a `LocaTag` in a language; init only                                           | 4           |
+| `mods`                | The loaded mods, the loader first                                                               | 5           |
+| `sync`                | Reports the mod's join values and returns the joined server's values to run with                | 6           |
+| `code_range`          | Where the game's code section is loaded and its length                                          | 7           |
+| `patch_code`          | Replaces bytes of game code that must read as expected at arming; init only                     | 7           |
+| `workshop_recipes`    | The most recipes one workshop takes: 512, or `u32::MAX` once the loader lifted the limit        | 7           |
+| `hosting`             | 1 while this process runs a game server                                                         | 8           |
+| `server_world`        | The entity world of the game server this process runs; 0 for none                               | 8           |
+| `command`             | Registers a chat command with a line of help; init only                                         | 9           |
+| `chat`                | Sends a chat line to one player or everyone, from any thread                                    | 9           |
+| `set_label`           | Gives an entity a name, as a player's rename does; server game thread only                      | 9           |
+| `rename_filter`       | Calls a filter before the server applies a player's rename; init only                           | 9           |
+| `join_missing`        | The server's join mods the last refused join found missing on this client                       | 10          |
+| `hook_at`             | Runs a handler before an instruction inside a game function; init only                          | 11          |
+| `inventory_open`      | Asks for inventory transactions and item data; init only; `MISSING` on a build that lacks them  | 12          |
+| `item_info`           | Writes an item's static data; any thread                                                        | 12          |
+| `inventory_submit`    | Queues an inventory transaction, from any thread; the result comes on the game thread           | 12          |
+| `status`              | Adds a source of lines for the loader's status summary                                          | 13          |
+| `run_command`         | Runs a chat command line as the server's console; server game thread only                       | 13          |
+| `altars_open`         | Asks the loader to follow the Flame Altars of the server's world; init only                     | 15          |
+| `altars`              | The altars with their levels and zones; any thread; `REFUSED` for a mod that did not open them  | 15          |
+| `altar_zones_control` | Makes the mod the one that sizes altar zones, one mod at a time; init only                      | 15          |
+| `set_altar_zones`     | Replaces the sizes the controlling mod gives altar zones; any thread                            | 15          |
+| `zone_check_filter`   | Calls a filter when the game refuses a placement outside a single building zone; init only      | 15          |
 
 ## Under an older loader
 
@@ -209,6 +216,7 @@ the mod off with a reason, which the mod's log shows as `off: <reason>`:
 | 13          | status lines                    | Off: `status lines need a newer loader`                      |
 | 13          | `commands::run`                 | `Err(RunError::NoLoader)`                                    |
 | 14          | `ModEntry::signed_by`           | Empty                                                        |
+| 15          | altars and zone checks          | Off: `altars need a newer loader`                            |
 
 A mod that can do without a feature catches the `Off` and goes on without it
 instead of returning it from `init`.

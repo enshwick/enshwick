@@ -35,7 +35,8 @@ copy_staff_locked_chest_chance = 0.02
 
 ## Who needs it
 
-The server and every player. It needs Flame altar zones and counts in the join
-check.
+The server and every player. It counts in the join check. It reads the altar
+zones from the platform, so it works with or without Flame altar zones and
+follows their grown zones when that mod runs.
 
 Licensed under [MIT](../../LICENSE).

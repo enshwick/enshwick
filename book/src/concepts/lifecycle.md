@@ -9,7 +9,7 @@ The loader takes every mod through five steps, all at game start.
    - mods for the other side (a dedicated server skips `CLIENT` mods);
    - a second mod with an id already taken, in file name order;
    - mods whose `requires` is missing, skipped or out of range, as in
-     `requires flame-altar-zones ^0.2, found 0.1.3`;
+     `requires trading-post ^0.2, found 0.1.3`;
    - mods in a dependency cycle.
 
    The rest load with their dependencies first, otherwise in id order.

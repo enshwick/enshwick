@@ -19,6 +19,7 @@
 - [Logging and diagnostics](logging.md)
 - [Events and the scheduler](events.md)
 - [The world](world.md)
+- [Altars and bases](altars.md)
 - [Commands and chat](commands.md)
 - [State and data folders](state.md)
 - [Services between mods](services.md)

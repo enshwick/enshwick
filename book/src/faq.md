@@ -85,18 +85,18 @@ On an unknown build every mod's hold applies; see
 
 These lines read `<file> skipped: <reason>`, or name the file alone:
 
-| Message                                                    | What it means                                                         |
-| ---------------------------------------------------------- | --------------------------------------------------------------------- |
-| `<file> is not an Enshwick mod`                            | The DLL lacks the four exports of `declare_mod!`                      |
-| `<file> could not be loaded`                               | Windows could not load the DLL, such as a missing dependency          |
-| `<file> is built for ABI 2, the loader speaks 1`           | The mod was built for another ABI major                               |
-| `skipped: not for this side of the game`                   | A client-only mod on the dedicated server                             |
-| `skipped: a second copy of safes, after #0`                | Two DLLs with the same id; the first one loads                        |
-| `skipped: requires flame-altar-zones, which is not loaded` | A required mod is absent or was skipped itself                        |
-| `skipped: requires flame-altar-zones ^0.2, found 0.1.3`    | A required mod is too old or too new                                  |
-| `skipped: conflicts with other-mod`                        | Of two conflicting mods, the later one gives way                      |
-| `skipped: in a dependency cycle`                           | Mods require each other in a circle                                   |
-| `skipped: the id "My Mod" is not [a-z0-9-]+`               | The manifest's id is invalid; other manifest errors read the same way |
+| Message                                               | What it means                                                         |
+| ----------------------------------------------------- | --------------------------------------------------------------------- |
+| `<file> is not an Enshwick mod`                       | The DLL lacks the four exports of `declare_mod!`                      |
+| `<file> could not be loaded`                          | Windows could not load the DLL, such as a missing dependency          |
+| `<file> is built for ABI 2, the loader speaks 1`      | The mod was built for another ABI major                               |
+| `skipped: not for this side of the game`              | A client-only mod on the dedicated server                             |
+| `skipped: a second copy of safes, after #0`           | Two DLLs with the same id; the first one loads                        |
+| `skipped: requires trading-post, which is not loaded` | A required mod is absent or was skipped itself                        |
+| `skipped: requires trading-post ^0.2, found 0.1.3`    | A required mod is too old or too new                                  |
+| `skipped: conflicts with other-mod`                   | Of two conflicting mods, the later one gives way                      |
+| `skipped: in a dependency cycle`                      | Mods require each other in a circle                                   |
+| `skipped: the id "My Mod" is not [a-z0-9-]+`          | The manifest's id is invalid; other manifest errors read the same way |
 
 The client loads server mods too, since it runs the server's code while it
 hosts a game; see [Sides and hosting](concepts/sides-and-hosting.md).

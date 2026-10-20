@@ -717,7 +717,7 @@ impl Load<'_> {
     /// static ZONES: Zones = Zones { count };
     ///
     /// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
-    ///     load.publish("flame-altar-zones.zones", 1, &ZONES)
+    ///     load.publish("trading-post.prices", 1, &ZONES)
     /// }
     /// ```
     pub fn publish<T: Sync>(
@@ -756,8 +756,8 @@ impl Load<'_> {
     /// }
     ///
     /// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
-    ///     // SAFETY: `Zones` is the table `flame-altar-zones` publishes as v1.
-    ///     let zones: &'static Zones = unsafe { load.service("flame-altar-zones.zones", 1)? };
+    ///     // SAFETY: `Zones` is the table `trading-post` publishes as v1.
+    ///     let zones: &'static Zones = unsafe { load.service("trading-post.prices", 1)? };
     ///     let _ = (zones.count)();
     ///     Ok(())
     /// }

@@ -5,9 +5,10 @@ use core::sync::atomic::Ordering;
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use crate::abi::{
-    BuildInfo, CallerFrame, CommandFn, Event, EventFn, Header, HookSpec, HostApi, InventoryDoneFn,
-    InventoryRequest, ItemData, Level, MidHookFn, MidHookSpec, ModHandle, ModInfo, PlayerInfo,
-    RenameFn, ResourceKey, ResourcePatchFn, Side, Status, StatusFn, Str,
+    AltarInfo, AltarZoneSize, BuildInfo, CallerFrame, CommandFn, Event, EventFn, Header, HookSpec,
+    HostApi, InventoryDoneFn, InventoryRequest, ItemData, Level, MidHookFn, MidHookSpec, ModHandle,
+    ModInfo, PlayerInfo, RenameFn, ResourceKey, ResourcePatchFn, Side, Status, StatusFn, Str,
+    ZoneCheckFn,
 };
 
 use super::{FakeHost, LinkedHook, ServedResource, SubmittedRequest};
@@ -42,6 +43,14 @@ pub(crate) struct State {
     pub(crate) status_sources: Vec<(StatusFn, usize)>,
     /// The command lines the mod ran as the console, in order.
     pub(crate) console: Vec<String>,
+    /// The altars `altars` lists, settable while installed.
+    pub(crate) altars: Vec<AltarInfo>,
+    /// Whether the mod opened altars, and whether it controls their zones.
+    pub(crate) altars_opened: bool,
+    pub(crate) zone_control: bool,
+    /// The zone sizes the mod set last.
+    pub(crate) zone_sizes: Vec<AltarZoneSize>,
+    pub(crate) zone_filters: Vec<(ZoneCheckFn, usize)>,
     /// The reply `run_command` last handed out, alive until the next call.
     run_out: Option<Box<str>>,
     /// The settings text last handed out, alive until the next call.
@@ -82,6 +91,11 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         rename_filters: Vec::new(),
         status_sources: Vec::new(),
         console: Vec::new(),
+        altars: Vec::new(),
+        altars_opened: false,
+        zone_control: false,
+        zone_sizes: Vec::new(),
+        zone_filters: Vec::new(),
         run_out: None,
         settings: None,
     });
@@ -394,15 +408,15 @@ extern "system" fn join_missing(
 
 /// Copies up to `capacity` of `mods` to `out`, `entry_size` bytes apart, and
 /// writes how many there are.
-fn list(
-    mods: &[ModInfo],
-    out: *mut ModInfo,
+fn list<T: Copy>(
+    mods: &[T],
+    out: *mut T,
     entry_size: u32,
     capacity: u32,
     count: *mut u32,
 ) -> Status {
     let stride = usize::try_from(entry_size).unwrap_or(0);
-    let shared = stride.min(size_of::<ModInfo>());
+    let shared = stride.min(size_of::<T>());
     let capacity = usize::try_from(capacity).unwrap_or(0);
     if !out.is_null() {
         for (i, info) in mods.iter().take(capacity).enumerate() {
@@ -598,6 +612,65 @@ extern "system" fn inventory_submit(
     })
 }
 
+extern "system" fn altars_open(_me: ModHandle) -> Status {
+    with(Status::MISSING, |s| {
+        s.altars_opened = true;
+        Status::OK
+    })
+}
+
+extern "system" fn altars(
+    _me: ModHandle,
+    out: *mut AltarInfo,
+    entry_size: u32,
+    capacity: u32,
+    count: *mut u32,
+) -> Status {
+    let Some(altars) = with(None, |s| s.altars_opened.then(|| s.altars.clone())) else {
+        return Status::REFUSED;
+    };
+    list(&altars, out, entry_size, capacity, count)
+}
+
+extern "system" fn altar_zones_control(_me: ModHandle) -> Status {
+    with(Status::MISSING, |s| {
+        s.altars_opened = true;
+        s.zone_control = true;
+        Status::OK
+    })
+}
+
+extern "system" fn set_altar_zones(
+    _me: ModHandle,
+    sizes: *const AltarZoneSize,
+    count: usize,
+) -> Status {
+    let sizes = if count == 0 || sizes.is_null() {
+        Vec::new()
+    } else {
+        // SAFETY: the safe layer passes `count` sizes, valid for the call.
+        unsafe { core::slice::from_raw_parts(sizes, count) }.to_vec()
+    };
+    with(Status::MISSING, |s| {
+        if !s.zone_control {
+            return Status::REFUSED;
+        }
+        s.zone_sizes = sizes;
+        Status::OK
+    })
+}
+
+extern "system" fn zone_check_filter(
+    _me: ModHandle,
+    callback: ZoneCheckFn,
+    user: *mut c_void,
+) -> Status {
+    with(Status::MISSING, |s| {
+        s.zone_filters.push((callback, user.expose_provenance()));
+        Status::OK
+    })
+}
+
 /// table it sees for the process, so it is one static.
 pub(crate) static TABLE: HostApi = HostApi {
     header: Header::of::<HostApi>(),
@@ -643,4 +716,9 @@ pub(crate) static TABLE: HostApi = HostApi {
     inventory_submit,
     status,
     run_command,
+    altars_open,
+    altars,
+    altar_zones_control,
+    set_altar_zones,
+    zone_check_filter,
 };

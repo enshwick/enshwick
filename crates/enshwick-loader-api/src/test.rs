@@ -84,9 +84,9 @@ use std::collections::{HashMap, HashSet};
 use std::sync::MutexGuard;
 
 use crate::abi::{
-    CallerFrame, CommandCall, Event, Fingerprint, Header, HookFlags, HostApi, InventoryOp,
-    InventoryOpResult, InventoryResult, ItemData, Level, ModHandle, ModInfo, PlayerInfo,
-    RenameCall, ResourceKey, Side, Status, Str,
+    AltarInfo, AltarZoneSize, Bounds, CallerFrame, CommandCall, Event, Fingerprint, Header,
+    HookFlags, HostApi, InventoryOp, InventoryOpResult, InventoryResult, ItemData, Level,
+    ModHandle, ModInfo, PlayerInfo, RenameCall, ResourceKey, Side, Status, Str, ZoneCheck,
 };
 use crate::events::Kind;
 use crate::{FnPtr, Hook};
@@ -648,7 +648,7 @@ impl FakeHost {
     /// static ZONES: Zones = Zones { count };
     ///
     /// let loader = enshwick_loader_api::test::FakeHost::new()
-    ///     .service("flame-altar-zones.zones", 1, (&raw const ZONES).cast())
+    ///     .service("trading-post.prices", 1, (&raw const ZONES).cast())
     ///     .install();
     /// # let _ = loader;
     /// ```
@@ -1314,6 +1314,77 @@ impl Installed {
     #[must_use]
     pub fn chat(&self) -> Vec<(u64, String)> {
         table::with(Vec::new(), |s| s.chat.clone())
+    }
+
+    /// Makes `altars` the altars of the world, as the loader lists them to a
+    /// mod that opened altars.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_loader_api::abi::AltarInfo;
+    ///
+    /// let loader = enshwick_loader_api::test::FakeHost::new().install();
+    /// let mut altar = AltarInfo::EMPTY;
+    /// altar.entity = 4096;
+    /// loader.set_altars(&[altar]);
+    /// ```
+    pub fn set_altars(&self, altars: &[AltarInfo]) {
+        table::with((), |s| s.altars = altars.to_vec());
+    }
+
+    /// Whether the mod opened altars, and whether it controls their zones.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick_loader_api::test::FakeHost::new().install();
+    /// assert_eq!(loader.altars_opened(), (false, false));
+    /// ```
+    #[must_use]
+    pub fn altars_opened(&self) -> (bool, bool) {
+        table::with((false, false), |s| (s.altars_opened, s.zone_control))
+    }
+
+    /// The altar zone sizes the mod set last.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick_loader_api::test::FakeHost::new().install();
+    /// assert!(loader.zone_sizes().is_empty());
+    /// ```
+    #[must_use]
+    pub fn zone_sizes(&self) -> Vec<AltarZoneSize> {
+        table::with(Vec::new(), |s| s.zone_sizes.clone())
+    }
+
+    /// Asks the mod's zone check filters about a placement the game refused,
+    /// as the loader would; whether any accepts it.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_loader_api::abi::Bounds;
+    ///
+    /// let loader = enshwick_loader_api::test::FakeHost::new().install();
+    /// assert!(!loader.zone_check(&[], Bounds::default(), 0));
+    /// ```
+    #[must_use]
+    pub fn zone_check(&self, zones: &[Bounds], object: Bounds, margin: i64) -> bool {
+        let filters = table::with(Vec::new(), |s| s.zone_filters.clone());
+        let call = ZoneCheck {
+            header: Header::of::<ZoneCheck>(),
+            zones: zones.as_ptr(),
+            zone_count: zones.len(),
+            object,
+            margin,
+        };
+        filters.iter().any(|&(callback, user)| {
+            let user = core::ptr::with_exposed_provenance_mut(user);
+            // SAFETY: a valid call; `user` is the pointer the mod registered with.
+            unsafe { callback(&raw const call, user) != 0 }
+        })
     }
 
     /// The labels the mod set, as `(entity, text)`, in order.

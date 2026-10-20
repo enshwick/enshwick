@@ -265,7 +265,7 @@ pub(crate) fn turn_off_mod(id: &str, reason: &str) {
     }
 }
 
-fn loader() -> Option<&'static Loader> {
+pub(crate) fn loader() -> Option<&'static Loader> {
     LOADER.get()
 }
 
@@ -438,6 +438,11 @@ pub(crate) static API: HostApi = HostApi {
     inventory_submit,
     status,
     run_command,
+    altars_open,
+    altars,
+    altar_zones_control,
+    set_altar_zones,
+    zone_check_filter,
 };
 
 /// A static slice from a pointer and a count, empty for a null pointer.
@@ -780,7 +785,7 @@ extern "system" fn subscribe(
     if record.off.load(Ordering::Acquire) {
         return Status::FAULTED;
     }
-    if !(Event::SETTINGS_CHANGED.0..=Event::JOIN_MISSING.0).contains(&event.0) {
+    if !(Event::SETTINGS_CHANGED.0..=Event::ALTARS_CHANGED.0).contains(&event.0) {
         return Status::MISSING;
     }
     if loader.delivery.get().is_some() {
@@ -1094,9 +1099,9 @@ extern "system" fn join_missing(
 /// # Safety
 ///
 /// A non-null `out` has room for `capacity` entries of `entry_size` bytes.
-unsafe fn list(
-    infos: &[ModInfo],
-    out: *mut ModInfo,
+unsafe fn list<T: Copy>(
+    infos: &[T],
+    out: *mut T,
     entry_size: u32,
     capacity: u32,
     count: *mut u32,
@@ -1106,7 +1111,7 @@ unsafe fn list(
         if stride < size_of::<Header>() {
             return Status::BAD_ARGS;
         }
-        let copied = stride.min(size_of::<ModInfo>());
+        let copied = stride.min(size_of::<T>());
         for (index, info) in infos.iter().take(capacity as usize).enumerate() {
             // SAFETY: the caller passes room for `capacity` entries of
             // `entry_size` bytes each.
@@ -1246,6 +1251,75 @@ extern "system" fn run_command(me: ModHandle, line: Str, out: *mut Str) -> Statu
         }),
         Err(status) => status,
     }
+}
+
+extern "system" fn altars_open(me: ModHandle) -> Status {
+    let Some((loader, index)) = caller_index(me) else {
+        return Status::BAD_ARGS;
+    };
+    crate::altars::open(loader, index)
+}
+
+extern "system" fn altars(
+    me: ModHandle,
+    out: *mut api_frame::AltarInfo,
+    entry_size: u32,
+    capacity: u32,
+    count: *mut u32,
+) -> Status {
+    let Some((_, index)) = caller_index(me) else {
+        return Status::BAD_ARGS;
+    };
+    if !crate::altars::opened(index) {
+        return Status::REFUSED;
+    }
+    let altars = crate::altars::list();
+    // SAFETY: forwarded from the mod's call.
+    unsafe { list(&altars, out, entry_size, capacity, count) }
+}
+
+extern "system" fn altar_zones_control(me: ModHandle) -> Status {
+    let Some((loader, index)) = caller_index(me) else {
+        return Status::BAD_ARGS;
+    };
+    crate::altars::control(loader, index)
+}
+
+extern "system" fn set_altar_zones(
+    me: ModHandle,
+    sizes: *const api_frame::AltarZoneSize,
+    count: usize,
+) -> Status {
+    let Some((_, index)) = caller_index(me) else {
+        return Status::BAD_ARGS;
+    };
+    let sizes = if count == 0 {
+        &[][..]
+    } else if sizes.is_null() {
+        return Status::BAD_ARGS;
+    } else {
+        // SAFETY: the mod passes `count` sizes, valid for the call.
+        unsafe { core::slice::from_raw_parts(sizes, count) }
+    };
+    crate::altars::set_sizes(index, sizes)
+}
+
+extern "system" fn zone_check_filter(
+    me: ModHandle,
+    callback: api_frame::ZoneCheckFn,
+    user: *mut core::ffi::c_void,
+) -> Status {
+    let Some((_, index)) = caller_index(me) else {
+        return Status::BAD_ARGS;
+    };
+    crate::altars::register(index, callback, user)
+}
+
+/// The loader and the index of the calling mod, unless it is unknown or off.
+fn caller_index(me: ModHandle) -> Option<(&'static Loader, usize)> {
+    let loader = loader()?;
+    let (index, record) = loader.record(me)?;
+    (!record.off.load(Ordering::Acquire)).then_some((loader, index))
 }
 
 /// Mod handles start at 1; 0 is no mod.

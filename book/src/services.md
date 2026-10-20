@@ -5,6 +5,10 @@ One mod can offer functions to others as a service: a `repr(C)` table of
 separate DLLs, possibly built with different compilers, so the table is the
 whole contract between them.
 
+A service carries one mod's own logic to another. Game data, such as altars,
+their zones and bases, comes from the platform's API instead (see
+[Altars and bases](altars.md)), so mods need not depend on each other for it.
+
 ## Publishing
 
 [`load.publish(name, version, &TABLE)`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/load.rs)
@@ -12,7 +16,7 @@ publishes a `'static` table during `init`:
 
 ```rust
 #[repr(C)]
-struct Zones {
+struct Prices {
     count: extern "system" fn() -> u32,
 }
 
@@ -20,10 +24,10 @@ extern "system" fn count() -> u32 {
     0
 }
 
-static ZONES: Zones = Zones { count };
+static PRICES: Prices = Prices { count };
 
 fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
-    load.publish("flame-altar-zones.zones", 1, &ZONES)
+    load.publish("trading-post.prices", 1, &PRICES)
 }
 ```
 
@@ -40,14 +44,14 @@ returns the table during `init`:
 
 ```rust
 #[repr(C)]
-struct Zones {
+struct Prices {
     count: extern "system" fn() -> u32,
 }
 
 fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
-    // SAFETY: `Zones` is the table `flame-altar-zones` publishes as v1.
-    let zones: &'static Zones = unsafe { load.service("flame-altar-zones.zones", 1)? };
-    enshwick_loader_api::info!("{} zones", (zones.count)());
+    // SAFETY: `Prices` is the table `trading-post` publishes as v1.
+    let prices: &'static Prices = unsafe { load.service("trading-post.prices", 1)? };
+    enshwick_loader_api::info!("{} prices", (prices.count)());
     Ok(())
 }
 ```
@@ -66,10 +70,9 @@ the user's manifest:
 
 ```rust
 let manifest = enshwick_loader_api::manifest!(
-    id: "survivors-per-altar",
-    side: BOTH,
-    join = true,
-    requires: ["flame-altar-zones" => ">=0.1, <1.0"],
+    id: "market-stalls",
+    side: SERVER,
+    requires: ["trading-post" => ">=0.1, <1.0"],
 );
 assert_eq!(manifest.dependency_count, 1);
 ```
@@ -105,38 +108,30 @@ compile time there:
 ```rust
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
-pub struct AltarZone {
-    pub altar: u32,
-    pub min: [i64; 3],
-    pub max: [i64; 3],
+pub struct Price {
+    pub item: u32,
+    pub buy: u32,
+    pub sell: u32,
 }
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
-pub struct ZonesService {
-    /// Writes up to `capacity` zones to `out` and returns how many altars
-    /// have a zone, which may exceed `capacity`.
-    pub zones: extern "system" fn(out: *mut AltarZone, capacity: usize) -> usize,
+pub struct PricesService {
+    /// Writes up to `capacity` prices to `out` and returns how many items
+    /// have a price, which may exceed `capacity`.
+    pub prices: extern "system" fn(out: *mut Price, capacity: usize) -> usize,
 }
 
-pub const NAME: &str = "flame-altar-zones.zones";
+pub const NAME: &str = "trading-post.prices";
 pub const VERSION: u32 = 1;
 
 const _: () = {
-    assert!(size_of::<AltarZone>() == 56);
-    assert!(size_of::<ZonesService>() == 8);
+    assert!(size_of::<Price>() == 12);
+    assert!(size_of::<PricesService>() == 8);
 };
 ```
 
 Pass plain data across the table: integers, floats, `repr(C)` structs, and
-pointers with a length the caller owns, as `zones` does. Never pass Rust types
+pointers with a length the caller owns, as `prices` does. Never pass Rust types
 such as `String`, `Vec` or `Box`, and never free across the boundary memory the
 other side allocated.
-
-This is
-[the zones service](https://github.com/themaiby/enshwick/blob/main/mods/enshwick-flame-altar-zones/src/service.rs).
-[`enshwick-flame-altar-zones`](https://github.com/themaiby/enshwick/tree/main/mods/enshwick-flame-altar-zones)
-publishes it, and
-[`enshwick-survivors-per-altar`](https://github.com/themaiby/enshwick/tree/main/mods/enshwick-survivors-per-altar)
-compiles the same file, requires `flame-altar-zones` and reads the altar zones
-through it.

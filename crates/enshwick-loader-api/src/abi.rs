@@ -14,7 +14,7 @@ use core::sync::atomic::AtomicUsize;
 pub const ABI_MAJOR: u16 = 1;
 
 /// The minor version of this interface. A newer minor only appends fields.
-pub const ABI_MINOR: u16 = 14;
+pub const ABI_MINOR: u16 = 15;
 
 /// Whether `id` is a valid mod id: 1 to 64 characters of `[a-z0-9-]`.
 ///
@@ -505,6 +505,12 @@ impl Event {
     /// the player closed the loader's note: a handler leaves downloads to a
     /// thread of its own. Client only. Since minor 10.
     pub const JOIN_MISSING: Self = Self(11);
+    /// The Flame Altars of the server's world changed: one was placed or
+    /// removed, moved, raised a level or had its zone built anew; no data.
+    /// [`HostApi::altars`] lists them as they are now. Raised on the game
+    /// thread after the step that noticed it, while a mod has opened altars
+    /// ([`HostApi::altars_open`]). Server only. Since minor 15.
+    pub const ALTARS_CHANGED: Self = Self(12);
 }
 
 /// The data of [`Event::BUILDING_PLACED`] and [`Event::BUILDING_REMOVED`].
@@ -1713,6 +1719,154 @@ impl ItemData {
     pub const IS_BLUEPRINT: u32 = 1 << 3;
 }
 
+/// A box of whole cells or of 32.32 fixed-point metres, as its user says:
+/// `min` inclusive, `max` exclusive on each axis; axis 1 is up.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::abi::Bounds;
+///
+/// let zone = Bounds { min: [0, 0, 0], max: [80, 80, 80] };
+/// assert_eq!(zone.max[0] - zone.min[0], 80);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub struct Bounds {
+    /// The inclusive lower corner.
+    pub min: [i64; 3],
+    /// The exclusive upper corner.
+    pub max: [i64; 3],
+}
+
+/// One Flame Altar of the server's world, from [`HostApi::altars`].
+///
+/// Zones are in whole 0.5 m cells, rounded outwards, as the engine builds
+/// them from the altar's trigger shape.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::abi::{AltarInfo, Bounds, Header};
+///
+/// let mut altar = AltarInfo::EMPTY;
+/// altar.entity = 4096;
+/// altar.level = 1;
+/// altar.level_count = 1;
+/// altar.zone = Bounds { min: [0, 0, 0], max: [80, 80, 80] };
+/// altar.levels[0] = altar.zone;
+/// assert_eq!(altar.header, Header::of::<AltarInfo>());
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct AltarInfo {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// The altar's entity.
+    pub entity: u32,
+    /// Its Flame level; 0 until the engine has reported it.
+    pub level: u8,
+    /// 1 when the altar is tilted off the vertical: its zone is known, its
+    /// level zones are not, and it keeps the engine's size.
+    pub tilted: u8,
+    /// How many entries of `levels` hold a zone.
+    pub level_count: u8,
+    /// Zero.
+    pub reserved: u8,
+    /// The zone as the engine has built it now, growth by any mod included.
+    pub zone: Bounds,
+    /// The vanilla zone at each level from 1 to `level_count`.
+    pub levels: [Bounds; 16],
+    /// Where the altar stands, in metres.
+    pub position: [f64; 3],
+}
+
+impl AltarInfo {
+    /// An altar with nothing known, its header set.
+    pub const EMPTY: Self = Self {
+        header: Header::of::<Self>(),
+        entity: 0,
+        level: 0,
+        tilted: 0,
+        level_count: 0,
+        reserved: 0,
+        zone: Bounds {
+            min: [0; 3],
+            max: [0; 3],
+        },
+        levels: [Bounds {
+            min: [0; 3],
+            max: [0; 3],
+        }; 16],
+        position: [0.0; 3],
+    };
+}
+
+/// The size a mod that controls altar zones gives one altar, for
+/// [`HostApi::set_altar_zones`]: its vanilla zone at `level` grown by `grow`
+/// cells on every horizontal side and made `height` cells tall. The loader
+/// applies it while the altar is at `level`, the vanilla size otherwise.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::abi::AltarZoneSize;
+///
+/// let size = AltarZoneSize { altar: 4096, level: 2, reserved: [0; 3], grow: 6, height: 120 };
+/// assert_eq!(size.grow, 6);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct AltarZoneSize {
+    /// The altar's entity.
+    pub altar: u32,
+    /// The level the size was worked out for.
+    pub level: u8,
+    /// Zero.
+    pub reserved: [u8; 3],
+    /// Cells added on every horizontal side, at least 0.
+    pub grow: i64,
+    /// The zone's height in cells.
+    pub height: i64,
+}
+
+/// A placement the game refused because the object's box does not lie in a
+/// single building zone, as [`HostApi::zone_check_filter`] hands it on.
+/// Coordinates are 32.32 fixed-point metres.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::abi::{Bounds, Header, ZoneCheck};
+///
+/// let check = ZoneCheck {
+///     header: Header::of::<ZoneCheck>(),
+///     zones: core::ptr::null(),
+///     zone_count: 0,
+///     object: Bounds::default(),
+///     margin: 0,
+/// };
+/// assert_eq!(check.zone_count, 0);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct ZoneCheck {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// The building zones, half-open boxes, valid for the call.
+    pub zones: *const Bounds,
+    /// How many boxes `zones` holds.
+    pub zone_count: usize,
+    /// The object's box, both corners included.
+    pub object: Bounds,
+    /// How far the game lets an object reach past a zone, on every side.
+    pub margin: i64,
+}
+
+/// A mod's zone check filter: the check and the pointer given at
+/// registration; returns 1 to accept the placement after all.
+pub type ZoneCheckFn = unsafe extern "system" fn(check: *const ZoneCheck, user: *mut c_void) -> u8;
+
 /// The table of services the loader offers a mod.
 ///
 /// Fields are only ever appended; a mod checks [`Header::covers`] before it
@@ -1947,6 +2101,39 @@ pub struct HostApi {
     /// game thread only; [`Status::MISSING`] when no command has the name.
     /// Since minor 13.
     pub run_command: extern "system" fn(me: ModHandle, line: Str, out: *mut Str) -> Status,
+    /// Asks the loader to follow the Flame Altars of the server's world, for
+    /// [`HostApi::altars`] and [`Event::ALTARS_CHANGED`]. Allowed during
+    /// `enshwick_mod_init` only. Since minor 15.
+    pub altars_open: extern "system" fn(me: ModHandle) -> Status,
+    /// Up to `capacity` altars of the server's world and how many there are.
+    /// Entries are `entry_size` bytes apart, the caller's
+    /// `size_of::<AltarInfo>()`; the loader fills what both sides know of
+    /// each and its own [`Header`]. Any thread; empty while no world runs.
+    /// [`Status::REFUSED`] for a mod that did not open altars. Since minor 15.
+    pub altars: extern "system" fn(
+        me: ModHandle,
+        out: *mut AltarInfo,
+        entry_size: u32,
+        capacity: u32,
+        count: *mut u32,
+    ) -> Status,
+    /// Makes the mod the one that sizes altar zones, through
+    /// [`HostApi::set_altar_zones`]; it opens altars too. One mod at a time:
+    /// [`Status::REFUSED`] when another holds it. Allowed during
+    /// `enshwick_mod_init` only. Since minor 15.
+    pub altar_zones_control: extern "system" fn(me: ModHandle) -> Status,
+    /// Replaces the sizes the loader gives altar zones with the `count`
+    /// sizes at `sizes`; an altar without one keeps its vanilla size. Any
+    /// thread; the server's next zone pass writes them. [`Status::REFUSED`]
+    /// for a mod that does not control altar zones. Since minor 15.
+    pub set_altar_zones:
+        extern "system" fn(me: ModHandle, sizes: *const AltarZoneSize, count: usize) -> Status,
+    /// Calls `callback` with `user` when the game refuses a placement whose
+    /// box does not lie in one building zone; any filter returning 1 accepts
+    /// it after all. Runs on both sides, since a client predicts placement.
+    /// Allowed during `enshwick_mod_init` only. Since minor 15.
+    pub zone_check_filter:
+        extern "system" fn(me: ModHandle, callback: ZoneCheckFn, user: *mut c_void) -> Status,
 }
 
 /// The exports a mod DLL provides, by name.
@@ -2008,7 +2195,7 @@ const _: () = {
     assert!(core::mem::offset_of!(HostApi, hook_at) == 24 + 35 * 8);
     assert!(core::mem::offset_of!(HostApi, inventory_open) == 24 + 36 * 8);
     assert!(core::mem::offset_of!(HostApi, inventory_submit) == 24 + 38 * 8);
-    assert!(size_of::<HostApi>() == 24 + 41 * 8);
+    assert!(size_of::<HostApi>() == 24 + 46 * 8);
     assert!(size_of::<InventoryOp>() == 32);
     assert!(size_of::<InventoryRequest>() == 32);
     assert!(size_of::<InventoryOpResult>() == 8);
@@ -2023,6 +2210,12 @@ const _: () = {
     assert!(size_of::<MidHookSpec>() == 32);
     assert!(core::mem::offset_of!(HostApi, status) == 24 + 39 * 8);
     assert!(core::mem::offset_of!(HostApi, run_command) == 24 + 40 * 8);
+    assert!(core::mem::offset_of!(HostApi, altars_open) == 24 + 41 * 8);
+    assert!(core::mem::offset_of!(HostApi, zone_check_filter) == 24 + 45 * 8);
+    assert!(size_of::<Bounds>() == 48);
+    assert!(size_of::<AltarInfo>() == 16 + 17 * 48 + 24);
+    assert!(size_of::<AltarZoneSize>() == 24);
+    assert!(size_of::<ZoneCheck>() == 8 + 16 + 48 + 8);
     assert!(core::mem::offset_of!(Manifest, updates) == 80);
     assert!(size_of::<UpdateSource>() == 48);
     assert!(size_of::<ResourceKey>() == 24);

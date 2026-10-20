@@ -19,6 +19,7 @@ doc = false
 
 [dependencies]
 arc-swap.workspace = true
+arrayvec.workspace = true
 enshwick-loader-api.workspace = true
 enshwick-loader-reflect.workspace = true
 rustc-hash.workspace = true

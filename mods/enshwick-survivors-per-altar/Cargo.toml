@@ -19,7 +19,6 @@ enshwick-loader-api.workspace = true
 serde.workspace = true
 
 [dev-dependencies]
-semver.workspace = true
 toml.workspace = true
 
 [lints]
