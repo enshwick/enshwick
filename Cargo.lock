@@ -263,6 +263,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "enshwick-shared-experience"
+version = "0.1.0"
+dependencies = [
+ "enshwick-api",
+ "enshwick-test",
+ "serde",
+ "toml",
+]
+
+[[package]]
 name = "enshwick-stub"
 version = "0.1.1"
 dependencies = [
