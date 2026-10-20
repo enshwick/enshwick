@@ -446,3 +446,113 @@ impl Components {
         (error == 0 && root != 0).then_some(Entity(root))
     }
 }
+
+/// Metres from the engine's 32.32 fixed-point world coordinates, as
+/// `CurrentTransform` stores them.
+///
+/// # Examples
+///
+/// ```
+/// assert_eq!(enshwick_api::ecs::metres([3_i64 << 32, -(1_i64 << 31), 0]), [3.0, -0.5, 0.0]);
+/// ```
+#[must_use]
+#[expect(clippy::cast_precision_loss, reason = "world coordinates fit an f64")]
+pub fn metres(fixed: [i64; 3]) -> [f64; 3] {
+    fixed.map(|v| v as f64 / 4_294_967_296.0)
+}
+
+type AttributeFind = unsafe extern "system" fn(out: *mut u64, attribute: u32, registry: u64) -> u64;
+
+/// Reads of attribute sets: components such as `Level` whose values are
+/// attributes looked up by hash in the row's attribute registry.
+///
+/// # Examples
+///
+/// ```
+/// fn init(load: &mut enshwick_api::Load<'_>) -> Result<enshwick_api::ecs::Attributes, enshwick_api::Off> {
+///     enshwick_api::ecs::Attributes::resolve(load)
+/// }
+/// ```
+#[derive(Clone, Copy, Debug)]
+pub struct Attributes {
+    find: AttributeFind,
+    flags: usize,
+    data_offset: usize,
+    slot: usize,
+}
+
+impl Attributes {
+    /// Resolves the reads for the running build.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] when the loader lacks any of them for this build.
+    ///
+    /// # Examples
+    ///
+    /// See [`Attributes`].
+    pub fn resolve(load: &Load<'_>) -> Result<Self, Off> {
+        let size = |name| {
+            load.constant(name)
+                .map(|v| usize::try_from(v).unwrap_or(usize::MAX))
+        };
+        let find = load.symbol("ecs.attribute_find")?;
+        Ok(Self {
+            // SAFETY: the loader pins this id to the attribute lookup.
+            find: unsafe { function(find) },
+            flags: size("ecs.level_flags")?,
+            data_offset: size("ecs.level_data_offset")?,
+            slot: size("ecs.attribute_slot")?,
+        })
+    }
+
+    /// The value of `attribute` in the attribute set `set`, looked up in the
+    /// row's attribute `registry`; `None` when the set is not initialised or
+    /// does not hold the attribute.
+    ///
+    /// # Safety
+    ///
+    /// `set` is a live attribute-set component and `registry` the attribute
+    /// registry word of the same row, inside the hooked system.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// unsafe fn level(a: &enshwick_api::ecs::Attributes, registry: u64, set: *const u8) -> Option<u32> {
+    ///     // SAFETY: the row's Level component and attribute registry.
+    ///     unsafe { a.value(registry, set, 0x724b_f568) }
+    /// }
+    /// ```
+    #[must_use]
+    pub unsafe fn value(&self, registry: u64, set: *const u8, attribute: u32) -> Option<u32> {
+        if set.is_null() {
+            return None;
+        }
+        // SAFETY: the set's flags; bit 0 marks it initialised.
+        let flags: u8 = unsafe { read_at(set, self.flags) };
+        if flags & 1 == 0 {
+            return None;
+        }
+        let mut found = [0u64; 2];
+        // SAFETY: the row's attribute registry, inside its system.
+        unsafe { (self.find)(found.as_mut_ptr(), attribute, registry) };
+        let definition =
+            core::ptr::with_exposed_provenance::<u8>(usize::try_from(found[1]).unwrap_or(0));
+        if found[0] & 0xff != 0 || definition.is_null() {
+            return None;
+        }
+        // SAFETY: a found definition starts with its set id.
+        let definition_set: u32 = unsafe { read_at(definition, 0) };
+        // SAFETY: so does the set.
+        let set_id: u32 = unsafe { read_at(set, 0) };
+        if definition_set != set_id {
+            return None;
+        }
+        // SAFETY: the definition's slot.
+        let slot = usize::from(unsafe { read_at::<u16>(definition, self.slot) });
+        // SAFETY: the set's data offset.
+        let data = usize::from(unsafe { read_at::<u16>(set, self.data_offset) });
+        // SAFETY: the attribute's word inside the set's data.
+        Some(unsafe { read_at::<u32>(set, data + slot * 4) })
+    }
+}

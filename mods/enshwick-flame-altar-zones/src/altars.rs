@@ -23,13 +23,12 @@ use std::time::{Duration, Instant};
 
 use arc_swap::ArcSwap;
 use arrayvec::ArrayVec;
-use enshwick_api::ecs::{Ecs, Entity};
+use enshwick_api::ecs::{Attributes, Ecs, Entity};
 use enshwick_api::{Load, Next, Off};
 use enshwick_geometry::{Altar, Box3, clusters};
 
 use crate::zones::{self, Placed};
 
-type AttributeFind = unsafe extern "system" fn(out: *mut u64, attribute: u32, registry: u64) -> u64;
 type ZoneSize = unsafe extern "system" fn(out: *mut f32, balancing: u64, level: u64) -> u64;
 
 /// Full zone sizes for levels 1 to the current one.
@@ -66,12 +65,9 @@ const HALF: f32 = 0.5;
 #[derive(Debug)]
 struct Engine {
     ecs: Ecs,
-    attribute_find: AttributeFind,
+    attributes: Attributes,
     zone_size: ZoneSize,
     level_attribute: u32,
-    level_data_offset: usize,
-    level_flags: usize,
-    attribute_slot: usize,
 }
 
 static ENGINE: OnceLock<Engine> = OnceLock::new();
@@ -174,23 +170,14 @@ unsafe fn function<F: Copy>(address: u64) -> F {
 
 /// Links both system hooks.
 pub(crate) fn link(load: &mut Load<'_>) -> Result<(), Off> {
-    let size = |name| {
-        load.constant(name)
-            .map(|v| usize::try_from(v).unwrap_or(usize::MAX))
-    };
-    let attribute_find = load.symbol("ecs.attribute_find")?;
     let zone_size = load.symbol("balancing.zone_size")?;
     let engine = Engine {
         ecs: Ecs::resolve(load)?,
-        // SAFETY: the loader pins this id to the attribute lookup.
-        attribute_find: unsafe { function(attribute_find) },
+        attributes: Attributes::resolve(load)?,
         // SAFETY: the loader pins this id to the zone size lookup.
         zone_size: unsafe { function(zone_size) },
         level_attribute: u32::try_from(load.constant("altar.level_attribute")?)
             .map_err(|_| Off::new("altar.level_attribute out of range"))?,
-        level_data_offset: size("ecs.level_data_offset")?,
-        level_flags: size("ecs.level_flags")?,
-        attribute_slot: size("ecs.attribute_slot")?,
     };
     let _first = ENGINE.set(engine);
     let _targets = TARGETS.set(ArcSwap::from_pointee(Targets::new()));
@@ -367,42 +354,16 @@ unsafe fn write_ranges(engine: &Engine, ctx: *mut u64) {
 /// `words` are the current row's iterator words.
 unsafe fn altar_level(engine: &Engine, words: &[u64; UPGRADE_WORDS]) -> Option<usize> {
     let level_component = words[UPGRADE_LEVEL] as *const u8;
-    if level_component.is_null() {
-        return None;
-    }
-    // SAFETY: the row's `Level` component.
-    let flags: u8 = unsafe { read_at(level_component, engine.level_flags) };
-    if flags & 1 == 0 {
-        return None;
-    }
-    let mut found = [0u64; 2];
-    // SAFETY: the attribute registry of the row.
-    unsafe {
-        (engine.attribute_find)(
-            found.as_mut_ptr(),
-            engine.level_attribute,
+    // SAFETY: the row's `Level` component and attribute registry.
+    let value = unsafe {
+        engine.attributes.value(
             words[UPGRADE_ATTRIBUTES],
+            level_component,
+            engine.level_attribute,
         )
-    };
-    let definition = found[1] as *const u8;
-    if found[0] & 0xff != 0 || definition.is_null() {
-        return None;
-    }
-    // SAFETY: a found definition starts with its set id.
-    let definition_set: u32 = unsafe { read_at(definition, 0) };
-    // SAFETY: so does the component.
-    let component_set: u32 = unsafe { read_at(level_component, 0) };
-    if definition_set != component_set {
-        return None;
-    }
-    // SAFETY: the definition's slot.
-    let slot = usize::from(unsafe { read_at::<u16>(definition, engine.attribute_slot) });
-    // SAFETY: the component's data offset.
-    let data = usize::from(unsafe { read_at::<u16>(level_component, engine.level_data_offset) });
-    // SAFETY: the level byte inside the component's data.
-    Some(usize::from(unsafe {
-        read_at::<u8>(level_component, data + slot * 4)
-    }))
+    }?;
+    // The level is the attribute's low byte.
+    Some(usize::from(value.to_le_bytes()[0]))
 }
 
 /// The current level's size and the sizes of every level up to it; `None`

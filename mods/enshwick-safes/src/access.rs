@@ -211,15 +211,9 @@ impl Access {
 
 /// A transform's position: x, y and z in 32.32 fixed point first.
 fn position(transform: *mut u8) -> [f64; 3] {
-    #[expect(clippy::cast_ptr_alignment, reason = "read unaligned below")]
-    let words = transform.cast::<i64>();
-    #[expect(clippy::cast_precision_loss, reason = "metres fit an f64")]
-    let metre = |i: usize| {
-        // SAFETY: a live CurrentTransform holds three i64 first.
-        let raw = unsafe { words.wrapping_add(i).read_unaligned() };
-        raw as f64 / 4_294_967_296.0
-    };
-    [metre(0), metre(1), metre(2)]
+    // SAFETY: a live CurrentTransform holds three i64 first.
+    let fixed = unsafe { transform.cast::<[i64; 3]>().read_unaligned() };
+    enshwick_api::ecs::metres(fixed)
 }
 
 #[cfg(test)]
