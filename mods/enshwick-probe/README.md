@@ -46,6 +46,7 @@ From the chat as an administrator, or through the admin tools' command file
 | `/probe vitals <id>`  | an entity's vitals and progress, against its replicated health |
 | `/probe destroy <id>` | asks the world to destroy an entity; on a copy of a world only |
 | `/probe spawn <id>`   | spawns a copy of an entity above it and follows it as above    |
+| `/probe notice <text>`| shows the text on your screen, or in chat without Enshwick     |
 
 ## Settings
 

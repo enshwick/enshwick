@@ -16,7 +16,7 @@ use core::ffi::c_void;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock, PoisonError};
 
-use enshwick_loader_api::abi::{GameEventData, GameEventFn, Header, HookFlags, Status};
+use enshwick_loader_api::abi::{GameEventData, GameEventFn, Header, HookFlags, Side, Status};
 use rustc_hash::FxHashSet;
 
 use crate::chains::Next;
@@ -118,7 +118,11 @@ pub(crate) fn link(loader: &'static Loader) {
         subscribers: subscribers.into_boxed_slice(),
     };
     let count = sealed.subscribers.len();
-    if SEALED.set(sealed).is_err() || (count == 0 && !crate::vetoes::crafting()) {
+    // A client always links the move, to raise the loader's notices in its
+    // own world.
+    if SEALED.set(sealed).is_err()
+        || (count == 0 && !crate::vetoes::crafting() && loader.side != Side::CLIENT)
+    {
         return;
     }
     let constant = |name: &str| {
@@ -157,6 +161,14 @@ unsafe extern "system" fn merge(entity_world: *mut u8) {
         // SAFETY: the server's entity world on its game thread, before the
         // engine moves its streams.
         guarded(|| unsafe { copy(layout, entity_world) });
+    } else if let Some((loader, _)) = LOADED.get()
+        && loader.side == Side::CLIENT
+        && !entity_world.is_null()
+        && entity_world.addr() as u64 != crate::world::server_world()
+    {
+        // SAFETY: the client's own entity world on its thread, before the
+        // engine moves its streams.
+        guarded(|| unsafe { crate::notices::raise(loader, entity_world.addr()) });
     }
     // SAFETY: forwarded unchanged.
     unsafe { MERGE_NEXT.get()(entity_world) };

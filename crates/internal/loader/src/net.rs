@@ -49,6 +49,8 @@ const CONTROL: u32 = 0;
 /// Control frames: a client's hello and the server's answer.
 const HELLO: u8 = 1;
 const WELCOME: u8 = 2;
+/// A control frame from the server: a notice for the client to show.
+const NOTICE: u8 = 3;
 /// Messages each peer may send per second, and in one burst.
 const RATE: f64 = 20.0;
 const BURST: f64 = 40.0;
@@ -309,6 +311,21 @@ fn control(kind: u8) -> Vec<u8> {
     vec![kind, PROTOCOL]
 }
 
+/// Sends the client of the player with account key `key` a notice for the
+/// player's entity `entity`; the client shows `text`.
+pub(crate) fn notice(key: u64, entity: u32, text: &str) -> Result<(), Status> {
+    if !ready(key) {
+        return Err(Status::MISSING);
+    }
+    let mut data = control(NOTICE);
+    data.extend_from_slice(&entity.to_le_bytes());
+    data.extend_from_slice(text.as_bytes());
+    for line in frames(CONTROL, 0, &data) {
+        crate::chat::send(key, &line);
+    }
+    Ok(())
+}
+
 /// Takes a frame line a client sent, on the server's game thread: `args` is
 /// the line after the command name, `key` the client's account key.
 pub(crate) fn server_received(key: u64, args: &str) {
@@ -360,6 +377,11 @@ pub(crate) fn client_received(text: &str) -> bool {
             if fresh {
                 crate::log!(INFO, "mod messages: the server answered");
             }
+        } else if let Some(rest) = frame.part.strip_prefix(control(NOTICE).as_slice())
+            && let Some((entity, text)) = rest.split_first_chunk::<4>()
+            && let Ok(text) = core::str::from_utf8(text)
+        {
+            crate::notices::queue(u32::from_le_bytes(*entity), text);
         }
         return true;
     }

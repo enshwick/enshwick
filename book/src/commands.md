@@ -110,6 +110,36 @@ to one player. Call them from any thread: the line waits in a queue, and the
 server posts it after the next step. Each line of `text` becomes a message of
 its own. The queue holds at most 256 lines; more are dropped.
 
+## Notices on screen
+
+[`world.notify(&player, text)`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/world.rs)
+shows a line on the player's screen, as the game shows its own "can't do
+that" messages, and `world.notify_all(text)` on every player's. It returns
+how the line went: `Notice::OnScreen`, or `Notice::Chat` when the player's
+client lacks Enshwick and gets the line in chat instead. Call it on the game
+thread; it needs ABI minor 27, and under an older loader it always tells in
+chat. The game shows up to 255 bytes; keep it to a short line.
+
+```rust
+use enshwick_loader_api::world::Notice;
+
+fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+    let world = load.world()?;
+    load.add_command("ping-me", "shows a notice", move |ctx, _args| {
+        match world.notify(&ctx.player, "Pong") {
+            Notice::OnScreen => "on screen".into(),
+            _ => "in chat".into(),
+        }
+    })
+}
+```
+
+The game raises these messages on the client, in the client's own world, so
+the server cannot raise one for a client. A notice travels as a
+[message](messages.md) to the client's loader, which shows the text through a
+text tag of its own and raises the game's message event in the client's world
+at its next step.
+
 ## Worked examples
 
 - [`enshwick-admin-tools`](https://github.com/themaiby/enshwick/tree/main/mods/enshwick-admin-tools)

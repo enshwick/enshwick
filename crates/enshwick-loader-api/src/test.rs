@@ -2011,6 +2011,21 @@ impl Installed {
         true
     }
 
+    /// The notices the mod showed on screen, `(account key, text)`, in
+    /// order; a player not given with [`FakeHost::net_peer`] has a client
+    /// without Enshwick, and gets chat lines instead.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick_loader_api::test::FakeHost::new().install();
+    /// assert!(loader.notices().is_empty());
+    /// ```
+    #[must_use]
+    pub fn notices(&self) -> Vec<(u64, String)> {
+        table::with(Vec::new(), |s| s.notices.clone())
+    }
+
     /// How many saves the mod asked for.
     ///
     /// # Examples

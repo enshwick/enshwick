@@ -64,6 +64,8 @@ pub(crate) struct State {
     pub(crate) channels: Vec<(String, u32, NetMessageFn, usize)>,
     /// Messages the mod sent: channel id, raw peer and bytes.
     pub(crate) net_sent: Vec<(u32, u64, Vec<u8>)>,
+    /// Notices the mod showed: account key and text.
+    pub(crate) notices: Vec<(u64, String)>,
     pub(crate) build_filters: Vec<(BuildCheckFn, usize)>,
     /// The world key last handed out, alive until the next one.
     world_key: Option<Box<str>>,
@@ -138,6 +140,7 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         craft_filters: Vec::new(),
         channels: Vec::new(),
         net_sent: Vec::new(),
+        notices: Vec::new(),
         build_filters: Vec::new(),
         world_key: None,
         altars: Vec::new(),
@@ -1069,6 +1072,17 @@ extern "system" fn net_ready(_me: ModHandle, peer: u64) -> Status {
     })
 }
 
+extern "system" fn notify(_me: ModHandle, key: u64, value: Str) -> Status {
+    let value = text(value);
+    with(Status::MISSING, |s| {
+        if !s.host.net_peers.contains(&key) {
+            return Status::MISSING;
+        }
+        s.notices.push((key, value));
+        Status::OK
+    })
+}
+
 /// The first entity id the fake hands out for a spawn.
 const FIRST_SPAWNED: u32 = 0x10_0000;
 
@@ -1167,4 +1181,5 @@ pub(crate) static TABLE: HostApi = HostApi {
     net_channel,
     net_send,
     net_ready,
+    notify,
 };

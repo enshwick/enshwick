@@ -1,6 +1,6 @@
 //! The server's world: components, templates, positions and players,
-//! component writes, entity queries, labels, chat lines, destroy requests and
-//! saves. Most calls
+//! component writes, entity queries, labels, chat lines, notices, destroy
+//! requests and saves. Most calls
 //! belong on the server's game thread, from a game event or a
 //! [`Scheduler`](crate::schedule::Scheduler) task, and each says what it does
 //! elsewhere. On a client the server is the built-in one, while it hosts a
@@ -230,6 +230,22 @@ impl Placed {
         let [x, y, z] = [0, 1, 2].map(|i| self.position[i] - point[i]);
         (x * x + y * y + z * z).sqrt()
     }
+}
+
+/// How a notice reached a player, from [`World::notify`].
+///
+/// # Examples
+///
+/// See [`World::notify`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum Notice {
+    /// On screen, as the game shows its own messages: the player's client
+    /// runs Enshwick.
+    OnScreen,
+    /// As a chat line: the player's client lacks Enshwick, or the loader is
+    /// older than ABI minor 27.
+    Chat,
 }
 
 /// Why the world refused a request.
@@ -702,6 +718,51 @@ impl World {
     pub fn tell(&self, player: &Player, text: &str) {
         if player.key != 0 {
             self.chat(player.key, text);
+        }
+    }
+
+    /// Shows `text` on `player`'s screen, as the game shows its own "can't
+    /// do that" messages, or tells it in chat when the player's client lacks
+    /// Enshwick to show it; says which. The game shows 255 bytes; keep it to
+    /// a line. On the game thread; elsewhere it goes to chat.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_loader_api::world::Notice;
+    ///
+    /// fn warn_low_fuel(world: &enshwick_loader_api::world::World, player: &enshwick_loader_api::world::Player) {
+    ///     if world.notify(player, "The forge runs out of fuel") == Notice::Chat {
+    ///         enshwick_loader_api::debug!("{} has no Enshwick client", player.name);
+    ///     }
+    /// }
+    /// ```
+    #[expect(
+        clippy::must_use_candidate,
+        reason = "shown is the point; how is for the curious"
+    )]
+    pub fn notify(&self, player: &Player, text: &str) -> Notice {
+        if self.offers(core::mem::offset_of!(HostApi, notify))
+            && (self.host.api().notify)(self.host.handle(), player.key, Str::new(text)).is_ok()
+        {
+            return Notice::OnScreen;
+        }
+        self.tell(player, text);
+        Notice::Chat
+    }
+
+    /// [`World::notify`] for every connected player.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// fn storm(world: &enshwick_loader_api::world::World) {
+    ///     world.notify_all("A storm is coming");
+    /// }
+    /// ```
+    pub fn notify_all(&self, text: &str) {
+        for player in self.players() {
+            self.notify(&player, text);
         }
     }
 

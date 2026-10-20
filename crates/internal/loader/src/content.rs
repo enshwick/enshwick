@@ -11,7 +11,7 @@ use core::ffi::c_void;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Mutex, OnceLock, PoisonError};
 
-use enshwick_loader_api::abi::{HookFlags, ResourceKey, ResourcePatchFn, Status};
+use enshwick_loader_api::abi::{HookFlags, ResourceKey, ResourcePatchFn, Side, Status};
 
 use crate::chains::Next;
 use crate::host::Loader;
@@ -75,6 +75,9 @@ pub(crate) fn add_text(id: u32, language: u32, text: &str) -> Status {
 
 /// The text of `id` for `language`: its own, else any-language, else English.
 fn text_for(id: u32, language: u32) -> Option<&'static str> {
+    if let Some(text) = crate::notices::text(id) {
+        return Some(text);
+    }
     let texts = TEXTS.get()?.get(&id)?;
     let pick = |wanted: u32| texts.iter().find(|(l, _)| *l == wanted).map(|(_, t)| *t);
     pick(language).or_else(|| pick(0)).or_else(|| pick(ENGLISH))
@@ -132,7 +135,8 @@ fn seal_texts(loader: &'static Loader) {
         let text: &'static str = Box::leak(text.into_boxed_str());
         texts.entry(id).or_default().push((language, text));
     }
-    if TEXTS.set(texts).is_err() || count == 0 {
+    // The client always links its lookups, for the loader's notices.
+    if TEXTS.set(texts).is_err() || (count == 0 && loader.side != Side::CLIENT) {
         return;
     }
     // Only the client shows text; the server has no lookups to link.

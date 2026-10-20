@@ -14,7 +14,7 @@ use core::sync::atomic::AtomicUsize;
 pub const ABI_MAJOR: u16 = 1;
 
 /// The minor version of this interface. A newer minor only appends fields.
-pub const ABI_MINOR: u16 = 26;
+pub const ABI_MINOR: u16 = 27;
 
 /// Whether `id` is a valid mod id: 1 to 64 characters of `[a-z0-9-]`.
 ///
@@ -2929,6 +2929,12 @@ pub struct HostApi {
     /// on a client. [`Status::MISSING`] otherwise. Any thread. Since minor
     /// 26.
     pub net_ready: extern "system" fn(me: ModHandle, peer: u64) -> Status,
+    /// Shows `text`, cut at 255 bytes, on the screen of the player with
+    /// account key `key`, as the game shows its own "can't do that"
+    /// messages; [`Status::MISSING`] when the player's client lacks
+    /// Enshwick and cannot show it, and nothing is sent. On the server's
+    /// game thread only. Since minor 27.
+    pub notify: extern "system" fn(me: ModHandle, key: u64, text: Str) -> Status,
 }
 
 /// The exports a mod DLL provides, by name.
@@ -2990,7 +2996,7 @@ const _: () = {
     assert!(core::mem::offset_of!(HostApi, hook_at) == 24 + 35 * 8);
     assert!(core::mem::offset_of!(HostApi, inventory_open) == 24 + 36 * 8);
     assert!(core::mem::offset_of!(HostApi, inventory_submit) == 24 + 38 * 8);
-    assert!(size_of::<HostApi>() == 24 + 72 * 8);
+    assert!(size_of::<HostApi>() == 24 + 73 * 8);
     assert!(size_of::<InventoryOp>() == 32);
     assert!(size_of::<InventoryRequest>() == 32);
     assert!(size_of::<InventoryOpResult>() == 8);
@@ -3025,6 +3031,7 @@ const _: () = {
     assert!(size_of::<BuildCheck>() == 8 + 8 + 24);
     assert!(core::mem::offset_of!(HostApi, net_ready) == 24 + 71 * 8);
     assert!(size_of::<NetMessage>() == 8 + 8 + 8 + 8 + 8);
+    assert!(core::mem::offset_of!(HostApi, notify) == 24 + 72 * 8);
     assert!(size_of::<GameEventData>() == 24);
     // Frozen: written as an array.
     assert!(size_of::<EntityPlace>() == 32);

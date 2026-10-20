@@ -480,6 +480,13 @@ impl Checks {
         }
     }
 
+    /// `/probe notice <text>`: shows the text to the player who typed it.
+    pub(crate) fn notice(&self, player: &enshwick_loader_api::world::Player, text: &str) -> String {
+        let how = self.world.notify(player, text);
+        enshwick_loader_api::info!("notice to {}: {how:?}", player.name);
+        format!("{how:?}")
+    }
+
     /// `/probe destroy <id>`.
     pub(crate) fn destroy(&self, id: &str) -> String {
         let Some(entity) = parse(id) else {
