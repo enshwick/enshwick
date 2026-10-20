@@ -430,6 +430,19 @@ keeps a serde value there as TOML, written to a temporary file and renamed, so a
 crash never leaves half a file; `load()` returns `T::default()` until the first
 `save`.
 
+A mod whose changes let a world grow past what the vanilla game opens safely,
+such as more altars than the game groups, sets a `state::Hold` with a reason
+while that is so, and clears it when it is no longer so. While the hold is set,
+the loader stops the game before the world loads whenever the mod would not run:
+on a game build the loader does not know, or when the mod is missing, skipped or
+off. The log names the mod and its reason; deleting `mod-data/<id>/hold.txt`
+opens the world anyway.
+
+```rust
+let hold = enshwick_api::state::Hold::new(&load.data_dir()?);
+hold.set("the world has 20 altar zones; the vanilla game groups only 16")?;
+```
+
 ## Finding the game
 
 Addresses change with every game update, so a mod never hard-codes one.

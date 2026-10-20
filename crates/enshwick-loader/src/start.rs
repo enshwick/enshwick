@@ -66,7 +66,8 @@ pub(crate) fn start(stub_abi: u32, missing_forwards: u32) {
     let Some(mods_dir) = begin(stub_abi, missing_forwards) else {
         return;
     };
-    let Some(game) = game() else {
+    let data_dir = mods_dir.with_file_name("mod-data");
+    let Some(game) = game(&data_dir) else {
         return;
     };
     let (libraries, candidates) = libraries(&mods_dir);
@@ -83,7 +84,7 @@ pub(crate) fn start(stub_abi: u32, missing_forwards: u32) {
         build: game.build,
         reflection: game.reflection,
         configs_dir: mods_dir.with_file_name("mod-configs"),
-        data_dir: mods_dir.with_file_name("mod-data"),
+        data_dir,
         mods_dir,
         mods: plan
             .order
@@ -131,6 +132,13 @@ pub(crate) fn start(stub_abi: u32, missing_forwards: u32) {
         );
     }
     arm(loader, frame);
+    let running: Vec<&str> = loader
+        .mods
+        .iter()
+        .filter(|m| !m.off.load(Ordering::Acquire))
+        .map(|m| m.id.as_str())
+        .collect();
+    crate::holds::enforce(&loader.data_dir, &running, false);
     ready(loader, &order);
     crate::watch::start(loader);
     if side == Side::SERVER
@@ -295,7 +303,8 @@ fn begin(stub_abi: u32, missing_forwards: u32) -> Option<PathBuf> {
 }
 
 /// Identifies the running game; `None`, logged, when the loader cannot serve it.
-fn game() -> Option<Game> {
+/// On a build it does not know, a mod's hold under `data_dir` stops the game.
+fn game(data_dir: &Path) -> Option<Game> {
     let Some((side, base, image_len)) = identify() else {
         crate::log!(
             ERROR,
@@ -328,6 +337,7 @@ fn game() -> Option<Game> {
             hex(&fingerprint.guid()),
             fingerprint.age()
         );
+        crate::holds::enforce(data_dir, &[], true);
         return None;
     };
     for &(name, rva) in build.checks {
@@ -339,6 +349,7 @@ fn game() -> Option<Game> {
                 ERROR,
                 "{name} is not where the build table says; nothing loads"
             );
+            crate::holds::enforce(data_dir, &[], true);
             return None;
         }
     }

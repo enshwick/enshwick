@@ -331,7 +331,14 @@ fn write(
 ) -> Vec<Verdict> {
     let hooks: Vec<&Pending> = ready.iter().map(|&(_, _, hook)| hook).collect();
     let hooked: Vec<(usize, usize)> = hooks.iter().map(|h| h.span()).collect();
-    let mut verdicts = crate::code::check(patches, &hooked, off, crate::code::read);
+    // A mod whose hook failed is turned off: its patches stay out with it.
+    let failed: Vec<usize> = failures
+        .iter()
+        .flat_map(|f| chains.owners(f.target))
+        .filter(|&owner| owner != crate::chains::LOADER)
+        .collect();
+    let off_or_failed = |owner: usize| off(owner) || failed.contains(&owner);
+    let mut verdicts = crate::code::check(patches, &hooked, off_or_failed, crate::code::read);
     let writes: Vec<crate::detour::Bytes<'_>> = patches
         .iter()
         .zip(&verdicts)

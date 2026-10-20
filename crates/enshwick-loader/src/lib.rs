@@ -3,7 +3,8 @@
 //! The `powrprof.dll` stub starts it on its own thread. It identifies the game
 //! build, loads every mod in `mods/`, resolves their dependencies, initialises
 //! them, arms their hook chains and answers their calls through the API table.
-//! A game build it does not know leaves the game vanilla.
+//! A game build it does not know leaves the game vanilla, unless a mod holds
+//! the game for a world vanilla cannot open.
 
 pub mod advertise;
 pub mod builds;
@@ -22,6 +23,7 @@ mod crash;
 mod detour;
 #[cfg(windows)]
 mod events;
+pub mod holds;
 #[cfg(windows)]
 mod host;
 #[cfg(windows)]
