@@ -1,12 +1,17 @@
 //! Game events on the server, raised from the loader's own links: tick, world
-//! loaded and saved, player joined and left, shutdown. A link is made only
-//! when a mod subscribed to one of its events.
+//! loaded and saved, player joined and left, shutdown, building placed and
+//! removed. The post-step link is always made on the server, since it also
+//! tells the world reads which thread is the game's; the others only when a
+//! mod subscribed to one of their events.
+//!
+//! Building happens inside ECS systems on worker threads, so those links only
+//! queue what happened; the post-step link raises it on the game thread.
 
 use core::ffi::c_void;
-use std::sync::OnceLock;
 use std::sync::atomic::{AtomicU32, AtomicU64, AtomicUsize, Ordering};
+use std::sync::{Mutex, OnceLock, PoisonError};
 
-use enshwick_api::abi::{Event, Header, HookFlags, PlayerData, TickData};
+use enshwick_api::abi::{BuildingData, Event, Header, HookFlags, PlayerData, TickData};
 
 use crate::chains::{LOADER, Link};
 use crate::host::Loader;
@@ -29,6 +34,8 @@ struct Offsets {
     slot_state: usize,
     slot_entity: usize,
     slot_key: usize,
+    ctx_player: usize,
+    ctx_replay: usize,
 }
 
 static LOADED: OnceLock<(&'static Loader, Offsets)> = OnceLock::new();
@@ -36,6 +43,10 @@ static STEP_NEXT: AtomicUsize = AtomicUsize::new(0);
 static STATE_NEXT: AtomicUsize = AtomicUsize::new(0);
 static SAVE_NEXT: AtomicUsize = AtomicUsize::new(0);
 static REMOVE_NEXT: AtomicUsize = AtomicUsize::new(0);
+static PLACE_NEXT: AtomicUsize = AtomicUsize::new(0);
+static PICKUP_NEXT: AtomicUsize = AtomicUsize::new(0);
+/// Building events from worker threads, raised after the step.
+static BUILDING: Mutex<Vec<BuildingData>> = Mutex::new(Vec::new());
 static STEPS: AtomicU64 = AtomicU64::new(0);
 /// The handle of the player seen joining in each slot, 0 for none.
 static JOINED: [AtomicU32; MAX_SLOTS] = [const { AtomicU32::new(0) }; MAX_SLOTS];
@@ -44,21 +55,21 @@ type StepFn = unsafe extern "system" fn(server: *mut u8);
 type StateFn = unsafe extern "system" fn(entry: *mut u8, state: u8);
 type SaveFn = unsafe extern "system" fn(out: *mut u8, save: *mut u8, context: *mut u8) -> *mut u8;
 type RemoveFn = unsafe extern "system" fn(server: *mut u8, slot: *mut u8);
+type PlaceFn = unsafe extern "system" fn(
+    context: *mut u8,
+    template: *const [u8; 16],
+    position: *const [f32; 3],
+    rotation: *const f32,
+    item: u32,
+    variant: u32,
+    material: *const u8,
+) -> u32;
+type PickupFn = unsafe extern "system" fn(context: *mut u8, target: *const u8, tool: u32) -> u8;
 
 /// Links what the subscriptions need; a missing symbol leaves its events
 /// silent and says so.
 pub(crate) fn link(loader: &'static Loader) {
     let wants = |events: &[Event]| events.iter().any(|&e| loader.subscribed(e));
-    if !wants(&[
-        Event::TICK,
-        Event::WORLD_LOADED,
-        Event::WORLD_SAVED,
-        Event::PLAYER_JOINED,
-        Event::PLAYER_LEFT,
-        Event::SHUTDOWN,
-    ]) {
-        return;
-    }
     let constant = |name: &str| {
         loader
             .build
@@ -74,6 +85,8 @@ pub(crate) fn link(loader: &'static Loader) {
             slot_state: constant("server.player_slot_state")?,
             slot_entity: constant("server.player_slot_entity")?,
             slot_key: constant("server.player_slot_key")?,
+            ctx_player: constant("building.ctx_player")?,
+            ctx_replay: constant("building.ctx_replay")?,
         })
     })();
     let Some(offsets) = offsets else {
@@ -83,13 +96,8 @@ pub(crate) fn link(loader: &'static Loader) {
     if LOADED.set((loader, offsets)).is_err() {
         return;
     }
-    let links: [(&[Event], &str, *const (), &'static AtomicUsize); 4] = [
-        (
-            &[Event::TICK, Event::PLAYER_JOINED],
-            "server.post_step",
-            step as *const (),
-            &STEP_NEXT,
-        ),
+    let links: [(&[Event], &str, *const (), &'static AtomicUsize); 6] = [
+        (&[], "server.post_step", step as *const (), &STEP_NEXT),
         (
             &[Event::WORLD_LOADED, Event::SHUTDOWN],
             "server.set_state",
@@ -108,9 +116,21 @@ pub(crate) fn link(loader: &'static Loader) {
             remove as *const (),
             &REMOVE_NEXT,
         ),
+        (
+            &[Event::BUILDING_PLACED],
+            "building.spawn_prop",
+            place as *const (),
+            &PLACE_NEXT,
+        ),
+        (
+            &[Event::BUILDING_REMOVED],
+            "building.pickup",
+            pickup as *const (),
+            &PICKUP_NEXT,
+        ),
     ];
     for (events, symbol, detour, next) in links {
-        if !wants(events) {
+        if !events.is_empty() && !wants(events) {
             continue;
         }
         let Some(rva) = loader.build.symbol(symbol) else {
@@ -171,6 +191,19 @@ unsafe extern "system" fn step(server: *mut u8) {
     let Some((loader, offsets)) = LOADED.get() else {
         return;
     };
+    crate::world::SERVER.store(server.addr(), Ordering::Release);
+    // SAFETY: no preconditions.
+    let thread = unsafe { windows_sys::Win32::System::Threading::GetCurrentThreadId() };
+    crate::world::GAME_THREAD.store(thread, Ordering::Release);
+    let built = std::mem::take(&mut *BUILDING.lock().unwrap_or_else(PoisonError::into_inner));
+    for data in &built {
+        let event = if data.kind == BuildingData::PLACED {
+            Event::BUILDING_PLACED
+        } else {
+            Event::BUILDING_REMOVED
+        };
+        loader.emit(event, None, (&raw const *data).cast());
+    }
     let step = STEPS.fetch_add(1, Ordering::Relaxed) + 1;
     let tick = TickData {
         header: Header::of::<TickData>(),
@@ -251,4 +284,87 @@ unsafe extern "system" fn remove(server: *mut u8, slot: *mut u8) {
     }
     // SAFETY: forwarded unchanged.
     unsafe { next::<RemoveFn>(&REMOVE_NEXT)(server, slot) };
+}
+
+fn queue(data: BuildingData) {
+    BUILDING
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .push(data);
+}
+
+unsafe extern "system" fn place(
+    context: *mut u8,
+    template: *const [u8; 16],
+    position: *const [f32; 3],
+    rotation: *const f32,
+    item: u32,
+    variant: u32,
+    material: *const u8,
+) -> u32 {
+    // SAFETY: forwarded unchanged.
+    let entity = unsafe {
+        next::<PlaceFn>(&PLACE_NEXT)(
+            context, template, position, rotation, item, variant, material,
+        )
+    };
+    if entity != 0
+        && !context.is_null()
+        && let Some((_, offsets)) = LOADED.get()
+    {
+        queue(BuildingData {
+            header: Header::of::<BuildingData>(),
+            entity,
+            // SAFETY: the build context holds the acting player and the replay flag.
+            player: unsafe { read(context, offsets.ctx_player) },
+            item,
+            kind: BuildingData::PLACED,
+            // SAFETY: as above.
+            replay: unsafe { read(context, offsets.ctx_replay) },
+            // SAFETY: the game passes its template GUID and position.
+            template: unsafe { template.as_ref() }.copied().unwrap_or_default(),
+            // SAFETY: as above.
+            position: unsafe { position.as_ref() }.copied().unwrap_or_default(),
+        });
+    }
+    entity
+}
+
+unsafe extern "system" fn pickup(context: *mut u8, target: *const u8, tool: u32) -> u8 {
+    // The target is the entity and the mode; read them while the entity lives.
+    let before = LOADED
+        .get()
+        .filter(|_| !context.is_null() && !target.is_null())
+        .map(|(_, offsets)| {
+            // SAFETY: the target starts with the entity id, then the mode byte.
+            let entity: u32 = unsafe { read(target, 0) };
+            // SAFETY: as above.
+            let mode: u8 = unsafe { read(target, 4) };
+            // SAFETY: the build context holds the acting player and the replay flag.
+            let player: u32 = unsafe { read(context, offsets.ctx_player) };
+            // SAFETY: as above.
+            let replay: u8 = unsafe { read(context, offsets.ctx_replay) };
+            (entity, mode, player, replay)
+        });
+    // SAFETY: forwarded unchanged.
+    let done = unsafe { next::<PickupFn>(&PICKUP_NEXT)(context, target, tool) };
+    if done != 0
+        && let Some((entity, mode, player, replay)) = before
+    {
+        queue(BuildingData {
+            header: Header::of::<BuildingData>(),
+            entity,
+            player,
+            item: 0,
+            kind: if mode == 2 {
+                BuildingData::TORN_DOWN
+            } else {
+                BuildingData::PICKED_UP
+            },
+            replay,
+            template: [0; 16],
+            position: [0.0; 3],
+        });
+    }
+    done
 }

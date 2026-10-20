@@ -27,6 +27,8 @@ pub mod settings;
 mod start;
 #[cfg(windows)]
 mod watch;
+#[cfg(windows)]
+mod world;
 
 /// Starts the loader; called once by the `powrprof.dll` stub.
 ///

@@ -14,7 +14,7 @@ use core::sync::atomic::AtomicUsize;
 pub const ABI_MAJOR: u16 = 1;
 
 /// The minor version of this interface. A newer minor only appends fields.
-pub const ABI_MINOR: u16 = 2;
+pub const ABI_MINOR: u16 = 3;
 
 /// Whether `id` is a valid mod id: 1 to 64 characters of `[a-z0-9-]`.
 ///
@@ -231,6 +231,9 @@ impl Status {
     pub const TOO_LATE: Self = Self(5);
     /// The mod has faulted and is off.
     pub const FAULTED: Self = Self(6);
+    /// Called from a thread the function does not serve, such as a game
+    /// read off the server's game thread.
+    pub const WRONG_THREAD: Self = Self(7);
 
     /// Whether this is [`Status::OK`].
     ///
@@ -393,6 +396,119 @@ impl Event {
     /// alive; no data. Raised on the game thread; a killed process raises
     /// nothing. Server only.
     pub const SHUTDOWN: Self = Self(8);
+    /// A player placed a building piece or prop; data is a [`BuildingData`].
+    /// Raised on the game thread after the step that placed it. Server only.
+    pub const BUILDING_PLACED: Self = Self(9);
+    /// A player picked up or tore down a placed piece; data is a
+    /// [`BuildingData`] whose entity no longer exists. Raised on the game
+    /// thread after the step. Server only.
+    pub const BUILDING_REMOVED: Self = Self(10);
+}
+
+/// The data of [`Event::BUILDING_PLACED`] and [`Event::BUILDING_REMOVED`].
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_api::abi::{BuildingData, Header};
+///
+/// let placed = BuildingData {
+///     header: Header::of::<BuildingData>(),
+///     entity: 4096,
+///     player: 2,
+///     item: 1_302_084_846,
+///     kind: BuildingData::PLACED,
+///     replay: 0,
+///     template: [0; 16],
+///     position: [1.0, 2.0, 3.0],
+/// };
+/// assert_eq!(placed.kind, BuildingData::PLACED);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct BuildingData {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// The placed entity; for a removal, the entity as it was.
+    pub entity: u32,
+    /// The acting player's character entity.
+    pub player: u32,
+    /// The item placed, which the entity keeps as its `UsedItem`; 0 for a
+    /// removal.
+    pub item: u32,
+    /// [`BuildingData::PLACED`], [`BuildingData::PICKED_UP`] or
+    /// [`BuildingData::TORN_DOWN`].
+    pub kind: u8,
+    /// 1 when undo or redo replayed the action.
+    pub replay: u8,
+    /// The template GUID of the placed entity, in file order; zero for a
+    /// removal.
+    pub template: [u8; 16],
+    /// Where it was placed, in metres; zero for a removal.
+    pub position: [f32; 3],
+}
+
+impl BuildingData {
+    /// Placed by a player.
+    pub const PLACED: u8 = 0;
+    /// Picked up, its item returned.
+    pub const PICKED_UP: u8 = 1;
+    /// Torn down.
+    pub const TORN_DOWN: u8 = 2;
+}
+
+/// A connected player, from [`HostApi::player`] or [`HostApi::players`].
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_api::abi::{Header, PlayerInfo};
+///
+/// let mut name = [0u8; 64];
+/// name[..3].copy_from_slice(b"Ann");
+/// let player = PlayerInfo {
+///     header: Header::of::<PlayerInfo>(),
+///     slot: 0,
+///     entity: 2,
+///     key: 7,
+///     permissions: PlayerInfo::CAN_ACCESS_INVENTORIES,
+///     name_len: 3,
+///     name,
+/// };
+/// assert_eq!(&player.name[..usize::from(player.name_len)], b"Ann");
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct PlayerInfo {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// The server's player slot.
+    pub slot: u32,
+    /// The player character's entity.
+    pub entity: u32,
+    /// The same number for the same account in every session.
+    pub key: u64,
+    /// The server's permission bits for the player, `PlayerInfo::CAN_*`.
+    pub permissions: u8,
+    /// Bytes of `name` in use.
+    pub name_len: u8,
+    /// The name the client sent, UTF-8 as sent, cut at 64 bytes.
+    pub name: [u8; 64],
+}
+
+impl PlayerInfo {
+    /// May kick and ban; the server's administrators.
+    pub const CAN_KICK_BAN: u8 = 1;
+    /// May open chests and other inventories.
+    pub const CAN_ACCESS_INVENTORIES: u8 = 1 << 1;
+    /// May build in bases.
+    pub const CAN_EDIT_BASE: u8 = 1 << 2;
+    /// May change the world outside bases.
+    pub const CAN_EDIT_WORLD: u8 = 1 << 3;
+    /// May extend bases.
+    pub const CAN_EXTEND_BASE: u8 = 1 << 4;
+    /// Receives experience.
+    pub const CAN_RECEIVE_EXP: u8 = 1 << 5;
 }
 
 /// The data of [`Event::TICK`].
@@ -958,6 +1074,32 @@ pub struct HostApi {
         callback: EventFn,
         user: *mut c_void,
     ) -> Status,
+    /// The ECS type hash of a reflected component type, by name. Since minor 3.
+    pub type_hash: extern "system" fn(type_name: Str, out: *mut u32) -> Status,
+    /// A read-only pointer to `entity`'s component of type `type_hash`, valid
+    /// until the game thread moves on; on the server's game thread only.
+    /// Since minor 3.
+    pub component: extern "system" fn(
+        me: ModHandle,
+        entity: u32,
+        type_hash: u32,
+        out: *mut *const c_void,
+    ) -> Status,
+    /// The template GUID of `entity`, in file order; on the server's game
+    /// thread only. Since minor 3.
+    pub entity_template:
+        extern "system" fn(me: ModHandle, entity: u32, out: *mut [u8; 16]) -> Status,
+    /// The connected player whose character is `entity`; on the server's game
+    /// thread only. Since minor 3.
+    pub player: extern "system" fn(me: ModHandle, entity: u32, out: *mut PlayerInfo) -> Status,
+    /// Up to `capacity` connected players with characters in the world, and
+    /// how many there are; on the server's game thread only. Since minor 3.
+    pub players: extern "system" fn(
+        me: ModHandle,
+        out: *mut PlayerInfo,
+        capacity: u32,
+        count: *mut u32,
+    ) -> Status,
 }
 
 /// The exports a mod DLL provides, by name.
@@ -1004,5 +1146,6 @@ const _: () = {
     assert!(core::mem::offset_of!(HostApi, data_dir) == 24 + 13 * 8);
     assert!(core::mem::offset_of!(HostApi, log_level) == 24 + 14 * 8);
     assert!(core::mem::offset_of!(HostApi, subscribe) == 24 + 15 * 8);
-    assert!(size_of::<HostApi>() == 24 + 16 * 8);
+    assert!(core::mem::offset_of!(HostApi, players) == 24 + 20 * 8);
+    assert!(size_of::<HostApi>() == 24 + 21 * 8);
 };
