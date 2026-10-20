@@ -7,7 +7,7 @@ use enshwick_loader_api::abi::Level;
 use enshwick_loader_api::config::Config as _;
 
 /// The id the loader logs and keeps settings under; no mod may take it.
-pub const LOADER_ID: &str = "enshwick";
+pub use enshwick_loader_api::mods::LOADER_ID;
 
 /// Minutes between status summaries by default.
 pub const STATUS_MINUTES: u32 = 10;
