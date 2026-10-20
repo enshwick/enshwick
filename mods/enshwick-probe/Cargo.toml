@@ -1,6 +1,6 @@
 [package]
 name = "enshwick-probe"
-version = "0.1.0"
+version = "0.1.1"
 description = "Development only, never shipped: exercises the platform API on a test server and logs what it sees"
 keywords = ["enshrouded", "mod", "server", "testing"]
 categories = ["game-development"]

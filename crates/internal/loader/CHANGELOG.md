@@ -1,5 +1,33 @@
 # Changelog
 
+## [0.4.0](https://github.com/themaiby/enshwick/compare/enshwick-loader-v0.3.1...enshwick-loader-v0.4.0) (2026-10-20)
+
+
+### ⚠ BREAKING CHANGES
+
+* **api:** one naming scheme, run-time errors and named abi values ([#110](https://github.com/themaiby/enshwick/issues/110))
+
+### Features
+
+* **api:** altar limit and bases past 16 zones in the platform ([#101](https://github.com/themaiby/enshwick/issues/101)) ([a8e5ca9](https://github.com/themaiby/enshwick/commit/a8e5ca9bafc6321d70c81f2bc1458e34a1ec8175))
+* **api:** altar zones and bases in the platform ([#97](https://github.com/themaiby/enshwick/issues/97)) ([e45cc7b](https://github.com/themaiby/enshwick/commit/e45cc7b58c6d82db2affa56b4fbfa89bd4fc3824))
+* **api:** engine events from the server's ECS event streams ([#104](https://github.com/themaiby/enshwick/issues/104)) ([73cdaaf](https://github.com/themaiby/enshwick/commit/73cdaafb179d62d9891cb614a3b03f3e3fc783fa))
+* **api:** entity queries, destroy, saves and per-world stores ([#105](https://github.com/themaiby/enshwick/issues/105)) ([ffd6090](https://github.com/themaiby/enshwick/commit/ffd6090628a40bd416e19767fcdc89ef7faba853))
+* **api:** interaction filters for chests and placed pieces ([#99](https://github.com/themaiby/enshwick/issues/99)) ([7a47400](https://github.com/themaiby/enshwick/commit/7a47400e8c74afee1e1fcfde60bc32aae24ba6d7))
+* **api:** skill, comfort and experience hooks in the platform ([#100](https://github.com/themaiby/enshwick/issues/100)) ([c810a02](https://github.com/themaiby/enshwick/commit/c810a02a60d5d05b8872bf8628afc27123868aa1))
+* **api:** survivor lookups, beds, staffs and menu in the platform ([#103](https://github.com/themaiby/enshwick/issues/103)) ([166e1ba](https://github.com/themaiby/enshwick/commit/166e1ba837d789bbd9a36f9bab41e8530666d4ef))
+* **api:** typed engine events, kill credit and character stats ([#106](https://github.com/themaiby/enshwick/issues/106)) ([99e1d93](https://github.com/themaiby/enshwick/commit/99e1d93ce64e899a9db5c5c872f199ac92bac6f4))
+
+
+### Bug Fixes
+
+* **loader:** safety and robustness pass from the conventions review ([#111](https://github.com/themaiby/enshwick/issues/111)) ([52ed976](https://github.com/themaiby/enshwick/commit/52ed976a30d65d7007a56202ed855fbb55e69740))
+
+
+### Other
+
+* **api:** one naming scheme, run-time errors and named abi values ([#110](https://github.com/themaiby/enshwick/issues/110)) ([cbe72c5](https://github.com/themaiby/enshwick/commit/cbe72c5e92104d374272a5b192272e6e276dd37b))
+
 ## [0.3.1](https://github.com/themaiby/enshwick/compare/enshwick-loader-v0.3.0...enshwick-loader-v0.3.1) (2026-10-20)
 
 

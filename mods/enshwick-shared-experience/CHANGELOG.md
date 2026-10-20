@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.3.0](https://github.com/themaiby/enshwick/compare/enshwick-shared-experience-v0.2.1...enshwick-shared-experience-v0.3.0) (2026-10-20)
+
+
+### ⚠ BREAKING CHANGES
+
+* **api:** one naming scheme, run-time errors and named abi values ([#110](https://github.com/themaiby/enshwick/issues/110))
+
+### Features
+
+* **api:** skill, comfort and experience hooks in the platform ([#100](https://github.com/themaiby/enshwick/issues/100)) ([c810a02](https://github.com/themaiby/enshwick/commit/c810a02a60d5d05b8872bf8628afc27123868aa1))
+
+
+### Bug Fixes
+
+* **mods:** audit fixes across every mod ([#94](https://github.com/themaiby/enshwick/issues/94)) ([e83b2d6](https://github.com/themaiby/enshwick/commit/e83b2d6d9f788f3cf9cc60d32fdcdb95196b76d4))
+
+
+### Other
+
+* **api:** one naming scheme, run-time errors and named abi values ([#110](https://github.com/themaiby/enshwick/issues/110)) ([cbe72c5](https://github.com/themaiby/enshwick/commit/cbe72c5e92104d374272a5b192272e6e276dd37b))
+
 ## [0.2.1](https://github.com/themaiby/enshwick/compare/enshwick-shared-experience-v0.2.0...enshwick-shared-experience-v0.2.1) (2026-10-20)
 
 ## [0.2.0](https://github.com/themaiby/enshwick/compare/enshwick-shared-experience-v0.1.2...enshwick-shared-experience-v0.2.0) (2026-10-20)

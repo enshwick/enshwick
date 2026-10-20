@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/themaiby/enshwick/compare/enshwick-loader-macros-v0.3.1...enshwick-loader-macros-v0.4.0) (2026-10-20)
+
+
+### Other
+
+* **enshwick-loader-macros:** Synchronize enshwick versions
+
 ## [0.3.1](https://github.com/themaiby/enshwick/compare/enshwick-loader-macros-v0.3.0...enshwick-loader-macros-v0.3.1) (2026-10-20)
 
 

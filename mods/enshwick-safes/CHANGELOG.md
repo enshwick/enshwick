@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.3.0](https://github.com/themaiby/enshwick/compare/enshwick-safes-v0.2.1...enshwick-safes-v0.3.0) (2026-10-20)
+
+
+### ⚠ BREAKING CHANGES
+
+* **api:** one naming scheme, run-time errors and named abi values ([#110](https://github.com/themaiby/enshwick/issues/110))
+
+### Features
+
+* **api:** interaction filters for chests and placed pieces ([#99](https://github.com/themaiby/enshwick/issues/99)) ([7a47400](https://github.com/themaiby/enshwick/commit/7a47400e8c74afee1e1fcfde60bc32aae24ba6d7))
+
+
+### Bug Fixes
+
+* **api:** audit the modder API for soundness, ABI and reuse ([#95](https://github.com/themaiby/enshwick/issues/95)) ([d800142](https://github.com/themaiby/enshwick/commit/d800142991a2d93aaf943af9f6e5cc629fa54d68))
+* **mods:** audit fixes across every mod ([#94](https://github.com/themaiby/enshwick/issues/94)) ([e83b2d6](https://github.com/themaiby/enshwick/commit/e83b2d6d9f788f3cf9cc60d32fdcdb95196b76d4))
+
+
+### Other
+
+* **api:** one naming scheme, run-time errors and named abi values ([#110](https://github.com/themaiby/enshwick/issues/110)) ([cbe72c5](https://github.com/themaiby/enshwick/commit/cbe72c5e92104d374272a5b192272e6e276dd37b))
+
 ## [0.2.1](https://github.com/themaiby/enshwick/compare/enshwick-safes-v0.2.0...enshwick-safes-v0.2.1) (2026-10-20)
 
 ## [0.2.0](https://github.com/themaiby/enshwick/compare/enshwick-safes-v0.1.3...enshwick-safes-v0.2.0) (2026-10-20)
