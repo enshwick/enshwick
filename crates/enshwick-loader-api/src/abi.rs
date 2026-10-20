@@ -14,7 +14,7 @@ use core::sync::atomic::AtomicUsize;
 pub const ABI_MAJOR: u16 = 1;
 
 /// The minor version of this interface. A newer minor only appends fields.
-pub const ABI_MINOR: u16 = 27;
+pub const ABI_MINOR: u16 = 28;
 
 /// Whether `id` is a valid mod id: 1 to 64 characters of `[a-z0-9-]`.
 ///
@@ -511,6 +511,13 @@ impl Event {
     /// thread after the step that noticed it, while a mod has opened altars
     /// ([`HostApi::altars_open`]). Server only. Since minor 15.
     pub const ALTARS_CHANGED: Self = Self(12);
+    /// The day began in the server's world: the clock passed the hour day
+    /// starts at, or a mod set it into the day; no data. Raised on the game
+    /// thread after the step that noticed it. Server only. Since minor 28.
+    pub const DAY_STARTED: Self = Self(13);
+    /// The night began in the server's world, as [`Event::DAY_STARTED`] the
+    /// day; no data. Server only. Since minor 28.
+    pub const NIGHT_STARTED: Self = Self(14);
 }
 
 /// The data of [`Event::BUILDING_PLACED`] and [`Event::BUILDING_REMOVED`].
@@ -2473,6 +2480,55 @@ impl NetMessage {
 /// given at registration. It must not unwind.
 pub type NetMessageFn = unsafe extern "system" fn(message: *const NetMessage, user: *mut c_void);
 
+/// The clock of the server's world, written by [`HostApi::time_of_day`].
+///
+/// Times are game nanoseconds of the day, 0 up to 24 hours; lengths are
+/// real nanoseconds.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::abi::{DaytimeInfo, Header};
+///
+/// let noon = DaytimeInfo {
+///     header: Header::of::<DaytimeInfo>(),
+///     time: 12 * 3_600_000_000_000,
+///     day_start: 6 * 3_600_000_000_000,
+///     day_end: 18 * 3_600_000_000_000,
+///     day_length: 1_800_000_000_000,
+///     night_length: 720_000_000_000,
+///     speed: 1.0,
+///     flags: DaytimeInfo::DAY,
+/// };
+/// assert_eq!(noon.flags & DaytimeInfo::DAY, DaytimeInfo::DAY);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct DaytimeInfo {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// The time of day.
+    pub time: i64,
+    /// The time of day the day starts at.
+    pub day_start: i64,
+    /// The time of day the night starts at.
+    pub day_end: i64,
+    /// How long the day lasts in real time at speed 1.
+    pub day_length: i64,
+    /// How long the night lasts in real time at speed 1.
+    pub night_length: i64,
+    /// How fast the clock runs: 1 normally, faster while players sleep, and
+    /// times every mod's factor ([`HostApi::set_time_speed`]).
+    pub speed: f32,
+    /// [`DaytimeInfo::DAY`] or none.
+    pub flags: u32,
+}
+
+impl DaytimeInfo {
+    /// It is day.
+    pub const DAY: u32 = 1;
+}
+
 /// The table of services the loader offers a mod.
 ///
 /// Fields are only ever appended; a mod checks [`Header::covers`] before it
@@ -2935,6 +2991,24 @@ pub struct HostApi {
     /// Enshwick and cannot show it, and nothing is sent. On the server's
     /// game thread only. Since minor 27.
     pub notify: extern "system" fn(me: ModHandle, key: u64, text: Str) -> Status,
+    /// Writes the clock of the server's world, as far as the [`Header`]
+    /// `out` starts with says the caller's struct reaches. On the server's
+    /// game thread only. Since minor 28.
+    pub time_of_day: extern "system" fn(me: ModHandle, out: *mut DaytimeInfo) -> Status,
+    /// Sets the clock of the server's world to `time`, game nanoseconds of
+    /// the day, taken modulo 24 hours; clients follow after the next step.
+    /// On the server's game thread only. Since minor 28.
+    pub set_time_of_day: extern "system" fn(me: ModHandle, time: i64) -> Status,
+    /// Lets the mod change how fast the clock runs, with
+    /// [`HostApi::set_time_speed`]. Allowed during `enshwick_mod_init` only.
+    /// Since minor 28.
+    pub time_speed_control: extern "system" fn(me: ModHandle) -> Status,
+    /// Sets the mod's factor on the clock's speed, from 0 (stopped) to 1000;
+    /// the clock runs at the game's own speed times every mod's factor.
+    /// [`Status::REFUSED`] for a mod without
+    /// [`HostApi::time_speed_control`], [`Status::BAD_ARGS`] for a factor
+    /// out of range. On the server's game thread only. Since minor 28.
+    pub set_time_speed: extern "system" fn(me: ModHandle, factor: f32) -> Status,
 }
 
 /// The exports a mod DLL provides, by name.
@@ -2996,7 +3070,10 @@ const _: () = {
     assert!(core::mem::offset_of!(HostApi, hook_at) == 24 + 35 * 8);
     assert!(core::mem::offset_of!(HostApi, inventory_open) == 24 + 36 * 8);
     assert!(core::mem::offset_of!(HostApi, inventory_submit) == 24 + 38 * 8);
-    assert!(size_of::<HostApi>() == 24 + 73 * 8);
+    assert!(size_of::<HostApi>() == 24 + 77 * 8);
+    assert!(core::mem::offset_of!(HostApi, time_of_day) == 24 + 73 * 8);
+    assert!(core::mem::offset_of!(HostApi, set_time_speed) == 24 + 76 * 8);
+    assert!(size_of::<DaytimeInfo>() == 8 + 5 * 8 + 8);
     assert!(size_of::<InventoryOp>() == 32);
     assert!(size_of::<InventoryRequest>() == 32);
     assert!(size_of::<InventoryOpResult>() == 8);

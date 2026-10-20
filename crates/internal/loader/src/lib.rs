@@ -24,6 +24,8 @@ mod content;
 #[cfg(windows)]
 mod crash;
 #[cfg(windows)]
+mod daytime;
+#[cfg(windows)]
 mod detour;
 pub mod diag;
 #[cfg(windows)]

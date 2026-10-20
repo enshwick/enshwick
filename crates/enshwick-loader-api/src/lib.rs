@@ -74,6 +74,7 @@ pub mod code;
 pub mod commands;
 pub mod config;
 pub mod content;
+pub mod daytime;
 mod declare;
 pub mod ecs;
 pub mod events;

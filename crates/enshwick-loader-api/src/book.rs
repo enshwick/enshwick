@@ -26,6 +26,7 @@ chapters! {
     GameEvents => "game-events.md",
     World => "world.md",
     Actions => "actions.md",
+    Daytime => "daytime.md",
     Altars => "altars.md",
     Survivors => "survivors.md",
     Interactions => "interactions.md",

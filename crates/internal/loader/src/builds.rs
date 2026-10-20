@@ -179,6 +179,8 @@ pub static BUILDS: &[KnownBuild] = &[
             ("world.time", 0x65_1a50),
             ("ecs.spawn_request", 0x5f_40d0),
             ("building.cursor_check", 0x9_b040),
+            ("daytime.set_time", 0x94_cf50),
+            ("daytime.set_speed", 0x94_ec80),
         ],
         constants: &[
             ("ecs.context_row", 8),
@@ -353,6 +355,21 @@ pub static BUILDS: &[KnownBuild] = &[
             // data here; the flag it sets without building permission.
             ("building.cursor_item_info", 0x60),
             ("building.cursor_no_permission", 0x4000),
+            // The server's game object holds the clock, `g38_daytime::Daytime`,
+            // here; its anchor (the ECS time and the game time of the last
+            // change), the clock's speed (f32), day and night bounds and real
+            // lengths, the time of day it works out each step, and whether
+            // it is day (u8). Times are i64 nanoseconds.
+            ("daytime.object", 0x2d0),
+            ("daytime.anchor", 0x10),
+            ("daytime.game_time", 0x18),
+            ("daytime.speed", 0x20),
+            ("daytime.day_start", 0x28),
+            ("daytime.day_end", 0x30),
+            ("daytime.day_length", 0x38),
+            ("daytime.night_length", 0x40),
+            ("daytime.clock", 0x48),
+            ("daytime.is_day", 0x58),
         ],
     },
     KnownBuild {
@@ -463,6 +480,8 @@ pub static BUILDS: &[KnownBuild] = &[
             ("world.time", 0x9b_0e10),
             ("ecs.spawn_request", 0x95_37d0),
             ("building.cursor_check", 0x29_7370),
+            ("daytime.set_time", 0xe9_8630),
+            ("daytime.set_speed", 0xe9_9ab0),
             ("chat.receive_return_a", 0x84_0b59),
             ("chat.receive_return_b", 0x86_9b1b),
             ("chat.client_send", 0x86_64d0),
@@ -650,6 +669,21 @@ pub static BUILDS: &[KnownBuild] = &[
             // data here; the flag it sets without building permission.
             ("building.cursor_item_info", 0x60),
             ("building.cursor_no_permission", 0x4000),
+            // The server's game object holds the clock, `g38_daytime::Daytime`,
+            // here; its anchor (the ECS time and the game time of the last
+            // change), the clock's speed (f32), day and night bounds and real
+            // lengths, the time of day it works out each step, and whether
+            // it is day (u8). Times are i64 nanoseconds.
+            ("daytime.object", 0x2d0),
+            ("daytime.anchor", 0x10),
+            ("daytime.game_time", 0x18),
+            ("daytime.speed", 0x20),
+            ("daytime.day_start", 0x28),
+            ("daytime.day_end", 0x30),
+            ("daytime.day_length", 0x38),
+            ("daytime.night_length", 0x40),
+            ("daytime.clock", 0x48),
+            ("daytime.is_day", 0x58),
             // The client's own chat: the game client holds it here.
             ("chat.client_store", 0xf8),
         ],
