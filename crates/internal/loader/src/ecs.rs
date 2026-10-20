@@ -1,7 +1,26 @@
-//! The engine helpers the altar links use: walking a system's query, the
-//! current row's entity, change marks, attribute reads and zone sizes.
+//! The engine helpers the loader's own links use: walking a system's query,
+//! the current row's entity, change marks, attribute reads, component reads
+//! and zone sizes.
+
+use std::sync::OnceLock;
 
 use crate::host::Loader;
+
+static ENGINE: OnceLock<Engine> = OnceLock::new();
+
+/// The helpers on this build, resolved once; `None` when the table lacks one.
+pub(crate) fn engine(loader: &Loader) -> Option<&'static Engine> {
+    if let Some(engine) = ENGINE.get() {
+        return Some(engine);
+    }
+    let engine = Engine::resolve(loader)?;
+    Some(ENGINE.get_or_init(|| engine))
+}
+
+/// The helpers once resolved.
+pub(crate) fn resolved() -> Option<&'static Engine> {
+    ENGINE.get()
+}
 
 type IteratorInit = unsafe extern "system" fn(ctx: *mut u64, iterator: *mut u64, size: u64);
 type IteratorNext = unsafe extern "system" fn(ctx: *mut u64, iterator: *mut u64, size: u64) -> u64;
@@ -15,15 +34,18 @@ type MarkChanged = unsafe extern "system" fn(
 );
 type AttributeFind = unsafe extern "system" fn(out: *mut u64, attribute: u32, registry: u64) -> u64;
 type ZoneSize = unsafe extern "system" fn(out: *mut f32, balancing: u64, level: u64) -> u64;
+type ComponentRead =
+    unsafe extern "system" fn(ctx: *mut u64, kind: *const u16, entity: u32) -> *const u8;
 
 /// The engine functions and layout on the running build.
 #[derive(Debug)]
-pub(super) struct Engine {
+pub(crate) struct Engine {
     init: IteratorInit,
     next: IteratorNext,
     mark: MarkChanged,
     find: AttributeFind,
     zone_size: ZoneSize,
+    component_read: ComponentRead,
     context_row: usize,
     entity_records: usize,
     entity_record_size: usize,
@@ -46,7 +68,7 @@ unsafe fn read_at<T: Copy>(base: *const u8, offset: usize) -> T {
 
 impl Engine {
     /// The helpers on this build, if the table has them all.
-    pub(super) fn resolve(loader: &Loader) -> Option<Self> {
+    pub(crate) fn resolve(loader: &Loader) -> Option<Self> {
         let function = |name: &str| {
             loader
                 .build
@@ -59,12 +81,13 @@ impl Engine {
                 .constant(name)
                 .and_then(|v| usize::try_from(v).ok())
         };
-        let (init, next, mark, find, zone_size) = (
+        let (init, next, mark, find, zone_size, component_read) = (
             function("ecs.iterator_init")?,
             function("ecs.iterator_next")?,
             function("ecs.mark_changed")?,
             function("ecs.attribute_find")?,
             function("balancing.zone_size")?,
+            function("ecs.component_read")?,
         );
         Some(Self {
             // SAFETY: each symbol is the game function with this signature
@@ -78,6 +101,8 @@ impl Engine {
             find: unsafe { core::mem::transmute::<usize, AttributeFind>(find) },
             // SAFETY: as above.
             zone_size: unsafe { core::mem::transmute::<usize, ZoneSize>(zone_size) },
+            // SAFETY: as above.
+            component_read: unsafe { core::mem::transmute::<usize, ComponentRead>(component_read) },
             context_row: size("ecs.context_row")?,
             entity_records: size("ecs.descriptor_entity_records")?,
             entity_record_size: size("ecs.entity_record_size")?,
@@ -95,7 +120,7 @@ impl Engine {
     ///
     /// `ctx` is the live query context of the hooked system and `N` matches
     /// its iterator.
-    pub(super) unsafe fn query<const N: usize>(&self, ctx: *mut u64) -> Query<'_, N> {
+    pub(crate) unsafe fn query<const N: usize>(&self, ctx: *mut u64) -> Query<'_, N> {
         let mut words = [0u64; N];
         // SAFETY: the caller passes a live context and a matching size.
         unsafe { (self.init)(ctx, words.as_mut_ptr(), (N * 8) as u64) };
@@ -111,7 +136,7 @@ impl Engine {
     /// # Safety
     ///
     /// `ctx` is a live query context.
-    pub(super) unsafe fn row(&self, ctx: *mut u64) -> u32 {
+    pub(crate) unsafe fn row(&self, ctx: *mut u64) -> u32 {
         // SAFETY: the row counter lies inside a live context.
         unsafe { read_at(ctx.cast(), self.context_row) }
     }
@@ -121,7 +146,7 @@ impl Engine {
     /// # Safety
     ///
     /// `ctx` is a live query context.
-    pub(super) unsafe fn set_row(&self, ctx: *mut u64, row: u32) {
+    pub(crate) unsafe fn set_row(&self, ctx: *mut u64, row: u32) {
         // SAFETY: the row counter lies inside a live context.
         unsafe {
             ctx.cast::<u8>()
@@ -136,7 +161,7 @@ impl Engine {
     /// # Safety
     ///
     /// `ctx` is a live query context.
-    pub(super) unsafe fn entity(&self, ctx: *mut u64) -> u32 {
+    pub(crate) unsafe fn entity(&self, ctx: *mut u64) -> u32 {
         // SAFETY: forwarded from the caller.
         let row = unsafe { self.row(ctx) };
         if row == 0 {
@@ -156,7 +181,7 @@ impl Engine {
     /// # Safety
     ///
     /// `ctx` is a live system context.
-    pub(super) unsafe fn is_world(&self, ctx: *mut u64, world: u64) -> bool {
+    pub(crate) unsafe fn is_world(&self, ctx: *mut u64, world: u64) -> bool {
         if world == 0 || ctx.is_null() {
             return false;
         }
@@ -176,7 +201,7 @@ impl Engine {
     ///
     /// The words come from the current row of a live query that writes the
     /// component.
-    pub(super) unsafe fn mark_changed(
+    pub(crate) unsafe fn mark_changed(
         &self,
         tracker: u64,
         stamp_a: u64,
@@ -202,7 +227,7 @@ impl Engine {
     /// # Safety
     ///
     /// `set` is a live attribute set and `registry` its row's registry word.
-    pub(super) unsafe fn level(&self, registry: u64, set: *const u8) -> Option<u32> {
+    pub(crate) unsafe fn level(&self, registry: u64, set: *const u8) -> Option<u32> {
         if set.is_null() {
             return None;
         }
@@ -234,13 +259,24 @@ impl Engine {
         Some(unsafe { read_at(set, data + slot * 4) })
     }
 
+    /// The component of type index `kind` of `entity`, read in the live
+    /// context `ctx`; null when it has none.
+    ///
+    /// # Safety
+    ///
+    /// `ctx` is a live query context.
+    pub(crate) unsafe fn component(&self, ctx: *mut u64, kind: u16, entity: u32) -> *const u8 {
+        // SAFETY: forwarded from the caller.
+        unsafe { (self.component_read)(ctx, &raw const kind, entity) }
+    }
+
     /// The full zone size of an altar at `level`, `None` when the balancing
     /// data has none.
     ///
     /// # Safety
     ///
     /// `balancing` is the balancing registry word of a live row.
-    pub(super) unsafe fn zone_size(&self, balancing: u64, level: usize) -> Option<[f32; 3]> {
+    pub(crate) unsafe fn zone_size(&self, balancing: u64, level: usize) -> Option<[f32; 3]> {
         let mut out = [0f32; 4];
         // SAFETY: the row's balancing registry; `out` has room for the three
         // floats and the valid byte.
@@ -253,7 +289,7 @@ impl Engine {
 
 /// A walk over a system's query; each row's iterator words.
 #[derive(Debug)]
-pub(super) struct Query<'e, const N: usize> {
+pub(crate) struct Query<'e, const N: usize> {
     engine: &'e Engine,
     ctx: *mut u64,
     words: [u64; N],
@@ -261,7 +297,7 @@ pub(super) struct Query<'e, const N: usize> {
 
 impl<const N: usize> Query<'_, N> {
     /// Moves to the next row and returns its words, or `None` at the end.
-    pub(super) fn next(&mut self) -> Option<&[u64; N]> {
+    pub(crate) fn next(&mut self) -> Option<&[u64; N]> {
         // SAFETY: the query was created from a live context and a matching size.
         let more = unsafe { (self.engine.next)(self.ctx, self.words.as_mut_ptr(), (N * 8) as u64) };
         (more & 0xff != 0).then_some(&self.words)

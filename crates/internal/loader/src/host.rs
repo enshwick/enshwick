@@ -443,6 +443,11 @@ pub(crate) static API: HostApi = HostApi {
     altar_zones_control,
     set_altar_zones,
     zone_check_filter,
+    survivor_lookup,
+    survivor_bed_check,
+    summon_filter,
+    summon_item,
+    survivor_status,
 };
 
 /// A static slice from a pointer and a count, empty for a null pointer.
@@ -1313,6 +1318,59 @@ extern "system" fn zone_check_filter(
         return Status::BAD_ARGS;
     };
     crate::altars::register(index, callback, user)
+}
+
+extern "system" fn survivor_lookup(
+    me: ModHandle,
+    callback: api_frame::SurvivorLookupFn,
+    user: *mut core::ffi::c_void,
+) -> Status {
+    match caller_index(me) {
+        Some((loader, index)) => crate::survivors::register_lookup(loader, index, callback, user),
+        None => Status::BAD_ARGS,
+    }
+}
+
+extern "system" fn survivor_bed_check(
+    me: ModHandle,
+    callback: api_frame::BedCheckFn,
+    user: *mut core::ffi::c_void,
+) -> Status {
+    match caller_index(me) {
+        Some((loader, index)) => {
+            crate::survivors::register_bed_check(loader, index, callback, user)
+        }
+        None => Status::BAD_ARGS,
+    }
+}
+
+extern "system" fn summon_filter(
+    me: ModHandle,
+    callback: api_frame::SummonFn,
+    user: *mut core::ffi::c_void,
+) -> Status {
+    match caller_index(me) {
+        Some((loader, index)) => crate::survivors::register_summon(loader, index, callback, user),
+        None => Status::BAD_ARGS,
+    }
+}
+
+extern "system" fn summon_item(me: ModHandle, item: u32, survivor: u32) -> Status {
+    match caller_index(me) {
+        Some((loader, _)) => crate::survivors::register_item(loader, item, survivor),
+        None => Status::BAD_ARGS,
+    }
+}
+
+extern "system" fn survivor_status(
+    me: ModHandle,
+    callback: api_frame::SurvivorStatusFn,
+    user: *mut core::ffi::c_void,
+) -> Status {
+    match caller_index(me) {
+        Some((loader, index)) => crate::survivors::register_status(loader, index, callback, user),
+        None => Status::BAD_ARGS,
+    }
 }
 
 /// The loader and the index of the calling mod, unless it is unknown or off.

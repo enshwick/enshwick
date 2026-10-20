@@ -6,10 +6,9 @@
 //! a zone with a copy it moves that copy. The original survivor, the one the
 //! game's own record names, is never touched.
 
-mod client;
 mod copies;
 mod cursor;
-mod server;
+mod policy;
 mod staffs;
 
 use enshwick_loader_api::abi::Side;
@@ -66,7 +65,6 @@ fn chance(name: &str, chance: f64) -> f64 {
 pub struct SurvivorsPerAltar;
 
 impl Mod for SurvivorsPerAltar {
-    #[expect(clippy::too_many_lines, reason = "one row per build")]
     fn manifest() -> &'static enshwick_loader_api::abi::Manifest {
         enshwick_loader_api::manifest!(
             id: "survivors-per-altar",
@@ -74,120 +72,6 @@ impl Mod for SurvivorsPerAltar {
             join = true,
             updates: github("themaiby/enshwick", "enshwick-survivors-per-altar"),
             signed_by: ["RWTjqgtfpy3lSOLC4uaUXuvvKSLQKOFf6nUnEytoiFjSzxMEhLnoAdJF"],
-            builds: [
-                {
-                    side: SERVER,
-                    guid: "1c129660cd6efc4f9f0b21652d5ff2bf",
-                    age: 387,
-                    symbols: [
-                        "survivors.spawn_return" => 0x4_05cb,
-                        "survivors.unique_return_a" => 0x1f_4929,
-                        "survivors.unique_return_b" => 0x1f_499d,
-                        "survivors.bed_return" => 0x1f_29ff,
-                        "survivors.bed_init_return" => 0x1f_2d76,
-                        "survivors.cursor_return_a" => 0x9_9fe8,
-                        "survivors.cursor_return_b" => 0x9_9ff3,
-                        "survivors.assign_return_a" => 0xb_f541,
-                        "survivors.assign_return_b" => 0xb_f5e4,
-                        "survivors.roaming_return" => 0x1f_24f8,
-                        "survivors.spawn" => 0x3_e170,
-                        "survivors.registry_load" => 0x95_f900,
-                        "survivors.map_find_slot" => 0x94_4290,
-                    ],
-                    constants: [
-                        "survivors.unique_context" => 0x38,
-                        "survivors.unique_saved_state" => 0x40,
-                        "survivors.unique_transform" => 0x48,
-                        "survivors.bed_context" => 0x40,
-                        "survivors.bed_transform" => 0x48,
-                        "survivors.bed_npc_common_type" => 0xa0,
-                        "survivors.npc_common_bed" => 0x48,
-                        "survivors.assign_context" => 0x30,
-                        "survivors.assign_targets" => 0x40,
-                        "survivors.assign_bed" => 0x85c,
-                        "survivors.roaming_context" => 0x40,
-                        "survivors.spawn_target" => 0x18,
-                        "survivors.move_survivor" => 0x450,
-                        "survivors.npc_transform" => 0x168,
-                        "survivors.npc_saved_state" => 0x1e0,
-                        "survivors.npc_common" => 0x300,
-                        "survivors.npc_state" => 0x450,
-                        "survivors.spawn_template" => 0x08,
-                        "survivors.spawn_used_item" => 0x98,
-                        "survivors.spawn_ammo_item" => 0xac,
-                        "survivors.spawn_consume" => 0xe0,
-                        "survivors.registry_loaded" => 0x20,
-                        "survivors.registry_item_map" => 0xa8,
-                        "survivors.map_bits" => 0x08,
-                        "survivors.map_capacity" => 0x10,
-                        "survivors.map_keys" => 0x28,
-                        "survivors.map_values" => 0x40,
-                        "survivors.map_count" => 0x54,
-                    ],
-                },
-                {
-                    // The built-in server's twins: the same code, so the
-                    // server constants hold. `cursor_return` is
-                    // `cursor_return_a`.
-                    side: CLIENT,
-                    guid: "69f0e9573b32c24a8838d3fff550824c",
-                    age: 410,
-                    symbols: [
-                        "survivors.cursor_return" => 0x29_63a8,
-                        "survivors.spawn_return" => 0x22_368b,
-                        "survivors.unique_return_a" => 0x45_b299,
-                        "survivors.unique_return_b" => 0x45_b30d,
-                        "survivors.bed_return" => 0x45_744f,
-                        "survivors.bed_init_return" => 0x45_77c6,
-                        "survivors.cursor_return_a" => 0x29_63a8,
-                        "survivors.cursor_return_b" => 0x29_63b3,
-                        "survivors.assign_return_a" => 0x2d_2f61,
-                        "survivors.assign_return_b" => 0x2d_3004,
-                        "survivors.roaming_return" => 0x45_6f48,
-                        "survivors.spawn" => 0x22_1230,
-                        "survivors.registry_load" => 0xea_a500,
-                        "survivors.map_find_slot" => 0xe8_fa70,
-                    ],
-                    constants: [
-                        "survivors.unique_context" => 0x38,
-                        "survivors.unique_saved_state" => 0x40,
-                        "survivors.unique_transform" => 0x48,
-                        "survivors.bed_context" => 0x40,
-                        "survivors.bed_transform" => 0x48,
-                        "survivors.bed_npc_common_type" => 0xa0,
-                        "survivors.npc_common_bed" => 0x48,
-                        "survivors.assign_context" => 0x30,
-                        "survivors.assign_targets" => 0x40,
-                        "survivors.assign_bed" => 0x85c,
-                        "survivors.roaming_context" => 0x40,
-                        "survivors.spawn_target" => 0x18,
-                        "survivors.move_survivor" => 0x450,
-                        "survivors.npc_transform" => 0x168,
-                        "survivors.npc_saved_state" => 0x1e0,
-                        "survivors.npc_common" => 0x300,
-                        "survivors.npc_state" => 0x450,
-                        "survivors.spawn_template" => 0x08,
-                        "survivors.spawn_used_item" => 0x98,
-                        "survivors.spawn_ammo_item" => 0xac,
-                        "survivors.spawn_consume" => 0xe0,
-                        "survivors.registry_loaded" => 0x20,
-                        "survivors.registry_item_map" => 0xa8,
-                        "survivors.map_bits" => 0x08,
-                        "survivors.map_capacity" => 0x10,
-                        "survivors.map_keys" => 0x28,
-                        "survivors.map_values" => 0x40,
-                        "survivors.map_count" => 0x54,
-                        "survivors.state_status" => 0x14,
-                        "survivors.ui_map_bits" => 0x46_3e98,
-                        "survivors.ui_map_capacity" => 0x46_3ea0,
-                        "survivors.ui_map_keys" => 0x46_3eb8,
-                        "survivors.ui_map_values" => 0x46_3ed0,
-                        "survivors.ui_map_count" => 0x46_3ee4,
-                        "survivors.ui_record_size" => 0x928,
-                        "survivors.ui_record_status" => 0x880,
-                    ],
-                },
-            ],
         )
     }
 
@@ -201,25 +85,19 @@ impl Mod for SurvivorsPerAltar {
             copy_staffs(load, &settings)?;
         }
         if load.host().build().side == Side::SERVER {
-            server::link(load, staffs)?;
+            policy::link(load, staffs)?;
         } else {
-            // The server half acts in the games this client hosts.
-            let merged = match server::link(load, staffs) {
-                Ok(()) => true,
-                Err(off) => {
-                    enshwick_loader_api::warn!("copies stay off in hosted games: {off}");
-                    false
-                }
-            };
-            client::link(load, !merged)?;
-            enshwick_loader_api::info!(
-                "client half linked; server half {}",
-                if merged {
-                    "acts while this client hosts"
-                } else {
-                    "off"
-                }
-            );
+            // The policy acts in the games this client hosts, and for its own
+            // cursor.
+            if let Err(off) = policy::link(load, staffs) {
+                enshwick_loader_api::warn!("copies stay off in hosted games: {off}");
+            }
+            // The menu keeps one record per survivor, which every copy writes
+            // its status into in turn: show the bits every copy has, the
+            // worst status, so a copy without a bed shows "no bed".
+            load.on_survivor_status(|_, statuses| {
+                (statuses.len() >= 2).then(|| statuses.iter().fold(u8::MAX, |all, s| all & s))
+            })?;
         }
         Ok(Self)
     }
@@ -232,7 +110,7 @@ fn copy_staffs(load: &mut Load<'_>, settings: &Settings) -> Result<(), Off> {
 
     let texts = load.texts(staffs::TEXTS)?;
     staffs::add(load, &texts)?;
-    staffs::link(load)?;
+    staffs::file(load)?;
     let items = staffs::copy_ids();
     let boss = chance("copy_staff_boss_chance", settings.copy_staff_boss_chance);
     let locked = chance(
@@ -276,5 +154,84 @@ mod tests {
         assert!((chance("c", f64::INFINITY) - 1.0).abs() < f64::EPSILON);
         assert!(chance("c", -0.5).abs() < f64::EPSILON);
         assert!(chance("c", f64::NAN).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn copies_answer_the_game_per_altar() {
+        use enshwick_loader_api::abi::{
+            AltarInfo, BedCheck, Bounds, Header, Status, SurvivorLookup,
+        };
+
+        let loader = enshwick_loader_api::test::FakeHost::new()
+            .settings(
+                "per_altar = true
+copy_staffs = false
+",
+            )
+            .install();
+        // SAFETY: the exports of `declare_mod!` above.
+        let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+        assert_eq!(status, Status::OK);
+        let altar = |entity, x| {
+            let mut info = AltarInfo::EMPTY;
+            info.entity = entity;
+            info.zone = Bounds {
+                min: [x, 0, 0],
+                max: [x + 80, 80, 80],
+            };
+            info
+        };
+        loader.set_altars(&[altar(1, 0), altar(2, 100)]);
+        let ask = |vanilla, purpose, entity, cell, beds: &[(u32, u32)]| {
+            loader.survivor_lookup(7, vanilla, purpose, entity, cell, beds)
+        };
+        let unique = SurvivorLookup::UNIQUENESS;
+        assert_eq!(
+            ask(10, unique, 10, [10, 0, 10], &[]),
+            Some(10),
+            "the original stays"
+        );
+        assert_eq!(
+            ask(10, unique, 11, [120, 0, 10], &[]),
+            Some(11),
+            "a copy at the other altar"
+        );
+        assert_eq!(
+            ask(10, unique, 12, [130, 0, 10], &[]),
+            Some(11),
+            "a second copy goes"
+        );
+        assert_eq!(
+            ask(10, SurvivorLookup::SPAWN, 0, [20, 0, 20], &[]),
+            Some(10)
+        );
+        assert_eq!(
+            ask(10, SurvivorLookup::BED_OWNER, 0, [150, 0, 10], &[]),
+            Some(11)
+        );
+        assert_eq!(
+            ask(
+                10,
+                SurvivorLookup::PREVIOUS_OCCUPANT,
+                50,
+                [150, 0, 10],
+                &[(11, 50)]
+            ),
+            Some(11)
+        );
+        assert_eq!(ask(10, SurvivorLookup::CURSOR, 0, [0; 3], &[]), Some(0));
+        let check = BedCheck {
+            header: Header::of::<BedCheck>(),
+            survivor: 7,
+            entity: 10,
+            bed: 50,
+            home: [10, 0, 10],
+            bed_at: [150, 0, 10],
+        };
+        assert!(
+            !loader.survivor_bed_check(&check),
+            "a bed at another altar is cleared"
+        );
+        assert!(loader.faults().is_empty());
     }
 }

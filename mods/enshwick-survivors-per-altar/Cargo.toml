@@ -19,6 +19,7 @@ enshwick-loader-api.workspace = true
 serde.workspace = true
 
 [dev-dependencies]
+enshwick-loader-api = { workspace = true, features = ["test"] }
 toml.workspace = true
 
 [lints]

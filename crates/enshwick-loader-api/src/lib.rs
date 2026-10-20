@@ -87,6 +87,7 @@ pub mod raw;
 pub mod schedule;
 pub mod state;
 pub mod status;
+pub mod survivors;
 #[cfg(feature = "test")]
 pub mod test;
 pub mod world;
