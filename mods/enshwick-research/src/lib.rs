@@ -33,24 +33,24 @@ struct Settings {
     /// Log what the client does where the platform needs engine facts;
     /// development only.
     #[serde(default)]
-    #[config(startup)]
+    #[config(client)]
     enabled: bool,
     /// Look at the item tooltip: what each of its functions is handed.
     #[serde(default = "yes")]
-    #[config(startup)]
+    #[config(client)]
     tooltip: bool,
     /// Look at join attempts and the menus after them.
     #[serde(default = "yes")]
-    #[config(startup)]
+    #[config(client)]
     join: bool,
     /// The least time between two dumps of one tooltip function, in
     /// milliseconds, unless a mark comes between.
     #[serde(default = "interval_ms")]
-    #[config(startup, range = 0..=60_000)]
+    #[config(client, range = 0..=60_000)]
     dump_interval_ms: u64,
     /// The most tooltip dumps between two marks.
     #[serde(default = "max_dumps")]
-    #[config(startup, range = 1..=100_000)]
+    #[config(client, range = 1..=100_000)]
     max_dumps: u32,
 }
 
