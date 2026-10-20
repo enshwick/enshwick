@@ -28,7 +28,7 @@ pub enum Updates {
         /// The tag prefix before `-v<semver>`.
         component: String,
     },
-    /// A JSON document at this `https://` URL that names the latest release.
+    /// A JSON document at this `https://` URL that lists the mod's versions.
     Url(String),
 }
 

@@ -1,7 +1,7 @@
 [package]
 name = "enshwick-updater"
 version = "0.1.1"
-description = "Updates Enshwick and its mods from signed GitHub releases, with the player's consent"
+description = "Updates Enshwick and its mods from signed releases, with the player's consent"
 keywords = ["enshrouded", "mod", "updater"]
 categories = ["game-development"]
 readme = "README.md"
