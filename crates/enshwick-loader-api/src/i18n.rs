@@ -114,9 +114,10 @@ languages! {
 /// ```
 /// use enshwick_loader_api::i18n::{Language, Texts};
 ///
-/// let texts = Texts::parse("[en]\ngreeting = \"Hello\"\n[uk]\ngreeting = \"Привіт\"\n").unwrap();
+/// let texts = Texts::parse("[en]\ngreeting = \"Hello\"\n[uk]\ngreeting = \"Привіт\"\n")?;
 /// assert_eq!(texts.get("greeting", Language::UK_UA), Some("Привіт"));
 /// assert_eq!(texts.get("greeting", Language::DE_DE), Some("Hello"));
+/// # Ok::<(), enshwick_loader_api::Off>(())
 /// ```
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Texts {
@@ -157,9 +158,10 @@ impl Texts {
     /// ```
     /// use enshwick_loader_api::i18n::{Language, Texts};
     ///
-    /// let mut texts = Texts::parse("[en]\na = \"A\"\n").unwrap();
-    /// texts.merge(Texts::parse("[en]\na = \"B\"\n").unwrap());
+    /// let mut texts = Texts::parse("[en]\na = \"A\"\n")?;
+    /// texts.merge(Texts::parse("[en]\na = \"B\"\n")?);
     /// assert_eq!(texts.get("a", Language::FALLBACK), Some("B"));
+    /// # Ok::<(), enshwick_loader_api::Off>(())
     /// ```
     pub fn merge(&mut self, other: Self) {
         for (language, entries) in other.by_language {
@@ -186,7 +188,19 @@ impl Texts {
         find(language).or_else(|| find(Language::FALLBACK))
     }
 
-    /// Every language with a text for `key`, and the text.
+    /// Every language with a text for `key`, and the text, in no set order.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_loader_api::i18n::Texts;
+    ///
+    /// let texts = Texts::parse("[en]\ngreeting = \"Hello\"\n[uk]\ngreeting = \"Привіт\"\n")?;
+    /// let mut all: Vec<&str> = texts.translations("greeting").map(|(_, text)| text).collect();
+    /// all.sort_unstable();
+    /// assert_eq!(all, ["Hello", "Привіт"]);
+    /// # Ok::<(), enshwick_loader_api::Off>(())
+    /// ```
     pub fn translations<'a>(
         &'a self,
         key: &'a str,

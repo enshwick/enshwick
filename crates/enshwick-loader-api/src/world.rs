@@ -38,6 +38,10 @@ impl ComponentType {
 }
 
 /// A connected player, as the server sees them.
+///
+/// # Examples
+///
+/// See [`World`].
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Player {
     /// The player character's entity.

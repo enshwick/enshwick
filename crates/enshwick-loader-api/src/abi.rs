@@ -133,8 +133,9 @@ impl Header {
 /// let mut old = TickData { header: Header::of::<TickData>(), step: 7 };
 /// old.header.size = 8;
 /// // SAFETY: a valid tick; an all-zero tick is valid.
-/// let tick = unsafe { read_headed(&raw const old, 8) }.unwrap();
+/// let tick = unsafe { read_headed(&raw const old, 8) }.ok_or("too short")?;
 /// assert_eq!(tick.step, 0);
+/// # Ok::<(), &str>(())
 /// ```
 #[must_use]
 pub unsafe fn read_headed<T: Copy>(raw: *const T, required: usize) -> Option<T> {

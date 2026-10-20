@@ -29,6 +29,15 @@ pub mod stations {
 }
 
 /// A vanilla crafting station: its item and the template the item places.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::content::workshops::stations;
+///
+/// let workbench = stations::WORKBENCH;
+/// assert_ne!(workbench.item, workbench.template);
+/// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Station {
     /// The station item.
@@ -94,6 +103,10 @@ impl WorkshopId {
 }
 
 /// How the new station is crafted: a copy of the vanilla station's recipe.
+///
+/// # Examples
+///
+/// See [`Load::add_workshop`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct StationRecipe {
     /// The recipe's GUID.
@@ -132,6 +145,10 @@ pub struct NewWorkshop {
 }
 
 /// Where the fields a workshop edit touches sit, from the game's reflection.
+///
+/// # Examples
+///
+/// See [`clone_template`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct WorkshopLayout {
     /// `ecs::TemplateResource.components`.
@@ -222,6 +239,27 @@ const REFERENCE: usize = 16;
 
 /// The station template with its crafting components moved to `workshop`;
 /// `None` unless it has all three, each of the reflected size.
+/// [`Load::add_workshop`] serves it, with the next three functions; call
+/// them from [`Load::serve`] builders of your own for a station it does not
+/// make.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::content::types;
+/// use enshwick_loader_api::content::workshops::{NewWorkshop, WorkshopLayout, clone_template};
+///
+/// fn init(
+///     load: &mut enshwick_loader_api::Load<'_>,
+///     new: NewWorkshop,
+/// ) -> Result<(), enshwick_loader_api::Off> {
+///     let layout = WorkshopLayout::resolve(load)?;
+///     let (template, like, workshop) = (new.template, new.like.template, new.workshop);
+///     load.serve(template.key(types::TEMPLATE), like.key(types::TEMPLATE), move |base| {
+///         clone_template(&layout, base, workshop)
+///     })
+/// }
+/// ```
 #[must_use]
 pub fn clone_template(layout: &WorkshopLayout, template: &[u8], workshop: Guid) -> Option<Vec<u8>> {
     let mut blob = Blob::new(template);
@@ -266,6 +304,24 @@ pub fn clone_template(layout: &WorkshopLayout, template: &[u8], workshop: Guid) 
 /// The new station item, cloned from the vanilla station in `like`, placing
 /// the new template; `None` when the vanilla item does not place
 /// `new.like.template`.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::content::items::ItemLayout;
+/// use enshwick_loader_api::content::types;
+/// use enshwick_loader_api::content::workshops::{NewWorkshop, WorkshopLayout, clone_station};
+///
+/// fn init(
+///     load: &mut enshwick_loader_api::Load<'_>,
+///     new: NewWorkshop,
+/// ) -> Result<(), enshwick_loader_api::Off> {
+///     let layout = WorkshopLayout::resolve(load)?;
+///     let items = ItemLayout::resolve(load)?;
+///     let (item, like) = (new.item.key(types::ITEM_INFO), new.like.item.key(types::ITEM_INFO));
+///     load.serve(item, like, move |base| clone_station(&items, &layout, base, &new))
+/// }
+/// ```
 #[must_use]
 pub fn clone_station(
     items: &ItemLayout,
@@ -283,6 +339,24 @@ pub fn clone_station(
 }
 
 /// The template collection with `template` listed after the others.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::content::types;
+/// use enshwick_loader_api::content::workshops::{
+///     NewWorkshop, TEMPLATE_COLLECTION, WorkshopLayout, list_template,
+/// };
+///
+/// fn init(
+///     load: &mut enshwick_loader_api::Load<'_>,
+///     new: NewWorkshop,
+/// ) -> Result<(), enshwick_loader_api::Off> {
+///     let layout = WorkshopLayout::resolve(load)?;
+///     let collection = TEMPLATE_COLLECTION.key(types::TEMPLATE_COLLECTION);
+///     load.serve(collection, collection, move |base| list_template(&layout, base, new.template))
+/// }
+/// ```
 #[must_use]
 pub fn list_template(
     layout: &WorkshopLayout,
@@ -302,6 +376,24 @@ pub fn list_template(
 
 /// The workshop registry with the new workshop after the others: a copy of
 /// the vanilla station's entry with the new workshop, item and name.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::content::types;
+/// use enshwick_loader_api::content::workshops::{
+///     NewWorkshop, WORKSHOP_REGISTRY, WorkshopLayout, list_workshop,
+/// };
+///
+/// fn init(
+///     load: &mut enshwick_loader_api::Load<'_>,
+///     new: NewWorkshop,
+/// ) -> Result<(), enshwick_loader_api::Off> {
+///     let layout = WorkshopLayout::resolve(load)?;
+///     let registry = WORKSHOP_REGISTRY.key(types::WORKSHOP_REGISTRY);
+///     load.serve(registry, registry, move |base| list_workshop(&layout, base, &new))
+/// }
+/// ```
 #[must_use]
 pub fn list_workshop(
     layout: &WorkshopLayout,

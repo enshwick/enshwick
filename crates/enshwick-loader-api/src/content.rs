@@ -164,10 +164,11 @@ pub mod types {
 /// let mut base = vec![8, 0, 0, 0, 2, 0, 0, 0];
 /// base.extend_from_slice(&[1, 0, 0, 0, 2, 0, 0, 0]);
 /// let mut blob = Blob::new(&base);
-/// blob.grow_array(0, 4, 4, &[], &[(vec![3, 0, 0, 0], None)]).unwrap();
-/// let (start, count) = blob.array(0).unwrap();
+/// blob.grow_array(0, 4, 4, &[], &[(vec![3, 0, 0, 0], None)]).ok_or("not an array")?;
+/// let (start, count) = blob.array(0).ok_or("not an array")?;
 /// assert_eq!(count, 3);
 /// assert_eq!(blob.read_u32(start + 8), Some(3));
+/// # Ok::<(), &str>(())
 /// ```
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Blob(Vec<u8>);

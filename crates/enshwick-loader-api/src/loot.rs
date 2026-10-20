@@ -32,6 +32,10 @@ pub const SYSTEM: &str = "destroy_inventory_on_loot";
 const ROW_WORDS: usize = 9;
 
 /// The last interaction a player started with a container.
+///
+/// # Examples
+///
+/// See [`Container`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Offer {
     /// The entity that last opened or looted the container; none before

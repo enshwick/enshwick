@@ -27,6 +27,10 @@ pub struct NewItem {
 }
 
 /// Where the fields an item edit touches sit, from the game's reflection.
+///
+/// # Examples
+///
+/// See [`ItemLayout::resolve`] and [`clone_item`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ItemLayout {
     /// `ItemInfo.itemId`.
@@ -55,7 +59,7 @@ impl ItemLayout {
     /// ```
     /// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
     ///     let layout = enshwick_loader_api::content::items::ItemLayout::resolve(load)?;
-    ///     assert_eq!(layout.id, 0);
+    ///     enshwick_loader_api::info!("ItemInfo.itemId at +{:#x}", layout.id);
     ///     Ok(())
     /// }
     /// ```
@@ -80,7 +84,31 @@ const REFERENCE: usize = 16;
 /// A blob string header.
 const BLOB_STRING: usize = 8;
 
-/// `item`'s `ItemInfo`, made from the vanilla one in `like`.
+/// `item`'s `ItemInfo`, made from the vanilla one in `like`: its id, object
+/// GUID and the tags it names replaced, the rest kept. `None` when `like` is
+/// too short for the layout. [`Load::add_item`] serves it; call it from a
+/// [`Load::serve`] builder of your own for an edit `add_item` does not make.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::content::Guid;
+/// use enshwick_loader_api::content::items::{ItemLayout, NewItem, clone_item};
+///
+/// let layout = ItemLayout { id: 0, object: 4, name: 0x48, description: 0x68, refs: 0, names: 0x38 };
+/// let item = NewItem {
+///     guid: Guid::parse("8a3f6e21-5c4b-4d7e-9f10-2b7c5e6a9d31"),
+///     like: Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d"),
+///     name: None,
+///     description: None,
+///     debug_name: "Safe".into(),
+/// };
+/// let vanilla = [0u8; 0x80];
+/// let clone = clone_item(&layout, &vanilla, &item).ok_or("too short")?;
+/// assert_eq!(clone[..4], item.guid.id().to_le_bytes());
+/// assert_eq!(clone[4..20], item.guid.0);
+/// # Ok::<(), &str>(())
+/// ```
 #[must_use]
 pub fn clone_item(layout: &ItemLayout, like: &[u8], item: &NewItem) -> Option<Vec<u8>> {
     let mut info = Blob::new(like);
@@ -96,7 +124,22 @@ pub fn clone_item(layout: &ItemLayout, like: &[u8], item: &NewItem) -> Option<Ve
 }
 
 /// The item registry with `guid` listed after the others, and its debug name
-/// beside it.
+/// beside it; `None` when the registry does not have the layout's arrays.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::content::{Guid, types};
+/// use enshwick_loader_api::content::items::{ITEM_REGISTRY, ItemLayout, list_item};
+///
+/// /// Lists an item whose `ItemInfo` the mod serves itself.
+/// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+///     let layout = ItemLayout::resolve(load)?;
+///     let staff = Guid::parse("8a3f6e21-5c4b-4d7e-9f10-2b7c5e6a9d31");
+///     let registry = ITEM_REGISTRY.key(types::ITEM_REGISTRY);
+///     load.serve(registry, registry, move |base| list_item(&layout, base, staff, "Staff"))
+/// }
+/// ```
 #[must_use]
 pub fn list_item(
     layout: &ItemLayout,

@@ -13,9 +13,10 @@
 /// ```
 /// use enshwick_loader_api::code::Pattern;
 ///
-/// let pattern = Pattern::parse("B9 ?? 02 00 00").unwrap();
+/// let pattern = Pattern::parse("B9 ?? 02 00 00")?;
 /// let code = [0x90, 0xb9, 0x00, 0x02, 0x00, 0x00, 0xc3];
 /// assert_eq!(pattern.find_unique(&code), Ok(1));
+/// # Ok::<(), enshwick_loader_api::code::PatternError>(())
 /// ```
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Pattern {
@@ -49,9 +50,10 @@ pub enum PatternError {
 /// ```
 /// use enshwick_loader_api::code::{Pattern, Unique};
 ///
-/// let pattern = Pattern::parse("C3").unwrap();
+/// let pattern = Pattern::parse("C3")?;
 /// assert_eq!(pattern.find_unique(&[0x90]), Err(Unique::None));
 /// assert_eq!(pattern.find_unique(&[0xc3, 0xc3]), Err(Unique::Many));
+/// # Ok::<(), enshwick_loader_api::code::PatternError>(())
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum Unique {
@@ -98,7 +100,8 @@ impl Pattern {
     /// ```
     /// use enshwick_loader_api::code::Pattern;
     ///
-    /// assert_eq!(Pattern::parse("0F 84 ?? ?? ?? ??").unwrap().len(), 6);
+    /// assert_eq!(Pattern::parse("0F 84 ?? ?? ?? ??")?.len(), 6);
+    /// # Ok::<(), enshwick_loader_api::code::PatternError>(())
     /// ```
     #[must_use]
     pub fn len(&self) -> usize {
@@ -112,7 +115,8 @@ impl Pattern {
     /// ```
     /// use enshwick_loader_api::code::Pattern;
     ///
-    /// assert!(!Pattern::parse("C3").unwrap().is_empty());
+    /// assert!(!Pattern::parse("C3")?.is_empty());
+    /// # Ok::<(), enshwick_loader_api::code::PatternError>(())
     /// ```
     #[must_use]
     pub fn is_empty(&self) -> bool {
@@ -126,9 +130,10 @@ impl Pattern {
     /// ```
     /// use enshwick_loader_api::code::Pattern;
     ///
-    /// let pattern = Pattern::parse("48 ?? 05").unwrap();
+    /// let pattern = Pattern::parse("48 ?? 05")?;
     /// assert!(pattern.matches(&[0x48, 0x8d, 0x05, 0xff]));
     /// assert!(!pattern.matches(&[0x48, 0x8d]));
+    /// # Ok::<(), enshwick_loader_api::code::PatternError>(())
     /// ```
     #[must_use]
     pub fn matches(&self, code: &[u8]) -> bool {
@@ -147,9 +152,10 @@ impl Pattern {
     /// ```
     /// use enshwick_loader_api::code::Pattern;
     ///
-    /// let pattern = Pattern::parse("CC ?? CC").unwrap();
+    /// let pattern = Pattern::parse("CC ?? CC")?;
     /// let found: Vec<usize> = pattern.find_all(&[0xcc, 1, 0xcc, 2, 0xcc]).collect();
     /// assert_eq!(found, [0, 2]);
+    /// # Ok::<(), enshwick_loader_api::code::PatternError>(())
     /// ```
     pub fn find_all<'a>(&'a self, code: &'a [u8]) -> impl Iterator<Item = usize> + 'a {
         // Anchor on the first fixed byte: a cheap scan, then the full compare.
