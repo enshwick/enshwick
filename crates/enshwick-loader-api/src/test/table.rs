@@ -11,7 +11,7 @@ use crate::abi::{
     HostApi, InteractionFn, InventoryRequest, InventoryResultFn, ItemData, KnowledgeInfo, Level,
     MidHookFn, MidHookSpec, ModHandle, ModInfo, NetMessageFn, PlayerInfo, RenameCallFn,
     ResourceKey, ResourcePatchFn, Side, SkillCheckFn, SpawnRequest, Status, StatusFn, Str,
-    SummonFn, SurvivorLookupFn, SurvivorStatusFn, TeleportRequest, ZoneCheckFn,
+    SummonFn, SurvivorLookupFn, SurvivorStatusFn, TeleportRequest, WeatherFront, ZoneCheckFn,
 };
 
 use super::{FakeHost, LinkedHook, ServedResource, SubmittedRequest};
@@ -85,6 +85,10 @@ pub(crate) struct State {
     pub(crate) grants: Vec<(u32, u32, u32, u32)>,
     /// The quest ids the fake knows.
     pub(crate) quests: Vec<u32>,
+    /// The weather weights everywhere and the fronts, settable.
+    pub(crate) weather: Option<([f32; 4], Vec<WeatherFront>)>,
+    /// The weather the mod started: effect and duration.
+    pub(crate) forecasts: Vec<(u32, i64)>,
     /// The world key last handed out, alive until the next one.
     world_key: Option<Box<str>>,
     /// The altars `altars` lists, settable while installed.
@@ -165,6 +169,8 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         knowledge: Vec::new(),
         grants: Vec::new(),
         quests: Vec::new(),
+        weather: None,
+        forecasts: Vec::new(),
         channels: Vec::new(),
         net_sent: Vec::new(),
         notices: Vec::new(),
@@ -1382,6 +1388,59 @@ extern "system" fn quests(_me: ModHandle, out: *mut u32, capacity: u32, count: *
     Status::OK
 }
 
+extern "system" fn weather_at(
+    _me: ModHandle,
+    position: *const [i64; 3],
+    out: *mut [f32; 4],
+) -> Status {
+    if position.is_null() || out.is_null() {
+        return Status::BAD_ARGS;
+    }
+    match with(None, |s| s.weather.as_ref().map(|w| w.0)) {
+        Some(weights) => {
+            // SAFETY: checked above; the safe layer passes a writable array.
+            unsafe { out.write(weights) };
+            Status::OK
+        }
+        None => Status::MISSING,
+    }
+}
+
+extern "system" fn weather_fronts(
+    _me: ModHandle,
+    out: *mut WeatherFront,
+    capacity: u32,
+    count: *mut u32,
+) -> Status {
+    let Some(fronts) = with(None, |s| s.weather.as_ref().map(|w| w.1.clone())) else {
+        return Status::MISSING;
+    };
+    if count.is_null() {
+        return Status::BAD_ARGS;
+    }
+    if !out.is_null() {
+        for (i, front) in fronts.iter().take(capacity as usize).enumerate() {
+            // SAFETY: the safe layer passes room for `capacity` fronts.
+            let slot = unsafe { out.add(i) };
+            // SAFETY: as above.
+            unsafe { slot.write(*front) };
+        }
+    }
+    // SAFETY: checked above.
+    unsafe { count.write(u32::try_from(fronts.len()).unwrap_or(u32::MAX)) };
+    Status::OK
+}
+
+extern "system" fn set_weather(_me: ModHandle, effect: u32, duration: i64) -> Status {
+    with(Status::MISSING, |s| {
+        if s.weather.is_none() {
+            return Status::MISSING;
+        }
+        s.forecasts.push((effect, duration));
+        Status::OK
+    })
+}
+
 /// table it sees for the process, so it is one static.
 pub(crate) static TABLE: HostApi = HostApi {
     header: Header::of::<HostApi>(),
@@ -1473,4 +1532,7 @@ pub(crate) static TABLE: HostApi = HostApi {
     knowledge,
     grant_knowledge,
     quests,
+    weather_at,
+    weather_fronts,
+    set_weather,
 };

@@ -41,6 +41,9 @@ Once the world has loaded, and again on `/probe check`:
   a grant of the wrong kind and one of an unknown id refused, and the
   counter raised by one, read back a second later; knowledge changes and
   completed quests are logged as they come;
+- weather: a reading at the first placed entity and the fronts; rain for two
+  minutes that shows in the fronts, then clear skies, then the game's own
+  choice again; chunk loads and unloads are logged as they come;
 - a save on demand, followed by `WorldSaved`.
 
 From start it counts the damage its damage filter sees by cause, and every

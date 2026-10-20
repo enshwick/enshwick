@@ -14,7 +14,7 @@ use core::sync::atomic::AtomicUsize;
 pub const ABI_MAJOR: u16 = 1;
 
 /// The minor version of this interface. A newer minor only appends fields.
-pub const ABI_MINOR: u16 = 32;
+pub const ABI_MINOR: u16 = 33;
 
 /// Whether `id` is a valid mod id: 1 to 64 characters of `[a-z0-9-]`.
 ///
@@ -527,6 +527,14 @@ impl Event {
     /// [`QuestData`]. Raised on the game thread after the step. Server
     /// only. Since minor 32.
     pub const QUEST_COMPLETED: Self = Self(16);
+    /// A chunk of the server's world loaded: players came near, and its
+    /// entities exist now; data is a [`ChunkData`]. Raised on the game
+    /// thread after the step. Server only. Since minor 33.
+    pub const CHUNK_LOADED: Self = Self(17);
+    /// A chunk of the server's world unloaded: no player is near, and its
+    /// entities are gone; data is a [`ChunkData`]. Raised on the game thread
+    /// after the step. Server only. Since minor 33.
+    pub const CHUNK_UNLOADED: Self = Self(18);
 }
 
 /// The data of [`Event::KNOWLEDGE_CHANGED`].
@@ -571,6 +579,32 @@ pub struct QuestData {
     pub entity: u32,
     /// The quest's id, a player knowledge id.
     pub quest: u32,
+}
+
+/// The data of [`Event::CHUNK_LOADED`] and [`Event::CHUNK_UNLOADED`].
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::abi::{ChunkData, Header};
+///
+/// let chunk = ChunkData { header: Header::of::<ChunkData>(), index: 41, x: 1, z: 1, size: 256 };
+/// assert_eq!(chunk.x * chunk.size, 256, "it starts 256 m east of the origin");
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ChunkData {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// The chunk's index in the world's grid: `z * width + x`.
+    pub index: u32,
+    /// Its column, west to east from 0.
+    pub x: u32,
+    /// Its row, from 0 along the other axis.
+    pub z: u32,
+    /// Its side in metres: it spans `x * size` to `(x + 1) * size` on one
+    /// axis and `z * size` to `(z + 1) * size` on the other, at any height.
+    pub size: u32,
 }
 
 /// The data of [`Event::BUILDING_PLACED`] and [`Event::BUILDING_REMOVED`].
@@ -2819,6 +2853,54 @@ impl KnowledgeInfo {
     pub const PLAYER: u8 = 1;
 }
 
+/// A front of weather in the server's world: the current phenomenon of one
+/// of its weather layers, written by [`HostApi::weather_fronts`].
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::abi::{Header, WeatherFront};
+///
+/// let storm = WeatherFront {
+///     header: Header::of::<WeatherFront>(),
+///     layer: 0,
+///     effect: WeatherFront::RAIN,
+///     position: [0; 3],
+///     radius: 900.0,
+///     reserved: 0,
+///     remaining: 300_000_000_000,
+/// };
+/// assert_eq!(storm.effect, WeatherFront::RAIN);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct WeatherFront {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// The weather layer it belongs to.
+    pub layer: u32,
+    /// [`WeatherFront::NONE`], [`WeatherFront::RAIN`] or
+    /// [`WeatherFront::BLIZZARD`].
+    pub effect: u32,
+    /// Where it is, in 32.32 fixed-point metres.
+    pub position: [i64; 3],
+    /// How far it reaches, in metres.
+    pub radius: f32,
+    /// Zero.
+    pub reserved: u32,
+    /// How long it has left, in game nanoseconds.
+    pub remaining: i64,
+}
+
+impl WeatherFront {
+    /// Clouds without rain, or nothing.
+    pub const NONE: u32 = 0;
+    /// Rain, snow where it is cold.
+    pub const RAIN: u32 = 1;
+    /// A blizzard.
+    pub const BLIZZARD: u32 = 2;
+}
+
 /// The table of services the loader offers a mod.
 ///
 /// Fields are only ever appended; a mod checks [`Header::covers`] before it
@@ -3376,6 +3458,26 @@ pub struct HostApi {
     /// are. On the server's game thread only. Since minor 32.
     pub quests:
         extern "system" fn(me: ModHandle, out: *mut u32, capacity: u32, count: *mut u32) -> Status,
+    /// Writes how clear, rainy, snowy and stormy it is at `position`, in
+    /// 32.32 fixed-point metres, as weights that add up to 1, as the game's
+    /// systems weigh it. On the server's game thread only. Since minor 33.
+    pub weather_at:
+        extern "system" fn(me: ModHandle, position: *const [i64; 3], out: *mut [f32; 4]) -> Status,
+    /// Up to `capacity` current weather fronts of the server's world, one per
+    /// layer that has one, and how many there are. On the server's game
+    /// thread only. Since minor 33.
+    pub weather_fronts: extern "system" fn(
+        me: ModHandle,
+        out: *mut WeatherFront,
+        capacity: u32,
+        count: *mut u32,
+    ) -> Status,
+    /// Starts new weather in every layer of the server's world: fronts of
+    /// `effect` ([`WeatherFront::NONE`] for clear skies) where a layer has
+    /// one, clear skies elsewhere, for `duration` game nanoseconds or the
+    /// game's own for 0; `u32::MAX` lets the game choose anew. Clients
+    /// follow. On the server's game thread only. Since minor 33.
+    pub set_weather: extern "system" fn(me: ModHandle, effect: u32, duration: i64) -> Status,
 }
 
 /// The exports a mod DLL provides, by name.
@@ -3437,7 +3539,7 @@ const _: () = {
     assert!(core::mem::offset_of!(HostApi, hook_at) == 24 + 35 * 8);
     assert!(core::mem::offset_of!(HostApi, inventory_open) == 24 + 36 * 8);
     assert!(core::mem::offset_of!(HostApi, inventory_submit) == 24 + 38 * 8);
-    assert!(size_of::<HostApi>() == 24 + 87 * 8);
+    assert!(size_of::<HostApi>() == 24 + 90 * 8);
     assert!(core::mem::offset_of!(HostApi, time_of_day) == 24 + 73 * 8);
     assert!(core::mem::offset_of!(HostApi, set_time_speed) == 24 + 76 * 8);
     assert!(size_of::<DaytimeInfo>() == 8 + 5 * 8 + 8);
@@ -3455,6 +3557,11 @@ const _: () = {
     assert!(size_of::<KnowledgeInfo>() == 8 + 16);
     assert!(size_of::<KnowledgeData>() == 8 + 12);
     assert!(size_of::<QuestData>() == 8 + 8);
+    assert!(core::mem::offset_of!(HostApi, weather_at) == 24 + 87 * 8);
+    assert!(core::mem::offset_of!(HostApi, set_weather) == 24 + 89 * 8);
+    // Frozen: written as an array.
+    assert!(size_of::<WeatherFront>() == 8 + 8 + 24 + 8 + 8);
+    assert!(size_of::<ChunkData>() == 8 + 16);
     assert!(size_of::<InventoryOp>() == 32);
     assert!(size_of::<InventoryRequest>() == 32);
     assert!(size_of::<InventoryOpResult>() == 8);

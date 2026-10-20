@@ -31,6 +31,7 @@ chapters! {
     Damage => "damage.md",
     Buffs => "buffs.md",
     Knowledge => "knowledge.md",
+    Weather => "weather.md",
     Altars => "altars.md",
     Survivors => "survivors.md",
     Interactions => "interactions.md",

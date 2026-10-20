@@ -191,6 +191,13 @@ pub static BUILDS: &[KnownBuild] = &[
             ("knowledge.player_value", 0x99_2bb0),
             ("knowledge.world_value", 0x99_2ce0),
             ("knowledge.push", 0x99_6880),
+            ("weather.sample", 0xa1_5260),
+            ("weather.clock", 0x23_2610),
+            ("weather.resource_lock", 0xa1_4940),
+            ("weather.resource_release", 0x82_10c0),
+            ("weather.free", 0xa1_4e50),
+            ("weather.spawn", 0xa1_6120),
+            ("chunks.step", 0x6b_ee40),
         ],
         constants: &[
             ("ecs.context_row", 8),
@@ -431,6 +438,30 @@ pub static BUILDS: &[KnownBuild] = &[
             ("knowledge.queue", 0x1d0),
             ("knowledge.journal", 0x1e8),
             ("knowledge.journal_blob", 0x48),
+            // The server holds its weather system here; the system its
+            // resource manager, handle and generation, its instance pool
+            // (pages, page count, shift, mask) and its layer slots and their
+            // number; an instance its phenomenon (u8), place, radius and end.
+            ("weather.system", 0x1798),
+            ("weather.manager", 0x00),
+            ("weather.resource", 0x0c),
+            ("weather.generation", 0x10),
+            ("weather.pages", 0x28),
+            ("weather.page_count", 0x30),
+            ("weather.page_shift", 0x50),
+            ("weather.page_mask", 0x60),
+            ("weather.layers", 0xc8),
+            ("weather.layer_count", 0xd0),
+            ("weather.instance_phenomenon", 0x01),
+            ("weather.instance_position", 0x08),
+            ("weather.instance_radius", 0x24),
+            ("weather.instance_despawn", 0x38),
+            // The entity world holds its chunk manager here; the manager
+            // its grid's width and height (u32); a chunk its index (u32).
+            ("chunks.manager", 0xeb_c028),
+            ("chunks.width", 0x10),
+            ("chunks.height", 0x14),
+            ("chunks.index", 0x30),
         ],
     },
     KnownBuild {
@@ -553,6 +584,13 @@ pub static BUILDS: &[KnownBuild] = &[
             ("knowledge.player_value", 0x11f_c410),
             ("knowledge.world_value", 0x11f_c540),
             ("knowledge.push", 0x120_0600),
+            ("weather.sample", 0xa9_b9e0),
+            ("weather.clock", 0x49_9740),
+            ("weather.resource_lock", 0xa9_aac0),
+            ("weather.resource_release", 0x106_6670),
+            ("weather.free", 0xa9_b560),
+            ("weather.spawn", 0xa9_c700),
+            ("chunks.step", 0xa1_d8d0),
             ("chat.receive_return_a", 0x84_0b59),
             ("chat.receive_return_b", 0x86_9b1b),
             ("chat.client_send", 0x86_64d0),
@@ -806,6 +844,30 @@ pub static BUILDS: &[KnownBuild] = &[
             ("knowledge.queue", 0x1d0),
             ("knowledge.journal", 0x1e8),
             ("knowledge.journal_blob", 0x48),
+            // The server holds its weather system here; the system its
+            // resource manager, handle and generation, its instance pool
+            // (pages, page count, shift, mask) and its layer slots and their
+            // number; an instance its phenomenon (u8), place, radius and end.
+            ("weather.system", 0x1798),
+            ("weather.manager", 0x00),
+            ("weather.resource", 0x0c),
+            ("weather.generation", 0x10),
+            ("weather.pages", 0x28),
+            ("weather.page_count", 0x30),
+            ("weather.page_shift", 0x50),
+            ("weather.page_mask", 0x60),
+            ("weather.layers", 0xc8),
+            ("weather.layer_count", 0xd0),
+            ("weather.instance_phenomenon", 0x01),
+            ("weather.instance_position", 0x08),
+            ("weather.instance_radius", 0x24),
+            ("weather.instance_despawn", 0x38),
+            // The entity world holds its chunk manager here; the manager
+            // its grid's width and height (u32); a chunk its index (u32).
+            ("chunks.manager", 0xeb_c028),
+            ("chunks.width", 0x10),
+            ("chunks.height", 0x14),
+            ("chunks.index", 0x30),
             // The client's own chat: the game client holds it here.
             ("chat.client_store", 0xf8),
         ],

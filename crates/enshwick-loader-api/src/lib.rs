@@ -101,6 +101,7 @@ pub mod survivors;
 #[cfg(feature = "test")]
 pub mod test;
 pub mod vetoes;
+pub mod weather;
 pub mod world;
 
 pub use abi::Registers;

@@ -66,6 +66,7 @@ fn link_features(loader: &'static Loader) {
     crate::vetoes::link(loader);
     crate::daytime::link(loader);
     crate::damage::link(loader);
+    crate::weather::link(loader);
     crate::game_events::link(loader);
     crate::saves::link(loader);
     crate::inventory::link(loader);
