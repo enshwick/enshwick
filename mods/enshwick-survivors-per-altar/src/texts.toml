@@ -1,6 +1,7 @@
 [en]
 "copy.name" = "Copy staff: {survivor}"
-"copy.description" = "Used once at a Flame Altar: places a copy of {survivor} there, or moves the copy that altar already has. Used up only when it works."
+"copy.description" = "At a Flame Altar: places a copy of {survivor} there, or moves the copy that altar already has. Each use that works spends a charge; the last one uses the staff up."
+"copy.full_charges" = "Charges when full"
 "survivor.blacksmith" = "Oswald Anders"
 "survivor.blacksmith_assistant" = "Rochelle Anders"
 "survivor.alchemist" = "Balthazar"
@@ -22,20 +23,25 @@
 
 [uk]
 "copy.name" = "Посох копії: {survivor}"
-"copy.description" = "Одноразовий, біля вівтаря Полум'я: ставить там копію персонажа {survivor} або переносить копію, яка вже є в цього вівтаря. Витрачається, лише коли спрацював."
+"copy.description" = "Біля вівтаря Полум'я: ставить там копію персонажа {survivor} або переносить копію, яка вже є в цього вівтаря. Кожне вдале застосування витрачає заряд; з останнім посох зникає."
+"copy.full_charges" = "Зарядів, коли повний"
 
 [de]
 "copy.name" = "Kopiestab: {survivor}"
-"copy.description" = "Einmal an einem Flammenaltar verwendbar: stellt dort eine Kopie von {survivor} auf oder versetzt die Kopie, die dieser Altar schon hat. Wird nur verbraucht, wenn es klappt."
+"copy.description" = "An einem Flammenaltar: stellt dort eine Kopie von {survivor} auf oder versetzt die Kopie, die dieser Altar schon hat. Jeder gelungene Einsatz verbraucht eine Ladung; mit der letzten ist der Stab verbraucht."
+"copy.full_charges" = "Ladungen, wenn voll"
 
 [fr]
 "copy.name" = "Bâton de copie : {survivor}"
-"copy.description" = "S'utilise une fois près d'un autel de la Flamme : y place une copie de {survivor}, ou y déplace la copie que cet autel possède déjà. N'est consommé qu'en cas de réussite."
+"copy.description" = "Près d'un autel de la Flamme : y place une copie de {survivor}, ou y déplace la copie que cet autel possède déjà. Chaque utilisation réussie consomme une charge ; la dernière consomme le bâton."
+"copy.full_charges" = "Charges une fois plein"
 
 [es]
 "copy.name" = "Bastón de copia: {survivor}"
-"copy.description" = "Se usa una vez en un altar de la Llama: coloca allí una copia de {survivor} o mueve la copia que ese altar ya tiene. Solo se gasta si funciona."
+"copy.description" = "En un altar de la Llama: coloca allí una copia de {survivor} o mueve la copia que ese altar ya tiene. Cada uso que funciona gasta una carga; con la última se gasta el bastón."
+"copy.full_charges" = "Cargas cuando está lleno"
 
 [pl]
 "copy.name" = "Kostur kopii: {survivor}"
-"copy.description" = "Jednorazowy, przy ołtarzu Płomienia: stawia tam kopię postaci {survivor} albo przenosi kopię, którą ten ołtarz już ma. Zużywa się tylko, gdy zadziała."
+"copy.description" = "Przy ołtarzu Płomienia: stawia tam kopię postaci {survivor} albo przenosi kopię, którą ten ołtarz już ma. Każde udane użycie zużywa ładunek; z ostatnim kostur się zużywa."
+"copy.full_charges" = "Ładunki, gdy pełny"

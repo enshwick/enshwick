@@ -16,10 +16,15 @@ zone.
   the copies.
 - Copy staffs: one per workshop survivor, such as "Copy staff: Oswald Anders".
   It does what the survivor's staff does at an altar, places a copy or moves
-  the one there, and is used up when that works. Outside every altar zone it
-  is kept. Bosses drop one at 10 %, chests that need a key or a lockpick hold
-  one at 2 %, a random survivor's each time. Removing the mod removes the
-  staffs from inventories.
+  the one there. Each use that works spends a charge, and the last charge
+  uses the staff up; outside every altar zone nothing is spent. A staff holds
+  3 charges when full, shown as a bar on its slot, and its tooltip names how
+  many it holds when full. Bosses drop one at 10 %, chests that need a key or
+  a lockpick hold one at 2 %, a random survivor's each time; a dropped staff
+  is full, or holds a random count when `copy_staff_charges_min` is above 0.
+  A staff from before charges gets full charges once the game next checks the
+  inventory that holds it; one used before that is used up. Removing the mod
+  removes the staffs from inventories.
 
 ## Settings
 
@@ -28,6 +33,11 @@ zone.
 ```toml
 per_altar = true
 copy_staffs = true
+# The charges of a full copy staff, from 1 to 100.
+copy_staff_charges = 3
+# A dropped staff holds from this many up to copy_staff_charges, at random;
+# 0 drops every staff full.
+copy_staff_charges_min = 0
 # From 0 to 1; 0 turns that source off.
 copy_staff_boss_chance = 0.10
 copy_staff_locked_chest_chance = 0.02

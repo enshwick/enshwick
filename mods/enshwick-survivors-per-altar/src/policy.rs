@@ -14,6 +14,7 @@ use enshwick_loader_api::abi::Side;
 use enshwick_loader_api::altars::Altars;
 use enshwick_loader_api::ecs::Entity;
 use enshwick_loader_api::events::{AltarsChanged, ShutdownStarted};
+use enshwick_loader_api::inventory::Bar;
 use enshwick_loader_api::survivors::{Answer, BedCheck, Lookup, Purpose, Summon};
 use enshwick_loader_api::{Load, Off};
 
@@ -57,6 +58,14 @@ pub(crate) fn link(load: &mut Load<'_>, staffs: bool) -> Result<(), Off> {
     load.on_survivor_bed_check(|check| read(|shared| keeps(shared, check)).unwrap_or(true))?;
     if staffs {
         load.on_summon(|summon| read(|shared| consumes(shared, summon)).unwrap_or(false))?;
+        let (world, scheduler) = (load.world()?, load.scheduler()?);
+        load.on_summoned(move |summon| {
+            if !read(|shared| spends_charge(shared, summon)).unwrap_or(false) {
+                return;
+            }
+            let staff = summon.pide;
+            scheduler.next_tick(move || spend(&world, staff));
+        })?;
     }
     if load.host().build().side == Side::CLIENT {
         // Entities belong to one hosted game; the next starts clean.
@@ -214,35 +223,75 @@ fn keeps(shared: &Shared, check: &BedCheck) -> bool {
     mine == beds
 }
 
-/// Marks a copy staff's use at an altar as consuming, so the game takes one
-/// staff in the same transaction as the spawn or move, and only when that
-/// works. The staff's effect spawn, which carries the same item, is left
-/// alone, and so is a use outside every altar zone, where the copy would not
-/// stay.
-fn consumes(shared: &Shared, summon: &Summon) -> bool {
-    let Some(staff) = crate::staffs::copy_staff(summon.item) else {
-        return false;
-    };
+/// Spends one charge of the copy staff `staff`, on the game thread.
+fn spend(world: &enshwick_loader_api::world::World, staff: Entity) {
+    match world.change_item_meter(staff, |c| c - 1) {
+        Ok(left) => enshwick_loader_api::info!(
+            "copy staff {}: {} of {} charges left",
+            staff.0,
+            left.current,
+            left.max
+        ),
+        Err(why) => enshwick_loader_api::warn!("copy staff {}: no charge spent: {why}", staff.0),
+    }
+}
+
+/// The copy staff a use at an altar spends: a copy staff placing its own
+/// survivor, inside an altar zone. The staff's effect spawn, which carries
+/// the same item, is left alone, and so is a use outside every altar zone,
+/// where the copy would not stay.
+fn staff_used(shared: &Shared, summon: &Summon) -> Option<&'static crate::staffs::Staff> {
+    let staff = crate::staffs::copy_staff(summon.item)?;
     if summon.ammo != 0
         || staff
             .survivor()
             .is_none_or(|s| summon.template != s.template())
     {
-        return false;
+        return None;
     }
     if shared.copies.altar_at(summon.target).is_none() {
         enshwick_loader_api::info!(
             "copy staff of {} used outside every altar zone: kept",
             staff.key
         );
-        return false;
+        return None;
     }
+    Some(staff)
+}
+
+/// Whether a use takes the whole staff: its last charge, or a staff from
+/// before charges, which has no meter. Any other use keeps the staff and
+/// spends a charge once it worked.
+pub(crate) fn last_charge(meter: Option<Bar>) -> bool {
+    meter.is_none_or(|charges| charges.current <= 1)
+}
+
+/// Marks a copy staff's use at an altar on its last charge as consuming, so
+/// the game takes the staff in the same transaction as the spawn or move,
+/// and only when that works.
+fn consumes(shared: &Shared, summon: &Summon) -> bool {
+    let Some(staff) = staff_used(shared, summon) else {
+        return false;
+    };
+    let last = last_charge(summon.meter);
     enshwick_loader_api::info!(
-        "copy staff of {} used at {:?}: taken on success",
+        "copy staff of {} used at {:?} with {:?} charges: {}",
         staff.key,
-        summon.target
+        summon.target,
+        summon.meter.map(|m| m.current),
+        if last {
+            "taken on success"
+        } else {
+            "a charge spent on success"
+        }
     );
-    true
+    last
+}
+
+/// Whether a use that worked spends a charge: one at an altar that kept the
+/// staff.
+fn spends_charge(shared: &Shared, summon: &Summon) -> bool {
+    !summon.consumed && summon.meter.is_some() && staff_used(shared, summon).is_some()
 }
 
 /// Lets go of copies the uniqueness pass no longer sees.
@@ -257,5 +306,23 @@ fn sweep(shared: &mut Shared, now: Instant) {
     for entity in gone {
         shared.seen.remove(&entity);
         shared.copies.forget(entity);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn only_the_last_charge_takes_the_staff() {
+        let charges = |current| Some(Bar { current, max: 3 });
+        assert!(!last_charge(charges(3)));
+        assert!(!last_charge(charges(2)));
+        assert!(last_charge(charges(1)));
+        assert!(last_charge(charges(0)), "an empty staff goes on its use");
+        assert!(
+            last_charge(None),
+            "a staff from before charges is used once"
+        );
     }
 }
