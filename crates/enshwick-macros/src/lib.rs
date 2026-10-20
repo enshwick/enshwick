@@ -1,9 +1,12 @@
-//! Derive macros for the Enshwick modding API; use them through
-//! `enshwick_api`, which re-exports them.
+//! Macros for the Enshwick modding API; use them through `enshwick_api`,
+//! which re-exports them.
 
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{Attribute, Data, DeriveInput, Expr, Fields, Lit, Meta, parse_macro_input};
+use syn::{
+    Attribute, Data, DeriveInput, Expr, Fields, FnArg, GenericArgument, Ident, ItemFn, Lit, Meta,
+    Pat, PathArguments, Type, parse_macro_input,
+};
 
 /// Implements `enshwick_api::config::Config` for a struct with named fields.
 ///
@@ -72,6 +75,111 @@ pub fn derive_config(input: TokenStream) -> TokenStream {
         }
     }
     .into()
+}
+
+/// Declares a hook from its body: the function stays, and
+/// `enshwick_api::detour!` declares a static `Hook` named after it in upper
+/// case.
+///
+/// The first argument is `next: Next<F>` with `F` the target's
+/// `extern "system" fn` type, the rest are the target's arguments by plain
+/// names. `#[hook(priority = <i32>, flags = <HookFlags>)]` sets the link's
+/// order and flags. Examples are on `enshwick_api::hook`.
+#[proc_macro_attribute]
+pub fn hook(args: TokenStream, item: TokenStream) -> TokenStream {
+    let mut priority: Option<Expr> = None;
+    let mut flags: Option<Expr> = None;
+    let settings = syn::meta::parser(|meta| {
+        if meta.path.is_ident("priority") {
+            priority = Some(meta.value()?.parse()?);
+            Ok(())
+        } else if meta.path.is_ident("flags") {
+            flags = Some(meta.value()?.parse()?);
+            Ok(())
+        } else {
+            Err(meta.error("expected `priority = <i32>` or `flags = <HookFlags>`"))
+        }
+    });
+    parse_macro_input!(args with settings);
+    let function = parse_macro_input!(item as ItemFn);
+    expand_hook(&function, priority.as_ref(), flags.as_ref())
+        .unwrap_or_else(|e| e.to_compile_error().into())
+}
+
+fn expand_hook(
+    function: &ItemFn,
+    priority: Option<&Expr>,
+    flags: Option<&Expr>,
+) -> syn::Result<TokenStream> {
+    let sig = &function.sig;
+    if !sig.generics.params.is_empty() {
+        return Err(syn::Error::new_spanned(
+            &sig.generics,
+            "a hook body takes no generics",
+        ));
+    }
+    let mut inputs = sig.inputs.iter();
+    let is_unsafe = inputs.next().and_then(next_is_unsafe).ok_or_else(|| {
+        syn::Error::new_spanned(
+            &sig.ident,
+            "a hook body takes `next: Next<extern \"system\" fn(..)>` first",
+        )
+    })?;
+    let unsafety = is_unsafe.then(|| quote!(unsafe));
+    let mut args = Vec::new();
+    for input in inputs {
+        let FnArg::Typed(typed) = input else {
+            return Err(syn::Error::new_spanned(
+                input,
+                "a hook body takes no `self`",
+            ));
+        };
+        let Pat::Ident(pat) = &*typed.pat else {
+            return Err(syn::Error::new_spanned(
+                &typed.pat,
+                "a hook body names each argument",
+            ));
+        };
+        let ident = &pat.ident;
+        let ty = &typed.ty;
+        args.push(quote!(#ident: #ty));
+    }
+    let output = &sig.output;
+    let body = &sig.ident;
+    let name = Ident::new(&body.to_string().to_uppercase(), body.span());
+    let vis = &function.vis;
+    let docs = function.attrs.iter().filter(|a| a.path().is_ident("doc"));
+    let priority = priority.map(|p| quote!(, priority = #p));
+    let flags = flags.map(|f| quote!(, flags = #f));
+    Ok(quote! {
+        #function
+
+        ::enshwick_api::detour! {
+            #(#docs)*
+            #vis static #name: #unsafety extern "system" fn(#(#args),*) #output
+                = #body #priority #flags;
+        }
+    }
+    .into())
+}
+
+/// Whether the `F` of `next: Next<F>` is an `unsafe fn`; `None` when the
+/// argument has another shape.
+fn next_is_unsafe(arg: &FnArg) -> Option<bool> {
+    let FnArg::Typed(typed) = arg else {
+        return None;
+    };
+    let Type::Path(path) = &*typed.ty else {
+        return None;
+    };
+    let segment = path.path.segments.last()?;
+    let PathArguments::AngleBracketed(generics) = &segment.arguments else {
+        return None;
+    };
+    match generics.args.first()? {
+        GenericArgument::Type(Type::FnPtr(f)) => Some(f.unsafety.is_some()),
+        _ => None,
+    }
 }
 
 /// The doc comment of `attrs` as TOML comment lines.

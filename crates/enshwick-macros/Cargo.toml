@@ -1,8 +1,8 @@
 [package]
 name = "enshwick-macros"
 version = "0.1.1"
-description = "Derive macros for the Enshwick modding API"
-keywords = ["enshrouded", "modding", "derive"]
+description = "Derive and attribute macros for the Enshwick modding API"
+keywords = ["enshrouded", "modding", "derive", "hooks"]
 categories = ["game-development"]
 readme = "README.md"
 edition.workspace = true
@@ -16,7 +16,7 @@ proc-macro = true
 
 [dependencies]
 quote = { version = "1.0.47", default-features = false, features = ["proc-macro"] }
-syn = { version = "3.0.9", default-features = false, features = ["derive", "parsing", "printing", "proc-macro"] }
+syn = { version = "3.0.9", default-features = false, features = ["derive", "full", "parsing", "printing", "proc-macro"] }
 
 [lints]
 workspace = true

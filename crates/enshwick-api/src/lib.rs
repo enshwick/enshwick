@@ -2,8 +2,8 @@
 //!
 //! A mod is a DLL in the game's `mods/` folder. It implements [`Mod`],
 //! exports itself with [`declare_mod!`], and during [`Mod::init`] links hooks
-//! with [`detour!`] and [`Load::hook`], reads its settings and finds game
-//! functions by name. The loader arms every hook once all mods are
+//! declared with [`detour!`] or [`#[hook]`](macro@hook) through
+//! [`Load::hook`], reads its settings and finds game functions by name. The loader arms every hook once all mods are
 //! initialised; a mod that fails or panics is turned off and the game runs
 //! vanilla where it acted.
 //!
@@ -68,6 +68,31 @@ pub mod state;
 pub mod world;
 
 pub use enshwick_macros::Config;
+/// Declares a hook from its body, as [`detour!`] does: the function stays,
+/// and a static [`Hook`] named after it in upper case joins it.
+///
+/// The first argument is `next: Next<F>`, where `F` is the target's
+/// `extern "system" fn` type; the other arguments are the target's, by plain
+/// names. `#[hook(priority = <i32>, flags = <HookFlags>)]` sets the link's
+/// order and flags. The static takes the function's visibility and doc
+/// comment.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_api::abi::HookFlags;
+/// use enshwick_api::{Next, hook};
+///
+/// /// Counts upgrades.
+/// #[hook(priority = 5, flags = HookFlags::CALLER_FRAME)]
+/// fn upgrade(next: Next<unsafe extern "system" fn(*mut u64)>, ctx: *mut u64) {
+///     // SAFETY: the original takes the same context.
+///     unsafe { next.get()(ctx) }
+/// }
+///
+/// assert_eq!(UPGRADE.name(), "UPGRADE");
+/// ```
+pub use enshwick_macros::hook;
 pub use hook::{FnPtr, Hook, Next};
 pub use host::{Host, host};
 pub use load::{Load, Mod, Off};

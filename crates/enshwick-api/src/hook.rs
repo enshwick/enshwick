@@ -58,7 +58,8 @@ const _: () = assert!(size_of::<extern "system" fn()>() == size_of::<usize>());
 /// A mod's link for one game function: its detour and the slot through which
 /// it reaches the rest of the chain.
 ///
-/// Declared with [`detour!`](crate::detour), registered with
+/// Declared with [`detour!`](crate::detour) or [`#[hook]`](macro@crate::hook),
+/// registered with
 /// [`Load::hook`](crate::Load::hook).
 ///
 /// # Examples
@@ -110,6 +111,28 @@ impl<F: FnPtr> Hook<F> {
     #[must_use]
     pub const fn name(&self) -> &'static str {
         self.name
+    }
+
+    /// The entry point the loader links into the chain: the detour with its
+    /// panic guard, as the game calls it.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// enshwick_api::detour! {
+    ///     static TICK: extern "system" fn() = tick;
+    /// }
+    ///
+    /// fn tick(next: enshwick_api::Next<extern "system" fn()>) {
+    ///     next.get()();
+    /// }
+    ///
+    /// let entry: extern "system" fn() = TICK.entry();
+    /// # let _ = entry;
+    /// ```
+    #[must_use]
+    pub const fn entry(&self) -> F {
+        self.detour
     }
 
     /// The rest of the chain: the next link or the original function.
@@ -180,7 +203,8 @@ impl<F: FnPtr> Next<F> {
 /// the game runs vanilla instead of crashing.
 ///
 /// Optional settings follow the function: `priority = <i32>` (lower runs
-/// earlier) and `flags = <HookFlags>`.
+/// earlier) and `flags = <HookFlags>`. [`#[hook]`](macro@crate::hook) writes the
+/// same declaration from the body's signature.
 ///
 /// # Examples
 ///
