@@ -306,6 +306,7 @@ name = "enshwick-survivors-per-altar"
 version = "0.2.0"
 dependencies = [
  "enshwick-loader-api",
+ "semver",
  "serde",
  "toml",
 ]

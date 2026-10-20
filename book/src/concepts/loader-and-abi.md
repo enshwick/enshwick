@@ -58,7 +58,7 @@ let manifest = enshwick_loader_api::manifest!(
     side: BOTH,                     // SERVER, CLIENT or BOTH
     version: "0.2.0",               // the crate's version when left out
     join = true,                    // counts in the join check
-    requires: ["flame-altar-zones" => "^0.1"],
+    requires: ["flame-altar-zones" => ">=0.1, <1.0"],
     after: ["flame-altar-count"],
     updates: github("themaiby/enshwick", "enshwick-survivors-per-altar"),
     signed_by: ["RWTjqgtfpy3lSOLC4uaUXuvvKSLQKOFf6nUnEytoiFjSzxMEhLnoAdJF"],

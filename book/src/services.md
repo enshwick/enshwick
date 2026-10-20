@@ -69,13 +69,16 @@ let manifest = enshwick_loader_api::manifest!(
     id: "survivors-per-altar",
     side: BOTH,
     join = true,
-    requires: ["flame-altar-zones" => "^0.1"],
+    requires: ["flame-altar-zones" => ">=0.1, <1.0"],
 );
 assert_eq!(manifest.dependency_count, 1);
 ```
 
 `requires` loads the publisher first, and skips the user with a reason when
-the publisher is missing or its version is out of range. `after: ["id"]`
+the publisher is missing or its version is out of range. Before 1.0 every
+minor release may bump `0.x`, and `^0.1` refuses 0.2.0: name the whole series
+the service stays compatible with, such as `>=0.1, <1.0`, and bump the range
+only when the service changes. `after: ["id"]`
 orders without requiring: use it with a service the mod can do without, and
 handle `load.service` failing.
 
