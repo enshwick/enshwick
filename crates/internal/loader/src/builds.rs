@@ -612,6 +612,40 @@ pub static BUILDS: &[KnownBuild] = &[
             ("chat.receive_return_b", 0x86_9b1b),
             ("chat.client_send", 0x86_64d0),
             ("chat.client_queue", 0xe9_73b0),
+            ("ui.popup", 0xb9_d860),
+            ("ui.window_begin", 0xa3_1020),
+            ("ui.window_end", 0xa3_1580),
+            ("ui.frame_from_node", 0xa2_e680),
+            ("ui.frame_open", 0xa2_e6c0),
+            ("ui.frame_close", 0xa3_1b70),
+            ("ui.frame_stretch", 0xa3_b4d0),
+            ("ui.frame_color", 0xa3_9110),
+            ("ui.node_padding", 0x11b_1410),
+            ("ui.node_spacing", 0x11b_1580),
+            ("ui.node_align", 0x11b_0f70),
+            ("ui.node_width", 0x11b_10a0),
+            ("ui.node_height", 0x11b_1020),
+            ("ui.node_stretch", 0x11b_1560),
+            ("ui.panel", 0xce_d910),
+            ("ui.nav_init", 0xa3_1120),
+            ("ui.nav_input", 0xd3_75c0),
+            ("ui.nav_set", 0xa4_33f0),
+            ("ui.nav_push", 0xa4_31f0),
+            ("ui.nav_end", 0xa4_3700),
+            ("ui.nav_drop", 0xa3_3450),
+            ("ui.label_new", 0xb0_c760),
+            ("ui.label_draw", 0xb1_3f50),
+            ("ui.button", 0xb5_c4c0),
+            ("ui.toggle", 0xac_f220),
+            ("ui.slider_init", 0xb1_2a80),
+            ("ui.slider", 0xc8_ad80),
+            ("ui.dropdown_init", 0xb1_27c0),
+            ("ui.dropdown", 0xac_d060),
+            ("ui.progress", 0xb4_7a10),
+            ("ui.sound", 0xa4_0ec0),
+            ("ui.loca_id", 0x42_7650),
+            ("ui.loca_text", 0xae_f3d0),
+            ("ui.context", 0x281_b498),
         ],
         constants: &[
             ("text.pool_language", 0xd8),
@@ -898,6 +932,40 @@ pub static BUILDS: &[KnownBuild] = &[
             ("terrain.registry_resource", 0x38),
             // The client's own chat: the game client holds it here.
             ("chat.client_store", 0xf8),
+            // The first 8 code bytes of each interface function, little-endian.
+            ("ui.popup.bytes", 0xa88d_4856_55c4_8b48),
+            ("ui.window_begin.bytes", 0x7489_4808_245c_8948),
+            ("ui.window_end.bytes", 0x8948_20ec_8348_5340),
+            ("ui.frame_from_node.bytes", 0x8b48_20ec_8348_5340),
+            ("ui.frame_open.bytes", 0x8b48_20ec_8348_5340),
+            ("ui.frame_close.bytes", 0x7489_4818_245c_8948),
+            ("ui.frame_stretch.bytes", 0xff3_20ec_8348_5340),
+            ("ui.frame_color.bytes", 0x8348_5708_245c_8948),
+            ("ui.node_padding.bytes", 0xa8_8111_0f02_100f),
+            ("ui.node_spacing.bytes", 0x2_0000_00b8_81c7),
+            ("ui.node_align.bytes", 0xc36c_4189_6602_b70f),
+            ("ui.node_width.bytes", 0x9081_c7c0_570f),
+            ("ui.node_height.bytes", 0x9481_c7c0_570f),
+            ("ui.node_stretch.bytes", 0xc300_0000_9091_8948),
+            ("ui.panel.bytes", 0x8d48_5641_55c4_8b48),
+            ("ui.nav_init.bytes", 0x7489_4808_245c_8948),
+            ("ui.nav_input.bytes", 0x5756_5518_245c_8948),
+            ("ui.nav_set.bytes", 0xf02_100f_0010_7980),
+            ("ui.nav_push.bytes", 0x851_8948_0841_8b48),
+            ("ui.nav_end.bytes", 0x5741_5441_5755_5340),
+            ("ui.nav_drop.bytes", 0x8348_5708_245c_8948),
+            ("ui.label_new.bytes", 0x7489_4808_245c_8948),
+            ("ui.label_draw.bytes", 0x246c_8d48_5756_5540),
+            ("ui.button.bytes", 0x5518_5889_48c4_8b48),
+            ("ui.toggle.bytes", 0x5510_5089_48c4_8b48),
+            ("ui.slider_init.bytes", 0x650d_100f_28ec_8348),
+            ("ui.slider.bytes", 0x4155_4157_5653_5540),
+            ("ui.dropdown_init.bytes", 0x250d_100f_28ec_8348),
+            ("ui.dropdown.bytes", 0x4818_5889_48c4_8b48),
+            ("ui.progress.bytes", 0x4808_5889_48c4_8b48),
+            ("ui.sound.bytes", 0x4c10_7889_48c4_8b48),
+            ("ui.loca_id.bytes", 0xc535_c98b_4c01_b60f),
+            ("ui.loca_text.bytes", 0x7489_4810_245c_8948),
         ],
     },
 ];
@@ -931,6 +999,54 @@ mod tests {
         assert_eq!(found.symbol("npc.lookup"), Some(0x20_2e80));
         assert_eq!(found.symbol("npc.nope"), None);
         assert!(find(Side::CLIENT, server.fingerprint).is_none());
+    }
+
+    /// Every symbol with a `.bytes` constant reads those bytes in the client
+    /// `ENSH_CLIENT_EXE` names; skipped without it.
+    #[test]
+    fn checked_symbols_read_their_bytes_in_the_client() {
+        let Ok(path) = std::env::var("ENSH_CLIENT_EXE") else {
+            return;
+        };
+        let bytes = std::fs::read(path).unwrap();
+        let image = enshwick_loader_reflect::Image::parse(
+            &bytes,
+            enshwick_loader_reflect::Layout::File,
+            None,
+        )
+        .unwrap();
+        let client = &BUILDS[1];
+        assert_eq!(image.fingerprint(), Some(client.fingerprint));
+        let mut checked = 0;
+        for &(id, rva) in client.symbols {
+            if let Some(expected) = client.constant(&format!("{id}.bytes")) {
+                assert_eq!(image.u64(image.base() + rva), Some(expected), "{id}");
+                checked += 1;
+            }
+        }
+        assert!(checked >= 33);
+        let reflection = enshwick_loader_reflect::Reflection::scan(&image);
+        for (ty, field, offset) in [
+            ("keen::FbUiBundle", "namedStyles", 0x10a0c),
+            ("keen::FbUiBundle", "sounds", 0x12060),
+            ("keen::FbUiBundle", "locatags", 0x10),
+            ("keen::FbUiBundle", "fontSizes", 0x109e0),
+            ("keen::FbUiCharacterStyles", "menu", 0x1130),
+            ("keen::FbUiCharacterStyles", "greenText", 0x210),
+            ("keen::FbUiMenuCharacterStyles", "header1", 0x58),
+            ("keen::FbUiSounds", "menu", 0x1e0),
+            ("keen::FbUiSoundsMenuGeneric", "entryTrigger", 0xf0),
+            ("keen::FbUiLocaLinks", "menuStrings", 0x54b0),
+            ("keen::FbUiLocaMenus", "settings", 0x1c10),
+            ("keen::FbUiLocaMenuSettings", "settingOff", 0xb0),
+            ("keen::FbUiFontSizes", "caps_large", 0x24),
+        ] {
+            assert_eq!(
+                reflection.field_offset(ty, field),
+                Ok(offset),
+                "{ty}.{field}"
+            );
+        }
     }
 
     #[test]

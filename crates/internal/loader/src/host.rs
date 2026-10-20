@@ -625,6 +625,9 @@ pub(crate) static API: HostApi = HostApi {
     item_data_open,
     item_data_get,
     item_data_set,
+    ui_frame,
+    ui_widget,
+    ui_dialog,
 };
 
 /// A static slice from a pointer and a count, empty for a null pointer.
@@ -2412,6 +2415,54 @@ extern "system" fn terrain_edit(
             Ok(changed) => put(amount, changed),
             Err(status) => status,
         }
+    })
+}
+
+extern "system" fn ui_frame(
+    me: ModHandle,
+    callback: api_frame::UiFrameFn,
+    user: *mut core::ffi::c_void,
+) -> Status {
+    entry("ui_frame", || match caller_index(me) {
+        Ok((loader, index)) => crate::ui::register_frame(loader, index, callback, user),
+        Err(status) => status,
+    })
+}
+
+extern "system" fn ui_widget(
+    me: ModHandle,
+    frame: u64,
+    widget: *mut api_frame::UiWidget,
+) -> Status {
+    entry("ui_widget", || {
+        let (loader, index) = match caller_index(me) {
+            Ok(found) => found,
+            Err(status) => return status,
+        };
+        // SAFETY: a non-null widget from a mod is its own, valid for the call.
+        let Some(widget) = (unsafe { widget.as_mut() }) else {
+            return Status::BAD_ARGS;
+        };
+        crate::ui::widget(loader, index, frame, widget)
+    })
+}
+
+extern "system" fn ui_dialog(
+    me: ModHandle,
+    dialog: *const api_frame::UiDialog,
+    callback: api_frame::UiAnswerFn,
+    user: *mut core::ffi::c_void,
+) -> Status {
+    entry("ui_dialog", || {
+        let (loader, index) = match caller_index(me) {
+            Ok(found) => found,
+            Err(status) => return status,
+        };
+        // SAFETY: a non-null dialog from a mod is valid for the call.
+        let Some(dialog) = (unsafe { dialog.as_ref() }) else {
+            return Status::BAD_ARGS;
+        };
+        crate::ui::mod_dialog(loader, index, dialog, callback, user)
     })
 }
 

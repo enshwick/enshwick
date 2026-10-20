@@ -47,6 +47,9 @@ compares the fingerprint with its own:
   joins.
 - **The server does not answer the query.** The player joins without a check.
 
+Notes show as dialogs in the game's own style, over the game, which goes on
+drawing; a refused join is refused at once, and the note follows.
+
 Mods without `join = true` never count: the player may run any of them.
 
 ## Join values

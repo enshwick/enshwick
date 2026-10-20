@@ -639,7 +639,7 @@ fn install_all(client: &Client, context: &Context, offers: &[Offer], next: &str)
             "Not installed:\n\n{}\n\nThe log is logs/enshwick/mods/updater.log.",
             failed.join("\n")
         ));
-        ask::warn(&text.join("\n\n"));
+        ask::tell(&text.join("\n\n"));
     }
 }
 
@@ -728,6 +728,7 @@ impl Mod for Updater {
 
     fn init(load: &mut Load<'_>) -> Result<Self, Off> {
         let settings: Settings = load.config()?;
+        ask::set(load.ui()?);
         let data = load.data_dir()?;
         let game = data
             .parent()

@@ -80,6 +80,7 @@ fn link_features(loader: &'static Loader) {
     crate::interactions::link(loader);
     crate::progress::link(loader);
     crate::bases::link(loader);
+    crate::ui::link(loader);
 }
 
 pub(crate) fn start(stub_abi: u32, missing_forwards: u32) {
@@ -142,6 +143,7 @@ pub(crate) fn start(stub_abi: u32, missing_forwards: u32) {
         );
     }
     arm(loader, frame);
+    crate::ui::armed(loader);
     let running: Vec<&str> = loader
         .mods
         .iter()

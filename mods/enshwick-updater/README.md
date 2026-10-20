@@ -3,7 +3,7 @@
 Keeps Enshwick and its mods up to date, with your say. A short while after
 the game starts, the updater asks for new releases of every loaded mod that
 names where its releases come from (`updates:` in its manifest): GitHub, or a
-document at an `https://` address. It does the same for the loader itself. When there are any, a window lists them, such as
+document at an `https://` address. It does the same for the loader itself. When there are any, a dialog in the game's own style lists them, such as
 `safes: 0.1.0 → 0.2.0`, and asks whether to download them. Nothing is
 downloaded without a Yes.
 
@@ -18,7 +18,7 @@ When a server runs mods you lack, or has them in another version, the join
 check keeps you out and says which. The updater then offers the server's
 versions, checked the same way. A mod you have comes from its own source,
 never one the server names; a mod you lack comes from the source the server
-advertises. A version older than yours is marked `(older)` in the window.
+advertises. A version older than yours is marked `(older)` in the dialog.
 Restart the game once they are downloaded and join again.
 
 ## What is installed
@@ -28,13 +28,13 @@ signed with (`signed_by:` in its manifest), and an update must be signed by a
 key the version you have names, or by one in `trusted_keys`. You are never
 asked about keys:
 
-- a mod whose version you have names no key is not downloaded; the window
+- a mod whose version you have names no key is not downloaded; the dialog
   lists it as "the author does not sign updates — update it by hand";
 - an update signed by another key than the one you have is refused with a
   note: it may have been tampered with, or the author changed keys; update it
   by hand if you trust it;
 - a mod you do not have, offered after a refused join, must be signed by the
-  author key the server names; the window shows the mod, its version, where
+  author key the server names; the dialog shows the mod, its version, where
   it comes from and that key. You trust it because you trust the server.
 
 Mods of this repository released before author keys are checked against

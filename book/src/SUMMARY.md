@@ -35,6 +35,7 @@
 - [Knowledge and quests](knowledge.md)
 - [Commands and chat](commands.md)
 - [Messages between server and client](messages.md)
+- [The interface](interface.md)
 - [State and data folders](state.md)
 - [Services between mods](services.md)
 
