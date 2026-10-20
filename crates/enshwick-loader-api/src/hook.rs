@@ -181,6 +181,13 @@ pub struct Next<F: FnPtr> {
 impl<F: FnPtr> Next<F> {
     /// The function to call to continue the chain.
     ///
+    /// # Panics
+    ///
+    /// When the hook is not linked: the loader fills the slot before the
+    /// detour first runs, so only a call from outside the chain, such as a
+    /// unit test that calls the detour's body itself, finds it empty. A null
+    /// function pointer would be undefined behaviour, so this panics instead.
+    ///
     /// # Examples
     ///
     /// See [`Hook`].
@@ -188,8 +195,13 @@ impl<F: FnPtr> Next<F> {
     #[must_use]
     pub fn get(self) -> F {
         let address = self.slot.load(Ordering::Acquire);
+        assert!(
+            address != 0,
+            "Next::get on a hook the loader has not linked"
+        );
         // SAFETY: the loader stores a function of type `F` in the slot before
-        // the detour can run; `F` is a function pointer the size of `usize`.
+        // the detour can run, and the slot is not empty; `F` is a function
+        // pointer the size of `usize`.
         unsafe { core::mem::transmute_copy(&address) }
     }
 }
@@ -272,4 +284,21 @@ macro_rules! detour {
     (@call [] $next:ident ($($arg:ident),*)) => {
         $next.get()($($arg),*)
     };
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Hook;
+    use crate::abi::HookFlags;
+
+    extern "system" fn original() {}
+
+    static UNLINKED: Hook<extern "system" fn()> =
+        Hook::new("UNLINKED", original, 0, HookFlags::NONE);
+
+    #[test]
+    #[should_panic(expected = "not linked")]
+    fn an_unlinked_next_panics_instead_of_calling_null() {
+        let _never = UNLINKED.next().get();
+    }
 }
