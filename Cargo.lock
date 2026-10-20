@@ -264,6 +264,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "enshwick-proton-optimizer"
+version = "0.1.0"
+dependencies = [
+ "enshwick-api",
+ "enshwick-test",
+ "serde",
+ "toml",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
 name = "enshwick-reflect"
 version = "0.1.0"
 dependencies = [
