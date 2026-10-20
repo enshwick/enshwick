@@ -57,10 +57,10 @@ fn current(text: &str, field: &Field) -> String {
 /// How a setting's stage reads in a list.
 fn stage_note(stage: Stage) -> &'static str {
     match stage {
-        Stage::Startup => "restart needed",
+        Stage::Startup => "when the world loads",
         Stage::Client => "each player's own",
-        Stage::Sync => "server's value for joined players",
-        _ => "applied live",
+        Stage::Sync => "the world's, joined players get it",
+        _ => "the world's, applied live",
     }
 }
 
@@ -159,6 +159,8 @@ pub struct Change {
     pub stage: Stage,
     /// The value as written.
     pub value: String,
+    /// Where it was written.
+    pub destination: crate::worlds::Destination,
 }
 
 /// Sets `key` to `value` in the settings file `text`, checked against
@@ -198,19 +200,22 @@ pub fn set(
         text: doc.to_string(),
         stage: field.stage,
         value,
+        destination: crate::worlds::Destination::Global,
     })
 }
 
 /// The reply to a change of `id`'s `key`, on a game server or not.
 #[must_use]
 pub fn changed(id: &str, key: &str, change: &Change) -> String {
-    let then = match change.stage {
-        Stage::Startup => "restart needed: it takes effect at the next start",
-        Stage::Sync => "applied now and sent to joined players",
-        Stage::Client => "applied now, on this game only",
-        _ => "applied now",
+    use crate::worlds::Destination;
+    let then = match (&change.destination, change.stage) {
+        (Destination::Next, _) => "saved for the next world that loads",
+        (_, Stage::Startup) => "saved for this world; it takes effect when the world loads again",
+        (_, Stage::Sync) => "saved for this world, applied now and sent to joined players",
+        (_, Stage::Client) => "saved for you, applied now",
+        _ => "saved for this world, applied now",
     };
-    format!("{id} {key} = {}: saved; {then}.", change.value)
+    format!("{id} {key} = {}: {then}.", change.value)
 }
 
 #[cfg(test)]
@@ -250,10 +255,12 @@ mod tests {
     fn lists_and_gets_show_values_ranges_and_stages() {
         let text = list("safes", &schema(), FILE);
         assert!(
-            text.contains("limit = 4 (1 to 16; restart needed)"),
+            text.contains("limit = 4 (1 to 16; when the world loads)"),
             "{text}"
         );
-        assert!(text.contains("language = \"en\" (one of \"en\", \"uk\"; applied live)"));
+        assert!(
+            text.contains("language = \"en\" (one of \"en\", \"uk\"; the world's, applied live)")
+        );
         assert!(text.contains("note = \"hi\" (text in quotes; each player's own)"));
         let one = get("safes", &schema(), FILE, "limit").unwrap();
         assert!(one.starts_with("safes limit = 4 (default 4)\nHow many Safes"));
@@ -275,7 +282,7 @@ mod tests {
         );
         assert_eq!(
             changed("safes", "limit", &change),
-            "safes limit = 6: saved; restart needed: it takes effect at the next start."
+            "safes limit = 6: saved for this world; it takes effect when the world loads again."
         );
         assert!(
             set("safes", &schema(), FILE, "limit", "40")

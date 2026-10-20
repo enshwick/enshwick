@@ -259,8 +259,9 @@ pub trait Config: serde::de::DeserializeOwned + Default {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Stage {
-    /// Read once at start; a change takes effect after a restart, and the
-    /// running values stay until then.
+    /// Read when a world loads (or at start, with none); a change takes
+    /// effect when the world loads again, and the running values stay until
+    /// then.
     Startup,
     /// Applied while the game runs, through the mod's
     /// [`on_config_change`](crate::Load::on_config_change).
@@ -283,6 +284,19 @@ impl Stage {
         matches!(self, Self::Startup)
     }
 
+    /// Where a setting at this stage lives.
+    ///
+    /// # Examples
+    ///
+    /// See [`Scope`].
+    #[must_use]
+    pub const fn scope(self) -> Scope {
+        match self {
+            Self::Client => Scope::User,
+            _ => Scope::World,
+        }
+    }
+
     /// The stage's name in the schema and in messages, such as `startup`.
     ///
     /// # Examples
@@ -299,6 +313,29 @@ impl Stage {
             Self::Sync => "sync",
         }
     }
+}
+
+/// Where a setting lives: with each player, or with the world.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::config::{Scope, Stage};
+///
+/// assert_eq!(Stage::Client.scope(), Scope::User);
+/// assert_eq!(Stage::Startup.scope(), Scope::World);
+/// ```
+#[non_exhaustive]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Scope {
+    /// Each player's own, in the settings file `mod-configs/<id>.toml`, for
+    /// every world: the `client` stage.
+    User,
+    /// The world's, kept with it in `mod-data/<id>/worlds/<key>/`; a new
+    /// world starts from the settings file. Every stage but `client`.
+    #[default]
+    World,
 }
 
 /// The TOML type of a setting's value.
@@ -382,6 +419,9 @@ pub struct Field {
     pub key: String,
     /// When a change takes effect.
     pub stage: Stage,
+    /// Where it lives, as its stage says.
+    #[serde(default)]
+    pub scope: Scope,
     /// The type of its value; `None` when the default has none TOML can
     /// write, such as `None`.
     pub kind: Option<Kind>,
@@ -417,6 +457,7 @@ impl Field {
         Self {
             key: key.to_owned(),
             stage,
+            scope: stage.scope(),
             kind: value.as_ref().map(Kind::of),
             default: value.map(|v| v.to_string()).unwrap_or_default(),
             text: format!("config.{key}"),
@@ -852,7 +893,7 @@ mod tests {
         );
         assert_eq!(super::Schema::parse(&schema.to_text()).unwrap(), schema);
         assert!(Staged::template().contains(
-            "# Takes effect at the next start.
+            "# Takes effect when the world loads.
 limit = 4"
         ));
     }

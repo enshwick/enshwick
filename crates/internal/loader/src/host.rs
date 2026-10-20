@@ -920,6 +920,7 @@ extern "system" fn settings(me: ModHandle, defaults: Str, out: *mut Str) -> Stat
             }
             defaults.to_owned()
         });
+        let content = crate::worlds::effective(loader, record, &content);
         let Ok(mut slot) = record.settings.lock() else {
             return Status::REFUSED;
         };
@@ -1039,7 +1040,7 @@ extern "system" fn subscribe(
             Ok(found) => found,
             Err(status) => return status,
         };
-        if !(Event::SETTINGS_CHANGED.0..=Event::CHUNK_UNLOADED.0).contains(&event.0) {
+        if !(Event::SETTINGS_CHANGED.0..=Event::WORLD_SETTINGS.0).contains(&event.0) {
             return Status::MISSING;
         }
         if loader.delivery.get().is_some() {

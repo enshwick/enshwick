@@ -647,9 +647,10 @@ fn config(loader: &Loader, args: &str, player: &PlayerInfo) -> String {
         return format!("{id} does not describe its settings; edit mod-configs/{id}.toml.");
     };
     let path = loader.configs_dir.join(format!("{id}.toml"));
-    let Ok(text) = std::fs::read_to_string(&path) else {
+    let Ok(global) = std::fs::read_to_string(&path) else {
         return format!("mod-configs/{id}.toml is missing; restart to write it.");
     };
+    let text = crate::worlds::compose(&crate::worlds::show_text(loader, record), &global, &schema);
     match request {
         Request::Set(_, key, value) => {
             let who = String::from_utf8_lossy(&player.name[..usize::from(player.name_len).min(64)])

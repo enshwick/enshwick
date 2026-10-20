@@ -503,7 +503,10 @@ impl Load<'_> {
         self.host.config_schema(&T::schema().to_text());
         self.config_check::<T>();
         let settings: T = read_config(self.host)?;
-        let _first = STARTED.set(settings.values(Stage::Startup).unwrap_or_default());
+        *STARTED
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) =
+            Some(settings.values(Stage::Startup).unwrap_or_default());
         Ok(settings)
     }
 
@@ -549,6 +552,26 @@ impl Load<'_> {
         T: Config,
         F: Fn(T) + Send + Sync + 'static,
     {
+        let handler = std::sync::Arc::new(handler);
+        let on_world = std::sync::Arc::clone(&handler);
+        if self.api().header.abi_minor >= 46 {
+            self.subscribe(Event::WORLD_SETTINGS, move |_| {
+                let Some(host) = crate::host() else {
+                    return;
+                };
+                match read_config::<T>(host) {
+                    Ok(settings) => {
+                        *STARTED
+                            .lock()
+                            .unwrap_or_else(std::sync::PoisonError::into_inner) =
+                            Some(settings.values(Stage::Startup).unwrap_or_default());
+                        on_world(settings);
+                        crate::info!("the world's settings apply");
+                    }
+                    Err(off) => crate::warn!("the world's settings are skipped: {off}"),
+                }
+            })?;
+        }
         self.subscribe(Event::SETTINGS_CHANGED, move |_| {
             let Some(host) = crate::host() else {
                 return;
@@ -922,19 +945,23 @@ impl Load<'_> {
 
 /// The startup values the mod read in [`Load::config`], as an inline table;
 /// later reads keep them until a restart.
-static STARTED: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+static STARTED: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
 
 /// Puts the startup values the mod started with back over `settings`,
 /// noting the ones that wait for a restart.
 fn hold_startup<T: Config>(settings: &mut T) {
-    let (Some(started), Some(now)) = (STARTED.get(), settings.values(Stage::Startup)) else {
+    let started = STARTED
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .clone();
+    let (Some(started), Some(now)) = (started, settings.values(Stage::Startup)) else {
         return;
     };
-    if *started == now {
+    if started == now {
         return;
     }
-    match settings.merge_values(Stage::Startup, started) {
-        Ok(()) => crate::info!("settings that take effect at the next start changed: {now}"),
+    match settings.merge_values(Stage::Startup, &started) {
+        Ok(()) => crate::info!("settings that take effect when the world loads changed: {now}"),
         Err(why) => crate::warn!("startup settings not kept: {why}"),
     }
 }

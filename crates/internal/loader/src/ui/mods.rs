@@ -57,6 +57,14 @@ static FRAME: AtomicU64 = AtomicU64::new(0);
 static NODE: AtomicU64 = AtomicU64::new(0);
 /// Set by a hook that saw Back while the screen showed.
 static BACK: AtomicU8 = AtomicU8::new(0);
+/// Set when the player asked for the world settings from the screen over
+/// the pause menu.
+static JUMP: AtomicU8 = AtomicU8::new(0);
+/// Set while the screen shows over the pause menu, where the world settings
+/// are one step away.
+static JUMP_SHOWN: AtomicU8 = AtomicU8::new(0);
+/// The pause menu's submenu state for the world settings.
+const WORLD_SETTINGS_SUBMENU: u32 = 4;
 
 /// What the screen shows.
 enum Page {
@@ -177,7 +185,19 @@ unsafe extern "system" fn main_menu(registers: *mut Registers, _user: *mut core:
     }
 }
 
-unsafe extern "system" fn pause_menu(_registers: *mut Registers, _user: *mut core::ffi::c_void) {
+unsafe extern "system" fn pause_menu(registers: *mut Registers, _user: *mut core::ffi::c_void) {
+    // SAFETY: the stub passes the registers at the hook.
+    let submenu = unsafe { registers.as_ref() }.map_or(0, |r| r.r12);
+    if JUMP.swap(0, Ordering::Relaxed) != 0
+        && let Ok(submenu) = usize::try_from(submenu)
+        && submenu != 0
+    {
+        let state = core::ptr::with_exposed_provenance_mut::<u32>(submenu);
+        // SAFETY: at the hook `r12` points at the pause menu's submenu
+        // state; 4 opens its world settings, as its own entry does.
+        unsafe { state.write_unaligned(WORLD_SETTINGS_SUBMENU) };
+        BACK.store(2, Ordering::Relaxed);
+    }
     let drawn = std::panic::catch_unwind(|| {
         // SAFETY: the hook sits right after the pause menu's Settings entry.
         entry(FROM_PAUSE, |engine, text| unsafe {
@@ -225,9 +245,19 @@ pub(super) unsafe fn draw(loader: &Loader, engine: &Engine, context: usize, fram
             *slot = None;
             return;
         }
-        if BACK.swap(0, Ordering::Relaxed) != 0 && back(screen) {
-            *slot = None;
-            return;
+        JUMP_SHOWN.store(u8::from(screen.from == FROM_PAUSE), Ordering::Relaxed);
+        match BACK.swap(0, Ordering::Relaxed) {
+            // The world settings opened over the pause menu: the screen goes.
+            2 => {
+                *slot = None;
+                JUMP_SHOWN.store(0, Ordering::Relaxed);
+                return;
+            }
+            1 if back(screen) => {
+                *slot = None;
+                return;
+            }
+            _ => {}
         }
         // SAFETY: forwarded from the caller.
         let close = unsafe { show(loader, engine, context, screen) };
@@ -469,6 +499,24 @@ fn server_settings(
 fn list(loader: &Loader, paint: &Painter<'_>, first: &mut usize) -> Option<usize> {
     let mods = &loader.mods;
     let mut opened = None;
+    if crate::world::hosting() && JUMP_SHOWN.load(Ordering::Relaxed) != 0 {
+        paint.label(
+            b"Settings of this world are in the world settings.",
+            UiWidget::STYLE_SECONDARY,
+            true,
+            false,
+        );
+        if paint.button(b"World settings", true) {
+            JUMP.store(1, Ordering::Relaxed);
+        }
+    } else {
+        paint.label(
+            b"Settings of a world are in its world settings, where you create or host it.",
+            UiWidget::STYLE_SECONDARY,
+            true,
+            false,
+        );
+    }
     for (index, record) in mods.iter().enumerate().skip(*first).take(MODS_PER_PAGE) {
         let off = if record.off.load(Ordering::Acquire) {
             " (off)"
@@ -489,12 +537,18 @@ fn list(loader: &Loader, paint: &Painter<'_>, first: &mut usize) -> Option<usize
         if !credits.is_empty() {
             paint.label(credits.as_bytes(), UiWidget::STYLE_SECONDARY, true, false);
         }
-        let described = record.schema.lock().is_ok_and(|s| s.is_some());
-        if described {
-            if paint.button(b"Settings", true) {
+        let world = record.schema.lock().is_ok_and(|s| {
+            s.as_ref().is_some_and(|s| {
+                s.fields
+                    .iter()
+                    .any(|f| f.stage != enshwick_loader_api::config::Stage::Client)
+            })
+        });
+        if client_schema(record).is_some() {
+            if paint.button(b"Your settings", true) {
                 opened = Some(index);
             }
-        } else {
+        } else if !world {
             let note = format!("Settings: mod-configs/{}.toml", record.id);
             paint.label(note.as_bytes(), UiWidget::STYLE_SECONDARY, false, false);
         }
@@ -527,23 +581,27 @@ fn page_rows(loader: &Loader, index: usize) -> Vec<Row> {
     let Some(record) = loader.mods.get(index) else {
         return Vec::new();
     };
-    let Some(schema) = record.schema.lock().ok().and_then(|s| s.clone()) else {
+    let Some(schema) = client_schema(record) else {
         return Vec::new();
     };
     let file = std::fs::read_to_string(loader.configs_dir.join(format!("{}.toml", record.id)))
         .unwrap_or_default();
-    let server = record
-        .server_synced
-        .lock()
-        .ok()
-        .and_then(|s| s.clone())
-        .and_then(|values| server_table(&values));
     let texts = record.texts.lock().ok().and_then(|t| t.clone());
     let words = texts.as_ref().map(|texts| rows::Words {
         texts,
         language: crate::content::language(),
     });
-    rows::rows(&schema, &file, server.as_ref(), words)
+    rows::rows(&schema, &file, None, words)
+}
+
+/// The settings of `record` each player keeps, the ones the Mods screen
+/// edits; `None` when it has none.
+fn client_schema(record: &crate::host::ModRecord) -> Option<enshwick_loader_api::config::Schema> {
+    let mut schema = record.schema.lock().ok().and_then(|s| s.clone())?;
+    schema
+        .fields
+        .retain(|f| f.stage == enshwick_loader_api::config::Stage::Client);
+    (!schema.fields.is_empty()).then_some(schema)
 }
 
 /// A joined server's join values, an inline table, as a table.
@@ -602,7 +660,7 @@ fn draw_row(
 ) -> Option<String> {
     let mut label = row.label.clone();
     if row.restart {
-        label.push_str(" (after a restart)");
+        label.push_str(" (when the world loads)");
     }
     if row.lock == Lock::Server {
         label.push_str(" (set by the server)");
@@ -677,15 +735,34 @@ fn world_rows(
             if schema.fields.is_empty() {
                 return None;
             }
-            let file =
-                std::fs::read_to_string(loader.configs_dir.join(format!("{}.toml", record.id)))
-                    .unwrap_or_default();
+            // Joined to another's game: its join values, shown, not changed.
+            let joined = joined_elsewhere();
+            let server = record
+                .server_synced
+                .lock()
+                .ok()
+                .and_then(|s| s.clone())
+                .and_then(|values| server_table(&values));
+            if joined {
+                schema
+                    .fields
+                    .retain(|f| f.stage == enshwick_loader_api::config::Stage::Sync);
+                if schema.fields.is_empty() {
+                    return None;
+                }
+            }
+            let file = crate::worlds::show_text(loader, record);
             let texts = record.texts.lock().ok().and_then(|t| t.clone());
             let words = texts.as_ref().map(|texts| rows::Words {
                 texts,
                 language: crate::content::language(),
             });
-            let rows = rows::rows(&schema, &file, None, words);
+            let mut rows = rows::rows(&schema, &file, server.as_ref().filter(|_| joined), words);
+            if joined {
+                for row in &mut rows {
+                    row.lock = Lock::Server;
+                }
+            }
             Some((index, record.label(), schema, rows))
         })
         .collect()
@@ -752,12 +829,12 @@ fn world(read_only: bool) {
             return;
         }
         paint.label(b"Mods", UiWidget::STYLE_H2, false, false);
-        paint.label(
-            b"These settings apply to every world.",
-            UiWidget::STYLE_SECONDARY,
-            true,
-            false,
-        );
+        let note: &[u8] = if crate::worlds::current().is_some() {
+            b"These settings belong to this world."
+        } else {
+            b"Changes here go into the next world that loads."
+        };
+        paint.label(note, UiWidget::STYLE_SECONDARY, true, false);
         if let Some((text, ok)) = &world.message {
             let style = if *ok {
                 UiWidget::STYLE_POSITIVE

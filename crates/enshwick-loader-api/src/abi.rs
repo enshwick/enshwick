@@ -14,7 +14,7 @@ use core::sync::atomic::AtomicUsize;
 pub const ABI_MAJOR: u16 = 1;
 
 /// The minor version of this interface. A newer minor only appends fields.
-pub const ABI_MINOR: u16 = 45;
+pub const ABI_MINOR: u16 = 46;
 
 /// Whether `id` is a valid mod id: 1 to 64 characters of `[a-z0-9-]`.
 ///
@@ -535,6 +535,11 @@ impl Event {
     /// entities are gone; data is a [`ChunkData`]. Raised on the game thread
     /// after the step. Server only. Since minor 33.
     pub const CHUNK_UNLOADED: Self = Self(18);
+    /// The settings a mod reads changed whole, as a world loads in this
+    /// process (its own settings from then on) or stops (the settings file
+    /// again); no data. The settings that wait for a start apply too.
+    /// Raised on the server's game thread. Since minor 46.
+    pub const WORLD_SETTINGS: Self = Self(19);
 }
 
 /// The data of [`Event::KNOWLEDGE_CHANGED`].

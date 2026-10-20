@@ -65,7 +65,7 @@ pub struct Row {
     pub widget: Widget,
     /// Whether it takes changes.
     pub lock: Lock,
-    /// A change takes effect at the next start.
+    /// A change takes effect when the world loads again.
     pub restart: bool,
 }
 

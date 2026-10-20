@@ -101,6 +101,7 @@ mod watch;
 mod weather;
 #[cfg(windows)]
 mod world;
+pub mod worlds;
 #[cfg(windows)]
 mod writes;
 

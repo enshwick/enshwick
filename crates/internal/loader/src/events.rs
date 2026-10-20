@@ -335,6 +335,9 @@ pub(crate) fn hosted_thread() -> Option<u32> {
 
 /// Ends a hosted game on the client: its server goes away with it.
 fn end_session() {
+    if let Some(loader) = crate::host::loader() {
+        crate::worlds::unload(loader);
+    }
     SESSION
         .lock()
         .unwrap_or_else(PoisonError::into_inner)
@@ -370,7 +373,10 @@ unsafe extern "system" fn set_state(entry: *mut u8, state: u8) {
         return;
     };
     guarded("server state", || match state {
-        STATE_RUN if old != STATE_RUN => loader.emit(Event::WORLD_LOADED, None, core::ptr::null()),
+        STATE_RUN if old != STATE_RUN => {
+            crate::worlds::load(loader);
+            loader.emit(Event::WORLD_LOADED, None, core::ptr::null());
+        }
         STATE_SHUTDOWN if old != STATE_SHUTDOWN => {
             loader.emit(Event::SHUTDOWN, None, core::ptr::null());
             if loader.side == Side::CLIENT {

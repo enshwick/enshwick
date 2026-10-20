@@ -172,10 +172,12 @@ mod tests {
         unsafe { loader.ready(enshwick_mod_ready) };
 
         // A settings change reaches the handler; a broken file is skipped.
-        assert_eq!(
-            loader.subscriptions(),
-            [Event::LOADER_SETTINGS_CHANGED, Event::SETTINGS_CHANGED]
-        );
+        let watched = [
+            Event::LOADER_SETTINGS_CHANGED,
+            Event::WORLD_SETTINGS,
+            Event::SETTINGS_CHANGED,
+        ];
+        assert_eq!(loader.subscriptions(), watched);
         loader.set_settings("limit = 9\n");
         assert_eq!(loader.raise::<events::SettingsChanged>(&()), 1);
         assert_eq!(LIVE_LIMIT.load(Ordering::Relaxed), 9);

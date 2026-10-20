@@ -389,8 +389,7 @@ mod live {
             return;
         };
         let text = if admin {
-            let file = std::fs::read_to_string(loader.configs_dir.join(format!("{id}.toml")))
-                .unwrap_or_default();
+            let file = crate::worlds::show_text(loader, record);
             without_secrets(&schema, &file)
         } else {
             record

@@ -134,7 +134,7 @@ fn expand_config(input: &DeriveInput) -> syn::Result<TokenStream> {
         let key = ident.to_string();
         let doc = comment(&field.attrs);
         let note = if stage == "Startup" {
-            "# Takes effect at the next start.\n"
+            "# Takes effect when the world loads.\n"
         } else {
             ""
         };
