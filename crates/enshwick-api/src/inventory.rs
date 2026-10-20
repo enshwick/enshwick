@@ -413,6 +413,7 @@ pub enum BatchError {
 pub struct Batch {
     ops: Vec<Op>,
     allow_partial: bool,
+    notify: bool,
     actor: Entity,
 }
 
@@ -466,6 +467,29 @@ impl Batch {
     #[must_use]
     pub const fn allow_partial(mut self) -> Self {
         self.allow_partial = true;
+        self
+    }
+
+    /// Shows the actor the game's pickup message for each stack it gets and
+    /// its inventory-full message for what does not fit, as the game's own
+    /// looting does. Batches with a give always do; moves are silent without
+    /// this.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_api::ecs::Entity;
+    /// use enshwick_api::inventory::{Batch, Op};
+    ///
+    /// let (corpse, player) = (Entity(40), Entity(2));
+    /// let _ = Batch::new()
+    ///     .with(Op::MoveAll { from: corpse, to: player, include_special: false })
+    ///     .actor(player)
+    ///     .notify();
+    /// ```
+    #[must_use]
+    pub const fn notify(mut self) -> Self {
+        self.notify = true;
         self
     }
 
@@ -572,7 +596,7 @@ impl Batch {
         if self.allow_partial {
             flags |= InventoryRequest::ALLOW_PARTIAL;
         }
-        if self.ops.iter().any(|op| matches!(op, Op::Give { .. })) {
+        if self.notify || self.ops.iter().any(|op| matches!(op, Op::Give { .. })) {
             flags |= InventoryRequest::NOTIFY;
         }
         flags
@@ -1418,6 +1442,10 @@ mod tests {
     fn requests_notify_for_gives_and_credit_the_first_destination() {
         let loot = Batch::new().with(all(40, 2));
         assert_eq!(loot.request_flags(), 0);
+        assert_eq!(
+            loot.clone().notify().request_flags(),
+            InventoryRequest::NOTIFY
+        );
         assert_eq!(loot.actor_entity(), Entity(2));
         let paid = Batch::new()
             .with(Op::Take {

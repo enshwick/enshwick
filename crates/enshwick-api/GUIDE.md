@@ -324,6 +324,36 @@ let ticket = inventories.submit(&trade, |_| {});
   nothing runs and requests time out after 30 seconds. A client that hosts
   nothing refuses requests (`Unavailable`, delivered once a game runs). A build without the
   pieces turns the mod off at `load.inventories()`.
+- Moves are silent; `Batch::notify()` shows the actor the game's pickup and
+  inventory-full messages, as its own looting does. Gives always show them.
+
+## Loot containers
+
+`enshwick_api::loot` reads the containers a dead enemy leaves, and other
+containers that dissolve once emptied. The game checks each of them every step
+in the system `loot::SYSTEM`; hook it and walk its rows from the hook:
+
+```rust
+use enshwick_api::loot::{Containers, near};
+
+let containers = Containers::resolve(load)?;
+load.hook(&CHECK, load.system(enshwick_api::loot::SYSTEM)?)?;
+// In the hook, after vanilla ran:
+unsafe { containers.each(ctx, |c| {
+    if c.is_open() && near(spot, c.position, 12.0, 4.0) { /* ... */ }
+}) };
+```
+
+- A `Container` gives the entity, its position, whether it is empty, whether
+  it despawns on its own, its `AreaLootOverride` and its interaction offer: who
+  last opened or looted it and when. `is_enemy_loot()` keeps corpses and enemy
+  loot bags and leaves out chests, quest containers and items a player
+  dropped; `is_open()` adds that it holds something and offers its
+  interaction.
+- `container(ctx, entity)`, `position` and `is_player` read any entity from
+  inside a system. Empty a container with `Inventories::move_all`.
+- On a hosting client the system runs in both worlds: check
+  `Worlds::is_server(ctx)` first.
 
 ## Content: items, recipes, workshops and texts
 

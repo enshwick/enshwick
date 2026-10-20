@@ -69,6 +69,7 @@ mod host;
 pub mod i18n;
 pub mod inventory;
 mod load;
+pub mod loot;
 pub mod mods;
 pub mod schedule;
 pub mod state;
