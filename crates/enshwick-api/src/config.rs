@@ -24,7 +24,8 @@ pub trait Config: serde::de::DeserializeOwned + Default {
     /// The commented file written when the mod's settings are missing.
     fn template() -> String;
 
-    /// Checks parsed values; an error turns the mod off with the message.
+    /// Checks parsed values; an error turns the mod off with the message at
+    /// init, and skips a changed file at run time.
     ///
     /// # Errors
     ///
@@ -32,7 +33,27 @@ pub trait Config: serde::de::DeserializeOwned + Default {
     ///
     /// # Examples
     ///
-    /// The default accepts every value; override it to check ranges.
+    /// The default accepts every value; the derive takes a checking function:
+    ///
+    /// ```
+    /// use enshwick_api::config::Config;
+    ///
+    /// /// Comfort settings.
+    /// #[derive(Default, serde::Deserialize, serde::Serialize, enshwick_api::Config)]
+    /// #[config(validate = Settings::check)]
+    /// struct Settings {
+    ///     /// Comfort per piece of furniture, times this factor.
+    ///     multiplier: f32,
+    /// }
+    ///
+    /// impl Settings {
+    ///     fn check(&self) -> Result<(), String> {
+    ///         (self.multiplier >= 0.0).then_some(()).ok_or_else(|| "a negative multiplier".into())
+    ///     }
+    /// }
+    ///
+    /// assert!(Settings { multiplier: -1.0 }.validate().is_err());
+    /// ```
     fn validate(&self) -> Result<(), String> {
         Ok(())
     }

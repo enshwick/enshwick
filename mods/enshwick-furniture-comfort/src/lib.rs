@@ -13,6 +13,7 @@ use enshwick_api::{Load, Mod, Next, Off};
 /// Furniture comfort settings.
 #[derive(Debug, serde::Deserialize, serde::Serialize, enshwick_api::Config)]
 #[serde(deny_unknown_fields)]
+#[config(validate = Settings::check)]
 struct Settings {
     /// Comfort each piece of furniture gives inside a base, times this factor.
     multiplier: f32,
@@ -21,6 +22,16 @@ struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self { multiplier: 2.0 }
+    }
+}
+
+impl Settings {
+    fn check(&self) -> Result<(), String> {
+        if self.multiplier.is_finite() && self.multiplier >= 0.0 {
+            Ok(())
+        } else {
+            Err("multiplier must be a number of zero or more".into())
+        }
     }
 }
 
@@ -72,11 +83,12 @@ impl Mod for FurnitureComfort {
 
     fn init(load: &mut Load<'_>) -> Result<Self, Off> {
         let settings: Settings = load.config()?;
-        if !settings.multiplier.is_finite() || settings.multiplier < 0.0 {
-            return Err(Off::new("multiplier must be a number of zero or more"));
-        }
         MULTIPLIER.store(settings.multiplier.to_bits(), Ordering::Relaxed);
         load.hook(&REGISTER, load.symbol("comfort.base_register")?)?;
+        load.on_config_change(|settings: Settings| {
+            MULTIPLIER.store(settings.multiplier.to_bits(), Ordering::Relaxed);
+            enshwick_api::info!("furniture comfort x{}", settings.multiplier);
+        })?;
         enshwick_api::info!("furniture comfort x{}", settings.multiplier);
         Ok(Self)
     }
@@ -101,5 +113,14 @@ mod tests {
         use enshwick_api::config::Config;
         let settings: Settings = toml::from_str(&Settings::template()).unwrap();
         assert!((settings.multiplier - 2.0).abs() < f32::EPSILON);
+        assert!(settings.validate().is_ok());
+        assert!(Settings { multiplier: -1.0 }.validate().is_err());
+        assert!(
+            Settings {
+                multiplier: f32::NAN
+            }
+            .validate()
+            .is_err()
+        );
     }
 }

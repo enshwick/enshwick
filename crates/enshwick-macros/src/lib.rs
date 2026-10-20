@@ -9,11 +9,33 @@ use syn::{Attribute, Data, DeriveInput, Expr, Fields, Lit, Meta, parse_macro_inp
 ///
 /// The settings file a player sees on first start is generated from the type:
 /// the struct's doc comment heads the file, each field's doc comment precedes
-/// its key, and each value comes from `Default`.
-#[proc_macro_derive(Config)]
+/// its key, and each value comes from `Default`. `#[config(validate = path)]`
+/// names a `fn(&Self) -> Result<(), String>` that checks parsed values.
+#[proc_macro_derive(Config, attributes(config))]
 pub fn derive_config(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     let name = &input.ident;
+    let mut validate: Option<syn::Path> = None;
+    for attr in input.attrs.iter().filter(|a| a.path().is_ident("config")) {
+        let parsed = attr.parse_nested_meta(|meta| {
+            if meta.path.is_ident("validate") {
+                validate = Some(meta.value()?.parse()?);
+                Ok(())
+            } else {
+                Err(meta.error("expected `validate = path`"))
+            }
+        });
+        if let Err(e) = parsed {
+            return e.to_compile_error().into();
+        }
+    }
+    let validate = validate.map(|path| {
+        quote! {
+            fn validate(&self) -> ::core::result::Result<(), ::std::string::String> {
+                #path(self)
+            }
+        }
+    });
     let Data::Struct(data) = &input.data else {
         return syn::Error::new_spanned(name, "Config is derived for structs only")
             .to_compile_error()
@@ -45,6 +67,8 @@ pub fn derive_config(input: TokenStream) -> TokenStream {
                 #(#entries)*
                 text
             }
+
+            #validate
         }
     }
     .into()

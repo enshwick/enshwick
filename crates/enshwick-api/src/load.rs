@@ -1,8 +1,10 @@
 //! What a mod does while the loader initialises it.
 
+use core::ffi::c_void;
 use std::borrow::Cow;
 
-use crate::abi::{HostApi, Status, Str};
+use crate::abi::{Event, HostApi, Status, Str};
+use crate::config::Config;
 use crate::hook::{FnPtr, Hook};
 use crate::host::Host;
 
@@ -287,13 +289,8 @@ impl Load<'_> {
     /// }
     /// ```
     pub fn settings<T: serde::de::DeserializeOwned>(&mut self, defaults: &str) -> Result<T, Off> {
-        let mut text = Str::EMPTY;
-        let status = (self.api().settings)(self.host.handle(), Str::new(defaults), &raw mut text);
-        ok(status, (), || "settings".to_owned())?;
-        // SAFETY: the loader keeps the text alive until this mod's init returns,
-        // which outlives this borrow.
-        let text = unsafe { text.as_str() }.ok_or_else(|| Off::new("settings: not UTF-8"))?;
-        toml::from_str(text).map_err(|e| Off::new(format!("settings: {}", e.message())))
+        let text = self.host.settings_text(defaults)?;
+        toml::from_str(&text).map_err(|e| Off::new(format!("settings: {}", e.message())))
     }
 
     /// The mod's typed settings: `mod-configs/<id>.toml`, written from
@@ -318,12 +315,87 @@ impl Load<'_> {
     ///     load.config()
     /// }
     /// ```
-    pub fn config<T: crate::config::Config>(&mut self) -> Result<T, Off> {
-        let settings: T = self.settings(&T::template())?;
-        settings
-            .validate()
-            .map_err(|why| Off::new(format!("settings: {why}")))?;
-        Ok(settings)
+    pub fn config<T: Config>(&mut self) -> Result<T, Off> {
+        read_config(self.host)
+    }
+
+    /// Calls `handler` with the mod's settings each time `mod-configs/<id>.toml`
+    /// changes, on a loader thread. A file that no longer parses or validates
+    /// is logged and skipped, and the running values stay.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] when the loader cannot watch settings.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::sync::atomic::{AtomicU32, Ordering};
+    ///
+    /// /// Comfort settings.
+    /// #[derive(Default, serde::Deserialize, serde::Serialize, enshwick_api::Config)]
+    /// struct Settings {
+    ///     /// Comfort per piece of furniture, times this factor.
+    ///     multiplier: f32,
+    /// }
+    ///
+    /// static MULTIPLIER: AtomicU32 = AtomicU32::new(0);
+    ///
+    /// fn init(load: &mut enshwick_api::Load<'_>) -> Result<(), enshwick_api::Off> {
+    ///     let settings: Settings = load.config()?;
+    ///     MULTIPLIER.store(settings.multiplier.to_bits(), Ordering::Relaxed);
+    ///     load.on_config_change(|settings: Settings| {
+    ///         MULTIPLIER.store(settings.multiplier.to_bits(), Ordering::Relaxed);
+    ///     })
+    /// }
+    /// ```
+    pub fn on_config_change<T, F>(&mut self, handler: F) -> Result<(), Off>
+    where
+        T: Config,
+        F: Fn(T) + Send + Sync + 'static,
+    {
+        self.subscribe(Event::SETTINGS_CHANGED, move |_| {
+            let Some(host) = crate::host() else {
+                return;
+            };
+            match read_config::<T>(host) {
+                Ok(settings) => {
+                    handler(settings);
+                    crate::info!("settings reloaded");
+                }
+                Err(off) => crate::warn!("settings change skipped, the running values stay: {off}"),
+            }
+        })
+    }
+
+    /// Calls `handler` on every `event` for this mod with the event's data,
+    /// null for events without, on the thread that raises it. A panic in
+    /// `handler` turns the mod off.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] when the loader does not know `event`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_api::abi::Event;
+    ///
+    /// fn init(load: &mut enshwick_api::Load<'_>) -> Result<(), enshwick_api::Off> {
+    ///     load.subscribe(Event::SETTINGS_CHANGED, |_| enshwick_api::info!("settings edited"))
+    /// }
+    /// ```
+    pub fn subscribe<F>(&mut self, event: Event, handler: F) -> Result<(), Off>
+    where
+        F: Fn(*const c_void) + Send + Sync + 'static,
+    {
+        let user = Box::into_raw(Box::new(handler));
+        let status = self.host.subscribe(event, deliver::<F>, user.cast());
+        if !status.is_ok() {
+            // SAFETY: refused, so the loader keeps no copy of the pointer.
+            drop(unsafe { Box::from_raw(user) });
+        }
+        ok(status, (), || format!("event {}", event.0))
     }
 
     /// The mod's own data folder, `mod-data/<id>` beside the game, for state
@@ -428,6 +500,33 @@ impl Load<'_> {
         // SAFETY: the publisher handed a `'static` table of type `T`, as the
         // caller guarantees.
         unsafe { out.cast::<T>().as_ref() }.ok_or_else(|| Off::new(format!("service {name}: null")))
+    }
+}
+
+/// The mod's settings as `T`, parsed and validated.
+fn read_config<T: Config>(host: Host) -> Result<T, Off> {
+    let text = host.settings_text(&T::template())?;
+    let settings: T =
+        toml::from_str(&text).map_err(|e| Off::new(format!("settings: {}", e.message())))?;
+    settings
+        .validate()
+        .map_err(|why| Off::new(format!("settings: {why}")))?;
+    Ok(settings)
+}
+
+/// Runs a subscribed handler; `user` is the handler boxed by
+/// [`Load::subscribe`], alive for the process.
+unsafe extern "system" fn deliver<F: Fn(*const c_void)>(
+    _event: Event,
+    data: *const c_void,
+    user: *mut c_void,
+) {
+    // SAFETY: `user` is the leaked `Box<F>` this function was subscribed with.
+    let handler = unsafe { &*user.cast::<F>() };
+    if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| handler(data))).is_err()
+        && let Some(host) = crate::host()
+    {
+        host.fault("panic in an event handler");
     }
 }
 

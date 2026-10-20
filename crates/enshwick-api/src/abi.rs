@@ -14,7 +14,7 @@ use core::sync::atomic::AtomicUsize;
 pub const ABI_MAJOR: u16 = 1;
 
 /// The minor version of this interface. A newer minor only appends fields.
-pub const ABI_MINOR: u16 = 1;
+pub const ABI_MINOR: u16 = 2;
 
 /// Whether `id` is a valid mod id: 1 to 64 characters of `[a-z0-9-]`.
 ///
@@ -351,6 +351,33 @@ impl<'de> serde::Deserialize<'de> for Level {
         name.parse().map_err(serde::de::Error::custom)
     }
 }
+
+/// Something the loader tells subscribed mods about, with
+/// [`HostApi::subscribe`].
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_api::abi::Event;
+///
+/// assert_ne!(Event::SETTINGS_CHANGED, Event::LOADER_SETTINGS_CHANGED);
+/// ```
+#[repr(transparent)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct Event(pub u32);
+
+impl Event {
+    /// The mod's settings file changed on disk; no data. Raised on a loader
+    /// thread, about a second after the change.
+    pub const SETTINGS_CHANGED: Self = Self(1);
+    /// The loader's settings changed, log levels among them; no data. Raised
+    /// on a loader thread.
+    pub const LOADER_SETTINGS_CHANGED: Self = Self(2);
+}
+
+/// A mod's handler for an [`Event`]: the event, its data (null for events
+/// without data, valid for the call) and the pointer given at subscription.
+pub type EventFn = unsafe extern "system" fn(event: Event, data: *const c_void, user: *mut c_void);
 
 /// A level name other than `error`, `warn`, `info` or `debug`.
 ///
@@ -837,7 +864,8 @@ pub struct HostApi {
     /// Writes a line to the log under the mod's id.
     pub log: extern "system" fn(me: ModHandle, level: Level, message: Str),
     /// The text of the mod's settings file, written from `defaults` first when
-    /// it is missing; the text stays valid until `enshwick_mod_init` returns.
+    /// it is missing; the text stays valid until the mod's next call to
+    /// `settings`.
     pub settings: extern "system" fn(me: ModHandle, defaults: Str, out: *mut Str) -> Status,
     /// Publishes a service: a versioned table of functions other mods may use.
     pub publish:
@@ -858,6 +886,15 @@ pub struct HostApi {
     /// The most detailed level kept for the mod's lines; the mod skips
     /// formatting anything more detailed. Since minor 1.
     pub log_level: extern "system" fn(me: ModHandle) -> Level,
+    /// Calls `callback` with `user` on every `event` for the mod, on the
+    /// thread that raises it, until the mod is off; allowed during
+    /// `enshwick_mod_init` only. Since minor 2.
+    pub subscribe: extern "system" fn(
+        me: ModHandle,
+        event: Event,
+        callback: EventFn,
+        user: *mut c_void,
+    ) -> Status,
 }
 
 /// The exports a mod DLL provides, by name.
@@ -903,5 +940,6 @@ const _: () = {
     assert!(core::mem::offset_of!(HostApi, constant) == 24 + 12 * 8);
     assert!(core::mem::offset_of!(HostApi, data_dir) == 24 + 13 * 8);
     assert!(core::mem::offset_of!(HostApi, log_level) == 24 + 14 * 8);
-    assert!(size_of::<HostApi>() == 24 + 15 * 8);
+    assert!(core::mem::offset_of!(HostApi, subscribe) == 24 + 15 * 8);
+    assert!(size_of::<HostApi>() == 24 + 16 * 8);
 };

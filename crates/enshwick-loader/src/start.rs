@@ -93,18 +93,22 @@ pub(crate) fn start(stub_abi: u32, missing_forwards: u32) {
         chains: Mutex::new(Chains::default()),
         services: Mutex::default(),
         caller_frame: read_frame,
+        subscriptions: Mutex::default(),
+        delivery: OnceLock::new(),
     };
     let Some(loader) = host::install(loader) else {
         return;
     };
     let order: Vec<&Library> = plan.order.iter().map(|&i| &libraries[i]).collect();
     initialise(loader, &order);
+    loader.seal_subscriptions();
     if side == Side::CLIENT {
         link_join(loader);
         std::thread::sleep(CLIENT_ARM_DELAY);
     }
     arm(loader, frame);
     ready(loader, &order);
+    crate::watch::start(loader);
     if side == Side::SERVER
         && let Some(game_dir) = loader.mods_dir.parent()
     {
@@ -268,9 +272,6 @@ fn initialise(loader: &Loader, order: &[&Library]) {
         // SAFETY: the mod exports `init` with this signature; the table lives
         // for the process.
         let status = unsafe { (library.init)(&raw const host::API, host::handle(index)) };
-        if let Ok(mut settings) = record.settings.lock() {
-            settings.take();
-        }
         if status.is_ok() {
             crate::log!(INFO, "{} {} initialised", record.id, record.version);
         } else {

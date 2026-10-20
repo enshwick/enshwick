@@ -121,13 +121,28 @@ The easiest way: derive `enshwick_api::Config` on a settings type that also
 derives serde's `Deserialize` and `Serialize` and implements `Default`, and call
 `load.config::<Settings>()`. The file a player sees is written from the type:
 the struct's doc comment heads it, each field's doc comment precedes its key,
-and values come from `Default`. Override `Config::validate` to refuse values.
+and values come from `Default`. `#[config(validate = Settings::check)]` names a
+`fn(&Self) -> Result<(), String>` that refuses values.
+
+`load.on_config_change(|settings: Settings| ...)` applies an edited file while
+the game runs: about a second after the file changes, the handler gets the new
+values on a loader thread. A file that no longer parses or validates is logged
+and skipped, and the running values stay. Keep what a hook reads in atomics or
+an `ArcSwap`, so the handler can replace it under a running game.
 
 `Load::settings(DEFAULTS)` returns the mod's `mod-configs/<id>.toml`, written
 from `DEFAULTS` on first start, parsed with serde into your type. Write
 `DEFAULTS` as the commented file a player should see, and use
 `#[serde(deny_unknown_fields)]` so a typo turns the mod off with a message
 instead of being ignored.
+
+## Events
+
+`load.subscribe(Event::..., |data| ...)` runs a handler each time the loader
+raises the event, on the thread that raises it, until the mod is off; a panic in
+the handler turns the mod off. Subscribe during `init`. Events so far:
+`SETTINGS_CHANGED` (the mod's file, which `on_config_change` wraps) and
+`LOADER_SETTINGS_CHANGED` (`mod-configs/enshwick.toml`, log levels among them).
 
 ## State between sessions
 

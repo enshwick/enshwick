@@ -12,6 +12,8 @@ each comfort category counts, as in vanilla.
 multiplier = 2.0
 ```
 
+An edit takes effect about a second after saving the file, without a restart.
+
 ## Who needs it
 
 Only the server. Players without the mod see the higher comfort and rested time;
