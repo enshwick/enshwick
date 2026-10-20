@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.4.0](https://github.com/themaiby/enshwick/compare/enshwick-build-camera-v0.3.0...enshwick-build-camera-v0.4.0) (2026-10-20)
+
+
+### ⚠ BREAKING CHANGES
+
+* **api:** name, describe and credit mods, with recommends and breaks ([#126](https://github.com/themaiby/enshwick/issues/126))
+
+### Features
+
+* **api:** name, describe and credit mods, with recommends and breaks ([#126](https://github.com/themaiby/enshwick/issues/126)) ([edfb07c](https://github.com/themaiby/enshwick/commit/edfb07c59676c441f1e8b06ddc2791a80594ae6c))
+
 ## [0.3.0](https://github.com/themaiby/enshwick/compare/enshwick-build-camera-v0.2.1...enshwick-build-camera-v0.3.0) (2026-10-20)
 
 

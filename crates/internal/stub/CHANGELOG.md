@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0](https://github.com/themaiby/enshwick/compare/enshwick-loader-stub-v0.4.0...enshwick-loader-stub-v0.5.0) (2026-10-20)
+
+
+### Other
+
+* **enshwick-loader-stub:** Synchronize enshwick versions
+
 ## [0.4.0](https://github.com/themaiby/enshwick/compare/enshwick-loader-stub-v0.3.1...enshwick-loader-stub-v0.4.0) (2026-10-20)
 
 

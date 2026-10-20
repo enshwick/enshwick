@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.4.0](https://github.com/themaiby/enshwick/compare/enshwick-shared-experience-v0.3.0...enshwick-shared-experience-v0.4.0) (2026-10-20)
+
+
+### ⚠ BREAKING CHANGES
+
+* **api:** name, describe and credit mods, with recommends and breaks ([#126](https://github.com/themaiby/enshwick/issues/126))
+* **api:** config stages, ranges, choices, schema and /config ([#130](https://github.com/themaiby/enshwick/issues/130))
+
+### Features
+
+* **api:** config stages, ranges, choices, schema and /config ([#130](https://github.com/themaiby/enshwick/issues/130)) ([8a19e89](https://github.com/themaiby/enshwick/commit/8a19e89afe6ac74d09d9a32c66b1fc133e81bc68))
+* **api:** name, describe and credit mods, with recommends and breaks ([#126](https://github.com/themaiby/enshwick/issues/126)) ([edfb07c](https://github.com/themaiby/enshwick/commit/edfb07c59676c441f1e8b06ddc2791a80594ae6c))
+
 ## [0.3.0](https://github.com/themaiby/enshwick/compare/enshwick-shared-experience-v0.2.1...enshwick-shared-experience-v0.3.0) (2026-10-20)
 
 

@@ -1,5 +1,32 @@
 # Changelog
 
+## [0.5.0](https://github.com/themaiby/enshwick/compare/enshwick-loader-v0.4.0...enshwick-loader-v0.5.0) (2026-10-20)
+
+
+### ⚠ BREAKING CHANGES
+
+* **api:** name, describe and credit mods, with recommends and breaks ([#126](https://github.com/themaiby/enshwick/issues/126))
+* **api:** config stages, ranges, choices, schema and /config ([#130](https://github.com/themaiby/enshwick/issues/130))
+
+### Features
+
+* **api:** add, dig and flatten terrain, and list its materials ([#125](https://github.com/themaiby/enshwick/issues/125)) ([032b1c9](https://github.com/themaiby/enshwick/commit/032b1c99513dad768d2e380ee339c42ece53ec90))
+* **api:** config stages, ranges, choices, schema and /config ([#130](https://github.com/themaiby/enshwick/issues/130)) ([8a19e89](https://github.com/themaiby/enshwick/commit/8a19e89afe6ac74d09d9a32c66b1fc133e81bc68))
+* **api:** filter damage by cause and type before it is applied ([#121](https://github.com/themaiby/enshwick/issues/121)) ([a349c50](https://github.com/themaiby/enshwick/commit/a349c50d002eaedafdf9d10873c740d76bdd7140))
+* **api:** list, give and remove buffs and debuffs ([#122](https://github.com/themaiby/enshwick/issues/122)) ([78a7b89](https://github.com/themaiby/enshwick/commit/78a7b89b2fbc3722600529f32f718f1d073bfee8))
+* **api:** messages between a mod's server and client parts ([#116](https://github.com/themaiby/enshwick/issues/116)) ([671de20](https://github.com/themaiby/enshwick/commit/671de2003d7a7016131b39db81b59efda4bd732a))
+* **api:** name, describe and credit mods, with recommends and breaks ([#126](https://github.com/themaiby/enshwick/issues/126)) ([edfb07c](https://github.com/themaiby/enshwick/commit/edfb07c59676c441f1e8b06ddc2791a80594ae6c))
+* **api:** raise allowed game events and teleport entities ([#113](https://github.com/themaiby/enshwick/issues/113)) ([5a42ea6](https://github.com/themaiby/enshwick/commit/5a42ea670417aba93ad18fba57d36db1190de2d2))
+* **api:** read and change the server's game settings ([#120](https://github.com/themaiby/enshwick/issues/120)) ([159227a](https://github.com/themaiby/enshwick/commit/159227a6d666999d4d1985b1920c590729055288))
+* **api:** read and grant knowledge, quests and their events ([#123](https://github.com/themaiby/enshwick/issues/123)) ([0a656e5](https://github.com/themaiby/enshwick/commit/0a656e585e8c6575c1ff10089d413b2aea672d7b))
+* **api:** read and set the time of day, its speed and day turns ([#119](https://github.com/themaiby/enshwick/issues/119)) ([b7505e6](https://github.com/themaiby/enshwick/commit/b7505e697beccf7fda0dfdb4db0b8220cf4e7f42))
+* **api:** read and start weather, and report chunk loads ([#124](https://github.com/themaiby/enshwick/issues/124)) ([a36528f](https://github.com/themaiby/enshwick/commit/a36528f1d683b8446c175be2de7635a50f9033db))
+* **api:** show notices on a player's screen ([#117](https://github.com/themaiby/enshwick/issues/117)) ([b174549](https://github.com/themaiby/enshwick/commit/b174549819df1e5285b2b74b626732bf3599ee58))
+* **api:** spawn entities from templates ([#114](https://github.com/themaiby/enshwick/issues/114)) ([63b6e3f](https://github.com/themaiby/enshwick/commit/63b6e3f2da5d44ad05d0ccc0bcad34582469a64c))
+* **api:** veto crafting and building ([#115](https://github.com/themaiby/enshwick/issues/115)) ([7009d56](https://github.com/themaiby/enshwick/commit/7009d568e78eee315a6f8631df6463342e7b1fd2))
+* **api:** write components marked changed, set health stamina mana ([#112](https://github.com/themaiby/enshwick/issues/112)) ([98a104f](https://github.com/themaiby/enshwick/commit/98a104fdc9eb06c525eabbcd73c286a039a5e211))
+* **loader:** turn mods off in mods.toml and record the set in a lock ([#127](https://github.com/themaiby/enshwick/issues/127)) ([f2e7dad](https://github.com/themaiby/enshwick/commit/f2e7dadffcb3877524ed86dc380cef1b6cfe7a59))
+
 ## [0.4.0](https://github.com/themaiby/enshwick/compare/enshwick-loader-v0.3.1...enshwick-loader-v0.4.0) (2026-10-20)
 
 

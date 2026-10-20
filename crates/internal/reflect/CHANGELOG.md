@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0](https://github.com/themaiby/enshwick/compare/enshwick-loader-reflect-v0.4.0...enshwick-loader-reflect-v0.5.0) (2026-10-20)
+
+
+### Features
+
+* **api:** write components marked changed, set health stamina mana ([#112](https://github.com/themaiby/enshwick/issues/112)) ([98a104f](https://github.com/themaiby/enshwick/commit/98a104fdc9eb06c525eabbcd73c286a039a5e211))
+
 ## [0.4.0](https://github.com/themaiby/enshwick/compare/enshwick-loader-reflect-v0.3.1...enshwick-loader-reflect-v0.4.0) (2026-10-20)
 
 
