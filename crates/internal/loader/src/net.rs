@@ -53,6 +53,8 @@ const WELCOME: u8 = 2;
 const NOTICE: u8 = 3;
 /// A control frame from the server: item data records.
 const ITEM_DATA: u8 = 4;
+/// A control frame from the server: open the interface demo.
+const UI_DEMO: u8 = 5;
 /// Messages each peer may send per second, and in one burst.
 const RATE: f64 = 20.0;
 const BURST: f64 = 40.0;
@@ -193,11 +195,6 @@ pub(crate) fn link() {
         crate::log!(INFO, "mod messages: channels {}", names.join(", "));
     }
     let _first = CHANNELS.set(channels.into_boxed_slice());
-}
-
-/// Whether any mod opened a channel or keeps item data.
-fn wanted() -> bool {
-    CHANNELS.get().is_some_and(|c| !c.is_empty()) || crate::item_data::wanted()
 }
 
 /// The frames of one message: base64 lines with the prefix.
@@ -346,10 +343,22 @@ pub(crate) fn item_data(key: u64, records: &[u8]) {
     }
 }
 
+/// Tells the client of the player with account key `key` to open the
+/// interface demo.
+pub(crate) fn ui_demo(key: u64) -> Result<(), Status> {
+    if !ready(key) {
+        return Err(Status::MISSING);
+    }
+    for line in frames(CONTROL, 0, &control(UI_DEMO)) {
+        crate::chat::send(key, &line);
+    }
+    Ok(())
+}
+
 /// Takes a frame line a client sent, on the server's game thread: `args` is
 /// the line after the command name, `key` the client's account key.
 pub(crate) fn server_received(key: u64, args: &str) {
-    if !wanted() || key == 0 {
+    if key == 0 {
         return;
     }
     let Some(frame) = parse(args) else {
@@ -409,6 +418,8 @@ pub(crate) fn client_received(text: &str) -> bool {
             && let Ok(text) = core::str::from_utf8(text)
         {
             crate::notices::queue(u32::from_le_bytes(*entity), text);
+        } else if frame.part == control(UI_DEMO) {
+            crate::ui::open_demo();
         }
         return true;
     }
@@ -543,9 +554,6 @@ fn send_to_server(channel: u32, data: &[u8]) -> Result<(), Status> {
 /// The lines waiting for the client's chat queue, and a hello when the
 /// server has not answered yet; on the client's thread that sends chat.
 pub(crate) fn client_lines() -> Vec<String> {
-    if !wanted() {
-        return Vec::new();
-    }
     state(|s| {
         let mut lines = Vec::new();
         let answered = s.peers.contains_key(&NetMessage::SERVER);

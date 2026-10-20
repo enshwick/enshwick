@@ -74,6 +74,7 @@ The loader answers `/enshwick` itself:
 | `/enshwick <mod id>` | what the mod is: name, version, description, authors, licence, homepage, and notes such as a recommended mod that is missing |
 | `/enshwick help` | every command of a running mod, with its mod id and help line |
 | `/enshwick status` | administrators only: a short [status summary](logging.md#status-summary), and a fresh `status.log` |
+| `/enshwick ui-demo` | administrators only, from a client that runs Enshwick: opens a window of every [interface](interface.md) widget on that client, for a visual check |
 | `/config <mod> [key] [value]` | administrators only: read and change a mod's settings; see [The schema and `/config`](settings.md#the-schema-and-config) |
 
 No mod may register `enshwick` or `config`. A `/` command no one has gets `Unknown command /name. /enshwick help lists

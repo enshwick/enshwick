@@ -61,6 +61,9 @@ Rows take `read_only(true)`: they show the value and do not take changes.
 Styles are the game's named ones: `Body`, `Secondary`, `H1` to `H3`,
 `Warning`, `Positive` and `Negative`.
 
+An administrator sees every widget at once with `/enshwick ui-demo`, which
+opens the loader's own demo window on their client.
+
 `frame.screen()` says where the player is: the menus, loading, or in game.
 
 A frame copies the texts it is handed, so nothing needs to outlive the call,
