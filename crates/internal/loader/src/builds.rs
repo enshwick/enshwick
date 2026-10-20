@@ -206,6 +206,12 @@ pub static BUILDS: &[KnownBuild] = &[
             ("server.player_slot_name", 0x20),
             ("server.world", 0x1d0),
             ("server.player_infos", 0x1d8),
+            // The server's live game settings (a pointer), the preset it
+            // runs (u8) and its flag for the settings in the next info
+            // message to the clients (u8).
+            ("server.game_settings", 0x1758),
+            ("server.game_settings_preset", 0x1760),
+            ("server.game_settings_resend", 0x18e0),
             ("server.permission_table", 0x498),
             ("server.permission_entry_size", 0xa0),
             ("server.permission_mask", 0x9d),
@@ -512,6 +518,12 @@ pub static BUILDS: &[KnownBuild] = &[
             ("server.player_slot_name", 0x20),
             ("server.world", 0x1d0),
             ("server.player_infos", 0x1d8),
+            // The server's live game settings (a pointer), the preset it
+            // runs (u8) and its flag for the settings in the next info
+            // message to the clients (u8).
+            ("server.game_settings", 0x1758),
+            ("server.game_settings_preset", 0x1760),
+            ("server.game_settings_resend", 0x18e0),
             ("server.permission_table", 0x498),
             ("server.permission_entry_size", 0xa0),
             ("server.permission_mask", 0x9d),

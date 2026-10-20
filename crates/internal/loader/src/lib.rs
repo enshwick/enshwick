@@ -38,6 +38,8 @@ mod entities;
 mod events;
 #[cfg(windows)]
 mod game_events;
+#[cfg(windows)]
+mod game_settings;
 pub mod holds;
 #[cfg(windows)]
 mod host;

@@ -565,6 +565,8 @@ pub(crate) static API: HostApi = HostApi {
     set_time_of_day,
     time_speed_control,
     set_time_speed,
+    game_settings,
+    set_game_settings,
 };
 
 /// A static slice from a pointer and a count, empty for a null pointer.
@@ -1956,6 +1958,45 @@ extern "system" fn set_time_speed(me: ModHandle, factor: f32) -> Status {
         match caller_index(me)
             .and_then(|(loader, index)| crate::daytime::set_speed(loader, index, factor))
         {
+            Ok(()) => Status::OK,
+            Err(status) => status,
+        }
+    })
+}
+
+extern "system" fn game_settings(
+    me: ModHandle,
+    out: *mut u8,
+    size: u32,
+    preset: *mut u32,
+) -> Status {
+    entry("game_settings", || {
+        let Ok(len) = usize::try_from(size) else {
+            return Status::BAD_ARGS;
+        };
+        if out.is_null() {
+            return Status::BAD_ARGS;
+        }
+        // SAFETY: the caller passes `size` writable bytes at `out` for the call.
+        let out = unsafe { core::slice::from_raw_parts_mut(out, len) };
+        match caller(me).and_then(|loader| crate::game_settings::read(loader, out)) {
+            Ok(value) => put(preset, u32::from(value)),
+            Err(status) => status,
+        }
+    })
+}
+
+extern "system" fn set_game_settings(me: ModHandle, data: *const u8, size: u32) -> Status {
+    entry("set_game_settings", || {
+        let Ok(len) = usize::try_from(size) else {
+            return Status::BAD_ARGS;
+        };
+        if data.is_null() {
+            return Status::BAD_ARGS;
+        }
+        // SAFETY: the caller passes `size` bytes at `data`, valid for the call.
+        let bytes = unsafe { core::slice::from_raw_parts(data, len) };
+        match caller(me).and_then(|loader| crate::game_settings::write(loader, bytes)) {
             Ok(()) => Status::OK,
             Err(status) => status,
         }

@@ -14,7 +14,7 @@ use core::sync::atomic::AtomicUsize;
 pub const ABI_MAJOR: u16 = 1;
 
 /// The minor version of this interface. A newer minor only appends fields.
-pub const ABI_MINOR: u16 = 28;
+pub const ABI_MINOR: u16 = 29;
 
 /// Whether `id` is a valid mod id: 1 to 64 characters of `[a-z0-9-]`.
 ///
@@ -3009,6 +3009,20 @@ pub struct HostApi {
     /// [`HostApi::time_speed_control`], [`Status::BAD_ARGS`] for a factor
     /// out of range. On the server's game thread only. Since minor 28.
     pub set_time_speed: extern "system" fn(me: ModHandle, factor: f32) -> Status,
+    /// Copies the server's live game settings, `keen::ecs::GameSettings`,
+    /// into `out`, `size` bytes, which must be the type's reflected size
+    /// ([`Status::BAD_ARGS`] otherwise), and writes the preset the server
+    /// runs (`GameSettingsPreset`) to `preset`. On the server's game thread
+    /// only. Since minor 29.
+    pub game_settings:
+        extern "system" fn(me: ModHandle, out: *mut u8, size: u32, preset: *mut u32) -> Status,
+    /// Replaces the server's live game settings with `data`, the type's
+    /// whole reflected layout, as the game's admin command does: systems
+    /// see them from the next step and every client gets them; the preset
+    /// becomes custom. Until the server stops: nothing writes them to disk.
+    /// [`Status::BAD_ARGS`] for a wrong size or a day or night length of
+    /// zero or less. On the server's game thread only. Since minor 29.
+    pub set_game_settings: extern "system" fn(me: ModHandle, data: *const u8, size: u32) -> Status,
 }
 
 /// The exports a mod DLL provides, by name.
@@ -3070,10 +3084,11 @@ const _: () = {
     assert!(core::mem::offset_of!(HostApi, hook_at) == 24 + 35 * 8);
     assert!(core::mem::offset_of!(HostApi, inventory_open) == 24 + 36 * 8);
     assert!(core::mem::offset_of!(HostApi, inventory_submit) == 24 + 38 * 8);
-    assert!(size_of::<HostApi>() == 24 + 77 * 8);
+    assert!(size_of::<HostApi>() == 24 + 79 * 8);
     assert!(core::mem::offset_of!(HostApi, time_of_day) == 24 + 73 * 8);
     assert!(core::mem::offset_of!(HostApi, set_time_speed) == 24 + 76 * 8);
     assert!(size_of::<DaytimeInfo>() == 8 + 5 * 8 + 8);
+    assert!(core::mem::offset_of!(HostApi, game_settings) == 24 + 77 * 8);
     assert!(size_of::<InventoryOp>() == 32);
     assert!(size_of::<InventoryRequest>() == 32);
     assert!(size_of::<InventoryOpResult>() == 8);

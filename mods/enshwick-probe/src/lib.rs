@@ -12,6 +12,7 @@
 mod census;
 mod checks;
 mod clock;
+mod settings;
 
 use std::ops::ControlFlow;
 use std::sync::Arc;
@@ -135,18 +136,31 @@ impl Mod for Probe {
             }
             ControlFlow::Continue(())
         });
-        let clock = clock::ClockChecks::new(load, scheduler)
-            .inspect_err(|off| enshwick_loader_api::warn!("FAIL clock: {off}"))
-            .ok();
-        let first = Arc::clone(&checks);
-        load.on::<WorldLoaded>(move |()| {
-            let checks = Arc::clone(&first);
-            scheduler.after(CHECK_DELAY, move || {
+        // Checks of single features, each run after the general ones.
+        let mut extras: Vec<Box<dyn Fn() + Send + Sync>> = Vec::new();
+        match clock::ClockChecks::new(load, scheduler) {
+            Ok(clock) => extras.push(Box::new(move || clock.run())),
+            Err(off) => enshwick_loader_api::warn!("FAIL clock: {off}"),
+        }
+        match settings::SettingsChecks::new(load) {
+            Ok(settings) => extras.push(Box::new(move || settings.run())),
+            Err(off) => enshwick_loader_api::warn!("FAIL game settings: {off}"),
+        }
+        let extras: Arc<[Box<dyn Fn() + Send + Sync>]> = extras.into();
+        let run_all = {
+            let checks = Arc::clone(&checks);
+            move || {
                 checks.run();
-                if let Some(clock) = clock {
-                    clock.run();
+                for extra in extras.iter() {
+                    extra();
                 }
-            });
+            }
+        };
+        let run_all = Arc::new(run_all);
+        let first = Arc::clone(&run_all);
+        load.on::<WorldLoaded>(move |()| {
+            let run = Arc::clone(&first);
+            scheduler.after(CHECK_DELAY, move || run());
         })?;
         let saved = Arc::clone(&checks);
         load.on::<WorldSaved>(move |()| saved.saved())?;
@@ -157,10 +171,7 @@ impl Mod for Probe {
                 _ if !ctx.is_admin() => "/probe is for administrators".into(),
                 ["census"] => census.lines().join("\n").into(),
                 ["check"] => {
-                    checks.run();
-                    if let Some(clock) = clock {
-                        clock.run();
-                    }
+                    run_all();
                     "checks run; see probe.log".into()
                 }
                 ["vitals", id] => checks.vitals_of(id).into(),

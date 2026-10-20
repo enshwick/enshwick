@@ -72,6 +72,8 @@ pub(crate) struct State {
     pub(crate) daytime: Option<DaytimeInfo>,
     /// The mod's factor on the clock's speed, once it asked to change it.
     pub(crate) clock_speed: Option<f32>,
+    /// The game settings' bytes and preset, settable while installed.
+    pub(crate) game_settings: Option<(Vec<u8>, u32)>,
     /// The world key last handed out, alive until the next one.
     world_key: Option<Box<str>>,
     /// The altars `altars` lists, settable while installed.
@@ -145,6 +147,7 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         craft_filters: Vec::new(),
         daytime: None,
         clock_speed: None,
+        game_settings: None,
         channels: Vec::new(),
         net_sent: Vec::new(),
         notices: Vec::new(),
@@ -1157,6 +1160,43 @@ extern "system" fn set_time_speed(_me: ModHandle, factor: f32) -> Status {
     })
 }
 
+extern "system" fn game_settings(
+    _me: ModHandle,
+    out: *mut u8,
+    size: u32,
+    preset: *mut u32,
+) -> Status {
+    let Some((bytes, value)) = with(None, |s| s.game_settings.clone()) else {
+        return Status::MISSING;
+    };
+    if out.is_null() || preset.is_null() || size as usize != bytes.len() {
+        return Status::BAD_ARGS;
+    }
+    // SAFETY: the safe layer passes `size` writable bytes and a preset.
+    unsafe {
+        core::ptr::copy_nonoverlapping(bytes.as_ptr(), out, bytes.len());
+    };
+    // SAFETY: as above.
+    unsafe { preset.write(value) };
+    Status::OK
+}
+
+extern "system" fn set_game_settings(_me: ModHandle, data: *const u8, size: u32) -> Status {
+    if data.is_null() {
+        return Status::BAD_ARGS;
+    }
+    // SAFETY: the safe layer passes `size` bytes for the call.
+    let bytes = unsafe { core::slice::from_raw_parts(data, size as usize) }.to_vec();
+    with(Status::MISSING, |s| match s.game_settings.as_mut() {
+        Some(current) if current.0.len() == bytes.len() => {
+            *current = (bytes, 4);
+            Status::OK
+        }
+        Some(_) => Status::BAD_ARGS,
+        None => Status::MISSING,
+    })
+}
+
 /// table it sees for the process, so it is one static.
 pub(crate) static TABLE: HostApi = HostApi {
     header: Header::of::<HostApi>(),
@@ -1238,4 +1278,6 @@ pub(crate) static TABLE: HostApi = HostApi {
     set_time_of_day,
     time_speed_control,
     set_time_speed,
+    game_settings,
+    set_game_settings,
 };

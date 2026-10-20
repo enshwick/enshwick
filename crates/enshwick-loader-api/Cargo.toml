@@ -38,6 +38,10 @@ name = "game_events"
 required-features = ["test"]
 
 [[test]]
+name = "game_settings"
+required-features = ["test"]
+
+[[test]]
 name = "inventory"
 required-features = ["test"]
 
