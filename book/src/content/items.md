@@ -92,7 +92,7 @@ fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_
 
 | `Meter` field | Meaning |
 | --- | --- |
-| `template` | The GUID of the item entity's template, a clone of the water pouch's; saves hold it. |
+| `template` | The GUID of the item entity's template, a clone of the water pouch's; saves hold it. Items with the same meter may share one. |
 | `max` | The most it holds, 1 or more. |
 | `start` | What a new item holds when nothing sets its fill. |
 

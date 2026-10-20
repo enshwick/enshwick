@@ -1,9 +1,14 @@
 //! New items: an item cloned from a vanilla one, listed in the item registry,
 //! with its own name, tooltip lines and a meter each item keeps.
 
+use std::sync::{Mutex, PoisonError};
+
 use super::{Blob, Guid, types};
 use crate::abi::ItemData;
 use crate::{Load, Off};
+
+/// The meter templates the mod serves.
+static METERS: Mutex<Vec<Meter>> = Mutex::new(Vec::new());
 
 /// The game's item registry resource.
 pub const ITEM_REGISTRY: Guid = Guid::parse("3064d35d-7342-40ca-bdc9-aad58f83bf45");
@@ -80,9 +85,9 @@ impl NewItem {
 /// new item with [`Op::Give`](crate::inventory::Op::Give)'s `fill` or a
 /// [`Drop`](crate::loot::Drop)'s fill.
 ///
-/// The item gets an entity template of its own, cloned from the water
-/// pouch's: `template` is that template's GUID, the mod's own and fixed
-/// forever, as saves hold it.
+/// The item gets an entity template, cloned from the water pouch's:
+/// `template` is that template's GUID, the mod's own and fixed forever, as
+/// saves hold it. Items with the same meter may share one template.
 ///
 /// # Examples
 ///
@@ -574,6 +579,19 @@ impl Load<'_> {
             list_item(&layout, base, guid, &debug_name)
         })?;
         if let Some(meter) = meter {
+            // Items of one kind may share their template: serve it once.
+            let mut served = METERS.lock().unwrap_or_else(PoisonError::into_inner);
+            match served.iter().find(|m| m.template == meter.template) {
+                Some(same) if *same == meter => return Ok(()),
+                Some(_) => {
+                    return Err(Off::new(format!(
+                        "meter template {}: served already with another maximum or start",
+                        meter.template
+                    )));
+                }
+                None => served.push(meter),
+            }
+            drop(served);
             let layout = MeterLayout::resolve(self)?;
             self.serve(
                 meter.template.key(types::TEMPLATE),
