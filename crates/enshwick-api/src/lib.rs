@@ -106,6 +106,16 @@ pub mod __private {
         level.0 <= MAX_LEVEL.load(Ordering::Relaxed)
     }
 
+    unsafe extern "system" fn refresh_level(
+        _event: crate::abi::Event,
+        _data: *const core::ffi::c_void,
+        _user: *mut core::ffi::c_void,
+    ) {
+        if let Some(host) = crate::host() {
+            MAX_LEVEL.store(host.log_level().0, Ordering::Relaxed);
+        }
+    }
+
     /// A call site that logs its first time only.
     #[derive(Debug)]
     pub struct Once(AtomicBool);
@@ -199,6 +209,12 @@ pub mod __private {
         };
         let host = host.install();
         MAX_LEVEL.store(host.log_level().0, Ordering::Relaxed);
+        // An older loader has no events; the level then stays as read.
+        let _watched = host.subscribe(
+            crate::abi::Event::LOADER_SETTINGS_CHANGED,
+            refresh_level,
+            core::ptr::null_mut(),
+        );
         let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             M::init(&mut Load::new(host))
         }));

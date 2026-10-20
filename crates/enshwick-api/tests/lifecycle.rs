@@ -1,19 +1,23 @@
 //! A mod's whole life against a fake loader: init, settings, hooks, a panic
-//! inside a detour.
+//! inside a detour, a settings change.
 
 #[cfg(test)]
 mod tests {
     use std::sync::Mutex;
-    use std::sync::atomic::{AtomicU32, Ordering};
+    use std::sync::atomic::{AtomicU8, AtomicU32, Ordering};
 
     use enshwick_api::abi::{
-        BuildInfo, Header, HookSpec, HostApi, Level, ModHandle, Side, Status, Str,
+        BuildInfo, Event, EventFn, Header, HookSpec, HostApi, Level, ModHandle, Side, Status, Str,
     };
 
     static HOOKS: Mutex<Vec<(u64, usize, i32)>> = Mutex::new(Vec::new());
     static FAULTS: Mutex<Vec<String>> = Mutex::new(Vec::new());
     static LOGS: Mutex<Vec<String>> = Mutex::new(Vec::new());
     static ORIGINAL_CALLS: AtomicU32 = AtomicU32::new(0);
+    static SUBSCRIPTIONS: Mutex<Vec<(Event, EventFn, usize)>> = Mutex::new(Vec::new());
+    /// Which settings file the fake loader serves: as shipped, edited, broken.
+    static FILE: AtomicU8 = AtomicU8::new(0);
+    static LIVE_LIMIT: AtomicU32 = AtomicU32::new(0);
 
     extern "system" fn build(out: *mut BuildInfo) {
         // SAFETY: the safe layer passes a valid struct.
@@ -85,12 +89,41 @@ mod tests {
             .push(unsafe { message.as_str() }.unwrap().to_owned());
     }
 
-    static SETTINGS_TEXT: &str = "limit = 7\n";
+    static SETTINGS_TEXTS: [&str; 3] = ["limit = 7\n", "limit = 9\n", "limit = \"x\"\n"];
 
     extern "system" fn settings(_me: ModHandle, _defaults: Str, out: *mut Str) -> Status {
+        let text = SETTINGS_TEXTS[usize::from(FILE.load(Ordering::Relaxed))];
         // SAFETY: the safe layer passes a valid out pointer.
-        unsafe { *out = Str::new(SETTINGS_TEXT) };
+        unsafe { *out = Str::new(text) };
         Status::OK
+    }
+
+    extern "system" fn subscribe(
+        _me: ModHandle,
+        event: Event,
+        callback: EventFn,
+        user: *mut core::ffi::c_void,
+    ) -> Status {
+        SUBSCRIPTIONS
+            .lock()
+            .unwrap()
+            .push((event, callback, user.expose_provenance()));
+        Status::OK
+    }
+
+    /// Raises `event` the way the loader does.
+    fn raise(event: Event) {
+        let subscriptions: Vec<_> = SUBSCRIPTIONS.lock().unwrap().clone();
+        for (_, callback, user) in subscriptions.into_iter().filter(|s| s.0 == event) {
+            // SAFETY: as subscribed by the safe layer.
+            unsafe {
+                callback(
+                    event,
+                    core::ptr::null(),
+                    core::ptr::with_exposed_provenance_mut(user),
+                );
+            }
+        }
     }
 
     extern "system" fn publish(
@@ -149,6 +182,7 @@ mod tests {
         constant,
         data_dir,
         log_level,
+        subscribe,
     };
 
     extern "system" fn original(value: u32) -> u32 {
@@ -167,6 +201,13 @@ mod tests {
 
     #[derive(serde::Deserialize)]
     struct Settings {
+        limit: u32,
+    }
+
+    /// Test settings.
+    #[derive(Default, serde::Deserialize, serde::Serialize, enshwick_api::Config)]
+    struct Live {
+        /// A limit.
         limit: u32,
     }
 
@@ -190,6 +231,7 @@ mod tests {
                 enshwick_api::warn_once!("once");
                 enshwick_api::warn_every!(std::time::Duration::from_secs(3600), "every");
             }
+            load.on_config_change(|live: Live| LIVE_LIMIT.store(live.limit, Ordering::Relaxed))?;
             Ok(Self {
                 limit: settings.limit,
             })
@@ -235,5 +277,25 @@ mod tests {
 
         // SAFETY: as for init.
         unsafe { enshwick_mod_ready(&raw const API, ModHandle(1)) };
+
+        // A settings change reaches the handler; a broken file is skipped.
+        let events: Vec<Event> = SUBSCRIPTIONS.lock().unwrap().iter().map(|s| s.0).collect();
+        assert_eq!(
+            events,
+            [Event::LOADER_SETTINGS_CHANGED, Event::SETTINGS_CHANGED]
+        );
+        FILE.store(1, Ordering::Relaxed);
+        raise(Event::SETTINGS_CHANGED);
+        assert_eq!(LIVE_LIMIT.load(Ordering::Relaxed), 9);
+        FILE.store(2, Ordering::Relaxed);
+        raise(Event::SETTINGS_CHANGED);
+        assert_eq!(LIVE_LIMIT.load(Ordering::Relaxed), 9);
+        assert!(
+            LOGS.lock()
+                .unwrap()
+                .iter()
+                .any(|line| line.starts_with("settings change skipped"))
+        );
+        raise(Event::LOADER_SETTINGS_CHANGED);
     }
 }

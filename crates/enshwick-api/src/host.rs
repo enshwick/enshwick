@@ -1,9 +1,12 @@
 //! The loader as one mod sees it.
 
-use std::sync::OnceLock;
+use core::ffi::c_void;
+use std::sync::{Mutex, OnceLock};
 
+use crate::Off;
 use crate::abi::{
-    BuildInfo, CallerFrame, Fingerprint, Header, HostApi, Level, ModHandle, Side, Str,
+    BuildInfo, CallerFrame, Event, EventFn, Fingerprint, Header, HostApi, Level, ModHandle, Side,
+    Status, Str,
 };
 
 static HOST: OnceLock<Host> = OnceLock::new();
@@ -138,6 +141,36 @@ impl Host {
             (self.api.log_level)(self.me)
         } else {
             Level::DEBUG
+        }
+    }
+
+    /// The text of this mod's settings file, written from `defaults` when
+    /// missing.
+    pub(crate) fn settings_text(&self, defaults: &str) -> Result<String, Off> {
+        // The loader's text lives until this mod's next call; one call at a time.
+        static CALL: Mutex<()> = Mutex::new(());
+        let _call = CALL
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut text = Str::EMPTY;
+        let status = (self.api.settings)(self.me, Str::new(defaults), &raw mut text);
+        if !status.is_ok() {
+            return Err(Off::new(format!("settings: status {}", status.0)));
+        }
+        // SAFETY: valid until this mod calls `settings` again, which the lock
+        // holds off until the copy is made.
+        let text = unsafe { text.as_str() }.ok_or_else(|| Off::new("settings: not UTF-8"))?;
+        Ok(text.to_owned())
+    }
+
+    /// Subscribes `callback` to `event`; [`Status::MISSING`] under a loader
+    /// older than ABI minor 2.
+    pub(crate) fn subscribe(&self, event: Event, callback: EventFn, user: *mut c_void) -> Status {
+        let end = core::mem::offset_of!(HostApi, subscribe) + size_of::<usize>();
+        if self.api.header.covers(end) {
+            (self.api.subscribe)(self.me, event, callback, user)
+        } else {
+            Status::MISSING
         }
     }
 

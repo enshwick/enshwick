@@ -18,6 +18,7 @@ crate-type = ["cdylib", "rlib"]
 doc = false
 
 [dependencies]
+arc-swap.workspace = true
 enshwick-api.workspace = true
 enshwick-reflect.workspace = true
 rustc-hash.workspace = true

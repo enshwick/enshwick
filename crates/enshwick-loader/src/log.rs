@@ -10,23 +10,27 @@ use std::sync::OnceLock;
 use std::sync::mpsc::{Sender, channel};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use arc_swap::ArcSwapOption;
 use enshwick_api::abi::Level;
 
 use crate::settings::{LOADER_ID, Settings};
 
 static LINES: OnceLock<Sender<(String, String)>> = OnceLock::new();
-static LEVELS: OnceLock<Settings> = OnceLock::new();
+static LEVELS: ArcSwapOption<Settings> = ArcSwapOption::const_empty();
 
-/// Keeps lines up to the levels in `settings`; the first call wins, and
-/// before it every source keeps `info`.
+/// Keeps lines up to the levels in `settings`; before the first call every
+/// source keeps `info`.
 pub fn set_levels(settings: Settings) {
-    let _first = LEVELS.set(settings);
+    LEVELS.store(Some(std::sync::Arc::new(settings)));
 }
 
 /// The most detailed level kept for lines from `source`.
 #[must_use]
 pub fn level(source: &str) -> Level {
-    LEVELS.get().map_or(Level::INFO, |s| s.level(source))
+    LEVELS
+        .load()
+        .as_ref()
+        .map_or(Level::INFO, |s| s.level(source))
 }
 
 /// Starts the writer in `dir`, truncating the previous session's files:

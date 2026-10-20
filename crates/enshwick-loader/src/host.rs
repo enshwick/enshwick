@@ -6,7 +6,8 @@ use std::sync::{Mutex, OnceLock};
 
 use enshwick_api::abi as api_frame;
 use enshwick_api::abi::{
-    BuildInfo, Header, HookSpec, HostApi, Level, Manifest, ModHandle, Side, Status, Str,
+    BuildInfo, Event, EventFn, Header, HookSpec, HostApi, Level, Manifest, ModHandle, Side, Status,
+    Str,
 };
 use enshwick_reflect::{Fingerprint, Reflection};
 use rustc_hash::FxHashMap;
@@ -25,8 +26,21 @@ pub(crate) struct ModRecord {
     pub(crate) manifest: &'static Manifest,
     /// Set when the mod is off: refused at init or faulted later.
     pub(crate) off: AtomicBool,
-    /// The settings text, kept alive while the mod initialises.
+    /// The settings text last handed to the mod, alive until its next call.
     pub(crate) settings: Mutex<Option<String>>,
+}
+
+/// A mod's handler for one event.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Subscription {
+    /// The subscribing mod's index.
+    pub(crate) owner: usize,
+    /// The event.
+    pub(crate) event: Event,
+    /// The handler, inside the mod's DLL.
+    pub(crate) callback: EventFn,
+    /// The mod's pointer for the handler, as an address.
+    pub(crate) user: usize,
 }
 
 /// Everything the loader knows once mods are resolved.
@@ -56,6 +70,10 @@ pub(crate) struct Loader {
     pub(crate) services: Mutex<FxHashMap<(String, u32), (usize, usize)>>,
     /// Reads the caller frame of the running chain.
     pub(crate) caller_frame: fn() -> api_frame::CallerFrame,
+    /// Subscriptions while mods initialise.
+    pub(crate) subscriptions: Mutex<Vec<Subscription>>,
+    /// The subscriptions once every mod is initialised, read without a lock.
+    pub(crate) delivery: OnceLock<Box<[Subscription]>>,
 }
 
 static LOADER: OnceLock<Loader> = OnceLock::new();
@@ -93,6 +111,41 @@ impl Loader {
                         .get(owner)
                         .is_none_or(|m| m.off.load(Ordering::Acquire))
             });
+        }
+    }
+
+    /// Ends subscribing: from now on events go to the subscriptions made so far.
+    pub(crate) fn seal_subscriptions(&self) {
+        let made = self
+            .subscriptions
+            .lock()
+            .map(|mut s| std::mem::take(&mut *s))
+            .unwrap_or_default();
+        let _first = self.delivery.set(made.into_boxed_slice());
+    }
+
+    /// Raises `event` with `data` for every mod still on, or for mod `only`.
+    pub(crate) fn emit(&self, event: Event, only: Option<usize>, data: *const core::ffi::c_void) {
+        let Some(delivery) = self.delivery.get() else {
+            return;
+        };
+        for subscription in delivery.iter().filter(|s| {
+            s.event == event
+                && only.is_none_or(|only| only == s.owner)
+                && self
+                    .mods
+                    .get(s.owner)
+                    .is_some_and(|m| !m.off.load(Ordering::Acquire))
+        }) {
+            // SAFETY: the handler lives in the mod's DLL, which stays loaded;
+            // the safe layer catches its panics.
+            unsafe {
+                (subscription.callback)(
+                    event,
+                    data,
+                    core::ptr::with_exposed_provenance_mut(subscription.user),
+                );
+            }
         }
     }
 
@@ -159,6 +212,7 @@ pub(crate) static API: HostApi = HostApi {
     constant,
     data_dir,
     log_level,
+    subscribe,
 };
 
 /// A static slice from a pointer and a count, empty for a null pointer.
@@ -439,6 +493,42 @@ extern "system" fn log_level(me: ModHandle) -> Level {
     loader()
         .and_then(|loader| loader.record(me))
         .map_or(Level::INFO, |(_, record)| crate::log::level(&record.id))
+}
+
+extern "system" fn subscribe(
+    me: ModHandle,
+    event: Event,
+    callback: EventFn,
+    user: *mut core::ffi::c_void,
+) -> Status {
+    let Some(loader) = loader() else {
+        return Status::BAD_ARGS;
+    };
+    let Some((index, record)) = loader.record(me) else {
+        return Status::BAD_ARGS;
+    };
+    if record.off.load(Ordering::Acquire) {
+        return Status::FAULTED;
+    }
+    if !matches!(
+        event,
+        Event::SETTINGS_CHANGED | Event::LOADER_SETTINGS_CHANGED
+    ) {
+        return Status::MISSING;
+    }
+    if loader.delivery.get().is_some() {
+        return Status::TOO_LATE;
+    }
+    let Ok(mut subscriptions) = loader.subscriptions.lock() else {
+        return Status::REFUSED;
+    };
+    subscriptions.push(Subscription {
+        owner: index,
+        event,
+        callback,
+        user: user.expose_provenance(),
+    });
+    Status::OK
 }
 
 /// Mod handles start at 1; 0 is no mod.
