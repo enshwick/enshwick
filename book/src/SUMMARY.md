@@ -29,6 +29,7 @@
 - [Crafting and building vetoes](vetoes.md)
 - [Damage](damage.md)
 - [Character progress](progress.md)
+- [Buffs](buffs.md)
 - [Commands and chat](commands.md)
 - [Messages between server and client](messages.md)
 - [State and data folders](state.md)

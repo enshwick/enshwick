@@ -12,7 +12,7 @@ raw table. The exact types and signatures are in the
 | Constant                                                                                            | Value | Meaning                                         |
 | --------------------------------------------------------------------------------------------------- | ----- | ----------------------------------------------- |
 | [`ABI_MAJOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 1     | A loader refuses a mod built for another major. |
-| [`ABI_MINOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 30    | A newer minor only appends.                     |
+| [`ABI_MINOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 31    | A newer minor only appends.                     |
 
 The ABI version is apart from Enshwick Loader's version (such as 0.2.0, see
 [Releasing and updates](releasing.md#versions)): a platform release raises
@@ -232,6 +232,10 @@ marked "init only" are allowed during `enshwick_mod_init` only.
 | `game_settings`       | Copies the server's live game settings and their preset; server game thread only                | 29          |
 | `set_game_settings`   | Replaces the live game settings as the admin command does, until the server stops               | 29          |
 | `damage_filter`       | Calls a filter on damage before the game applies it, on worker threads; init only               | 30          |
+| `buff_types`          | The buff and debuff types of the running game; server game thread only                          | 31          |
+| `buffs`               | The buffs an entity has; server game thread only                                                | 31          |
+| `apply_buff`          | Gives an entity a buff, or renews it, as the game restores saved buffs; server game thread only | 31          |
+| `remove_buff`         | Removes a buff type from an entity, as the game cleanses one; server game thread only           | 31          |
 
 ## Under an older loader
 
@@ -275,6 +279,7 @@ the mod off with a reason, which the mod's log shows as `off: <reason>`:
 | 28          | `Load::clock`, `clock_speed`    | Off: `clock: needs a newer loader` and the like           |
 | 29          | `Load::game_settings`           | Off: `game settings: needs a newer loader`                |
 | 30          | `Load::on_damage`               | Off: `damage filters: needs a newer loader`               |
+| 31          | `Load::buffs`                   | Off: `buffs: needs a newer loader`                        |
 
 A mod that can do without a feature catches the `Off` and goes on without it
 instead of returning it from `init`.

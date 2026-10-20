@@ -5,13 +5,13 @@ use core::sync::atomic::Ordering;
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use crate::abi::{
-    AltarInfo, AltarLimitFn, AltarZoneSize, BedCheckFn, BuildCheckFn, BuildInfo, CallerFrame,
-    ComfortFn, CommandCallFn, CraftCheckFn, DamageFilterFn, DaytimeInfo, EntityPlace, Event,
-    EventFn, ExperiencePassFn, GameEventFn, Header, HookSpec, HostApi, InteractionFn,
-    InventoryRequest, InventoryResultFn, ItemData, Level, MidHookFn, MidHookSpec, ModHandle,
-    ModInfo, NetMessageFn, PlayerInfo, RenameCallFn, ResourceKey, ResourcePatchFn, Side,
-    SkillCheckFn, SpawnRequest, Status, StatusFn, Str, SummonFn, SurvivorLookupFn,
-    SurvivorStatusFn, TeleportRequest, ZoneCheckFn,
+    ActiveBuff, AltarInfo, AltarLimitFn, AltarZoneSize, BedCheckFn, BuffRequest, BuffTypeInfo,
+    BuildCheckFn, BuildInfo, CallerFrame, ComfortFn, CommandCallFn, CraftCheckFn, DamageFilterFn,
+    DaytimeInfo, EntityPlace, Event, EventFn, ExperiencePassFn, GameEventFn, Header, HookSpec,
+    HostApi, InteractionFn, InventoryRequest, InventoryResultFn, ItemData, Level, MidHookFn,
+    MidHookSpec, ModHandle, ModInfo, NetMessageFn, PlayerInfo, RenameCallFn, ResourceKey,
+    ResourcePatchFn, Side, SkillCheckFn, SpawnRequest, Status, StatusFn, Str, SummonFn,
+    SurvivorLookupFn, SurvivorStatusFn, TeleportRequest, ZoneCheckFn,
 };
 
 use super::{FakeHost, LinkedHook, ServedResource, SubmittedRequest};
@@ -75,6 +75,10 @@ pub(crate) struct State {
     /// The game settings' bytes and preset, settable while installed.
     pub(crate) game_settings: Option<(Vec<u8>, u32)>,
     pub(crate) damage_filters: Vec<(DamageFilterFn, usize)>,
+    /// The buff types the fake knows.
+    pub(crate) buff_types: Vec<BuffTypeInfo>,
+    /// The buffs of each entity that holds buffs.
+    pub(crate) buffs: std::collections::HashMap<u32, Vec<ActiveBuff>>,
     /// The world key last handed out, alive until the next one.
     world_key: Option<Box<str>>,
     /// The altars `altars` lists, settable while installed.
@@ -150,6 +154,8 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         clock_speed: None,
         game_settings: None,
         damage_filters: Vec::new(),
+        buff_types: Vec::new(),
+        buffs: std::collections::HashMap::new(),
         channels: Vec::new(),
         net_sent: Vec::new(),
         notices: Vec::new(),
@@ -1210,6 +1216,98 @@ extern "system" fn damage_filter(
     })
 }
 
+/// Writes up to `capacity` of `items` to `out` and their number to `count`.
+fn put_list<T: Copy>(items: &[T], out: *mut T, capacity: u32, count: *mut u32) -> Status {
+    if count.is_null() {
+        return Status::BAD_ARGS;
+    }
+    if !out.is_null() {
+        for (i, item) in items.iter().take(capacity as usize).enumerate() {
+            // SAFETY: the safe layer passes room for `capacity` entries.
+            let slot = unsafe { out.add(i) };
+            // SAFETY: as above.
+            unsafe { slot.write(*item) };
+        }
+    }
+    // SAFETY: as above.
+    unsafe { count.write(u32::try_from(items.len()).unwrap_or(u32::MAX)) };
+    Status::OK
+}
+
+extern "system" fn buff_types(
+    _me: ModHandle,
+    out: *mut BuffTypeInfo,
+    capacity: u32,
+    count: *mut u32,
+) -> Status {
+    let types = with(Vec::new(), |s| s.buff_types.clone());
+    put_list(&types, out, capacity, count)
+}
+
+extern "system" fn buffs(
+    _me: ModHandle,
+    entity: u32,
+    out: *mut ActiveBuff,
+    capacity: u32,
+    count: *mut u32,
+) -> Status {
+    match with(None::<Vec<ActiveBuff>>, |s| s.buffs.get(&entity).cloned()) {
+        Some(on) => put_list(&on, out, capacity, count),
+        None => Status::MISSING,
+    }
+}
+
+extern "system" fn apply_buff(_me: ModHandle, request: *const BuffRequest) -> Status {
+    // SAFETY: the safe layer passes a valid request for the call.
+    let Some(request) = (unsafe { request.as_ref() }).copied() else {
+        return Status::BAD_ARGS;
+    };
+    with(Status::MISSING, |s| {
+        let Some(ty) = s.buff_types.iter().find(|ty| ty.id == request.id).copied() else {
+            return Status::BAD_ARGS;
+        };
+        let Some(on) = s.buffs.get_mut(&request.entity) else {
+            return Status::MISSING;
+        };
+        let duration = if request.duration == 0 {
+            ty.duration
+        } else {
+            request.duration
+        };
+        if let Some(buff) = on.iter_mut().find(|buff| buff.id == request.id) {
+            buff.duration = duration;
+            buff.remaining = duration;
+        } else {
+            on.push(ActiveBuff {
+                header: Header::of::<ActiveBuff>(),
+                id: request.id,
+                entity: 0x8000 + u32::try_from(on.len()).unwrap_or(0),
+                slot: u32::from(ty.slot),
+                level: request.level,
+                duration,
+                remaining: duration,
+            });
+        }
+        Status::OK
+    })
+}
+
+extern "system" fn remove_buff(_me: ModHandle, entity: u32, id: u32, removed: *mut u8) -> Status {
+    if removed.is_null() {
+        return Status::BAD_ARGS;
+    }
+    with(Status::MISSING, |s| {
+        let Some(on) = s.buffs.get_mut(&entity) else {
+            return Status::MISSING;
+        };
+        let before = on.len();
+        on.retain(|buff| buff.id != id);
+        // SAFETY: checked above; the safe layer passes a writable byte.
+        unsafe { removed.write(u8::from(on.len() != before)) };
+        Status::OK
+    })
+}
+
 /// table it sees for the process, so it is one static.
 pub(crate) static TABLE: HostApi = HostApi {
     header: Header::of::<HostApi>(),
@@ -1294,4 +1392,8 @@ pub(crate) static TABLE: HostApi = HostApi {
     game_settings,
     set_game_settings,
     damage_filter,
+    buff_types,
+    buffs,
+    apply_buff,
+    remove_buff,
 };

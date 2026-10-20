@@ -185,6 +185,9 @@ pub static BUILDS: &[KnownBuild] = &[
             ("damage.fall", 0x8_5d6d),
             ("damage.shroud", 0xb_d83b),
             ("damage.shroud_death", 0xb_d781),
+            ("buffs.type_by_id", 0x92_70e0),
+            ("buffs.restore", 0x79_c840),
+            ("buffs.cleanse", 0x5_9090),
         ],
         constants: &[
             ("ecs.context_row", 8),
@@ -385,6 +388,21 @@ pub static BUILDS: &[KnownBuild] = &[
             ("damage.hit_vector", 0x10),
             ("damage.hit_target", 0x158),
             ("damage.hit_source", 0x15c),
+            // The game object holds its buff registry here, the registry
+            // its types' blob, and the game object its balancing registry.
+            ("buffs.registry", 0x248),
+            ("buffs.registry_blob", 0x20),
+            ("game.balancing", 0x1f0),
+            // The saved-buff record the restore of a character's buffs
+            // reads: type, total and remaining time, level and whether it
+            // is set, the strength (f32) and whether it is set.
+            ("buffs.record_type", 0x00),
+            ("buffs.record_lifetime", 0x08),
+            ("buffs.record_remaining", 0x10),
+            ("buffs.record_level", 0x18),
+            ("buffs.record_has_level", 0x19),
+            ("buffs.record_strength", 0x24),
+            ("buffs.record_has_strength", 0x28),
         ],
     },
     KnownBuild {
@@ -501,6 +519,9 @@ pub static BUILDS: &[KnownBuild] = &[
             ("damage.fall", 0x27_433d),
             ("damage.shroud", 0x2d_125b),
             ("damage.shroud_death", 0x2d_11a1),
+            ("buffs.type_by_id", 0xe7_29d0),
+            ("buffs.restore", 0xe3_2ca0),
+            ("buffs.cleanse", 0x23_c640),
             ("chat.receive_return_a", 0x84_0b59),
             ("chat.receive_return_b", 0x86_9b1b),
             ("chat.client_send", 0x86_64d0),
@@ -714,6 +735,21 @@ pub static BUILDS: &[KnownBuild] = &[
             ("damage.hit_vector", 0x10),
             ("damage.hit_target", 0x158),
             ("damage.hit_source", 0x15c),
+            // The game object holds its buff registry here, the registry
+            // its types' blob, and the game object its balancing registry.
+            ("buffs.registry", 0x248),
+            ("buffs.registry_blob", 0x20),
+            ("game.balancing", 0x1f0),
+            // The saved-buff record the restore of a character's buffs
+            // reads: type, total and remaining time, level and whether it
+            // is set, the strength (f32) and whether it is set.
+            ("buffs.record_type", 0x00),
+            ("buffs.record_lifetime", 0x08),
+            ("buffs.record_remaining", 0x10),
+            ("buffs.record_level", 0x18),
+            ("buffs.record_has_level", 0x19),
+            ("buffs.record_strength", 0x24),
+            ("buffs.record_has_strength", 0x28),
             // The client's own chat: the game client holds it here.
             ("chat.client_store", 0xf8),
         ],

@@ -9,6 +9,7 @@
 //! writes, actions, spawns, a per-world store and a save on demand. `/probe` commands run them again, from the
 //! admin tools' command file as well.
 
+mod buffs;
 mod census;
 mod checks;
 mod clock;
@@ -67,6 +68,10 @@ fn extras(load: &mut Load<'_>, scheduler: Scheduler) -> Vec<Check> {
     match settings::SettingsChecks::new(load) {
         Ok(settings) => extras.push(Box::new(move || settings.run())),
         Err(off) => enshwick_loader_api::warn!("FAIL game settings: {off}"),
+    }
+    match buffs::BuffChecks::new(load, scheduler) {
+        Ok(buffs) => extras.push(Box::new(move || buffs.run())),
+        Err(off) => enshwick_loader_api::warn!("FAIL buffs: {off}"),
     }
     extras
 }
