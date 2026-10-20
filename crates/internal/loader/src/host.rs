@@ -58,6 +58,8 @@ pub(crate) struct ModRecord {
     pub(crate) schema: Mutex<Option<enshwick_loader_api::config::Schema>>,
     /// The mod's check of new settings texts: callback and pointer.
     pub(crate) check: OnceLock<(api_frame::ConfigCheckFn, usize)>,
+    /// The texts the mod handed the loader, for its settings' labels.
+    pub(crate) texts: Mutex<Option<enshwick_loader_api::i18n::Texts>>,
 }
 
 impl ModRecord {
@@ -663,6 +665,7 @@ pub(crate) static API: HostApi = HostApi {
     ui_hud,
     ui_markers,
     config_check,
+    texts,
 };
 
 /// A static slice from a pointer and a count, empty for a null pointer.
@@ -2593,6 +2596,26 @@ pub(crate) fn check_settings(index: usize, text: &str) -> Result<(), String> {
     Err(unsafe { why.as_str() }
         .unwrap_or("refused by the mod")
         .to_owned())
+}
+
+extern "system" fn texts(me: ModHandle, toml: Str) -> Status {
+    entry("texts", || {
+        let (_, _, record) = match calling(me) {
+            Ok(found) => found,
+            Err(status) => return status,
+        };
+        let Some(toml) = text(toml) else {
+            return Status::BAD_ARGS;
+        };
+        let Ok(parsed) = enshwick_loader_api::i18n::Texts::parse(toml) else {
+            return Status::BAD_ARGS;
+        };
+        let Ok(mut slot) = record.texts.lock() else {
+            return Status::REFUSED;
+        };
+        *slot = Some(parsed);
+        Status::OK
+    })
 }
 
 /// Mod handles start at 1; 0 is no mod.

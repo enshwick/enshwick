@@ -55,11 +55,18 @@ static TEXT_NEXT: Next<TextFn> = unsafe { Next::new() };
 // SAFETY: as above.
 static ENGLISH_NEXT: Next<TextFn> = unsafe { Next::new() };
 static POOL_LANGUAGE: AtomicUsize = AtomicUsize::new(usize::MAX);
+/// The language the game last asked a text in.
+static LANGUAGE: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(ENGLISH);
 /// The English the game falls back to.
 const ENGLISH: u32 = 1;
 
 type TextFn =
     unsafe extern "system" fn(out: *mut [u64; 3], pool: *mut u8, id: u32) -> *mut [u64; 3];
+
+/// The language the game shows its texts in, as far as the loader saw.
+pub(crate) fn language() -> enshwick_loader_api::i18n::Language {
+    enshwick_loader_api::i18n::Language(LANGUAGE.load(Ordering::Relaxed))
+}
 
 /// Registers a mod text; refused after init.
 pub(crate) fn add_text(id: u32, language: u32, text: &str) -> Status {
@@ -105,6 +112,7 @@ unsafe extern "system" fn lookup(out: *mut [u64; 3], pool: *mut u8, id: u32) -> 
         // SAFETY: the pool holds its current language there.
         unsafe { pool.wrapping_add(offset).cast::<u32>().read_unaligned() }
     };
+    LANGUAGE.store(language, Ordering::Relaxed);
     match text_for(id, language) {
         Some(text) => answer(out, text),
         // SAFETY: forwarded unchanged.

@@ -2558,6 +2558,20 @@ impl Installed {
         Err(unsafe { why.as_str() }.unwrap_or("refused").to_owned())
     }
 
+    /// The texts the mod handed the loader last, as TOML; `None` before it
+    /// read any.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick_loader_api::test::FakeHost::new().install();
+    /// assert_eq!(loader.published_texts(), None);
+    /// ```
+    #[must_use]
+    pub fn published_texts(&self) -> Option<String> {
+        table::with(None, |s| s.published_texts.clone())
+    }
+
     /// The mod's markers on the map, as it set them last.
     ///
     /// # Examples
