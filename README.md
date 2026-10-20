@@ -15,6 +15,7 @@ every mod is a DLL in the `mods/` folder beside it.
 | [Safes](mods/enshwick-safes)                             | a craftable chest only the player who placed it can use            |
 | [Building yield](mods/enshwick-building-yield)           | bulk recipes for blocks, roofs, overgrowth, decor and furniture    |
 | [Updater](mods/enshwick-updater)                         | signed updates from GitHub releases, installed with your consent   |
+| [Build camera](mods/enshwick-build-camera)               | the building fly mode for every player, without the skill          |
 
 ## Install
 

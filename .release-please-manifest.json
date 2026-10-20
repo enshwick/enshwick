@@ -11,5 +11,6 @@
   "mods/enshwick-safes": "0.1.1",
   "mods/enshwick-building-yield": "0.1.1",
   "crates/enshwick-test": "0.1.0",
-  "mods/enshwick-updater": "0.1.0"
+  "mods/enshwick-updater": "0.1.0",
+  "mods/enshwick-build-camera": "0.1.0"
 }
