@@ -490,13 +490,30 @@ fn hook(
             !inside
         });
     }
-    write(chains, &ready, off, patches, failures)
+    write(chains, mids, &ready, off, patches, failures)
+}
+
+/// The mods hooked on a target that failed, function or mid-function hook;
+/// never the loader.
+fn failed_owners(failures: &[Failure], chains: &Chains, mids: &Mids) -> Vec<usize> {
+    failures
+        .iter()
+        .flat_map(|f| {
+            if f.inside {
+                mids.owners(f.target)
+            } else {
+                chains.owners(f.target)
+            }
+        })
+        .filter(|&owner| owner != crate::chains::LOADER)
+        .collect()
 }
 
 /// Writes the prepared jumps and the code patches that pass their check, all
 /// or none.
 fn write(
     chains: &mut Chains,
+    mids: &Mids,
     ready: &[(u64, bool, &Pending)],
     off: fn(usize) -> bool,
     patches: &[CodePatch],
@@ -505,11 +522,7 @@ fn write(
     let hooks: Vec<&Pending> = ready.iter().map(|&(_, _, hook)| hook).collect();
     let hooked: Vec<(usize, usize)> = hooks.iter().map(|h| h.span()).collect();
     // A mod whose hook failed is turned off: its patches stay out with it.
-    let failed: Vec<usize> = failures
-        .iter()
-        .flat_map(|f| chains.owners(f.target))
-        .filter(|&owner| owner != crate::chains::LOADER)
-        .collect();
+    let failed = failed_owners(failures, chains, mids);
     let off_or_failed = |owner: usize| off(owner) || failed.contains(&owner);
     let mut verdicts = crate::code::check(patches, &hooked, off_or_failed, crate::code::read);
     let writes: Vec<crate::detour::Bytes<'_>> = patches
@@ -882,6 +895,38 @@ mod tests {
             counter.samples.load(core::sync::atomic::Ordering::Relaxed),
             0
         );
+    }
+
+    #[test]
+    fn the_owners_of_a_failed_mid_function_hook_count_as_failed() {
+        use crate::chains::{LOADER, Link};
+        use crate::mid::MidLink;
+        use enshwick_loader_api::abi::{HookFlags, Registers};
+
+        static NEXT: AtomicUsize = AtomicUsize::new(0);
+        unsafe extern "system" fn handler(_: *mut Registers, _: *mut core::ffi::c_void) {}
+
+        let mut chains = Chains::default();
+        let link = |owner| Link {
+            owner,
+            detour: 0x1,
+            next: &NEXT,
+            priority: 0,
+            flags: HookFlags::NONE,
+        };
+        let _ = chains.add(0x10, link(LOADER));
+        let _ = chains.add(0x10, link(2));
+        let mut mids = Mids::default();
+        let mid = MidLink {
+            owner: 1,
+            handler,
+            user: 0,
+            priority: 0,
+            flags: HookFlags::NONE,
+        };
+        let _ = mids.add(0x20, mid);
+        let failures = [Failure::chain(0x10, "x"), Failure::site(0x20, "y")];
+        assert_eq!(failed_owners(&failures, &chains, &mids), [2, 1]);
     }
 
     #[test]
