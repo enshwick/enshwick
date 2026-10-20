@@ -2,7 +2,8 @@
 //! [`Event::SETTINGS_CHANGED`] for it, the loader's re-reads the log levels
 //! and raises [`Event::LOADER_SETTINGS_CHANGED`] for every mod.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::sync::{Mutex, PoisonError};
 use std::time::{Duration, SystemTime};
 
 use enshwick_loader_api::abi::Event;
@@ -16,6 +17,27 @@ const PERIOD: Duration = Duration::from_secs(1);
 /// What a settings file looked like when last seen: modified time and length.
 type Stamp = Option<(SystemTime, u64)>;
 
+/// Files the loader wrote itself and raised the event for already, with
+/// what they looked like after the write.
+static WRITTEN: Mutex<Vec<(PathBuf, Stamp)>> = Mutex::new(Vec::new());
+
+/// Notes that the loader wrote `path` and raised its event itself, so the
+/// watcher does not raise it again.
+pub(crate) fn wrote(path: &Path) {
+    let now = stamp(path);
+    WRITTEN
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .push((path.to_path_buf(), now));
+}
+
+/// Whether the loader wrote `path` as it looks now; forgets the write.
+fn ours(path: &Path, now: Stamp) -> bool {
+    let mut written = WRITTEN.lock().unwrap_or_else(PoisonError::into_inner);
+    let found = written.iter().position(|(p, s)| p == path && *s == now);
+    found.map(|at| written.swap_remove(at)).is_some()
+}
+
 /// A watched file and whom it belongs to: a mod index, or `None` for the loader.
 struct Watched {
     owner: Option<usize>,
@@ -23,7 +45,7 @@ struct Watched {
     seen: Stamp,
 }
 
-fn stamp(path: &std::path::Path) -> Stamp {
+fn stamp(path: &Path) -> Stamp {
     let meta = std::fs::metadata(path).ok()?;
     Some((meta.modified().ok()?, meta.len()))
 }
@@ -58,7 +80,7 @@ pub(crate) fn start(loader: &'static Loader) {
                         continue;
                     }
                     file.seen = now;
-                    if now.is_none() {
+                    if now.is_none() || ours(&file.path, now) {
                         continue;
                     }
                     changed(loader, file.owner);

@@ -49,12 +49,16 @@ const CHECK_DELAY: Duration = Duration::from_secs(10);
 )]
 struct Settings {
     /// Exercise the platform API and log what it sees; development only.
+    #[config(startup)]
     enabled: bool,
     /// Refuse every craft request, to see the craft filter in game.
+    #[config(startup)]
     refuse_crafting: bool,
     /// Refuse every placement, to see the build filter in game.
+    #[config(startup)]
     refuse_building: bool,
     /// Halve every damage, to see the damage filter in game.
+    #[config(startup)]
     soften_damage: bool,
 }
 

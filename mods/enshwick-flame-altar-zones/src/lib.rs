@@ -15,18 +15,25 @@ mod solver;
 use enshwick_loader_api::events::AltarsChanged;
 use enshwick_loader_api::{Load, Mod, Off};
 
-const DEFAULTS: &str = "\
-# Altars whose zones touch grow together and share their area.
-clusters = true
-# Pieces may be placed across the seams between the zones of one cluster.
-building_across_seams = true
-";
-
-#[derive(Debug, serde::Deserialize)]
+/// Flame altar zones settings, in `mod-configs/flame-altar-zones.toml`.
+#[derive(Debug, serde::Deserialize, serde::Serialize, enshwick_loader_api::Config)]
 #[serde(deny_unknown_fields)]
 struct Settings {
+    /// Altars whose zones touch grow together and share their area.
+    #[config(startup)]
     clusters: bool,
+    /// Pieces may be placed across the seams between the zones of one cluster.
+    #[config(startup)]
     building_across_seams: bool,
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Self {
+            clusters: true,
+            building_across_seams: true,
+        }
+    }
 }
 
 /// The mod's state.
@@ -48,7 +55,7 @@ impl Mod for FlameAltarZones {
     }
 
     fn init(load: &mut Load<'_>) -> Result<Self, Off> {
-        let settings: Settings = load.settings(DEFAULTS)?;
+        let settings: Settings = load.config()?;
         if settings.building_across_seams {
             load.on_zone_check(seam::accepts)?;
         }
@@ -79,7 +86,9 @@ mod tests {
 
     #[test]
     fn the_default_settings_parse() {
-        let settings: Settings = toml::from_str(DEFAULTS).unwrap();
+        use enshwick_loader_api::config::Config as _;
+
+        let settings: Settings = toml::from_str(&Settings::template()).unwrap();
         assert!(settings.clusters && settings.building_across_seams);
     }
 
@@ -88,7 +97,7 @@ mod tests {
         use enshwick_loader_api::abi::{AltarInfo, Bounds, Status};
 
         let loader = enshwick_loader_api::test::FakeHost::new()
-            .settings(DEFAULTS)
+            .settings(&<Settings as enshwick_loader_api::config::Config>::template())
             .install();
         // SAFETY: the exports of `declare_mod!` above.
         let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };

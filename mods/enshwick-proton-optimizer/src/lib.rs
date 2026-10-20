@@ -54,21 +54,23 @@ impl Switch {
 
 /// Proton optimizer settings.
 #[derive(Debug, serde::Deserialize, serde::Serialize, enshwick_loader_api::Config)]
-#[config(validate = Settings::check)]
 #[serde(deny_unknown_fields)]
 pub struct Settings {
     /// Exact short waits in the engine's event loop: "auto" under Wine and
     /// Proton only, "on" everywhere, Windows included, "off" never.
     /// Turning them on takes effect at the next start when they were off at
     /// start; turning them off takes effect at once.
+    #[config(runtime, choices = [Switch::Auto, Switch::On, Switch::Off])]
     pub exact_waits: Switch,
     /// The longest the server's game loop waits between its passes while
     /// players are online, in milliseconds, 1 to 8, never past the next
     /// simulation step. 1 is vanilla. 2 to 4 saves CPU, but check gliding,
     /// joining and combat before keeping it.
+    #[config(runtime, range = 1..=8)]
     pub server_wait_cap_ms: u32,
     /// A line a minute in the log and the status summary: CPU, loop and step
     /// rates, exact waits and the server's Bad Performance warnings.
+    #[config(runtime)]
     pub measure: bool,
 }
 
@@ -78,24 +80,6 @@ impl Default for Settings {
             exact_waits: Switch::Auto,
             server_wait_cap_ms: 1,
             measure: true,
-        }
-    }
-}
-
-impl Settings {
-    /// Refuses a cap outside 1 to 8 ms.
-    ///
-    /// # Errors
-    ///
-    /// The reason, for the log.
-    pub fn check(&self) -> Result<(), String> {
-        if (1..=8).contains(&self.server_wait_cap_ms) {
-            Ok(())
-        } else {
-            Err(format!(
-                "server_wait_cap_ms is {}, not 1 to 8",
-                self.server_wait_cap_ms
-            ))
         }
     }
 }
@@ -235,11 +219,11 @@ mod tests {
         assert_eq!(settings.exact_waits, Switch::Auto);
         assert_eq!(settings.server_wait_cap_ms, 1);
         assert!(settings.measure);
-        assert!(settings.check().is_ok());
+        assert!(settings.validate().is_ok());
         let wide: Settings =
             toml::from_str("exact_waits = \"on\"\nserver_wait_cap_ms = 9\nmeasure = false")
                 .unwrap();
-        assert!(wide.check().is_err());
+        assert!(wide.validate().is_err());
         assert!(
             toml::from_str::<Settings>(
                 "exact_waits = \"maybe\"\nserver_wait_cap_ms = 1\nmeasure = true"

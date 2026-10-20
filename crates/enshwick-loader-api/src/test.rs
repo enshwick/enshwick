@@ -1577,6 +1577,21 @@ impl Installed {
         check
     }
 
+    /// The settings schema the mod handed the loader, which
+    /// [`Load::config`](crate::Load::config) does; `None` before.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick_loader_api::test::FakeHost::new().install();
+    /// assert!(loader.config_schema().is_none());
+    /// ```
+    #[must_use]
+    pub fn config_schema(&self) -> Option<crate::config::Schema> {
+        table::with(None, |s| s.config_schema.clone())
+            .and_then(|text| crate::config::Schema::parse(&text).ok())
+    }
+
     /// Sets the buff types the fake knows and the entities that hold buffs,
     /// with none yet; a buff the mod gives starts with the duration asked,
     /// or the type's, and one it removes goes at once.

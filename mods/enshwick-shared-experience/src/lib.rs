@@ -24,6 +24,7 @@ pub use share::{Character, Levels, high_water};
 #[serde(deny_unknown_fields)]
 struct Settings {
     /// Every character catches up with the one furthest ahead in experience.
+    #[config(runtime)]
     enabled: bool,
 }
 

@@ -12,13 +12,15 @@ use enshwick_loader_api::{Load, Mod, Off};
 /// Area loot settings.
 #[derive(Debug, serde::Deserialize, serde::Serialize, enshwick_loader_api::Config)]
 #[serde(deny_unknown_fields)]
-#[config(validate = Settings::check)]
 struct Settings {
     /// Metres across the ground from the emptied container.
+    #[config(runtime, range = 0.1..=50.0)]
     radius: f32,
     /// Metres above or below the emptied container.
+    #[config(runtime, range = 0.1..=20.0)]
     height: f32,
     /// Take the loot around; false leaves looting vanilla.
+    #[config(runtime)]
     enabled: bool,
 }
 
@@ -28,18 +30,6 @@ impl Default for Settings {
             radius: 12.0,
             height: 4.0,
             enabled: true,
-        }
-    }
-}
-
-impl Settings {
-    fn check(&self) -> Result<(), String> {
-        if !(self.radius > 0.0 && self.radius <= 50.0) {
-            Err("radius is more than 0 and at most 50".into())
-        } else if !(self.height > 0.0 && self.height <= 20.0) {
-            Err("height is more than 0 and at most 20".into())
-        } else {
-            Ok(())
         }
     }
 }

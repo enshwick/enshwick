@@ -14,17 +14,6 @@ mod staffs;
 use enshwick_loader_api::abi::Side;
 use enshwick_loader_api::{Load, Mod, Off};
 
-const DEFAULTS: &str = "\
-# A copy of each survivor at every altar, at most one per altar zone.
-per_altar = true
-# Copy staffs: one per workshop survivor, used up when it places or moves a copy.
-copy_staffs = true
-# The chance a boss's corpse holds a copy staff, from 0 to 1.
-copy_staff_boss_chance = 0.10
-# The chance a chest that needs a key or a lockpick holds one.
-copy_staff_locked_chest_chance = 0.02
-";
-
 const fn yes() -> bool {
     true
 }
@@ -37,16 +26,36 @@ const fn locked_chest_chance() -> f64 {
     0.02
 }
 
-#[derive(Debug, serde::Deserialize)]
+/// Survivors per altar settings, in `mod-configs/survivors-per-altar.toml`.
+#[derive(Debug, serde::Deserialize, serde::Serialize, enshwick_loader_api::Config)]
 #[serde(deny_unknown_fields)]
 struct Settings {
+    /// A copy of each survivor at every altar, at most one per altar zone.
+    #[config(startup)]
     per_altar: bool,
+    /// Copy staffs: one per workshop survivor, used up when it places or moves a copy.
     #[serde(default = "yes")]
+    #[config(startup)]
     copy_staffs: bool,
+    /// The chance a boss's corpse holds a copy staff, from 0 to 1.
     #[serde(default = "boss_chance")]
+    #[config(startup)]
     copy_staff_boss_chance: f64,
+    /// The chance a chest that needs a key or a lockpick holds one.
     #[serde(default = "locked_chest_chance")]
+    #[config(startup)]
     copy_staff_locked_chest_chance: f64,
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Self {
+            per_altar: true,
+            copy_staffs: yes(),
+            copy_staff_boss_chance: boss_chance(),
+            copy_staff_locked_chest_chance: locked_chest_chance(),
+        }
+    }
 }
 
 /// `chance` within 0 to 1, warning about a value outside, such as `10` typed
@@ -76,7 +85,7 @@ impl Mod for SurvivorsPerAltar {
     }
 
     fn init(load: &mut Load<'_>) -> Result<Self, Off> {
-        let settings: Settings = load.settings(DEFAULTS)?;
+        let settings: Settings = load.config()?;
         if !settings.per_altar {
             return Err(Off::new("per_altar is off in the settings"));
         }
@@ -139,7 +148,9 @@ mod tests {
 
     #[test]
     fn the_default_settings_parse() {
-        let settings: Settings = toml::from_str(DEFAULTS).unwrap();
+        use enshwick_loader_api::config::Config as _;
+
+        let settings: Settings = toml::from_str(&Settings::template()).unwrap();
         assert!(settings.per_altar && settings.copy_staffs);
         assert!((settings.copy_staff_boss_chance - 0.10).abs() < f64::EPSILON);
         let old: Settings = toml::from_str("per_altar = true\n").unwrap();

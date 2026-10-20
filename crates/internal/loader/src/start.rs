@@ -122,6 +122,7 @@ pub(crate) fn start(stub_abi: u32, missing_forwards: u32) {
                 synced: Mutex::new(None),
                 server_synced: Mutex::new(None),
                 sync_out: Mutex::new(String::new()),
+                schema: Mutex::new(None),
             })
             .collect(),
         chains: Mutex::new(Chains::default()),

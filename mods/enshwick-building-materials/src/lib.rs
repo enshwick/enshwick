@@ -22,11 +22,10 @@ static SCALED: [AtomicBool; 3] = [
 /// Building materials settings.
 #[derive(Debug, serde::Deserialize, serde::Serialize, enshwick_loader_api::Config)]
 #[serde(default, deny_unknown_fields)]
-#[config(validate = Settings::check)]
 struct Settings {
     /// The vanilla recipes make their output times this, for the same cost.
     /// A joined player runs with the server's value.
-    #[config(sync)]
+    #[config(sync, range = 2..=100)]
     multiplier: u32,
     /// Building blocks and roofs.
     #[config(sync)]
@@ -51,13 +50,6 @@ impl Default for Settings {
 }
 
 impl Settings {
-    fn check(&self) -> Result<(), String> {
-        (2..=100)
-            .contains(&self.multiplier)
-            .then_some(())
-            .ok_or_else(|| "multiplier is 2 to 100".into())
-    }
-
     /// Puts these settings in force for the recipe patch.
     fn apply(&self) {
         MULTIPLIER.store(self.multiplier, Ordering::Relaxed);

@@ -42,10 +42,13 @@ use crate::command::Phrases;
 #[config(validate = Settings::check)]
 struct Settings {
     /// The Safe costs the wooden chest's ingredients times this.
+    #[config(startup, range = 1..=100)]
     cost_multiplier: u32,
     /// Whether the server's administrators may open, remove and rename every Safe.
+    #[config(runtime)]
     admins_can_open: bool,
     /// The language of the owner's name on a Safe and of `/safe` replies: "en", "uk", "de", ...
+    #[config(startup)]
     label_language: String,
 }
 
@@ -61,9 +64,6 @@ impl Default for Settings {
 
 impl Settings {
     fn check(&self) -> Result<(), String> {
-        if !(1..=100).contains(&self.cost_multiplier) {
-            return Err("cost_multiplier is 1 to 100".into());
-        }
         self.language().map(|_| ()).ok_or_else(|| {
             format!(
                 "label_language {:?} is no language code",

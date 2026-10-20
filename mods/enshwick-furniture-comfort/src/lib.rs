@@ -14,28 +14,16 @@ use enshwick_loader_api::{Load, Mod, Off};
 /// Furniture comfort settings.
 #[derive(Debug, serde::Deserialize, serde::Serialize, enshwick_loader_api::Config)]
 #[serde(deny_unknown_fields)]
-#[config(validate = Settings::check)]
 struct Settings {
     /// Comfort each piece of furniture gives inside a base, times this factor,
     /// from 0 to 100.
+    #[config(runtime, range = 0.0..=MAX_MULTIPLIER)]
     multiplier: f32,
 }
 
 impl Default for Settings {
     fn default() -> Self {
         Self { multiplier: 2.0 }
-    }
-}
-
-impl Settings {
-    fn check(&self) -> Result<(), String> {
-        if (0.0..=MAX_MULTIPLIER).contains(&self.multiplier) {
-            Ok(())
-        } else {
-            Err(format!(
-                "multiplier must be a number from 0 to {MAX_MULTIPLIER}"
-            ))
-        }
     }
 }
 

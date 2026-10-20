@@ -94,6 +94,7 @@ pub(crate) struct State {
     pub(crate) terrain: Option<Vec<TerrainMaterialInfo>>,
     /// The terrain edits the mod asked for.
     pub(crate) terrain_edits: Vec<TerrainEdit>,
+    pub(crate) config_schema: Option<String>,
     /// The world key last handed out, alive until the next one.
     world_key: Option<Box<str>>,
     /// The altars `altars` lists, settable while installed.
@@ -178,6 +179,7 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         forecasts: Vec::new(),
         terrain: None,
         terrain_edits: Vec::new(),
+        config_schema: None,
         channels: Vec::new(),
         net_sent: Vec::new(),
         notices: Vec::new(),
@@ -1227,6 +1229,20 @@ extern "system" fn set_game_settings(_me: ModHandle, data: *const u8, size: u32)
     })
 }
 
+extern "system" fn config_schema(_me: ModHandle, schema: Str) -> Status {
+    // SAFETY: the mod passes text valid for the call.
+    let Some(text) = (unsafe { schema.as_str() }) else {
+        return Status::BAD_ARGS;
+    };
+    if crate::config::Schema::parse(text).is_err() {
+        return Status::BAD_ARGS;
+    }
+    with(Status::REFUSED, |s| {
+        s.config_schema = Some(text.to_owned());
+        Status::OK
+    })
+}
+
 extern "system" fn damage_filter(
     _me: ModHandle,
     callback: DamageFilterFn,
@@ -1595,4 +1611,5 @@ pub(crate) static TABLE: HostApi = HostApi {
     set_weather,
     terrain_materials,
     terrain_edit,
+    config_schema,
 };

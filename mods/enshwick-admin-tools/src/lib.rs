@@ -52,6 +52,7 @@ struct Settings {
     /// Turn on the /admin commands for administrators and the command file
     /// mod-data/admin-tools/commands.txt, whose new lines run as the server
     /// console's commands.
+    #[config(runtime)]
     enabled: bool,
 }
 
