@@ -15,6 +15,7 @@ mod checks;
 mod clock;
 mod damage;
 mod knowledge;
+mod raw_stats;
 mod settings;
 mod stats;
 mod terrain;
@@ -40,6 +41,8 @@ use crate::checks::Checks;
 const CENSUS_PERIOD: Duration = Duration::from_secs(60);
 /// How long after the world loads the checks run.
 const CHECK_DELAY: Duration = Duration::from_secs(10);
+/// The commands, for `/enshwick help` and a malformed `/probe`.
+const HELP: &str = "/probe census|check|vitals <id>|vitals me [shown values]|teleport me [dx dy dz]|destroy <id>|spawn <id>|notice <text>";
 
 /// Probe settings, read at start.
 #[derive(Debug, Default, serde::Deserialize, serde::Serialize, enshwick_loader_api::Config)]
@@ -140,6 +143,38 @@ fn vetoes(load: &mut Load<'_>, settings: &Settings) {
     }
 }
 
+/// Registers `/probe`.
+fn commands(
+    load: &mut Load<'_>,
+    census: Arc<Census>,
+    checks: Arc<Checks>,
+    run_all: Arc<dyn Fn() + Send + Sync>,
+) -> Result<(), Off> {
+    let raw_stats = raw_stats::RawStats::new(load)
+        .inspect_err(|off| enshwick_loader_api::warn!("FAIL raw stats: {off}"))
+        .ok();
+    load.add_command("probe", HELP, move |ctx, args| match args {
+        _ if !ctx.is_admin() => "/probe is for administrators".into(),
+        ["census"] => census.lines().join("\n").into(),
+        ["check"] => {
+            run_all();
+            "checks run; see probe.log".into()
+        }
+        ["vitals", "me", shown @ ..] => match &raw_stats {
+            Some(raw) => raw.dump(ctx.player.entity, shown).into(),
+            None => checks.vitals_of(&ctx.player.entity.0.to_string()).into(),
+        },
+        ["vitals", id] => checks.vitals_of(id).into(),
+        ["teleport", "me", offset @ ..] if offset.len() <= 3 => {
+            checks.teleport_self(ctx.player.entity, offset).into()
+        }
+        ["destroy", id] => checks.destroy(id).into(),
+        ["spawn", id] => checks.spawn_copy(id).into(),
+        ["notice", words @ ..] => checks.notice(&ctx.player, &words.join(" ")).into(),
+        _ => HELP.into(),
+    })
+}
+
 impl Mod for Probe {
     fn manifest() -> &'static enshwick_loader_api::abi::Manifest {
         enshwick_loader_api::manifest!(id: "probe", side: SERVER, name: "Probe")
@@ -213,7 +248,7 @@ impl Mod for Probe {
                 }
             }
         };
-        let run_all = Arc::new(run_all);
+        let run_all: Arc<dyn Fn() + Send + Sync> = Arc::new(run_all);
         let first = Arc::clone(&run_all);
         load.on::<WorldLoaded>(move |()| {
             let run = Arc::clone(&first);
@@ -221,23 +256,7 @@ impl Mod for Probe {
         })?;
         let saved = Arc::clone(&checks);
         load.on::<WorldSaved>(move |()| saved.saved())?;
-        load.add_command(
-            "probe",
-            "development probe; /probe census|check|vitals <id>|destroy <id>|spawn <id>|notice <text>",
-            move |ctx, args| match args {
-                _ if !ctx.is_admin() => "/probe is for administrators".into(),
-                ["census"] => census.lines().join("\n").into(),
-                ["check"] => {
-                    run_all();
-                    "checks run; see probe.log".into()
-                }
-                ["vitals", id] => checks.vitals_of(id).into(),
-                ["destroy", id] => checks.destroy(id).into(),
-                ["spawn", id] => checks.spawn_copy(id).into(),
-                ["notice", words @ ..] => checks.notice(&ctx.player, &words.join(" ")).into(),
-                _ => "/probe census|check|vitals <id>|destroy <id>|spawn <id>|notice <text>".into(),
-            },
-        )?;
+        commands(load, census, checks, run_all)?;
         enshwick_loader_api::info!("probe on");
         Ok(Self)
     }

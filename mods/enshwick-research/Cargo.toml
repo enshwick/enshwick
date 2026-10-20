@@ -1,0 +1,38 @@
+[package]
+name = "enshwick-research"
+version = "0.1.0"
+description = "Development only, never shipped: logs what a running client does where the platform still needs engine facts"
+keywords = ["enshrouded", "mod", "client", "research"]
+categories = ["game-development"]
+readme = "README.md"
+authors.workspace = true
+homepage = "https://github.com/themaiby/enshwick/tree/main/mods/enshwick-research"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+enshwick-loader-api.workspace = true
+rustc-hash.workspace = true
+serde.workspace = true
+windows-sys = { workspace = true, features = [
+    "Win32_Foundation",
+    "Win32_System_Diagnostics_Debug",
+    "Win32_System_LibraryLoader",
+    "Win32_System_Threading",
+] }
+
+[dev-dependencies]
+enshwick-loader-reflect.workspace = true
+
+[lints]
+workspace = true
+
+# Development only: no release and no place in the release archives.
+[package.metadata.enshwick]
+release = false

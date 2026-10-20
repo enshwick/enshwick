@@ -23,6 +23,14 @@ const PING_AT: [f64; 3] = [-12345.0, -500.0, 777.0];
 /// When the probe looks at a teleported entity's components.
 const TELEPORT_PEEK: Duration = Duration::from_millis(500);
 
+/// How far `/probe teleport me` moves the player by default: 10 m along x and
+/// half a metre up, clear of the ground.
+const SELF_TELEPORT: [f64; 3] = [10.0, 0.5, 0.0];
+/// How often the position is logged after it.
+const SELF_TELEPORT_STEP: Duration = Duration::from_millis(250);
+/// How many times: five seconds.
+const SELF_TELEPORT_STEPS: u32 = 20;
+
 /// What the probe keeps per world: how often it checked it.
 #[derive(Debug, Default, serde::Deserialize, serde::Serialize)]
 #[serde(default)]
@@ -485,6 +493,72 @@ impl Checks {
         let how = self.world.notify(player, text);
         enshwick_loader_api::info!("notice to {}: {how:?}", player.name);
         format!("{how:?}")
+    }
+
+    /// `/probe teleport me [dx dy dz]`: moves the typing player's character
+    /// by the offset, 10 m along x by default, and logs where it stands four
+    /// times a second for five seconds: whether it stays or snaps back.
+    pub(crate) fn teleport_self(&self, entity: Entity, offset: &[&str]) -> String {
+        let mut by = SELF_TELEPORT;
+        for (axis, word) in by.iter_mut().zip(offset) {
+            match word.parse::<f64>() {
+                Ok(value) if value.is_finite() => *axis = value,
+                _ => return format!("not a distance: {word}"),
+            }
+        }
+        let Some(from) = self.world.position(entity) else {
+            return format!("entity {} has no place", entity.0);
+        };
+        let to = [from[0] + by[0], from[1] + by[1], from[2] + by[2]];
+        if let Err(why) = self.actions.teleport(entity, to, Teleport::new()) {
+            fail(&format!(
+                "R7 teleport of entity {} to {to:?}: {why}",
+                entity.0
+            ));
+            return format!("{why}");
+        }
+        enshwick_loader_api::info!(
+            "R7 teleport of entity {} asked from {from:?} to {to:?}",
+            entity.0
+        );
+        let world = self.world;
+        let parts = self.teleport_parts;
+        for step in 1..=SELF_TELEPORT_STEPS {
+            self.scheduler.after(SELF_TELEPORT_STEP * step, move || {
+                let at = world.position(entity);
+                let distance = |p: [f64; 3], q: [f64; 3]| {
+                    ((p[0] - q[0]).powi(2) + (p[1] - q[1]).powi(2) + (p[2] - q[2]).powi(2)).sqrt()
+                };
+                let place = at.map_or_else(
+                    || "nowhere".to_owned(),
+                    |p| {
+                        format!(
+                            "{p:?}, {:.2} m from the target, {:.2} m from the start",
+                            distance(p, to),
+                            distance(p, from)
+                        )
+                    },
+                );
+                enshwick_loader_api::info!(
+                    "R7 +{} ms: entity {} at {place}; Teleport {}, TeleportCount {}, LastTransform {}",
+                    (SELF_TELEPORT_STEP * step).as_millis(),
+                    entity.0,
+                    world.component(entity, parts[0]).is_some(),
+                    world.component(entity, parts[1]).is_some(),
+                    world.component(entity, parts[2]).is_some(),
+                );
+                if step == SELF_TELEPORT_STEPS {
+                    let verdict = match at {
+                        Some(p) if distance(p, to) < 1.0 => "stays at the target",
+                        Some(p) if distance(p, from) < 1.0 => "is back where it started",
+                        Some(_) => "is elsewhere (it may have walked)",
+                        None => "has no place",
+                    };
+                    enshwick_loader_api::info!("R7 after 5 s entity {} {verdict}", entity.0);
+                }
+            });
+        }
+        format!("teleport asked to {to:?}; see probe.log for the next 5 s")
     }
 
     /// `/probe destroy <id>`.

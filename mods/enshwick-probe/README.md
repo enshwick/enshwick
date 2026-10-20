@@ -55,23 +55,26 @@ Once the world has loaded, and again on `/probe check`:
 - a save on demand, followed by `WorldSaved`.
 
 From start it counts the damage its damage filter sees by cause, and every
-game event by type, and logs the counts every
-minute, and logs each typed game event it receives; a typed event whose
-fields this game build lacks shows as `FAIL typed <type>`.
+game event by type, and logs the counts every minute. It logs each typed
+game event it receives, each fall and shroud damage, and the first 200 hits
+a player takes or deals, with the amount before and after the filter; a
+typed event whose fields this game build lacks shows as `FAIL typed <type>`.
 
 ## Commands
 
 From the chat as an administrator, or through the admin tools' command file
 (`mod-data/admin-tools/commands.txt`):
 
-| Command               | What it does                                                   |
-| --------------------- | -------------------------------------------------------------- |
-| `/probe census`       | the game events counted so far, by type                        |
-| `/probe check`        | runs the checks again                                          |
-| `/probe vitals <id>`  | an entity's vitals and progress, against its replicated health |
-| `/probe destroy <id>` | asks the world to destroy an entity; on a copy of a world only |
-| `/probe spawn <id>`   | spawns a copy of an entity above it and follows it as above    |
-| `/probe notice <text>`| shows the text on your screen, or in chat without Enshwick     |
+| Command                         | What it does                                                                                                                                           |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `/probe census`                 | the game events counted so far, by type                                                                                                                |
+| `/probe check`                  | runs the checks again                                                                                                                                  |
+| `/probe vitals <id>`            | an entity's vitals and progress, against its replicated health                                                                                         |
+| `/probe vitals me [shown]`      | your character's raw health, stamina and mana sets, every slot, the replicated copies and the API's reading, beside the values you read off the screen |
+| `/probe teleport me [dx dy dz]` | moves your character by the offset (10 m along x and 0.5 m up by default) and logs where it stands four times a second for five seconds                |
+| `/probe destroy <id>`           | asks the world to destroy an entity; on a copy of a world only                                                                                         |
+| `/probe spawn <id>`             | spawns a copy of an entity above it and follows it as above                                                                                            |
+| `/probe notice <text>`          | shows the text on your screen, or in chat without Enshwick                                                                                             |
 
 ## Settings
 
