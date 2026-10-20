@@ -78,7 +78,7 @@ fn layout(loader: &Loader) -> Option<Layout> {
 /// Seals the filters and adds the sites when any mod asked.
 pub(crate) fn link(loader: &Loader) {
     let filters = take(&FILTERS);
-    let wanted = !filters.is_empty();
+    let wanted = !filters.is_empty() || crate::stats::wanted();
     let _first = SEALED.set(filters.into_boxed_slice());
     if !wanted {
         return;
@@ -139,7 +139,7 @@ fn blank(cause: u32, target: u32) -> DamageCheck {
         cause,
         target,
         source: 0,
-        reserved: 0,
+        attacker: 0,
         amounts: [0.0; TYPES],
         total: 0.0,
     }
@@ -217,8 +217,14 @@ unsafe extern "system" fn hit(registers: *mut Registers, _user: *mut c_void) {
         // SAFETY: as above.
         let amounts = unsafe { vector.read_unaligned() };
         let mut check = blank(DamageCheck::HIT, target);
+        // At the site `r12d` holds the root of the hitting impact, the
+        // attacker, worked out before it; 1.0 build 1269579.
+        let root = low(registers.r12).cast_unsigned();
+        let attacker = if root == 0 { source } else { root };
         check.source = source;
+        check.attacker = attacker;
         check.amounts = amounts;
+        crate::stats::on_hit(&mut check.amounts, target, attacker);
         check.total = amounts
             .iter()
             .enumerate()

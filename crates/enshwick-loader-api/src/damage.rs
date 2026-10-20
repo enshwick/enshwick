@@ -182,6 +182,31 @@ impl Damage<'_> {
         }
     }
 
+    /// Who dealt a hit: the attacker, also for its arrows and spells; `None`
+    /// for other causes. Under a loader older than minor 45, the same as
+    /// [`Damage::source`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+    ///     // Entity 7 deals double damage, by hand or by bow.
+    ///     load.on_damage(|damage| {
+    ///         if damage.attacker().is_some_and(|a| a.0 == 7) {
+    ///             damage.scale(2.0);
+    ///         }
+    ///     })
+    /// }
+    /// ```
+    #[must_use]
+    pub const fn attacker(&self) -> Option<Entity> {
+        if self.check.attacker != 0 {
+            Some(Entity(self.check.attacker))
+        } else {
+            self.source()
+        }
+    }
+
     /// A hit's damage of type `ty`; 0 for other causes.
     ///
     /// # Examples

@@ -36,7 +36,8 @@ are the game's: `Cut`, `Pierce`, `Blunt`, `Fire`, `Ice`, `Shroud`,
 `Healing` is what the hit heals; `scale` and `cancel` leave it alone.
 
 `target()` is the entity that takes the damage; `source()` is what dealt a
-hit, the attacker or its projectile, and `None` for the other causes.
+hit, the attacker or its projectile, and `attacker()` who dealt it, the
+archer for an arrow; both are `None` for the other causes.
 `amount(ty)` and `set(ty, amount)` read and set one type of a hit; `total()`
 is the sum but healing, or the amount of another cause. `scale(factor)` scales
 everything, `scale_type(ty, factor)` one type, and `cancel()` takes it all

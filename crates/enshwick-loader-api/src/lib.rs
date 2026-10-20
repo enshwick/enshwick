@@ -97,6 +97,7 @@ pub mod progress;
 pub mod raw;
 pub mod schedule;
 pub mod state;
+pub mod stats;
 pub mod status;
 pub mod survivors;
 pub mod terrain;

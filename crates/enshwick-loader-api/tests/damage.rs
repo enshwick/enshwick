@@ -38,7 +38,7 @@ mod tests {
             cause,
             target,
             source,
-            reserved: 0,
+            attacker: 0,
             amounts: [0.0; 13],
             total: 0.0,
         }

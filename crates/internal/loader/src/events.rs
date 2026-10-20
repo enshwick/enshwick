@@ -290,6 +290,7 @@ unsafe fn after_step(loader: &'static Loader, offsets: &Offsets, server: *mut u8
     crate::weather::after_step(loader);
     let step = STEPS.fetch_add(1, Ordering::Relaxed) + 1;
     crate::interactions::after_step(loader, step);
+    crate::stats::after_step(loader, step);
     let tick = TickData {
         header: Header::of::<TickData>(),
         step,
@@ -314,6 +315,7 @@ unsafe fn after_step(loader: &'static Loader, offsets: &Offsets, server: *mut u8
         } else if state == SLOT_IN_GAME && entity != 0 && joined.load(Ordering::Relaxed) != handle {
             joined.store(handle, Ordering::Relaxed);
             let data = player(index, slot, offsets);
+            crate::stats::player_joined(loader, &data);
             loader.emit(Event::PLAYER_JOINED, None, (&raw const data).cast());
         }
     }

@@ -14,7 +14,7 @@ use core::sync::atomic::AtomicUsize;
 pub const ABI_MAJOR: u16 = 1;
 
 /// The minor version of this interface. A newer minor only appends fields.
-pub const ABI_MINOR: u16 = 44;
+pub const ABI_MINOR: u16 = 45;
 
 /// Whether `id` is a valid mod id: 1 to 64 characters of `[a-z0-9-]`.
 ///
@@ -2759,7 +2759,7 @@ impl DaytimeInfo {
 ///     cause: DamageCheck::FALL,
 ///     target: 2,
 ///     source: 0,
-///     reserved: 0,
+///     attacker: 0,
 ///     amounts: [0.0; 13],
 ///     total: 40.0,
 /// };
@@ -2779,8 +2779,10 @@ pub struct DamageCheck {
     /// What dealt a hit: the attacker, or its projectile; 0 for other
     /// causes.
     pub source: u32,
-    /// Zero.
-    pub reserved: u32,
+    /// Who dealt a hit, the root of the impact that hit (the archer for an
+    /// arrow), or `source` when the game names none; 0 for other causes.
+    /// Since minor 45.
+    pub attacker: u32,
     /// A hit's damage by type (`DamageTypeNew`: cut 0, pierce 1, blunt 2,
     /// fire 3, ice 4, shroud 5, lightning 6, healing 7, poison 8, wood 9,
     /// stone 10, metal 11, explosion 12), after the target's resistances
@@ -2806,6 +2808,235 @@ impl DamageCheck {
 /// A mod's damage filter: the damage, which it may change, and the pointer
 /// given at registration. It runs on the game's worker threads.
 pub type DamageFilterFn = unsafe extern "system" fn(check: *mut DamageCheck, user: *mut c_void);
+
+/// A stat kind's definition, for [`HostApi::stat_open`] and
+/// [`HostApi::stat_info`].
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::abi::{Header, StatDefData, Str};
+///
+/// let crit = StatDefData {
+///     header: Header::of::<StatDefData>(),
+///     ty: StatDefData::ADDITIVE,
+///     format: StatDefData::PERCENT,
+///     reserved: 0,
+///     default: 0.0,
+///     min: 0.0,
+///     max: 1.0,
+///     text: Str::new("stat.crit"),
+/// };
+/// assert!(crit.min <= crit.default && crit.default <= crit.max);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct StatDefData {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// [`StatDefData::ADDITIVE`], [`StatDefData::MULTIPLICATIVE`] or
+    /// [`StatDefData::FLAG`].
+    pub ty: u8,
+    /// How the value reads: [`StatDefData::NUMBER`],
+    /// [`StatDefData::SIGNED`] or [`StatDefData::PERCENT`].
+    pub format: u8,
+    /// Zero.
+    pub reserved: u16,
+    /// The value without modifiers.
+    pub default: f32,
+    /// The least value.
+    pub min: f32,
+    /// The greatest value.
+    pub max: f32,
+    /// The text key that names the stat, in its mod's texts.
+    pub text: Str,
+}
+
+impl StatDefData {
+    /// A sum of points, such as extra health.
+    pub const ADDITIVE: u8 = 0;
+    /// A factor, 1 without modifiers, such as a damage multiplier.
+    pub const MULTIPLICATIVE: u8 = 1;
+    /// On or off: any value but 0 is on.
+    pub const FLAG: u8 = 2;
+    /// A plain number.
+    pub const NUMBER: u8 = 0;
+    /// A number with its sign.
+    pub const SIGNED: u8 = 1;
+    /// A fraction shown as a percentage.
+    pub const PERCENT: u8 = 2;
+}
+
+/// A stat kind as the loader numbers it: its index for calls and its key,
+/// the FNV-1a 32 hash of its full id, for what is stored.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::abi::StatRef;
+///
+/// let health = StatRef { index: 0, key: 0x1234 };
+/// assert_eq!(health.index, 0);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub struct StatRef {
+    /// The index in this process.
+    pub index: u32,
+    /// The FNV-1a 32 hash of the full id, the same in every process.
+    pub key: u32,
+}
+
+/// One modifier of a stat, by index; written as arrays.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::abi::StatModifierData;
+///
+/// let more = StatModifierData { stat: 0, op: StatModifierData::ADD, reserved: [0; 3], value: 50.0 };
+/// assert_eq!(more.op, StatModifierData::ADD);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct StatModifierData {
+    /// The stat's index.
+    pub stat: u32,
+    /// [`StatModifierData::ADD`], [`StatModifierData::MULTIPLY`],
+    /// [`StatModifierData::MAX`] or [`StatModifierData::OVERRIDE`].
+    pub op: u8,
+    /// Zero.
+    pub reserved: [u8; 3],
+    /// The modifier's value.
+    pub value: f32,
+}
+
+impl StatModifierData {
+    /// Adds the value.
+    pub const ADD: u8 = 0;
+    /// Multiplies by the value.
+    pub const MULTIPLY: u8 = 1;
+    /// Raises the result to at least the value.
+    pub const MAX: u8 = 2;
+    /// Sets the result.
+    pub const OVERRIDE: u8 = 3;
+}
+
+/// Sets or removes a mod's modifier on an entity, for
+/// [`HostApi::stat_modify`].
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::abi::{Header, StatModifierData, StatModify};
+///
+/// let blessing = StatModify {
+///     header: Header::of::<StatModify>(),
+///     entity: 2,
+///     key: 7,
+///     modifier: StatModifierData { stat: 0, op: StatModifierData::ADD, reserved: [0; 3], value: 50.0 },
+///     flags: 0,
+///     duration_ms: 60_000,
+/// };
+/// assert_eq!(blessing.flags & StatModify::REMOVE, 0);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct StatModify {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// The entity.
+    pub entity: u32,
+    /// The mod's own key; a modifier with the same mod, key and stat
+    /// replaces the one before.
+    pub key: u32,
+    /// The modifier.
+    pub modifier: StatModifierData,
+    /// [`StatModify::REMOVE`], [`StatModify::SAVED`].
+    pub flags: u32,
+    /// How long it lasts in milliseconds; 0 until removed.
+    pub duration_ms: u64,
+}
+
+impl StatModify {
+    /// Removes the modifier instead.
+    pub const REMOVE: u32 = 1;
+    /// Kept with the world for the player's account, and given back when
+    /// the player joins again; players only.
+    pub const SAVED: u32 = 1 << 1;
+}
+
+/// A stat whose value changed on an entity, for the handlers registered
+/// with [`HostApi::stats_changed`].
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::abi::{Header, StatChange, StatRef};
+///
+/// let change = StatChange { header: Header::of::<StatChange>(), entity: 2, stat: StatRef { index: 0, key: 0x1234 }, old: 0.0, new: 50.0, reserved: 0 };
+/// assert!(change.new > change.old);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct StatChange {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// The entity.
+    pub entity: u32,
+    /// The stat.
+    pub stat: StatRef,
+    /// The value before.
+    pub old: f32,
+    /// The value now.
+    pub new: f32,
+    /// Zero.
+    pub reserved: u32,
+}
+
+/// A handler of stat changes: the change and the pointer given at
+/// registration. It runs on the game thread, after a step.
+pub type StatChangeFn = unsafe extern "system" fn(change: *const StatChange, user: *mut c_void);
+
+/// One modifier that counts toward an entity's stat, and where it comes
+/// from, written by [`HostApi::stat_sources`] as an array.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::abi::{StatModifierData, StatSource};
+///
+/// let ring = StatSource { kind: StatSource::ITEM, op: StatModifierData::ADD, reserved: 0, stat: 0, value: 20.0, id: 900, owner: 0x5e01 };
+/// assert_eq!(ring.kind, StatSource::ITEM);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct StatSource {
+    /// [`StatSource::ITEM`], [`StatSource::BUFF`] or
+    /// [`StatSource::ENTITY`].
+    pub kind: u8,
+    /// The operation, as [`StatModifierData::op`].
+    pub op: u8,
+    /// Zero.
+    pub reserved: u16,
+    /// The stat's index.
+    pub stat: u32,
+    /// The modifier's value.
+    pub value: f32,
+    /// The item's entity, the buff id or the modifier's key.
+    pub id: u32,
+    /// The item id, 0, or the index of the mod that set the modifier.
+    pub owner: u32,
+}
+
+impl StatSource {
+    /// An item the entity wears.
+    pub const ITEM: u8 = 0;
+    /// A buff the entity has.
+    pub const BUFF: u8 = 1;
+    /// A modifier a mod set on the entity.
+    pub const ENTITY: u8 = 2;
+}
 
 /// A buff or debuff type of the running game, written by
 /// [`HostApi::buff_types`].
@@ -4104,7 +4335,7 @@ pub struct HostApi {
     /// interface, on the thread that draws it, while the mod is on; the
     /// callback draws with [`HostApi::ui_widget`]. Client only
     /// ([`Status::MISSING`] on a server or when the interface could not be
-    /// linked). Allowed during `enshwick_mod_init` only. Since minor 39.
+    /// linked). Allowed during `enshwick_mod_init` only. Since minor 45.
     pub ui_frame:
         extern "system" fn(me: ModHandle, callback: UiFrameFn, user: *mut c_void) -> Status,
     /// Draws `widget` in the frame `frame` names and writes back its
@@ -4119,7 +4350,7 @@ pub struct HostApi {
     /// thread. Client only ([`Status::MISSING`] on a server);
     /// [`Status::REFUSED`] when too many wait; [`Status::WRONG_THREAD`] for
     /// [`UiDialog::WAITING`] on the thread that draws the interface. On an
-    /// error status `callback` is never called. Since minor 39.
+    /// error status `callback` is never called. Since minor 45.
     pub ui_dialog: extern "system" fn(
         me: ModHandle,
         dialog: *const UiDialog,
@@ -4174,6 +4405,65 @@ pub struct HostApi {
     /// images; [`Status::MISSING`] otherwise, and always on a server. Any
     /// thread. Since minor 44.
     pub icons_ready: extern "system" fn(me: ModHandle) -> Status,
+    /// Defines the stat kind `id` with `def`, or opens it with a null
+    /// `def`, and writes its index and key to `out`. A mod defines kinds in
+    /// its own namespace (`name` or `<mod>:name`); any mod opens any kind,
+    /// the loader's built-in ones (`enshwick:<name>`) among them. Every mod
+    /// gets the same index for one id. [`Status::BAD_ARGS`] for a malformed
+    /// id or definition, [`Status::REFUSED`] for a kind defined twice or in
+    /// another mod's namespace. Allowed during `enshwick_mod_init` only.
+    /// Since minor 45.
+    pub stat_open: extern "system" fn(
+        me: ModHandle,
+        id: Str,
+        def: *const StatDefData,
+        out: *mut StatRef,
+    ) -> Status,
+    /// Writes the definition of stat `stat` to `def` and its full id to
+    /// `id`, a string the loader keeps for the process; [`Status::MISSING`]
+    /// for a kind opened but never defined. Any thread. Since minor 45.
+    pub stat_info:
+        extern "system" fn(me: ModHandle, stat: u32, def: *mut StatDefData, id: *mut Str) -> Status,
+    /// Writes the value of stat `stat` on `entity` to `out`: its default
+    /// when nothing modifies it. Values are worked out on the server after
+    /// each step a source changed; a client answers defaults. Any thread,
+    /// without locks. Since minor 45.
+    pub stat_value:
+        extern "system" fn(me: ModHandle, entity: u32, stat: u32, out: *mut f32) -> Status,
+    /// Sets or removes a modifier the mod keeps on an entity; the value
+    /// follows after the next step. [`Status::REFUSED`] on a client alone,
+    /// or for a saved modifier on an entity that is no player. Any thread.
+    /// Since minor 45.
+    pub stat_modify: extern "system" fn(me: ModHandle, request: *const StatModify) -> Status,
+    /// Gives the buff type `buff` the `count` modifiers at `modifiers`:
+    /// they count toward every watched entity that has the buff. Allowed
+    /// during `enshwick_mod_init` only. Since minor 45.
+    pub stat_buff: extern "system" fn(
+        me: ModHandle,
+        buff: u32,
+        modifiers: *const StatModifierData,
+        count: u32,
+    ) -> Status,
+    /// Calls `callback` with `user` for every stat value that changed on a
+    /// watched entity, on the game thread after the step that changed it.
+    /// Allowed during `enshwick_mod_init` only. Since minor 45.
+    pub stats_changed:
+        extern "system" fn(me: ModHandle, callback: StatChangeFn, user: *mut c_void) -> Status,
+    /// Writes up to `capacity` modifiers that count toward stat `stat` on
+    /// `entity`, in the order they apply, and how many there are to
+    /// `count`; every stat for `u32::MAX`. Any thread. Since minor 45.
+    pub stat_sources: extern "system" fn(
+        me: ModHandle,
+        entity: u32,
+        stat: u32,
+        out: *mut StatSource,
+        capacity: u32,
+        count: *mut u32,
+    ) -> Status,
+    /// Watches `entity` for the items it wears and the buffs it has, or
+    /// stops for `watch` 0: players are always watched, and so is every
+    /// entity a mod keeps a modifier on. Any thread. Since minor 45.
+    pub stat_watch: extern "system" fn(me: ModHandle, entity: u32, watch: u8) -> Status,
 }
 
 /// The exports a mod DLL provides, by name.
@@ -4235,7 +4525,15 @@ const _: () = {
     assert!(core::mem::offset_of!(HostApi, hook_at) == 24 + 35 * 8);
     assert!(core::mem::offset_of!(HostApi, inventory_open) == 24 + 36 * 8);
     assert!(core::mem::offset_of!(HostApi, inventory_submit) == 24 + 38 * 8);
-    assert!(size_of::<HostApi>() == 24 + 107 * 8);
+    assert!(size_of::<HostApi>() == 24 + 115 * 8);
+    assert!(core::mem::offset_of!(HostApi, stat_open) == 24 + 107 * 8);
+    assert!(size_of::<StatDefData>() == 8 + 16 + 16);
+    // Frozen: written as arrays.
+    assert!(size_of::<StatRef>() == 8);
+    assert!(size_of::<StatModifierData>() == 12);
+    assert!(size_of::<StatSource>() == 20);
+    assert!(size_of::<StatModify>() == 8 + 8 + 12 + 4 + 8);
+    assert!(size_of::<StatChange>() == 8 + 24);
     assert!(core::mem::offset_of!(HostApi, config_schema) == 24 + 92 * 8);
     assert!(core::mem::offset_of!(HostApi, time_of_day) == 24 + 73 * 8);
     assert!(core::mem::offset_of!(HostApi, set_time_speed) == 24 + 76 * 8);

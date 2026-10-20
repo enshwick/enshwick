@@ -478,7 +478,7 @@ impl Loader {
         let item_data = matches!(
             event,
             Event::WORLD_LOADED | Event::WORLD_SAVED | Event::SHUTDOWN
-        ) && crate::item_data::wanted();
+        ) && (crate::item_data::wanted() || crate::stats::wanted());
         item_data
             || self
                 .delivery
@@ -490,6 +490,7 @@ impl Loader {
     pub(crate) fn emit(&self, event: Event, only: Option<usize>, data: *const core::ffi::c_void) {
         if only.is_none() {
             crate::item_data::world_event(self, event);
+            crate::stats::world_event(self, event);
         }
         let Some(delivery) = self.delivery.get() else {
             return;
@@ -659,6 +660,14 @@ pub(crate) static API: HostApi = HostApi {
     item_data_open,
     item_data_get,
     item_data_set,
+    stat_open,
+    stat_info,
+    stat_value,
+    stat_modify,
+    stat_buff,
+    stats_changed,
+    stat_sources,
+    stat_watch,
     ui_frame,
     ui_widget,
     ui_dialog,
@@ -1883,6 +1892,156 @@ extern "system" fn icons_ready(me: ModHandle) -> Status {
         Ok(_) if crate::textures::ready() => Status::OK,
         Ok(_) => Status::MISSING,
         Err(status) => status,
+    })
+}
+
+extern "system" fn stat_open(
+    me: ModHandle,
+    id: Str,
+    def: *const api_frame::StatDefData,
+    out: *mut api_frame::StatRef,
+) -> Status {
+    entry("stat_open", || {
+        let Some(id) = text(id) else {
+            return Status::BAD_ARGS;
+        };
+        // SAFETY: the caller passes a valid definition for the call, or null.
+        let def = match unsafe { def.as_ref() } {
+            // SAFETY: the definition's text is borrowed for the call.
+            Some(data) => match unsafe { enshwick_loader_api::stats::StatDef::from_data(data) } {
+                Some(def) => Some(def),
+                None => return Status::BAD_ARGS,
+            },
+            None => None,
+        };
+        match caller_index(me)
+            .and_then(|(loader, index)| crate::stats::open(loader, index, id, def))
+        {
+            Ok(stat) => put(out, stat),
+            Err(status) => status,
+        }
+    })
+}
+
+extern "system" fn stat_info(
+    me: ModHandle,
+    stat: u32,
+    def: *mut api_frame::StatDefData,
+    id: *mut Str,
+) -> Status {
+    entry("stat_info", || {
+        if let Err(status) = caller(me) {
+            return status;
+        }
+        match crate::stats::info(stat) {
+            Ok((data, name)) => {
+                let status = put(def, data);
+                if status.is_ok() {
+                    put(id, name)
+                } else {
+                    status
+                }
+            }
+            Err(status) => status,
+        }
+    })
+}
+
+extern "system" fn stat_value(me: ModHandle, entity: u32, stat: u32, out: *mut f32) -> Status {
+    entry("stat_value", || {
+        if let Err(status) = caller(me) {
+            return status;
+        }
+        match crate::stats::value(entity, stat) {
+            Ok(value) => put(out, value),
+            Err(status) => status,
+        }
+    })
+}
+
+extern "system" fn stat_modify(me: ModHandle, request: *const api_frame::StatModify) -> Status {
+    entry("stat_modify", || {
+        // SAFETY: the caller passes a valid request for the call.
+        let Some(request) = (unsafe { request.as_ref() }) else {
+            return Status::BAD_ARGS;
+        };
+        match caller_index(me)
+            .and_then(|(loader, index)| crate::stats::modify(loader, index, request))
+        {
+            Ok(()) => Status::OK,
+            Err(status) => status,
+        }
+    })
+}
+
+extern "system" fn stat_buff(
+    me: ModHandle,
+    buff: u32,
+    modifiers: *const api_frame::StatModifierData,
+    count: u32,
+) -> Status {
+    entry("stat_buff", || {
+        if let Err(status) = caller(me) {
+            return status;
+        }
+        let list = if count == 0 {
+            &[][..]
+        } else if modifiers.is_null() {
+            return Status::BAD_ARGS;
+        } else {
+            // SAFETY: the caller passes `count` modifiers for the call.
+            unsafe { core::slice::from_raw_parts(modifiers, count as usize) }
+        };
+        match crate::stats::buff(buff, list) {
+            Ok(()) => Status::OK,
+            Err(status) => status,
+        }
+    })
+}
+
+extern "system" fn stats_changed(
+    me: ModHandle,
+    callback: api_frame::StatChangeFn,
+    user: *mut core::ffi::c_void,
+) -> Status {
+    entry("stats_changed", || match caller_index(me) {
+        Ok((_, index)) => match crate::stats::on_changed(index, callback, user) {
+            Ok(()) => Status::OK,
+            Err(status) => status,
+        },
+        Err(status) => status,
+    })
+}
+
+extern "system" fn stat_sources(
+    me: ModHandle,
+    entity: u32,
+    stat: u32,
+    out: *mut api_frame::StatSource,
+    capacity: u32,
+    count: *mut u32,
+) -> Status {
+    entry("stat_sources", || {
+        let loader = match caller(me) {
+            Ok(loader) => loader,
+            Err(status) => return status,
+        };
+        match crate::stats::sources(loader, entity, stat) {
+            Ok(list) => put_list(&list, out, capacity, count),
+            Err(status) => status,
+        }
+    })
+}
+
+extern "system" fn stat_watch(me: ModHandle, entity: u32, watch: u8) -> Status {
+    entry("stat_watch", || {
+        if let Err(status) = caller(me) {
+            return status;
+        }
+        match crate::stats::watch(entity, watch != 0) {
+            Ok(()) => Status::OK,
+            Err(status) => status,
+        }
     })
 }
 

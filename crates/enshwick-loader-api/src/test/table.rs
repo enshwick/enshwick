@@ -138,6 +138,8 @@ pub(crate) struct State {
     pub(crate) content: std::collections::BTreeMap<[u32; 4], Vec<u8>>,
     pub(crate) item_values: std::collections::BTreeMap<(u32, u32), (u32, Vec<u8>)>,
     pub(crate) summon_items: Vec<(u32, u32)>,
+    /// Stat kinds, modifiers and worn items.
+    pub(crate) stats: super::stats::FakeStats,
     pub(crate) survivor_status: Option<(SurvivorStatusFn, usize)>,
     pub(crate) interaction_filters: Vec<(InteractionFn, usize)>,
     pub(crate) skills: Vec<(u32, SkillCheckFn, usize)>,
@@ -235,6 +237,7 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         content: std::collections::BTreeMap::new(),
         item_values: std::collections::BTreeMap::new(),
         summon_items: Vec::new(),
+        stats: super::stats::FakeStats::default(),
         survivor_status: None,
         interaction_filters: Vec::new(),
         skills: Vec::new(),
@@ -1446,7 +1449,12 @@ extern "system" fn damage_filter(
 }
 
 /// Writes up to `capacity` of `items` to `out` and their number to `count`.
-fn put_list<T: Copy>(items: &[T], out: *mut T, capacity: u32, count: *mut u32) -> Status {
+pub(crate) fn put_list<T: Copy>(
+    items: &[T],
+    out: *mut T,
+    capacity: u32,
+    count: *mut u32,
+) -> Status {
     if count.is_null() {
         return Status::BAD_ARGS;
     }
@@ -2044,4 +2052,12 @@ pub(crate) static TABLE: HostApi = HostApi {
     content_serve,
     content_read,
     icons_ready,
+    stat_open: super::stats::stat_open,
+    stat_info: super::stats::stat_info,
+    stat_value: super::stats::stat_value,
+    stat_modify: super::stats::stat_modify,
+    stat_buff: super::stats::stat_buff,
+    stats_changed: super::stats::stats_changed,
+    stat_sources: super::stats::stat_sources,
+    stat_watch: super::stats::stat_watch,
 };

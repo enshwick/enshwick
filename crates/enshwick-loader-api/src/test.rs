@@ -72,6 +72,7 @@
 //! # Ok::<(), &str>(())
 //! ```
 
+mod stats;
 mod table;
 
 /// The modding book's chapter on tests, whose examples run as doctests here.
@@ -1727,7 +1728,7 @@ impl Installed {
     ///     cause: DamageCheck::FALL,
     ///     target: 2,
     ///     source: 0,
-    ///     reserved: 0,
+    ///     attacker: 0,
     ///     amounts: [0.0; 13],
     ///     total: 40.0,
     /// };
@@ -2104,6 +2105,51 @@ impl Installed {
         table::with(Vec::new(), |s| {
             s.content.iter().map(|(h, b)| (*h, b.clone())).collect()
         })
+    }
+
+    /// Puts `item` on `entity`, as worn equipment the stats count.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_loader_api::ecs::Entity;
+    /// use enshwick_loader_api::item_data::ItemInstance;
+    ///
+    /// let loader = enshwick_loader_api::test::FakeHost::new().install();
+    /// loader.wear(2, ItemInstance { pide: Entity(900), item: 0x5e01 });
+    /// ```
+    pub fn wear(&self, entity: u32, item: crate::item_data::ItemInstance) {
+        table::with((), |s| s.stats.worn.entry(entity).or_default().push(item));
+    }
+
+    /// Works out the stat values of every watched entity and runs the mod's
+    /// [`on_stats_changed`](crate::Load::on_stats_changed) handlers for each
+    /// that changed since the last call, as the loader does after a step;
+    /// how many changes it raised.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick_loader_api::test::FakeHost::new().install();
+    /// assert_eq!(loader.settle_stats(), 0);
+    /// ```
+    #[must_use]
+    pub fn settle_stats(&self) -> usize {
+        stats::settle()
+    }
+
+    /// The modifiers the mod keeps on entities: `(entity, key hash, stat
+    /// index, operation, value, flags, duration in ms)`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick_loader_api::test::FakeHost::new().install();
+    /// assert!(loader.stat_modifiers().is_empty());
+    /// ```
+    #[must_use]
+    pub fn stat_modifiers(&self) -> Vec<(u32, u32, u32, u8, f32, u32, u64)> {
+        stats::modifiers()
     }
 
     /// The items the mod filed as summoning staffs, as `(item, survivor)`.

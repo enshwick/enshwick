@@ -82,6 +82,8 @@ mod spawns;
 #[cfg(windows)]
 mod start;
 #[cfg(windows)]
+mod stats;
+#[cfg(windows)]
 mod status;
 #[cfg(windows)]
 mod survivors;

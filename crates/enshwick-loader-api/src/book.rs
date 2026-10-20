@@ -59,6 +59,7 @@ chapters! {
     Texts => "content/texts.md",
     Inventories => "inventories.md",
     ItemData => "item-data.md",
+    Stats => "stats.md",
     Releasing => "releasing.md",
     AbiReference => "abi-reference.md",
     Faq => "faq.md",

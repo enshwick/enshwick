@@ -16,6 +16,7 @@ mod clock;
 mod damage;
 mod knowledge;
 mod settings;
+mod stats;
 mod terrain;
 mod weather;
 
@@ -87,6 +88,10 @@ fn extras(load: &mut Load<'_>, scheduler: Scheduler) -> Vec<Check> {
     match weather::WeatherChecks::new(load, scheduler) {
         Ok(weather) => extras.push(Box::new(move || weather.run())),
         Err(off) => enshwick_loader_api::warn!("FAIL weather: {off}"),
+    }
+    match stats::StatChecks::new(load, scheduler) {
+        Ok(stats) => extras.push(Box::new(move || stats.run())),
+        Err(off) => enshwick_loader_api::warn!("FAIL stats: {off}"),
     }
     match terrain::TerrainChecks::new(load) {
         Ok(terrain) => extras.push(Box::new(move || terrain.run())),

@@ -288,6 +288,7 @@ dependencies = [
  "enshwick-loader-api",
  "enshwick-loader-reflect",
  "iced-x86",
+ "postcard",
  "rustc-hash",
  "semver",
  "serde",
