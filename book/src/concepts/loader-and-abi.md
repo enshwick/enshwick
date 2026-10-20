@@ -61,6 +61,7 @@ let manifest = enshwick_api::manifest!(
     requires: ["flame-altar-zones" => "^0.1"],
     after: ["flame-altar-count"],
     updates: github("themaiby/enshwick", "enshwick-survivors-per-altar"),
+    signed_by: ["RWTjqgtfpy3lSOLC4uaUXuvvKSLQKOFf6nUnEytoiFjSzxMEhLnoAdJF"],
     builds: [{
         side: SERVER,
         guid: "1c129660cd6efc4f9f0b21652d5ff2bf",
@@ -83,6 +84,9 @@ let manifest = enshwick_api::manifest!(
   they load first. `after` names mods that load first when present.
 - `updates` says where new releases come from, `github(...)` or
   `url("https://...")`; see [Releasing and updates](../releasing.md).
+- `signed_by` names the minisign public keys (one, or two while you change
+  keys) your releases are signed with; an updater installs only releases one
+  of them signed. See [Author keys](../releasing.md#author-keys).
 - `builds` pins symbols and constants for game builds the loader's table does
   not cover, per side, by the build's GUID and age; see
   [Finding the game](../finding-the-game.md).
