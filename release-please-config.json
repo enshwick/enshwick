@@ -101,6 +101,10 @@
     "mods/enshwick-safes": {
       "package-name": "enshwick-safes",
       "component": "enshwick-safes"
+    },
+    "mods/enshwick-building-yield": {
+      "package-name": "enshwick-building-yield",
+      "component": "enshwick-building-yield"
     }
   }
 }

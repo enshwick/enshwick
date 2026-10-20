@@ -1,0 +1,25 @@
+[package]
+name = "enshwick-building-yield"
+version = "0.1.0"
+description = "Bulk recipes for building blocks, roofs, overgrowth, decor and furniture: twice the output for the same cost"
+keywords = ["enshrouded", "mod", "building", "recipes"]
+categories = ["game-development"]
+readme = "README.md"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+enshwick-api.workspace = true
+serde.workspace = true
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+toml.workspace = true

@@ -209,7 +209,11 @@ load.add_recipe(NewRecipe { guid: SAFE_RECIPE, like: CHEST, output: SAFE, output
 - `add_item` clones a vanilla item under a new GUID (its game id is
   `Guid::id`) and lists it in the item registry; `add_recipe` copies the
   recipe of a vanilla item for a new output, at the same workshop and unlocked
-  with it. Several mods can add items and recipes; their changes compose.
+  with it. `derive_recipes(salt, |recipe| ...)` looks at every vanilla
+  recipe (debug name, output) and adds a scaled copy of the ones it picks.
+  Several mods can add items and recipes; their changes compose. The game
+  takes at most 512 recipes per workshop: derived copies stop 16 short of it,
+  leaving room for single recipes, and the log names what was left out.
 - Texts live in one TOML file per mod, a table per language code (`en`, `uk`,
   `de`, ... see `i18n::Language`), `en` being the fallback. A server owner
   overrides or adds texts in `mod-configs/<id>.texts.toml`.
