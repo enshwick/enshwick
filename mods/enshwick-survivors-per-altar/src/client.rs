@@ -211,9 +211,7 @@ fn survivor_id(guid: &[u8; 16]) -> u32 {
     if guid.iter().all(|&b| b == 0) {
         return 0;
     }
-    guid.iter().fold(0x811c_9dc5_u32, |h, &b| {
-        (h ^ u32::from(b)).wrapping_mul(0x0100_0193)
-    })
+    enshwick_api::content::Guid(*guid).id()
 }
 
 #[cfg(test)]

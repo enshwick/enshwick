@@ -157,15 +157,10 @@ impl World {
     /// See [`World`].
     #[must_use]
     pub fn position(&self, entity: Entity) -> Option<[f64; 3]> {
-        let data = self.component(entity, self.transform)?.cast::<i64>();
-        // The transform starts with x, y and z in 32.32 fixed point.
-        #[expect(clippy::cast_precision_loss, reason = "metres fit an f64")]
-        let metre = |i: usize| {
-            // SAFETY: a live CurrentTransform holds three i64 first.
-            let raw = unsafe { data.wrapping_add(i).read_unaligned() };
-            raw as f64 / 4_294_967_296.0
-        };
-        Some([metre(0), metre(1), metre(2)])
+        let data = self.component(entity, self.transform)?;
+        // SAFETY: a live CurrentTransform starts with x, y and z in 32.32 fixed point.
+        let fixed = unsafe { data.cast::<[i64; 3]>().read_unaligned() };
+        Some(crate::ecs::metres(fixed))
     }
 
     /// The item `entity` was placed from, which it keeps across saves.
