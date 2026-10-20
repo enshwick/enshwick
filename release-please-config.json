@@ -106,6 +106,10 @@
       "package-name": "enshwick-building-yield",
       "component": "enshwick-building-yield"
     },
+    "mods/enshwick-area-loot": {
+      "package-name": "enshwick-area-loot",
+      "component": "enshwick-area-loot"
+    },
     "crates/enshwick-test": {
       "package-name": "enshwick-test",
       "component": "enshwick-test"

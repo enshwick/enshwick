@@ -164,6 +164,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "enshwick-area-loot"
+version = "0.1.0"
+dependencies = [
+ "enshwick-api",
+ "serde",
+ "toml",
+]
+
+[[package]]
 name = "enshwick-build-camera"
 version = "0.1.0"
 dependencies = [
