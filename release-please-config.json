@@ -113,6 +113,10 @@
     "mods/enshwick-updater": {
       "package-name": "enshwick-updater",
       "component": "enshwick-updater"
+    },
+    "mods/enshwick-build-camera": {
+      "package-name": "enshwick-build-camera",
+      "component": "enshwick-build-camera"
     }
   }
 }
