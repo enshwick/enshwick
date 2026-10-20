@@ -4,11 +4,15 @@
 //! `None` or nothing. On a client the server is the built-in one, while it
 //! hosts a game.
 
+mod stats;
+
 use core::ffi::c_void;
 
 use crate::abi::{EntityPlace, Header, HostApi, PlayerInfo, Status, Str};
 use crate::ecs::Entity;
 use crate::{Host, Load, Off};
+
+pub use stats::{Meter, Progress, Vitals};
 
 /// A reflected ECS component type, resolved once at init.
 ///
@@ -213,6 +217,7 @@ pub struct World {
     transform: ComponentType,
     used_item: ComponentType,
     label: Option<ComponentType>,
+    stats: Option<stats::Stats>,
 }
 
 impl World {
@@ -227,11 +232,15 @@ impl World {
             transform: ComponentType(0),
             used_item: ComponentType(0),
             label: None,
+            stats: None,
         };
         world.transform = world.component_type(load, "keen::ecs::CurrentTransform")?;
         world.used_item = world.component_type(load, "keen::ecs::UsedItem")?;
         world.label = world
             .component_type(load, "keen::ecs::CustomPlayerString")
+            .ok();
+        world.stats = stats::Stats::resolve(load, &world)
+            .inspect_err(|off| crate::debug!("stat reads off: {off}"))
             .ok();
         Ok(world)
     }
@@ -440,6 +449,43 @@ impl World {
         if self.offers(core::mem::offset_of!(HostApi, chat)) {
             let _queued = (self.host.api().chat)(self.host.handle(), to, Str::new(text));
         }
+    }
+
+    /// `entity`'s health, stamina and mana; `None` when it has no health,
+    /// off the game thread, or on a build without stat reads.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_loader_api::events::PlayerJoined;
+    ///
+    /// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+    ///     let world = load.world()?;
+    ///     load.on::<PlayerJoined>(move |joined| {
+    ///         if let Some(vitals) = world.vitals(enshwick_loader_api::ecs::Entity(joined.entity)) {
+    ///             enshwick_loader_api::info!("joined with {} of {} health", vitals.health.current, vitals.health.max);
+    ///         }
+    ///     })
+    /// }
+    /// ```
+    #[must_use]
+    pub fn vitals(&self, entity: Entity) -> Option<Vitals> {
+        self.stats?.vitals(self, entity)
+    }
+
+    /// `entity`'s level and experience; `None` for an entity without them,
+    /// off the game thread, or on a build without stat reads.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// fn level(world: &enshwick_loader_api::world::World, player: &enshwick_loader_api::world::Player) -> u32 {
+    ///     world.progress(player.entity).map_or(0, |progress| progress.level)
+    /// }
+    /// ```
+    #[must_use]
+    pub fn progress(&self, entity: Entity) -> Option<Progress> {
+        self.stats?.progress(self, entity)
     }
 
     /// Every entity with a component of type `ty` and a place in the world,

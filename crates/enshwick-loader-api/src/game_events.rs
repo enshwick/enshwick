@@ -11,11 +11,19 @@
 //! An event arrives as raw bytes in the engine's layout; [`Field`]s resolved
 //! by name read them for the running build.
 
+mod kinds;
+
 use core::marker::PhantomData;
 
 use crate::abi::{GameEventData, HostApi, Str};
 use crate::ecs::Entity;
 use crate::{Load, Off};
+
+pub use kinds::{
+    AltarAction, AltarActionKind, AttackCategories, Block, Built, CraftRequested, Crafted,
+    DamageTypes, Died, EquipmentChanged, Hit, Interacted, LevelUp, LootOpened, PickedUp, Revived,
+    TornDown, Typed, XpGained, XpSource,
+};
 
 mod sealed {
     pub trait Sealed {}

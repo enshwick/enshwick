@@ -706,6 +706,25 @@ impl Load<'_> {
         self.game_events(ty.hash(), ty.name(), handler)
     }
 
+    /// Calls `handler` on every engine event of kind `E`, typed; see
+    /// [`game_events`](crate::game_events). A panic in `handler` turns the
+    /// mod off.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] under a loader older than ABI minor 20, after `init`, or when
+    /// this build lacks a field of the event.
+    ///
+    /// # Examples
+    ///
+    /// See [`Died`](crate::game_events::Died).
+    pub fn on_game<E: crate::game_events::Typed>(
+        &mut self,
+        handler: impl Fn(&E) + Send + Sync + 'static,
+    ) -> Result<(), Off> {
+        E::subscribe(self, handler)
+    }
+
     /// Calls `handler` on every engine event of every type, for finding out
     /// what the game raises. Each event is copied for the mod, so leave this
     /// to development builds.

@@ -1,0 +1,1110 @@
+//! Typed engine events: a struct per event with its fields read for the
+//! running build, for [`Load::on_game`](crate::Load::on_game).
+
+use crate::ecs::Entity;
+use crate::game_events::{EventType, Field, GameEvent};
+use crate::world::{ComponentType, World};
+use crate::{Load, Off};
+
+mod sealed {
+    pub trait Sealed {}
+}
+
+/// An engine event with a typed form; implemented by the types in this
+/// module only.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::game_events::{Died, Typed};
+///
+/// fn watch<E: Typed + core::fmt::Debug>(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+///     load.on_game::<E>(|event| enshwick_loader_api::debug!("{event:?}"))
+/// }
+///
+/// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+///     watch::<Died>(load)
+/// }
+/// ```
+pub trait Typed: sealed::Sealed + Sized + 'static {
+    /// The reflected engine type the event comes from.
+    const TYPE_NAME: &'static str;
+
+    /// Resolves the event's fields and subscribes `handler`.
+    #[doc(hidden)]
+    fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
+    where
+        F: Fn(&Self) + Send + Sync + 'static;
+}
+
+/// `Some(entity)` unless it is [`Entity::NONE`].
+fn some(entity: Entity) -> Option<Entity> {
+    (!entity.is_none()).then_some(entity)
+}
+
+/// Subscribes `handler` to the events `decode` turns into an `E`.
+fn on<E, D, F>(load: &mut Load<'_>, ty: EventType, decode: D, handler: F) -> Result<(), Off>
+where
+    D: Fn(&GameEvent<'_>) -> Option<E> + Send + Sync + 'static,
+    F: Fn(&E) + Send + Sync + 'static,
+{
+    load.on_game_event(ty, move |event| {
+        if let Some(typed) = decode(event) {
+            handler(&typed);
+        }
+    })
+}
+
+/// Bits of the damage types of a hit, the engine's `DamageTypeNew` mask.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::game_events::DamageTypes;
+///
+/// let types = DamageTypes(DamageTypes::FIRE.0 | DamageTypes::CUT.0);
+/// assert!(types.contains(DamageTypes::FIRE));
+/// assert!(!types.contains(DamageTypes::ICE));
+/// ```
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub struct DamageTypes(pub u16);
+
+impl DamageTypes {
+    /// Physical cut.
+    pub const CUT: Self = Self(1);
+    /// Physical pierce.
+    pub const PIERCE: Self = Self(1 << 1);
+    /// Physical blunt.
+    pub const BLUNT: Self = Self(1 << 2);
+    /// Fire.
+    pub const FIRE: Self = Self(1 << 3);
+    /// Ice.
+    pub const ICE: Self = Self(1 << 4);
+    /// Shroud.
+    pub const SHROUD: Self = Self(1 << 5);
+    /// Lightning.
+    pub const LIGHTNING: Self = Self(1 << 6);
+    /// Healing.
+    pub const HEALING: Self = Self(1 << 7);
+    /// Poison.
+    pub const POISON: Self = Self(1 << 8);
+    /// Wood, against trees and wooden things.
+    pub const WOOD: Self = Self(1 << 9);
+    /// Stone, against rock.
+    pub const STONE: Self = Self(1 << 10);
+    /// Metal, against ore.
+    pub const METAL: Self = Self(1 << 11);
+    /// Explosion.
+    pub const EXPLOSION: Self = Self(1 << 12);
+
+    /// Whether every bit of `other` is set.
+    ///
+    /// # Examples
+    ///
+    /// See [`DamageTypes`].
+    #[must_use]
+    pub const fn contains(self, other: Self) -> bool {
+        self.0 & other.0 == other.0
+    }
+}
+
+/// Bits of the attack categories of a hit, the engine's `AttackCategory`
+/// mask.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::game_events::AttackCategories;
+///
+/// assert!(AttackCategories(1).contains(AttackCategories::MELEE));
+/// ```
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub struct AttackCategories(pub u8);
+
+impl AttackCategories {
+    /// Melee.
+    pub const MELEE: Self = Self(1);
+    /// Ranged.
+    pub const RANGED: Self = Self(1 << 1);
+    /// Magic.
+    pub const MAGIC: Self = Self(1 << 2);
+    /// A tool, such as a pickaxe.
+    pub const TOOL: Self = Self(1 << 3);
+    /// Anything else.
+    pub const OTHER: Self = Self(1 << 4);
+    /// Area of effect.
+    pub const AREA: Self = Self(1 << 5);
+    /// A skill shot.
+    pub const SKILL_SHOT: Self = Self(1 << 6);
+
+    /// Whether every bit of `other` is set.
+    ///
+    /// # Examples
+    ///
+    /// See [`AttackCategories`].
+    #[must_use]
+    pub const fn contains(self, other: Self) -> bool {
+        self.0 & other.0 == other.0
+    }
+}
+
+/// A hit the server resolved, damage or healing: `HitEvent`, written where
+/// health changes. Fall and shroud damage change health without a hit.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::game_events::Hit;
+///
+/// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+///     load.on_game::<Hit>(|hit| {
+///         if hit.health_change < 0 {
+///             enshwick_loader_api::debug!("{:?} took {} from {:?}", hit.target, -hit.health_change, hit.attacker);
+///         }
+///     })
+/// }
+/// ```
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct Hit {
+    /// Who the hit is credited to: a character or enemy, not its arrow.
+    pub attacker: Option<Entity>,
+    /// What dealt it: the attacker itself, a projectile or an effect.
+    pub source: Option<Entity>,
+    /// The entity hit.
+    pub target: Entity,
+    /// The root of what was hit: the actor a hit body part belongs to.
+    pub root_target: Option<Entity>,
+    /// The weapon's item entity.
+    pub weapon: Option<Entity>,
+    /// The change of the target's health: below 0 for damage.
+    pub health_change: i32,
+    /// The change of the target's stamina.
+    pub stamina_change: i32,
+    /// The damage types.
+    pub damage_types: DamageTypes,
+    /// The attack categories.
+    pub attack: AttackCategories,
+    /// The target's faction, the engine's `FactionType`.
+    pub target_faction: u8,
+}
+
+impl sealed::Sealed for Hit {}
+
+impl Typed for Hit {
+    const TYPE_NAME: &'static str = "keen::ecs::HitEvent";
+
+    fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
+    where
+        F: Fn(&Self) + Send + Sync + 'static,
+    {
+        const BASE: &str = "keen::ecs::BaseHitEvent";
+        let ty = load.event_type(Self::TYPE_NAME)?;
+        let attacker: Field<Entity> = ty.inherited_field(load, BASE, "rootSourceId")?;
+        let target: Field<Entity> = ty.inherited_field(load, BASE, "targetId")?;
+        let source: Field<Entity> = ty.field(load, "sourceId")?;
+        let root_target: Field<Entity> = ty.field(load, "rootTargetId")?;
+        let weapon: Field<Entity> = ty.field(load, "weaponPideId")?;
+        let health: Field<i32> = ty.field(load, "healthChange")?;
+        let stamina: Field<i32> = ty.field(load, "staminaChange")?;
+        let damage: Field<u16> = ty.field(load, "damageTypes")?;
+        let attack: Field<u8> = ty.field(load, "attackCategory")?;
+        let faction: Field<u8> = ty.field(load, "targetFaction")?;
+        on(
+            load,
+            ty,
+            move |e| {
+                Some(Self {
+                    attacker: some(e.get(attacker)?),
+                    source: some(e.get(source)?),
+                    target: e.get(target)?,
+                    root_target: some(e.get(root_target)?),
+                    weapon: some(e.get(weapon)?),
+                    health_change: e.get(health)?,
+                    stamina_change: e.get(stamina)?,
+                    damage_types: DamageTypes(e.get(damage)?),
+                    attack: AttackCategories(e.get(attack)?),
+                    target_faction: e.get(faction)?,
+                })
+            },
+            handler,
+        )
+    }
+}
+
+/// An entity died: `EntityDiedEvent`, with who killed it as far as the
+/// engine kept track, read while the dead entity is still in the world.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::game_events::Died;
+///
+/// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+///     let world = load.world()?;
+///     load.on_game::<Died>(move |died| {
+///         if let Some(player) = died.killer_player.and_then(|p| world.player(p)) {
+///             enshwick_loader_api::info!("{} killed entity {}", player.name, died.entity.0);
+///         }
+///     })
+/// }
+/// ```
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct Died {
+    /// The entity that died.
+    pub entity: Entity,
+    /// The attacker of the last hit it took, from its `HitHistory`.
+    pub killer: Option<Entity>,
+    /// The last player character that hit it, from its `ExperienceSource`:
+    /// the one the game credits with the experience.
+    pub killer_player: Option<Entity>,
+}
+
+impl sealed::Sealed for Died {}
+
+/// Where the kill credit lives on a dying entity.
+#[derive(Clone, Copy, Debug)]
+struct Credit {
+    world: World,
+    history: ComponentType,
+    last_index: usize,
+    entries: usize,
+    slots: usize,
+    entry_size: usize,
+    entry_attacker: usize,
+    experience: ComponentType,
+    last_player: usize,
+}
+
+impl Credit {
+    fn resolve(load: &mut Load<'_>) -> Result<Self, Off> {
+        let world = load.world()?;
+        let offset = |ty: &str, field: &str| {
+            load.field_offset(ty, field).and_then(|o| {
+                usize::try_from(o).map_err(|_| Off::new(format!("{ty}.{field}: out of range")))
+            })
+        };
+        let history = "keen::ecs::HitHistory";
+        let size = usize::try_from(load.type_size(history)?).unwrap_or(0);
+        let entries = offset(history, "history")?;
+        let entry_size = usize::try_from(load.type_size(Hit::TYPE_NAME)?)
+            .unwrap_or(0)
+            .max(1);
+        let slots = offset(history, "targetTransform")?.saturating_sub(entries) / entry_size;
+        Ok(Self {
+            history: world.component_type(load, history)?,
+            last_index: offset(history, "lastIndex")?,
+            entries,
+            slots,
+            entry_size,
+            entry_attacker: offset("keen::ecs::BaseHitEvent", "rootSourceId")?,
+            experience: world.component_type(load, "keen::ecs::ExperienceSource")?,
+            last_player: offset("keen::ecs::ExperienceSource", "lastHitPlayerId")?,
+            world,
+        })
+        .and_then(|credit: Self| {
+            (credit.last_index + 4 <= size
+                && credit.entries + credit.slots * credit.entry_size <= size)
+                .then_some(credit)
+                .ok_or_else(|| Off::new("keen::ecs::HitHistory: an unexpected layout"))
+        })
+    }
+
+    /// The attacker of the last hit `entity` took.
+    fn killer(&self, entity: Entity) -> Option<Entity> {
+        let history = self.world.component(entity, self.history)?.cast::<u8>();
+        // SAFETY: the entity's live HitHistory, read on the game thread.
+        let last: u32 = unsafe {
+            history
+                .wrapping_add(self.last_index)
+                .cast::<u32>()
+                .read_unaligned()
+        };
+        let last = usize::try_from(last).ok().filter(|&i| i < self.slots)?;
+        let at = self.entries + last * self.entry_size + self.entry_attacker;
+        // SAFETY: as above; `at` lies inside the history array.
+        some(Entity(unsafe {
+            history.wrapping_add(at).cast::<u32>().read_unaligned()
+        }))
+    }
+
+    /// The last player character that hit `entity`.
+    fn killer_player(&self, entity: Entity) -> Option<Entity> {
+        let source = self.world.component(entity, self.experience)?.cast::<u8>();
+        // SAFETY: the entity's live ExperienceSource, read on the game thread.
+        some(Entity(unsafe {
+            source
+                .wrapping_add(self.last_player)
+                .cast::<u32>()
+                .read_unaligned()
+        }))
+    }
+}
+
+impl Typed for Died {
+    const TYPE_NAME: &'static str = "keen::ecs::EntityDiedEvent";
+
+    fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
+    where
+        F: Fn(&Self) + Send + Sync + 'static,
+    {
+        let ty = load.event_type(Self::TYPE_NAME)?;
+        let dead: Field<Entity> = ty.field(load, "deadEntityId")?;
+        let credit = Credit::resolve(load)
+            .inspect_err(|off| crate::debug!("kill credit off: {off}"))
+            .ok();
+        on(
+            load,
+            ty,
+            move |e| {
+                let entity = e.get(dead)?;
+                Some(Self {
+                    entity,
+                    killer: credit.as_ref().and_then(|c| c.killer(entity)),
+                    killer_player: credit.as_ref().and_then(|c| c.killer_player(entity)),
+                })
+            },
+            handler,
+        )
+    }
+}
+
+/// A character reached a new level: `LevelUpEvent`.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::game_events::LevelUp;
+///
+/// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+///     load.on_game::<LevelUp>(|up| enshwick_loader_api::info!("entity {} reached level {}", up.player.0, up.level))
+/// }
+/// ```
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct LevelUp {
+    /// The player's character.
+    pub player: Entity,
+    /// The level reached.
+    pub level: u32,
+}
+
+impl sealed::Sealed for LevelUp {}
+
+impl Typed for LevelUp {
+    const TYPE_NAME: &'static str = "keen::ecs::LevelUpEvent";
+
+    fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
+    where
+        F: Fn(&Self) + Send + Sync + 'static,
+    {
+        let ty = load.event_type(Self::TYPE_NAME)?;
+        let player: Field<Entity> = ty.field(load, "playerEntityId")?;
+        let level: Field<i32> = ty.field(load, "level")?;
+        on(
+            load,
+            ty,
+            move |e| {
+                Some(Self {
+                    player: e.get(player)?,
+                    level: u32::try_from(e.get(level)?).ok()?,
+                })
+            },
+            handler,
+        )
+    }
+}
+
+/// Where experience came from, the engine's `ExperienceSourceType`.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::game_events::XpSource;
+///
+/// assert_eq!(XpSource::from_raw(4), XpSource::Combat);
+/// assert_eq!(XpSource::from_raw(40), XpSource::Other(40));
+/// ```
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum XpSource {
+    /// No source given.
+    None,
+    /// Exploring.
+    Exploration,
+    /// Reading lore.
+    Lore,
+    /// A quest.
+    Quest,
+    /// A kill.
+    Combat,
+    /// Mining.
+    Mining,
+    /// A completed item set.
+    ItemSetCompleted,
+    /// A value this crate does not name.
+    Other(u8),
+}
+
+impl XpSource {
+    /// The source the engine's value names.
+    ///
+    /// # Examples
+    ///
+    /// See [`XpSource`].
+    #[must_use]
+    pub const fn from_raw(value: u8) -> Self {
+        match value {
+            0 => Self::None,
+            1 => Self::Exploration,
+            2 => Self::Lore,
+            3 => Self::Quest,
+            4 => Self::Combat,
+            5 => Self::Mining,
+            6 => Self::ItemSetCompleted,
+            other => Self::Other(other),
+        }
+    }
+}
+
+/// A character gained experience: `XPGainedEvent`.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::game_events::{XpGained, XpSource};
+///
+/// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+///     load.on_game::<XpGained>(|xp| {
+///         if xp.source == XpSource::Combat {
+///             enshwick_loader_api::debug!("{} experience for a kill", xp.amount);
+///         }
+///     })
+/// }
+/// ```
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct XpGained {
+    /// The player's character.
+    pub player: Entity,
+    /// How much.
+    pub amount: u32,
+    /// Where from.
+    pub source: XpSource,
+}
+
+impl sealed::Sealed for XpGained {}
+
+impl Typed for XpGained {
+    const TYPE_NAME: &'static str = "keen::ecs::XPGainedEvent";
+
+    fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
+    where
+        F: Fn(&Self) + Send + Sync + 'static,
+    {
+        let ty = load.event_type(Self::TYPE_NAME)?;
+        let player: Field<Entity> = ty.field(load, "playerEntityId")?;
+        let amount: Field<u32> = ty.field(load, "amount")?;
+        let source: Field<u8> = ty.field(load, "source")?;
+        on(
+            load,
+            ty,
+            move |e| {
+                Some(Self {
+                    player: e.get(player)?,
+                    amount: e.get(amount)?,
+                    source: XpSource::from_raw(e.get(source)?),
+                })
+            },
+            handler,
+        )
+    }
+}
+
+/// A player asked a station to craft: `CraftRecipeEvent`, before the
+/// server checks ingredients.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::game_events::CraftRequested;
+///
+/// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+///     load.on_game::<CraftRequested>(|craft| enshwick_loader_api::debug!("recipe {:#x} x{}", craft.recipe, craft.amount))
+/// }
+/// ```
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct CraftRequested {
+    /// The crafting player's character.
+    pub player: Entity,
+    /// The station, or none for crafting by hand.
+    pub station: Option<Entity>,
+    /// The recipe id.
+    pub recipe: u32,
+    /// How many.
+    pub amount: u16,
+}
+
+impl sealed::Sealed for CraftRequested {}
+
+impl Typed for CraftRequested {
+    const TYPE_NAME: &'static str = "keen::ecs::CraftRecipeEvent";
+
+    fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
+    where
+        F: Fn(&Self) + Send + Sync + 'static,
+    {
+        let ty = load.event_type(Self::TYPE_NAME)?;
+        let player: Field<Entity> = ty.field(load, "craftingOperatorId")?;
+        let station: Field<Entity> = ty.field(load, "craftingStationId")?;
+        let recipe: Field<u32> = ty.field(load, "recipeId")?;
+        let amount: Field<u16> = ty.field(load, "recipeAmount")?;
+        on(
+            load,
+            ty,
+            move |e| {
+                Some(Self {
+                    player: e.get(player)?,
+                    station: some(e.get(station)?),
+                    recipe: e.get(recipe)?,
+                    amount: e.get(amount)?,
+                })
+            },
+            handler,
+        )
+    }
+}
+
+/// A workshop finished a recipe: `CraftRecipeSuccessEvent`.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::game_events::Crafted;
+///
+/// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+///     load.on_game::<Crafted>(|done| enshwick_loader_api::debug!("workshop {:#x} made {:#x}", done.workshop, done.recipe))
+/// }
+/// ```
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct Crafted {
+    /// The workshop id.
+    pub workshop: u32,
+    /// The recipe id.
+    pub recipe: u32,
+}
+
+impl sealed::Sealed for Crafted {}
+
+impl Typed for Crafted {
+    const TYPE_NAME: &'static str = "keen::ecs::CraftRecipeSuccessEvent";
+
+    fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
+    where
+        F: Fn(&Self) + Send + Sync + 'static,
+    {
+        let ty = load.event_type(Self::TYPE_NAME)?;
+        let workshop: Field<u32> = ty.field(load, "workshopId")?;
+        let recipe: Field<u32> = ty.field(load, "recipeId")?;
+        on(
+            load,
+            ty,
+            move |e| {
+                Some(Self {
+                    workshop: e.get(workshop)?,
+                    recipe: e.get(recipe)?,
+                })
+            },
+            handler,
+        )
+    }
+}
+
+/// A player accepted an interaction an entity offered, such as opening a
+/// door or talking to a survivor: `AcceptOfferedInteractionEvent`.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::game_events::Interacted;
+///
+/// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+///     load.on_game::<Interacted>(|used| enshwick_loader_api::debug!("{:?} used {:?}", used.player, used.target))
+/// }
+/// ```
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct Interacted {
+    /// The player's character.
+    pub player: Entity,
+    /// The entity that offered the interaction.
+    pub target: Entity,
+    /// Which of the target's offers.
+    pub offer: u32,
+}
+
+impl sealed::Sealed for Interacted {}
+
+impl Typed for Interacted {
+    const TYPE_NAME: &'static str = "keen::ecs::AcceptOfferedInteractionEvent";
+
+    fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
+    where
+        F: Fn(&Self) + Send + Sync + 'static,
+    {
+        let ty = load.event_type(Self::TYPE_NAME)?;
+        let player: Field<Entity> = ty.field(load, "guestEntityId")?;
+        let target: Field<Entity> = ty.field(load, "hostEntityId")?;
+        let offer: Field<u32> = ty.field(load, "offerId")?;
+        on(
+            load,
+            ty,
+            move |e| {
+                Some(Self {
+                    player: e.get(player)?,
+                    target: e.get(target)?,
+                    offer: e.get(offer)?,
+                })
+            },
+            handler,
+        )
+    }
+}
+
+/// What a player did to a building block, from the engine's building
+/// events.
+///
+/// # Examples
+///
+/// See [`Built`].
+#[derive(Clone, Copy, Debug, PartialEq)]
+#[non_exhaustive]
+pub struct Block {
+    /// The player's character.
+    pub player: Entity,
+    /// Where, in metres, as the engine records it.
+    pub position: [f32; 3],
+    /// The block's volume, its lower corner, in metres.
+    pub volume_min: [f32; 3],
+    /// The block's volume, its upper corner, in metres.
+    pub volume_max: [f32; 3],
+    /// The material's feedback id.
+    pub material: u32,
+}
+
+/// The fields every building event shares.
+#[derive(Clone, Copy, Debug)]
+struct BlockFields {
+    player: Field<Entity>,
+    position: [Field<f32>; 3],
+    min: [Field<f32>; 3],
+    max: [Field<f32>; 3],
+    material: Field<u32>,
+}
+
+impl BlockFields {
+    fn resolve(load: &Load<'_>, ty: EventType) -> Result<Self, Off> {
+        let vector = |name: &str| -> Result<[Field<f32>; 3], Off> {
+            let at: Field<f32> = ty.field(load, name)?;
+            let next = |step: u64| {
+                let offset = u64::from(at.offset()) + step;
+                ty.field_at::<f32>(offset)
+                    .ok_or_else(|| Off::new(format!("{}.{name}: past the end", ty.name())))
+            };
+            Ok([at, next(4)?, next(8)?])
+        };
+        Ok(Self {
+            player: ty.field(load, "ownerId")?,
+            position: vector("position")?,
+            min: vector("volumeMin")?,
+            max: vector("volumeMax")?,
+            material: ty.field(load, "material")?,
+        })
+    }
+
+    fn read(&self, e: &GameEvent<'_>) -> Option<Block> {
+        let vector = |fields: [Field<f32>; 3]| -> Option<[f32; 3]> {
+            Some([e.get(fields[0])?, e.get(fields[1])?, e.get(fields[2])?])
+        };
+        Some(Block {
+            player: e.get(self.player)?,
+            position: vector(self.position)?,
+            volume_min: vector(self.min)?,
+            volume_max: vector(self.max)?,
+            material: e.get(self.material)?,
+        })
+    }
+}
+
+/// A player placed a building block: `BuildingPlaceEvent`. Props and
+/// furniture come as [`BuildingPlaced`](crate::events::BuildingPlaced) too.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::game_events::Built;
+///
+/// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+///     load.on_game::<Built>(|built| enshwick_loader_api::debug!("{:?} built at {:?}", built.block.player, built.block.position))
+/// }
+/// ```
+#[derive(Clone, Copy, Debug, PartialEq)]
+#[non_exhaustive]
+pub struct Built {
+    /// The block.
+    pub block: Block,
+    /// The item the block was built from.
+    pub item: u32,
+}
+
+impl sealed::Sealed for Built {}
+
+impl Typed for Built {
+    const TYPE_NAME: &'static str = "keen::ecs::BuildingPlaceEvent";
+
+    fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
+    where
+        F: Fn(&Self) + Send + Sync + 'static,
+    {
+        let ty = load.event_type(Self::TYPE_NAME)?;
+        let block = BlockFields::resolve(load, ty)?;
+        let item: Field<u32> = ty.field(load, "trackingItemId")?;
+        on(
+            load,
+            ty,
+            move |e| {
+                Some(Self {
+                    block: block.read(e)?,
+                    item: e.get(item)?,
+                })
+            },
+            handler,
+        )
+    }
+}
+
+/// A player tore down building blocks: `BuildingTearDownEvent`.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::game_events::TornDown;
+///
+/// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+///     load.on_game::<TornDown>(|torn| enshwick_loader_api::debug!("torn down at {:?}", torn.block.position))
+/// }
+/// ```
+#[derive(Clone, Copy, Debug, PartialEq)]
+#[non_exhaustive]
+pub struct TornDown {
+    /// The block.
+    pub block: Block,
+}
+
+impl sealed::Sealed for TornDown {}
+
+impl Typed for TornDown {
+    const TYPE_NAME: &'static str = "keen::ecs::BuildingTearDownEvent";
+
+    fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
+    where
+        F: Fn(&Self) + Send + Sync + 'static,
+    {
+        let ty = load.event_type(Self::TYPE_NAME)?;
+        let block = BlockFields::resolve(load, ty)?;
+        on(
+            load,
+            ty,
+            move |e| {
+                Some(Self {
+                    block: block.read(e)?,
+                })
+            },
+            handler,
+        )
+    }
+}
+
+/// A player picked up a placed piece: `BuildingPickUpEvent`.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::game_events::PickedUp;
+///
+/// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+///     load.on_game::<PickedUp>(|picked| enshwick_loader_api::debug!("picked up {:?}", picked.entity))
+/// }
+/// ```
+#[derive(Clone, Copy, Debug, PartialEq)]
+#[non_exhaustive]
+pub struct PickedUp {
+    /// The block.
+    pub block: Block,
+    /// The entity picked up.
+    pub entity: Option<Entity>,
+}
+
+impl sealed::Sealed for PickedUp {}
+
+impl Typed for PickedUp {
+    const TYPE_NAME: &'static str = "keen::ecs::BuildingPickUpEvent";
+
+    fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
+    where
+        F: Fn(&Self) + Send + Sync + 'static,
+    {
+        let ty = load.event_type(Self::TYPE_NAME)?;
+        let block = BlockFields::resolve(load, ty)?;
+        let picked: Field<Entity> = ty.field(load, "pickedEntityId")?;
+        on(
+            load,
+            ty,
+            move |e| {
+                Some(Self {
+                    block: block.read(e)?,
+                    entity: some(e.get(picked)?),
+                })
+            },
+            handler,
+        )
+    }
+}
+
+/// What a player did at a Flame Altar, the engine's `FlameAltarActionType`.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::game_events::AltarActionKind;
+///
+/// assert_eq!(AltarActionKind::from_raw(1), AltarActionKind::Reclaim);
+/// ```
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum AltarActionKind {
+    /// Abandoned the base.
+    Abandon,
+    /// Reclaimed an abandoned base.
+    Reclaim,
+    /// Removed the water.
+    RemoveWater,
+    /// Made it the preferred respawn altar.
+    SetSpawn,
+    /// A value this crate does not name.
+    Other(u8),
+}
+
+impl AltarActionKind {
+    /// The action the engine's value names.
+    ///
+    /// # Examples
+    ///
+    /// See [`AltarActionKind`].
+    #[must_use]
+    pub const fn from_raw(value: u8) -> Self {
+        match value {
+            0 => Self::Abandon,
+            1 => Self::Reclaim,
+            2 => Self::RemoveWater,
+            3 => Self::SetSpawn,
+            other => Self::Other(other),
+        }
+    }
+}
+
+/// A player acted at a Flame Altar: `FlameAltarEvent`.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::game_events::AltarAction;
+///
+/// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+///     load.on_game::<AltarAction>(|action| enshwick_loader_api::info!("{:?} at altar {:?}", action.kind, action.altar))
+/// }
+/// ```
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct AltarAction {
+    /// The player's character.
+    pub player: Entity,
+    /// The altar's base entity.
+    pub altar: Entity,
+    /// What was done.
+    pub kind: AltarActionKind,
+}
+
+impl sealed::Sealed for AltarAction {}
+
+impl Typed for AltarAction {
+    const TYPE_NAME: &'static str = "keen::ecs::FlameAltarEvent";
+
+    fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
+    where
+        F: Fn(&Self) + Send + Sync + 'static,
+    {
+        let ty = load.event_type(Self::TYPE_NAME)?;
+        let player: Field<Entity> = ty.field(load, "playerEntityId")?;
+        let altar: Field<Entity> = ty.field(load, "baseEntityId")?;
+        let kind: Field<u8> = ty.field(load, "type")?;
+        on(
+            load,
+            ty,
+            move |e| {
+                Some(Self {
+                    player: e.get(player)?,
+                    altar: e.get(altar)?,
+                    kind: AltarActionKind::from_raw(e.get(kind)?),
+                })
+            },
+            handler,
+        )
+    }
+}
+
+/// A player opened loot, a chest or a container: `LootInteractionEvent`.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::game_events::LootOpened;
+///
+/// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+///     load.on_game::<LootOpened>(|loot| enshwick_loader_api::debug!("{:?} looted {:?}", loot.player, loot.container))
+/// }
+/// ```
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct LootOpened {
+    /// The player's character.
+    pub player: Entity,
+    /// The container.
+    pub container: Entity,
+    /// Whether the player took everything at once.
+    pub take_all: bool,
+}
+
+impl sealed::Sealed for LootOpened {}
+
+impl Typed for LootOpened {
+    const TYPE_NAME: &'static str = "keen::ecs::LootInteractionEvent";
+
+    fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
+    where
+        F: Fn(&Self) + Send + Sync + 'static,
+    {
+        let ty = load.event_type(Self::TYPE_NAME)?;
+        let player: Field<Entity> = ty.field(load, "guestId")?;
+        let container: Field<Entity> = ty.field(load, "hostId")?;
+        let all: Field<bool> = ty.field(load, "lootAll")?;
+        on(
+            load,
+            ty,
+            move |e| {
+                Some(Self {
+                    player: e.get(player)?,
+                    container: e.get(container)?,
+                    take_all: e.get(all)?,
+                })
+            },
+            handler,
+        )
+    }
+}
+
+/// A player's equipment slot changed: `HandleEquipmentSlotChangedEvent`.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::game_events::EquipmentChanged;
+///
+/// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+///     load.on_game::<EquipmentChanged>(|changed| enshwick_loader_api::debug!("slot {} of {:?}", changed.slot, changed.player))
+/// }
+/// ```
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct EquipmentChanged {
+    /// The player's character.
+    pub player: Entity,
+    /// The slot, the engine's `EquipmentSlot`: 5 to 9 armour from head to
+    /// feet, 10 and 11 rings, 12 the ranged weapon, 13 the shield.
+    pub slot: u8,
+}
+
+impl sealed::Sealed for EquipmentChanged {}
+
+impl Typed for EquipmentChanged {
+    const TYPE_NAME: &'static str = "keen::ecs::HandleEquipmentSlotChangedEvent";
+
+    fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
+    where
+        F: Fn(&Self) + Send + Sync + 'static,
+    {
+        let ty = load.event_type(Self::TYPE_NAME)?;
+        let player: Field<Entity> = ty.field(load, "playerEntityId")?;
+        let slot: Field<u8> = ty.field(load, "equipmentSlot")?;
+        on(
+            load,
+            ty,
+            move |e| {
+                Some(Self {
+                    player: e.get(player)?,
+                    slot: e.get(slot)?,
+                })
+            },
+            handler,
+        )
+    }
+}
+
+/// A downed player was revived: `RevivedPlayerEvent`.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::game_events::Revived;
+///
+/// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+///     load.on_game::<Revived>(|revived| enshwick_loader_api::info!("{:?} revived by {:?}", revived.player, revived.by))
+/// }
+/// ```
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct Revived {
+    /// The revived player's character.
+    pub player: Entity,
+    /// Who revived them.
+    pub by: Option<Entity>,
+}
+
+impl sealed::Sealed for Revived {}
+
+impl Typed for Revived {
+    const TYPE_NAME: &'static str = "keen::ecs::RevivedPlayerEvent";
+
+    fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
+    where
+        F: Fn(&Self) + Send + Sync + 'static,
+    {
+        let ty = load.event_type(Self::TYPE_NAME)?;
+        let player: Field<Entity> = ty.field(load, "targetEntityId")?;
+        let by: Field<Entity> = ty.field(load, "sourceEntityId")?;
+        on(
+            load,
+            ty,
+            move |e| {
+                Some(Self {
+                    player: e.get(player)?,
+                    by: some(e.get(by)?),
+                })
+            },
+            handler,
+        )
+    }
+}
