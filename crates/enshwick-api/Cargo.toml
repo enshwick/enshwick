@@ -19,9 +19,6 @@ toml.workspace = true
 
 [dev-dependencies]
 serde = { workspace = true, features = ["derive"] }
-# The key differs from the package name: release-please reads dev-dependencies
-# by key and refuses the cycle enshwick-test -> enshwick-api -> enshwick-test.
-enshwick_test = { package = "enshwick-test", path = "../enshwick-test" }
 
 [lints]
 workspace = true
