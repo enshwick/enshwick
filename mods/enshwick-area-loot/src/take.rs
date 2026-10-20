@@ -1,17 +1,16 @@
-//! The server's side: a link after the game's loot container check notices a
-//! container a player emptied and queues the full ones around it; each is
-//! then emptied into that player, nearest first, through the game's own
-//! inventory transactions.
+//! After each loot container check the mod notices a container a player
+//! emptied and queues the full ones around it; each is then emptied into that
+//! player, nearest first, through the game's own inventory transactions.
 
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::{Mutex, MutexGuard, OnceLock, PoisonError};
 use std::time::{Duration, Instant};
 
-use enshwick_loader_api::ecs::{Entity, Worlds};
+use enshwick_loader_api::ecs::Entity;
 use enshwick_loader_api::inventory::{Batch, Inventories, Op, Outcome};
-use enshwick_loader_api::loot::{Container, Containers, near};
-use enshwick_loader_api::{Load, Next, Off};
+use enshwick_loader_api::loot::{Container, LootPass, near};
+use enshwick_loader_api::{Load, Off};
 
 use crate::Settings;
 use crate::tracker::Tracker;
@@ -24,15 +23,7 @@ const OPEN_RANGE: f64 = 4.0;
 /// How often the pass prunes what it remembers.
 const PRUNE_EVERY: Duration = Duration::from_secs(60);
 
-/// The reads the pass needs.
-#[derive(Debug)]
-struct Engine {
-    containers: Containers,
-    inventories: Inventories,
-    worlds: Worlds,
-}
-
-static ENGINE: OnceLock<Engine> = OnceLock::new();
+static INVENTORIES: OnceLock<Inventories> = OnceLock::new();
 static TRACKER: Mutex<Option<Tracker>> = Mutex::new(None);
 static LAST_PRUNE: Mutex<Option<Instant>> = Mutex::new(None);
 static ENABLED: AtomicBool = AtomicBool::new(true);
@@ -42,10 +33,6 @@ static HEIGHT: AtomicU32 = AtomicU32::new(0x4080_0000);
 static OFF: AtomicBool = AtomicBool::new(false);
 /// Counts the games run, so a take chain never reaches into the next one.
 static GAME: AtomicU64 = AtomicU64::new(0);
-
-enshwick_loader_api::detour! {
-    static CHECK: unsafe extern "system" fn(ctx: *mut u64) = check;
-}
 
 /// Applies `settings` from now on.
 pub(crate) fn apply(settings: &Settings) {
@@ -68,14 +55,9 @@ fn tracker() -> MutexGuard<'static, Option<Tracker>> {
 
 /// Links the pass.
 pub(crate) fn link(load: &mut Load<'_>) -> Result<(), Off> {
-    let engine = Engine {
-        containers: Containers::resolve(load)?,
-        inventories: load.inventories()?,
-        worlds: Worlds::resolve(load)?,
-    };
-    let _first = ENGINE.set(engine);
+    let _first = INVENTORIES.set(load.inventories()?);
     *tracker() = Some(Tracker::default());
-    load.hook(&CHECK, load.system(enshwick_loader_api::loot::SYSTEM)?)?;
+    load.on_loot_pass(check)?;
     // Entity ids belong to one game.
     load.on::<enshwick_loader_api::events::Shutdown>(|()| {
         GAME.fetch_add(1, Ordering::AcqRel);
@@ -85,17 +67,11 @@ pub(crate) fn link(load: &mut Load<'_>) -> Result<(), Off> {
     })
 }
 
-fn check(next: Next<unsafe extern "system" fn(*mut u64)>, ctx: *mut u64) {
-    // SAFETY: the original system takes its own context.
-    unsafe { next.get()(ctx) };
+fn check(loot: &LootPass<'_>) {
     if OFF.load(Ordering::Acquire) || !ENABLED.load(Ordering::Relaxed) {
         return;
     }
-    if let Some(engine) = ENGINE.get()
-        // SAFETY: the system's live context.
-        && unsafe { engine.worlds.is_server(ctx) }
-        // SAFETY: the system's live context, after vanilla ran.
-        && std::panic::catch_unwind(|| unsafe { pass(engine, ctx) }).is_err()
+    if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| pass(loot))).is_err()
         && !OFF.swap(true, Ordering::AcqRel)
     {
         enshwick_loader_api::warn!("area loot off, vanilla from now on: the pass panicked");
@@ -103,11 +79,7 @@ fn check(next: Next<unsafe extern "system" fn(*mut u64)>, ctx: *mut u64) {
 }
 
 /// Watches every container and starts a take for each one a player emptied.
-///
-/// # Safety
-///
-/// `ctx` is the live context of the loot container check, on its thread.
-unsafe fn pass(engine: &Engine, ctx: *mut u64) {
+fn pass(loot: &LootPass<'_>) {
     let now = Instant::now();
     let mut emptied: Vec<(Container, Entity)> = Vec::new();
     {
@@ -115,14 +87,11 @@ unsafe fn pass(engine: &Engine, ctx: *mut u64) {
         let Some(t) = guard.as_mut() else {
             return;
         };
-        // SAFETY: forwarded from the caller.
-        unsafe {
-            engine.containers.each(ctx, |c| {
-                if let Some(by) = t.observe(c, now) {
-                    emptied.push((*c, by));
-                }
-            });
-        }
+        loot.each(|c| {
+            if let Some(by) = t.observe(c, now) {
+                emptied.push((*c, by));
+            }
+        });
         let mut last = LAST_PRUNE.lock().unwrap_or_else(PoisonError::into_inner);
         if last.is_none_or(|at| now.saturating_duration_since(at) >= PRUNE_EVERY) {
             t.prune(now);
@@ -130,10 +99,8 @@ unsafe fn pass(engine: &Engine, ctx: *mut u64) {
         }
     }
     for (container, player) in emptied {
-        // SAFETY: forwarded from the caller.
-        if container.is_enemy_loot() && unsafe { engine.containers.is_player(ctx, player) } {
-            // SAFETY: as above.
-            let queue = unsafe { gather(engine, ctx, &container, player, now) };
+        if container.is_enemy_loot() && loot.is_player(player) {
+            let queue = gather(loot, &container, player, now);
             if !queue.is_empty() {
                 enshwick_loader_api::debug!(
                     "{} emptied {}: taking {} more",
@@ -149,13 +116,8 @@ unsafe fn pass(engine: &Engine, ctx: *mut u64) {
 
 /// The full enemy loot containers around `emptied` that no other player is
 /// at, nearest first, each held for the take.
-///
-/// # Safety
-///
-/// As for [`pass`].
-unsafe fn gather(
-    engine: &Engine,
-    ctx: *mut u64,
+fn gather(
+    loot: &LootPass<'_>,
     emptied: &Container,
     player: Entity,
     now: Instant,
@@ -168,8 +130,7 @@ unsafe fn gather(
     };
     let mut queue = VecDeque::new();
     for entity in t.around(emptied.position, radius, height, emptied.entity, now) {
-        // SAFETY: forwarded from the caller.
-        let Some(c) = (unsafe { engine.containers.container(ctx, entity) }) else {
+        let Some(c) = loot.container(entity) else {
             t.forget(entity);
             continue;
         };
@@ -181,8 +142,7 @@ unsafe fn gather(
         }
         let guest = c.offer.map_or(Entity::NONE, |o| o.guest);
         if guest != player && !guest.is_none() {
-            // SAFETY: as above.
-            let at = unsafe { engine.containers.position(ctx, guest) };
+            let at = loot.position(guest);
             if at.is_some_and(|at| near(c.position, at, OPEN_RANGE, OPEN_RANGE)) {
                 continue;
             }
@@ -196,7 +156,7 @@ unsafe fn gather(
 /// Empties the first container of `queue` into `player`, and the next once
 /// that one emptied completely.
 fn take_next(player: Entity, mut queue: VecDeque<Entity>, game: u64) {
-    let Some(engine) = ENGINE.get() else {
+    let Some(&inventories) = INVENTORIES.get() else {
         return;
     };
     // Switched off, stopped by a panic or another game since: the rest stays.
@@ -223,7 +183,6 @@ fn take_next(player: Entity, mut queue: VecDeque<Entity>, game: u64) {
         .actor(player)
         .allow_partial()
         .notify();
-    let inventories = engine.inventories;
     let _ticket = inventories.submit(&batch, move |outcome: &Outcome| {
         let left = inventories
             .read()
