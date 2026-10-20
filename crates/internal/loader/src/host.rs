@@ -682,6 +682,7 @@ pub(crate) static API: HostApi = HostApi {
     define_event,
     subscribe_event,
     send_event,
+    migrate,
 };
 
 /// A static slice from a pointer and a count, empty for a null pointer.
@@ -1105,6 +1106,23 @@ extern "system" fn subscribe_event(
             user.expose_provenance(),
         );
         Status::OK
+    })
+}
+
+extern "system" fn migrate(me: ModHandle, set: *const api_frame::MigrationSet) -> Status {
+    entry("migrate", || {
+        let (loader, index, _) = match calling(me) {
+            Ok(found) => found,
+            Err(status) => return status,
+        };
+        if loader.delivery.get().is_some() {
+            return Status::TOO_LATE;
+        }
+        // SAFETY: the safe layer passes a valid set or null.
+        match unsafe { set.as_ref() } {
+            Some(set) => crate::migrations::register(loader, index, set),
+            None => Status::BAD_ARGS,
+        }
     })
 }
 

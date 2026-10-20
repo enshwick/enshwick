@@ -570,6 +570,17 @@ impl Load<'_> {
     /// }
     /// ```
     pub fn add_item(&mut self, item: NewItem) -> Result<(), Off> {
+        for old in crate::migrations::old_guids(item.guid) {
+            self.add_one_item(NewItem {
+                guid: old,
+                debug_name: format!("{} (renamed)", item.debug_name),
+                ..item.clone()
+            })?;
+        }
+        self.add_one_item(item)
+    }
+
+    fn add_one_item(&mut self, item: NewItem) -> Result<(), Off> {
         let layout = ItemLayout::resolve(self)?;
         let meter = item.meter;
         if meter.is_some_and(|m| m.max == 0) {

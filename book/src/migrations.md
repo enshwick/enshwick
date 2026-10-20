@@ -1,0 +1,134 @@
+# Migrations
+
+A new version of a mod sometimes changes what older versions left behind: a
+setting gets a better name or another unit, a world store moves, an item gets
+a new GUID. A **migration** says how to carry the old over. The mod declares
+every migration it ever made, oldest first, and the loader runs each one
+once per world and records it, as Factorio does with its saves.
+
+## Declaring migrations
+
+[`load.migrate`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/migrations.rs)
+takes a
+[`Migrations`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/migrations.rs)
+list during `init`, before `load.config()`:
+
+```rust
+use enshwick_loader_api::content::Guid;
+use enshwick_loader_api::migrations::Migrations;
+
+const OLD_SAFE: Guid = Guid::parse("8a3f6e21-5c4b-4d7e-9f10-2b7c5e6a9d31");
+const SAFE: Guid = Guid::parse("9b4f7e32-6d5c-4e8f-a021-3c8d6f7b0e42");
+
+fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+    load.migrate(
+        Migrations::new()
+            .add("2", |m| {
+                m.rename_setting("cost", "cost_multiplier")
+                    .remove_setting("legacy")
+                    .rename_content(OLD_SAFE, SAFE)
+            })
+            .add("3", |m| {
+                m.map_setting("limit", |old| {
+                    let limit = old.as_integer().ok_or("limit is a number")?;
+                    Ok(toml::Value::Integer(limit * 2))
+                })
+                .rename_store("owners", "keepers")
+                .map_store("keepers", |table| {
+                    table.remove("legacy");
+                    Ok(())
+                })
+            }),
+    )
+}
+```
+
+- Each migration has an id, unique in the mod and never reused: name it
+  after the release that brought it, such as `"2"` or `"0.5.0"`. Migrations
+  run in the order they are added.
+- Keep every migration in the list forever. A player may skip versions, and
+  each world runs the ones it has not seen.
+
+| Step                       | What it does                                                                       |
+| -------------------------- | ---------------------------------------------------------------------------------- |
+| `rename_setting(from, to)` | moves a setting to a new key, value and comments kept; nothing when `to` is taken  |
+| `remove_setting(key)`      | removes a setting                                                                  |
+| `map_setting(key, f)`      | changes a setting's value: `f` takes the old `toml::Value` and returns the new one |
+| `rename_store(from, to)`   | moves a [world store](state.md#per-world-state) to a new name                      |
+| `map_store(name, f)`       | changes a world store: `f` edits its `toml::Table` in place                        |
+| `rename_content(from, to)` | reads content saved under the GUID `from` as the content now under `to`            |
+
+A step whose setting or store is missing does nothing. A map that returns
+`Err` fails its migration with that reason.
+
+## When migrations run
+
+- **The settings file**, `mod-configs/<id>.toml`, during `load.migrate`: the
+  settings steps of every migration it has not seen. A failure turns the mod
+  off with the reason.
+- **Each world**, when it loads on a dedicated server or in a hosted game,
+  before the mod reads the world's settings or opens its stores: the
+  settings steps on the world's settings, and the store steps on its
+  stores. A failure turns the mod off for the session, with the reason; the
+  migration runs again at the next load.
+- **Content renames** hold while the mod runs: whenever the game reads a
+  resource under an old GUID that nobody serves, it gets the one under the
+  new GUID, so placed objects saved with the old GUID load as the new ones.
+  An item the mod adds under the new GUID is also added under the old one,
+  so stacks saved with the old item stay in inventories and look and work
+  the same.
+
+A file or world the mod has never seen starts current: its files come from
+the mod as it is now, so the loader records every migration as done and
+runs none. This holds for a world created after the update and for a world
+the mod joins late.
+
+`mod-data/enshwick/migrations.toml` records what ran, per mod, for the
+settings files and for each world by its [key](world.md). Delete a mod's
+line to run its migrations again.
+
+## Checking before it runs
+
+Before it changes anything the loader logs the plan under the mod's id:
+
+```text
+info  [safes] migrations on world world0-d3a23c4a: safes 3: change setting limit, rename store owners to keepers, change store keepers
+```
+
+With `migrations_dry_run = true` in `mod-configs/enshwick.toml` the loader
+only logs the plan, adds `dry run, nothing changed`, and records nothing:
+try a release against a copy of a server's data before it goes live.
+
+## Testing migrations
+
+The [fake loader](testing.md) keeps the migrations the mod declared and runs
+them on text, the way the loader runs them on files:
+
+```rust
+use enshwick_loader_api::migrations::Migrations;
+
+struct Safes;
+
+impl enshwick_loader_api::Mod for Safes {
+    fn manifest() -> &'static enshwick_loader_api::abi::Manifest {
+        enshwick_loader_api::manifest!(id: "safes", side: SERVER)
+    }
+
+    fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<Self, enshwick_loader_api::Off> {
+        load.migrate(Migrations::new().add("2", |m| m.rename_setting("cost", "cost_multiplier")))?;
+        Ok(Self)
+    }
+}
+
+enshwick_loader_api::declare_mod!(Safes);
+
+let loader = enshwick_loader_api::test::FakeHost::new().install();
+// SAFETY: the exports of `declare_mod!` above.
+let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+assert!(status.is_ok());
+assert_eq!(loader.migrations(), ["2"]);
+assert_eq!(loader.migrate_settings("cost = 3\n"), Ok("cost_multiplier = 3\n".to_owned()));
+```
+
+`migrate_store(name, text)` does the same for a world store and returns the
+name it ends with.

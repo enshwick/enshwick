@@ -125,7 +125,9 @@ reason back while the hold is set.
 
 ## The loader's own data
 
-The loader keeps its data in `mod-data/enshwick/`. `clones.toml` there records
+The loader keeps its data in `mod-data/enshwick/`. `migrations.toml` there
+records the [migrations](migrations.md) that ran on each mod's settings file
+and on each world. `clones.toml` there records
 every template and item a mod cloned, with its vanilla source. When no mod
 serves a cloned template any more, the game reads the vanilla template under
 the clone's GUID, so a placed object of a removed mod loads as the vanilla

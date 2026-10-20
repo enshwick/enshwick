@@ -9,8 +9,8 @@ use crate::abi::{
     BuildCheckFn, BuildInfo, CallerFrame, ComfortFn, CommandCallFn, ConfigCheckFn, CraftCheckFn,
     DamageFilterFn, DaytimeInfo, EntityPlace, Event, EventFn, EventSpec, ExperiencePassFn,
     GameEventFn, Header, HookSpec, HostApi, InteractionFn, InventoryRequest, InventoryResultFn,
-    ItemData, KnowledgeInfo, Level, MidHookFn, MidHookSpec, ModEventFn, ModHandle, ModInfo,
-    NetMessageFn, PlayerInfo, RenameCallFn, ResourceKey, ResourcePatchFn, ServiceFound,
+    ItemData, KnowledgeInfo, Level, MidHookFn, MidHookSpec, MigrationSet, ModEventFn, ModHandle,
+    ModInfo, NetMessageFn, PlayerInfo, RenameCallFn, ResourceKey, ResourcePatchFn, ServiceFound,
     ServiceSpec, Side, SkillCheckFn, SpawnRequest, Status, StatusFn, Str, SummonFn,
     SurvivorLookupFn, SurvivorStatusFn, TeleportRequest, TerrainEdit, TerrainMaterialInfo,
     UiAnswerFn, UiDialog, UiFrameFn, UiMarker, UiWidget, WeatherFront, ZoneCheckFn,
@@ -49,6 +49,8 @@ pub(crate) struct State {
     pub(crate) mod_event_subscriptions: Vec<ModEventSubscription>,
     /// The names of the mod events the mod sent, in order.
     pub(crate) sent_events: Vec<String>,
+    /// The migrations the mod declared.
+    pub(crate) migrations: Option<super::FakeMigrations>,
     pub(crate) defaults: Vec<String>,
     pub(crate) synced: Vec<String>,
     pub(crate) commands: Vec<(String, String, CommandCallFn, usize)>,
@@ -191,6 +193,7 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         defined_events: Vec::new(),
         mod_event_subscriptions: Vec::new(),
         sent_events: Vec::new(),
+        migrations: None,
         defaults: Vec::new(),
         synced: Vec::new(),
         inventory_requests: Vec::new(),
@@ -537,6 +540,41 @@ extern "system" fn send_event(_me: ModHandle, event: u32, _data: *const c_void) 
     })
 }
 
+extern "system" fn migrate(_me: ModHandle, set: *const MigrationSet) -> Status {
+    // SAFETY: the safe layer passes a valid set.
+    let Some(set) = (unsafe { set.as_ref() }) else {
+        return Status::BAD_ARGS;
+    };
+    let mut migrations = Vec::new();
+    for index in 0..set.count as usize {
+        // SAFETY: the set holds `count` migrations.
+        let migration = unsafe { set.migrations.add(index) };
+        // SAFETY: as above.
+        let migration = unsafe { &*migration };
+        let steps = (0..migration.count as usize)
+            .map(|i| {
+                // SAFETY: the migration holds `count` steps.
+                let step = unsafe { migration.steps.add(i) };
+                // SAFETY: as above.
+                let step = unsafe { &*step };
+                (step.kind, text(step.from), text(step.to))
+            })
+            .collect();
+        migrations.push((text(migration.id), steps));
+    }
+    with(Status::MISSING, |s| {
+        if s.migrations.is_some() {
+            return Status::REFUSED;
+        }
+        s.migrations = Some(super::FakeMigrations {
+            list: migrations,
+            map: set.map,
+            user: set.user.expose_provenance(),
+        });
+        Status::OK
+    })
+}
+
 extern "system" fn constant(_me: ModHandle, name: Str, out: *mut u64) -> Status {
     let name = text(name);
     found(with(None, |s| s.host.constants.get(&name).copied()), out)
@@ -627,7 +665,10 @@ extern "system" fn serve_resource(
         return Status::BAD_ARGS;
     };
     with(Status::MISSING, |s| {
-        if s.served.iter().any(|served| served.0.key == key) {
+        if s.served
+            .iter()
+            .any(|served| served.0.key == key && served.0.base != base)
+        {
             return Status::REFUSED;
         }
         s.served.push((
@@ -2180,4 +2221,5 @@ pub(crate) static TABLE: HostApi = HostApi {
     affix_roll: super::stats::affix_roll,
     item_lines: super::stats::item_lines,
     affix_info: super::stats::affix_info,
+    migrate,
 };

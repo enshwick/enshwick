@@ -256,6 +256,7 @@ mod live {
             );
             return;
         };
+        crate::migrations::world_loaded(loader, &key);
         for record in loader.mods.iter().filter(|m| schema(m).is_some()) {
             let global = read(&global_path(loader, record)).unwrap_or_default();
             let world_path = world_file(&loader.data_dir, &record.id, &key);

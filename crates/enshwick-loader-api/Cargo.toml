@@ -90,6 +90,10 @@ name = "lifecycle"
 required-features = ["test"]
 
 [[test]]
+name = "migrations"
+required-features = ["test"]
+
+[[test]]
 name = "mid_hook"
 required-features = ["test"]
 

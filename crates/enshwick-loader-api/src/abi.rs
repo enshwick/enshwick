@@ -14,7 +14,7 @@ use core::sync::atomic::AtomicUsize;
 pub const ABI_MAJOR: u16 = 1;
 
 /// The minor version of this interface. A newer minor only appends fields.
-pub const ABI_MINOR: u16 = 48;
+pub const ABI_MINOR: u16 = 49;
 
 /// Whether `id` is a valid mod id: 1 to 64 characters of `[a-z0-9-]`.
 ///
@@ -4653,6 +4653,125 @@ pub struct HostApi {
     /// and `rarity`. Any thread. Since minor 48.
     pub affix_info:
         extern "system" fn(me: ModHandle, affix: u32, text: *mut Str, rarity: *mut u8) -> Status,
+    /// Registers the mod's migrations, `set`, copied: the loader runs the
+    /// settings steps on the settings file now, and every step on each
+    /// world's files when the world loads, once per world, and records what
+    /// ran in `mod-data/enshwick/migrations.toml`. [`Status::REFUSED`] for
+    /// a second call or a migration that failed on the settings file, with
+    /// the reason logged. Allowed during `enshwick_mod_init` only. Since
+    /// minor 49.
+    pub migrate: extern "system" fn(me: ModHandle, set: *const MigrationSet) -> Status,
+}
+
+/// One step of a mod migration, as [`HostApi::migrate`] takes it.
+///
+/// Frozen: written as an array.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::abi::{MigrationStep, Str};
+///
+/// let step = MigrationStep {
+///     kind: MigrationStep::RENAME_SETTING,
+///     from: Str::new("cost"),
+///     to: Str::new("cost_multiplier"),
+///     from_guid: [0; 16],
+///     to_guid: [0; 16],
+/// };
+/// assert_eq!(step.kind, 1);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct MigrationStep {
+    /// What the step does: one of the constants below.
+    pub kind: u32,
+    /// The setting or store the step reads, or renames from.
+    pub from: Str,
+    /// The setting or store a rename writes to; empty otherwise.
+    pub to: Str,
+    /// The GUID content had, for [`MigrationStep::RENAME_CONTENT`].
+    pub from_guid: [u8; 16],
+    /// The GUID content has now, for [`MigrationStep::RENAME_CONTENT`].
+    pub to_guid: [u8; 16],
+}
+
+impl MigrationStep {
+    /// Renames the setting `from` to `to`, value and comments kept.
+    pub const RENAME_SETTING: u32 = 1;
+    /// Changes the value of the setting `from` through the mod's
+    /// [`MigrateFn`], which gets and returns a TOML value.
+    pub const MAP_SETTING: u32 = 2;
+    /// Removes the setting `from`.
+    pub const REMOVE_SETTING: u32 = 3;
+    /// Renames the world store `from` to `to`.
+    pub const RENAME_STORE: u32 = 4;
+    /// Changes the world store `from` through the mod's [`MigrateFn`], which
+    /// gets and returns the whole TOML file.
+    pub const MAP_STORE: u32 = 5;
+    /// Reads content saved under `from_guid` as the content now under
+    /// `to_guid`.
+    pub const RENAME_CONTENT: u32 = 6;
+}
+
+/// One mod migration: an id and its steps, in order.
+///
+/// Frozen: written as an array.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::abi::{Migration, Str};
+///
+/// let migration = Migration { id: Str::new("2"), steps: core::ptr::null(), count: 0 };
+/// assert_eq!(migration.count, 0);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct Migration {
+    /// The migration's id, unique in the mod; the record keeps it.
+    pub id: Str,
+    /// Its steps.
+    pub steps: *const MigrationStep,
+    /// How many `steps` points at.
+    pub count: u32,
+}
+
+/// Changes a value for a migration step: `migration` and `step` index the
+/// set, `input` is a TOML value ([`MigrationStep::MAP_SETTING`]) or a whole
+/// TOML file ([`MigrationStep::MAP_STORE`]), and the answer goes to `out`,
+/// valid until the next call; an error status with the reason in `out`
+/// fails the migration.
+pub type MigrateFn = unsafe extern "system" fn(
+    user: *mut c_void,
+    migration: u32,
+    step: u32,
+    input: Str,
+    out: *mut Str,
+) -> Status;
+
+/// Every migration of a mod, oldest first, for [`HostApi::migrate`].
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::abi::{Header, MigrationSet};
+///
+/// assert_eq!(Header::of::<MigrationSet>().size as usize, size_of::<MigrationSet>());
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct MigrationSet {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// The migrations, oldest first.
+    pub migrations: *const Migration,
+    /// How many `migrations` points at.
+    pub count: u32,
+    /// Changes values for the steps that map them.
+    pub map: MigrateFn,
+    /// The pointer `map` takes.
+    pub user: *mut c_void,
 }
 
 /// One field of a service table or mod event, as its layout hash sees it.
@@ -4856,7 +4975,6 @@ const _: () = {
     assert!(core::mem::offset_of!(HostApi, hook_at) == 24 + 35 * 8);
     assert!(core::mem::offset_of!(HostApi, inventory_open) == 24 + 36 * 8);
     assert!(core::mem::offset_of!(HostApi, inventory_submit) == 24 + 38 * 8);
-    assert!(size_of::<HostApi>() == 24 + 122 * 8);
     assert!(core::mem::offset_of!(HostApi, affix_open) == 24 + 118 * 8);
     assert!(size_of::<AffixDefData>() == 8 + 32 + 8 + 16);
     // Frozen: read and written as arrays.
@@ -4871,6 +4989,12 @@ const _: () = {
     assert!(size_of::<StatSource>() == 20);
     assert!(size_of::<StatModify>() == 8 + 8 + 12 + 4 + 8);
     assert!(size_of::<StatChange>() == 8 + 24);
+    assert!(size_of::<HostApi>() == 24 + 123 * 8);
+    assert!(core::mem::offset_of!(HostApi, migrate) == 24 + 122 * 8);
+    // Frozen: written as arrays.
+    assert!(size_of::<MigrationStep>() == 8 + 16 + 16 + 16 + 16);
+    assert!(size_of::<Migration>() == 16 + 8 + 8);
+    assert!(size_of::<MigrationSet>() == 8 + 8 + 8 + 8 + 8);
     assert!(core::mem::offset_of!(HostApi, define_event) == 24 + 115 * 8);
     // Frozen: written as an array.
     assert!(size_of::<LayoutField>() == 24);

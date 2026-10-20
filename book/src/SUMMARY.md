@@ -37,6 +37,7 @@
 - [Messages between server and client](messages.md)
 - [The interface](interface.md)
 - [State and data folders](state.md)
+- [Migrations](migrations.md)
 - [Services between mods](services.md)
 
 # Reaching into the game

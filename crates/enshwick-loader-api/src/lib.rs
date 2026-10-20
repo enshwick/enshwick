@@ -92,6 +92,7 @@ pub mod item_data;
 pub mod knowledge;
 mod load;
 pub mod loot;
+pub mod migrations;
 pub mod mods;
 pub mod net;
 pub mod progress;
