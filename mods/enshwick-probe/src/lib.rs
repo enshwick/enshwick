@@ -6,7 +6,7 @@
 //! While on, it counts every game event by type and logs the counts every
 //! minute, logs each typed game event it receives, and runs its checks
 //! once the world has loaded: world key, entity queries, stats, component
-//! writes, actions, a per-world store and a save on demand. `/probe` commands run them again, from the
+//! writes, actions, spawns, a per-world store and a save on demand. `/probe` commands run them again, from the
 //! admin tools' command file as well.
 
 mod census;
@@ -100,7 +100,7 @@ impl Mod for Probe {
         load.on::<WorldSaved>(move |()| saved.saved())?;
         load.add_command(
             "probe",
-            "development probe; /probe census|check|vitals <id>|destroy <id>",
+            "development probe; /probe census|check|vitals <id>|destroy <id>|spawn <id>",
             move |ctx, args| match args {
                 _ if !ctx.is_admin() => "/probe is for administrators".into(),
                 ["census"] => census.lines().join("\n").into(),
@@ -110,7 +110,8 @@ impl Mod for Probe {
                 }
                 ["vitals", id] => checks.vitals_of(id).into(),
                 ["destroy", id] => checks.destroy(id).into(),
-                _ => "/probe census|check|vitals <id>|destroy <id>".into(),
+                ["spawn", id] => checks.spawn_copy(id).into(),
+                _ => "/probe census|check|vitals <id>|destroy <id>|spawn <id>".into(),
             },
         )?;
         enshwick_loader_api::info!("probe on");

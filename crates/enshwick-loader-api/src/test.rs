@@ -1856,6 +1856,20 @@ impl Installed {
         table::with(Vec::new(), |s| s.teleports.clone())
     }
 
+    /// The spawns the mod asked for, with the entity ids the fake handed
+    /// out, in order.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick_loader_api::test::FakeHost::new().install();
+    /// assert!(loader.spawns().is_empty());
+    /// ```
+    #[must_use]
+    pub fn spawns(&self) -> Vec<(u32, crate::abi::SpawnRequest)> {
+        table::with(Vec::new(), |s| s.spawns.clone())
+    }
+
     /// How many saves the mod asked for.
     ///
     /// # Examples
