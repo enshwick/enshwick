@@ -1,9 +1,9 @@
 {
-  "crates/enshwick-api": "0.1.0",
-  "crates/enshwick-loader": "0.1.0",
-  "crates/enshwick-stub": "0.1.0",
-  "mods/enshwick-flame-altar-count": "0.1.0",
-  "mods/enshwick-flame-altar-zones": "0.1.0",
-  "mods/enshwick-survivors-per-altar": "0.1.0",
+  "crates/enshwick-api": "0.1.1",
+  "crates/enshwick-loader": "0.1.1",
+  "crates/enshwick-stub": "0.1.1",
+  "mods/enshwick-flame-altar-count": "0.1.1",
+  "mods/enshwick-flame-altar-zones": "0.1.1",
+  "mods/enshwick-survivors-per-altar": "0.1.1",
   "mods/enshwick-furniture-comfort": "0.1.0"
 }
