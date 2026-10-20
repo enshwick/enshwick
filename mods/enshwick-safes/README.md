@@ -41,12 +41,14 @@ admins_can_open = true
 label_language = "en"
 ```
 
-`admins_can_open` lets administrators open, remove and rename every Safe.
-`label_language` is the language of the owner's name on a Safe and of the
+`cost_multiplier` scales the Safe's recipe and applies after a restart.
+`admins_can_open` lets administrators open, remove and rename every Safe, and
+applies while the game runs. `label_language` is the language of the owner's name on a Safe and of the
 `/safe` replies; a change applies after a restart, to Safes named from then
 on.
 
-Texts are in English, Ukrainian, German, French, Spanish and Polish; a server
+Texts are in English and Ukrainian; German, French, Spanish and Polish name
+and describe the Safe, and `/safe` replies in them fall back to English; a server
 can change or add them in `mod-configs/safes.texts.toml`, in the form of
 [texts.toml](src/texts.toml). Owners and the players they allowed are kept in
 `mod-data/safes/owners.toml`; files from 0.1 load as they are.
