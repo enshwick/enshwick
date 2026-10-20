@@ -712,8 +712,9 @@ impl Load<'_> {
     /// Lets the game group 32 altar zones into its 16 bases, refusing an
     /// altar that would start a 17th base; `Ok(false)` when the platform does
     /// not recognise this build's code, and the game keeps 16. The patches
-    /// count as the mod's own: one the game refuses at arming turns the mod
-    /// off.
+    /// count as the mod's own and go in only with the loader's hooks that
+    /// guard them: when one of either cannot be armed, none goes in, the game
+    /// keeps 16 and the mod is turned off.
     ///
     /// # Errors
     ///

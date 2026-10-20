@@ -353,6 +353,11 @@ impl Load<'_> {
     /// server or a hosting client, and for [`Purpose::Cursor`] on a client
     /// alone too: keep it quick and never block.
     ///
+    /// Several engine systems look survivors up for every survivor on every
+    /// tick, so `handler` runs many times a frame: answer from state read
+    /// without contention, such as a read lock or an atomic snapshot, and
+    /// never allocate on the common path.
+    ///
     /// # Errors
     ///
     /// [`Off`] after init, when another mod answers already, on a build that
@@ -375,7 +380,9 @@ impl Load<'_> {
     }
 
     /// Runs `filter` after a survivor's own check kept its bed; returning
-    /// `false` makes the game clear the bed. Server's worker threads.
+    /// `false` makes the game clear the bed. Server's worker threads, for
+    /// every survivor with a bed on every tick: keep it quick and never
+    /// block.
     ///
     /// # Errors
     ///
@@ -470,7 +477,8 @@ impl Load<'_> {
     /// Makes `merge` decide what the client's survivor menu shows for a
     /// survivor with several entities: it gets the status byte of each and
     /// returns the byte to show, or `None` for the game's. Client only; one
-    /// mod at a time.
+    /// mod at a time. It runs every frame while the menu shows, once per such
+    /// survivor: it must not allocate or lock.
     ///
     /// # Errors
     ///

@@ -13,7 +13,7 @@ use std::sync::{Mutex, OnceLock, PoisonError};
 
 use enshwick_loader_api::abi::{HookFlags, ResourceKey, ResourcePatchFn, Status};
 
-use crate::chains::{LOADER, Link};
+use crate::chains::Next;
 use crate::host::Loader;
 
 /// Marks a handle the loader made.
@@ -50,8 +50,10 @@ struct State {
 static PENDING_TEXTS: Mutex<Vec<(u32, u32, String)>> = Mutex::new(Vec::new());
 /// Mod texts once sealed: tag id to `(language, text)`, read without a lock.
 static TEXTS: OnceLock<std::collections::HashMap<u32, Vec<(u32, &'static str)>>> = OnceLock::new();
-static TEXT_NEXT: AtomicUsize = AtomicUsize::new(0);
-static ENGLISH_NEXT: AtomicUsize = AtomicUsize::new(0);
+// SAFETY: each slot joins the chain of the function its type names.
+static TEXT_NEXT: Next<TextFn> = unsafe { Next::new() };
+// SAFETY: as above.
+static ENGLISH_NEXT: Next<TextFn> = unsafe { Next::new() };
 static POOL_LANGUAGE: AtomicUsize = AtomicUsize::new(usize::MAX);
 /// The English the game falls back to.
 const ENGLISH: u32 = 1;
@@ -103,7 +105,7 @@ unsafe extern "system" fn lookup(out: *mut [u64; 3], pool: *mut u8, id: u32) -> 
     match text_for(id, language) {
         Some(text) => answer(out, text),
         // SAFETY: forwarded unchanged.
-        None => unsafe { next::<TextFn>(&TEXT_NEXT)(out, pool, id) },
+        None => unsafe { TEXT_NEXT.get()(out, pool, id) },
     }
 }
 
@@ -115,7 +117,7 @@ unsafe extern "system" fn lookup_english(
     match text_for(id, ENGLISH) {
         Some(text) => answer(out, text),
         // SAFETY: forwarded unchanged.
-        None => unsafe { next::<TextFn>(&ENGLISH_NEXT)(out, pool, id) },
+        None => unsafe { ENGLISH_NEXT.get()(out, pool, id) },
     }
 }
 
@@ -145,24 +147,21 @@ fn seal_texts(loader: &'static Loader) {
         usize::try_from(offset).unwrap_or(usize::MAX),
         Ordering::Relaxed,
     );
-    for (rva, detour, next) in [
-        (lookup_rva, lookup as *const (), &TEXT_NEXT),
-        (english_rva, lookup_english as *const (), &ENGLISH_NEXT),
-    ] {
-        let link = Link {
-            owner: LOADER,
-            detour: detour.addr(),
-            next,
-            priority: i32::MIN,
-            flags: HookFlags::NONE,
-        };
-        if let Ok(mut chains) = loader.chains.lock() {
-            let status = chains.add(loader.base + rva, link);
-            if !status.is_ok() {
-                crate::log!(WARN, "mod texts off: a lookup was refused ({})", status.0);
-            }
-        }
-    }
+    let base = loader.base;
+    loader.link_feature(
+        "mod texts",
+        Some(base + lookup_rva),
+        &TEXT_NEXT,
+        lookup as TextFn,
+        HookFlags::NONE,
+    );
+    loader.link_feature(
+        "mod English texts",
+        Some(base + english_rva),
+        &ENGLISH_NEXT,
+        lookup_english as TextFn,
+        HookFlags::NONE,
+    );
     crate::log!(INFO, "{count} texts from mods");
 }
 
@@ -173,9 +172,12 @@ static SERVED_LIST: OnceLock<Box<[Served]>> = OnceLock::new();
 /// Cloned templates ever served, clone GUID to vanilla GUID: read in place of
 /// a clone no mod serves now.
 static ALIASES: OnceLock<rustc_hash::FxHashMap<[u8; 16], [u8; 16]>> = OnceLock::new();
-static OPEN_NEXT: AtomicUsize = AtomicUsize::new(0);
-static RESOLVE_NEXT: AtomicUsize = AtomicUsize::new(0);
-static KEY_NEXT: AtomicUsize = AtomicUsize::new(0);
+// SAFETY: each slot joins the chain of the function its type names.
+static OPEN_NEXT: Next<OpenFn> = unsafe { Next::new() };
+// SAFETY: as above.
+static RESOLVE_NEXT: Next<ResolveFn> = unsafe { Next::new() };
+// SAFETY: as above.
+static KEY_NEXT: Next<KeyFn> = unsafe { Next::new() };
 
 type OpenFn = unsafe extern "system" fn(
     out: *mut u32,
@@ -238,34 +240,26 @@ pub(crate) fn seal_and_link(loader: &'static Loader) {
     if served_recipes() {
         crate::code::lift_workshop_limit(loader);
     }
-    let links: [(&str, *const (), &'static AtomicUsize); 3] = [
-        ("resource.open", open as *const (), &OPEN_NEXT),
-        ("resource.resolve", resolve as *const (), &RESOLVE_NEXT),
-        ("resource.key_of", key_of as *const (), &KEY_NEXT),
-    ];
-    for (symbol, detour, next) in links {
-        let Some(rva) = loader.build.symbol(symbol) else {
-            crate::log!(WARN, "served resources off: {symbol} is not in this build");
-            return;
-        };
-        let link = Link {
-            owner: LOADER,
-            detour: detour.addr(),
-            next,
-            priority: i32::MIN,
-            flags: HookFlags::NONE,
-        };
-        if let Ok(mut chains) = loader.chains.lock() {
-            let status = chains.add(loader.base + rva, link);
-            if !status.is_ok() {
-                crate::log!(
-                    WARN,
-                    "served resources off: {symbol} refused ({})",
-                    status.0
-                );
-            }
-        }
-    }
+    let none = HookFlags::NONE;
+    let _linked = loader.link_feature(
+        "served resources (resource.open)",
+        loader.address("resource.open"),
+        &OPEN_NEXT,
+        open,
+        none,
+    ) && loader.link_feature(
+        "served resources (resource.resolve)",
+        loader.address("resource.resolve"),
+        &RESOLVE_NEXT,
+        resolve,
+        none,
+    ) && loader.link_feature(
+        "served resources (resource.key_of)",
+        loader.address("resource.key_of"),
+        &KEY_NEXT,
+        key_of,
+        none,
+    );
     crate::log!(INFO, "{count} resources served by mods");
     if orphans > 0 {
         crate::log!(
@@ -319,13 +313,6 @@ fn served_recipes() -> bool {
         .is_some_and(|served| served.iter().any(|s| s.key == recipe_registry()))
 }
 
-fn next<F: Copy>(slot: &AtomicUsize) -> F {
-    let address = slot.load(Ordering::Acquire);
-    // SAFETY: the loader points the slot at the rest of the chain, which has
-    // the hooked function's signature, before the link can run.
-    unsafe { core::mem::transmute_copy::<usize, F>(&address) }
-}
-
 fn served(handle: u32) -> Option<&'static Served> {
     if handle & SERVED == 0 {
         return None;
@@ -362,18 +349,18 @@ unsafe extern "system" fn open(
     let Some((index, entry)) = found else {
         if let Some(vanilla) = wanted.and_then(alias) {
             // SAFETY: the game's open with a key of ours, valid for the call.
-            return unsafe { next::<OpenFn>(&OPEN_NEXT)(out, database, &raw const vanilla) };
+            return unsafe { OPEN_NEXT.get()(out, database, &raw const vanilla) };
         }
         // SAFETY: forwarded unchanged.
-        return unsafe { next::<OpenFn>(&OPEN_NEXT)(out, database, key) };
+        return unsafe { OPEN_NEXT.get()(out, database, key) };
     };
     let mut base_handle = 0u32;
     // SAFETY: the game's open with a key of ours, valid for the call.
-    unsafe { next::<OpenFn>(&OPEN_NEXT)(&raw mut base_handle, database, &raw const entry.base) };
+    unsafe { OPEN_NEXT.get()(&raw mut base_handle, database, &raw const entry.base) };
     if base_handle == 0 {
         // No base in this archive: the served key stays missing.
         // SAFETY: forwarded unchanged.
-        return unsafe { next::<OpenFn>(&OPEN_NEXT)(out, database, key) };
+        return unsafe { OPEN_NEXT.get()(out, database, key) };
     }
     entry
         .state
@@ -395,7 +382,7 @@ unsafe extern "system" fn resolve(
 ) -> *mut [u64; 3] {
     let Some(entry) = served(handle) else {
         // SAFETY: forwarded unchanged.
-        return unsafe { next::<ResolveFn>(&RESOLVE_NEXT)(out, database, handle) };
+        return unsafe { RESOLVE_NEXT.get()(out, database, handle) };
     };
     let result =
         build(entry, database).map_or([0; 3], |(data, len)| [data as u64, len as u64, RESIDENT]);
@@ -417,7 +404,7 @@ fn build(entry: &Served, database: *mut u8) -> Option<(usize, usize)> {
     }
     let mut base = [0u64; 3];
     // SAFETY: the game's resolve with the base's handle.
-    unsafe { next::<ResolveFn>(&RESOLVE_NEXT)(&raw mut base, database, state.base_handle) };
+    unsafe { RESOLVE_NEXT.get()(&raw mut base, database, state.base_handle) };
     let (data, len) = (
         usize::try_from(base[0]).ok()?,
         usize::try_from(base[1]).ok()?,
@@ -491,7 +478,7 @@ fn hex(bytes: &[u8]) -> String {
 unsafe extern "system" fn key_of(out: *mut u8, database: *mut u8, handle: u32) -> *mut u8 {
     let Some(entry) = served(handle) else {
         // SAFETY: forwarded unchanged.
-        return unsafe { next::<KeyFn>(&KEY_NEXT)(out, database, handle) };
+        return unsafe { KEY_NEXT.get()(out, database, handle) };
     };
     if !out.is_null() {
         // Status byte, a word, then the key padded to 32 bytes, as the game writes it.

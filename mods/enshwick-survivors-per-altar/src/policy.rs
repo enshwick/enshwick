@@ -1,48 +1,62 @@
 //! The copies' answers to the game's survivor lookups, bed checks and staff
 //! uses. The original survivor, the one the game's record names, is never
 //! touched.
+//!
+//! The game asks from many places every frame, so lookups share a read
+//! lock: only the uniqueness pass, which files copies, writes. Altar zones
+//! are read when the altars change, never in a lookup.
 
 use std::collections::BTreeMap;
-use std::sync::Mutex;
+use std::sync::{PoisonError, RwLock};
 use std::time::{Duration, Instant};
 
 use enshwick_loader_api::abi::Side;
 use enshwick_loader_api::altars::Altars;
 use enshwick_loader_api::ecs::Entity;
-use enshwick_loader_api::events::Shutdown;
+use enshwick_loader_api::events::{AltarsChanged, Shutdown};
 use enshwick_loader_api::survivors::{Answer, BedCheck, Lookup, Purpose, Summon};
 use enshwick_loader_api::{Load, Off};
 
 use crate::copies::{Copies, Verdict, Zone};
 
-const REFRESH: Duration = Duration::from_secs(2);
+/// How often the uniqueness pass lets go of copies it no longer sees.
+const SWEEP: Duration = Duration::from_secs(2);
 const FORGET_AFTER: Duration = Duration::from_secs(3);
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 struct Shared {
     copies: Copies,
     /// When the uniqueness pass last saw each copy.
     seen: BTreeMap<u32, Instant>,
-    refreshed: Option<Instant>,
+    swept: Instant,
 }
 
-static SHARED: Mutex<Option<Shared>> = Mutex::new(None);
+impl Shared {
+    fn new() -> Self {
+        Self {
+            copies: Copies::default(),
+            seen: BTreeMap::new(),
+            swept: Instant::now(),
+        }
+    }
+}
+
+static SHARED: RwLock<Option<Shared>> = RwLock::new(None);
 
 pub(crate) fn link(load: &mut Load<'_>, staffs: bool) -> Result<(), Off> {
     let altars = load.altars()?;
-    if let Ok(mut shared) = SHARED.lock() {
-        *shared = Some(Shared::default());
-    }
-    load.on_survivor_lookup(move |lookup| {
-        with_shared(altars, |shared| answer(shared, lookup)).unwrap_or(Answer::Vanilla)
+    forget();
+    load.on::<AltarsChanged>(move |()| read_altars(altars))?;
+    load.on_survivor_lookup(|lookup| {
+        match lookup.purpose {
+            Purpose::Uniqueness { .. } => write(|shared| answer(shared, lookup)),
+            _ => read(|shared| answer_reading(shared, lookup)),
+        }
+        .unwrap_or(Answer::Vanilla)
     })?;
-    load.on_survivor_bed_check(move |check| {
-        with_shared(altars, |shared| keeps(shared, check)).unwrap_or(true)
-    })?;
+    load.on_survivor_bed_check(|check| read(|shared| keeps(shared, check)).unwrap_or(true))?;
     if staffs {
-        load.on_summon(move |summon| {
-            with_shared(altars, |shared| consumes(shared, summon)).unwrap_or(false)
-        })?;
+        load.on_summon(|summon| read(|shared| consumes(shared, summon)).unwrap_or(false))?;
     }
     if load.host().build().side == Side::CLIENT {
         // Entities belong to one hosted game; the next starts clean.
@@ -52,25 +66,65 @@ pub(crate) fn link(load: &mut Load<'_>, staffs: bool) -> Result<(), Off> {
 }
 
 fn forget() {
-    if let Ok(mut shared) = SHARED.lock() {
-        *shared = Some(Shared::default());
+    *SHARED.write().unwrap_or_else(PoisonError::into_inner) = Some(Shared::new());
+}
+
+fn read<R>(f: impl FnOnce(&Shared) -> R) -> Option<R> {
+    let slot = SHARED.read().unwrap_or_else(PoisonError::into_inner);
+    slot.as_ref().map(f)
+}
+
+fn write<R>(f: impl FnOnce(&mut Shared) -> R) -> Option<R> {
+    let mut slot = SHARED.write().unwrap_or_else(PoisonError::into_inner);
+    slot.as_mut().map(f)
+}
+
+/// Takes the altars' zones, which move only when someone builds.
+fn read_altars(altars: Altars) {
+    let list = altars.list();
+    if list.is_empty() {
+        return;
     }
+    write(|shared| {
+        shared.copies.set_altars(
+            list.iter()
+                .filter(|altar| !altar.zone.is_empty())
+                .map(|altar| {
+                    (
+                        u64::from(altar.entity.0),
+                        Zone::new(altar.zone.min, altar.zone.max),
+                    )
+                }),
+        );
+    });
 }
 
-fn with_shared<R>(altars: Altars, f: impl FnOnce(&mut Shared) -> R) -> Option<R> {
-    let mut slot = SHARED.lock().ok()?;
-    let shared = slot.as_mut()?;
-    refresh(altars, shared);
-    Some(f(shared))
-}
-
+/// The uniqueness pass, which files copies.
 fn answer(shared: &mut Shared, lookup: &Lookup) -> Answer {
     let npc = lookup.survivor.0;
     let found = lookup.vanilla.map_or(0, |e| e.0);
-    let hosting = enshwick_loader_api::host().is_some_and(|host| host.hosting());
     match lookup.purpose {
-        Purpose::Cursor => crate::cursor::answer(hosting, shared.copies.copy_count(npc)),
-        Purpose::Uniqueness { me, home } => file_copy(shared, npc, found, me.0, home),
+        Purpose::Uniqueness { me, home } => {
+            let now = Instant::now();
+            if now.duration_since(shared.swept) >= SWEEP {
+                sweep(shared, now);
+            }
+            file_copy(shared, npc, found, me.0, home, now)
+        }
+        _ => answer_reading(shared, lookup),
+    }
+}
+
+/// Every other lookup, which only reads.
+fn answer_reading(shared: &Shared, lookup: &Lookup) -> Answer {
+    let npc = lookup.survivor.0;
+    let found = lookup.vanilla.map_or(0, |e| e.0);
+    match lookup.purpose {
+        Purpose::Cursor => {
+            let hosting = enshwick_loader_api::host().is_some_and(|host| host.hosting());
+            crate::cursor::answer(hosting, shared.copies.copy_count(npc))
+        }
+        Purpose::Uniqueness { .. } => Answer::Vanilla,
         Purpose::Spawn { target } => {
             if let Some(copy) = shared.copies.for_spawn(npc, target, found) {
                 return Answer::Entity(Entity(copy));
@@ -113,8 +167,15 @@ fn entity_or_nobody(entity: Option<u32>) -> Answer {
     entity.map_or(Answer::Nobody, |e| Answer::Entity(Entity(e)))
 }
 
-fn file_copy(shared: &mut Shared, npc: u32, found: u32, me: u32, home: [i64; 3]) -> Answer {
-    shared.seen.insert(me, Instant::now());
+fn file_copy(
+    shared: &mut Shared,
+    npc: u32,
+    found: u32,
+    me: u32,
+    home: [i64; 3],
+    now: Instant,
+) -> Answer {
+    shared.seen.insert(me, now);
     // Right after a load the zones are not known yet: keep every copy until
     // they are, or each would look like one outside the zones.
     if !shared.copies.knows_altars() {
@@ -140,7 +201,7 @@ fn file_copy(shared: &mut Shared, npc: u32, found: u32, me: u32, home: [i64; 3])
 
 /// Whether a copy keeps a bed the game kept: not one at another altar than
 /// its home's.
-fn keeps(shared: &mut Shared, check: &BedCheck) -> bool {
+fn keeps(shared: &Shared, check: &BedCheck) -> bool {
     if !shared.copies.knows_altars() || shared.copies.copy_count(check.survivor.0) <= 1 {
         return true;
     }
@@ -158,7 +219,7 @@ fn keeps(shared: &mut Shared, check: &BedCheck) -> bool {
 /// works. The staff's effect spawn, which carries the same item, is left
 /// alone, and so is a use outside every altar zone, where the copy would not
 /// stay.
-fn consumes(shared: &mut Shared, summon: &Summon) -> bool {
+fn consumes(shared: &Shared, summon: &Summon) -> bool {
     let Some(staff) = crate::staffs::copy_staff(summon.item) else {
         return false;
     };
@@ -180,30 +241,13 @@ fn consumes(shared: &mut Shared, summon: &Summon) -> bool {
     true
 }
 
-/// Altars move only when someone builds: read their zones now and then, and
-/// let go of copies the uniqueness pass no longer sees.
-fn refresh(altars: Altars, shared: &mut Shared) {
-    if shared.refreshed.is_some_and(|at| at.elapsed() < REFRESH) {
-        return;
-    }
-    shared.refreshed = Some(Instant::now());
-    let list = altars.list();
-    if !list.is_empty() {
-        shared.copies.set_altars(
-            list.iter()
-                .filter(|altar| !altar.zone.is_empty())
-                .map(|altar| {
-                    (
-                        u64::from(altar.entity.0),
-                        Zone::new(altar.zone.min, altar.zone.max),
-                    )
-                }),
-        );
-    }
+/// Lets go of copies the uniqueness pass no longer sees.
+fn sweep(shared: &mut Shared, now: Instant) {
+    shared.swept = now;
     let gone: Vec<u32> = shared
         .seen
         .iter()
-        .filter(|(_, at)| at.elapsed() > FORGET_AFTER)
+        .filter(|(_, at)| now.duration_since(**at) > FORGET_AFTER)
         .map(|(&e, _)| e)
         .collect();
     for entity in gone {

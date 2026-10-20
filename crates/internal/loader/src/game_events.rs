@@ -10,13 +10,13 @@
 
 use core::cell::RefCell;
 use core::ffi::c_void;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock, PoisonError};
 
 use enshwick_loader_api::abi::{GameEventData, GameEventFn, Header, HookFlags, Status};
 use rustc_hash::FxHashSet;
 
-use crate::chains::{LOADER, Link};
+use crate::chains::Next;
 use crate::host::Loader;
 
 /// A mod's handler for one event type, or for all with hash 0.
@@ -72,7 +72,8 @@ struct Batch {
 static PENDING: Mutex<Vec<Subscriber>> = Mutex::new(Vec::new());
 static SEALED: OnceLock<Sealed> = OnceLock::new();
 static LOADED: OnceLock<(&'static Loader, Layout)> = OnceLock::new();
-static MERGE_NEXT: AtomicUsize = AtomicUsize::new(0);
+// SAFETY: each slot joins the chain of the function its type names.
+static MERGE_NEXT: Next<MergeFn> = unsafe { Next::new() };
 /// Set once the loader's own work in the link panicked: from then on the link
 /// only forwards.
 static OFF: AtomicBool = AtomicBool::new(false);
@@ -134,25 +135,14 @@ pub(crate) fn link(loader: &'static Loader) {
             record_align: constant("ecs.event_record_align")?.max(1),
         })
     })();
-    let (Some(layout), Some(rva)) = (layout, loader.build.symbol("ecs.event_merge")) else {
+    let Some(layout) = layout else {
         crate::log!(WARN, "engine events off: this build has no event layout");
         return;
     };
     let _first = LOADED.set((loader, layout));
-    let link = Link {
-        owner: LOADER,
-        detour: (merge as *const ()).addr(),
-        next: &MERGE_NEXT,
-        priority: i32::MIN,
-        flags: HookFlags::NONE,
-    };
-    let status = loader.chains.lock().map_or(Status::REFUSED, |mut chains| {
-        chains.add(loader.base + rva, link)
-    });
-    if status.is_ok() {
+    let target = loader.address("ecs.event_merge");
+    if loader.link_feature("engine events", target, &MERGE_NEXT, merge, HookFlags::NONE) {
         crate::log!(INFO, "engine events: {count} subscriptions");
-    } else {
-        crate::log!(WARN, "engine events off: refused ({})", status.0);
     }
 }
 
@@ -165,12 +155,8 @@ unsafe extern "system" fn merge(entity_world: *mut u8) {
         // engine moves its streams.
         guarded(|| unsafe { copy(layout, entity_world) });
     }
-    let next = MERGE_NEXT.load(Ordering::Acquire);
-    // SAFETY: the loader points the slot at the rest of the chain, which has
-    // the hooked function's signature, before the link can run.
-    let next = unsafe { core::mem::transmute::<usize, MergeFn>(next) };
     // SAFETY: forwarded unchanged.
-    unsafe { next(entity_world) };
+    unsafe { MERGE_NEXT.get()(entity_world) };
     if let Some((loader, _)) = ours {
         guarded(|| deliver(loader));
     }

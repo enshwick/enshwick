@@ -12,7 +12,7 @@
 //! administrator with no character, on the game thread.
 
 use core::ffi::c_void;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock, PoisonError};
 
 use enshwick_loader_api::abi::{
@@ -20,7 +20,7 @@ use enshwick_loader_api::abi::{
 };
 use enshwick_loader_api::commands::{is_valid_name, parse_line};
 
-use crate::chains::{LOADER, Link};
+use crate::chains::Next;
 use crate::host::Loader;
 use crate::settings::LOADER_ID;
 
@@ -91,7 +91,8 @@ type PostFn = unsafe extern "system" fn(
 type MarkFn = unsafe extern "system" fn(store: *mut u8, node: *mut u8, slot: u32, bytes: u32);
 
 static LOADED: OnceLock<(&'static Loader, Layout)> = OnceLock::new();
-static POST_NEXT: AtomicUsize = AtomicUsize::new(0);
+// SAFETY: the slot joins the chain of the chat post, typed `PostFn`.
+static POST_NEXT: Next<PostFn> = unsafe { Next::new() };
 static COMMANDS: Mutex<Vec<Command>> = Mutex::new(Vec::new());
 static SEALED: AtomicBool = AtomicBool::new(false);
 static OUTBOX: Mutex<Vec<Line>> = Mutex::new(Vec::new());
@@ -198,31 +199,17 @@ pub(crate) fn link(loader: &'static Loader) {
     if LOADED.set((loader, layout)).is_err() {
         return;
     }
-    let link = Link {
-        owner: LOADER,
-        detour: (post as PostFn as *const ()).addr(),
-        next: &POST_NEXT,
-        priority: i32::MIN,
-        flags: HookFlags::CALLER_FRAME,
-    };
-    if let Ok(mut chains) = loader.chains.lock() {
-        let status = chains.add(target, link);
-        if !status.is_ok() {
-            crate::log!(WARN, "chat commands off: refused ({})", status.0);
-            return;
-        }
+    let status = loader.link(target, &POST_NEXT, post, HookFlags::CALLER_FRAME);
+    if !status.is_ok() {
+        crate::log!(WARN, "chat commands off: refused ({})", status.0);
+        return;
     }
     let count = COMMANDS.lock().map(|c| c.len()).unwrap_or_default();
     crate::log!(INFO, "chat commands on: {count} from mods, and /enshwick");
 }
 
 fn next() -> Option<PostFn> {
-    let address = POST_NEXT.load(Ordering::Acquire);
-    (address != 0).then(|| {
-        // SAFETY: the loader points the slot at the rest of the chain, which
-        // has the chat post's signature.
-        unsafe { core::mem::transmute::<usize, PostFn>(address) }
-    })
+    POST_NEXT.wired()
 }
 
 unsafe extern "system" fn post(

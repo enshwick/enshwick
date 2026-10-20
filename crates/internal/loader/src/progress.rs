@@ -6,12 +6,14 @@ use std::cell::RefCell;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Mutex, OnceLock, PoisonError};
 
+use crate::chains::Next;
+use crate::host::{Registered, take};
+
 use enshwick_loader_api::abi::{
     Comfort, ComfortFn, ExperienceFn, ExperiencePass, ExperienceRow, Header, HookFlags, Side,
     SkillCheck, SkillFn, Status,
 };
 
-use crate::chains::{LOADER, Link};
 use crate::ecs::Engine;
 use crate::host::Loader;
 
@@ -29,13 +31,6 @@ const TRACKER: usize = 7;
 const LEVEL: usize = 8;
 const BALANCING: usize = 20;
 const REGISTRY: usize = 22;
-
-#[derive(Debug, Clone, Copy)]
-struct Registered<F> {
-    owner: usize,
-    callback: F,
-    user: usize,
-}
 
 #[derive(Debug, Default)]
 struct Sealed {
@@ -64,9 +59,12 @@ static LOADED: OnceLock<&'static Loader> = OnceLock::new();
 static FLY_MODE: AtomicUsize = AtomicUsize::new(0);
 static LEVELS: OnceLock<Option<Levels>> = OnceLock::new();
 
-static SKILL_NEXT: AtomicUsize = AtomicUsize::new(0);
-static COMFORT_NEXT: AtomicUsize = AtomicUsize::new(0);
-static LEVEL_NEXT: AtomicUsize = AtomicUsize::new(0);
+// SAFETY: each slot joins the chain of the function its type names.
+static SKILL_NEXT: Next<NodeUnlockedFn> = unsafe { Next::new() };
+// SAFETY: as above.
+static COMFORT_NEXT: Next<RegisterFn> = unsafe { Next::new() };
+// SAFETY: as above.
+static LEVEL_NEXT: Next<SystemFn> = unsafe { Next::new() };
 
 thread_local! {
     static ROWS: RefCell<Vec<ExperienceRow>> = const { RefCell::new(Vec::new()) };
@@ -86,9 +84,8 @@ type LevelCapFn = unsafe extern "system" fn(balancing: u64) -> u32;
 
 fn symbol(loader: &Loader, name: &str) -> Option<usize> {
     loader
-        .build
-        .symbol(name)
-        .and_then(|rva| usize::try_from(loader.base + rva).ok())
+        .address(name)
+        .and_then(|address| usize::try_from(address).ok())
 }
 
 fn levels(loader: &Loader) -> Option<&'static Levels> {
@@ -117,14 +114,6 @@ fn too_late(loader: &Loader) -> bool {
     loader.delivery.get().is_some() || SEALED.get().is_some()
 }
 
-fn registered<F>(owner: usize, callback: F, user: *mut c_void) -> Registered<F> {
-    Registered {
-        owner,
-        callback,
-        user: user.expose_provenance(),
-    }
-}
-
 pub(crate) fn register_skill(
     loader: &Loader,
     owner: usize,
@@ -141,7 +130,7 @@ pub(crate) fn register_skill(
     SKILLS
         .lock()
         .unwrap_or_else(PoisonError::into_inner)
-        .push((node, registered(owner, callback, user)));
+        .push((node, Registered::new(owner, callback, user)));
     Status::OK
 }
 
@@ -160,7 +149,7 @@ pub(crate) fn register_comfort(
     COMFORT
         .lock()
         .unwrap_or_else(PoisonError::into_inner)
-        .push(registered(owner, callback, user));
+        .push(Registered::new(owner, callback, user));
     Status::OK
 }
 
@@ -179,12 +168,8 @@ pub(crate) fn register_experience(
     EXPERIENCE_FILTERS
         .lock()
         .unwrap_or_else(PoisonError::into_inner)
-        .push(registered(owner, callback, user));
+        .push(Registered::new(owner, callback, user));
     Status::OK
-}
-
-fn take<T>(list: &Mutex<Vec<T>>) -> Vec<T> {
-    std::mem::take(&mut *list.lock().unwrap_or_else(PoisonError::into_inner))
 }
 
 pub(crate) fn link(loader: &'static Loader) {
@@ -208,61 +193,40 @@ pub(crate) fn link(loader: &'static Loader) {
         .reflection
         .system("player_level")
         .map_or(0, enshwick_loader_reflect::System::entry);
-    let links: [(&str, u64, *const (), &'static AtomicUsize, HookFlags); 3] = [
-        (
+    let address = |name| loader.address(name);
+    if wants[0]
+        && loader.link_feature(
             "skill checks",
-            symbol(loader, "skill.node_unlocked").map_or(0, |a| a as u64),
-            node_unlocked as NodeUnlockedFn as *const (),
+            address("skill.node_unlocked"),
             &SKILL_NEXT,
+            node_unlocked,
             HookFlags::CALLER_FRAME,
-        ),
-        (
-            "comfort",
-            symbol(loader, "comfort.base_register").map_or(0, |a| a as u64),
-            register as RegisterFn as *const (),
-            &COMFORT_NEXT,
-            HookFlags::NONE,
-        ),
-        (
-            "experience",
-            player_level,
-            player_level_link as SystemFn as *const (),
-            &LEVEL_NEXT,
-            HookFlags::NONE,
-        ),
-    ];
-    for ((name, target, detour, next, flags), wanted) in links.into_iter().zip(wants) {
-        if !wanted {
-            continue;
-        }
-        if target == 0 {
-            crate::log!(WARN, "{name}: not in this build");
-            continue;
-        }
-        let link = Link {
-            owner: LOADER,
-            detour: detour.addr(),
-            next,
-            priority: i32::MIN,
-            flags,
-        };
-        let status = loader
-            .chains
-            .lock()
-            .map_or(Status::REFUSED, |mut chains| chains.add(target, link));
-        if status.is_ok() {
-            crate::log!(INFO, "{name} filtered by mods");
-        } else {
-            crate::log!(WARN, "{name}: refused ({})", status.0);
-        }
+        )
+    {
+        crate::log!(INFO, "skill checks filtered by mods");
     }
-}
-
-fn next<F: Copy>(slot: &AtomicUsize) -> F {
-    let address = slot.load(Ordering::Acquire);
-    // SAFETY: the loader points the slot at the rest of the chain, which has
-    // the hooked function's signature, before the link can run.
-    unsafe { core::mem::transmute_copy::<usize, F>(&address) }
+    if wants[1]
+        && loader.link_feature(
+            "comfort",
+            address("comfort.base_register"),
+            &COMFORT_NEXT,
+            register,
+            HookFlags::NONE,
+        )
+    {
+        crate::log!(INFO, "comfort filtered by mods");
+    }
+    if wants[2]
+        && loader.link_feature(
+            "experience",
+            Some(player_level),
+            &LEVEL_NEXT,
+            player_level_link,
+            HookFlags::NONE,
+        )
+    {
+        crate::log!(INFO, "experience filtered by mods");
+    }
 }
 
 unsafe extern "system" fn node_unlocked(node: u32, bits: *const u64, tree: *const u8) -> u8 {
@@ -271,7 +235,7 @@ unsafe extern "system" fn node_unlocked(node: u32, bits: *const u64, tree: *cons
         .is_some_and(|s| s.skills.iter().any(|(n, _)| *n == node));
     if !ours {
         // SAFETY: the rest of the chain takes the arguments the game passed.
-        return unsafe { next::<NodeUnlockedFn>(&SKILL_NEXT)(node, bits, tree) };
+        return unsafe { SKILL_NEXT.get()(node, bits, tree) };
     }
     // SAFETY: as above.
     unsafe { override_skill(node, bits, tree) }
@@ -293,7 +257,7 @@ unsafe fn override_skill(node: u32, bits: *const u64, tree: *const u8) -> u8 {
         }
     });
     // SAFETY: the rest of the chain takes the arguments the game passed.
-    let vanilla = unsafe { next::<NodeUnlockedFn>(&SKILL_NEXT)(node, bits, tree) };
+    let vanilla = unsafe { SKILL_NEXT.get()(node, bits, tree) };
     let check = SkillCheck {
         header: Header::of::<SkillCheck>(),
         node,
@@ -352,7 +316,7 @@ unsafe extern "system" fn register(
             })
     });
     // SAFETY: the rest of the chain takes the arguments the game passed.
-    unsafe { next::<RegisterFn>(&COMFORT_NEXT)(system, category, comfort, position) }
+    unsafe { COMFORT_NEXT.get()(system, category, comfort, position) }
 }
 
 unsafe extern "system" fn player_level_link(ctx: *mut u64) {
@@ -369,7 +333,7 @@ unsafe extern "system" fn player_level_link(ctx: *mut u64) {
         unsafe { engine.set_row(ctx, saved) };
     }
     // SAFETY: the original system takes its own context.
-    unsafe { next::<SystemFn>(&LEVEL_NEXT)(ctx) };
+    unsafe { LEVEL_NEXT.get()(ctx) };
 }
 
 /// What `need_for` needs during one pass.

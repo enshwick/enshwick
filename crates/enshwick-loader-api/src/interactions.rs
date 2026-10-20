@@ -110,6 +110,11 @@ impl Load<'_> {
     /// on the thread of the system that checks the interaction: keep it quick
     /// and never block.
     ///
+    /// The game asks whether to offer an interaction for every entity in
+    /// each player's reach on every frame, so `filter` runs many times a
+    /// frame: it must not allocate, lock or log. Moves, sorts, stock draws,
+    /// dismantling and upgrades ask once per action.
+    ///
     /// # Errors
     ///
     /// [`Off`] after init, on a build that lacks a piece, or with a loader

@@ -1414,7 +1414,8 @@ impl Installed {
     }
 
     /// Makes `altars` the altars of the world, as the loader lists them to a
-    /// mod that opened altars.
+    /// mod that opened altars, and raises
+    /// [`AltarsChanged`](crate::events::AltarsChanged) as the loader does.
     ///
     /// # Examples
     ///
@@ -1428,6 +1429,7 @@ impl Installed {
     /// ```
     pub fn set_altars(&self, altars: &[AltarInfo]) {
         table::with((), |s| s.altars = altars.to_vec());
+        let _handled = self.raise::<crate::events::AltarsChanged>(&());
     }
 
     /// Whether the mod opened altars, and whether it controls their zones.

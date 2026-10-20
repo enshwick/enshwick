@@ -626,7 +626,8 @@ impl World {
     /// The key of the world the server runs: its save file's name and a hash
     /// of its folder, such as `world0-1a2b3c4d`, the same in every session;
     /// `None` before the server has read the world, or under a loader older
-    /// than ABI minor 21. Any thread.
+    /// than ABI minor 21. On a client it is the key of the game it hosts,
+    /// and `None` once that game ends. Any thread.
     ///
     /// # Examples
     ///

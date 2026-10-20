@@ -250,6 +250,11 @@ impl Load<'_> {
     /// server applies it; changes to `gained` are written back and sent to
     /// the players. Server's worker threads, once per batch.
     ///
+    /// The engine runs its experience system several times a tick, one batch
+    /// of characters each, so `filter` runs on every tick, most often with
+    /// nothing gained: return early when no row gained anything, and never
+    /// allocate or lock on the way.
+    ///
     /// # Errors
     ///
     /// As for [`Load::on_skill`].

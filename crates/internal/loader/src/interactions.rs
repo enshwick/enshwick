@@ -5,16 +5,15 @@
 
 use core::ffi::c_void;
 use std::cell::RefCell;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Mutex, OnceLock, PoisonError};
 
 use enshwick_loader_api::abi::{Header, HookFlags, Interaction, InteractionFn, Side, Status};
 
 use arc_swap::ArcSwapOption;
 
-use crate::chains::{LOADER, Link};
+use crate::chains::Next;
 use crate::ecs::{Components, Engine};
-use crate::host::Loader;
+use crate::host::{Loader, Registered, take};
 
 /// The offer result the game writes when it does not offer an interaction.
 const NOT_OFFERED: u8 = 6;
@@ -47,12 +46,7 @@ struct Layout {
     consumed_input: u32,
 }
 
-#[derive(Debug, Clone, Copy)]
-struct Filter {
-    owner: usize,
-    callback: InteractionFn,
-    user: usize,
-}
+type Filter = Registered<InteractionFn>;
 
 static FILTERS: Mutex<Vec<Filter>> = Mutex::new(Vec::new());
 static SEALED: OnceLock<Box<[Filter]>> = OnceLock::new();
@@ -60,12 +54,18 @@ static LOADED: OnceLock<(&'static Loader, Layout, Components)> = OnceLock::new()
 /// The players' character entities, read on the game thread now and then.
 static PLAYERS: ArcSwapOption<Vec<u32>> = ArcSwapOption::const_empty();
 
-static OFFER_NEXT: AtomicUsize = AtomicUsize::new(0);
-static TRANSFER_NEXT: AtomicUsize = AtomicUsize::new(0);
-static SORT_NEXT: AtomicUsize = AtomicUsize::new(0);
-static STOCK_NEXT: AtomicUsize = AtomicUsize::new(0);
-static DISMANTLE_NEXT: AtomicUsize = AtomicUsize::new(0);
-static ACTIONS_NEXT: AtomicUsize = AtomicUsize::new(0);
+// SAFETY: each slot joins the chain of the function its type names.
+static OFFER_NEXT: Next<OfferFn> = unsafe { Next::new() };
+// SAFETY: as above.
+static TRANSFER_NEXT: Next<ActionFn> = unsafe { Next::new() };
+// SAFETY: as above.
+static SORT_NEXT: Next<ActionFn> = unsafe { Next::new() };
+// SAFETY: as above.
+static STOCK_NEXT: Next<StockFn> = unsafe { Next::new() };
+// SAFETY: as above.
+static DISMANTLE_NEXT: Next<DismantleFn> = unsafe { Next::new() };
+// SAFETY: as above.
+static ACTIONS_NEXT: Next<ActionsFn> = unsafe { Next::new() };
 
 type OfferFn =
     unsafe extern "system" fn(*mut u8, *mut u8, *mut u8, u32, *mut u8, *mut u8, u8, u32) -> *mut u8;
@@ -132,16 +132,12 @@ pub(crate) fn register(
     FILTERS
         .lock()
         .unwrap_or_else(PoisonError::into_inner)
-        .push(Filter {
-            owner,
-            callback,
-            user: user.expose_provenance(),
-        });
+        .push(Registered::new(owner, callback, user));
     Status::OK
 }
 
 pub(crate) fn link(loader: &'static Loader) {
-    let filters = std::mem::take(&mut *FILTERS.lock().unwrap_or_else(PoisonError::into_inner));
+    let filters = take(&FILTERS);
     let wanted = !filters.is_empty();
     let _first = SEALED.set(filters.into_boxed_slice());
     if !wanted {
@@ -151,85 +147,54 @@ pub(crate) fn link(loader: &'static Loader) {
         return;
     };
     let _first = LOADED.set((loader, layout, components));
-    let at = |name: &str| {
-        loader
-            .build
-            .symbol(&format!("access.{name}"))
-            .map_or(0, |rva| loader.base + rva)
-    };
+    let at = |name: &str| loader.address(&format!("access.{name}"));
     let actions = loader
         .reflection
         .system("inventory_actions")
-        .map_or(0, enshwick_loader_reflect::System::entry);
+        .ok()
+        .map(enshwick_loader_reflect::System::entry);
     let stock_flags = if layout.stock_ui_return == 0 {
         HookFlags::NONE
     } else {
         HookFlags::CALLER_FRAME
     };
-    let links: [(&str, u64, *const (), &'static AtomicUsize, HookFlags); 6] = [
-        (
-            "offer",
-            at("offer_test"),
-            offer as OfferFn as *const (),
-            &OFFER_NEXT,
-            HookFlags::NONE,
-        ),
-        (
-            "transfer",
-            at("transfer"),
-            transfer as ActionFn as *const (),
-            &TRANSFER_NEXT,
-            HookFlags::NONE,
-        ),
-        (
-            "sort",
-            at("sort"),
-            sort as ActionFn as *const (),
-            &SORT_NEXT,
-            HookFlags::NONE,
-        ),
-        (
-            "base stock",
-            at("base_stock"),
-            stock as StockFn as *const (),
-            &STOCK_NEXT,
-            stock_flags,
-        ),
-        (
-            "dismantle",
-            at("dismantle_method"),
-            dismantle as DismantleFn as *const (),
-            &DISMANTLE_NEXT,
-            HookFlags::NONE,
-        ),
-        (
-            "inventory actions",
-            actions,
-            inventory_actions as ActionsFn as *const (),
-            &ACTIONS_NEXT,
-            HookFlags::NONE,
-        ),
-    ];
-    for (name, target, detour, next, flags) in links {
-        if target == 0 {
-            crate::log!(WARN, "interactions: {name} is not in this build");
-            continue;
-        }
-        let link = Link {
-            owner: LOADER,
-            detour: detour.addr(),
-            next,
-            priority: i32::MIN,
-            flags,
-        };
-        let status = loader
-            .chains
-            .lock()
-            .map_or(Status::REFUSED, |mut chains| chains.add(target, link));
-        if !status.is_ok() {
-            crate::log!(WARN, "interactions: {name} refused ({})", status.0);
-        }
-    }
+    let none = HookFlags::NONE;
+    loader.link_feature(
+        "interaction offers",
+        at("offer_test"),
+        &OFFER_NEXT,
+        offer,
+        none,
+    );
+    loader.link_feature(
+        "transfers",
+        at("transfer"),
+        &TRANSFER_NEXT,
+        transfer as ActionFn,
+        none,
+    );
+    loader.link_feature("sorting", at("sort"), &SORT_NEXT, sort as ActionFn, none);
+    loader.link_feature(
+        "base stock",
+        at("base_stock"),
+        &STOCK_NEXT,
+        stock,
+        stock_flags,
+    );
+    loader.link_feature(
+        "dismantling",
+        at("dismantle_method"),
+        &DISMANTLE_NEXT,
+        dismantle,
+        none,
+    );
+    loader.link_feature(
+        "inventory actions",
+        actions,
+        &ACTIONS_NEXT,
+        inventory_actions,
+        none,
+    );
     crate::log!(INFO, "interaction filters on");
 }
 
@@ -252,13 +217,6 @@ pub(crate) fn forget() {
     PLAYERS.store(None);
 }
 
-fn next<F: Copy>(slot: &AtomicUsize) -> F {
-    let address = slot.load(Ordering::Acquire);
-    // SAFETY: the loader points the slot at the rest of the chain, which has
-    // the hooked function's signature, before the link can run.
-    unsafe { core::mem::transmute_copy::<usize, F>(&address) }
-}
-
 unsafe fn read<T: Copy>(base: *const u8, offset: usize) -> T {
     // SAFETY: forwarded from the caller.
     unsafe { base.wrapping_add(offset).cast::<T>().read_unaligned() }
@@ -273,15 +231,11 @@ fn allowed(call: &Interaction) -> bool {
     let Some(filters) = SEALED.get() else {
         return true;
     };
-    filters
-        .iter()
-        .filter(|f| !crate::host::is_off(f.owner))
-        .all(|f| {
-            let user = core::ptr::with_exposed_provenance_mut(f.user);
-            // SAFETY: the callback lives in the mod's DLL, which stays loaded,
-            // and takes the pointer it registered; the call is valid for it.
-            unsafe { (f.callback)(call, user) != 0 }
-        })
+    filters.iter().filter(|f| f.live()).all(|f| {
+        // SAFETY: the callback lives in the mod's DLL, which stays loaded,
+        // and takes the pointer it registered; the call is valid for it.
+        unsafe { (f.callback)(call, f.user()) != 0 }
+    })
 }
 
 /// The interaction `kind` of `player` with `target`, with what the target
@@ -387,7 +341,7 @@ unsafe extern "system" fn offer(
     }
     // SAFETY: forwarded unchanged.
     unsafe {
-        next::<OfferFn>(&OFFER_NEXT)(
+        OFFER_NEXT.get()(
             out,
             query,
             hits,
@@ -471,7 +425,7 @@ unsafe extern "system" fn transfer(ctx: *mut u64, state: *mut u8) {
         return;
     }
     // SAFETY: forwarded unchanged.
-    unsafe { next::<ActionFn>(&TRANSFER_NEXT)(ctx, state) }
+    unsafe { TRANSFER_NEXT.get()(ctx, state) }
 }
 
 unsafe extern "system" fn sort(ctx: *mut u64, state: *mut u8) {
@@ -494,7 +448,7 @@ unsafe extern "system" fn sort(ctx: *mut u64, state: *mut u8) {
         return;
     }
     // SAFETY: forwarded unchanged.
-    unsafe { next::<ActionFn>(&SORT_NEXT)(ctx, state) }
+    unsafe { SORT_NEXT.get()(ctx, state) }
 }
 
 thread_local! {
@@ -521,8 +475,7 @@ unsafe extern "system" fn stock(
         frame.rsp != 0 && unsafe { frame.return_address() } == layout.stock_ui_return
     });
     // SAFETY: forwarded unchanged.
-    let result =
-        unsafe { next::<StockFn>(&STOCK_NEXT)(out, lists, server, client, position, player) };
+    let result = unsafe { STOCK_NEXT.get()(out, lists, server, client, position, player) };
     // SAFETY: the first byte is the game's error code, 0 for success.
     if ui || out.is_null() || lists.is_null() || unsafe { out.read() } != 0 {
         return result;
@@ -590,7 +543,7 @@ unsafe extern "system" fn dismantle(
     permissions: u8,
 ) -> u64 {
     // SAFETY: forwarded unchanged.
-    let method = unsafe { next::<DismantleFn>(&DISMANTLE_NEXT)(ctx, object, held, permissions) };
+    let method = unsafe { DISMANTLE_NEXT.get()(ctx, object, held, permissions) };
     if method.trailing_zeros() >= 8 || ctx.is_null() || object.is_null() {
         return method;
     }
@@ -632,7 +585,7 @@ unsafe extern "system" fn inventory_actions(ctx: *mut u64) -> u64 {
         let _done = std::panic::catch_unwind(|| unsafe { refuse_pending(ctx) });
     }
     // SAFETY: forwarded unchanged.
-    unsafe { next::<ActionsFn>(&ACTIONS_NEXT)(ctx) }
+    unsafe { ACTIONS_NEXT.get()(ctx) }
 }
 
 /// # Safety

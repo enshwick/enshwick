@@ -15,20 +15,25 @@
 //! - the placement cursor refuses an altar that would start a 17th base, with
 //!   the game's own "too many altars" answer.
 //!
+//! The patches and the links are one change: the patches need the links
+//! armed with them, and the links act only once the patches are written, so
+//! either both are in or the game keeps its 16 zones.
+//!
 //! The client runs one grouping for its own world and the server it hosts, so
 //! the same patches and links serve both.
 
 mod limit;
 
 use core::ffi::c_void;
-use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, Mutex, OnceLock, PoisonError};
 
 use arc_swap::ArcSwap;
 use enshwick_loader_api::abi::{AltarLimitFn, HookFlags, Status};
 
 use self::limit::{Aabb, MAX_BASES, MAX_ZONES, Zone, Zones};
-use crate::chains::{LOADER, Link};
+use crate::chains::Next;
+use crate::code::{CodePatch, Verdict};
 use crate::ecs::read_at;
 use crate::host::Loader;
 
@@ -93,12 +98,14 @@ const ZONE_HIGH: usize = 0x10;
 /// The game lists at most 255 zones.
 const MAX_LISTED: usize = 0xff;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 struct Sites {
     grouping: u64,
     new_base: u64,
     cursor: u64,
     balancing: usize,
+    /// The first byte of every patch.
+    patches: Box<[usize]>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -114,11 +121,17 @@ static SEALED_LIMIT: OnceLock<Option<Limit>> = OnceLock::new();
 static ZONES: OnceLock<ArcSwap<Zones>> = OnceLock::new();
 /// How many zones the world has, `u32::MAX` before the first grouping.
 static ZONE_COUNT: AtomicU32 = AtomicU32::new(u32::MAX);
+/// Set at arming when every patch is written with the links.
+static RAISED: AtomicBool = AtomicBool::new(false);
 
-static GROUP_NEXT: AtomicUsize = AtomicUsize::new(0);
-static ADD_BASE_NEXT: AtomicUsize = AtomicUsize::new(0);
-static CHECK_NEXT: AtomicUsize = AtomicUsize::new(0);
-static MAX_ALTARS_NEXT: AtomicUsize = AtomicUsize::new(0);
+// SAFETY: each slot joins the chain of the function its type names.
+static GROUP_NEXT: Next<GroupFn> = unsafe { Next::new() };
+// SAFETY: as above.
+static ADD_BASE_NEXT: Next<AddBaseFn> = unsafe { Next::new() };
+// SAFETY: as above.
+static CHECK_NEXT: Next<CheckFn> = unsafe { Next::new() };
+// SAFETY: as above.
+static MAX_ALTARS_NEXT: Next<MaxAltarsFn> = unsafe { Next::new() };
 
 type GroupFn = unsafe extern "system" fn(bases: *mut u8, world: *mut u8);
 type AddBaseFn = unsafe extern "system" fn(bases: *mut u8, zone: *const u8, index: u32);
@@ -160,8 +173,8 @@ pub(crate) fn register_limit(
     Status::OK
 }
 
-/// Finds every site and registers the patches as mod `owner`'s; a miss
-/// leaves the game untouched.
+/// Finds every site and registers the patches as mod `owner`'s, all or
+/// none; a miss or a refusal leaves nothing registered.
 pub(crate) fn raise(loader: &Loader, owner: usize) -> Status {
     if too_late(loader) {
         return Status::TOO_LATE;
@@ -186,27 +199,30 @@ pub(crate) fn raise(loader: &Loader, owner: usize) -> Status {
         }
     };
     let (sites, patches) = patches;
-    for (at, expected, replacement) in patches {
-        let status = crate::code::register(
-            crate::code::CodePatch {
-                owner,
-                address: text.0 + at,
-                expected: expected.into(),
-                replacement: replacement.into(),
-            },
-            text,
-        );
-        if !status.is_ok() {
-            return status;
-        }
-    }
     let start = text.0 as u64;
-    let _first = SITES.set(Sites {
+    let sites = Sites {
         grouping: start + sites.grouping,
         new_base: start + sites.new_base,
         cursor: start + sites.cursor,
         balancing: sites.balancing,
-    });
+        patches: patches.iter().map(|&(at, _, _)| text.0 + at).collect(),
+    };
+    let needs: Box<[u64]> = Box::new([sites.grouping, sites.new_base, sites.cursor]);
+    let patches = patches
+        .into_iter()
+        .map(|(at, expected, replacement)| CodePatch {
+            owner,
+            address: text.0 + at,
+            expected: expected.into(),
+            replacement: replacement.into(),
+            needs: needs.clone(),
+        })
+        .collect();
+    let status = crate::code::register_all(patches, text);
+    if !status.is_ok() {
+        return status;
+    }
+    let _first = SITES.set(sites);
     let _first = ZONES.set(ArcSwap::from_pointee(Zones::default()));
     Status::OK
 }
@@ -257,12 +273,34 @@ fn find_sites(code: &[u8]) -> Result<(Sites, Vec<Patch>), String> {
         new_base: new_base as u64,
         cursor: cursor as u64,
         balancing,
+        patches: Box::default(),
     };
     Ok((sites, patches))
 }
 
+/// Settles, before arming writes anything, whether the limit is raised:
+/// every patch written, which the patches' needs tie to the links.
+pub(crate) fn arming(patches: &[CodePatch], verdicts: &[Verdict]) {
+    let raised = SITES.get().is_some_and(|sites| {
+        sites.patches.iter().all(|&at| {
+            patches
+                .iter()
+                .zip(verdicts)
+                .any(|(p, v)| p.address == at && *v == Verdict::Write)
+        })
+    });
+    RAISED.store(raised, Ordering::Release);
+}
+
+fn raised() -> bool {
+    RAISED.load(Ordering::Acquire)
+}
+
 /// The zones and bases of the last grouping.
 pub(crate) fn zones() -> Option<(u32, u32)> {
+    if !raised() {
+        return None;
+    }
     let count = ZONE_COUNT.load(Ordering::Relaxed);
     let known = ZONES.get()?;
     (count != u32::MAX).then(|| (count, known.load().bases))
@@ -278,63 +316,42 @@ pub(crate) fn forget() {
 pub(crate) fn link(loader: &'static Loader) {
     let limit = LIMIT.lock().unwrap_or_else(PoisonError::into_inner).take();
     let _first = SEALED_LIMIT.set(limit);
-    let mut links: Vec<(&str, u64, *const (), &'static AtomicUsize)> = Vec::new();
     if limit.is_some()
-        && let Some(rva) = loader.build.symbol("building.max_altars")
+        && let Some(target) = loader.address("building.max_altars")
     {
-        links.push((
-            "altar limit",
-            loader.base + rva,
-            max_altars as MaxAltarsFn as *const (),
-            &MAX_ALTARS_NEXT,
-        ));
-    }
-    if let Some(sites) = SITES.get() {
-        links.push((
-            "base grouping",
-            sites.grouping,
-            group as GroupFn as *const (),
-            &GROUP_NEXT,
-        ));
-        links.push((
-            "new base",
-            sites.new_base,
-            add_base as AddBaseFn as *const (),
-            &ADD_BASE_NEXT,
-        ));
-        links.push((
-            "placement cursor",
-            sites.cursor,
-            check as CheckFn as *const (),
-            &CHECK_NEXT,
-        ));
-    }
-    for (name, target, detour, next) in links {
-        let link = Link {
-            owner: LOADER,
-            detour: detour.addr(),
-            next,
-            priority: i32::MIN,
-            flags: HookFlags::NONE,
-        };
-        let status = loader
-            .chains
-            .lock()
-            .map_or(Status::REFUSED, |mut chains| chains.add(target, link));
+        let status = loader.link(target, &MAX_ALTARS_NEXT, max_altars, HookFlags::NONE);
         if !status.is_ok() {
-            crate::log!(WARN, "{name}: refused ({})", status.0);
+            crate::log!(WARN, "altar limit: refused ({})", status.0);
         }
     }
-    if SITES.get().is_some() {
+    let Some(sites) = SITES.get() else {
+        return;
+    };
+    // A link refused here leaves the patches without a hook they need, so
+    // arming keeps them out.
+    let refused = [
+        (
+            "base grouping",
+            loader.link(sites.grouping, &GROUP_NEXT, group, HookFlags::NONE),
+        ),
+        (
+            "new base",
+            loader.link(sites.new_base, &ADD_BASE_NEXT, add_base, HookFlags::NONE),
+        ),
+        (
+            "placement cursor",
+            loader.link(sites.cursor, &CHECK_NEXT, check, HookFlags::NONE),
+        ),
+    ]
+    .into_iter()
+    .filter(|(_, status)| !status.is_ok())
+    .inspect(|(name, status)| crate::log!(WARN, "{name}: refused ({})", status.0))
+    .count();
+    if refused == 0 {
         crate::log!(INFO, "bases take {MAX_ZONES} altar zones");
+    } else {
+        crate::log!(WARN, "bases keep 16 altar zones: a link was refused");
     }
-}
-
-fn next<F: Copy>(slot: &AtomicUsize) -> F {
-    let address = slot.load(Ordering::Acquire);
-    // SAFETY: the loader points the slot at the rest of the chain, which has
-    // the hooked function's signature, before the link can run.
-    unsafe { core::mem::transmute_copy::<usize, F>(&address) }
 }
 
 unsafe extern "system" fn max_altars(balancing: u64, flame_level: u32) -> u8 {
@@ -347,13 +364,13 @@ unsafe extern "system" fn max_altars(balancing: u64, flame_level: u32) -> u8 {
         return unsafe { (limit.callback)(flame_level, user) };
     }
     // SAFETY: the rest of the chain takes the arguments the game passed.
-    unsafe { next::<MaxAltarsFn>(&MAX_ALTARS_NEXT)(balancing, flame_level) }
+    unsafe { MAX_ALTARS_NEXT.get()(balancing, flame_level) }
 }
 
 unsafe extern "system" fn group(bases: *mut u8, world: *mut u8) {
     // SAFETY: the original takes the arguments the game passed.
-    unsafe { next::<GroupFn>(&GROUP_NEXT)(bases, world) };
-    if !bases.is_null() {
+    unsafe { GROUP_NEXT.get()(bases, world) };
+    if raised() && !bases.is_null() {
         // SAFETY: the grouping just filled the bases object.
         let _done = std::panic::catch_unwind(|| unsafe { keep(bases) });
     }
@@ -426,11 +443,11 @@ unsafe fn keep(bases: *const u8) {
 
 unsafe extern "system" fn add_base(bases: *mut u8, zone: *const u8, index: u32) {
     // SAFETY: the grouping passes its bases object.
-    if !bases.is_null() && unsafe { read_at::<u32>(bases, BASE_COUNT) } >= MAX_BASES {
+    if raised() && !bases.is_null() && unsafe { read_at::<u32>(bases, BASE_COUNT) } >= MAX_BASES {
         return;
     }
     // SAFETY: the original takes the arguments the game passed.
-    unsafe { next::<AddBaseFn>(&ADD_BASE_NEXT)(bases, zone, index) };
+    unsafe { ADD_BASE_NEXT.get()(bases, zone, index) };
 }
 
 unsafe extern "system" fn check(
@@ -442,8 +459,8 @@ unsafe extern "system" fn check(
     extra: u64,
 ) {
     // SAFETY: the original takes the arguments the game passed.
-    unsafe { next::<CheckFn>(&CHECK_NEXT)(flags, ctx, transform, item, mode, extra) };
-    if flags.is_null() || ctx.is_null() || transform.is_null() || item.is_null() {
+    unsafe { CHECK_NEXT.get()(flags, ctx, transform, item, mode, extra) };
+    if !raised() || flags.is_null() || ctx.is_null() || transform.is_null() || item.is_null() {
         return;
     }
     // SAFETY: the cursor's arguments, after the original ran.
