@@ -368,6 +368,27 @@ impl Load<'_> {
         })
     }
 
+    /// The mod's [`Scheduler`](crate::schedule::Scheduler), which runs work on
+    /// the server's game thread after each simulation step.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] on a client, or when the loader raises no ticks.
+    ///
+    /// # Examples
+    ///
+    /// See [`Scheduler`](crate::schedule::Scheduler).
+    pub fn scheduler(&mut self) -> Result<crate::schedule::Scheduler, Off> {
+        if self.host.build().side != crate::abi::Side::SERVER {
+            return Err(Off::new("the scheduler runs on the server's game thread"));
+        }
+        let (scheduler, created) = crate::schedule::Scheduler::get();
+        if created {
+            self.on::<crate::events::Tick>(move |_| scheduler.run_due())?;
+        }
+        Ok(scheduler)
+    }
+
     /// Calls `handler` on every event of kind `E` with its typed data, on the
     /// thread that raises it. A panic in `handler` turns the mod off.
     ///
