@@ -129,19 +129,20 @@ fn prepare_one(request: Request, fresh: &mut Vec<usize>) -> Result<Pending, Stri
         if instruction.is_invalid() {
             return Err("its first instructions do not decode".into());
         }
+        // Bytes after a return or a jump away belong to other code, which
+        // the jump must not overwrite.
         match instruction.flow_control() {
             FlowControl::Return | FlowControl::Interrupt | FlowControl::Exception
                 if !request.inside && stolen + instruction.len() < PATCH =>
             {
                 return Err("the function is shorter than the jump".into());
             }
-            // Inside a function, bytes after a jump away belong to other code.
             FlowControl::Return
             | FlowControl::Interrupt
             | FlowControl::Exception
             | FlowControl::UnconditionalBranch
             | FlowControl::IndirectBranch
-                if request.inside && stolen + instruction.len() < PATCH =>
+                if stolen + instruction.len() < PATCH =>
             {
                 return Err("control leaves within the bytes of the jump".into());
             }
@@ -505,6 +506,17 @@ mod tests {
         assert!(commit(&ready, &code));
         assert_eq!(callable(patched)(0), 2);
         assert_eq!(callable(hooked)(1), 101);
+    }
+
+    #[test]
+    fn a_function_that_jumps_away_within_the_jump_is_refused() {
+        // jmp +3; the next function's first bytes, which the jump would cover
+        let target = function(&[0xeb, 0x03, 0xb8, 0x01, 0x00, 0x00, 0x00, 0xc3, 0xcc]);
+        assert!(hook(target).is_err());
+        // jmp rel32: the whole jump moves, nothing past it is touched
+        let thunk = function(&[0xe9, 0x00, 0x00, 0x00, 0x00, 0x89, 0xc8, 0xc3, 0xcc]);
+        let original = hook(thunk).unwrap();
+        assert_eq!(callable(original)(4), 4);
     }
 
     #[test]
