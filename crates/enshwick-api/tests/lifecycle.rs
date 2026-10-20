@@ -212,6 +212,37 @@ mod tests {
         Status::OK
     }
 
+    extern "system" fn mods(
+        _me: ModHandle,
+        out: *mut enshwick_api::abi::ModInfo,
+        entry_size: u32,
+        capacity: u32,
+        count: *mut u32,
+    ) -> Status {
+        assert_eq!(entry_size as usize, size_of::<enshwick_api::abi::ModInfo>());
+        if !out.is_null() && capacity > 0 {
+            // SAFETY: the safe layer passes room for `capacity` entries.
+            unsafe {
+                out.write(enshwick_api::abi::ModInfo {
+                    header: Header::of::<enshwick_api::abi::ModInfo>(),
+                    id: Str::new("enshwick"),
+                    version: Str::new("0.2.0"),
+                    side: Side::BOTH,
+                    flags: enshwick_api::abi::ManifestFlags::NONE,
+                    off: 0,
+                    file: Str::new("mods/enshwick/enshwick.dll"),
+                    updates: enshwick_api::abi::UpdateSource::github(
+                        "themaiby/enshwick",
+                        "enshwick-loader",
+                    ),
+                });
+            }
+        }
+        // SAFETY: the safe layer passes a valid count.
+        unsafe { count.write(1) };
+        Status::OK
+    }
+
     fn evaluated() -> u32 {
         panic!("a filtered line evaluates nothing")
     }
@@ -242,6 +273,7 @@ mod tests {
         players,
         serve_resource,
         add_text,
+        mods,
     };
 
     extern "system" fn original(value: u32) -> u32 {
@@ -316,6 +348,16 @@ mod tests {
         assert_eq!(
             enshwick_api::host().map(|h| h.build().side),
             Some(Side::SERVER)
+        );
+        let listed = enshwick_api::mods();
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].file, "mods/enshwick/enshwick.dll");
+        assert_eq!(
+            listed[0]
+                .updates
+                .as_ref()
+                .and_then(enshwick_api::mods::Updates::tag_prefix),
+            Some("enshwick-loader-v".to_owned())
         );
         assert_eq!(HOOKS.lock().unwrap()[0].0, 0x1_4009_0a60);
         assert_eq!(HOOKS.lock().unwrap()[0].2, -5);

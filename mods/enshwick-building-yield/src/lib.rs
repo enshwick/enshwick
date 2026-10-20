@@ -75,7 +75,12 @@ pub struct BuildingYield;
 
 impl Mod for BuildingYield {
     fn manifest() -> &'static enshwick_api::abi::Manifest {
-        enshwick_api::manifest!(id: "building-yield", side: BOTH, join = true)
+        enshwick_api::manifest!(
+            id: "building-yield",
+            side: BOTH,
+            join = true,
+            updates: github("themaiby/enshwick", "enshwick-building-yield"),
+        )
     }
 
     fn init(load: &mut Load<'_>) -> Result<Self, Off> {

@@ -6,14 +6,20 @@ use std::sync::{Mutex, OnceLock};
 
 use enshwick_api::abi as api_frame;
 use enshwick_api::abi::{
-    BuildInfo, Event, EventFn, Header, HookSpec, HostApi, Level, Manifest, ModHandle, Side, Status,
-    Str,
+    BuildInfo, Event, EventFn, Header, HookSpec, HostApi, Level, Manifest, ManifestFlags,
+    ModHandle, ModInfo, Side, Status, Str, UpdateSource,
 };
 use enshwick_reflect::{Fingerprint, Reflection};
 use rustc_hash::FxHashMap;
 
 use crate::builds::KnownBuild;
 use crate::chains::{Chains, Link};
+
+/// Where the loader's own releases come from.
+const LOADER_UPDATES: UpdateSource = UpdateSource::github("themaiby/enshwick", "enshwick-loader");
+
+/// The loader's DLL relative to the game's folder.
+const LOADER_FILE: &str = "mods/enshwick/enshwick.dll";
 
 /// A loaded mod.
 #[derive(Debug)]
@@ -22,6 +28,10 @@ pub(crate) struct ModRecord {
     pub(crate) id: String,
     /// Its version.
     pub(crate) version: String,
+    /// Its DLL relative to the game's folder, with `/` separators.
+    pub(crate) file: String,
+    /// Where its new releases come from, checked.
+    pub(crate) updates: UpdateSource,
     /// Its static manifest, inside its DLL.
     pub(crate) manifest: &'static Manifest,
     /// Set when the mod is off: refused at init or faulted later.
@@ -236,6 +246,7 @@ pub(crate) static API: HostApi = HostApi {
     players,
     serve_resource,
     add_text,
+    mods,
 };
 
 /// A static slice from a pointer and a count, empty for a null pointer.
@@ -663,6 +674,69 @@ extern "system" fn add_text(me: ModHandle, id: u32, language: u32, text: Str) ->
         Some(_) => Status::FAULTED,
         None => Status::BAD_ARGS,
     }
+}
+
+/// The listing entry of the loader itself.
+fn loader_info() -> ModInfo {
+    ModInfo {
+        header: Header::of::<ModInfo>(),
+        id: Str::new(crate::settings::LOADER_ID),
+        version: Str::new(env!("CARGO_PKG_VERSION")),
+        side: Side::BOTH,
+        flags: ManifestFlags::NONE,
+        off: 0,
+        file: Str::new(LOADER_FILE),
+        updates: LOADER_UPDATES,
+    }
+}
+
+/// The listing entry of a loaded mod; its strings live as long as the loader.
+fn mod_info(record: &'static ModRecord) -> ModInfo {
+    ModInfo {
+        header: Header::of::<ModInfo>(),
+        id: Str::new(&record.id),
+        version: Str::new(&record.version),
+        side: record.manifest.side,
+        flags: record.manifest.flags,
+        off: u8::from(record.off.load(Ordering::Acquire)),
+        file: Str::new(&record.file),
+        updates: record.updates,
+    }
+}
+
+extern "system" fn mods(
+    me: ModHandle,
+    out: *mut ModInfo,
+    entry_size: u32,
+    capacity: u32,
+    count: *mut u32,
+) -> Status {
+    let Some(loader) = loader() else {
+        return Status::BAD_ARGS;
+    };
+    if loader.record(me).is_none() {
+        return Status::BAD_ARGS;
+    }
+    let infos: Vec<ModInfo> = core::iter::once(loader_info())
+        .chain(loader.mods.iter().map(mod_info))
+        .collect();
+    if !out.is_null() {
+        let stride = entry_size as usize;
+        if stride < size_of::<Header>() {
+            return Status::BAD_ARGS;
+        }
+        let copied = stride.min(size_of::<ModInfo>());
+        for (index, info) in infos.iter().take(capacity as usize).enumerate() {
+            // SAFETY: the caller passes room for `capacity` entries of
+            // `entry_size` bytes each.
+            let entry = unsafe { out.cast::<u8>().add(index * stride) };
+            // SAFETY: as above; `copied` bytes fit both the entry and `info`.
+            unsafe {
+                core::ptr::copy_nonoverlapping((&raw const *info).cast::<u8>(), entry, copied);
+            };
+        }
+    }
+    put(count, u32::try_from(infos.len()).unwrap_or(u32::MAX))
 }
 
 /// Mod handles start at 1; 0 is no mod.

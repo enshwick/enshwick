@@ -122,6 +122,7 @@ impl Mod for Safes {
             id: "safes",
             side: BOTH,
             join = true,
+            updates: github("themaiby/enshwick", "enshwick-safes"),
             builds: [{
                 side: SERVER,
                 guid: "1c129660cd6efc4f9f0b21652d5ff2bf",

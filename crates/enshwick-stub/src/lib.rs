@@ -1,13 +1,14 @@
 //! The POWRPROF.dll proxy that starts the Enshwick loader.
 //!
 //! Windows loads it from the game's folder. It forwards every POWRPROF.dll
-//! export to the system copy, then, outside the loader lock, loads
-//! `mods/enshwick/enshwick.dll` and calls its `enshwick_start`. Without the
-//! loader the game runs vanilla.
+//! export to the system copy, then, outside the loader lock, moves staged
+//! updates from `mods/.staged/` into place, loads `mods/enshwick/enshwick.dll`
+//! and calls its `enshwick_start`. Without the loader the game runs vanilla.
 
 #![cfg(windows)]
 
 mod proxy;
+mod staged;
 
 use core::ffi::c_void;
 
@@ -51,6 +52,14 @@ pub unsafe extern "system" fn DllMain(
 }
 
 fn start(missing: u32) {
+    // An update that fails to move stays staged; the loader starts anyway.
+    let _staged = std::panic::catch_unwind(|| {
+        if let Ok(exe) = std::env::current_exe()
+            && let Some(game) = exe.parent()
+        {
+            staged::apply_and_log(game);
+        }
+    });
     let Some(path) = loader_path() else {
         return;
     };

@@ -78,7 +78,12 @@ fn max_altars(
 
 impl Mod for AltarCount {
     fn manifest() -> &'static enshwick_api::abi::Manifest {
-        enshwick_api::manifest!(id: "flame-altar-count", side: BOTH, join = true)
+        enshwick_api::manifest!(
+            id: "flame-altar-count",
+            side: BOTH,
+            join = true,
+            updates: github("themaiby/enshwick", "enshwick-flame-altar-count"),
+        )
     }
 
     fn init(load: &mut Load<'_>) -> Result<Self, Off> {

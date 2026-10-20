@@ -102,6 +102,7 @@ enshwick_api::manifest!(
     join = true,                    // server and players must match
     requires: ["flame-altar-zones" => "^0.1"],
     after: ["flame-altar-count"],   // order only, may be absent
+    updates: github("themaiby/enshwick", "enshwick-survivors-per-altar"),
     builds: [{
         side: SERVER,
         guid: "1c129660cd6efc4f9f0b21652d5ff2bf",
@@ -289,6 +290,32 @@ A mod can publish a `repr(C)` table of `extern "system"` functions with
 `load.service(name, version)` and declares the publisher in `requires`, so it
 loads first. Put the table type in a small crate both mods depend on, as
 `enshwick-geometry::service` does for altar zones.
+
+## Updates
+
+`updates:` in the manifest says where new releases of the mod come from:
+
+- `github("owner/name", "component")`: GitHub releases of that repository
+  whose tags are `<component>-v<semver>`, as release-please tags a workspace
+  (`enshwick-safes-v0.2.0`);
+- `url("https://example.com/my-mod/latest.json")`: a document on any other
+  host that names the latest release.
+
+The loader checks the source, ignores a malformed one with a warning, and
+lists every loaded mod, itself first, with `enshwick_api::mods()`: id,
+version, side, join flag, whether it runs, its DLL's path under the game's
+folder and its source. An updater mod reads that list, fetches new releases
+and writes the files to `mods/.staged/<path>`; on the next start, before the
+loader runs, the `powrprof.dll` stub moves each to `<path>` and keeps the file
+it replaces as `<path>.previous`. A mod without `updates:` is updated by hand.
+
+```rust
+for entry in enshwick_api::mods() {
+    if let Some(enshwick_api::mods::Updates::GitHub { repository, component }) = &entry.updates {
+        enshwick_api::info!("{} {}: {repository}, tags {component}-v*", entry.id, entry.version);
+    }
+}
+```
 
 ## Rules for code in the game's frame
 

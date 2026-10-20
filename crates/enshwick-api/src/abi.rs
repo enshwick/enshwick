@@ -14,7 +14,7 @@ use core::sync::atomic::AtomicUsize;
 pub const ABI_MAJOR: u16 = 1;
 
 /// The minor version of this interface. A newer minor only appends fields.
-pub const ABI_MINOR: u16 = 4;
+pub const ABI_MINOR: u16 = 5;
 
 /// Whether `id` is a valid mod id: 1 to 64 characters of `[a-z0-9-]`.
 ///
@@ -828,6 +828,114 @@ impl ManifestFlags {
     }
 }
 
+/// Where an [`UpdateSource`] looks for new releases.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_api::abi::UpdateKind;
+///
+/// assert_ne!(UpdateKind::GITHUB, UpdateKind::URL);
+/// ```
+#[repr(transparent)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct UpdateKind(pub u32);
+
+impl UpdateKind {
+    /// No source: the mod is updated by hand.
+    pub const NONE: Self = Self(0);
+    /// GitHub releases of `location`, an `owner/name` repository, whose tags
+    /// are `<component>-v<semver>`, as release-please writes them for a
+    /// workspace.
+    pub const GITHUB: Self = Self(1);
+    /// A JSON document at `location`, an `https://` URL, that names the latest
+    /// release; `component` is empty. The updater documents the format.
+    pub const URL: Self = Self(2);
+}
+
+/// Where a mod's new releases come from, declared in its [`Manifest`] with
+/// `updates:` in [`manifest!`](crate::manifest).
+///
+/// The loader only checks and lists it; an updater mod reads it from
+/// [`HostApi::mods`] and fetches, compares and stages files itself.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_api::abi::{Header, Str, UpdateKind, UpdateSource};
+///
+/// let safes = UpdateSource {
+///     header: Header::of::<UpdateSource>(),
+///     kind: UpdateKind::GITHUB,
+///     location: Str::new("themaiby/enshwick"),
+///     component: Str::new("enshwick-safes"),
+/// };
+/// assert_eq!(safes.kind, UpdateKind::GITHUB);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct UpdateSource {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// What `location` and `component` mean.
+    pub kind: UpdateKind,
+    /// The repository, `owner/name`, for [`UpdateKind::GITHUB`]; the URL for
+    /// [`UpdateKind::URL`].
+    pub location: Str,
+    /// The tag prefix before `-v<semver>` for [`UpdateKind::GITHUB`]; empty
+    /// otherwise.
+    pub component: Str,
+}
+
+impl UpdateSource {
+    /// No source.
+    pub const NONE: Self = Self {
+        header: Header::of::<Self>(),
+        kind: UpdateKind::NONE,
+        location: Str::EMPTY,
+        component: Str::EMPTY,
+    };
+
+    /// GitHub releases of `repository` tagged `<component>-v<semver>`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_api::abi::{UpdateKind, UpdateSource};
+    ///
+    /// let source = UpdateSource::github("themaiby/enshwick", "enshwick-safes");
+    /// assert_eq!(source.kind, UpdateKind::GITHUB);
+    /// ```
+    #[must_use]
+    pub const fn github(repository: &'static str, component: &'static str) -> Self {
+        Self {
+            kind: UpdateKind::GITHUB,
+            location: Str::new(repository),
+            component: Str::new(component),
+            ..Self::NONE
+        }
+    }
+
+    /// The JSON document at `url` that names the latest release.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_api::abi::{UpdateKind, UpdateSource};
+    ///
+    /// let source = UpdateSource::url("https://example.com/my-mod/latest.json");
+    /// assert_eq!(source.kind, UpdateKind::URL);
+    /// ```
+    #[must_use]
+    pub const fn url(url: &'static str) -> Self {
+        Self {
+            kind: UpdateKind::URL,
+            location: Str::new(url),
+            ..Self::NONE
+        }
+    }
+}
+
 /// What a mod is, read by the loader before it runs any of the mod's code.
 ///
 /// It is static data returned by `enshwick_mod_query`.
@@ -847,6 +955,7 @@ impl ManifestFlags {
 ///     dependency_count: 0,
 ///     builds: core::ptr::null(),
 ///     build_count: 0,
+///     updates: core::ptr::null(),
 /// };
 /// assert!(manifest.flags.contains(ManifestFlags::JOIN));
 /// ```
@@ -871,6 +980,8 @@ pub struct Manifest {
     pub builds: *const BuildRow,
     /// How many rows `builds` points at.
     pub build_count: usize,
+    /// Where new releases come from; null for none. Since minor 5.
+    pub updates: *const UpdateSource,
 }
 
 // SAFETY: a manifest is immutable static data; its pointers refer to statics.
@@ -1018,6 +1129,51 @@ impl CallerFrame {
     }
 }
 
+/// A mod the loader loaded, from [`HostApi::mods`]; the loader itself comes
+/// first, with the id `enshwick`.
+///
+/// Every string stays valid for the life of the process.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_api::abi::{Header, ManifestFlags, ModInfo, Side, Str, UpdateSource};
+///
+/// let safes = ModInfo {
+///     header: Header::of::<ModInfo>(),
+///     id: Str::new("safes"),
+///     version: Str::new("0.1.0"),
+///     side: Side::BOTH,
+///     flags: ManifestFlags::JOIN,
+///     off: 0,
+///     file: Str::new("mods/enshwick_safes.dll"),
+///     updates: UpdateSource::github("themaiby/enshwick", "enshwick-safes"),
+/// };
+/// assert_eq!(safes.off, 0);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct ModInfo {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// The mod id.
+    pub id: Str,
+    /// The mod's SemVer version.
+    pub version: Str,
+    /// The sides the mod runs on.
+    pub side: Side,
+    /// The manifest's flags; [`ManifestFlags::JOIN`] when it counts in the
+    /// join check.
+    pub flags: ManifestFlags,
+    /// 1 when the mod is off: refused at init or faulted since.
+    pub off: u8,
+    /// The DLL's path relative to the game's folder, with `/` separators,
+    /// such as `mods/enshwick_safes.dll`; the path a staged update goes to.
+    pub file: Str,
+    /// Where new releases come from; [`UpdateKind::NONE`] for none.
+    pub updates: UpdateSource,
+}
+
 /// An opaque handle the loader gives each mod; every call names its caller
 /// with it.
 ///
@@ -1147,6 +1303,17 @@ pub struct HostApi {
     /// language without its own); the client shows it wherever the game asks
     /// for that tag. Allowed during `enshwick_mod_init` only. Since minor 4.
     pub add_text: extern "system" fn(me: ModHandle, id: u32, language: u32, text: Str) -> Status,
+    /// Up to `capacity` loaded mods, the loader first, and how many there
+    /// are. Entries are `entry_size` bytes apart, the caller's
+    /// `size_of::<ModInfo>()`; the loader fills what both sides know of each
+    /// and its own [`Header`]. Since minor 5.
+    pub mods: extern "system" fn(
+        me: ModHandle,
+        out: *mut ModInfo,
+        entry_size: u32,
+        capacity: u32,
+        count: *mut u32,
+    ) -> Status,
 }
 
 /// The exports a mod DLL provides, by name.
@@ -1196,6 +1363,9 @@ const _: () = {
     assert!(core::mem::offset_of!(HostApi, players) == 24 + 20 * 8);
     assert!(core::mem::offset_of!(HostApi, serve_resource) == 24 + 21 * 8);
     assert!(core::mem::offset_of!(HostApi, add_text) == 24 + 22 * 8);
-    assert!(size_of::<HostApi>() == 24 + 23 * 8);
+    assert!(core::mem::offset_of!(HostApi, mods) == 24 + 23 * 8);
+    assert!(size_of::<HostApi>() == 24 + 24 * 8);
+    assert!(core::mem::offset_of!(Manifest, updates) == 80);
+    assert!(size_of::<UpdateSource>() == 48);
     assert!(size_of::<ResourceKey>() == 24);
 };
