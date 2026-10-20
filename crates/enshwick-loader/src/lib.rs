@@ -9,6 +9,8 @@ pub mod advertise;
 pub mod builds;
 pub mod chains;
 #[cfg(windows)]
+mod chat;
+#[cfg(windows)]
 mod code;
 #[cfg(windows)]
 mod content;
@@ -21,6 +23,8 @@ mod events;
 #[cfg(windows)]
 mod host;
 pub mod join;
+#[cfg(windows)]
+mod label;
 pub mod log;
 pub mod manifest;
 #[cfg(windows)]

@@ -58,6 +58,7 @@ extern crate self as enshwick_api;
 
 pub mod abi;
 pub mod code;
+pub mod commands;
 pub mod config;
 pub mod content;
 mod declare;

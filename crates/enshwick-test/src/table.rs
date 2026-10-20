@@ -5,8 +5,8 @@ use core::sync::atomic::Ordering;
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use enshwick_api::abi::{
-    BuildInfo, CallerFrame, Event, EventFn, Header, HookSpec, HostApi, Level, ModHandle, ModInfo,
-    PlayerInfo, ResourceKey, ResourcePatchFn, Status, Str,
+    BuildInfo, CallerFrame, CommandFn, Event, EventFn, Header, HookSpec, HostApi, Level, ModHandle,
+    ModInfo, PlayerInfo, RenameFn, ResourceKey, ResourcePatchFn, Status, Str,
 };
 
 use crate::{FakeHost, LinkedHook, ServedResource};
@@ -24,6 +24,10 @@ pub(crate) struct State {
     pub(crate) published: Vec<(String, u32, usize)>,
     pub(crate) defaults: Vec<String>,
     pub(crate) synced: Vec<String>,
+    pub(crate) commands: Vec<(String, String, CommandFn, usize)>,
+    pub(crate) chat: Vec<(u64, String)>,
+    pub(crate) labels: Vec<(u32, String)>,
+    pub(crate) rename_filters: Vec<(RenameFn, usize)>,
     /// The settings text last handed out, alive until the next call.
     settings: Option<Box<str>>,
     /// The join values last handed out, alive until the next call.
@@ -54,6 +58,10 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         defaults: Vec::new(),
         synced: Vec::new(),
         sync_out: None,
+        commands: Vec::new(),
+        chat: Vec::new(),
+        labels: Vec::new(),
+        rename_filters: Vec::new(),
         settings: None,
     });
     turn
@@ -409,6 +417,47 @@ extern "system" fn server_world() -> u64 {
     with(0, |s| s.host.server_world)
 }
 
+extern "system" fn command(
+    _me: ModHandle,
+    name: Str,
+    help: Str,
+    callback: CommandFn,
+    user: *mut c_void,
+) -> Status {
+    let (name, help) = (text(name), text(help));
+    with(Status::MISSING, |s| {
+        if s.commands.iter().any(|c| c.0 == name) || name == "enshwick" {
+            return Status::REFUSED;
+        }
+        s.commands
+            .push((name, help, callback, user.expose_provenance()));
+        Status::OK
+    })
+}
+
+extern "system" fn chat(_me: ModHandle, to: u64, value: Str) -> Status {
+    let value = text(value);
+    with(Status::MISSING, |s| {
+        s.chat.push((to, value));
+        Status::OK
+    })
+}
+
+extern "system" fn set_label(_me: ModHandle, entity: u32, value: Str) -> Status {
+    let value = text(value);
+    with(Status::MISSING, |s| {
+        s.labels.push((entity, value));
+        Status::OK
+    })
+}
+
+extern "system" fn rename_filter(_me: ModHandle, callback: RenameFn, user: *mut c_void) -> Status {
+    with(Status::MISSING, |s| {
+        s.rename_filters.push((callback, user.expose_provenance()));
+        Status::OK
+    })
+}
+
 /// The table every installed fake answers through; a mod keeps the first
 /// table it sees for the process, so it is one static.
 pub(crate) static TABLE: HostApi = HostApi {
@@ -444,4 +493,8 @@ pub(crate) static TABLE: HostApi = HostApi {
     workshop_recipes,
     hosting,
     server_world,
+    command,
+    chat,
+    set_label,
+    rename_filter,
 };

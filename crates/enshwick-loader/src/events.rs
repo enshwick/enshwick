@@ -288,6 +288,7 @@ unsafe extern "system" fn step(server: *mut u8) {
         step,
     };
     loader.emit(Event::TICK, None, (&raw const tick).cast::<c_void>());
+    crate::chat::drain();
     if server.is_null() {
         return;
     }
@@ -352,6 +353,7 @@ unsafe extern "system" fn set_state(entry: *mut u8, state: u8) {
             loader.emit(Event::SHUTDOWN, None, core::ptr::null());
             if loader.side == Side::CLIENT {
                 end_session();
+                crate::chat::forget();
             }
         }
         _ => {}

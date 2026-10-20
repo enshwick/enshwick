@@ -78,8 +78,8 @@ use std::collections::{HashMap, HashSet};
 use std::sync::MutexGuard;
 
 use enshwick_api::abi::{
-    CallerFrame, Event, Fingerprint, HookFlags, HostApi, Level, ModHandle, ModInfo, PlayerInfo,
-    ResourceKey, Side, Status,
+    CallerFrame, CommandCall, Event, Fingerprint, Header, HookFlags, HostApi, Level, ModHandle,
+    ModInfo, PlayerInfo, RenameCall, ResourceKey, Side, Status, Str,
 };
 use enshwick_api::events::Kind;
 use enshwick_api::{FnPtr, Hook};
@@ -1006,6 +1006,130 @@ impl Installed {
     #[must_use]
     pub fn texts(&self) -> Vec<(u32, u32, String)> {
         table::with(Vec::new(), |s| s.texts.clone())
+    }
+
+    /// Runs the mod's chat command `/name` as `player` typed it with `args`;
+    /// the reply, or `None` when the mod has no such command.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_api::abi::{Header, PlayerInfo};
+    ///
+    /// let loader = enshwick_test::FakeHost::new().install();
+    /// let player = PlayerInfo {
+    ///     header: Header::of::<PlayerInfo>(),
+    ///     slot: 0,
+    ///     entity: 2,
+    ///     key: 7,
+    ///     permissions: 0,
+    ///     name_len: 0,
+    ///     name: [0; 64],
+    /// };
+    /// assert_eq!(loader.command("safe", &player, "list"), None);
+    /// ```
+    #[must_use]
+    pub fn command(&self, name: &str, player: &PlayerInfo, args: &str) -> Option<String> {
+        let (callback, user) = table::with(None, |s| {
+            s.commands.iter().find(|c| c.0 == name).map(|c| (c.2, c.3))
+        })?;
+        let call = CommandCall {
+            header: Header::of::<CommandCall>(),
+            player: *player,
+            name: Str::new(name),
+            args: Str::new(args),
+        };
+        let mut reply = Str::EMPTY;
+        // SAFETY: a valid call; `user` is the pointer the mod registered with.
+        unsafe {
+            callback(
+                &raw const call,
+                core::ptr::with_exposed_provenance_mut(user),
+                &raw mut reply,
+            );
+        };
+        // SAFETY: the reply stays valid until the handler runs again.
+        Some(unsafe { reply.as_str() }.unwrap_or("").to_owned())
+    }
+
+    /// The commands the mod registered, as `(name, help)`, in order.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick_test::FakeHost::new().install();
+    /// assert!(loader.commands().is_empty());
+    /// ```
+    #[must_use]
+    pub fn commands(&self) -> Vec<(String, String)> {
+        table::with(Vec::new(), |s| {
+            s.commands
+                .iter()
+                .map(|c| (c.0.clone(), c.1.clone()))
+                .collect()
+        })
+    }
+
+    /// The chat lines the mod sent, as `(account key, text)`; key 0 for
+    /// everyone.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick_test::FakeHost::new().install();
+    /// assert!(loader.chat().is_empty());
+    /// ```
+    #[must_use]
+    pub fn chat(&self) -> Vec<(u64, String)> {
+        table::with(Vec::new(), |s| s.chat.clone())
+    }
+
+    /// The labels the mod set, as `(entity, text)`, in order.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick_test::FakeHost::new().install();
+    /// assert!(loader.labels().is_empty());
+    /// ```
+    #[must_use]
+    pub fn labels(&self) -> Vec<(u32, String)> {
+        table::with(Vec::new(), |s| s.labels.clone())
+    }
+
+    /// Asks the mod's rename filters about `player` renaming `entity` to
+    /// `text`; whether every filter lets it through.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick_test::FakeHost::new().install();
+    /// assert!(loader.rename(4096, None, "Tools"));
+    /// ```
+    #[must_use]
+    pub fn rename(&self, entity: u32, player: Option<&PlayerInfo>, text: &str) -> bool {
+        let filters = table::with(Vec::new(), |s| s.rename_filters.clone());
+        let call = RenameCall {
+            header: Header::of::<RenameCall>(),
+            entity,
+            known: u8::from(player.is_some()),
+            player: player.copied().unwrap_or(PlayerInfo {
+                header: Header::of::<PlayerInfo>(),
+                slot: u32::MAX,
+                entity: 0,
+                key: 0,
+                permissions: 0,
+                name_len: 0,
+                name: [0; 64],
+            }),
+            text: Str::new(text),
+        };
+        filters.iter().all(|&(callback, user)| {
+            let user = core::ptr::with_exposed_provenance_mut(user);
+            // SAFETY: a valid call; `user` is the pointer the mod registered with.
+            let allowed = unsafe { callback(&raw const call, user) };
+            allowed != 0
+        })
     }
 
     /// The services the mod published, as `(name, version)`, in order.
