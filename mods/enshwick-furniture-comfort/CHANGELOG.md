@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.2.2](https://github.com/themaiby/enshwick/compare/enshwick-furniture-comfort-v0.2.1...enshwick-furniture-comfort-v0.2.2) (2026-10-20)
+
+
+### Features
+
+* **api:** skill, comfort and experience hooks in the platform ([#100](https://github.com/themaiby/enshwick/issues/100)) ([c810a02](https://github.com/themaiby/enshwick/commit/c810a02a60d5d05b8872bf8628afc27123868aa1))
+
+
+### Bug Fixes
+
+* **mods:** audit fixes across every mod ([#94](https://github.com/themaiby/enshwick/issues/94)) ([e83b2d6](https://github.com/themaiby/enshwick/commit/e83b2d6d9f788f3cf9cc60d32fdcdb95196b76d4))
+
 ## [0.2.1](https://github.com/themaiby/enshwick/compare/enshwick-furniture-comfort-v0.2.0...enshwick-furniture-comfort-v0.2.1) (2026-10-20)
 
 ## [0.2.0](https://github.com/themaiby/enshwick/compare/enshwick-furniture-comfort-v0.1.6...enshwick-furniture-comfort-v0.2.0) (2026-10-20)

@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.2](https://github.com/themaiby/enshwick/compare/enshwick-building-materials-v0.3.1...enshwick-building-materials-v0.3.2) (2026-10-20)
+
+
+### Bug Fixes
+
+* **mods:** audit fixes across every mod ([#94](https://github.com/themaiby/enshwick/issues/94)) ([e83b2d6](https://github.com/themaiby/enshwick/commit/e83b2d6d9f788f3cf9cc60d32fdcdb95196b76d4))
+
 ## [0.3.1](https://github.com/themaiby/enshwick/compare/enshwick-building-materials-v0.3.0...enshwick-building-materials-v0.3.1) (2026-10-20)
 
 ## [0.3.0](https://github.com/themaiby/enshwick/compare/enshwick-building-materials-v0.2.0...enshwick-building-materials-v0.3.0) (2026-10-20)

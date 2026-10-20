@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.4.0](https://github.com/themaiby/enshwick/compare/cargo-enshwick-v0.3.1...cargo-enshwick-v0.4.0) (2026-10-20)
+
+
+### Features
+
+* **api:** skill, comfort and experience hooks in the platform ([#100](https://github.com/themaiby/enshwick/issues/100)) ([c810a02](https://github.com/themaiby/enshwick/commit/c810a02a60d5d05b8872bf8628afc27123868aa1))
+
+
+### Bug Fixes
+
+* **api:** audit the modder API for soundness, ABI and reuse ([#95](https://github.com/themaiby/enshwick/issues/95)) ([d800142](https://github.com/themaiby/enshwick/commit/d800142991a2d93aaf943af9f6e5cc629fa54d68))
+
 ## [0.3.1](https://github.com/themaiby/enshwick/compare/cargo-enshwick-v0.3.0...cargo-enshwick-v0.3.1) (2026-10-20)
 
 
