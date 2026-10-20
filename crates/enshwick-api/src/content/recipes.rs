@@ -4,13 +4,43 @@
 use super::{Blob, Guid, types};
 use crate::{Load, Off};
 
-/// The most recipes the game takes at one workshop; more ends the game with
-/// "`SmallDynamicArray` is out of elements".
+/// The most recipes the game itself takes at one workshop; more ends the game
+/// with "`SmallDynamicArray` is out of elements" unless the loader lifts the
+/// limit (see [`workshop_limit`]).
 pub const WORKSHOP_RECIPES: usize = 512;
 
 /// Places at each workshop derived recipes leave free for single ones,
-/// which [`Load::add_recipe`] adds.
+/// which [`Load::add_recipe`] adds, while the game's limit holds.
 pub const RESERVED_FOR_SINGLE: usize = 16;
+
+/// The most recipes one workshop takes on the running game: [`usize::MAX`]
+/// once the loader has lifted the game's limit, else [`WORKSHOP_RECIPES`],
+/// also outside the game and with an older loader. The answer is final once
+/// the hooks are armed, before the game first reads the recipe registry.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_api::content::recipes::{WORKSHOP_RECIPES, workshop_limit};
+///
+/// // Outside the game the limit holds.
+/// assert_eq!(workshop_limit(), WORKSHOP_RECIPES);
+/// ```
+#[must_use]
+pub fn workshop_limit() -> usize {
+    let Some(host) = crate::host() else {
+        return WORKSHOP_RECIPES;
+    };
+    let api = host.api();
+    let end = core::mem::offset_of!(crate::abi::HostApi, workshop_recipes) + size_of::<usize>();
+    if !api.header.covers(end) {
+        return WORKSHOP_RECIPES;
+    }
+    match (api.workshop_recipes)() {
+        u32::MAX => usize::MAX,
+        limit => usize::try_from(limit).unwrap_or(WORKSHOP_RECIPES),
+    }
+}
 
 /// The game's recipe registry resource.
 pub const RECIPE_REGISTRY: Guid = Guid::parse("5e57de0f-280c-4559-8191-f02c1ba656e2");
@@ -121,12 +151,14 @@ fn fnv1a(bytes: &[u8]) -> u32 {
     })
 }
 
-/// The recipe registry with `recipe` after the others.
+/// The recipe registry with `recipe` after the others, unless its workshop
+/// already holds `limit` recipes.
 #[must_use]
 pub fn add_recipe_to(
     layout: &RecipeLayout,
     registry: &[u8],
     recipe: &NewRecipe,
+    limit: usize,
 ) -> Option<Vec<u8>> {
     let mut registry = Blob::new(registry);
     let (start, count) = registry.array(layout.recipes)?;
@@ -138,11 +170,9 @@ pub fn add_recipe_to(
         .get(&workshop)
         .copied()
         .unwrap_or(0)
-        >= WORKSHOP_RECIPES
+        >= limit
     {
-        crate::warn!(
-            "recipe skipped: workshop {workshop} holds {WORKSHOP_RECIPES} recipes, the game's most"
-        );
+        crate::warn!("recipe skipped: workshop {workshop} holds {limit} recipes, the game's most");
         return Some(registry.into_bytes());
     }
     let template = registry.bytes().get(like..like + layout.recipe)?.to_vec();
@@ -304,14 +334,21 @@ pub fn derived_guid(base: Guid, salt: u32) -> Guid {
 }
 
 /// The recipe registry with a derived copy after the others for each vanilla
-/// recipe `choose` picks.
+/// recipe `choose` picks. With a workshop `limit` other than [`usize::MAX`],
+/// copies stop [`RESERVED_FOR_SINGLE`] short of it.
 #[must_use]
 pub fn derive_recipes_in(
     layout: &RecipeLayout,
     registry: &[u8],
     salt: u32,
+    limit: usize,
     choose: &dyn Fn(&RecipeView<'_>) -> Option<Derived>,
 ) -> Option<Vec<u8>> {
+    let cap = if limit == usize::MAX {
+        limit
+    } else {
+        limit.saturating_sub(RESERVED_FOR_SINGLE)
+    };
     let mut blob = Blob::new(registry);
     let (start, count) = blob.array(layout.recipes)?;
     let mut counts = workshop_counts(layout, &blob)?;
@@ -329,7 +366,7 @@ pub fn derive_recipes_in(
         let held = counts
             .entry(blob.read_u32(at + layout.workshop)?)
             .or_insert(0);
-        if *held >= WORKSHOP_RECIPES - RESERVED_FOR_SINGLE {
+        if *held >= cap {
             skipped += 1;
             continue;
         }
@@ -338,7 +375,7 @@ pub fn derive_recipes_in(
     }
     if skipped > 0 {
         crate::warn!(
-            "{skipped} derived recipes skipped: a workshop takes {WORKSHOP_RECIPES} recipes at most, {RESERVED_FOR_SINGLE} kept for single ones; many recipes belong at a workshop or NPC of the mod's own"
+            "{skipped} derived recipes skipped: a workshop takes {limit} recipes at most, {RESERVED_FOR_SINGLE} kept for single ones; many recipes belong at a workshop or NPC of the mod's own"
         );
     }
     if picked.is_empty() {
@@ -412,7 +449,7 @@ impl Load<'_> {
         let layout = RecipeLayout::resolve(self)?;
         let registry = RECIPE_REGISTRY.key(types::RECIPE_REGISTRY);
         self.serve(registry, registry, move |base| {
-            add_recipe_to(&layout, base, &recipe)
+            add_recipe_to(&layout, base, &recipe, workshop_limit())
         })
     }
 
@@ -449,7 +486,7 @@ impl Load<'_> {
         let salt = fnv1a(salt.as_bytes());
         let registry = RECIPE_REGISTRY.key(types::RECIPE_REGISTRY);
         self.serve(registry, registry, move |base| {
-            derive_recipes_in(&layout, base, salt, &choose)
+            derive_recipes_in(&layout, base, salt, workshop_limit(), &choose)
         })
     }
 }
@@ -504,7 +541,8 @@ mod tests {
             output_count: 1,
             cost: 2,
         };
-        let built = Blob::new(&add_recipe_to(&LAYOUT, blob.bytes(), &new).unwrap());
+        let built =
+            Blob::new(&add_recipe_to(&LAYOUT, blob.bytes(), &new, WORKSHOP_RECIPES).unwrap());
         let (recipes, count) = built.array(8).unwrap();
         assert_eq!(count, 2);
         let copy = recipes + 0xa8;
@@ -539,7 +577,7 @@ mod tests {
             assert!(blob.set_array(at + 0x78, name_at, u32::try_from(name.len() - 1).unwrap()));
         }
         assert!(blob.set_array(8, first, 2));
-        let built = derive_recipes_in(&LAYOUT, blob.bytes(), 7, &|r| {
+        let built = derive_recipes_in(&LAYOUT, blob.bytes(), 7, WORKSHOP_RECIPES, &|r| {
             r.debug_name()
                 .starts_with("Block_")
                 .then_some(Derived { output: 2, cost: 1 })
@@ -575,6 +613,6 @@ mod tests {
             output_count: 1,
             cost: 1,
         };
-        assert!(add_recipe_to(&LAYOUT, blob.bytes(), &new).is_none());
+        assert!(add_recipe_to(&LAYOUT, blob.bytes(), &new, WORKSHOP_RECIPES).is_none());
     }
 }

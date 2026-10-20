@@ -155,6 +155,8 @@ pub struct FakeHost {
     mods: Vec<ModInfo>,
     services: HashMap<(String, u32), usize>,
     refused_hooks: HashSet<u64>,
+    code: (u64, u64),
+    workshop_recipes: u32,
 }
 
 impl Default for FakeHost {
@@ -196,6 +198,8 @@ impl FakeHost {
             mods: Vec::new(),
             services: HashMap::new(),
             refused_hooks: HashSet::new(),
+            code: (0, 0),
+            workshop_recipes: 512,
         }
     }
 
@@ -517,6 +521,36 @@ impl FakeHost {
     #[must_use]
     pub fn refuse_hook(mut self, target: u64) -> Self {
         self.refused_hooks.insert(target);
+        self
+    }
+
+    /// Answers `code` as the game's code section, for pattern searches.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// static CODE: [u8; 4] = [0x90, 0xb9, 0x00, 0x02];
+    /// let loader = enshwick_test::FakeHost::new().code(&CODE).install();
+    /// # let _ = loader;
+    /// ```
+    #[must_use]
+    pub fn code(mut self, code: &'static [u8]) -> Self {
+        self.code = (code.as_ptr().addr() as u64, code.len() as u64);
+        self
+    }
+
+    /// The most recipes one workshop takes; 512 unless set, [`u32::MAX`]
+    /// for a lifted limit.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick_test::FakeHost::new().workshop_recipes(u32::MAX).install();
+    /// # let _ = loader;
+    /// ```
+    #[must_use]
+    pub fn workshop_recipes(mut self, limit: u32) -> Self {
+        self.workshop_recipes = limit;
         self
     }
 
@@ -909,6 +943,20 @@ impl Installed {
         }
         // SAFETY: on success the patch wrote bytes that live for the process.
         Ok(unsafe { core::slice::from_raw_parts(out, out_len) }.to_vec())
+    }
+
+    /// The code patches the mod asked for, as `(address, expected,
+    /// replacement)`, in order.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick_test::FakeHost::new().install();
+    /// assert!(loader.code_patches().is_empty());
+    /// ```
+    #[must_use]
+    pub fn code_patches(&self) -> Vec<(u64, Vec<u8>, Vec<u8>)> {
+        table::with(Vec::new(), |s| s.code_patches.clone())
     }
 
     /// The texts the mod added, as `(tag, language, text)`, in order.

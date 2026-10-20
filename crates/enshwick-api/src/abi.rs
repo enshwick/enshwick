@@ -14,7 +14,7 @@ use core::sync::atomic::AtomicUsize;
 pub const ABI_MAJOR: u16 = 1;
 
 /// The minor version of this interface. A newer minor only appends fields.
-pub const ABI_MINOR: u16 = 6;
+pub const ABI_MINOR: u16 = 7;
 
 /// Whether `id` is a valid mod id: 1 to 64 characters of `[a-z0-9-]`.
 ///
@@ -1321,6 +1321,26 @@ pub struct HostApi {
     /// advertises the `synced` of each join mod. The text written stays valid
     /// until the mod's next call to `sync`. Since minor 6.
     pub sync: extern "system" fn(me: ModHandle, synced: Str, out: *mut Str) -> Status,
+    /// Writes where the game's code section (`.text`) is loaded and how many
+    /// bytes it spans. Since minor 7.
+    pub code_range: extern "system" fn(start: *mut u64, len: *mut u64) -> Status,
+    /// Replaces `len` bytes of game code at `address`, which must read
+    /// `expected` at arming, with `replacement`; both point at `len` bytes
+    /// valid for the call. The loader writes the patch with the hooks, refuses
+    /// one that overlaps another patch, and skips one that overlaps hooked
+    /// bytes or no longer reads `expected`, turning the mod off. Allowed
+    /// during `enshwick_mod_init` only. Since minor 7.
+    pub patch_code: extern "system" fn(
+        me: ModHandle,
+        address: u64,
+        expected: *const u8,
+        replacement: *const u8,
+        len: usize,
+    ) -> Status,
+    /// The most recipes one workshop takes on the running game: 512, the
+    /// game's own list size, or [`u32::MAX`] once the loader has lifted that
+    /// limit at arming. Since minor 7.
+    pub workshop_recipes: extern "system" fn() -> u32,
 }
 
 /// The exports a mod DLL provides, by name.
@@ -1372,7 +1392,9 @@ const _: () = {
     assert!(core::mem::offset_of!(HostApi, add_text) == 24 + 22 * 8);
     assert!(core::mem::offset_of!(HostApi, mods) == 24 + 23 * 8);
     assert!(core::mem::offset_of!(HostApi, sync) == 24 + 24 * 8);
-    assert!(size_of::<HostApi>() == 24 + 25 * 8);
+    assert!(core::mem::offset_of!(HostApi, code_range) == 24 + 25 * 8);
+    assert!(core::mem::offset_of!(HostApi, workshop_recipes) == 24 + 27 * 8);
+    assert!(size_of::<HostApi>() == 24 + 28 * 8);
     assert!(core::mem::offset_of!(Manifest, updates) == 80);
     assert!(size_of::<UpdateSource>() == 48);
     assert!(size_of::<ResourceKey>() == 24);

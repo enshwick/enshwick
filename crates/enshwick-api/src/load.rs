@@ -265,6 +265,121 @@ impl Load<'_> {
         ok(status, (), || format!("hook {}", hook.name()))
     }
 
+    /// The game's code section (`.text`) as loaded; the slice starts at its
+    /// absolute address and lives for the process.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] when the loader is too old to tell.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// fn init(load: &mut enshwick_api::Load<'_>) -> Result<(), enshwick_api::Off> {
+    ///     let code = load.code()?;
+    ///     enshwick_api::info!("code at {:p}, {} bytes", code.as_ptr(), code.len());
+    ///     Ok(())
+    /// }
+    /// ```
+    pub fn code(&self) -> Result<&'static [u8], Off> {
+        let api = self.api();
+        let end = core::mem::offset_of!(HostApi, code_range) + size_of::<usize>();
+        if !api.header.covers(end) {
+            return Err(Off::new("code search needs a newer loader"));
+        }
+        let (mut start, mut len) = (0u64, 0u64);
+        let status = (api.code_range)(&raw mut start, &raw mut len);
+        ok(status, (), || "code section".to_owned())?;
+        let (Ok(start), Ok(len)) = (usize::try_from(start), usize::try_from(len)) else {
+            return Err(Off::new("code section: out of range"));
+        };
+        if start == 0 {
+            return Err(Off::new("code section: missing"));
+        }
+        // SAFETY: the loader names the game's code section, mapped readable
+        // for the life of the process.
+        Ok(unsafe { core::slice::from_raw_parts(core::ptr::with_exposed_provenance(start), len) })
+    }
+
+    /// The absolute address of the one place in the game's code that matches
+    /// `pattern`: hex bytes separated by spaces, `??` for any byte (see
+    /// [`Pattern`](crate::code::Pattern)). Unlike a pinned symbol it survives
+    /// a game update that leaves those bytes alone.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] when the pattern is malformed, matches nothing or matches more
+    /// than one place.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// fn init(load: &mut enshwick_api::Load<'_>) -> Result<(), enshwick_api::Off> {
+    ///     let site = load.find_code("B9 00 02 00 00 66 3B C1 0F 84 ?? ?? ?? ??")?;
+    ///     assert_ne!(site, 0);
+    ///     Ok(())
+    /// }
+    /// ```
+    pub fn find_code(&self, pattern: &str) -> Result<u64, Off> {
+        let parsed = crate::code::Pattern::parse(pattern)
+            .map_err(|e| Off::new(format!("code pattern {pattern:?}: {e}")))?;
+        let code = self.code()?;
+        let at = parsed
+            .find_unique(code)
+            .map_err(|e| Off::new(format!("code pattern {pattern:?}: {e}")))?;
+        Ok(code.as_ptr().addr() as u64 + at as u64)
+    }
+
+    /// Replaces game code at `address`: the bytes there must read `expected`
+    /// and become `replacement`, of the same length. The loader checks the
+    /// bytes again when it arms, writes the patch together with every hook,
+    /// and logs it. A patch stays for the process, even when the mod is
+    /// turned off later.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] when the loader is too old, the lengths differ, the bytes are
+    /// not in the game's code or another patch covers any of them. At arming,
+    /// a patch whose bytes no longer read `expected` or that overlaps a hooked
+    /// function's first bytes is skipped and the mod turned off.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// fn init(load: &mut enshwick_api::Load<'_>) -> Result<(), enshwick_api::Off> {
+    ///     // `cmp eax, 8; jb` becomes `cmp eax, 16; jb`.
+    ///     let site = load.find_code("83 F8 08 72 ??")?;
+    ///     load.patch_code(site + 2, &[0x08], &[0x10])
+    /// }
+    /// ```
+    pub fn patch_code(
+        &mut self,
+        address: u64,
+        expected: &[u8],
+        replacement: &[u8],
+    ) -> Result<(), Off> {
+        let api = self.api();
+        let end = core::mem::offset_of!(HostApi, patch_code) + size_of::<usize>();
+        if !api.header.covers(end) {
+            return Err(Off::new("code patches need a newer loader"));
+        }
+        if expected.len() != replacement.len() {
+            return Err(Off::new(format!(
+                "code patch at {address:#x}: {} bytes expected, {} given",
+                expected.len(),
+                replacement.len()
+            )));
+        }
+        let status = (api.patch_code)(
+            self.host.handle(),
+            address,
+            expected.as_ptr(),
+            replacement.as_ptr(),
+            expected.len(),
+        );
+        ok(status, (), || format!("code patch at {address:#x}"))
+    }
+
     /// The mod's settings: its file in `mod-configs/`, created from `defaults` when
     /// missing, parsed into `T`.
     ///

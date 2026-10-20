@@ -93,10 +93,26 @@ pub(crate) fn prepare(requests: &[Request]) -> Vec<Result<Pending, String>> {
     prepared
 }
 
-/// Writes the jumps over the targets of `pending`, all or none; false when
-/// none could be written.
-pub(crate) fn commit(pending: &[&Pending]) -> bool {
-    write_all(pending)
+/// Bytes to write over game code in the same batch as the hooks.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Bytes<'a> {
+    /// Where they go.
+    pub(crate) address: usize,
+    /// What goes there.
+    pub(crate) bytes: &'a [u8],
+}
+
+impl Pending {
+    /// The bytes of the target the hook replaces or moves: start and length.
+    pub(crate) fn span(&self) -> (usize, usize) {
+        (self.target, self.stolen)
+    }
+}
+
+/// Writes the jumps over the targets of `pending` and the `code` patches,
+/// all or none; false when none could be written.
+pub(crate) fn commit(pending: &[&Pending], code: &[Bytes<'_>]) -> bool {
+    write_all(pending, code)
 }
 
 fn prepare_one(request: Request, fresh: &mut Vec<usize>) -> Result<Pending, String> {
@@ -238,10 +254,16 @@ fn allocate_near(target: usize) -> Option<usize> {
         })
 }
 
-/// Writes every patch with the other threads suspended; false when any
-/// target could not be made writable, in which case none is written.
-fn write_all(prepared: &[&Pending]) -> bool {
-    if prepared.is_empty() {
+/// Writes every hook jump and code patch with the other threads suspended;
+/// false when any target could not be made writable, in which case none is
+/// written.
+fn write_all(prepared: &[&Pending], code: &[Bytes<'_>]) -> bool {
+    let writes: Vec<(usize, &[u8], Option<&Pending>)> = prepared
+        .iter()
+        .map(|&p| (p.target, &p.patch[..], Some(p)))
+        .chain(code.iter().map(|c| (c.address, c.bytes, None)))
+        .collect();
+    if writes.is_empty() {
         return true;
     }
     let threads = other_threads();
@@ -249,41 +271,44 @@ fn write_all(prepared: &[&Pending]) -> bool {
         // SAFETY: a thread handle opened with suspend rights.
         unsafe { SuspendThread(thread) };
     }
-    let mut protections = Vec::with_capacity(prepared.len());
+    let mut protections = Vec::with_capacity(writes.len());
     let mut writable = true;
-    for p in prepared {
+    for &(address, bytes, _) in &writes {
         let mut old = 0;
         // SAFETY: the target's code pages; restored below.
         let ok = unsafe {
             VirtualProtect(
-                p.target as *const _,
-                PATCH,
+                address as *const _,
+                bytes.len(),
                 PAGE_EXECUTE_READWRITE,
                 &raw mut old,
             )
         };
         writable &= ok != 0;
-        protections.push((p.target, old, ok != 0));
+        protections.push((address, bytes.len(), old, ok != 0));
     }
     if writable {
-        for p in prepared {
-            // SAFETY: the target is writable now and its first `stolen` bytes
-            // were moved to the trampoline.
-            unsafe { (p.target as *mut u8).copy_from_nonoverlapping(p.patch.as_ptr(), PATCH) };
-            for &thread in &threads {
-                relocate(thread, p);
+        for &(address, bytes, hook) in &writes {
+            // SAFETY: the target is writable now; a hook's first `stolen`
+            // bytes were moved to the trampoline, and a code patch's bytes
+            // were checked against what its owner expected.
+            unsafe { (address as *mut u8).copy_from_nonoverlapping(bytes.as_ptr(), bytes.len()) };
+            if let Some(p) = hook {
+                for &thread in &threads {
+                    relocate(thread, p);
+                }
             }
         }
     }
     // SAFETY: no preconditions.
     let process = unsafe { GetCurrentProcess() };
-    for (target, old, changed) in protections {
+    for (address, len, old, changed) in protections {
         if changed {
             let mut ignored = 0;
             // SAFETY: restores what was there before.
-            unsafe { VirtualProtect(target as *const _, PATCH, old, &raw mut ignored) };
+            unsafe { VirtualProtect(address as *const _, len, old, &raw mut ignored) };
             // SAFETY: our own process's code.
-            unsafe { FlushInstructionCache(process, target as *const _, PATCH) };
+            unsafe { FlushInstructionCache(process, address as *const _, len) };
         }
     }
     for &thread in &threads {
@@ -407,7 +432,7 @@ mod tests {
             detour: (plus_hundred as Unary as *const ()).addr(),
         }]);
         let ready: Vec<&Pending> = pending.iter().filter_map(|p| p.as_ref().ok()).collect();
-        assert!(commit(&ready));
+        assert!(commit(&ready, &[]));
         pending.into_iter().next().unwrap().map(|p| p.original)
     }
 
@@ -446,6 +471,26 @@ mod tests {
         let original = hook(function(&code)).unwrap();
         assert_eq!(callable(original)(1), 5);
         assert_eq!(callable(original)(0), 9);
+    }
+
+    #[test]
+    fn code_patches_are_written_in_the_batch_with_the_hooks() {
+        // mov eax, 1; ret; padding
+        let patched = function(&[0xb8, 0x01, 0x00, 0x00, 0x00, 0xc3, 0xcc, 0xcc]);
+        let hooked = function(&[0x89, 0xc8, 0x83, 0xc0, 0x01, 0xc3, 0xcc, 0xcc, 0xcc]);
+        let pending = prepare(&[Request {
+            target: hooked,
+            detour: (plus_hundred as Unary as *const ()).addr(),
+        }]);
+        let ready: Vec<&Pending> = pending.iter().filter_map(|p| p.as_ref().ok()).collect();
+        assert_eq!(ready[0].span(), (hooked, 5));
+        let code = [Bytes {
+            address: patched + 1,
+            bytes: &[0x02],
+        }];
+        assert!(commit(&ready, &code));
+        assert_eq!(callable(patched)(0), 2);
+        assert_eq!(callable(hooked)(1), 101);
     }
 
     #[test]

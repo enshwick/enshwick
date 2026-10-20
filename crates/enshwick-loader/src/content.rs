@@ -224,6 +224,9 @@ pub(crate) fn seal_and_link(loader: &'static Loader) {
         return;
     }
     LOADED.get_or_init(|| loader);
+    if served_recipes() {
+        crate::code::lift_workshop_limit(loader);
+    }
     let links: [(&str, *const (), &'static AtomicUsize); 3] = [
         ("resource.open", open as *const (), &OPEN_NEXT),
         ("resource.resolve", resolve as *const (), &RESOLVE_NEXT),
@@ -256,6 +259,19 @@ pub(crate) fn seal_and_link(loader: &'static Loader) {
 }
 
 static LOADED: OnceLock<&'static Loader> = OnceLock::new();
+
+/// The game's recipe registry.
+fn recipe_registry() -> ResourceKey {
+    use enshwick_api::content::{recipes::RECIPE_REGISTRY, types};
+    RECIPE_REGISTRY.key(types::RECIPE_REGISTRY)
+}
+
+/// Whether mods serve the recipe registry.
+fn served_recipes() -> bool {
+    SERVED_LIST
+        .get()
+        .is_some_and(|served| served.iter().any(|s| s.key == recipe_registry()))
+}
 
 fn next<F: Copy>(slot: &AtomicUsize) -> F {
     let address = slot.load(Ordering::Acquire);
@@ -393,6 +409,9 @@ fn build(entry: &Served, database: *mut u8) -> Option<(usize, usize)> {
     }
     let result = (current, current_len);
     state.built = Some(result);
+    if entry.key == recipe_registry() {
+        crate::code::recipes_served(current, current_len);
+    }
     if let Some(loader) = LOADED.get() {
         let by: Vec<&str> = applied
             .iter()
