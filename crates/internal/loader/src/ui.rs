@@ -13,6 +13,7 @@ mod demo;
 mod dialog;
 mod engine;
 mod map;
+mod mods;
 
 use core::cell::{Cell, RefCell};
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
@@ -239,6 +240,9 @@ pub(crate) fn link(loader: &'static Loader) {
     let popup = engine.popup;
     let hud = engine.hud;
     let _first = ENGINE.set(engine);
+    if let Some(engine) = ENGINE.get() {
+        mods::link(loader, engine);
+    }
     loader.link_feature(
         "HUD",
         Some(hud),
@@ -297,11 +301,16 @@ unsafe extern "system" fn detour(state: *mut u8) {
     }
     let drawn = std::panic::catch_unwind(|| {
         UI_THREAD.store(thread_id(), Ordering::Release);
+        let frame = mods::next_frame();
         map::note(context);
         ARENA.with_borrow_mut(Arena::next_frame);
         frames(engine, context);
         // SAFETY: inside the frame, on its thread, no window open.
         unsafe { demo::draw(engine, context) };
+        if let Some(loader) = crate::host::loader() {
+            // SAFETY: as above.
+            unsafe { mods::draw(loader, engine, context, frame) };
+        }
         // SAFETY: inside the frame, on its thread, no popup of the game's
         // showing; the slot is the popup's chain.
         unsafe { dialog::draw(NEXT.get(), context) };
@@ -557,7 +566,27 @@ impl<'a> Painter<'a> {
     ) -> Option<f32> {
         let label = copy(&[label]);
         // SAFETY: as above.
-        unsafe { self.engine.slider(&label, value, range, steps, read_only) }
+        unsafe {
+            self.engine
+                .slider(&label, value, range, steps, read_only, false)
+        }
+    }
+
+    /// A settings slider that takes its value when the player lets go.
+    pub(super) fn setting_slider(
+        &self,
+        label: &[u8],
+        value: f32,
+        range: (f32, f32),
+        steps: u32,
+        read_only: bool,
+    ) -> Option<f32> {
+        let label = copy(&[label]);
+        // SAFETY: as above.
+        unsafe {
+            self.engine
+                .slider(&label, value, range, steps, read_only, true)
+        }
     }
 
     pub(super) fn dropdown(
@@ -702,7 +731,8 @@ fn row(
             let range = (raw.min.min(raw.max), raw.max.max(raw.min));
             let value = raw.value.clamp(range.0, range.1);
             // SAFETY: as above.
-            let changed = unsafe { engine.slider(&label, value, range, raw.steps, read_only) };
+            let changed =
+                unsafe { engine.slider(&label, value, range, raw.steps, read_only, false) };
             if let Some(value) = changed {
                 raw.value = value;
                 raw.result = 1;

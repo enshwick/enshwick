@@ -56,6 +56,8 @@ pub(crate) struct ModRecord {
     pub(crate) sync_out: Mutex<String>,
     /// The settings schema the mod handed the loader.
     pub(crate) schema: Mutex<Option<enshwick_loader_api::config::Schema>>,
+    /// The mod's check of new settings texts: callback and pointer.
+    pub(crate) check: OnceLock<(api_frame::ConfigCheckFn, usize)>,
 }
 
 impl ModRecord {
@@ -630,6 +632,7 @@ pub(crate) static API: HostApi = HostApi {
     ui_dialog,
     ui_hud,
     ui_markers,
+    config_check,
 };
 
 /// A static slice from a pointer and a count, empty for a null pointer.
@@ -2502,6 +2505,55 @@ extern "system" fn ui_dialog(
         };
         crate::ui::mod_dialog(loader, index, dialog, callback, user)
     })
+}
+
+extern "system" fn config_check(
+    me: ModHandle,
+    callback: api_frame::ConfigCheckFn,
+    user: *mut core::ffi::c_void,
+) -> Status {
+    entry("config_check", || match calling(me) {
+        Ok((_, _, record)) => {
+            if record
+                .check
+                .set((callback, user.expose_provenance()))
+                .is_ok()
+            {
+                Status::OK
+            } else {
+                Status::REFUSED
+            }
+        }
+        Err(status) => status,
+    })
+}
+
+/// Runs mod `index`'s check of the new settings text `text`; `Ok` for a mod
+/// without one.
+pub(crate) fn check_settings(index: usize, text: &str) -> Result<(), String> {
+    let Some(&(callback, user)) = loader()
+        .and_then(|loader| loader.mods.get(index))
+        .and_then(|record| record.check.get())
+    else {
+        return Ok(());
+    };
+    let mut why = Str::EMPTY;
+    // SAFETY: the mod's check with its own pointer; the text lives for the
+    // call, and the safe layer catches its panics.
+    let status = unsafe {
+        callback(
+            Str::new(text),
+            &raw mut why,
+            core::ptr::with_exposed_provenance_mut(user),
+        )
+    };
+    if status.is_ok() {
+        return Ok(());
+    }
+    // SAFETY: the reason stays valid until the mod's next check.
+    Err(unsafe { why.as_str() }
+        .unwrap_or("refused by the mod")
+        .to_owned())
 }
 
 /// Mod handles start at 1; 0 is no mod.

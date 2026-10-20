@@ -648,6 +648,12 @@ pub static BUILDS: &[KnownBuild] = &[
             ("ui.context", 0x281_b498),
             ("ui.hud", 0xbd_be70),
             ("ui.hud_visible", 0xd4_e4a0),
+            ("ui.main_entry", 0xc1_b7a0),
+            ("ui.pause_entry", 0xc9_ffe0),
+            ("ui.action_new", 0xb1_2ff0),
+            ("ui.action_query", 0xd8_f6f0),
+            ("ui.main_menu_site", 0xc1_a7e0),
+            ("ui.pause_menu_site", 0xcc_1a87),
         ],
         constants: &[
             ("text.pool_language", 0xd8),
@@ -970,6 +976,12 @@ pub static BUILDS: &[KnownBuild] = &[
             ("ui.loca_text.bytes", 0x7489_4810_245c_8948),
             ("ui.hud.bytes", 0x5756_5508_245c_8948),
             ("ui.hud_visible.bytes", 0x8b48_20ec_8348_5740),
+            ("ui.main_entry.bytes", 0x4157_5653_55c4_8b48),
+            ("ui.pause_entry.bytes", 0x8818_4088_44c4_8b48),
+            ("ui.action_new.bytes", 0x3345_40ec_8348_5340),
+            ("ui.action_query.bytes", 0xc8ec_8148_5741_5340),
+            ("ui.main_menu_site.bytes", 0x0001_4824_44c7_c033),
+            ("ui.pause_menu_site.bytes", 0x4c01_b59a_0a05_8b48),
         ],
     },
 ];
@@ -1028,7 +1040,7 @@ mod tests {
                 checked += 1;
             }
         }
-        assert!(checked >= 35);
+        assert!(checked >= 41);
         let reflection = enshwick_loader_reflect::Reflection::scan(&image);
         for (ty, field, offset) in [
             ("keen::FbUiBundle", "namedStyles", 0x10a0c),

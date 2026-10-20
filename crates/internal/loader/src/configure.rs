@@ -7,6 +7,12 @@
 use enshwick_loader_api::config::{Field, Kind, Schema, Stage};
 use toml_edit::DocumentMut;
 
+#[cfg(windows)]
+mod apply;
+pub mod rows;
+#[cfg(windows)]
+pub(crate) use apply::apply;
+
 /// The command's name.
 pub const COMMAND: &str = "config";
 

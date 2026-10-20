@@ -61,7 +61,8 @@ mods.
 3. Start the game or the server. Each mod writes its settings to
    `mod-configs/<id>.toml` on first start; the log is `logs/enshwick/`
    (`all.log`, `loader.log`, `mods/<id>.log`), and how much it keeps is set in
-   `mod-configs/enshwick.toml`.
+   `mod-configs/enshwick.toml`. In game, "Mods" in the main menu and in the
+   pause menu lists the mods and changes their settings.
 
 Players and their server need the same mods: the server advertises its mod set.
 A player's mods the server does not run are turned off for that session, with a

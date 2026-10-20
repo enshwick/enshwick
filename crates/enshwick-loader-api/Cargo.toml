@@ -46,6 +46,10 @@ name = "buffs"
 required-features = ["test"]
 
 [[test]]
+name = "config_check"
+required-features = ["test"]
+
+[[test]]
 name = "game_events"
 required-features = ["test"]
 
