@@ -55,7 +55,12 @@ static ZONES: ZonesService = ZonesService { zones };
 
 impl Mod for FlameAltarZones {
     fn manifest() -> &'static enshwick_api::abi::Manifest {
-        enshwick_api::manifest!(id: "flame-altar-zones", side: BOTH, join = true)
+        enshwick_api::manifest!(
+            id: "flame-altar-zones",
+            side: BOTH,
+            join = true,
+            updates: github("themaiby/enshwick", "enshwick-flame-altar-zones"),
+        )
     }
 
     fn init(load: &mut Load<'_>) -> Result<Self, Off> {

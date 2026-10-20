@@ -6,7 +6,9 @@
 /// `SERVER`, `CLIENT` or `BOTH`. Optional, in this order: `version: "x.y.z"`
 /// (the crate's version when omitted), `join = true` (the
 /// mod counts in the join check), `requires: ["id" => "range", ...]`,
-/// `after: ["id", ...]` and
+/// `after: ["id", ...]`,
+/// `updates: github("owner/name", "component")` or `updates: url("https://...")`,
+/// where new releases come from (see [`UpdateSource`](crate::abi::UpdateSource)), and
 /// `builds: [{ side, guid, age, symbols: ["id" => rva], constants: ["id" => value] }]`,
 /// symbols and constants the mod pins itself for those game builds. The loader
 /// names the version in every message about the mod: a missing or mismatched
@@ -20,6 +22,7 @@
 ///     side: BOTH,
 ///     join = true,
 ///     requires: ["flame-altar-zones" => "^0.1"],
+///     updates: github("themaiby/enshwick", "enshwick-survivors-per-altar"),
 ///     builds: [{
 ///         side: SERVER,
 ///         guid: "1c129660cd6efc4f9f0b21652d5ff2bf",
@@ -30,10 +33,21 @@
 /// );
 /// assert_eq!(manifest.dependency_count, 1);
 /// assert_eq!(manifest.build_count, 1);
+/// assert!(!manifest.updates.is_null());
 ///
 /// let pinned = enshwick_api::manifest!(id: "safes", side: SERVER, version: "0.3.0");
 /// // SAFETY: a static string.
 /// assert_eq!(unsafe { pinned.version.as_str() }, Some("0.3.0"));
+/// assert!(pinned.updates.is_null());
+///
+/// let elsewhere = enshwick_api::manifest!(
+///     id: "my-mod",
+///     side: SERVER,
+///     updates: url("https://example.com/my-mod/latest.json"),
+/// );
+/// // SAFETY: the macro points at a static source.
+/// let source = unsafe { &*elsewhere.updates };
+/// assert_eq!(source.kind, enshwick_api::abi::UpdateKind::URL);
 /// ```
 #[macro_export]
 macro_rules! manifest {
@@ -44,6 +58,7 @@ macro_rules! manifest {
         $(, join = $join:expr)?
         $(, requires: [$($req:literal => $range:literal),* $(,)?])?
         $(, after: [$($after:literal),* $(,)?])?
+        $(, updates: $source:ident($($source_arg:literal),* $(,)?))?
         $(, builds: [$({
             side: $bside:ident,
             guid: $guid:literal,
@@ -80,6 +95,9 @@ macro_rules! manifest {
                     as &[$crate::abi::Symbol]).len(),
             },)*)?
         ];
+        static UPDATES: &[$crate::abi::UpdateSource] = &[
+            $($crate::abi::UpdateSource::$source($($source_arg),*),)?
+        ];
         static MANIFEST: $crate::abi::Manifest = $crate::abi::Manifest {
             header: $crate::abi::Header::of::<$crate::abi::Manifest>(),
             id: $crate::abi::Str::new($id),
@@ -93,6 +111,7 @@ macro_rules! manifest {
             dependency_count: DEPENDENCIES.len(),
             builds: BUILDS.as_ptr(),
             build_count: BUILDS.len(),
+            updates: $crate::__private::first_or_null(UPDATES),
         };
         &MANIFEST
     }};

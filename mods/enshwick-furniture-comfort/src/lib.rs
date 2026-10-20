@@ -78,7 +78,11 @@ pub struct FurnitureComfort;
 
 impl Mod for FurnitureComfort {
     fn manifest() -> &'static enshwick_api::abi::Manifest {
-        enshwick_api::manifest!(id: "furniture-comfort", side: SERVER)
+        enshwick_api::manifest!(
+            id: "furniture-comfort",
+            side: SERVER,
+            updates: github("themaiby/enshwick", "enshwick-furniture-comfort"),
+        )
     }
 
     fn init(load: &mut Load<'_>) -> Result<Self, Off> {

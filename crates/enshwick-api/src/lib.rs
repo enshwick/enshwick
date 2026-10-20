@@ -62,6 +62,7 @@ mod hook;
 mod host;
 pub mod i18n;
 mod load;
+pub mod mods;
 pub mod schedule;
 pub mod state;
 pub mod world;
@@ -70,6 +71,7 @@ pub use enshwick_macros::Config;
 pub use hook::{FnPtr, Hook, Next};
 pub use host::{Host, host};
 pub use load::{Load, Mod, Off};
+pub use mods::mods;
 
 #[doc(hidden)]
 pub mod __private {
@@ -85,6 +87,15 @@ pub mod __private {
         match join {
             [true] => ManifestFlags::JOIN,
             _ => ManifestFlags::NONE,
+        }
+    }
+
+    #[must_use]
+    pub const fn first_or_null<T>(given: &'static [T]) -> *const T {
+        if given.is_empty() {
+            core::ptr::null()
+        } else {
+            given.as_ptr()
         }
     }
 

@@ -91,6 +91,8 @@ pub(crate) fn start(stub_abi: u32, missing_forwards: u32) {
             .map(|&i| ModRecord {
                 id: candidates[i].id.clone(),
                 version: candidates[i].version.to_string(),
+                file: format!("mods/{}", libraries[i].file),
+                updates: updates_of(&libraries[i]),
                 manifest: libraries[i].manifest,
                 off: AtomicBool::new(false),
                 settings: Mutex::new(None),
@@ -354,6 +356,15 @@ fn libraries(mods_dir: &Path) -> (Vec<Library>, Vec<Candidate>) {
         }
     }
     (libraries, candidates)
+}
+
+/// The update source a library declares; none, logged, when it is malformed.
+fn updates_of(library: &Library) -> enshwick_api::abi::UpdateSource {
+    // SAFETY: the manifest is static data inside its loaded DLL.
+    unsafe { crate::manifest::updates(library.manifest) }.unwrap_or_else(|reason| {
+        crate::log!(WARN, "{}: no update source: {reason}", library.file);
+        enshwick_api::abi::UpdateSource::NONE
+    })
 }
 
 /// Calls every mod's `init` in load order.
