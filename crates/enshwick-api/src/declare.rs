@@ -3,12 +3,14 @@
 /// Builds a mod's static [`Manifest`](crate::abi::Manifest).
 ///
 /// `id` is `[a-z0-9-]+` and names the DLL and the settings file; `side` is
-/// `SERVER`, `CLIENT` or `BOTH`. Optional, in this order: `join = true` (the
+/// `SERVER`, `CLIENT` or `BOTH`. Optional, in this order: `version: "x.y.z"`
+/// (the crate's version when omitted), `join = true` (the
 /// mod counts in the join check), `requires: ["id" => "range", ...]`,
 /// `after: ["id", ...]` and
 /// `builds: [{ side, guid, age, symbols: ["id" => rva], constants: ["id" => value] }]`,
-/// symbols and constants the mod pins itself for those game builds. The version is the
-/// crate's.
+/// symbols and constants the mod pins itself for those game builds. The loader
+/// names the version in every message about the mod: a missing or mismatched
+/// dependency, or a server with a different mod set.
 ///
 /// # Examples
 ///
@@ -28,12 +30,17 @@
 /// );
 /// assert_eq!(manifest.dependency_count, 1);
 /// assert_eq!(manifest.build_count, 1);
+///
+/// let pinned = enshwick_api::manifest!(id: "safes", side: SERVER, version: "0.3.0");
+/// // SAFETY: a static string.
+/// assert_eq!(unsafe { pinned.version.as_str() }, Some("0.3.0"));
 /// ```
 #[macro_export]
 macro_rules! manifest {
     (
         id: $id:literal,
         side: $side:ident
+        $(, version: $version:literal)?
         $(, join = $join:expr)?
         $(, requires: [$($req:literal => $range:literal),* $(,)?])?
         $(, after: [$($after:literal),* $(,)?])?
@@ -76,7 +83,10 @@ macro_rules! manifest {
         static MANIFEST: $crate::abi::Manifest = $crate::abi::Manifest {
             header: $crate::abi::Header::of::<$crate::abi::Manifest>(),
             id: $crate::abi::Str::new($id),
-            version: $crate::abi::Str::new(env!("CARGO_PKG_VERSION")),
+            version: $crate::abi::Str::new($crate::__private::or_default(
+                &[$($version)?],
+                env!("CARGO_PKG_VERSION"),
+            )),
             side: $crate::abi::Side::$side,
             flags: $crate::__private::join_flag(&[$($join)?]),
             dependencies: DEPENDENCIES.as_ptr(),

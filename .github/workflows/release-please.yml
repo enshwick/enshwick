@@ -67,6 +67,19 @@ jobs:
           pack loader enshwick-loader.zip
           pack all enshwick.zip
 
+      - name: Versions
+        env:
+          OUTPUTS: ${{ needs.release-please.outputs.all }}
+        run: |
+          # Every released mod's DLL carries the version of its tag, which the
+          # loader names in its messages.
+          tags=$(echo "$OUTPUTS" | jq -r 'to_entries[] | select(.key | endswith("--tag_name")) | .value' | tr -d '\r')
+          for tag in $tags; do
+            component=${tag%-v*}
+            [ -d "mods/$component" ] || continue
+            target/release/cargo-enshwick enshwick manifest "target/release/$(echo "$component" | tr '-' '_').dll" --expect-version "${tag##*-v}"
+          done
+
       - name: Attach
         env:
           GH_TOKEN: ${{ github.token }}

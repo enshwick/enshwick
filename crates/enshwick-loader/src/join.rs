@@ -5,6 +5,7 @@
 //! query `ip:port`. The hook lets the join go ahead and asks the server, over
 //! the Steam query protocol, for its `enshwick` rule.
 
+use std::collections::BTreeMap;
 use std::net::{SocketAddr, UdpSocket};
 use std::time::Duration;
 
@@ -15,14 +16,48 @@ const QUERY_TIMEOUT: Duration = Duration::from_secs(3);
 pub fn verdict(ours: &str, ours_mods: &str, server: Option<(&str, &str)>) -> Option<String> {
     match server {
         Some((fingerprint, _)) if fingerprint == ours => None,
-        Some((_, mods)) => Some(format!(
-            "This server runs a different set of Enshwick mods.\n\nServer: {mods}\nYours: {ours_mods}\n\nInstall the same mods and versions as the server, or things may not work."
-        )),
+        Some((_, mods)) => {
+            let lines = differences(mods, ours_mods);
+            Some(if lines.is_empty() {
+                "This server runs Enshwick with the same mods but another loader version, or more mods than it can list. Install the server's release, or things may not work.".to_owned()
+            } else {
+                format!(
+                    "This server runs different Enshwick mods:\n\n{}\n\nInstall the server's versions, or things may not work.",
+                    lines.join("\n")
+                )
+            })
+        }
         None if ours_mods.is_empty() => None,
         None => Some(format!(
             "This server runs no Enshwick mods, and yours ({ours_mods}) change the game for both sides. Things may not work as expected."
         )),
     }
+}
+
+/// One line per mod whose version differs between two `id@version,...` lists,
+/// naming both versions.
+#[must_use]
+pub fn differences(server: &str, ours: &str) -> Vec<String> {
+    let parse = |list: &str| -> BTreeMap<String, String> {
+        list.split(',')
+            .filter_map(|entry| entry.split_once('@'))
+            .map(|(id, version)| (id.to_owned(), version.to_owned()))
+            .collect()
+    };
+    let (server, ours) = (parse(server), parse(ours));
+    let mut ids: Vec<&String> = server.keys().chain(ours.keys()).collect();
+    ids.sort();
+    ids.dedup();
+    ids.into_iter()
+        .filter_map(|id| match (server.get(id), ours.get(id)) {
+            (Some(theirs), Some(mine)) if theirs != mine => {
+                Some(format!("{id}: server {theirs}, yours {mine}"))
+            }
+            (Some(theirs), None) => Some(format!("{id}: server {theirs}, not installed")),
+            (None, Some(mine)) => Some(format!("{id}: yours {mine}, not on the server")),
+            _ => None,
+        })
+        .collect()
 }
 
 /// The `ip:port` at the start of a server change request.
@@ -165,7 +200,12 @@ mod tests {
         assert!(
             verdict("ab", "a@1", Some(("cd", "a@2")))
                 .unwrap()
-                .contains("Server: a@2")
+                .contains("a: server 2, yours 1")
+        );
+        assert!(
+            verdict("ab", "a@1", Some(("cd", "a@1")))
+                .unwrap()
+                .contains("another loader version")
         );
         assert!(
             verdict("ab", "a@1", None)
@@ -173,6 +213,19 @@ mod tests {
                 .contains("no Enshwick mods")
         );
         assert_eq!(verdict("ab", "", None), None);
+    }
+
+    #[test]
+    fn differences_name_both_versions() {
+        assert_eq!(
+            differences("a@1.0.0,b@0.2.0,c@1.0.0", "a@1.0.0,b@0.1.0,d@3.0.0"),
+            [
+                "b: server 0.2.0, yours 0.1.0",
+                "c: server 1.0.0, not installed",
+                "d: yours 3.0.0, not on the server",
+            ]
+        );
+        assert!(differences("", "").is_empty());
     }
 
     #[test]

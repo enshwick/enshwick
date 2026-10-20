@@ -98,6 +98,7 @@ mod in full.
 enshwick_api::manifest!(
     id: "survivors-per-altar",      // [a-z0-9-]+; names the settings file
     side: BOTH,                     // SERVER, CLIENT or BOTH
+    version: "0.2.0",               // optional; the crate's version by default
     join = true,                    // server and players must match
     requires: ["flame-altar-zones" => "^0.1"],
     after: ["flame-altar-count"],   // order only, may be absent
@@ -110,6 +111,13 @@ enshwick_api::manifest!(
     }],
 )
 ```
+
+The version is SemVer, and the loader names it wherever the mod comes up: a
+dependency out of range reads `requires flame-altar-zones ^0.2, found 0.1.3`,
+and a player joining a server with other versions sees each mod with the
+server's version and theirs. Leave `version` out to use the crate's, so the
+version you release is the one the DLL reports; `cargo enshwick manifest <dll>`
+shows what a built DLL says about itself.
 
 `join = true` puts the mod in the mod set the server advertises; a player whose
 set differs is warned before joining. Leave it off for mods that only change

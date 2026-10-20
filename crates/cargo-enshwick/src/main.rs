@@ -7,6 +7,7 @@ use std::process::ExitCode;
 use clap::{Parser, Subcommand, ValueEnum};
 
 mod install;
+mod manifest;
 mod new;
 
 /// Cargo runs a subcommand as `cargo-enshwick enshwick <args>`.
@@ -37,6 +38,15 @@ enum Command {
         #[arg(long, default_value = ".")]
         dir: PathBuf,
     },
+    /// Shows what a built mod DLL says about itself: id, version, side and
+    /// dependencies.
+    Manifest {
+        /// The mod DLL.
+        dll: PathBuf,
+        /// Fails unless the DLL's version is this one.
+        #[arg(long)]
+        expect_version: Option<String>,
+    },
     /// Builds the mod in release and copies its DLL into the game's `mods/`.
     Install {
         /// The folder holding `enshrouded.exe` or `enshrouded_server.exe`;
@@ -62,6 +72,10 @@ fn main() -> ExitCode {
     let outcome = match args.command {
         Command::New { id, side, dir } => new::create(&dir, &id, side),
         Command::Install { game, package } => install::install(&game, package.as_deref()),
+        Command::Manifest {
+            dll,
+            expect_version,
+        } => manifest::show(&dll, expect_version.as_deref()),
     };
     match outcome {
         Ok(done) => {
