@@ -8,11 +8,14 @@
 //! both sides, since the client predicts placement.
 
 mod altars;
+pub mod geometry;
 mod seam;
+pub mod service;
 mod zones;
 
-use enshwick_api::{Load, Mod, Off};
-use enshwick_geometry::service::{self, AltarZone, ZonesService};
+use enshwick_loader_api::{Load, Mod, Off};
+
+use crate::service::{AltarZone, ZonesService};
 
 const DEFAULTS: &str = "\
 # Altars whose zones touch grow together and share their area.
@@ -54,8 +57,8 @@ extern "system" fn zones(out: *mut AltarZone, capacity: usize) -> usize {
 static ZONES: ZonesService = ZonesService { zones };
 
 impl Mod for FlameAltarZones {
-    fn manifest() -> &'static enshwick_api::abi::Manifest {
-        enshwick_api::manifest!(
+    fn manifest() -> &'static enshwick_loader_api::abi::Manifest {
+        enshwick_loader_api::manifest!(
             id: "flame-altar-zones",
             side: BOTH,
             join = true,
@@ -79,8 +82,8 @@ impl Mod for FlameAltarZones {
         })
     }
 
-    fn ready(&'static self, _host: enshwick_api::Host) {
-        enshwick_api::info!(
+    fn ready(&'static self, _host: enshwick_loader_api::Host) {
+        enshwick_loader_api::info!(
             "clusters {}, building across seams {}",
             self.clusters,
             self.seams
@@ -88,7 +91,7 @@ impl Mod for FlameAltarZones {
     }
 }
 
-enshwick_api::declare_mod!(FlameAltarZones);
+enshwick_loader_api::declare_mod!(FlameAltarZones);
 
 #[cfg(test)]
 mod tests {

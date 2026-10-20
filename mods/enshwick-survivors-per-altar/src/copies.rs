@@ -10,14 +10,32 @@
 
 use std::collections::BTreeMap;
 
-use enshwick_geometry::Box3;
-
 /// A survivor's id, the hash of its template.
 pub(crate) type Survivor = u32;
 /// An entity id.
 pub(crate) type Entity = u32;
 /// An altar's identity: its entity.
 pub(crate) type AltarKey = u64;
+
+/// An altar's zone in whole cells, half-open like the engine's point test.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct Zone {
+    /// The inclusive lower corner.
+    pub(crate) min: [i64; 3],
+    /// The exclusive upper corner.
+    pub(crate) max: [i64; 3],
+}
+
+impl Zone {
+    pub(crate) const fn new(min: [i64; 3], max: [i64; 3]) -> Self {
+        Self { min, max }
+    }
+
+    /// Whether `point` lies inside: `min <= point < max` on every axis.
+    fn contains_point(&self, point: [i64; 3]) -> bool {
+        (0..3).all(|axis| self.min[axis] <= point[axis] && point[axis] < self.max[axis])
+    }
+}
 
 /// What to do with an entity the uniqueness pass sees.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -31,14 +49,14 @@ pub(crate) enum Verdict {
 #[derive(Debug, Default)]
 pub(crate) struct Copies {
     /// The altars' zones, as the altar mod grows them.
-    altars: Vec<(AltarKey, Box3)>,
+    altars: Vec<(AltarKey, Zone)>,
     slots: BTreeMap<(Survivor, AltarKey), Entity>,
     /// Each kept entity's survivor and home.
     homes: BTreeMap<Entity, (Survivor, [i64; 3])>,
 }
 
 impl Copies {
-    pub(crate) fn set_altars(&mut self, altars: impl IntoIterator<Item = (AltarKey, Box3)>) {
+    pub(crate) fn set_altars(&mut self, altars: impl IntoIterator<Item = (AltarKey, Zone)>) {
         self.altars = altars.into_iter().collect();
         self.altars.sort_by_key(|(key, _)| *key);
         let known: Vec<AltarKey> = self.altars.iter().map(|(k, _)| *k).collect();
@@ -177,8 +195,8 @@ mod tests {
 
     const SMITH: Survivor = 0x47a2_094a;
 
-    fn zone(x: i64) -> Box3 {
-        Box3::new([x, 0, 0], [x + 80, 80, 80])
+    fn zone(x: i64) -> Zone {
+        Zone::new([x, 0, 0], [x + 80, 80, 80])
     }
 
     fn two_altars() -> Copies {
@@ -253,8 +271,8 @@ mod tests {
     fn where_zones_overlap_a_bed_belongs_to_the_nearest_copy() {
         let mut copies = Copies::default();
         let (a, b) = (
-            Box3::new([0, 0, 0], [80, 80, 80]),
-            Box3::new([40, 0, 0], [120, 80, 80]),
+            Zone::new([0, 0, 0], [80, 80, 80]),
+            Zone::new([40, 0, 0], [120, 80, 80]),
         );
         copies.set_altars([(1, a), (2, b)]);
         copies.observe(SMITH, 10, [45, 10, 10], 10);

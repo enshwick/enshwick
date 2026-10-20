@@ -14,11 +14,11 @@ mod share;
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
-use enshwick_api::abi::Side;
-use enshwick_api::ecs::{Attributes, Ecs, Worlds};
-use enshwick_api::events::{Shutdown, WorldLoaded, WorldSaved};
-use enshwick_api::state::Store;
-use enshwick_api::{Load, Mod, Next, Off};
+use enshwick_loader_api::abi::Side;
+use enshwick_loader_api::ecs::{Attributes, Ecs, Worlds};
+use enshwick_loader_api::events::{Shutdown, WorldLoaded, WorldSaved};
+use enshwick_loader_api::state::Store;
+use enshwick_loader_api::{Load, Mod, Next, Off};
 
 pub use share::{Character, Levels, high_water};
 
@@ -47,7 +47,7 @@ type NeedFor = unsafe extern "system" fn(level: u32, balancing: u64) -> u32;
 type LevelCap = unsafe extern "system" fn(balancing: u64) -> u32;
 
 /// Shared experience settings.
-#[derive(Debug, serde::Deserialize, serde::Serialize, enshwick_api::Config)]
+#[derive(Debug, serde::Deserialize, serde::Serialize, enshwick_loader_api::Config)]
 #[serde(deny_unknown_fields)]
 struct Settings {
     /// Every character catches up with the one furthest ahead in experience.
@@ -101,11 +101,11 @@ unsafe fn function<F: Copy>(address: u64) -> F {
 
 fn turn_off(why: &str) {
     if !OFF.swap(true, Ordering::AcqRel) {
-        enshwick_api::warn!("shared experience off, vanilla from now on: {why}");
+        enshwick_loader_api::warn!("shared experience off, vanilla from now on: {why}");
     }
 }
 
-enshwick_api::detour! {
+enshwick_loader_api::detour! {
     static PLAYER_LEVEL: unsafe extern "system" fn(ctx: *mut u64) = player_level;
 }
 
@@ -169,7 +169,7 @@ unsafe fn level_table(engine: &Engine, words: &[u64; WORDS]) -> &'static Levels 
         // SAFETY: the game's need per level, from level 1, as `player_level`
         // calls it.
         let levels = Levels::new(cap, |level| unsafe { (engine.need_for)(level, balancing) });
-        enshwick_api::info!(
+        enshwick_loader_api::info!(
             "level cap {cap}, {} experience to reach it",
             levels.total(Character {
                 level: cap,
@@ -262,11 +262,11 @@ fn save(store: &'static Store<Saved>) {
         .name("shared-experience-save".into())
         .spawn(move || {
             if let Err(off) = store.save(&saved) {
-                enshwick_api::warn!("experience mark not saved: {off}");
+                enshwick_loader_api::warn!("experience mark not saved: {off}");
             }
         });
     if spawned.is_err() {
-        enshwick_api::warn!("experience mark not saved: no thread");
+        enshwick_loader_api::warn!("experience mark not saved: no thread");
     }
 }
 
@@ -275,8 +275,8 @@ fn save(store: &'static Store<Saved>) {
 pub struct SharedExperience;
 
 impl Mod for SharedExperience {
-    fn manifest() -> &'static enshwick_api::abi::Manifest {
-        enshwick_api::manifest!(
+    fn manifest() -> &'static enshwick_loader_api::abi::Manifest {
+        enshwick_loader_api::manifest!(
             id: "shared-experience",
             side: SERVER,
             updates: github("themaiby/enshwick", "enshwick-shared-experience"),
@@ -335,7 +335,7 @@ impl Mod for SharedExperience {
                     high_water: HIGH_WATER.load(Ordering::Relaxed),
                 };
                 if let Err(off) = store.save(&saved) {
-                    enshwick_api::warn!("experience mark not saved: {off}");
+                    enshwick_loader_api::warn!("experience mark not saved: {off}");
                 }
             })?;
         } else {
@@ -344,13 +344,13 @@ impl Mod for SharedExperience {
             load.on::<Shutdown>(|()| HIGH_WATER.store(0, Ordering::Relaxed))?;
         }
         load.on::<WorldLoaded>(|()| {
-            enshwick_api::info!("experience mark {}", HIGH_WATER.load(Ordering::Relaxed));
+            enshwick_loader_api::info!("experience mark {}", HIGH_WATER.load(Ordering::Relaxed));
         })?;
         load.on_config_change(|settings: Settings| {
             ENABLED.store(settings.enabled, Ordering::Relaxed);
-            enshwick_api::info!("shared experience {}", on_off(settings.enabled));
+            enshwick_loader_api::info!("shared experience {}", on_off(settings.enabled));
         })?;
-        enshwick_api::info!("shared experience {}", on_off(settings.enabled));
+        enshwick_loader_api::info!("shared experience {}", on_off(settings.enabled));
         Ok(Self)
     }
 }
@@ -359,11 +359,11 @@ fn on_off(enabled: bool) -> &'static str {
     if enabled { "on" } else { "off" }
 }
 
-enshwick_api::declare_mod!(SharedExperience);
+enshwick_loader_api::declare_mod!(SharedExperience);
 
 #[cfg(test)]
 mod tests {
-    use enshwick_api::config::Config as _;
+    use enshwick_loader_api::config::Config as _;
 
     use super::*;
 
@@ -382,7 +382,7 @@ mod tests {
     #[test]
     fn a_server_life_keeps_the_mark_and_hands_vanilla_the_tick_when_off() {
         let dir = std::env::temp_dir().join(format!("shared-experience-{}", std::process::id()));
-        let loader = enshwick_test::FakeHost::new()
+        let loader = enshwick_loader_api::test::FakeHost::new()
             .symbol("ecs.iterator_init", 0x1_0000)
             .symbol("ecs.iterator_next", 0x1_0010)
             .symbol("ecs.mark_changed", 0x1_0020)
@@ -399,7 +399,7 @@ mod tests {
             .constant("altar.level_attribute", 0x724b_f568)
             .system(
                 "player_level",
-                enshwick_test::address(vanilla as extern "system" fn(*mut u64)),
+                enshwick_loader_api::test::address(vanilla as extern "system" fn(*mut u64)),
             )
             .settings(
                 "enabled = false
@@ -409,7 +409,7 @@ mod tests {
             .install();
         // SAFETY: the exports of `declare_mod!`.
         let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
-        assert_eq!(status, enshwick_api::abi::Status::OK);
+        assert_eq!(status, enshwick_loader_api::abi::Status::OK);
         let tick = loader.detour(&PLAYER_LEVEL).unwrap();
         // SAFETY: switched off, the link forwards without reading the context.
         unsafe { tick(core::ptr::null_mut()) };

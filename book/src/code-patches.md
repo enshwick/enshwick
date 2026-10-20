@@ -6,7 +6,7 @@ the bytes stay changed for every caller, and for the rest of the process.
 Reach for a [hook](hooks.md) first; patch only what a hook cannot reach.
 
 ```rust
-fn init(load: &mut enshwick_api::Load<'_>) -> Result<(), enshwick_api::Off> {
+fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
     // `cmp eax, 8; jb` becomes `cmp eax, 16; jb`.
     let site = load.find_code("83 F8 08 72 ??")?;
     load.patch_code(site + 2, &[0x08], &[0x10])
@@ -66,12 +66,12 @@ displacements and offsets, and keep enough fixed bytes around the site to make
 it unique. Check the bytes you patch in the pattern too: `expected` must match
 them at arming anyway.
 
-[`code::Pattern`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/code.rs)
+[`code::Pattern`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/code.rs)
 parses and searches patterns on any slice, which helps test them against a
 copy of the bytes in a unit test:
 
 ```rust
-use enshwick_api::code::Pattern;
+use enshwick_loader_api::code::Pattern;
 
 let pattern = Pattern::parse("83 F8 08 72 ??").unwrap();
 let code = [0x90, 0x83, 0xf8, 0x08, 0x72, 0x05, 0xc3];

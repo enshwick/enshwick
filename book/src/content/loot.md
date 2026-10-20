@@ -1,6 +1,6 @@
 # Loot containers
 
-[`enshwick_api::loot`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/loot.rs)
+[`enshwick_loader_api::loot`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/loot.rs)
 reads the containers a dead enemy leaves, corpses and loot bags, and other
 containers that dissolve once emptied. It reads only; empty a container
 through [Inventories](../inventories.md). To put items into the loot a
@@ -9,17 +9,17 @@ container rolls, see [Random loot](random-loot.md).
 ## The system and the hook
 
 The game checks every such container each step in one ECS system,
-[`loot::SYSTEM`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/loot.rs)
+[`loot::SYSTEM`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/loot.rs)
 (`destroy_inventory_on_loot`), on a worker thread. Hook it, let vanilla run,
 then walk its rows with
-[`Containers::each`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/loot.rs):
+[`Containers::each`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/loot.rs):
 
 ```rust
 use std::sync::OnceLock;
 
-use enshwick_api::ecs::Worlds;
-use enshwick_api::loot::{Containers, SYSTEM, near};
-use enshwick_api::{Load, Next, Off};
+use enshwick_loader_api::ecs::Worlds;
+use enshwick_loader_api::loot::{Containers, SYSTEM, near};
+use enshwick_loader_api::{Load, Next, Off};
 
 struct Reads {
     containers: Containers,
@@ -28,7 +28,7 @@ struct Reads {
 
 static READS: OnceLock<Reads> = OnceLock::new();
 
-enshwick_api::detour! {
+enshwick_loader_api::detour! {
     static CHECK: unsafe extern "system" fn(ctx: *mut u64) = check;
 }
 
@@ -63,7 +63,7 @@ fn init(load: &mut Load<'_>) -> Result<(), Off> {
 }
 ```
 
-[`Containers::resolve`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/ecs.rs)
+[`Containers::resolve`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/ecs.rs)
 finds the components and fields it reads in the game's reflection, during
 `init`; it returns `Err(Off)` when the loader or the game lacks a piece.
 `Containers` is `Copy`; keep it in a static the hook can reach.
@@ -76,7 +76,7 @@ every step. See [ECS inside systems](../ecs.md) and
 
 ## Reading one container
 
-[`Container`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/loot.rs)
+[`Container`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/loot.rs)
 holds what one container is and holds, read in one go:
 
 | Field | Meaning |
@@ -86,7 +86,7 @@ holds what one container is and holds, read in one go:
 | `empty` | Whether it holds nothing, as the game last recorded. |
 | `expires` | Whether it despawns on its own after a while (`LifeTime`). |
 | `area_loot` | Its `AreaLootOverride`: `Some(true)` when area loot may take it, `Some(false)` when excluded (items a player dropped), `None` without one. |
-| `offer` | Its interaction offer, an [`Offer`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/loot.rs); `None` without one. |
+| `offer` | Its interaction offer, an [`Offer`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/loot.rs); `None` without one. |
 
 An `Offer` names who last opened or looted the container (`guest`,
 `Entity::NONE` before anyone did), when (`accepted_at`, in the game's
@@ -112,12 +112,12 @@ From inside any hooked system, with its context:
 - `is_player(ctx, entity)` tells whether an entity is a player character,
   such as an offer's `guest`.
 
-[`near(center, at, radius, height)`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/loot.rs)
+[`near(center, at, radius, height)`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/loot.rs)
 tells whether `at` lies within `radius` metres of `center` across the
 ground and within `height` metres above or below it:
 
 ```rust
-use enshwick_api::loot::near;
+use enshwick_loader_api::loot::near;
 
 assert!(near([0.0, 0.0, 0.0], [6.0, 3.0, 8.0], 10.0, 4.0));
 assert!(!near([0.0, 0.0, 0.0], [6.0, 5.0, 8.0], 10.0, 4.0));
@@ -127,7 +127,7 @@ assert!(!near([0.0, 0.0, 0.0], [6.0, 5.0, 8.0], 10.0, 4.0));
 
 A client that hosts a game runs the system in the built-in server's world
 and in its own. Check
-[`Worlds::is_server(ctx)`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/ecs.rs)
+[`Worlds::is_server(ctx)`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/ecs.rs)
 first, as the example does: it is always true on the dedicated server, and on
 a client only for the built-in server's systems. Entity ids of the two
 worlds are unrelated. See [Sides and hosting](../concepts/sides-and-hosting.md).

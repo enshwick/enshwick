@@ -1,9 +1,9 @@
 //! The Safe as game content: an item cloned from the wooden chest that places
 //! the same vanilla chest, and a recipe beside the chest's.
 
-use enshwick_api::content::Guid;
-use enshwick_api::content::items::NewItem;
-use enshwick_api::content::recipes::NewRecipe;
+use enshwick_loader_api::content::Guid;
+use enshwick_loader_api::content::items::NewItem;
+use enshwick_loader_api::content::recipes::NewRecipe;
 
 /// The vanilla wooden chest item.
 pub const CHEST: Guid = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");
@@ -46,7 +46,7 @@ pub const fn recipe(cost: u32) -> NewRecipe {
 
 #[cfg(test)]
 mod tests {
-    use enshwick_api::i18n::{Language, Texts};
+    use enshwick_loader_api::i18n::{Language, Texts};
 
     use super::*;
 

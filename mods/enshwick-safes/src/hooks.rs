@@ -12,8 +12,8 @@
 use std::cell::RefCell;
 use std::sync::OnceLock;
 
-use enshwick_api::ecs::Entity;
-use enshwick_api::{Load, Next, Off};
+use enshwick_loader_api::ecs::Entity;
+use enshwick_loader_api::{Load, Next, Off};
 
 use crate::access::{ACCESS, Action, Reads};
 
@@ -84,7 +84,7 @@ unsafe fn not_offered(out: *mut u8) {
     unsafe { write(out, 0x10, 0u32) };
 }
 
-enshwick_api::detour! {
+enshwick_loader_api::detour! {
     static OFFER: unsafe extern "system" fn(
         out: *mut u8, query: *mut u8, hits: *mut u8, candidate: u32,
         shape: *mut u8, transform: *mut u8, permissions: u8, range: u32,
@@ -136,10 +136,10 @@ fn offer(
     }
 }
 
-enshwick_api::detour! {
+enshwick_loader_api::detour! {
     static TRANSFER: unsafe extern "system" fn(ctx: *mut u64, state: *mut u8) = transfer;
 }
-enshwick_api::detour! {
+enshwick_loader_api::detour! {
     static SORT: unsafe extern "system" fn(ctx: *mut u64, state: *mut u8) = sort;
 }
 
@@ -211,15 +211,15 @@ fn sort(next: Next<ActionFn>, ctx: *mut u64, state: *mut u8) {
     unsafe { next.get()(ctx, state) }
 }
 
-enshwick_api::detour! {
+enshwick_loader_api::detour! {
     static BASE_STOCK: unsafe extern "system" fn(
         out: *mut u8, lists: *mut [u64; 4], server: *mut u8, client: *mut u8, position: *const f32, player: u32,
     ) -> *mut u8 = base_stock;
 }
-enshwick_api::detour! {
+enshwick_loader_api::detour! {
     static BASE_STOCK_FRAMED: unsafe extern "system" fn(
         out: *mut u8, lists: *mut [u64; 4], server: *mut u8, client: *mut u8, position: *const f32, player: u32,
-    ) -> *mut u8 = base_stock, flags = enshwick_api::abi::HookFlags::CALLER_FRAME;
+    ) -> *mut u8 = base_stock, flags = enshwick_loader_api::abi::HookFlags::CALLER_FRAME;
 }
 
 /// Whether base stock was asked for by the client's own interface, which
@@ -228,7 +228,7 @@ fn for_client_ui(layout: &Layout) -> bool {
     if layout.stock_ui_return == 0 {
         return false;
     }
-    enshwick_api::host().is_some_and(|host| {
+    enshwick_loader_api::host().is_some_and(|host| {
         // SAFETY: the frame was taken at entry of this chain.
         let caller = unsafe { host.caller_frame().return_address() };
         caller == layout.stock_ui_return
@@ -302,7 +302,7 @@ fn base_stock(
     result
 }
 
-enshwick_api::detour! {
+enshwick_loader_api::detour! {
     static DISMANTLE: unsafe extern "system" fn(ctx: *mut u8, object: *mut u8, held: *mut u8, permissions: u8) -> u64 = dismantle;
 }
 
@@ -351,7 +351,7 @@ fn dismantle(
     }
 }
 
-enshwick_api::detour! {
+enshwick_loader_api::detour! {
     static INVENTORY_ACTIONS: unsafe extern "system" fn(ctx: *mut u64) -> u64 = inventory_actions;
 }
 

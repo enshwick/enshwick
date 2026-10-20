@@ -8,10 +8,10 @@ use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Mutex, MutexGuard, OnceLock, PoisonError};
 use std::time::{Duration, Instant};
 
-use enshwick_api::ecs::{Entity, Worlds};
-use enshwick_api::inventory::{Batch, Inventories, Op, Outcome};
-use enshwick_api::loot::{Container, Containers, near};
-use enshwick_api::{Load, Next, Off};
+use enshwick_loader_api::ecs::{Entity, Worlds};
+use enshwick_loader_api::inventory::{Batch, Inventories, Op, Outcome};
+use enshwick_loader_api::loot::{Container, Containers, near};
+use enshwick_loader_api::{Load, Next, Off};
 
 use crate::Settings;
 use crate::tracker::Tracker;
@@ -41,7 +41,7 @@ static RADIUS: AtomicU32 = AtomicU32::new(0x4140_0000);
 static HEIGHT: AtomicU32 = AtomicU32::new(0x4080_0000);
 static OFF: AtomicBool = AtomicBool::new(false);
 
-enshwick_api::detour! {
+enshwick_loader_api::detour! {
     static CHECK: unsafe extern "system" fn(ctx: *mut u64) = check;
 }
 
@@ -65,9 +65,9 @@ pub(crate) fn link(load: &mut Load<'_>) -> Result<(), Off> {
     };
     let _first = ENGINE.set(engine);
     *tracker() = Some(Tracker::default());
-    load.hook(&CHECK, load.system(enshwick_api::loot::SYSTEM)?)?;
+    load.hook(&CHECK, load.system(enshwick_loader_api::loot::SYSTEM)?)?;
     // Entity ids belong to one game.
-    load.on::<enshwick_api::events::Shutdown>(|()| {
+    load.on::<enshwick_loader_api::events::Shutdown>(|()| {
         if let Some(t) = tracker().as_mut() {
             t.clear();
         }
@@ -87,7 +87,7 @@ fn check(next: Next<unsafe extern "system" fn(*mut u64)>, ctx: *mut u64) {
         && std::panic::catch_unwind(|| unsafe { pass(engine, ctx) }).is_err()
         && !OFF.swap(true, Ordering::AcqRel)
     {
-        enshwick_api::warn!("area loot off, vanilla from now on: the pass panicked");
+        enshwick_loader_api::warn!("area loot off, vanilla from now on: the pass panicked");
     }
 }
 
@@ -124,7 +124,7 @@ unsafe fn pass(engine: &Engine, ctx: *mut u64) {
             // SAFETY: as above.
             let queue = unsafe { gather(engine, ctx, &container, player, now) };
             if !queue.is_empty() {
-                enshwick_api::debug!(
+                enshwick_loader_api::debug!(
                     "{} emptied {}: taking {} more",
                     player.0,
                     container.entity.0,
@@ -212,7 +212,7 @@ fn take_next(player: Entity, mut queue: VecDeque<Entity>) {
             return;
         }
         // Inventory full or the container changed: the rest stays for later.
-        enshwick_api::debug!(
+        enshwick_loader_api::debug!(
             "area loot for {} stopped at {}: {:?}",
             player.0,
             container.0,
@@ -235,7 +235,7 @@ fn emptied(outcome: &Outcome) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use enshwick_api::inventory::{Done, OpResult};
+    use enshwick_loader_api::inventory::{Done, OpResult};
 
     use super::*;
 

@@ -27,9 +27,9 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, SystemTime};
 
-use enshwick_api::events::JoinMissing;
-use enshwick_api::mods::{ModEntry, Updates};
-use enshwick_api::{Load, Mod, Off};
+use enshwick_loader_api::events::JoinMissing;
+use enshwick_loader_api::mods::{ModEntry, Updates};
+use enshwick_loader_api::{Load, Mod, Off};
 use semver::Version;
 
 use crate::document::Document;
@@ -45,7 +45,7 @@ const LAST_CHECK: &str = "last-check";
 const SCRATCH: &str = "incoming";
 
 /// Updater settings.
-#[derive(Debug, Clone, serde::Deserialize, serde::Serialize, enshwick_api::Config)]
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize, enshwick_loader_api::Config)]
 #[serde(deny_unknown_fields)]
 #[config(validate = Settings::check)]
 struct Settings {
@@ -233,7 +233,7 @@ fn at_start() {
         return;
     };
     if !context.settings.enabled {
-        enshwick_api::info!("updates are off in the settings");
+        enshwick_loader_api::info!("updates are off in the settings");
         return;
     }
     let record = context.data.join(LAST_CHECK);
@@ -241,27 +241,27 @@ fn at_start() {
         .ok()
         .and_then(|text| text.trim().parse().ok());
     if !due(last, now(), context.settings.check_interval_hours) {
-        enshwick_api::info!(
+        enshwick_loader_api::info!(
             "checked within the last {} hours; not checking again yet",
             context.settings.check_interval_hours
         );
         return;
     }
     let client = Client::new();
-    let offers = match newer(&client, &context, &enshwick_api::mods()) {
+    let offers = match newer(&client, &context, &enshwick_loader_api::mods()) {
         Ok(offers) => offers,
         Err(failure) => {
-            enshwick_api::warn!("no update check this time: {failure}");
+            enshwick_loader_api::warn!("no update check this time: {failure}");
             return;
         }
     };
     if let Err(e) = std::fs::write(&record, now().to_string()) {
-        enshwick_api::warn!("cannot record the check in {}: {e}", record.display());
+        enshwick_loader_api::warn!("cannot record the check in {}: {e}", record.display());
     }
     let _busy = BUSY.lock().unwrap_or_else(PoisonError::into_inner);
     let offers = unoffered(offers);
     if offers.is_empty() {
-        enshwick_api::info!("everything is up to date");
+        enshwick_loader_api::info!("everything is up to date");
         return;
     }
     let (offers, by_hand) = signed(offers);
@@ -278,7 +278,7 @@ fn at_start() {
     )];
     question.extend(by_hand);
     if !ask::confirm(&question.join("\n\n")) {
-        enshwick_api::info!("the player declined {}", lines(&offers).replace('\n', ", "));
+        enshwick_loader_api::info!("the player declined {}", lines(&offers).replace('\n', ", "));
         return;
     }
     install_all(
@@ -298,12 +298,12 @@ fn after_refused_join() {
     if !context.settings.enabled {
         return;
     }
-    let missing = enshwick_api::mods::join_missing();
+    let missing = enshwick_loader_api::mods::join_missing();
     if missing.is_empty() {
         return;
     }
     let client = Client::new();
-    let installed = enshwick_api::mods();
+    let installed = enshwick_loader_api::mods();
     let trusted = context.settings.trusted();
     let mut offers = Vec::new();
     let mut unavailable = Vec::new();
@@ -311,7 +311,7 @@ fn after_refused_join() {
         match server_version(&client, entry, &installed, &trusted) {
             Ok(offer) => offers.push(offer),
             Err(why) => {
-                enshwick_api::warn!("{} {}: {why}", entry.id, entry.version);
+                enshwick_loader_api::warn!("{} {}: {why}", entry.id, entry.version);
                 unavailable.push(format!("{} {}: {why}", entry.id, entry.version));
             }
         }
@@ -358,7 +358,7 @@ fn after_refused_join() {
     );
     let question = question.join("\n\n");
     if !ask::confirm(&question) {
-        enshwick_api::info!(
+        enshwick_loader_api::info!(
             "the player declined the server's {}",
             lines(&offers).replace('\n', ", ")
         );
@@ -441,7 +441,7 @@ fn newer(client: &Client, context: &Context, mods: &[ModEntry]) -> Result<Vec<Of
             continue;
         };
         if stage::waiting(&context.game, &entry.file) {
-            enshwick_api::info!("an update of {} waits for the next start", entry.id);
+            enshwick_loader_api::info!("an update of {} waits for the next start", entry.id);
             continue;
         }
         let prereleases = context.settings.prereleases;
@@ -454,7 +454,7 @@ fn newer(client: &Client, context: &Context, mods: &[ModEntry]) -> Result<Vec<Of
             Updates::Url(url) => {
                 let document = documents.entry(url.as_str()).or_insert_with(|| {
                     fetch_document(client, url)
-                        .map_err(|e| enshwick_api::warn!("{e}"))
+                        .map_err(|e| enshwick_loader_api::warn!("{e}"))
                         .ok()
                 });
                 if let Some(pick) = document
@@ -476,12 +476,12 @@ fn newer(client: &Client, context: &Context, mods: &[ModEntry]) -> Result<Vec<Of
         if !lists.contains_key(repository.as_str()) {
             let releases = match client.api(&release::list_url(repository)) {
                 Ok(json) => release::parse(&json).unwrap_or_else(|e| {
-                    enshwick_api::warn!("{repository}: {e}");
+                    enshwick_loader_api::warn!("{repository}: {e}");
                     Vec::new()
                 }),
                 Err(Failure::RateLimited) => return Err(Failure::RateLimited),
                 Err(failure) => {
-                    enshwick_api::warn!("{repository}: {failure}");
+                    enshwick_loader_api::warn!("{repository}: {failure}");
                     Vec::new()
                 }
             };
@@ -526,7 +526,7 @@ fn signed(offers: Vec<Offer>) -> (Vec<Offer>, String) {
         .iter()
         .filter_map(|offer| {
             let note = offer.trust.as_ref().err()?.note();
-            enshwick_api::info!("not offered {}: {note}", offer.line());
+            enshwick_loader_api::info!("not offered {}: {note}", offer.line());
             Some(format!("{}: {note}", offer.line()))
         })
         .collect::<Vec<_>>()
@@ -550,11 +550,11 @@ fn install_all(client: &Client, context: &Context, offers: &[Offer], next: &str)
     for offer in offers {
         match install(client, context, offer) {
             Ok(files) => {
-                enshwick_api::info!("staged {}: {}", offer.line(), files.join(", "));
+                enshwick_loader_api::info!("staged {}: {}", offer.line(), files.join(", "));
                 done.push(offer.line());
             }
             Err(why) => {
-                enshwick_api::warn!("did not install {}: {why}", offer.line());
+                enshwick_loader_api::warn!("did not install {}: {why}", offer.line());
                 failed.push(format!("{}: {why}", offer.line()));
             }
         }
@@ -610,11 +610,11 @@ fn spawn(name: &'static str, work: fn()) {
         .name(name.to_owned())
         .spawn(move || {
             if std::panic::catch_unwind(work).is_err() {
-                enshwick_api::warn!("{name}: stopped by a panic");
+                enshwick_loader_api::warn!("{name}: stopped by a panic");
             }
         });
     if let Err(e) = spawned {
-        enshwick_api::warn!("cannot start {name}: {e}");
+        enshwick_loader_api::warn!("cannot start {name}: {e}");
     }
 }
 
@@ -631,8 +631,8 @@ fn set_context(settings: Settings, game: &Path, data: &Path) {
 pub struct Updater;
 
 impl Mod for Updater {
-    fn manifest() -> &'static enshwick_api::abi::Manifest {
-        enshwick_api::manifest!(
+    fn manifest() -> &'static enshwick_loader_api::abi::Manifest {
+        enshwick_loader_api::manifest!(
             id: "updater",
             side: CLIENT,
             updates: github("themaiby/enshwick", "enshwick-updater"),
@@ -657,7 +657,7 @@ impl Mod for Updater {
             .on::<JoinMissing>(|()| spawn("enshwick-updater-join", after_refused_join))
             .is_err()
         {
-            enshwick_api::warn!(
+            enshwick_loader_api::warn!(
                 "this loader does not report a server's missing mods; update the loader to get them here"
             );
         }
@@ -666,7 +666,7 @@ impl Mod for Updater {
     }
 }
 
-enshwick_api::declare_mod!(Updater);
+enshwick_loader_api::declare_mod!(Updater);
 
 #[cfg(test)]
 mod tests {
@@ -674,7 +674,7 @@ mod tests {
 
     #[test]
     fn the_default_settings_parse() {
-        use enshwick_api::config::Config;
+        use enshwick_loader_api::config::Config;
         let settings: Settings = toml::from_str(&Settings::template()).unwrap();
         assert!(settings.enabled);
         assert_eq!(settings.check_interval_hours, 24);
@@ -693,7 +693,7 @@ mod tests {
 
     #[test]
     fn trusted_keys_must_be_minisign_keys() {
-        use enshwick_api::config::Config;
+        use enshwick_loader_api::config::Config;
         let mut settings = Settings::default();
         settings
             .trusted_keys

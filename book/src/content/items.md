@@ -1,13 +1,13 @@
 # Items
 
-[`Load::add_item`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/content/items.rs)
+[`Load::add_item`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/content/items.rs)
 adds an item to the game. The new item is a clone of a vanilla one: it looks
 and behaves like it, under a GUID of its own, with its own name and
 description if you give them.
 
 ```rust
-use enshwick_api::content::Guid;
-use enshwick_api::content::items::NewItem;
+use enshwick_loader_api::content::Guid;
+use enshwick_loader_api::content::items::NewItem;
 
 /// The vanilla wooden chest.
 const CHEST: Guid = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");
@@ -23,7 +23,7 @@ const TEXTS: &str = r#"
 "safe.description" = "A chest only its owner can open."
 "#;
 
-fn init(load: &mut enshwick_api::Load<'_>) -> Result<(), enshwick_api::Off> {
+fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
     let texts = load.texts(TEXTS)?;
     load.add_texts(&texts, &[
         ("safe.name", SAFE_NAME),
@@ -64,18 +64,18 @@ it from a [recipe](recipes.md), loot, or a mod's
 
 ## GUIDs and item ids
 
-[`Guid::parse`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/code.rs)
+[`Guid::parse`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/code.rs)
 reads the textual form `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx` and stores the
 bytes in the order the game keeps them in memory. It is a `const fn`: in a
 constant, a malformed GUID fails the build.
 
 The game numbers items, recipes and workshops by a 32-bit id, which
-[`Guid::id`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/content.rs)
+[`Guid::id`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/content.rs)
 computes from the GUID. The id is what an inventory slot holds and what the
 [inventory](../inventories.md) calls take:
 
 ```rust
-use enshwick_api::content::Guid;
+use enshwick_loader_api::content::Guid;
 
 const CHEST: Guid = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");
 assert_eq!(CHEST.id(), 1_302_084_846);

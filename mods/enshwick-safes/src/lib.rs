@@ -22,23 +22,23 @@ use std::sync::Mutex;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
 
-use enshwick_api::abi::BuildingData;
-use enshwick_api::abi::Side;
-use enshwick_api::commands::Rename;
-use enshwick_api::ecs::{Components, Ecs, Entity, Worlds};
-use enshwick_api::events::{
+use enshwick_loader_api::abi::BuildingData;
+use enshwick_loader_api::abi::Side;
+use enshwick_loader_api::commands::Rename;
+use enshwick_loader_api::ecs::{Components, Ecs, Entity, Worlds};
+use enshwick_loader_api::events::{
     BuildingPlaced, BuildingRemoved, PlayerJoined, PlayerLeft, Shutdown, WorldSaved,
 };
-use enshwick_api::i18n::Language;
-use enshwick_api::state::Store;
-use enshwick_api::world::{ComponentType, World};
-use enshwick_api::{Load, Mod, Off};
+use enshwick_loader_api::i18n::Language;
+use enshwick_loader_api::state::Store;
+use enshwick_loader_api::world::{ComponentType, World};
+use enshwick_loader_api::{Load, Mod, Off};
 
 use crate::access::{ACCESS, Action, Allowed, Cell, Reads, Safe, Seen, permits};
 use crate::command::Phrases;
 
 /// Safe settings.
-#[derive(Debug, serde::Deserialize, serde::Serialize, enshwick_api::Config)]
+#[derive(Debug, serde::Deserialize, serde::Serialize, enshwick_loader_api::Config)]
 #[serde(default, deny_unknown_fields)]
 #[config(validate = Settings::check)]
 struct Settings {
@@ -167,11 +167,11 @@ fn save(store: &'static Store<Owners>) {
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner);
             if let Err(off) = store.save(&owners) {
-                enshwick_api::warn!("owners not saved: {off}");
+                enshwick_loader_api::warn!("owners not saved: {off}");
             }
         });
     if spawned.is_err() {
-        enshwick_api::warn!("owners not saved: no thread");
+        enshwick_loader_api::warn!("owners not saved: no thread");
     }
 }
 
@@ -180,8 +180,8 @@ fn save(store: &'static Store<Owners>) {
 pub struct Safes;
 
 impl Mod for Safes {
-    fn manifest() -> &'static enshwick_api::abi::Manifest {
-        enshwick_api::manifest!(
+    fn manifest() -> &'static enshwick_loader_api::abi::Manifest {
+        enshwick_loader_api::manifest!(
             id: "safes",
             side: BOTH,
             join = true,
@@ -277,7 +277,7 @@ impl Mod for Safes {
             language: settings.language().unwrap_or(Language::FALLBACK),
         }));
         guard(load, phrases)?;
-        enshwick_api::info!(
+        enshwick_loader_api::info!(
             "the Safe costs the wooden chest x{cost}; administrators may open Safes: {}",
             settings.admins_can_open
         );
@@ -334,7 +334,7 @@ fn guard(load: &mut Load<'_>, phrases: &'static Phrases) -> Result<(), Off> {
     let store: &'static Store<Owners> =
         Box::leak(Box::new(Store::new(&load.data_dir()?, "owners")));
     let owners = store.load()?.into_map();
-    enshwick_api::info!("{} Safe owners loaded", owners.len());
+    enshwick_loader_api::info!("{} Safe owners loaded", owners.len());
     ACCESS.load_owners(owners);
 
     hooks::link(load, reads, layout)?;
@@ -347,7 +347,7 @@ fn guard(load: &mut Load<'_>, phrases: &'static Phrases) -> Result<(), Off> {
     })?;
     load.on::<BuildingRemoved>(move |removed| {
         if ACCESS.removed(removed.entity) {
-            enshwick_api::info!("Safe {} removed", removed.entity);
+            enshwick_loader_api::info!("Safe {} removed", removed.entity);
             save(store);
         }
     })?;
@@ -355,7 +355,7 @@ fn guard(load: &mut Load<'_>, phrases: &'static Phrases) -> Result<(), Off> {
     if client {
         // Entities and players belong to one hosted game; owners stay.
         load.on::<Shutdown>(|()| ACCESS.forget_session())?;
-        enshwick_api::info!("the Safe's checks act while this client hosts a game");
+        enshwick_loader_api::info!("the Safe's checks act while this client hosts a game");
     }
     load.on_config_change(|settings: Settings| {
         ACCESS
@@ -381,7 +381,7 @@ fn placed_safe(world: World, phrases: &Phrases, placed: &BuildingData) {
         .map(|p| p.key)
         .or_else(|| ACCESS.players.load().get(&entity.0).map(|seen| seen.key));
     let Some(key) = key else {
-        enshwick_api::warn!("a Safe was placed by no known player and stays open to all");
+        enshwick_loader_api::warn!("a Safe was placed by no known player and stays open to all");
         return;
     };
     let name = player.map(|p| p.name).unwrap_or_default();
@@ -390,10 +390,10 @@ fn placed_safe(world: World, phrases: &Phrases, placed: &BuildingData) {
     if !name.is_empty() {
         let label = phrases.say("safe.label", &[("owner", &name)]);
         if !world.set_label(Entity(placed.entity), &label) {
-            enshwick_api::warn!("Safe {} not labelled", placed.entity);
+            enshwick_loader_api::warn!("Safe {} not labelled", placed.entity);
         }
     }
-    enshwick_api::info!(
+    enshwick_loader_api::info!(
         "Safe {} placed at {position:?} by {key:016x}",
         placed.entity
     );
@@ -429,7 +429,7 @@ fn may_rename(world: World, rename: &Rename) -> bool {
     let safe = owners.get(&at).unwrap_or(&fallback);
     let allowed = permits(safe, Some(seen), admins_open, Action::Manage);
     if !allowed {
-        enshwick_api::info!("{} may not rename Safe {}", player.name, rename.entity.0);
+        enshwick_loader_api::info!("{} may not rename Safe {}", player.name, rename.entity.0);
     }
     allowed
 }
@@ -492,7 +492,7 @@ fn label_seen(
 
 /// Keeps the connected players' keys and administrator flags current.
 fn track_players(load: &mut Load<'_>, world: World) -> Result<(), Off> {
-    let seen = |player: &enshwick_api::world::Player| Seen {
+    let seen = |player: &enshwick_loader_api::world::Player| Seen {
         key: player.key,
         admin: player.is_admin(),
     };
@@ -531,7 +531,7 @@ fn track_players(load: &mut Load<'_>, world: World) -> Result<(), Off> {
     Ok(())
 }
 
-enshwick_api::declare_mod!(Safes);
+enshwick_loader_api::declare_mod!(Safes);
 
 #[cfg(test)]
 mod tests {
@@ -539,7 +539,7 @@ mod tests {
 
     #[test]
     fn the_default_settings_parse() {
-        use enshwick_api::config::Config;
+        use enshwick_loader_api::config::Config;
         let settings: Settings = toml::from_str(&Settings::template()).unwrap();
         assert_eq!(settings.cost_multiplier, 2);
         assert!(settings.admins_can_open);
@@ -559,7 +559,7 @@ mod tests {
 
     #[test]
     fn settings_from_0_1_still_parse() {
-        use enshwick_api::config::Config;
+        use enshwick_loader_api::config::Config;
         let old: Settings =
             toml::from_str("cost_multiplier = 3\nadmins_can_open = false\n").unwrap();
         assert_eq!(old.cost_multiplier, 3);

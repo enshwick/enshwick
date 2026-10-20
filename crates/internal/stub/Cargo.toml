@@ -1,0 +1,28 @@
+[package]
+name = "enshwick-loader-stub"
+version = "0.2.0"
+description = "Internal, not for mods: the POWRPROF.dll proxy that starts the Enshwick Loader inside Enshrouded"
+keywords = ["enshrouded", "modding", "loader", "proxy"]
+categories = ["game-development"]
+readme = "README.md"
+build = "build.rs"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lib]
+name = "powrprof"
+crate-type = ["cdylib"]
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { workspace = true, features = [
+    "Win32_Foundation",
+    "Win32_System_LibraryLoader",
+    "Win32_System_SystemInformation",
+    "Win32_System_SystemServices",
+] }
+
+[lints]
+workspace = true

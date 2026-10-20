@@ -2,16 +2,16 @@
 
 A workshop is what a crafting station crafts at: recipes name a workshop,
 and a placed station opens the crafting menu of its workshop.
-[`Load::add_workshop`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/content/workshops.rs)
+[`Load::add_workshop`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/content/workshops.rs)
 clones a vanilla station into a new one with a workshop of its own, and
 returns its
-[`WorkshopId`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/content/workshops.rs)
+[`WorkshopId`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/content/workshops.rs)
 for your recipes.
 
 ```rust
-use enshwick_api::content::Guid;
-use enshwick_api::content::recipes::Derived;
-use enshwick_api::content::workshops::{NewWorkshop, StationRecipe, stations};
+use enshwick_loader_api::content::Guid;
+use enshwick_loader_api::content::recipes::Derived;
+use enshwick_loader_api::content::workshops::{NewWorkshop, StationRecipe, stations};
 
 const BENCH: Guid = Guid::parse("0851e93d-8883-42e4-a807-c30fd644e7c3");
 const BENCH_TEMPLATE: Guid = Guid::parse("77ff6155-1365-4a4a-8987-507a1bdd32a2");
@@ -20,7 +20,7 @@ const BENCH_RECIPE: Guid = Guid::parse("94cf68a3-11e0-4c05-a793-526f7e1d7693");
 const BENCH_NAME: Guid = Guid::parse("41b222ea-cefa-4774-a040-c43aa9f0b227");
 const BENCH_DESCRIPTION: Guid = Guid::parse("6bc87387-936a-40a5-8e62-5aa5dbf933eb");
 
-fn init(load: &mut enshwick_api::Load<'_>) -> Result<(), enshwick_api::Off> {
+fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
     let texts = load.texts(r#"
 [en]
 "bench.name" = "Bulk Workbench"
@@ -74,16 +74,16 @@ made at it.
 
 | Field | Meaning |
 | --- | --- |
-| `like` | The vanilla station cloned, a [`Station`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/content/workshops.rs): its item and the template the item places. |
+| `like` | The vanilla station cloned, a [`Station`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/content/workshops.rs): its item and the template the item places. |
 | `item` | The new station item's GUID. |
 | `template` | The new station's template GUID. |
 | `workshop` | The new workshop's GUID. |
 | `name` | The tag of the station's name, which also names the workshop; `None` keeps the vanilla names. |
 | `description` | The tag of the station item's description; `None` keeps the vanilla one. |
-| `station_recipe` | How the station is crafted, a [`StationRecipe`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/content/workshops.rs) with the recipe's GUID and a cost factor; `None` adds no recipe. |
+| `station_recipe` | How the station is crafted, a [`StationRecipe`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/content/workshops.rs) with the recipe's GUID and a cost factor; `None` adds no recipe. |
 | `debug_name` | The item's name in the registry's debug list. |
 
-[`stations`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/content/workshops.rs)
+[`stations`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/content/workshops.rs)
 lists the vanilla stations known to clone; it holds `WORKBENCH` today. A
 `Station` with other GUIDs works if the item places that template, the
 template has all three crafting components and the workshop registry has an
@@ -101,12 +101,12 @@ Send recipes to the workshop with its `WorkshopId`:
 
 A `WorkshopId` is only a GUID with the game's id beside it. `add_workshop`
 returns one, and
-[`WorkshopId::new`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/load.rs)
+[`WorkshopId::new`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/load.rs)
 names any workshop, a vanilla one included:
 
 ```rust
-use enshwick_api::content::Guid;
-use enshwick_api::content::workshops::WorkshopId;
+use enshwick_loader_api::content::Guid;
+use enshwick_loader_api::content::workshops::WorkshopId;
 
 let workbench = WorkshopId::new(Guid::parse("965d3192-0287-49a2-ad51-a716139571a6"));
 assert_eq!(workbench.id(), 1_302_892_403);

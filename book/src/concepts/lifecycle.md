@@ -56,16 +56,16 @@ before the state exists, or whose mod failed at init, forwards to `next`:
 
 ```rust
 # struct MyMod { altars: u8 }
-# impl enshwick_api::Mod for MyMod {
-#     fn manifest() -> &'static enshwick_api::abi::Manifest {
-#         enshwick_api::manifest!(id: "my-mod", side: SERVER)
+# impl enshwick_loader_api::Mod for MyMod {
+#     fn manifest() -> &'static enshwick_loader_api::abi::Manifest {
+#         enshwick_loader_api::manifest!(id: "my-mod", side: SERVER)
 #     }
-#     fn init(_load: &mut enshwick_api::Load<'_>) -> Result<Self, enshwick_api::Off> {
+#     fn init(_load: &mut enshwick_loader_api::Load<'_>) -> Result<Self, enshwick_loader_api::Off> {
 #         Ok(Self { altars: 16 })
 #     }
 # }
-# enshwick_api::declare_mod!(MyMod);
-use enshwick_api::Next;
+# enshwick_loader_api::declare_mod!(MyMod);
+use enshwick_loader_api::Next;
 
 fn max_altars(next: Next<unsafe extern "system" fn(u64, u32) -> u8>, balancing: u64, level: u32) -> u8 {
     match MyMod::instance() {

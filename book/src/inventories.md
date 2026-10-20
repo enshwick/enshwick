@@ -1,27 +1,27 @@
 # Inventories
 
-[`enshwick_api::inventory`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/inventory.rs)
+[`enshwick_loader_api::inventory`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/inventory.rs)
 reads what a chest, a corpse or a player holds, and changes it through the
 game's own transactions. It works in the game server: the dedicated server,
 or a client while it hosts a game.
 
 Ask for it during `init` with
-[`load.inventories()`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/load.rs).
+[`load.inventories()`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/load.rs).
 The returned
-[`Inventories`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/inventory.rs)
+[`Inventories`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/inventory.rs)
 is `Copy`; keep it anywhere.
 
 ```rust
-use enshwick_api::ecs::Entity;
+use enshwick_loader_api::ecs::Entity;
 
-fn init(load: &mut enshwick_api::Load<'_>) -> Result<(), enshwick_api::Off> {
+fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
     let inventories = load.inventories()?;
     let (corpse, player) = (Entity(40), Entity(2));
     load.scheduler()?.next_tick(move || {
         let full = inventories.read().slots(corpse).iter().filter(|s| !s.is_empty()).count();
-        enshwick_api::info!("{full} stacks to loot");
+        enshwick_loader_api::info!("{full} stacks to loot");
         inventories.move_all(corpse, player, |outcome| {
-            enshwick_api::info!("looted: {}", outcome.is_committed());
+            enshwick_loader_api::info!("looted: {}", outcome.is_committed());
         });
     });
     Ok(())
@@ -40,13 +40,13 @@ another inventory. Only items with durability or a level have an entity of
 their own, the item's PIDE.
 
 A slot is a
-[`SlotRef`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/inventory.rs):
+[`SlotRef`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/inventory.rs):
 the sub-inventory entity and the slot index, packed as the game packs them,
 `entity | index << 32`.
 
 ```rust
-use enshwick_api::ecs::Entity;
-use enshwick_api::inventory::SlotRef;
+use enshwick_loader_api::ecs::Entity;
+use enshwick_loader_api::inventory::SlotRef;
 
 let slot = SlotRef::new(Entity(0x41), 3);
 assert_eq!(slot.0, 0x3_0000_0041);
@@ -58,17 +58,17 @@ assert_eq!((slot.inventory(), slot.index()), (Entity(0x41), 3));
 Reads are synchronous plain memory reads. Make them where no inventory
 changes underneath:
 
-- [`read()`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/inventory.rs)
+- [`read()`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/inventory.rs)
   on the server's game thread between steps: in a game event, a
   [scheduler](events.md) task or an inventory callback. Elsewhere it returns
   nothing: empty lists, zero counts, `None`;
-- [`read_in(ctx)`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/inventory.rs)
+- [`read_in(ctx)`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/inventory.rs)
   inside a hooked ECS system, through its context. It is `unsafe`: `ctx`
   must be the hooked system's live context, used on its thread during the
   hook.
 
 Both return a
-[`Reader`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/inventory.rs):
+[`Reader`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/inventory.rs):
 
 | Call | Returns |
 | --- | --- |
@@ -78,7 +78,7 @@ Both return a
 | `root(slot_ref)` | The inventory a slot belongs to at the root, the chest or player; `None` when its sub-inventory has no owner. |
 | `durability(pide)` | An item entity's `Durability`, `current` and `max`, as clients see it. |
 
-A [`Slot`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/inventory.rs)
+A [`Slot`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/inventory.rs)
 holds `at` (its `SlotRef`), `category` (equipment, currency, ordinary
 storage, ...), `item` (the item id, 0 for none), `count` and `pide`
 (`Entity::NONE` for items without an entity). `is_empty()` is true when
@@ -87,7 +87,7 @@ storage, ...), `item` (the item id, 0 for none), `count` and `pide`
 Item ids are [`Guid::id`](content/items.md#guids-and-item-ids) of the
 item's GUID.
 
-[`item_info(item)`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/inventory.rs)
+[`item_info(item)`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/inventory.rs)
 gives an item's static data from any thread: `max_stack`, and flags with
 `has_pide()`, `is_container()` and `is_blueprint()`. It returns `None` for
 an unknown item, and before the game first ran its inventory system, which
@@ -115,15 +115,15 @@ action bar, equipment and locked slots where they are;
 
 ### Batches
 
-[`Batch`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/inventory.rs)
-runs several [`Op`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/inventory.rs)s
+[`Batch`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/inventory.rs)
+runs several [`Op`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/inventory.rs)s
 as one transaction through
-[`submit`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/inventory.rs):
+[`submit`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/inventory.rs):
 every operation succeeds, or nothing changes.
 
 ```rust
-use enshwick_api::ecs::Entity;
-use enshwick_api::inventory::{Batch, Inventories, Op};
+use enshwick_loader_api::ecs::Entity;
+use enshwick_loader_api::inventory::{Batch, Inventories, Op};
 
 const COIN: u32 = 0x0c01;
 const SWORD: u32 = 0x5e01;
@@ -134,7 +134,7 @@ fn trade(inventories: &Inventories, player: Entity) {
         .with(Op::Take { from: player, item: COIN, count: 5 })
         .with(Op::Give { to: player, item: SWORD, count: 1 });
     let _ticket = inventories.submit(&batch, |outcome| {
-        enshwick_api::info!("trade: {:?}", outcome.done);
+        enshwick_loader_api::info!("trade: {:?}", outcome.done);
     });
 }
 ```
@@ -153,13 +153,13 @@ The one-operation calls above are batches of one. A batch also sets:
 ### Limits and splitting
 
 A transaction has limits, and
-[`Batch::check`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/inventory.rs)
+[`Batch::check`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/inventory.rs)
 tests them:
 
 - at most 64 operations
-  ([`MAX_OPS`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/inventory.rs));
+  ([`MAX_OPS`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/inventory.rs));
 - at most 16 distinct inventories named
-  ([`MAX_INVENTORIES`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/inventory.rs));
+  ([`MAX_INVENTORIES`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/inventory.rs));
 - what fits the game's op log of 512 records, counting a give or take as 16,
   a slot move as 4, a destroy as 1 and a `MoveAll` as 256. So one batch
   holds at most two `MoveAll`s;
@@ -169,13 +169,13 @@ tests them:
 
 `submit` refuses a batch that breaks a limit before it reaches the game,
 with `Done::Refused(BatchError)`.
-[`Batch::split`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/inventory.rs)
+[`Batch::split`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/inventory.rs)
 cuts a batch into parts that fit, in order, keeping its settings. Each part
 is all or nothing on its own; together they are not.
 
 ```rust
-use enshwick_api::ecs::Entity;
-use enshwick_api::inventory::{Batch, Op};
+use enshwick_loader_api::ecs::Entity;
+use enshwick_loader_api::inventory::{Batch, Op};
 
 let mut everything = Batch::new();
 for chest in 100..120 {
@@ -189,7 +189,7 @@ assert!(parts.iter().all(|part| part.check().is_ok()));
 ## Outcomes
 
 Each callback gets an
-[`Outcome`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/inventory.rs):
+[`Outcome`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/inventory.rs):
 `done`, how the request ended, and `ops`, one result per operation when the
 request ran, else empty.
 
@@ -201,7 +201,7 @@ request ran, else empty.
 | `TimedOut` | The game did not run its inventory system within 30 seconds; nothing changed. |
 | `Refused(BatchError)` | The batch broke a limit and never reached the game. |
 
-An [`OpResult`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/inventory.rs)
+An [`OpResult`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/inventory.rs)
 holds the game's `error` code (0 for none) and `remaining`, how much of the
 count the operation could not do. `ok()` is true without an error.
 Operations after a failed one are not run and carry
@@ -210,16 +210,16 @@ fit or does not exist, `OpResult::TOO_LARGE` a transaction past the game's
 limits.
 
 ```rust
-use enshwick_api::inventory::{Done, Outcome};
+use enshwick_loader_api::inventory::{Done, Outcome};
 
 fn report(outcome: &Outcome) {
     match outcome.done {
-        Done::Committed => enshwick_api::info!("done"),
+        Done::Committed => enshwick_loader_api::info!("done"),
         Done::RolledBack => {
             let failed = outcome.ops.iter().position(|op| !op.ok() || op.remaining > 0);
-            enshwick_api::warn!("rolled back at operation {failed:?}");
+            enshwick_loader_api::warn!("rolled back at operation {failed:?}");
         }
-        other => enshwick_api::warn!("not run: {other:?}"),
+        other => enshwick_loader_api::warn!("not run: {other:?}"),
     }
 }
 ```
@@ -230,7 +230,7 @@ inventory it touched to the clients, as vanilla does after a transfer.
 ### Tickets
 
 Every request returns a
-[`Ticket`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/inventory.rs)
+[`Ticket`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/inventory.rs)
 that holds the same outcome once it is known, for polling instead of a
 callback: `is_done()` and `outcome()`. Clone it freely. A callback that does
 nothing, `|_| {}`, is fine when you poll.
@@ -263,7 +263,7 @@ game is hosted. See [Sides and hosting](concepts/sides-and-hosting.md).
 
 ## Testing
 
-[`enshwick-test`](https://github.com/themaiby/enshwick/tree/main/crates/enshwick-test)
+[The test fake](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/test.rs)
 records a mod's requests: `inventory_requests()` lists them and
 `finish_inventory(outcome, results)` answers the oldest as the game would;
 `item` and `without_inventories` set what the build has. See

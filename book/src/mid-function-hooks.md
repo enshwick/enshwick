@@ -6,10 +6,10 @@ and no function boundary is near it. `load.hook_at(address, handler)` runs
 has there:
 
 ```rust
-fn init(load: &mut enshwick_api::Load<'_>) -> Result<(), enshwick_api::Off> {
+fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
     // An instruction inside a function, pinned per build in the mod's rows.
     let site = load.symbol("my-mod.range_clamp")?;
-    load.hook_at(site, |registers: &mut enshwick_api::Registers| {
+    load.hook_at(site, |registers: &mut enshwick_loader_api::Registers| {
         registers.rax = registers.rax.min(64);
     })
 }
@@ -22,7 +22,7 @@ reaches the instruction.
 
 ## Registers
 
-[`Registers`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/abi.rs)
+[`Registers`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs)
 holds the 16 general-purpose registers and `rflags`.
 
 - Writes to any field but `rsp` take effect when the game code goes on.
@@ -74,7 +74,7 @@ off. From then on its handlers are skipped; the game goes on unchanged.
 
 ## Testing
 
-In [`enshwick-test`](testing.md), `mid_hooks()` lists the addresses a mod hooked
+In [the test fake](testing.md), `mid_hooks()` lists the addresses a mod hooked
 and `run_at(address, &mut registers)` runs its handlers there, as the game
 reaching that instruction would, and returns how many ran.
 

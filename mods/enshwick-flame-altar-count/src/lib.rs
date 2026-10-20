@@ -17,7 +17,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU8, Ordering};
 
 use arc_swap::ArcSwap;
-use enshwick_api::{Load, Mod, Next, Off};
+use enshwick_loader_api::{Load, Mod, Next, Off};
 
 /// Vanilla `altarsPerFlameLevel` for Flame levels 0 to 11; later levels repeat
 /// the last entry.
@@ -31,7 +31,7 @@ const VANILLA_CAP: u8 = 16;
 static IN_FORCE: AtomicU8 = AtomicU8::new(VANILLA_CAP);
 
 /// Flame Altar count settings.
-#[derive(Debug, serde::Deserialize, serde::Serialize, enshwick_api::Config)]
+#[derive(Debug, serde::Deserialize, serde::Serialize, enshwick_loader_api::Config)]
 #[serde(deny_unknown_fields)]
 struct Settings {
     /// Altars allowed at each Flame level, from level 0; levels past the end use
@@ -81,10 +81,10 @@ impl AltarTable {
             .iter()
             .any(|&n| n > u16::from(cap))
         {
-            enshwick_api::warn!("altars above {cap} lowered to {cap}: {}", cap_reason(cap));
+            enshwick_loader_api::warn!("altars above {cap} lowered to {cap}: {}", cap_reason(cap));
         }
         let table = Self::new(&settings.altars_per_flame_level, cap);
-        enshwick_api::info!("altars per Flame level: {:?}", table.table);
+        enshwick_loader_api::info!("altars per Flame level: {:?}", table.table);
         table
     }
 
@@ -116,7 +116,7 @@ pub struct AltarCount {
     table: ArcSwap<AltarTable>,
 }
 
-enshwick_api::detour! {
+enshwick_loader_api::detour! {
     static MAX_ALTARS: unsafe extern "system" fn(balancing: u64, flame_level: u32) -> u8 = max_altars;
 }
 
@@ -133,8 +133,8 @@ fn max_altars(
 }
 
 impl Mod for AltarCount {
-    fn manifest() -> &'static enshwick_api::abi::Manifest {
-        enshwick_api::manifest!(
+    fn manifest() -> &'static enshwick_loader_api::abi::Manifest {
+        enshwick_loader_api::manifest!(
             id: "flame-altar-count",
             side: BOTH,
             join = true,
@@ -163,11 +163,11 @@ impl Mod for AltarCount {
     }
 }
 
-enshwick_api::declare_mod!(AltarCount);
+enshwick_loader_api::declare_mod!(AltarCount);
 
 #[cfg(test)]
 mod tests {
-    use enshwick_api::config::Config as _;
+    use enshwick_loader_api::config::Config as _;
 
     use super::*;
 

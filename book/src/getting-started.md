@@ -33,7 +33,7 @@ cargo enshwick new my-mod --side server
 current one by default) and `--side` is `server` (the default), `client` or
 `both`. The id is 1 to 64 characters of `[a-z0-9-]`. The crate holds:
 
-- `Cargo.toml`: a `cdylib` named after the id, `enshwick-api` from this
+- `Cargo.toml`: a `cdylib` named after the id, `enshwick-loader-api` from this
   repository's git tag for the API version the tool was built with, `serde`,
   and a release profile with `panic = "unwind"`, which every hook needs to
   catch panics;
@@ -79,10 +79,10 @@ its settings.
 ```rust
 use std::sync::atomic::{AtomicU8, Ordering};
 
-use enshwick_api::{Load, Mod, Next, Off};
+use enshwick_loader_api::{Load, Mod, Next, Off};
 
 /// Flame Altar settings.
-#[derive(serde::Deserialize, serde::Serialize, enshwick_api::Config)]
+#[derive(serde::Deserialize, serde::Serialize, enshwick_loader_api::Config)]
 #[serde(deny_unknown_fields)]
 struct Settings {
     /// Altars allowed at every Flame level, 1 to 16.
@@ -100,7 +100,7 @@ static ALTARS: AtomicU8 = AtomicU8::new(16);
 
 struct AltarCount;
 
-enshwick_api::detour! {
+enshwick_loader_api::detour! {
     static MAX_ALTARS: unsafe extern "system" fn(balancing: u64, level: u32) -> u8 = max_altars;
 }
 
@@ -117,8 +117,8 @@ fn apply(settings: &Settings) {
 }
 
 impl Mod for AltarCount {
-    fn manifest() -> &'static enshwick_api::abi::Manifest {
-        enshwick_api::manifest!(id: "my-altar-count", side: BOTH, join = true)
+    fn manifest() -> &'static enshwick_loader_api::abi::Manifest {
+        enshwick_loader_api::manifest!(id: "my-altar-count", side: BOTH, join = true)
     }
 
     fn init(load: &mut Load<'_>) -> Result<Self, Off> {
@@ -126,12 +126,12 @@ impl Mod for AltarCount {
         apply(&settings);
         load.hook(&MAX_ALTARS, load.symbol("building.max_altars")?)?;
         load.on_config_change(|settings: Settings| apply(&settings))?;
-        enshwick_api::info!("{} altars per Flame level", settings.altars);
+        enshwick_loader_api::info!("{} altars per Flame level", settings.altars);
         Ok(Self)
     }
 }
 
-enshwick_api::declare_mod!(AltarCount);
+enshwick_loader_api::declare_mod!(AltarCount);
 ```
 
 What each piece does:
@@ -169,7 +169,7 @@ file afresh at every start:
 - `status.log`, `crash.log` and `stub.log`: see
   [Logging and diagnostics](logging.md).
 
-A mod writes there with `enshwick_api::info!` and the other log macros.
+A mod writes there with `enshwick_loader_api::info!` and the other log macros.
 `mod-configs/enshwick.toml` sets how much is kept.
 
 ## What to read next

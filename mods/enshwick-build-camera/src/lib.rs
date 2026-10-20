@@ -15,8 +15,8 @@
 
 use core::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
-use enshwick_api::abi::HookFlags;
-use enshwick_api::{Load, Mod, Next, Off};
+use enshwick_loader_api::abi::HookFlags;
+use enshwick_loader_api::{Load, Mod, Next, Off};
 
 /// The Airborne Architect node in the skill tree, as the gate passes it.
 pub const NODE: u32 = 0x4475_e8dd;
@@ -30,7 +30,7 @@ static ENABLED: AtomicBool = AtomicBool::new(false);
 static GATE_RETURN: AtomicU64 = AtomicU64::new(0);
 
 /// Build camera settings.
-#[derive(Debug, serde::Deserialize, serde::Serialize, enshwick_api::Config)]
+#[derive(Debug, serde::Deserialize, serde::Serialize, enshwick_loader_api::Config)]
 #[serde(deny_unknown_fields)]
 struct Settings {
     /// Every player may use the building fly mode near a base without the
@@ -58,7 +58,7 @@ pub fn lifts(node: u32, return_address: u64, gate: u64, enabled: bool) -> bool {
 #[derive(Debug)]
 pub struct BuildCamera;
 
-enshwick_api::detour! {
+enshwick_loader_api::detour! {
     static NODE_UNLOCKED: unsafe extern "system" fn(node: u32, bits: *const u64, tree: *const u8) -> u8 =
         node_unlocked, flags = HookFlags::CALLER_FRAME;
 }
@@ -66,7 +66,7 @@ enshwick_api::detour! {
 fn node_unlocked(next: Next<NodeUnlocked>, node: u32, bits: *const u64, tree: *const u8) -> u8 {
     // Fast path first: another node, or the mod is off.
     let enabled = node == NODE && ENABLED.load(Ordering::Relaxed);
-    if enabled && let Some(host) = enshwick_api::host() {
+    if enabled && let Some(host) = enshwick_loader_api::host() {
         // SAFETY: the frame was taken at entry of this chain.
         let from = unsafe { host.caller_frame().return_address() };
         if lifts(node, from, GATE_RETURN.load(Ordering::Relaxed), enabled) {
@@ -81,7 +81,7 @@ fn node_unlocked(next: Next<NodeUnlocked>, node: u32, bits: *const u64, tree: *c
 fn apply(settings: &Settings) {
     let was = ENABLED.swap(settings.enabled, Ordering::Relaxed);
     if was != settings.enabled || !settings.enabled {
-        enshwick_api::info!(
+        enshwick_loader_api::info!(
             "fly mode without the skill: {}",
             if settings.enabled { "on" } else { "off" }
         );
@@ -89,8 +89,8 @@ fn apply(settings: &Settings) {
 }
 
 impl Mod for BuildCamera {
-    fn manifest() -> &'static enshwick_api::abi::Manifest {
-        enshwick_api::manifest!(
+    fn manifest() -> &'static enshwick_loader_api::abi::Manifest {
+        enshwick_loader_api::manifest!(
             id: "build-camera",
             side: BOTH,
             join = true,
@@ -126,13 +126,13 @@ impl Mod for BuildCamera {
     }
 }
 
-enshwick_api::declare_mod!(BuildCamera);
+enshwick_loader_api::declare_mod!(BuildCamera);
 
 #[cfg(test)]
 mod tests {
-    use enshwick_api::abi::{CallerFrame, Status};
-    use enshwick_api::config::Config as _;
-    use enshwick_api::events;
+    use enshwick_loader_api::abi::{CallerFrame, Status};
+    use enshwick_loader_api::config::Config as _;
+    use enshwick_loader_api::events;
 
     use super::*;
 
@@ -167,10 +167,10 @@ mod tests {
 
     #[test]
     fn the_gate_follows_the_settings_and_the_servers_join_value() {
-        let loader = enshwick_test::FakeHost::new()
+        let loader = enshwick_loader_api::test::FakeHost::new()
             .symbol(
                 "skill.node_unlocked",
-                enshwick_test::address(
+                enshwick_loader_api::test::address(
                     locked as extern "system" fn(u32, *const u64, *const u8) -> u8,
                 ),
             )

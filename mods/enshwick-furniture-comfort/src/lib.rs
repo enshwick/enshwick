@@ -9,10 +9,10 @@
 
 use std::sync::atomic::{AtomicU32, Ordering};
 
-use enshwick_api::{Load, Mod, Next, Off};
+use enshwick_loader_api::{Load, Mod, Next, Off};
 
 /// Furniture comfort settings.
-#[derive(Debug, serde::Deserialize, serde::Serialize, enshwick_api::Config)]
+#[derive(Debug, serde::Deserialize, serde::Serialize, enshwick_loader_api::Config)]
 #[serde(deny_unknown_fields)]
 #[config(validate = Settings::check)]
 struct Settings {
@@ -46,7 +46,7 @@ type Register = unsafe extern "system" fn(
     position: *const f32,
 ) -> u64;
 
-enshwick_api::detour! {
+enshwick_loader_api::detour! {
     static REGISTER: unsafe extern "system" fn(system: *mut u8, category: u32, comfort: i32, position: *const f32) -> u64 = register;
 }
 
@@ -78,8 +78,8 @@ fn register(
 pub struct FurnitureComfort;
 
 impl Mod for FurnitureComfort {
-    fn manifest() -> &'static enshwick_api::abi::Manifest {
-        enshwick_api::manifest!(
+    fn manifest() -> &'static enshwick_loader_api::abi::Manifest {
+        enshwick_loader_api::manifest!(
             id: "furniture-comfort",
             side: SERVER,
             updates: github("themaiby/enshwick", "enshwick-furniture-comfort"),
@@ -93,14 +93,14 @@ impl Mod for FurnitureComfort {
         load.hook(&REGISTER, load.symbol("comfort.base_register")?)?;
         load.on_config_change(|settings: Settings| {
             MULTIPLIER.store(settings.multiplier.to_bits(), Ordering::Relaxed);
-            enshwick_api::info!("furniture comfort x{}", settings.multiplier);
+            enshwick_loader_api::info!("furniture comfort x{}", settings.multiplier);
         })?;
-        enshwick_api::info!("furniture comfort x{}", settings.multiplier);
+        enshwick_loader_api::info!("furniture comfort x{}", settings.multiplier);
         Ok(Self)
     }
 }
 
-enshwick_api::declare_mod!(FurnitureComfort);
+enshwick_loader_api::declare_mod!(FurnitureComfort);
 
 #[cfg(test)]
 mod tests {
@@ -116,7 +116,7 @@ mod tests {
 
     #[test]
     fn the_default_settings_parse() {
-        use enshwick_api::config::Config;
+        use enshwick_loader_api::config::Config;
         let settings: Settings = toml::from_str(&Settings::template()).unwrap();
         assert!((settings.multiplier - 2.0).abs() < f32::EPSILON);
         assert!(settings.validate().is_ok());

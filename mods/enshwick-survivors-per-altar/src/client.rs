@@ -13,7 +13,7 @@
 use std::collections::BTreeMap;
 use std::sync::OnceLock;
 
-use enshwick_api::{Load, Next, Off};
+use enshwick_loader_api::{Load, Next, Off};
 
 type IteratorInit = unsafe extern "system" fn(ctx: *mut u64, iterator: *mut u64, size: u64);
 type IteratorNext = unsafe extern "system" fn(ctx: *mut u64, iterator: *mut u64, size: u64) -> u64;
@@ -45,11 +45,11 @@ struct Engine {
 
 static ENGINE: OnceLock<Engine> = OnceLock::new();
 
-enshwick_api::detour! {
+enshwick_loader_api::detour! {
     static CURSOR_LOOKUP: unsafe extern "system" fn(bases: *mut u8, npc: *const u32) -> u32 = cursor_lookup,
-        flags = enshwick_api::abi::HookFlags::CALLER_FRAME;
+        flags = enshwick_loader_api::abi::HookFlags::CALLER_FRAME;
 }
-enshwick_api::detour! {
+enshwick_loader_api::detour! {
     static UI_STATUS: unsafe extern "system" fn(ctx: *mut u64) = ui_status;
 }
 
@@ -100,7 +100,7 @@ pub(crate) fn link(load: &mut Load<'_>, cursor: bool) -> Result<(), Off> {
 }
 
 fn cursor_lookup(next: Next<LookupFn>, bases: *mut u8, npc: *const u32) -> u32 {
-    if let (Some(engine), Some(host)) = (ENGINE.get(), enshwick_api::host())
+    if let (Some(engine), Some(host)) = (ENGINE.get(), enshwick_loader_api::host())
         // SAFETY: the frame was taken at entry of this chain.
         && unsafe { host.caller_frame().return_address() } == engine.cursor_return
     {
@@ -215,7 +215,7 @@ fn survivor_id(guid: &[u8; 16]) -> u32 {
     if guid.iter().all(|&b| b == 0) {
         return 0;
     }
-    enshwick_api::content::Guid(*guid).id()
+    enshwick_loader_api::content::Guid(*guid).id()
 }
 
 #[cfg(test)]

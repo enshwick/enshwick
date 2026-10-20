@@ -4,8 +4,8 @@
 
 use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
-use enshwick_api::content::recipes::RecipeEdit;
-use enshwick_api::{Load, Mod, Off};
+use enshwick_loader_api::content::recipes::RecipeEdit;
+use enshwick_loader_api::{Load, Mod, Off};
 
 /// The settings file of the mod this one replaces, carried over once.
 const OLD_SETTINGS: &str = "building-yield.toml";
@@ -20,7 +20,7 @@ static SCALED: [AtomicBool; 3] = [
 ];
 
 /// Building materials settings.
-#[derive(Debug, serde::Deserialize, serde::Serialize, enshwick_api::Config)]
+#[derive(Debug, serde::Deserialize, serde::Serialize, enshwick_loader_api::Config)]
 #[serde(default, deny_unknown_fields)]
 #[config(validate = Settings::check)]
 struct Settings {
@@ -67,7 +67,7 @@ impl Settings {
         {
             scaled.store(on, Ordering::Relaxed);
         }
-        enshwick_api::info!(
+        enshwick_loader_api::info!(
             "output x{}: blocks {}, overgrowth {}, decor {}",
             self.multiplier,
             self.blocks,
@@ -132,7 +132,7 @@ fn carried_over(template: &str, old: &str) -> Option<String> {
 /// Writes the mod's settings from the replaced mod's file, when the mod has
 /// none of its own yet and that file exists.
 fn carry_over_old_settings(load: &Load<'_>) -> Result<(), Off> {
-    use enshwick_api::config::Config;
+    use enshwick_loader_api::config::Config;
     // `<game>/mod-data/<id>` beside `<game>/mod-configs/`.
     let data = load.data_dir()?;
     let Some(configs) = data.parent().and_then(|d| d.parent()) else {
@@ -148,10 +148,12 @@ fn carry_over_old_settings(load: &Load<'_>) -> Result<(), Off> {
     }
     match carried_over(&Settings::template(), &old) {
         Some(text) => match std::fs::write(&new, text) {
-            Ok(()) => enshwick_api::info!("settings carried over from {OLD_SETTINGS}"),
-            Err(e) => enshwick_api::warn!("settings not carried over from {OLD_SETTINGS}: {e}"),
+            Ok(()) => enshwick_loader_api::info!("settings carried over from {OLD_SETTINGS}"),
+            Err(e) => {
+                enshwick_loader_api::warn!("settings not carried over from {OLD_SETTINGS}: {e}");
+            }
         },
-        None => enshwick_api::warn!("{OLD_SETTINGS} does not parse, the defaults apply"),
+        None => enshwick_loader_api::warn!("{OLD_SETTINGS} does not parse, the defaults apply"),
     }
     Ok(())
 }
@@ -161,8 +163,8 @@ fn carry_over_old_settings(load: &Load<'_>) -> Result<(), Off> {
 pub struct BuildingMaterials;
 
 impl Mod for BuildingMaterials {
-    fn manifest() -> &'static enshwick_api::abi::Manifest {
-        enshwick_api::manifest!(
+    fn manifest() -> &'static enshwick_loader_api::abi::Manifest {
+        enshwick_loader_api::manifest!(
             id: "building-materials",
             side: BOTH,
             join = true,
@@ -183,12 +185,12 @@ impl Mod for BuildingMaterials {
     }
 }
 
-enshwick_api::declare_mod!(BuildingMaterials);
+enshwick_loader_api::declare_mod!(BuildingMaterials);
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use enshwick_api::config::Config;
+    use enshwick_loader_api::config::Config;
 
     #[test]
     fn recipes_fall_in_their_categories() {

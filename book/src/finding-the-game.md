@@ -22,11 +22,11 @@ reads that reflection at start, so these lookups keep working after an update
 without anyone touching the mod:
 
 ```rust
-fn init(load: &mut enshwick_api::Load<'_>) -> Result<(), enshwick_api::Off> {
+fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
     let system = load.system("upgrade_building_range")?;
     let range_x = load.field_offset("keen::ecs::TriggerShape", "rangeX")?;
     let size = load.type_size("keen::ecs::TriggerShape")?;
-    enshwick_api::info!("system at {system:#x}, rangeX at +{range_x}, {size} bytes");
+    enshwick_loader_api::info!("system at {system:#x}, rangeX at +{range_x}, {size} bytes");
     Ok(())
 }
 ```
@@ -41,10 +41,10 @@ Engine helpers that reflection does not describe are pinned per build under a
 symbolic id, such as `npc.lookup` or `ecs.context_row`:
 
 ```rust
-fn init(load: &mut enshwick_api::Load<'_>) -> Result<(), enshwick_api::Off> {
+fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
     let lookup = load.symbol("npc.lookup")?;
     let row = load.constant("ecs.context_row")?;
-    enshwick_api::info!("lookup at {lookup:#x}, row word at +{row}");
+    enshwick_loader_api::info!("lookup at {lookup:#x}, row word at +{row}");
     Ok(())
 }
 ```
@@ -55,7 +55,7 @@ base, and the loader adds the base. `constant` looks in the same two places and
 returns the value as it is.
 
 The loader's table, in
-[`builds.rs`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader/src/builds.rs),
+[`builds.rs`](https://github.com/themaiby/enshwick/blob/main/crates/internal/loader/src/builds.rs),
 holds what several mods share: the ECS iterator, component reads, chat, labels,
 inventories and so on. Ids a single mod uses go in that mod's rows.
 
@@ -64,7 +64,7 @@ inventories and so on. Ids a single mod uses go in that mod's rows.
 A mod pins its own ids with `builds:` in [`manifest!`](getting-started.md):
 
 ```rust
-let manifest = enshwick_api::manifest!(
+let manifest = enshwick_loader_api::manifest!(
     id: "my-mod",
     side: BOTH,
     builds: [
@@ -109,7 +109,7 @@ binaries;
 pins two game functions the same way.
 
 When the game updates, the rows of the new build come from
-[`enshwick-pin`](https://github.com/themaiby/enshwick/tree/main/crates/enshwick-pin):
+[`cargo enshwick pin`](https://github.com/themaiby/enshwick/blob/main/crates/cargo-enshwick/README.md#porting-build-rows-pin):
 given the old and the new executable, it finds every pinned symbol of the
 loader's table and of each mod's rows again and writes the new rows next to
 the old ones. What it cannot place for sure it leaves out with a `// pin:`
@@ -140,9 +140,9 @@ and returns the absolute address of the one place it matches. It survives an
 update that leaves those bytes alone, without a new row.
 
 ```rust
-fn init(load: &mut enshwick_api::Load<'_>) -> Result<(), enshwick_api::Off> {
+fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
     let site = load.find_code("B9 00 02 00 00 66 3B C1 0F 84 ?? ?? ?? ??")?;
-    enshwick_api::info!("check at {site:#x}");
+    enshwick_loader_api::info!("check at {site:#x}");
     Ok(())
 }
 ```
@@ -154,19 +154,19 @@ fn init(load: &mut enshwick_api::Load<'_>) -> Result<(), enshwick_api::Off> {
 - It must match exactly once. No match and more than one match both give `Off`,
   so a pattern never lands on the wrong place. Make it long enough to be unique.
 
-[`code::Pattern`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/code.rs)
+[`code::Pattern`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/code.rs)
 is the same parser and search, for use on any slice: `parse`, `matches`,
 `find_all` and `find_unique`. `load.code()` returns the game's code section as
 a `&'static [u8]` that starts at its absolute address, for a mod that reads
 the bytes around a match:
 
 ```rust
-fn init(load: &mut enshwick_api::Load<'_>) -> Result<(), enshwick_api::Off> {
+fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
     let code = load.code()?;
-    let pattern = enshwick_api::code::Pattern::parse("E8 ?? ?? ?? ?? 84 C0")
-        .map_err(|e| enshwick_api::Off::new(e.to_string()))?;
+    let pattern = enshwick_loader_api::code::Pattern::parse("E8 ?? ?? ?? ?? 84 C0")
+        .map_err(|e| enshwick_loader_api::Off::new(e.to_string()))?;
     let calls = pattern.find_all(code).count();
-    enshwick_api::info!("{calls} calls followed by a test of al");
+    enshwick_loader_api::info!("{calls} calls followed by a test of al");
     Ok(())
 }
 ```

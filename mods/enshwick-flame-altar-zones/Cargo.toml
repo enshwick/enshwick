@@ -17,11 +17,12 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 arc-swap.workspace = true
 arrayvec.workspace = true
-enshwick-api.workspace = true
-enshwick-geometry.workspace = true
+enshwick-loader-api.workspace = true
 serde.workspace = true
+thiserror.workspace = true
 
 [dev-dependencies]
+proptest.workspace = true
 toml.workspace = true
 
 [lints]

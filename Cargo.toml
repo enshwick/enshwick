@@ -1,6 +1,11 @@
 [workspace]
 resolver = "3"
-members = ["crates/*", "mods/*"]
+members = [
+    "crates/cargo-enshwick",
+    "crates/enshwick-loader-api",
+    "crates/internal/*",
+    "mods/*",
+]
 
 [workspace.package]
 edition = "2024"
@@ -13,10 +18,8 @@ publish = false
 arc-swap = { version = "1.9.3", default-features = false }
 clap = { version = "4.6.7", default-features = false, features = ["std", "derive", "help", "usage", "error-context", "env"] }
 arrayvec = { version = "0.7.8", default-features = false, features = ["std"] }
-enshwick-api = { path = "crates/enshwick-api" }
-enshwick-reflect = { path = "crates/enshwick-reflect" }
-enshwick-geometry = { path = "crates/enshwick-geometry" }
-enshwick-test = { path = "crates/enshwick-test" }
+enshwick-loader-api = { path = "crates/enshwick-loader-api" }
+enshwick-loader-reflect = { path = "crates/internal/reflect" }
 iced-x86 = { version = "1.21.0", default-features = false, features = ["std", "decoder", "block_encoder", "instr_info"] }
 memchr = { version = "2.8.3", default-features = false, features = ["std"] }
 proptest = { version = "1.12.0", default-features = false, features = ["std"] }

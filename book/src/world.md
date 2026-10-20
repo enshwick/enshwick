@@ -1,20 +1,20 @@
 # The world
 
-[`load.world()`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/load.rs)
+[`load.world()`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/load.rs)
 returns a
-[`World`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/world.rs):
+[`World`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/world.rs):
 reads of the server's world, entity labels and chat lines. It is `Copy`; get
 it during `init` and move it into handlers and tasks.
 
 ```rust
-use enshwick_api::ecs::Entity;
-use enshwick_api::events::PlayerJoined;
+use enshwick_loader_api::ecs::Entity;
+use enshwick_loader_api::events::PlayerJoined;
 
-fn init(load: &mut enshwick_api::Load<'_>) -> Result<(), enshwick_api::Off> {
+fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
     let world = load.world()?;
     load.on::<PlayerJoined>(move |joined| {
         if let Some(player) = world.player(Entity(joined.entity)) {
-            enshwick_api::info!("{} joined, admin: {}", player.name, player.is_admin());
+            enshwick_loader_api::info!("{} joined, admin: {}", player.name, player.is_admin());
         }
     })
 }
@@ -49,19 +49,19 @@ through the system's context instead; see [ECS inside systems](ecs.md).
 The pointer from `component` stays valid until the game thread returns to the
 game; read what you need at once. `component_type` turns the mod off when the
 type is not reflected on the running build. Its `hash()` is the hash
-[`ecs::Components`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/ecs.rs)
+[`ecs::Components`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/ecs.rs)
 takes inside systems.
 
 ```rust
-use enshwick_api::ecs::Entity;
-use enshwick_api::events::BuildingPlaced;
+use enshwick_loader_api::ecs::Entity;
+use enshwick_loader_api::events::BuildingPlaced;
 
-fn init(load: &mut enshwick_api::Load<'_>) -> Result<(), enshwick_api::Off> {
+fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
     let world = load.world()?;
     load.on::<BuildingPlaced>(move |placed| {
         let entity = Entity(placed.entity);
         if let (Some(at), Some(item)) = (world.position(entity), world.used_item(entity)) {
-            enshwick_api::debug!("item {item} placed at {at:?}");
+            enshwick_loader_api::debug!("item {item} placed at {at:?}");
         }
     })
 }
@@ -71,7 +71,7 @@ fn init(load: &mut enshwick_api::Load<'_>) -> Result<(), enshwick_api::Off> {
 
 `player(entity)` returns the connected player whose character is `entity`;
 `players()` returns every connected player with a character in the world. A
-[`Player`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/world.rs)
+[`Player`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/world.rs)
 has:
 
 - `entity`, the character's entity;
@@ -79,7 +79,7 @@ has:
 - `key`, the same number for the same account in every session. Use it to
   remember a player between sessions;
 - `permissions`, the server's permission bits, `PlayerInfo::CAN_*` in
-  [`abi`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/abi.rs);
+  [`abi`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs);
   `is_admin()` tells whether the player may kick and ban, the server's
   administrators;
 - `name`, the name the client sent. It is untrusted: a client picks it, and two
@@ -94,10 +94,10 @@ the name. It works on the game thread only, and returns `false` elsewhere or
 when the entity is gone.
 
 ```rust
-use enshwick_api::ecs::Entity;
-use enshwick_api::events::BuildingPlaced;
+use enshwick_loader_api::ecs::Entity;
+use enshwick_loader_api::events::BuildingPlaced;
 
-fn init(load: &mut enshwick_api::Load<'_>) -> Result<(), enshwick_api::Off> {
+fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
     let world = load.world()?;
     load.on::<BuildingPlaced>(move |placed| {
         if let Some(player) = world.player(Entity(placed.player)) {
@@ -109,14 +109,14 @@ fn init(load: &mut enshwick_api::Load<'_>) -> Result<(), enshwick_api::Off> {
 ```
 
 The game checks no permission when a player renames something.
-[`load.on_rename(|rename| ...)`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/commands.rs)
+[`load.on_rename(|rename| ...)`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/commands.rs)
 runs before every rename on the server, on its game thread, with a
-[`Rename`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/commands.rs):
+[`Rename`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/commands.rs):
 the `entity`, the `player` (`None` when the server cannot tell) and the new
 `text`. Returning `false` refuses the rename, and the entity keeps its name.
 
 ```rust
-fn init(load: &mut enshwick_api::Load<'_>) -> Result<(), enshwick_api::Off> {
+fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
     // Only administrators rename anything.
     load.on_rename(|rename| rename.player.as_ref().is_some_and(|p| p.is_admin()))
 }

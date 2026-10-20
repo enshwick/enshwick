@@ -11,20 +11,20 @@ game code again.
 
 ## Declaring a hook
 
-[`detour!`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/hook.rs)
+[`detour!`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/hook.rs)
 declares a static
-[`Hook`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/hook.rs):
+[`Hook`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/hook.rs):
 the mod's link, with an entry point that has the game function's signature and
 catches panics. The body is an ordinary function that takes a
-[`Next`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/hook.rs)
+[`Next`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/hook.rs)
 and the target's arguments:
 
 ```rust
-use enshwick_api::Next;
+use enshwick_loader_api::Next;
 
 type MaxAltars = unsafe extern "system" fn(balancing: u64, level: u32) -> u8;
 
-enshwick_api::detour! {
+enshwick_loader_api::detour! {
     static MAX_ALTARS: unsafe extern "system" fn(balancing: u64, level: u32) -> u8 = max_altars;
 }
 
@@ -34,7 +34,7 @@ fn max_altars(next: Next<MaxAltars>, balancing: u64, level: u32) -> u8 {
     vanilla.max(16)
 }
 
-fn init(load: &mut enshwick_api::Load<'_>) -> Result<(), enshwick_api::Off> {
+fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
     load.hook(&MAX_ALTARS, load.symbol("building.max_altars")?)
 }
 ```
@@ -49,12 +49,12 @@ fn init(load: &mut enshwick_api::Load<'_>) -> Result<(), enshwick_api::Off> {
   `address` (an absolute address from [Finding the game](finding-the-game.md)).
   Hooks are linked during `init` only; nothing runs until arming.
 
-[`#[hook]`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/lib.rs)
+[`#[hook]`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/lib.rs)
 writes the same declaration from the body. The static is named after the
 function in upper case:
 
 ```rust
-use enshwick_api::{Next, hook};
+use enshwick_loader_api::{Next, hook};
 
 #[hook]
 fn upgrade(next: Next<unsafe extern "system" fn(*mut u64)>, ctx: *mut u64) {
@@ -62,7 +62,7 @@ fn upgrade(next: Next<unsafe extern "system" fn(*mut u64)>, ctx: *mut u64) {
     unsafe { next.get()(ctx) }
 }
 
-fn init(load: &mut enshwick_api::Load<'_>) -> Result<(), enshwick_api::Off> {
+fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
     load.hook(&UPGRADE, load.system("upgrade_building_range")?)
 }
 ```
@@ -74,9 +74,9 @@ priority run in load order: dependencies first, then by mod id. The default
 priority is 0.
 
 ```rust
-use enshwick_api::{Next, abi::HookFlags};
+use enshwick_loader_api::{Next, abi::HookFlags};
 
-enshwick_api::detour! {
+enshwick_loader_api::detour! {
     static LOOKUP: unsafe extern "system" fn(bases: *mut u8, npc: *const u32) -> u32 =
         lookup, priority = -10;
 }
@@ -104,7 +104,7 @@ and every mod linked on it is turned off.
 
 ## Flags
 
-[`HookFlags`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/abi.rs)
+[`HookFlags`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs)
 has two flags, combined with `HookFlags(a.0 | b.0)`:
 
 - `EXCLUSIVE`: no other mod may link on this function. Use it for a link that
@@ -119,7 +119,7 @@ has two flags, combined with `HookFlags(a.0 | b.0)`:
 
 A function that many places call often needs a change for one of them only.
 With `CALLER_FRAME`, the
-[`CallerFrame`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/abi.rs)
+[`CallerFrame`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs)
 names the call site: `return_address()` reads the address the function returns
 to, which a mod pins per build in its own rows. `stack()` is the caller's stack
 above the return address, and the callee-saved registers are as the caller had
@@ -128,20 +128,20 @@ them, for reading its locals.
 ```rust
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use enshwick_api::{Next, abi::HookFlags};
+use enshwick_loader_api::{Next, abi::HookFlags};
 
 type NodeUnlocked = unsafe extern "system" fn(node: u32, bits: *const u64) -> u8;
 
 /// The return address of the one call site to change; set in `init`.
 static GATE: AtomicU64 = AtomicU64::new(0);
 
-enshwick_api::detour! {
+enshwick_loader_api::detour! {
     static NODE_UNLOCKED: unsafe extern "system" fn(node: u32, bits: *const u64) -> u8 =
         node_unlocked, flags = HookFlags::CALLER_FRAME;
 }
 
 fn node_unlocked(next: Next<NodeUnlocked>, node: u32, bits: *const u64) -> u8 {
-    if node == 7 && let Some(host) = enshwick_api::host() {
+    if node == 7 && let Some(host) = enshwick_loader_api::host() {
         // SAFETY: the frame was taken at entry of this chain.
         let from = unsafe { host.caller_frame().return_address() };
         if from == GATE.load(Ordering::Relaxed) {
@@ -152,7 +152,7 @@ fn node_unlocked(next: Next<NodeUnlocked>, node: u32, bits: *const u64) -> u8 {
     unsafe { next.get()(node, bits) }
 }
 
-fn init(load: &mut enshwick_api::Load<'_>) -> Result<(), enshwick_api::Off> {
+fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
     GATE.store(load.symbol("my-mod.gate_return")?, Ordering::Relaxed);
     load.hook(&NODE_UNLOCKED, load.symbol("skill.node_unlocked")?)
 }
@@ -170,13 +170,13 @@ answers each caller of one lookup differently.
 `init` has returned the state, `None` before. A hook can read settings there:
 
 ```rust
-use enshwick_api::{Load, Mod, Next, Off};
+use enshwick_loader_api::{Load, Mod, Next, Off};
 
 struct MyMod {
     altars: u8,
 }
 
-enshwick_api::detour! {
+enshwick_loader_api::detour! {
     static MAX_ALTARS: unsafe extern "system" fn(balancing: u64, level: u32) -> u8 = max_altars;
 }
 
@@ -189,8 +189,8 @@ fn max_altars(next: Next<unsafe extern "system" fn(u64, u32) -> u8>, balancing: 
 }
 
 impl Mod for MyMod {
-    fn manifest() -> &'static enshwick_api::abi::Manifest {
-        enshwick_api::manifest!(id: "my-mod", side: BOTH, join = true)
+    fn manifest() -> &'static enshwick_loader_api::abi::Manifest {
+        enshwick_loader_api::manifest!(id: "my-mod", side: BOTH, join = true)
     }
 
     fn init(load: &mut Load<'_>) -> Result<Self, Off> {
@@ -199,7 +199,7 @@ impl Mod for MyMod {
     }
 }
 
-enshwick_api::declare_mod!(MyMod);
+enshwick_loader_api::declare_mod!(MyMod);
 # fn main() {}
 ```
 
@@ -237,5 +237,5 @@ asks [`ecs::Worlds`](ecs.md#which-world-worlds) first.
 
 ## Testing
 
-[`enshwick-test`](testing.md) runs a mod's hooks without the game: a fake
+[The test fake](testing.md) runs a mod's hooks without the game: a fake
 loader whose chain ends at a plain function standing in for the game's.

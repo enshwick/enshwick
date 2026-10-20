@@ -9,10 +9,10 @@
 //! a copy staff's use as consuming, which makes the game take one staff in
 //! the same transaction as the spawn or move, and only when that works.
 
-use enshwick_api::content::Guid;
-use enshwick_api::content::items::NewItem;
-use enshwick_api::i18n::Texts;
-use enshwick_api::{Load, Next, Off};
+use enshwick_loader_api::content::Guid;
+use enshwick_loader_api::content::items::NewItem;
+use enshwick_loader_api::i18n::Texts;
+use enshwick_loader_api::{Load, Next, Off};
 
 /// The mod's texts, per language.
 pub(crate) const TEXTS: &str = include_str!("texts.toml");
@@ -136,7 +136,7 @@ pub(crate) fn add(load: &mut Load<'_>, texts: &Texts) -> Result<(), Off> {
 type RegistryLoadFn = unsafe extern "system" fn(registry: *mut u8);
 type FindSlotFn = unsafe extern "system" fn(map: *mut u8, key: *const u32) -> u64;
 
-enshwick_api::detour! {
+enshwick_loader_api::detour! {
     static REGISTRY_LOAD: unsafe extern "system" fn(registry: *mut u8) = registry_load;
 }
 
@@ -213,7 +213,7 @@ fn registry_load(next: Next<RegistryLoadFn>, registry: *mut u8) {
             filed += 1;
         }
     }
-    enshwick_api::info!("filed {filed} copy staffs in the survivor registry");
+    enshwick_loader_api::info!("filed {filed} copy staffs in the survivor registry");
 }
 
 /// Maps `item` to `npc` in the game's map at `table`, as its own build does:
@@ -265,7 +265,7 @@ unsafe fn file(map: &ItemMap, table: *mut u8, item: u32, npc: u32) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use enshwick_api::i18n::Language;
+    use enshwick_loader_api::i18n::Language;
 
     #[test]
     fn every_staff_has_its_own_ids_and_a_name() {

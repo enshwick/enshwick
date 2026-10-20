@@ -15,7 +15,7 @@
 use std::sync::OnceLock;
 
 use arrayvec::ArrayVec;
-use enshwick_api::{Load, Next, Off};
+use enshwick_loader_api::{Load, Next, Off};
 
 /// The engine keeps at most 255 zones.
 const MAX_ZONES: usize = 256;
@@ -36,7 +36,7 @@ struct Layout {
 
 static LAYOUT: OnceLock<Layout> = OnceLock::new();
 
-enshwick_api::detour! {
+enshwick_loader_api::detour! {
     static SEAM: unsafe extern "system" fn(zones: *const u8, corners: *const i64, margin: f32) -> u8 = seam;
 }
 

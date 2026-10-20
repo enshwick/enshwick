@@ -19,7 +19,7 @@ vanilla; see [Finding the game](../finding-the-game.md).
 
 Every `*.dll` directly in `mods/` is a candidate, taken in file name order. The
 loader loads each and keeps it when it exports the four functions of
-[`abi::exports`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/abi.rs)
+[`abi::exports`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs)
 and was built for the loader's ABI major. Other DLLs are logged as "not an
 Enshwick mod" and unloaded. The file name is free; the id in the manifest
 names the mod.
@@ -27,7 +27,7 @@ names the mod.
 ## The ABI
 
 A mod and the loader are built separately, so they talk through a C ABI,
-[`enshwick_api::abi`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/abi.rs):
+[`enshwick_loader_api::abi`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs):
 
 - `ABI_MAJOR` changes only with an incompatible change. A loader refuses a mod
   built for another major.
@@ -38,9 +38,9 @@ A mod and the loader are built separately, so they talk through a C ABI,
   The safe layer checks `Header::covers` before it calls a field newer than
   the loader, and falls back or reports `Off` where the loader is too old.
 
-A mod rarely touches the ABI. [`Load`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/load.rs)
+A mod rarely touches the ABI. [`Load`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/load.rs)
 wraps the table during init, and
-[`host()`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/host.rs)
+[`host()`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/host.rs)
 returns a `Host` afterwards, from any thread, for logging, `fault`,
 `hosting()` and the raw table. Each mod DLL links its own copy of the crate,
 so `host()` always answers for the mod that calls it. The
@@ -48,12 +48,12 @@ so `host()` always answers for the mod that calls it. The
 
 ## The manifest
 
-[`manifest!`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/declare.rs)
+[`manifest!`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/declare.rs)
 builds the static data the loader reads before it runs any of the mod's code.
 Fields go in this order; only `id` and `side` are required:
 
 ```rust
-let manifest = enshwick_api::manifest!(
+let manifest = enshwick_loader_api::manifest!(
     id: "survivors-per-altar",      // 1 to 64 of [a-z0-9-]
     side: BOTH,                     // SERVER, CLIENT or BOTH
     version: "0.2.0",               // the crate's version when left out
@@ -94,18 +94,18 @@ let manifest = enshwick_api::manifest!(
 ## The mod
 
 A mod implements
-[`Mod`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/load.rs) on its
+[`Mod`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/load.rs) on its
 state type:
 
 - `manifest()` returns the `manifest!`;
 - `init(load)` registers hooks, settings, events and content, and returns the
-  state or an [`Off`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/load.rs);
+  state or an [`Off`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/load.rs);
 - `ready(&'static self, host)`, optional, runs once the hooks are armed.
 
 `Off::new(reason)` turns the mod off with a reason for the log. Every fallible
 call on `Load` returns `Result<_, Off>`, so `?` is the usual way out.
 
-[`declare_mod!`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/declare.rs)
+[`declare_mod!`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/declare.rs)
 exports the type: `enshwick_mod_abi`, `enshwick_mod_query`,
 `enshwick_mod_init` and `enshwick_mod_ready`, each catching panics. It also
 adds `instance()`, the mod's state once `init` has returned it.
@@ -113,16 +113,16 @@ adds `instance()`, the mod's state once `init` has returned it.
 ```rust
 struct Quiet;
 
-impl enshwick_api::Mod for Quiet {
-    fn manifest() -> &'static enshwick_api::abi::Manifest {
-        enshwick_api::manifest!(id: "quiet", side: SERVER)
+impl enshwick_loader_api::Mod for Quiet {
+    fn manifest() -> &'static enshwick_loader_api::abi::Manifest {
+        enshwick_loader_api::manifest!(id: "quiet", side: SERVER)
     }
 
-    fn init(_load: &mut enshwick_api::Load<'_>) -> Result<Self, enshwick_api::Off> {
-        Err(enshwick_api::Off::new("nothing to do on this build"))
+    fn init(_load: &mut enshwick_loader_api::Load<'_>) -> Result<Self, enshwick_loader_api::Off> {
+        Err(enshwick_loader_api::Off::new("nothing to do on this build"))
     }
 }
 
-enshwick_api::declare_mod!(Quiet);
+enshwick_loader_api::declare_mod!(Quiet);
 # assert!(Quiet::instance().is_none());
 ```

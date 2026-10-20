@@ -2,7 +2,7 @@
 
 A mod ships its texts, item names, descriptions and chat phrases, in one
 TOML file with a table per language. The
-[`i18n`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/i18n.rs)
+[`i18n`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/i18n.rs)
 module reads it, and a server owner can add to it or change it.
 
 ## The texts file
@@ -20,7 +20,7 @@ module reads it, and a server owner can add to it or change it.
 ```
 
 - Each table is a language code:
-  [`Language`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/i18n.rs)
+  [`Language`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/i18n.rs)
   lists the 35 the game knows, such as `en`, `en-us`, `de`, `uk`, `pt-br` or
   `zh-cn`. Codes ignore case; an unknown code is an error.
 - Keys are the mod's own names for its texts; values must be strings.
@@ -29,10 +29,10 @@ module reads it, and a server owner can add to it or change it.
 
 Embed the file with `include_str!("texts.toml")` and read it during `init`
 with
-[`Load::texts`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/i18n.rs):
+[`Load::texts`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/i18n.rs):
 
 ```rust
-use enshwick_api::content::Guid;
+use enshwick_loader_api::content::Guid;
 
 const SAFE_NAME: Guid = Guid::parse("b7c1d2e3-4f50-4a61-8b72-c3d4e5f60718");
 const SAFE_DESCRIPTION: Guid = Guid::parse("c8d2e3f4-5061-4b72-9c83-d4e5f6071829");
@@ -47,7 +47,7 @@ const TEXTS: &str = r#"
 "safe.name" = "Сейф"
 "#;
 
-fn init(load: &mut enshwick_api::Load<'_>) -> Result<(), enshwick_api::Off> {
+fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
     let texts = load.texts(TEXTS)?;
     load.add_texts(&texts, &[
         ("safe.name", SAFE_NAME),
@@ -61,7 +61,7 @@ below is malformed, with the file's path in the message for the override.
 
 ## Texts the game shows
 
-[`Load::add_texts(&texts, pairs)`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/i18n.rs)
+[`Load::add_texts(&texts, pairs)`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/i18n.rs)
 gives game tags their texts. Each pair is a key of the texts file and a tag,
 a GUID of the mod's own, such as the `name` and `description` of a
 [`NewItem`](items.md). Every language that has a text for the key gets it;
@@ -79,7 +79,7 @@ Under the hood each text goes through
 ## Texts the mod uses itself
 
 The returned
-[`Texts`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-api/src/i18n.rs)
+[`Texts`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/i18n.rs)
 also serves the mod's own strings, such as chat replies:
 
 - `get(key, language)` returns the text in `language`, else in `en`, else
@@ -89,7 +89,7 @@ also serves the mod's own strings, such as chat replies:
 - `Texts::parse(toml)` reads a texts file without a `Load`, for tests.
 
 ```rust
-use enshwick_api::i18n::{Language, Texts};
+use enshwick_loader_api::i18n::{Language, Texts};
 
 let mut texts = Texts::parse("[en]\ngreeting = \"Hello\"\n[uk]\ngreeting = \"Привіт\"\n").unwrap();
 assert_eq!(texts.get("greeting", Language::UK_UA), Some("Привіт"));
