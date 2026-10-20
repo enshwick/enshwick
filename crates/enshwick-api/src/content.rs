@@ -13,6 +13,7 @@ use crate::{Load, Off};
 
 pub mod items;
 pub mod recipes;
+pub mod workshops;
 
 /// A GUID in memory order: the `bytes_le` of its textual form.
 ///
@@ -101,6 +102,28 @@ impl Guid {
     }
 }
 
+impl core::fmt::Display for Guid {
+    /// The textual form [`Guid::parse`] reads.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_api::content::Guid;
+    ///
+    /// let text = "6943053a-32c1-4718-ae22-e61427ddf54d";
+    /// assert_eq!(Guid::parse(text).to_string(), text);
+    /// ```
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let b = &self.0;
+        write!(
+            f,
+            "{:02x}{:02x}{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}-",
+            b[3], b[2], b[1], b[0], b[5], b[4], b[7], b[6], b[8], b[9]
+        )?;
+        b[10..].iter().try_for_each(|byte| write!(f, "{byte:02x}"))
+    }
+}
+
 #[expect(
     clippy::panic,
     reason = "const evaluation: a malformed literal fails the build"
@@ -122,6 +145,12 @@ pub mod types {
     pub const ITEM_REGISTRY: u32 = 0x72ab_39b6;
     /// `RecipeRegistryResource`, every recipe.
     pub const RECIPE_REGISTRY: u32 = 0x5f53_82cf;
+    /// `ecs::TemplateResource`, what a placed object or creature is made of.
+    pub const TEMPLATE: u32 = 0x3976_8775;
+    /// `ecs::TemplateCollectionResource`, the list of every template.
+    pub const TEMPLATE_COLLECTION: u32 = 0xd80f_e371;
+    /// `WorkshopRegistryResource`, every workshop.
+    pub const WORKSHOP_REGISTRY: u32 = 0xa8ea_5924;
 }
 
 /// A resource blob being edited.
