@@ -206,7 +206,7 @@ pub fn set(
 pub fn changed(id: &str, key: &str, change: &Change) -> String {
     let then = match change.stage {
         Stage::Startup => "restart needed: it takes effect at the next start",
-        Stage::Sync => "applied now; joined players get it when they join again",
+        Stage::Sync => "applied now and sent to joined players",
         Stage::Client => "applied now, on this game only",
         _ => "applied now",
     };

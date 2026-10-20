@@ -368,6 +368,77 @@ fn demo_position(bytes: &[u8]) -> Option<[i64; 3]> {
     }
 }
 
+/// The longest control message, in bytes, with its kind and version.
+pub(crate) const MAX_CONTROL: usize = PART_BYTES * MAX_PARTS - 2;
+/// Numbers the multi-part control messages this side sends.
+static CONTROL_MESSAGE: std::sync::atomic::AtomicU16 = std::sync::atomic::AtomicU16::new(1);
+
+/// The frames of a settings message.
+fn remote_frames(message: &crate::remote::Message) -> Vec<String> {
+    let mut data = control(message.kind());
+    data.extend_from_slice(&message.body());
+    let id = CONTROL_MESSAGE.fetch_add(1, Ordering::Relaxed);
+    frames(CONTROL, id, &data)
+}
+
+/// Sends a settings message to the client of the player with account key
+/// `key`, when it takes messages.
+pub(crate) fn to_player(key: u64, message: &crate::remote::Message) {
+    if !ready(key) {
+        return;
+    }
+    for line in remote_frames(message) {
+        crate::chat::send(key, &line);
+    }
+}
+
+/// Sends a settings message to every client that runs Enshwick.
+pub(crate) fn broadcast_control(message: &crate::remote::Message) {
+    let keys: Vec<u64> = state(|s| {
+        s.peers
+            .keys()
+            .copied()
+            .filter(|&k| k != NetMessage::SERVER)
+            .collect()
+    });
+    if keys.is_empty() {
+        return;
+    }
+    let lines = remote_frames(message);
+    for key in keys {
+        for line in &lines {
+            crate::chat::send(key, line);
+        }
+    }
+}
+
+/// Sends a settings message from the client to its server; false while the
+/// server takes no messages.
+pub(crate) fn to_server(message: &crate::remote::Message) -> bool {
+    if !ready(NetMessage::SERVER) {
+        return false;
+    }
+    let lines = remote_frames(message);
+    state(|s| {
+        if s.outbox.len() + lines.len() > MAX_WAITING {
+            return false;
+        }
+        s.outbox.extend(lines);
+        WAITING.store(true, Ordering::Release);
+        true
+    })
+}
+
+/// A control message's kind and body, when it is a settings message.
+fn remote_message(data: &[u8]) -> Option<crate::remote::Message> {
+    let (&kind, rest) = data.split_first()?;
+    let (&version, body) = rest.split_first()?;
+    if version != PROTOCOL {
+        return None;
+    }
+    crate::remote::Message::read(kind, body)
+}
+
 /// Takes a frame line a client sent, on the server's game thread: `args` is
 /// the line after the command name, `key` the client's account key.
 pub(crate) fn server_received(key: u64, args: &str) {
@@ -392,6 +463,20 @@ pub(crate) fn server_received(key: u64, args: &str) {
                     item_data(key, &records);
                 }
             }
+            return;
+        }
+        let whole = state(|s| {
+            let peer = s.peers.get_mut(&key)?;
+            if frame.index == 0 && !peer.admit() {
+                dropped();
+                return None;
+            }
+            assemble(peer, frame)
+        });
+        if let (Some((_, data)), Some(loader)) = (whole, crate::host::loader())
+            && let Some(message) = remote_message(&data)
+        {
+            crate::remote::server(loader, key, message);
         }
         return;
     }
@@ -419,20 +504,36 @@ pub(crate) fn client_received(text: &str) -> bool {
         return true;
     };
     if frame.channel == CONTROL {
-        if frame.part == control(WELCOME) {
+        // Only the remote settings messages take more than one frame.
+        let single = frame.total == 1;
+        if single && frame.part == control(WELCOME) {
             let fresh = state(|s| s.peers.insert(NetMessage::SERVER, Peer::new()).is_none());
             if fresh {
                 crate::log!(INFO, "mod messages: the server answered");
             }
-        } else if let Some(records) = frame.part.strip_prefix(control(ITEM_DATA).as_slice()) {
+        } else if single
+            && let Some(records) = frame.part.strip_prefix(control(ITEM_DATA).as_slice())
+        {
             crate::item_data::received(records);
-        } else if let Some(rest) = frame.part.strip_prefix(control(NOTICE).as_slice())
+        } else if single
+            && let Some(rest) = frame.part.strip_prefix(control(NOTICE).as_slice())
             && let Some((entity, text)) = rest.split_first_chunk::<4>()
             && let Ok(text) = core::str::from_utf8(text)
         {
             crate::notices::queue(u32::from_le_bytes(*entity), text);
-        } else if let Some(rest) = frame.part.strip_prefix(control(UI_DEMO).as_slice()) {
+        } else if single && let Some(rest) = frame.part.strip_prefix(control(UI_DEMO).as_slice()) {
             crate::ui::open_demo(demo_position(rest));
+        } else {
+            let whole = state(|s| {
+                s.peers
+                    .get_mut(&NetMessage::SERVER)
+                    .and_then(|peer| assemble(peer, frame))
+            });
+            if let Some((_, data)) = whole
+                && let Some(message) = remote_message(&data)
+            {
+                crate::remote::client(message);
+            }
         }
         return true;
     }

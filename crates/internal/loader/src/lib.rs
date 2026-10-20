@@ -72,6 +72,7 @@ mod notices;
 mod patch;
 #[cfg(windows)]
 mod progress;
+pub mod remote;
 pub mod resolve;
 #[cfg(windows)]
 mod saves;

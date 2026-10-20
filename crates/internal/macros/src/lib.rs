@@ -21,7 +21,8 @@ use syn::{
 ///
 /// Field attributes: one stage of `startup`, `runtime` (the default),
 /// `client` and `sync`; `range = a..=b`, `a..` or `..=b`; `choices = [..]`;
-/// `text = "key"`, the text key of the field's translated label. The derive
+/// `text = "key"`, the text key of the field's translated label; `secret`,
+/// a value never sent to a client and changed in the file only. The derive
 /// implements `schema`, `values`, `merge_values` and a `validate` that checks
 /// ranges and choices before the struct's own check.
 #[proc_macro_derive(Config, attributes(config))]
@@ -38,6 +39,7 @@ struct FieldConfig {
     max: Option<Expr>,
     choices: Option<syn::ExprArray>,
     text: Option<syn::LitStr>,
+    secret: bool,
 }
 
 /// The stages a field may name, as `enshwick_loader_api::config::Stage` variants.
@@ -72,9 +74,12 @@ fn field_config(attrs: &[Attribute]) -> syn::Result<FieldConfig> {
             } else if meta.path.is_ident("text") {
                 config.text = Some(meta.value()?.parse()?);
                 Ok(())
+            } else if meta.path.is_ident("secret") {
+                config.secret = true;
+                Ok(())
             } else {
                 Err(meta.error(
-                    "expected `startup`, `runtime`, `client`, `sync`, `range = a..=b`, `choices = [..]` or `text = \"key\"`",
+                    "expected `startup`, `runtime`, `client`, `sync`, `range = a..=b`, `choices = [..]`, `text = \"key\"` or `secret`",
                 ))
             }
         })?;
@@ -148,6 +153,7 @@ fn expand_config(input: &DeriveInput) -> syn::Result<TokenStream> {
         let choices = config.choices.map(|c| quote!(.with_choices(&#c)));
         let plain = doc_text(&field.attrs);
         let text = config.text.map(|t| t.value()).unwrap_or_default();
+        let secret = config.secret;
         described.push(quote! {
             ::enshwick_loader_api::config::Field::new(
                 #key,
@@ -157,6 +163,7 @@ fn expand_config(input: &DeriveInput) -> syn::Result<TokenStream> {
             .with_range(#min, #max)
             #choices
             .with_doc(#plain, #text)
+            .with_secret(#secret)
         });
         staged.push((stage, field));
     }

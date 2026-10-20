@@ -72,6 +72,7 @@ settings menu names it:
 | `range = a..=b`  | Numbers from `a` to `b`; `a..` and `..=b` leave one end open. Constants work, as in `0.0..=MAX`                                  |
 | `choices = [..]` | One of these values; any type serde writes, such as an enum's variants                                                           |
 | `text = "key"`   | The key of the field's label in the mod's [texts](content/texts.md), `config.<field>` by default; its description is `<key>.doc` |
+| `secret`         | A value such as a password: never sent to a client, and changed in the file only                                                 |
 
 A field takes one stage; two fail the build. On the struct,
 `#[config(text = "key")]` names the key of the set's title, `config` by
@@ -136,6 +137,15 @@ restart", and while the client is joined to a server that sets a mod's `sync`
 values, those rows show the server's values and take no changes. A change is
 written at once, as the game applies its own settings.
 
+On a client joined to a dedicated server, the screen also offers "Server
+settings": the server's mods with settings, and each one's values as the
+server holds them, asked over the loader's own messages. An administrator
+changes them there; the server checks the permission on its own record of the
+player, runs the same checks as `/config`, writes its file, and answers with
+the outcome and the new values. Other players see the join values only,
+without changes. Fields marked `secret` never leave the server, and a player
+changes at most a few settings a second.
+
 Before either writes, the loader runs the mod's own check: `load.config()`
 hands it over, and it parses the new file and runs the type's `validate`; a
 refusal keeps the file and shows its reason.
@@ -143,7 +153,7 @@ refusal keeps the file and shows its reason.
 A value is TOML (`5`, `true`, `"text"`, `[1, 2]`); text settings also take
 plain words. After a write the loader raises the mod's settings event at once:
 `runtime` and `sync` values apply through `on_config_change` (joined players
-get `sync` values when they join again), and `startup` values answer
+get `sync` values at once), and `startup` values answer
 `restart needed`. `client` values are refused on a dedicated server.
 
 A file that does not parse turns the mod off at init with serde's message. Add
@@ -273,8 +283,9 @@ Apply join values in `on_config_change`. A mod without a handler runs with its
 file's values until the next start.
 
 A server's edited join values are advertised once the mod has read them, that
-is, once its `on_config_change` handler has run. Players get them the next
-time they join.
+is, once its `on_config_change` handler has run, and pushed at the same moment
+to every joined player whose client runs Enshwick: their mod's
+`on_config_change` runs with the new values, without joining again.
 
 [`enshwick-flame-altar-count`](https://github.com/themaiby/enshwick/tree/main/mods/enshwick-flame-altar-count)
 keeps its altar table as a join value: the client's building interface asks

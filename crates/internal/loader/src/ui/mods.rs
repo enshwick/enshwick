@@ -64,6 +64,17 @@ enum Page {
         first: usize,
         rows: Vec<Row>,
     },
+    /// The joined server's mods with settings, from `first`.
+    ServerList { first: usize },
+    /// The joined server's settings of mod `id`, from row `first`, as last
+    /// heard (`news`).
+    ServerSettings {
+        id: String,
+        first: usize,
+        rows: Vec<Row>,
+        schema: Option<enshwick_loader_api::config::Schema>,
+        news: u64,
+    },
 }
 
 struct Screen {
@@ -221,14 +232,31 @@ pub(super) unsafe fn draw(loader: &Loader, engine: &Engine, context: usize, fram
 /// One step back: from a mod's settings to the list; true when the screen
 /// closes.
 fn back(screen: &mut Screen) -> bool {
+    screen.message = None;
     match screen.page {
-        Page::Settings { .. } => {
+        Page::Settings { .. } | Page::ServerList { .. } => {
             screen.page = Page::List { first: 0 };
-            screen.message = None;
+            false
+        }
+        Page::ServerSettings { .. } => {
+            open_server_list(screen);
             false
         }
         Page::List { .. } => true,
     }
+}
+
+/// Whether this client is joined to a server it does not host, which takes
+/// messages: whose settings an administrator may change from here.
+fn joined_elsewhere() -> bool {
+    crate::net::ready(enshwick_loader_api::abi::NetMessage::SERVER) && !crate::world::hosting()
+}
+
+fn open_server_list(screen: &mut Screen) {
+    crate::remote::forget();
+    let asked = crate::net::to_server(&crate::remote::Message::Query { id: String::new() });
+    screen.page = Page::ServerList { first: 0 };
+    screen.message = (!asked).then(|| ("The server takes no messages now.".to_owned(), false));
 }
 
 /// Draws the screen's window; true when the player closed it.
@@ -240,6 +268,8 @@ unsafe fn show(loader: &Loader, engine: &Engine, context: usize, screen: &mut Sc
             .mods
             .get(*index)
             .map_or_else(|| copy(&[b"Mods"]), |m| copy(&[m.label().as_bytes()])),
+        Page::ServerList { .. } => copy(&[b"Server settings"]),
+        Page::ServerSettings { id, .. } => copy(&[b"Server settings: ", id.as_bytes()]),
     };
     // SAFETY: forwarded from the caller; the window lives in the screen's
     // state until it ends below.
@@ -256,6 +286,12 @@ unsafe fn show(loader: &Loader, engine: &Engine, context: usize, screen: &mut Sc
     }
     let close = match &mut screen.page {
         Page::List { first } => {
+            if joined_elsewhere() && paint.button(b"Server settings", true) {
+                open_server_list(screen);
+                // SAFETY: the window started above, in this frame.
+                unsafe { engine.window_end(context, &mut screen.window) };
+                return false;
+            }
             let opened = list(loader, &paint, first);
             if let Some(index) = opened {
                 screen.page = Page::Settings {
@@ -278,10 +314,139 @@ unsafe fn show(loader: &Loader, engine: &Engine, context: usize, screen: &mut Sc
             }
             false
         }
+        Page::ServerList { first } => {
+            if let Some(id) = server_list(&paint, first) {
+                let asked =
+                    crate::net::to_server(&crate::remote::Message::Query { id: id.clone() });
+                screen.message =
+                    (!asked).then(|| ("The server takes no messages now.".to_owned(), false));
+                screen.page = Page::ServerSettings {
+                    id,
+                    first: 0,
+                    rows: Vec::new(),
+                    schema: None,
+                    news: 0,
+                };
+            } else if paint.button(b"Back", true) {
+                screen.page = Page::List { first: 0 };
+                screen.message = None;
+            }
+            false
+        }
+        Page::ServerSettings {
+            id,
+            first,
+            rows,
+            schema,
+            news,
+        } => {
+            if let Some(message) = server_settings(&paint, id, first, rows, schema, news) {
+                screen.message = Some(message);
+            }
+            if paint.button(b"Back", true) {
+                open_server_list(screen);
+            }
+            false
+        }
     };
     // SAFETY: the window started above, in this frame.
     unsafe { engine.window_end(context, &mut screen.window) };
     close
+}
+
+/// Draws a page of the server's mods; the mod whose settings the player
+/// opened.
+fn server_list(paint: &Painter<'_>, first: &mut usize) -> Option<String> {
+    let mods = crate::remote::heard(|h| h.mods.clone());
+    let Some(mods) = mods else {
+        paint.label(
+            b"Asking the server...",
+            UiWidget::STYLE_SECONDARY,
+            false,
+            true,
+        );
+        return None;
+    };
+    if mods.is_empty() {
+        paint.label(
+            b"The server shows you no settings.",
+            UiWidget::STYLE_SECONDARY,
+            false,
+            true,
+        );
+    }
+    let mut opened = None;
+    for (id, name) in mods.iter().skip(*first).take(MODS_PER_PAGE) {
+        paint.label(name.as_bytes(), UiWidget::STYLE_H3, false, false);
+        if paint.button(b"Settings", true) {
+            opened = Some(id.clone());
+        }
+    }
+    pages(paint, first, mods.len(), MODS_PER_PAGE);
+    opened
+}
+
+/// Draws a page of the server's settings of mod `id`, rebuilding the rows
+/// when the server sent news; the outcome of a change or the server's
+/// answer.
+fn server_settings(
+    paint: &Painter<'_>,
+    id: &str,
+    first: &mut usize,
+    rows: &mut Vec<Row>,
+    schema: &mut Option<enshwick_loader_api::config::Schema>,
+    news: &mut u64,
+) -> Option<(String, bool)> {
+    let (heard_news, result) = crate::remote::heard(|h| (h.news, h.result.clone()));
+    let mut message = None;
+    if heard_news != *news {
+        *news = heard_news;
+        let settings = crate::remote::heard(|h| h.settings.clone());
+        if let Some((heard_id, admin, heard_schema, text)) = settings
+            && heard_id == id
+        {
+            *rows = rows::rows(&heard_schema, &text, None);
+            if !admin {
+                for row in rows.iter_mut() {
+                    row.lock = Lock::Server;
+                }
+            }
+            *schema = Some(heard_schema);
+        }
+        message = result.map(|(ok, text)| (text, ok));
+    }
+    let Some(known) = schema.as_ref() else {
+        paint.label(
+            b"Asking the server...",
+            UiWidget::STYLE_SECONDARY,
+            false,
+            true,
+        );
+        return message;
+    };
+    let mut changed = None;
+    for row in rows.iter().skip(*first).take(ROWS_PER_PAGE) {
+        if let Some(value) = draw_row(paint, id, known, row) {
+            changed = Some((row.key.clone(), value));
+        }
+        if !row.doc.is_empty() {
+            paint.label(row.doc.as_bytes(), UiWidget::STYLE_SECONDARY, true, false);
+        }
+    }
+    pages(paint, first, rows.len(), ROWS_PER_PAGE);
+    if let Some((key, value)) = changed {
+        let sent = crate::net::to_server(&crate::remote::Message::Edit {
+            id: id.to_owned(),
+            key,
+            value,
+        });
+        return Some(if sent {
+            ("Sent to the server...".to_owned(), true)
+        } else {
+            ("The server takes no messages now.".to_owned(), false)
+        });
+    }
+    message
 }
 
 /// Draws a page of the mod list; the mod whose settings the player opened.
@@ -387,9 +552,10 @@ fn settings(
             false,
         );
     }
+    let schema = record.schema.lock().ok().and_then(|s| s.clone())?;
     let mut changed = None;
     for row in rows.iter().skip(*first).take(ROWS_PER_PAGE) {
-        if let Some(value) = draw_row(paint, record, row) {
+        if let Some(value) = draw_row(paint, &record.id, &schema, row) {
             changed = Some((row.key.clone(), value));
         }
         if !row.doc.is_empty() {
@@ -407,7 +573,12 @@ fn settings(
 }
 
 /// Draws one row; the TOML of the player's change.
-fn draw_row(paint: &Painter<'_>, record: &crate::host::ModRecord, row: &Row) -> Option<String> {
+fn draw_row(
+    paint: &Painter<'_>,
+    id: &str,
+    schema: &enshwick_loader_api::config::Schema,
+    row: &Row,
+) -> Option<String> {
     let mut label = row.label.clone();
     if row.restart {
         label.push_str(" (after a restart)");
@@ -437,11 +608,10 @@ fn draw_row(paint: &Painter<'_>, record: &crate::host::ModRecord, row: &Row) -> 
                 u32::try_from(*index).unwrap_or(u32::MAX),
                 read_only,
             )?;
-            let schema = record.schema.lock().ok()?.clone()?;
             rows::picked(schema.field(&row.key)?, picked as usize)
         }
         Widget::Text(value) => {
-            let line = format!("{label}: {value} (edit mod-configs/{}.toml)", record.id);
+            let line = format!("{label}: {value} (edit mod-configs/{id}.toml)");
             paint.label(line.as_bytes(), UiWidget::STYLE_BODY, true, false);
             None
         }

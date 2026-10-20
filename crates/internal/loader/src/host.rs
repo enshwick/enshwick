@@ -147,6 +147,36 @@ pub(crate) fn join_values() -> BTreeMap<String, String> {
 /// [`Event::SETTINGS_CHANGED`] for every mod whose values change, so its
 /// handler reads its settings again. A mod the server sends none for runs
 /// with its file's.
+/// On a client, takes the joined server's new join values of mod `id`, which
+/// it pushed after a change, and tells the mod.
+pub(crate) fn apply_server_value(id: &str, values: &str) {
+    // A hosting client's own server: its file's values are the server's.
+    let Some(loader) = loader().filter(|_| !crate::world::hosting()) else {
+        return;
+    };
+    let Some((index, record)) = loader
+        .mods
+        .iter()
+        .enumerate()
+        .find(|(_, m)| m.id == id && m.joins())
+    else {
+        return;
+    };
+    let now = Some(values.to_owned());
+    if let Ok(mut held) = record.server_synced.lock() {
+        if *held == now {
+            return;
+        }
+        held.clone_from(&now);
+    }
+    crate::log::write(
+        Level::INFO,
+        &record.id,
+        &format!("the server changed its join values: {values}"),
+    );
+    loader.emit(Event::SETTINGS_CHANGED, Some(index), core::ptr::null());
+}
+
 pub(crate) fn apply_join_values(values: &BTreeMap<String, String>) {
     let Some(loader) = loader() else {
         return;
@@ -1451,7 +1481,16 @@ extern "system" fn sync(me: ModHandle, synced: Str, out: *mut Str) -> Status {
             return Status::BAD_ARGS;
         };
         if let Ok(mut reported) = record.synced.lock() {
-            *reported = (!synced.is_empty()).then(|| synced.to_owned());
+            let now = (!synced.is_empty()).then(|| synced.to_owned());
+            // A server whose join values changed tells the joined clients at
+            // once; the first report, at init, finds none joined.
+            if reported.is_some()
+                && *reported != now
+                && (loader.side == Side::SERVER || crate::world::hosting())
+            {
+                crate::remote::push_sync(&record.id, now.as_deref().unwrap_or("{}"));
+            }
+            *reported = now;
         }
         let server = record
             .server_synced
