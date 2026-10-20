@@ -82,7 +82,7 @@ The rules:
 - the patches of a mod already turned off are skipped.
 
 The loader's log names each built resource and the mods that built it:
-`served resource <type>:<guid> built by safes, building-yield, <n> bytes`.
+`served resource <type>:<guid> built by safes, building-materials, <n> bytes`.
 The [status summary](../logging.md) counts what mods serve, what was built
 and what failed.
 

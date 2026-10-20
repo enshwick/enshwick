@@ -126,6 +126,3 @@ first reads them, and turns the mod off then.
 When the mod is removed, placed stations load as the vanilla station they
 were cloned from: see [Content](../content.md#when-a-mod-is-removed). The
 station items players hold disappear, like any item of a removed mod.
-
-[`enshwick-building-yield`](https://github.com/themaiby/enshwick/blob/main/mods/enshwick-building-yield/src/lib.rs)
-adds its Bulk Workbench this way.

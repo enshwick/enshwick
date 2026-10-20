@@ -9,7 +9,7 @@
   "mods/enshwick-furniture-comfort": "0.1.5",
   "crates/enshwick-macros": "0.1.2",
   "mods/enshwick-safes": "0.1.2",
-  "mods/enshwick-building-yield": "0.1.2",
+  "mods/enshwick-building-materials": "0.1.0",
   "crates/enshwick-test": "0.1.1",
   "mods/enshwick-updater": "0.1.1",
   "mods/enshwick-build-camera": "0.1.1",

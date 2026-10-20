@@ -183,8 +183,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "enshwick-building-yield"
-version = "0.1.2"
+name = "enshwick-building-materials"
+version = "0.1.0"
 dependencies = [
  "enshwick-api",
  "serde",

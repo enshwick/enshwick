@@ -6,20 +6,20 @@ every mod is a DLL in the `mods/` folder beside it.
 
 ## Mods
 
-| Mod                                                      | What it does                                                       |
-| -------------------------------------------------------- | ------------------------------------------------------------------ |
-| [Flame altar zones](mods/enshwick-flame-altar-zones)     | touching altar zones grow together and can be built across         |
-| [Flame altar count](mods/enshwick-flame-altar-count)     | how many altars each Flame level allows, twice vanilla by default  |
-| [Furniture comfort](mods/enshwick-furniture-comfort)     | more comfort from furniture, twice vanilla by default              |
-| [Survivors per altar](mods/enshwick-survivors-per-altar) | a copy of each survivor at every altar, with beds of its own altar |
-| [Safes](mods/enshwick-safes)                             | a craftable chest only the player who placed it can use            |
-| [Building yield](mods/enshwick-building-yield)           | bulk recipes for blocks, roofs, overgrowth, decor and furniture    |
-| [Updater](mods/enshwick-updater)                         | signed updates from GitHub releases, installed with your consent   |
-| [Build camera](mods/enshwick-build-camera)               | the building fly mode for every player, without the skill          |
-| [Shared experience](mods/enshwick-shared-experience)     | every character keeps up with the one furthest ahead in experience |
-| [Area loot](mods/enshwick-area-loot)                     | emptying one enemy corpse takes the loot of the others around it   |
-| [Dev tools](mods/enshwick-dev-tools)                     | administrator commands and a command file for test servers         |
-| [Proton optimizer](mods/enshwick-proton-optimizer)       | less server CPU under Wine and Proton, with a report and measures  |
+| Mod                                                       | What it does                                                       |
+| --------------------------------------------------------- | ------------------------------------------------------------------ |
+| [Flame altar zones](mods/enshwick-flame-altar-zones)      | touching altar zones grow together and can be built across         |
+| [Flame altar count](mods/enshwick-flame-altar-count)      | how many altars each Flame level allows, twice vanilla by default  |
+| [Furniture comfort](mods/enshwick-furniture-comfort)      | more comfort from furniture, twice vanilla by default              |
+| [Survivors per altar](mods/enshwick-survivors-per-altar)  | a copy of each survivor at every altar, with beds of its own altar |
+| [Safes](mods/enshwick-safes)                              | a craftable chest only the player who placed it can use            |
+| [Building materials x2](mods/enshwick-building-materials) | twice the output of block, roof, overgrowth and decor recipes      |
+| [Updater](mods/enshwick-updater)                          | signed updates from GitHub releases, installed with your consent   |
+| [Build camera](mods/enshwick-build-camera)                | the building fly mode for every player, without the skill          |
+| [Shared experience](mods/enshwick-shared-experience)      | every character keeps up with the one furthest ahead in experience |
+| [Area loot](mods/enshwick-area-loot)                      | emptying one enemy corpse takes the loot of the others around it   |
+| [Dev tools](mods/enshwick-dev-tools)                      | administrator commands and a command file for test servers         |
+| [Proton optimizer](mods/enshwick-proton-optimizer)        | less server CPU under Wine and Proton, with a report and measures  |
 
 ## Install
 

@@ -1,5 +1,5 @@
-//! New recipes: a vanilla recipe copied for a new output, with its
-//! ingredients scaled.
+//! Recipes: a vanilla recipe copied for a new output, with its ingredients
+//! scaled, or the recipes in the registry changed in place.
 
 use super::workshops::WorkshopId;
 use super::{Blob, Guid, types};
@@ -446,6 +446,92 @@ pub fn derive_recipes_in(
     Some(blob.into_bytes())
 }
 
+/// A recipe in the registry as [`Load::modify_recipes`] shows it, with its
+/// counts open to change in place.
+#[derive(Debug)]
+pub struct RecipeEdit<'a> {
+    blob: &'a mut Blob,
+    at: usize,
+    layout: &'a RecipeLayout,
+    changed: bool,
+}
+
+impl RecipeEdit<'_> {
+    /// The recipe as it reads now: GUID, debug name and output.
+    ///
+    /// # Examples
+    ///
+    /// See [`Load::modify_recipes`].
+    #[must_use]
+    pub fn view(&self) -> RecipeView<'_> {
+        RecipeView {
+            blob: self.blob,
+            at: self.at,
+            layout: self.layout,
+        }
+    }
+
+    /// Multiplies the count of each item the recipe makes by `by`.
+    ///
+    /// # Examples
+    ///
+    /// See [`Load::modify_recipes`].
+    pub fn scale_output(&mut self, by: u32) {
+        self.scale(self.layout.output, self.layout.stack_size, by);
+    }
+
+    /// Multiplies the count of each ingredient by `by`.
+    ///
+    /// # Examples
+    ///
+    /// See [`Load::modify_recipes`].
+    pub fn scale_inputs(&mut self, by: u32) {
+        self.scale(self.layout.input, self.layout.input_size, by);
+    }
+
+    /// Multiplies the stack counts of the array at `field`, whose elements
+    /// are `size` bytes and start with an item stack.
+    fn scale(&mut self, field: usize, size: usize, by: u32) {
+        let Some((start, count)) = self.blob.array(self.at + field) else {
+            return;
+        };
+        for i in 0..count as usize {
+            let at = start + i * size + self.layout.stack_count;
+            let Some(made) = self.blob.read_u32(at) else {
+                return;
+            };
+            let scaled = made.saturating_mul(by);
+            if scaled != made && self.blob.write(at, &scaled.to_le_bytes()) {
+                self.changed = true;
+            }
+        }
+    }
+}
+
+/// The recipe registry with `modify` called on each recipe in turn; the
+/// second value is how many recipes it changed.
+#[must_use]
+pub fn modify_recipes_in(
+    layout: &RecipeLayout,
+    registry: &[u8],
+    modify: &dyn Fn(&mut RecipeEdit<'_>),
+) -> Option<(Vec<u8>, usize)> {
+    let mut blob = Blob::new(registry);
+    let (start, count) = blob.array(layout.recipes)?;
+    let mut changed = 0;
+    for at in (0..usize::try_from(count).ok()?).map(|i| start + i * layout.recipe) {
+        let mut edit = RecipeEdit {
+            blob: &mut blob,
+            at,
+            layout,
+            changed: false,
+        };
+        modify(&mut edit);
+        changed += usize::from(edit.changed);
+    }
+    Some((blob.into_bytes(), changed))
+}
+
 impl Load<'_> {
     /// Adds a recipe to the game, on the server and the client alike: a copy
     /// of the recipe that makes `like`, at the same workshop and unlocked with
@@ -498,7 +584,7 @@ impl Load<'_> {
     /// use enshwick_api::content::recipes::Derived;
     ///
     /// fn init(load: &mut enshwick_api::Load<'_>) -> Result<(), enshwick_api::Off> {
-    ///     load.derive_recipes("building-yield", |recipe| {
+    ///     load.derive_recipes("my-mod", |recipe| {
     ///         recipe
     ///             .debug_name()
     ///             .starts_with("Block_")
@@ -516,6 +602,45 @@ impl Load<'_> {
         let registry = RECIPE_REGISTRY.key(types::RECIPE_REGISTRY);
         self.serve(registry, registry, move |base| {
             derive_recipes_in(&layout, base, salt, workshop_limit(), &choose)
+        })
+    }
+
+    /// Changes recipes in the registry in place, on the server and the
+    /// client alike, so the client's crafting menu shows the new counts:
+    /// `modify` is called with each recipe and may scale its output and
+    /// ingredient counts. It sees the registry as it reaches this patch,
+    /// with the recipes and changes of mods that patched before, and the
+    /// mods after see its changes. The mod's log says how many recipes
+    /// changed.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] when the loader is too old or the recipe layout is not
+    /// reflected.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_api::content::recipes::RecipeEdit;
+    ///
+    /// fn init(load: &mut enshwick_api::Load<'_>) -> Result<(), enshwick_api::Off> {
+    ///     load.modify_recipes(|recipe: &mut RecipeEdit<'_>| {
+    ///         if recipe.view().debug_name().starts_with("Block_") {
+    ///             recipe.scale_output(2);
+    ///         }
+    ///     })
+    /// }
+    /// ```
+    pub fn modify_recipes(
+        &mut self,
+        modify: impl Fn(&mut RecipeEdit<'_>) + Send + Sync + 'static,
+    ) -> Result<(), Off> {
+        let layout = RecipeLayout::resolve(self)?;
+        let registry = RECIPE_REGISTRY.key(types::RECIPE_REGISTRY);
+        self.serve(registry, registry, move |base| {
+            let (built, changed) = modify_recipes_in(&layout, base, &modify)?;
+            crate::info!("{changed} recipes changed");
+            Some(built)
         })
     }
 }
@@ -688,6 +813,60 @@ mod tests {
         let (recipes, count) = derived.array(8).unwrap();
         assert_eq!(count, 2);
         assert_eq!(u32_at(derived.bytes(), recipes + 0xa8 + 0x24), bench.id());
+    }
+
+    #[test]
+    fn modified_recipes_change_in_place_and_stay_one_each() {
+        let mut blob = Blob::new(&[0u8; 16]);
+        let first = blob.append(&[0; 0xa8 * 2], 8);
+        for (i, name) in [&b"Block_A"[..], &b"Prop_Decoration_Chest"[..]]
+            .iter()
+            .enumerate()
+        {
+            let at = first + i * 0xa8;
+            let mut input = vec![0u8; 48 * 2];
+            input[0x14..0x18].copy_from_slice(&3u32.to_le_bytes());
+            input[48 + 0x14..48 + 0x18].copy_from_slice(&4u32.to_le_bytes());
+            let input_at = blob.append(&input, 8);
+            let mut output = vec![0u8; 24];
+            output[0x14..0x18].copy_from_slice(&10u32.to_le_bytes());
+            let output_at = blob.append(&output, 8);
+            let name_at = blob.append(name, 1);
+            assert!(blob.set_array(at + 0x28, input_at, 2));
+            assert!(blob.set_array(at + 0x30, output_at, 1));
+            assert!(blob.set_array(at + 0x78, name_at, u32::try_from(name.len()).unwrap()));
+        }
+        assert!(blob.set_array(8, first, 2));
+        let (built, changed) = modify_recipes_in(&LAYOUT, blob.bytes(), &|recipe| {
+            if recipe.view().debug_name().starts_with("Block_") {
+                recipe.scale_output(3);
+                recipe.scale_inputs(1);
+            }
+        })
+        .unwrap();
+        assert_eq!(changed, 1);
+        assert_eq!(built.len(), blob.bytes().len(), "in place, nothing added");
+        let built = Blob::new(&built);
+        let (recipes, count) = built.array(8).unwrap();
+        assert_eq!(count, 2);
+        let view = |at| RecipeView {
+            blob: &built,
+            at,
+            layout: &LAYOUT,
+        };
+        assert_eq!(view(recipes).output().unwrap().1, 30);
+        assert_eq!(view(recipes + 0xa8).output().unwrap().1, 10);
+        let (inputs, _) = built.array(recipes + 0x28).unwrap();
+        assert_eq!(u32_at(built.bytes(), inputs + 0x14), 3);
+        assert_eq!(u32_at(built.bytes(), inputs + 48 + 0x14), 4);
+
+        // A second patch composes: it sees the first one's counts.
+        let (again, _) =
+            modify_recipes_in(&LAYOUT, built.bytes(), &|recipe| recipe.scale_inputs(2)).unwrap();
+        let again = Blob::new(&again);
+        let (inputs, _) = again.array(recipes + 0x28).unwrap();
+        assert_eq!(u32_at(again.bytes(), inputs + 48 + 0x14), 8);
+        assert_eq!(view(recipes).output().unwrap().1, 30);
     }
 
     #[test]
