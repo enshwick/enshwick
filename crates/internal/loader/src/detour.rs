@@ -279,12 +279,14 @@ fn write_all(prepared: &[&Pending], code: &[Bytes<'_>]) -> bool {
     if writes.is_empty() {
         return true;
     }
+    // Nothing below allocates while the other threads stand still: one of
+    // them may hold the heap's lock.
+    let mut protections = Vec::with_capacity(writes.len());
     let threads = other_threads();
     for &thread in &threads {
         // SAFETY: a thread handle opened with suspend rights.
         unsafe { SuspendThread(thread) };
     }
-    let mut protections = Vec::with_capacity(writes.len());
     let mut writable = true;
     for &(address, bytes, _) in &writes {
         let mut old = 0;
