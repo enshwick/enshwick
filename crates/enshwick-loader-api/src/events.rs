@@ -108,6 +108,9 @@ without_data! {
     DayStarted = DAY_STARTED;
     /// [`Event::NIGHT_STARTED`].
     NightStarted = NIGHT_STARTED;
+    /// [`Event::WORLD_SETTINGS`]; [`Load::on_config_change`](crate::Load::on_config_change)
+    /// re-reads the settings for you, the ones that wait for a start too.
+    WorldSettings = WORLD_SETTINGS;
 }
 
 // Each event names its data and the size that data had in the minor that

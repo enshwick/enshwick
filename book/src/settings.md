@@ -65,7 +65,7 @@ settings menu names it:
 
 | Attribute        | Meaning                                                                                                                          |
 | ---------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| `startup`        | Read once at start. `on_config_change` gets the values the mod started with; a change waits for a restart, and the file says so  |
+| `startup`        | Read when a world loads; `on_config_change` gets the world's values, and a change waits for the next load                        |
 | `runtime`        | The default: applied while the game runs, through `on_config_change`                                                             |
 | `client`         | Each player's own: never sent to or taken from a server; `/config` on a dedicated server leaves it alone                         |
 | `sync`           | The server's value: a joined client runs with it ([Join values](#join-values))                                                   |
@@ -103,67 +103,101 @@ let schema = Settings::schema();
 let cost = schema.field("cost_multiplier").ok_or("no field")?;
 assert_eq!(cost.stage, Stage::Startup);
 assert_eq!(cost.accepts(), "1 to 100");
-assert!(Settings::template().contains("# Takes effect at the next start."));
+assert!(Settings::template().contains("# Takes effect when the world loads."));
 # Ok::<(), &str>(())
 ```
+
+## Settings per world
+
+A setting lives in one of two places, its scope, which its stage decides and
+the schema states (`Field::scope`, `Scope`):
+
+| Scope   | Stages                       | Where                                                                     |
+| ------- | ---------------------------- | ------------------------------------------------------------------------- |
+| `user`  | `client`                     | the settings file `mod-configs/<id>.toml`, each player's own, every world |
+| `world` | `startup`, `runtime`, `sync` | `mod-data/<id>/worlds/<key>/settings.toml`, with the world                |
+
+The settings file is also the template: a world that loads for the first time
+in single player, hosted or on a dedicated server gets a copy of it as its
+own settings, never inside the game's save. While a world runs in the
+process, a mod reads that world's settings with its own `client` settings
+over them; with no world, as in the main menu, the template. A mod reads its
+settings as before: when a world loads or stops, the loader raises
+[`Event::WORLD_SETTINGS`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs),
+and `on_config_change` gets the world's settings, its `startup` values too:
+they apply when the world loads, with no restart of the game. A mod that reads
+a `startup` value only in `init`, for content it registers then, keeps the
+value it started with.
+
+A newer version of a mod that adds a setting finds it at its template value
+in each world. Changes to world settings made before any world runs, as on
+the screen that creates or starts a world, wait in
+`mod-data/<id>/worlds/next.toml` and go into the next world that loads.
 
 ## The schema and `/config`
 
 [`Config::schema()`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/config.rs)
-describes every field: key, stage, type, default, range, choices, doc comment
-and text key. `load.config()` hands it to the loader, which keeps it for the
-process; it is the description a settings menu builds on, and what the
-loader checks values against before it writes them.
+describes every field: key, stage, scope, type, default, range, choices, doc
+comment and text key. `load.config()` hands it to the loader, which keeps it
+for the process; it is the description the loader's screens build on, and
+what the loader checks values against before it writes them.
 
 Administrators change settings in the chat, or from a console line such as
 admin-tools' command file:
 
-| Command                       | Answer                                                                       |
-| ----------------------------- | ---------------------------------------------------------------------------- |
-| `/config`                     | the mods that describe their settings                                        |
-| `/config <mod>`               | each setting with its value, what it takes and when a change applies         |
-| `/config <mod> <key>`         | one setting with its default and description                                 |
-| `/config <mod> <key> <value>` | checks the value, writes it to `mod-configs/<mod>.toml` keeping the comments |
+| Command                       | Answer                                                                           |
+| ----------------------------- | -------------------------------------------------------------------------------- |
+| `/config`                     | the mods that describe their settings                                            |
+| `/config <mod>`               | each setting with its value, what it takes and where and when a change applies   |
+| `/config <mod> <key>`         | one setting with its default and description                                     |
+| `/config <mod> <key> <value>` | checks the value and writes it to the running world's settings, comments kept    |
 
-Players change them in game too, on the Mods screen: a "Mods" entry in the
-title screen's main menu and in the pause menu, beside Settings, lists the
-mods with their names, versions, descriptions and authors, and shows each
-mod's settings as the game's own rows, built from the schema: a toggle for
-`bool`, a slider for a number with a range (in stops for whole numbers up to
-32 values), a dropdown for `choices`, and the value with the file's name for
-the rest (text, lists, tables, numbers without a range). Rows speak the
-player's language through the mod's [texts](content/texts.md), which
-`load.texts` hands the loader: the label is the field's text key
-(`config.<field>` or its `text`), the description under it `<key>.doc`, a
-choice `<key>.<choice>`; without a text, the label is the key in words and
-the description the doc comment. `startup` rows say "after a restart", and while the client is joined to a server that sets a mod's `sync`
-values, those rows show the server's values and take no changes. A change is
+On a dedicated server, `/config` edits the world it runs; before its world
+loads, the change waits for it.
+
+The world settings, when a player creates or starts a world and in the pause
+menu's world settings, are where a world's settings are edited: under their
+last tab, every mod's world settings show as the game's own rows, built from
+the schema: a toggle for `bool`, a slider for a number with a range (in stops
+for whole numbers up to 32 values), a dropdown for `choices`, and the value
+with the file's name for the rest (text, lists, tables, numbers without a
+range). They are read-only where the game makes its own rows read-only, for a
+player who is no host; joined to another's game, the rows show the server's
+`sync` values only.
+
+Rows speak the player's language through the mod's
+[texts](content/texts.md), which `load.texts` hands the loader: the label is
+the field's text key (`config.<field>` or its `text`), the description under
+it `<key>.doc`, a choice `<key>.<choice>`; without a text, the label is the
+key in words and the description the doc comment. `startup` rows say "when the
+world loads": they apply when the world loads again. A change is
 written at once, as the game applies its own settings.
 
-The world settings, when a player creates, starts or hosts a world and in the
-pause menu's world settings, show the same rows under their last tab, every
-setting but each player's own (`client`); they are read-only where the game
-makes its own rows read-only, for a player who is no host. Settings stay
-global: a change there applies to every world.
+The Mods screen, "Mods" in the title screen's main menu and in the pause menu
+beside Settings, lists the mods with their names, versions, descriptions,
+authors and status, and edits each player's own (`client`) settings. Over
+the pause menu while hosting, its "World settings" button opens the game's
+world settings.
 
 On a client joined to a dedicated server, the screen also offers "Server
 settings": the server's mods with settings, and each one's values as the
-server holds them, asked over the loader's own messages. An administrator
-changes them there; the server checks the permission on its own record of the
-player, runs the same checks as `/config`, writes its file, and answers with
-the outcome and the new values. Other players see the join values only,
-without changes. Fields marked `secret` never leave the server, and a player
-changes at most a few settings a second.
+server's world holds them, asked over the loader's own messages. An
+administrator changes them there; the server checks the permission on its
+own record of the player, runs the same checks as `/config`, writes its
+world's settings, and answers with the outcome and the new values. Other
+players see the join values only, without changes. Fields marked `secret`
+never leave the server, and a player changes at most a few settings a
+second.
 
-Before either writes, the loader runs the mod's own check: `load.config()`
-hands it over, and it parses the new file and runs the type's `validate`; a
-refusal keeps the file and shows its reason.
+Before anything writes, the loader runs the mod's own check: `load.config()`
+hands it over, and it parses what the mod would read and runs the type's
+`validate`; a refusal keeps the file and shows its reason.
 
 A value is TOML (`5`, `true`, `"text"`, `[1, 2]`); text settings also take
 plain words. After a write the loader raises the mod's settings event at once:
 `runtime` and `sync` values apply through `on_config_change` (joined players
-get `sync` values at once), and `startup` values answer
-`restart needed`. `client` values are refused on a dedicated server.
+get `sync` values at once), and `startup` values apply when the world loads
+again. `client` values are refused on a dedicated server.
 
 A file that does not parse turns the mod off at init with serde's message. Add
 `#[serde(deny_unknown_fields)]` so a misspelt key does the same instead of

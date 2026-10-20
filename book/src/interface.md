@@ -160,11 +160,12 @@ never run and dialogs show as system message boxes instead.
 
 The loader adds a "Mods" entry to the title screen's main menu and to the
 pause menu, beside Settings. It opens a screen of the loader's own that lists
-every mod and shows the settings of each mod that derives `Config`, as the
-game's settings rows, with nothing to write in the mod; see
-[Settings](settings.md#the-schema-and-config). Back, Escape or the gamepad's B
-steps back from a mod's settings to the list, and from the list out. The world settings show the
-same rows under their last tab.
+every mod and edits each player's own settings of each mod that derives
+`Config`; a world's settings are edited in the game's world settings, under
+their last tab, with nothing to write in the mod. See
+[Settings per world](settings.md#settings-per-world). Back, Escape or the
+gamepad's B steps back from a mod's settings to the list, and from the list
+out.
 
 ## Testing
 

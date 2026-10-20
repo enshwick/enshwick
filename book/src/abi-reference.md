@@ -12,7 +12,7 @@ raw table. The exact types and signatures are in the
 | Constant                                                                                            | Value | Meaning                                         |
 | --------------------------------------------------------------------------------------------------- | ----- | ----------------------------------------------- |
 | [`ABI_MAJOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 1     | A loader refuses a mod built for another major. |
-| [`ABI_MINOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 45    | A newer minor only appends.                     |
+| [`ABI_MINOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 46    | A newer minor only appends.                     |
 
 The ABI version is apart from Enshwick Loader's version (such as 0.2.0, see
 [Releasing and updates](releasing.md#versions)): a platform release raises
@@ -142,21 +142,16 @@ id through `Load::subscribe`. See [Events and the scheduler](events.md).
 | 16 | `QUEST_COMPLETED`         | `QuestCompleted`        | `QuestData`     | the game thread | server |
 | 17 | `CHUNK_LOADED`            | `ChunkLoaded`           | `ChunkData`     | the game thread | server |
 | 18 | `CHUNK_UNLOADED`          | `ChunkUnloaded`         | `ChunkData`     | the game thread | server |
+| 19 | `WORLD_SETTINGS`          | `WorldSettings`         | none            | the game thread | server |
 
 Subscribing needs minor 2; `JOIN_MISSING` came with minor 10 and
 `ALTARS_CHANGED`, raised for mods that opened altars, with minor 15;
 `DAY_STARTED` and `NIGHT_STARTED` with minor 28; `KNOWLEDGE_CHANGED` and
 `QUEST_COMPLETED` with minor 32; `CHUNK_LOADED` and `CHUNK_UNLOADED` with
-minor 33. "Server" events also reach a client while it hosts a game, solo
+minor 33; `WORLD_SETTINGS` with minor 46. "Server" events also reach a client while it hosts a game, solo
 play included. The typed events hand a handler the fields the loader knows,
 with fields added after the event zero; they skip the handler only when the
 data lacks a field the event came with.
-`ALTARS_CHANGED`, raised for mods that opened altars, with minor 15;
-`CHUNK_LOADED` and `CHUNK_UNLOADED` with minor 33. "Server"
-events also reach a client while it hosts a game, solo play included. The
-typed events hand a handler the fields the loader knows, with fields added
-after the event zero; they skip the handler only when the data lacks a field
-the event came with.
 
 ## The host table
 
@@ -344,6 +339,7 @@ the mod off with a reason, which the mod's log shows as `off: <reason>`:
 | 44          | `Load::add_icon`, item icons    | Off: `icons: needs a newer loader`                        |
 | 45          | `Load::stats` and stat kinds    | Off: `stats: needs a newer loader`                        |
 | 45          | `Damage::attacker`              | The hit's source                                          |
+| 46          | world settings                  | Startup values stay until a restart                       |
 
 A mod that can do without a feature catches the `Off` and goes on without it
 instead of returning it from `init`.

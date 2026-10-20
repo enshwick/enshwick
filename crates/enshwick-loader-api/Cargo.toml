@@ -145,6 +145,10 @@ name = "weather"
 required-features = ["test"]
 
 [[test]]
+name = "world_settings"
+required-features = ["test"]
+
+[[test]]
 name = "worlds"
 required-features = ["test"]
 
