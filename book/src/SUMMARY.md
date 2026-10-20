@@ -60,6 +60,7 @@
   - [Texts](content/texts.md)
 - [Inventories](inventories.md)
 - [Item data](item-data.md)
+- [Stats](stats.md)
 
 # Shipping
 

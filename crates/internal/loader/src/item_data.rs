@@ -92,6 +92,26 @@ pub(crate) fn open(loader: &Loader, owner: usize, id: &str) -> Result<u32, Statu
     u32::try_from(index).map_err(|_| Status::REFUSED)
 }
 
+/// Opens the loader's own kind `id` for a platform feature, before the
+/// kinds are sealed.
+pub(crate) fn open_platform(id: &str) {
+    let mut pending = PENDING.lock().unwrap_or_else(PoisonError::into_inner);
+    if !pending.iter().any(|k| k == id) {
+        pending.push(id.to_owned());
+    }
+}
+
+/// The value of the loader's own kind `id` on the item `pide` holding
+/// `item`.
+pub(crate) fn get_platform_kind(id: &str, pide: u32, item: u32) -> Option<Box<[u8]>> {
+    get(kind_of(id)?, pide, item).ok()
+}
+
+/// The item stats of the item `pide` holding `item`.
+pub(crate) fn get_platform(pide: u32, item: u32) -> Option<Box<[u8]>> {
+    get_platform_kind(enshwick_loader_api::stats::ITEM_KIND, pide, item)
+}
+
 /// Seals the kinds; the store runs only when a mod opened one.
 pub(crate) fn seal() {
     let kinds = std::mem::take(&mut *PENDING.lock().unwrap_or_else(PoisonError::into_inner));
@@ -167,6 +187,9 @@ pub(crate) fn set(kind: u32, pide: u32, item: u32, value: &[u8]) -> Result<(), S
             server.values.insert((kind, pide), record);
         }
         server.changed = true;
+    }
+    if id == enshwick_loader_api::stats::ITEM_KIND {
+        crate::stats::items_changed();
     }
     let mut message = Vec::new();
     encode(&mut message, id, pide, item, value);

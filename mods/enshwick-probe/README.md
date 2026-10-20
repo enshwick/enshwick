@@ -44,6 +44,11 @@ Once the world has loaded, and again on `/probe check`:
 - weather: a reading at the first placed entity and the fronts; rain for two
   minutes that shows in the fronts, then clear skies, then the game's own
   choice again; chunk loads and unloads are logged as they come;
+- stats: a built-in kind's definition; on the first living entity with
+  health, the probe's own kind and 100 extra maximum health set as
+  modifiers, both read back a second later (the maximum through the
+  entity's vitals), then removed, the maximum back where it was; stat
+  changes are logged as they come;
 - terrain: the materials, a dry dig at the first placed entity, a mound
   added 40 metres above it and dug away again, and a radius of 100 metres
   refused;

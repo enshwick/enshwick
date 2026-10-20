@@ -37,11 +37,13 @@ struct Sealed {
     subscribers: Box<[Subscriber]>,
     wanted: FxHashSet<u32>,
     every: bool,
+    /// The equipment event, when stats follow it.
+    equipment: Option<u32>,
 }
 
 impl Sealed {
     fn wants(&self, type_hash: u32) -> bool {
-        self.every || self.wanted.contains(&type_hash)
+        self.every || self.wanted.contains(&type_hash) || self.equipment == Some(type_hash)
     }
 }
 
@@ -112,12 +114,22 @@ pub(crate) fn register(
 /// Seals the subscriptions and links the event move when a mod subscribed.
 pub(crate) fn link(loader: &'static Loader) {
     let subscribers = std::mem::take(&mut *PENDING.lock().unwrap_or_else(PoisonError::into_inner));
+    let equipment = crate::stats::wanted()
+        .then(|| {
+            let info = loader
+                .reflection
+                .type_info("keen::ecs::HandleEquipmentSlotChangedEvent")
+                .ok()?;
+            crate::world::type_hash(loader, info.va())
+        })
+        .flatten();
     let sealed = Sealed {
         wanted: subscribers.iter().map(|s| s.type_hash).collect(),
         every: subscribers.iter().any(|s| s.type_hash == 0),
         subscribers: subscribers.into_boxed_slice(),
+        equipment,
     };
-    let count = sealed.subscribers.len();
+    let count = sealed.subscribers.len() + usize::from(equipment.is_some());
     // A client always links the move, to raise the loader's notices in its
     // own world.
     if SEALED.set(sealed).is_err()
@@ -271,6 +283,9 @@ fn deliver(loader: &Loader) {
     };
     BATCH.with_borrow_mut(|batch| {
         for event in &batch.events {
+            if sealed.equipment == Some(event.type_hash) {
+                crate::stats::equipment_changed();
+            }
             let data = GameEventData {
                 header: Header::of::<GameEventData>(),
                 type_hash: event.type_hash,

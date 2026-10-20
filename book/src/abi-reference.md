@@ -12,7 +12,7 @@ raw table. The exact types and signatures are in the
 | Constant                                                                                            | Value | Meaning                                         |
 | --------------------------------------------------------------------------------------------------- | ----- | ----------------------------------------------- |
 | [`ABI_MAJOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 1     | A loader refuses a mod built for another major. |
-| [`ABI_MINOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 44    | A newer minor only appends.                     |
+| [`ABI_MINOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 45    | A newer minor only appends.                     |
 
 The ABI version is apart from Enshwick Loader's version (such as 0.2.0, see
 [Releasing and updates](releasing.md#versions)): a platform release raises
@@ -275,6 +275,14 @@ marked "init only" are allowed during `enshwick_mod_init` only.
 | `content_serve`       | Serves bytes as game content, a served texture's pixels, and gives their hash; any thread       | 44          |
 | `content_read`        | Copies the game's own content from its archive files; any thread                                | 44          |
 | `icons_ready`         | Whether this client shows the UI images mods serve; any thread                                  | 44          |
+| `stat_open`           | Defines or opens a stat kind by id; init only                                                   | 45          |
+| `stat_info`           | A stat kind's definition and id; any thread                                                     | 45          |
+| `stat_value`          | A stat's value on an entity, without locks; any thread                                          | 45          |
+| `stat_modify`         | Sets or removes a mod's modifier on an entity; server, any thread                               | 45          |
+| `stat_buff`           | Gives a buff type modifiers; init only                                                          | 45          |
+| `stats_changed`       | Calls a handler for every stat value that changed; init only                                    | 45          |
+| `stat_sources`        | The modifiers that count toward an entity's stat; server game thread only                       | 45          |
+| `stat_watch`          | Watches an entity for its worn items and buffs; any thread                                      | 45          |
 
 ## Under an older loader
 
@@ -334,6 +342,8 @@ the mod off with a reason, which the mod's log shows as `off: <reason>`:
 | 42          | `Op::Renew`                     | The batch fails                                           |
 | 43          | texts for the Mods screen       | The settings' keys in words                               |
 | 44          | `Load::add_icon`, item icons    | Off: `icons: needs a newer loader`                        |
+| 45          | `Load::stats` and stat kinds    | Off: `stats: needs a newer loader`                        |
+| 45          | `Damage::attacker`              | The hit's source                                          |
 
 A mod that can do without a feature catches the `Off` and goes on without it
 instead of returning it from `init`.

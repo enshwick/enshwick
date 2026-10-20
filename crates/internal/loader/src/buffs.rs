@@ -354,6 +354,29 @@ pub(crate) fn of(loader: &Loader, entity: u32) -> Result<Vec<ActiveBuff>, Status
     Ok(out)
 }
 
+/// The type ids of the buffs `entity` has; empty for an entity without
+/// buffs. On the game thread.
+pub(crate) fn type_ids(loader: &Loader, entity: u32) -> Vec<u32> {
+    let Some(layout) = layout(loader) else {
+        return Vec::new();
+    };
+    let Ok(container) = crate::world::component(loader, entity, layout.container) else {
+        return Vec::new();
+    };
+    let container = container.addr();
+    slots(layout, container)
+        .filter_map(|(slot, _)| {
+            // SAFETY: a slot of the live container, as reflected, read on
+            // the game thread.
+            let buff: u32 = unsafe { read(slot, layout.instance_entity) };
+            // SAFETY: as above.
+            let cleansed: u8 = unsafe { read(slot, layout.instance_cleansed) };
+            // SAFETY: as above.
+            (buff != 0 && cleansed == 0).then(|| unsafe { read(slot, layout.instance_type) })
+        })
+        .collect()
+}
+
 /// Gives `request.entity` the buff `request.id`, or renews the one it has.
 pub(crate) fn apply(loader: &Loader, request: &BuffRequest) -> Result<(), Status> {
     let layout = layout(loader).ok_or(Status::MISSING)?;
