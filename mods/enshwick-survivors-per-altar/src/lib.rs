@@ -65,7 +65,7 @@ impl Mod for SurvivorsPerAltar {
             id: "survivors-per-altar",
             side: BOTH,
             join = true,
-            requires: ["flame-altar-zones" => "^0.1"],
+            requires: ["flame-altar-zones" => ">=0.1, <1.0"],
             updates: github("themaiby/enshwick", "enshwick-survivors-per-altar"),
             signed_by: ["RWTjqgtfpy3lSOLC4uaUXuvvKSLQKOFf6nUnEytoiFjSzxMEhLnoAdJF"],
             builds: [
@@ -249,6 +249,9 @@ fn copy_staffs(load: &mut Load<'_>, settings: &Settings) -> Result<(), Off> {
 }
 
 enshwick_loader_api::declare_mod!(SurvivorsPerAltar);
+
+#[cfg(test)]
+mod requires;
 
 #[cfg(test)]
 mod tests {
