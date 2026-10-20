@@ -76,6 +76,7 @@ pub(crate) fn start(stub_abi: u32, missing_forwards: u32) {
         fingerprint: game.fingerprint,
         build: game.build,
         reflection: game.reflection,
+        configs_dir: mods_dir.with_file_name("mod-configs"),
         mods_dir,
         mods: plan
             .order
@@ -152,9 +153,12 @@ fn joined(loader: &Loader) -> Vec<(String, String)> {
 
 /// Creates `mods/` and opens the log; `None` when the folder cannot be made.
 fn begin(stub_abi: u32, missing_forwards: u32) -> Option<PathBuf> {
-    let mods_dir = game_dir()?.join("mods");
-    std::fs::create_dir_all(&mods_dir).ok()?;
-    log::open(&mods_dir.join("enshwick.log"));
+    let game_dir = game_dir()?;
+    let mods_dir = game_dir.join("mods");
+    for dir in ["mods", "mod-configs", "mod-data", "logs"] {
+        std::fs::create_dir_all(game_dir.join(dir)).ok()?;
+    }
+    log::open(&game_dir.join("logs").join("enshwick"));
     crate::log!(INFO, "Enshwick {} starting", env!("CARGO_PKG_VERSION"));
     if stub_abi != STUB_ABI {
         crate::log!(
