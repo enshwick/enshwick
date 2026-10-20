@@ -1,6 +1,7 @@
 //! New recipes: a vanilla recipe copied for a new output, with its
 //! ingredients scaled.
 
+use super::workshops::WorkshopId;
 use super::{Blob, Guid, types};
 use crate::{Load, Off};
 
@@ -62,6 +63,9 @@ pub struct NewRecipe {
     pub output_count: u32,
     /// The copied recipe's ingredient counts times this.
     pub cost: u32,
+    /// The workshop the recipe is made at, such as one from
+    /// [`Load::add_workshop`]; `None` keeps the copied recipe's.
+    pub workshop: Option<WorkshopId>,
 }
 
 /// Where the fields a recipe edit touches sit, from the game's reflection.
@@ -75,6 +79,8 @@ pub struct RecipeLayout {
     pub guid: usize,
     /// `RecipeInfo.recipeId`.
     pub id: usize,
+    /// `RecipeInfo.workshopGuid`.
+    pub workshop_guid: usize,
     /// `RecipeInfo.workshopId`.
     pub workshop: usize,
     /// `RecipeInfo.input`.
@@ -126,6 +132,7 @@ impl RecipeLayout {
             recipe: size("keen::RecipeInfo")?,
             guid: recipe("recipeGuid")?,
             id: recipe("recipeId")?,
+            workshop_guid: recipe("workshopGuid")?,
             workshop: recipe("workshopId")?,
             input: recipe("input")?,
             output: recipe("output")?,
@@ -165,7 +172,10 @@ pub fn add_recipe_to(
     let like = (0..usize::try_from(count).ok()?)
         .map(|i| start + i * layout.recipe)
         .find(|&at| makes(layout, &registry, at, recipe.like))?;
-    let workshop = registry.read_u32(like + layout.workshop)?;
+    let workshop = match recipe.workshop {
+        Some(target) => target.id(),
+        None => registry.read_u32(like + layout.workshop)?,
+    };
     if workshop_counts(layout, &registry)?
         .get(&workshop)
         .copied()
@@ -203,8 +213,17 @@ pub fn add_recipe_to(
         // The recipe's completion flag is its own id.
         && registry.write(at + layout.completion, &id)
         && registry.set_array(at + layout.input, inputs_at, input_count)
-        && registry.set_array(at + layout.output, output_at, 1);
+        && registry.set_array(at + layout.output, output_at, 1)
+        && recipe
+            .workshop
+            .is_none_or(|target| retarget(layout, &mut registry, at, target));
     written.then(|| registry.into_bytes())
+}
+
+/// Moves the recipe at `at` to `workshop`.
+fn retarget(layout: &RecipeLayout, blob: &mut Blob, at: usize, workshop: WorkshopId) -> bool {
+    blob.write(at + layout.workshop_guid, &workshop.guid().0)
+        && blob.write(at + layout.workshop, &workshop.id().to_le_bytes())
 }
 
 /// How many recipes each workshop has.
@@ -314,6 +333,9 @@ pub struct Derived {
     pub output: u32,
     /// The vanilla ingredient counts times this.
     pub cost: u32,
+    /// The workshop the copy is made at, such as one from
+    /// [`Load::add_workshop`]; `None` keeps the vanilla recipe's.
+    pub workshop: Option<WorkshopId>,
 }
 
 /// A derived recipe's GUID: the vanilla one marked with the mod's salt, so it
@@ -363,9 +385,11 @@ pub fn derive_recipes_in(
         let Some(derived) = choose(&view) else {
             continue;
         };
-        let held = counts
-            .entry(blob.read_u32(at + layout.workshop)?)
-            .or_insert(0);
+        let workshop = match derived.workshop {
+            Some(target) => target.id(),
+            None => blob.read_u32(at + layout.workshop)?,
+        };
+        let held = counts.entry(workshop).or_insert(0);
         if *held >= cap {
             skipped += 1;
             continue;
@@ -400,7 +424,8 @@ pub fn derive_recipes_in(
     }
     let first = blob.grow_array(layout.recipes, layout.recipe, 8, &layout.relative, &extra)?;
     let (start, _) = blob.array(layout.recipes)?;
-    for (index, ((_, _, guid), (inputs, output))) in picked.iter().zip(changes).enumerate() {
+    for (index, ((_, derived, guid), (inputs, output))) in picked.iter().zip(changes).enumerate() {
+        let derived = *derived;
         let at = start + (usize::try_from(first).ok()? + index) * layout.recipe;
         let id = guid.id().to_le_bytes();
         let input_count = u32::try_from(inputs.len() / layout.input_size.max(1)).ok()?;
@@ -410,7 +435,10 @@ pub fn derive_recipes_in(
             && blob.write(at + layout.id, &id)
             && blob.write(at + layout.completion, &id)
             && blob.set_array(at + layout.input, inputs_at, input_count)
-            && blob.set_array(at + layout.output, output_at, 1);
+            && blob.set_array(at + layout.output, output_at, 1)
+            && derived
+                .workshop
+                .is_none_or(|target| retarget(layout, &mut blob, at, target));
         if !written {
             return None;
         }
@@ -442,6 +470,7 @@ impl Load<'_> {
     ///         output: Guid::parse("8a3f6e21-5c4b-4d7e-9f10-2b7c5e6a9d31"),
     ///         output_count: 1,
     ///         cost: 2,
+    ///         workshop: None,
     ///     })
     /// }
     /// ```
@@ -473,7 +502,7 @@ impl Load<'_> {
     ///         recipe
     ///             .debug_name()
     ///             .starts_with("Block_")
-    ///             .then_some(Derived { output: 2, cost: 1 })
+    ///             .then_some(Derived { output: 2, cost: 1, workshop: None })
     ///     })
     /// }
     /// ```
@@ -500,6 +529,7 @@ mod tests {
         recipe: 0xa8,
         guid: 0,
         id: 0x10,
+        workshop_guid: 0x14,
         workshop: 0x24,
         input: 0x28,
         output: 0x30,
@@ -540,6 +570,7 @@ mod tests {
             output: SAFE,
             output_count: 1,
             cost: 2,
+            workshop: None,
         };
         let built =
             Blob::new(&add_recipe_to(&LAYOUT, blob.bytes(), &new, WORKSHOP_RECIPES).unwrap());
@@ -578,9 +609,11 @@ mod tests {
         }
         assert!(blob.set_array(8, first, 2));
         let built = derive_recipes_in(&LAYOUT, blob.bytes(), 7, WORKSHOP_RECIPES, &|r| {
-            r.debug_name()
-                .starts_with("Block_")
-                .then_some(Derived { output: 2, cost: 1 })
+            r.debug_name().starts_with("Block_").then_some(Derived {
+                output: 2,
+                cost: 1,
+                workshop: None,
+            })
         })
         .unwrap();
         let built = Blob::new(&built);
@@ -603,6 +636,61 @@ mod tests {
     }
 
     #[test]
+    fn a_recipe_can_move_to_another_workshop() {
+        let mut blob = Blob::new(&[0u8; 16]);
+        let recipe = blob.append(&[0; 0xa8], 8);
+        assert!(blob.write(recipe + 0x24, &7u32.to_le_bytes()));
+        let mut output = vec![0u8; 24];
+        output[..16].copy_from_slice(&CHEST.0);
+        let output_at = blob.append(&output, 8);
+        assert!(blob.set_array(recipe + 0x30, output_at, 1));
+        assert!(blob.set_array(8, recipe, 1));
+        let bench = WorkshopId::new(Guid::parse("5b828914-9b48-40f8-b541-72e9b942cee6"));
+        let new = NewRecipe {
+            guid: RECIPE,
+            like: CHEST,
+            output: SAFE,
+            output_count: 1,
+            cost: 1,
+            workshop: Some(bench),
+        };
+        let built = add_recipe_to(&LAYOUT, blob.bytes(), &new, WORKSHOP_RECIPES).unwrap();
+        let built = Blob::new(&built);
+        let (recipes, _) = built.array(8).unwrap();
+        let copy = recipes + 0xa8;
+        assert_eq!(&built.bytes()[copy + 0x14..copy + 0x24], &bench.guid().0);
+        assert_eq!(u32_at(built.bytes(), copy + 0x24), bench.id());
+        assert_eq!(u32_at(built.bytes(), recipes + 0x24), 7);
+
+        // Derived copies move too, and count against the new workshop.
+        let derived = derive_recipes_in(&LAYOUT, blob.bytes(), 7, 1, &|_| {
+            Some(Derived {
+                output: 2,
+                cost: 1,
+                workshop: Some(bench),
+            })
+        })
+        .unwrap();
+        assert_eq!(
+            Blob::new(&derived).array(8).unwrap().1,
+            1,
+            "limit 1, held 0"
+        );
+        let derived = derive_recipes_in(&LAYOUT, blob.bytes(), 7, RESERVED_FOR_SINGLE + 1, &|_| {
+            Some(Derived {
+                output: 2,
+                cost: 1,
+                workshop: Some(bench),
+            })
+        })
+        .unwrap();
+        let derived = Blob::new(&derived);
+        let (recipes, count) = derived.array(8).unwrap();
+        assert_eq!(count, 2);
+        assert_eq!(u32_at(derived.bytes(), recipes + 0xa8 + 0x24), bench.id());
+    }
+
+    #[test]
     fn an_item_without_a_recipe_builds_nothing() {
         let mut blob = Blob::new(&[0u8; 16]);
         assert!(blob.set_array(8, 16, 0));
@@ -612,6 +700,7 @@ mod tests {
             output: SAFE,
             output_count: 1,
             cost: 1,
+            workshop: None,
         };
         assert!(add_recipe_to(&LAYOUT, blob.bytes(), &new, WORKSHOP_RECIPES).is_none());
     }

@@ -40,6 +40,7 @@ pub const fn recipe(cost: u32) -> NewRecipe {
         output: SAFE,
         output_count: 1,
         cost,
+        workshop: None,
     }
 }
 

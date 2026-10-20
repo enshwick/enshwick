@@ -170,6 +170,9 @@ fn seal_texts(loader: &'static Loader) {
 static PENDING: Mutex<Vec<Served>> = Mutex::new(Vec::new());
 /// The registrations once sealed, read without a lock.
 static SERVED_LIST: OnceLock<Box<[Served]>> = OnceLock::new();
+/// Cloned templates ever served, clone GUID to vanilla GUID: read in place of
+/// a clone no mod serves now.
+static ALIASES: OnceLock<rustc_hash::FxHashMap<[u8; 16], [u8; 16]>> = OnceLock::new();
 static OPEN_NEXT: AtomicUsize = AtomicUsize::new(0);
 static RESOLVE_NEXT: AtomicUsize = AtomicUsize::new(0);
 static KEY_NEXT: AtomicUsize = AtomicUsize::new(0);
@@ -220,10 +223,18 @@ pub(crate) fn seal_and_link(loader: &'static Loader) {
     seal_texts(loader);
     let served = std::mem::take(&mut *PENDING.lock().unwrap_or_else(PoisonError::into_inner));
     let count = served.len();
-    if SERVED_LIST.set(served.into_boxed_slice()).is_err() || count == 0 {
+    let aliases = crate::clones::update(&loader.data_dir, served.iter().map(|s| (s.key, s.base)));
+    let orphans = aliases
+        .keys()
+        .filter(|guid| !served.iter().any(|s| s.key.guid == **guid))
+        .count();
+    let recorded = aliases.len();
+    if SERVED_LIST.set(served.into_boxed_slice()).is_err()
+        || ALIASES.set(aliases).is_err()
+        || count + recorded == 0
+    {
         return;
     }
-    LOADED.get_or_init(|| loader);
     if served_recipes() {
         crate::code::lift_workshop_limit(loader);
     }
@@ -256,6 +267,24 @@ pub(crate) fn seal_and_link(loader: &'static Loader) {
         }
     }
     crate::log!(INFO, "{count} resources served by mods");
+    if orphans > 0 {
+        crate::log!(
+            INFO,
+            "{orphans} cloned templates no mod serves now read as their vanilla source"
+        );
+    }
+}
+
+/// The vanilla template to read for `key`, a cloned template no mod serves.
+fn alias(key: &ResourceKey) -> Option<ResourceKey> {
+    if key.type_hash != enshwick_api::content::types::TEMPLATE {
+        return None;
+    }
+    let vanilla = ALIASES.get()?.get(&key.guid)?;
+    Some(ResourceKey {
+        guid: *vanilla,
+        ..*key
+    })
 }
 
 static LOADED: OnceLock<&'static Loader> = OnceLock::new();
@@ -314,6 +343,10 @@ unsafe extern "system" fn open(
             .find(|(_, s)| s.key == *wanted && owner_on(s))
     });
     let Some((index, entry)) = found else {
+        if let Some(vanilla) = wanted.and_then(alias) {
+            // SAFETY: the game's open with a key of ours, valid for the call.
+            return unsafe { next::<OpenFn>(&OPEN_NEXT)(out, database, &raw const vanilla) };
+        }
         // SAFETY: forwarded unchanged.
         return unsafe { next::<OpenFn>(&OPEN_NEXT)(out, database, key) };
     };

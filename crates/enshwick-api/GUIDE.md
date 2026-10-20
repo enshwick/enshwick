@@ -277,7 +277,7 @@ and the server's features act whenever the client hosts:
   server and client halves hook one function, it links one detour there that
   answers for both.
 
-## Content: items, recipes and texts
+## Content: items, recipes, workshops and texts
 
 New game content works on the server and the client alike; the mod runs on
 both (`side: BOTH`, `join = true`).
@@ -291,7 +291,7 @@ const SAFE: Guid = Guid::parse("8a3f6e21-5c4b-4d7e-9f10-2b7c5e6a9d31");
 let texts = load.texts(include_str!("texts.toml"))?;
 load.add_texts(&texts, &[("safe.name", SAFE_NAME)])?;
 load.add_item(NewItem { guid: SAFE, like: CHEST, name: Some(SAFE_NAME), description: None, debug_name: "Safe".into() })?;
-load.add_recipe(NewRecipe { guid: SAFE_RECIPE, like: CHEST, output: SAFE, output_count: 1, cost: 2 })?;
+load.add_recipe(NewRecipe { guid: SAFE_RECIPE, like: CHEST, output: SAFE, output_count: 1, cost: 2, workshop: None })?;
 ```
 
 - `add_item` clones a vanilla item under a new GUID (its game id is
@@ -304,6 +304,31 @@ load.add_recipe(NewRecipe { guid: SAFE_RECIPE, like: CHEST, output: SAFE, output
   leaving room for single recipes, and the log names what was left out. A mod
   that adds many recipes should give them a workshop or an NPC of its own
   rather than crowd the vanilla ones, which other mods share.
+- `add_workshop(NewWorkshop { like: stations::WORKBENCH, item, template,
+  workshop, name, description, station_recipe, debug_name })` clones a vanilla
+  station: its template, crafting at a new workshop, its item, placing the new
+  template, the workshop registry entry and, with `station_recipe`, a copy of
+  the vanilla station's recipe. It returns the `WorkshopId`; recipes go there
+  with `NewRecipe { workshop: Some(id), .. }` or `Derived { workshop: Some(id),
+  .. }`, and a new workshop starts with none of the 512 taken. Keep every GUID
+  fixed for good: saves hold them.
+
+  ```rust
+  use enshwick_api::content::workshops::{NewWorkshop, StationRecipe, stations};
+
+  let bench = load.add_workshop(NewWorkshop {
+      like: stations::WORKBENCH,
+      item: BENCH, template: BENCH_TEMPLATE, workshop: BENCH_WORKSHOP,
+      name: Some(BENCH_NAME), description: Some(BENCH_DESCRIPTION),
+      station_recipe: Some(StationRecipe { guid: BENCH_RECIPE, cost: 1 }),
+      debug_name: "Craftingstation_BulkWorkbench".into(),
+  })?;
+  load.derive_recipes("my-mod", move |recipe| {
+      recipe.debug_name().starts_with("Block_")
+          .then_some(Derived { output: 2, cost: 1, workshop: Some(bench) })
+  })?;
+  ```
+
 - Texts live in one TOML file per mod, a table per language code (`en`, `uk`,
   `de`, ... see `i18n::Language`), `en` being the fallback. A server owner
   overrides or adds texts in `mod-configs/<id>.texts.toml`.
@@ -314,7 +339,11 @@ load.add_recipe(NewRecipe { guid: SAFE_RECIPE, like: CHEST, output: SAFE, output
 
 Items a mod adds disappear from inventories when the mod is removed, as the
 game drops unknown items; a placed object keeps working as its vanilla
-template.
+template. The loader records every template and item a mod clones, with its
+vanilla source, in `mod-data/enshwick/clones.toml`; when no mod serves a cloned
+template any more, the game reads the vanilla template under the clone's GUID,
+so a placed station of a removed mod loads as the vanilla station it was cloned
+from.
 
 ## State between sessions
 

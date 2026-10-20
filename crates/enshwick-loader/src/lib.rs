@@ -11,6 +11,8 @@ pub mod chains;
 #[cfg(windows)]
 mod chat;
 #[cfg(windows)]
+mod clones;
+#[cfg(windows)]
 mod code;
 #[cfg(windows)]
 mod content;
