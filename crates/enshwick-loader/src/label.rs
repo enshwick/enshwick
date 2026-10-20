@@ -149,7 +149,9 @@ pub(crate) fn link(loader: &'static Loader) {
     let target = (layout.replace as *const ()).addr() as u64;
     if let Ok(mut chains) = loader.chains.lock() {
         let status = chains.add(target, link);
-        if !status.is_ok() {
+        if status.is_ok() {
+            crate::log!(INFO, "rename filters on");
+        } else {
             crate::log!(WARN, "rename filters off: refused ({})", status.0);
         }
     }
