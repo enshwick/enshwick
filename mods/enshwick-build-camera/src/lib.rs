@@ -1,33 +1,17 @@
 //! Airborne Architect's building fly mode for every player.
 //!
-//! The game lets a player enter, and stay in, fly mode when the character is
-//! near a building zone, alive and not gliding, may edit the base, and has
-//! unlocked the Airborne Architect skill node. The server decides; the client
-//! predicts the same gate. Both ask one generic test, `node_unlocked(node,
-//! unlocked bits, skill tree)`, which about fifty other places ask too, some
-//! with node ids read at run time. The hook answers "unlocked" only for the
-//! fly mode node and only at the gate's own call site, told by its return
-//! address, so skill points, prerequisites and the skill tree stay vanilla.
-//!
-//! On a client the one gate serves its own world and, while it hosts, the
-//! built-in server's; both get the same answer. `enabled` is a join value: a
+//! The game opens fly mode near a building zone to a character that may edit
+//! the base, is alive, not gliding, and unlocked the Airborne Architect node.
+//! This mod answers "unlocked" at the fly mode gate alone, so skill points,
+//! prerequisites and the skill tree stay vanilla. `enabled` is a join value: a
 //! joined player predicts with the server's.
 
-use core::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use core::sync::atomic::{AtomicBool, Ordering};
 
-use enshwick_loader_api::abi::HookFlags;
-use enshwick_loader_api::{Load, Mod, Next, Off};
+use enshwick_loader_api::progress::{AIRBORNE_ARCHITECT, SkillGate};
+use enshwick_loader_api::{Load, Mod, Off};
 
-/// The Airborne Architect node in the skill tree, as the gate passes it.
-pub const NODE: u32 = 0x4475_e8dd;
-
-/// `node_unlocked(node, unlocked bits, skill tree) -> bool in al`.
-type NodeUnlocked = unsafe extern "system" fn(node: u32, bits: *const u64, tree: *const u8) -> u8;
-
-/// Whether fly mode is open to everyone now; the settings handler flips it.
 static ENABLED: AtomicBool = AtomicBool::new(false);
-/// Where the gate's call to `node_unlocked` returns to; 0 until init.
-static GATE_RETURN: AtomicU64 = AtomicU64::new(0);
 
 /// Build camera settings.
 #[derive(Debug, serde::Deserialize, serde::Serialize, enshwick_loader_api::Config)]
@@ -47,37 +31,26 @@ impl Default for Settings {
     }
 }
 
-/// Whether the hook answers "unlocked" for a call: the fly mode node, asked
-/// from the gate, while the mod is enabled.
+/// The answer to a check of the Airborne Architect node.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::progress::SkillGate;
+///
+/// assert_eq!(enshwick_build_camera::lifts(SkillGate::FlyMode, true), Some(true));
+/// assert_eq!(enshwick_build_camera::lifts(SkillGate::FlyMode, false), None);
+/// assert_eq!(enshwick_build_camera::lifts(SkillGate::Other, true), None);
+/// ```
 #[must_use]
-pub fn lifts(node: u32, return_address: u64, gate: u64, enabled: bool) -> bool {
-    enabled && node == NODE && gate != 0 && return_address == gate
+pub fn lifts(gate: SkillGate, enabled: bool) -> Option<bool> {
+    (enabled && gate == SkillGate::FlyMode).then_some(true)
 }
 
-/// The mod. Its running state is in statics the hook reads.
+/// The mod.
 #[derive(Debug)]
 pub struct BuildCamera;
 
-enshwick_loader_api::detour! {
-    static NODE_UNLOCKED: unsafe extern "system" fn(node: u32, bits: *const u64, tree: *const u8) -> u8 =
-        node_unlocked, flags = HookFlags::CALLER_FRAME;
-}
-
-fn node_unlocked(next: Next<NodeUnlocked>, node: u32, bits: *const u64, tree: *const u8) -> u8 {
-    // Fast path first: another node, or the mod is off.
-    let enabled = node == NODE && ENABLED.load(Ordering::Relaxed);
-    if enabled && let Some(host) = enshwick_loader_api::host() {
-        // SAFETY: the frame was taken at entry of this chain.
-        let from = unsafe { host.caller_frame().return_address() };
-        if lifts(node, from, GATE_RETURN.load(Ordering::Relaxed), enabled) {
-            return 1;
-        }
-    }
-    // SAFETY: the rest of the chain takes the arguments the game passed.
-    unsafe { next.get()(node, bits, tree) }
-}
-
-/// Applies `settings` to the running hook.
 fn apply(settings: &Settings) {
     let was = ENABLED.swap(settings.enabled, Ordering::Relaxed);
     if was != settings.enabled {
@@ -96,30 +69,14 @@ impl Mod for BuildCamera {
             join = true,
             updates: github("themaiby/enshwick", "enshwick-build-camera"),
             signed_by: ["RWTjqgtfpy3lSOLC4uaUXuvvKSLQKOFf6nUnEytoiFjSzxMEhLnoAdJF"],
-            builds: [
-                {
-                    side: SERVER,
-                    guid: "1c129660cd6efc4f9f0b21652d5ff2bf",
-                    age: 387,
-                    // `player_control_action_sequence`'s fly mode gate.
-                    symbols: ["build_camera.gate_return" => 0xc_4875],
-                },
-                {
-                    // The same gate, predicting for the client's world and
-                    // deciding for the built-in server's.
-                    side: CLIENT,
-                    guid: "69f0e9573b32c24a8838d3fff550824c",
-                    age: 410,
-                    symbols: ["build_camera.gate_return" => 0x2d_8295],
-                },
-            ],
         )
     }
 
     fn init(load: &mut Load<'_>) -> Result<Self, Off> {
         let settings: Settings = load.config()?;
-        GATE_RETURN.store(load.symbol("build_camera.gate_return")?, Ordering::Relaxed);
-        load.hook(&NODE_UNLOCKED, load.symbol("skill.node_unlocked")?)?;
+        load.on_skill(AIRBORNE_ARCHITECT, |check| {
+            lifts(check.gate, ENABLED.load(Ordering::Relaxed))
+        })?;
         load.on_config_change(|settings: Settings| apply(&settings))?;
         apply(&settings);
         Ok(Self)
@@ -130,22 +87,11 @@ enshwick_loader_api::declare_mod!(BuildCamera);
 
 #[cfg(test)]
 mod tests {
-    use enshwick_loader_api::abi::{CallerFrame, Status};
+    use enshwick_loader_api::abi::{Header, SkillCheck as RawCheck, Status};
     use enshwick_loader_api::config::Config as _;
     use enshwick_loader_api::events;
 
     use super::*;
-
-    const GATE: u64 = 0x1_400c_4875;
-
-    #[test]
-    fn only_the_fly_node_at_the_gate_is_lifted() {
-        assert!(lifts(NODE, GATE, GATE, true));
-        assert!(!lifts(NODE, GATE, GATE, false));
-        assert!(!lifts(NODE, GATE + 5, GATE, true));
-        assert!(!lifts(NODE ^ 1, GATE, GATE, true));
-        assert!(!lifts(NODE, 0, 0, true));
-    }
 
     #[test]
     fn enabled_is_the_join_value_and_on_by_default() {
@@ -158,50 +104,51 @@ mod tests {
         assert!(!local.enabled);
     }
 
-    /// The return address the fake caller frame points at.
-    static RETURN: AtomicU64 = AtomicU64::new(0);
-
-    extern "system" fn locked(_node: u32, _bits: *const u64, _tree: *const u8) -> u8 {
-        0
-    }
-
     #[test]
     fn the_gate_follows_the_settings_and_the_servers_join_value() {
         let loader = enshwick_loader_api::test::FakeHost::new()
-            .symbol(
-                "skill.node_unlocked",
-                enshwick_loader_api::test::address(
-                    locked as extern "system" fn(u32, *const u64, *const u8) -> u8,
-                ),
-            )
-            .symbol("build_camera.gate_return", GATE)
-            .caller_frame(CallerFrame {
-                rsp: RETURN.as_ptr() as u64,
-                ..CallerFrame::default()
-            })
             .settings("enabled = true\n")
             .install();
         // SAFETY: the exports of `declare_mod!` above.
         let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
-        let detour = loader.detour(&NODE_UNLOCKED).unwrap();
-        let ask = |node, from| {
-            RETURN.store(from, Ordering::Relaxed);
-            // SAFETY: the vanilla stand-in reads nothing.
-            unsafe { detour(node, core::ptr::null(), core::ptr::null()) }
+        let ask = |node, gate| {
+            loader.skill(&RawCheck {
+                header: Header::of::<RawCheck>(),
+                node,
+                gate,
+                unlocked: 0,
+                reserved: [0; 3],
+            })
         };
 
-        assert_eq!(ask(NODE, GATE), 1);
-        assert_eq!(ask(NODE, 0x1_4000_3e78), 0, "another caller stays vanilla");
-        assert_eq!(ask(0xa667_75b7, GATE), 0, "another node stays vanilla");
+        assert_eq!(ask(AIRBORNE_ARCHITECT, RawCheck::FLY_MODE), 1);
+        assert_eq!(
+            ask(AIRBORNE_ARCHITECT, RawCheck::OTHER),
+            0,
+            "another caller stays vanilla"
+        );
+        assert_eq!(
+            ask(0xa667_75b7, RawCheck::FLY_MODE),
+            0,
+            "another node stays vanilla"
+        );
 
         loader.set_server_synced(Some("{ enabled = false }"));
         assert_eq!(loader.raise::<events::SettingsChanged>(&()), 1);
-        assert_eq!(ask(NODE, GATE), 0, "the server turned it off");
+        assert_eq!(
+            ask(AIRBORNE_ARCHITECT, RawCheck::FLY_MODE),
+            0,
+            "the server turned it off"
+        );
 
         loader.set_server_synced(None);
         assert_eq!(loader.raise::<events::SettingsChanged>(&()), 1);
-        assert_eq!(ask(NODE, GATE), 1, "the file's value again");
+        assert_eq!(
+            ask(AIRBORNE_ARCHITECT, RawCheck::FLY_MODE),
+            1,
+            "the file's value again"
+        );
         assert!(loader.faults().is_empty());
     }
 }

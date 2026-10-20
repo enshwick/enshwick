@@ -84,10 +84,11 @@ use std::collections::{HashMap, HashSet};
 use std::sync::MutexGuard;
 
 use crate::abi::{
-    AltarInfo, AltarZoneSize, BedCheck, Bounds, CallerFrame, CommandCall, Event, Fingerprint,
-    Header, HookFlags, HostApi, Interaction, InventoryOp, InventoryOpResult, InventoryResult,
-    ItemData, Level, ModHandle, ModInfo, PlayerInfo, RenameCall, ResourceKey, Side, Status, Str,
-    Summon, SurvivorLookup, ZoneCheck,
+    AltarInfo, AltarZoneSize, BedCheck, Bounds, CallerFrame, Comfort, CommandCall, Event,
+    ExperiencePass, ExperienceRow, Fingerprint, Header, HookFlags, HostApi, Interaction,
+    InventoryOp, InventoryOpResult, InventoryResult, ItemData, Level, ModHandle, ModInfo,
+    PlayerInfo, RenameCall, ResourceKey, Side, SkillCheck, Status, Str, Summon, SurvivorLookup,
+    ZoneCheck,
 };
 use crate::events::Kind;
 use crate::{FnPtr, Hook};
@@ -1542,6 +1543,94 @@ impl Installed {
             // SAFETY: a valid call; `user` is the mod's pointer.
             unsafe { callback(call, user) != 0 }
         })
+    }
+
+    /// Asks the mod's skill overrides about `check` as the loader would: the
+    /// first answer for the node, 0 for none, 1 unlocked, 2 locked.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_loader_api::abi::{Header, SkillCheck};
+    ///
+    /// let loader = enshwick_loader_api::test::FakeHost::new().install();
+    /// let check = SkillCheck { header: Header::of::<SkillCheck>(), node: 7, gate: SkillCheck::OTHER, unlocked: 0, reserved: [0; 3] };
+    /// assert_eq!(loader.skill(&check), 0);
+    /// ```
+    #[must_use]
+    pub fn skill(&self, check: &SkillCheck) -> u8 {
+        let skills = table::with(Vec::new(), |s| s.skills.clone());
+        skills
+            .iter()
+            .filter(|(node, _, _)| *node == check.node)
+            .map(|&(_, callback, user)| {
+                let user = core::ptr::with_exposed_provenance_mut(user);
+                // SAFETY: a valid check; `user` is the mod's pointer.
+                unsafe { callback(check, user) }
+            })
+            .find(|&answer| answer != 0)
+            .unwrap_or(0)
+    }
+
+    /// Runs the mod's comfort filters on `comfort` as the loader would; the
+    /// comfort registered.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_loader_api::abi::{Comfort, Header};
+    ///
+    /// let loader = enshwick_loader_api::test::FakeHost::new().install();
+    /// let comfort = Comfort { header: Header::of::<Comfort>(), category: 1, value: 3, position: [0.0; 3] };
+    /// assert_eq!(loader.comfort(&comfort), 3);
+    /// ```
+    #[must_use]
+    pub fn comfort(&self, comfort: &Comfort) -> i32 {
+        let filters = table::with(Vec::new(), |s| s.comfort_filters.clone());
+        filters
+            .iter()
+            .fold(comfort.value, |value, &(callback, user)| {
+                let call = Comfort { value, ..*comfort };
+                let user = core::ptr::with_exposed_provenance_mut(user);
+                // SAFETY: a valid registration; `user` is the mod's pointer.
+                unsafe { callback(&raw const call, user) }
+            })
+    }
+
+    /// Runs the mod's experience filters on `rows` as the loader would, with
+    /// a level table of `cap` levels, level `l` needing `need(l)`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_loader_api::abi::ExperienceRow;
+    ///
+    /// let loader = enshwick_loader_api::test::FakeHost::new().install();
+    /// let mut rows = [ExperienceRow { entity: 1, level: 1, progress: 0, need: 100, gained: 5 }];
+    /// loader.experience(&mut rows, 25, |level| level * 100);
+    /// assert_eq!(rows[0].gained, 5);
+    /// ```
+    pub fn experience(&self, rows: &mut [ExperienceRow], cap: u32, need: fn(u32) -> u32) {
+        unsafe extern "system" fn need_for(token: *mut core::ffi::c_void, level: u32) -> u32 {
+            // SAFETY: the token is the `need` function of the running call.
+            let need = unsafe { *token.cast::<fn(u32) -> u32>() };
+            need(level)
+        }
+        let filters = table::with(Vec::new(), |s| s.experience_filters.clone());
+        let mut need = need;
+        for &(callback, user) in &filters {
+            let mut pass = ExperiencePass {
+                header: Header::of::<ExperiencePass>(),
+                rows: rows.as_mut_ptr(),
+                row_count: rows.len(),
+                level_cap: cap,
+                need_for: Some(need_for),
+                token: (&raw mut need).cast(),
+            };
+            let user = core::ptr::with_exposed_provenance_mut(user);
+            // SAFETY: a valid pass; `user` is the mod's pointer.
+            unsafe { callback(&raw mut pass, user) };
+        }
     }
 
     /// The labels the mod set, as `(entity, text)`, in order.
