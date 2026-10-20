@@ -7,6 +7,7 @@ use crate::abi::{Event, HookFlags, HostApi, MidHookSpec, Registers, Status, Str}
 use crate::config::{Config, Stage};
 use crate::hook::{FnPtr, Hook};
 use crate::host::Host;
+use crate::services::{Emitter, ModEvent, Service};
 
 /// Why a mod turns itself off during initialisation; the loader logs the
 /// reason and keeps the game vanilla where the mod would have acted.
@@ -863,21 +864,21 @@ impl Load<'_> {
         Ok(store)
     }
 
-    /// Publishes a service other mods can find by `name` and `version`.
+    /// Publishes `table` as the service its type declares, for other mods.
     ///
-    /// `T` is a `repr(C)` table of `extern "system"` functions, the contract
-    /// both mods share; a new incompatible table is a new `version`.
+    /// The type comes from [`#[service]`](macro@crate::service), and the
+    /// loader keeps its layout to check every user against.
     ///
     /// # Errors
     ///
-    /// [`Off`] when another mod already publishes the name and version.
+    /// [`Off`] when another mod publishes the same name and major.
     ///
     /// # Examples
     ///
     /// ```
-    /// #[repr(C)]
-    /// struct Prices {
-    ///     price: extern "system" fn(item: u32) -> u32,
+    /// #[enshwick_loader_api::service(name = "trading-post.prices")]
+    /// pub struct Prices {
+    ///     pub price: extern "system" fn(item: u32) -> u32,
     /// }
     ///
     /// extern "system" fn price(_item: u32) -> u32 {
@@ -887,60 +888,237 @@ impl Load<'_> {
     /// static PRICES: Prices = Prices { price };
     ///
     /// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
-    ///     load.publish("trading-post.prices", 1, &PRICES)
+    ///     load.publish(&PRICES)
     /// }
     /// ```
-    pub fn publish<T: Sync>(
-        &mut self,
-        name: &str,
-        version: u32,
-        table: &'static T,
-    ) -> Result<(), Off> {
-        let status = (self.api().publish)(
-            self.host.handle(),
-            Str::new(name),
-            version,
-            core::ptr::from_ref(table).cast(),
-        );
-        ok(status, (), || format!("service {name} v{version}"))
+    pub fn publish<T: Service>(&mut self, table: &'static T) -> Result<(), Off> {
+        services_offered(self.api())?;
+        let spec = service_spec::<T>(core::ptr::from_ref(table).cast());
+        let status = (self.api().publish)(self.host.handle(), &raw const spec);
+        ok(status, (), || {
+            format!(
+                "service {} v{}: published by another mod",
+                T::NAME,
+                T::MAJOR
+            )
+        })
     }
 
-    /// A service another mod published.
+    /// The service `T` declares, published by another mod, once the loader
+    /// has checked that the published table starts with every field of
+    /// `T`.
     ///
-    /// # Safety
-    ///
-    /// `T` must be the exact table type the publisher declared for `name` and
-    /// `version`.
+    /// A publisher built against a longer declaration serves this mod; one
+    /// built against a shorter declaration does not, and the error names
+    /// the first field it lacks.
     ///
     /// # Errors
     ///
-    /// [`Off`] when no loaded mod publishes the service; declare the publisher
-    /// as a dependency so it loads first.
+    /// [`Off`] with the reason when no running mod publishes the service,
+    /// or the published table lacks or changed a field of `T`. Declare the
+    /// publisher in `requires` so it loads first.
     ///
     /// # Examples
     ///
     /// ```
-    /// #[repr(C)]
-    /// struct Prices {
-    ///     price: extern "system" fn(item: u32) -> u32,
+    /// #[enshwick_loader_api::service(name = "trading-post.prices")]
+    /// pub struct Prices {
+    ///     pub price: extern "system" fn(item: u32) -> u32,
     /// }
     ///
     /// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
-    ///     // SAFETY: `Prices` is the table `trading-post` publishes as v1.
-    ///     let prices: &'static Prices = unsafe { load.service("trading-post.prices", 1)? };
+    ///     let prices: &'static Prices = load.service()?;
     ///     let _ = (prices.price)(0);
     ///     Ok(())
     /// }
     /// ```
-    pub unsafe fn service<T>(&self, name: &str, version: u32) -> Result<&'static T, Off> {
-        let mut out = core::ptr::null();
-        let status =
-            (self.api().service)(self.host.handle(), Str::new(name), version, &raw mut out);
-        ok(status, (), || format!("service {name} v{version}"))?;
-        // SAFETY: the publisher handed a `'static` table of type `T`, as the
-        // caller guarantees.
-        unsafe { out.cast::<T>().as_ref() }.ok_or_else(|| Off::new(format!("service {name}: null")))
+    pub fn service<T: Service>(&self) -> Result<&'static T, Off> {
+        self.find_service::<T>()
+            .map_err(|(_, reason)| Off::new(reason))
     }
+
+    /// The service `T` declares when a running mod publishes a table that
+    /// serves it, `None` otherwise: for a service the mod can do without,
+    /// with the publisher in `after`. A table that does not serve `T` is
+    /// logged as a warning.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// #[enshwick_loader_api::service(name = "trading-post.prices")]
+    /// pub struct Prices {
+    ///     pub price: extern "system" fn(item: u32) -> u32,
+    /// }
+    ///
+    /// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+    ///     if let Some(prices) = load.optional_service::<Prices>() {
+    ///         let _ = (prices.price)(0);
+    ///     }
+    ///     Ok(())
+    /// }
+    /// ```
+    #[must_use]
+    pub fn optional_service<T: Service>(&self) -> Option<&'static T> {
+        match self.find_service::<T>() {
+            Ok(table) => Some(table),
+            Err((status, reason)) => {
+                let level = if status == Status::MISSING {
+                    crate::abi::Level::DEBUG
+                } else {
+                    crate::abi::Level::WARN
+                };
+                self.host.log(level, &reason);
+                None
+            }
+        }
+    }
+
+    fn find_service<T: Service>(&self) -> Result<&'static T, (Status, String)> {
+        services_offered(self.api()).map_err(|off| (Status::MISSING, off.to_string()))?;
+        let spec = service_spec::<T>(core::ptr::null());
+        let mut found = crate::abi::ServiceFound::EMPTY;
+        let status = (self.api().service)(self.host.handle(), &raw const spec, &raw mut found);
+        let what = format!("service {} v{}", T::NAME, T::MAJOR);
+        if !status.is_ok() {
+            // SAFETY: the loader keeps the reason for the process.
+            let reason = unsafe { found.reason.as_str() }.unwrap_or_default();
+            return Err((
+                status,
+                if reason.is_empty() {
+                    format!("{what}: not found")
+                } else {
+                    format!("{what}: {reason}")
+                },
+            ));
+        }
+        // SAFETY: the loader checked the published layout starts with
+        // every field of `T`, and tables are `'static`.
+        unsafe { found.table.cast::<T>().as_ref() }
+            .ok_or_else(|| (Status::MISSING, format!("{what}: null table")))
+    }
+
+    /// Defines the mod event `E` for other mods to subscribe to, and returns
+    /// the [`Emitter`] that sends it.
+    ///
+    /// `E` comes from [`#[event]`](macro@crate::event), named after this
+    /// mod: `<id>.<what>`.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] when the name is outside this mod's id or defined twice.
+    ///
+    /// # Examples
+    ///
+    /// See [`Emitter`].
+    pub fn define_event<E: ModEvent>(&mut self) -> Result<Emitter<E>, Off> {
+        services_offered(self.api())?;
+        let spec = event_spec::<E>();
+        let mut id = 0;
+        let status = (self.api().define_event)(self.host.handle(), &raw const spec, &raw mut id);
+        ok(status, Emitter::new(self.host, id), || {
+            format!(
+                "event {}: named after another mod or defined twice",
+                E::NAME
+            )
+        })
+    }
+
+    /// Calls `handler` on every mod event `E` another mod sends, on the
+    /// sending thread. A panic in `handler` turns this mod off.
+    ///
+    /// The loader matches the subscription once every mod is initialised:
+    /// with no running mod defining `E`, or a definition that lacks or
+    /// changed a field of `E`, it logs why and the handler stays idle.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] when called after `init`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// #[enshwick_loader_api::event(name = "trading-post.sold")]
+    /// #[derive(Clone, Copy, Debug)]
+    /// pub struct Sold {
+    ///     pub item: u32,
+    /// }
+    ///
+    /// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+    ///     load.on_mod_event(|sold: &Sold| enshwick_loader_api::info!("sold {}", sold.item))
+    /// }
+    /// ```
+    pub fn on_mod_event<E: ModEvent>(
+        &mut self,
+        handler: impl Fn(&E) + Send + Sync + 'static,
+    ) -> Result<(), Off> {
+        subscribe_mod_event(self.host, handler)
+    }
+}
+
+/// Subscribes `handler` to the mod event `E`.
+fn subscribe_mod_event<E: ModEvent, F: Fn(&E) + Send + Sync + 'static>(
+    host: Host,
+    handler: F,
+) -> Result<(), Off> {
+    services_offered(host.api())?;
+    let spec = event_spec::<E>();
+    hand_over(
+        handler,
+        |user| {
+            (host.api().subscribe_event)(
+                host.handle(),
+                &raw const spec,
+                deliver_mod_event::<E, F>,
+                user,
+            )
+        },
+        &format!("event {}", E::NAME),
+    )
+}
+
+/// Whether the loader has typed services and mod events.
+fn services_offered(api: &HostApi) -> Result<(), Off> {
+    offered(
+        api,
+        core::mem::offset_of!(HostApi, send_event),
+        "services and mod events",
+    )
+}
+
+/// The ABI description of the service `T`, with `table` or null.
+fn service_spec<T: Service>(table: *const c_void) -> crate::abi::ServiceSpec {
+    crate::abi::ServiceSpec {
+        header: crate::abi::Header::of::<crate::abi::ServiceSpec>(),
+        name: crate::services::name(T::NAME),
+        major: T::MAJOR,
+        layout: crate::services::layout(T::LAYOUT, size_of::<T>()),
+        table,
+    }
+}
+
+/// The ABI description of the mod event `E`.
+fn event_spec<E: ModEvent>() -> crate::abi::EventSpec {
+    crate::abi::EventSpec {
+        header: crate::abi::Header::of::<crate::abi::EventSpec>(),
+        name: crate::services::name(E::NAME),
+        layout: crate::services::layout(E::LAYOUT, size_of::<E>()),
+    }
+}
+
+/// Runs a mod event handler; `user` is the handler boxed by
+/// `Load::on_mod_event`, alive for the process.
+unsafe extern "system" fn deliver_mod_event<E: ModEvent, F: Fn(&E)>(
+    data: *const c_void,
+    user: *mut c_void,
+) {
+    // SAFETY: `user` is the leaked `Box<F>` this function was subscribed with.
+    let handler = unsafe { &*user.cast::<F>() };
+    // SAFETY: the loader checked the sender's layout starts with every
+    // field of `E`, and the data lives for the call.
+    let Some(event) = (unsafe { data.cast::<E>().as_ref() }) else {
+        return;
+    };
+    crate::host::guard("panic in a mod event handler", || (), || handler(event));
 }
 
 /// The startup values the mod read in [`Load::config`], as an inline table;

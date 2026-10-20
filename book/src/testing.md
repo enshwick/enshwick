@@ -168,7 +168,7 @@ Every method of `FakeHost` takes and returns the builder.
 | `loaded(info)`                       | A loaded mod that `enshwick_loader_api::mods()` lists.                                |
 | `join_missing(info)`                 | A server mod that `enshwick_loader_api::mods::join_missing()` lists.                  |
 | `foreign_command(name, reply)`       | The reply of a command another mod or the loader answers, for `commands::run`.        |
-| `service(name, version, table)`      | A service another mod publishes; the table must stay valid while installed.           |
+| `service(&TABLE)`                    | A service another mod publishes, typed by its `#[service]` declaration.               |
 | `refuse_hook(target)`                | Refuses hooks on a target, as when another mod holds it exclusively.                  |
 | `code(bytes)`                        | The game's code section, for pattern searches.                                        |
 | `workshop_recipes(limit)`            | The most recipes one workshop takes; 512 by default, `u32::MAX` for lifted.           |
@@ -209,7 +209,9 @@ What the mod asked for, each in order:
 | `game_event_types()`   | The game event types asked for, by hash; 0 for every type.             |
 | `destroyed()`          | The entities the mod asked the world to destroy.                       |
 | `saves()`              | How many saves the mod asked for.                                      |
-| `published()`          | `(name, version)` of each service published.                           |
+| `published()`          | `(name, major)` of each service published.                             |
+| `defined_events()`     | The names of the mod events defined.                                   |
+| `sent_events()`        | The names of the mod events sent.                                      |
 | `status()`             | The lines the mod's status sources give now.                           |
 | `settings_defaults()`  | The defaults the mod passed each time it read its settings.            |
 | `reported_synced()`    | The join values the mod reported each time it read its settings.       |
@@ -224,6 +226,7 @@ Playing the game:
 | `raise::<E>(&data)`               | Raises an event to the mod's handlers on this thread; returns how many ran. |
 | `raise_raw(event, data)`          | The same for a raw `Event` id; `unsafe`.                                    |
 | `raise_game_event(hash, bytes)`   | Hands a game event to the mod's handlers; returns how many ran.             |
+| `send_mod_event(&event)`          | Sends another mod's event to the mod's handlers; returns how many ran.      |
 | `set_settings(text)`              | Replaces the settings file's text; raise `SettingsChanged` after it.        |
 | `set_server_synced(values)`       | Sets the joined server's join values; raise `SettingsChanged` after it.     |
 | `command(name, &player, args)`    | Runs the mod's chat command; its reply, or `None` without such a command.   |

@@ -7,13 +7,13 @@ use std::sync::{Mutex, MutexGuard, PoisonError};
 use crate::abi::{
     ActiveBuff, AltarInfo, AltarLimitFn, AltarZoneSize, BedCheckFn, BuffRequest, BuffTypeInfo,
     BuildCheckFn, BuildInfo, CallerFrame, ComfortFn, CommandCallFn, ConfigCheckFn, CraftCheckFn,
-    DamageFilterFn, DaytimeInfo, EntityPlace, Event, EventFn, ExperiencePassFn, GameEventFn,
-    Header, HookSpec, HostApi, InteractionFn, InventoryRequest, InventoryResultFn, ItemData,
-    KnowledgeInfo, Level, MidHookFn, MidHookSpec, ModHandle, ModInfo, NetMessageFn, PlayerInfo,
-    RenameCallFn, ResourceKey, ResourcePatchFn, Side, SkillCheckFn, SpawnRequest, Status, StatusFn,
-    Str, SummonFn, SurvivorLookupFn, SurvivorStatusFn, TeleportRequest, TerrainEdit,
-    TerrainMaterialInfo, UiAnswerFn, UiDialog, UiFrameFn, UiMarker, UiWidget, WeatherFront,
-    ZoneCheckFn,
+    DamageFilterFn, DaytimeInfo, EntityPlace, Event, EventFn, EventSpec, ExperiencePassFn,
+    GameEventFn, Header, HookSpec, HostApi, InteractionFn, InventoryRequest, InventoryResultFn,
+    ItemData, KnowledgeInfo, Level, MidHookFn, MidHookSpec, ModEventFn, ModHandle, ModInfo,
+    NetMessageFn, PlayerInfo, RenameCallFn, ResourceKey, ResourcePatchFn, ServiceFound,
+    ServiceSpec, Side, SkillCheckFn, SpawnRequest, Status, StatusFn, Str, SummonFn,
+    SurvivorLookupFn, SurvivorStatusFn, TeleportRequest, TerrainEdit, TerrainMaterialInfo,
+    UiAnswerFn, UiDialog, UiFrameFn, UiMarker, UiWidget, WeatherFront, ZoneCheckFn,
 };
 
 use super::{FakeHost, LinkedHook, ServedResource, SubmittedRequest};
@@ -24,6 +24,9 @@ pub(crate) struct OpenRequest {
     pub(crate) done: InventoryResultFn,
     pub(crate) user: usize,
 }
+
+/// A mod event handler: name, layout, handler and the mod's pointer.
+pub(crate) type ModEventSubscription = (String, Vec<(String, u64)>, ModEventFn, usize);
 
 /// What the installed fake answers and what it has recorded.
 pub(crate) struct State {
@@ -39,7 +42,13 @@ pub(crate) struct State {
     pub(crate) served: Vec<(ServedResource, ResourcePatchFn, usize)>,
     pub(crate) texts: Vec<(u32, u32, String)>,
     pub(crate) code_patches: Vec<(u64, Vec<u8>, Vec<u8>)>,
-    pub(crate) published: Vec<(String, u32, usize)>,
+    pub(crate) published: Vec<super::FakeService>,
+    /// Mod events the mod defined: name and layout, by id.
+    pub(crate) defined_events: Vec<(String, Vec<(String, u64)>)>,
+    /// Mod event handlers: name, layout, handler, pointer.
+    pub(crate) mod_event_subscriptions: Vec<ModEventSubscription>,
+    /// The names of the mod events the mod sent, in order.
+    pub(crate) sent_events: Vec<String>,
     pub(crate) defaults: Vec<String>,
     pub(crate) synced: Vec<String>,
     pub(crate) commands: Vec<(String, String, CommandCallFn, usize)>,
@@ -179,6 +188,9 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         texts: Vec::new(),
         code_patches: Vec::new(),
         published: Vec::new(),
+        defined_events: Vec::new(),
+        mod_event_subscriptions: Vec::new(),
+        sent_events: Vec::new(),
         defaults: Vec::new(),
         synced: Vec::new(),
         inventory_requests: Vec::new(),
@@ -390,38 +402,139 @@ extern "system" fn settings(_me: ModHandle, defaults: Str, out: *mut Str) -> Sta
     found(served, out)
 }
 
-extern "system" fn publish(
-    _me: ModHandle,
-    name: Str,
-    version: u32,
-    table: *const c_void,
-) -> Status {
-    let name = text(name);
+/// The `(name, hash)` fields of a layout the safe layer passed.
+fn layout_of(layout: &crate::abi::Layout) -> Option<Vec<(String, u64)>> {
+    // SAFETY: the safe layer passes the layout of a declared type.
+    unsafe { crate::services::read_layout(layout) }
+}
+
+/// Borrowed `(name, hash)` pairs.
+pub(crate) fn view(fields: &[(String, u64)]) -> Vec<(&str, u64)> {
+    fields.iter().map(|(n, h)| (n.as_str(), *h)).collect()
+}
+
+extern "system" fn publish(_me: ModHandle, spec: *const ServiceSpec) -> Status {
+    // SAFETY: the safe layer passes a valid spec.
+    let Some(spec) = (unsafe { spec.as_ref() }) else {
+        return Status::BAD_ARGS;
+    };
+    let (name, Some(fields)) = (text(spec.name), layout_of(&spec.layout)) else {
+        return Status::BAD_ARGS;
+    };
     with(Status::MISSING, |s| {
-        if s.published.iter().any(|p| p.0 == name && p.1 == version) {
+        let taken = s
+            .published
+            .iter()
+            .any(|p| p.name == name && p.major == spec.major)
+            || s.host
+                .services
+                .iter()
+                .any(|p| p.name == name && p.major == spec.major);
+        if taken {
             return Status::REFUSED;
         }
-        s.published.push((name, version, table.expose_provenance()));
+        s.published.push(super::FakeService {
+            name,
+            major: spec.major,
+            fields,
+            table: spec.table.expose_provenance(),
+        });
         Status::OK
     })
 }
 
 extern "system" fn service(
     _me: ModHandle,
-    name: Str,
-    version: u32,
-    out: *mut *const c_void,
+    wanted: *const ServiceSpec,
+    out: *mut ServiceFound,
 ) -> Status {
-    let key = (text(name), version);
-    let table = with(None, |s| {
-        s.host.services.get(&key).copied().or_else(|| {
-            s.published
-                .iter()
-                .find(|p| p.0 == key.0 && p.1 == key.1)
-                .map(|p| p.2)
-        })
+    // SAFETY: the safe layer passes a valid spec.
+    let Some(wanted) = (unsafe { wanted.as_ref() }) else {
+        return Status::BAD_ARGS;
+    };
+    let (name, Some(fields)) = (text(wanted.name), layout_of(&wanted.layout)) else {
+        return Status::BAD_ARGS;
+    };
+    let answer = with(Err("no fake installed".to_owned()), |s| {
+        let offered = s
+            .host
+            .services
+            .iter()
+            .chain(&s.published)
+            .find(|p| p.name == name && p.major == wanted.major)
+            .ok_or_else(|| "no running mod publishes it".to_owned())?;
+        crate::services::compare(&view(&fields), &view(&offered.fields))
+            .map_err(|e| e.to_string())?;
+        Ok((offered.table, offered.fields.len()))
     });
-    found(table.map(core::ptr::with_exposed_provenance), out)
+    let mut found = ServiceFound::EMPTY;
+    let status = match answer {
+        Ok((table, count)) => {
+            found.table = core::ptr::with_exposed_provenance(table);
+            found.fields = u32::try_from(count).unwrap_or(u32::MAX);
+            found.owner = Str::new("fake");
+            Status::OK
+        }
+        Err(reason) => {
+            found.reason = Str::new(Box::leak(reason.into_boxed_str()));
+            Status::REFUSED
+        }
+    };
+    match put(out, found) {
+        Status::OK => status,
+        other => other,
+    }
+}
+
+extern "system" fn define_event(_me: ModHandle, spec: *const EventSpec, out: *mut u32) -> Status {
+    // SAFETY: the safe layer passes a valid spec.
+    let Some(spec) = (unsafe { spec.as_ref() }) else {
+        return Status::BAD_ARGS;
+    };
+    let (name, Some(fields)) = (text(spec.name), layout_of(&spec.layout)) else {
+        return Status::BAD_ARGS;
+    };
+    let id = with(None, |s| {
+        if s.defined_events.iter().any(|d| d.0 == name) {
+            return None;
+        }
+        s.defined_events.push((name, fields));
+        u32::try_from(s.defined_events.len() - 1).ok()
+    });
+    match id {
+        Some(id) => put(out, id),
+        None => Status::REFUSED,
+    }
+}
+
+extern "system" fn subscribe_event(
+    _me: ModHandle,
+    spec: *const EventSpec,
+    callback: ModEventFn,
+    user: *mut c_void,
+) -> Status {
+    // SAFETY: the safe layer passes a valid spec.
+    let Some(spec) = (unsafe { spec.as_ref() }) else {
+        return Status::BAD_ARGS;
+    };
+    let (name, Some(fields)) = (text(spec.name), layout_of(&spec.layout)) else {
+        return Status::BAD_ARGS;
+    };
+    with(Status::MISSING, |s| {
+        s.mod_event_subscriptions
+            .push((name, fields, callback, user.expose_provenance()));
+        Status::OK
+    })
+}
+
+extern "system" fn send_event(_me: ModHandle, event: u32, _data: *const c_void) -> Status {
+    with(Status::MISSING, |s| {
+        let Some(name) = s.defined_events.get(event as usize).map(|d| d.0.clone()) else {
+            return Status::BAD_ARGS;
+        };
+        s.sent_events.push(name);
+        Status::OK
+    })
 }
 
 extern "system" fn constant(_me: ModHandle, name: Str, out: *mut u64) -> Status {
@@ -2060,4 +2173,7 @@ pub(crate) static TABLE: HostApi = HostApi {
     stats_changed: super::stats::stats_changed,
     stat_sources: super::stats::stat_sources,
     stat_watch: super::stats::stat_watch,
+    define_event,
+    subscribe_event,
+    send_event,
 };

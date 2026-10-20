@@ -96,6 +96,7 @@ pub mod net;
 pub mod progress;
 pub mod raw;
 pub mod schedule;
+pub mod services;
 pub mod state;
 pub mod stats;
 pub mod status;
@@ -110,6 +111,29 @@ pub mod world;
 
 pub use abi::Registers;
 pub use enshwick_loader_macros::Config;
+/// Declares a mod event other mods subscribe to: the struct becomes
+/// `repr(C)` and implements [`services::ModEvent`] with a layout hash per
+/// field.
+///
+/// `#[event(name = "<defining mod id>.<what>")]`; the struct is `Copy`
+/// plain data and grows by appending fields, as a
+/// [`#[service]`](macro@service) table does.
+///
+/// # Examples
+///
+/// ```
+/// #[enshwick_loader_api::event(name = "trading-post.sold")]
+/// #[derive(Clone, Copy, Debug)]
+/// pub struct Sold {
+///     pub item: u32,
+///     pub price: u32,
+/// }
+///
+/// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+///     load.on_mod_event(|sold: &Sold| enshwick_loader_api::info!("sold {} for {}", sold.item, sold.price))
+/// }
+/// ```
+pub use enshwick_loader_macros::event;
 /// Declares a hook from its body, as [`detour!`] does: the function stays,
 /// and a static [`Hook`] named after it in upper case joins it.
 ///
@@ -135,6 +159,35 @@ pub use enshwick_loader_macros::Config;
 /// assert_eq!(UPGRADE.name(), "UPGRADE");
 /// ```
 pub use enshwick_loader_macros::hook;
+/// Declares a service table other mods use: the struct becomes `repr(C)`
+/// and implements [`services::Service`] with a layout hash per field, which
+/// the loader checks when a mod asks for the service.
+///
+/// `#[service(name = "<publisher id>.<what>", version = <major>)]`, the
+/// version 1 when left out. Fields are `extern "system" fn` pointers or
+/// plain data. Append fields to grow the table: users built against the
+/// shorter table keep working. Change a published field only with a new
+/// major. Types count as written, so keep one declaration both mods compile.
+///
+/// # Examples
+///
+/// ```
+/// #[enshwick_loader_api::service(name = "trading-post.prices", version = 1)]
+/// pub struct Prices {
+///     pub price: extern "system" fn(item: u32) -> u32,
+/// }
+///
+/// extern "system" fn price(_item: u32) -> u32 {
+///     3
+/// }
+///
+/// static PRICES: Prices = Prices { price };
+///
+/// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+///     load.publish(&PRICES)
+/// }
+/// ```
+pub use enshwick_loader_macros::service;
 pub use hook::{FnPtr, Hook, Next};
 pub use host::{Host, host};
 pub use load::{Load, Mod, Off};

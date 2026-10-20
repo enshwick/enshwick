@@ -5,6 +5,7 @@ members = [
     "crates/enshwick-loader-api",
     "crates/internal/*",
     "mods/*",
+    "examples/*",
 ]
 
 [workspace.package]
