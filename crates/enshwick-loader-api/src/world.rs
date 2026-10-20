@@ -6,7 +6,7 @@
 
 use core::ffi::c_void;
 
-use crate::abi::{HostApi, PlayerInfo, Status, Str};
+use crate::abi::{Header, HostApi, PlayerInfo, Status, Str};
 use crate::ecs::Entity;
 use crate::{Host, Load, Off};
 
@@ -72,6 +72,20 @@ impl Player {
     #[must_use]
     pub const fn is_admin(&self) -> bool {
         self.permissions & PlayerInfo::CAN_KICK_BAN != 0
+    }
+}
+
+/// A [`PlayerInfo`] for the loader to fill, its header naming this build's
+/// layout.
+fn blank_info() -> PlayerInfo {
+    PlayerInfo {
+        header: Header::of::<PlayerInfo>(),
+        slot: 0,
+        entity: 0,
+        key: 0,
+        permissions: 0,
+        name_len: 0,
+        name: [0; 64],
     }
 }
 
@@ -195,8 +209,7 @@ impl World {
     /// See [`World`].
     #[must_use]
     pub fn player(&self, entity: Entity) -> Option<Player> {
-        // SAFETY: plain data, valid when zeroed.
-        let mut info: PlayerInfo = unsafe { core::mem::zeroed() };
+        let mut info = blank_info();
         let status = (self.host.api().player)(self.host.handle(), entity.0, &raw mut info);
         status.is_ok().then(|| Player::from_info(&info))
     }
@@ -282,8 +295,7 @@ impl World {
     #[must_use]
     pub fn players(&self) -> Vec<Player> {
         const MAX: usize = 64;
-        // SAFETY: plain data, valid when zeroed.
-        let mut infos: [PlayerInfo; MAX] = unsafe { core::mem::zeroed() };
+        let mut infos = [blank_info(); MAX];
         let mut count = 0u32;
         let status = (self.host.api().players)(
             self.host.handle(),

@@ -560,6 +560,12 @@ impl BuildingData {
 
 /// A connected player, from [`HostApi::player`] or [`HostApi::players`].
 ///
+/// Unlike other structs with a [`Header`], its layout is frozen and it never
+/// grows: [`CommandCall`] and [`RenameCall`] carry it before fields of their
+/// own, and [`HostApi::players`] writes an array of it with no entry size.
+/// Player data a later minor adds goes into a new struct. The caller still
+/// starts each one it passes with [`Header::of`].
+///
 /// # Examples
 ///
 /// ```
@@ -2007,6 +2013,9 @@ const _: () = {
     assert!(size_of::<InventoryOpResult>() == 8);
     assert!(size_of::<InventoryResult>() == 24);
     assert!(size_of::<ItemData>() == 20);
+    // Frozen: embedded in calls and written as an array.
+    assert!(size_of::<PlayerInfo>() == 96);
+    assert!(core::mem::offset_of!(PlayerInfo, name) == 26);
     assert!(size_of::<Registers>() == 17 * 8);
     assert!(core::mem::offset_of!(Registers, rsp) == 4 * 8);
     assert!(core::mem::offset_of!(Registers, rflags) == 16 * 8);
