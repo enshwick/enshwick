@@ -41,6 +41,9 @@ const MAX_DEPTH: usize = 4;
 /// assert!(!allowed("mods/lanterns.toml"));
 /// assert!(!allowed("mods/../powrprof.dll"));
 /// assert!(!allowed("LICENSE"));
+/// assert!(allowed("mods/enshwick/enshwick.dll"));
+/// assert!(!allowed("mods/enshwick/dbghelp.dll"));
+/// assert!(!allowed("mods/ENSHWI~1.DLL"));
 /// ```
 #[must_use]
 pub fn allowed(name: &str) -> bool {
@@ -58,8 +61,13 @@ pub fn allowed(name: &str) -> bool {
             && !part.starts_with('.')
             && !part.ends_with('.')
             && !part.ends_with(' ')
+            // Windows reads `~` in an 8.3 short name and folds letters past
+            // ASCII without case: either could name another file than the
+            // one the checks compared.
             && part.chars().all(|c| {
-                !c.is_control() && !matches!(c, '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|')
+                c.is_ascii()
+                    && !c.is_ascii_control()
+                    && !matches!(c, '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|' | '~')
             })
     };
     let extension = |wanted: &str| {
@@ -68,15 +76,19 @@ pub fn allowed(name: &str) -> bool {
             .and_then(|file| Path::new(file).extension())
             .is_some_and(|e| e.eq_ignore_ascii_case(wanted))
     };
-    let pack_data = parts.len() >= 2
-        && !parts[0].eq_ignore_ascii_case(LOADER_DIR)
-        && (extension("toml") || extension("png"));
-    parts.len() <= MAX_DEPTH && parts.iter().all(plain) && (extension("dll") || pack_data)
+    let in_loader_dir = parts.len() >= 2 && parts[0].eq_ignore_ascii_case(LOADER_DIR);
+    let pack_data = parts.len() >= 2 && !in_loader_dir && (extension("toml") || extension("png"));
+    // The stub loads the loader with its folder searched first, so no other
+    // DLL may land there.
+    let dll = extension("dll") && (!in_loader_dir || name.eq_ignore_ascii_case(LOADER_FILE));
+    parts.len() <= MAX_DEPTH && parts.iter().all(plain) && (dll || pack_data)
 }
 
 /// The loader's folder under `mods/`, which only its own update writes DLLs
 /// into and no pack.
 const LOADER_DIR: &str = "enshwick";
+/// The loader's DLL, the one DLL its folder takes.
+const LOADER_FILE: &str = enshwick_loader_api::mods::LOADER_FILE;
 
 /// Whether an archive entry `name` is unsafe and refuses the archive: a path
 /// that could leave the game folder or reach the staging folder.
@@ -194,7 +206,9 @@ fn own_dll(
     let file_name = |path: &str| path.rsplit('/').next().unwrap_or(path).to_ascii_lowercase();
     let dlls: Vec<(usize, String)> = files
         .into_iter()
-        .filter(|(_, name)| is_dll(name) && name.starts_with("mods/"))
+        .filter(|(_, name)| {
+            is_dll(name) && name.starts_with("mods/") && name.matches('/').count() == 1
+        })
         .collect();
     let wanted = installed.map(file_name);
     let same = dlls
@@ -301,6 +315,13 @@ pub fn stage(
     };
     let files = plan(&names, installed, own)?;
     refuse_taken(&files, taken)?;
+    // A DLL in `mods/` that is not the mod's own belongs to a mod switched
+    // off or skipped, which the loader does not list.
+    let others: Vec<String> = dlls_on_disk(game)
+        .into_iter()
+        .filter(|file| installed.is_none_or(|own| !own.eq_ignore_ascii_case(file)))
+        .collect();
+    refuse_taken(&files, &others)?;
     // Scratch space of earlier runs goes first.
     let _gone = std::fs::remove_dir_all(scratch);
     let mut unpacked: Vec<(PathBuf, String)> = Vec::new();
@@ -334,6 +355,20 @@ pub fn stage(
     }
     let _gone = std::fs::remove_dir_all(scratch);
     Ok(unpacked.into_iter().map(|(_, to)| to).collect())
+}
+
+/// The DLLs directly in `game`'s `mods/` folder, as `mods/<file>`.
+fn dlls_on_disk(game: &Path) -> Vec<String> {
+    let Ok(entries) = std::fs::read_dir(game.join("mods")) else {
+        return Vec::new();
+    };
+    entries
+        .filter_map(Result::ok)
+        .filter(|entry| entry.file_type().is_ok_and(|t| t.is_file()))
+        .filter_map(|entry| entry.file_name().into_string().ok())
+        .filter(|name| is_dll(name))
+        .map(|name| format!("mods/{name}"))
+        .collect()
 }
 
 /// Entry `entry` of `zip`, named `name`, read up to the size limit.
@@ -473,6 +508,42 @@ fn write(path: &Path, bytes: &[u8]) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn an_update_never_writes_the_dll_of_a_mod_the_loader_does_not_list() {
+        let game = std::env::temp_dir().join(format!("enshwick-stage-off-{}", std::process::id()));
+        let _gone = std::fs::remove_dir_all(&game);
+        std::fs::create_dir_all(game.join("mods")).unwrap();
+        std::fs::write(game.join("mods/enshwick-safes.dll"), b"off").unwrap();
+        std::fs::write(game.join("mods/my_mod.dll"), b"old").unwrap();
+        let scratch = game.join("scratch");
+        let fresh = Download {
+            name: "enshwick-safes.dll",
+            bytes: b"other",
+        };
+        let refused = stage(fresh, None, true, &[], &game, &scratch);
+        assert!(refused.is_err(), "{refused:?}");
+        assert_eq!(
+            std::fs::read(game.join("mods/enshwick-safes.dll")).unwrap(),
+            b"off"
+        );
+        let own = Download {
+            name: "MY_MOD.dll",
+            bytes: b"new",
+        };
+        let staged = stage(own, Some("mods/my_mod.dll"), true, &[], &game, &scratch);
+        assert_eq!(staged, Ok(vec!["mods/my_mod.dll".to_owned()]));
+        let _gone = std::fs::remove_dir_all(&game);
+    }
+
+    #[test]
+    fn an_unsigned_update_takes_no_dll_below_mods() {
+        let names = ["mods/enshwick/x.dll".to_owned()];
+        assert!(plan(&names, None, true).is_err());
+        let deep = ["mods/pack/helper.dll".to_owned()];
+        assert!(plan(&deep, None, true).is_err());
+        assert!(plan(&deep, None, false).is_ok(), "a signed archive may");
+    }
+
     use std::io::Write as _;
 
     use super::*;
