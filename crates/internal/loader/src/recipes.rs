@@ -271,6 +271,18 @@ impl Index {
         Some(Self::new(recipes))
     }
 
+    /// The index with each recipe a content id names called by that id:
+    /// a mod's recipe is a copy of a vanilla one, debug name included.
+    #[must_use]
+    pub fn with_content(mut self, content: &HashMap<u32, String>) -> Self {
+        for recipe in &mut self.recipes {
+            if let Some(name) = content.get(&recipe.id) {
+                recipe.name.clone_from(name);
+            }
+        }
+        Self::new(self.recipes)
+    }
+
     /// Every recipe, in registry order.
     #[must_use]
     pub fn recipes(&self) -> &[Recipe] {
@@ -315,6 +327,16 @@ impl Names {
             names.workshop_items.insert(workshop, item);
         }
         names
+    }
+
+    /// The names with each item the game's data lacks, a mod's, called by
+    /// the content id that names it.
+    #[must_use]
+    pub fn with_content(mut self, content: &HashMap<u32, String>) -> Self {
+        for (&id, name) in content {
+            self.item_labels.entry(id).or_insert_with(|| name.clone());
+        }
+        self
     }
 
     /// The debug name of the item with game id `id`.
@@ -776,6 +798,41 @@ mod tests {
                 "Tool_Torch01_T0_bench ({}) at Craftingstation_Workbench, makes Tool_Torch01_T0",
                 index.recipes[1].guid
             )
+        );
+    }
+
+    #[test]
+    fn a_mods_copy_goes_by_its_content_id_and_leaves_the_vanilla_name_alone() {
+        let safe = Guid::named("safes:safe");
+        let copy = Guid::named("safes:safe.recipe");
+        let mut recipes = index().recipes;
+        recipes.push(Recipe {
+            guid: copy,
+            id: copy.id(),
+            name: "Block_Wood".to_owned(),
+            outputs: vec![safe.id()],
+            workshop: BENCH,
+        });
+        let content: HashMap<u32, String> = [
+            (copy.id(), "safes:safe.recipe".to_owned()),
+            (safe.id(), "safes:safe".to_owned()),
+        ]
+        .into();
+        let index = Index::new(recipes).with_content(&content);
+        let names = names().with_content(&content);
+        assert_eq!(
+            resolve(&rule(Kind::Recipe, "Block_Wood"), &index, &names),
+            Ok(vec![3])
+        );
+        assert_eq!(
+            resolve(&rule(Kind::Recipe, "safes:safe.recipe"), &index, &names),
+            Ok(vec![copy.id()])
+        );
+        let found = find(&index, &names, "safe");
+        assert_eq!(found.len(), 1);
+        assert_eq!(
+            describe(found[0], &names),
+            format!("safes:safe.recipe ({copy}) at Craftingstation_Workbench, makes safes:safe")
         );
     }
 

@@ -1,6 +1,7 @@
 //! Disabled recipes in the running game: the rules in force, the lookup's
 //! filter, the screen's question, the messages to clients and the command.
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, LazyLock, Mutex, OnceLock, PoisonError};
@@ -182,7 +183,8 @@ fn ensure_index(loader: &Loader) -> Option<Arc<Index>> {
     }
     let read = crate::archive::game()
         .and_then(|archive| archive.resource(&RECIPE_REGISTRY.key(types::RECIPE_REGISTRY)))
-        .and_then(|registry| Index::read(layout()?, &registry));
+        .and_then(|registry| Index::read(layout()?, &registry))
+        .map(|index| index.with_content(&content_names()));
     let Some(index) = read.map(Arc::new) else {
         live(|l| {
             if !l.unreadable {
@@ -206,15 +208,26 @@ fn names(loader: &Loader) -> Arc<Names> {
     if let Some(names) = live(|l| l.names.clone()) {
         return names;
     }
-    let names = Arc::new(read_names(loader).unwrap_or_else(|| {
+    let names = read_names(loader).unwrap_or_else(|| {
         crate::log!(
             WARN,
             "disabled recipes: item names do not read; name items and workshops by GUID"
         );
         Names::default()
-    }));
+    });
+    let names = Arc::new(names.with_content(&content_names()));
     live(|l| l.names = Some(Arc::clone(&names)));
     names
+}
+
+/// The mods' content ids by the game id of their GUID.
+fn content_names() -> HashMap<u32, String> {
+    crate::ids::with(|ids| {
+        ids.content()
+            .into_iter()
+            .filter_map(|(name, _)| Some((Guid::try_named(name)?.id(), name.to_owned())))
+            .collect()
+    })
 }
 
 fn read_names(loader: &Loader) -> Option<Names> {
@@ -369,7 +382,7 @@ pub(crate) fn registry_built(data: usize, len: usize) {
         );
         return;
     };
-    live(|l| l.index = Some(Arc::new(index)));
+    live(|l| l.index = Some(Arc::new(index.with_content(&content_names()))));
     DIRTY.store(true, Ordering::Release);
 }
 
@@ -646,12 +659,9 @@ fn change(
         _ => (loader.configs_dir.join(FILE), format!("mod-configs/{FILE}")),
     };
     let text = std::fs::read_to_string(&path).unwrap_or_default();
-    let written = edit_file(&text, kind, name, disable).and_then(|text| {
-        if let Some(dir) = path.parent() {
-            std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
-        }
-        std::fs::write(&path, text).map_err(|e| e.to_string())
-    });
+    // Through a rename: the poll never reads a half-written file.
+    let written = edit_file(&text, kind, name, disable)
+        .and_then(|text| crate::worlds::write_target(&path, &text).map_err(|e| e.to_string()));
     match written {
         Ok(()) => {
             DIRTY.store(true, Ordering::Release);
