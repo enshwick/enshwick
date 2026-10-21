@@ -137,6 +137,12 @@ in each world. Changes to world settings made before any world runs, as on
 the screen that creates or starts a world, wait in
 `mod-data/<id>/worlds/next.toml` and go into the next world that loads.
 
+While a world runs, the loader watches its settings file as it watches the
+settings file, and an edit reaches `on_config_change` about a second after it
+is saved. An edit of the settings file then changes only the `client`
+settings the mod reads, and the mod's log says where the world's settings
+are.
+
 ## The schema and `/config`
 
 [`Config::schema()`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/config.rs)
