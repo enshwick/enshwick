@@ -65,10 +65,11 @@ they are never released.
    how much it keeps is set in `mod-configs/enshwick.toml`. In game, "Mods" in
    the main menu and in the pause menu lists the mods.
 
-Players and their server need the same mods: the server advertises its mod set.
-A player's mods the server does not run are turned off for that session, with a
-note; a player who lacks a server mod, or has another version, is told which
-and does not join. To turn a mod off, set `enabled = false` for it in
+Players and their server need the same versions of the mods that count in the
+join check, which each mod's page names; the server advertises them. A
+player's such mods the server does not run are turned off for that session,
+with a note; a player who lacks one the server runs, or has another version,
+is told which and does not join. Other mods are each side's own. To turn a mod off, set `enabled = false` for it in
 `mods/enshwick/mods.toml`, which the loader writes on first start with every
 mod it finds; to remove one, delete its DLL from `mods/`; to remove Enshwick
 Loader, delete `powrprof.dll`. A server keeps the exact set that loaded, with
