@@ -17,6 +17,12 @@ mod tests {
 
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             let _texts = load.texts(TEXTS)?;
+            // As a pack's texts arrive after the mod's own.
+            let _more = load.texts(
+                "[en]
+\"lantern.name\" = \"Lantern\"
+",
+            )?;
             Ok(Self)
         }
     }
@@ -31,5 +37,6 @@ mod tests {
         assert_eq!(status, Status::OK);
         let kept = Texts::parse(&loader.published_texts().unwrap()).unwrap();
         assert_eq!(kept.get("config.limit", Language::UK_UA), Some("Ліміт"));
+        assert_eq!(kept.get("lantern.name", Language::UK_UA), Some("Lantern"));
     }
 }

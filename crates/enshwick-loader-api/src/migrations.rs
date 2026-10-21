@@ -281,14 +281,10 @@ pub(crate) fn parse_value(text: &str) -> Result<toml::Value, String> {
 
 /// A TOML value as text, as the loader takes a setting back.
 pub(crate) fn write_value(value: &toml::Value) -> Result<String, String> {
-    let mut table = toml::Table::new();
-    table.insert("v".to_owned(), value.clone());
-    let text = toml::to_string(&table).map_err(|e| e.to_string())?;
-    Ok(text
-        .trim_end()
-        .strip_prefix("v = ")
-        .unwrap_or(text.trim_end())
-        .to_owned())
+    // `Display` writes a value inline, tables and arrays of tables too.
+    let text = value.to_string();
+    parse_value(&text)?;
+    Ok(text)
 }
 
 /// The mod's migrations, kept for the process: the loader calls their maps.
@@ -302,14 +298,35 @@ static KEPT: OnceLock<Kept> = OnceLock::new();
 /// The GUIDs content the mod adds under `guid` was saved under before, by
 /// its migrations.
 pub(crate) fn old_guids(guid: Guid) -> Vec<Guid> {
-    KEPT.get().map_or_else(Vec::new, |kept| {
-        kept.list
-            .iter()
-            .flat_map(|m| &m.steps)
-            .filter(|s| s.kind == MigrationStep::RENAME_CONTENT && s.to_guid == guid)
-            .map(|s| s.from_guid)
-            .collect()
-    })
+    KEPT.get()
+        .map_or_else(Vec::new, |kept| renamed_to(&kept.list, guid))
+}
+
+/// Every GUID a chain of renames in `list` leads from to `guid`.
+fn renamed_to(list: &[Migration], guid: Guid) -> Vec<Guid> {
+    let mut found: Vec<Guid> = Vec::new();
+    let mut at = 0;
+    let mut wanted = guid;
+    loop {
+        for (from, to) in renames(list) {
+            if to == wanted && from != guid && !found.contains(&from) {
+                found.push(from);
+            }
+        }
+        let Some(&next) = found.get(at) else {
+            return found;
+        };
+        wanted = next;
+        at += 1;
+    }
+}
+
+/// The content renames of `list`, old GUID to new, in order.
+fn renames(list: &[Migration]) -> impl Iterator<Item = (Guid, Guid)> + '_ {
+    list.iter()
+        .flat_map(|m| &m.steps)
+        .filter(|s| s.kind == MigrationStep::RENAME_CONTENT)
+        .map(|s| (s.from_guid, s.to_guid))
 }
 
 /// The game id content saved as `id` has now: the id of the content the
@@ -335,14 +352,20 @@ pub(crate) fn old_guids(guid: Guid) -> Vec<Guid> {
 /// ```
 #[must_use]
 pub fn current_id(id: u32) -> u32 {
-    KEPT.get()
-        .and_then(|kept| {
-            kept.list
-                .iter()
-                .flat_map(|m| &m.steps)
-                .find(|s| s.kind == MigrationStep::RENAME_CONTENT && s.from_guid.id() == id)
-        })
-        .map_or(id, |s| s.to_guid.id())
+    KEPT.get().map_or(id, |kept| renamed_from(&kept.list, id))
+}
+
+/// The id at the end of the chain of renames in `list` that starts at
+/// `id`: as many hops as there are renames, so a cycle ends.
+fn renamed_from(list: &[Migration], id: u32) -> u32 {
+    let mut current = id;
+    for _ in renames(list) {
+        match renames(list).find(|(from, _)| from.id() == current) {
+            Some((_, to)) if to.id() != current && to.id() != id => current = to.id(),
+            _ => break,
+        }
+    }
+    current
 }
 
 /// Runs a step's map for the loader.
@@ -463,16 +486,43 @@ impl Load<'_> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Migrations, parse_value, write_value};
+    use super::{Migrations, parse_value, renamed_from, renamed_to, write_value};
     use crate::content::Guid;
 
     #[test]
     fn values_round_trip_as_text() {
-        for text in ["5", "true", "\"text\"", "[1, 2]", "1.5"] {
+        for text in [
+            "5",
+            "true",
+            "\"text\"",
+            "[1, 2]",
+            "1.5",
+            "{ a = 1 }",
+            "[{ a = 1 }, { b = \"x\" }]",
+        ] {
             let value = parse_value(text).unwrap();
             assert_eq!(write_value(&value).unwrap(), text);
         }
         assert!(parse_value("not toml [").is_err());
+    }
+
+    #[test]
+    fn renames_follow_their_chain_both_ways() {
+        let (a, b, c) = (Guid::named("t:a"), Guid::named("t:b"), Guid::named("t:c"));
+        let list = Migrations::new()
+            .add("2", |m| m.rename_content(a, b))
+            .add("3", |m| m.rename_content(b, c))
+            .list;
+        assert_eq!(renamed_from(&list, a.id()), c.id());
+        assert_eq!(renamed_from(&list, b.id()), c.id());
+        assert_eq!(renamed_from(&list, c.id()), c.id());
+        assert_eq!(renamed_to(&list, c), [b, a]);
+        let cycle = Migrations::new()
+            .add("2", |m| m.rename_content(a, b))
+            .add("3", |m| m.rename_content(b, a))
+            .list;
+        assert_eq!(renamed_from(&cycle, a.id()), b.id());
+        assert_eq!(renamed_to(&cycle, a), [b]);
     }
 
     #[test]
