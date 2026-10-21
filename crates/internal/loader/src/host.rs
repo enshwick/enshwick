@@ -570,10 +570,7 @@ impl Loader {
         };
         let late = crate::reload::late();
         let late = late.as_ref().map_or(&[][..], |late| late.as_slice());
-        let first = delivery.partition_point(|s| s.event.0 < event.0);
-        let end = delivery.partition_point(|s| s.event.0 <= event.0);
-        let sealed = delivery.get(first..end).unwrap_or_default();
-        for subscription in sealed.iter().chain(late).filter(|s| {
+        for subscription in of_event(delivery, event).iter().chain(late).filter(|s| {
             s.event == event
                 && only.is_none_or(|only| only == s.owner)
                 && self
@@ -3693,9 +3690,51 @@ pub(crate) fn handle(index: usize) -> ModHandle {
 #[cfg(test)]
 mod headed_tests;
 
+/// The subscriptions to `event` among `sealed`, which are sorted by event.
+fn of_event(sealed: &[Subscription], event: Event) -> &[Subscription] {
+    let first = sealed.partition_point(|s| s.event.0 < event.0);
+    let end = sealed.partition_point(|s| s.event.0 <= event.0);
+    sealed.get(first..end).unwrap_or_default()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_raise_walks_its_event_s_subscriptions_in_their_order() {
+        unsafe extern "system" fn handler(
+            _: Event,
+            _: *const core::ffi::c_void,
+            _: *mut core::ffi::c_void,
+        ) {
+        }
+        let made = |owner, event| Subscription {
+            owner,
+            event,
+            callback: handler,
+            user: 0,
+            generation: 0,
+        };
+        let mut sealed = vec![
+            made(2, Event::TICK),
+            made(0, Event::WORLD_SAVED),
+            made(1, Event::TICK),
+            made(0, Event::TICK),
+            made(1, Event::SETTINGS_CHANGED),
+        ];
+        sealed.sort_by_key(|s| s.event.0);
+        let owners = |event| {
+            of_event(&sealed, event)
+                .iter()
+                .map(|s| s.owner)
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(owners(Event::TICK), [2, 1, 0]);
+        assert_eq!(owners(Event::WORLD_SAVED), [0]);
+        assert_eq!(owners(Event::SETTINGS_CHANGED), [1]);
+        assert!(owners(Event::SHUTDOWN).is_empty());
+    }
 
     fn read(text: Str) -> Option<&'static str> {
         // SAFETY: the tests read texts of stores that live to their end.
