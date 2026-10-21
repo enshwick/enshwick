@@ -870,7 +870,10 @@ impl Engine {
         }
         config.u8(0xc00, u8::try_from(count).unwrap_or(0));
         config.u8(0xc74, u8::from(!read_only));
-        let mut value = i32::try_from(index).unwrap_or(0);
+        // An index past the entries, "none", stays inside the config the
+        // game reads the shown entry from.
+        let shown = index.min(u32::try_from(count.min(MAX_ENTRIES - 1)).unwrap_or(0));
+        let mut value = i32::try_from(shown).unwrap_or(0);
         // SAFETY: the config the constructor made with its entries, the value.
         let changed =
             unsafe { (self.dropdown)(config.ptr(), &raw mut value, core::ptr::null_mut()) } != 0;
