@@ -131,4 +131,5 @@ and on each world. `clones.toml` there records
 every template and item a mod cloned, with its vanilla source. When no mod
 serves a cloned template any more, the game reads the vanilla template under
 the clone's GUID, so a placed object of a removed mod loads as the vanilla
-object it was cloned from. See [Content](content.md).
+object it was cloned from, and an item of a removed mod stays as a stand-in
+until the mod is back. See [Content](content.md#when-a-mod-is-removed).

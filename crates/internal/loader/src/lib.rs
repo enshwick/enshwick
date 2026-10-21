@@ -93,6 +93,7 @@ pub mod settings;
 #[cfg(windows)]
 mod spawns;
 #[cfg(windows)]
+mod standins;
 mod start;
 #[cfg(windows)]
 pub use start::{DryMod, DryRun, dry_run};

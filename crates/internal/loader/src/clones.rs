@@ -4,8 +4,9 @@
 //! any more, the game reads the vanilla template under the clone's GUID, so a
 //! saved station loads as the vanilla station.
 //!
-//! Items are recorded too, for a later fallback: an item stack keeps only its
-//! item id, and the game drops ids it does not know.
+//! Items are recorded too: an item stack keeps only its item id, and the
+//! game drops ids it does not know, so [`crate::standins`] serves a
+//! stand-in for each recorded item no mod serves.
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -70,6 +71,22 @@ fn guid(text: &str) -> Option<Guid> {
         });
     // Checked above, so the parse cannot fail.
     well_formed.then(|| Guid::parse(text))
+}
+
+/// The cloned items of the record in `data_dir`: item GUID and vanilla
+/// GUID, in memory order; none without a record.
+pub(crate) fn items(data_dir: &Path) -> Vec<([u8; 16], [u8; 16])> {
+    std::fs::read_to_string(data_dir.join(FILE))
+        .ok()
+        .and_then(|text| toml::from_str::<Clones>(&text).ok())
+        .map(|clones| {
+            clones
+                .items
+                .iter()
+                .filter_map(|(item, vanilla)| Some((guid(item)?.0, guid(vanilla)?.0)))
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 /// Reads the record in `data_dir`, adds `served` and writes it back when it
