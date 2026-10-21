@@ -18,18 +18,21 @@ use iced_x86::{
     BlockEncoder, BlockEncoderOptions, Decoder, DecoderOptions, FlowControl, Instruction,
     InstructionBlock,
 };
-use windows_sys::Win32::Foundation::{CloseHandle, HANDLE};
+use windows_sys::Win32::Foundation::{CloseHandle, HANDLE, INVALID_HANDLE_VALUE};
 use windows_sys::Win32::System::Diagnostics::Debug::{
     CONTEXT, CONTEXT_CONTROL_AMD64, FlushInstructionCache, GetThreadContext, SetThreadContext,
+};
+use windows_sys::Win32::System::Diagnostics::ToolHelp::{
+    CreateToolhelp32Snapshot, TH32CS_SNAPTHREAD, THREADENTRY32, Thread32First, Thread32Next,
 };
 use windows_sys::Win32::System::Memory::{
     MEM_COMMIT, MEM_FREE, MEM_RESERVE, MEMORY_BASIC_INFORMATION, PAGE_EXECUTE_READ,
     PAGE_EXECUTE_READWRITE, PAGE_READWRITE, VirtualAlloc, VirtualProtect, VirtualQuery,
 };
 use windows_sys::Win32::System::Threading::{
-    GetCurrentProcess, GetCurrentThreadId, GetThreadId, ResumeThread, SuspendThread,
-    THREAD_GET_CONTEXT, THREAD_QUERY_LIMITED_INFORMATION, THREAD_SET_CONTEXT,
-    THREAD_SUSPEND_RESUME,
+    GetCurrentProcess, GetCurrentProcessId, GetCurrentThreadId, GetThreadId, OpenThread,
+    ResumeThread, SuspendThread, THREAD_GET_CONTEXT, THREAD_QUERY_LIMITED_INFORMATION,
+    THREAD_SET_CONTEXT, THREAD_SUSPEND_RESUME,
 };
 
 use crate::settings::LOADER_ID;
@@ -307,7 +310,7 @@ fn write_all(prepared: &[&Pending], code: &[Bytes<'_>]) -> bool {
     let mut protections = Vec::with_capacity(writes.len());
     let mut threads = Threads::new();
     let mut tries = 0;
-    loop {
+    let unsettled = loop {
         if !threads.suspend() {
             threads.resume();
             return false;
@@ -317,19 +320,12 @@ fn write_all(prepared: &[&Pending], code: &[Bytes<'_>]) -> bool {
                 .iter()
                 .any(|thread| in_flight(thread, &patched, &returns));
         if !busy || tries == SETTLE_TRIES {
-            if busy {
-                crate::log::write(
-                    Level::WARN,
-                    LOADER_ID,
-                    "a thread still stands in or returns into the code being patched",
-                );
-            }
-            break;
+            break busy;
         }
         threads.resume();
         tries += 1;
         std::thread::sleep(SETTLE_WAIT);
-    }
+    };
     let mut writable = true;
     for &(address, bytes) in &writes {
         let mut old = 0;
@@ -368,6 +364,13 @@ fn write_all(prepared: &[&Pending], code: &[Bytes<'_>]) -> bool {
         }
     }
     threads.resume();
+    if unsettled {
+        crate::log::write(
+            Level::WARN,
+            LOADER_ID,
+            "code patched while a thread still stood in or returned into it",
+        );
+    }
     writable
 }
 
@@ -578,7 +581,8 @@ impl Threads {
                 }
                 if status < 0 {
                     if self.held.is_empty() && status != NO_MORE_ENTRIES {
-                        return false;
+                        // A system without the call, such as an old Wine.
+                        return self.suspend_listed(me, access);
                     }
                     break;
                 }
@@ -603,6 +607,49 @@ impl Threads {
                 return true;
             }
         }
+    }
+
+    /// Suspends the other threads a snapshot lists, once: a thread started
+    /// meanwhile stays running.
+    fn suspend_listed(&mut self, me: u32, access: u32) -> bool {
+        // SAFETY: no preconditions.
+        let process = unsafe { GetCurrentProcessId() };
+        // SAFETY: a thread snapshot of the system.
+        let snapshot = unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0) };
+        if snapshot == INVALID_HANDLE_VALUE {
+            return false;
+        }
+        let mut entry = THREADENTRY32 {
+            dwSize: u32::try_from(size_of::<THREADENTRY32>()).unwrap_or(0),
+            cntUsage: 0,
+            th32ThreadID: 0,
+            th32OwnerProcessID: 0,
+            tpBasePri: 0,
+            tpDeltaPri: 0,
+            dwFlags: 0,
+        };
+        // SAFETY: a valid snapshot and entry.
+        let mut more = unsafe { Thread32First(snapshot, &raw mut entry) } != 0;
+        while more && self.held.len() < self.held.capacity() {
+            let id = entry.th32ThreadID;
+            if entry.th32OwnerProcessID == process && id != me {
+                // SAFETY: opening a thread of our own process.
+                let thread = unsafe { OpenThread(access, 0, id) };
+                // SAFETY: a thread of our own process, opened with suspend
+                // rights; a null handle fails the call.
+                if !thread.is_null() && unsafe { SuspendThread(thread) } != u32::MAX {
+                    self.held.push((thread, id));
+                } else if !thread.is_null() {
+                    // SAFETY: opened above, not kept.
+                    unsafe { CloseHandle(thread) };
+                }
+            }
+            // SAFETY: as above.
+            more = unsafe { Thread32Next(snapshot, &raw mut entry) } != 0;
+        }
+        // SAFETY: the snapshot is ours.
+        unsafe { CloseHandle(snapshot) };
+        !more
     }
 
     /// The suspended threads.
@@ -836,5 +883,48 @@ mod tests {
             bytes: &bytes,
         }];
         assert_eq!(patch_returns(&patch), [code + 2]);
+    }
+
+    /// Whether a thread counting on its own stands still while `threads`
+    /// holds it, and counts again once they are resumed.
+    fn stops_and_goes(suspend: impl FnOnce(&mut Threads) -> bool) -> bool {
+        let count = std::sync::Arc::new(AtomicU32::new(0));
+        let stop = std::sync::Arc::new(AtomicU32::new(0));
+        let counting = {
+            let (count, stop) = (std::sync::Arc::clone(&count), std::sync::Arc::clone(&stop));
+            std::thread::spawn(move || {
+                while stop.load(Ordering::Relaxed) == 0 {
+                    count.fetch_add(1, Ordering::Relaxed);
+                }
+            })
+        };
+        while count.load(Ordering::Relaxed) == 0 {
+            std::thread::yield_now();
+        }
+        let mut threads = Threads::new();
+        let suspended = suspend(&mut threads);
+        let before = count.load(Ordering::Relaxed);
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        let still = count.load(Ordering::Relaxed) == before;
+        threads.resume();
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        let moves = count.load(Ordering::Relaxed) != before;
+        stop.store(1, Ordering::Relaxed);
+        counting.join().unwrap();
+        suspended && still && moves
+    }
+
+    #[test]
+    fn every_other_thread_stands_still_until_resumed() {
+        assert!(stops_and_goes(Threads::suspend));
+    }
+
+    #[test]
+    fn a_snapshot_suspends_the_other_threads_where_the_system_has_no_thread_walk() {
+        assert!(stops_and_goes(|threads| {
+            // SAFETY: no preconditions.
+            let me = unsafe { GetCurrentThreadId() };
+            threads.suspend_listed(me, THREAD_SUSPEND_RESUME)
+        }));
     }
 }

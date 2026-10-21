@@ -4,8 +4,9 @@
 //! in `mods/` stays writable. A thread watches those DLLs; when one changes
 //! and its mod allows it (`reload = true` in the manifest), the loader wires
 //! the mod's hooks past it and drops its events, waits for calls in flight,
-//! runs its `shutdown`, unloads it, loads the new copy and initialises it
-//! again with the same handle, then runs its `ready`. A mod that used
+//! runs its `shutdown`, loads the new copy and initialises it again with the
+//! same handle, then runs its `ready`. The old copy stays loaded until the
+//! server stops, so a call still running in it never faults. A mod that used
 //! anything a reload cannot hand over (content, commands, services, patches
 //! and every other registration besides hooks, events, lookups, settings and
 //! logging) is refused with the calls it made; so is a new copy whose
@@ -143,6 +144,11 @@ fn note_cold(index: usize, name: &'static str) {
     {
         calls.push(name);
     }
+}
+
+/// Whether mod `index` is running its `init` now.
+pub(crate) fn in_init(index: usize) -> bool {
+    INITIALISING.load(Ordering::Acquire) == index
 }
 
 /// Whether mod `index` is being initialised again by a reload.
@@ -329,9 +335,11 @@ fn reload(loader: &'static Loader, mod_: &mut Watched) -> Result<String, String>
     }
     unlink(loader, index);
     shutdown(mod_.module);
-    if let Ok(mut chains) = loader.chains.lock() {
-        chains.remove_owner(index);
-    }
+    loader
+        .chains
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .remove_owner(index);
     if let Some(calls) = CALLS
         .lock()
         .unwrap_or_else(PoisonError::into_inner)
@@ -339,11 +347,9 @@ fn reload(loader: &'static Loader, mod_: &mut Watched) -> Result<String, String>
     {
         calls.clear();
     }
-    // SAFETY: the mod's hooks are wired past and gone, its events filtered
-    // out, calls in flight had their grace, and it ran its shutdown; the
-    // loader keeps none of its memory (its manifest is the loader's copy).
-    unsafe { FreeLibrary(mod_.module) };
-    let _gone = std::fs::remove_file(&mod_.copy);
+    // The old copy stays loaded: a call still in flight in it, or a thread
+    // it started, returns into mapped code. The next start clears the
+    // copies folder.
     mod_.module = new.module;
     mod_.copy = copy;
     mod_.copies += 1;
@@ -355,9 +361,11 @@ fn reload(loader: &'static Loader, mod_: &mut Watched) -> Result<String, String>
         unsafe { (new.init)(&raw const host::API, host::handle(index)) }
     });
     REINIT.store(NONE, Ordering::Release);
-    if let Ok(chains) = loader.chains.lock() {
-        chains.rewire(host::is_off);
-    }
+    loader
+        .chains
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .rewire(host::is_off);
     if !status.is_ok() {
         loader.turn_off(index, &format!("reload: init returned {}", status.0));
         return Err(format!("its init returned {}", status.0));
@@ -383,9 +391,11 @@ fn unlink(loader: &Loader, index: usize) {
         generation.fetch_add(1, Ordering::AcqRel);
     }
     loader.mods[index].off.store(true, Ordering::Release);
-    if let Ok(chains) = loader.chains.lock() {
-        chains.rewire(host::is_off);
-    }
+    loader
+        .chains
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .rewire(host::is_off);
     std::thread::sleep(GRACE);
 }
 

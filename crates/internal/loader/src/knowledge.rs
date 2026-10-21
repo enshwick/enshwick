@@ -33,6 +33,11 @@ type PlayerValueFn =
 type WorldValueFn = unsafe extern "system" fn(state: *const u8, id: *const u32) -> u64;
 type PushFn = unsafe extern "system" fn(queue: *mut u8, request: *const [u8; 16]) -> u8;
 
+/// More player records than a server keeps: a count past it is a misread.
+const MAX_RECORDS: u64 = 4096;
+/// More changes than one update logs: a count past it is a misread.
+const MAX_LOG: u32 = 1 << 16;
+
 /// Where the store and its parts lie, from the build table and reflection.
 #[derive(Debug)]
 struct Layout {
@@ -411,7 +416,7 @@ pub(crate) fn after_step(loader: &Loader) {
     let records: usize = unsafe { read(state, layout.records) };
     // SAFETY: as above.
     let record_count: u64 = unsafe { read(state, layout.record_count) };
-    if records == 0 {
+    if records == 0 || record_count > MAX_RECORDS {
         return;
     }
     for index in 0..usize::try_from(record_count).unwrap_or(0) {
@@ -432,7 +437,7 @@ pub(crate) fn after_step(loader: &Loader) {
 
 /// Raises the changes of one log, and the quests among a player's.
 fn raise(loader: &Loader, layout: &Layout, game: usize, entity: u32, log: usize, count: u32) {
-    if log == 0 {
+    if log == 0 || count > MAX_LOG {
         return;
     }
     for i in 0..count as usize {

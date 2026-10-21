@@ -9,11 +9,12 @@
 //! a custom marker type with a label from the registry once it loads.
 
 use std::collections::VecDeque;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, OnceLock, PoisonError};
 
 use arc_swap::ArcSwap;
 use enshwick_loader_api::abi::{HookFlags, Status, UiMarker};
+use windows_sys::Win32::System::SystemInformation::GetTickCount64;
 
 use super::engine::{Buf, UiText};
 use crate::chains::Next;
@@ -70,8 +71,15 @@ static SNAPSHOT: OnceLock<ArcSwap<Sets>> = OnceLock::new();
 /// Every mod's markers, one shared set each.
 type Sets = Vec<Arc<[Owned]>>;
 static RETIRED_SETS: Mutex<VecDeque<Arc<Sets>>> = Mutex::new(VecDeque::new());
-/// The interface's play data, as the last frame found it.
+/// The interface's play data, as the last frame found it; 0 outside a world.
 static PLAY_DATA: AtomicUsize = AtomicUsize::new(0);
+/// When a frame last found it, in milliseconds since the system started.
+static NOTED_AT: AtomicU64 = AtomicU64::new(0);
+/// How old the play data may be: frames that stop noting it, such as under a
+/// loading screen between two worlds, leave it to a world that may be gone.
+const FRESH_MS: u64 = 500;
+/// More marker types than any build has: a count past it is a misread.
+const MAX_TYPES: u32 = 4096;
 /// The marker type mod markers show with, once the registry is read.
 static MARKER_TYPE: OnceLock<Option<u32>> = OnceLock::new();
 
@@ -115,17 +123,21 @@ pub(crate) fn set(owner: usize, given: &[UiMarker]) -> Status {
 pub(super) fn note(context: usize) {
     // SAFETY: a live context holds its G38 state pointer.
     let state = unsafe { crate::world::read::<usize>(context, CONTEXT_STATE) };
-    if state == 0 {
-        return;
-    }
-    // SAFETY: the state's first word points at the play state, or is 0.
-    let play = unsafe { crate::world::read::<usize>(state, 0) };
-    if play == 0 {
-        return;
-    }
-    // SAFETY: the play state holds its play data pointer.
-    let data = unsafe { crate::world::read::<usize>(play, STATE_PLAY_DATA) };
+    let play = if state == 0 {
+        0
+    } else {
+        // SAFETY: the state's first word points at the play state, or is 0.
+        unsafe { crate::world::read::<usize>(state, 0) }
+    };
+    let data = if play == 0 {
+        0
+    } else {
+        // SAFETY: the play state holds its play data pointer.
+        unsafe { crate::world::read::<usize>(play, STATE_PLAY_DATA) }
+    };
     PLAY_DATA.store(data, Ordering::Release);
+    // SAFETY: no preconditions.
+    NOTED_AT.store(unsafe { GetTickCount64() }, Ordering::Release);
 }
 
 /// Links the replicate system on the client.
@@ -166,7 +178,9 @@ fn append() {
         return;
     }
     let data = PLAY_DATA.load(Ordering::Acquire);
-    if data == 0 {
+    // SAFETY: no preconditions.
+    let age = unsafe { GetTickCount64() }.saturating_sub(NOTED_AT.load(Ordering::Acquire));
+    if data == 0 || age > FRESH_MS {
         return;
     }
     let Some(kind) = marker_type(data) else {
@@ -227,7 +241,7 @@ fn marker_type(data: usize) -> Option<u32> {
     let array = blob + BLOB_TYPES;
     let offset: i32 = read(array, 0);
     let count: u32 = read(array, 4);
-    if offset == 0 || count == 0 {
+    if offset == 0 || count == 0 || count > MAX_TYPES {
         return None;
     }
     let first = array.wrapping_add_signed(offset as isize);

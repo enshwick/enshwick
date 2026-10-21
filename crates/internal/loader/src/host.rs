@@ -492,15 +492,18 @@ impl Loader {
             crate::packs::forget(&record.id);
         }
         crate::diag::turned_off(&record.id, reason);
-        if let Ok(chains) = self.chains.lock() {
-            chains.rewire(|owner| {
-                owner != crate::chains::LOADER
-                    && self
-                        .mods
-                        .get(owner)
-                        .is_none_or(|m| m.off.load(Ordering::Acquire))
-            });
-        }
+        // A poisoned lock still holds the chains: the mod must be wired past.
+        let chains = self
+            .chains
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        chains.rewire(|owner| {
+            owner != crate::chains::LOADER
+                && self
+                    .mods
+                    .get(owner)
+                    .is_none_or(|m| m.off.load(Ordering::Acquire))
+        });
     }
 
     /// Ends subscribing: from now on events go to the subscriptions made so far.
@@ -1909,6 +1912,10 @@ extern "system" fn status(
             Ok(found) => found,
             Err(status) => return status,
         };
+        // A source added later would outlive a reload of the mod unseen.
+        if !crate::reload::in_init(index) {
+            return Status::TOO_LATE;
+        }
         crate::status::register(index, callback, user)
     })
 }
@@ -3318,6 +3325,7 @@ extern "system" fn config_check(
     user: *mut core::ffi::c_void,
 ) -> Status {
     entry("config_check", || match calling(me) {
+        Ok((_, index, _)) if !crate::reload::in_init(index) => Status::TOO_LATE,
         Ok((_, _, record)) => {
             if record
                 .check
