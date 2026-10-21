@@ -687,7 +687,7 @@ pub(crate) fn world_event(loader: &Loader, event: Event) {
                 changed: false,
             });
         }
-        Event::WORLD_SAVED | Event::SHUTDOWN => save(loader, event == Event::WORLD_SAVED),
+        Event::WORLD_SAVED | Event::SHUTDOWN_STARTED => save(loader, event == Event::WORLD_SAVED),
         _ => {}
     }
 }

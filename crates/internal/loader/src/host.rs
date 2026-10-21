@@ -374,7 +374,7 @@ pub(crate) struct Wanted {
 
 /// On a client the join check kept out: records `missing`, the server's
 /// join mods this client lacks or runs in another version, and raises
-/// [`Event::JOIN_MISSING`].
+/// [`Event::JOIN_REFUSED`].
 pub(crate) fn report_join_missing(missing: &[Wanted]) {
     let Some(loader) = loader() else {
         return;
@@ -420,7 +420,7 @@ pub(crate) fn report_join_missing(missing: &[Wanted]) {
     if let Ok(mut held) = JOIN_MISSING.lock() {
         *held = entries;
     }
-    loader.emit(Event::JOIN_MISSING, None, core::ptr::null());
+    loader.emit(Event::JOIN_REFUSED, None, core::ptr::null());
 }
 
 /// Turns off the loaded mod `id`, if there is one, with `reason`.
@@ -594,7 +594,7 @@ impl Loader {
     pub(crate) fn subscribed(&self, event: Event) -> bool {
         let item_data = matches!(
             event,
-            Event::WORLD_LOADED | Event::WORLD_SAVED | Event::SHUTDOWN
+            Event::WORLD_LOADED | Event::WORLD_SAVED | Event::SHUTDOWN_STARTED
         ) && (crate::item_data::wanted() || crate::stats::wanted());
         item_data
             || self
@@ -610,7 +610,7 @@ impl Loader {
         if only.is_none()
             && matches!(
                 event,
-                Event::WORLD_LOADED | Event::WORLD_SAVED | Event::SHUTDOWN
+                Event::WORLD_LOADED | Event::WORLD_SAVED | Event::SHUTDOWN_STARTED
             )
         {
             crate::game_settings::world_event(self, event);
@@ -3950,10 +3950,10 @@ mod tests {
             generation: 0,
         };
         let mut sealed = vec![
-            made(2, Event::TICK),
+            made(2, Event::TICKED),
             made(0, Event::WORLD_SAVED),
-            made(1, Event::TICK),
-            made(0, Event::TICK),
+            made(1, Event::TICKED),
+            made(0, Event::TICKED),
             made(1, Event::SETTINGS_CHANGED),
         ];
         sealed.sort_by_key(|s| s.event.0);
@@ -3963,10 +3963,10 @@ mod tests {
                 .map(|s| s.owner)
                 .collect::<Vec<_>>()
         };
-        assert_eq!(owners(Event::TICK), [2, 1, 0]);
+        assert_eq!(owners(Event::TICKED), [2, 1, 0]);
         assert_eq!(owners(Event::WORLD_SAVED), [0]);
         assert_eq!(owners(Event::SETTINGS_CHANGED), [1]);
-        assert!(owners(Event::SHUTDOWN).is_empty());
+        assert!(owners(Event::SHUTDOWN_STARTED).is_empty());
     }
 
     fn read(text: Str) -> Option<&'static str> {

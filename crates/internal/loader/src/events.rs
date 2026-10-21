@@ -225,7 +225,10 @@ pub(crate) fn link(loader: &'static Loader) {
     let feature = "server events";
     let stepped = link(&[], "server.post_step")
         .is_some_and(|target| loader.link_feature(feature, Some(target), &STEP_NEXT, step, none));
-    if let Some(target) = link(&[Event::WORLD_LOADED, Event::SHUTDOWN], "server.set_state") {
+    if let Some(target) = link(
+        &[Event::WORLD_LOADED, Event::SHUTDOWN_STARTED],
+        "server.set_state",
+    ) {
         loader.link_feature(feature, Some(target), &STATE_NEXT, set_state, none);
     }
     if let Some(target) = link(&[Event::WORLD_SAVED], "server.save_step") {
@@ -353,7 +356,7 @@ unsafe fn after_step(loader: &'static Loader, offsets: &Offsets, server: *mut u8
     };
     part!(
         "tick events",
-        loader.emit(Event::TICK, None, (&raw const tick).cast::<c_void>())
+        loader.emit(Event::TICKED, None, (&raw const tick).cast::<c_void>())
     );
     part!("chat sending", crate::chat::drain());
     if server.is_null() {
@@ -447,7 +450,7 @@ unsafe extern "system" fn set_state(entry: *mut u8, state: u8) {
             loader.emit(Event::WORLD_LOADED, None, core::ptr::null());
         }
         STATE_SHUTDOWN if old != STATE_SHUTDOWN => {
-            loader.emit(Event::SHUTDOWN, None, core::ptr::null());
+            loader.emit(Event::SHUTDOWN_STARTED, None, core::ptr::null());
             if loader.side == Side::CLIENT {
                 end_session();
                 crate::chat::forget();

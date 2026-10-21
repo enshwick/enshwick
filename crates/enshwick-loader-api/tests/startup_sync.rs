@@ -58,7 +58,7 @@ mod tests {
             Some("{ rule = true }"),
             "joined players keep the value in force"
         );
-        assert_eq!(loader.raise::<events::WorldSettings>(&()), 1);
+        assert_eq!(loader.raise::<events::SettingsReplaced>(&()), 1);
         assert!(!rule());
         assert_eq!(
             loader.reported_synced().last().map(String::as_str),

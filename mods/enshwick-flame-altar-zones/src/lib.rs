@@ -163,7 +163,7 @@ mod tests {
     #[test]
     fn a_world_s_own_clusters_value_applies_when_it_loads() {
         use enshwick_loader_api::abi::{AltarInfo, Bounds, Status};
-        use enshwick_loader_api::events::WorldSettings;
+        use enshwick_loader_api::events::SettingsReplaced;
 
         let loader = enshwick_loader_api::test::FakeHost::new()
             .settings(
@@ -196,7 +196,7 @@ building_across_seams = true
 building_across_seams = true
 ",
         );
-        assert!(loader.raise::<WorldSettings>(&()) >= 1);
+        assert!(loader.raise::<SettingsReplaced>(&()) >= 1);
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
         while loader.zone_sizes().len() < 2 && std::time::Instant::now() < deadline {
             std::thread::yield_now();
@@ -207,7 +207,7 @@ building_across_seams = true
 building_across_seams = true
 ",
         );
-        assert!(loader.raise::<WorldSettings>(&()) >= 1);
+        assert!(loader.raise::<SettingsReplaced>(&()) >= 1);
         assert!(
             loader.zone_sizes().is_empty(),
             "the next world turned them off"

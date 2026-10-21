@@ -129,34 +129,34 @@ and the types in
 or with a raw [`Event`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs)
 id through `Load::on_raw_event`. See [Events and the scheduler](events.md).
 
-| Id  | Constant                  | Typed event             | Data              | Raised on       | Side   |
-| --- | ------------------------- | ----------------------- | ----------------- | --------------- | ------ |
-| 1   | `SETTINGS_CHANGED`        | `SettingsChanged`       | none              | not fixed       | both   |
-| 2   | `LOADER_SETTINGS_CHANGED` | `LoaderSettingsChanged` | none              | a loader thread | both   |
-| 3   | `TICK`                    | `Ticked`                | `TickData`        | the game thread | server |
-| 4   | `WORLD_LOADED`            | `WorldLoaded`           | none              | the game thread | server |
-| 5   | `WORLD_SAVED`             | `WorldSaved`            | none              | the game thread | server |
-| 6   | `PLAYER_JOINED`           | `PlayerJoined`          | `PlayerData`      | the game thread | server |
-| 7   | `PLAYER_LEFT`             | `PlayerLeft`            | `PlayerData`      | the game thread | server |
-| 8   | `SHUTDOWN`                | `ShutdownStarted`       | none              | the game thread | server |
-| 9   | `BUILDING_PLACED`         | `BuildingPlaced`        | `BuildingData`    | the game thread | server |
-| 10  | `BUILDING_REMOVED`        | `BuildingRemoved`       | `BuildingData`    | the game thread | server |
-| 11  | `JOIN_MISSING`            | `JoinRefused`           | none              | the game thread | client |
-| 12  | `ALTARS_CHANGED`          | `AltarsChanged`         | none              | the game thread | server |
-| 13  | `DAY_STARTED`             | `DayStarted`            | none              | the game thread | server |
-| 14  | `NIGHT_STARTED`           | `NightStarted`          | none              | the game thread | server |
-| 15  | `KNOWLEDGE_CHANGED`       | `KnowledgeChanged`      | `KnowledgeData`   | the game thread | server |
-| 16  | `QUEST_COMPLETED`         | `QuestCompleted`        | `QuestData`       | the game thread | server |
-| 17  | `CHUNK_LOADED`            | `ChunkLoaded`           | `ChunkData`       | the game thread | server |
-| 18  | `CHUNK_UNLOADED`          | `ChunkUnloaded`         | `ChunkData`       | the game thread | server |
-| 19  | `WORLD_SETTINGS`          | `WorldSettings`         | none              | the game thread | server |
-| 20  | `PLAYER_DIED`             | `PlayerDied`            | `PlayerDeathData` | the game thread | server |
+| Id | Constant                  | Typed event             | Data              | Raised on       | Side   |
+| -- | ------------------------- | ----------------------- | ----------------- | --------------- | ------ |
+| 1  | `SETTINGS_CHANGED`        | `SettingsChanged`       | none              | not fixed       | both   |
+| 2  | `LOADER_SETTINGS_CHANGED` | `LoaderSettingsChanged` | none              | a loader thread | both   |
+| 3  | `TICKED`                  | `Ticked`                | `TickData`        | the game thread | server |
+| 4  | `WORLD_LOADED`            | `WorldLoaded`           | none              | the game thread | server |
+| 5  | `WORLD_SAVED`             | `WorldSaved`            | none              | the game thread | server |
+| 6  | `PLAYER_JOINED`           | `PlayerJoined`          | `PlayerData`      | the game thread | server |
+| 7  | `PLAYER_LEFT`             | `PlayerLeft`            | `PlayerData`      | the game thread | server |
+| 8  | `SHUTDOWN_STARTED`        | `ShutdownStarted`       | none              | the game thread | server |
+| 9  | `BUILDING_PLACED`         | `BuildingPlaced`        | `BuildingData`    | the game thread | server |
+| 10 | `BUILDING_REMOVED`        | `BuildingRemoved`       | `BuildingData`    | the game thread | server |
+| 11 | `JOIN_REFUSED`            | `JoinRefused`           | none              | the game thread | client |
+| 12 | `ALTARS_CHANGED`          | `AltarsChanged`         | none              | the game thread | server |
+| 13 | `DAY_STARTED`             | `DayStarted`            | none              | the game thread | server |
+| 14 | `NIGHT_STARTED`           | `NightStarted`          | none              | the game thread | server |
+| 15 | `KNOWLEDGE_CHANGED`       | `KnowledgeChanged`      | `KnowledgeData`   | the game thread | server |
+| 16 | `QUEST_COMPLETED`         | `QuestCompleted`        | `QuestData`       | the game thread | server |
+| 17 | `CHUNK_LOADED`            | `ChunkLoaded`           | `ChunkData`       | the game thread | server |
+| 18 | `CHUNK_UNLOADED`          | `ChunkUnloaded`         | `ChunkData`       | the game thread | server |
+| 19 | `SETTINGS_REPLACED`       | `SettingsReplaced`      | none              | the game thread | server |
+| 20 | `PLAYER_DIED`             | `PlayerDied`            | `PlayerDeathData` | the game thread | server |
 
-Subscribing needs minor 2; `JOIN_MISSING` came with minor 10 and
+Subscribing needs minor 2; `JOIN_REFUSED` came with minor 10 and
 `ALTARS_CHANGED`, raised for mods that opened altars, with minor 15;
 `DAY_STARTED` and `NIGHT_STARTED` with minor 28; `KNOWLEDGE_CHANGED` and
 `QUEST_COMPLETED` with minor 32; `CHUNK_LOADED` and `CHUNK_UNLOADED` with
-minor 33; `WORLD_SETTINGS` with minor 46; `PLAYER_DIED` with minor 60. "Server" events also reach a client while it hosts a game, solo
+minor 33; `SETTINGS_REPLACED` with minor 46; `PLAYER_DIED` with minor 60. "Server" events also reach a client while it hosts a game, solo
 play included. The typed events hand a handler the fields the loader knows,
 with fields added after the event zero; they skip the handler only when the
 data lacks a field the event came with.

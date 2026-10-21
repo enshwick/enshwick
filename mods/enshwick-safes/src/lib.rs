@@ -609,7 +609,7 @@ mod tests {
     #[test]
     fn a_world_s_cost_applies_when_it_loads() {
         use enshwick_loader_api::abi::Status;
-        use enshwick_loader_api::events::WorldSettings;
+        use enshwick_loader_api::events::SettingsReplaced;
 
         let mut host = enshwick_loader_api::test::FakeHost::new()
             .field_offset("keen::RecipeRegistryResource", "recipes", 8)
@@ -673,7 +673,7 @@ label_language = \"en\"
 label_language = \"en\"
 ",
         );
-        assert!(loader.raise::<WorldSettings>(&()) >= 1);
+        assert!(loader.raise::<SettingsReplaced>(&()) >= 1);
         assert_eq!(
             loader.rebuilds().len(),
             allowed,
@@ -684,7 +684,7 @@ label_language = \"en\"
 label_language = \"uk\"
 ",
         );
-        assert!(loader.raise::<WorldSettings>(&()) >= 1);
+        assert!(loader.raise::<SettingsReplaced>(&()) >= 1);
         assert_eq!(COST.load(Ordering::Relaxed), 5);
         assert_eq!(
             loader.rebuilds().len(),
