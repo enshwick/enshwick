@@ -149,7 +149,7 @@ name = "language"
 required-features = ["test"]
 
 [[test]]
-name = "catalog"
+name = "updates"
 required-features = ["test"]
 
 [[test]]

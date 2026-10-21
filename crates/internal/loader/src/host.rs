@@ -746,8 +746,8 @@ pub(crate) static API: HostApi = HostApi {
     language,
     keep_game_settings,
     forget_game_settings,
-    catalog_set,
-    catalog_pick,
+    updates_set,
+    update_pick,
     revoke_knowledge,
     account_knowledge,
     resource_read,
@@ -3479,8 +3479,8 @@ extern "system" fn language(_me: ModHandle) -> u32 {
         .map_or(0, |_| crate::content::language().0)
 }
 
-extern "system" fn catalog_set(me: ModHandle, toml: Str) -> Status {
-    entry("catalog_set", || {
+extern "system" fn updates_set(me: ModHandle, toml: Str) -> Status {
+    entry("updates_set", || {
         let (loader, index, _) = match calling(me) {
             Ok(found) => found,
             Err(status) => return status,
@@ -3488,17 +3488,17 @@ extern "system" fn catalog_set(me: ModHandle, toml: Str) -> Status {
         if loader.side != Side::CLIENT {
             return Status::MISSING;
         }
-        text(toml).map_or(Status::BAD_ARGS, |toml| crate::catalog::set(index, toml))
+        text(toml).map_or(Status::BAD_ARGS, |toml| crate::updates::set(index, toml))
     })
 }
 
-extern "system" fn catalog_pick(
+extern "system" fn update_pick(
     me: ModHandle,
-    callback: api_frame::CatalogPickFn,
+    callback: api_frame::UpdatePickFn,
     user: *mut core::ffi::c_void,
 ) -> Status {
-    entry("catalog_pick", || match calling(me) {
-        Ok((_, index, _)) => crate::catalog::on_pick(index, callback, user.expose_provenance()),
+    entry("update_pick", || match calling(me) {
+        Ok((_, index, _)) => crate::updates::on_pick(index, callback, user.expose_provenance()),
         Err(status) => status,
     })
 }

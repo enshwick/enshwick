@@ -167,26 +167,26 @@ their last tab, with nothing to write in the mod. See
 gamepad's B steps back from a mod's settings to the list, and from the list
 out.
 
-### Catalogs
+### Updates
 
-A mod that knows of updates or of mods the player may add, such as the
-updater, shows them on the screen with
-[`catalog::publish`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/catalog.rs):
-a list of `Entry` values, each an id, the version on offer, the installed
-version for an update, where it comes from, a note and whether it is ready.
-An installed mod with an update shows `Update: <version>` under its name, an
-entry not installed sits on the "Available mods" page, and a ready entry has
-an Update or Install button. A press only calls the mod back through
-[`Load::on_catalog_pick`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/catalog.rs),
-on the interface thread, with the entry's id: the mod asks the player and
-downloads on a thread of its own; the loader itself never goes online.
+A mod that knows of updates of installed mods, such as the updater, shows
+them on the screen with
+[`updates::publish`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/updates.rs):
+a list of `Update` values, each the installed mod's id, the version on offer,
+a note and whether it is ready. The mod shows `Update: <version>` and the
+note under its name, and a ready update has an Update button. A press only
+calls the publishing mod back through
+[`Load::on_update_pick`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/updates.rs),
+on the interface thread, with the mod's id: the publishing mod asks the
+player and downloads on a thread of its own; the loader itself never goes
+online.
 
 ```rust
-use enshwick_loader_api::catalog::{self, Entry};
+use enshwick_loader_api::updates::{self, Update};
 
 fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
-    load.on_catalog_pick(|id| enshwick_loader_api::info!("the player picked {id}"))?;
-    catalog::publish(&[Entry::new("lanterns", "1.2.0").source("github.com/someone/lanterns").ready(true)])
+    load.on_update_pick(|id| enshwick_loader_api::info!("the player picked {id}"))?;
+    updates::publish(&[Update::new("safes", "1.2.0").ready(true)])
 }
 ```
 
