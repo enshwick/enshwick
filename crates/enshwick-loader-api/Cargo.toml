@@ -148,6 +148,10 @@ name = "language"
 required-features = ["test"]
 
 [[test]]
+name = "catalog"
+required-features = ["test"]
+
+[[test]]
 name = "stat_kinds"
 required-features = ["test"]
 

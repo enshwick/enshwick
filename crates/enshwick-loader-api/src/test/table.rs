@@ -6,15 +6,15 @@ use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use crate::abi::{
     ActiveBuff, AltarInfo, AltarLimitFn, AltarZoneSize, BedCheckFn, BuffRequest, BuffTypeInfo,
-    BuildCheckFn, BuildInfo, CallerFrame, ComfortFn, CommandCallFn, ConfigCheckFn, CraftCheckFn,
-    DamageFilterFn, DaytimeInfo, EntityPlace, Event, EventFn, EventSpec, ExperiencePassFn,
-    GameEventFn, Header, HookSpec, HostApi, InteractionFn, InventoryRequest, InventoryResultFn,
-    ItemData, KnowledgeInfo, KnowledgeInputFn, Level, MidHookFn, MidHookSpec, MigrationSet,
-    ModEventFn, ModHandle, ModInfo, NetMessageFn, PlayerInfo, RenameCallFn, ResourceKey,
-    ResourcePatchFn, ServiceFound, ServiceSpec, Side, SkillCheckFn, SpawnRequest, Status, StatusFn,
-    Str, SummonFn, SurvivorLookupFn, SurvivorStatusFn, TeleportRequest, TerrainEdit,
-    TerrainMaterialInfo, UiAnswerFn, UiDialog, UiFrameFn, UiMarker, UiWidget, WeatherFront,
-    ZoneCheckFn,
+    BuildCheckFn, BuildInfo, CallerFrame, CatalogPickFn, ComfortFn, CommandCallFn, ConfigCheckFn,
+    CraftCheckFn, DamageFilterFn, DaytimeInfo, EntityPlace, Event, EventFn, EventSpec,
+    ExperiencePassFn, GameEventFn, Header, HookSpec, HostApi, InteractionFn, InventoryRequest,
+    InventoryResultFn, ItemData, KnowledgeInfo, KnowledgeInputFn, Level, MidHookFn, MidHookSpec,
+    MigrationSet, ModEventFn, ModHandle, ModInfo, NetMessageFn, PlayerInfo, RenameCallFn,
+    ResourceKey, ResourcePatchFn, ServiceFound, ServiceSpec, Side, SkillCheckFn, SpawnRequest,
+    Status, StatusFn, Str, SummonFn, SurvivorLookupFn, SurvivorStatusFn, TeleportRequest,
+    TerrainEdit, TerrainMaterialInfo, UiAnswerFn, UiDialog, UiFrameFn, UiMarker, UiWidget,
+    WeatherFront, ZoneCheckFn,
 };
 
 use super::{FakeHost, LinkedHook, ServedResource, SubmittedRequest};
@@ -126,6 +126,10 @@ pub(crate) struct State {
     pub(crate) config_check: Option<(ConfigCheckFn, usize)>,
     /// The texts the mod handed the loader last, as TOML.
     pub(crate) published_texts: Option<String>,
+    /// The catalog the mod published last, as TOML.
+    pub(crate) published_catalog: Option<String>,
+    /// The mod's answer to a catalog pick.
+    pub(crate) catalog_pick: Option<(CatalogPickFn, usize)>,
     /// The frame drawing now: its token, whether a window is open and what
     /// was drawn.
     pub(crate) frame: Option<(u64, bool, Vec<super::Drawn>)>,
@@ -243,6 +247,8 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         markers: Vec::new(),
         config_check: None,
         published_texts: None,
+        published_catalog: None,
+        catalog_pick: None,
         frame: None,
         inputs: Vec::new(),
         dialogs: Vec::new(),
@@ -2197,6 +2203,31 @@ extern "system" fn language(_me: ModHandle) -> u32 {
     with(0, |s| s.host.language)
 }
 
+extern "system" fn catalog_set(_me: ModHandle, toml: Str) -> Status {
+    let toml = text(toml);
+    if crate::catalog::from_toml(&toml).is_err() {
+        return Status::BAD_ARGS;
+    }
+    with(Status::MISSING, |s| {
+        s.published_catalog = Some(toml);
+        Status::OK
+    })
+}
+
+extern "system" fn catalog_pick(
+    _me: ModHandle,
+    callback: CatalogPickFn,
+    user: *mut c_void,
+) -> Status {
+    with(Status::MISSING, |s| {
+        if s.catalog_pick.is_some() {
+            return Status::REFUSED;
+        }
+        s.catalog_pick = Some((callback, user.expose_provenance()));
+        Status::OK
+    })
+}
+
 pub(crate) static TABLE: HostApi = HostApi {
     header: Header::of::<HostApi>(),
     host_version: Str::new("0.0.0-test"),
@@ -2330,4 +2361,6 @@ pub(crate) static TABLE: HostApi = HostApi {
     language,
     keep_game_settings,
     forget_game_settings,
+    catalog_set,
+    catalog_pick,
 };

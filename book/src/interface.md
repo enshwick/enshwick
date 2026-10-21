@@ -167,6 +167,29 @@ their last tab, with nothing to write in the mod. See
 gamepad's B steps back from a mod's settings to the list, and from the list
 out.
 
+### Catalogs
+
+A mod that knows of updates or of mods the player may add, such as the
+updater, shows them on the screen with
+[`catalog::publish`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/catalog.rs):
+a list of `Entry` values, each an id, the version on offer, the installed
+version for an update, where it comes from, a note and whether it is ready.
+An installed mod with an update shows `Update: <version>` under its name, an
+entry not installed sits on the "Available mods" page, and a ready entry has
+an Update or Install button. A press only calls the mod back through
+[`Load::on_catalog_pick`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/catalog.rs),
+on the interface thread, with the entry's id: the mod asks the player and
+downloads on a thread of its own; the loader itself never goes online.
+
+```rust
+use enshwick_loader_api::catalog::{self, Entry};
+
+fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+    load.on_catalog_pick(|id| enshwick_loader_api::info!("the player picked {id}"))?;
+    catalog::publish(&[Entry::new("lanterns", "1.2.0").source("github.com/someone/lanterns").ready(true)])
+}
+```
+
 ## Testing
 
 With the `test` feature, the [fake loader](testing.md) runs frame callbacks

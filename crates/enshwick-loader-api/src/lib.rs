@@ -72,6 +72,7 @@ pub mod altars;
 #[cfg(doctest)]
 mod book;
 pub mod buffs;
+pub mod catalog;
 pub mod code;
 pub mod commands;
 pub mod config;

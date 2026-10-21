@@ -126,6 +126,9 @@ static CONTEXT: Mutex<Option<Arc<Context>>> = Mutex::new(None);
 static BUSY: Mutex<()> = Mutex::new(());
 /// `id@version` offered this session, accepted or not; not offered again.
 static OFFERED: Mutex<Option<HashSet<String>>> = Mutex::new(None);
+/// What the Mods screen's catalog offers: updates and mods from the sources
+/// of the installed ones; and the ids staged from it this session.
+static CATALOG: Mutex<(Vec<Offer>, Vec<String>)> = Mutex::new((Vec::new(), Vec::new()));
 
 fn context() -> Option<Arc<Context>> {
     CONTEXT
@@ -355,22 +358,29 @@ fn at_start() {
     let last = std::fs::read_to_string(&record)
         .ok()
         .and_then(|text| text.trim().parse().ok());
-    if !due(last, now(), context.settings.check_interval_hours) {
+    let is_due = due(last, now(), context.settings.check_interval_hours);
+    let paused = paused(&context.data);
+    if !is_due {
         enshwick_loader_api::info!(
             "checked within the last {} hours; not checking again yet",
             context.settings.check_interval_hours
         );
-        return;
-    }
-    if let Some(until) = paused(&context.data) {
+    } else if let Some(until) = paused {
         enshwick_loader_api::info!(
             "GitHub refused more requests for {} more minutes; checking at a later start",
             net::minutes_until(until, now())
         );
-        return;
     }
-    let client = client(&context);
-    let (offers, answered) = match newer(&client, &context, &enshwick_loader_api::mods()) {
+    // A start that does not check still fills the Mods screen's catalog,
+    // from the lists kept at the last check.
+    let online = is_due && paused.is_none();
+    let client = if online {
+        client(&context)
+    } else {
+        Client::kept(&context.data.join(CACHE))
+    };
+    let installed = enshwick_loader_api::mods();
+    let (offers, answered, lists) = match newer(&client, &context, &installed) {
         Ok(checked) => checked,
         Err(failure) => {
             if let Failure::RateLimited { until } = failure {
@@ -380,6 +390,11 @@ fn at_start() {
             return;
         }
     };
+    let new = from_sources(&context, &installed, &lists);
+    publish_catalog(offers.iter().cloned().chain(new).collect());
+    if !online {
+        return;
+    }
     // A source that did not answer, such as one offline, is asked again at
     // the next start rather than after a whole interval.
     if !answered {
@@ -413,7 +428,10 @@ fn at_start() {
         enshwick_loader_api::info!("the player declined {}", lines(&offers).replace('\n', ", "));
         return;
     }
-    install_all(&client, &context, &offers, &say::text("next-start", &[]));
+    let staged = install_all(&client, &context, &offers, &say::text("next-start", &[]));
+    let mut catalog = CATALOG.lock().unwrap_or_else(PoisonError::into_inner);
+    catalog.1.extend(staged);
+    show_catalog(&catalog);
 }
 
 /// On a build the loader runs on patterns: the table for it, when the
@@ -680,13 +698,16 @@ fn releases_of(
     }
 }
 
+/// The release lists of the repositories the installed mods come from.
+type Lists = BTreeMap<String, Vec<release::Release>>;
+
 /// Newer releases of `mods`, one list per repository and one request per
-/// document, and whether every source answered.
+/// document, whether every source answered, and the lists read.
 fn newer(
     client: &Client,
     context: &Context,
     mods: &[ModEntry],
-) -> Result<(Vec<Offer>, bool), Failure> {
+) -> Result<(Vec<Offer>, bool, Lists), Failure> {
     let mut answered = true;
     let mut lists: BTreeMap<&str, Vec<release::Release>> = BTreeMap::new();
     let mut documents: BTreeMap<&str, Option<Document>> = BTreeMap::new();
@@ -765,7 +786,142 @@ fn newer(
             });
         }
     }
-    Ok((offers, answered))
+    let lists = lists
+        .into_iter()
+        .map(|(repository, releases)| (repository.to_owned(), releases))
+        .collect();
+    Ok((offers, answered, lists))
+}
+
+/// The mods the player may add from `lists`: the newest release of each
+/// component no installed mod is released as, from a repository at least
+/// one installed mod names a key for, checked against those keys when
+/// picked.
+fn from_sources(context: &Context, installed: &[ModEntry], lists: &Lists) -> Vec<Offer> {
+    let trusted = context.settings.trusted();
+    let mut new = Vec::new();
+    for (repository, releases) in lists {
+        let same: Vec<&ModEntry> = installed
+            .iter()
+            .filter(|m| matches!(&m.updates, Some(Updates::GitHub { repository: from, .. }) if from == repository))
+            .collect();
+        let Ok(trust) = trust::for_source(&same, &trusted) else {
+            continue;
+        };
+        let taken = components_of(installed, repository);
+        let mut components: Vec<&str> = releases
+            .iter()
+            .filter_map(|r| r.tag_name.rsplit_once("-v").map(|(component, _)| component))
+            .filter(|component| !taken.contains(component))
+            .collect();
+        components.sort_unstable();
+        components.dedup();
+        for component in components {
+            let none = Version::new(0, 0, 0);
+            let Some(pick) = release::newest(
+                releases,
+                repository,
+                component,
+                &none,
+                context.settings.prereleases,
+            ) else {
+                continue;
+            };
+            new.push(Offer {
+                id: component.to_owned(),
+                name: String::new(),
+                from: None,
+                file: String::new(),
+                pick,
+                source: source_of(&Updates::GitHub {
+                    repository: repository.clone(),
+                    component: component.to_owned(),
+                }),
+                trust: Ok(trust.clone()),
+            });
+        }
+    }
+    new
+}
+
+/// The catalog entry of `offer` as the Mods screen shows it.
+fn entry(offer: &Offer, staged: bool) -> enshwick_loader_api::catalog::Entry {
+    let mut entry =
+        enshwick_loader_api::catalog::Entry::new(&offer.id, &offer.pick.version.to_string())
+            .name(&offer.name)
+            .source(&offer.source);
+    if let Some(from) = &offer.from {
+        entry = entry.installed(from);
+    }
+    let (note, ready) = match &offer.trust {
+        _ if staged => (say::text("catalog.staged", &[]), false),
+        Err(refusal) => (say::text(refusal.key(), &[]), false),
+        Ok(_) if offer.from.is_none() => (say::text("catalog.new", &[]), true),
+        Ok(_) => (String::new(), true),
+    };
+    entry.note(&note).ready(ready)
+}
+
+/// Shows `offers` on the Mods screen, in place of the catalog before.
+fn publish_catalog(offers: Vec<Offer>) {
+    let mut catalog = CATALOG.lock().unwrap_or_else(PoisonError::into_inner);
+    catalog.0 = offers;
+    show_catalog(&catalog);
+}
+
+fn show_catalog(catalog: &(Vec<Offer>, Vec<String>)) {
+    let entries: Vec<_> = catalog
+        .0
+        .iter()
+        .map(|offer| entry(offer, catalog.1.contains(&offer.id)))
+        .collect();
+    if let Err(off) = enshwick_loader_api::catalog::publish(&entries) {
+        enshwick_loader_api::info!("the Mods screen shows no catalog: {off}");
+    }
+}
+
+/// The player picked `id` from the catalog on the Mods screen: asks, then
+/// downloads it as an update from the start check would be.
+fn picked(id: &str) {
+    let Some(context) = context() else {
+        return;
+    };
+    let offer = {
+        let catalog = CATALOG.lock().unwrap_or_else(PoisonError::into_inner);
+        if catalog.1.iter().any(|staged| staged == id) {
+            return;
+        }
+        catalog.0.iter().find(|offer| offer.id == id).cloned()
+    };
+    let Some(offer) = offer else {
+        return;
+    };
+    let _busy = BUSY.lock().unwrap_or_else(PoisonError::into_inner);
+    let question = if offer.from.is_some() {
+        say::text("catalog.update", &[("line", &offer.said())])
+    } else {
+        say::text(
+            "catalog.ask",
+            &[
+                ("name", &offer.label()),
+                ("version", &offer.pick.version.to_string()),
+                ("source", &offer.source),
+            ],
+        )
+    };
+    if !ask::confirm(&question) {
+        enshwick_loader_api::info!("the player declined {} from the catalog", offer.line());
+        return;
+    }
+    let staged = install_all(
+        &client(&context),
+        &context,
+        &[offer],
+        &say::text("next-start", &[]),
+    );
+    let mut catalog = CATALOG.lock().unwrap_or_else(PoisonError::into_inner);
+    catalog.1.extend(staged);
+    show_catalog(&catalog);
 }
 
 /// The components of `mods` released from `repository`.
@@ -832,8 +988,9 @@ fn said_lines(offers: &[Offer]) -> String {
 }
 
 /// Downloads, checks and stages every offer, then tells the player what
-/// came of it, ending with `next`.
-fn install_all(client: &Client, context: &Context, offers: &[Offer], next: &str) {
+/// came of it, ending with `next`; the ids staged.
+fn install_all(client: &Client, context: &Context, offers: &[Offer], next: &str) -> Vec<String> {
+    let mut staged = Vec::new();
     let mut done = Vec::new();
     let mut failed = Vec::new();
     let replaced = enshwick_loader_api::mods::replaced();
@@ -841,6 +998,7 @@ fn install_all(client: &Client, context: &Context, offers: &[Offer], next: &str)
         match install(client, context, offer) {
             Ok(files) => {
                 enshwick_loader_api::info!("staged {}: {}", offer.line(), files.join(", "));
+                staged.push(offer.id.clone());
                 done.push(offer.said());
                 let taken = taken("", &enshwick_loader_api::mods());
                 let (deleted, kept) =
@@ -879,6 +1037,7 @@ fn install_all(client: &Client, context: &Context, offers: &[Offer], next: &str)
         ));
     }
     ask::tell(&text.join("\n\n"));
+    staged
 }
 
 fn install(client: &Client, context: &Context, offer: &Offer) -> Result<Vec<String>, String> {
@@ -930,7 +1089,7 @@ fn taken(id: &str, installed: &[ModEntry]) -> Vec<String> {
 }
 
 /// Runs `work` on a thread of its own; a panic only ends that thread.
-fn spawn(name: &'static str, work: fn()) {
+fn spawn(name: &'static str, work: impl FnOnce() + Send + std::panic::UnwindSafe + 'static) {
     let spawned = std::thread::Builder::new()
         .name(name.to_owned())
         .spawn(move || {
@@ -996,6 +1155,13 @@ impl Mod for Updater {
                 "this loader does not report a server's missing mods; update the loader to get them here"
             );
         }
+        let picks = load.on_catalog_pick(|id| {
+            let id = id.to_owned();
+            spawn("enshwick-updater-pick", move || picked(&id));
+        });
+        if let Err(off) = picks {
+            enshwick_loader_api::info!("no catalog on the Mods screen: {off}");
+        }
         spawn("enshwick-updater", at_start);
         Ok(Self)
     }
@@ -1024,6 +1190,86 @@ mod tests {
         assert!(first.len() <= all.len());
         assert!(release::seen_all(&first, &["enshwick-updater"]));
         std::fs::remove_dir_all(&cache).unwrap();
+    }
+
+    fn released(repository: &str, tag: &str, component: &str) -> release::Release {
+        let asset = |name: String| release::Asset {
+            browser_download_url: format!(
+                "https://github.com/{repository}/releases/download/{tag}/{name}"
+            ),
+            name,
+        };
+        release::Release {
+            tag_name: tag.to_owned(),
+            draft: false,
+            prerelease: false,
+            assets: vec![
+                asset(format!("{component}.zip")),
+                asset(format!("{component}.zip.minisig")),
+            ],
+        }
+    }
+
+    #[test]
+    fn the_catalog_offers_other_mods_of_a_signed_source_only() {
+        const KEY: &str = "RWTjqgtfpy3lSOLC4uaUXuvvKSLQKOFf6nUnEytoiFjSzxMEhLnoAdJF";
+        let context = Context {
+            settings: Settings::default(),
+            game: PathBuf::new(),
+            data: PathBuf::new(),
+        };
+        let github = |repository: &str, component: &str| {
+            Some(Updates::GitHub {
+                repository: repository.into(),
+                component: component.into(),
+            })
+        };
+        let installed = [
+            ModEntry {
+                updates: github("someone/mods", "someone-safes"),
+                signed_by: vec![KEY.into()],
+                ..listed("safes", "mods/someone_safes.dll")
+            },
+            ModEntry {
+                updates: github("other/mods", "other-a"),
+                ..listed("a", "mods/other_a.dll")
+            },
+        ];
+        let mut lists = Lists::new();
+        let mut api = released("someone/mods", "someone-api-v1.0.0", "someone-api");
+        api.assets.clear();
+        lists.insert(
+            "someone/mods".into(),
+            vec![
+                released("someone/mods", "someone-safes-v2.0.0", "someone-safes"),
+                released(
+                    "someone/mods",
+                    "someone-lanterns-v1.1.0",
+                    "someone-lanterns",
+                ),
+                released(
+                    "someone/mods",
+                    "someone-lanterns-v1.0.0",
+                    "someone-lanterns",
+                ),
+                api,
+            ],
+        );
+        lists.insert(
+            "other/mods".into(),
+            vec![released("other/mods", "other-b-v1.0.0", "other-b")],
+        );
+        let new = from_sources(&context, &installed, &lists);
+        assert_eq!(new.len(), 1, "{new:?}");
+        assert_eq!(new[0].id, "someone-lanterns");
+        assert_eq!(new[0].pick.version, Version::new(1, 1, 0));
+        assert!(matches!(&new[0].trust, Ok(Trust::Source(keys)) if keys == &[KEY.to_owned()]));
+        let shown = entry(&new[0], false);
+        assert!(shown.ready && shown.installed.is_none());
+        assert!(
+            !entry(&new[0], true).ready,
+            "a staged mod is not offered again"
+        );
     }
 
     fn listed(id: &str, file: &str) -> ModEntry {
