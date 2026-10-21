@@ -28,6 +28,27 @@ const QUERY_TIMEOUT: Duration = Duration::from_secs(2);
 /// advertises.
 pub type Names = BTreeMap<String, String>;
 
+/// The longest mod name a server may advertise, in characters.
+const MAX_NAME: usize = 64;
+/// The longest version a server may advertise, in bytes.
+const MAX_VERSION: usize = 64;
+
+/// The `(id, version)` entries of an `id@version,...` list, without an id
+/// that is no mod id or a version that is no version: a server writes the
+/// list, and its ids and versions reach the player's notes and the updater.
+fn entries(list: &str) -> impl Iterator<Item = (&str, &str)> {
+    list.split(',')
+        .filter_map(|entry| entry.split_once('@'))
+        .filter(|&(id, version)| {
+            enshwick_loader_api::abi::is_valid_id(id)
+                && !version.is_empty()
+                && version.len() <= MAX_VERSION
+                && version
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'+' | b'-'))
+        })
+}
+
 /// `Name (id)` of mod `id`, or the id when `names` has none.
 fn label(names: &Names, id: &str) -> String {
     enshwick_loader_api::mods::label(names.get(id).map_or("", String::as_str), id)
@@ -95,11 +116,7 @@ impl Plan {
 /// mod list), or no Enshwick at all; notes name mods by `names`.
 #[must_use]
 pub fn plan(ours: &str, ours_mods: &str, server: Option<(&str, &str)>, names: &Names) -> Plan {
-    let ids = |list: &str| -> Vec<String> {
-        list.split(',')
-            .filter_map(|entry| entry.split_once('@').map(|(id, _)| id.to_owned()))
-            .collect()
-    };
+    let ids = |list: &str| -> Vec<String> { entries(list).map(|(id, _)| id.to_owned()).collect() };
     match server {
         Some((fingerprint, _)) if fingerprint == ours => Plan::default(),
         None => Plan {
@@ -133,8 +150,7 @@ pub fn plan(ours: &str, ours_mods: &str, server: Option<(&str, &str)>, names: &N
 #[must_use]
 pub fn differences(server: &str, ours: &str, names: &Names) -> Vec<(String, bool, String)> {
     let parse = |list: &str| -> BTreeMap<String, String> {
-        list.split(',')
-            .filter_map(|entry| entry.split_once('@'))
+        entries(list)
             .map(|(id, version)| (id.to_owned(), version.to_owned()))
             .collect()
     };
@@ -162,13 +178,8 @@ pub fn differences(server: &str, ours: &str, names: &Names) -> Vec<(String, bool
 /// another version, from two `id@version,...` lists.
 #[must_use]
 pub fn wanted(server: &str, ours: &str) -> Vec<(String, String)> {
-    let ours: BTreeMap<&str, &str> = ours
-        .split(',')
-        .filter_map(|entry| entry.split_once('@'))
-        .collect();
-    server
-        .split(',')
-        .filter_map(|entry| entry.split_once('@'))
+    let ours: BTreeMap<&str, &str> = entries(ours).collect();
+    entries(server)
         .filter(|(id, version)| ours.get(id) != Some(version))
         .map(|(id, version)| (id.to_owned(), version.to_owned()))
         .collect()
@@ -201,10 +212,20 @@ pub fn source(reply: &[u8], id: &str) -> Option<Updates> {
     Updates::parse(&line)
 }
 
-/// The name a server advertises for mod `id`; empty when it advertises none.
+/// The name a server advertises for mod `id`, on one line and at most
+/// [`MAX_NAME`] characters; empty when it advertises none.
 #[must_use]
 pub fn name(reply: &[u8], id: &str) -> String {
-    rule(reply, &format!("{}.{id}", crate::advertise::RULE_NAME)).unwrap_or_default()
+    rule(reply, &format!("{}.{id}", crate::advertise::RULE_NAME))
+        .map(|name| {
+            name.chars()
+                .filter(|c| !c.is_control())
+                .take(MAX_NAME)
+                .collect::<String>()
+                .trim()
+                .to_owned()
+        })
+        .unwrap_or_default()
 }
 
 /// The author keys a server advertises for mod `id`; empty when it
@@ -625,6 +646,27 @@ mod tests {
         assert_eq!(keys(&reply, "a"), [key]);
         assert!(keys(&reply, "b").is_empty());
         assert!(keys(&reply, "c").is_empty());
+    }
+
+    #[test]
+    fn a_server_s_ids_versions_and_names_are_checked_before_anyone_reads_them() {
+        let server =
+            "ok@1.2.0,../evil@1.0.0,x\ny@1.0.0,Caps@1.0.0,pack@0.1.0+ab12,bad@1.0\nInstall,@1";
+        assert_eq!(
+            wanted(server, ""),
+            [
+                ("ok".to_owned(), "1.2.0".to_owned()),
+                ("pack".to_owned(), "0.1.0+ab12".to_owned())
+            ]
+        );
+        let missing = plan("ab", "", Some(("cd", server)), &Names::new());
+        assert_eq!(missing.missing.len(), 2, "{:?}", missing.missing);
+        let reply = reply(&[
+            ("enshwick.name.ok", "Safes\n\nVerified by Enshwick"),
+            ("enshwick.name.long", &"n".repeat(500)),
+        ]);
+        assert_eq!(name(&reply, "ok"), "SafesVerified by Enshwick");
+        assert_eq!(name(&reply, "long").chars().count(), MAX_NAME);
     }
 
     #[test]

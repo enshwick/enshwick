@@ -210,10 +210,31 @@ pub(crate) fn apply_server_value(id: &str, values: &str) {
     crate::log::write(
         Level::INFO,
         &record.id,
-        &format!("the server changed its join values: {values}"),
+        &format!("the server changed its join values: {}", shown(values)),
     );
     loader.emit(Event::SETTINGS_CHANGED, Some(index), core::ptr::null());
 }
+
+/// Join values a server sent, as a log line shows them: on one line, cut
+/// at [`SHOWN_VALUES`] characters, so a server writes no lines of its own
+/// into the log.
+fn shown(values: &str) -> String {
+    let mut shown = String::with_capacity(values.len().min(SHOWN_VALUES));
+    for c in values.chars().take(SHOWN_VALUES) {
+        if c.is_control() {
+            shown.extend(c.escape_default());
+        } else {
+            shown.push(c);
+        }
+    }
+    if values.chars().nth(SHOWN_VALUES).is_some() {
+        shown.push_str("...");
+    }
+    shown
+}
+
+/// The most characters of a server's join values a log line shows.
+const SHOWN_VALUES: usize = 512;
 
 pub(crate) fn apply_join_values(values: &BTreeMap<String, String>) {
     let Some(loader) = loader() else {
@@ -248,7 +269,7 @@ pub(crate) fn apply_join_values(values: &BTreeMap<String, String>) {
             held.clone_from(&now);
         }
         let line = match &now {
-            Some(values) => format!("the server's join values apply: {values}"),
+            Some(values) => format!("the server's join values apply: {}", shown(values)),
             None => "the settings file's join values apply again".to_owned(),
         };
         crate::log::write(Level::INFO, &record.id, &line);
@@ -3636,6 +3657,17 @@ mod tests {
     fn read(text: Str) -> Option<&'static str> {
         // SAFETY: the tests read texts of stores that live to their end.
         unsafe { text.as_str() }
+    }
+
+    #[test]
+    fn a_server_s_join_values_stay_on_one_log_line() {
+        assert_eq!(shown("{ a = \"Сейф\" }"), "{ a = \"Сейф\" }");
+        assert_eq!(
+            shown("{ a = 1 }\n12:00:00.000Z ERROR [enshwick] forged"),
+            "{ a = 1 }\\n12:00:00.000Z ERROR [enshwick] forged"
+        );
+        let long = shown(&"x".repeat(SHOWN_VALUES * 4));
+        assert_eq!(long.len(), SHOWN_VALUES + 3);
     }
 
     #[test]
