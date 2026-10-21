@@ -95,7 +95,10 @@ measure = true
   effect when the server starts again. 0 is automatic: the container's CPU limit
   under Wine, rounded up and at least 2, else as many as the game picks.
 - `server_wait_cap_ms`: 1 to 8. 1 is vanilla. Before keeping more, check in
-  game that gliding, joining or respawning and combat feel the same.
+  game that gliding, joining or respawning and combat feel the same. A change
+  applies at once, except a cap raised while the game started with it at 1
+  and `measure = false`: the server loop's wait is hooked only at start, so
+  that cap takes effect at the next start, and the log says so.
 - `measure`: the line a minute. It costs a few atomic counters and a look at
   the threads once a minute.
 
