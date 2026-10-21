@@ -80,10 +80,11 @@ pub unsafe trait ModEvent: Copy + 'static {
 }
 
 /// The hash of one field for a layout: FNV-1a over the field as written,
-/// `name: type`, then its size, alignment and offset.
+/// `name: type` without its whitespace, then its size, alignment and offset.
 ///
 /// The macros call it; the type counts as written, so both sides name it
-/// the same way, which one shared declaration gives.
+/// the same way, which one shared declaration gives. Whitespace does not
+/// count, since compilers print the same tokens with different spacing.
 ///
 /// # Examples
 ///
@@ -93,6 +94,10 @@ pub unsafe trait ModEvent: Copy + 'static {
 /// let a = layout_hash("price: u32", 4, 4, 0);
 /// assert_ne!(a, layout_hash("price: u32", 4, 4, 4));
 /// assert_ne!(a, layout_hash("price: i32", 4, 4, 0));
+/// assert_eq!(
+///     layout_hash("best: Option<u32>", 8, 4, 0),
+///     layout_hash("best : Option < u32 >", 8, 4, 0)
+/// );
 /// ```
 #[must_use]
 pub const fn layout_hash(written: &str, size: usize, align: usize, offset: usize) -> u64 {
@@ -101,8 +106,10 @@ pub const fn layout_hash(written: &str, size: usize, align: usize, offset: usize
     let bytes = written.as_bytes();
     let mut i = 0;
     while i < bytes.len() {
-        hash ^= bytes[i] as u64;
-        hash = hash.wrapping_mul(PRIME);
+        if !bytes[i].is_ascii_whitespace() {
+            hash ^= bytes[i] as u64;
+            hash = hash.wrapping_mul(PRIME);
+        }
         i += 1;
     }
     let numbers = [size as u64, align as u64, offset as u64];
@@ -321,6 +328,34 @@ impl<E: ModEvent> Emitter<E> {
 #[cfg(test)]
 mod tests {
     use super::{Mismatch, compare, layout_hash};
+
+    #[crate::event(name = "probe.direct")]
+    #[derive(Clone, Copy, Debug)]
+    struct Direct {
+        best: Option<u32>,
+        pair: [u8; 2],
+    }
+
+    macro_rules! through {
+        ($best:ty, $pair:ty) => {
+            #[crate::event(name = "probe.through")]
+            #[derive(Clone, Copy, Debug)]
+            struct Through {
+                best: $best,
+                pair: $pair,
+            }
+        };
+    }
+    through!(Option<u32>, [u8; 2]);
+
+    #[test]
+    fn a_type_passed_through_a_macro_hashes_as_written_out() {
+        use super::ModEvent;
+        let hashes = |layout: &[crate::abi::LayoutField]| -> Vec<u64> {
+            layout.iter().map(|field| field.hash).collect()
+        };
+        assert_eq!(hashes(Direct::LAYOUT), hashes(Through::LAYOUT));
+    }
 
     #[test]
     fn an_older_user_reads_a_newer_table() {
