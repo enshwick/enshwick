@@ -65,7 +65,7 @@ jobs:
           done
           if gh release view dev --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
             gh api -X PATCH "repos/$GITHUB_REPOSITORY/git/refs/tags/dev" -f sha="$GITHUB_SHA" -F force=true > /dev/null
-            gh release edit dev --repo "$GITHUB_REPOSITORY" --title "$title" --notes "$notes" --prerelease --latest=false
+            gh release edit dev --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "$title" --notes "$notes" --prerelease --latest=false
             gh release upload dev "${assets[@]}" --clobber --repo "$GITHUB_REPOSITORY"
             # Files of an earlier build that this one no longer has, such as a
             # renamed mod's archive, go.
