@@ -321,6 +321,10 @@ static LAST: OnceLock<String> = OnceLock::new();
 static NEXT: AtomicUsize = AtomicUsize::new(0);
 /// Set while the filter runs: a fault inside it goes to the next filter.
 static INSIDE: AtomicBool = AtomicBool::new(false);
+/// The thread the filter handed on to the next filter, 0 before: a filter
+/// set after the loader's chains back to it, which must not call that one
+/// again.
+static HANDED_ON: AtomicU32 = AtomicU32::new(0);
 
 /// The filter's line, used by one thread at a time under [`INSIDE`].
 struct Shared(UnsafeCell<Line>);
@@ -978,8 +982,12 @@ unsafe fn report(pointers: *const EXCEPTION_POINTERS, thread: u32) {
 unsafe extern "system" fn filter(pointers: *const EXCEPTION_POINTERS) -> i32 {
     // SAFETY: no preconditions.
     let thread = unsafe { GetCurrentThreadId() };
+    if HANDED_ON.load(Ordering::Acquire) == thread {
+        return CONTINUE_SEARCH;
+    }
     // SAFETY: Windows passes the fault's pointers on the faulting thread.
     unsafe { report(pointers, thread) };
+    HANDED_ON.store(thread, Ordering::Release);
     let next = NEXT.load(Ordering::Acquire);
     if next == 0 {
         return CONTINUE_SEARCH;
@@ -1058,6 +1066,24 @@ unsafe fn record(state: &State, pointers: &EXCEPTION_POINTERS, thread: u32, line
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_filter_that_chains_back_runs_once() {
+        static CALLS: AtomicU32 = AtomicU32::new(0);
+        // Another module's filter, set after ours, calls the one it
+        // replaced: ours.
+        unsafe extern "system" fn other(pointers: *const EXCEPTION_POINTERS) -> i32 {
+            if CALLS.fetch_add(1, Ordering::Relaxed) > 4 {
+                return CONTINUE_SEARCH;
+            }
+            // SAFETY: forwarded unchanged.
+            unsafe { filter(pointers) }
+        }
+        NEXT.store(other as *const () as usize, Ordering::Release);
+        // SAFETY: no pointers: the report stops at once.
+        assert_eq!(unsafe { filter(core::ptr::null()) }, CONTINUE_SEARCH);
+        assert_eq!(CALLS.load(Ordering::Relaxed), 1);
+    }
 
     fn ranges() -> [Range; 3] {
         [

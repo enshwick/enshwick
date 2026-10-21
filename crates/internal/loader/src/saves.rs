@@ -163,12 +163,24 @@ fn remember(path: &str, thread: u32) {
         return;
     };
     let mut keys = KEYS.lock().unwrap_or_else(PoisonError::into_inner);
-    let known = keys.iter().find(|&&(_, k)| k == key).map(|&(_, k)| k);
-    let key = known.unwrap_or_else(|| {
-        crate::log!(INFO, "world key {key}, from {path}");
-        Box::leak(key.into_boxed_str())
-    });
+    let key = intern(&key, path);
     keep(&mut keys, thread, key);
+}
+
+/// Every world key seen, kept once for the process: a menu that builds the
+/// paths of several worlds sees each key again and again.
+static SEEN: Mutex<Vec<&'static str>> = Mutex::new(Vec::new());
+
+/// `key`, kept for the process; logged the first time, from `path`.
+fn intern(key: &str, path: &str) -> &'static str {
+    let mut seen = SEEN.lock().unwrap_or_else(PoisonError::into_inner);
+    if let Some(&known) = seen.iter().find(|&&k| k == key) {
+        return known;
+    }
+    crate::log!(INFO, "world key {key}, from {path}");
+    let kept: &'static str = Box::leak(key.into());
+    seen.push(kept);
+    kept
 }
 
 /// Makes `key` the latest of `thread` in `keys`, keeping at most [`KEPT`].
@@ -269,6 +281,17 @@ pub(crate) fn request(loader: &Loader) -> Result<(), Status> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_world_key_is_kept_once() {
+        let first = intern("a1b2", "x");
+        for _ in 0..3 {
+            let _other = intern("c3d4", "y");
+            assert!(core::ptr::eq(intern("a1b2", "x"), first));
+        }
+        let seen = SEEN.lock().unwrap();
+        assert_eq!(seen.iter().filter(|k| **k == "a1b2").count(), 1);
+    }
 
     #[test]
     fn a_world_key_names_the_save_and_its_folder() {

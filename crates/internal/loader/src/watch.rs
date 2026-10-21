@@ -28,10 +28,18 @@ static WRITTEN: Mutex<Vec<(PathBuf, Stamp)>> = Mutex::new(Vec::new());
 /// watcher does not raise it again.
 pub(crate) fn wrote(path: &Path) {
     let now = stamp(path);
-    WRITTEN
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .push((path.to_path_buf(), now));
+    note(
+        &mut WRITTEN.lock().unwrap_or_else(PoisonError::into_inner),
+        path,
+        now,
+    );
+}
+
+/// Keeps the latest write of `path` only: an older one can never match
+/// again, and a file no watcher looks at must not pile up writes.
+fn note(written: &mut Vec<(PathBuf, Stamp)>, path: &Path, now: Stamp) {
+    written.retain(|(p, _)| p != path);
+    written.push((path.to_path_buf(), now));
 }
 
 /// Whether the loader wrote `path` as it looks now; forgets the write.
@@ -224,6 +232,19 @@ fn changed(loader: &Loader, owner: Option<usize>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn writes_to_one_file_keep_only_the_latest() {
+        let mut written = Vec::new();
+        let (a, b) = (Path::new("a.toml"), Path::new("b.toml"));
+        let stamp = |n| Some((SystemTime::UNIX_EPOCH, n));
+        for n in 0..100 {
+            note(&mut written, a, stamp(n));
+        }
+        note(&mut written, b, stamp(1));
+        assert_eq!(written.len(), 2);
+        assert!(written.contains(&(a.to_path_buf(), stamp(99))));
+    }
 
     #[test]
     fn a_world_s_settings_count_as_changed_only_when_someone_else_edits_them() {

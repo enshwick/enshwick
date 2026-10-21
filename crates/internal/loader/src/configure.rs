@@ -135,11 +135,17 @@ pub fn list(id: &str, schema: &Schema, text: &str) -> String {
 pub fn get(id: &str, schema: &Schema, text: &str, key: &str) -> Result<String, String> {
     let field = field(id, schema, key)?;
     let value = current(text, field);
+    // A secret's default is as secret as its value.
+    let default = if field.secret && !field.default.is_empty() {
+        texts::fill("config.secret", &[])
+    } else {
+        field.default.clone()
+    };
     let args = [
         ("id", id),
         ("key", field.key.as_str()),
         ("value", value.as_str()),
-        ("default", field.default.as_str()),
+        ("default", default.as_str()),
     ];
     let mut lines = vec![if field.default.is_empty() {
         texts::fill("config.get.no-default", &args)
@@ -297,6 +303,7 @@ mod tests {
                 Field::new("language", Stage::Runtime, "en").with_choices(&["en", "uk"]),
                 Field::new("note", Stage::Client, "hi"),
                 Field::new("token", Stage::Runtime, "").with_secret(true),
+                Field::new("shared", Stage::Runtime, "letmein").with_secret(true),
             ],
         )
     }
@@ -348,6 +355,8 @@ mod tests {
             !one.contains("hunter2") && one.contains("(secret)"),
             "{one}"
         );
+        let shared = get("safes", &schema(), &file, "shared").unwrap();
+        assert!(!shared.contains("letmein"), "{shared}");
         assert_eq!(
             set("safes", &schema(), &file, "token", "\"x\"").unwrap_err(),
             "token is changed in the server's file only."
