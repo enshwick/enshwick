@@ -1,5 +1,7 @@
 # Changelog
 
+## [0.3.6](https://github.com/themaiby/enshwick/compare/enshwick-furniture-comfort-v0.3.5...enshwick-furniture-comfort-v0.3.6) (2026-10-21)
+
 ## [0.3.5](https://github.com/themaiby/enshwick/compare/enshwick-furniture-comfort-v0.3.4...enshwick-furniture-comfort-v0.3.5) (2026-10-21)
 
 ## [0.3.4](https://github.com/themaiby/enshwick/compare/enshwick-furniture-comfort-v0.3.3...enshwick-furniture-comfort-v0.3.4) (2026-10-21)

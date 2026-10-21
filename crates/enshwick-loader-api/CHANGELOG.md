@@ -1,5 +1,31 @@
 # Changelog
 
+## [0.9.0](https://github.com/themaiby/enshwick/compare/enshwick-loader-api-v0.8.2...enshwick-loader-api-v0.9.0) (2026-10-21)
+
+
+### ⚠ BREAKING CHANGES
+
+* **updater:** accept common GitHub release forms and unsigned updates ([#198](https://github.com/themaiby/enshwick/issues/198))
+* **loader:** show only updates of installed mods on the Mods screen ([#196](https://github.com/themaiby/enshwick/issues/196))
+
+### Features
+
+* **loader:** name the killer entity of a player killed by a hit ([#202](https://github.com/themaiby/enshwick/issues/202)) ([c81f863](https://github.com/themaiby/enshwick/commit/c81f8630e192ec6dceba4c395c4639aafea27e7b))
+* **loader:** show only updates of installed mods on the Mods screen ([#196](https://github.com/themaiby/enshwick/issues/196)) ([aee82ac](https://github.com/themaiby/enshwick/commit/aee82acb3a6a0f9d8aa2ebbe414a7a31961c1cd7))
+* **updater:** accept common GitHub release forms and unsigned updates ([#198](https://github.com/themaiby/enshwick/issues/198)) ([51d3e47](https://github.com/themaiby/enshwick/commit/51d3e4754a34496c5c90ab4b610f3621f0a92d85))
+
+
+### Bug Fixes
+
+* **loader:** refuse world changes inside a step ([#199](https://github.com/themaiby/enshwick/issues/199)) ([56f7b79](https://github.com/themaiby/enshwick/commit/56f7b799d8ba90cce10fcd5f1385f5410e995555))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * enshwick-loader-macros bumped from 0.8.2 to 0.9.0
+
 ## [0.8.2](https://github.com/themaiby/enshwick/compare/enshwick-loader-api-v0.8.1...enshwick-loader-api-v0.8.2) (2026-10-21)
 
 

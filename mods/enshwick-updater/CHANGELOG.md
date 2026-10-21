@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.5.0](https://github.com/themaiby/enshwick/compare/enshwick-updater-v0.4.5...enshwick-updater-v0.5.0) (2026-10-21)
+
+
+### ⚠ BREAKING CHANGES
+
+* **updater:** accept common GitHub release forms and unsigned updates ([#198](https://github.com/themaiby/enshwick/issues/198))
+* **loader:** show only updates of installed mods on the Mods screen ([#196](https://github.com/themaiby/enshwick/issues/196))
+
+### Features
+
+* **loader:** show only updates of installed mods on the Mods screen ([#196](https://github.com/themaiby/enshwick/issues/196)) ([aee82ac](https://github.com/themaiby/enshwick/commit/aee82acb3a6a0f9d8aa2ebbe414a7a31961c1cd7))
+* **updater:** accept common GitHub release forms and unsigned updates ([#198](https://github.com/themaiby/enshwick/issues/198)) ([51d3e47](https://github.com/themaiby/enshwick/commit/51d3e4754a34496c5c90ab4b610f3621f0a92d85))
+
 ## [0.4.5](https://github.com/themaiby/enshwick/compare/enshwick-updater-v0.4.4...enshwick-updater-v0.4.5) (2026-10-21)
 
 ## [0.4.4](https://github.com/themaiby/enshwick/compare/enshwick-updater-v0.4.3...enshwick-updater-v0.4.4) (2026-10-21)

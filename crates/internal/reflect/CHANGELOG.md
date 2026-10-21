@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.0](https://github.com/themaiby/enshwick/compare/enshwick-loader-reflect-v0.8.2...enshwick-loader-reflect-v0.9.0) (2026-10-21)
+
+
+### Other
+
+* **enshwick-loader-reflect:** Synchronize enshwick versions
+
 ## [0.8.2](https://github.com/themaiby/enshwick/compare/enshwick-loader-reflect-v0.8.1...enshwick-loader-reflect-v0.8.2) (2026-10-21)
 
 

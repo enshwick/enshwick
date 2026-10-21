@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.9.0](https://github.com/themaiby/enshwick/compare/enshwick-loader-builds-v0.8.2...enshwick-loader-builds-v0.9.0) (2026-10-21)
+
+
+### Bug Fixes
+
+* **loader:** look up the survivors' component types by hash ([#201](https://github.com/themaiby/enshwick/issues/201)) ([b1d6e57](https://github.com/themaiby/enshwick/commit/b1d6e57aa68fce15f2a6637cd5117dc94e49e3fb))
+* **loader:** refuse world changes inside a step ([#199](https://github.com/themaiby/enshwick/issues/199)) ([56f7b79](https://github.com/themaiby/enshwick/commit/56f7b799d8ba90cce10fcd5f1385f5410e995555))
+
 ## [0.8.2](https://github.com/themaiby/enshwick/compare/enshwick-loader-builds-v0.8.1...enshwick-loader-builds-v0.8.2) (2026-10-21)
 
 

@@ -1,5 +1,7 @@
 # Changelog
 
+## [0.6.4](https://github.com/themaiby/enshwick/compare/enshwick-survivors-per-altar-v0.6.3...enshwick-survivors-per-altar-v0.6.4) (2026-10-21)
+
 ## [0.6.3](https://github.com/themaiby/enshwick/compare/enshwick-survivors-per-altar-v0.6.2...enshwick-survivors-per-altar-v0.6.3) (2026-10-21)
 
 

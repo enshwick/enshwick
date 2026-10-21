@@ -1,6 +1,6 @@
 [package]
 name = "enshwick-admin-tools"
-version = "0.4.5"
+version = "0.4.6"
 description = "Tools for test servers: /admin commands and a command file run as the server console"
 keywords = ["enshrouded", "mod", "server", "testing", "commands"]
 categories = ["game-development"]
