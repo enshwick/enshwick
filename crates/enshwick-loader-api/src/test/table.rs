@@ -51,6 +51,8 @@ pub(crate) struct State {
     pub(crate) sent_events: Vec<String>,
     /// The migrations the mod declared.
     pub(crate) migrations: Option<super::FakeMigrations>,
+    /// Content ids the mod declared, in order.
+    pub(crate) content_ids: Vec<String>,
     pub(crate) defaults: Vec<String>,
     pub(crate) synced: Vec<String>,
     pub(crate) commands: Vec<(String, String, CommandCallFn, usize)>,
@@ -194,6 +196,7 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         mod_event_subscriptions: Vec::new(),
         sent_events: Vec::new(),
         migrations: None,
+        content_ids: Vec::new(),
         defaults: Vec::new(),
         synced: Vec::new(),
         inventory_requests: Vec::new(),
@@ -537,6 +540,26 @@ extern "system" fn send_event(_me: ModHandle, event: u32, _data: *const c_void) 
         };
         s.sent_events.push(name);
         Status::OK
+    })
+}
+
+extern "system" fn declare_content(_me: ModHandle, id: Str, out: *mut [u8; 16]) -> Status {
+    let id = text(id);
+    let Some(guid) = crate::content::Guid::try_named(&id) else {
+        return Status::BAD_ARGS;
+    };
+    with(Status::MISSING, |s| {
+        let clash = s.content_ids.iter().any(|known| {
+            *known != id
+                && crate::content::Guid::try_named(known).is_some_and(|g| g.id() == guid.id())
+        });
+        if clash {
+            return Status::REFUSED;
+        }
+        if !s.content_ids.contains(&id) {
+            s.content_ids.push(id);
+        }
+        put(out, guid.0)
     })
 }
 
@@ -2222,4 +2245,5 @@ pub(crate) static TABLE: HostApi = HostApi {
     item_lines: super::stats::item_lines,
     affix_info: super::stats::affix_info,
     migrate,
+    declare_content,
 };

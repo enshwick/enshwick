@@ -6,13 +6,15 @@ mod tests {
     use enshwick_loader_api::abi::Status;
     use enshwick_loader_api::content::icons::{Icon, Pixels, Tint};
     use enshwick_loader_api::content::items::NewItem;
-    use enshwick_loader_api::content::{Guid, types};
+    use enshwick_loader_api::content::{Guid, Id, types};
     use enshwick_loader_api::test::FakeHost;
     use enshwick_loader_api::{Load, Mod, Off};
 
-    const STAFF: Guid = Guid::parse("8a3f6e21-5c4b-4d7e-9f10-2b7c5e6a9d31");
+    const STAFF_ID: Id = Id::new("staffs:staff");
+    const STAFF: Guid = STAFF_ID.guid();
     const VANILLA: Guid = Guid::parse("505ccfbc-440d-4d63-a3d6-d689d3d55e78");
-    const ICON: Guid = Guid::parse("3c1f2a9e-7d4b-4e8a-9f60-1a2b3c4d5e6f");
+    const ICON_ID: Id = Id::new("staffs:staff.icon");
+    const ICON: Guid = ICON_ID.guid();
 
     struct Staffs;
 
@@ -24,14 +26,14 @@ mod tests {
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             load.add_item(NewItem {
                 icon: Some(Icon {
-                    guid: ICON,
+                    id: ICON_ID,
                     like: VANILLA,
                     pixels: Pixels::Tint(Tint {
                         colour: [0, 0, 255],
                         amount: 100,
                     }),
                 }),
-                ..NewItem::new(STAFF, VANILLA, "Staff")
+                ..NewItem::new(STAFF_ID, VANILLA)
             })?;
             Ok(Self)
         }

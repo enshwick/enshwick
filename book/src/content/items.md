@@ -2,20 +2,20 @@
 
 [`Load::add_item`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/content/items.rs)
 adds an item to the game. The new item is a clone of a vanilla one: it looks
-and behaves like it, under a GUID of its own, with its own name and
-description if you give them.
+and behaves like it, under a [content id](../content.md#content-ids) of its
+own, with its own name and description if you give them.
 
 ```rust
-use enshwick_loader_api::content::Guid;
+use enshwick_loader_api::content::{Guid, Id};
 use enshwick_loader_api::content::items::NewItem;
 
 /// The vanilla wooden chest.
 const CHEST: Guid = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");
-/// The new item, the mod's own GUID.
-const SAFE: Guid = Guid::parse("8a3f6e21-5c4b-4d7e-9f10-2b7c5e6a9d31");
+/// The new item.
+const SAFE: Id = Id::new("safes:safe");
 /// The tags of its name and description.
-const SAFE_NAME: Guid = Guid::parse("b7c1d2e3-4f50-4a61-8b72-c3d4e5f60718");
-const SAFE_DESCRIPTION: Guid = Guid::parse("c8d2e3f4-5061-4b72-9c83-d4e5f6071829");
+const SAFE_NAME: Id = Id::new("safes:safe.name");
+const SAFE_DESCRIPTION: Id = Id::new("safes:safe.description");
 
 const TEXTS: &str = r#"
 [en]
@@ -30,9 +30,9 @@ fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_
         ("safe.description", SAFE_DESCRIPTION),
     ])?;
     load.add_item(NewItem {
-        name: Some(SAFE_NAME),
-        description: Some(SAFE_DESCRIPTION),
-        ..NewItem::new(SAFE, CHEST, "Safe")
+        name: Some(SAFE_NAME.guid()),
+        description: Some(SAFE_DESCRIPTION.guid()),
+        ..NewItem::new(SAFE, CHEST)
     })
 }
 ```
@@ -44,17 +44,18 @@ A real mod keeps the texts in a file and embeds it with
 
 | Field | Meaning |
 | --- | --- |
-| `guid` | The new item's GUID. Its game id is `guid.id()`. |
+| `id` | The new item's content id. Its game id is `id.id()`. |
 | `like` | The vanilla item it is cloned from: what it looks like and does. |
 | `name` | The tag of its name; `None` keeps the vanilla item's name. |
 | `description` | The tag of its description; `None` keeps the vanilla one. |
-| `debug_name` | The name in the item registry's debug list. |
+| `debug_name` | The name in the item registry's debug list; the id unless set. |
 | `meter` | A count each item keeps, see [Meters](#meters); `None` for none. |
 | `stats` | Lines the tooltip shows after the vanilla item's, see [Tooltip lines](#tooltip-lines). |
 | `icon` | An icon of its own, see [Icons](#icons); `None` keeps the vanilla icon. |
 
-`NewItem::new(guid, like, debug_name)` makes one with no edits but its
-identity; set the other fields with struct update syntax.
+`NewItem::new(id, like)` makes one with no edits but its identity; set the
+other fields with struct update syntax. `add_item` declares the item's id,
+its meter template's and its icon's.
 
 `add_item` serves two resources: the new item's `ItemInfo`, built from the
 vanilla one with the new id, GUID, name, description, meter and tooltip lines
@@ -66,6 +67,8 @@ chest.
 
 An item whose GUID changed keeps the stacks saved with the old one through a
 [migration](../migrations.md): `rename_content(old, new)` adds it under both.
+Old stacks keep the old game id, so compare item ids through
+[`migrations::current_id`](../migrations.md#items-under-their-old-ids).
 
 The item exists once the game reads it, but nobody has one yet. Players get
 it from a [recipe](recipes.md), loot, or a mod's
@@ -79,25 +82,25 @@ water: on the item's own entity, saved with the world, sent to players and
 drawn as a bar on the item's slot.
 
 ```rust
-use enshwick_loader_api::content::Guid;
+use enshwick_loader_api::content::{Guid, Id};
 use enshwick_loader_api::content::items::{Meter, NewItem};
 
-const STAFF: Guid = Guid::parse("8a3f6e21-5c4b-4d7e-9f10-2b7c5e6a9d31");
+const STAFF: Id = Id::new("my-mod:charged-staff");
 const VANILLA_STAFF: Guid = Guid::parse("505ccfbc-440d-4d63-a3d6-d689d3d55e78");
-/// The staff entity's template: the mod's own GUID, fixed forever.
-const STAFF_ENTITY: Guid = Guid::parse("0b6f3c1e-2d4a-4e5f-8a9b-1c2d3e4f5a6b");
+/// The staff entity's template, fixed forever.
+const STAFF_ENTITY: Id = Id::new("my-mod:charged-staff.entity");
 
 fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
     load.add_item(NewItem {
         meter: Some(Meter { template: STAFF_ENTITY, max: 3, start: 3 }),
-        ..NewItem::new(STAFF, VANILLA_STAFF, "Charged staff")
+        ..NewItem::new(STAFF, VANILLA_STAFF)
     })
 }
 ```
 
 | `Meter` field | Meaning |
 | --- | --- |
-| `template` | The GUID of the item entity's template, a clone of the water pouch's; saves hold it. Items with the same meter may share one. |
+| `template` | The content id of the item entity's template, a clone of the water pouch's; saves hold its GUID. Items with the same meter may share one. |
 | `max` | The most it holds, 1 or more. |
 | `start` | What a new item holds when nothing sets its fill. |
 
@@ -120,17 +123,19 @@ entity already, such as a weapon with durability, cannot take a meter:
 game lists an armour's bonuses: each a [text tag](texts.md) and a number.
 
 ```rust
-use enshwick_loader_api::content::Guid;
+use enshwick_loader_api::content::{Guid, Id};
 use enshwick_loader_api::content::items::{NewItem, Stat, StatFormat};
 
-const RING: Guid = Guid::parse("8a3f6e21-5c4b-4d7e-9f10-2b7c5e6a9d31");
+const RING: Id = Id::new("my-mod:lucky-ring");
 const VANILLA_RING: Guid = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");
-const LUCK: Guid = Guid::parse("c8d2e3f4-5061-4b72-9c83-d4e5f6071829");
+const LUCK: Id = Id::new("my-mod:lucky-ring.luck");
 
 fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+    let texts = load.texts("[en]\nluck = \"Luck\"\n")?;
+    load.add_texts(&texts, &[("luck", LUCK)])?;
     load.add_item(NewItem {
-        stats: vec![Stat { label: LUCK, value: 5, format: StatFormat::Percent }],
-        ..NewItem::new(RING, VANILLA_RING, "Lucky ring")
+        stats: vec![Stat { label: LUCK.guid(), value: 5, format: StatFormat::Percent }],
+        ..NewItem::new(RING, VANILLA_RING)
     })
 }
 ```
@@ -144,8 +149,8 @@ of its own shows through its meter.
 The game's item icons are pictures it ships ready-made: UI images, named by
 GUID, whose pixels it reads from its archive. An
 [`Icon`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/content/icons.rs)
-is a UI image the mod serves under a GUID of its own, made when the client
-first shows it:
+is a UI image the mod serves under a content id of its own, made when the
+client first shows it:
 
 - `Pixels::Tint(Tint { colour, amount })` recolours the vanilla icon
   `like`: every pixel moves `amount` percent toward `colour` at its own
@@ -155,23 +160,23 @@ first shows it:
   best square, such as 256 by 256.
 
 ```rust
-use enshwick_loader_api::content::Guid;
+use enshwick_loader_api::content::{Guid, Id};
 use enshwick_loader_api::content::icons::{Icon, Pixels, Tint};
 use enshwick_loader_api::content::items::NewItem;
 
 /// The Blacksmith's summoning staff; its icon is a portrait.
 const VANILLA_STAFF: Guid = Guid::parse("505ccfbc-440d-4d63-a3d6-d689d3d55e78");
-const STAFF: Guid = Guid::parse("8a3f6e21-5c4b-4d7e-9f10-2b7c5e6a9d31");
-const STAFF_ICON: Guid = Guid::parse("3c1f2a9e-7d4b-4e8a-9f60-1a2b3c4d5e6f");
+const STAFF: Id = Id::new("my-mod:spectral-staff");
+const STAFF_ICON: Id = Id::new("my-mod:spectral-staff.icon");
 
 fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
     load.add_item(NewItem {
         icon: Some(Icon {
-            guid: STAFF_ICON,
+            id: STAFF_ICON,
             like: VANILLA_STAFF,
             pixels: Pixels::Tint(Tint { colour: [120, 170, 255], amount: 60 }),
         }),
-        ..NewItem::new(STAFF, VANILLA_STAFF, "Spectral staff")
+        ..NewItem::new(STAFF, VANILLA_STAFF)
     })
 }
 ```
@@ -206,15 +211,17 @@ assert_eq!(CHEST.id(), 1_302_084_846);
 assert_eq!(CHEST.to_string(), "6943053a-32c1-4718-ae22-e61427ddf54d");
 ```
 
-Saves keep item ids, so a GUID is fixed for good once players have the item:
-see [Content](../content.md#guids-are-fixed-forever).
+Saves keep item ids, so a content id is fixed for good once players have the
+item: see [Content ids](../content.md#content-ids).
 
 ## Errors
 
 `add_item` returns `Err(Off)` when the loader is too old for served
 resources, when the game's reflection lacks a field the clone writes, when
-another mod serves the same item GUID from another vanilla item, or when the
-meter's maximum is 0. A meter on an item that has an entity already turns
+another mod serves the same item GUID from another vanilla item, when the
+meter's maximum is 0, or when the loader refuses one of its content ids. An
+item whose game id a vanilla item has turns the mod off when the game first
+reads the registry, with both items named in the mod's log. A meter on an item that has an entity already turns
 the mod off when the game reads the item.
 [`enshwick-safes`](https://github.com/themaiby/enshwick/tree/main/mods/enshwick-safes)
 adds its Safe this way.

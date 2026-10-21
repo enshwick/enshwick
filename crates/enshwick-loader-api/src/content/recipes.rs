@@ -2,7 +2,7 @@
 //! scaled, or the recipes in the registry changed in place.
 
 use super::workshops::WorkshopId;
-use super::{Blob, Guid, types};
+use super::{Blob, Guid, Id, types};
 use crate::{Load, Off};
 
 /// The most recipes the game itself takes at one workshop; more ends the game
@@ -53,8 +53,8 @@ pub const RECIPE_REGISTRY: Guid = Guid::parse("5e57de0f-280c-4559-8191-f02c1ba65
 /// See [`Load::add_recipe`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct NewRecipe {
-    /// The new recipe's GUID; its game id is [`Guid::id`].
-    pub guid: Guid,
+    /// The new recipe's id; its game id is [`Id::id`].
+    pub id: Id,
     /// The item whose recipe is copied: same workshop, unlock and duration.
     pub like: Guid,
     /// The item the recipe makes.
@@ -222,7 +222,7 @@ pub fn add_recipe_to(
     )?;
     let (start, _) = registry.array(layout.recipes)?;
     let at = start + usize::try_from(index).ok()? * layout.recipe;
-    let id = recipe.guid.id().to_le_bytes();
+    let id = recipe.id.id().to_le_bytes();
     let mut output = vec![0u8; layout.stack_size];
     output.get_mut(..16)?.copy_from_slice(&recipe.output.0);
     output
@@ -234,7 +234,7 @@ pub fn add_recipe_to(
     let input_count = u32::try_from(inputs.len() / layout.input_size.max(1)).ok()?;
     let inputs_at = registry.append(&inputs, 8);
     let output_at = registry.append(&output, 8);
-    let written = registry.write(at + layout.guid, &recipe.guid.0)
+    let written = registry.write(at + layout.guid, &recipe.id.guid().0)
         && registry.write(at + layout.id, &id)
         // The recipe's completion flag is its own id.
         && registry.write(at + layout.completion, &id)
@@ -631,21 +631,22 @@ impl Load<'_> {
     ///
     /// # Errors
     ///
-    /// [`Off`] when the loader is too old or the recipe layout is not
-    /// reflected; a `like` with no recipe turns the mod off when the game
-    /// first reads the registry.
+    /// [`Off`] when the loader is too old, the recipe layout is not
+    /// reflected or the loader refuses the recipe's id (see
+    /// [`Load::declare`]); a `like` with no recipe turns the mod off when the
+    /// game first reads the registry.
     ///
     /// # Examples
     ///
     /// ```
-    /// use enshwick_loader_api::content::Guid;
+    /// use enshwick_loader_api::content::{Guid, Id};
     /// use enshwick_loader_api::content::recipes::NewRecipe;
     ///
     /// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
     ///     load.add_recipe(NewRecipe {
-    ///         guid: Guid::parse("4e9d2c17-8b3a-4f65-a1c2-7d5e3b9f0a48"),
+    ///         id: Id::new("my-mod:safe.recipe"),
     ///         like: Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d"),
-    ///         output: Guid::parse("8a3f6e21-5c4b-4d7e-9f10-2b7c5e6a9d31"),
+    ///         output: Guid::named("my-mod:safe"),
     ///         output_count: 1,
     ///         cost: 2,
     ///         workshop: None,
@@ -653,6 +654,7 @@ impl Load<'_> {
     /// }
     /// ```
     pub fn add_recipe(&mut self, recipe: NewRecipe) -> Result<(), Off> {
+        self.declare(recipe.id)?;
         let layout = RecipeLayout::resolve(self)?;
         let registry = RECIPE_REGISTRY.key(types::RECIPE_REGISTRY);
         self.serve(registry, registry, move |base| {
@@ -759,7 +761,8 @@ mod tests {
     };
     const CHEST: Guid = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");
     const SAFE: Guid = Guid::parse("8a3f6e21-5c4b-4d7e-9f10-2b7c5e6a9d31");
-    const RECIPE: Guid = Guid::parse("4e9d2c17-8b3a-4f65-a1c2-7d5e3b9f0a48");
+    const RECIPE_ID: Id = Id::new("test:recipe");
+    const RECIPE: Guid = RECIPE_ID.guid();
 
     fn u32_at(bytes: &[u8], at: usize) -> u32 {
         u32::from_le_bytes(bytes[at..at + 4].try_into().unwrap())
@@ -782,7 +785,7 @@ mod tests {
         assert!(blob.set_array(8, recipe, 1));
 
         let new = NewRecipe {
-            guid: RECIPE,
+            id: RECIPE_ID,
             like: CHEST,
             output: SAFE,
             output_count: 1,
@@ -864,7 +867,7 @@ mod tests {
         assert!(blob.set_array(8, recipe, 1));
         let bench = WorkshopId::new(Guid::parse("5b828914-9b48-40f8-b541-72e9b942cee6"));
         let new = NewRecipe {
-            guid: RECIPE,
+            id: RECIPE_ID,
             like: CHEST,
             output: SAFE,
             output_count: 1,
@@ -966,7 +969,7 @@ mod tests {
         let mut blob = Blob::new(&[0u8; 16]);
         assert!(blob.set_array(8, 16, 0));
         let new = NewRecipe {
-            guid: RECIPE,
+            id: RECIPE_ID,
             like: CHEST,
             output: SAFE,
             output_count: 1,

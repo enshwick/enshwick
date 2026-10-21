@@ -688,6 +688,7 @@ pub(crate) static API: HostApi = HostApi {
     subscribe_event,
     send_event,
     migrate,
+    declare_content,
 };
 
 /// A static slice from a pointer and a count, empty for a null pointer.
@@ -1128,6 +1129,28 @@ extern "system" fn migrate(me: ModHandle, set: *const api_frame::MigrationSet) -
         match unsafe { set.as_ref() } {
             Some(set) => crate::migrations::register(loader, index, set),
             None => Status::BAD_ARGS,
+        }
+    })
+}
+
+extern "system" fn declare_content(me: ModHandle, id: Str, out: *mut [u8; 16]) -> Status {
+    entry("declare_content", || {
+        let (loader, index, record) = match calling(me) {
+            Ok(found) => found,
+            Err(status) => return status,
+        };
+        if loader.delivery.get().is_some() {
+            return Status::TOO_LATE;
+        }
+        let Some(id) = text(id) else {
+            return Status::BAD_ARGS;
+        };
+        match crate::ids::declare_content(&record.id, id) {
+            Ok(guid) => put(out, guid.0),
+            Err(why) => {
+                loader.turn_off(index, &why);
+                Status::REFUSED
+            }
         }
     })
 }

@@ -47,7 +47,7 @@ pub(crate) fn link(load: &mut Load<'_>) -> Result<(), Off> {
     let world = load.world()?;
     let scheduler = load.scheduler()?;
     let containers = world.component_type(load, "keen::ecs::InventorySetup").ok();
-    let staffs = crate::staffs::copy_ids();
+    let staffs = crate::staffs::known_ids();
     let sweep = {
         let staffs = staffs.clone();
         move || {

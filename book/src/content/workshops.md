@@ -9,16 +9,16 @@ returns its
 for your recipes.
 
 ```rust
-use enshwick_loader_api::content::Guid;
+use enshwick_loader_api::content::Id;
 use enshwick_loader_api::content::recipes::Derived;
 use enshwick_loader_api::content::workshops::{NewWorkshop, StationRecipe, stations};
 
-const BENCH: Guid = Guid::parse("0851e93d-8883-42e4-a807-c30fd644e7c3");
-const BENCH_TEMPLATE: Guid = Guid::parse("77ff6155-1365-4a4a-8987-507a1bdd32a2");
-const BENCH_WORKSHOP: Guid = Guid::parse("5b828914-9b48-40f8-b541-72e9b942cee6");
-const BENCH_RECIPE: Guid = Guid::parse("94cf68a3-11e0-4c05-a793-526f7e1d7693");
-const BENCH_NAME: Guid = Guid::parse("41b222ea-cefa-4774-a040-c43aa9f0b227");
-const BENCH_DESCRIPTION: Guid = Guid::parse("6bc87387-936a-40a5-8e62-5aa5dbf933eb");
+const BENCH: Id = Id::new("my-mod:bulk-bench");
+const BENCH_TEMPLATE: Id = Id::new("my-mod:bulk-bench.template");
+const BENCH_WORKSHOP: Id = Id::new("my-mod:bulk-bench.workshop");
+const BENCH_RECIPE: Id = Id::new("my-mod:bulk-bench.recipe");
+const BENCH_NAME: Id = Id::new("my-mod:bulk-bench.name");
+const BENCH_DESCRIPTION: Id = Id::new("my-mod:bulk-bench.description");
 
 fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
     let texts = load.texts(r#"
@@ -35,9 +35,9 @@ fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_
         item: BENCH,
         template: BENCH_TEMPLATE,
         workshop: BENCH_WORKSHOP,
-        name: Some(BENCH_NAME),
-        description: Some(BENCH_DESCRIPTION),
-        station_recipe: Some(StationRecipe { guid: BENCH_RECIPE, cost: 1 }),
+        name: Some(BENCH_NAME.guid()),
+        description: Some(BENCH_DESCRIPTION.guid()),
+        station_recipe: Some(StationRecipe { id: BENCH_RECIPE, cost: 1 }),
         debug_name: "Craftingstation_BulkWorkbench".into(),
     })?;
     load.derive_recipes("my-mod", move |recipe| {
@@ -75,12 +75,12 @@ made at it.
 | Field | Meaning |
 | --- | --- |
 | `like` | The vanilla station cloned, a [`Station`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/content/workshops.rs): its item and the template the item places. |
-| `item` | The new station item's GUID. |
-| `template` | The new station's template GUID. |
-| `workshop` | The new workshop's GUID. |
+| `item` | The new station item's content id. |
+| `template` | The new station's template's content id. |
+| `workshop` | The new workshop's content id. |
 | `name` | The tag of the station's name, which also names the workshop; `None` keeps the vanilla names. |
 | `description` | The tag of the station item's description; `None` keeps the vanilla one. |
-| `station_recipe` | How the station is crafted, a [`StationRecipe`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/content/workshops.rs) with the recipe's GUID and a cost factor; `None` adds no recipe. |
+| `station_recipe` | How the station is crafted, a [`StationRecipe`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/content/workshops.rs) with the recipe's content id and a cost factor; `None` adds no recipe. |
 | `debug_name` | The item's name in the registry's debug list. |
 
 [`stations`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/content/workshops.rs)
@@ -89,8 +89,10 @@ lists the vanilla stations known to clone; it holds `WORKBENCH` today. A
 template has all three crafting components and the workshop registry has an
 entry for the item.
 
-Every GUID is the mod's own and fixed for good: saves keep the template GUID
-of each placed station and the item id of each stack.
+Every [content id](../content.md#content-ids) is the mod's own and fixed for
+good: saves keep the template GUID of each placed station and the item id of
+each stack. `add_workshop` declares the item's, the template's and the
+workshop's ids.
 
 ## Recipes at the new workshop
 

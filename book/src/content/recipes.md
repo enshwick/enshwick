@@ -17,18 +17,18 @@ their changes add up.
 ## A single recipe
 
 ```rust
-use enshwick_loader_api::content::Guid;
+use enshwick_loader_api::content::{Guid, Id};
 use enshwick_loader_api::content::recipes::NewRecipe;
 
 const CHEST: Guid = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");
-const SAFE: Guid = Guid::parse("8a3f6e21-5c4b-4d7e-9f10-2b7c5e6a9d31");
-const SAFE_RECIPE: Guid = Guid::parse("4e9d2c17-8b3a-4f65-a1c2-7d5e3b9f0a48");
+const SAFE: Id = Id::new("safes:safe");
+const SAFE_RECIPE: Id = Id::new("safes:safe.recipe");
 
 fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
     load.add_recipe(NewRecipe {
-        guid: SAFE_RECIPE,
+        id: SAFE_RECIPE,
         like: CHEST,
-        output: SAFE,
+        output: SAFE.guid(),
         output_count: 1,
         cost: 2,
         workshop: None,
@@ -43,9 +43,9 @@ is crafted where the wooden chest is, for twice the chest's ingredients.
 
 | Field | Meaning |
 | --- | --- |
-| `guid` | The recipe's GUID, fixed for good; its game id is `guid.id()`. |
+| `id` | The recipe's [content id](../content.md#content-ids), fixed for good; its game id is `id.id()`. |
 | `like` | The item whose recipe is copied. |
-| `output` | The item the recipe makes, such as one from [`add_item`](items.md). |
+| `output` | The item the recipe makes, such as one from [`add_item`](items.md), by GUID: `Guid::named` of a mod item's id, or a vanilla GUID. |
 | `output_count` | How many it makes. |
 | `cost` | The copied ingredient counts times this. |
 | `workshop` | Where it is made: `None` keeps the copied recipe's workshop, `Some(id)` moves it, such as to a [workshop of the mod's own](workshops.md). |

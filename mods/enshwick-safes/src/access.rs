@@ -240,7 +240,7 @@ impl Access {
         if let Some(&known) = self.safes.load().get(&chest.0) {
             return Some(known);
         }
-        if item? != crate::content::SAFE.id() {
+        if !crate::content::is_safe(item?) {
             return None;
         }
         let found = self.seen(chest.0, cell(position?));

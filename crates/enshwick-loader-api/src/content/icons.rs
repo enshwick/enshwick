@@ -11,7 +11,7 @@
 //! item keeps its vanilla icon anywhere else, the dedicated server
 //! included, where no icon shows anyway.
 
-use super::{Blob, Guid};
+use super::{Blob, Guid, Id};
 use crate::abi::HostApi;
 use crate::{Load, Off};
 
@@ -23,11 +23,11 @@ pub const UI_IMAGE: u32 = 0xf9e8_6997;
 /// # Examples
 ///
 /// ```
-/// use enshwick_loader_api::content::Guid;
+/// use enshwick_loader_api::content::{Guid, Id};
 /// use enshwick_loader_api::content::icons::{Icon, Pixels, Tint};
 ///
 /// let ghostly = Icon {
-///     guid: Guid::parse("3c1f2a9e-7d4b-4e8a-9f60-1a2b3c4d5e6f"),
+///     id: Id::new("my-mod:ghostly-staff.icon"),
 ///     like: Guid::parse("505ccfbc-440d-4d63-a3d6-d689d3d55e78"),
 ///     pixels: Pixels::Tint(Tint { colour: [120, 170, 255], amount: 60 }),
 /// };
@@ -35,8 +35,8 @@ pub const UI_IMAGE: u32 = 0xf9e8_6997;
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Icon {
-    /// The icon's GUID, the mod's own and fixed forever.
-    pub guid: Guid,
+    /// The icon's id, the mod's own.
+    pub id: Id,
     /// The vanilla icon it starts from: an item's GUID for an item drawn
     /// from its model, or the GUID in an item's `iconImage`.
     pub like: Guid,
@@ -397,17 +397,18 @@ impl Load<'_> {
     ///
     /// # Errors
     ///
-    /// [`Off`] when the loader is too old for icons.
+    /// [`Off`] when the loader is too old for icons or refuses the icon's id
+    /// (see [`Load::declare`]).
     ///
     /// # Examples
     ///
     /// ```
-    /// use enshwick_loader_api::content::Guid;
+    /// use enshwick_loader_api::content::{Guid, Id};
     /// use enshwick_loader_api::content::icons::{Icon, Pixels, Tint};
     ///
     /// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
     ///     load.add_icon(Icon {
-    ///         guid: Guid::parse("3c1f2a9e-7d4b-4e8a-9f60-1a2b3c4d5e6f"),
+    ///         id: Id::new("my-mod:ghostly-staff.icon"),
     ///         like: Guid::parse("505ccfbc-440d-4d63-a3d6-d689d3d55e78"),
     ///         pixels: Pixels::Tint(Tint { colour: [120, 170, 255], amount: 60 }),
     ///     })
@@ -419,13 +420,14 @@ impl Load<'_> {
             core::mem::offset_of!(HostApi, icons_ready),
             "icons",
         )?;
+        self.declare(icon.id)?;
         // A build without the layout, such as the dedicated server, shows
         // no icons: the item keeps its vanilla one.
         let Ok(layout) = ImageLayout::resolve(self) else {
             return Ok(());
         };
         self.serve(
-            icon.guid.key(UI_IMAGE),
+            icon.id.key(UI_IMAGE),
             icon.like.key(UI_IMAGE),
             move |base| Some(build(&layout, base, icon.pixels)),
         )

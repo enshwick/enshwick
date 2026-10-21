@@ -14,7 +14,7 @@ use core::sync::atomic::AtomicUsize;
 pub const ABI_MAJOR: u16 = 1;
 
 /// The minor version of this interface. A newer minor only appends fields.
-pub const ABI_MINOR: u16 = 49;
+pub const ABI_MINOR: u16 = 50;
 
 /// Whether `id` is a valid mod id: 1 to 64 characters of `[a-z0-9-]`.
 ///
@@ -4661,6 +4661,13 @@ pub struct HostApi {
     /// the reason logged. Allowed during `enshwick_mod_init` only. Since
     /// minor 49.
     pub migrate: extern "system" fn(me: ModHandle, set: *const MigrationSet) -> Status,
+    /// Declares the content id `id`, `<mod>:<name>` in the mod's own
+    /// namespace, and writes its GUID to `out`; [`Status::REFUSED`] for a
+    /// malformed id, one outside the namespace, or one whose game id
+    /// another content id has, which turns the mod off with both ids and
+    /// both mods named. Allowed during `enshwick_mod_init` only. Since
+    /// minor 50.
+    pub declare_content: extern "system" fn(me: ModHandle, id: Str, out: *mut [u8; 16]) -> Status,
 }
 
 /// One step of a mod migration, as [`HostApi::migrate`] takes it.
@@ -4989,8 +4996,9 @@ const _: () = {
     assert!(size_of::<StatSource>() == 20);
     assert!(size_of::<StatModify>() == 8 + 8 + 12 + 4 + 8);
     assert!(size_of::<StatChange>() == 8 + 24);
-    assert!(size_of::<HostApi>() == 24 + 123 * 8);
+    assert!(size_of::<HostApi>() == 24 + 124 * 8);
     assert!(core::mem::offset_of!(HostApi, migrate) == 24 + 122 * 8);
+    assert!(core::mem::offset_of!(HostApi, declare_content) == 24 + 123 * 8);
     // Frozen: written as arrays.
     assert!(size_of::<MigrationStep>() == 8 + 16 + 16 + 16 + 16);
     assert!(size_of::<Migration>() == 16 + 8 + 8);

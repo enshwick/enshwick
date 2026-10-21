@@ -169,18 +169,18 @@ impl Migration {
 /// # Examples
 ///
 /// ```
-/// use enshwick_loader_api::content::Guid;
+/// use enshwick_loader_api::content::{Guid, Id};
 /// use enshwick_loader_api::migrations::Migrations;
 ///
 /// const OLD_SAFE: Guid = Guid::parse("8a3f6e21-5c4b-4d7e-9f10-2b7c5e6a9d31");
-/// const SAFE: Guid = Guid::parse("9b4f7e32-6d5c-4e8f-a021-3c8d6f7b0e42");
+/// const SAFE: Id = Id::new("safes:safe");
 ///
 /// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
 ///     load.migrate(
 ///         Migrations::new()
 ///             .add("2", |m| {
 ///                 m.rename_setting("cost", "cost_multiplier")
-///                     .rename_content(OLD_SAFE, SAFE)
+///                     .rename_content(OLD_SAFE, SAFE.guid())
 ///             })
 ///             .add("3", |m| {
 ///                 m.map_setting("limit", |old| {
@@ -310,6 +310,39 @@ pub(crate) fn old_guids(guid: Guid) -> Vec<Guid> {
             .map(|s| s.from_guid)
             .collect()
     })
+}
+
+/// The game id content saved as `id` has now: the id of the content the
+/// mod's migrations renamed `id`'s GUID to, else `id` itself. An item
+/// renamed with [`Migration::rename_content`] stays in old stacks under its
+/// old id, so compare item ids through this.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::content::{Guid, Id};
+/// use enshwick_loader_api::migrations::{Migrations, current_id};
+///
+/// const OLD_SAFE: Guid = Guid::parse("8a3f6e21-5c4b-4d7e-9f10-2b7c5e6a9d31");
+/// const SAFE: Id = Id::new("safes:safe");
+///
+/// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+///     load.migrate(Migrations::new().add("2", |m| m.rename_content(OLD_SAFE, SAFE.guid())))?;
+///     assert_eq!(current_id(OLD_SAFE.id()), SAFE.id());
+///     assert_eq!(current_id(SAFE.id()), SAFE.id());
+///     Ok(())
+/// }
+/// ```
+#[must_use]
+pub fn current_id(id: u32) -> u32 {
+    KEPT.get()
+        .and_then(|kept| {
+            kept.list
+                .iter()
+                .flat_map(|m| &m.steps)
+                .find(|s| s.kind == MigrationStep::RENAME_CONTENT && s.from_guid.id() == id)
+        })
+        .map_or(id, |s| s.to_guid.id())
 }
 
 /// Runs a step's map for the loader.

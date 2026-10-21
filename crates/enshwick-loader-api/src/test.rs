@@ -2905,6 +2905,19 @@ impl Installed {
         })
     }
 
+    /// The content ids the mod declared, `<mod>:<name>`, in order.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick_loader_api::test::FakeHost::new().install();
+    /// assert!(loader.content_ids().is_empty());
+    /// ```
+    #[must_use]
+    pub fn content_ids(&self) -> Vec<String> {
+        table::with(Vec::new(), |s| s.content_ids.clone())
+    }
+
     /// The ids of the migrations the mod declared, in order.
     ///
     /// # Examples

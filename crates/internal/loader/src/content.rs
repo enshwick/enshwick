@@ -235,6 +235,16 @@ pub(crate) fn register(
 pub(crate) fn seal_and_link(loader: &'static Loader) {
     LOADED.get_or_init(|| loader);
     seal_texts(loader);
+    let ids = crate::ids::with(|ids| {
+        ids.content()
+            .iter()
+            .map(|(name, _)| *name)
+            .collect::<Vec<_>>()
+            .join(", ")
+    });
+    if !ids.is_empty() {
+        crate::log!(DEBUG, "content ids: {ids}");
+    }
     let served = std::mem::take(&mut *PENDING.lock().unwrap_or_else(PoisonError::into_inner));
     let count = served.len();
     let aliases = crate::clones::update(&loader.data_dir, served.iter().map(|s| (s.key, s.base)));

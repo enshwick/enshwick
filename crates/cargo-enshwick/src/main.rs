@@ -6,6 +6,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use clap::{Parser, Subcommand, ValueEnum};
+use enshwick_loader_api::content::Guid;
 
 mod install;
 mod manifest;
@@ -62,6 +63,12 @@ enum Command {
     /// Ports the build rows of the loader and the mods in an Enshwick
     /// checkout to a new game build. Exits with 2 when an entry needs a human.
     Pin(pin::Args),
+    /// Prints the GUID and game id of each content id, `<mod>:<name>`.
+    Id {
+        /// The content ids.
+        #[arg(required = true)]
+        names: Vec<String>,
+    },
 }
 
 /// Where a mod runs, as `manifest!` spells it.
@@ -70,6 +77,24 @@ enum Side {
     Server,
     Client,
     Both,
+}
+
+/// A line per content id: the id, its GUID and its game id in decimal and
+/// hex; an error naming the first malformed id.
+fn ids(names: &[String]) -> Result<String, String> {
+    let lines: Result<Vec<String>, String> = names
+        .iter()
+        .map(|name| {
+            let guid = Guid::try_named(name).ok_or_else(|| {
+                format!("{name:?} is no content id: <mod>:<name>, the mod side 1 to 64 of [a-z0-9_-], the name 1 to 128 of [a-z0-9_./-]")
+            })?;
+            Ok(format!("{name}  {guid}  {id} {id:#010x}", id = guid.id()))
+        })
+        .collect();
+    Ok(lines?.join(
+        "
+",
+    ))
 }
 
 fn main() -> ExitCode {
@@ -91,6 +116,7 @@ fn main() -> ExitCode {
             dll,
             expect_version,
         } => manifest::show(&dll, expect_version.as_deref()),
+        Command::Id { names } => ids(&names),
     };
     match outcome {
         Ok(done) => {
@@ -101,5 +127,24 @@ fn main() -> ExitCode {
             let _shown = writeln!(std::io::stderr(), "error: {error}");
             ExitCode::FAILURE
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn an_id_prints_its_guid_and_game_id() {
+        let line = ids(&["safes:safe".to_owned()]).unwrap();
+        let guid = Guid::named("safes:safe");
+        assert_eq!(
+            line,
+            format!(
+                "safes:safe  f7eb124c-c132-5cf1-9c6c-e9e49ed3c896  {0} {0:#010x}",
+                guid.id()
+            )
+        );
+        assert!(ids(&["safe".to_owned()]).is_err());
     }
 }

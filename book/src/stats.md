@@ -47,6 +47,11 @@ each other's stats without depending on each other. A kind no mod defines
 reads 0, and the loader logs it. `stats.info(stat)` gives a kind's id and
 definition, for a menu or a tooltip.
 
+Item stats store a kind by its key, the game id of the GUID its id turns
+into, as for any [content id](content.md#content-ids). Two ids with one key
+would read as one kind, so the loader turns off the mod that opens the
+second and names both ids and both mods; affixes are checked the same way.
+
 ## Modifiers
 
 A `Modifier` is a stat, an `Op` and a value. They come from three sources,

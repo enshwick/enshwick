@@ -32,10 +32,10 @@ with
 [`Load::texts`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/i18n.rs):
 
 ```rust
-use enshwick_loader_api::content::Guid;
+use enshwick_loader_api::content::Id;
 
-const SAFE_NAME: Guid = Guid::parse("b7c1d2e3-4f50-4a61-8b72-c3d4e5f60718");
-const SAFE_DESCRIPTION: Guid = Guid::parse("c8d2e3f4-5061-4b72-9c83-d4e5f6071829");
+const SAFE_NAME: Id = Id::new("safes:safe.name");
+const SAFE_DESCRIPTION: Id = Id::new("safes:safe.description");
 
 // In a mod: const TEXTS: &str = include_str!("texts.toml");
 const TEXTS: &str = r#"
@@ -63,8 +63,8 @@ below is malformed, with the file's path in the message for the override.
 
 [`Load::add_texts(&texts, pairs)`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/i18n.rs)
 gives game tags their texts. Each pair is a key of the texts file and a tag,
-a GUID of the mod's own, such as the `name` and `description` of a
-[`NewItem`](items.md). Every language that has a text for the key gets it;
+a [content id](../content.md#content-ids) of the mod's own, whose GUID goes
+into the `name` and `description` of a [`NewItem`](items.md). Every language that has a text for the key gets it;
 a key with no text in any language is an error.
 
 The client shows the texts: wherever the game asks for the tag, it gets the

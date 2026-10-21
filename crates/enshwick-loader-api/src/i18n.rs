@@ -15,7 +15,7 @@
 
 use std::collections::{BTreeMap, HashMap};
 
-use crate::content::Guid;
+use crate::content::Id;
 use crate::{Load, Off};
 
 /// A game language, as the game numbers them.
@@ -286,26 +286,29 @@ impl Load<'_> {
     }
 
     /// Gives each game tag the translations of its key, for every language
-    /// that has one: `(key, tag)` pairs, such as an item's name tag.
+    /// that has one: `(key, tag)` pairs, such as an item's name tag, each
+    /// tag the mod's own content id.
     ///
     /// # Errors
     ///
-    /// [`Off`] when the loader is too old or a key has no text at all.
+    /// [`Off`] when the loader is too old, refuses a tag's id (see
+    /// [`Load::declare`]) or a key has no text at all.
     ///
     /// # Examples
     ///
     /// ```
-    /// use enshwick_loader_api::content::Guid;
+    /// use enshwick_loader_api::content::Id;
     ///
-    /// const SAFE_NAME: Guid = Guid::parse("b7c1d2e3-4f50-4a61-8b72-c3d4e5f60718");
+    /// const SAFE_NAME: Id = Id::new("safes:safe.name");
     ///
     /// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
     ///     let texts = load.texts("[en]\n\"safe.name\" = \"Safe\"\n[uk]\n\"safe.name\" = \"Сейф\"\n")?;
     ///     load.add_texts(&texts, &[("safe.name", SAFE_NAME)])
     /// }
     /// ```
-    pub fn add_texts(&mut self, texts: &Texts, tags: &[(&str, Guid)]) -> Result<(), Off> {
+    pub fn add_texts(&mut self, texts: &Texts, tags: &[(&str, Id)]) -> Result<(), Off> {
         for &(key, tag) in tags {
+            let tag = self.declare(tag)?;
             let mut any = false;
             for (language, text) in texts.translations(key) {
                 self.add_text(tag, language.0, text)?;
