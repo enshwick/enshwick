@@ -288,6 +288,7 @@ unsafe fn after_step(loader: &'static Loader, offsets: &Offsets, server: *mut u8
     crate::daytime::after_step(loader);
     crate::knowledge::after_step(loader);
     crate::deaths::after_step(loader);
+    crate::survivors::after_step(loader);
     crate::game_settings::after_step(loader);
     crate::weather::after_step(loader);
     let step = STEPS.fetch_add(1, Ordering::Relaxed) + 1;
