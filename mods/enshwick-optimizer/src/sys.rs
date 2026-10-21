@@ -7,14 +7,18 @@
 use core::ffi::{CStr, c_char};
 use std::sync::OnceLock;
 
-use windows_sys::Win32::Foundation::{CloseHandle, FILETIME, HANDLE, INVALID_HANDLE_VALUE};
+use windows_sys::Win32::Foundation::{
+    CloseHandle, FILETIME, HANDLE, INVALID_HANDLE_VALUE, LocalFree,
+};
 use windows_sys::Win32::System::Diagnostics::ToolHelp::{
     CreateToolhelp32Snapshot, TH32CS_SNAPTHREAD, THREADENTRY32, Thread32First, Thread32Next,
 };
 use windows_sys::Win32::System::LibraryLoader::{GetModuleHandleW, GetProcAddress};
 use windows_sys::Win32::System::Threading::{
-    GetActiveProcessorCount, GetCurrentProcess, GetCurrentProcessId, GetCurrentThreadId,
-    GetProcessTimes, GetThreadTimes, OpenThread, THREAD_QUERY_LIMITED_INFORMATION,
+    CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, CreateWaitableTimerExW, GetActiveProcessorCount,
+    GetCurrentProcess, GetCurrentProcessId, GetCurrentThreadId, GetProcessTimes,
+    GetThreadDescription, GetThreadTimes, INFINITE, OpenThread, SetWaitableTimer,
+    THREAD_QUERY_LIMITED_INFORMATION, TIMER_ALL_ACCESS, WaitForSingleObject,
 };
 
 /// What `GetProcAddress` returns.
@@ -60,9 +64,9 @@ pub(crate) fn init() -> bool {
     DELAY.set(delay).is_ok() || DELAY.get().is_some()
 }
 
-/// Sleeps `ticks` of 100 ns, not alertable, without touching any handle.
-/// Under Wine a sleep that is not alertable is a plain Unix sleep, with no
-/// call into the Wine server.
+/// Sleeps `ticks` of 100 ns, not alertable, without touching any handle of
+/// the game's. Under Wine a sleep that is not alertable is a plain Unix
+/// sleep, with no call into the Wine server.
 /// Does nothing before [`init`].
 pub(crate) fn delay(ticks: u64) {
     let Some(delay) = DELAY.get() else {
@@ -71,6 +75,65 @@ pub(crate) fn delay(ticks: u64) {
     let interval = -i64::try_from(ticks).unwrap_or(i64::MAX);
     // SAFETY: a relative interval read for the call.
     let _status = unsafe { delay(0, &raw const interval) };
+}
+
+/// A high-resolution waitable timer of one thread; closed when the thread
+/// ends.
+#[derive(Debug)]
+struct Timer(HANDLE);
+
+impl Drop for Timer {
+    fn drop(&mut self) {
+        // SAFETY: the handle this value created, closed once.
+        let _closed = unsafe { CloseHandle(self.0) };
+    }
+}
+
+thread_local! {
+    /// The calling thread's timer, `None` where Windows has none (before
+    /// Windows 10 1803).
+    static TIMER: Option<Timer> = {
+        // SAFETY: no attributes and no name; a failure returns null.
+        let handle = unsafe {
+            CreateWaitableTimerExW(
+                core::ptr::null(),
+                core::ptr::null(),
+                CREATE_WAITABLE_TIMER_HIGH_RESOLUTION,
+                TIMER_ALL_ACCESS,
+            )
+        };
+        (!handle.is_null()).then_some(Timer(handle))
+    };
+}
+
+/// Whether this system has high-resolution waitable timers.
+pub(crate) fn precise_timers() -> bool {
+    TIMER.try_with(Option::is_some).unwrap_or(false)
+}
+
+/// Sleeps `ticks` of 100 ns on a high-resolution timer of the calling
+/// thread's own, which Windows fires a fraction of a millisecond late
+/// whatever the timer resolution; false when there is none and nothing was
+/// slept.
+pub(crate) fn delay_precise(ticks: u64) -> bool {
+    let due = -i64::try_from(ticks).unwrap_or(i64::MAX);
+    TIMER
+        .try_with(|timer| {
+            let Some(timer) = timer else {
+                return false;
+            };
+            // SAFETY: the thread's own timer and a relative due time, no
+            // completion routine.
+            let set =
+                unsafe { SetWaitableTimer(timer.0, &raw const due, 0, None, core::ptr::null(), 0) };
+            if set == 0 {
+                return false;
+            }
+            // SAFETY: the timer is set and fires once.
+            let _waited = unsafe { WaitForSingleObject(timer.0, INFINITE) };
+            true
+        })
+        .unwrap_or(false)
 }
 
 /// The current timer resolution in nanoseconds, `None` when ntdll does not
@@ -200,6 +263,36 @@ impl Thread {
     pub(crate) fn cpu(&self) -> Option<u64> {
         self.times().map(|(_, cpu)| cpu)
     }
+
+    /// When the thread started, in 100 ns units since 1601.
+    pub(crate) fn created(&self) -> Option<u64> {
+        self.times().map(|(created, _)| created)
+    }
+
+    /// The name the thread gave itself, empty when it has none.
+    pub(crate) fn name(&self) -> String {
+        let mut text: windows_sys::core::PWSTR = core::ptr::null_mut();
+        // SAFETY: an open handle and an out pointer valid for the call.
+        let status = unsafe { GetThreadDescription(self.handle, &raw mut text) };
+        if status < 0 || text.is_null() {
+            return String::new();
+        }
+        let mut len = 0;
+        loop {
+            // SAFETY: within the NUL-terminated string Windows returned.
+            let at = unsafe { text.add(len) };
+            // SAFETY: as above; the NUL ends the loop.
+            if unsafe { at.read() } == 0 {
+                break;
+            }
+            len += 1;
+        }
+        // SAFETY: `len` units read above.
+        let name = String::from_utf16_lossy(unsafe { core::slice::from_raw_parts(text, len) });
+        // SAFETY: the string Windows allocated for this call, freed once.
+        let _freed = unsafe { LocalFree(text.cast()) };
+        name
+    }
 }
 
 impl Drop for Thread {
@@ -209,12 +302,12 @@ impl Drop for Thread {
     }
 }
 
-/// The process's first thread still running: the game's main thread.
-pub(crate) fn main_thread() -> Option<Thread> {
+/// The ids of the process's threads.
+pub(crate) fn thread_ids() -> Vec<u32> {
     // SAFETY: plain arguments; a failure returns `INVALID_HANDLE_VALUE`.
     let snapshot = unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0) };
     if snapshot == INVALID_HANDLE_VALUE || snapshot.is_null() {
-        return None;
+        return Vec::new();
     }
     // SAFETY: no arguments.
     let process = unsafe { GetCurrentProcessId() };
@@ -227,21 +320,27 @@ pub(crate) fn main_thread() -> Option<Thread> {
         tpDeltaPri: 0,
         dwFlags: 0,
     };
-    let mut first: Option<(u64, Thread)> = None;
+    let mut ids = Vec::new();
     // SAFETY: an open snapshot and an entry with its size set.
     let mut more = unsafe { Thread32First(snapshot, &raw mut entry) } != 0;
     while more {
-        if entry.th32OwnerProcessID == process
-            && let Some(thread) = Thread::open(entry.th32ThreadID)
-            && let Some((created, _)) = thread.times()
-            && first.as_ref().is_none_or(|(at, _)| created < *at)
-        {
-            first = Some((created, thread));
+        if entry.th32OwnerProcessID == process {
+            ids.push(entry.th32ThreadID);
         }
         // SAFETY: as above.
         more = unsafe { Thread32Next(snapshot, &raw mut entry) } != 0;
     }
     // SAFETY: the snapshot opened above, closed once.
     let _closed = unsafe { CloseHandle(snapshot) };
-    first.map(|(_, thread)| thread)
+    ids
+}
+
+/// The process's first thread still running: the game's main thread.
+pub(crate) fn main_thread() -> Option<Thread> {
+    thread_ids()
+        .into_iter()
+        .filter_map(Thread::open)
+        .filter_map(|thread| Some((thread.created()?, thread)))
+        .min_by_key(|(created, _)| *created)
+        .map(|(_, thread)| thread)
 }
