@@ -12,7 +12,7 @@ raw table. The exact types and signatures are in the
 | Constant                                                                                            | Value | Meaning                                         |
 | --------------------------------------------------------------------------------------------------- | ----- | ----------------------------------------------- |
 | [`ABI_MAJOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 1     | A loader refuses a mod built for another major. |
-| [`ABI_MINOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 55    | A newer minor only appends.                     |
+| [`ABI_MINOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 56    | A newer minor only appends.                     |
 
 The ABI version is apart from Enshwick Loader's version (such as 0.2.0, see
 [Releasing and updates](releasing.md#versions)): a platform release raises
@@ -296,6 +296,7 @@ marked "init only" are allowed during `enshwick_mod_init` only.
 | `entity_data_open`       | Opens an entity data kind, sent to clients or not; init only                                    | 52          |
 | `replaced`               | The mods a present mod replaces, never started; any thread                                      | 54          |
 | `knowledge_input_filter` | A filter on the knowledge clients ask for in their input; server worker threads                 | 55          |
+| `language`               | The game language the client last asked a text in; 0 on a server; any thread                    | 56          |
 
 ## Under an older loader
 
@@ -368,6 +369,7 @@ the mod off with a reason, which the mod's log shows as `off: <reason>`:
 | 53          | `ManifestFlags::RELOAD`         | The mod is never reloaded                                 |
 | 54          | `mods::replaced()`              | An empty list                                             |
 | 55          | `Load::on_knowledge_input`      | Off: `knowledge input filters: needs a newer loader`      |
+| 56          | `i18n::language()`              | `Language::FALLBACK`                                      |
 
 A mod that can do without a feature catches the `Off` and goes on without it
 instead of returning it from `init`.

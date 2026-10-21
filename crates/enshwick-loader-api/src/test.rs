@@ -390,6 +390,7 @@ pub struct FakeHost {
     server_world: u64,
     join_missing: Vec<ModInfo>,
     replaced: Vec<ModInfo>,
+    language: u32,
     services: Vec<FakeService>,
     refused_hooks: HashSet<u64>,
     code: (u64, u64),
@@ -447,6 +448,7 @@ impl FakeHost {
             server_world: 0,
             join_missing: Vec::new(),
             replaced: Vec::new(),
+            language: 0,
             services: Vec::new(),
             refused_hooks: HashSet::new(),
             code: (0, 0),
@@ -936,6 +938,25 @@ impl FakeHost {
     #[must_use]
     pub fn replaced(mut self, info: ModInfo) -> Self {
         self.replaced.push(info);
+        self
+    }
+
+    /// The language the game shows its texts in, which
+    /// `enshwick_loader_api::i18n::language()` answers; the fallback by
+    /// default.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_loader_api::i18n::Language;
+    ///
+    /// let _loader = enshwick_loader_api::test::FakeHost::new()
+    ///     .language(Language::UK_UA)
+    ///     .install();
+    /// ```
+    #[must_use]
+    pub const fn language(mut self, language: crate::i18n::Language) -> Self {
+        self.language = language.0;
         self
     }
 

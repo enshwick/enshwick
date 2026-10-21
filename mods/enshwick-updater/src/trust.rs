@@ -23,7 +23,25 @@ pub enum Refusal {
 }
 
 impl Refusal {
-    /// What the player reads about it.
+    /// The key of its text in the updater's texts, for the player's
+    /// language.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_updater::trust::Refusal;
+    ///
+    /// assert_eq!(Refusal::Unsigned.key(), "refusal.unsigned");
+    /// ```
+    #[must_use]
+    pub const fn key(&self) -> &'static str {
+        match self {
+            Self::Unsigned => "refusal.unsigned",
+            Self::NoServerKey => "refusal.no-server-key",
+        }
+    }
+
+    /// What the log says about it.
     ///
     /// # Examples
     ///
@@ -61,7 +79,17 @@ impl Trust {
         }
     }
 
-    /// Why a download none of [`Trust::keys`] signed is refused.
+    /// The key of [`Trust::refusal`]'s text in the updater's texts.
+    #[must_use]
+    pub const fn refusal_key(&self) -> &'static str {
+        match self {
+            Self::Installed(_) => "refusal.other-key",
+            Self::Server(_) => "refusal.not-server-key",
+        }
+    }
+
+    /// Why a download none of [`Trust::keys`] signed is refused, as the log
+    /// says it.
     #[must_use]
     pub const fn refusal(&self) -> &'static str {
         match self {

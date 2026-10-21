@@ -717,6 +717,7 @@ pub(crate) static API: HostApi = HostApi {
     entity_data_open,
     replaced,
     knowledge_input_filter,
+    language,
 };
 
 /// A static slice from a pointer and a count, empty for a null pointer.
@@ -3323,6 +3324,12 @@ extern "system" fn texts(me: ModHandle, toml: Str) -> Status {
         *slot = Some(parsed);
         Status::OK
     })
+}
+
+extern "system" fn language(_me: ModHandle) -> u32 {
+    loader()
+        .filter(|loader| loader.side == Side::CLIENT)
+        .map_or(0, |_| crate::content::language().0)
 }
 
 /// Mod handles start at 1; 0 is no mod.
