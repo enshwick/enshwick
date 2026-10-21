@@ -4,40 +4,35 @@ A dedicated server in a container gets Enshwick the way any server does: the
 files next to `enshrouded_server.exe`. Nothing installs them for you; the
 image, or a volume, carries them at versions you chose.
 
-## Bake the files in at a pinned version
+## Bake the files in
 
 Put `powrprof.dll` and `mods/` into the image beside the server, or into a
-volume mounted there, at fixed versions:
+volume mounted there, from files you keep:
 
-- `enshwick.zip` from the platform release holds the loader and every mod of
-  this repository:
-  `https://github.com/themaiby/enshwick/releases/download/enshwick-loader-v<version>/enshwick.zip`;
-- a single mod comes from its own release:
-  `https://github.com/themaiby/enshwick/releases/download/enshwick-<id>-v<version>/enshwick-<id>.zip`,
-  beside `enshwick-loader.zip` (the loader alone) from the platform release;
+- `enshwick.zip` holds the loader and every mod of this repository;
+  `enshwick-loader.zip` holds the loader alone, and `enshwick-<id>.zip` a
+  single mod;
+- until the first release, 1.0.0, these exist only as the development build,
+  `https://github.com/themaiby/enshwick/releases/download/dev/<file>`, which
+  every new build replaces. Download the files once, keep them in your own
+  storage (an artifact store, a bucket, the image's build context) and build
+  from there, so that a rebuild of the image gets the same files;
 - every archive has a `.minisig` beside it. Check it with Enshwick's public
   key, given in the [README](https://github.com/themaiby/enshwick#install),
-  before the files go in. The trusted comment names the tag and the file.
+  before the files go in. The trusted comment of a development build's
+  signature is `dev <short sha> <file>`, naming the commit it was built
+  from.
 
-Avoid `releases/latest/download/...` in a build: it changes under you.
-
-Until the first release, 1.0.0, there are no versioned releases, only the
-development build at `releases/download/dev/<file>`, which every new build
-replaces. Download it once, keep the files in your own storage and build from
-there; the trusted comment of its signatures is `dev <short sha> <file>`.
-
-A template to fill in; every `<...>` is yours to set:
+A template to fill in, with the archive and its signature in the build
+context; every `<...>` is yours to set:
 
 ```dockerfile
 FROM alpine:<version> AS enshwick
-RUN apk add --no-cache curl minisign unzip
-ARG ENSHWICK_VERSION=<version>
+RUN apk add --no-cache minisign unzip
 ARG ENSHWICK_KEY=<public key from the README>
 WORKDIR /enshwick
-RUN base=https://github.com/themaiby/enshwick/releases/download/enshwick-loader-v${ENSHWICK_VERSION} \
- && curl -fsSLO "$base/enshwick.zip" \
- && curl -fsSLO "$base/enshwick.zip.minisig" \
- && minisign -Vm enshwick.zip -P "$ENSHWICK_KEY" \
+COPY enshwick.zip enshwick.zip.minisig ./
+RUN minisign -Vm enshwick.zip -P "$ENSHWICK_KEY" \
  && unzip -q enshwick.zip -d files
 
 FROM <your Enshrouded server image>
@@ -56,8 +51,10 @@ restart would start a set nobody built, and replicas would drift apart.
 The [updater](https://github.com/themaiby/enshwick/tree/main/mods/enshwick-updater)
 is a client mod: a dedicated server skips it, so it never changes files in a
 container. After a game update, a loader without the new build's table runs
-on the code patterns of the newest table it embeds; rebuild the image with a
-loader that has the table.
+on the code patterns of the newest table it embeds, and only what they miss
+stays off; `build_patterns = false` in `mod-configs/enshwick.toml` keeps such
+a build vanilla instead. Rebuild the image with a loader that has the table
+once there is one.
 
 ## Check what loaded
 

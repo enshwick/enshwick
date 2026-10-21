@@ -36,7 +36,8 @@ current one by default) and `--side` is `server` (the default), `client` or
 it names the crate too. The crate holds:
 
 - `Cargo.toml`: a `cdylib` named after the id, `enshwick-loader-api` from this
-  repository's git tag for the API version the tool was built with, `serde`,
+  repository's git tag for the API version the tool was built with (from its
+  `main` branch while the tool is a development build, before 1.0.0), `serde`,
   and a release profile with `panic = "unwind"`, which every hook needs to
   catch panics;
 - `src/lib.rs`: a settings type with one field, `enabled`, a mod type named

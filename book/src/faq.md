@@ -94,7 +94,8 @@ On an unknown build every mod's hold applies; see
 ### Some features are off after a game update
 
 `loader.log` reads `game build <guid>/<age> has no build table yet: <n>
-entries found by their code patterns, <m> missing`. The game was updated, and
+entries found by their code patterns, <m> missing; ...`, and at `debug` the
+missing entries. The game was updated, and
 the loader runs it on the code patterns of the newest build table it has.
 Whatever those patterns do not find stays off: a loader feature logs
 `<feature> off: not in this build`, and a mod that needs a missing entry turns
@@ -195,8 +196,8 @@ lists them and the client stays out:
 ```text
 This server runs Enshwick mods you do not have in its version:
 
-safes: server 0.2.0, yours 0.1.0
-survivors-per-altar: server 0.1.4, not installed
+Safes (safes): server 0.2.0, yours 0.1.0
+Survivors per altar (survivors-per-altar): server 0.1.4, not installed
 
 Install the server's versions to join.
 ```
