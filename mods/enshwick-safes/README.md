@@ -56,6 +56,15 @@ can change or add them in `mod-configs/safes.texts.toml`, in the form of
 world, in `mod-data/safes/worlds/<world>/owners.toml`, so every world a player
 hosts has its own; files from 0.1 load as they are.
 
+## Install
+
+Download [`enshwick-safes.zip`](https://github.com/themaiby/enshwick/releases/latest/download/enshwick-safes.zip),
+always the newest version of this mod, and extract it into the folder that
+holds `enshrouded.exe` or `enshrouded_server.exe`. It needs Enshwick Loader:
+[`enshwick-loader.zip`](https://github.com/themaiby/enshwick/releases/latest/download/enshwick-loader.zip)
+alone, or [`enshwick.zip`](https://github.com/themaiby/enshwick/releases/latest/download/enshwick.zip)
+with every mod.
+
 ## Who needs it
 
 The server and every player: the item and its recipe come from the mod on each

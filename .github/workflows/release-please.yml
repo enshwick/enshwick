@@ -126,6 +126,12 @@ jobs:
                 enshwick-loader) files="enshwick-loader.zip enshwick.zip" ;;
                 *) [ -f "$component.zip" ] && files="$component.zip" || files="" ;;
               esac
+              # A library crate has nothing to download: its tag stays, its
+              # release goes, so the list holds only the platform and the mods.
+              if [ -z "$files" ]; then
+                gh release delete "$tag" --yes --repo "$GITHUB_REPOSITORY"
+                continue
+              fi
               for file in $files; do
                 rsign sign -W -s "$key" -x "$file.minisig" -t "$tag $file" "$file" < /dev/null
                 gh release upload "$tag" "$file" "$file.minisig" --clobber --repo "$GITHUB_REPOSITORY"
@@ -135,15 +141,25 @@ jobs:
       - name: Platform release
         env:
           GH_TOKEN: ${{ github.token }}
+          MINISIGN_SECRET_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
         run: |
           # The other platform crates release with the loader under the same
           # version; the loader's release is the one players download. It is
           # named after the platform and stays the latest release, also after a
-          # release of mods alone, so the latest release always has enshwick.zip.
+          # release of mods alone. Every run puts the fresh enshwick.zip and
+          # each mod's archive on it, so releases/latest/download/<file> is
+          # always the newest of every mod, which the mod READMEs link to.
           tag=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 100 --json tagName \
             --jq '[.[] | select(.tagName | startswith("enshwick-loader-v"))][0].tagName // empty' | tr -d '\r')
           [ -n "$tag" ] || exit 0
           gh release edit "$tag" --title "Enshwick Loader ${tag##*-v}" --latest --repo "$GITHUB_REPOSITORY"
+          key="$RUNNER_TEMP/minisign.key"
+          trap 'rm -f "$key"' EXIT
+          printf '%s\n' "$MINISIGN_SECRET_KEY" > "$key"
+          for file in enshwick.zip $(cut -f1 "$RUNNER_TEMP/mods.tsv" | sed 's/$/.zip/'); do
+            rsign sign -W -s "$key" -x "$file.minisig" -t "$tag $file" "$file" < /dev/null
+            gh release upload "$tag" "$file" "$file.minisig" --clobber --repo "$GITHUB_REPOSITORY"
+          done
 
   # The loader's build tables, crates/internal/builds/tables/*.toml, go up as
   # files of the release `build-tables`, each with a minisign signature whose

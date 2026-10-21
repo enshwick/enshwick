@@ -22,6 +22,15 @@ clusters = true
 building_across_seams = true
 ```
 
+## Install
+
+Download [`enshwick-flame-altar-zones.zip`](https://github.com/themaiby/enshwick/releases/latest/download/enshwick-flame-altar-zones.zip),
+always the newest version of this mod, and extract it into the folder that
+holds `enshrouded.exe` or `enshrouded_server.exe`. It needs Enshwick Loader:
+[`enshwick-loader.zip`](https://github.com/themaiby/enshwick/releases/latest/download/enshwick-loader.zip)
+alone, or [`enshwick.zip`](https://github.com/themaiby/enshwick/releases/latest/download/enshwick.zip)
+with every mod.
+
 ## Who needs it
 
 The server solves the clusters, and every player needs the mod for building

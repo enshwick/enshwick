@@ -24,6 +24,15 @@ enabled = true
 `false` asks for the skill again, as in vanilla. An edited file applies while
 the game runs.
 
+## Install
+
+Download [`enshwick-build-camera.zip`](https://github.com/themaiby/enshwick/releases/latest/download/enshwick-build-camera.zip),
+always the newest version of this mod, and extract it into the folder that
+holds `enshrouded.exe` or `enshrouded_server.exe`. It needs Enshwick Loader:
+[`enshwick-loader.zip`](https://github.com/themaiby/enshwick/releases/latest/download/enshwick-loader.zip)
+alone, or [`enshwick.zip`](https://github.com/themaiby/enshwick/releases/latest/download/enshwick.zip)
+with every mod.
+
 ## Who needs it
 
 The server and every player: the server decides fly mode, and the player's

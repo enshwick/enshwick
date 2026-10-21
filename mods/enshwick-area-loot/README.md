@@ -29,6 +29,15 @@ Switched back on, the mod starts watching afresh, so nothing emptied while it
 was off is taken. An edit takes effect about a second after saving the file,
 without a restart.
 
+## Install
+
+Download [`enshwick-area-loot.zip`](https://github.com/themaiby/enshwick/releases/latest/download/enshwick-area-loot.zip),
+always the newest version of this mod, and extract it into the folder that
+holds `enshrouded.exe` or `enshrouded_server.exe`. It needs Enshwick Loader:
+[`enshwick-loader.zip`](https://github.com/themaiby/enshwick/releases/latest/download/enshwick-loader.zip)
+alone, or [`enshwick.zip`](https://github.com/themaiby/enshwick/releases/latest/download/enshwick.zip)
+with every mod.
+
 ## Who needs it
 
 Only the server, or the player who hosts the game. Players without the mod get

@@ -54,6 +54,15 @@ copy_staff_locked_chest_chance = 0.02
 vanilla_staff_places_copies = false
 ```
 
+## Install
+
+Download [`enshwick-survivors-per-altar.zip`](https://github.com/themaiby/enshwick/releases/latest/download/enshwick-survivors-per-altar.zip),
+always the newest version of this mod, and extract it into the folder that
+holds `enshrouded.exe` or `enshrouded_server.exe`. It needs Enshwick Loader:
+[`enshwick-loader.zip`](https://github.com/themaiby/enshwick/releases/latest/download/enshwick-loader.zip)
+alone, or [`enshwick.zip`](https://github.com/themaiby/enshwick/releases/latest/download/enshwick.zip)
+with every mod.
+
 ## Who needs it
 
 The server and every player. It counts in the join check. It reads the altar

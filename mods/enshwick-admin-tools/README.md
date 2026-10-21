@@ -60,6 +60,15 @@ hold something. `/dev` still answers as `/admin`, with a note, until the next
 release. Delete the old `mods/enshwick-dev-tools.dll`: the updater does not
 replace a mod under another name.
 
+## Install
+
+Download [`enshwick-admin-tools.zip`](https://github.com/themaiby/enshwick/releases/latest/download/enshwick-admin-tools.zip),
+always the newest version of this mod, and extract it into the folder that
+holds `enshrouded.exe` or `enshrouded_server.exe`. It needs Enshwick Loader:
+[`enshwick-loader.zip`](https://github.com/themaiby/enshwick/releases/latest/download/enshwick-loader.zip)
+alone, or [`enshwick.zip`](https://github.com/themaiby/enshwick/releases/latest/download/enshwick.zip)
+with every mod.
+
 ## Who needs it
 
 Only the server, the dedicated one or a game a client hosts. Players need
