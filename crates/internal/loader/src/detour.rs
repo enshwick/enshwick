@@ -30,7 +30,8 @@ use windows_sys::Win32::System::Diagnostics::ToolHelp::{
 };
 use windows_sys::Win32::System::Memory::{
     MEM_COMMIT, MEM_FREE, MEM_RESERVE, MEMORY_BASIC_INFORMATION, PAGE_EXECUTE_READ,
-    PAGE_EXECUTE_READWRITE, PAGE_READWRITE, VirtualAlloc, VirtualProtect, VirtualQuery,
+    PAGE_EXECUTE_READWRITE, PAGE_EXECUTE_WRITECOPY, PAGE_GUARD, PAGE_NOACCESS, PAGE_READONLY,
+    PAGE_READWRITE, PAGE_WRITECOPY, VirtualAlloc, VirtualProtect, VirtualQuery,
 };
 use windows_sys::Win32::System::Threading::{
     GetCurrentProcess, GetCurrentProcessId, GetCurrentThreadId, GetThreadId, OpenThread,
@@ -134,9 +135,72 @@ pub(crate) fn commit(pending: &[&Pending], code: &[Bytes<'_>]) -> bool {
     write_all(pending, code)
 }
 
+/// Protections of code that runs and reads.
+const EXECUTABLE: u32 = PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY;
+/// Protections whose pages read without a fault.
+const READABLE: u32 = PAGE_READONLY
+    | PAGE_READWRITE
+    | PAGE_WRITECOPY
+    | PAGE_EXECUTE_READ
+    | PAGE_EXECUTE_READWRITE
+    | PAGE_EXECUTE_WRITECOPY;
+
+/// The protection and end of the committed region `address` lies in.
+fn region(address: usize) -> Option<(u32, usize)> {
+    let mut info = MEMORY_BASIC_INFORMATION {
+        BaseAddress: core::ptr::null_mut(),
+        AllocationBase: core::ptr::null_mut(),
+        AllocationProtect: 0,
+        PartitionId: 0,
+        RegionSize: 0,
+        State: 0,
+        Protect: 0,
+        Type: 0,
+    };
+    // SAFETY: querying any address is allowed; the struct is writable.
+    let known = unsafe {
+        VirtualQuery(
+            core::ptr::with_exposed_provenance(address),
+            &raw mut info,
+            size_of::<MEMORY_BASIC_INFORMATION>(),
+        )
+    };
+    if known == 0 || info.State != MEM_COMMIT || info.Protect & (PAGE_GUARD | PAGE_NOACCESS) != 0 {
+        return None;
+    }
+    Some((
+        info.Protect,
+        info.BaseAddress.addr().checked_add(info.RegionSize)?,
+    ))
+}
+
+/// Whether `address` is mapped code followed by `len` bytes that read: a
+/// wrong address from a mod or a table must refuse its hook, not fault.
+fn hookable(address: usize, len: usize) -> bool {
+    let Some(end) = address.checked_add(len) else {
+        return false;
+    };
+    let Some((protect, mut reached)) = region(address) else {
+        return false;
+    };
+    if protect & EXECUTABLE == 0 {
+        return false;
+    }
+    while reached < end {
+        match region(reached) {
+            Some((protect, next)) if protect & READABLE != 0 && next > reached => reached = next,
+            _ => return false,
+        }
+    }
+    true
+}
+
 fn prepare_one(request: Request, fresh: &mut Vec<usize>) -> Result<Pending, String> {
-    // SAFETY: the build table, reflection or a mod vouches for an instruction
-    // start, followed by at least `READ` mapped bytes of code or padding.
+    if !hookable(request.target, READ) {
+        return Err("its address is not mapped code".into());
+    }
+    // SAFETY: an instruction start the build table, reflection or a mod
+    // vouches for, in mapped code followed by `READ` readable bytes.
     let code = unsafe { core::slice::from_raw_parts(request.target as *const u8, READ) };
     let mut decoder = Decoder::with_ip(64, code, request.target as u64, DecoderOptions::NONE);
     let mut instructions: Vec<Instruction> = Vec::new();
@@ -682,6 +746,28 @@ mod tests {
     use std::sync::atomic::{AtomicU32, Ordering};
 
     use super::*;
+
+    #[test]
+    fn only_mapped_code_takes_a_hook() {
+        let code = (only_mapped_code_takes_a_hook as fn() as *const ()).addr();
+        assert!(hookable(code, READ));
+        let data = 7u64;
+        assert!(!hookable(core::ptr::from_ref(&data).addr(), READ));
+        assert!(!hookable(0, READ));
+        assert!(!hookable(0x10, READ));
+        assert!(!hookable(usize::MAX - 4, READ));
+        assert!(matches!(
+            prepare_one(
+                Request {
+                    target: 0x10,
+                    detour: code,
+                    inside: false,
+                },
+                &mut Vec::new()
+            ),
+            Err(why) if why.contains("not mapped")
+        ));
+    }
 
     type Unary = extern "system" fn(u32) -> u32;
 

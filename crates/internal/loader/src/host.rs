@@ -531,23 +531,22 @@ impl Loader {
             .chains
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        chains.rewire(|owner| {
+        let faulted = |owner: usize| {
             owner != crate::chains::LOADER
                 && self
                     .mods
                     .get(owner)
                     .is_none_or(|m| m.off.load(Ordering::Acquire))
-        });
+        };
+        chains.rewire(faulted);
+        drop(chains);
+        crate::points::rearm(faulted);
     }
 
     /// Ends subscribing: from now on events go to the subscriptions made so
     /// far, grouped by event in subscription order, so a raise walks its own.
     pub(crate) fn seal_subscriptions(&self) {
-        let mut made = self
-            .subscriptions
-            .lock()
-            .map(|mut s| std::mem::take(&mut *s))
-            .unwrap_or_default();
+        let mut made = std::mem::take(&mut *relock(&self.subscriptions, "the subscriptions"));
         made.sort_by_key(|s| s.event.0);
         for subscription in &made {
             mark_handled(subscription.event);
@@ -1305,6 +1304,9 @@ extern "system" fn define_event(
         let Some((name, fields)) = (unsafe { spec_parts(spec.name, &spec.layout) }) else {
             return Status::BAD_ARGS;
         };
+        if out.is_null() {
+            return Status::BAD_ARGS;
+        }
         let defined = crate::services::registry().define(index, &record.id, name, fields);
         match defined {
             Ok(id) => put(out, id),
@@ -1420,6 +1422,13 @@ extern "system" fn define_point(
         let Some(declared) = (unsafe { declared(&spec) }) else {
             return Status::BAD_ARGS;
         };
+        // Checked before the point is defined: a point whose handle is lost
+        // could never be asked, nor defined again.
+        // SAFETY: a non-null out pointer from a mod starts with its header.
+        let room = (!out.is_null()).then(|| unsafe { out.cast::<Header>().read_unaligned() }.size);
+        if room.is_none_or(|room| (room as usize) < size_of::<api_frame::PointHandle>()) {
+            return Status::BAD_ARGS;
+        }
         let defined = crate::points::registry().define(index, &record.id, declared);
         match defined {
             Ok((id, live)) => put_headed(
@@ -2118,6 +2127,7 @@ unsafe fn list<T: Copy>(
             return Status::BAD_ARGS;
         }
         let copied = stride.min(size_of::<T>());
+        let size = u32::try_from(copied).unwrap_or(u32::MAX);
         for (index, info) in infos.iter().take(capacity as usize).enumerate() {
             // SAFETY: the caller passes room for `capacity` entries of
             // `entry_size` bytes each.
@@ -2126,6 +2136,9 @@ unsafe fn list<T: Copy>(
             unsafe {
                 core::ptr::copy_nonoverlapping((&raw const *info).cast::<u8>(), entry, copied);
             };
+            // The header says what the entry holds, never more than it has.
+            // SAFETY: the header's size is the entry's first field.
+            unsafe { entry.cast::<u32>().write_unaligned(size) };
         }
     }
     put(count, u32::try_from(infos.len()).unwrap_or(u32::MAX))

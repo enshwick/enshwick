@@ -1003,14 +1003,14 @@ mod tests {
         use crate::mid::MidLink;
         use enshwick_loader_api::abi::{HookFlags, Registers};
 
-        static NEXT: AtomicUsize = AtomicUsize::new(0);
+        static NEXT: [AtomicUsize; 2] = [const { AtomicUsize::new(0) }; 2];
         unsafe extern "system" fn handler(_: *mut Registers, _: *mut core::ffi::c_void) {}
 
         let mut chains = Chains::default();
-        let link = |owner| Link {
+        let link = |owner: usize| Link {
             owner,
             detour: 0x1,
-            next: &NEXT,
+            next: &NEXT[usize::from(owner == LOADER)],
             priority: 0,
             flags: HookFlags::NONE,
             hop: None,
