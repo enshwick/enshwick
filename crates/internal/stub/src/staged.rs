@@ -7,8 +7,9 @@
 //! `<game folder>/<path>`, and the file it replaces stays beside it as
 //! `<path>.previous` for one rollback. Anything else in the staging folder,
 //! such as an update a crash cut short, is left alone. A file that cannot be
-//! moved stays staged for the next start; nothing here stops the game from
-//! starting.
+//! moved stays staged for the next start, and so do the units after its own,
+//! so that an older file never lands over a newer one; nothing here stops the
+//! game from starting.
 
 use std::fmt::Write as _;
 use std::fs;
@@ -43,13 +44,27 @@ pub(crate) fn apply_and_log(game: &Path) {
     }
 }
 
-/// Moves every staged file under `game` into place, unit by unit.
+/// Moves every staged file under `game` into place, unit by unit, up to the
+/// first unit that leaves a file staged.
 pub(crate) fn apply(game: &Path) -> Vec<Outcome> {
     let mut outcomes = Vec::new();
+    let mut held: Option<PathBuf> = None;
     for unit in units(&game.join(STAGED)) {
+        let name = unit.file_name().map(PathBuf::from).unwrap_or_default();
+        if let Some(older) = &held {
+            outcomes.push(Outcome {
+                path: Path::new(STAGED).join(&name),
+                result: Err(format!(
+                    "the older update {} left files staged",
+                    older.display()
+                )),
+            });
+            continue;
+        }
         let mut files = Vec::new();
         collect(&unit, Path::new(""), 0, &mut files);
         files.sort();
+        let first = outcomes.len();
         outcomes.extend(files.into_iter().map(|relative| {
             let result = install(&unit.join(&relative), &game.join(&relative));
             Outcome {
@@ -57,6 +72,9 @@ pub(crate) fn apply(game: &Path) -> Vec<Outcome> {
                 result,
             }
         }));
+        if outcomes[first..].iter().any(|o| o.result.is_err()) {
+            held = Some(name);
+        }
         prune(&unit);
         // Fails, as it should, while a file stays staged.
         let _removed = fs::remove_dir(&unit);
@@ -122,9 +140,11 @@ fn install(staged: &Path, target: &Path) -> Result<bool, String> {
         fs::rename(target, &previous).map_err(|e| format!("keeping the current file: {e}"))?;
     }
     if let Err(error) = fs::rename(staged, target) {
-        if replaces {
-            // Put the current file back; the update stays staged.
-            let _restored = fs::rename(&previous, target);
+        // Put the current file back; the update stays staged.
+        if replaces && let Err(restore) = fs::rename(&previous, target) {
+            return Err(format!(
+                "moving it: {error}; putting the current file back: {restore},                  it is kept as .previous"
+            ));
         }
         return Err(format!("moving it: {error}"));
     }
@@ -289,5 +309,44 @@ mod tests {
         assert!(half.exists());
         assert!(!game.join(STAGED).join("00000000000000000001").exists());
         assert!(!game.join(STAGED).join("00000000000000000002").exists());
+    }
+
+    #[test]
+    fn units_after_one_that_left_a_file_staged_wait() {
+        let game = game("held");
+        fs::create_dir_all(game.join("mods/safes.dll")).unwrap();
+        stage_in(&game, "1", "mods/safes.dll", "first");
+        stage_in(&game, "1", "mods/zones.dll", "first");
+        stage_in(&game, "2", "mods/zones.dll", "second");
+        let outcomes = apply(&game);
+        assert_eq!(outcomes.len(), 3, "{outcomes:?}");
+        assert!(outcomes[0].result.is_err());
+        assert_eq!(outcomes[1].result, Ok(false));
+        assert_eq!(outcomes[2].path, Path::new(STAGED).join("2"));
+        assert!(outcomes[2].result.is_err());
+        assert_eq!(read(&game, "mods/zones.dll"), "first");
+        assert_eq!(read(&game, "mods/.staged/2/mods/zones.dll"), "second");
+        fs::remove_dir(game.join("mods/safes.dll")).unwrap();
+        let outcomes = apply(&game);
+        assert!(outcomes.iter().all(|o| o.result.is_ok()), "{outcomes:?}");
+        assert_eq!(read(&game, "mods/safes.dll"), "first");
+        assert_eq!(read(&game, "mods/zones.dll"), "second");
+        assert_eq!(read(&game, "mods/zones.dll.previous"), "first");
+        assert!(!game.join(STAGED).join("1").exists());
+        assert!(!game.join(STAGED).join("2").exists());
+    }
+
+    #[test]
+    fn a_failed_move_keeps_the_current_file() {
+        let game = game("restore");
+        fs::create_dir_all(game.join("mods")).unwrap();
+        fs::write(game.join("mods/safes.dll"), "old").unwrap();
+        let result = install(
+            &game.join("mods/.staged/1/mods/safes.dll"),
+            &game.join("mods/safes.dll"),
+        );
+        assert!(result.is_err());
+        assert_eq!(read(&game, "mods/safes.dll"), "old");
+        assert!(!game.join("mods/safes.dll.previous").exists());
     }
 }

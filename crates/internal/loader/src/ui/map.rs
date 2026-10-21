@@ -7,6 +7,9 @@
 //! the same thread, so a marker a mod drops is gone the next frame. A marker
 //! shows only with a marker type the game's registry knows; the loader picks
 //! a custom marker type with a label from the registry once it loads.
+//!
+//! The layouts below are pinned for that build alone and no pattern finds
+//! them on another, so map markers stay off on a build without its own table.
 
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
@@ -17,6 +20,7 @@ use enshwick_loader_api::abi::{HookFlags, Status, UiMarker};
 use windows_sys::Win32::System::SystemInformation::GetTickCount64;
 
 use super::engine::{Buf, UiText};
+use crate::builds::Kind;
 use crate::chains::Next;
 use crate::host::Loader;
 
@@ -135,6 +139,9 @@ fn retire(retired: &mut VecDeque<(u64, Arc<Sets>)>, now: u64) {
 /// Notes the play data of the interface context `context`, for the
 /// system's thread.
 pub(super) fn note(context: usize) {
+    if NEXT.wired().is_none() {
+        return;
+    }
     // SAFETY: a live context holds its G38 state pointer.
     let state = unsafe { crate::world::read::<usize>(context, CONTEXT_STATE) };
     let play = if state == 0 {
@@ -154,8 +161,21 @@ pub(super) fn note(context: usize) {
     NOTED_AT.store(unsafe { GetTickCount64() }, Ordering::Release);
 }
 
-/// Links the replicate system on the client.
+/// Whether the layouts this module writes through hold on a build whose
+/// table came about as `kind`.
+fn layout_pinned(kind: Kind) -> bool {
+    kind == Kind::Exact
+}
+
+/// Links the replicate system on the client, on a build with its own table.
 pub(crate) fn link(loader: &Loader) {
+    if !layout_pinned(loader.build.kind) {
+        crate::log!(
+            WARN,
+            "map markers off: their layout is known only on a build with its own table"
+        );
+        return;
+    }
     let target = loader
         .reflection
         .system("replicate_map_markers_for_ui")
@@ -312,6 +332,12 @@ fn pick(types: &[(u32, bool, bool, bool)]) -> Option<u32> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn markers_need_a_build_with_its_own_table() {
+        assert!(layout_pinned(Kind::Exact));
+        assert!(!layout_pinned(Kind::Fallback));
+    }
 
     #[test]
     fn a_custom_type_with_a_label_wins() {

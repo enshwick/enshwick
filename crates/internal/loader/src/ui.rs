@@ -394,6 +394,7 @@ unsafe extern "system" fn detour(state: *mut u8) {
     };
     // SAFETY: forwarded unchanged.
     unsafe { NEXT.get()(state) };
+    ARENA.with_borrow_mut(Arena::next_frame);
     if context == 0 || state.is_null() {
         return;
     }
@@ -407,7 +408,6 @@ unsafe extern "system" fn detour(state: *mut u8) {
         UI_THREAD.store(thread_id(), Ordering::Release);
         let frame = mods::next_frame();
         map::note(context);
-        ARENA.with_borrow_mut(Arena::next_frame);
         frames(engine, context);
         // SAFETY: inside the frame, on its thread, no window open.
         unsafe { demo::draw(engine, context) };
@@ -430,6 +430,9 @@ unsafe extern "system" fn hud_detour(arg: *mut u8) {
     let Some(engine) = ENGINE.get() else {
         return;
     };
+    if hud_turns_frames(NEXT.wired().is_some()) {
+        ARENA.with_borrow_mut(Arena::next_frame);
+    }
     let context = engine.context();
     if context == 0 {
         return;
@@ -446,6 +449,12 @@ unsafe extern "system" fn hud_detour(arg: *mut u8) {
             "interface: the loader panicked while drawing the HUD"
         );
     }
+}
+
+/// Whether the HUD turns the text arena to the next frame: only when the
+/// popup, which turns it every frame otherwise, is not wired.
+const fn hud_turns_frames(popup_wired: bool) -> bool {
+    !popup_wired
 }
 
 /// The game's alignment word for a HUD anchor, and the text alignment
@@ -895,6 +904,12 @@ mod tests {
         // SAFETY: two frames on, the first buffer is still untouched.
         let again = unsafe { core::slice::from_raw_parts(first.ptr, 14) };
         assert_eq!(again, b"enshwick/probe");
+    }
+
+    #[test]
+    fn the_arena_turns_once_a_frame_whichever_hook_is_wired() {
+        assert!(!hud_turns_frames(true));
+        assert!(hud_turns_frames(false));
     }
 
     #[test]

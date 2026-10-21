@@ -108,7 +108,10 @@ shows the mod's markers on the map, at most 256, each with a position in
 metres, a label and one of the game's eight custom marker colours; the next
 call replaces them all, and `clear_markers` takes them off. It works from any
 thread and copies what it is handed. The markers use one of the game's
-custom marker types with a label; the compass does not show them.
+custom marker types with a label; the compass does not show them. The map's
+layout is known only for builds with their own table, so on a build the
+loader runs by patterns the markers stay off and `set_markers` has no
+effect.
 
 ```rust
 use enshwick_loader_api::ui::{Marker, MarkerColor, Ui};

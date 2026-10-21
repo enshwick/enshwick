@@ -436,6 +436,7 @@ fn server_list(paint: &Painter<'_>, first: &mut usize) -> Option<String> {
         );
     }
     let mut opened = None;
+    *first = clamp_first(*first, mods.len(), MODS_PER_PAGE);
     for (id, name) in mods.iter().skip(*first).take(MODS_PER_PAGE) {
         paint.label(name.as_bytes(), UiWidget::STYLE_H3, false, false);
         if paint.button(texts::text("mods.settings").as_bytes(), true) {
@@ -492,6 +493,7 @@ fn server_settings(
         return message;
     };
     let mut changed = None;
+    *first = clamp_first(*first, rows.len(), ROWS_PER_PAGE);
     for row in rows.iter().skip(*first).take(ROWS_PER_PAGE) {
         if let Some(value) = draw_row(paint, id, known, row) {
             changed = Some((row.key.clone(), value));
@@ -582,6 +584,7 @@ fn list(loader: &Loader, paint: &Painter<'_>, first: &mut usize) -> Listed {
             false,
         );
     }
+    *first = clamp_first(*first, mods.len(), MODS_PER_PAGE);
     for (index, record) in mods.iter().enumerate().skip(*first).take(MODS_PER_PAGE) {
         let heading = if record.off.load(Ordering::Acquire) {
             let name = record.label();
@@ -639,6 +642,16 @@ fn list(loader: &Loader, paint: &Painter<'_>, first: &mut usize) -> Listed {
     }
     pages(paint, first, mods.len(), MODS_PER_PAGE);
     done
+}
+
+/// The first item of the page showing `first` in a list that now holds
+/// `count` items: the last page when the list shrank below it.
+fn clamp_first(first: usize, count: usize, per_page: usize) -> usize {
+    if first < count {
+        first
+    } else {
+        count.saturating_sub(1) / per_page.max(1) * per_page
+    }
 }
 
 /// The Previous and Next buttons of a paged list of `count` items.
@@ -715,6 +728,7 @@ fn settings(
     }
     let schema = record.schema.lock().ok().and_then(|s| s.clone())?;
     let mut changed = None;
+    *first = clamp_first(*first, rows.len(), ROWS_PER_PAGE);
     for row in rows.iter().skip(*first).take(ROWS_PER_PAGE) {
         if let Some(value) = draw_row(paint, &record.id, &schema, row) {
             changed = Some((row.key.clone(), value));
@@ -966,6 +980,15 @@ fn world(read_only: bool) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_page_past_a_shrunk_list_moves_to_its_last_page() {
+        assert_eq!(clamp_first(8, 20, 8), 8);
+        assert_eq!(clamp_first(16, 12, 8), 8);
+        assert_eq!(clamp_first(8, 5, 8), 0);
+        assert_eq!(clamp_first(8, 8, 8), 0);
+        assert_eq!(clamp_first(8, 0, 8), 0);
+    }
 
     #[test]
     fn a_servers_join_values_read_as_a_table() {
