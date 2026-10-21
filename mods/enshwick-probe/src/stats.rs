@@ -32,7 +32,7 @@ pub(crate) struct StatChecks {
 impl StatChecks {
     pub(crate) fn new(load: &mut Load<'_>, scheduler: Scheduler) -> Result<Self, Off> {
         let world = load.world()?;
-        let luck = load.stat("luck", &StatDef::additive("probe.luck").range(0.0, 1.0))?;
+        let luck = load.define_stat("luck", &StatDef::additive("probe.luck").range(0.0, 1.0))?;
         load.on_stats_changed(|change| {
             enshwick_loader_api::info!(
                 "stats: {:?} stat {} {} -> {}",

@@ -127,7 +127,7 @@ A mod subscribes with
 and the types in
 [`events`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/events.rs),
 or with a raw [`Event`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs)
-id through `Load::subscribe`. See [Events and the scheduler](events.md).
+id through `Load::on_raw_event`. See [Events and the scheduler](events.md).
 
 | Id  | Constant                  | Typed event             | Data              | Raised on       | Side   |
 | --- | ------------------------- | ----------------------- | ----------------- | --------------- | ------ |

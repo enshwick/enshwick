@@ -213,7 +213,7 @@ offers them once the note closes. Other cases do not keep the player out:
 - the server does not answer the query: the client joins without a check
   (`joining <address>: no rules answer`).
 
-Only mods with `join = true` count; see [The join check](concepts/join-check.md).
+Only mods with `join: true` count; see [The join check](concepts/join-check.md).
 
 ## How do I remove a mod or Enshwick?
 

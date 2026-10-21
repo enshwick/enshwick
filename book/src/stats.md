@@ -13,7 +13,7 @@ use enshwick_loader_api::stats::{Lasting, Modifier, Op, StatDef, builtin};
 
 fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
     // A kind of this mod's own, `<mod>:luck`, from 0 to 1.
-    let luck = load.stat("luck", &StatDef::additive("stat.luck").range(0.0, 1.0))?;
+    let luck = load.define_stat("luck", &StatDef::additive("stat.luck").range(0.0, 1.0))?;
     // A built-in kind the platform applies to the game.
     let health = load.open_stat(builtin::HEALTH_MAX)?;
     let stats = load.stats()?;
@@ -43,7 +43,7 @@ and a `StatDef`:
 | `text` | the text key that names the stat, in the mod's [texts](content/texts.md) |
 | `format` | how the value reads: `Number`, `Signed` or `Percent` |
 
-`load.stat(name, &def)` defines a kind in the mod's own namespace during
+`load.define_stat(name, &def)` defines a kind in the mod's own namespace during
 `init`; `load.open_stat(id)` opens any kind by its full id, another mod's or
 a built-in one. Every mod that opens one id shares its values, so mods read
 each other's stats without depending on each other. A kind no mod defines

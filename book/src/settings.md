@@ -332,7 +332,7 @@ let settings = Settings { altars: vec![2, 4], verbose: true };
 assert_eq!(settings.synced().as_deref(), Some("{ altars = [2, 4] }"));
 ```
 
-Join values only work for a mod with `join = true` in its manifest, the mods
+Join values only work for a mod with `join: true` in its manifest, the mods
 that count in the [join check](concepts/join-check.md). Then:
 
 - **On the server.** Each time the mod reads its settings, the loader takes

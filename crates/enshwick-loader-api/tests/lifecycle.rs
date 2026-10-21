@@ -66,7 +66,7 @@ mod tests {
 
     impl enshwick_loader_api::Mod for Test {
         fn manifest() -> &'static enshwick_loader_api::abi::Manifest {
-            enshwick_loader_api::manifest!(id: "test-mod", side: BOTH, join = true, requires: ["other" => "^1"])
+            enshwick_loader_api::manifest!(id: "test-mod", side: BOTH, join: true, requires: ["other" => "^1"])
         }
 
         fn init(

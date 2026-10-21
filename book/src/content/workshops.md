@@ -98,10 +98,8 @@ use enshwick_loader_api::content::vanilla::Vanilla;
 
 fn forge() -> Result<enshwick_loader_api::content::workshops::Station, Off> {
     let vanilla = Vanilla::game().ok_or_else(|| Off::new("no game data"))?;
-    let item = vanilla
-        .item("Prop_Production_T1_Forge")
-        .map_err(|why| Off::new(why.to_string()))?;
-    vanilla.station(item).map_err(|why| Off::new(why.to_string()))
+    let item = vanilla.item("Prop_Production_T1_Forge")?;
+    Ok(vanilla.station(item)?)
 }
 ```
 

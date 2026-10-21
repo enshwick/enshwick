@@ -44,7 +44,7 @@ pub struct Settings {
     /// build vanilla until its table arrives. Read at start.
     pub build_patterns: bool,
     /// Watch the mod DLLs in mods/ and reload one that changes, when the mod
-    /// allows it (`reload = true` in its manifest). For developing mods, on
+    /// allows it (`reload: true` in its manifest). For developing mods, on
     /// the dedicated server or the client. Read at start.
     pub dev_reload: bool,
     /// What the server does with knowledge a client asks for in its input

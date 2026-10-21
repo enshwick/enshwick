@@ -16,12 +16,12 @@ use enshwick_loader_api::stats::{Op, builtin};
 fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
     let health = load.open_stat(builtin::HEALTH_MAX)?;
     let fire = load.open_stat(builtin::RESISTANCE_FIRE)?;
-    load.affix(
+    load.define_affix(
         "sturdy",
         &AffixDef::new("affix.sturdy", Categories::EQUIPMENT)
             .with(Range::new(health, Op::Add, 10.0, 30.0).step(1.0)),
     )?;
-    load.affix(
+    load.define_affix(
         "fireproof",
         &AffixDef::new("affix.fireproof", Categories::EQUIPMENT)
             .with(Range::new(fire, Op::Add, 0.05, 0.2).step(0.01))
@@ -30,15 +30,15 @@ fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_
             .group("element"),
     )?;
     // Half the armour bosses drop rolls one or two affixes.
-    load.affixes_on_loot(AffixLoot::new(Source::bosses(), 0.5).count(1, 2))?;
+    load.add_loot_affixes(AffixLoot::new(Source::bosses(), 0.5).count(1, 2))?;
     // A fifth of what players craft rolls one.
-    load.affixes_on_craft(AffixCraft::new(0.2, RollRules::new(1, 1)))
+    load.add_craft_affixes(AffixCraft::new(0.2, RollRules::new(1, 1)))
 }
 ```
 
 ## Defining affixes
 
-`load.affix(name, &def)` defines `<mod>:<name>` during `init`, on both
+`load.define_affix(name, &def)` defines `<mod>:<name>` during `init`, on both
 sides, so clients can name what items rolled. An `AffixDef` holds:
 
 | Field | Means |
@@ -61,11 +61,11 @@ a group with one taken, then its values. `roll(&pool, category, rules,
 seed)` is the same roll as a pure function: the same seed, category and
 pool give the same affixes, whatever order the pool comes in.
 
-- `load.affixes_on_loot(AffixLoot)` rolls the items with an entity of their
+- `load.add_loot_affixes(AffixLoot)` rolls the items with an entity of their
   own (weapons, armour, tools) that random loot puts into containers the
   rule's [`Source`](content/random-loot.md) matches, each at the rule's
   chance, right after the container rolls its loot.
-- `load.affixes_on_craft(AffixCraft)` rolls the items that turn up in a
+- `load.add_craft_affixes(AffixCraft)` rolls the items that turn up in a
   player's inventories within a second of their craft request.
 - `affixes.roll(item, rules, seed, once)` rolls one item on purpose, from
   `load.affixes()`; `once` leaves an item that rolled before as it is.

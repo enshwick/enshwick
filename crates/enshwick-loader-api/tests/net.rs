@@ -21,7 +21,7 @@ mod tests {
 
     impl Mod for Talker {
         fn manifest() -> &'static enshwick_loader_api::abi::Manifest {
-            enshwick_loader_api::manifest!(id: "talker", side: BOTH, join = true)
+            enshwick_loader_api::manifest!(id: "talker", side: BOTH, join: true)
         }
 
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {

@@ -24,7 +24,7 @@ fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_
 - The loader links the game functions behind an event only when some mod
   subscribed to it, so an unused event costs nothing.
 
-[`load.subscribe(event, |raw| ...)`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/load.rs)
+[`load.on_raw_event(event, |raw| ...)`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/load.rs)
 is the untyped form: it takes an
 [`abi::Event`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs)
 and gives the handler the raw data pointer, null for events without data.

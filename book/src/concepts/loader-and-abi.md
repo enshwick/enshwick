@@ -94,8 +94,8 @@ let manifest = enshwick_loader_api::manifest!(
     authors: ["Your Name"],
     license: "MIT OR Apache-2.0",
     homepage: "https://github.com/you/trading-post",
-    join = true,                    // counts in the join check
-    reload = true,                  // a development server may reload it
+    join: true,                    // counts in the join check
+    reload: true,                  // a development server may reload it
     requires: ["market-stalls" => ">=0.2, <1.0"],
     after: ["market-stalls"],
     recommends: ["caravans" => ">=0.3, <1.0"],
@@ -126,8 +126,8 @@ let manifest = enshwick_loader_api::manifest!(
   the updater's questions. Each but `name` comes from the crate's
   `Cargo.toml` when left out (`homepage` falls back to `repository`); a mod
   without a name is shown by its id.
-- `join = true`: see [The join check](join-check.md).
-- `reload = true`: a development server may reload the mod while it runs; see
+- `join: true`: see [The join check](join-check.md).
+- `reload: true`: a development server may reload the mod while it runs; see
   [Testing](../testing.md#reloading-a-mod-while-the-game-runs).
 - `requires` names mods that must be present in a Cargo-style version range;
   they load first. `after` names mods that load first when present.
@@ -172,7 +172,7 @@ state type:
   state or an [`Off`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/load.rs);
 - `ready(&'static self, host)`, optional, runs once the hooks are armed;
 - `shutdown(&'static self)`, optional, runs before a development reload
-  unloads a mod with `reload = true`.
+  unloads a mod with `reload: true`.
 
 `Off::new(reason)` turns the mod off with a reason for the log. Every fallible
 call on `Load` returns `Result<_, Off>`, so `?` is the usual way out.

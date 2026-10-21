@@ -67,7 +67,7 @@ impl Mod for BuildCamera {
             id: "build-camera",
             side: BOTH,
             name: "Build camera",
-            join = true,
+            join: true,
             updates: github("themaiby/enshwick", "enshwick-build-camera"),
             signed_by: ["RWTjqgtfpy3lSOLC4uaUXuvvKSLQKOFf6nUnEytoiFjSzxMEhLnoAdJF"],
         )

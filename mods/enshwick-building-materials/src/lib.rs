@@ -160,7 +160,7 @@ impl Mod for BuildingMaterials {
             id: "building-materials",
             side: BOTH,
             name: "Building materials",
-            join = true,
+            join: true,
             replaces: ["building-yield"],
             updates: github("themaiby/enshwick", "enshwick-building-materials"),
             signed_by: ["RWTjqgtfpy3lSOLC4uaUXuvvKSLQKOFf6nUnEytoiFjSzxMEhLnoAdJF"],

@@ -7,7 +7,7 @@
 /// `cap`, links' answers too, so a link cannot raise a level past `cap`.
 /// Asked whenever the game checks the limit, on the thread that checks it,
 /// on the server and on every client: a linking mod belongs on both sides
-/// with `join = true`, or the two disagree on the limit.
+/// with `join: true`, or the two disagree on the limit.
 ///
 /// # Examples
 ///

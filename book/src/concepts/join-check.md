@@ -2,7 +2,7 @@
 
 Some mods only work when the server and every player run them in the same
 version: content, or a limit the client's interface also checks. Such a mod
-sets `join = true` in its manifest. Leave it off for mods that change only
+sets `join: true` in its manifest. Leave it off for mods that change only
 what one side sees or decides, such as a server-only balance change.
 
 ## What the server advertises
@@ -51,7 +51,7 @@ compares the fingerprint with its own:
 Notes show as dialogs in the game's own style, over the game, which goes on
 drawing; a refused join is refused at once, and the note follows.
 
-Mods without `join = true` never count: the player may run any of them.
+Mods without `join: true` never count: the player may run any of them.
 
 ## Join values
 

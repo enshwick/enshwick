@@ -11,8 +11,8 @@
 ///   `homepage: "https://..."`, each taken from the crate's `Cargo.toml`
 ///   (`description`, `authors`, `license`, `homepage` or else `repository`)
 ///   when omitted;
-/// - `join = true`: the mod counts in the join check;
-/// - `reload = true`: the mod may be reloaded while a development server runs
+/// - `join: true`: the mod counts in the join check;
+/// - `reload: true`: the mod may be reloaded while a development server runs
 ///   (see [`ManifestFlags::RELOAD`](crate::abi::ManifestFlags::RELOAD));
 /// - `requires: ["id" => "range", ...]`: mods that must load first, in a
 ///   Cargo-style version range (`""` for any);
@@ -44,7 +44,7 @@
 ///     side: BOTH,
 ///     name: "Survivors per Altar",
 ///     authors: ["themaiby"],
-///     join = true,
+///     join: true,
 ///     requires: ["flame-altar-zones" => ">=0.1, <1.0"],
 ///     breaks: ["old-survivors" => "<0.3"],
 ///     replaces: ["survivors"],
@@ -100,8 +100,8 @@ macro_rules! manifest {
         $(, authors: [$($author:literal),* $(,)?])?
         $(, license: $license:literal)?
         $(, homepage: $homepage:literal)?
-        $(, join = $join:expr)?
-        $(, reload = $reload:expr)?
+        $(, join: $join:expr)?
+        $(, reload: $reload:expr)?
         $(, requires: [$($req:literal => $range:literal),* $(,)?])?
         $(, after: [$($after:literal),* $(,)?])?
         $(, recommends: [$($rec:literal => $rec_range:literal),* $(,)?])?

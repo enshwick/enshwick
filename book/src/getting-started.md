@@ -127,7 +127,7 @@ fn apply(settings: &Settings) {
 
 impl Mod for AltarCount {
     fn manifest() -> &'static enshwick_loader_api::abi::Manifest {
-        enshwick_loader_api::manifest!(id: "my-altar-count", side: BOTH, join = true)
+        enshwick_loader_api::manifest!(id: "my-altar-count", side: BOTH, join: true)
     }
 
     fn init(load: &mut Load<'_>) -> Result<Self, Off> {
@@ -154,7 +154,7 @@ What each piece does:
   catches panics. The body gets `next`, the rest of the chain, and the
   function's arguments. See [Hooks](hooks.md).
 - `manifest!` names the mod and where it runs. `side: BOTH` and
-  `join = true` because the client's interface asks the same function, so
+  `join: true` because the client's interface asks the same function, so
   players and their server must agree. See
   [The loader and the ABI](concepts/loader-and-abi.md).
 - `init` reads the settings, finds the function by its symbolic id and links

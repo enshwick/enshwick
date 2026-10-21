@@ -35,10 +35,11 @@ impl AffixChecks {
         for (id, _) in builtin::ALL {
             kinds.push((id.to_owned(), load.open_stat(id)?));
         }
-        let lucky = load.stat("lucky", &StatDef::additive("probe.lucky").range(0.0, 100.0))?;
+        let lucky =
+            load.define_stat("lucky", &StatDef::additive("probe.lucky").range(0.0, 100.0))?;
         kinds.push(("probe:lucky".to_owned(), lucky));
         let health = load.open_stat(builtin::HEALTH_MAX)?;
-        load.affix(
+        load.define_affix(
             "sturdy",
             &AffixDef::new(
                 "probe.affix.sturdy",
@@ -46,7 +47,7 @@ impl AffixChecks {
             )
             .with(Range::new(health, Op::Add, 10.0, 30.0).step(1.0)),
         )?;
-        load.affix(
+        load.define_affix(
             "fortunate",
             &AffixDef::new(
                 "probe.affix.fortunate",

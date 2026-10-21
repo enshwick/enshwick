@@ -316,7 +316,7 @@ its mod without a restart:
 4. it runs the new copy's `init` with the same handle, links its hooks into
    the armed chains, and runs its `ready`.
 
-A mod opts in with `reload = true` in its `manifest!` and keeps a contract:
+A mod opts in with `reload: true` in its `manifest!` and keeps a contract:
 
 - **Only what a reload can unlink.** Hooks on functions it hooked at start,
   events, lookups (symbols, constants, systems, fields, types), settings,
