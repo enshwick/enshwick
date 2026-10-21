@@ -281,6 +281,8 @@ pub struct Constant {
     value: u64,
     pattern: Option<Pattern>,
     operand: Option<Operand>,
+    via: Option<String>,
+    attribute: Option<String>,
 }
 
 impl Constant {
@@ -309,12 +311,48 @@ impl Constant {
         self.operand
     }
 
+    /// The symbol in whose code the value is read, for a value only a
+    /// function too short to find on its own holds: its pattern must match
+    /// where the symbol starts, and the operand is read there.
+    #[must_use]
+    pub fn via(&self) -> Option<&str> {
+        self.via.as_deref()
+    }
+
+    /// The name of the attribute whose slot in its set the value is; the
+    /// game looks such slots up in its data at run time, so no code holds
+    /// them and the loader reads them from the game's archive.
+    #[must_use]
+    pub fn attribute(&self) -> Option<&str> {
+        self.attribute.as_deref()
+    }
+
     /// The value as its pattern finds it in `code`: read from the operand,
     /// or the pinned value when the pattern only confirms it; `None` without
-    /// a pattern or a unique match.
+    /// a pattern or a unique match, and for a value read [`Self::via`] a
+    /// symbol.
     #[must_use]
     pub fn find(&self, code: &[u8]) -> Option<u64> {
+        if self.via.is_some() {
+            return None;
+        }
         let start = u64::try_from(self.pattern.as_ref()?.find_unique(code).ok()?).ok()?;
+        self.read(code, start)
+    }
+
+    /// The value in the code at `start`, where the pattern must match: read
+    /// from the operand, or the pinned value when the pattern only confirms
+    /// it; `None` without a pattern or a match there.
+    #[must_use]
+    pub fn find_at(&self, code: &[u8], start: u64) -> Option<u64> {
+        let at = usize::try_from(start).ok()?;
+        if !self.pattern.as_ref()?.matches(code.get(at..)?) {
+            return None;
+        }
+        self.read(code, start)
+    }
+
+    fn read(&self, code: &[u8], start: u64) -> Option<u64> {
         match self.operand {
             Some(operand) => operand.read(code, start),
             None => Some(self.value),
@@ -396,6 +434,8 @@ struct ConstantFull {
     shl: bool,
     #[serde(default)]
     plus: i64,
+    via: Option<String>,
+    attribute: Option<String>,
 }
 
 impl ConstantFull {
@@ -515,11 +555,26 @@ impl Table {
             .constants
             .into_iter()
             .map(|(id, value)| {
-                let (value, text, operand) = match value {
-                    ConstantValue::Plain(value) => (value.value(&id)?, None, None),
+                let (value, text, operand, via, attribute) = match value {
+                    ConstantValue::Plain(value) => (value.value(&id)?, None, None, None, None),
                     ConstantValue::Full(full) => {
                         let operand = full.operand(&id)?;
-                        (full.value.value(&id)?, full.pattern, operand)
+                        let bad = |why: &str| Err(TableError::Toml(format!("{id}: {why}")));
+                        if full.via.is_some() && full.pattern.is_none() {
+                            return bad("`via` needs a pattern");
+                        }
+                        if full.attribute.is_some()
+                            && (full.pattern.is_some() || full.via.is_some())
+                        {
+                            return bad("`attribute` takes no pattern and no `via`");
+                        }
+                        (
+                            full.value.value(&id)?,
+                            full.pattern,
+                            operand,
+                            full.via,
+                            full.attribute,
+                        )
                     }
                 };
                 Ok(Constant {
@@ -527,6 +582,8 @@ impl Table {
                     id,
                     value,
                     operand,
+                    via,
+                    attribute,
                 })
             })
             .collect::<Result<_, TableError>>()?;
@@ -612,7 +669,15 @@ impl Table {
                 .map(|c| (c.id.clone(), c.value))
                 .collect(),
             missing: Vec::new(),
+            attributes: self.attributes(),
         }
+    }
+
+    fn attributes(&self) -> Vec<(String, String)> {
+        self.constants
+            .iter()
+            .filter_map(|c| Some((c.id.clone(), c.attribute.clone()?)))
+            .collect()
     }
 
     /// The table carried to a build without its own: each entry found by
@@ -621,8 +686,10 @@ impl Table {
     /// there still starts with the bytes its `<id>.bytes` constant pins, if
     /// any; a constant counts when the code that uses it is still found
     /// once, and takes the value read from that code where its operand
-    /// say. Everything else is [`Resolved::missing`]. The checks do not
-    /// apply.
+    /// say; a constant read [`Constant::via`] a symbol counts when that
+    /// symbol counts and its code there matches. Everything else is
+    /// [`Resolved::missing`], the slots of [`Constant::attribute`]s among
+    /// them until the loader supplies them. The checks do not apply.
     #[must_use]
     pub fn fall_back(&self, code: &[u8], code_rva: u64) -> Resolved {
         let found_symbols = search(&self.symbols, |s| {
@@ -646,6 +713,10 @@ impl Table {
                 let value = read(code, rva.checked_sub(code_rva)?, 8)?;
                 return (value == c.value).then_some(c.value);
             }
+            if let Some(via) = &c.via {
+                let (_, rva) = symbols.iter().find(|(id, _)| id == via)?;
+                return c.find_at(code, rva.checked_sub(code_rva)?);
+            }
             c.find(code)
         });
         let mut constants = Vec::new();
@@ -663,6 +734,22 @@ impl Table {
             symbols,
             constants,
             missing,
+            attributes: self.attributes(),
+        }
+    }
+
+    /// The value of `constant` as its pattern finds it in `code`, the code
+    /// section that starts at `code_rva`, on the build the table is for: a
+    /// value read [`Constant::via`] a symbol in the code where the table
+    /// pins that symbol, any other in its unique match.
+    #[must_use]
+    pub fn find_pinned(&self, constant: &Constant, code: &[u8], code_rva: u64) -> Option<u64> {
+        match constant.via() {
+            Some(via) => {
+                let symbol = self.symbols.iter().find(|s| s.id == via)?;
+                constant.find_at(code, symbol.rva.checked_sub(code_rva)?)
+            }
+            None => constant.find(code),
         }
     }
 
@@ -746,6 +833,7 @@ pub struct Resolved {
     symbols: Vec<(String, u64)>,
     constants: Vec<(String, u64)>,
     missing: Vec<String>,
+    attributes: Vec<(String, String)>,
 }
 
 impl Resolved {
@@ -796,6 +884,52 @@ impl Resolved {
     #[must_use]
     pub fn missing(&self) -> &[String] {
         &self.missing
+    }
+
+    /// The constants that are slots of attributes, by id, with the name of
+    /// their attribute ([`Constant::attribute`]).
+    #[must_use]
+    pub fn attributes(&self) -> &[(String, String)] {
+        &self.attributes
+    }
+
+    /// Sets the constant `id` to `value`, read from the game's data, and
+    /// takes it off [`Self::missing`]; the value it had, if any.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_loader_builds::Table;
+    ///
+    /// let table = Table::parse(
+    ///     r#"
+    ///     name = "1.0 server (1)"
+    ///     side = "server"
+    ///     guid = "00000000000000000000000000000001"
+    ///     age = 2
+    ///     [constants]
+    ///     "attribute.health_max_slot" = { value = 7, attribute = "Health_Max" }
+    ///     "#,
+    /// )?;
+    /// let mut resolved = table.fall_back(&[], 0);
+    /// assert_eq!(resolved.missing(), ["attribute.health_max_slot"]);
+    /// assert_eq!(resolved.supply("attribute.health_max_slot", 7), None);
+    /// assert_eq!(resolved.constant("attribute.health_max_slot"), Some(7));
+    /// assert!(resolved.missing().is_empty());
+    /// # Ok::<(), enshwick_loader_builds::TableError>(())
+    /// ```
+    pub fn supply(&mut self, id: &str, value: u64) -> Option<u64> {
+        self.missing.retain(|have| have != id);
+        match self
+            .constants
+            .binary_search_by(|(have, _)| have.as_str().cmp(id))
+        {
+            Ok(i) => Some(core::mem::replace(&mut self.constants[i].1, value)),
+            Err(i) => {
+                self.constants.insert(i, (id.to_owned(), value));
+                None
+            }
+        }
     }
 }
 
@@ -1009,6 +1143,63 @@ mod tests {
         );
     }
 
+    /// A constant read via a symbol counts where the symbol is found and
+    /// its code matches; a slot of an attribute waits for the loader.
+    #[test]
+    fn constants_via_a_symbol_or_from_data_fall_back_as_they_say() {
+        let table = Table::parse(
+            r#"
+            name = "1.0 server (1)"
+            side = "server"
+            guid = "00000000000000000000000000000001"
+            age = 2
+            [symbols]
+            "g.get" = { rva = 0x5020, pattern = "E8 ?? ?? ?? ?? 0F 0B", rel = 1 }
+            "g.lost" = { rva = 0x5030, pattern = "77 66 55" }
+            [constants]
+            "g.blob" = { value = 0x48, via = "g.get", pattern = "48 8B 41 ?? C3", at = 3, size = 1 }
+            "g.other" = { value = 0x48, via = "g.lost", pattern = "48 8B 41 ?? C3", at = 3, size = 1 }
+            "g.slot" = { value = 7, attribute = "Health_Max" }
+            "#,
+        )
+        .unwrap();
+        let mut code = vec![0xccu8; 64];
+        // A call at 0 to 0x20, where the getter reads +0x50 now.
+        code[..7].copy_from_slice(&[0xe8, 0x1b, 0, 0, 0, 0x0f, 0x0b]);
+        code[0x20..0x25].copy_from_slice(&[0x48, 0x8b, 0x41, 0x50, 0xc3]);
+        let mut resolved = table.fall_back(&code, 0x5000);
+        assert_eq!(resolved.symbol("g.get"), Some(0x5020));
+        assert_eq!(resolved.constant("g.blob"), Some(0x50));
+        assert_eq!(resolved.missing(), ["g.lost", "g.other", "g.slot"]);
+        assert_eq!(
+            resolved.attributes(),
+            [("g.slot".to_owned(), "Health_Max".to_owned())]
+        );
+        assert_eq!(resolved.supply("g.slot", 7), None);
+        assert_eq!(resolved.supply("g.blob", 0x50), Some(0x50));
+        assert_eq!(resolved.missing(), ["g.lost", "g.other"]);
+        code[0x23] = 0x48;
+        code[0x24] = 0x90;
+        assert_eq!(table.fall_back(&code, 0x5000).constant("g.blob"), None);
+        assert_eq!(table.resolve().constant("g.slot"), Some(7));
+        for bad in [
+            r#""x" = { value = 1, via = "g.get" }"#,
+            r#""x" = { value = 1, attribute = "A", pattern = "11" }"#,
+        ] {
+            let text = format!(
+                "name = \"n\"
+side = \"server\"
+guid = \"{}\"
+age = 1
+[constants]
+{bad}
+",
+                "0".repeat(32)
+            );
+            assert!(Table::parse(&text).is_err(), "{bad}");
+        }
+    }
+
     #[test]
     fn expected_bytes_count_only_where_the_pattern_fixes_them() {
         let mut symbol = Symbol {
@@ -1149,7 +1340,9 @@ mod tests {
                 }
             }
             for constant in table.constants() {
-                if let Some(pattern) = constant.pattern() {
+                if let Some(pattern) = constant.pattern()
+                    && constant.via().is_none()
+                {
                     unique(constant.id(), pattern);
                 }
             }
@@ -1160,7 +1353,7 @@ mod tests {
                 }
             }
             for constant in table.constants() {
-                let found = constant.find(code);
+                let found = table.find_pinned(constant, code, code_rva);
                 if constant.pattern().is_some() && found != Some(constant.value()) {
                     wrong.push(format!("{}: reads {found:x?}", constant.id()));
                 }
@@ -1182,6 +1375,6 @@ mod tests {
 
     /// How many symbols and constants the patterns of each side's table find
     /// on its own build, at least; raised as patterns are added.
-    const COVERED_SERVER: (usize, usize) = (120, 246);
-    const COVERED_CLIENT: (usize, usize) = (181, 323);
+    const COVERED_SERVER: (usize, usize) = (121, 247);
+    const COVERED_CLIENT: (usize, usize) = (182, 324);
 }

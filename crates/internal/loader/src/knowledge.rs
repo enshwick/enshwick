@@ -37,6 +37,7 @@ pub(crate) const TABLE_IDS: &[&str] = &[
     "knowledge.input_check",
     "knowledge.journal",
     "knowledge.journal_blob",
+    "knowledge.journal_blob_get",
     "knowledge.log_entry_size",
     "knowledge.object",
     "knowledge.player_value",

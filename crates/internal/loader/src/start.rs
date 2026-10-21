@@ -563,7 +563,7 @@ fn game(data_dir: &Path) -> Option<Game> {
             .read(range.start, range.end - range.start)
             .map(|bytes| (bytes, range.start - base))
     });
-    let Some(build) = builds::select(&tables, side, fingerprint, code) else {
+    let Some(mut build) = builds::select(&tables, side, fingerprint, code) else {
         crate::log!(
             ERROR,
             "unknown game build {}/{}; the game runs vanilla until Enshwick has its build table",
@@ -585,6 +585,9 @@ fn game(data_dir: &Path) -> Option<Game> {
             crate::holds::enforce(data_dir, &[], true);
             return None;
         }
+    }
+    if let Some(game_dir) = data_dir.parent() {
+        crate::attribute_slots::supply(&mut build, &reflection, game_dir, side);
     }
     let build: &'static builds::KnownBuild = Box::leak(Box::new(build));
     match build.kind {
@@ -1172,12 +1175,15 @@ pub fn dry_run(exe: &Path, game_dir: &Path, patterns: bool) -> Result<DryRun, St
             .read(range.start, range.end - range.start)
             .map(|bytes| (bytes, range.start - base))
     });
-    let build = if patterns {
+    let mut build = if patterns {
         code.and_then(|code| builds::by_patterns(&tables, side, code))
     } else {
         builds::select(&tables, side, fingerprint, code)
     }
     .ok_or("no build table serves this build")?;
+    if let Some(exe_dir) = exe.parent() {
+        crate::attribute_slots::supply(&mut build, &reflection, exe_dir, side);
+    }
     let build: &'static builds::KnownBuild = Box::leak(Box::new(build));
     for dir in ["mods", "mod-configs", "mod-data", "logs"] {
         std::fs::create_dir_all(game_dir.join(dir)).map_err(|e| e.to_string())?;

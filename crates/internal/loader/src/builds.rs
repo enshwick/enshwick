@@ -79,6 +79,19 @@ impl KnownBuild {
         self.table.missing().iter().any(|id| id.starts_with(prefix))
     }
 
+    /// The constants that are slots of attributes, with the name of their
+    /// attribute.
+    #[must_use]
+    pub fn attributes(&self) -> &[(String, String)] {
+        self.table.attributes()
+    }
+
+    /// Sets the constant `id` to `value`, read from the game's data, and
+    /// takes it off the missing entries; the value it had, if any.
+    pub fn supply(&mut self, id: &str, value: u64) -> Option<u64> {
+        self.table.supply(id, value)
+    }
+
     /// How many symbols and constants this build has.
     #[must_use]
     pub fn entries(&self) -> usize {
