@@ -58,7 +58,6 @@ const PAUSE: &str = "github-pause";
 /// Updater settings.
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize, enshwick_loader_api::Config)]
 #[serde(deny_unknown_fields)]
-#[config(validate = Settings::check)]
 struct Settings {
     /// Look for updates at start, and offer a server's versions when it runs
     /// mods this game lacks. Off: the updater never goes online.
@@ -70,6 +69,7 @@ struct Settings {
     /// Public keys accepted for updates besides the ones each installed mod
     /// names: the second line of a minisign .pub file, such as "RWQ...".
     /// For an author who changed keys; add only keys of authors you trust.
+    /// An entry that is not a key is skipped, with a warning in the log.
     #[config(client)]
     trusted_keys: Vec<String>,
     /// Offer prereleases too.
@@ -89,11 +89,14 @@ impl Default for Settings {
 }
 
 impl Settings {
-    fn check(&self) -> Result<(), String> {
+    /// Warns once about each entry of `trusted_keys` that is not a key,
+    /// which the updater skips.
+    fn warn_bad_keys(&self) {
         for key in &self.trusted_keys {
-            verify::key(key).map_err(|e| format!("trusted_keys: {key:?} is {e}"))?;
+            if let Err(e) = verify::key(key) {
+                enshwick_loader_api::warn!("trusted_keys: {key:?} is skipped, it is {e}");
+            }
         }
-        Ok(())
     }
 
     /// The trusted keys that read as keys.
@@ -975,6 +978,7 @@ fn spawn(name: &'static str, work: impl FnOnce() + Send + std::panic::UnwindSafe
 }
 
 fn set_context(settings: Settings, game: &Path, data: &Path) {
+    settings.warn_bad_keys();
     *CONTEXT.lock().unwrap_or_else(PoisonError::into_inner) = Some(Arc::new(Context {
         settings,
         game: game.to_path_buf(),
@@ -1132,7 +1136,7 @@ mod tests {
     }
 
     #[test]
-    fn trusted_keys_must_be_minisign_keys() {
+    fn a_trusted_key_that_is_no_key_is_skipped() {
         use enshwick_loader_api::config::Config;
         let mut settings = Settings::default();
         settings
@@ -1140,8 +1144,16 @@ mod tests {
             .push("RWSVvUJNE6Z0IzsG2I1G/+JlpjWYHLgP8QVhvMlSWCg0AShBnBmVIt4r".into());
         assert!(settings.validate().is_ok());
         assert_eq!(settings.trusted().len(), 1);
-        settings.trusted_keys.push("not a key".into());
-        assert!(settings.validate().is_err());
+        settings.trusted_keys.insert(0, "not a key".into());
+        assert!(
+            settings.validate().is_ok(),
+            "one bad entry keeps the updater on"
+        );
+        assert_eq!(
+            settings.trusted(),
+            ["RWSVvUJNE6Z0IzsG2I1G/+JlpjWYHLgP8QVhvMlSWCg0AShBnBmVIt4r"],
+            "the bad entry is skipped"
+        );
     }
 
     #[test]

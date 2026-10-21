@@ -236,17 +236,27 @@ fn pick(
     component: &str,
     signed: bool,
 ) -> Option<Pick> {
-    let prefix = format!(
-        "https://github.com/{repository}/releases/download/{}/",
-        release.tag_name
-    );
+    let prefix = format!("https://github.com/{repository}/releases/download/");
+    // GitHub escapes the tag in the address, such as `@` as `%40`.
     let url = |name: &str| {
         release
             .assets
             .iter()
             .find(|asset| asset.name == name)
             .map(|asset| asset.browser_download_url.clone())
-            .filter(|url| url.strip_prefix(&prefix) == Some(name))
+            .filter(|url| {
+                url.strip_prefix(&prefix)
+                    .and_then(|rest| {
+                        percent_encoding::percent_decode_str(rest)
+                            .decode_utf8()
+                            .ok()
+                    })
+                    .is_some_and(|rest| {
+                        rest.strip_prefix(release.tag_name.as_str())
+                            .and_then(|rest| rest.strip_prefix('/'))
+                            == Some(name)
+                    })
+            })
     };
     let archive = file(release, component)?.name.clone();
     let signature_url = url(&format!("{archive}.minisig"));
@@ -375,6 +385,30 @@ mod tests {
         );
         assert_eq!(named("my-mod2-1.0.0"), Some(("my-mod2", v("1.0.0"))));
         assert_eq!(named("nightly"), None);
+    }
+
+    #[test]
+    fn a_tag_with_an_at_sign_downloads_from_its_escaped_address() {
+        let mut at = release("my-mod@1.2.0", false, &["my-mod.zip", "my-mod.zip.minisig"]);
+        for asset in &mut at.assets {
+            // As GitHub lists it.
+            asset.browser_download_url = asset.browser_download_url.replace('@', "%40");
+        }
+        let pick = newest(&[at], REPO, "my-mod", &v("1.0.0"), false, true).unwrap();
+        assert_eq!(pick.tag, "my-mod@1.2.0");
+        assert_eq!(
+            pick.archive_url,
+            format!("https://github.com/{REPO}/releases/download/my-mod%401.2.0/my-mod.zip")
+        );
+        assert!(pick.signature_url.is_some());
+        // Another release's file stays refused, escaped or not.
+        let mut elsewhere = release("my-mod@1.3.0", false, &["my-mod.zip"]);
+        elsewhere.assets[0].browser_download_url =
+            format!("https://github.com/{REPO}/releases/download/my-mod%401.2.0/my-mod.zip");
+        assert_eq!(
+            newest(&[elsewhere], REPO, "my-mod", &v("1.0.0"), false, false),
+            None
+        );
     }
 
     #[test]

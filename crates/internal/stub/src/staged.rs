@@ -1,10 +1,14 @@
 //! Staged updates: files an updater left in `mods/.staged/`, moved into place
 //! before the loader starts.
 //!
-//! `mods/.staged/<path>` replaces `<game folder>/<path>`, and the file it
-//! replaces stays beside it as `<path>.previous` for one rollback. A file
-//! that cannot be moved stays staged for the next start; nothing here stops
-//! the game from starting.
+//! Each update is a unit, a folder `mods/.staged/<unit>/` named by 1 to 20
+//! digits, which the updater renames into place only once it is complete.
+//! Units apply oldest first, by name: `mods/.staged/<unit>/<path>` replaces
+//! `<game folder>/<path>`, and the file it replaces stays beside it as
+//! `<path>.previous` for one rollback. Anything else in the staging folder,
+//! such as an update a crash cut short, is left alone. A file that cannot be
+//! moved stays staged for the next start; nothing here stops the game from
+//! starting.
 
 use std::fmt::Write as _;
 use std::fs;
@@ -15,8 +19,10 @@ use std::path::{Path, PathBuf};
 const STAGED: &str = "mods/.staged";
 /// The stub's log, relative to the game's folder.
 const LOG: &str = "logs/enshwick/stub.log";
-/// How deep the staging folder is walked.
+/// How deep a unit is walked.
 const MAX_DEPTH: usize = 8;
+/// The most digits of a unit's name.
+const UNIT_DIGITS: usize = 20;
 
 /// What became of one staged file.
 #[derive(Debug, PartialEq, Eq)]
@@ -37,24 +43,43 @@ pub(crate) fn apply_and_log(game: &Path) {
     }
 }
 
-/// Moves every staged file under `game` into place.
+/// Moves every staged file under `game` into place, unit by unit.
 pub(crate) fn apply(game: &Path) -> Vec<Outcome> {
-    let staged = game.join(STAGED);
-    let mut files = Vec::new();
-    collect(&staged, Path::new(""), 0, &mut files);
-    files.sort();
-    let outcomes = files
-        .into_iter()
-        .map(|relative| {
-            let result = install(&staged.join(&relative), &game.join(&relative));
+    let mut outcomes = Vec::new();
+    for unit in units(&game.join(STAGED)) {
+        let mut files = Vec::new();
+        collect(&unit, Path::new(""), 0, &mut files);
+        files.sort();
+        outcomes.extend(files.into_iter().map(|relative| {
+            let result = install(&unit.join(&relative), &game.join(&relative));
             Outcome {
                 path: relative,
                 result,
             }
+        }));
+        prune(&unit);
+        // Fails, as it should, while a file stays staged.
+        let _removed = fs::remove_dir(&unit);
+    }
+    outcomes
+}
+
+/// The units in the staging folder `staged`, oldest first.
+fn units(staged: &Path) -> Vec<PathBuf> {
+    let Ok(entries) = fs::read_dir(staged) else {
+        return Vec::new();
+    };
+    let mut units: Vec<(String, PathBuf)> = entries
+        .filter_map(Result::ok)
+        .filter(|entry| entry.file_type().is_ok_and(|kind| kind.is_dir()))
+        .filter_map(|entry| Some((entry.file_name().into_string().ok()?, entry.path())))
+        .filter(|(name, _)| {
+            (1..=UNIT_DIGITS).contains(&name.len()) && name.bytes().all(|b| b.is_ascii_digit())
         })
         .collect();
-    prune(&staged);
-    outcomes
+    // Shorter names are older: padding may differ between updater versions.
+    units.sort_by(|a, b| (a.0.len(), &a.0).cmp(&(b.0.len(), &b.0)));
+    units.into_iter().map(|(_, path)| path).collect()
 }
 
 /// Adds the regular files under `dir` to `out`, as paths relative to the
@@ -169,8 +194,13 @@ mod tests {
         dir
     }
 
+    /// Stages `relative` in the unit `00000000000000000001`.
     fn stage(game: &Path, relative: &str, text: &str) {
-        let path = game.join(STAGED).join(relative);
+        stage_in(game, "00000000000000000001", relative, text);
+    }
+
+    fn stage_in(game: &Path, unit: &str, relative: &str, text: &str) {
+        let path = game.join(STAGED).join(unit).join(relative);
         fs::create_dir_all(path.parent().unwrap()).unwrap();
         fs::write(path, text).unwrap();
     }
@@ -204,7 +234,7 @@ mod tests {
         );
         assert_eq!(read(&game, "mods/safes.dll"), "new");
         assert_eq!(read(&game, "mods/safes.dll.previous"), "old");
-        assert!(!game.join(STAGED).join("mods").exists());
+        assert!(!game.join(STAGED).join("00000000000000000001").exists());
         assert!(game.join(STAGED).exists());
     }
 
@@ -230,10 +260,34 @@ mod tests {
         let outcomes = apply(&game);
         assert!(outcomes[0].result.is_err(), "{outcomes:?}");
         assert_eq!(outcomes[1].result, Ok(false));
-        assert_eq!(read(&game, "mods/.staged/mods/safes.dll"), "new");
+        assert_eq!(
+            read(&game, "mods/.staged/00000000000000000001/mods/safes.dll"),
+            "new"
+        );
         assert_eq!(read(&game, "mods/zones.dll"), "zones");
         apply_and_log(&game);
         let log = read(&game, LOG);
         assert!(log.contains("mods/safes.dll stays staged"), "{log}");
+    }
+
+    #[test]
+    fn units_apply_oldest_first_and_anything_else_stays_alone() {
+        let game = game("units");
+        stage_in(&game, "00000000000000000002", "mods/safes.dll", "second");
+        stage_in(&game, "00000000000000000001", "mods/safes.dll", "first");
+        // An update a crash cut short, and files of an older layout.
+        let half = game.join(STAGED).join(".unit/mods/zones.dll");
+        fs::create_dir_all(half.parent().unwrap()).unwrap();
+        fs::write(&half, "half").unwrap();
+        fs::create_dir_all(game.join(STAGED).join("mods")).unwrap();
+        fs::write(game.join(STAGED).join("mods/zones.dll"), "loose").unwrap();
+        let outcomes = apply(&game);
+        assert_eq!(outcomes.len(), 2, "{outcomes:?}");
+        assert_eq!(read(&game, "mods/safes.dll"), "second");
+        assert_eq!(read(&game, "mods/safes.dll.previous"), "first");
+        assert!(!game.join("mods/zones.dll").exists());
+        assert!(half.exists());
+        assert!(!game.join(STAGED).join("00000000000000000001").exists());
+        assert!(!game.join(STAGED).join("00000000000000000002").exists());
     }
 }

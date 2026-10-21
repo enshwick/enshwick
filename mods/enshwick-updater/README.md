@@ -87,7 +87,9 @@ prereleases = false
   start. The offer of a server's versions does not wait for the interval.
 - `trusted_keys`: public keys accepted for updates besides the ones each
   installed mod names, each the second line of a minisign `.pub` file
-  (`RW...`). For an author who changed keys; add only keys you trust.
+  (`RW...`). For an author who changed keys; add only keys you trust. An
+  entry that is not a key is skipped with a warning in the log; the others
+  still count.
 - `prereleases`: offer prereleases too.
 
 GitHub allows 60 requests an hour without a token. The updater reads a
@@ -98,7 +100,10 @@ unchanged page costs nothing of the hourly limit. When GitHub refuses, the
 updater leaves it alone until the time GitHub names and checks again at a
 later start. A download that breaks off or a server error is tried twice
 more; an archive is installed only once its signature checks out, so a
-download cut short is never staged. The log is
+download cut short is never staged. An update is staged whole or not at
+all: its files are written apart and moved into `mods/.staged/` in one step,
+so a crash while staging leaves nothing the next start would install. The
+log is
 `logs/enshwick/mods/updater.log`.
 
 The dialogs follow the game's language, English and Ukrainian for now. A
