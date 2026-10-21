@@ -1,7 +1,8 @@
 # Getting started
 
 This chapter sets up the tools, creates a mod, puts it into the game and
-shows where its log goes.
+shows where its log goes. The first mod uses the API's high-level calls;
+raw hooks come last, as the way down when the API has no call.
 
 ## The toolchain
 
@@ -81,14 +82,14 @@ version, for release pipelines. It loads the DLL, so it runs on Windows only.
 
 ## A first mod
 
-This mod sets how many Flame Altars every Flame level allows. The game asks
-one function for that number; the mod links a hook into it and answers from
-its settings.
+This mod sets how many Flame Altars every Flame level allows. The API has a
+call for exactly that, so the mod only answers with a number from its
+settings.
 
 ```rust
 use std::sync::atomic::{AtomicU8, Ordering};
 
-use enshwick_loader_api::{Load, Mod, Next, Off};
+use enshwick_loader_api::{Load, Mod, Off};
 
 /// Flame Altar settings.
 #[derive(serde::Deserialize, serde::Serialize, enshwick_loader_api::Config)]
@@ -104,7 +105,71 @@ impl Default for Settings {
     }
 }
 
-/// What the hook answers; replaced whole when the settings change.
+/// What the limit answers; replaced whole when the settings change.
+static ALTARS: AtomicU8 = AtomicU8::new(16);
+
+fn apply(settings: &Settings) {
+    ALTARS.store(settings.altars.clamp(1, 16), Ordering::Relaxed);
+}
+
+struct AltarCount;
+
+impl Mod for AltarCount {
+    fn manifest() -> &'static enshwick_loader_api::abi::Manifest {
+        enshwick_loader_api::manifest!(id: "my-altar-count", side: BOTH, join: true)
+    }
+
+    fn init(load: &mut Load<'_>) -> Result<Self, Off> {
+        let settings: Settings = load.config()?;
+        apply(&settings);
+        load.on_altar_limit(|_flame_level| ALTARS.load(Ordering::Relaxed))?;
+        load.on_config_change(|settings: Settings| apply(&settings))?;
+        enshwick_loader_api::info!("{} altars per Flame level", settings.altars);
+        Ok(Self)
+    }
+}
+
+enshwick_loader_api::declare_mod!(AltarCount);
+```
+
+What each piece does:
+
+- `Settings` derives [`Config`](settings.md): the file
+  `mod-configs/my-altar-count.toml` is written from its doc comments and
+  `Default` on first start, and `load.config()` reads it.
+- `manifest!` names the mod and where it runs. `side: BOTH` and
+  `join: true` because the client's interface asks the same limit, so
+  players and their server must agree. See
+  [The loader and the ABI](concepts/loader-and-abi.md).
+- `init` reads the settings and hands the limit to the game with
+  `on_altar_limit`, which the game asks with the Flame level each time it
+  needs the number. Any `?` that fails turns the mod off with the reason in
+  the log; the game then runs vanilla. See
+  [The life of a mod](concepts/lifecycle.md).
+- `on_config_change` applies an edited file while the game runs. The limit
+  reads an atomic, so the handler can change it under a running game.
+- `declare_mod!` exports the mod and adds `AltarCount::instance()`.
+
+[`enshwick-flame-altar-count`](https://github.com/themaiby/enshwick/tree/main/mods/enshwick-flame-altar-count)
+is this mod in full: a table per Flame level swapped with `arc-swap`, the
+table as a join value, and more than 16 altars.
+
+Most of what mods do has such a call: [events](events.md), the
+[world](world.md), [content](content.md), [settings](settings.md) and the
+other chapters of Writing a mod. Look there first.
+
+## Reaching lower
+
+When the API has no call for what a mod needs, the mod reaches into the game
+itself: it finds a function by its symbolic id and links a hook into it.
+This is the low-level escape hatch, and it is `unsafe`, since the mod vouches
+for the function's type. The same limit as a hook on the game's own lookup:
+
+```rust
+use std::sync::atomic::{AtomicU8, Ordering};
+
+use enshwick_loader_api::{Load, Mod, Next, Off};
+
 static ALTARS: AtomicU8 = AtomicU8::new(16);
 
 struct AltarCount;
@@ -121,23 +186,15 @@ fn max_altars(next: Next<unsafe extern "system" fn(u64, u32) -> u8>, balancing: 
     }
 }
 
-fn apply(settings: &Settings) {
-    ALTARS.store(settings.altars.clamp(1, 16), Ordering::Relaxed);
-}
-
 impl Mod for AltarCount {
     fn manifest() -> &'static enshwick_loader_api::abi::Manifest {
         enshwick_loader_api::manifest!(id: "my-altar-count", side: BOTH, join: true)
     }
 
     fn init(load: &mut Load<'_>) -> Result<Self, Off> {
-        let settings: Settings = load.config()?;
-        apply(&settings);
         let max_altars = load.symbol("building.max_altars")?;
         // SAFETY: the game's altar limit has the type `MAX_ALTARS` declares.
         unsafe { load.hook(&MAX_ALTARS, max_altars) }?;
-        load.on_config_change(|settings: Settings| apply(&settings))?;
-        enshwick_loader_api::info!("{} altars per Flame level", settings.altars);
         Ok(Self)
     }
 }
@@ -145,28 +202,15 @@ impl Mod for AltarCount {
 enshwick_loader_api::declare_mod!(AltarCount);
 ```
 
-What each piece does:
-
-- `Settings` derives [`Config`](settings.md): the file
-  `mod-configs/my-altar-count.toml` is written from its doc comments and
-  `Default` on first start, and `load.config()` reads it.
 - `detour!` declares a hook: a static `MAX_ALTARS` and an entry point that
   catches panics. The body gets `next`, the rest of the chain, and the
   function's arguments. See [Hooks](hooks.md).
-- `manifest!` names the mod and where it runs. `side: BOTH` and
-  `join: true` because the client's interface asks the same function, so
-  players and their server must agree. See
-  [The loader and the ABI](concepts/loader-and-abi.md).
-- `init` reads the settings, finds the function by its symbolic id and links
-  the hook. Any `?` that fails turns the mod off with the reason in the log;
-  the game then runs vanilla. See [The life of a mod](concepts/lifecycle.md).
-- `on_config_change` applies an edited file while the game runs. The hook
-  reads an atomic, so the handler can change it under a running game.
-- `declare_mod!` exports the mod and adds `AltarCount::instance()`.
-
-[`enshwick-flame-altar-count`](https://github.com/themaiby/enshwick/tree/main/mods/enshwick-flame-altar-count)
-is this mod in full: a table per Flame level swapped with `arc-swap`, the
-table as a join value, and more than 16 altars.
+- `load.symbol` finds the function by its symbolic id on the running build;
+  [Finding the game](finding-the-game.md) shows how ids are found and pinned.
+- A hook chains with other mods' hooks on the same function, while
+  `on_altar_limit` belongs to one mod at a time; a hook is also the mod's to
+  keep working when the game changes. Prefer the API's call where there is
+  one, and ask for one when other mods would need the same hook.
 
 ## Where the logs are
 
