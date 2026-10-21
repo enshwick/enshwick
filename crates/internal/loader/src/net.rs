@@ -197,15 +197,19 @@ pub(crate) fn link() {
     let _first = CHANNELS.set(channels.into_boxed_slice());
 }
 
-/// The frames of one message: base64 lines with the prefix.
-fn frames(channel: u32, message: u16, data: &[u8]) -> Vec<String> {
+/// The frames of one message: base64 lines with the prefix; `None` for a
+/// message longer than [`MAX_PARTS`] frames, which no peer takes.
+fn frames(channel: u32, message: u16, data: &[u8]) -> Option<Vec<String>> {
     let parts: Vec<&[u8]> = if data.is_empty() {
         vec![&[]]
     } else {
         data.chunks(PART_BYTES).collect()
     };
-    let total = u8::try_from(parts.len()).unwrap_or(u8::MAX);
-    parts
+    if parts.len() > MAX_PARTS {
+        return None;
+    }
+    let total = u8::try_from(parts.len()).ok()?;
+    let lines = parts
         .iter()
         .enumerate()
         .map(|(index, part)| {
@@ -218,7 +222,18 @@ fn frames(channel: u32, message: u16, data: &[u8]) -> Vec<String> {
             bytes.extend_from_slice(part);
             format!("{PREFIX}{}", URL_SAFE_NO_PAD.encode(bytes))
         })
-        .collect()
+        .collect();
+    Some(lines)
+}
+
+/// The frames of a control message, numbered when it takes more than one.
+fn control_frames(data: &[u8]) -> Option<Vec<String>> {
+    let id = if data.len() > PART_BYTES {
+        CONTROL_MESSAGE.fetch_add(1, Ordering::Relaxed)
+    } else {
+        0
+    };
+    frames(CONTROL, id, data)
 }
 
 /// A frame's header and part.
@@ -323,7 +338,7 @@ pub(crate) fn notice(key: u64, entity: u32, text: &str) -> Result<(), Status> {
     let mut data = control(NOTICE);
     data.extend_from_slice(&entity.to_le_bytes());
     data.extend_from_slice(text.as_bytes());
-    for line in frames(CONTROL, 0, &data) {
+    for line in control_frames(&data).ok_or(Status::BAD_ARGS)? {
         crate::chat::send(key, &line);
     }
     Ok(())
@@ -340,9 +355,13 @@ pub(crate) fn item_data(key: u64, records: &[u8]) {
     } else {
         vec![key]
     };
+    let Some(lines) = control_frames(&data) else {
+        crate::log!(WARN, "mod messages: item data records too long to send");
+        return;
+    };
     for peer in peers.into_iter().filter(|&p| p != NetMessage::SERVER) {
-        for line in frames(CONTROL, 0, &data) {
-            crate::chat::send(peer, &line);
+        for line in &lines {
+            crate::chat::send(peer, line);
         }
     }
 }
@@ -357,7 +376,7 @@ pub(crate) fn ui_demo(key: u64, at: Option<[i64; 3]>) -> Result<(), Status> {
     for axis in at.iter().flatten() {
         data.extend_from_slice(&axis.to_le_bytes());
     }
-    for line in frames(CONTROL, 0, &data) {
+    for line in control_frames(&data).ok_or(Status::BAD_ARGS)? {
         crate::chat::send(key, &line);
     }
     Ok(())
@@ -377,12 +396,15 @@ pub(crate) const MAX_CONTROL: usize = PART_BYTES * MAX_PARTS - 2;
 /// Numbers the multi-part control messages this side sends.
 static CONTROL_MESSAGE: std::sync::atomic::AtomicU16 = std::sync::atomic::AtomicU16::new(1);
 
-/// The frames of a settings message.
+/// The frames of a settings message, none for one too long to send.
 fn remote_frames(message: &crate::remote::Message) -> Vec<String> {
     let mut data = control(message.kind());
     data.extend_from_slice(&message.body());
     let id = CONTROL_MESSAGE.fetch_add(1, Ordering::Relaxed);
-    frames(CONTROL, id, &data)
+    frames(CONTROL, id, &data).unwrap_or_else(|| {
+        crate::log!(WARN, "mod messages: a settings message too long to send");
+        Vec::new()
+    })
 }
 
 /// Sends a settings message to the client of the player with account key
@@ -405,10 +427,10 @@ pub(crate) fn broadcast_control(message: &crate::remote::Message) {
             .filter(|&k| k != NetMessage::SERVER)
             .collect()
     });
-    if keys.is_empty() {
+    let lines = remote_frames(message);
+    if keys.is_empty() || lines.is_empty() {
         return;
     }
-    let lines = remote_frames(message);
     for key in keys {
         for line in &lines {
             crate::chat::send(key, line);
@@ -423,6 +445,9 @@ pub(crate) fn to_server(message: &crate::remote::Message) -> bool {
         return false;
     }
     let lines = remote_frames(message);
+    if lines.is_empty() {
+        return false;
+    }
     state(|s| {
         if s.outbox.len() + lines.len() > MAX_WAITING {
             return false;
@@ -477,7 +502,7 @@ pub(crate) fn server_received(key: u64, args: &str) {
             if fresh {
                 crate::log!(INFO, "mod messages: the client of {key:016x} said hello");
             }
-            for line in frames(CONTROL, 0, &control(WELCOME)) {
+            for line in frames(CONTROL, 0, &control(WELCOME)).unwrap_or_default() {
                 crate::chat::send(key, &line);
             }
             if fresh {
@@ -649,6 +674,7 @@ fn send_to_clients(channel: u32, peer: u64, data: &[u8]) -> Result<(), Status> {
         };
         let message = s.next_message;
         s.next_message = s.next_message.wrapping_add(1);
+        let lines = frames(channel, message, data).ok_or(Status::BAD_ARGS)?;
         let mut out = Vec::new();
         for key in keys {
             let rate = s.sending.entry(key).or_insert_with(Peer::new);
@@ -656,7 +682,7 @@ fn send_to_clients(channel: u32, peer: u64, data: &[u8]) -> Result<(), Status> {
                 dropped();
                 continue;
             }
-            out.extend(frames(channel, message, data).into_iter().map(|l| (key, l)));
+            out.extend(lines.iter().map(|l| (key, l.clone())));
         }
         Ok(out)
     })?;
@@ -675,13 +701,13 @@ fn send_to_server(channel: u32, data: &[u8]) -> Result<(), Status> {
             .sending
             .entry(NetMessage::SERVER)
             .or_insert_with(Peer::new);
-        if !rate.admit() || s.outbox.len() >= MAX_WAITING {
+        let lines = frames(channel, s.next_message, data).ok_or(Status::BAD_ARGS)?;
+        if !rate.admit() || s.outbox.len() + lines.len() > MAX_WAITING {
             dropped();
             return Err(Status::REFUSED);
         }
-        let message = s.next_message;
         s.next_message = s.next_message.wrapping_add(1);
-        s.outbox.extend(frames(channel, message, data));
+        s.outbox.extend(lines);
         WAITING.store(true, Ordering::Release);
         Ok(())
     })
@@ -699,7 +725,7 @@ pub(crate) fn client_lines() -> Vec<String> {
         let modded = SERVER_RUNS_ENSHWICK.load(Ordering::Acquire) || crate::world::hosting();
         if !answered && due && modded {
             s.hello_at = Some(Instant::now());
-            lines.extend(frames(CONTROL, 0, &control(HELLO)));
+            lines.extend(frames(CONTROL, 0, &control(HELLO)).unwrap_or_default());
         }
         if WAITING.swap(false, Ordering::AcqRel) {
             lines.extend(s.outbox.drain(..));
@@ -757,7 +783,7 @@ mod tests {
     #[test]
     fn a_message_goes_out_in_frames_and_comes_back_whole() {
         let data: Vec<u8> = (0..2000u32).map(|i| (i % 251) as u8).collect();
-        let lines = frames(7, 3, &data);
+        let lines = frames(7, 3, &data).unwrap();
         assert_eq!(lines.len(), 3);
         assert!(
             lines
@@ -776,7 +802,15 @@ mod tests {
 
     #[test]
     fn the_largest_message_fits_its_frames_and_malformed_frames_are_dropped() {
-        assert!(frames(1, 0, &[0; MAX_MESSAGE]).len() <= MAX_PARTS);
+        assert!(frames(1, 0, &[0; MAX_MESSAGE]).unwrap().len() <= MAX_PARTS);
+        assert_eq!(
+            frames(1, 0, &[0; PART_BYTES * MAX_PARTS]).unwrap().len(),
+            MAX_PARTS
+        );
+        assert!(frames(1, 0, &[0; PART_BYTES * MAX_PARTS + 1]).is_none());
+        let mut long = control(NOTICE);
+        long.extend_from_slice(&[b'a'; MAX_CONTROL + 1]);
+        assert!(control_frames(&long).is_none());
         assert!(parse("not base64 !").is_none());
         assert!(parse(&URL_SAFE_NO_PAD.encode([9u8; HEADER])).is_none());
         let mut bad = vec![PROTOCOL, 1, 0, 0, 0, 0, 0, 3, 2];
