@@ -888,7 +888,7 @@ pub fn enable(rule: RecipeRule<'_>) -> Result<(), Off> {
 /// use enshwick_loader_api::content::Guid;
 /// use enshwick_loader_api::content::recipes::is_disabled;
 ///
-/// let torch = Guid::parse("f3bedfba-bea3-45d4-9ca1-a4019f93c4a7");
+/// let torch = Guid::parse("7fa62007-a38e-4790-8591-873055fc3f34");
 /// assert!(!is_disabled(torch));
 /// ```
 #[must_use]

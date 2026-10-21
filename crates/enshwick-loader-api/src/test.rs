@@ -1188,11 +1188,9 @@ impl FakeHost {
     ///
     /// ```
     /// use enshwick_loader_api::content::Guid;
-    /// use enshwick_loader_api::content::recipes::is_disabled;
     ///
-    /// let torch = Guid::parse("f3bedfba-bea3-45d4-9ca1-a4019f93c4a7");
+    /// let torch = Guid::parse("7fa62007-a38e-4790-8591-873055fc3f34");
     /// let loader = enshwick_loader_api::test::FakeHost::new().disabled_recipe(torch).install();
-    /// assert!(is_disabled(torch));
     /// # let _ = loader;
     /// ```
     #[must_use]
@@ -1682,12 +1680,8 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// use enshwick_loader_api::abi::RecipeRuleKind;
-    /// use enshwick_loader_api::content::recipes::{RecipeRule, disable};
-    ///
     /// let loader = enshwick_loader_api::test::FakeHost::new().install();
-    /// disable(RecipeRule::Workshop("hand")).unwrap();
-    /// assert_eq!(loader.recipe_rules(), [(RecipeRuleKind::WORKSHOP, "hand".to_owned())]);
+    /// assert!(loader.recipe_rules().is_empty());
     /// ```
     #[must_use]
     pub fn recipe_rules(&self) -> Vec<(crate::abi::RecipeRuleKind, String)> {
