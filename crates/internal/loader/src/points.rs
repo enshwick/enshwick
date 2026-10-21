@@ -348,7 +348,7 @@ fn refusal(link: &Pending, definition: &Definition, mods: &impl Mods) -> Option<
     if want.output != have.output {
         return Some((
             format!(
-                "the answer has another type here and at {id} {version}; both mods must compile one declaration"
+                "the answer's type, or a field, variant or value inside it, differs here and at {id} {version}; both mods must compile one declaration"
             ),
             Level::WARN,
         ));

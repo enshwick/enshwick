@@ -994,7 +994,7 @@ impl FakeHost {
     /// # Examples
     ///
     /// ```
-    /// #[enshwick_loader_api::service(name = "trading-post.prices")]
+    /// #[enshwick_loader_api::service(name = "trading-post:prices")]
     /// pub struct Prices {
     ///     pub price: extern "system" fn(item: u32) -> u32,
     /// }
@@ -3359,7 +3359,7 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// #[enshwick_loader_api::event(name = "trading-post.sold")]
+    /// #[enshwick_loader_api::event(name = "trading-post:sold")]
     /// #[derive(Clone, Copy, Debug)]
     /// pub struct Sold {
     ///     pub item: u32,

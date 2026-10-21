@@ -14,6 +14,7 @@ use core::marker::PhantomData;
 
 use crate::Host;
 use crate::abi::{Layout, LayoutField, Str};
+use crate::shape::ShapeHasher;
 
 /// A table of functions a mod publishes for others.
 ///
@@ -30,16 +31,16 @@ use crate::abi::{Layout, LayoutField, Str};
 /// ```
 /// use enshwick_loader_api::services::Service;
 ///
-/// #[enshwick_loader_api::service(name = "trading-post.prices", version = 1)]
+/// #[enshwick_loader_api::service(name = "trading-post:prices", version = 1)]
 /// pub struct Prices {
 ///     pub price: extern "system" fn(item: u32) -> u32,
 /// }
 ///
-/// assert_eq!(Prices::NAME, "trading-post.prices");
+/// assert_eq!(Prices::NAME, "trading-post:prices");
 /// assert_eq!(Prices::LAYOUT.len(), 1);
 /// ```
 pub unsafe trait Service: Sync + 'static {
-    /// The service's name, `<publisher id>.<what>`.
+    /// The service's name, `<publisher id>:<what>`.
     const NAME: &'static str;
     /// The incompatible version; a changed field bumps it.
     const MAJOR: u32;
@@ -62,69 +63,52 @@ pub unsafe trait Service: Sync + 'static {
 /// ```
 /// use enshwick_loader_api::services::ModEvent;
 ///
-/// #[enshwick_loader_api::event(name = "trading-post.sold")]
+/// #[enshwick_loader_api::event(name = "trading-post:sold")]
 /// #[derive(Clone, Copy, Debug)]
 /// pub struct Sold {
 ///     pub item: u32,
 ///     pub price: u32,
 /// }
 ///
-/// assert_eq!(Sold::NAME, "trading-post.sold");
+/// assert_eq!(Sold::NAME, "trading-post:sold");
 /// assert_eq!(Sold::LAYOUT.len(), 2);
 /// ```
 pub unsafe trait ModEvent: Copy + 'static {
-    /// The event's name, `<defining mod id>.<what>`.
+    /// The event's name, `<defining mod id>:<what>`.
     const NAME: &'static str;
     /// The data's fields, in order.
     const LAYOUT: &'static [LayoutField];
 }
 
-/// The hash of one field for a layout: FNV-1a over the field as written,
-/// `name: type` without its whitespace, then its size, alignment and offset.
+/// The hash of one field for a layout: its name, the [`Shape`] of its type,
+/// its size, alignment and offset.
 ///
-/// The macros call it; the type counts as written, so both sides name it
-/// the same way, which one shared declaration gives. Whitespace does not
-/// count, since compilers print the same tokens with different spacing.
+/// The macros call it for every field of a declaration. The shape reaches
+/// into the type, so a struct field that changes inside, an enum that gains
+/// a variant or a newtype whose values change all change the hash.
+///
+/// [`Shape`]: crate::Shape
 ///
 /// # Examples
 ///
 /// ```
+/// use enshwick_loader_api::Shape;
 /// use enshwick_loader_api::services::layout_hash;
 ///
-/// let a = layout_hash("price: u32", 4, 4, 0);
-/// assert_ne!(a, layout_hash("price: u32", 4, 4, 4));
-/// assert_ne!(a, layout_hash("price: i32", 4, 4, 0));
-/// assert_eq!(
-///     layout_hash("best: Option<u32>", 8, 4, 0),
-///     layout_hash("best : Option < u32 >", 8, 4, 0)
-/// );
+/// let a = layout_hash("price", u32::SHAPE, 4, 4, 0);
+/// assert_ne!(a, layout_hash("price", u32::SHAPE, 4, 4, 4));
+/// assert_ne!(a, layout_hash("price", i32::SHAPE, 4, 4, 0));
+/// assert_ne!(a, layout_hash("cost", u32::SHAPE, 4, 4, 0));
 /// ```
 #[must_use]
-pub const fn layout_hash(written: &str, size: usize, align: usize, offset: usize) -> u64 {
-    const PRIME: u64 = 0x0000_0100_0000_01b3;
-    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
-    let bytes = written.as_bytes();
-    let mut i = 0;
-    while i < bytes.len() {
-        if !bytes[i].is_ascii_whitespace() {
-            hash ^= bytes[i] as u64;
-            hash = hash.wrapping_mul(PRIME);
-        }
-        i += 1;
-    }
-    let numbers = [size as u64, align as u64, offset as u64];
-    let mut n = 0;
-    while n < numbers.len() {
-        let value = numbers[n].to_le_bytes();
-        let mut b = 0;
-        while b < value.len() {
-            hash ^= value[b] as u64;
-            hash = hash.wrapping_mul(PRIME);
-            b += 1;
-        }
-        n += 1;
-    }
-    hash
+pub const fn layout_hash(name: &str, shape: u64, size: usize, align: usize, offset: usize) -> u64 {
+    ShapeHasher::new("field")
+        .text(name)
+        .number(shape)
+        .number(size as u64)
+        .number(align as u64)
+        .number(offset as u64)
+        .finish()
 }
 
 /// Why a published layout does not serve the one a mod asks for.
@@ -155,7 +139,7 @@ pub enum LayoutError {
     },
     /// A field both sides have differs.
     #[error(
-        "field {index} is `{wanted}` here and `{offered}` at the publisher, with another type, size or place"
+        "field {index} is `{wanted}` here and `{offered}` at the publisher: its type, place or a field, variant or value inside it differs"
     )]
     Field {
         /// The field's position, from 0.
@@ -267,7 +251,7 @@ pub(crate) fn name(name: &'static str) -> Str {
 /// # Examples
 ///
 /// ```
-/// #[enshwick_loader_api::event(name = "trading-post.sold")]
+/// #[enshwick_loader_api::event(name = "trading-post:sold")]
 /// #[derive(Clone, Copy, Debug)]
 /// pub struct Sold {
 ///     pub item: u32,
@@ -329,7 +313,7 @@ impl<E: ModEvent> Emitter<E> {
 mod tests {
     use super::{LayoutError, compare, layout_hash};
 
-    #[crate::event(name = "probe.direct")]
+    #[crate::event(name = "probe:direct")]
     #[derive(Clone, Copy, Debug)]
     struct Direct {
         best: Option<u32>,
@@ -338,7 +322,7 @@ mod tests {
 
     macro_rules! through {
         ($best:ty, $pair:ty) => {
-            #[crate::event(name = "probe.through")]
+            #[crate::event(name = "probe:through")]
             #[derive(Clone, Copy, Debug)]
             struct Through {
                 best: $best,
@@ -349,7 +333,7 @@ mod tests {
     through!(Option<u32>, [u8; 2]);
 
     #[test]
-    fn a_type_passed_through_a_macro_hashes_as_written_out() {
+    fn a_type_passed_through_a_macro_hashes_alike() {
         use super::ModEvent;
         let hashes = |layout: &[crate::abi::LayoutField]| -> Vec<u64> {
             layout.iter().map(|field| field.hash).collect()
@@ -393,12 +377,14 @@ mod tests {
     }
 
     #[test]
-    fn the_hash_sees_type_size_and_place() {
-        let base = layout_hash("a: u32", 4, 4, 0);
-        assert_ne!(base, layout_hash("a: u64", 4, 4, 0));
-        assert_ne!(base, layout_hash("a: u32", 8, 4, 0));
-        assert_ne!(base, layout_hash("a: u32", 4, 8, 0));
-        assert_ne!(base, layout_hash("a: u32", 4, 4, 8));
-        assert_eq!(base, layout_hash("a: u32", 4, 4, 0));
+    fn the_hash_sees_name_shape_size_and_place() {
+        use crate::Shape;
+        let base = layout_hash("a", u32::SHAPE, 4, 4, 0);
+        assert_ne!(base, layout_hash("b", u32::SHAPE, 4, 4, 0));
+        assert_ne!(base, layout_hash("a", u64::SHAPE, 4, 4, 0));
+        assert_ne!(base, layout_hash("a", u32::SHAPE, 8, 4, 0));
+        assert_ne!(base, layout_hash("a", u32::SHAPE, 4, 8, 0));
+        assert_ne!(base, layout_hash("a", u32::SHAPE, 4, 4, 8));
+        assert_eq!(base, layout_hash("a", u32::SHAPE, 4, 4, 0));
     }
 }

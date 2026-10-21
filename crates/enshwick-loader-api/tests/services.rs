@@ -8,7 +8,7 @@ mod tests {
     use enshwick_loader_api::{Load, Mod, Off};
 
     /// What `trading-post` publishes today.
-    #[enshwick_loader_api::service(name = "trading-post.prices")]
+    #[enshwick_loader_api::service(name = "trading-post:prices")]
     pub(crate) struct Prices {
         pub(crate) price: extern "system" fn(item: u32) -> u32,
         pub(crate) refund: extern "system" fn(item: u32) -> u32,
@@ -16,7 +16,7 @@ mod tests {
 
     /// What an older `trading-post` published.
     mod older {
-        #[enshwick_loader_api::service(name = "trading-post.prices")]
+        #[enshwick_loader_api::service(name = "trading-post:prices")]
         pub(crate) struct Prices {
             pub(crate) price: extern "system" fn(item: u32) -> u32,
         }
@@ -24,23 +24,23 @@ mod tests {
 
     /// The same table with a changed field.
     mod changed {
-        #[enshwick_loader_api::service(name = "trading-post.prices")]
+        #[enshwick_loader_api::service(name = "trading-post:prices")]
         pub(crate) struct Prices {
             pub(crate) price: extern "system" fn(item: u64) -> u32,
             pub(crate) refund: extern "system" fn(item: u32) -> u32,
         }
     }
 
-    #[enshwick_loader_api::event(name = "trading-post.sold")]
+    #[enshwick_loader_api::event(name = "trading-post:sold")]
     #[derive(Clone, Copy, Debug)]
     pub(crate) struct Sold {
         pub(crate) item: u32,
         pub(crate) price: u32,
     }
 
-    /// A newer `trading-post.sold`, with a field this mod does not know.
+    /// A newer `trading-post:sold`, with a field this mod does not know.
     mod newer {
-        #[enshwick_loader_api::event(name = "trading-post.sold")]
+        #[enshwick_loader_api::event(name = "trading-post:sold")]
         #[derive(Clone, Copy, Debug)]
         pub(crate) struct Sold {
             pub(crate) item: u32,
@@ -49,12 +49,12 @@ mod tests {
         }
     }
 
-    #[enshwick_loader_api::service(name = "market.stalls", version = 2)]
+    #[enshwick_loader_api::service(name = "market:stalls", version = 2)]
     pub(crate) struct Stalls {
         pub(crate) count: extern "system" fn() -> u32,
     }
 
-    #[enshwick_loader_api::event(name = "market.opened")]
+    #[enshwick_loader_api::event(name = "market:opened")]
     #[derive(Clone, Copy, Debug)]
     pub(crate) struct Opened {
         pub(crate) stalls: u32,
@@ -127,9 +127,9 @@ mod tests {
             .service(&PRICES)
             .install();
         assert_eq!(start(&loader), Status::OK);
-        assert_eq!(loader.published(), [("market.stalls".to_owned(), 2)]);
-        assert_eq!(loader.defined_events(), ["market.opened"]);
-        assert_eq!(loader.sent_events(), ["market.opened"]);
+        assert_eq!(loader.published(), [("market:stalls".to_owned(), 2)]);
+        assert_eq!(loader.defined_events(), ["market:opened"]);
+        assert_eq!(loader.sent_events(), ["market:opened"]);
         EARNED.store(0, Ordering::Relaxed);
         assert_eq!(loader.send_mod_event(&Sold { item: 1, price: 7 }), 1);
         assert_eq!(EARNED.load(Ordering::Relaxed), 7);
@@ -158,7 +158,7 @@ mod tests {
             .install();
         assert_ne!(start(&loader), Status::OK);
         let log = logged(&loader);
-        assert!(log.contains("trading-post.prices v1"), "{log}");
+        assert!(log.contains("trading-post:prices v1"), "{log}");
         assert!(log.contains("`refund`"), "{log}");
     }
 

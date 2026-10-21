@@ -1,5 +1,5 @@
 //! Example: raises `trading-post`'s prices for rare items through its
-//! service, and counts the coins earned from its `trading-post.sold` event.
+//! service, and counts the coins earned from its `trading-post:sold` event.
 
 use std::sync::atomic::{AtomicU64, Ordering};
 

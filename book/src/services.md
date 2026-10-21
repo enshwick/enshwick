@@ -15,7 +15,7 @@ instead (see [Extending other mods](extending.md)).
 
 The [examples](https://github.com/themaiby/enshwick/tree/main/examples)
 folder holds the two mods this chapter follows: `trading-post` publishes item
-prices and sends `trading-post.sold`, and `market-stalls` uses the prices and
+prices and sends `trading-post:sold`, and `market-stalls` uses the prices and
 counts the coins from each sale.
 
 ## One declaration
@@ -25,7 +25,7 @@ here `trading-post-api`:
 
 ```rust
 /// Item prices, published by `trading-post`.
-#[enshwick_loader_api::service(name = "trading-post.prices", version = 1)]
+#[enshwick_loader_api::service(name = "trading-post:prices", version = 1)]
 pub struct Prices {
     /// The price of `item` in coins, 0 for an item with no price.
     pub price: extern "system" fn(item: u32) -> u32,
@@ -34,7 +34,7 @@ pub struct Prices {
 }
 
 /// An item sold at the trading post.
-#[enshwick_loader_api::event(name = "trading-post.sold")]
+#[enshwick_loader_api::event(name = "trading-post:sold")]
 #[derive(Clone, Copy, Debug)]
 pub struct Sold {
     pub item: u32,
@@ -44,17 +44,61 @@ pub struct Sold {
 
 - [`#[service]`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/lib.rs)
   and `#[event]` make the struct `repr(C)` and give it a layout: a hash per
-  field of its name, its type as written, its size, alignment and offset.
-- Name both after the publishing mod, as `<id>.<what>`. An event's name must
-  start with its definer's id; the loader refuses others.
+  field of its name, the shape of its type, its size, alignment and offset.
+- Name both after the publishing mod, as `<id>:<what>`, the form content
+  ids and extension points use. An event's name must start with its
+  definer's id; the loader refuses others.
 - `version` is the major version of the service, 1 when left out.
-- A type counts as written: `c_void` and `core::ffi::c_void` hash apart.
-  One declaration both mods compile keeps them equal.
+- Every field's type implements [`Shape`](#shapes): its structural hash
+  reaches into the type, so a change inside it refuses the link with the name
+  of the outer field.
 
 Pass plain data across a table or in an event: integers, floats, `repr(C)`
 structs, and pointers with a length the caller owns. An event is `Copy`.
 Never pass Rust types such as `String`, `Vec` or `Box`, and never free memory
 the other side allocated.
+
+### Shapes
+
+A field's hash reaches into its type through [`Shape`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/shape.rs).
+Integers, floats, `bool` (with its two values), arrays, pointers, `Option`
+and `extern` function pointers have one already, as do the API's own types
+such as `Entity` and `Guid`. A type of the mod's own derives it:
+
+```rust
+use enshwick_loader_api::Shape;
+
+#[derive(Clone, Copy, Debug, Shape)]
+#[repr(u8)]
+pub enum Stall {
+    Food = 1,
+    Tools = 2,
+}
+
+#[derive(Clone, Copy, Debug, Shape)]
+#[repr(transparent)]
+#[shape(values(OPEN, CLOSED))]
+pub struct Hours(pub u8);
+
+impl Hours {
+    pub const OPEN: Self = Self(0);
+    pub const CLOSED: Self = Self(1);
+}
+
+#[enshwick_loader_api::event(name = "market:opened")]
+#[derive(Clone, Copy, Debug)]
+pub struct Opened {
+    pub stall: Stall,
+    pub hours: Hours,
+}
+```
+
+A struct hashes its name and every field with its offset and shape; an enum,
+which has an integer `repr` and unit variants, every variant with its
+discriminant; a newtype with `#[shape(values(..))]` the named constants with
+their values. Adding a variant, renumbering one, giving a nested struct
+another field or a constant another value changes the outer field's hash, so
+two mods that read the same bytes differently never link.
 
 ## Publishing
 
@@ -62,7 +106,7 @@ the other side allocated.
 publishes a `'static` table during `init`:
 
 ```rust
-#[enshwick_loader_api::service(name = "trading-post.prices")]
+#[enshwick_loader_api::service(name = "trading-post:prices")]
 pub struct Prices {
     pub price: extern "system" fn(item: u32) -> u32,
 }
@@ -88,7 +132,7 @@ returns the table once the loader has checked that the published table
 starts with every field of `T`:
 
 ```rust
-#[enshwick_loader_api::service(name = "trading-post.prices")]
+#[enshwick_loader_api::service(name = "trading-post:prices")]
 pub struct Prices {
     pub price: extern "system" fn(item: u32) -> u32,
 }
@@ -115,7 +159,7 @@ it gets back; sending calls every subscriber's handler on the sending
 thread, with no queue and no allocation:
 
 ```rust
-#[enshwick_loader_api::event(name = "trading-post.sold")]
+#[enshwick_loader_api::event(name = "trading-post:sold")]
 #[derive(Clone, Copy, Debug)]
 pub struct Sold {
     pub item: u32,
@@ -140,7 +184,7 @@ fn sell(item: u32, price: u32) {
 Other mods subscribe during `init`:
 
 ```rust
-#[enshwick_loader_api::event(name = "trading-post.sold")]
+#[enshwick_loader_api::event(name = "trading-post:sold")]
 #[derive(Clone, Copy, Debug)]
 pub struct Sold {
     pub item: u32,
@@ -172,7 +216,7 @@ A user built against a longer declaration than the publisher's is refused,
 with the first field the publisher lacks:
 
 ```text
-service trading-post.prices v1: trading-post 0.3.0: the publisher has 2 of
+service trading-post:prices v1: trading-post 0.3.0: the publisher has 2 of
 the 3 fields this mod needs: `refund` and later are newer than the publisher;
 update trading-post
 ```

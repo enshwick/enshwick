@@ -217,6 +217,10 @@ name = "points_owner"
 required-features = ["test"]
 
 [[test]]
+name = "shapes"
+required-features = ["test"]
+
+[[test]]
 name = "points_links"
 required-features = ["test"]
 

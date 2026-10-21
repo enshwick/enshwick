@@ -12,7 +12,8 @@ use crate::ecs::Entity;
 /// assert_ne!(SafeAction::USE, SafeAction::REMOVE);
 /// ```
 #[repr(transparent)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Shape)]
+#[shape(values(USE, REMOVE, MANAGE))]
 pub struct SafeAction(pub u32);
 
 impl SafeAction {

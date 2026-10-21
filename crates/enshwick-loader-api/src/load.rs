@@ -931,7 +931,7 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// #[enshwick_loader_api::service(name = "trading-post.prices")]
+    /// #[enshwick_loader_api::service(name = "trading-post:prices")]
     /// pub struct Prices {
     ///     pub price: extern "system" fn(item: u32) -> u32,
     /// }
@@ -975,7 +975,7 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// #[enshwick_loader_api::service(name = "trading-post.prices")]
+    /// #[enshwick_loader_api::service(name = "trading-post:prices")]
     /// pub struct Prices {
     ///     pub price: extern "system" fn(item: u32) -> u32,
     /// }
@@ -999,7 +999,7 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// #[enshwick_loader_api::service(name = "trading-post.prices")]
+    /// #[enshwick_loader_api::service(name = "trading-post:prices")]
     /// pub struct Prices {
     ///     pub price: extern "system" fn(item: u32) -> u32,
     /// }
@@ -1054,7 +1054,7 @@ impl Load<'_> {
     /// the [`Emitter`] that sends it.
     ///
     /// `E` comes from [`#[event]`](macro@crate::event), named after this
-    /// mod: `<id>.<what>`.
+    /// mod: `<id>:<what>`.
     ///
     /// # Errors
     ///
@@ -1089,7 +1089,7 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// #[enshwick_loader_api::event(name = "trading-post.sold")]
+    /// #[enshwick_loader_api::event(name = "trading-post:sold")]
     /// #[derive(Clone, Copy, Debug)]
     /// pub struct Sold {
     ///     pub item: u32,

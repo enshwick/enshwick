@@ -199,11 +199,11 @@ impl Registry {
     ) -> Result<u32, String> {
         if name
             .strip_prefix(owner_id)
-            .and_then(|rest| rest.strip_prefix('.'))
+            .and_then(|rest| rest.strip_prefix(':'))
             .is_none_or(str::is_empty)
         {
             return Err(format!(
-                "event {name}: an event is named `{owner_id}.<what>`"
+                "event {name}: an event is named `{owner_id}:<what>`"
             ));
         }
         if self.defined.iter().any(|d| d.name == name) {
@@ -446,7 +446,7 @@ mod tests {
         assert_eq!(
             registry.publish(
                 0,
-                "trading-post.prices",
+                "trading-post:prices",
                 1,
                 fields(&["a", "b"]),
                 0x10,
@@ -454,7 +454,7 @@ mod tests {
             ),
             Ok(())
         );
-        let found = registry.find("trading-post.prices", 1, &fields(&["a"]), &mods());
+        let found = registry.find("trading-post:prices", 1, &fields(&["a"]), &mods());
         assert_eq!(found.map(|f| (f.table, f.fields)), Ok((0x10, 2)));
     }
 
@@ -463,11 +463,11 @@ mod tests {
         let mut registry = Registry::default();
         assert!(
             registry
-                .publish(0, "trading-post.prices", 1, fields(&["a"]), 0x10, &mods())
+                .publish(0, "trading-post:prices", 1, fields(&["a"]), 0x10, &mods())
                 .is_ok()
         );
         let Err((status, reason)) =
-            registry.find("trading-post.prices", 1, &fields(&["a", "b"]), &mods())
+            registry.find("trading-post:prices", 1, &fields(&["a", "b"]), &mods())
         else {
             panic!("served");
         };
@@ -482,11 +482,11 @@ mod tests {
         let mut registry = Registry::default();
         assert!(
             registry
-                .publish(0, "trading-post.prices", 2, fields(&["a"]), 0x10, &mods())
+                .publish(0, "trading-post:prices", 2, fields(&["a"]), 0x10, &mods())
                 .is_ok()
         );
         let Err((status, reason)) =
-            registry.find("trading-post.prices", 1, &fields(&["a"]), &mods())
+            registry.find("trading-post:prices", 1, &fields(&["a"]), &mods())
         else {
             panic!("served");
         };
@@ -497,7 +497,7 @@ mod tests {
     #[test]
     fn nothing_published_is_missing() {
         let registry = Registry::default();
-        let found = registry.find("trading-post.prices", 1, &fields(&["a"]), &mods());
+        let found = registry.find("trading-post:prices", 1, &fields(&["a"]), &mods());
         assert!(matches!(found, Err((Status::MISSING, _))));
     }
 
@@ -506,12 +506,12 @@ mod tests {
         let mut registry = Registry::default();
         assert!(
             registry
-                .publish(0, "trading-post.prices", 1, fields(&["a"]), 0x10, &mods())
+                .publish(0, "trading-post:prices", 1, fields(&["a"]), 0x10, &mods())
                 .is_ok()
         );
         let mut off = mods();
         off.0[0].2 = true;
-        let found = registry.find("trading-post.prices", 1, &fields(&["a"]), &off);
+        let found = registry.find("trading-post:prices", 1, &fields(&["a"]), &off);
         assert!(matches!(found, Err((Status::MISSING, reason)) if reason.contains("is off")));
     }
 
@@ -520,17 +520,17 @@ mod tests {
         let mut registry = Registry::default();
         assert!(
             registry
-                .publish(0, "trading-post.prices", 1, fields(&["a"]), 0x10, &mods())
+                .publish(0, "trading-post:prices", 1, fields(&["a"]), 0x10, &mods())
                 .is_ok()
         );
         assert!(
             registry
-                .publish(1, "trading-post.prices", 1, fields(&["a"]), 0x20, &mods())
+                .publish(1, "trading-post:prices", 1, fields(&["a"]), 0x20, &mods())
                 .is_err()
         );
         assert!(
             registry
-                .publish(0, "trading-post.prices", 2, fields(&["a"]), 0x20, &mods())
+                .publish(0, "trading-post:prices", 2, fields(&["a"]), 0x20, &mods())
                 .is_ok()
         );
     }
@@ -539,22 +539,22 @@ mod tests {
     fn events_are_named_after_their_definer() {
         let mut registry = Registry::default();
         assert_eq!(
-            registry.define(0, "trading-post", "trading-post.sold", fields(&["a"])),
+            registry.define(0, "trading-post", "trading-post:sold", fields(&["a"])),
             Ok(0)
         );
         assert!(
             registry
-                .define(0, "trading-post", "trading-postx.sold", fields(&["a"]))
+                .define(0, "trading-post", "trading-postx:sold", fields(&["a"]))
                 .is_err()
         );
         assert!(
             registry
-                .define(0, "trading-post", "trading-post.", fields(&["a"]))
+                .define(0, "trading-post", "trading-post:", fields(&["a"]))
                 .is_err()
         );
         assert!(
             registry
-                .define(0, "trading-post", "trading-post.sold", fields(&["a"]))
+                .define(0, "trading-post", "trading-post:sold", fields(&["a"]))
                 .is_err()
         );
     }
@@ -564,12 +564,12 @@ mod tests {
         let mut registry = Registry::default();
         assert!(
             registry
-                .define(0, "trading-post", "trading-post.sold", fields(&["a", "b"]))
+                .define(0, "trading-post", "trading-post:sold", fields(&["a", "b"]))
                 .is_ok()
         );
-        registry.subscribe(1, "trading-post.sold", fields(&["a"]), idle, 1);
-        registry.subscribe(1, "trading-post.sold", fields(&["a", "b", "c"]), idle, 2);
-        registry.subscribe(1, "trading-post.bought", fields(&["a"]), idle, 3);
+        registry.subscribe(1, "trading-post:sold", fields(&["a"]), idle, 1);
+        registry.subscribe(1, "trading-post:sold", fields(&["a", "b", "c"]), idle, 2);
+        registry.subscribe(1, "trading-post:bought", fields(&["a"]), idle, 3);
         let (slots, idle) = registry.seal(&mods());
         assert_eq!(slots.len(), 1);
         assert_eq!(slots[0].subscribers.len(), 1);

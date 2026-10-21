@@ -4825,7 +4825,7 @@ pub struct HostApi {
     /// stops for `watch` 0: players are always watched, and so is every
     /// entity a mod keeps a modifier on. Any thread. Since minor 45.
     pub stat_watch: extern "system" fn(me: ModHandle, entity: u32, watch: u8) -> Status,
-    /// Defines the mod event `spec` describes, named `<id>.<name>` after
+    /// Defines the mod event `spec` describes, named `<id>:<name>` after
     /// the defining mod, and writes the id [`HostApi::send_event`] takes;
     /// [`Status::REFUSED`] for a name outside the mod's id or defined
     /// twice. Allowed during `enshwick_mod_init` only. Since minor 47.
@@ -5227,8 +5227,8 @@ pub struct MigrationSet {
 pub struct LayoutField {
     /// The field's name.
     pub name: Str,
-    /// The hash of the field's name, its type as written, size, alignment
-    /// and offset.
+    /// The hash of the field's name, the shape of its type, its size,
+    /// alignment and offset.
     pub hash: u64,
 }
 
@@ -5262,7 +5262,7 @@ pub struct Layout {
 ///
 /// let spec = ServiceSpec {
 ///     header: Header::of::<ServiceSpec>(),
-///     name: Str::new("trading-post.prices"),
+///     name: Str::new("trading-post:prices"),
 ///     major: 1,
 ///     layout: Layout { fields: core::ptr::null(), count: 0, size: 0 },
 ///     table: core::ptr::null(),
@@ -5274,7 +5274,7 @@ pub struct Layout {
 pub struct ServiceSpec {
     /// Size and version of this struct.
     pub header: Header,
-    /// The service's name, `<publisher id>.<what>`.
+    /// The service's name, `<publisher id>:<what>`.
     pub name: Str,
     /// The incompatible version: tables of two majors share nothing.
     pub major: u32,
@@ -5332,7 +5332,7 @@ impl ServiceFound {
 ///
 /// let spec = EventSpec {
 ///     header: Header::of::<EventSpec>(),
-///     name: Str::new("trading-post.sold"),
+///     name: Str::new("trading-post:sold"),
 ///     layout: Layout { fields: core::ptr::null(), count: 0, size: 0 },
 /// };
 /// assert_eq!(spec.layout.size, 0);
@@ -5342,7 +5342,7 @@ impl ServiceFound {
 pub struct EventSpec {
     /// Size and version of this struct.
     pub header: Header,
-    /// The event's name, `<defining mod id>.<what>`.
+    /// The event's name, `<defining mod id>:<what>`.
     pub name: Str,
     /// The event data's fields; events grow by appending.
     pub layout: Layout,

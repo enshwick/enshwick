@@ -27,7 +27,8 @@ pub mod workshops;
 /// const CHEST: Guid = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");
 /// assert_eq!(CHEST.id(), 1_302_084_846);
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[repr(transparent)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Shape)]
 pub struct Guid(pub [u8; 16]);
 
 impl Guid {

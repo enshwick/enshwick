@@ -126,7 +126,7 @@ point with its links and every inert link:
 | `<owner> <version> defines no such point; update <owner>`                           | The owner is older than the declaration                |
 | `<owner> <version>: ... <field> and later are newer than the owner; update <owner>` | The owner's input is older than the link's declaration |
 | `<owner> <version>: field <n> is <name> here and <name> at the owner, ...`          | A field differs: the mods compiled other declarations  |
-| `the answer has another type here and at <owner> <version>; ...`                    | The answer's type differs                              |
+| `the answer's type, or a field, variant or value inside it, differs ...`            | The answer's type differs                              |
 | `<owner> <version> declares it overridden, this mod advised; ...`                   | The mode or the refusal flag differs                   |
 | `off in mods/enshwick/mods.toml`                                                    | The player switched the link off                       |
 
