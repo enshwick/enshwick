@@ -74,6 +74,38 @@ struct Batch {
     bytes: Vec<u8>,
 }
 
+impl Batch {
+    /// Appends `other`'s events after this batch's own.
+    fn append(&mut self, other: &Self) {
+        let offset = self.bytes.len();
+        self.events.extend(other.events.iter().map(|e| Copied {
+            start: e.start + offset,
+            ..*e
+        }));
+        self.bytes.extend_from_slice(&other.bytes);
+    }
+}
+
+/// Takes this thread's batch out of its cell, so the mod callbacks that run
+/// while it is filled or handed out may reach the loader again.
+fn take_batch() -> Batch {
+    BATCH.take()
+}
+
+/// Puts `batch` back into this thread's cell, after the events a callback
+/// copied meanwhile, keeping its buffers when there were none.
+fn give_back(mut batch: Batch) {
+    BATCH.with_borrow_mut(|held| {
+        if held.events.is_empty() && held.bytes.is_empty() {
+            core::mem::swap(held, &mut batch);
+        } else {
+            let newer = core::mem::take(held);
+            batch.append(&newer);
+            *held = batch;
+        }
+    });
+}
+
 static PENDING: Mutex<Vec<Subscriber>> = Mutex::new(Vec::new());
 static SEALED: OnceLock<Sealed> = OnceLock::new();
 static LOADED: OnceLock<(&'static Loader, Layout)> = OnceLock::new();
@@ -226,56 +258,55 @@ unsafe fn copy(layout: &Layout, entity_world: *mut u8) {
     if streams == 0 {
         return;
     }
-    BATCH.with_borrow_mut(|batch| {
-        for index in 0..count {
-            let stream = streams + index * layout.stream_size;
-            // SAFETY: each stream starts with its buffer.
-            let base: usize = unsafe { crate::world::read(stream, 0) };
-            // SAFETY: and holds the bytes used at `stream_used`.
-            let used = unsafe { crate::world::read::<u32>(stream, layout.stream_used) } as usize;
-            if base == 0 {
-                continue;
-            }
-            let mut at = 0;
-            while at + layout.record_header <= used {
-                let record = base + at;
-                // SAFETY: a record starts with its type hash, inside the
-                // bytes used.
-                let type_hash: u32 = unsafe { crate::world::read(record, 0) };
-                // SAFETY: and holds its payload size at `record_size`.
-                let size =
-                    usize::from(unsafe { crate::world::read::<u8>(record, layout.record_size) });
-                if at + layout.record_header + size > used {
-                    break;
-                }
-                // SAFETY: the record's payload, inside the bytes used, on
-                // the game thread before the engine moves the streams.
-                unsafe {
-                    crate::vetoes::screen(
-                        type_hash,
-                        core::ptr::with_exposed_provenance_mut(record + layout.record_header),
-                        size,
-                    );
-                };
-                if sealed.wants(type_hash) {
-                    // SAFETY: as above.
-                    let payload = unsafe {
-                        core::slice::from_raw_parts(
-                            core::ptr::with_exposed_provenance::<u8>(record + layout.record_header),
-                            size,
-                        )
-                    };
-                    batch.events.push(Copied {
-                        type_hash,
-                        size: u32::try_from(size).unwrap_or(0),
-                        start: batch.bytes.len(),
-                    });
-                    batch.bytes.extend_from_slice(payload);
-                }
-                at += layout.record_header + size.next_multiple_of(layout.record_align);
-            }
+    let mut batch = take_batch();
+    for index in 0..count {
+        let stream = streams + index * layout.stream_size;
+        // SAFETY: each stream starts with its buffer.
+        let base: usize = unsafe { crate::world::read(stream, 0) };
+        // SAFETY: and holds the bytes used at `stream_used`.
+        let used = unsafe { crate::world::read::<u32>(stream, layout.stream_used) } as usize;
+        if base == 0 {
+            continue;
         }
-    });
+        let mut at = 0;
+        while at + layout.record_header <= used {
+            let record = base + at;
+            // SAFETY: a record starts with its type hash, inside the
+            // bytes used.
+            let type_hash: u32 = unsafe { crate::world::read(record, 0) };
+            // SAFETY: and holds its payload size at `record_size`.
+            let size = usize::from(unsafe { crate::world::read::<u8>(record, layout.record_size) });
+            if at + layout.record_header + size > used {
+                break;
+            }
+            // SAFETY: the record's payload, inside the bytes used, on
+            // the game thread before the engine moves the streams.
+            unsafe {
+                crate::vetoes::screen(
+                    type_hash,
+                    core::ptr::with_exposed_provenance_mut(record + layout.record_header),
+                    size,
+                );
+            };
+            if sealed.wants(type_hash) {
+                // SAFETY: as above.
+                let payload = unsafe {
+                    core::slice::from_raw_parts(
+                        core::ptr::with_exposed_provenance::<u8>(record + layout.record_header),
+                        size,
+                    )
+                };
+                batch.events.push(Copied {
+                    type_hash,
+                    size: u32::try_from(size).unwrap_or(0),
+                    start: batch.bytes.len(),
+                });
+                batch.bytes.extend_from_slice(payload);
+            }
+            at += layout.record_header + size.next_multiple_of(layout.record_align);
+        }
+    }
+    give_back(batch);
 }
 
 /// Hands this thread's batch to the subscribers still on, and empties it.
@@ -283,39 +314,76 @@ fn deliver(loader: &Loader) {
     let Some(sealed) = SEALED.get() else {
         return;
     };
-    BATCH.with_borrow_mut(|batch| {
-        for event in &batch.events {
-            if sealed.equipment == Some(event.type_hash) {
-                crate::stats::equipment_changed();
-            }
-            let data = GameEventData {
-                header: Header::of::<GameEventData>(),
-                type_hash: event.type_hash,
-                size: event.size,
-                data: batch.bytes[event.start..].as_ptr(),
-            };
-            for subscriber in sealed.subscribers.iter().filter(|s| {
-                (s.type_hash == 0 || s.type_hash == event.type_hash)
-                    && loader
-                        .mods
-                        .get(s.owner)
-                        .is_some_and(|m| !m.off.load(Ordering::Acquire))
-            }) {
-                // SAFETY: the handler lives in the mod's DLL, which stays
-                // loaded; the safe layer catches its panics.
-                crate::profile::call(
-                    subscriber.owner,
-                    crate::profile::Feature::GameEvents,
-                    || unsafe {
-                        (subscriber.callback)(
-                            &raw const data,
-                            core::ptr::with_exposed_provenance_mut(subscriber.user),
-                        );
-                    },
-                );
-            }
+    let mut batch = take_batch();
+    for event in &batch.events {
+        if sealed.equipment == Some(event.type_hash) {
+            crate::stats::equipment_changed();
         }
-        batch.events.clear();
-        batch.bytes.clear();
-    });
+        let data = GameEventData {
+            header: Header::of::<GameEventData>(),
+            type_hash: event.type_hash,
+            size: event.size,
+            data: batch.bytes[event.start..].as_ptr(),
+        };
+        for subscriber in sealed.subscribers.iter().filter(|s| {
+            (s.type_hash == 0 || s.type_hash == event.type_hash)
+                && loader
+                    .mods
+                    .get(s.owner)
+                    .is_some_and(|m| !m.off.load(Ordering::Acquire))
+        }) {
+            // SAFETY: the handler lives in the mod's DLL, which stays
+            // loaded; the safe layer catches its panics.
+            crate::profile::call(
+                subscriber.owner,
+                crate::profile::Feature::GameEvents,
+                || unsafe {
+                    (subscriber.callback)(
+                        &raw const data,
+                        core::ptr::with_exposed_provenance_mut(subscriber.user),
+                    );
+                },
+            );
+        }
+    }
+    batch.events.clear();
+    batch.bytes.clear();
+    give_back(batch);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn copied(type_hash: u32, bytes: &[u8], into: &mut Batch) {
+        into.events.push(Copied {
+            type_hash,
+            size: u32::try_from(bytes.len()).unwrap(),
+            start: into.bytes.len(),
+        });
+        into.bytes.extend_from_slice(bytes);
+    }
+
+    fn payloads(batch: &Batch) -> Vec<(u32, Vec<u8>)> {
+        batch
+            .events
+            .iter()
+            .map(|e| {
+                let end = e.start + e.size as usize;
+                (e.type_hash, batch.bytes[e.start..end].to_vec())
+            })
+            .collect()
+    }
+
+    #[test]
+    fn a_batch_taken_out_leaves_the_cell_free_and_keeps_events_copied_meanwhile() {
+        let mut first = take_batch();
+        copied(1, b"ab", &mut first);
+        BATCH.with_borrow_mut(|held| copied(2, b"cde", held));
+        give_back(first);
+        let back = take_batch();
+        assert_eq!(payloads(&back), [(1, b"ab".to_vec()), (2, b"cde".to_vec())]);
+        give_back(Batch::default());
+        BATCH.with_borrow(|held| assert!(held.events.is_empty() && held.bytes.is_empty()));
+    }
 }
