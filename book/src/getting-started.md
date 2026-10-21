@@ -32,7 +32,8 @@ cargo enshwick new my-mod --side server
 
 `new <id>` creates the crate in `<dir>/<id>`; `--dir` sets the folder (the
 current one by default) and `--side` is `server` (the default), `client` or
-`both`. The id is 1 to 64 characters of `[a-z0-9-]`. The crate holds:
+`both`. The id is 1 to 64 characters of `[a-z0-9-]`, starting with a letter, since
+it names the crate too. The crate holds:
 
 - `Cargo.toml`: a `cdylib` named after the id, `enshwick-loader-api` from this
   repository's git tag for the API version the tool was built with, `serde`,

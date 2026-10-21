@@ -125,6 +125,9 @@ fn query(dll: &Path) -> Result<Manifest, String> {
 
     use windows_sys::Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryW};
 
+    // A bare name would go through the DLL search order, and could load a
+    // system DLL of that name instead.
+    let dll = std::path::absolute(dll).map_err(|e| format!("{}: {e}", dll.display()))?;
     let wide: Vec<u16> = dll.as_os_str().encode_wide().chain([0]).collect();
     // SAFETY: a NUL-terminated path; the DLL stays loaded for the process.
     let module = unsafe { LoadLibraryW(wide.as_ptr()) };

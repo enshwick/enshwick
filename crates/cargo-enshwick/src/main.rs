@@ -34,7 +34,8 @@ struct Args {
 enum Command {
     /// Creates a mod crate in `<dir>/<id>`.
     New {
-        /// The mod id: 1 to 64 characters of `[a-z0-9-]`.
+        /// The mod id: 1 to 64 characters of `[a-z0-9-]`, starting with a
+        /// letter.
         id: String,
         /// Where the mod runs.
         #[arg(long, value_enum, default_value_t = Side::Server)]

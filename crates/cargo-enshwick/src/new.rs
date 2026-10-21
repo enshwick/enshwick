@@ -25,9 +25,12 @@ pub(crate) fn create(dir: &Path, id: &str, side: Side) -> Result<String, String>
 
 /// The crate's files for mod `id`, relative to its root.
 fn files(id: &str, side: Side) -> Result<Vec<(PathBuf, String)>, String> {
-    if !enshwick_loader_api::abi::is_valid_id(id) {
+    // The id names the crate too, and a crate's name starts with a letter.
+    if !enshwick_loader_api::abi::is_valid_id(id)
+        || !id.starts_with(|c: char| c.is_ascii_lowercase())
+    {
         return Err(format!(
-            "the id {id:?} is not 1 to 64 characters of [a-z0-9-]"
+            "the id {id:?} is not 1 to 64 characters of [a-z0-9-] starting with a letter"
         ));
     }
     let side = match side {
@@ -192,6 +195,13 @@ mod tests {
         assert_eq!(type_name("flame-altar-zones"), "FlameAltarZones");
         assert_eq!(type_name("safes"), "Safes");
         assert_eq!(type_name("2x-loot"), "Mod2xLoot");
+    }
+
+    #[test]
+    fn an_id_that_cannot_name_a_crate_is_refused() {
+        assert!(files("2x-loot", Side::Server).is_err());
+        assert!(files("-loot", Side::Server).is_err());
+        assert!(files("loot-2x", Side::Server).is_ok());
     }
 
     #[test]
