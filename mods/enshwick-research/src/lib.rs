@@ -6,11 +6,15 @@
 //! hovered item), at the interface (scroll areas, tab bars, text input) and
 //! at join attempts (what a refused join leaves behind). On both sides it
 //! logs the entities near each player, so a client's and a server's log can
-//! be joined (which ids a client gives the server's entities).
+//! be joined (which ids a client gives the server's entities), the health
+//! the game's impact programs set (heals, revives, scripted kills), and
+//! whether any thread runs on a fiber.
 //! `/research mark` starts a new section of the log while the client hosts
 //! a game.
 
 mod entities;
+mod fibers;
+mod health;
 mod join;
 mod memory;
 mod tooltip;
@@ -61,6 +65,15 @@ struct Settings {
     #[serde(default = "yes")]
     #[config(client)]
     entities: bool,
+    /// Log the health the game's impact programs set, outside hits: heals,
+    /// revives, scripted kills; on the client and on the server.
+    #[serde(default = "yes")]
+    #[config(client)]
+    impact_health: bool,
+    /// Look for threads on fibers for five minutes after the start.
+    #[serde(default = "yes")]
+    #[config(client)]
+    fibers: bool,
     /// The least time between two dumps of one tooltip function, in
     /// milliseconds, unless a mark comes between.
     #[serde(default = "interval_ms")]
@@ -80,15 +93,19 @@ impl Default for Settings {
             ui: yes(),
             join: yes(),
             entities: yes(),
+            impact_health: yes(),
+            fibers: yes(),
             dump_interval_ms: interval_ms(),
             max_dumps: max_dumps(),
         }
     }
 }
 
-/// The research mod.
+/// The research mod: whether it looks for fibers once ready.
 #[derive(Debug)]
-pub struct Research;
+pub struct Research {
+    fibers: bool,
+}
 
 impl Mod for Research {
     fn manifest() -> &'static enshwick_loader_api::abi::Manifest {
@@ -121,6 +138,14 @@ impl Mod for Research {
                     "research.entity_slot" => 0x9a_8070,
                     "research.type_index" => 0x9a_5080,
                     "research.component_read_raw" => 0x9a_5ec0,
+                    "research.impact_attribute" => 0x3e_2cc0,
+                ],
+            }, {
+                side: SERVER,
+                guid: "1c129660cd6efc4f9f0b21652d5ff2bf",
+                age: 387,
+                symbols: [
+                    "research.impact_attribute" => 0x18_4b90,
                 ],
             }],
         )
@@ -129,11 +154,17 @@ impl Mod for Research {
     fn init(load: &mut Load<'_>) -> Result<Self, Off> {
         let settings: Settings = load.config()?;
         if !settings.enabled {
-            return Ok(Self);
+            return Ok(Self { fibers: false });
         }
         let client = load.host().build().side == Side::CLIENT;
         if settings.entities {
             entities_link(load, client);
+        }
+        if settings.impact_health {
+            match health::link(load) {
+                Ok(()) => enshwick_loader_api::info!("R17 impact health writes looked at"),
+                Err(off) => enshwick_loader_api::warn!("R17 off: {off}"),
+            }
         }
         if client {
             if settings.tooltip {
@@ -176,17 +207,32 @@ impl Mod for Research {
                     );
                     format!("mark {mark}; hover the item now").into()
                 }
-                ["status"] => match tooltip::dumps() {
-                    Some((dumps, most)) => {
-                        format!("{dumps} of {most} tooltip dumps since the last mark").into()
+                ["status"] => {
+                    let (health, other) = health::counts();
+                    let impact = format!("; impact writes: {health} health, {other} other");
+                    match tooltip::dumps() {
+                        Some((dumps, most)) => {
+                            format!("{dumps} of {most} tooltip dumps since the last mark{impact}")
+                                .into()
+                        }
+                        None => {
+                            format!("the tooltip is not looked at in this process{impact}").into()
+                        }
                     }
-                    None => "the tooltip is not looked at in this process".into(),
-                },
+                }
                 _ => "/research mark [text and values] | status".into(),
             },
         )?;
         enshwick_loader_api::info!("research on");
-        Ok(Self)
+        Ok(Self {
+            fibers: settings.fibers,
+        })
+    }
+
+    fn ready(&'static self, _host: enshwick_loader_api::Host) {
+        if self.fibers {
+            fibers::start();
+        }
     }
 }
 

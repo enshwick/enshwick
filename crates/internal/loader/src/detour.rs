@@ -9,7 +9,10 @@
 //! writes to the targets, moving any thread that stood inside the replaced
 //! bytes, and any return address into them on a thread's stack, into the
 //! trampoline. Threads that live on fibers of their own are not seen: a
-//! fiber that is not running keeps its stack where no thread points.
+//! fiber that is not running keeps its stack where no thread points. The
+//! game makes none: neither image imports or names a fiber call, and on the
+//! server no thread left the stack its thread block records (build
+//! 1269579); a fiber another module makes stays unseen.
 
 use std::sync::Mutex;
 
