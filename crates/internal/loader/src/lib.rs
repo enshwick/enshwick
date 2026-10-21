@@ -107,6 +107,7 @@ mod status;
 mod survivors;
 #[cfg(windows)]
 mod terrain;
+mod texts;
 #[cfg(windows)]
 mod textures;
 #[cfg(windows)]

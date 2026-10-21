@@ -37,6 +37,7 @@ use super::engine::{Engine, Window};
 use super::{ENGINE, Painter, copy};
 use crate::configure::rows::{self, Lock, Row, Widget};
 use crate::host::Loader;
+use crate::texts;
 
 /// Mods a list page shows.
 const MODS_PER_PAGE: usize = 4;
@@ -170,7 +171,7 @@ fn entry(from: u8, draw: impl FnOnce(&Engine, &super::engine::UiText) -> bool) {
     if showing && unsafe { engine.back_pressed(NODE.load(Ordering::Relaxed)) } {
         BACK.store(1, Ordering::Relaxed);
     }
-    let text = copy(&[b"Mods"]);
+    let text = copy(&[texts::text("mods.title").as_bytes()]);
     if draw(engine, &text) && !showing {
         OPEN.store(from, Ordering::Relaxed);
     }
@@ -304,20 +305,22 @@ fn open_server_list(screen: &mut Screen) {
     crate::remote::forget();
     let asked = crate::net::to_server(&crate::remote::Message::Query { id: String::new() });
     screen.page = Page::ServerList { first: 0 };
-    screen.message = (!asked).then(|| ("The server takes no messages now.".to_owned(), false));
+    screen.message = (!asked).then(|| (texts::text("mods.server.closed").to_owned(), false));
 }
 
 /// The screen's title on `page`.
 fn title(loader: &Loader, page: &Page) -> super::engine::UiText {
     match page {
-        Page::List { .. } => copy(&[b"Mods"]),
-        Page::Settings { index, .. } => loader
-            .mods
-            .get(*index)
-            .map_or_else(|| copy(&[b"Mods"]), |m| copy(&[m.label().as_bytes()])),
-        Page::ServerList { .. } => copy(&[b"Server settings"]),
-        Page::Catalog { .. } => copy(&[b"Available mods"]),
-        Page::ServerSettings { id, .. } => copy(&[b"Server settings: ", id.as_bytes()]),
+        Page::List { .. } => copy(&[texts::text("mods.title").as_bytes()]),
+        Page::Settings { index, .. } => loader.mods.get(*index).map_or_else(
+            || copy(&[texts::text("mods.title").as_bytes()]),
+            |m| copy(&[m.label().as_bytes()]),
+        ),
+        Page::ServerList { .. } => copy(&[texts::text("mods.server").as_bytes()]),
+        Page::Catalog { .. } => copy(&[texts::text("mods.available").as_bytes()]),
+        Page::ServerSettings { id, .. } => {
+            copy(&[texts::fill("mods.server.of", &[("id", id)]).as_bytes()])
+        }
     }
 }
 
@@ -340,7 +343,7 @@ unsafe fn show(loader: &Loader, engine: &Engine, context: usize, screen: &mut Sc
     }
     let close = match &mut screen.page {
         Page::List { first } => {
-            if joined_elsewhere() && paint.button(b"Server settings", true) {
+            if joined_elsewhere() && paint.button(texts::text("mods.server").as_bytes(), true) {
                 open_server_list(screen);
                 // SAFETY: the window started above, in this frame.
                 unsafe { engine.window_end(context, &mut screen.window) };
@@ -362,14 +365,14 @@ unsafe fn show(loader: &Loader, engine: &Engine, context: usize, screen: &mut Sc
                 Listed::Picked(message) => screen.message = Some(message),
                 Listed::Nothing => {}
             }
-            paint.button(b"Back", true)
+            paint.button(texts::text("mods.back").as_bytes(), true)
         }
         Page::Settings { index, first, rows } => {
             if let Some(message) = settings(loader, &paint, *index, first, rows) {
                 *rows = page_rows(loader, *index);
                 screen.message = Some(message);
             }
-            if paint.button(b"Back", true) {
+            if paint.button(texts::text("mods.back").as_bytes(), true) {
                 screen.page = Page::List { first: 0 };
                 screen.message = None;
             }
@@ -380,7 +383,7 @@ unsafe fn show(loader: &Loader, engine: &Engine, context: usize, screen: &mut Sc
                 let asked =
                     crate::net::to_server(&crate::remote::Message::Query { id: id.clone() });
                 screen.message =
-                    (!asked).then(|| ("The server takes no messages now.".to_owned(), false));
+                    (!asked).then(|| (texts::text("mods.server.closed").to_owned(), false));
                 screen.page = Page::ServerSettings {
                     id,
                     first: 0,
@@ -388,7 +391,7 @@ unsafe fn show(loader: &Loader, engine: &Engine, context: usize, screen: &mut Sc
                     schema: None,
                     news: 0,
                 };
-            } else if paint.button(b"Back", true) {
+            } else if paint.button(texts::text("mods.back").as_bytes(), true) {
                 screen.page = Page::List { first: 0 };
                 screen.message = None;
             }
@@ -398,7 +401,7 @@ unsafe fn show(loader: &Loader, engine: &Engine, context: usize, screen: &mut Sc
             if let Some(message) = available(loader, &paint, first) {
                 screen.message = Some(message);
             }
-            if paint.button(b"Back", true) {
+            if paint.button(texts::text("mods.back").as_bytes(), true) {
                 screen.page = Page::List { first: 0 };
                 screen.message = None;
             }
@@ -414,7 +417,7 @@ unsafe fn show(loader: &Loader, engine: &Engine, context: usize, screen: &mut Sc
             if let Some(message) = server_settings(&paint, id, first, rows, schema, news) {
                 screen.message = Some(message);
             }
-            if paint.button(b"Back", true) {
+            if paint.button(texts::text("mods.back").as_bytes(), true) {
                 open_server_list(screen);
             }
             false
@@ -431,7 +434,7 @@ fn server_list(paint: &Painter<'_>, first: &mut usize) -> Option<String> {
     let mods = crate::remote::heard(|h| h.mods.clone());
     let Some(mods) = mods else {
         paint.label(
-            b"Asking the server...",
+            texts::text("mods.server.asking").as_bytes(),
             UiWidget::STYLE_SECONDARY,
             false,
             true,
@@ -440,7 +443,7 @@ fn server_list(paint: &Painter<'_>, first: &mut usize) -> Option<String> {
     };
     if mods.is_empty() {
         paint.label(
-            b"The server shows you no settings.",
+            texts::text("mods.server.none").as_bytes(),
             UiWidget::STYLE_SECONDARY,
             false,
             true,
@@ -449,7 +452,7 @@ fn server_list(paint: &Painter<'_>, first: &mut usize) -> Option<String> {
     let mut opened = None;
     for (id, name) in mods.iter().skip(*first).take(MODS_PER_PAGE) {
         paint.label(name.as_bytes(), UiWidget::STYLE_H3, false, false);
-        if paint.button(b"Settings", true) {
+        if paint.button(texts::text("mods.settings").as_bytes(), true) {
             opened = Some(id.clone());
         }
     }
@@ -495,7 +498,7 @@ fn server_settings(
     }
     let Some(known) = schema.as_ref() else {
         paint.label(
-            b"Asking the server...",
+            texts::text("mods.server.asking").as_bytes(),
             UiWidget::STYLE_SECONDARY,
             false,
             true,
@@ -519,9 +522,9 @@ fn server_settings(
             value,
         });
         return Some(if sent {
-            ("Sent to the server...".to_owned(), true)
+            (texts::text("mods.server.sent").to_owned(), true)
         } else {
-            ("The server takes no messages now.".to_owned(), false)
+            (texts::text("mods.server.closed").to_owned(), false)
         });
     }
     message
@@ -561,7 +564,11 @@ fn available_button(loader: &Loader, paint: &Painter<'_>) -> bool {
         .iter()
         .filter(|(_, entry)| entry.installed.is_none())
         .count();
-    offered > 0 && paint.button(format!("Available mods ({offered})").as_bytes(), true)
+    offered > 0 && {
+        let count = offered.to_string();
+        let text = texts::fill("mods.available.count", &[("count", &count)]);
+        paint.button(text.as_bytes(), true)
+    }
 }
 
 /// Hands the player's pick of `entry` to `owner`, the mod that offered it;
@@ -576,9 +583,9 @@ fn pick(
         .get(owner)
         .map_or_else(String::new, crate::host::ModRecord::label);
     if crate::catalog::pick(owner, &entry.id) {
-        (format!("{by} takes it from here: answer its dialog."), true)
+        (texts::fill("mods.picked", &[("mod", &by)]), true)
     } else {
-        (format!("{by} does not take picks."), false)
+        (texts::fill("mods.picked.refused", &[("mod", &by)]), false)
     }
 }
 
@@ -591,7 +598,7 @@ fn available(loader: &Loader, paint: &Painter<'_>, first: &mut usize) -> Option<
         .collect();
     if offered.is_empty() {
         paint.label(
-            b"No mods on offer now.",
+            texts::text("mods.available.none").as_bytes(),
             UiWidget::STYLE_SECONDARY,
             false,
             true,
@@ -602,7 +609,7 @@ fn available(loader: &Loader, paint: &Painter<'_>, first: &mut usize) -> Option<
         let heading = format!("{} {}", entry.label(), entry.version);
         paint.label(heading.as_bytes(), UiWidget::STYLE_H3, false, false);
         if !entry.source.is_empty() {
-            let from = format!("From {}", entry.source);
+            let from = texts::fill("mods.from", &[("source", &entry.source)]);
             paint.label(from.as_bytes(), UiWidget::STYLE_SECONDARY, true, false);
         }
         if !entry.note.is_empty() {
@@ -613,7 +620,7 @@ fn available(loader: &Loader, paint: &Painter<'_>, first: &mut usize) -> Option<
                 false,
             );
         }
-        if entry.ready && paint.button(b"Install", true) {
+        if entry.ready && paint.button(texts::text("mods.install").as_bytes(), true) {
             message = Some(pick(loader, *owner, entry));
         }
     }
@@ -632,29 +639,29 @@ fn list(loader: &Loader, paint: &Painter<'_>, first: &mut usize) -> Listed {
     };
     if crate::world::hosting() && JUMP_SHOWN.load(Ordering::Relaxed) != 0 {
         paint.label(
-            b"Settings of this world are in the world settings.",
+            texts::text("mods.world.here").as_bytes(),
             UiWidget::STYLE_SECONDARY,
             true,
             false,
         );
-        if paint.button(b"World settings", true) {
+        if paint.button(texts::text("mods.world.open").as_bytes(), true) {
             JUMP.store(1, Ordering::Relaxed);
         }
     } else {
         paint.label(
-            b"Settings of a world are in its world settings, where you create or host it.",
+            texts::text("mods.world.elsewhere").as_bytes(),
             UiWidget::STYLE_SECONDARY,
             true,
             false,
         );
     }
     for (index, record) in mods.iter().enumerate().skip(*first).take(MODS_PER_PAGE) {
-        let off = if record.off.load(Ordering::Acquire) {
-            " (off)"
+        let heading = if record.off.load(Ordering::Acquire) {
+            let name = record.label();
+            texts::fill("mods.off", &[("name", &name), ("version", &record.version)])
         } else {
-            ""
+            format!("{} {}", record.label(), record.version)
         };
-        let heading = format!("{} {}{off}", record.label(), record.version);
         paint.label(heading.as_bytes(), UiWidget::STYLE_H3, false, false);
         if !record.meta.description.is_empty() {
             paint.label(
@@ -672,7 +679,7 @@ fn list(loader: &Loader, paint: &Painter<'_>, first: &mut usize) -> Listed {
             .iter()
             .find(|(_, entry)| entry.installed.is_some() && entry.id == record.id);
         if let Some((owner, entry)) = update {
-            let line = format!("Update: {}", entry.version);
+            let line = texts::fill("mods.update.version", &[("version", &entry.version)]);
             paint.label(line.as_bytes(), UiWidget::STYLE_POSITIVE, false, false);
             if !entry.note.is_empty() {
                 paint.label(
@@ -682,7 +689,7 @@ fn list(loader: &Loader, paint: &Painter<'_>, first: &mut usize) -> Listed {
                     false,
                 );
             }
-            if entry.ready && paint.button(b"Update", true) {
+            if entry.ready && paint.button(texts::text("mods.update").as_bytes(), true) {
                 done = Listed::Picked(pick(loader, *owner, entry));
             }
         }
@@ -694,11 +701,11 @@ fn list(loader: &Loader, paint: &Painter<'_>, first: &mut usize) -> Listed {
             })
         });
         if client_schema(record).is_some() {
-            if paint.button(b"Your settings", true) {
+            if paint.button(texts::text("mods.settings.yours").as_bytes(), true) {
                 done = Listed::Settings(index);
             }
         } else if !world {
-            let note = format!("Settings: mod-configs/{}.toml", record.id);
+            let note = texts::fill("mods.settings.file", &[("id", &record.id)]);
             paint.label(note.as_bytes(), UiWidget::STYLE_SECONDARY, false, false);
         }
     }
@@ -711,16 +718,16 @@ fn pages(paint: &Painter<'_>, first: &mut usize, count: usize, per_page: usize) 
     if count <= per_page {
         return;
     }
-    let page = format!(
-        "Page {} of {}",
-        *first / per_page + 1,
-        count.div_ceil(per_page)
+    let (page, pages) = (
+        (*first / per_page + 1).to_string(),
+        count.div_ceil(per_page).to_string(),
     );
+    let page = texts::fill("mods.page", &[("page", &page), ("pages", &pages)]);
     paint.label(page.as_bytes(), UiWidget::STYLE_SECONDARY, false, true);
-    if *first + per_page < count && paint.button(b"Next page", true) {
+    if *first + per_page < count && paint.button(texts::text("mods.page.next").as_bytes(), true) {
         *first += per_page;
     }
-    if *first > 0 && paint.button(b"Previous page", true) {
+    if *first > 0 && paint.button(texts::text("mods.page.previous").as_bytes(), true) {
         *first = first.saturating_sub(per_page);
     }
 }
@@ -774,7 +781,7 @@ fn settings(
     let record = loader.mods.get(index)?;
     if rows.iter().any(|r| r.lock == Lock::Server) {
         paint.label(
-            b"Settings marked \"set by the server\" come from the server you joined.",
+            texts::text("mods.settings.server-marked").as_bytes(),
             UiWidget::STYLE_SECONDARY,
             true,
             false,
@@ -809,10 +816,10 @@ fn draw_row(
 ) -> Option<String> {
     let mut label = row.label.clone();
     if row.restart {
-        label.push_str(" (when the world loads)");
+        label = texts::fill("row.restart", &[("label", &label)]);
     }
     if row.lock == Lock::Server {
-        label.push_str(" (set by the server)");
+        label = texts::fill("row.server", &[("label", &label)]);
     }
     let read_only = row.lock != Lock::Open;
     match &row.widget {
@@ -839,7 +846,10 @@ fn draw_row(
             rows::picked(schema.field(&row.key)?, picked as usize)
         }
         Widget::Text(value) => {
-            let line = format!("{label}: {value} (edit mod-configs/{id}.toml)");
+            let line = texts::fill(
+                "row.text",
+                &[("label", &label), ("value", value), ("id", id)],
+            );
             paint.label(line.as_bytes(), UiWidget::STYLE_BODY, true, false);
             None
         }
@@ -977,13 +987,18 @@ fn world(read_only: bool) {
         if world.mods.is_empty() {
             return;
         }
-        paint.label(b"Mods", UiWidget::STYLE_H2, false, false);
-        let note: &[u8] = if crate::worlds::current().is_some() {
-            b"These settings belong to this world."
+        paint.label(
+            texts::text("mods.title").as_bytes(),
+            UiWidget::STYLE_H2,
+            false,
+            false,
+        );
+        let note = if crate::worlds::current().is_some() {
+            texts::text("world.belongs")
         } else {
-            b"Changes here go into the next world that loads."
+            texts::text("world.next")
         };
-        paint.label(note, UiWidget::STYLE_SECONDARY, true, false);
+        paint.label(note.as_bytes(), UiWidget::STYLE_SECONDARY, true, false);
         if let Some((text, ok)) = &world.message {
             let style = if *ok {
                 UiWidget::STYLE_POSITIVE

@@ -17,20 +17,6 @@ use crate::host::Loader;
 const NAME: Id = Id::new("enshwick:stand-in.name");
 /// The tag of a stand-in's description.
 const DESCRIPTION: Id = Id::new("enshwick:stand-in.description");
-/// The game's language numbers of the texts: the fallback and Ukrainian.
-const TEXTS: [(u32, &str, &str); 2] = [
-    (
-        0,
-        "Item of a removed mod",
-        "Kept for a mod that is not installed now. Install the mod again to get the item back.",
-    ),
-    (
-        34,
-        "Предмет вилученого мода",
-        "Збережено для мода, якого зараз немає. Встановіть мод знову, щоб повернути предмет.",
-    ),
-];
-
 /// Builds a served resource from its base's bytes.
 pub(crate) type Builder = Box<dyn Fn(&[u8]) -> Option<Vec<u8>> + Send + Sync>;
 
@@ -131,9 +117,13 @@ pub(crate) fn served(loader: &Loader, orphans: &[(Guid, Guid)]) -> Option<(Vec<S
             list_item(&layout, &registry, item, &format!("stand-in {item}"))
         })
     });
-    for (language, name, description) in TEXTS {
-        let _name = crate::content::add_text(NAME.id(), language, name);
-        let _description = crate::content::add_text(DESCRIPTION.id(), language, description);
+    for (tag, key) in [
+        (NAME, "stand-in.name"),
+        (DESCRIPTION, "stand-in.description"),
+    ] {
+        for (language, text) in crate::texts::translations(key) {
+            let _added = crate::content::add_text(tag.id(), language.0, text);
+        }
     }
     Some((items, registry))
 }
