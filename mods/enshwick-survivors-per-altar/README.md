@@ -78,7 +78,9 @@ and a change applies while the game runs. Off, copy staffs neither drop nor
 work, and the staffs players hold stay for when they are on again. The
 chances, `copy_staff_charges_min` and `vanilla_staff_places_copies` apply
 while the game runs too, and each world's own values apply when it loads.
-`per_altar` applies when the world loads.
+`per_altar` applies when the world loads, and a joined player runs with the
+server's value, so its bed cursor and survivor menu follow the server's
+world.
 
 `copy_staff_charges` is part of the staff item the game builds as it starts:
 it is read from `mod-configs/survivors-per-altar.toml` for every world, and a

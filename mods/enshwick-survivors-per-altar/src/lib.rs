@@ -57,8 +57,9 @@ const fn full_charges() -> u16 {
 #[config(validate = Settings::check)]
 struct Settings {
     /// A copy of each survivor at every altar, at most one per altar zone.
-    /// Off, survivors and staffs behave as in vanilla in that world.
-    #[config(startup)]
+    /// Off, survivors and staffs behave as in vanilla in that world. A
+    /// joined player runs with the server's value.
+    #[config(startup, sync)]
     per_altar: bool,
     /// Copy staffs: one per workshop survivor. Each new copy it places
     /// spends a charge and the last charge uses the staff up; moving the
@@ -397,10 +398,14 @@ copy_staff_boss_chance = 0.0
             ..Settings::default()
         };
         let synced = server.synced().unwrap();
-        assert_eq!(synced, "{ copy_staffs = false }");
-        let mut joined = Settings::default();
+        assert_eq!(synced, "{ copy_staffs = false, per_altar = true }");
+        let mut joined = Settings {
+            per_altar: false,
+            ..Settings::default()
+        };
         joined.merge_synced(&synced).unwrap();
         assert!(!joined.copy_staffs);
+        assert!(joined.per_altar, "the server's world keeps copies");
     }
 
     #[test]
