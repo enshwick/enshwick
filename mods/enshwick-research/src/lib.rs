@@ -4,10 +4,13 @@
 //! Off until `enabled = true` in `mod-configs/research.toml`; read at start.
 //! On a client it looks at the item tooltip (which argument names the
 //! hovered item), at the interface (scroll areas, tab bars, text input) and
-//! at join attempts (what a refused join leaves behind).
+//! at join attempts (what a refused join leaves behind). On both sides it
+//! logs the entities near each player, so a client's and a server's log can
+//! be joined (which ids a client gives the server's entities).
 //! `/research mark` starts a new section of the log while the client hosts
 //! a game.
 
+mod entities;
 mod join;
 mod memory;
 mod tooltip;
@@ -53,6 +56,11 @@ struct Settings {
     #[serde(default = "yes")]
     #[config(client)]
     join: bool,
+    /// Log the entities near each player every five seconds, on the client
+    /// and on the server, with their ids, templates and positions.
+    #[serde(default = "yes")]
+    #[config(client)]
+    entities: bool,
     /// The least time between two dumps of one tooltip function, in
     /// milliseconds, unless a mark comes between.
     #[serde(default = "interval_ms")]
@@ -71,6 +79,7 @@ impl Default for Settings {
             tooltip: yes(),
             ui: yes(),
             join: yes(),
+            entities: yes(),
             dump_interval_ms: interval_ms(),
             max_dumps: max_dumps(),
         }
@@ -107,6 +116,11 @@ impl Mod for Research {
                     "research.tabs" => 0xcc_a5a0,
                     "research.text_dialog" => 0xcc_8e30,
                     "research.text_field" => 0xb1_2120,
+                    "research.client_cursor" => 0x28_fa70,
+                    "research.entities_with" => 0x9a_71d0,
+                    "research.entity_slot" => 0x9a_8070,
+                    "research.type_index" => 0x9a_5080,
+                    "research.component_read_raw" => 0x9a_5ec0,
                 ],
             }],
         )
@@ -117,7 +131,11 @@ impl Mod for Research {
         if !settings.enabled {
             return Ok(Self);
         }
-        if load.host().build().side == Side::CLIENT {
+        let client = load.host().build().side == Side::CLIENT;
+        if settings.entities {
+            entities_link(load, client);
+        }
+        if client {
             if settings.tooltip {
                 match tooltip::link(load, settings.dump_interval_ms, settings.max_dumps) {
                     Ok(hooked) => {
@@ -169,6 +187,27 @@ impl Mod for Research {
         )?;
         enshwick_loader_api::info!("research on");
         Ok(Self)
+    }
+}
+
+/// Links R11 on the server side and, on a client, on the client side.
+fn entities_link(load: &mut Load<'_>, client: bool) {
+    let world = match load.world() {
+        Ok(world) => world,
+        Err(off) => {
+            enshwick_loader_api::warn!("R11 off: {off}");
+            return;
+        }
+    };
+    match entities::link_server(load, world) {
+        Ok(()) => enshwick_loader_api::info!("R11 server sweeps every 5 s while players are in"),
+        Err(off) => enshwick_loader_api::warn!("R11 server side off: {off}"),
+    }
+    if client {
+        match entities::link_client(load, &world) {
+            Ok(()) => enshwick_loader_api::info!("R11 client sweeps every 5 s in a game"),
+            Err(off) => enshwick_loader_api::warn!("R11 client side off: {off}"),
+        }
     }
 }
 

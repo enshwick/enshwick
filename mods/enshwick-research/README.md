@@ -2,9 +2,10 @@
 
 A development mod, never released: it logs what a running client does where
 the platform still needs engine facts, to `logs/enshwick/mods/research.log`.
-It only reads; each hooked function's first bytes are checked against the
-client build its address was found on (1269579), and a function that
-differs stays unhooked. Keep it off games people play.
+It only reads; the first bytes of each function it hooks or calls are
+checked against the client build its address was found on (1269579), and
+what depends on a function that differs stays off. Keep it off games people
+play.
 
 ## What it logs
 
@@ -23,6 +24,15 @@ differs stays unhooked. Keep it off games people play.
   answers (0 when the join check refused it), and for 30 seconds after, once
   a second, how many main- and pause-menu entries were drawn. Lines start
   with `R8`.
+- Entity ids, on the client and on the server: every five seconds, the
+  entities within 20 m of each player, with their id, template GUID and
+  position, and the entity ids that `DespawnLink`, `OwnerRelationship`,
+  `NetworkComfort` and `AggroTargetNetworkData` hold with what those ids name
+  on the same side. The client adds each entity's slot and record. Joining a
+  client's and a server's log by template and position shows which ids a
+  client gives the server's entities. Lines start with `R11 client` or
+  `R11 server`; a server without players sweeps once around its first
+  entity.
 
 ## Commands
 
@@ -39,10 +49,12 @@ From the chat as an administrator while the client hosts a game:
 
 ```toml
 enabled = false
-# Look at the item tooltip, the interface and join attempts.
+# Look at the item tooltip, the interface and join attempts, and log the
+# entities near each player.
 tooltip = true
 ui = true
 join = true
+entities = true
 # The least time between two dumps of one tooltip function, unless a mark
 # comes between, and the most dumps between two marks.
 dump_interval_ms = 1000
