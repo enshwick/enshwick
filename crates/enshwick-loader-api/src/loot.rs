@@ -39,9 +39,9 @@ const ROW_WORDS: usize = 9;
 /// See [`Container`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Offer {
-    /// The entity that last opened or looted the container; none before
+    /// The entity that last opened or looted the container; `None` before
     /// anyone did.
-    pub guest: Entity,
+    pub guest: Option<Entity>,
     /// When, in the game's nanoseconds; changes with each interaction.
     pub accepted_at: i64,
     /// Whether the game offers no interaction now.
@@ -62,7 +62,7 @@ pub struct Offer {
 ///     empty: false,
 ///     expires: true,
 ///     area_loot: Some(true),
-///     offer: Some(Offer { guest: Entity::NONE, accepted_at: 0, disabled: false }),
+///     offer: Some(Offer { guest: None, accepted_at: 0, disabled: false }),
 /// };
 /// assert!(corpse.is_enemy_loot());
 /// assert!(corpse.is_open());
@@ -253,7 +253,9 @@ impl Containers {
         let mut query = unsafe { self.ecs.query::<ROW_WORDS>(ctx) };
         while query.next().is_some() {
             // SAFETY: as above, on the current row.
-            let entity = unsafe { self.ecs.entity(ctx) };
+            let Some(entity) = (unsafe { self.ecs.entity(ctx) }) else {
+                continue;
+            };
             // SAFETY: as above.
             if let Some(container) = unsafe { self.container(ctx, entity) } {
                 f(&container);
@@ -299,7 +301,7 @@ impl Containers {
         });
         let offer = read(layout.offer).map(|data| Offer {
             // SAFETY: a live InteractionOfferRuntime holds these fields.
-            guest: Entity(unsafe { read_at(data, layout.accept_guest) }),
+            guest: Entity::from_raw(unsafe { read_at(data, layout.accept_guest) }),
             // SAFETY: as above.
             accepted_at: unsafe { read_at(data, layout.accept_time) },
             // SAFETY: as above.
@@ -506,7 +508,7 @@ mod tests {
             expires: true,
             area_loot: Some(true),
             offer: Some(Offer {
-                guest: Entity::NONE,
+                guest: None,
                 accepted_at: 0,
                 disabled: false,
             }),

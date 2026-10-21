@@ -78,8 +78,8 @@ impl Kinds {
 pub struct Roll {
     /// What the container is.
     pub kind: Kinds,
-    /// The container; [`Entity::NONE`] for a single-item roll.
-    pub entity: Entity,
+    /// The container; `None` for a single-item roll.
+    pub entity: Option<Entity>,
     /// The world node a chest is placed at; 0 for a corpse.
     pub node: u32,
     /// The loot labels of the enemy or chest type: the FNV-1a hash of the
@@ -99,7 +99,7 @@ pub struct Roll {
 /// use enshwick_loader_api::ecs::Entity;
 /// use enshwick_loader_api::loot::{Source, Kinds, Roll};
 ///
-/// let boss = Roll { kind: Kinds::CORPSES, entity: Entity(7), node: 0, labels: 9, boss: true, locked: false };
+/// let boss = Roll { kind: Kinds::CORPSES, entity: Some(Entity(7)), node: 0, labels: 9, boss: true, locked: false };
 /// assert!(Source::bosses().matches(&boss));
 /// assert!(!Source::locked_chests().matches(&boss));
 /// assert!(Source::kinds(Kinds::CORPSES).with_labels(&[9]).matches(&boss));
@@ -520,7 +520,7 @@ impl Engine {
             } else {
                 Kinds::CHESTS
             },
-            entity,
+            entity: Some(entity),
             node,
             labels,
             boss: corpse && has(self.boss).is_some(),
@@ -570,6 +570,9 @@ fn add_drops(res: *mut u8, txn: *mut u8, request: *const u8) {
             .unwrap_or_else(PoisonError::into_inner)
             .push(roll);
     }
+    let Some(container) = roll.entity else {
+        return;
+    };
     let drops = DROPS.lock().unwrap_or_else(PoisonError::into_inner);
     let absent = [0u8; 16];
     for drop in drops
@@ -593,7 +596,7 @@ fn add_drops(res: *mut u8, txn: *mut u8, request: *const u8) {
             (engine.give)(
                 &raw mut added,
                 txn,
-                roll.entity.0,
+                container.0,
                 0,
                 item,
                 i32::from(count),
@@ -638,7 +641,7 @@ fn add_one(res: *mut u8, out: *mut u8) {
     }
     let roll = Roll {
         kind: Kinds::DESTROYED,
-        entity: Entity::NONE,
+        entity: None,
         node: 0,
         labels: 0,
         boss: false,
@@ -798,7 +801,7 @@ mod tests {
     fn roll(kind: Kinds) -> Roll {
         Roll {
             kind,
-            entity: Entity(5),
+            entity: Some(Entity(5)),
             node: 0,
             labels: 0,
             boss: false,

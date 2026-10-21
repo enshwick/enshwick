@@ -86,6 +86,9 @@ where
         RawInteraction::UPGRADE => Kind::Upgrade,
         _ => return 1,
     };
+    if call.player == 0 || call.target == 0 {
+        return 1;
+    }
     let known = call.known != 0;
     let interaction = Interaction {
         kind,
@@ -113,7 +116,8 @@ impl Load<'_> {
     /// The game asks whether to offer an interaction for every entity in
     /// each player's reach on every frame, so `filter` runs many times a
     /// frame: it must not allocate, lock or log. Moves, sorts, stock draws,
-    /// dismantling and upgrades ask once per action.
+    /// dismantling and upgrades ask once per action. An interaction without
+    /// a player's character or without a target is allowed unasked.
     ///
     /// # Errors
     ///

@@ -59,8 +59,10 @@ fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_
 | `map_store(name, f)`       | changes a world store: `f` edits its `toml::Table` in place                        |
 | `rename_content(from, to)` | reads content saved under the GUID `from` as the content now under `to`            |
 
-A step whose setting or store is missing does nothing. A map that returns
-`Err` fails its migration with that reason.
+A step whose setting or store is missing does nothing. A map returns
+`Result<_, MigrationError>`; a `&str` or `String` turns into one with `?`, as
+`ok_or("limit is a number")?` does, and an `Err` fails its migration with that
+reason.
 
 ## When migrations run
 

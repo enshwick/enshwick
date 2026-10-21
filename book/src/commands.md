@@ -18,7 +18,10 @@ use enshwick_loader_api::commands::Reply;
 fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
     load.add_command("safe", "allow, deny or list players at your nearest Safe", |ctx, args| {
         match args {
-            ["list"] => Reply::from(format!("{} asked for the list", ctx.player.name)),
+            ["list"] => match &ctx.player {
+                Some(player) => Reply::from(format!("{} asked for the list", player.name)),
+                None => Reply::from("the console has no Safes"),
+            },
             _ => Reply::from("/safe allow <player>, /safe deny <player>, /safe list"),
         }
     })
@@ -38,8 +41,9 @@ The loader runs the handler on the server's game thread, where
 [world reads](world.md) work, with two arguments:
 
 - a [`CommandContext`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/commands.rs):
-  `ctx.player`, the [`Player`](world.md#players) who typed it, `ctx.name`, the
-  command's name, and `ctx.is_admin()`;
+  `ctx.player`, the [`Player`](world.md#players) who typed it (`None` for the
+  server's console), `ctx.character()`, that player's character, `ctx.name`,
+  the command's name, and `ctx.is_admin()`, true for the console too;
 - the words after the name, split at whitespace, as `&[&str]`.
 
 The handler returns a
@@ -87,9 +91,9 @@ loader's own messages between client and server. A `/` command no one has gets
 ## Running a command line
 
 [`commands::run(line)`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/commands.rs)
-runs a command line as the server's console: an administrator named `console`
-with no character (entity 0, account key 0). Any mod's command and the
-loader's own work, and it returns the reply.
+runs a command line as the server's console: an administrator without a
+character, whose handlers get `ctx.player` as `None`. Any mod's command and
+the loader's own work, and it returns the reply.
 
 Call it on the server's game thread, from a scheduled task or a game event.
 Elsewhere it returns `RunError::NotOnGameThread`.
@@ -105,8 +109,7 @@ fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_
 }
 ```
 
-A handler that gets the console has a `Player` with `key` 0: a reply to it is
-returned, not sent, and `world.tell` to it sends nothing.
+A reply to the console is returned to the caller, not sent.
 
 ## Chat lines
 
@@ -133,7 +136,10 @@ use enshwick_loader_api::world::Notice;
 fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
     let world = load.world()?;
     load.add_command("ping-me", "shows a notice", move |ctx, _args| {
-        match world.notify(&ctx.player, "Pong") {
+        let Some(player) = &ctx.player else {
+            return "the console sees no notices".into();
+        };
+        match world.notify(player, "Pong") {
             Notice::OnScreen => "on screen".into(),
             _ => "in chat".into(),
         }

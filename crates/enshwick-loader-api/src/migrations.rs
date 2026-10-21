@@ -21,8 +21,62 @@ use crate::abi::{self, MigrationStep, Status, Str};
 use crate::content::Guid;
 use crate::{Load, Off};
 
+/// Why a migration's map cannot change a value; the loader logs it and
+/// leaves the world's files as they were.
+///
+/// A `&str` or `String` turns into one with `?` or `into`.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::migrations::MigrationError;
+///
+/// fn double(old: toml::Value) -> Result<toml::Value, MigrationError> {
+///     let limit = old.as_integer().ok_or("limit is a number")?;
+///     Ok(toml::Value::Integer(limit * 2))
+/// }
+///
+/// assert_eq!(double(toml::Value::Boolean(true)).unwrap_err().to_string(), "limit is a number");
+/// ```
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+#[error("{0}")]
+pub struct MigrationError(String);
+
+impl MigrationError {
+    /// A refusal with `why`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let refused = enshwick_loader_api::migrations::MigrationError::new("no owners table");
+    /// assert_eq!(refused.to_string(), "no owners table");
+    /// ```
+    #[must_use]
+    pub fn new(why: impl Into<String>) -> Self {
+        Self(why.into())
+    }
+}
+
+impl From<&str> for MigrationError {
+    fn from(why: &str) -> Self {
+        Self(why.to_owned())
+    }
+}
+
+impl From<String> for MigrationError {
+    fn from(why: String) -> Self {
+        Self(why)
+    }
+}
+
+impl From<toml::de::Error> for MigrationError {
+    fn from(error: toml::de::Error) -> Self {
+        Self(error.message().to_owned())
+    }
+}
+
 /// A change of a value: a setting's TOML value, or a store's whole table.
-type Map = Box<dyn Fn(&str) -> Result<String, String> + Send + Sync>;
+type Map = Box<dyn Fn(&str) -> Result<String, MigrationError> + Send + Sync>;
 
 /// One step, kept on the mod's side.
 struct Step {
@@ -100,7 +154,7 @@ impl Migration {
     pub fn map_setting(
         self,
         key: &str,
-        map: impl Fn(toml::Value) -> Result<toml::Value, String> + Send + Sync + 'static,
+        map: impl Fn(toml::Value) -> Result<toml::Value, MigrationError> + Send + Sync + 'static,
     ) -> Self {
         let map: Map = Box::new(move |text| {
             let value = parse_value(text)?;
@@ -131,13 +185,12 @@ impl Migration {
     pub fn map_store(
         self,
         name: &str,
-        map: impl Fn(&mut toml::Table) -> Result<(), String> + Send + Sync + 'static,
+        map: impl Fn(&mut toml::Table) -> Result<(), MigrationError> + Send + Sync + 'static,
     ) -> Self {
         let map: Map = Box::new(move |text| {
-            let mut table: toml::Table =
-                toml::from_str(text).map_err(|e| e.message().to_owned())?;
+            let mut table: toml::Table = toml::from_str(text)?;
             map(&mut table)?;
-            toml::to_string(&table).map_err(|e| e.to_string())
+            toml::to_string(&table).map_err(|e| MigrationError(e.to_string()))
         });
         self.push(MigrationStep::MAP_STORE, name, "", Some(map))
     }
@@ -273,14 +326,13 @@ impl Migrations {
 }
 
 /// A TOML value from its text, as the loader hands a setting over.
-pub(crate) fn parse_value(text: &str) -> Result<toml::Value, String> {
-    let mut table: toml::Table =
-        toml::from_str(&format!("v = {text}")).map_err(|e| e.message().to_owned())?;
-    table.remove("v").ok_or_else(|| "no value".to_owned())
+pub(crate) fn parse_value(text: &str) -> Result<toml::Value, MigrationError> {
+    let mut table: toml::Table = toml::from_str(&format!("v = {text}"))?;
+    table.remove("v").ok_or_else(|| "no value".into())
 }
 
 /// A TOML value as text, as the loader takes a setting back.
-pub(crate) fn write_value(value: &toml::Value) -> Result<String, String> {
+pub(crate) fn write_value(value: &toml::Value) -> Result<String, MigrationError> {
     // `Display` writes a value inline, tables and arrays of tables too.
     let text = value.to_string();
     parse_value(&text)?;
@@ -396,7 +448,7 @@ unsafe extern "system" fn run_map(
         || (Status::FAULTED, "the migration panicked".to_owned()),
         || match map(input) {
             Ok(text) => (Status::OK, text),
-            Err(reason) => (Status::REFUSED, reason),
+            Err(reason) => (Status::REFUSED, reason.0),
         },
     );
     let mut held = kept.out.lock().unwrap_or_else(PoisonError::into_inner);

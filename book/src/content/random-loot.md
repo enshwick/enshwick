@@ -89,7 +89,7 @@ comes from a source, which a unit test can check without the game:
 use enshwick_loader_api::ecs::Entity;
 use enshwick_loader_api::loot::{Kinds, Roll, Source};
 
-let boss = Roll { kind: Kinds::CORPSES, entity: Entity(7), node: 0, labels: 9, boss: true, locked: false };
+let boss = Roll { kind: Kinds::CORPSES, entity: Some(Entity(7)), node: 0, labels: 9, boss: true, locked: false };
 assert!(Source::bosses().matches(&boss));
 assert!(!Source::locked_chests().matches(&boss));
 assert!(Source::kinds(Kinds::CORPSES).with_labels(&[9]).matches(&boss));

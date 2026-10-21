@@ -14,7 +14,10 @@ use enshwick_loader_api::buffs::{Apply, BuffId};
 fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
     let buffs = load.buffs()?;
     load.add_command("buffs", "lists your buffs", move |ctx, _args| {
-        match buffs.of(ctx.player.entity) {
+        let Some(me) = ctx.character() else {
+            return "the console has no character".into();
+        };
+        match buffs.of(me) {
             Ok(on) => on
                 .iter()
                 .map(|b| format!("{:#x} {:?}, {}s left", b.id.0, b.kind, b.remaining.as_secs()))
@@ -25,10 +28,13 @@ fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_
         }
     })?;
     load.add_command("bless", "a buff for five minutes: /bless <buff id>", move |ctx, args| {
+        let Some(me) = ctx.character() else {
+            return "the console has no character".into();
+        };
         let Some(id) = args.first().and_then(|a| a.parse().ok()).map(BuffId) else {
             return "/bless <buff id>".into();
         };
-        format!("{:?}", buffs.apply(ctx.player.entity, id, Apply::new().lasting(Duration::from_mins(5)))).into()
+        format!("{:?}", buffs.apply(me, id, Apply::new().lasting(Duration::from_mins(5)))).into()
     })
 }
 ```

@@ -115,7 +115,6 @@ pub mod vetoes;
 pub mod weather;
 pub mod world;
 
-pub use abi::Registers;
 pub use enshwick_loader_macros::Config;
 /// Declares a mod event other mods subscribe to: the struct becomes
 /// `repr(C)` and implements [`services::ModEvent`] with a layout hash per

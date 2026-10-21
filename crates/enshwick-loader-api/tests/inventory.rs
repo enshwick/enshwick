@@ -128,7 +128,7 @@ mod tests {
         assert_eq!(slots[0].at, SlotRef::new(Entity(41), 0));
         assert_eq!(
             (slots[0].item, slots[0].pide, slots[0].category),
-            (SWORD, Entity(900), Category::GENERIC)
+            (SWORD, Some(Entity(900)), Category::GENERIC)
         );
         assert_eq!(slots[9].at, SlotRef::new(Entity(43), 1));
         assert_eq!(slots.iter().filter(|s| !s.is_empty()).count(), 3);

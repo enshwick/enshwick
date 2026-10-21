@@ -9,7 +9,7 @@ has there:
 fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
     // An instruction inside a function, pinned per build in the mod's rows.
     let site = load.symbol("my-mod.range_clamp")?;
-    load.hook_at(site, |registers: &mut enshwick_loader_api::Registers| {
+    load.hook_at(site, |registers: &mut enshwick_loader_api::abi::Registers| {
         registers.rax = registers.rax.min(64);
     })
 }

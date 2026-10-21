@@ -88,8 +88,7 @@ fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_
     })?;
     let (world, scheduler) = (load.world()?, load.scheduler()?);
     load.on_summoned(move |summon| {
-        if summon.item == MY_STAFF && !summon.consumed {
-            let staff = summon.pide;
+        if let (MY_STAFF, false, Some(staff)) = (summon.item, summon.consumed, summon.pide) {
             scheduler.next_tick(move || {
                 let _spent = world.change_item_meter(staff, |charges| charges - 1);
             });

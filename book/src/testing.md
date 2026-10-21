@@ -242,7 +242,7 @@ Mid-function hooks run on registers you set up:
 
 ```rust
 let loader = enshwick_loader_api::test::FakeHost::new().install();
-let mut registers = enshwick_loader_api::Registers { rcx: 7, ..Default::default() };
+let mut registers = enshwick_loader_api::abi::Registers { rcx: 7, ..Default::default() };
 assert_eq!(loader.run_at(0x1_4000_1000, &mut registers), 0);
 ```
 

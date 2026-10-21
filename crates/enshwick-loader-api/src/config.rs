@@ -152,9 +152,9 @@ pub trait Config: serde::de::DeserializeOwned + Default {
     /// let mut settings = Settings { limit: 9 };
     /// settings.merge_values(Stage::Startup, "{ limit = 4 }")?;
     /// assert_eq!(settings.limit, 4);
-    /// # Ok::<(), String>(())
+    /// # Ok::<(), enshwick_loader_api::config::ConfigError>(())
     /// ```
-    fn merge_values(&mut self, _stage: Stage, _values: &str) -> Result<(), String> {
+    fn merge_values(&mut self, _stage: Stage, _values: &str) -> Result<(), ConfigError> {
         Ok(())
     }
 
@@ -164,11 +164,13 @@ pub trait Config: serde::de::DeserializeOwned + Default {
     ///
     /// # Errors
     ///
-    /// A message for the log when a value is out of range.
+    /// [`ConfigError::Value`] for a value out of its field's range or
+    /// choices, [`ConfigError::Invalid`] when the struct's own check refuses.
     ///
     /// # Examples
     ///
-    /// The default accepts every value; the derive takes a checking function:
+    /// The default accepts every value; the derive takes a checking function
+    /// whose error is any `Display`:
     ///
     /// ```
     /// use enshwick_loader_api::config::Config;
@@ -189,7 +191,7 @@ pub trait Config: serde::de::DeserializeOwned + Default {
     ///
     /// assert!(Settings { multiplier: -1.0 }.validate().is_err());
     /// ```
-    fn validate(&self) -> Result<(), String> {
+    fn validate(&self) -> Result<(), ConfigError> {
         Ok(())
     }
 
@@ -230,8 +232,8 @@ pub trait Config: serde::de::DeserializeOwned + Default {
     ///
     /// # Errors
     ///
-    /// A message for the log when `synced` does not parse or a value does not
-    /// fit its field.
+    /// [`ConfigError::Parse`] when `synced` does not parse or a value does
+    /// not fit its field.
     ///
     /// # Examples
     ///
@@ -251,10 +253,66 @@ pub trait Config: serde::de::DeserializeOwned + Default {
     /// let mut settings = Settings { altars: vec![1], verbose: true };
     /// settings.merge_synced("{ altars = [2, 4] }")?;
     /// assert_eq!((settings.altars, settings.verbose), (vec![2, 4], true));
-    /// # Ok::<(), String>(())
+    /// # Ok::<(), enshwick_loader_api::config::ConfigError>(())
     /// ```
-    fn merge_synced(&mut self, synced: &str) -> Result<(), String> {
+    fn merge_synced(&mut self, synced: &str) -> Result<(), ConfigError> {
         self.merge_values(Stage::Sync, synced)
+    }
+}
+
+/// Why settings did not read or did not pass their checks; at init it turns
+/// the mod off with its message, at run time the changed file is skipped.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::config::{ConfigError, Field, Stage};
+///
+/// let field = Field::new("limit", Stage::Startup, &4).with_range(Some(1.0), Some(16.0));
+/// let refused = field.check(&toml::Value::Integer(20)).unwrap_err();
+/// assert_eq!(refused, ConfigError::Value { key: "limit".into(), need: "is 1 to 16".into() });
+/// assert_eq!(refused.to_string(), "limit is 1 to 16");
+/// ```
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+#[non_exhaustive]
+pub enum ConfigError {
+    /// The text is not settings TOML, or a value does not fit its field's
+    /// type.
+    #[error("{0}")]
+    Parse(String),
+    /// A value lies outside what its field accepts.
+    #[error("{key} {need}")]
+    Value {
+        /// The field's key.
+        key: String,
+        /// What the field needs, such as `is 1 to 16`.
+        need: String,
+    },
+    /// The settings type's own check refused the values.
+    #[error("{0}")]
+    Invalid(String),
+}
+
+impl ConfigError {
+    /// An [`Invalid`](Self::Invalid) with `why`, as the derive wraps a
+    /// `validate` function's error.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_loader_api::config::ConfigError;
+    ///
+    /// assert_eq!(ConfigError::invalid("first after last").to_string(), "first after last");
+    /// ```
+    #[must_use]
+    pub fn invalid(why: impl core::fmt::Display) -> Self {
+        Self::Invalid(why.to_string())
+    }
+}
+
+impl From<toml::de::Error> for ConfigError {
+    fn from(error: toml::de::Error) -> Self {
+        Self::Parse(error.message().to_owned())
     }
 }
 
@@ -552,17 +610,17 @@ impl Field {
     ///
     /// # Errors
     ///
-    /// A message naming the field and what it accepts.
+    /// [`ConfigError::Value`] naming the field and what it accepts.
     ///
     /// # Examples
     ///
-    /// See [`Field`].
-    pub fn check(&self, value: &toml::Value) -> Result<(), String> {
+    /// See [`ConfigError`].
+    pub fn check(&self, value: &toml::Value) -> Result<(), ConfigError> {
         let value = &tidy(value.clone());
         if let Some(kind) = self.kind
             && !kind.accepts(Kind::of(value))
         {
-            return Err(format!("{} takes {}", self.key, kind_name(kind)));
+            return Err(self.refused(format!("takes {}", kind_name(kind))));
         }
         #[expect(
             clippy::cast_precision_loss,
@@ -576,7 +634,7 @@ impl Field {
         if let Some(n) = number
             && !(self.min.is_none_or(|min| n >= min) && self.max.is_none_or(|max| n <= max))
         {
-            return Err(format!("{} is {}", self.key, self.accepts()));
+            return Err(self.refused(format!("is {}", self.accepts())));
         }
         let chosen = |choice: &String| {
             *choice == value.to_string()
@@ -587,9 +645,16 @@ impl Field {
                 })
         };
         if !self.choices.is_empty() && !self.choices.iter().any(chosen) {
-            return Err(format!("{} is {}", self.key, self.accepts()));
+            return Err(self.refused(format!("is {}", self.accepts())));
         }
         Ok(())
+    }
+
+    fn refused(&self, need: String) -> ConfigError {
+        ConfigError::Value {
+            key: self.key.clone(),
+            need,
+        }
     }
 
     /// What the field accepts, for messages: `1 to 16`, `at least 0`,
@@ -640,7 +705,7 @@ const fn kind_name(kind: Kind) -> &'static str {
 ///
 /// let schema = Schema::new("Safe settings.", "config", vec![Field::new("limit", Stage::Startup, &4)]);
 /// assert_eq!(Schema::parse(&schema.to_text())?, schema);
-/// # Ok::<(), String>(())
+/// # Ok::<(), enshwick_loader_api::config::ConfigError>(())
 /// ```
 #[non_exhaustive]
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -693,13 +758,14 @@ impl Schema {
     ///
     /// # Errors
     ///
-    /// A message when `text` is not one.
+    /// [`ConfigError::Parse`] when `text` is not one.
     ///
     /// # Examples
     ///
     /// See [`Schema`].
-    pub fn parse(text: &str) -> Result<Self, String> {
-        toml::from_str(text).map_err(|e| format!("settings schema: {}", e.message()))
+    pub fn parse(text: &str) -> Result<Self, ConfigError> {
+        toml::from_str(text)
+            .map_err(|e| ConfigError::Parse(format!("settings schema: {}", e.message())))
     }
 
     /// Checks every field of `settings` that has a value against its
@@ -707,7 +773,7 @@ impl Schema {
     ///
     /// # Errors
     ///
-    /// The first field's message.
+    /// The first field's [`ConfigError::Value`].
     ///
     /// # Examples
     ///
@@ -716,10 +782,10 @@ impl Schema {
     ///
     /// let limit = Field::new("limit", Stage::Startup, &4).with_range(Some(1.0), Some(16.0));
     /// let schema = Schema::new("", "config", vec![limit]);
-    /// assert!(schema.check(&toml::from_str("limit = 20").map_err(|e| e.to_string())?).is_err());
-    /// # Ok::<(), String>(())
+    /// assert!(schema.check(&toml::from_str("limit = 20")?).is_err());
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
-    pub fn check(&self, settings: &toml::Table) -> Result<(), String> {
+    pub fn check(&self, settings: &toml::Table) -> Result<(), ConfigError> {
         self.fields.iter().try_for_each(|field| {
             settings
                 .get(&field.key)
@@ -731,7 +797,11 @@ impl Schema {
 /// Checks the serialized fields of `settings` against `schema`, for the
 /// derive's `validate`.
 #[doc(hidden)]
-pub fn __check_field<T: Serialize>(schema: &Schema, key: &str, value: &T) -> Result<(), String> {
+pub fn __check_field<T: Serialize>(
+    schema: &Schema,
+    key: &str,
+    value: &T,
+) -> Result<(), ConfigError> {
     let Some(field) = schema.field(key) else {
         return Ok(());
     };
@@ -741,9 +811,10 @@ pub fn __check_field<T: Serialize>(schema: &Schema, key: &str, value: &T) -> Res
     match toml::Value::try_from(one) {
         Ok(toml::Value::Table(table)) => table.get(key).map_or(Ok(()), |v| field.check(v)),
         _ if field.min.is_none() && field.max.is_none() && field.choices.is_empty() => Ok(()),
-        _ => Err(format!(
-            "{key} cannot be checked: TOML cannot hold its value"
-        )),
+        _ => Err(ConfigError::Value {
+            key: key.to_owned(),
+            need: "cannot be checked: TOML cannot hold its value".to_owned(),
+        }),
     }
 }
 
@@ -803,13 +874,13 @@ impl __Values {
     ///
     /// # Errors
     ///
-    /// A message when `text` is not one.
-    pub fn parse(text: &str) -> Result<Self, String> {
+    /// [`ConfigError::Parse`] when `text` is not one.
+    pub fn parse(text: &str) -> Result<Self, ConfigError> {
         let mut document: toml::Table = toml::from_str(&format!("synced = {text}"))
-            .map_err(|e| format!("values: {}", e.message()))?;
+            .map_err(|e| ConfigError::Parse(format!("values: {}", e.message())))?;
         match document.remove("synced") {
             Some(toml::Value::Table(table)) if document.is_empty() => Ok(Self(table)),
-            _ => Err("values: not an inline table".to_owned()),
+            _ => Err(ConfigError::Parse("values: not an inline table".to_owned())),
         }
     }
 
@@ -817,15 +888,17 @@ impl __Values {
     ///
     /// # Errors
     ///
-    /// A message when the value does not fit `T`.
-    pub fn take<T: serde::de::DeserializeOwned>(&self, key: &str) -> Result<Option<T>, String> {
+    /// [`ConfigError::Parse`] when the value does not fit `T`.
+    pub fn take<T: serde::de::DeserializeOwned>(
+        &self,
+        key: &str,
+    ) -> Result<Option<T>, ConfigError> {
         self.0
             .get(key)
             .map(|value| {
-                value
-                    .clone()
-                    .try_into()
-                    .map_err(|e: toml::de::Error| format!("value {key}: {}", e.message()))
+                value.clone().try_into().map_err(|e: toml::de::Error| {
+                    ConfigError::Parse(format!("value {key}: {}", e.message()))
+                })
             })
             .transpose()
     }
@@ -983,10 +1056,22 @@ limit = 4"
         assert_eq!(staged.limit, 9);
         assert!(staged.validate().is_ok());
         staged.limit = 17;
-        assert!(staged.validate().unwrap_err().contains("1 to 16"));
+        assert!(
+            staged
+                .validate()
+                .unwrap_err()
+                .to_string()
+                .contains("1 to 16")
+        );
         staged.limit = 3;
         staged.mode = "off".into();
-        assert!(staged.validate().unwrap_err().contains("one of"));
+        assert!(
+            staged
+                .validate()
+                .unwrap_err()
+                .to_string()
+                .contains("one of")
+        );
     }
 
     #[test]
@@ -1038,11 +1123,11 @@ limit = 4"
             seed: 1,
             ..Mixed::default()
         };
-        assert!(mixed.validate().unwrap_err().contains("limit"));
+        assert!(mixed.validate().unwrap_err().to_string().contains("limit"));
         mixed.limit = 3;
         assert!(mixed.validate().is_ok());
         mixed.seed = u64::MAX;
-        assert!(mixed.validate().unwrap_err().contains("seed"));
+        assert!(mixed.validate().unwrap_err().to_string().contains("seed"));
     }
 
     #[test]

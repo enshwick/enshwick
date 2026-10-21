@@ -356,7 +356,7 @@ the mod off with a reason, which the mod's log shows as `off: <reason>`:
 | 35          | settings schema                                        | `/config` does not know the mod's settings                          |
 | 36          | `ModEntry` name and credits                            | Empty                                                               |
 | 37          | `Load::on_summoned`                                    | Off: `the summon handler: needs a newer loader`                     |
-| 37          | `Summon` item and meter                                | `Entity::NONE` and `None`                                           |
+| 37          | `Summon` item and meter                                | `None` and `None`                                                   |
 | 38          | `Load::item_data`                                      | Off: `item data: needs a newer loader`                              |
 | 39          | `Load::ui`, `Load::on_frame`                           | Off: `the interface: needs a newer loader`                          |
 | 40          | `Load::on_hud`, markers                                | Off, or `UiError::Unavailable`                                      |

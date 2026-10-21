@@ -86,7 +86,9 @@ pub fn run(
     if request == Request::Help {
         return phrases.say("command.usage", &[]).into();
     }
-    let me = &ctx.player;
+    let Some(me) = &ctx.player else {
+        return phrases.say("command.no_safe", &[]).into();
+    };
     let Some(position) = world.position(me.entity) else {
         return phrases.say("command.no_safe", &[]).into();
     };

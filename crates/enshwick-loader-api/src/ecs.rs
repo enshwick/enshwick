@@ -22,27 +22,33 @@ type MarkChanged = unsafe extern "system" fn(
 
 /// An entity id, as the engine numbers entities.
 ///
+/// The engine's id 0 stands for no entity; the API hands it over as `None`
+/// in an `Option<Entity>`, never as an `Entity`.
+///
 /// # Examples
 ///
 /// ```
 /// let entity = enshwick_loader_api::ecs::Entity(1210);
-/// assert!(!entity.is_none());
+/// assert_eq!(entity.0, 1210);
 /// ```
+#[repr(transparent)]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Entity(pub u32);
 
 impl Entity {
-    /// No entity.
-    pub const NONE: Self = Self(0);
+    /// The engine's id for no entity.
+    pub(crate) const NONE: Self = Self(0);
 
-    /// Whether this is [`Entity::NONE`].
-    ///
-    /// # Examples
-    ///
-    /// See [`Entity`].
+    /// Whether this is the engine's id for no entity.
     #[must_use]
-    pub const fn is_none(self) -> bool {
+    pub(crate) const fn is_none(self) -> bool {
         self.0 == 0
+    }
+
+    /// `Some(entity)` for the engine's id `raw`, `None` for 0.
+    #[must_use]
+    pub(crate) const fn from_raw(raw: u32) -> Option<Self> {
+        if raw == 0 { None } else { Some(Self(raw)) }
     }
 }
 
@@ -195,8 +201,7 @@ impl Ecs {
         }
     }
 
-    /// The entity of the query's current row, [`Entity::NONE`] before the
-    /// first.
+    /// The entity of the query's current row, `None` before the first.
     ///
     /// # Safety
     ///
@@ -205,17 +210,17 @@ impl Ecs {
     /// # Examples
     ///
     /// ```
-    /// unsafe fn current(ecs: &enshwick_loader_api::ecs::Ecs, ctx: *mut u64) -> enshwick_loader_api::ecs::Entity {
+    /// unsafe fn current(ecs: &enshwick_loader_api::ecs::Ecs, ctx: *mut u64) -> Option<enshwick_loader_api::ecs::Entity> {
     ///     // SAFETY: called from the system's hook with its context.
     ///     unsafe { ecs.entity(ctx) }
     /// }
     /// ```
     #[must_use]
-    pub unsafe fn entity(&self, ctx: *mut u64) -> Entity {
+    pub unsafe fn entity(&self, ctx: *mut u64) -> Option<Entity> {
         // SAFETY: forwarded from the caller.
         let row = unsafe { self.row(ctx) };
         if row == 0 {
-            return Entity::NONE;
+            return None;
         }
         // SAFETY: the first word of a context is its query descriptor.
         let descriptor: *const u8 = unsafe { read_at(ctx.cast(), 0) };
@@ -223,7 +228,7 @@ impl Ecs {
         let records: *const u8 = unsafe { read_at(descriptor, self.entity_records) };
         let offset = (row as usize - 1) * self.entity_record_size;
         // SAFETY: `row` is a valid 1-based row of this query.
-        Entity(unsafe { read_at(records, offset) })
+        Entity::from_raw(unsafe { read_at(records, offset) })
     }
 
     /// Marks a written component changed, so replication sends it.

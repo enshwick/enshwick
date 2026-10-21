@@ -287,7 +287,7 @@ impl Checks {
     /// Raises a ping and checks two refusals: a type off the allow list and
     /// a teleport of an entity not in the world.
     fn actions(&self) {
-        match self.actions.ping(Entity::NONE, PING_AT) {
+        match self.actions.ping(Entity(0), PING_AT) {
             Ok(()) => {
                 self.ping_sent.store(true, Ordering::Release);
                 pass("ping raised; the game should hand it back next step");
@@ -460,7 +460,7 @@ impl Checks {
     }
 
     fn refusals(&self) {
-        match self.world.destroy(Entity::NONE) {
+        match self.world.destroy(Entity(0)) {
             Err(WorldError::Refused) => pass("destroy refuses entity 0"),
             other => fail(&format!("destroy of entity 0: {other:?}")),
         }

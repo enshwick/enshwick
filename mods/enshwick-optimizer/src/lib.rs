@@ -395,7 +395,7 @@ mod tests {
 
         // A zero wait with 0.3 ms left sleeps them and keeps the zero wait.
         let slept = waits::SLEEPS.load(core::sync::atomic::Ordering::Relaxed);
-        let mut registers = enshwick_loader_api::Registers {
+        let mut registers = enshwick_loader_api::abi::Registers {
             r9: 0,
             rbx: 300_000,
             ..Default::default()
@@ -409,7 +409,7 @@ mod tests {
             slept + 1
         );
         // A timed wait is left alone.
-        let mut registers = enshwick_loader_api::Registers {
+        let mut registers = enshwick_loader_api::abi::Registers {
             r9: 16,
             rbx: 16_600_000,
             ..Default::default()
@@ -422,7 +422,7 @@ mod tests {
 
         // Before any step the server wait stays vanilla; right after one it
         // grows to the cap; the idle wait never changes.
-        let mut registers = enshwick_loader_api::Registers {
+        let mut registers = enshwick_loader_api::abi::Registers {
             r9: 1_000_000,
             ..Default::default()
         };
@@ -438,7 +438,7 @@ mod tests {
         );
         assert_eq!(loader.run_at(server, &mut registers), 1);
         assert_eq!(registers.r9, 4_000_000);
-        let mut registers = enshwick_loader_api::Registers {
+        let mut registers = enshwick_loader_api::abi::Registers {
             r9: 40_000_000,
             ..Default::default()
         };
@@ -450,13 +450,13 @@ mod tests {
             "exact_waits = \"off\"\ntask_workers = 0\nserver_wait_cap_ms = 1\nmeasure = true\n",
         );
         assert_eq!(loader.raise::<events::SettingsChanged>(&()), 1);
-        let mut registers = enshwick_loader_api::Registers {
+        let mut registers = enshwick_loader_api::abi::Registers {
             r9: 1_000_000,
             ..Default::default()
         };
         assert_eq!(loader.run_at(server, &mut registers), 1);
         assert_eq!(registers.r9, 1_000_000);
-        let mut registers = enshwick_loader_api::Registers {
+        let mut registers = enshwick_loader_api::abi::Registers {
             r9: 0,
             rbx: 300_000,
             ..Default::default()

@@ -20,7 +20,7 @@ pub(crate) const FORGET: Duration = Duration::from_secs(3600);
 struct Seen {
     position: [f64; 3],
     empty: bool,
-    guest: Entity,
+    guest: Option<Entity>,
     accepted_at: i64,
     /// When the mod first saw the current guest and time.
     since: Duration,
@@ -32,7 +32,7 @@ struct Seen {
 #[derive(Clone, Copy, Debug)]
 struct Held {
     until: Duration,
-    guest: Entity,
+    guest: Option<Entity>,
     accepted_at: i64,
 }
 
@@ -50,7 +50,7 @@ impl Tracker {
     pub(crate) fn observe(&mut self, container: &Container, now: Duration) -> Option<Entity> {
         let (guest, accepted_at) = container
             .offer
-            .map_or((Entity::NONE, 0), |o| (o.guest, o.accepted_at));
+            .map_or((None, 0), |o| (o.guest, o.accepted_at));
         let fresh = Seen {
             position: container.position,
             empty: container.empty,
@@ -66,7 +66,7 @@ impl Tracker {
             seen.since = was.since;
         }
         let turned = !was.empty && container.empty;
-        (turned && !guest.is_none() && !self.holds(container.entity, now)).then_some(guest)
+        guest.filter(|_| turned && !self.holds(container.entity, now))
     }
 
     /// Whether an entity other than `player` opened or looted `container`
@@ -82,7 +82,7 @@ impl Tracker {
         let Some(offer) = container.offer else {
             return false;
         };
-        if offer.guest.is_none() || offer.guest == player {
+        if offer.guest.is_none_or(|guest| guest == player) {
             return false;
         }
         let since = self
@@ -126,7 +126,7 @@ impl Tracker {
         let (guest, accepted_at) = self
             .seen
             .get(&container)
-            .map_or((Entity::NONE, 0), |s| (s.guest, s.accepted_at));
+            .map_or((None, 0), |s| (s.guest, s.accepted_at));
         self.held.insert(
             container,
             Held {
@@ -146,7 +146,7 @@ impl Tracker {
             return false;
         };
         let untouched = (seen.guest, seen.accepted_at) == (held.guest, held.accepted_at)
-            || seen.guest == player;
+            || seen.guest == Some(player);
         now < held.until && !seen.empty && untouched
     }
 
@@ -191,7 +191,7 @@ mod tests {
     const PLAYER: Entity = Entity(2);
     const OTHER: Entity = Entity(3);
 
-    fn corpse(id: u32, x: f64, empty: bool, guest: Entity, at: i64) -> Container {
+    fn corpse(id: u32, x: f64, empty: bool, guest: Option<Entity>, at: i64) -> Container {
         Container {
             entity: Entity(id),
             position: [x, 0.0, 0.0],
@@ -210,44 +210,44 @@ mod tests {
     fn emptying_reports_the_last_guest_once() {
         let mut t = Tracker::default();
         let now = Duration::ZERO;
+        assert_eq!(t.observe(&corpse(9, 0.0, false, None, 0), now), None);
         assert_eq!(
-            t.observe(&corpse(9, 0.0, false, Entity::NONE, 0), now),
+            t.observe(&corpse(9, 0.0, false, Some(PLAYER), 5), now),
             None
         );
-        assert_eq!(t.observe(&corpse(9, 0.0, false, PLAYER, 5), now), None);
         assert_eq!(
-            t.observe(&corpse(9, 0.0, true, PLAYER, 5), now),
+            t.observe(&corpse(9, 0.0, true, Some(PLAYER), 5), now),
             Some(PLAYER)
         );
-        assert_eq!(t.observe(&corpse(9, 0.0, true, PLAYER, 5), now), None);
+        assert_eq!(t.observe(&corpse(9, 0.0, true, Some(PLAYER), 5), now), None);
         // Seen empty first: nothing to tell.
-        assert_eq!(t.observe(&corpse(10, 0.0, true, PLAYER, 5), now), None);
-        // Emptied by nobody (the mod's own take of a corpse never opened).
-        t.observe(&corpse(11, 0.0, false, Entity::NONE, 0), now);
         assert_eq!(
-            t.observe(&corpse(11, 0.0, true, Entity::NONE, 0), now),
+            t.observe(&corpse(10, 0.0, true, Some(PLAYER), 5), now),
             None
         );
+        // Emptied by nobody (the mod's own take of a corpse never opened).
+        t.observe(&corpse(11, 0.0, false, None, 0), now);
+        assert_eq!(t.observe(&corpse(11, 0.0, true, None, 0), now), None);
     }
 
     #[test]
     fn a_held_container_starts_nothing_until_the_hold_runs_out() {
         let mut t = Tracker::default();
         let now = Duration::ZERO;
-        t.observe(&corpse(9, 0.0, false, OTHER, 5), now);
+        t.observe(&corpse(9, 0.0, false, Some(OTHER), 5), now);
         t.hold(Entity(9), now);
-        assert_eq!(t.observe(&corpse(9, 0.0, true, OTHER, 5), now), None);
+        assert_eq!(t.observe(&corpse(9, 0.0, true, Some(OTHER), 5), now), None);
         let later = now + HOLD;
-        t.observe(&corpse(9, 0.0, false, OTHER, 5), later);
+        t.observe(&corpse(9, 0.0, false, Some(OTHER), 5), later);
         assert_eq!(
-            t.observe(&corpse(9, 0.0, true, OTHER, 5), later),
+            t.observe(&corpse(9, 0.0, true, Some(OTHER), 5), later),
             Some(OTHER)
         );
         t.hold(Entity(9), later);
         t.release(Entity(9));
-        t.observe(&corpse(9, 0.0, false, OTHER, 5), later);
+        t.observe(&corpse(9, 0.0, false, Some(OTHER), 5), later);
         assert_eq!(
-            t.observe(&corpse(9, 0.0, true, OTHER, 5), later),
+            t.observe(&corpse(9, 0.0, true, Some(OTHER), 5), later),
             Some(OTHER)
         );
     }
@@ -257,7 +257,7 @@ mod tests {
         let window = Duration::from_secs(10);
         let mut t = Tracker::default();
         let now = Duration::ZERO;
-        let opened = corpse(9, 0.0, false, OTHER, 77);
+        let opened = corpse(9, 0.0, false, Some(OTHER), 77);
         t.observe(&opened, now);
         assert!(t.busy(&opened, PLAYER, now + Duration::from_secs(9), window));
         assert!(!t.busy(&opened, PLAYER, now + window, window));
@@ -266,9 +266,9 @@ mod tests {
         assert!(!t.busy(&opened, PLAYER, now + window, window));
         // Never busy for the player's own interactions or nobody's.
         assert!(!t.busy(&opened, OTHER, now, window));
-        assert!(!t.busy(&corpse(9, 0.0, false, Entity::NONE, 0), PLAYER, now, window));
+        assert!(!t.busy(&corpse(9, 0.0, false, None, 0), PLAYER, now, window));
         // An interaction the mod has not seen counts as just now.
-        let reopened = corpse(9, 0.0, false, OTHER, 99);
+        let reopened = corpse(9, 0.0, false, Some(OTHER), 99);
         assert!(t.busy(&reopened, PLAYER, now + window, window));
     }
 
@@ -276,21 +276,21 @@ mod tests {
     fn a_held_container_another_player_opens_is_no_longer_free() {
         let mut t = Tracker::default();
         let now = Duration::ZERO;
-        t.observe(&corpse(9, 0.0, false, Entity::NONE, 0), now);
+        t.observe(&corpse(9, 0.0, false, None, 0), now);
         t.hold(Entity(9), now);
         assert!(t.still_free(Entity(9), PLAYER, now));
         // The player's own interaction keeps it.
-        t.observe(&corpse(9, 0.0, false, PLAYER, 4), now);
+        t.observe(&corpse(9, 0.0, false, Some(PLAYER), 4), now);
         assert!(t.still_free(Entity(9), PLAYER, now));
         // Another player opens it while the take waits its turn.
-        t.observe(&corpse(9, 0.0, false, OTHER, 5), now);
+        t.observe(&corpse(9, 0.0, false, Some(OTHER), 5), now);
         assert!(!t.still_free(Entity(9), PLAYER, now));
         // Emptied meanwhile, or the hold ran out.
-        t.observe(&corpse(10, 0.0, false, OTHER, 1), now);
+        t.observe(&corpse(10, 0.0, false, Some(OTHER), 1), now);
         t.hold(Entity(10), now);
         assert!(t.still_free(Entity(10), PLAYER, now));
         assert!(!t.still_free(Entity(10), PLAYER, now + HOLD));
-        t.observe(&corpse(10, 0.0, true, OTHER, 1), now);
+        t.observe(&corpse(10, 0.0, true, Some(OTHER), 1), now);
         assert!(!t.still_free(Entity(10), PLAYER, now));
         assert!(!t.still_free(Entity(11), PLAYER, now), "never held");
     }
@@ -307,11 +307,11 @@ mod tests {
             (5, 5.0, true),
             (6, 1.0, false),
         ] {
-            t.observe(&corpse(id, x, empty, Entity::NONE, 0), now);
+            t.observe(&corpse(id, x, empty, None, 0), now);
         }
         let tall = Container {
             position: [2.0, 9.0, 0.0],
-            ..corpse(7, 0.0, false, Entity::NONE, 0)
+            ..corpse(7, 0.0, false, None, 0)
         };
         t.observe(&tall, now);
         t.hold(Entity(6), now);
@@ -323,13 +323,13 @@ mod tests {
     fn prune_forgets_unseen_containers_and_ended_holds() {
         let mut t = Tracker::default();
         let now = Duration::ZERO;
-        t.observe(&corpse(1, 0.0, false, Entity::NONE, 0), now);
-        t.observe(&corpse(2, 0.0, false, Entity::NONE, 0), now + FORGET);
+        t.observe(&corpse(1, 0.0, false, None, 0), now);
+        t.observe(&corpse(2, 0.0, false, None, 0), now + FORGET);
         t.hold(Entity(2), now);
         t.prune(now + FORGET);
         assert_eq!(t.len(), 1);
         assert_eq!(
-            t.around([0.0; 3], 1.0, 1.0, Entity::NONE, now + FORGET),
+            t.around([0.0; 3], 1.0, 1.0, Entity(99), now + FORGET),
             vec![Entity(2)]
         );
         t.forget(Entity(2));

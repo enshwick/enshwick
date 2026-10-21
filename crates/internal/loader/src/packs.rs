@@ -216,7 +216,7 @@ pub(crate) fn sha256_of(id: &str) -> Option<String> {
 }
 
 /// Logs every problem of a pack under its id, one line each.
-fn report(id: &str, errors: &enshwick_loader_api::packs::PackErrors) {
+fn report(id: &str, errors: &enshwick_loader_api::packs::ParsePackError) {
     for error in errors.list() {
         crate::log::write(Level::ERROR, id, &error.to_string());
     }
@@ -239,7 +239,7 @@ pub(crate) unsafe extern "system" fn init(api: *const HostApi, me: ModHandle) ->
     let files = match PackFiles::read_dir(&dir) {
         Ok(files) => files,
         Err(why) => {
-            crate::log::write(Level::ERROR, &id, &why);
+            crate::log::write(Level::ERROR, &id, &why.to_string());
             return Status::REFUSED;
         }
     };

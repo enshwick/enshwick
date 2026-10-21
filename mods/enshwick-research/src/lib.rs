@@ -229,7 +229,7 @@ impl Mod for Research {
                     let mark = tooltip::mark(&values);
                     enshwick_loader_api::info!(
                         "===== mark {mark} by {}: {} (values looked for: {values:?}) =====",
-                        ctx.player.name,
+                        ctx.player.as_ref().map_or("console", |p| p.name.as_str()),
                         words.join(" ")
                     );
                     format!("mark {mark}; hover the item now").into()

@@ -221,9 +221,6 @@ impl Access {
     /// was taken: refused, and the snapshot is asked to catch up.
     #[must_use]
     pub fn may(&self, owner: u64, at: Cell, player: Entity, action: Action) -> bool {
-        if player.is_none() {
-            return true;
-        }
         let seen = self.players.load().get(&player.0).copied();
         if seen.is_none() {
             self.unregistered.store(true, Ordering::Relaxed);
@@ -245,9 +242,6 @@ impl Access {
         item: Option<u32>,
         position: Option<[f64; 3]>,
     ) -> Option<(u64, Cell)> {
-        if chest.is_none() {
-            return None;
-        }
         if let Some(&known) = self.safes.load().get(&chest.0) {
             return Some(known);
         }
@@ -485,10 +479,6 @@ mod tests {
         assert!(access.unregistered.swap(false, Ordering::Relaxed));
         assert!(!access.refused_seen(500, Entity(10)));
         assert!(!access.unregistered.load(Ordering::Relaxed));
-        assert!(
-            !access.refused_seen(500, Entity::NONE),
-            "no character at all"
-        );
         access.players.rcu(|players| {
             let mut players = HashMap::clone(players);
             players.insert(14, OWNER);

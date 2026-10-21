@@ -146,7 +146,7 @@ impl Clock {
             reason = "the hours are taken modulo a day first"
         )]
         let ns = (f64::from(hours).rem_euclid(24.0) * HOUR) as i64;
-        result((self.host.api().set_time_of_day)(self.host.handle(), ns))
+        WorldError::from_status((self.host.api().set_time_of_day)(self.host.handle(), ns))
     }
 }
 
@@ -193,16 +193,7 @@ impl ClockSpeed {
         if !(0.0..=Self::MAX).contains(&factor) {
             return Err(WorldError::Refused);
         }
-        result((self.host.api().set_time_speed)(self.host.handle(), factor))
-    }
-}
-
-fn result(status: Status) -> Result<(), WorldError> {
-    match status {
-        Status::OK => Ok(()),
-        Status::WRONG_THREAD => Err(WorldError::WrongThread),
-        Status::REFUSED | Status::BAD_ARGS => Err(WorldError::Refused),
-        _ => Err(WorldError::Missing),
+        WorldError::from_status((self.host.api().set_time_speed)(self.host.handle(), factor))
     }
 }
 

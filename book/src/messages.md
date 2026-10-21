@@ -30,10 +30,13 @@ fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_
     })?;
     let world = load.world()?;
     load.add_command("mark", "sends your position to your client", move |ctx, _args| {
-        let Some(at) = world.position(ctx.player.entity) else {
+        let Some(me) = &ctx.player else {
+            return "the console has no client".into();
+        };
+        let Some(at) = world.position(me.entity) else {
             return "no position".into();
         };
-        match waypoints.send(Peer::Player(ctx.player.key), &Waypoint::Set(at)) {
+        match waypoints.send(Peer::Player(me.key), &Waypoint::Set(at)) {
             Ok(()) => "sent".into(),
             Err(why) => format!("not sent: {why}").into(),
         }

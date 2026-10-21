@@ -3,7 +3,7 @@
 
 #[cfg(test)]
 mod tests {
-    use enshwick_loader_api::Registers;
+    use enshwick_loader_api::abi::Registers;
     use enshwick_loader_api::abi::Status;
     use enshwick_loader_api::test::FakeHost;
 

@@ -1095,7 +1095,10 @@ impl Load<'_> {
             let containers: Vec<_> =
                 core::mem::take(&mut *rolled.lock().unwrap_or_else(PoisonError::into_inner));
             for roll in containers.iter().filter(|r| rule.from.matches(r)) {
-                for item in instances(&inventories.read().slots(roll.entity)) {
+                let Some(container) = roll.entity else {
+                    continue;
+                };
+                for item in instances(&inventories.read().slots(container)) {
                     try_roll(affixes, item, rule.chance, rule.rules);
                 }
             }

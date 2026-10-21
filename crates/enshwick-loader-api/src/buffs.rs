@@ -21,11 +21,14 @@
 //! fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
 //!     let buffs = load.buffs()?;
 //!     load.add_command("bless", "gives you a buff for a minute: /bless <buff id>", move |ctx, args| {
+//!         let Some(me) = ctx.character() else {
+//!             return "the console has no character".into();
+//!         };
 //!         let Some(id) = args.first().and_then(|a| a.parse().ok()).map(BuffId) else {
 //!             return "/bless <buff id>".into();
 //!         };
 //!         let how = Apply::new().lasting(Duration::from_mins(1));
-//!         format!("{:?}", buffs.apply(ctx.player.entity, id, how)).into()
+//!         format!("{:?}", buffs.apply(me, id, how)).into()
 //!     })
 //! }
 //! ```
@@ -245,16 +248,6 @@ fn nanos(duration: i64) -> Duration {
     Duration::from_nanos(u64::try_from(duration).unwrap_or(0))
 }
 
-fn result(status: Status) -> Result<(), WorldError> {
-    match status {
-        Status::OK => Ok(()),
-        Status::WRONG_THREAD => Err(WorldError::WrongThread),
-        Status::REFUSED | Status::BAD_ARGS => Err(WorldError::Refused),
-        Status::MISSING => Err(WorldError::Lacks),
-        _ => Err(WorldError::Missing),
-    }
-}
-
 impl Buffs {
     /// Every buff and debuff type of the running game; empty off the game
     /// thread or while no world runs.
@@ -374,10 +367,10 @@ impl Buffs {
             reserved: 0,
             duration,
         };
-        result((self.host.api().apply_buff)(
-            self.host.handle(),
-            &raw const request,
-        ))
+        WorldError::check(
+            (self.host.api().apply_buff)(self.host.handle(), &raw const request),
+            WorldError::Lacks,
+        )
     }
 
     /// Removes every buff of type `id` from `entity`, as the game cleanses
@@ -399,12 +392,10 @@ impl Buffs {
     /// ```
     pub fn remove(&self, entity: Entity, id: BuffId) -> Result<bool, WorldError> {
         let mut removed = 0u8;
-        result((self.host.api().remove_buff)(
-            self.host.handle(),
-            entity.0,
-            id.0,
-            &raw mut removed,
-        ))?;
+        WorldError::check(
+            (self.host.api().remove_buff)(self.host.handle(), entity.0, id.0, &raw mut removed),
+            WorldError::Lacks,
+        )?;
         Ok(removed != 0)
     }
 }
@@ -419,7 +410,10 @@ fn list<T: Copy>(
     loop {
         let mut count = 0u32;
         let capacity = u32::try_from(items.len()).unwrap_or(u32::MAX);
-        result(fill(items.as_mut_ptr(), capacity, &raw mut count))?;
+        WorldError::check(
+            fill(items.as_mut_ptr(), capacity, &raw mut count),
+            WorldError::Lacks,
+        )?;
         let count = count as usize;
         if count <= items.len() {
             items.truncate(count);

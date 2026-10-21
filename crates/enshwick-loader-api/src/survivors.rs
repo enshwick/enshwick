@@ -213,9 +213,8 @@ pub struct Summon {
     pub target: [i64; 3],
     /// The slot the used item lies in.
     pub slot: SlotRef,
-    /// The used item's own entity; [`Entity::NONE`] for an item without
-    /// one.
-    pub pide: Entity,
+    /// The used item's own entity; `None` for an item without one.
+    pub pide: Option<Entity>,
     /// The used item's meter (see [`Meter`](crate::content::items::Meter))
     /// as clients see it; `None` for an item without one.
     pub meter: Option<Bar>,
@@ -233,7 +232,7 @@ impl Summon {
             template: Guid(raw.template),
             target: raw.target,
             slot: SlotRef(raw.slot),
-            pide: Entity(raw.pide),
+            pide: Entity::from_raw(raw.pide),
             meter: (max != 0).then_some(Bar { current, max }),
             consumed: raw.consumed != 0,
         }
@@ -546,8 +545,7 @@ impl Load<'_> {
     /// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
     ///     let (world, scheduler) = (load.world()?, load.scheduler()?);
     ///     load.on_summoned(move |summon| {
-    ///         if summon.meter.is_some() && !summon.consumed {
-    ///             let pide = summon.pide;
+    ///         if let (Some(pide), Some(_), false) = (summon.pide, summon.meter, summon.consumed) {
     ///             scheduler.next_tick(move || {
     ///                 let _spent = world.change_item_meter(pide, |charges| charges - 1);
     ///             });
@@ -665,7 +663,7 @@ mod tests {
             (use_.slot.inventory(), use_.slot.index()),
             (Entity(0x41), 3)
         );
-        assert_eq!(use_.pide, Entity(900));
+        assert_eq!(use_.pide, Some(Entity(900)));
         assert_eq!(use_.meter, Some(Bar { current: 2, max: 3 }));
         assert!(use_.consumed);
         assert_eq!(Summon::from_raw(&raw(0, [0; 2])).meter, None);
@@ -677,6 +675,6 @@ mod tests {
         old.header.size = u32::try_from(core::mem::offset_of!(RawSummon, slot)).unwrap();
         // SAFETY: a valid summon, its header naming the older size.
         let use_ = unsafe { read_summon(&raw const old) }.unwrap();
-        assert_eq!((use_.item, use_.pide, use_.meter), (7, Entity::NONE, None));
+        assert_eq!((use_.item, use_.pide, use_.meter), (7, None, None));
     }
 }

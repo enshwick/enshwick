@@ -33,7 +33,7 @@
 
 use core::time::Duration;
 
-use crate::abi::{HostApi, Status};
+use crate::abi::HostApi;
 use crate::world::WorldError;
 use crate::{Host, Load, Off};
 
@@ -464,7 +464,7 @@ impl GameSettings {
         let (bytes, settings) = self.changed(change)?;
         let size = u32::try_from(bytes.len()).map_err(|_| WorldError::Missing)?;
         let status = (self.host.api().set_game_settings)(self.host.handle(), bytes.as_ptr(), size);
-        result(status).map(|()| settings)
+        WorldError::from_status(status).map(|()| settings)
     }
 
     /// Changes the settings as [`change`](Self::change) does and keeps the
@@ -512,7 +512,7 @@ impl GameSettings {
             mask.as_ptr(),
             size,
         );
-        result(status).map(|()| settings)
+        WorldError::from_status(status).map(|()| settings)
     }
 
     /// Forgets every field kept for the running world, by any mod, and puts
@@ -535,7 +535,7 @@ impl GameSettings {
         if !self.keeps {
             return Err(WorldError::Missing);
         }
-        result((self.host.api().forget_game_settings)(self.host.handle()))
+        WorldError::from_status((self.host.api().forget_game_settings)(self.host.handle()))
     }
 
     /// The bytes of the settings in force after `change`, and the settings.
@@ -563,20 +563,11 @@ impl GameSettings {
             size,
             &raw mut preset,
         );
-        result(status)?;
+        WorldError::from_status(status)?;
         Ok((
             bytes,
             Preset::from_value(u8::try_from(preset).unwrap_or(u8::MAX)),
         ))
-    }
-}
-
-fn result(status: Status) -> Result<(), WorldError> {
-    match status {
-        Status::OK => Ok(()),
-        Status::WRONG_THREAD => Err(WorldError::WrongThread),
-        Status::REFUSED | Status::BAD_ARGS => Err(WorldError::Refused),
-        _ => Err(WorldError::Missing),
     }
 }
 

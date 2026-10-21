@@ -161,33 +161,41 @@ fn commands(
     let raw_stats = raw_stats::RawStats::new(load)
         .inspect_err(|off| enshwick_loader_api::warn!("FAIL raw stats: {off}"))
         .ok();
-    load.add_command("probe", HELP, move |ctx, args| match args {
-        _ if !ctx.is_admin() => "/probe is for administrators".into(),
-        ["census"] => census.lines().join("\n").into(),
-        ["check"] => {
-            run_all();
-            "checks run; see probe.log".into()
+    load.add_command("probe", HELP, move |ctx, args| {
+        if !ctx.is_admin() {
+            return "/probe is for administrators".into();
         }
-        ["vitals", "me", shown @ ..] => match &raw_stats {
-            Some(raw) => raw.dump(ctx.player.entity, shown).into(),
-            None => checks.vitals_of(&ctx.player.entity.0.to_string()).into(),
-        },
-        ["vitals", id] => checks.vitals_of(id).into(),
-        ["teleport", "me", offset @ ..] if offset.len() <= 3 => {
-            checks.teleport_self(ctx.player.entity, offset).into()
+        let Some(player) = &ctx.player else {
+            return "/probe runs for a player, not the console".into();
+        };
+        let me = player.entity;
+        match args {
+            ["census"] => census.lines().join("\n").into(),
+            ["check"] => {
+                run_all();
+                "checks run; see probe.log".into()
+            }
+            ["vitals", "me", shown @ ..] => match &raw_stats {
+                Some(raw) => raw.dump(me, shown).into(),
+                None => checks.vitals_of(&me.0.to_string()).into(),
+            },
+            ["vitals", id] => checks.vitals_of(id).into(),
+            ["teleport", "me", offset @ ..] if offset.len() <= 3 => {
+                checks.teleport_self(me, offset).into()
+            }
+            ["destroy", id] => checks.destroy(id).into(),
+            ["spawn", id] => checks.spawn_copy(id).into(),
+            ["notice", words @ ..] => checks.notice(player, &words.join(" ")).into(),
+            ["key"] => format!("your account key: {:016x}", player.key).into(),
+            [
+                word @ ("knowledge" | "learn" | "unlearn" | "learn-later"),
+                rest @ ..,
+            ] => knowledge::command(knowledge, me, word, rest).into(),
+            [word @ ("stat" | "stats" | "affix"), rest @ ..] => {
+                affixes::command(affix_checks.as_deref(), player, word, rest).into()
+            }
+            _ => HELP.into(),
         }
-        ["destroy", id] => checks.destroy(id).into(),
-        ["spawn", id] => checks.spawn_copy(id).into(),
-        ["notice", words @ ..] => checks.notice(&ctx.player, &words.join(" ")).into(),
-        ["key"] => format!("your account key: {:016x}", ctx.player.key).into(),
-        [
-            word @ ("knowledge" | "learn" | "unlearn" | "learn-later"),
-            rest @ ..,
-        ] => knowledge::command(knowledge, ctx.player.entity, word, rest).into(),
-        [word @ ("stat" | "stats" | "affix"), rest @ ..] => {
-            affixes::command(affix_checks.as_deref(), &ctx.player, word, rest).into()
-        }
-        _ => HELP.into(),
     })
 }
 

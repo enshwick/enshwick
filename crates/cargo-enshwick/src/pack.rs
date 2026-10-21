@@ -117,7 +117,7 @@ fn check(
     let manifest = PackManifest::parse(&text).map_err(|e| e.to_string())?;
     semver::Version::parse(&manifest.version)
         .map_err(|e| format!("{MANIFEST_FILE}: version {:?}: {e}", manifest.version))?;
-    let files = PackFiles::read_dir(dir)?;
+    let files = PackFiles::read_dir(dir).map_err(|e| e.to_string())?;
     let pack =
         Pack::parse_with(&manifest.id, &files, vanilla).map_err(|errors| errors.to_string())?;
     let summary = format!(

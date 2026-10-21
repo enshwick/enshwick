@@ -164,7 +164,10 @@ fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_
     let flags = world.writable_type(load, "keen::ecs::CombatFlags")?;
     let immune = flags.field::<bool>(load, "immune")?;
     load.add_command("immune", "toggles your character's immunity", move |ctx, _args| {
-        let entity = ctx.player.entity;
+        let Some(me) = ctx.character() else {
+            return "the console has no character".into();
+        };
+        let entity = me;
         let now = !world.get(entity, immune).unwrap_or(false);
         match world.set(entity, immune, now) {
             Ok(()) => format!("immune: {now}").into(),
