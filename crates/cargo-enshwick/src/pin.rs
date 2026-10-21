@@ -10,6 +10,7 @@
 //! With `--patterns` it writes the patterns of one build's table from its own
 //! executable. See the README.
 
+mod anchor;
 mod exe;
 mod patterns;
 mod port;
@@ -20,6 +21,7 @@ mod signature;
 mod staged;
 mod table;
 
+use std::collections::HashMap;
 use std::fs;
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
@@ -57,6 +59,19 @@ pub(crate) struct Args {
     /// Writes the report here instead of to standard output.
     #[arg(long)]
     report: Option<PathBuf>,
+    /// With `--patterns`: builds an entry's pattern around the instruction
+    /// at an RVA, `<id>=<pick>`. For a constant, `<rva>` of an instruction
+    /// whose displacement or immediate carries the value (`disp:`, `neg:`,
+    /// `imm:` or `shl:` before it to choose, `+<n>` or `-<n>` after it for a
+    /// value next to it), or `confirm:<rva>` for an instruction that
+    /// confirms it; for a symbol, `<rva>` of an instruction that calls,
+    /// jumps to or addresses it, or `direct`.
+    #[arg(long, requires = "patterns")]
+    from: Vec<String>,
+    /// With `--patterns`: a file of `--from` picks, one `<id>=<pick>` or
+    /// `<id> <pick>` per line, `#` starting a comment.
+    #[arg(long, requires = "patterns")]
+    from_file: Option<PathBuf>,
 }
 
 /// The exit code when the run worked but some entries need a human.
@@ -134,7 +149,11 @@ fn port_tables(
                 return Err("--write needs --build for the loader table".to_owned());
             }
         }
-        let ported = row::port_row(&row, old, new);
+        let mut ported = row::port_row(&row, old, new);
+        let source = enshwick_loader_builds::Table::parse(&src)
+            .map_err(|e| format!("{}: {e}", path.display()))?;
+        let anchors = row::port_anchors(&row, &mut ported, &source, old, new);
+        row::confirm_by_patterns(&mut ported, &source, new);
         let name = new_name(row.name.as_deref().unwrap_or_default(), args.build, new_fp);
         let guid = guid_hex(new_fp.guid());
         let identity = table::Identity {
@@ -144,13 +163,15 @@ fn port_tables(
             build: args.build,
             new_build: true,
         };
-        let (text, _) = table::render(&src, &row, &identity, &ported.edits, Some(new))
-            .map_err(|e| format!("{}: {e}", path.display()))?;
+        let (text, patterned) =
+            table::render(&src, &row, &identity, &ported.edits, Some(new), &anchors)
+                .map_err(|e| format!("{}: {e}", path.display()))?;
         sections.push(report::Section {
             file: relative(&args.repo, &target),
             title: name,
             lines: ported.lines,
             text: (!args.write).then(|| (text.clone(), "toml")),
+            unpatterned: patterned.problems,
         });
         if args.write {
             staged.create(target, text);
@@ -202,6 +223,7 @@ fn port_mods(
                 title,
                 lines: ported.lines,
                 text: (!args.write).then_some((text, "rust")),
+                unpatterned: Vec::new(),
             });
         }
         if !inserts.is_empty() {
@@ -237,9 +259,10 @@ fn patterns_only(args: &Args, exe_path: &Path) -> Result<bool, String> {
             build: None,
             new_build: false,
         };
-        let (text, patterned) = table::render(&src, &row, &identity, &[], Some(&exe))
+        let anchors = picks(args, &row, &exe)?;
+        let (text, patterned) = table::render(&src, &row, &identity, &[], Some(&exe), &anchors)
             .map_err(|e| format!("{}: {e}", path.display()))?;
-        let summary = format!(
+        let mut summary = format!(
             "{}: patterns for {} of {} symbols and {} of {} constants\n",
             relative(&args.repo, &path),
             patterned.symbols.1,
@@ -247,6 +270,11 @@ fn patterns_only(args: &Args, exe_path: &Path) -> Result<bool, String> {
             patterned.constants.1,
             patterned.constants.0,
         );
+        for problem in &patterned.problems {
+            summary.push_str("  ");
+            summary.push_str(problem);
+            summary.push('\n');
+        }
         if args.write {
             let mut staged = Staged::default();
             staged.replace(path, text, src);
@@ -256,9 +284,42 @@ fn patterns_only(args: &Args, exe_path: &Path) -> Result<bool, String> {
             let _shown = write!(std::io::stdout(), "{text}");
             let _shown = write!(std::io::stderr(), "{summary}");
         }
-        return Ok(true);
+        return Ok(patterned.problems.is_empty());
     }
     Err(format!("no table is for the build {}", spell(fp)))
+}
+
+/// The anchors `--from` and `--from-file` pick for the entries of `row`, in
+/// `exe`.
+fn picks(args: &Args, row: &Row, exe: &Exe<'_>) -> Result<HashMap<String, anchor::Anchor>, String> {
+    let mut lines: Vec<String> = args.from.clone();
+    if let Some(path) = &args.from_file {
+        let text = fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
+        lines.extend(
+            text.lines()
+                .map(|l| l.split('#').next().unwrap_or_default().trim().to_owned())
+                .filter(|l| !l.is_empty()),
+        );
+    }
+    let mut out = HashMap::new();
+    for line in lines {
+        let (id, pick) = line
+            .split_once('=')
+            .or_else(|| line.split_once(char::is_whitespace))
+            .map(|(id, pick)| (id.trim(), pick.trim()))
+            .ok_or_else(|| format!("{line:?} is no `<id>=<pick>`"))?;
+        let (value, symbol) = if let Some(e) = row.symbols.iter().find(|e| e.id == id) {
+            (e.value, true)
+        } else if let Some(e) = row.constants.iter().find(|e| e.id == id) {
+            (e.value, false)
+        } else {
+            return Err(format!("{id}: no such entry in the table"));
+        };
+        let anchor =
+            anchor::parse_pick(pick, value, symbol, exe).map_err(|why| format!("{id}: {why}"))?;
+        out.insert(id.to_owned(), anchor);
+    }
+    Ok(out)
 }
 
 fn relative(repo: &Path, path: &Path) -> String {
@@ -486,6 +547,59 @@ mod tests {
         assert!(wrong.is_empty(), "{followed} followed, wrong: {wrong:#?}");
     }
 
+    /// Moves three fields that the loader table reads from code by 8 bytes,
+    /// in the displacements its patterns read: porting re-reads each new
+    /// offset, and the patterns alone find it too.
+    ///
+    /// `ENSHWICK_PIN_EXE=path/to/enshrouded_server.exe cargo test --release
+    /// -p cargo-enshwick -- --ignored`
+    #[test]
+    #[ignore = "needs a game executable in ENSHWICK_PIN_EXE"]
+    fn a_moved_field_is_read_on_the_new_build() {
+        let (bytes, rows) = exe_and_rows();
+        let (src, row) = rows.iter().find(|(_, r)| r.table == Table::Loader).unwrap();
+        let source = enshwick_loader_builds::Table::parse(src).unwrap();
+        let old = Exe::parse(&bytes).unwrap();
+        let (code, code_rva) = old.text();
+        let (text, _) = raw_section(&bytes, b".text");
+        let mut moved = bytes.clone();
+        let mut changed = Vec::new();
+        for constant in source.constants() {
+            let (Some(pattern), Some(operand)) = (constant.pattern(), constant.operand()) else {
+                continue;
+            };
+            if operand.size() != 4
+                || operand != enshwick_loader_builds::Operand::new(operand.at(), 4).unwrap()
+            {
+                continue;
+            }
+            let at =
+                text + pattern.find_unique(code).unwrap() + usize::try_from(operand.at()).unwrap();
+            let value = constant.value() + 8;
+            moved[at..at + 4].copy_from_slice(&u32::try_from(value).unwrap().to_le_bytes());
+            changed.push((constant.id().to_owned(), value));
+            if changed.len() == 3 {
+                break;
+            }
+        }
+        assert_eq!(changed.len(), 3);
+        let new = Exe::parse(&moved).unwrap();
+        let mut ported = row::port_row(row, &old, &new);
+        let anchors = row::port_anchors(row, &mut ported, &source, &old, &new);
+        let (new_code, _) = new.text();
+        let resolved = source.fall_back(new_code, code_rva);
+        for (id, value) in &changed {
+            let line = ported.lines.iter().find(|l| &l.id == id).unwrap();
+            assert_eq!(
+                (line.new, line.status),
+                (Some(*value), row::Status::Read),
+                "{id}"
+            );
+            assert!(anchors.contains_key(id), "{id}");
+            assert_eq!(resolved.constant(id), Some(*value), "{id}");
+        }
+    }
+
     /// Ports every row of one executable's build to the same executable:
     /// every symbol and check must map to itself.
     ///
@@ -518,7 +632,9 @@ mod tests {
                     build: None,
                     new_build: false,
                 };
-                let (text, _) = table::render(src, row, &identity, &result.edits, None).unwrap();
+                let (text, _) =
+                    table::render(src, row, &identity, &result.edits, None, &HashMap::new())
+                        .unwrap();
                 assert_eq!(&text, src, "the same build renders the same table");
                 continue;
             }

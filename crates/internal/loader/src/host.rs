@@ -1441,9 +1441,7 @@ extern "system" fn type_hash(type_name: Str, out: *mut u32) -> Status {
             return Status::BAD_ARGS;
         };
         match loader.reflection.type_info(type_name) {
-            Ok(info) => {
-                crate::world::type_hash(loader, info.va()).map_or(Status::MISSING, |h| put(out, h))
-            }
+            Ok(info) => crate::world::type_hash(info.va()).map_or(Status::MISSING, |h| put(out, h)),
             Err(error) => lookup(&error),
         }
     })

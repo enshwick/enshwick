@@ -352,12 +352,14 @@ fn build(loader: &Loader) -> Option<Executor> {
         .build
         .constants()
         .iter()
-        .filter(|(name, _)| name.starts_with("inventory.copy_"))
-        .filter_map(|&(_, packed)| {
-            Some((
-                usize::try_from(packed >> 32).ok()?,
-                usize::try_from(packed & 0xffff_ffff).ok()?,
-            ))
+        .filter_map(|(name, view)| {
+            let field = name
+                .strip_prefix("inventory.copy_")?
+                .strip_suffix(".view")?;
+            let desc = loader
+                .build
+                .constant(&format!("inventory.copy_{field}.desc"))?;
+            Some((usize::try_from(desc).ok()?, usize::try_from(*view).ok()?))
         })
         .collect();
     let field = |name: &str| {
@@ -449,8 +451,8 @@ fn build(loader: &Loader) -> Option<Executor> {
 /// `executor` with its scratch block, when the game code at the hook reads
 /// as the build table says.
 fn checked(loader: &Loader, executor: Executor, txn_size: usize) -> Option<Executor> {
-    if !code_matches(loader, "inventory.actions_row", "inventory.row_bytes")
-        || !code_matches(loader, "inventory.view_fill", "inventory.view_fill_bytes")
+    if !code_matches(loader, "inventory.actions_row")
+        || !code_matches(loader, "inventory.view_fill")
     {
         crate::log!(
             WARN,
@@ -470,10 +472,11 @@ fn checked(loader: &Loader, executor: Executor, txn_size: usize) -> Option<Execu
     })
 }
 
-/// Whether the 8 code bytes at the symbol `at` are the constant `bytes`.
-fn code_matches(loader: &Loader, at: &str, bytes: &str) -> bool {
-    let (Some(rva), Some(expected)) = (loader.build.symbol(at), loader.build.constant(bytes))
-    else {
+/// Whether the eight bytes at `symbol` are the build table's
+/// `<symbol>.bytes`.
+fn code_matches(loader: &Loader, symbol: &str) -> bool {
+    let bytes = loader.build.constant(&format!("{symbol}.bytes"));
+    let (Some(rva), Some(expected)) = (loader.build.symbol(symbol), bytes) else {
         return false;
     };
     let Ok(address) = usize::try_from(loader.base + rva) else {
@@ -1177,8 +1180,8 @@ mod tests {
             assert!(server.symbol(name).is_some(), "{name}");
         }
         let constants = [
-            "inventory.row_bytes",
-            "inventory.view_fill_bytes",
+            "inventory.actions_row.bytes",
+            "inventory.view_fill.bytes",
             "inventory.view_frame",
             "inventory.view_owners",
             "inventory.view_actors",
@@ -1198,7 +1201,10 @@ mod tests {
             .iter()
             .filter(|(name, _)| name.starts_with("inventory.copy_"))
             .count();
-        assert_eq!(copies, 15);
+        assert_eq!(
+            copies, 30,
+            "a view and a descriptor offset for each of 15 fields"
+        );
         assert!(server.constant("inventory.desc_size").unwrap() <= DESC_AREA as u64);
     }
 

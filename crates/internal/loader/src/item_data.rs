@@ -477,7 +477,7 @@ fn write_file(values: &Values, unknown: &[u8]) -> Vec<u8> {
 fn held(loader: &Loader, pide: u32) -> Option<u32> {
     let (ty, offset) = (*ITEM_STATE.get_or_init(|| {
         let info = loader.reflection.type_info("keen::ecs::ItemState").ok()?;
-        let ty = crate::world::type_hash(loader, info.va())?;
+        let ty = crate::world::type_hash(info.va())?;
         let offset = loader
             .reflection
             .field_offset("keen::ecs::ItemState", "itemId")

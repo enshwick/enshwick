@@ -27,20 +27,17 @@ pub(crate) struct Insn {
     pub(crate) displacement: Option<u64>,
     /// An immediate that is not a branch target or a pointer.
     pub(crate) immediate: Option<u64>,
-    /// Whether the displacement is off `rsp` or `rbp`: a stack slot rather
-    /// than a field.
-    pub(crate) on_stack: bool,
     /// Where the instruction points, when it does.
     pub(crate) reference: Option<Reference>,
+    /// The offset and size in the instruction of `displacement`.
+    pub(crate) displacement_at: Option<(usize, usize)>,
+    /// The offset and size in the instruction of `immediate`.
+    pub(crate) immediate_at: Option<(usize, usize)>,
+    /// The offset in the instruction of the rel32 behind `reference`.
+    pub(crate) reference_at: Option<usize>,
 }
 
 impl Insn {
-    /// Whether the instruction carries `value` as a field offset (a positive
-    /// displacement off anything but the stack) or as an immediate.
-    pub(crate) fn uses_as_field(&self, value: u64) -> bool {
-        (self.displacement == Some(value) && !self.on_stack) || self.immediate == Some(value)
-    }
-
     /// Whether the instruction carries `value` as a displacement (either
     /// sign) or an immediate.
     pub(crate) fn uses(&self, value: u64) -> bool {
@@ -90,20 +87,21 @@ impl Masked {
                 displacement: None,
                 immediate: None,
                 reference: None,
-                on_stack: false,
+                displacement_at: None,
+                immediate_at: None,
+                reference_at: None,
             };
             if offsets.has_displacement() {
                 if instruction.is_ip_rel_memory_operand() {
                     hide(offsets.displacement_offset(), offsets.displacement_size());
                     insn.reference = Some(Reference::Data(instruction.ip_rel_memory_address()));
+                    insn.reference_at = Some(offsets.displacement_offset());
                 } else if instruction.memory_base() != Register::None
                     || instruction.memory_index() != Register::None
                 {
                     insn.displacement = Some(instruction.memory_displacement64());
-                    insn.on_stack = matches!(
-                        instruction.memory_base(),
-                        Register::RSP | Register::RBP | Register::ESP | Register::EBP
-                    );
+                    insn.displacement_at =
+                        Some((offsets.displacement_offset(), offsets.displacement_size()));
                 }
             }
             if offsets.has_immediate() {
@@ -111,6 +109,7 @@ impl Masked {
                     if offsets.immediate_size() == 4 {
                         hide(offsets.immediate_offset(), 4);
                         insn.reference = Some(Reference::Code(instruction.near_branch_target()));
+                        insn.reference_at = Some(offsets.immediate_offset());
                     }
                 } else {
                     let value = immediate(&instruction);
@@ -118,6 +117,8 @@ impl Masked {
                         hide(offsets.immediate_offset(), 8);
                     } else {
                         insn.immediate = Some(value);
+                        insn.immediate_at =
+                            Some((offsets.immediate_offset(), offsets.immediate_size()));
                     }
                 }
             }
@@ -135,6 +136,47 @@ impl Masked {
         Some(Pattern {
             bytes: self.bytes.get(bytes.clone())?,
             mask: self.mask.get(bytes)?,
+        })
+    }
+
+    /// The signature of the instructions `insns` with the byte ranges
+    /// `hide` (offsets into the code) masked too; `loose` also masks every
+    /// displacement off a register, the field and frame offsets a change of
+    /// layout moves, except in the instructions `keep`.
+    pub(crate) fn window_hiding(
+        &self,
+        insns: Range<usize>,
+        hide: &[Range<usize>],
+        loose: bool,
+        keep: &[usize],
+    ) -> Option<Owned> {
+        let first = self.insns.get(insns.start)?;
+        let last = self.insns.get(insns.end.checked_sub(1)?)?;
+        let span = first.offset..last.offset + last.len;
+        let mut mask = self.mask.get(span.clone())?.to_vec();
+        let mut clear = |range: Range<usize>| {
+            for at in range {
+                if let Some(byte) = at.checked_sub(span.start).and_then(|i| mask.get_mut(i)) {
+                    *byte = false;
+                }
+            }
+        };
+        for range in hide {
+            clear(range.clone());
+        }
+        if loose {
+            for (i, insn) in self.insns.get(insns.clone())?.iter().enumerate() {
+                if let (Some((at, size)), false) =
+                    (insn.displacement_at, keep.contains(&(insns.start + i)))
+                {
+                    clear(insn.offset + at..insn.offset + at + size);
+                }
+            }
+        }
+        Some(Owned {
+            bytes: self.bytes.get(span.clone())?.to_vec(),
+            mask,
+            start: span.start,
         })
     }
 
@@ -193,6 +235,27 @@ fn immediate(instruction: &Instruction) -> u64 {
             )
         })
         .map_or(0, |i| instruction.immediate(i))
+}
+
+/// A byte signature that owns its mask, and where it starts in its code.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct Owned {
+    /// The bytes.
+    pub(crate) bytes: Vec<u8>,
+    /// Which bytes must match.
+    pub(crate) mask: Vec<bool>,
+    /// The offset of the first byte in the code it was taken from.
+    pub(crate) start: usize,
+}
+
+impl Owned {
+    /// The signature as a borrowed [`Pattern`].
+    pub(crate) fn pattern(&self) -> Pattern<'_> {
+        Pattern {
+            bytes: &self.bytes,
+            mask: &self.mask,
+        }
+    }
 }
 
 /// A byte signature: bytes and which of them must match.

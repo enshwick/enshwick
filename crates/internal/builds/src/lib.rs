@@ -65,13 +65,41 @@ pub enum TableError {
     },
 }
 
+/// Where a symbol lies relative to its pattern's match.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_builds::Locate;
+///
+/// // A call at offset 4 of the match: its rel32 at 5, the next instruction at 9.
+/// let call = Locate::Rel { at: 5, end: 9 };
+/// assert_ne!(call, Locate::At(0));
+/// ```
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum Locate {
+    /// The symbol is the code this many bytes past the match's start.
+    At(u64),
+    /// The symbol is what a rel32 displacement in the match points at: a
+    /// call or jump target, or a RIP-relative operand, as for data or for a
+    /// function the game holds several identical copies of.
+    Rel {
+        /// The displacement's offset in the match.
+        at: u64,
+        /// The offset in the match where its instruction ends, which the
+        /// displacement counts from.
+        end: u64,
+    },
+}
+
 /// A pinned engine function or address.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Symbol {
     id: String,
     rva: u64,
     pattern: Option<Pattern>,
-    at: u64,
+    locate: Locate,
 }
 
 impl Symbol {
@@ -87,14 +115,162 @@ impl Symbol {
         self.rva
     }
 
-    /// Code that finds the symbol on another build, and how far past the
-    /// match's start the symbol lies.
+    /// Code that finds the symbol on another build, and where the symbol
+    /// lies from its match.
     #[must_use]
-    pub const fn pattern(&self) -> Option<(&Pattern, u64)> {
+    pub const fn pattern(&self) -> Option<(&Pattern, Locate)> {
         match &self.pattern {
-            Some(pattern) => Some((pattern, self.at)),
+            Some(pattern) => Some((pattern, self.locate)),
             None => None,
         }
+    }
+
+    /// The symbol's address relative to the image base as its pattern finds
+    /// it in `code`, the code section that starts at `code_rva`; `None`
+    /// without a pattern or a unique match.
+    #[must_use]
+    pub fn find(&self, code: &[u8], code_rva: u64) -> Option<u64> {
+        let pattern = self.pattern.as_ref()?;
+        let start = u64::try_from(pattern.find_unique(code).ok()?).ok()?;
+        let base = code_rva.checked_add(start)?;
+        match self.locate {
+            Locate::At(at) => base.checked_add(at),
+            Locate::Rel { at, end } => {
+                let disp = u32::try_from(read(code, start.checked_add(at)?, 4)?).ok()?;
+                base.checked_add(end)?
+                    .checked_add_signed(i64::from(i32::from_le_bytes(disp.to_le_bytes())))
+            }
+        }
+    }
+}
+
+/// The `size` little-endian bytes of `code` at `at`, zero-extended.
+fn read(code: &[u8], at: u64, size: u8) -> Option<u64> {
+    let at = usize::try_from(at).ok()?;
+    let bytes = code.get(at..at.checked_add(usize::from(size))?)?;
+    let mut word = [0u8; 8];
+    word.get_mut(..bytes.len())?.copy_from_slice(bytes);
+    Some(u64::from_le_bytes(word))
+}
+
+/// Where a constant's pattern reads its value: the displacement or
+/// immediate of the instruction that uses it.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_builds::Operand;
+///
+/// let disp8 = Operand::new(3, 1).ok_or("a bad size")?;
+/// assert_eq!((disp8.at(), disp8.size()), (3, 1));
+/// assert_eq!(disp8.read(&[0x48, 0x8b, 0x41, 0x46], 0), Some(0x46));
+/// let below_rbp = disp8.negative();
+/// assert_eq!(below_rbp.read(&[0x48, 0x8d, 0x55, 0xa0], 0), Some(0x60));
+/// assert_eq!(disp8.plus(8).read(&[0x48, 0x8b, 0x41, 0x46], 0), Some(0x4e));
+/// // shl r9, 6: a size of 0x40 that only appears as a shift.
+/// assert_eq!(disp8.shift().read(&[0x49, 0xc1, 0xe1, 0x06], 0), Some(0x40));
+/// assert!(Operand::new(3, 3).is_none());
+/// # Ok::<(), &str>(())
+/// ```
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Operand {
+    at: u64,
+    size: u8,
+    negative: bool,
+    shift: bool,
+    plus: i64,
+}
+
+impl Operand {
+    /// The operand of `size` bytes, 1, 2, 4 or 8, `at` bytes past the
+    /// match's start, read as it is.
+    #[must_use]
+    pub const fn new(at: u64, size: u8) -> Option<Self> {
+        match size {
+            1 | 2 | 4 | 8 => Some(Self {
+                at,
+                size,
+                negative: false,
+                shift: false,
+                plus: 0,
+            }),
+            _ => None,
+        }
+    }
+
+    /// The operand read as the value negated, for a frame slot the code
+    /// reaches as `[rbp - value]`.
+    #[must_use]
+    pub const fn negative(self) -> Self {
+        Self {
+            negative: true,
+            ..self
+        }
+    }
+
+    /// The operand read as a shift count, the value being `1 << count`, for
+    /// a size the code only multiplies by as `shl reg, count`.
+    #[must_use]
+    pub const fn shift(self) -> Self {
+        Self {
+            shift: true,
+            ..self
+        }
+    }
+
+    /// The operand read with `plus` added, for a value the code only reaches
+    /// next to it, such as a size from the offset of the last field.
+    #[must_use]
+    pub const fn plus(self, plus: i64) -> Self {
+        Self { plus, ..self }
+    }
+
+    /// Its offset in the match.
+    #[must_use]
+    pub const fn at(self) -> u64 {
+        self.at
+    }
+
+    /// Its size in bytes.
+    #[must_use]
+    pub const fn size(self) -> u8 {
+        self.size
+    }
+
+    /// Whether it is read negated.
+    #[must_use]
+    pub const fn is_negative(self) -> bool {
+        self.negative
+    }
+
+    /// Whether it is read as a shift count.
+    #[must_use]
+    pub const fn is_shift(self) -> bool {
+        self.shift
+    }
+
+    /// What is added to it.
+    #[must_use]
+    pub const fn addend(self) -> i64 {
+        self.plus
+    }
+
+    /// The value it gives in the match at `start` in `code`: its bytes
+    /// zero-extended, sign-extended and negated, or as a shift count, plus
+    /// the addend.
+    #[must_use]
+    pub fn read(self, code: &[u8], start: u64) -> Option<u64> {
+        let raw = read(code, start.checked_add(self.at)?, self.size)?;
+        let value = if self.negative {
+            let unused = 64 - u32::from(self.size) * 8;
+            let signed = (raw << unused).cast_signed() >> unused;
+            u64::try_from(signed.checked_neg()?).ok()?
+        } else if self.shift {
+            1u64.checked_shl(u32::try_from(raw).ok()?)?
+        } else {
+            raw
+        };
+        value.checked_add_signed(self.plus)
     }
 }
 
@@ -104,6 +280,7 @@ pub struct Constant {
     id: String,
     value: u64,
     pattern: Option<Pattern>,
+    operand: Option<Operand>,
 }
 
 impl Constant {
@@ -119,10 +296,29 @@ impl Constant {
         self.value
     }
 
-    /// Code that uses the value, with the value's bytes fixed.
+    /// Code that uses the value.
     #[must_use]
     pub const fn pattern(&self) -> Option<&Pattern> {
         self.pattern.as_ref()
+    }
+
+    /// Where the value lies in the pattern's match; `None` when the pattern
+    /// fixes the value's bytes, so that a match only confirms it.
+    #[must_use]
+    pub const fn operand(&self) -> Option<Operand> {
+        self.operand
+    }
+
+    /// The value as its pattern finds it in `code`: read from the operand,
+    /// or the pinned value when the pattern only confirms it; `None` without
+    /// a pattern or a unique match.
+    #[must_use]
+    pub fn find(&self, code: &[u8]) -> Option<u64> {
+        let start = u64::try_from(self.pattern.as_ref()?.find_unique(code).ok()?).ok()?;
+        match self.operand {
+            Some(operand) => operand.read(code, start),
+            None => Some(self.value),
+        }
     }
 }
 
@@ -176,6 +372,8 @@ struct SymbolFull {
     pattern: Option<String>,
     #[serde(default)]
     at: u64,
+    rel: Option<u64>,
+    end: Option<u64>,
 }
 
 #[derive(serde::Deserialize)]
@@ -190,6 +388,39 @@ enum ConstantValue {
 struct ConstantFull {
     value: Number,
     pattern: Option<String>,
+    at: Option<u64>,
+    size: Option<u8>,
+    #[serde(default)]
+    neg: bool,
+    #[serde(default)]
+    shl: bool,
+    #[serde(default)]
+    plus: i64,
+}
+
+impl ConstantFull {
+    /// The operand `at`, `size`, `neg` and `plus` name.
+    fn operand(&self, id: &str) -> Result<Option<Operand>, TableError> {
+        let bad = |why: &str| Err(TableError::Toml(format!("{id}: {why}")));
+        let operand = match (self.at, self.size) {
+            (None, None) if !self.neg && !self.shl && self.plus == 0 => return Ok(None),
+            (Some(at), Some(size)) => Operand::new(at, size),
+            _ => return bad("`at` and `size` go together, and `neg`, `shl` and `plus` need them"),
+        };
+        let Some(mut operand) = operand else {
+            return bad("an operand is 1, 2, 4 or 8 bytes");
+        };
+        if self.pattern.is_none() {
+            return bad("an operand needs a pattern");
+        }
+        match (self.neg, self.shl) {
+            (true, true) => return bad("`neg` and `shl` exclude each other"),
+            (true, false) => operand = operand.negative(),
+            (false, true) => operand = operand.shift(),
+            (false, false) => {}
+        }
+        Ok(Some(operand.plus(self.plus)))
+    }
 }
 
 /// A TOML integer, or a hex string for a value past `i64::MAX`, since TOML
@@ -256,15 +487,27 @@ impl Table {
             .symbols
             .into_iter()
             .map(|(id, value)| {
-                let (rva, text, at) = match value {
-                    SymbolValue::Plain(rva) => (rva, None, 0),
-                    SymbolValue::Full(full) => (full.rva, full.pattern, full.at),
+                let (rva, text, locate) = match value {
+                    SymbolValue::Plain(rva) => (rva, None, Locate::At(0)),
+                    SymbolValue::Full(full) => {
+                        let locate = match (full.rel, full.end) {
+                            (Some(at), end) => Locate::Rel {
+                                at,
+                                end: end.unwrap_or(at + 4),
+                            },
+                            (None, None) => Locate::At(full.at),
+                            (None, Some(_)) => {
+                                return Err(TableError::Toml(format!("{id}: `end` needs `rel`")));
+                            }
+                        };
+                        (full.rva, full.pattern, locate)
+                    }
                 };
                 Ok(Symbol {
                     pattern: pattern(&id, text)?,
                     id,
                     rva,
-                    at,
+                    locate,
                 })
             })
             .collect::<Result<_, TableError>>()?;
@@ -272,14 +515,18 @@ impl Table {
             .constants
             .into_iter()
             .map(|(id, value)| {
-                let (value, text) = match value {
-                    ConstantValue::Plain(value) => (value.value(&id)?, None),
-                    ConstantValue::Full(full) => (full.value.value(&id)?, full.pattern),
+                let (value, text, operand) = match value {
+                    ConstantValue::Plain(value) => (value.value(&id)?, None, None),
+                    ConstantValue::Full(full) => {
+                        let operand = full.operand(&id)?;
+                        (full.value.value(&id)?, full.pattern, operand)
+                    }
                 };
                 Ok(Constant {
                     pattern: pattern(&id, text)?,
                     id,
                     value,
+                    operand,
                 })
             })
             .collect::<Result<_, TableError>>()?;
@@ -372,19 +619,18 @@ impl Table {
     /// its pattern in `code`, the code section that starts at `code_rva`.
     /// A symbol counts when its pattern matches exactly once and the code
     /// there still starts with the bytes its `<id>.bytes` constant pins, if
-    /// any; a constant counts when the code that used it is still found
-    /// once. Everything else is [`Resolved::missing`]. The checks do not
+    /// any; a constant counts when the code that uses it is still found
+    /// once, and takes the value read from that code where its operand
+    /// say. Everything else is [`Resolved::missing`]. The checks do not
     /// apply.
     #[must_use]
     pub fn fall_back(&self, code: &[u8], code_rva: u64) -> Resolved {
         let found_symbols = search(&self.symbols, |s| {
-            let (pattern, at) = s.pattern()?;
-            let start = pattern.find_unique(code).ok()?;
-            let offset = (start as u64).checked_add(at)?;
+            let rva = s.find(code, code_rva)?;
             let bytes_ok = self
                 .constant_value(&format!("{}.bytes", s.id))
-                .is_none_or(|want| expected_bytes(code, offset, want, pattern, at));
-            bytes_ok.then_some(code_rva + offset)
+                .is_none_or(|want| expected_bytes(code, code_rva, rva, want, s));
+            bytes_ok.then_some(rva)
         });
         let mut symbols = Vec::new();
         let mut missing = Vec::new();
@@ -397,12 +643,10 @@ impl Table {
         let found_constants = search(&self.constants, |c| {
             if let Some(symbol) = c.id.strip_suffix(".bytes") {
                 let (_, rva) = symbols.iter().find(|(id, _)| id == symbol)?;
-                let at = usize::try_from(rva - code_rva).ok()?;
-                let bytes = code.get(at..at + 8)?;
-                let value = u64::from_le_bytes(bytes.try_into().ok()?);
+                let value = read(code, rva.checked_sub(code_rva)?, 8)?;
                 return (value == c.value).then_some(c.value);
             }
-            c.pattern()?.find_unique(code).ok().map(|_| c.value)
+            c.find(code)
         });
         let mut constants = Vec::new();
         for (constant, found) in self.constants.iter().zip(found_constants) {
@@ -430,21 +674,26 @@ impl Table {
     }
 }
 
-/// Whether the 8 bytes at `offset` in `code` equal `want` wherever the
-/// pattern, whose match starts `at` bytes before `offset`, fixes a byte;
-/// bytes past the pattern must equal outright.
-fn expected_bytes(code: &[u8], offset: u64, want: u64, pattern: &Pattern, at: u64) -> bool {
-    let Ok(offset) = usize::try_from(offset) else {
+/// Whether the 8 bytes at `rva` in `code`, which starts at `code_rva`,
+/// equal `want` wherever the symbol's pattern does not leave the byte open;
+/// bytes past its pattern, or of a symbol found through a displacement,
+/// must equal outright.
+fn expected_bytes(code: &[u8], code_rva: u64, rva: u64, want: u64, symbol: &Symbol) -> bool {
+    let Some(have) = rva.checked_sub(code_rva).and_then(|at| read(code, at, 8)) else {
         return false;
     };
-    let Some(have) = code.get(offset..offset + 8) else {
-        return false;
+    let (have, want) = (have.to_le_bytes(), want.to_le_bytes());
+    let open = |i: usize| match symbol.pattern() {
+        Some((pattern, Locate::At(at))) => {
+            usize::try_from(at)
+                .ok()
+                .and_then(|at| at.checked_add(i))
+                .and_then(|p| pattern.is_fixed(p))
+                == Some(false)
+        }
+        _ => false,
     };
-    let want = want.to_le_bytes();
-    let at = usize::try_from(at).unwrap_or(usize::MAX);
-    (0..8).all(|i| {
-        at.checked_add(i).and_then(|p| pattern.is_fixed(p)) == Some(false) || have[i] == want[i]
-    })
+    (0..8).all(|i| open(i) || have[i] == want[i])
 }
 
 /// Runs `find` over `entries` on all cores, in order.
@@ -695,10 +944,15 @@ mod tests {
         "f.found" = { rva = 0x1004, pattern = "11 22 ?? 44", at = 1 }
         "f.twice" = { rva = 0x1010, pattern = "AA" }
         "f.changed" = { rva = 0x1020, pattern = "11 22 ?? 44", at = 1 }
+        "f.called" = { rva = 0x1030, pattern = "E8 ?? ?? ?? ?? C3", rel = 1 }
         [constants]
         "c.plain" = 8
         "c.used" = { value = 0x48, pattern = "8B 48 ?? 48" }
+        "c.read" = { value = 0x48, pattern = "8B 48 ?? 48", at = 2, size = 1 }
+        "c.wide" = { value = 0x1234, pattern = "B9 ?? ?? ?? ?? 8B 41 07", at = 1, size = 4 }
         "c.gone" = { value = 0x50, pattern = "8B 50" }
+        "c.below" = { value = 0x60, pattern = "48 8D 55 ??", at = 3, size = 1, neg = true }
+        "c.after" = { value = 0x50, pattern = "8B 48 ?? 48", at = 2, size = 1, plus = 8 }
         "f.found.bytes" = 0x0807_0605_3344_7722
         "f.changed.bytes" = "0x9111_1111_1111_1111"
     "#;
@@ -734,13 +988,18 @@ mod tests {
         assert_eq!(resolved.symbol("f.plain"), None);
         assert_eq!(resolved.symbol("f.twice"), None);
         assert_eq!(resolved.constant("c.used"), Some(0x48));
+        assert_eq!(resolved.constant("c.read"), Some(0x01), "read, not pinned");
+        assert_eq!(resolved.constant("c.after"), Some(0x09));
         assert_eq!(resolved.constant("c.plain"), None);
         assert_eq!(resolved.constant("c.gone"), None);
         assert_eq!(
             resolved.missing(),
             [
+                "c.below",
                 "c.gone",
                 "c.plain",
+                "c.wide",
+                "f.called",
                 "f.changed",
                 "f.changed.bytes",
                 "f.found.bytes",
@@ -752,12 +1011,68 @@ mod tests {
 
     #[test]
     fn expected_bytes_count_only_where_the_pattern_fixes_them() {
-        let pattern = Pattern::parse("11 ?? 33").unwrap();
+        let mut symbol = Symbol {
+            id: "s".into(),
+            rva: 0x10,
+            pattern: Some(Pattern::parse("11 ?? 33").unwrap()),
+            locate: Locate::At(0),
+        };
         let code = [0x11, 0x99, 0x33, 4, 5, 6, 7, 8, 9];
         let want = u64::from_le_bytes([0x11, 0x22, 0x33, 4, 5, 6, 7, 8]);
-        assert!(expected_bytes(&code, 0, want, &pattern, 0));
+        assert!(expected_bytes(&code, 0x10, 0x10, want, &symbol));
         let wrong = u64::from_le_bytes([0x11, 0x22, 0x33, 4, 5, 6, 7, 0]);
-        assert!(!expected_bytes(&code, 0, wrong, &pattern, 0));
+        assert!(!expected_bytes(&code, 0x10, 0x10, wrong, &symbol));
+        symbol.locate = Locate::Rel { at: 0, end: 4 };
+        assert!(
+            !expected_bytes(&code, 0x10, 0x10, want, &symbol),
+            "a target is compared outright"
+        );
+    }
+
+    #[test]
+    fn operands_read_the_value_from_the_code() {
+        let table = Table::parse(TABLE).unwrap();
+        // c.read: 8B 48 ?? 48, the disp8 read; c.wide: the imm32.
+        let mut code = vec![0u8; 80];
+        code[40..44].copy_from_slice(&[0x8b, 0x48, 0x52, 0x48]);
+        code[48..56].copy_from_slice(&[0xb9, 0x34, 0x12, 0, 0, 0x8b, 0x41, 0x07]);
+        // f.called: E8 rel32 at 56, calling 0x5000 + 61 - 0x10.
+        code[56..61].copy_from_slice(&[0xe8, 0xf0, 0xff, 0xff, 0xff]);
+        code[61] = 0xc3;
+        let resolved = table.fall_back(&code, 0x5000);
+        assert_eq!(resolved.constant("c.read"), Some(0x52));
+        assert_eq!(resolved.constant("c.after"), Some(0x5a));
+        assert_eq!(resolved.constant("c.wide"), Some(0x1234));
+        assert_eq!(resolved.symbol("f.called"), Some(0x5000 + 61 - 0x10));
+        code[62..66].copy_from_slice(&[0x48, 0x8d, 0x55, 0xa0]);
+        let resolved = table.fall_back(&code, 0x5000);
+        assert_eq!(
+            resolved.constant("c.below"),
+            Some(0x60),
+            "lea rdx, [rbp - 0x60]"
+        );
+        let read = table
+            .constants()
+            .iter()
+            .find(|c| c.id() == "c.read")
+            .unwrap();
+        assert_eq!(read.operand(), Operand::new(2, 1));
+    }
+
+    #[test]
+    fn malformed_operands_are_refused() {
+        for bad in [
+            "{ value = 1, pattern = \"8B\", at = 1 }",
+            "{ value = 1, pattern = \"8B\", at = 1, size = 3 }",
+            "{ value = 1, pattern = \"8B\", neg = true }",
+            "{ value = 1, at = 1, size = 1 }",
+            "{ value = 1, pattern = \"8B\", plus = 1 }",
+        ] {
+            let text = TABLE.replace("\"c.plain\" = 8", &format!("\"c.plain\" = {bad}"));
+            assert!(Table::parse(&text).is_err(), "{bad}");
+        }
+        let text = TABLE.replace("pattern = \"AA\" }", "pattern = \"AA\", end = 4 }");
+        assert!(Table::parse(&text).is_err());
     }
 
     #[test]
@@ -820,30 +1135,53 @@ mod tests {
             let text = image.section(".text").unwrap();
             let range = image.range(text);
             let code = image.read(range.start, range.end - range.start).unwrap();
-            let resolved = table.fall_back(code, range.start - image.base());
-            let mut found = 0;
+            let code_rva = range.start - image.base();
+            let mut wrong = Vec::new();
+            let mut unique = |id: &str, pattern: &Pattern| {
+                let count = pattern.find_all(code).take(2).count();
+                if count != 1 {
+                    wrong.push(format!("{id}: {count} matches"));
+                }
+            };
             for symbol in table.symbols() {
-                if symbol.pattern().is_some() {
-                    assert_eq!(
-                        resolved.symbol(symbol.id()),
-                        Some(symbol.rva()),
-                        "{}",
-                        symbol.id()
-                    );
-                    found += 1;
+                if let Some((pattern, _)) = symbol.pattern() {
+                    unique(symbol.id(), pattern);
                 }
             }
             for constant in table.constants() {
-                if constant.pattern().is_some() {
-                    assert_eq!(
-                        resolved.constant(constant.id()),
-                        Some(constant.value()),
-                        "{}",
-                        constant.id()
-                    );
+                if let Some(pattern) = constant.pattern() {
+                    unique(constant.id(), pattern);
                 }
             }
-            assert!(found * 4 > table.symbols().len() * 3, "{var}: {found}");
+            for symbol in table.symbols() {
+                let found = symbol.find(code, code_rva);
+                if symbol.pattern().is_some() && found != Some(symbol.rva()) {
+                    wrong.push(format!("{}: found at {found:x?}", symbol.id()));
+                }
+            }
+            for constant in table.constants() {
+                let found = constant.find(code);
+                if constant.pattern().is_some() && found != Some(constant.value()) {
+                    wrong.push(format!("{}: reads {found:x?}", constant.id()));
+                }
+            }
+            let resolved = table.fall_back(code, code_rva);
+            assert!(wrong.is_empty(), "{var}:\n{}", wrong.join("\n"));
+            let (symbols, constants) = (resolved.symbols().len(), resolved.constants().len());
+            let floor = match side {
+                Side::Server => COVERED_SERVER,
+                Side::Client => COVERED_CLIENT,
+            };
+            assert!(
+                symbols >= floor.0 && constants >= floor.1,
+                "{var}: patterns cover {symbols} symbols and {constants} constants, fewer than {floor:?}; missing {:?}",
+                resolved.missing()
+            );
         }
     }
+
+    /// How many symbols and constants the patterns of each side's table find
+    /// on its own build, at least; raised as patterns are added.
+    const COVERED_SERVER: (usize, usize) = (120, 246);
+    const COVERED_CLIENT: (usize, usize) = (181, 323);
 }

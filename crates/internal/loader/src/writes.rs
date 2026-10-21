@@ -63,7 +63,7 @@ fn refused(loader: &Loader) -> &'static FxHashSet<u32> {
             .type_names()
             .filter(|name| DERIVED.iter().any(|prefix| name.starts_with(prefix)))
             .filter_map(|name| loader.reflection.type_info(name).ok())
-            .filter_map(|info| crate::world::type_hash(loader, info.va()))
+            .filter_map(|info| crate::world::type_hash(info.va()))
             .collect()
     })
 }

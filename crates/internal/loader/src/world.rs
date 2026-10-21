@@ -374,7 +374,7 @@ pub(crate) fn fixed_position(loader: &Loader, entity: u32) -> Option<[i64; 3]> {
         .reflection
         .type_info("keen::ecs::CurrentTransform")
         .ok()?;
-    let hash = type_hash(loader, info.va())?;
+    let hash = type_hash(info.va())?;
     let data = component(loader, entity, hash).ok()?;
     // SAFETY: a live CurrentTransform starts with its position, three
     // fixed-point `i64`, read at once on the game thread.
@@ -470,9 +470,9 @@ fn player_at(layout: &Layout, slot: usize, index: usize, entity: u32, infos: usi
 
 /// The ECS type hash of a reflected type: the low 32 bits of its descriptor's
 /// hash field.
-pub(crate) fn type_hash(loader: &Loader, descriptor: u64) -> Option<u32> {
-    let offset = loader.build.constant("reflect.type_hash")?;
-    let address = usize::try_from(descriptor.checked_add(offset)?).ok()?;
+pub(crate) fn type_hash(descriptor: u64) -> Option<u32> {
+    let address =
+        usize::try_from(descriptor.checked_add(enshwick_loader_reflect::DESCRIPTOR_HASH)?).ok()?;
     // SAFETY: a type descriptor in the game's image, which stays mapped.
     let value: u64 = unsafe { read(address, 0) };
     #[expect(clippy::cast_possible_truncation, reason = "the hash is the low half")]

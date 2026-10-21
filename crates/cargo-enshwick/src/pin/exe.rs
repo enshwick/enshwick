@@ -99,13 +99,69 @@ impl<'a> Exe<'a> {
     }
 
     /// The code at `rva` and how far it runs: its function table entry, or a
-    /// bounded stretch when no entry covers it (a leaf function).
+    /// bounded stretch when no entry covers it (a leaf function), from the
+    /// leaf's start when the padding before it marks one.
     pub(crate) fn code_around(&self, rva: u64) -> Option<(Range<u64>, bool)> {
         if let Some(f) = self.function_at(rva) {
-            return Some((f, true));
+            // A function split into chunks has an entry per chunk, back to
+            // back: a prologue's entry may hold only a few instructions.
+            let i = self.functions.partition_point(|g| g.start < f.start);
+            let mut span = f;
+            for g in self.functions.iter().skip(i + 1) {
+                if g.start != span.end || span.end >= rva + LOOSE_CODE {
+                    break;
+                }
+                span.end = g.end;
+            }
+            for g in self.functions.iter().take(i).rev() {
+                if g.end != span.start || span.start + LOOSE_CODE <= rva {
+                    break;
+                }
+                span.start = g.start;
+            }
+            return Some((span, true));
         }
         let end = (rva + LOOSE_CODE).min(self.text_rva + self.text.len() as u64);
-        (end > rva).then_some((rva..end, false))
+        if end <= rva {
+            return None;
+        }
+        Some((self.leaf_start(rva).unwrap_or(rva)..end, false))
+    }
+
+    /// Where the leaf function holding `rva` starts: the first code after
+    /// the padding that follows the function table entry before it, or after
+    /// a later leaf's padding, when decoding from there meets `rva`.
+    fn leaf_start(&self, rva: u64) -> Option<u64> {
+        let i = self.functions.partition_point(|f| f.start <= rva);
+        let previous = self.functions.get(i.checked_sub(1)?)?.end;
+        let floor = previous.max(rva.saturating_sub(LOOSE_CODE));
+        let mut start = floor;
+        while start < rva {
+            while start < rva && self.code(start, 1)? == [0xcc] {
+                start += 1;
+            }
+            let code = self.code(start, rva + 16 - start)?;
+            let mut decoder =
+                iced_x86::Decoder::with_ip(64, code, start, iced_x86::DecoderOptions::NONE);
+            let mut instruction = iced_x86::Instruction::default();
+            let mut padding = None;
+            while decoder.can_decode() && decoder.ip() < rva {
+                let at = decoder.ip();
+                decoder.decode_out(&mut instruction);
+                if instruction.is_invalid() {
+                    return None;
+                }
+                if instruction.code() == iced_x86::Code::Int3 {
+                    padding = Some(at);
+                    break;
+                }
+            }
+            match padding {
+                Some(at) => start = at,
+                None => return (decoder.ip() == rva).then_some(start),
+            }
+        }
+        None
     }
 
     /// The entry of the reflected system `name`, as an RVA.

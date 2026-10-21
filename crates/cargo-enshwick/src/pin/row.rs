@@ -1,8 +1,12 @@
 //! Ports one build row: its checks through reflection, its symbols through
 //! signatures, and its constants through the code that uses them.
 
+use std::collections::HashMap;
 use std::fmt;
 
+use enshwick_loader_builds::Table;
+
+use super::anchor::{self, Anchor};
 use super::exe::Exe;
 use super::port::{Outcome, Ported, Porter};
 use super::rows::{Edit, Entry, Row, hex};
@@ -48,6 +52,8 @@ pub(crate) enum Status {
     Flagged,
     /// A constant with no use to sample.
     Unverified,
+    /// A constant read from the ported instruction that uses it.
+    Read,
 }
 
 impl Status {
@@ -67,6 +73,7 @@ impl fmt::Display for Status {
             Self::Kept => "kept",
             Self::Flagged => "flagged",
             Self::Unverified => "unverified",
+            Self::Read => "read",
         })
     }
 }
@@ -315,5 +322,119 @@ fn sampled(value: u64, ported: &[(&Entry, Ported)]) -> (Status, String) {
             Status::Unverified,
             "no use in this row's functions".to_owned(),
         )
+    }
+}
+
+/// Finds the anchors of `table`'s entries on `new`, by their patterns or by
+/// porting their instructions from `old`, and settles those entries of
+/// `ported` by them: a constant takes the value its ported
+/// instruction carries, a symbol the target of its ported reference. The
+/// anchors in `new`, for the new table's patterns.
+pub(crate) fn port_anchors<'r>(
+    row: &'r Row,
+    ported: &mut PortedRow<'r>,
+    table: &Table,
+    old: &Exe<'_>,
+    new: &Exe<'_>,
+) -> HashMap<String, Anchor> {
+    let finder = Porter::new(old, new);
+    // The entry's own pattern finds its instruction on the new build while
+    // the code around it holds; else the instruction is ported.
+    let in_new = anchor::of_table(table, new);
+    let mut out = HashMap::new();
+    for (id, anchor) in anchor::of_table(table, old) {
+        let here = match in_new.get(&id) {
+            Some(found) => found.clone(),
+            None => {
+                let Some(site) = anchor.site().and_then(|s| finder.symbol(s).outcome.rva()) else {
+                    continue;
+                };
+                anchor.moved_to(site)
+            }
+        };
+        let Some(site) = here.site() else {
+            continue;
+        };
+        let at = hex(site);
+        let settled = match &here {
+            Anchor::Read(..) => anchor::read(new, &here).map(|value| {
+                let entry = row.constants.iter().find(|e| e.id == id);
+                let status = if entry.is_some_and(|e| e.value == value) {
+                    Status::Kept
+                } else {
+                    Status::Read
+                };
+                (
+                    value,
+                    status,
+                    None,
+                    format!("read from the code that uses it, at {at}"),
+                )
+            }),
+            Anchor::Through(site) => anchor::target(new, *site).map(|rva| {
+                let entry = row.symbols.iter().find(|e| e.id == id);
+                let status = moved(entry.map_or(rva, |e| e.value), rva);
+                (
+                    rva,
+                    status,
+                    Some("medium".to_owned()),
+                    format!("what the code at {} reaches", hex(*site)),
+                )
+            }),
+            Anchor::Confirm(_) | Anchor::Own => None,
+        };
+        let Some((value, status, confidence, note)) = settled else {
+            continue;
+        };
+        let Some(index) = ported.lines.iter().position(|l| l.id == id) else {
+            continue;
+        };
+        let line = &mut ported.lines[index];
+        if let (Kind::Symbol, Some(own)) = (line.kind, line.new)
+            && own != value
+        {
+            line.status = Status::Ambiguous;
+            line.note = format!("its own code is at {}, {note} {}", hex(own), hex(value));
+            let drop = format!("{id} ambiguous: {}; was {}", line.note, hex(line.old));
+            if let Some(edit) = ported.edits.iter_mut().find(|(e, _)| e.id == id) {
+                edit.1 = Edit::Drop(drop);
+            }
+            continue;
+        }
+        if line.kind == Kind::Symbol && line.new.is_some() {
+            out.insert(id, here);
+            continue;
+        }
+        line.new = Some(value);
+        line.status = status;
+        line.confidence = confidence;
+        line.note = note;
+        if let Some(edit) = ported.edits.iter_mut().find(|(e, _)| e.id == id) {
+            edit.1 = Edit::Set(value);
+        }
+        out.insert(id, here);
+    }
+    out
+}
+
+/// Settles the constants of `ported` whose pattern in `table` only
+/// confirms the value: kept where it still matches once in `new`.
+pub(crate) fn confirm_by_patterns(ported: &mut PortedRow<'_>, table: &Table, new: &Exe<'_>) {
+    let (code, _) = new.text();
+    for constant in table.constants() {
+        let (Some(pattern), None) = (constant.pattern(), constant.operand()) else {
+            continue;
+        };
+        if pattern.find_unique(code).is_err() {
+            continue;
+        }
+        if let Some(line) = ported
+            .lines
+            .iter_mut()
+            .find(|l| l.kind == Kind::Constant && l.id == constant.id())
+        {
+            line.status = Status::Kept;
+            "the code that confirms it is unchanged".clone_into(&mut line.note);
+        }
     }
 }

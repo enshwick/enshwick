@@ -140,10 +140,11 @@ struct Layout {
     registry_listed: usize,
 }
 
-/// Whether the eight bytes at `symbol` are the build table's `bytes`.
-fn code_matches(loader: &Loader, symbol: &str, bytes: &str) -> bool {
-    let (Some(address), Some(expected)) = (loader.address(symbol), loader.build.constant(bytes))
-    else {
+/// Whether the eight bytes at `symbol` are the build table's
+/// `<symbol>.bytes`.
+fn code_matches(loader: &Loader, symbol: &str) -> bool {
+    let bytes = loader.build.constant(&format!("{symbol}.bytes"));
+    let (Some(address), Some(expected)) = (loader.address(symbol), bytes) else {
         return false;
     };
     let Ok(address) = usize::try_from(address) else {
@@ -158,19 +159,16 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
     LAYOUT
         .get_or_init(|| {
             let checks = [
-                ("textures.request", "textures.request_bytes"),
-                ("textures.request_ring", "textures.request_ring_bytes"),
-                ("textures.request_post", "textures.request_post_bytes"),
-                ("textures.request_signal", "textures.request_signal_bytes"),
-                ("textures.keys", "textures.keys_bytes"),
-                ("textures.registry_fill", "textures.registry_fill_bytes"),
-                (
-                    "textures.registry_listed_at",
-                    "textures.registry_listed_bytes",
-                ),
-                ("textures.signal", "textures.signal_bytes"),
+                "textures.request",
+                "textures.request_ring",
+                "textures.request_post",
+                "textures.request_signal",
+                "textures.keys",
+                "textures.registry_fill",
+                "textures.registry_listed_at",
+                "textures.signal",
             ];
-            if let Some((symbol, _)) = checks.iter().find(|(s, b)| !code_matches(loader, s, b)) {
+            if let Some(symbol) = checks.iter().find(|s| !code_matches(loader, s)) {
                 crate::log!(
                     WARN,
                     "mod textures off: {symbol} is not the code the loader knows"

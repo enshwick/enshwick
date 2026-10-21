@@ -115,7 +115,7 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
             let reflection = &loader.reflection;
             let hash_of = |name: &str| {
                 let info = reflection.type_info(name).ok()?;
-                crate::world::type_hash(loader, info.va())
+                crate::world::type_hash(info.va())
             };
             let offset = |ty: &str, field: &str| {
                 reflection

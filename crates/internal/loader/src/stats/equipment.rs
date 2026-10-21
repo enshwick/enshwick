@@ -36,7 +36,7 @@ fn layout(loader: &Loader) -> Option<Layout> {
         let reflection = &loader.reflection;
         let ty = |name: &str| {
             let info = reflection.type_info(name).ok()?;
-            crate::world::type_hash(loader, info.va())
+            crate::world::type_hash(info.va())
         };
         let offset = |ty: &str, field: &str| {
             reflection

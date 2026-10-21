@@ -237,13 +237,29 @@ pub(crate) fn run(args: &Args) -> Result<bool, String> {
             }
         }
         Kind::Fallback => {
-            works = false;
+            works = args.patterns && table.missing().is_empty();
+            let how = if args.patterns {
+                "As asked, the loader's newest table of this side,"
+            } else {
+                "None is made for this build. The loader takes"
+            };
             let _w = writeln!(
                 out,
-                "## Build table\n\nNone is made for this build. The loader takes `{}` and finds its entries by their patterns: {} found, {} missing. Write this build's table with `cargo enshwick pin`.\n",
+                "## Build table\n\n{how} `{}`, finds its entries by their patterns: {} found, {} missing.\n",
                 source.name(),
                 table.symbols().len() + table.constants().len(),
                 table.missing().len()
+            );
+            if !args.patterns {
+                let _w = writeln!(out, "Write this build's table with `cargo enshwick pin`.\n");
+            }
+            let _w = writeln!(
+                out,
+                "Patterns find {} of {} symbols and {} of {} constants.\n",
+                table.symbols().len(),
+                source.symbols().len(),
+                table.constants().len(),
+                source.constants().len()
             );
             if !table.missing().is_empty() {
                 let _w = writeln!(out, "Missing: {}.\n", code_list(table.missing()));
@@ -355,25 +371,16 @@ fn check_exact(build: &Build, table: &Table) -> Vec<String> {
             ));
         }
     }
-    let at = |rva: u64| {
-        usize::try_from(rva.checked_sub(build.code_rva)?)
-            .ok()
-            .and_then(|i| build.code.get(i..))
-    };
+    let resolved = table.resolve();
     for symbol in table.symbols() {
-        if let Some((pattern, offset)) = symbol.pattern()
-            && !symbol
-                .rva()
-                .checked_sub(offset)
-                .and_then(at)
-                .is_some_and(|code| pattern.matches(code))
+        if symbol.pattern().is_some()
+            && symbol.find(build.code, build.code_rva) != Some(symbol.rva())
         {
             problems.push(format!(
-                "the pattern of `{}` does not match where it is pinned",
+                "the pattern of `{}` does not find it once where it is pinned",
                 symbol.id()
             ));
         }
-        let resolved = table.resolve();
         if let Some(want) = resolved.constant(&format!("{}.bytes", symbol.id())) {
             let have = build.image.u64(build.base + symbol.rva());
             if have != Some(want) {
@@ -382,6 +389,14 @@ fn check_exact(build: &Build, table: &Table) -> Vec<String> {
                     symbol.id()
                 ));
             }
+        }
+    }
+    for constant in table.constants() {
+        if constant.pattern().is_some() && constant.find(build.code) != Some(constant.value()) {
+            problems.push(format!(
+                "the pattern of `{}` does not find its value once",
+                constant.id()
+            ));
         }
     }
     problems

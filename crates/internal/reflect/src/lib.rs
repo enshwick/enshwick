@@ -271,7 +271,10 @@ const DESCRIPTOR_SHORT_NAME: u64 = 0x40;
 const DESCRIPTOR_FULL_NAME: u64 = 0x60;
 const DESCRIPTOR_SIZE_ALIGN: u64 = 0x80;
 const DESCRIPTOR_FIELD_COUNT: u64 = 0x88;
-const DESCRIPTOR_HASH: u64 = 0x90;
+/// Where a type descriptor holds its hash, whose low 32 bits are the
+/// FNV-1a hash of the type's full name and its ECS type hash. Every lookup
+/// by name checks it, so it holds on any build reflection reads.
+pub const DESCRIPTOR_HASH: u64 = 0x90;
 const DESCRIPTOR_FIELDS: u64 = 0x98;
 const FIELD_RECORD: u64 = 48;
 const FIELD_TYPE: u64 = 16;
