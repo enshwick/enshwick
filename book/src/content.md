@@ -115,17 +115,23 @@ different vanilla items: the second is refused, and that mod is turned off.
 
 Removing a content mod leaves the world playable:
 
-- items it added disappear from inventories, as the game drops item ids it
-  does not know;
+- items it added stay in inventories and chests as stand-ins. The game drops
+  a stack whose item id it does not know, so for every item a mod cloned that
+  no mod serves now the loader serves a stand-in under the item's own GUID: a
+  copy of the vanilla item it was cloned from, named "Item of a removed mod".
+  The stack keeps its id, count and data, and when the mod is installed again
+  it serves its item and the stack is that item once more;
 - a placed object stays. When its template is one the mod cloned, the loader
   serves the vanilla template it came from under the clone's GUID, so a
   station of a removed mod loads as the vanilla station it was cloned from.
 
-For that fallback the loader records every template and item a mod clones,
-with its vanilla source, in `mod-data/enshwick/clones.toml`. Keep the file:
-the record outlives the mods. The loader logs how many cloned templates no
-mod serves now and so read as their vanilla source. Items are recorded too,
-though nothing reads them back yet.
+For both the loader records every template and item a mod clones, with its
+vanilla source, in `mod-data/enshwick/clones.toml`. Keep the file: the record
+outlives the mods. The loader logs how many cloned templates read as their
+vanilla source and how many items stand in. An item renamed by a mod's
+[migration](migrations.md) gets no stand-in, since the game reads it under
+its new GUID.
 
-The template fallback also applies when the game reads a cloned template
-while the mod that serves it is installed but turned off.
+Both fallbacks also apply while the mod is installed but turned off. A
+stand-in works as its vanilla item does, and the count of a stack is held to
+the vanilla item's stack size when the world loads.

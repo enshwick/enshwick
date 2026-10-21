@@ -234,6 +234,18 @@ pub(crate) fn register(
 /// Ends registration and links the database when anything is served.
 pub(crate) fn seal_and_link(loader: &'static Loader) {
     LOADED.get_or_init(|| loader);
+    let renames = crate::migrations::renamed(loader);
+    let stand_ins = {
+        let keys: Vec<ResourceKey> = PENDING
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .iter()
+            .map(|s| s.key)
+            .collect();
+        let recorded = crate::clones::items(&loader.data_dir);
+        let orphans = crate::standins::orphans(&recorded, &keys, |guid| renames.contains_key(guid));
+        crate::standins::served(loader, &orphans)
+    };
     seal_texts(loader);
     let ids = crate::ids::with(|ids| {
         ids.content()
@@ -245,19 +257,21 @@ pub(crate) fn seal_and_link(loader: &'static Loader) {
     if !ids.is_empty() {
         crate::log!(DEBUG, "content ids: {ids}");
     }
-    let served = std::mem::take(&mut *PENDING.lock().unwrap_or_else(PoisonError::into_inner));
+    let mut served = std::mem::take(&mut *PENDING.lock().unwrap_or_else(PoisonError::into_inner));
     let count = served.len();
     let aliases = crate::clones::update(&loader.data_dir, served.iter().map(|s| (s.key, s.base)));
+    let standing = stand_ins.map_or(0, |(items, registry)| {
+        serve_stand_ins(&mut served, items, registry)
+    });
     let orphans = aliases
         .keys()
         .filter(|guid| !served.iter().any(|s| s.key.guid == **guid))
         .count();
     let recorded = aliases.len();
-    let renames = crate::migrations::renamed(loader);
     let _first = RENAMES.set(renames);
     if SERVED_LIST.set(served.into_boxed_slice()).is_err()
         || ALIASES.set(aliases).is_err()
-        || count + recorded + renames.len() == 0
+        || count + recorded + renames.len() + standing == 0
     {
         return;
     }
@@ -298,6 +312,74 @@ pub(crate) fn seal_and_link(loader: &'static Loader) {
             "{orphans} cloned templates no mod serves now read as their vanilla source"
         );
     }
+    if standing > 0 {
+        crate::log!(
+            INFO,
+            "{standing} items of removed mods stand in until their mods are back"
+        );
+    }
+}
+
+/// Adds the loader's stand-ins for the items of removed mods to `served`,
+/// and the patch that lists them to the item registry; how many.
+fn serve_stand_ins(
+    served: &mut Vec<Served>,
+    items: Vec<crate::standins::StandIn>,
+    registry: crate::standins::Builder,
+) -> usize {
+    fn patch(builder: crate::standins::Builder) -> Patch {
+        Patch {
+            owner: crate::chains::LOADER,
+            apply: build_stand_in,
+            user: Box::into_raw(Box::new(builder)).expose_provenance(),
+        }
+    }
+    let count = items.len();
+    for (key, base, builder) in items {
+        served.push(Served {
+            key,
+            base,
+            patches: vec![patch(builder)],
+            state: Mutex::new(State::default()),
+        });
+    }
+    let key = enshwick_loader_api::content::items::ITEM_REGISTRY
+        .key(enshwick_loader_api::content::types::ITEM_REGISTRY);
+    match served.iter_mut().find(|s| s.key == key) {
+        Some(listed) => listed.patches.push(patch(registry)),
+        None => served.push(Served {
+            key,
+            base: key,
+            patches: vec![patch(registry)],
+            state: Mutex::new(State::default()),
+        }),
+    }
+    count
+}
+
+/// The loader's own patch: a stand-in built by the builder at `user`.
+unsafe extern "system" fn build_stand_in(
+    base: *const u8,
+    base_len: usize,
+    user: *mut c_void,
+    out: *mut *const u8,
+    out_len: *mut usize,
+) -> Status {
+    // SAFETY: `user` is the builder `serve_stand_ins` leaked for it.
+    let builder = unsafe { &*user.cast::<crate::standins::Builder>() };
+    // SAFETY: the base's bytes, valid for the call.
+    let base = unsafe { core::slice::from_raw_parts(base, base_len) };
+    let built = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| builder(base)));
+    let Ok(Some(bytes)) = built else {
+        return Status::REFUSED;
+    };
+    // The game reads the resource for the life of the process.
+    let bytes: &'static [u8] = Box::leak(bytes.into_boxed_slice());
+    // SAFETY: the out pointers `build` passes.
+    unsafe { out.write(bytes.as_ptr()) };
+    // SAFETY: as above.
+    unsafe { out_len.write(bytes.len()) };
+    Status::OK
 }
 
 /// The served resources of type `type_hash` that are new, not a vanilla
@@ -417,10 +499,11 @@ fn served(handle: u32) -> Option<&'static Served> {
 }
 
 fn mod_on(owner: usize) -> bool {
-    LOADED
-        .get()
-        .and_then(|loader| loader.mods.get(owner))
-        .is_some_and(|m| !m.off.load(Ordering::Acquire))
+    owner == crate::chains::LOADER
+        || LOADED
+            .get()
+            .and_then(|loader| loader.mods.get(owner))
+            .is_some_and(|m| !m.off.load(Ordering::Acquire))
 }
 
 fn owner_on(served: &Served) -> bool {
@@ -517,18 +600,29 @@ fn build(entry: &Served, database: *mut u8) -> Option<(usize, usize)> {
     for patch in entry.patches.iter().filter(|p| mod_on(p.owner)) {
         let (mut built, mut built_len) = (core::ptr::null::<u8>(), 0usize);
         // SAFETY: the mod's patch function with the bytes so far, valid for the call.
-        let status =
-            crate::profile::call(patch.owner, crate::profile::Feature::Resources, || unsafe {
-                (patch.apply)(
-                    core::ptr::with_exposed_provenance(current),
-                    current_len,
-                    core::ptr::with_exposed_provenance_mut(patch.user),
-                    &raw mut built,
-                    &raw mut built_len,
-                )
-            });
+        // SAFETY: the patch function with the bytes so far, valid for the
+        // call.
+        let mut apply = || unsafe {
+            (patch.apply)(
+                core::ptr::with_exposed_provenance(current),
+                current_len,
+                core::ptr::with_exposed_provenance_mut(patch.user),
+                &raw mut built,
+                &raw mut built_len,
+            )
+        };
+        let status = if patch.owner == crate::chains::LOADER {
+            apply()
+        } else {
+            crate::profile::call(patch.owner, crate::profile::Feature::Resources, apply)
+        };
         if status != Status::OK || built.is_null() {
-            if let Some(loader) = LOADED.get() {
+            if patch.owner == crate::chains::LOADER {
+                crate::log!(
+                    WARN,
+                    "a stand-in for an item of a removed mod failed to build"
+                );
+            } else if let Some(loader) = LOADED.get() {
                 loader.turn_off(
                     patch.owner,
                     &format!("a served resource failed to build ({})", status.0),
@@ -551,7 +645,13 @@ fn build(entry: &Served, database: *mut u8) -> Option<(usize, usize)> {
     if let Some(loader) = LOADED.get() {
         let by: Vec<&str> = applied
             .iter()
-            .filter_map(|&owner| loader.mods.get(owner).map(|m| m.id.as_str()))
+            .filter_map(|&owner| {
+                if owner == crate::chains::LOADER {
+                    Some("the loader")
+                } else {
+                    loader.mods.get(owner).map(|m| m.id.as_str())
+                }
+            })
             .collect();
         crate::log!(
             INFO,
