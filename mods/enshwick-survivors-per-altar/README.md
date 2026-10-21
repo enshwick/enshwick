@@ -69,7 +69,9 @@ vanilla_staff_places_copies = false
   and below 0 as 0, with a warning in the log.
 - `vanilla_staff_places_copies`: `true` lets the survivor's own staff place a
   copy at an altar without one and move the copy an altar has, as before copy
-  staffs; `false` moves the survivor itself, as in vanilla.
+  staffs; `false` moves the survivor itself, as in vanilla. A new copy keeps
+  to the same limit as a copy staff's: where it would give the survivor more
+  entities than there are altars, the staff is refused.
 
 `copy_staffs` is the server's: a joined player runs with the server's value,
 and a change applies while the game runs. Off, copy staffs neither drop nor

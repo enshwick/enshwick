@@ -7,7 +7,8 @@
 /// The mod answers with the number of altars. Each altar still holds one
 /// entity at most, so a higher answer adds one at most: a copy at every
 /// altar while the original stands outside them. Asked on the server's
-/// game thread when a copy staff would place a new copy.
+/// game thread when a staff would place a new copy: a copy staff, or the
+/// survivor's own with `vanilla_staff_places_copies`.
 ///
 /// # Examples
 ///

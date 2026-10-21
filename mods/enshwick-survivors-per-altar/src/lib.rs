@@ -695,6 +695,73 @@ copy_staff_locked_chest_chance = 0.0
     }
 
     #[test]
+    fn the_survivor_s_own_staff_placing_copies_keeps_the_copy_limit() {
+        use enshwick_loader_api::abi::{AltarInfo, Bounds, Header, Status, Summon, SurvivorLookup};
+        use enshwick_loader_api::points::Verdict;
+        use enshwick_loader_api::points::survivors_per_altar::CopyLimit;
+        use enshwick_loader_api::survivors::WORKSHOP_SURVIVORS;
+
+        let loader = host()
+            .settings(
+                "per_altar = true
+copy_staffs = false
+copy_staff_boss_chance = 0.0
+copy_staff_locked_chest_chance = 0.0
+vanilla_staff_places_copies = true
+",
+            )
+            .install();
+        // SAFETY: the exports of `declare_mod!` above.
+        let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+        assert_eq!(status, Status::OK, "{:?}", loader.logs());
+        let altar = |entity, x| {
+            let mut info = AltarInfo::EMPTY;
+            info.entity = entity;
+            info.zone = Bounds {
+                min: [x, 0, 0],
+                max: [x + 80, 80, 80],
+            };
+            info
+        };
+        loader.set_altars(&[altar(1, 0), altar(2, 100)]);
+        policy::settle();
+        let smith = &WORKSHOP_SURVIVORS[0];
+        let survivor = smith.id().0;
+        let unique = SurvivorLookup::UNIQUENESS;
+        // The original out in the world, a copy at altar 1: two entities,
+        // two altars.
+        assert_eq!(
+            loader.survivor_lookup(survivor, 10, unique, 10, [900, 0, 10], &[]),
+            Some(10)
+        );
+        assert_eq!(
+            loader.survivor_lookup(survivor, 10, unique, 11, [10, 0, 10], &[]),
+            Some(11)
+        );
+        let summon = |x| Summon {
+            header: Header::of::<Summon>(),
+            item: smith.staff().id(),
+            ammo: 0,
+            template: smith.template().0,
+            target: [x, 0, 10],
+            slot: 0,
+            pide: 0,
+            meter: [0; 2],
+            consumed: 0,
+            reserved: [0; 3],
+        };
+        assert_eq!(
+            loader.summon(&summon(130)),
+            Summon::REFUSE,
+            "a new copy at altar 2 would make three"
+        );
+        assert_eq!(loader.summon(&summon(20)), 0, "moving altar 1's copy");
+        assert!(loader.extend_point(|_: &CopyLimit, limit: &u32| Verdict::Set(limit + 1)));
+        assert_eq!(loader.summon(&summon(130)), 0, "a link raised the limit");
+        assert!(loader.faults().is_empty());
+    }
+
+    #[test]
     fn other_mods_set_the_copy_limit_and_the_charge_cost() {
         use enshwick_loader_api::abi::{AltarInfo, Bounds, Header, Status, Summon, SurvivorLookup};
         use enshwick_loader_api::points::Verdict;

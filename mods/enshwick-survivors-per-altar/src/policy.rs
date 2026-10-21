@@ -556,6 +556,17 @@ fn judge(shared: &Shared, summon: &Summon, staffs: Staffs) -> SummonVerdict {
     if !crate::PER_ALTAR.load(Ordering::Relaxed) {
         return SummonVerdict::Allow;
     }
+    judge_own_staff(shared, summon, survivor, original)
+}
+
+/// What the survivor's own staff does: it moves the original, or with
+/// [`crate::VANILLA_PLACES`] places and moves copies within the limit.
+fn judge_own_staff(
+    shared: &Shared,
+    summon: &Summon,
+    survivor: u32,
+    original: u32,
+) -> SummonVerdict {
     // The survivor's own staff moves the original, as in vanilla; a copy at
     // the target's altar then gives way to it.
     let vanilla =
@@ -575,8 +586,29 @@ fn judge(shared: &Shared, summon: &Summon, staffs: Staffs) -> SummonVerdict {
                 cost: 0,
             }));
         });
+    } else if vanilla && vanilla_staff_over_limit(&shared.copies, survivor, summon.target, original)
+    {
+        enshwick_loader_api::info!(
+            "survivor {survivor:#010x}: its own staff at {:?} refused, one entity per altar",
+            summon.target
+        );
+        return SummonVerdict::Refuse;
     }
     SummonVerdict::Allow
+}
+
+/// Whether the survivor's own staff, placing copies, would place a new one
+/// at `target` beyond the copy limit.
+fn vanilla_staff_over_limit(
+    copies: &Copies,
+    survivor: u32,
+    target: [i64; 3],
+    original: u32,
+) -> bool {
+    copies.places_new(survivor, target)
+        && copies.over_limit(survivor, original, |altars, count| {
+            copy_limit(survivor, altars, count)
+        })
 }
 
 /// Lets go of copies the uniqueness pass no longer sees.
