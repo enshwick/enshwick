@@ -143,6 +143,22 @@ mod tests {
             world.update(Entity(8), resolved.flags, |_| ()),
             Err(WorldError::Lacks)
         );
+        let half = std::panic::catch_unwind(|| {
+            world.update(Entity(7), resolved.flags, |bytes| {
+                bytes[2] = 4;
+                panic!("halfway");
+            })
+        });
+        assert!(half.is_err());
+        // SAFETY: as above.
+        assert_eq!(unsafe { combat_ptr.wrapping_add(2).read() }, 0);
+        let nested = world.update(Entity(7), resolved.flags, |outer| {
+            outer[3] = 1;
+            world.update(Entity(7), resolved.flags, |inner| inner[3])
+        });
+        assert_eq!(nested, Ok(Ok(0)));
+        // SAFETY: as above.
+        assert_eq!(unsafe { combat_ptr.wrapping_add(3).read() }, 1);
         assert!(loader.writes().contains(&(7, 6)));
         assert!(loader.writes().contains(&(7, 1)));
     }

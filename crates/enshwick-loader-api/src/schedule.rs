@@ -141,8 +141,12 @@ impl Scheduler {
         period: Option<Duration>,
         run: impl FnMut() -> ControlFlow<()> + Send + 'static,
     ) {
+        // A delay past what `Instant` holds is never due.
+        let Some(due) = Instant::now().checked_add(delay) else {
+            return;
+        };
         let task = Task {
-            due: Instant::now() + delay,
+            due,
             period,
             run: Box::new(run),
         };
@@ -189,7 +193,7 @@ impl Scheduler {
             .into_iter()
             .filter_map(|mut task| match ((task.run)(), task.period) {
                 (ControlFlow::Continue(()), Some(period)) => {
-                    task.due = now + period;
+                    task.due = now.checked_add(period)?;
                     Some(task)
                 }
                 _ => None,
@@ -243,5 +247,13 @@ mod tests {
         assert_eq!(repeated.load(Ordering::Relaxed), 3);
         assert_eq!(later.load(Ordering::Relaxed), 0);
         assert_ne!(scheduler.queue.next_due.load(Ordering::Relaxed), IDLE);
+    }
+
+    #[test]
+    fn a_delay_past_what_time_holds_never_runs() {
+        let (scheduler, _) = Scheduler::get();
+        scheduler.after(Duration::MAX, || unreachable!());
+        scheduler.every(Duration::MAX, || unreachable!());
+        scheduler.run_due();
     }
 }

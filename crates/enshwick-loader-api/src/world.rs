@@ -418,7 +418,8 @@ impl World {
     /// Lets `write` change `entity`'s component of type `ty`, its reflected
     /// bytes, and marks it changed the game's way, so the game sends it to
     /// clients and saves it; returns what `write` returns. On the game
-    /// thread only.
+    /// thread only. `write` changes a copy, written back when it returns, so
+    /// a panic in it leaves the component as it was.
     ///
     /// # Errors
     ///
@@ -450,13 +451,28 @@ impl World {
         ty: WritableType,
         write: impl FnOnce(&mut [u8]) -> R,
     ) -> Result<R, WorldError> {
-        let data = self.component_mut(entity, ty.ty)?;
         let len = usize::try_from(ty.size).map_err(|_| WorldError::Missing)?;
+        let data = self.component_mut(entity, ty.ty)?;
+        // `write` works on a copy: it may call the world itself, which a
+        // borrow of the component would alias, and a panic in it leaves the
+        // component whole.
+        let mut small = [0u8; 256];
+        let mut large = Vec::new();
+        let copy = if len <= small.len() {
+            &mut small[..len]
+        } else {
+            large.resize(len, 0);
+            &mut large[..]
+        };
         // SAFETY: the entity's live component of the reflected size, which
-        // the loader handed out for writing, used before the game thread
-        // returns to the game.
-        let bytes = unsafe { core::slice::from_raw_parts_mut(data.cast::<u8>(), len) };
-        Ok(write(bytes))
+        // the loader handed out for writing, on the game thread.
+        unsafe { core::ptr::copy_nonoverlapping(data.cast::<u8>(), copy.as_mut_ptr(), len) };
+        let result = write(copy);
+        // Asked again: `write` may have moved or removed the component.
+        let data = self.component_mut(entity, ty.ty)?;
+        // SAFETY: as above.
+        unsafe { core::ptr::copy_nonoverlapping(copy.as_ptr(), data.cast::<u8>(), len) };
+        Ok(result)
     }
 
     /// The value of `field` in `entity`'s component; `None` when the entity
