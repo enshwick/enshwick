@@ -58,14 +58,29 @@ impl BuffId {
     /// See [`BuffId`].
     #[must_use]
     pub const fn from_guid(guid: [u8; 16]) -> Self {
-        let mut hash: u32 = 0x811c_9dc5;
-        let mut i = 0;
-        while i < guid.len() {
-            hash ^= guid[i] as u32;
-            hash = hash.wrapping_mul(0x0100_0193);
-            i += 1;
-        }
-        Self(hash)
+        Self(crate::content::Guid(guid).id())
+    }
+
+    /// The id of a buff type a mod serves under the content id `id`
+    /// (`<mod>:<name>`); a malformed literal fails the build when used in a
+    /// constant.
+    ///
+    /// # Panics
+    ///
+    /// On a malformed id.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_loader_api::buffs::BuffId;
+    /// use enshwick_loader_api::content::Guid;
+    ///
+    /// const WARMTH: BuffId = BuffId::named("my-mod:warmth");
+    /// assert_eq!(WARMTH, BuffId::from_guid(Guid::named("my-mod:warmth").0));
+    /// ```
+    #[must_use]
+    pub const fn named(id: &str) -> Self {
+        Self::from_guid(crate::content::Guid::named(id).0)
     }
 }
 

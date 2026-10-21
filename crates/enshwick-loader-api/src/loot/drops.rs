@@ -202,10 +202,10 @@ impl Source {
 /// # Examples
 ///
 /// ```
-/// use enshwick_loader_api::content::Guid;
+/// use enshwick_loader_api::content::Id;
 /// use enshwick_loader_api::loot::{Drop, Source};
 ///
-/// const STAFF: Guid = Guid::parse("8a3f6e21-5c4b-4d7e-9f10-2b7c5e6a9d31");
+/// const STAFF: Id = Id::new("my-mod:staff");
 ///
 /// let drop = Drop::new(STAFF.id(), 0.1, Source::bosses()).count(1, 2);
 /// assert_eq!(drop.count, [1, 2]);
@@ -679,10 +679,10 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// use enshwick_loader_api::content::Guid;
+    /// use enshwick_loader_api::content::Id;
     /// use enshwick_loader_api::loot::{Drop, Source, Kinds};
     ///
-    /// const STAFF: Guid = Guid::parse("8a3f6e21-5c4b-4d7e-9f10-2b7c5e6a9d31");
+    /// const STAFF: Id = Id::new("my-mod:staff");
     ///
     /// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
     ///     load.add_loot(Drop::new(STAFF.id(), 0.10, Source::bosses()))?;

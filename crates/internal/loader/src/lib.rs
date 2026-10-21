@@ -50,6 +50,8 @@ pub mod holds;
 #[cfg(windows)]
 mod host;
 #[cfg(windows)]
+mod ids;
+#[cfg(windows)]
 mod interactions;
 #[cfg(windows)]
 mod inventory;

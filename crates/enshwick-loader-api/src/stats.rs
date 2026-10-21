@@ -55,27 +55,21 @@ use crate::{Host, Load, Off};
 /// The item data kind that holds every item's [`ItemStats`].
 pub const ITEM_KIND: &str = "enshwick:stats";
 
-/// The FNV-1a 32 hash of a full stat id, the key stored for it.
+/// The key stored for a full stat id: the game id of the id's GUID, as
+/// [`Guid::named`](crate::content::Guid::named) derives it.
 ///
 /// # Examples
 ///
 /// ```
+/// use enshwick_loader_api::content::Guid;
 /// use enshwick_loader_api::stats::{StatKey, key_of};
 ///
-/// assert_eq!(key_of("enshwick:health_max"), key_of("enshwick:health_max"));
+/// assert_eq!(key_of("enshwick:health_max"), StatKey(Guid::named("enshwick:health_max").id()));
 /// assert_ne!(key_of("a:b"), StatKey(0));
 /// ```
 #[must_use]
 pub const fn key_of(id: &str) -> StatKey {
-    let bytes = id.as_bytes();
-    let mut hash: u32 = 0x811c_9dc5;
-    let mut i = 0;
-    while i < bytes.len() {
-        hash ^= bytes[i] as u32;
-        hash = hash.wrapping_mul(0x0100_0193);
-        i += 1;
-    }
-    StatKey(hash)
+    StatKey(crate::content::Guid::hashed(id).id())
 }
 
 /// The platform's built-in stat kinds, which it applies to the game on the

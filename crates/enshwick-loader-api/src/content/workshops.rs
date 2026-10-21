@@ -8,7 +8,7 @@
 
 use super::items::{self, ItemLayout, NewItem};
 use super::recipes::NewRecipe;
-use super::{Blob, Guid, types};
+use super::{Blob, Guid, Id, types};
 use crate::{Load, Off};
 
 /// The game's workshop registry resource.
@@ -109,15 +109,15 @@ impl WorkshopId {
 /// See [`Load::add_workshop`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct StationRecipe {
-    /// The recipe's GUID.
-    pub guid: Guid,
+    /// The recipe's id.
+    pub id: Id,
     /// The vanilla recipe's ingredient counts times this.
     pub cost: u32,
 }
 
 /// A new workshop for [`Load::add_workshop`].
 ///
-/// Every GUID is the mod's own and never changes: saves keep the template
+/// Every id is the mod's own and never changes: saves keep the template
 /// GUID of each placed station and the item id of each stack.
 ///
 /// # Examples
@@ -128,11 +128,11 @@ pub struct NewWorkshop {
     /// The vanilla station cloned: what the new one looks like and does.
     pub like: Station,
     /// The new station item.
-    pub item: Guid,
+    pub item: Id,
     /// The new station's template.
-    pub template: Guid,
+    pub template: Id,
     /// The new workshop.
-    pub workshop: Guid,
+    pub workshop: Id,
     /// The tag of the station's name, which also names the workshop; `None`
     /// keeps the vanilla names.
     pub name: Option<Guid>,
@@ -254,7 +254,7 @@ const REFERENCE: usize = 16;
 ///     new: NewWorkshop,
 /// ) -> Result<(), enshwick_loader_api::Off> {
 ///     let layout = WorkshopLayout::resolve(load)?;
-///     let (template, like, workshop) = (new.template, new.like.template, new.workshop);
+///     let (template, like, workshop) = (new.template, new.like.template, new.workshop.guid());
 ///     load.serve(template.key(types::TEMPLATE), like.key(types::TEMPLATE), move |base| {
 ///         clone_template(&layout, base, workshop)
 ///     })
@@ -333,8 +333,13 @@ pub fn clone_station(
     if placed != new.like.template.0 {
         return None;
     }
-    let mut item = Blob::new(&items::clone_item(items, like, &item_of(new))?);
-    item.write(layout.placed_entity, &new.template.0)
+    let mut item = Blob::new(&items::clone_item(
+        items,
+        like,
+        &item_of(new),
+        new.item.guid(),
+    )?);
+    item.write(layout.placed_entity, &new.template.guid().0)
         .then(|| item.into_bytes())
 }
 
@@ -354,7 +359,7 @@ pub fn clone_station(
 /// ) -> Result<(), enshwick_loader_api::Off> {
 ///     let layout = WorkshopLayout::resolve(load)?;
 ///     let collection = TEMPLATE_COLLECTION.key(types::TEMPLATE_COLLECTION);
-///     load.serve(collection, collection, move |base| list_template(&layout, base, new.template))
+///     load.serve(collection, collection, move |base| list_template(&layout, base, new.template.guid()))
 /// }
 /// ```
 #[must_use]
@@ -412,10 +417,10 @@ pub fn list_workshop(
             .get_mut(at..at + bytes.len())
             .map(|target| target.copy_from_slice(bytes))
     };
-    put(layout.entry_guid, &new.workshop.0)?;
+    put(layout.entry_guid, &new.workshop.guid().0)?;
     put(layout.entry_id, &new.workshop.id().to_le_bytes())?;
     put(layout.entry_item, &new.item.id().to_le_bytes())?;
-    put(layout.entry_item_ref, &new.item.0)?;
+    put(layout.entry_item_ref, &new.item.guid().0)?;
     if let Some(name) = new.name {
         put(layout.entry_name, &name.id().to_le_bytes())?;
     }
@@ -428,7 +433,8 @@ fn item_of(new: &NewWorkshop) -> NewItem {
     NewItem {
         name: new.name,
         description: new.description,
-        ..NewItem::new(new.item, new.like.item, new.debug_name.clone())
+        debug_name: new.debug_name.clone(),
+        ..NewItem::new(new.item, new.like.item)
     }
 }
 
@@ -446,38 +452,39 @@ impl Load<'_> {
     ///
     /// # Errors
     ///
-    /// [`Off`] when the loader is too old or a layout is not reflected; a
-    /// station whose components or item do not match turns the mod off when
-    /// the game first reads them.
+    /// [`Off`] when the loader is too old, a layout is not reflected or the
+    /// loader refuses one of its ids (see [`Load::declare`]); a station whose
+    /// components or item do not match turns the mod off when the game first
+    /// reads them.
     ///
     /// # Examples
     ///
     /// ```
-    /// use enshwick_loader_api::content::Guid;
+    /// use enshwick_loader_api::content::{Guid, Id};
     /// use enshwick_loader_api::content::workshops::{NewWorkshop, StationRecipe, stations};
     ///
     /// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
     ///     let bench = load.add_workshop(NewWorkshop {
     ///         like: stations::WORKBENCH,
-    ///         item: Guid::parse("0851e93d-8883-42e4-a807-c30fd644e7c3"),
-    ///         template: Guid::parse("77ff6155-1365-4a4a-8987-507a1bdd32a2"),
-    ///         workshop: Guid::parse("5b828914-9b48-40f8-b541-72e9b942cee6"),
+    ///         item: Id::new("my-mod:bench"),
+    ///         template: Id::new("my-mod:bench.template"),
+    ///         workshop: Id::new("my-mod:bench.workshop"),
     ///         name: None,
     ///         description: None,
-    ///         station_recipe: Some(StationRecipe {
-    ///             guid: Guid::parse("94cf68a3-11e0-4c05-a793-526f7e1d7693"),
-    ///             cost: 1,
-    ///         }),
+    ///         station_recipe: Some(StationRecipe { id: Id::new("my-mod:bench.recipe"), cost: 1 }),
     ///         debug_name: "Bulk Workbench".into(),
     ///     })?;
-    ///     assert_eq!(bench.guid(), Guid::parse("5b828914-9b48-40f8-b541-72e9b942cee6"));
+    ///     assert_eq!(bench.guid(), Guid::named("my-mod:bench.workshop"));
     ///     Ok(())
     /// }
     /// ```
     pub fn add_workshop(&mut self, new: NewWorkshop) -> Result<WorkshopId, Off> {
+        for id in [new.item, new.template, new.workshop] {
+            self.declare(id)?;
+        }
         let layout = WorkshopLayout::resolve(self)?;
         let item_layout = ItemLayout::resolve(self)?;
-        let workshop = WorkshopId::new(new.workshop);
+        let workshop = WorkshopId::new(new.workshop.guid());
         let (like, template) = (new.like, new.template);
         self.serve(
             template.key(types::TEMPLATE),
@@ -486,7 +493,7 @@ impl Load<'_> {
         )?;
         let collection = TEMPLATE_COLLECTION.key(types::TEMPLATE_COLLECTION);
         self.serve(collection, collection, move |base| {
-            list_template(&layout, base, template)
+            list_template(&layout, base, template.guid())
         })?;
         let station = new.clone();
         self.serve(
@@ -494,7 +501,7 @@ impl Load<'_> {
             like.item.key(types::ITEM_INFO),
             move |base| clone_station(&item_layout, &layout, base, &station),
         )?;
-        let (item, debug_name) = (new.item, new.debug_name.clone());
+        let (item, debug_name) = (new.item.guid(), new.debug_name.clone());
         let registry = items::ITEM_REGISTRY.key(types::ITEM_REGISTRY);
         self.serve(registry, registry, move |base| {
             items::list_item(&item_layout, base, item, &debug_name)
@@ -506,7 +513,7 @@ impl Load<'_> {
         })?;
         if let Some(recipe) = recipe {
             self.add_recipe(NewRecipe {
-                guid: recipe.guid,
+                id: recipe.id,
                 like: like.item,
                 output: item,
                 output_count: 1,
@@ -550,18 +557,21 @@ mod tests {
         refs: 0,
         names: 0x38,
     };
-    const WORKSHOP: Guid = Guid::parse("5b828914-9b48-40f8-b541-72e9b942cee6");
-    const ITEM: Guid = Guid::parse("0851e93d-8883-42e4-a807-c30fd644e7c3");
-    const TEMPLATE: Guid = Guid::parse("77ff6155-1365-4a4a-8987-507a1bdd32a2");
+    const WORKSHOP_ID: Id = Id::new("test:bench.workshop");
+    const ITEM_ID: Id = Id::new("test:bench");
+    const TEMPLATE_ID: Id = Id::new("test:bench.template");
+    const WORKSHOP: Guid = WORKSHOP_ID.guid();
+    const ITEM: Guid = ITEM_ID.guid();
+    const TEMPLATE: Guid = TEMPLATE_ID.guid();
     const NAME: Guid = Guid::parse("41b222ea-cefa-4774-a040-c43aa9f0b227");
     const OLD: Guid = Guid::parse("965d3192-0287-49a2-ad51-a716139571a6");
 
     fn new() -> NewWorkshop {
         NewWorkshop {
             like: stations::WORKBENCH,
-            item: ITEM,
-            template: TEMPLATE,
-            workshop: WORKSHOP,
+            item: ITEM_ID,
+            template: TEMPLATE_ID,
+            workshop: WORKSHOP_ID,
             name: Some(NAME),
             description: None,
             station_recipe: None,

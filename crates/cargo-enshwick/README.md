@@ -19,6 +19,9 @@ cargo enshwick install --game "C:/Program Files (x86)/Steam/steamapps/common/Ens
 - `install` builds the mod in release and copies its DLL to
   `<game>/mods/<package>.dll`. The game folder is `--game` or `ENSHROUDED_DIR`;
   in a workspace with several mods, `--package` names one.
+- `id <mod:name>...` prints the GUID and the game id of each
+  [content id](../../book/src/content.md#content-ids), as `Guid::named`
+  derives them: `cargo enshwick id safes:safe`.
 - `pin --old <exe> --new <exe>` ports the build rows of the loader and the
   mods in an Enshwick checkout to a new game build, for maintainers. See
   [below](#porting-build-rows-pin).

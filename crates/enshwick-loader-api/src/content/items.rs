@@ -3,7 +3,7 @@
 
 use std::sync::{Mutex, PoisonError};
 
-use super::{Blob, Guid, types};
+use super::{Blob, Guid, Id, types};
 use crate::abi::ItemData;
 use crate::{Load, Off};
 
@@ -26,20 +26,20 @@ const FUEL_SETUP: u32 = 0x139a_fbec;
 /// # Examples
 ///
 /// ```
-/// use enshwick_loader_api::content::Guid;
+/// use enshwick_loader_api::content::{Guid, Id};
 /// use enshwick_loader_api::content::items::NewItem;
 ///
 /// let item = NewItem::new(
-///     Guid::parse("8a3f6e21-5c4b-4d7e-9f10-2b7c5e6a9d31"),
+///     Id::new("safes:safe"),
 ///     Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d"),
-///     "Safe",
 /// );
+/// assert_eq!(item.debug_name, "safes:safe");
 /// assert!(item.meter.is_none() && item.stats.is_empty());
 /// ```
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct NewItem {
-    /// The new item's GUID; its game id is [`Guid::id`].
-    pub guid: Guid,
+    /// The new item's id; its game id is [`Id::id`].
+    pub id: Id,
     /// The vanilla item it is cloned from: what it looks like and does.
     pub like: Guid,
     /// The tag of its name, given text with [`Load::add_texts`]; `None` keeps
@@ -47,7 +47,7 @@ pub struct NewItem {
     pub name: Option<Guid>,
     /// The tag of its description; `None` keeps the vanilla one.
     pub description: Option<Guid>,
-    /// The name in the registry's debug list.
+    /// The name in the registry's debug list; the id unless set.
     pub debug_name: String,
     /// A count each item keeps, such as charges, which the game saves,
     /// sends to players and shows as a bar on the item.
@@ -66,13 +66,13 @@ impl NewItem {
     ///
     /// See [`NewItem`].
     #[must_use]
-    pub fn new(guid: Guid, like: Guid, debug_name: impl Into<String>) -> Self {
+    pub fn new(id: Id, like: Guid) -> Self {
         Self {
-            guid,
+            id,
             like,
             name: None,
             description: None,
-            debug_name: debug_name.into(),
+            debug_name: id.name().to_owned(),
             meter: None,
             stats: Vec::new(),
             icon: None,
@@ -90,22 +90,22 @@ impl NewItem {
 /// [`Drop`](crate::loot::Drop)'s fill.
 ///
 /// The item gets an entity template, cloned from the water pouch's:
-/// `template` is that template's GUID, the mod's own and fixed forever, as
-/// saves hold it. Items with the same meter may share one template.
+/// `template` is that template's id, the mod's own and fixed forever, as
+/// saves hold its GUID. Items with the same meter may share one template.
 ///
 /// # Examples
 ///
 /// ```
-/// use enshwick_loader_api::content::Guid;
+/// use enshwick_loader_api::content::Id;
 /// use enshwick_loader_api::content::items::Meter;
 ///
-/// let charges = Meter { template: Guid::parse("0b6f3c1e-2d4a-4e5f-8a9b-1c2d3e4f5a6b"), max: 5, start: 3 };
+/// let charges = Meter { template: Id::new("my-mod:charges"), max: 5, start: 3 };
 /// assert!(charges.start <= charges.max);
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Meter {
-    /// The GUID of the item's entity template.
-    pub template: Guid,
+    /// The id of the item's entity template.
+    pub template: Id,
     /// The most it holds, 1 or more.
     pub max: u16,
     /// What a new item holds when nothing sets its fill.
@@ -118,10 +118,10 @@ impl Meter {
     /// # Examples
     ///
     /// ```
-    /// use enshwick_loader_api::content::Guid;
+    /// use enshwick_loader_api::content::Id;
     /// use enshwick_loader_api::content::items::Meter;
     ///
-    /// let meter = Meter { template: Guid([0; 16]), max: 4, start: 1 };
+    /// let meter = Meter { template: Id::new("my-mod:charges"), max: 4, start: 1 };
     /// assert!((meter.start_fill() - 0.25).abs() < f32::EPSILON);
     /// ```
     #[must_use]
@@ -336,8 +336,9 @@ const BLOB_STRING: usize = 8;
 /// A `BlobVariant`: type hash, offset from its second word, size.
 const VARIANT: usize = 12;
 
-/// `item`'s `ItemInfo`, made from the vanilla one in `like`: its id, object
-/// GUID, the tags it names, its meter and tooltip lines written in, the rest
+/// `item`'s `ItemInfo` under `guid`, the item's own or one it was renamed
+/// from, made from the vanilla one in `like`: its id, object GUID, the tags
+/// it names, its meter and tooltip lines written in, the rest
 /// kept. `None` when `like` is too short for the layout, or when the item
 /// has a meter and `like` already has an entity of its own (a weapon's
 /// durability), which the meter's would replace. [`Load::add_item`] serves
@@ -347,7 +348,7 @@ const VARIANT: usize = 12;
 /// # Examples
 ///
 /// ```
-/// use enshwick_loader_api::content::Guid;
+/// use enshwick_loader_api::content::{Guid, Id};
 /// use enshwick_loader_api::content::items::{ItemLayout, NewItem, clone_item};
 ///
 /// let layout = ItemLayout {
@@ -355,21 +356,20 @@ const VARIANT: usize = 12;
 ///     ui_values: 0x88, icon_image: 0x58, ui_value: [0x28, 0, 4, 8, 0x24], refs: 0, names: 0x38,
 /// };
 /// let item = NewItem::new(
-///     Guid::parse("8a3f6e21-5c4b-4d7e-9f10-2b7c5e6a9d31"),
+///     Id::new("safes:safe"),
 ///     Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d"),
-///     "Safe",
 /// );
 /// let vanilla = [0u8; 0x90];
-/// let clone = clone_item(&layout, &vanilla, &item).ok_or("too short")?;
-/// assert_eq!(clone[..4], item.guid.id().to_le_bytes());
-/// assert_eq!(clone[4..20], item.guid.0);
+/// let clone = clone_item(&layout, &vanilla, &item, item.id.guid()).ok_or("too short")?;
+/// assert_eq!(clone[..4], item.id.id().to_le_bytes());
+/// assert_eq!(clone[4..20], item.id.guid().0);
 /// # Ok::<(), &str>(())
 /// ```
 #[must_use]
-pub fn clone_item(layout: &ItemLayout, like: &[u8], item: &NewItem) -> Option<Vec<u8>> {
+pub fn clone_item(layout: &ItemLayout, like: &[u8], item: &NewItem, guid: Guid) -> Option<Vec<u8>> {
     let mut info = Blob::new(like);
-    let mut written = info.write(layout.id, &item.guid.id().to_le_bytes())
-        && info.write(layout.object, &item.guid.0);
+    let mut written =
+        info.write(layout.id, &guid.id().to_le_bytes()) && info.write(layout.object, &guid.0);
     if let Some(name) = item.name {
         written &= info.write(layout.name, &name.0);
     }
@@ -383,10 +383,10 @@ pub fn clone_item(layout: &ItemLayout, like: &[u8], item: &NewItem) -> Option<Ve
         }
         let flags = flags | ItemData::HAS_PIDE | ItemData::USES_FUEL;
         written &= info.write(layout.flags, &flags.to_le_bytes())
-            && info.write(layout.pid_entity, &meter.template.0);
+            && info.write(layout.pid_entity, &meter.template.guid().0);
     }
     if let Some(icon) = item.icon {
-        written &= info.write(layout.icon_image, &icon.guid.0);
+        written &= info.write(layout.icon_image, &icon.id.guid().0);
     }
     if !item.stats.is_empty() {
         let [size, label, format, value, signed] = layout.ui_value;
@@ -426,7 +426,7 @@ pub fn clone_item(layout: &ItemLayout, like: &[u8], item: &NewItem) -> Option<Ve
 /// template.extend_from_slice(&8u32.to_le_bytes());
 /// template.extend_from_slice(&0x28u32.to_le_bytes());
 /// template.extend_from_slice(&[0; 0x28]);
-/// let meter = Meter { template: Guid([1; 16]), max: 3, start: 3 };
+/// let meter = Meter { template: enshwick_loader_api::content::Id::new("my-mod:charges"), max: 3, start: 3 };
 /// let clone = Blob::new(&clone_meter_template(&layout, &template, &meter).ok_or("no FuelSetup")?);
 /// assert_eq!(clone.read_u32(20 + 0x20), Some(3));
 /// # Ok::<(), &str>(())
@@ -488,7 +488,8 @@ pub fn list_meter_template(
 }
 
 /// The item registry with `guid` listed after the others, and its debug name
-/// beside it; `None` when the registry does not have the layout's arrays.
+/// beside it; `None` when the registry does not have the layout's arrays or
+/// lists another item with `guid`'s game id, which would stand for both.
 ///
 /// # Examples
 ///
@@ -512,8 +513,24 @@ pub fn list_item(
     debug_name: &str,
 ) -> Option<Vec<u8>> {
     let mut registry = Blob::new(registry);
-    let (_, refs) = registry.array(layout.refs)?;
+    let (first, refs) = registry.array(layout.refs)?;
     let (_, names) = registry.array(layout.names)?;
+    let listed = registry
+        .bytes()
+        .get(first..first.checked_add(usize::try_from(refs).ok()?.checked_mul(REFERENCE)?)?)?;
+    if let Some(other) = listed
+        .as_chunks::<REFERENCE>()
+        .0
+        .iter()
+        .map(|r| Guid(*r))
+        .find(|other| other.id() == guid.id() && *other != guid)
+    {
+        crate::warn!(
+            "item {debug_name} ({guid}) has the game id {:#010x} of item {other}; it needs another id",
+            guid.id()
+        );
+        return None;
+    }
     registry.grow_array(layout.refs, REFERENCE, 4, &[], &[(guid.0.to_vec(), None)])?;
     // The debug names run beside the references; keep them in step.
     if names == refs {
@@ -546,41 +563,39 @@ impl Load<'_> {
     /// # Errors
     ///
     /// [`Off`] when the loader is too old, the item layout is not reflected,
-    /// or the meter's maximum is 0.
+    /// the meter's maximum is 0, or the loader refuses one of its content ids
+    /// (see [`Load::declare`]).
     ///
     /// # Examples
     ///
     /// ```
-    /// use enshwick_loader_api::content::Guid;
+    /// use enshwick_loader_api::content::{Guid, Id};
     /// use enshwick_loader_api::content::items::{Meter, NewItem};
     ///
     /// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
     ///     load.add_item(NewItem {
-    ///         meter: Some(Meter {
-    ///             template: Guid::parse("0b6f3c1e-2d4a-4e5f-8a9b-1c2d3e4f5a6b"),
-    ///             max: 3,
-    ///             start: 3,
-    ///         }),
+    ///         meter: Some(Meter { template: Id::new("my-mod:charges"), max: 3, start: 3 }),
     ///         ..NewItem::new(
-    ///             Guid::parse("8a3f6e21-5c4b-4d7e-9f10-2b7c5e6a9d31"),
+    ///             Id::new("my-mod:charged-safe"),
     ///             Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d"),
-    ///             "Charged safe",
     ///         )
     ///     })
     /// }
     /// ```
     pub fn add_item(&mut self, item: NewItem) -> Result<(), Off> {
-        for old in crate::migrations::old_guids(item.guid) {
-            self.add_one_item(NewItem {
-                guid: old,
-                debug_name: format!("{} (renamed)", item.debug_name),
-                ..item.clone()
-            })?;
+        self.declare(item.id)?;
+        if let Some(meter) = item.meter {
+            self.declare(meter.template)?;
         }
-        self.add_one_item(item)
+        for old in crate::migrations::old_guids(item.id.guid()) {
+            let debug_name = format!("{} (renamed)", item.debug_name);
+            self.add_one_item(item.clone(), old, debug_name)?;
+        }
+        let (guid, debug_name) = (item.id.guid(), item.debug_name.clone());
+        self.add_one_item(item, guid, debug_name)
     }
 
-    fn add_one_item(&mut self, item: NewItem) -> Result<(), Off> {
+    fn add_one_item(&mut self, item: NewItem, guid: Guid, debug_name: String) -> Result<(), Off> {
         let layout = ItemLayout::resolve(self)?;
         let meter = item.meter;
         if meter.is_some_and(|m| m.max == 0) {
@@ -589,7 +604,7 @@ impl Load<'_> {
                 item.debug_name
             )));
         }
-        let (guid, like, debug_name) = (item.guid, item.like, item.debug_name.clone());
+        let like = item.like;
         if let Some(icon) = item.icon {
             self.add_icon(icon)?;
         }
@@ -604,9 +619,9 @@ impl Load<'_> {
                         icon: None,
                         ..item.clone()
                     };
-                    return clone_item(&layout, base, &vanilla);
+                    return clone_item(&layout, base, &vanilla, guid);
                 }
-                clone_item(&layout, base, &item)
+                clone_item(&layout, base, &item, guid)
             },
         )?;
         let registry = ITEM_REGISTRY.key(types::ITEM_REGISTRY);
@@ -635,7 +650,7 @@ impl Load<'_> {
             )?;
             let collection = super::workshops::TEMPLATE_COLLECTION.key(types::TEMPLATE_COLLECTION);
             self.serve(collection, collection, move |base| {
-                list_meter_template(&layout, base, meter.template)
+                list_meter_template(&layout, base, meter.template.guid())
             })?;
         }
         Ok(())
@@ -660,9 +675,11 @@ mod tests {
         names: 0x38,
     };
     const CHEST: Guid = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");
-    const NEW: Guid = Guid::parse("8a3f6e21-5c4b-4d7e-9f10-2b7c5e6a9d31");
+    const NEW_ID: Id = Id::new("test:new");
+    const NEW: Guid = NEW_ID.guid();
     const NAME: Guid = Guid::parse("b7c1d2e3-4f50-4a61-8b72-c3d4e5f60718");
-    const TEMPLATE: Guid = Guid::parse("0b6f3c1e-2d4a-4e5f-8a9b-1c2d3e4f5a6b");
+    const TEMPLATE_ID: Id = Id::new("test:charges");
+    const TEMPLATE: Guid = TEMPLATE_ID.guid();
 
     fn string(blob: &Blob, header: usize) -> Vec<u8> {
         let (at, len) = blob.array(header).unwrap();
@@ -676,9 +693,9 @@ mod tests {
         chest[0x70] = 9;
         let item = NewItem {
             name: Some(NAME),
-            ..NewItem::new(NEW, CHEST, "New")
+            ..NewItem::new(NEW_ID, CHEST)
         };
-        let clone = clone_item(&LAYOUT, &chest, &item).unwrap();
+        let clone = clone_item(&LAYOUT, &chest, &item, NEW).unwrap();
         assert_eq!(&clone[..4], &NEW.id().to_le_bytes());
         assert_eq!(&clone[4..20], &NEW.0);
         assert_eq!(&clone[0x48..0x58], &NAME.0);
@@ -691,15 +708,15 @@ mod tests {
         let mut staff = vec![0u8; 0x98];
         staff[0x78..0x7c].copy_from_slice(&(1u32 << 8).to_le_bytes());
         let meter = Meter {
-            template: TEMPLATE,
+            template: TEMPLATE_ID,
             max: 3,
             start: 3,
         };
         let item = NewItem {
             meter: Some(meter),
-            ..NewItem::new(NEW, CHEST, "Staff")
+            ..NewItem::new(NEW_ID, CHEST)
         };
-        let clone = Blob::new(&clone_item(&LAYOUT, &staff, &item).unwrap());
+        let clone = Blob::new(&clone_item(&LAYOUT, &staff, &item, NEW).unwrap());
         assert_eq!(
             clone.read_u32(0x78),
             Some(1 << 8 | ItemData::HAS_PIDE | ItemData::USES_FUEL)
@@ -709,7 +726,7 @@ mod tests {
         let mut sword = staff.clone();
         sword[0x78..0x7c].copy_from_slice(&ItemData::HAS_PIDE.to_le_bytes());
         assert!(
-            clone_item(&LAYOUT, &sword, &item).is_none(),
+            clone_item(&LAYOUT, &sword, &item, NEW).is_none(),
             "a durability entity stays"
         );
     }
@@ -734,9 +751,9 @@ mod tests {
                     format: StatFormat::Signed,
                 },
             ],
-            ..NewItem::new(NEW, CHEST, "Armour")
+            ..NewItem::new(NEW_ID, CHEST)
         };
-        let clone = Blob::new(&clone_item(&LAYOUT, armour.bytes(), &item).unwrap());
+        let clone = Blob::new(&clone_item(&LAYOUT, armour.bytes(), &item, NEW).unwrap());
         let (rows, count) = clone.array(0x90).unwrap();
         assert_eq!(count, 3);
         assert_eq!(clone.read_u32(rows), Some(7));
@@ -780,7 +797,7 @@ mod tests {
         }
         template.extend_from_slice(&[0; 4 + 0x28]);
         let meter = Meter {
-            template: TEMPLATE,
+            template: TEMPLATE_ID,
             max: 5,
             start: 2,
         };

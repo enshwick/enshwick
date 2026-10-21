@@ -157,6 +157,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "const-sha1"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0d8a42181e0652c2997ae4d217f25b63c5337a52fd2279736e97b832fa0a3cff"
+
+[[package]]
 name = "core_detect"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -326,6 +332,7 @@ name = "enshwick-loader-api"
 version = "0.5.0"
 dependencies = [
  "bcdec_rs",
+ "const-sha1",
  "enshwick-loader-macros",
  "fastrand",
  "postcard",

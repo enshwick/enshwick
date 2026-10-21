@@ -26,12 +26,14 @@ bytes of the resource `base`:
   registry with one more entry.
 
 ```rust
-use enshwick_loader_api::content::{Blob, Guid, types};
+use enshwick_loader_api::content::{Blob, Guid, Id, types};
 
 const CHEST: Guid = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");
-const SAFE: Guid = Guid::parse("5afe5afe-0000-4000-8000-000000000001");
+const SAFE_ID: Id = Id::new("my-mod:safe");
 
 fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+    const SAFE: Guid = SAFE_ID.guid();
+    load.declare(SAFE_ID)?;
     load.serve(SAFE.key(types::ITEM_INFO), CHEST.key(types::ITEM_INFO), |chest| {
         let mut item = Blob::new(chest);
         // Offsets for illustration: a real mod reads them from reflection.
@@ -150,20 +152,22 @@ are worked examples: each builds its resources with `Blob` alone.
 
 [`Load::add_text(tag, language, text)`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/content.rs)
 is the low-level text call: the client shows `text` wherever the game asks
-for the `LocaTag` `tag` in `language`, a
+for the `LocaTag` `tag`, a declared [content id](../content.md#content-ids)'s
+GUID, in `language`, a
 [`Language`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/i18n.rs)
 number. A served item whose name field holds `tag` shows that text as its
 name.
 
 ```rust
-use enshwick_loader_api::content::Guid;
+use enshwick_loader_api::content::Id;
 use enshwick_loader_api::i18n::Language;
 
-const SAFE_NAME: Guid = Guid::parse("b7c1d2e3-4f50-4a61-8b72-c3d4e5f60718");
+const SAFE_NAME: Id = Id::new("my-mod:safe.name");
 
 fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
-    load.add_text(SAFE_NAME, Language::FALLBACK.0, "Safe")?;
-    load.add_text(SAFE_NAME, Language::DE_DE.0, "Tresor")
+    let tag = load.declare(SAFE_NAME)?;
+    load.add_text(tag, Language::FALLBACK.0, "Safe")?;
+    load.add_text(tag, Language::DE_DE.0, "Tresor")
 }
 ```
 

@@ -14,11 +14,12 @@ takes a
 list during `init`, before `load.config()`:
 
 ```rust
-use enshwick_loader_api::content::Guid;
+use enshwick_loader_api::content::{Guid, Id};
 use enshwick_loader_api::migrations::Migrations;
 
+/// The GUID the Safe had before it got a content id.
 const OLD_SAFE: Guid = Guid::parse("8a3f6e21-5c4b-4d7e-9f10-2b7c5e6a9d31");
-const SAFE: Guid = Guid::parse("9b4f7e32-6d5c-4e8f-a021-3c8d6f7b0e42");
+const SAFE: Id = Id::new("safes:safe");
 
 fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
     load.migrate(
@@ -26,7 +27,7 @@ fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_
             .add("2", |m| {
                 m.rename_setting("cost", "cost_multiplier")
                     .remove_setting("legacy")
-                    .rename_content(OLD_SAFE, SAFE)
+                    .rename_content(OLD_SAFE, SAFE.guid())
             })
             .add("3", |m| {
                 m.map_setting("limit", |old| {
@@ -86,6 +87,32 @@ the mod joins late.
 `mod-data/enshwick/migrations.toml` records what ran, per mod, for the
 settings files and for each world by its [key](world.md). Delete a mod's
 line to run its migrations again.
+
+## Items under their old ids
+
+An item renamed with `rename_content` keeps its old stacks: the game holds
+them under the old item's game id, which the loader serves as a copy of the
+new item. Code that asks "is this my item" compares through
+[`migrations::current_id`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/migrations.rs),
+which turns an old id into the id it was renamed to and leaves every other
+id as it is:
+
+```rust
+use enshwick_loader_api::content::{Guid, Id};
+use enshwick_loader_api::migrations::current_id;
+
+const SAFE: Id = Id::new("safes:safe");
+
+fn is_safe(item: u32) -> bool {
+    current_id(item) == SAFE.id()
+}
+
+assert!(is_safe(SAFE.id()));
+assert!(!is_safe(Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d").id()));
+```
+
+Moving a mod's items from hand-picked GUIDs to [content ids](content.md#content-ids)
+is such a rename: keep each old GUID as the `from` of a `rename_content`.
 
 ## Checking before it runs
 

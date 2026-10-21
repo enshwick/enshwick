@@ -34,6 +34,8 @@ use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::chains::LOADER;
 use crate::host::{Loader, Registered};
+use crate::ids::Space;
+use crate::settings::LOADER_ID;
 
 /// Steps between two looks at what watched entities wear and have.
 const LOOK_EVERY: u64 = 30;
@@ -208,6 +210,28 @@ fn index_of(kinds: &mut Vec<Kind>, id: &str) -> usize {
     })
 }
 
+/// Records `full` in its space; a name whose key another has turns mod
+/// `owner` off with both named.
+fn declare(loader: &Loader, owner: usize, space: Space, full: &str) -> Result<(), Status> {
+    if SEALED.get().is_some() {
+        return Err(Status::TOO_LATE);
+    }
+    let key = key_of(full).0;
+    let by = loader.mods.get(owner).map_or("?", |m| m.id.as_str());
+    let declared = crate::ids::with(|ids| {
+        if space == Space::Stat {
+            for (id, _) in builtin::ALL {
+                let _builtin = ids.declare(LOADER_ID, Space::Stat, id, key_of(id).0);
+            }
+        }
+        ids.declare(by, space, full, key)
+    });
+    declared.map_err(|why| {
+        loader.turn_off(owner, &why);
+        Status::REFUSED
+    })
+}
+
 /// Defines or opens kind `id` for mod `owner`. During init only.
 pub(crate) fn open(
     loader: &Loader,
@@ -217,6 +241,7 @@ pub(crate) fn open(
 ) -> Result<StatRef, Status> {
     let record = loader.mods.get(owner).ok_or(Status::BAD_ARGS)?;
     let (full, own) = full_id(&record.id, id).ok_or(Status::BAD_ARGS)?;
+    declare(loader, owner, Space::Stat, &full)?;
     pending(|p| {
         let index = index_of(&mut p.kinds, &full);
         if let Some(def) = def {
@@ -254,6 +279,7 @@ pub(crate) fn open_affix(
     if !own {
         return Err(Status::REFUSED);
     }
+    declare(loader, owner, Space::Affix, &full)?;
     pending(|p| {
         let kinds = &p.kinds;
         let stat = |index: u32| {

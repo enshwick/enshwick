@@ -143,6 +143,7 @@ impl Mod for SurvivorsPerAltar {
     }
 
     fn init(load: &mut Load<'_>) -> Result<Self, Off> {
+        load.migrate(staffs::migrations())?;
         let settings: Settings = load.config()?;
         if !settings.per_altar {
             return Err(Off::new("per_altar is off in the settings"));

@@ -193,6 +193,7 @@ impl Mod for Safes {
     }
 
     fn init(load: &mut Load<'_>) -> Result<Self, Off> {
+        load.migrate(content::migrations())?;
         let settings: Settings = load.config()?;
         let cost = settings.cost_multiplier;
         let texts = load.texts(content::TEXTS)?;
@@ -234,7 +235,7 @@ fn guard(load: &mut Load<'_>, phrases: &'static Phrases) -> Result<(), Off> {
     load.on_interaction(access::filter)?;
     track_players(load, world)?;
     load.on::<BuildingPlaced>(move |placed| {
-        if placed.item == content::SAFE.id() {
+        if content::is_safe(placed.item) {
             placed_safe(world, phrases, placed);
             save(store);
         }
@@ -299,7 +300,7 @@ fn placed_safe(world: World, phrases: &Phrases, placed: &BuildingData) {
 fn may_rename(world: World, rename: &Rename) -> bool {
     let known = ACCESS.safes.load().get(&rename.entity.0).copied();
     let found = known.or_else(|| {
-        if world.used_item(rename.entity)? != content::SAFE.id() {
+        if !content::is_safe(world.used_item(rename.entity)?) {
             return None;
         }
         ACCESS.seen(

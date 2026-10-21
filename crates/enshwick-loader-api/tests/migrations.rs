@@ -5,14 +5,15 @@
 mod tests {
     use enshwick_loader_api::abi::Status;
     use enshwick_loader_api::content::items::NewItem;
-    use enshwick_loader_api::content::{Guid, types};
-    use enshwick_loader_api::migrations::Migrations;
+    use enshwick_loader_api::content::{Guid, Id, types};
+    use enshwick_loader_api::migrations::{Migrations, current_id};
     use enshwick_loader_api::test::FakeHost;
     use enshwick_loader_api::{Load, Mod, Off};
 
     const CHEST: Guid = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");
     const OLD_SAFE: Guid = Guid::parse("8a3f6e21-5c4b-4d7e-9f10-2b7c5e6a9d31");
-    const SAFE: Guid = Guid::parse("9b4f7e32-6d5c-4e8f-a021-3c8d6f7b0e42");
+    const SAFE_ID: Id = Id::new("safes:safe");
+    const SAFE: Guid = SAFE_ID.guid();
 
     struct Safes;
 
@@ -41,7 +42,7 @@ mod tests {
                         })
                     }),
             )?;
-            load.add_item(NewItem::new(SAFE, CHEST, "Safe"))?;
+            load.add_item(NewItem::new(SAFE_ID, CHEST))?;
             Ok(Self)
         }
     }
@@ -113,5 +114,13 @@ mod tests {
         let served: Vec<_> = loader.resources().iter().map(|r| r.key).collect();
         assert!(served.contains(&SAFE.key(types::ITEM_INFO)));
         assert!(served.contains(&OLD_SAFE.key(types::ITEM_INFO)));
+    }
+
+    #[test]
+    fn the_item_s_id_is_declared_and_old_stacks_read_as_it() {
+        let loader = start();
+        assert_eq!(loader.content_ids(), ["safes:safe"]);
+        assert_eq!(current_id(OLD_SAFE.id()), SAFE.id());
+        assert_eq!(current_id(CHEST.id()), CHEST.id());
     }
 }
