@@ -3984,8 +3984,8 @@ pub struct HostApi {
     /// Writes a line to the log under the mod's id.
     pub log: extern "system" fn(me: ModHandle, level: Level, message: Str),
     /// The text of the mod's settings file, written from `defaults` first when
-    /// it is missing; the text stays valid until the mod's next call to
-    /// `settings`.
+    /// it is missing; the text stays valid for the life of the process, so
+    /// a thread may read it while another asks again.
     pub settings: extern "system" fn(me: ModHandle, defaults: Str, out: *mut Str) -> Status,
     /// Publishes the service `spec` describes, table and layout, for other
     /// mods; [`Status::REFUSED`] when another mod publishes its name and
@@ -4075,7 +4075,7 @@ pub struct HostApi {
     /// over them: the server's while this client is joined to a server that
     /// advertises values for the mod, else an empty string. A server
     /// advertises the `synced` of each join mod. The text written stays valid
-    /// until the mod's next call to `sync`. Since minor 6.
+    /// for the life of the process. Since minor 6.
     pub sync: extern "system" fn(me: ModHandle, synced: Str, out: *mut Str) -> Status,
     /// Writes where the game's code section (`.text`) is loaded and how many
     /// bytes it spans. Since minor 7.

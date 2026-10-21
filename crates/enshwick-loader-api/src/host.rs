@@ -1,7 +1,7 @@
 //! The loader as one mod sees it.
 
 use core::ffi::c_void;
-use std::sync::{Mutex, OnceLock};
+use std::sync::OnceLock;
 
 use crate::Off;
 use crate::abi::{
@@ -199,16 +199,10 @@ impl Host {
     /// The text of this mod's settings file, written from `defaults` when
     /// missing.
     pub(crate) fn settings_text(&self, defaults: &str) -> Result<String, Off> {
-        // The loader's text lives until this mod's next call; one call at a time.
-        static CALL: Mutex<()> = Mutex::new(());
-        let _call = CALL
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let mut text = Str::EMPTY;
         let status = (self.api.settings)(self.me, Str::new(defaults), &raw mut text);
         crate::load::ok(status, (), || "settings".to_owned())?;
-        // SAFETY: valid until this mod calls `settings` again, which the lock
-        // holds off until the copy is made.
+        // SAFETY: the loader keeps the text for the life of the process.
         let text = unsafe { text.as_str() }.ok_or_else(|| Off::new("settings: not UTF-8"))?;
         Ok(text.to_owned())
     }
@@ -229,22 +223,16 @@ impl Host {
     /// run with over them; `None` when there are none or under a loader older
     /// than ABI minor 6.
     pub(crate) fn sync(&self, synced: &str) -> Option<String> {
-        // The loader's text lives until this mod's next call; one call at a time.
-        static CALL: Mutex<()> = Mutex::new(());
         let end = core::mem::offset_of!(HostApi, sync) + size_of::<usize>();
         if !self.api.header.covers(end) {
             return None;
         }
-        let _call = CALL
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let mut text = Str::EMPTY;
         let status = (self.api.sync)(self.me, Str::new(synced), &raw mut text);
         if !status.is_ok() {
             return None;
         }
-        // SAFETY: valid until this mod calls `sync` again, which the lock holds
-        // off until the copy is made.
+        // SAFETY: the loader keeps the text for the life of the process.
         let text = unsafe { text.as_str() }?;
         (!text.is_empty()).then(|| text.to_owned())
     }

@@ -295,10 +295,10 @@ fn records(
                 .map(|(_, note)| note.clone())
                 .collect(),
             off: AtomicBool::new(false),
-            settings: Mutex::new(None),
+            settings: host::Kept::default(),
             synced: Mutex::new(None),
             server_synced: Mutex::new(None),
-            sync_out: Mutex::new(String::new()),
+            sync_out: host::Kept::default(),
             schema: Mutex::new(None),
             check: OnceLock::new(),
             texts: Mutex::new(None),
