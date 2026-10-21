@@ -705,7 +705,8 @@ impl Load<'_> {
     /// ingredient counts. It sees the registry as it reaches this patch,
     /// with the recipes and changes of mods that patched before, and the
     /// mods after see its changes. The mod's log says how many recipes
-    /// changed.
+    /// changed. When values `modify` reads change later, such as a server's
+    /// join values, [`rebuild_recipes`] applies them.
     ///
     /// # Errors
     ///
@@ -735,8 +736,39 @@ impl Load<'_> {
             let (built, changed) = modify_recipes_in(&layout, base, &modify)?;
             crate::info!("{changed} recipes changed");
             Some(built)
-        })
+        })?;
+        // Under an older loader the registry is built once.
+        if let Err(off) = self.allow_rebuild(registry) {
+            crate::debug!("recipes are built once: {off}");
+        }
+        Ok(())
     }
+}
+
+/// Builds the recipe registry again with every mod's recipe changes, from
+/// any thread, for a mod whose [`Load::modify_recipes`] reads values that
+/// changed, such as a server's join values on a joined client: the counts
+/// the game holds change in place. Nothing is done while the game has not
+/// built the registry yet. See [`rebuild`](crate::content::rebuild) for
+/// what a rebuild can change.
+///
+/// # Errors
+///
+/// [`Off`] under a loader older than ABI minor 63, for a mod that does not
+/// modify recipes, and when another mod's patch changed the registry's
+/// length.
+///
+/// # Examples
+///
+/// ```
+/// fn settings_changed() {
+///     if let Err(off) = enshwick_loader_api::content::recipes::rebuild_recipes() {
+///         enshwick_loader_api::warn!("recipe counts change at the next start: {off}");
+///     }
+/// }
+/// ```
+pub fn rebuild_recipes() -> Result<(), Off> {
+    crate::content::rebuild(RECIPE_REGISTRY.key(types::RECIPE_REGISTRY))
 }
 
 #[cfg(test)]

@@ -729,17 +729,65 @@ unsafe extern "system" fn build(
     let Ok(Some(bytes)) = built else {
         return Status::REFUSED;
     };
-    // The game reads the resource for the life of the process.
-    let bytes: &'static [u8] = Box::leak(bytes.into_boxed_slice());
+    // The game reads the resource for the life of the process, and a
+    // rebuild writes over it: the bytes are handed over, never read here
+    // again.
+    let len = bytes.len();
+    let bytes: *mut [u8] = Box::into_raw(bytes.into_boxed_slice());
     // SAFETY: the loader's out pointers.
     unsafe {
-        out.write(bytes.as_ptr());
+        out.write(bytes.cast::<u8>().cast_const());
     }
     // SAFETY: as above.
     unsafe {
-        out_len.write(bytes.len());
+        out_len.write(len);
     }
     Status::OK
+}
+
+/// Builds the resource `key`, which this mod serves and asked to rebuild
+/// with [`Load::allow_rebuild`], again from its base with the patches of
+/// every mod still on, from any thread, and writes the bytes that differ
+/// over the resource the game holds: for values a patch reads that changed
+/// after the first build, such as a server's join values. Nothing is done
+/// while the game has not built `key` yet, as its first build takes the
+/// values in force. Each rebuild keeps the patches' new bytes for the
+/// process, so it is for rare changes.
+///
+/// The game keeps reading the first build's bytes, so a rebuild must come
+/// out the same length: a patch that only changes values qualifies, one
+/// that adds entries does not. A copy of the data the game made from the
+/// resource is not updated.
+///
+/// # Errors
+///
+/// [`Off`] under a loader older than ABI minor 63, for a key the mod does
+/// not serve or did not allow to rebuild, and when the new build differs in
+/// length.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::content::{Guid, rebuild, types};
+///
+/// const TABLE: Guid = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");
+///
+/// fn settings_changed() {
+///     if let Err(off) = rebuild(TABLE.key(types::ITEM_INFO)) {
+///         enshwick_loader_api::warn!("the change applies at the next start: {off}");
+///     }
+/// }
+/// ```
+pub fn rebuild(key: ResourceKey) -> Result<(), Off> {
+    let host = crate::host().ok_or_else(|| Off::new("rebuild: no loader"))?;
+    let api = host.api();
+    crate::load::offered(
+        api,
+        core::mem::offset_of!(crate::abi::HostApi, rebuild_resource),
+        "rebuilding a served resource",
+    )?;
+    let status = (api.rebuild_resource)(host.handle(), &raw const key);
+    crate::load::ok(status, (), || "rebuild resource".to_owned())
 }
 
 impl Load<'_> {
@@ -873,6 +921,41 @@ impl Load<'_> {
             drop(unsafe { Box::from_raw(user) });
         }
         crate::load::ok(status, (), || "serve resource".to_owned())
+    }
+}
+
+impl Load<'_> {
+    /// Lets [`rebuild`] build the resource `key`, which this mod serves,
+    /// again later: the loader keeps a copy of its base from its first
+    /// build. Call it during `init`, after [`Load::serve`].
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] under a loader older than ABI minor 63, or for a key the mod
+    /// does not serve.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_loader_api::content::{Guid, types};
+    ///
+    /// const CHEST: Guid = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");
+    ///
+    /// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+    ///     let key = CHEST.key(types::ITEM_INFO);
+    ///     load.serve(key, key, |chest| Some(chest.to_vec()))?;
+    ///     load.allow_rebuild(key)
+    /// }
+    /// ```
+    pub fn allow_rebuild(&mut self, key: ResourceKey) -> Result<(), Off> {
+        let api = self.host().api();
+        crate::load::offered(
+            api,
+            core::mem::offset_of!(crate::abi::HostApi, rebuild_resource),
+            "rebuilding a served resource",
+        )?;
+        let status = (api.rebuild_resource)(self.host().handle(), &raw const key);
+        crate::load::ok(status, (), || "allow rebuild".to_owned())
     }
 }
 

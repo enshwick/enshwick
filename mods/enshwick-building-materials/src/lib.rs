@@ -171,14 +171,17 @@ impl Mod for BuildingMaterials {
         carry_over_old_settings(load)?;
         let settings: Settings = load.config()?;
         settings.apply();
-        // The loader builds the recipe registry once and keeps it: values
-        // that arrive later, an edited file or a server's join values, reach
-        // the recipes only if the registry is built after them.
+        // Values that arrive later, an edited file or a joined server's
+        // values and the file's again on leaving, rebuild the registry the
+        // game already holds.
         load.on_config_change(|settings: Settings| {
             settings.apply();
-            enshwick_loader_api::info!(
-                "recipes already built keep their counts until the next start"
-            );
+            match enshwick_loader_api::content::recipes::rebuild_recipes() {
+                Ok(()) => enshwick_loader_api::info!("recipe counts follow the new values"),
+                Err(off) => enshwick_loader_api::warn!(
+                    "recipes already built keep their counts until the next start: {off}"
+                ),
+            }
         })?;
         load.modify_recipes(scale)?;
         Ok(Self)
@@ -231,6 +234,51 @@ mod tests {
         for key in ["multiplier", "blocks", "overgrowth", "decor"] {
             assert!(synced.contains(key), "{key} in {synced}");
         }
+    }
+
+    #[test]
+    fn a_joined_server_s_values_and_leaving_rebuild_the_recipes() {
+        use enshwick_loader_api::abi::Status;
+        use enshwick_loader_api::events::SettingsChanged;
+
+        let mut host = enshwick_loader_api::test::FakeHost::new()
+            .field_offset("keen::RecipeRegistryResource", "recipes", 8)
+            .type_size("keen::RecipeInfo", 0xa8)
+            .type_size("keen::RecipeInputResource", 48)
+            .type_size("keen::RecipeItemStackResource", 24)
+            .field_offset("keen::RecipeItemStackResource", "item", 0x10)
+            .field_offset("keen::RecipeItemStackResource", "count", 0x14);
+        for (field, at) in [
+            ("recipeGuid", 0),
+            ("recipeId", 0x10),
+            ("workshopGuid", 0x14),
+            ("workshopId", 0x24),
+            ("input", 0x28),
+            ("output", 0x30),
+            ("requiredProps", 0x40),
+            ("completionRequirementQuery", 0x5c),
+            ("debugName", 0x78),
+        ] {
+            host = host.field_offset("keen::RecipeInfo", field, at);
+        }
+        let loader = host
+            .side(enshwick_loader_api::abi::Side::CLIENT)
+            .settings("multiplier = 2\nblocks = true\novergrowth = true\ndecor = true\n")
+            .install();
+        // SAFETY: the exports of `declare_mod!` above.
+        let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+        assert_eq!(status, Status::OK, "{:?}", loader.logs());
+        let allowed = loader.rebuilds().len();
+        assert_eq!(allowed, 1, "the registry may be rebuilt");
+        loader.set_server_synced(Some("{ multiplier = 5 }"));
+        assert_eq!(loader.raise::<SettingsChanged>(&()), 1);
+        assert_eq!(MULTIPLIER.load(Ordering::Relaxed), 5);
+        assert_eq!(loader.rebuilds().len(), allowed + 1, "joined: rebuilt");
+        loader.set_server_synced(None);
+        assert_eq!(loader.raise::<SettingsChanged>(&()), 1);
+        assert_eq!(MULTIPLIER.load(Ordering::Relaxed), 2);
+        assert_eq!(loader.rebuilds().len(), allowed + 2, "left: rebuilt");
+        assert!(loader.faults().is_empty());
     }
 
     #[test]

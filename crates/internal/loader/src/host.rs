@@ -750,6 +750,7 @@ pub(crate) static API: HostApi = HostApi {
     account_knowledge,
     resource_read,
     game_text,
+    rebuild_resource,
 };
 
 /// A static slice from a pointer and a count, empty for a null pointer.
@@ -1585,6 +1586,20 @@ extern "system" fn serve_resource(
             return Status::BAD_ARGS;
         };
         crate::content::register(index, *key, *base, patch, user)
+    })
+}
+
+extern "system" fn rebuild_resource(me: ModHandle, key: *const api_frame::ResourceKey) -> Status {
+    entry("rebuild_resource", || {
+        let (_, index, _) = match calling(me) {
+            Ok(found) => found,
+            Err(status) => return status,
+        };
+        // SAFETY: a non-null key from a mod points at a valid key for the call.
+        let Some(key) = (unsafe { key.as_ref() }) else {
+            return Status::BAD_ARGS;
+        };
+        crate::content::rebuild(index, *key)
     })
 }
 
