@@ -68,6 +68,35 @@ fn word(bytes: &[u8], at: usize) -> Option<u32> {
     Some(u32::from_le_bytes(bytes.get(at..at + 4)?.try_into().ok()?))
 }
 
+/// A buffer of `len` zero bytes; `None` when the memory is not there, so a
+/// size read from a damaged file fails the read instead of the game.
+fn zeroed(len: usize) -> Option<Vec<u8>> {
+    let mut bytes = Vec::new();
+    bytes.try_reserve_exact(len).ok()?;
+    bytes.resize(len, 0);
+    Some(bytes)
+}
+
+/// Whether `count` entries of `size` bytes from `at` lie inside `bytes`.
+fn holds(bytes: &[u8], at: usize, count: usize, size: usize) -> bool {
+    count
+        .checked_mul(size)
+        .and_then(|len| at.checked_add(len))
+        .is_some_and(|end| end <= bytes.len())
+}
+
+/// Opens `path` and moves to `at`, when `len` bytes from there lie inside
+/// the file.
+fn open_at(path: &Path, at: u32, len: usize) -> Option<File> {
+    let mut file = File::open(path).ok()?;
+    let end = u64::from(at).checked_add(u64::try_from(len).ok()?)?;
+    if end > file.metadata().ok()?.len() {
+        return None;
+    }
+    file.seek(SeekFrom::Start(u64::from(at))).ok()?;
+    Some(file)
+}
+
 /// A location in the header: where it points and its count.
 fn location(header: &[u8], field: usize) -> Option<(usize, usize)> {
     let offset = usize::try_from(word(header, field)?).ok()?;
@@ -90,7 +119,10 @@ impl Archive {
         }
         let (keys, count) = location(&header, RESOURCE_KEYS)?;
         let (values, values_count) = location(&header, RESOURCE_VALUES)?;
-        if values_count != count {
+        if values_count != count
+            || !holds(&header, keys, count, RESOURCE_KEY)
+            || !holds(&header, values, count, 8)
+        {
             return None;
         }
         let mut resources = FxHashMap::default();
@@ -108,6 +140,9 @@ impl Archive {
             resources.insert((guid, type_hash, part), place);
         }
         let (chunks_at, chunk_count) = location(&header, CHUNKS)?;
+        if !holds(&header, chunks_at, chunk_count, CHUNK) {
+            return None;
+        }
         let chunks = (0..chunk_count)
             .map(|i| {
                 let at = chunks_at.checked_add(i.checked_mul(CHUNK)?)?;
@@ -135,9 +170,9 @@ impl Archive {
     pub fn content(&self, hash: &ContentHash) -> Option<Vec<u8>> {
         let (container, offset) = find_content(&self.header, hash)?;
         let path = self.dir.join(format!("{}_{container:03}.dat", self.name));
-        let mut file = File::open(path).ok()?;
-        file.seek(SeekFrom::Start(u64::from(offset))).ok()?;
-        let mut data = vec![0u8; usize::try_from(hash[0]).ok()?];
+        let len = usize::try_from(hash[0]).ok()?;
+        let mut file = open_at(&path, offset, len)?;
+        let mut data = zeroed(len)?;
         file.read_exact(&mut data).ok()?;
         Some(data)
     }
@@ -149,7 +184,8 @@ impl Archive {
         let place = *self.resources.get(&(key.guid, key.type_hash, key.part))?;
         let (start, len) = (place.at, place.len);
         let end = start.checked_add(len)?;
-        let mut out = Vec::with_capacity(usize::try_from(len).ok()?);
+        let mut out = Vec::new();
+        out.try_reserve_exact(usize::try_from(len).ok()?).ok()?;
         for (index, chunk) in self.chunks.iter().enumerate() {
             let chunk_end = chunk.at.saturating_add(chunk.len);
             if chunk_end <= start || chunk.at >= end {
@@ -175,14 +211,14 @@ impl Archive {
             return Some(Arc::clone(bytes));
         }
         let chunk = self.chunks.get(index)?;
-        let mut file = File::open(self.dir.join(format!("{}.kfc_resources", self.name))).ok()?;
-        file.seek(SeekFrom::Start(u64::from(chunk.packed_at)))
-            .ok()?;
-        let mut packed = vec![0u8; usize::try_from(chunk.packed_len).ok()?];
+        let path = self.dir.join(format!("{}.kfc_resources", self.name));
+        let packed_len = usize::try_from(chunk.packed_len).ok()?;
+        let mut file = open_at(&path, chunk.packed_at, packed_len)?;
+        let mut packed = zeroed(packed_len)?;
         file.read_exact(&mut packed).ok()?;
         let len = usize::try_from(chunk.len).ok()?;
         let bytes: Arc<[u8]> = if packed.starts_with(&ZSTD) {
-            let mut unpacked = vec![0u8; len];
+            let mut unpacked = zeroed(len)?;
             let written = ruzstd::decoding::FrameDecoder::new()
                 .decode_all(&packed, &mut unpacked)
                 .ok()?;
@@ -223,7 +259,8 @@ fn find_content(header: &[u8], hash: &ContentHash) -> Option<(u16, u32)> {
     let bucket = buckets + (usize::try_from(hash[1]).ok()? & (bucket_count - 1)) * 8;
     let first = usize::try_from(word(header, bucket)?).ok()?;
     let count = usize::try_from(word(header, bucket + 4)?).ok()?;
-    for index in first..first.checked_add(count)? {
+    let held = header.len().saturating_sub(keys) / 16;
+    for index in first..first.checked_add(count)?.min(held) {
         let key = keys + index * 16;
         if (0..4).all(|i| word(header, key + i * 4) == Some(hash[i])) {
             let value = values + index * 16;
@@ -376,6 +413,29 @@ mod tests {
         assert_eq!(archive.resource(&key(8, 1)), None);
         archive.trim();
         assert_eq!(archive.resource(&key(7, 0)), Some(vec![6, 7, 8, 9]));
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn counts_and_sizes_past_the_file_fail_the_read() {
+        let (dir, archive) = archive();
+        let mut h = std::fs::read(dir.join("game.kfc")).unwrap();
+        for field in [RESOURCE_KEYS, CHUNKS] {
+            let mut broken = h.clone();
+            put(&mut broken, field + 4, u32::MAX);
+            if field == RESOURCE_KEYS {
+                put(&mut broken, RESOURCE_VALUES + 4, u32::MAX);
+            }
+            assert!(Archive::from_header(&dir, "game", broken.into_boxed_slice()).is_none());
+        }
+        // A bucket that claims every entry stops at the header's end.
+        put(&mut h, 0x104, u32::MAX);
+        assert_eq!(find_content(&h, &[4, 1, 2, 4]), None);
+        assert_eq!(find_content(&h, &[4, 1, 2, 3]), Some((0, 2)));
+        // A content larger than its container is not read.
+        assert_eq!(archive.content(&[4, 1, 2, 3]).map(|c| c.len()), Some(4));
+        assert!(open_at(&dir.join("game_000.dat"), 2, 5).is_none());
+        assert!(open_at(&dir.join("game_000.dat"), u32::MAX, usize::MAX).is_none());
         std::fs::remove_dir_all(dir).unwrap();
     }
 
