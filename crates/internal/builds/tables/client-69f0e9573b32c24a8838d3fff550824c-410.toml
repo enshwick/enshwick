@@ -134,6 +134,11 @@ revision = 1
 "damage.fall" = { rva = 0x27_433d, pattern = "F3 44 0F 2C CF 4C 03 C3 45 89 0C 88 48 8B CB E8 ?? ?? ?? ??", at = 8 }
 "damage.shroud" = { rva = 0x2d_125b, pattern = "F3 0F 2C C6 4C 03 C3 41 29 04 88 48 8B D7 48 8B CB", at = 7 }
 "damage.shroud_death" = { rva = 0x2d_11a1, pattern = "44 0F B7 43 04 4C 03 C3 41 89 14 88 E9 ?? ?? ?? ?? 48 8D 95 00 01 00 00", at = 8 }
+"damage.drowning" = { rva = 0x23_8c49, pattern = "48 8B D7 F3 0F 2C C6 4C 03 C3 41 29 04 88 48 8B CB E8 ?? ?? ?? ?? 48 8B 4D A0", at = 10 }
+"damage.drowning_death" = { rva = 0x23_8e1e, pattern = "44 0F B7 43 04 48 8B D7 4C 03 C3 45 89 34 88 48 8B CB E8 ?? ?? ?? ?? 41 B8 F8 00 00 00", at = 11 }
+"damage.freezing" = { rva = 0x2c_ffd7, pattern = "48 8B D7 F3 0F 2C C6 4C 03 C3 41 29 04 88 48 8B CB E8 ?? ?? ?? ?? EB 32", at = 10 }
+"damage.admin_kill" = { rva = 0x2c_c847, pattern = "48 8D 8D 88 04 00 00 E8 ?? ?? ?? ?? 48 8B 38 48 85 FF 0F 84 ?? ?? ?? ??", at = 12 }
+"damage.faction_kill" = { rva = 0x23_4c1d, pattern = "0F B6 08 66 0F A3 CB 0F 83 ?? ?? ?? ?? 48 8D 55 6F 49 8B CE", at = 7 }
 "buffs.type_by_id" = { rva = 0xe7_29d0, pattern = "48 89 5C 24 08 48 89 6C 24 10 48 89 74 24 20 57 85 C9" }
 "buffs.restore" = { rva = 0xe3_2ca0, pattern = "4C 89 4C 24 20 48 89 4C 24 08 55 53 57 41 55 41 56 41 57 48 8D AC 24 B8 FC FF FF" }
 "buffs.cleanse" = { rva = 0x23_c640, pattern = "45 33 C9 4C 8D 41 04 41 8B C1 4C 8B D1 0F 1F 00" }

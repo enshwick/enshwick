@@ -4,11 +4,17 @@
 //! A hit's damage is worked out in the impact node `ApplyDamage` as a vector
 //! of one amount per damage type; the loader hooks the point after the
 //! target's resistances and before its armour, so the armour, the block and
-//! the hit the game raises all follow what the filters leave. Falls and the
-//! shroud take health without a hit, in `fall_damage_infliction` and
-//! `fog_resistance_update`; the loader hooks their writes to the health
-//! attribute. Every site runs on the game's worker threads, in parallel, so
-//! the filters run there too: no allocation, no lock.
+//! the hit the game raises all follow what the filters leave. Falls, the
+//! shroud, drowning and freezing take health without a hit, in
+//! `fall_damage_infliction`, `fog_resistance_update`, `oxygen_update` and
+//! `bodyheat_depletion`; the loader hooks their writes to the health
+//! attribute. An administrator's kill zeroes every health attribute at
+//! once, so the loader hooks the test before it: of the target's health in
+//! `admin_player` for chosen enemies, of the entity's faction in
+//! `debug_kill_faction` for whole factions and players, and a refused kill
+//! takes the path of an entity the kill does not reach. Every site runs on
+//! the game's worker threads, in parallel, so the filters run there too: no
+//! allocation, no lock.
 
 use core::ffi::c_void;
 use std::sync::{Mutex, OnceLock, PoisonError};
@@ -23,6 +29,12 @@ use crate::mid::MidLink;
 const TYPES: usize = 13;
 /// The healing entry of a hit's vector.
 const HEALING: usize = 7;
+/// The carry flag in `rflags`.
+const CARRY: u64 = 1;
+
+/// Null, for an admin kill's test of the target's health to read when the
+/// filters refuse it.
+static NO_HEALTH: u64 = 0;
 
 static FILTERS: Mutex<Vec<Registered<DamageFilterFn>>> = Mutex::new(Vec::new());
 static SEALED: OnceLock<Box<[Registered<DamageFilterFn>]>> = OnceLock::new();
@@ -45,6 +57,11 @@ enum Site {
     Fall,
     Shroud,
     ShroudDeath,
+    Drowning,
+    DrowningDeath,
+    Freezing,
+    AdminKill,
+    FactionKill,
 }
 
 /// Registers mod `owner`'s damage filter.
@@ -87,11 +104,16 @@ pub(crate) fn link(loader: &Loader) {
         return;
     };
     let _first = LAYOUT.set(layout);
-    let sites: [(&str, Site, MidFn); 4] = [
+    let sites: [(&str, Site, MidFn); 9] = [
         ("damage.hit", Site::Hit, hit),
         ("damage.fall", Site::Fall, fall),
         ("damage.shroud", Site::Shroud, shroud),
         ("damage.shroud_death", Site::ShroudDeath, shroud_death),
+        ("damage.drowning", Site::Drowning, drowning),
+        ("damage.drowning_death", Site::DrowningDeath, drowning_death),
+        ("damage.freezing", Site::Freezing, freezing),
+        ("damage.admin_kill", Site::AdminKill, admin_kill),
+        ("damage.faction_kill", Site::FactionKill, faction_kill),
     ];
     let mut linked = 0;
     for (name, site, handler) in sites {
@@ -116,7 +138,7 @@ pub(crate) fn link(loader: &Loader) {
             crate::log!(WARN, "damage filters: {site:?} off, refused ({})", status.0);
         }
     }
-    crate::log!(INFO, "damage filters on: {linked} of 4 sites");
+    crate::log!(INFO, "damage filters on: {linked} of {} sites", sites.len());
 }
 
 type MidFn = unsafe extern "system" fn(registers: *mut Registers, user: *mut c_void);
@@ -305,6 +327,118 @@ unsafe extern "system" fn shroud_death(registers: *mut Registers, _user: *mut c_
     });
 }
 
+unsafe extern "system" fn drowning(registers: *mut Registers, _user: *mut c_void) {
+    let _caught = std::panic::catch_unwind(|| {
+        // SAFETY: the stub's saved registers, valid for the call.
+        let Some(registers) = (unsafe { registers.as_mut() }) else {
+            return;
+        };
+        // At the site `eax` is what `oxygen_update` takes from the health
+        // at `[r8 + rcx * 4]`; r15 is its context; 1.0 build 1269579.
+        let damage = low(registers.rax);
+        if damage <= 0 {
+            return;
+        }
+        // SAFETY: r15 is the system's context at the site.
+        let target = unsafe { row_entity(registers.r15) };
+        let damage = filtered(DamageCheck::DROWNING, target, damage);
+        registers.rax = u64::from(damage.cast_unsigned());
+    });
+}
+
+unsafe extern "system" fn drowning_death(registers: *mut Registers, _user: *mut c_void) {
+    let _caught = std::panic::catch_unwind(|| {
+        // SAFETY: the stub's saved registers, valid for the call.
+        let Some(registers) = (unsafe { registers.as_mut() }) else {
+            return;
+        };
+        // SAFETY: at the site `[r8 + rcx * 4]` is a creature's current
+        // health, about to be overwritten with `r14d` (0), which the system
+        // loads again for each row; 1.0 build 1269579.
+        let current = unsafe { health_slot(registers).read_unaligned() };
+        let new = low(registers.r14);
+        let damage = current.saturating_sub(new);
+        if damage <= 0 {
+            return;
+        }
+        // SAFETY: r15 is the system's context at the site.
+        let target = unsafe { row_entity(registers.r15) };
+        let damage = filtered(DamageCheck::DROWNING_DEATH, target, damage);
+        let kept = current.saturating_sub(damage).max(0).cast_unsigned();
+        registers.r14 = (registers.r14 & !0xffff_ffff) | u64::from(kept);
+    });
+}
+
+unsafe extern "system" fn freezing(registers: *mut Registers, _user: *mut c_void) {
+    let _caught = std::panic::catch_unwind(|| {
+        // SAFETY: the stub's saved registers, valid for the call.
+        let Some(registers) = (unsafe { registers.as_mut() }) else {
+            return;
+        };
+        // At the site `eax` is what `bodyheat_depletion` takes from the
+        // health; its context is r14 there; 1.0 build 1269579.
+        let damage = low(registers.rax);
+        if damage <= 0 {
+            return;
+        }
+        // SAFETY: r14 is the system's context at the site.
+        let target = unsafe { row_entity(registers.r14) };
+        let damage = filtered(DamageCheck::FREEZING, target, damage);
+        registers.rax = u64::from(damage.cast_unsigned());
+    });
+}
+
+/// Whether the filters let an admin kill of `target` through.
+fn kill_allowed(target: u32) -> bool {
+    let mut check = blank(DamageCheck::ADMIN_KILL, target);
+    check.total = 1.0;
+    filter(&mut check);
+    kept(check.total) > 0.0
+}
+
+unsafe extern "system" fn admin_kill(registers: *mut Registers, _user: *mut c_void) {
+    let _caught = std::panic::catch_unwind(|| {
+        // SAFETY: the stub's saved registers, valid for the call.
+        let Some(registers) = (unsafe { registers.as_mut() }) else {
+            return;
+        };
+        let at = address(registers.rax);
+        if at == 0 {
+            return;
+        }
+        // SAFETY: at the site `rax` points at the target's health component
+        // pointer, which `admin_player` tests next: null skips the kill;
+        // `ebx` is the target; 1.0 build 1269579.
+        let health: u64 = unsafe { crate::world::read(at, 0) };
+        if health == 0 {
+            return;
+        }
+        if !kill_allowed(low(registers.rbx).cast_unsigned()) {
+            registers.rax = (&raw const NO_HEALTH).addr() as u64;
+        }
+    });
+}
+
+unsafe extern "system" fn faction_kill(registers: *mut Registers, _user: *mut c_void) {
+    let _caught = std::panic::catch_unwind(|| {
+        // SAFETY: the stub's saved registers, valid for the call.
+        let Some(registers) = (unsafe { registers.as_mut() }) else {
+            return;
+        };
+        // At the site a set carry makes `debug_kill_faction` kill the row's
+        // entity, a clear one skips it; r14 is its context; 1.0 build
+        // 1269579.
+        if registers.rflags & CARRY == 0 {
+            return;
+        }
+        // SAFETY: r14 is the system's context at the site.
+        let target = unsafe { row_entity(registers.r14) };
+        if !kill_allowed(target) {
+            registers.rflags &= !CARRY;
+        }
+    });
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -319,5 +453,6 @@ mod tests {
     #[test]
     fn without_filters_damage_stays() {
         assert_eq!(filtered(DamageCheck::FALL, 1, 40), 40);
+        assert!(kill_allowed(1));
     }
 }

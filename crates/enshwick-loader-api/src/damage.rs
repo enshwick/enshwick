@@ -3,9 +3,12 @@
 //!
 //! A hit's damage comes by type, after the target's resistances and before
 //! its armour: the armour, a block and the hit the game raises all follow
-//! what the filters leave. Falls and the shroud take health without a hit
-//! and come as one amount. A filter scales, sets or cancels; filters of
-//! several mods run in load order, each on what the one before left.
+//! what the filters leave. Falls, the shroud, drowning and freezing take
+//! health without a hit and come as one amount; an administrator's kill
+//! comes as an amount of 1 that a filter can only let through or cancel. A
+//! filter scales, sets or cancels; filters of several mods run in load
+//! order, each on what the one before left. Executions are hits; heals and
+//! health set by the game's scripts are not filtered.
 //!
 //! Filters run on the game's worker threads, in parallel, inside the
 //! systems that deal damage: they must not allocate, lock or log, and read
@@ -107,6 +110,15 @@ pub enum DamageCause {
     Shroud,
     /// The deadly shroud, which kills at once.
     ShroudDeath,
+    /// A character out of breath under water.
+    Drowning,
+    /// A creature out of breath under water, which dies at once.
+    DrowningDeath,
+    /// A character frozen through, out of body heat.
+    Freezing,
+    /// An administrator's kill command: [`Damage::total`] is 1, and the kill
+    /// goes ahead unless a filter [cancels](Damage::cancel) it.
+    AdminKill,
     /// A cause this API does not name.
     Other(u32),
 }
@@ -135,6 +147,10 @@ impl Damage<'_> {
             DamageCheck::FALL => DamageCause::Fall,
             DamageCheck::SHROUD => DamageCause::Shroud,
             DamageCheck::SHROUD_DEATH => DamageCause::ShroudDeath,
+            DamageCheck::DROWNING => DamageCause::Drowning,
+            DamageCheck::DROWNING_DEATH => DamageCause::DrowningDeath,
+            DamageCheck::FREEZING => DamageCause::Freezing,
+            DamageCheck::ADMIN_KILL => DamageCause::AdminKill,
             other => DamageCause::Other(other),
         }
     }

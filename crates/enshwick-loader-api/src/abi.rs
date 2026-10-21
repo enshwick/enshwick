@@ -2899,8 +2899,10 @@ impl DaytimeInfo {
 pub struct DamageCheck {
     /// Size and version of this struct.
     pub header: Header,
-    /// [`DamageCheck::HIT`], [`DamageCheck::FALL`], [`DamageCheck::SHROUD`]
-    /// or [`DamageCheck::SHROUD_DEATH`].
+    /// [`DamageCheck::HIT`], [`DamageCheck::FALL`], [`DamageCheck::SHROUD`],
+    /// [`DamageCheck::SHROUD_DEATH`], [`DamageCheck::DROWNING`],
+    /// [`DamageCheck::DROWNING_DEATH`], [`DamageCheck::FREEZING`] or
+    /// [`DamageCheck::ADMIN_KILL`].
     pub cause: u32,
     /// The entity that takes the damage.
     pub target: u32,
@@ -2931,6 +2933,16 @@ impl DamageCheck {
     pub const SHROUD: u32 = 2;
     /// The deadly shroud, which kills at once.
     pub const SHROUD_DEATH: u32 = 3;
+    /// A character out of breath under water.
+    pub const DROWNING: u32 = 4;
+    /// A creature out of breath under water, which dies at once.
+    pub const DROWNING_DEATH: u32 = 5;
+    /// A character frozen through, out of body heat.
+    pub const FREEZING: u32 = 6;
+    /// An administrator's kill command, of chosen enemies or of whole
+    /// factions or players: `total` is 1, and the kill goes ahead unless
+    /// the filters leave 0.
+    pub const ADMIN_KILL: u32 = 7;
 }
 
 /// A mod's damage filter: the damage, which it may change, and the pointer

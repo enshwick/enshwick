@@ -27,6 +27,10 @@ fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_
 | `Fall` | a fall | the amount |
 | `Shroud` | the shroud, once a character's time in it ran out | the amount |
 | `ShroudDeath` | the deadly shroud, which kills at once | the amount: the whole health, unless the filter lowers it |
+| `Drowning` | a character out of breath under water | the amount |
+| `DrowningDeath` | a creature out of breath under water, which dies at once | the amount: the whole health, unless the filter lowers it |
+| `Freezing` | a character frozen through, out of body heat | the amount |
+| `AdminKill` | an administrator's kill of chosen enemies, or of whole factions or players | only whether: the amount is 1, and 0 refuses the kill |
 
 A hit's damage comes by type, after the target's resistances and before its
 armour, so the armour, a block and the hit the game raises (and a
@@ -55,6 +59,8 @@ no allocation, no lock, no logging; read only what the mod holds itself, such
 as settings kept in atomics. A filter that panics leaves the damage as it
 was and turns the mod off.
 
-Damage the game deals by other ways, such as drowning, freezing or an
-administrator's kill, does not pass the filter, and neither does mining,
-which wears terrain and buildings by volume rather than health.
+Executions are hits and pass as `Hit`. An administrator's kill zeroes every
+health value of its target at once, so a filter can only let it through or
+refuse it whole. Health the game's scripts set or heal, an entity whose
+lifetime ends, and mining, which wears terrain and buildings by volume
+rather than health, do not pass the filter.
