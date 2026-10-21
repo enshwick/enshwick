@@ -7,6 +7,8 @@
 use enshwick_loader_api::config::{Field, Kind, Schema, Stage};
 use toml_edit::DocumentMut;
 
+use crate::texts;
+
 #[cfg(windows)]
 mod apply;
 pub mod rows;
@@ -43,7 +45,10 @@ pub fn parse(args: &str) -> Request<'_> {
 }
 
 /// The help line of `/config`.
-pub const HELP: &str = "/config: mods with settings; /config <mod>: its settings; /config <mod> <key>: one setting; /config <mod> <key> <value>: change it (administrators)";
+#[must_use]
+pub fn help() -> String {
+    texts::fill("config.help", &[])
+}
 
 /// The value of `key` in the settings file `text`, as TOML; the field's
 /// default when the file lacks it.
@@ -55,25 +60,62 @@ fn current(text: &str, field: &Field) -> String {
 }
 
 /// How a setting's stage reads in a list.
-fn stage_note(stage: Stage) -> &'static str {
-    match stage {
-        Stage::Startup => "when the world loads",
-        Stage::Client => "each player's own",
-        Stage::Sync => "the world's, joined players get it",
-        _ => "the world's, applied live",
+fn stage_note(stage: Stage) -> String {
+    let key = match stage {
+        Stage::Startup => "stage.startup",
+        Stage::Client => "stage.client",
+        Stage::Sync => "stage.sync",
+        _ => "stage.runtime",
+    };
+    texts::fill(key, &[])
+}
+
+/// What `field` accepts, in the game's language: `1 to 16`, `at least 0`,
+/// `one of "auto", "on", "off"` or its type.
+#[must_use]
+pub fn accepts(field: &Field) -> String {
+    if !field.choices.is_empty() {
+        return texts::fill("accepts.one-of", &[("choices", &field.choices.join(", "))]);
     }
+    match (field.min, field.max) {
+        (Some(min), Some(max)) => texts::fill(
+            "accepts.range",
+            &[("min", &min.to_string()), ("max", &max.to_string())],
+        ),
+        (Some(min), None) => texts::fill("accepts.min", &[("min", &min.to_string())]),
+        (None, Some(max)) => texts::fill("accepts.max", &[("max", &max.to_string())]),
+        (None, None) => {
+            let key = match field.kind {
+                Some(Kind::Bool) => "kind.bool",
+                Some(Kind::Integer) => "kind.integer",
+                Some(Kind::Float) => "kind.float",
+                Some(Kind::String) => "kind.string",
+                Some(Kind::Array) => "kind.array",
+                Some(Kind::Table) => "kind.table",
+                Some(Kind::Datetime) => "kind.datetime",
+                _ => "accepts.any",
+            };
+            texts::fill(key, &[])
+        }
+    }
+}
+
+/// A refusal of a change for `why`, in the game's language.
+#[must_use]
+pub fn refused(why: &str) -> String {
+    texts::fill("refused", &[("why", why)])
 }
 
 /// `/config <mod>`: one line per setting.
 #[must_use]
 pub fn list(id: &str, schema: &Schema, text: &str) -> String {
-    let mut lines = vec![format!("{id} settings (/config {id} <key> for one):")];
+    let mut lines = vec![texts::fill("config.list", &[("id", id)])];
     lines.extend(schema.fields.iter().map(|field| {
         format!(
             "{} = {} ({}; {})",
             field.key,
             current(text, field),
-            field.accepts(),
+            accepts(field),
             stage_note(field.stage)
         )
     }));
@@ -87,24 +129,28 @@ pub fn list(id: &str, schema: &Schema, text: &str) -> String {
 /// A reply when the mod has no such setting.
 pub fn get(id: &str, schema: &Schema, text: &str, key: &str) -> Result<String, String> {
     let field = field(id, schema, key)?;
-    let mut lines = vec![format!(
-        "{id} {} = {} (default {})",
-        field.key,
-        current(text, field),
-        if field.default.is_empty() {
-            "none"
-        } else {
-            &field.default
-        }
-    )];
+    let value = current(text, field);
+    let args = [
+        ("id", id),
+        ("key", field.key.as_str()),
+        ("value", value.as_str()),
+        ("default", field.default.as_str()),
+    ];
+    let mut lines = vec![if field.default.is_empty() {
+        texts::fill("config.get.no-default", &args)
+    } else {
+        texts::fill("config.get", &args)
+    }];
     if !field.doc.is_empty() {
         lines.push(field.doc.clone());
     }
-    lines.push(format!(
-        "Takes {}; {} ({}).",
-        field.accepts(),
-        stage_note(field.stage),
-        field.stage.name()
+    lines.push(texts::fill(
+        "config.takes",
+        &[
+            ("accepts", &accepts(field)),
+            ("stage", &stage_note(field.stage)),
+            ("name", field.stage.name()),
+        ],
     ));
     Ok(lines.join("\n"))
 }
@@ -112,13 +158,26 @@ pub fn get(id: &str, schema: &Schema, text: &str, key: &str) -> Result<String, S
 fn field<'a>(id: &str, schema: &'a Schema, key: &str) -> Result<&'a Field, String> {
     schema.field(key).ok_or_else(|| {
         let keys: Vec<&str> = schema.fields.iter().map(|f| f.key.as_str()).collect();
-        format!("{id} has no setting {key}; it has {}.", keys.join(", "))
+        texts::fill(
+            "config.no-key",
+            &[("id", id), ("key", key), ("keys", &keys.join(", "))],
+        )
     })
 }
 
 /// `value` as typed into the chat, as a TOML value for `field`: TOML, or
 /// for a text setting the words as they are.
 fn typed(field: &Field, value: &str) -> Result<toml_edit::Value, String> {
+    let no_value = || {
+        texts::fill(
+            "config.bad-value",
+            &[
+                ("value", value),
+                ("key", &field.key),
+                ("accepts", &accepts(field)),
+            ],
+        )
+    };
     let parsed = value.parse::<toml_edit::Value>();
     let parsed = match (parsed, field.kind) {
         (Ok(toml_edit::Value::Integer(n)), Some(Kind::Float)) => {
@@ -131,21 +190,16 @@ fn typed(field: &Field, value: &str) -> Result<toml_edit::Value, String> {
         }
         (Ok(parsed), _) => parsed,
         (Err(_), Some(Kind::String)) => toml_edit::Value::from(value),
-        (Err(_), _) => {
-            return Err(format!(
-                "{value} is no value for {}: it takes {}.",
-                field.key,
-                field.accepts()
-            ));
-        }
+        (Err(_), _) => return Err(no_value()),
     };
-    let checked: toml::Table = format!("v = {parsed}")
-        .parse()
-        .map_err(|_| format!("{value} is no value for {}.", field.key))?;
-    if let Some(value) = checked.get("v") {
-        field
-            .check(value)
-            .map_err(|why| format!("Not changed: {why}."))?;
+    let checked: toml::Table = format!("v = {parsed}").parse().map_err(|_| no_value())?;
+    if let Some(value) = checked.get("v")
+        && field.check(value).is_err()
+    {
+        return Err(refused(&texts::fill(
+            "refused.value",
+            &[("key", &field.key), ("accepts", &accepts(field))],
+        )));
     }
     Ok(parsed)
 }
@@ -179,9 +233,9 @@ pub fn set(
 ) -> Result<Change, String> {
     let field = field(id, schema, key)?;
     let mut new = typed(field, value)?;
-    let mut doc: DocumentMut = text
-        .parse()
-        .map_err(|_| format!("Not changed: mod-configs/{id}.toml is not valid TOML."))?;
+    let mut doc: DocumentMut = text.parse().map_err(|e: toml_edit::TomlError| {
+        texts::fill("refused.toml", &[("id", id), ("error", e.message())])
+    })?;
     match doc.get_mut(key).and_then(toml_edit::Item::as_value_mut) {
         Some(old) => {
             *new.decor_mut() = old.decor().clone();
@@ -207,7 +261,6 @@ pub fn set(
 /// The reply to a change of `id`'s `key`, on a game server or not.
 #[must_use]
 pub fn changed(id: &str, key: &str, change: &Change) -> String {
-    use crate::texts;
     use crate::worlds::Destination;
     let args = [("id", id), ("key", key), ("value", change.value.as_str())];
     match (&change.destination, change.stage) {
@@ -304,6 +357,15 @@ mod tests {
             "{}",
             words.text
         );
-        assert!(set("safes", &schema(), "limit = ", "limit", "2").is_err());
+        let broken = set("safes", &schema(), "limit = ", "limit", "2").unwrap_err();
+        assert!(
+            broken.starts_with("Not changed: mod-configs/safes.toml is not valid TOML: ")
+                && broken.len() > 55,
+            "{broken}"
+        );
+        assert_eq!(
+            set("safes", &schema(), FILE, "limit", "40").unwrap_err(),
+            "Not changed: limit takes 1 to 16."
+        );
     }
 }

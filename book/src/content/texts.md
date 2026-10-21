@@ -169,8 +169,9 @@ overrides or adds texts: `load.texts` merges it over the embedded file. It
 lets a server owner reword a mod or translate it into another language
 without rebuilding it.
 
-The loader's own texts, the words of the Mods screen and the name of an item
-whose mod is gone, ship in English and Ukrainian in
+The loader's own texts, the words of the Mods screen, the replies of
+`/enshwick` and `/config`, the reasons a settings change is refused and the
+name of an item whose mod is gone, ship in English and Ukrainian in
 [`texts.toml`](https://github.com/themaiby/enshwick/blob/main/crates/internal/loader/src/texts.toml),
 and `mod-configs/enshwick.texts.toml` overrides them or adds a language the
 same way.

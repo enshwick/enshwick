@@ -11,6 +11,8 @@ use std::time::{Duration, Instant};
 
 use enshwick_loader_api::config::Schema;
 
+use crate::texts;
+
 /// The control frame kinds, after the protocol's notice (3), item data (4)
 /// and demo (5).
 pub const SYNC: u8 = 6;
@@ -214,13 +216,13 @@ pub fn admit(
     now: Instant,
 ) -> Result<(), String> {
     if !admin {
-        return Err("Only administrators change the server's settings.".to_owned());
+        return Err(texts::fill("remote.admins", &[]));
     }
     if schema.field(key).is_some_and(|f| f.secret) {
-        return Err(format!("{key} is changed in the server's file only."));
+        return Err(texts::fill("remote.secret", &[("key", key)]));
     }
     if last.is_some_and(|last| now.duration_since(last) < EDIT_GAP) {
-        return Err("Too many changes at once; try again.".to_owned());
+        return Err(texts::fill("remote.busy", &[]));
     }
     Ok(())
 }
@@ -237,7 +239,7 @@ mod live {
     use enshwick_loader_api::abi::PlayerInfo;
     use enshwick_loader_api::config::Schema;
 
-    use super::{Message, admit, values_text, without_secrets};
+    use super::{Message, admit, texts, values_text, without_secrets};
     use crate::host::Loader;
 
     /// When each player last changed a setting.
@@ -425,7 +427,7 @@ mod live {
                 key,
                 &Message::Result {
                     ok: false,
-                    text: format!("{id}'s settings are too long to send; use /config."),
+                    text: texts::fill("remote.too-long", &[("id", id)]),
                 },
             );
             return;
@@ -446,13 +448,13 @@ mod live {
             .iter()
             .enumerate()
             .find(|(_, m)| m.id == id)
-            .ok_or_else(|| format!("The server runs no mod {id}."))?;
+            .ok_or_else(|| texts::fill("remote.unknown", &[("id", id)]))?;
         let schema = record
             .schema
             .lock()
             .ok()
             .and_then(|s| s.clone())
-            .ok_or_else(|| format!("{id} does not describe its settings."))?;
+            .ok_or_else(|| texts::fill("remote.no-schema", &[("id", id)]))?;
         let now = Instant::now();
         {
             let mut last = LAST_EDIT.lock().unwrap_or_else(PoisonError::into_inner);

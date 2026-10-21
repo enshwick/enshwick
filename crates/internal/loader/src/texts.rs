@@ -79,7 +79,15 @@ mod tests {
     /// The keys the loader's code asks for: the first argument of each
     /// `texts::` call that is a literal, and the stand-ins' keys.
     fn keys() -> Vec<String> {
-        let source = [include_str!("ui/mods.rs"), include_str!("configure.rs")].concat();
+        let source = [
+            include_str!("ui/mods.rs"),
+            include_str!("configure.rs"),
+            include_str!("configure/apply.rs"),
+            include_str!("chat.rs"),
+            include_str!("remote.rs"),
+            include_str!("host.rs"),
+        ]
+        .concat();
         let mut keys: Vec<String> = source
             .split("texts::")
             .skip(1)
@@ -112,6 +120,22 @@ mod tests {
     }
 
     #[test]
+    fn english_and_ukrainian_hold_the_same_keys() {
+        let table: toml::Table = EMBEDDED.parse().unwrap();
+        let keys = |language: &str| -> Vec<String> {
+            let mut keys: Vec<String> = table[language]
+                .as_table()
+                .unwrap()
+                .keys()
+                .cloned()
+                .collect();
+            keys.sort_unstable();
+            keys
+        };
+        assert_eq!(keys("en"), keys("uk"));
+    }
+
+    #[test]
     fn english_and_ukrainian_name_the_same_placeholders() {
         fn placeholders(text: &str) -> Vec<&str> {
             let mut names: Vec<&str> = text
@@ -123,7 +147,9 @@ mod tests {
             names
         }
         let texts = Texts::parse(EMBEDDED).unwrap();
-        for (english, ukrainian) in keys().iter().filter_map(|key| {
+        let table: toml::Table = EMBEDDED.parse().unwrap();
+        let all = table["en"].as_table().unwrap().keys();
+        for (english, ukrainian) in all.filter_map(|key| {
             Some((
                 texts.get(key, Language::FALLBACK)?,
                 texts.get(key, Language::UK_UA)?,

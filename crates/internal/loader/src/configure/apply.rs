@@ -8,8 +8,9 @@
 use enshwick_loader_api::abi::Event;
 use enshwick_loader_api::config::Stage;
 
-use super::Change;
+use super::{Change, refused};
 use crate::host::Loader;
+use crate::texts;
 use crate::worlds::Destination;
 
 /// Sets mod `index`'s setting `key` to `value`, TOML or for a text setting
@@ -29,28 +30,24 @@ pub(crate) fn apply(
     let record = loader
         .mods
         .get(index)
-        .ok_or_else(|| "No such mod.".to_owned())?;
+        .ok_or_else(|| texts::fill("refused.no-mod", &[]))?;
     let id = record.id.as_str();
     let schema = record
         .schema
         .lock()
         .ok()
         .and_then(|s| s.clone())
-        .ok_or_else(|| {
-            format!("{id} does not describe its settings; edit mod-configs/{id}.toml.")
-        })?;
+        .ok_or_else(|| texts::fill("config.no-schema", &[("id", id)]))?;
     if loader.side == enshwick_loader_api::abi::Side::SERVER
         && schema.field(key).is_some_and(|f| f.stage == Stage::Client)
     {
-        return Err(format!(
-            "{id} {key} is each player's own: they set it in their game."
-        ));
+        return Err(texts::fill("refused.client", &[("id", id), ("key", key)]));
     }
     let stage = schema.field(key).map_or(Stage::Runtime, |f| f.stage);
     let destination = crate::worlds::destination(stage, crate::worlds::current().as_deref());
     let global_path = loader.configs_dir.join(format!("{id}.toml"));
     let global = std::fs::read_to_string(&global_path)
-        .map_err(|_| format!("mod-configs/{id}.toml is missing; restart to write it."))?;
+        .map_err(|_| texts::fill("config.missing", &[("id", id)]))?;
     let (path, text) = crate::worlds::target_text(loader, record, &destination);
     let mut change = super::set(id, &schema, &text, key, value)?;
     // The mod checks what it would read with the change.
@@ -59,9 +56,16 @@ pub(crate) fn apply(
         Destination::World(_) => crate::worlds::compose(&change.text, &global, &schema),
         Destination::Next => crate::worlds::overlay(&global, &change.text, None),
     };
-    crate::host::check_settings(index, &read).map_err(|why| format!("Not changed: {why}."))?;
-    crate::worlds::write_target(&path, &change.text)
-        .map_err(|e| format!("Not changed: {}: {e}", path.display()))?;
+    crate::host::check_settings(index, &read).map_err(|why| refused(&why))?;
+    crate::worlds::write_target(&path, &change.text).map_err(|e| {
+        texts::fill(
+            "refused.write",
+            &[
+                ("path", &path.display().to_string()),
+                ("error", &e.to_string()),
+            ],
+        )
+    })?;
     crate::watch::wrote(&path);
     crate::log!(INFO, "{who} set {id} {key} = {}", change.value);
     change.destination = destination.clone();
