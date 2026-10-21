@@ -1,5 +1,7 @@
 //! A background thread solves the clusters whenever the altars' vanilla
-//! zones change; the game thread never waits for it.
+//! zones change; the game thread never waits for it. What was solved
+//! belongs to one game: the loader drops the sizes when a hosted game stops,
+//! so the next game, the same world again included, is solved afresh.
 
 use std::collections::BTreeMap;
 use std::sync::Mutex;
@@ -17,18 +19,57 @@ type Input = BTreeMap<u32, Vec<Box3>>;
 struct State {
     solved: Option<Input>,
     solving: bool,
+    /// Counts the games run, so a solve of one never lands in the next.
+    game: u64,
 }
 
-static STATE: Mutex<State> = Mutex::new(State {
-    solved: None,
-    solving: false,
-});
+impl State {
+    const fn new() -> Self {
+        Self {
+            solved: None,
+            solving: false,
+            game: 0,
+        }
+    }
+
+    /// Whether `input` still needs solving: it differs from what this game
+    /// solved last.
+    fn wants(&self, input: &Input) -> bool {
+        self.solved.as_ref() != Some(input)
+    }
+
+    /// Forgets what was solved, for the next game.
+    fn forget(&mut self) {
+        self.solved = None;
+        self.game = self.game.wrapping_add(1);
+    }
+
+    /// Notes the end of a solve of `input` started in `game`; whether its
+    /// sizes still apply, as they do unless another game began meanwhile.
+    fn finish(&mut self, game: u64, input: Input) -> bool {
+        self.solving = false;
+        if game != self.game {
+            return false;
+        }
+        self.solved = Some(input);
+        true
+    }
+}
+
+static STATE: Mutex<State> = Mutex::new(State::new());
 
 pub(crate) fn request(control: ZoneControl) {
     let Ok(mut state) = STATE.lock() else {
         return;
     };
     maybe_solve(&mut state, control);
+}
+
+/// Forgets the game that stopped: the next one solves its zones again.
+pub(crate) fn forget() {
+    if let Ok(mut state) = STATE.lock() {
+        state.forget();
+    }
 }
 
 fn input(control: ZoneControl) -> Input {
@@ -61,12 +102,13 @@ fn maybe_solve(state: &mut State, control: ZoneControl) {
         return;
     }
     let input = input(control);
-    if state.solved.as_ref() == Some(&input) {
+    if !state.wants(&input) {
         return;
     }
     let levels: Vec<(u32, usize)> = input.iter().map(|(id, l)| (*id, l.len())).collect();
     enshwick_loader_api::info!("{} altars placed, levelled {levels:?}", input.len());
     state.solving = true;
+    let game = state.game;
     let spawned = std::thread::Builder::new()
         .name("altar-zones-solver".into())
         .spawn(move || {
@@ -74,18 +116,18 @@ fn maybe_solve(state: &mut State, control: ZoneControl) {
             let Ok(mut state) = STATE.lock() else {
                 return;
             };
-            state.solving = false;
-            match solved {
-                Ok(sizes) => {
-                    if let Err(error) = control.set(&sizes) {
-                        enshwick_loader_api::warn!("{error}");
-                    }
-                    state.solved = Some(input);
-                    // The altars may have moved on while this ran.
-                    maybe_solve(&mut state, control);
-                }
-                Err(_) => enshwick_loader_api::warn!("the solver panicked; vanilla zones stay"),
+            let Ok(sizes) = solved else {
+                state.solving = false;
+                enshwick_loader_api::warn!("the solver panicked; vanilla zones stay");
+                return;
+            };
+            if state.finish(game, input)
+                && let Err(error) = control.set(&sizes)
+            {
+                enshwick_loader_api::warn!("{error}");
             }
+            // The altars may have moved on while this ran.
+            maybe_solve(&mut state, control);
         });
     if spawned.is_err() {
         state.solving = false;
@@ -143,6 +185,28 @@ pub(crate) fn sizes(input: &Input) -> Vec<ZoneSize> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_next_game_solves_the_same_altars_again() {
+        let mut input = Input::new();
+        input.insert(1, vec![Box3::new([0, 0, 0], [80, 80, 80])]);
+        let mut state = State::new();
+        assert!(state.wants(&input));
+        state.solving = true;
+        assert!(state.finish(state.game, input.clone()));
+        assert!(!state.solving);
+        assert!(!state.wants(&input), "solved in this game");
+        // The host quits and loads the same world again.
+        state.forget();
+        assert!(state.wants(&input), "the loader dropped the sizes");
+        // A solve still running when its game stopped lands nowhere.
+        let started = state.game;
+        state.solving = true;
+        state.forget();
+        assert!(!state.finish(started, input.clone()));
+        assert!(!state.solving);
+        assert!(state.wants(&input));
+    }
 
     #[test]
     fn two_touching_altars_grow_alike_and_a_lone_one_keeps_its_zone() {
