@@ -291,8 +291,11 @@ fn address(register: u64) -> usize {
     usize::try_from(register).unwrap_or(0)
 }
 
+/// The switch of the knowledge guard.
+static GUARD_FUSE: crate::fuse::Fuse = crate::fuse::Fuse::new("knowledge guard");
+
 unsafe extern "system" fn check(registers: *mut Registers, _user: *mut c_void) {
-    let _caught = std::panic::catch_unwind(|| {
+    let _caught = GUARD_FUSE.run("the check", || {
         // SAFETY: the stub's saved registers, valid for the call.
         let Some(registers) = (unsafe { registers.as_mut() }) else {
             return;

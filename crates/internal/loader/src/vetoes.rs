@@ -231,6 +231,9 @@ pub(crate) unsafe fn screen(type_hash: u32, payload: *mut u8, size: usize) {
     }
 }
 
+/// The switch of the crafting and building vetoes.
+static VETOES_FUSE: crate::fuse::Fuse = crate::fuse::Fuse::new("crafting and building vetoes");
+
 unsafe extern "system" fn cursor(
     flags: *mut u32,
     cursor_context: *mut u8,
@@ -242,7 +245,7 @@ unsafe extern "system" fn cursor(
 ) {
     // SAFETY: forwarded unchanged.
     unsafe { CURSOR_NEXT.get()(flags, cursor_context, placement, transform, a, b, range) };
-    let _caught = std::panic::catch_unwind(|| {
+    let _caught = VETOES_FUSE.run("the cursor", || {
         // SAFETY: the game's arguments, after its own check.
         unsafe { refuse(flags, cursor_context, placement, transform) };
     });

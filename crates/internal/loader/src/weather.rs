@@ -482,6 +482,9 @@ pub(crate) fn link(loader: &'static Loader) {
     );
 }
 
+/// The switch of the chunk events.
+static CHUNKS_FUSE: crate::fuse::Fuse = crate::fuse::Fuse::new("chunk events");
+
 unsafe extern "system" fn chunk_step(entities: *mut u8, chunk: *mut u8, budget: *mut u32) -> u8 {
     let before = if chunk.is_null() {
         0xff
@@ -501,7 +504,7 @@ unsafe extern "system" fn chunk_step(entities: *mut u8, chunk: *mut u8, budget: 
         (UNLOADING, UNLOADED) => Event::CHUNK_UNLOADED,
         _ => return done,
     };
-    let _caught = std::panic::catch_unwind(|| {
+    let _caught = CHUNKS_FUSE.run("the chunk step", || {
         // SAFETY: the game's entity world and chunk, as passed to the step.
         unsafe { record(event, entities, chunk) };
     });

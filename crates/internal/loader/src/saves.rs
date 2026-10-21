@@ -90,6 +90,9 @@ pub(crate) fn link(loader: &'static Loader) {
     loader.link_feature("world keys", target, &PATH_NEXT, built, HookFlags::NONE);
 }
 
+/// The switch of the save path notes.
+static SAVES_FUSE: crate::fuse::Fuse = crate::fuse::Fuse::new("save path notes");
+
 unsafe extern "system" fn built(result: *mut u8, path: *mut u8, slot: *mut u8) -> *mut u8 {
     // SAFETY: forwarded unchanged.
     let out = unsafe { PATH_NEXT.get()(result, path, slot) };
@@ -97,7 +100,7 @@ unsafe extern "system" fn built(result: *mut u8, path: *mut u8, slot: *mut u8) -
     // SAFETY: the game wrote its result's first byte, 0 on success.
     let code = (!result.is_null()).then(|| unsafe { result.read() });
     if let Some(layout) = layout {
-        let _caught = std::panic::catch_unwind(|| {
+        let _caught = SAVES_FUSE.run("the built", || {
             // SAFETY: the path the game has just built.
             let text = unsafe { read_path(&layout, path) };
             crate::log!(DEBUG, "save path built ({code:?}): {text:?}");

@@ -104,16 +104,24 @@ fn answer(out: *mut [u64; 3], text: &str) -> *mut [u64; 3] {
     out
 }
 
+/// The mod texts' switch.
+static TEXTS_FUSE: crate::fuse::Fuse = crate::fuse::Fuse::new("mod texts");
+/// The served resources' switch.
+static RESOURCES_FUSE: crate::fuse::Fuse = crate::fuse::Fuse::new("served resources");
+
 unsafe extern "system" fn lookup(out: *mut [u64; 3], pool: *mut u8, id: u32) -> *mut [u64; 3] {
-    let offset = POOL_LANGUAGE.load(Ordering::Relaxed);
-    let language = if pool.is_null() || offset == usize::MAX {
-        ENGLISH
-    } else {
-        // SAFETY: the pool holds its current language there.
-        unsafe { pool.wrapping_add(offset).cast::<u32>().read_unaligned() }
-    };
-    LANGUAGE.store(language, Ordering::Relaxed);
-    match text_for(id, language) {
+    let found = TEXTS_FUSE.run("the text lookup", || {
+        let offset = POOL_LANGUAGE.load(Ordering::Relaxed);
+        let language = if pool.is_null() || offset == usize::MAX {
+            ENGLISH
+        } else {
+            // SAFETY: the pool holds its current language there.
+            unsafe { pool.wrapping_add(offset).cast::<u32>().read_unaligned() }
+        };
+        LANGUAGE.store(language, Ordering::Relaxed);
+        text_for(id, language)
+    });
+    match found.flatten() {
         Some(text) => answer(out, text),
         // SAFETY: forwarded unchanged.
         None => unsafe { TEXT_NEXT.get()(out, pool, id) },
@@ -125,7 +133,10 @@ unsafe extern "system" fn lookup_english(
     pool: *mut u8,
     id: u32,
 ) -> *mut [u64; 3] {
-    match text_for(id, ENGLISH) {
+    match TEXTS_FUSE
+        .run("the English text lookup", || text_for(id, ENGLISH))
+        .flatten()
+    {
         Some(text) => answer(out, text),
         // SAFETY: forwarded unchanged.
         None => unsafe { ENGLISH_NEXT.get()(out, pool, id) },
@@ -517,18 +528,30 @@ unsafe extern "system" fn open(
 ) -> *mut u32 {
     // SAFETY: the game passes a key it owns for the call.
     let wanted = unsafe { key.as_ref() };
-    let mut found = wanted.and_then(find);
-    let mut new = None;
-    if found.is_none() {
-        new = wanted.and_then(renamed);
-        found = new.as_ref().and_then(find);
-    }
+    let decided = RESOURCES_FUSE.run("a resource open", || {
+        let mut found = wanted.and_then(find);
+        let mut new = None;
+        if found.is_none() {
+            new = wanted.and_then(renamed);
+            found = new.as_ref().and_then(find);
+        }
+        let aliased = if found.is_none() && new.is_none() {
+            wanted.and_then(alias)
+        } else {
+            None
+        };
+        (found, new, aliased)
+    });
+    let Some((found, new, aliased)) = decided else {
+        // SAFETY: forwarded unchanged.
+        return unsafe { OPEN_NEXT.get()(out, database, key) };
+    };
     let Some((index, entry)) = found else {
         if let Some(new) = new {
             // SAFETY: the game's open with a key of ours, valid for the call.
             return unsafe { OPEN_NEXT.get()(out, database, &raw const new) };
         }
-        if let Some(vanilla) = wanted.and_then(alias) {
+        if let Some(vanilla) = aliased {
             // SAFETY: the game's open with a key of ours, valid for the call.
             return unsafe { OPEN_NEXT.get()(out, database, &raw const vanilla) };
         }
@@ -565,8 +588,12 @@ unsafe extern "system" fn resolve(
         // SAFETY: forwarded unchanged.
         return unsafe { RESOLVE_NEXT.get()(out, database, handle) };
     };
-    let result =
-        build(entry, database).map_or([0; 3], |(data, len)| [data as u64, len as u64, RESIDENT]);
+    // A served handle never reaches the game's resolve, even once the
+    // resources are off: it would read past the game's table.
+    let result = RESOURCES_FUSE
+        .run("a resource build", || build(entry, database))
+        .flatten()
+        .map_or([0; 3], |(data, len)| [data as u64, len as u64, RESIDENT]);
     if !out.is_null() {
         // SAFETY: the game's out triple.
         unsafe { out.write(result) };

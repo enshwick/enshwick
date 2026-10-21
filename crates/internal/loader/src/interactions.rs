@@ -308,6 +308,9 @@ unsafe fn server_player(ctx: *mut u64) -> Option<u32> {
     Some(unsafe { engine.entity(ctx) })
 }
 
+/// The switch of the interaction filters.
+static INTERACTIONS_FUSE: crate::fuse::Fuse = crate::fuse::Fuse::new("interaction filters");
+
 unsafe extern "system" fn offer(
     out: *mut u8,
     query: *mut u8,
@@ -320,17 +323,18 @@ unsafe extern "system" fn offer(
 ) -> *mut u8 {
     let refused = !out.is_null()
         && !query.is_null()
-        && std::panic::catch_unwind(|| {
-            // SAFETY: the query state starts with the system context.
-            let ctx: *mut u64 = unsafe { read(query, 0) };
-            // SAFETY: the offer test runs inside its system, on its thread.
-            let Some(player) = (unsafe { server_player(ctx) }) else {
-                return false;
-            };
-            // SAFETY: as above.
-            !allowed(&unsafe { interaction(Interaction::OPEN, player, candidate, ctx) })
-        })
-        .unwrap_or(false);
+        && INTERACTIONS_FUSE
+            .run("the offer", || {
+                // SAFETY: the query state starts with the system context.
+                let ctx: *mut u64 = unsafe { read(query, 0) };
+                // SAFETY: the offer test runs inside its system, on its thread.
+                let Some(player) = (unsafe { server_player(ctx) }) else {
+                    return false;
+                };
+                // SAFETY: as above.
+                !allowed(&unsafe { interaction(Interaction::OPEN, player, candidate, ctx) })
+            })
+            .unwrap_or(false);
     if refused {
         // SAFETY: the offer's 0x14-byte out record.
         unsafe { write(out, 0, NOT_OFFERED) };
@@ -395,32 +399,33 @@ unsafe fn may_touch(
 unsafe extern "system" fn transfer(ctx: *mut u64, state: *mut u8) {
     let refused = LOADED.get().is_some_and(|(_, layout, _)| {
         !state.is_null()
-            && std::panic::catch_unwind(|| {
-                // SAFETY: the action state points at the player's input.
-                let input: *const u8 = unsafe { read(state, layout.state_input) };
-                if input.is_null() {
-                    return false;
-                }
-                // SAFETY: the input holds the transfer at these offsets.
-                let source: u32 = unsafe { read(input, layout.transfer_source) };
-                // SAFETY: as above.
-                let target: u32 = unsafe { read(input, layout.transfer_target) };
-                // SAFETY: as above.
-                let source_slot: u64 = unsafe { read(input, layout.transfer_source_slot) };
-                // SAFETY: as above.
-                let target_slot: u64 = unsafe { read(input, layout.transfer_target_slot) };
-                // SAFETY: the running action's context and state.
-                !unsafe {
-                    may_touch(
-                        Interaction::MOVE,
-                        ctx,
-                        state,
-                        &[source, target],
-                        &[source_slot, target_slot],
-                    )
-                }
-            })
-            .unwrap_or(false)
+            && INTERACTIONS_FUSE
+                .run("the transfer", || {
+                    // SAFETY: the action state points at the player's input.
+                    let input: *const u8 = unsafe { read(state, layout.state_input) };
+                    if input.is_null() {
+                        return false;
+                    }
+                    // SAFETY: the input holds the transfer at these offsets.
+                    let source: u32 = unsafe { read(input, layout.transfer_source) };
+                    // SAFETY: as above.
+                    let target: u32 = unsafe { read(input, layout.transfer_target) };
+                    // SAFETY: as above.
+                    let source_slot: u64 = unsafe { read(input, layout.transfer_source_slot) };
+                    // SAFETY: as above.
+                    let target_slot: u64 = unsafe { read(input, layout.transfer_target_slot) };
+                    // SAFETY: the running action's context and state.
+                    !unsafe {
+                        may_touch(
+                            Interaction::MOVE,
+                            ctx,
+                            state,
+                            &[source, target],
+                            &[source_slot, target_slot],
+                        )
+                    }
+                })
+                .unwrap_or(false)
     });
     if refused {
         // Skipped: the caller marks the action consumed and resends the
@@ -434,18 +439,19 @@ unsafe extern "system" fn transfer(ctx: *mut u64, state: *mut u8) {
 unsafe extern "system" fn sort(ctx: *mut u64, state: *mut u8) {
     let refused = LOADED.get().is_some_and(|(_, layout, _)| {
         !state.is_null()
-            && std::panic::catch_unwind(|| {
-                // SAFETY: as for the transfer.
-                let input: *const u8 = unsafe { read(state, layout.state_input) };
-                if input.is_null() {
-                    return false;
-                }
-                // SAFETY: the input holds the sort's target there.
-                let target: u32 = unsafe { read(input, layout.sort_target) };
-                // SAFETY: the running action's context and state.
-                !unsafe { may_touch(Interaction::SORT, ctx, state, &[target], &[]) }
-            })
-            .unwrap_or(false)
+            && INTERACTIONS_FUSE
+                .run("the sort", || {
+                    // SAFETY: as for the transfer.
+                    let input: *const u8 = unsafe { read(state, layout.state_input) };
+                    if input.is_null() {
+                        return false;
+                    }
+                    // SAFETY: the input holds the sort's target there.
+                    let target: u32 = unsafe { read(input, layout.sort_target) };
+                    // SAFETY: the running action's context and state.
+                    !unsafe { may_touch(Interaction::SORT, ctx, state, &[target], &[]) }
+                })
+                .unwrap_or(false)
     });
     if refused {
         return;
@@ -484,7 +490,7 @@ unsafe extern "system" fn stock(
         return result;
     }
     // SAFETY: the game's lists, filled for this call.
-    let _done = std::panic::catch_unwind(|| unsafe { filter_stock(lists, player) });
+    let _done = INTERACTIONS_FUSE.run("the stock", || unsafe { filter_stock(lists, player) });
     result
 }
 
@@ -553,29 +559,30 @@ unsafe extern "system" fn dismantle(
     let Some((_, layout, _)) = LOADED.get() else {
         return method;
     };
-    let refused = std::panic::catch_unwind(|| {
-        // SAFETY: the object describes an entity when its kind word is 0.
-        let id: u64 = unsafe { read(object, layout.object_id) };
-        // SAFETY: as above.
-        let kind: u64 = unsafe { read(object, layout.object_kind) };
-        if kind != 0 {
-            return false;
-        }
-        // SAFETY: the cursor context starts with the system context.
-        let system: *mut u64 = unsafe { read(ctx, 0) };
-        // SAFETY: the cursor runs inside its system, on its thread.
-        let Some(player) = (unsafe { server_player(system) }) else {
-            return false;
-        };
-        #[expect(
-            clippy::cast_possible_truncation,
-            reason = "the entity id is the low half"
-        )]
-        let target = id as u32;
-        // SAFETY: as above.
-        !allowed(&unsafe { interaction(Interaction::DISMANTLE, player, target, system) })
-    })
-    .unwrap_or(false);
+    let refused = INTERACTIONS_FUSE
+        .run("the dismantle", || {
+            // SAFETY: the object describes an entity when its kind word is 0.
+            let id: u64 = unsafe { read(object, layout.object_id) };
+            // SAFETY: as above.
+            let kind: u64 = unsafe { read(object, layout.object_kind) };
+            if kind != 0 {
+                return false;
+            }
+            // SAFETY: the cursor context starts with the system context.
+            let system: *mut u64 = unsafe { read(ctx, 0) };
+            // SAFETY: the cursor runs inside its system, on its thread.
+            let Some(player) = (unsafe { server_player(system) }) else {
+                return false;
+            };
+            #[expect(
+                clippy::cast_possible_truncation,
+                reason = "the entity id is the low half"
+            )]
+            let target = id as u32;
+            // SAFETY: as above.
+            !allowed(&unsafe { interaction(Interaction::DISMANTLE, player, target, system) })
+        })
+        .unwrap_or(false);
     if refused { 0 } else { method }
 }
 
@@ -585,7 +592,8 @@ unsafe extern "system" fn dismantle(
 unsafe extern "system" fn inventory_actions(ctx: *mut u64) -> u64 {
     if LOADED.get().is_some() && !ctx.is_null() {
         // SAFETY: the system's context, at its entry on its thread.
-        let _done = std::panic::catch_unwind(|| unsafe { refuse_pending(ctx) });
+        let _done =
+            INTERACTIONS_FUSE.run("the inventory actions", || unsafe { refuse_pending(ctx) });
     }
     // SAFETY: forwarded unchanged.
     unsafe { ACTIONS_NEXT.get()(ctx) }
