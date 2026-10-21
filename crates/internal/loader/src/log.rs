@@ -4,7 +4,8 @@
 //! background thread owns the files, so a hook never waits on the disk. A
 //! line the full channel cannot take is counted and the count logged once
 //! there is room. The writer also keeps the latest lines in memory for
-//! `/enshwick log`.
+//! `/enshwick log`. The writer keeps the two runs before as `<name>.1.log`
+//! and `<name>.2.log`, each at most [`KEPT_BYTES`].
 
 use std::collections::VecDeque;
 use std::fmt::Write as _;
@@ -24,6 +25,10 @@ use crate::settings::{LOADER_ID, Settings};
 const QUEUE: usize = 4096;
 /// The latest lines kept in memory.
 const RECENT: usize = 1024;
+/// The most bytes kept of one earlier run's file: its last ones.
+const KEPT_BYTES: u64 = 8 << 20;
+/// Earlier runs kept beside the current one.
+const KEPT_RUNS: usize = 2;
 
 /// One line: its level, its source and the line as written.
 type Line = (Level, String, String);
@@ -57,7 +62,7 @@ pub fn enabled(level: Level, source: &str) -> bool {
     level <= self::level(source)
 }
 
-/// Starts the writer in `dir`, truncating the previous session's files:
+/// Starts the writer in `dir`, the previous runs' files moved aside first:
 /// `all.log` gets every line, `loader.log` the loader's, `mods/<id>.log` each
 /// mod's.
 pub fn open(dir: &Path) {
@@ -65,14 +70,19 @@ pub fn open(dir: &Path) {
     if std::fs::create_dir_all(&mods).is_err() {
         return;
     }
-    let Ok(mut all) = std::fs::File::create(dir.join("all.log")) else {
-        return;
-    };
     let dir = dir.to_path_buf();
     let (send, receive) = sync_channel::<Line>(QUEUE);
     let started = std::thread::Builder::new()
         .name("enshwick-log".into())
         .spawn(move || {
+            // On the writer's thread: the game's start never waits on the
+            // disk, and lines sent meanwhile wait in the channel.
+            rotate(&dir.join("all.log"));
+            rotate(&dir.join("loader.log"));
+            rotate_dir(&mods);
+            let Ok(mut all) = std::fs::File::create(dir.join("all.log")) else {
+                return;
+            };
             let mut files: std::collections::HashMap<String, Option<std::fs::File>> =
                 std::collections::HashMap::new();
             for (level, source, line) in receive {
@@ -106,6 +116,83 @@ pub fn open(dir: &Path) {
     if started.is_ok() {
         let _first = LINES.set(send);
     }
+}
+
+/// Moves every current `<name>.log` in `dir` aside as `<name>.1.log`, the
+/// one before to `<name>.2.log`, dropping the oldest.
+fn rotate_dir(dir: &Path) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    let current: Vec<std::path::PathBuf> = entries
+        .filter_map(|entry| Some(entry.ok()?.path()))
+        .filter(|path| path.is_file() && run_of(path) == Some(0))
+        .collect();
+    for path in current {
+        rotate(&path);
+    }
+}
+
+/// The run a log file of the writer belongs to: 0 for `<name>.log`, `n` for
+/// `<name>.<n>.log`; `None` for any other file.
+fn run_of(path: &Path) -> Option<usize> {
+    if path.extension()? != "log" {
+        return None;
+    }
+    let stem = path.file_stem()?.to_str()?;
+    match stem.rsplit_once('.') {
+        Some((_, run)) => run.parse().ok().filter(|&run| run > 0),
+        None => Some(0),
+    }
+}
+
+/// `<name>.<run>.log` beside `current`, `<name>.log`.
+fn run_path(current: &Path, run: usize) -> Option<std::path::PathBuf> {
+    let stem = current.file_stem()?.to_str()?;
+    Some(current.with_file_name(format!("{stem}.{run}.log")))
+}
+
+/// Moves `current` aside as run 1, run 1 to run 2 and so on up to
+/// [`KEPT_RUNS`]; a file over [`KEPT_BYTES`] keeps its last lines that fit.
+fn rotate(current: &Path) {
+    if !current.is_file() {
+        return;
+    }
+    let Some(runs) = (1..=KEPT_RUNS)
+        .map(|run| run_path(current, run))
+        .collect::<Option<Vec<_>>>()
+    else {
+        return;
+    };
+    let _oldest = runs.last().map(std::fs::remove_file);
+    for pair in runs.windows(2).rev() {
+        let _moved = std::fs::rename(&pair[0], &pair[1]);
+    }
+    let size = std::fs::metadata(current).map_or(0, |m| m.len());
+    if size <= KEPT_BYTES {
+        let _moved = std::fs::rename(current, &runs[0]);
+    } else {
+        let _kept = keep_tail(current, &runs[0], KEPT_BYTES);
+        let _removed = std::fs::remove_file(current);
+    }
+}
+
+/// Writes the last whole lines of `from` that fit in `bytes` to `to`.
+fn keep_tail(from: &Path, to: &Path, bytes: u64) -> std::io::Result<()> {
+    use std::io::{Read as _, Seek as _, SeekFrom};
+    let mut file = std::fs::File::open(from)?;
+    let size = file.metadata()?.len();
+    file.seek(SeekFrom::Start(size.saturating_sub(bytes)))?;
+    let mut tail = Vec::new();
+    file.read_to_end(&mut tail)?;
+    let start = if size > bytes {
+        tail.iter()
+            .position(|&b| b == b'\n')
+            .map_or(tail.len(), |at| at + 1)
+    } else {
+        0
+    };
+    std::fs::write(to, &tail[start..])
 }
 
 /// Whether lines go to [`CAPTURED`] instead of the files.
@@ -264,6 +351,42 @@ mod tests {
         assert!(!formatted.get());
         crate::log!(ERROR, "{}", costly());
         assert!(formatted.get());
+    }
+
+    #[test]
+    fn earlier_runs_are_kept_twice_and_capped() {
+        let dir = std::env::temp_dir().join(format!("enshwick-log-{}", std::process::id()));
+        let _fresh = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let read = |name: &str| std::fs::read_to_string(dir.join(name)).ok();
+        for run in ["first", "second", "third"] {
+            std::fs::write(dir.join("all.log"), run).unwrap();
+            std::fs::write(dir.join("notes.txt"), run).unwrap();
+            rotate_dir(&dir);
+        }
+        assert_eq!(read("all.log"), None);
+        assert_eq!(read("all.1.log").as_deref(), Some("third"));
+        assert_eq!(read("all.2.log").as_deref(), Some("second"));
+        assert_eq!(read("all.3.log"), None);
+        assert_eq!(read("notes.txt").as_deref(), Some("third"));
+        assert_eq!(read("notes.1.txt"), None);
+
+        let big = dir.join("big.log");
+        std::fs::write(&big, "aaaa\nbbbb\ncccc\n").unwrap();
+        keep_tail(&big, &dir.join("tail.log"), 7).unwrap();
+        assert_eq!(read("tail.log").as_deref(), Some("cccc\n"));
+        keep_tail(&big, &dir.join("tail.log"), 100).unwrap();
+        assert_eq!(read("tail.log").as_deref(), Some("aaaa\nbbbb\ncccc\n"));
+        let _clean = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn only_the_writer_s_logs_have_runs() {
+        assert_eq!(run_of(Path::new("all.log")), Some(0));
+        assert_eq!(run_of(Path::new("all.2.log")), Some(2));
+        assert_eq!(run_of(Path::new("all.0.log")), None);
+        assert_eq!(run_of(Path::new("all.txt")), None);
+        assert_eq!(run_of(Path::new("all.x.log")), None);
     }
 
     #[test]

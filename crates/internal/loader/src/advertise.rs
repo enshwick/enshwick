@@ -29,8 +29,12 @@ const RULE_LIMIT: usize = 127;
 pub const RULE: &str = "enshwick";
 /// The rule that lists the mods; further parts are `enshwick.mods.1` and on.
 pub const RULE_MODS: &str = "enshwick.mods";
-/// The most rules the mod list spreads over.
-pub const MOD_RULES: usize = 16;
+/// The most rules the mod list spreads over, about 4 KiB: a reply the query
+/// splits is put back together from up to 16 packets.
+pub const MOD_RULES: usize = 32;
+/// The rule that gives the number of mods when the list did not fit in
+/// [`MOD_RULES`] rules, so a client knows it reads only part of it.
+pub const RULE_MOD_COUNT: &str = "enshwick.mods.count";
 /// The prefix of a mod's join value rules, `enshwick.sync.<id>`.
 pub const RULE_SYNC: &str = "enshwick.sync";
 /// The most rules one mod's join values spread over.
@@ -152,6 +156,9 @@ pub struct Advert {
     /// Mods whose join values need more than [`SYNC_RULES`] rules; they are
     /// left out of the rules and the fingerprint.
     pub too_long: Vec<String>,
+    /// Mods left out of the mod list rules, which hold at most
+    /// [`MOD_RULES`]; they still count in the fingerprint.
+    pub mods_cut: usize,
 }
 
 impl Advert {
@@ -167,7 +174,10 @@ impl Advert {
         synced: &BTreeMap<String, String>,
     ) -> Self {
         let mut fit = BTreeMap::new();
-        let mut rules = mod_rules(mods);
+        let (mut rules, mods_cut) = mod_rules(mods);
+        if mods_cut > 0 {
+            rules.push((RULE_MOD_COUNT.to_owned(), mods.len().to_string()));
+        }
         rules.extend(source_rules(&lines.sources));
         rules.extend(key_rules(&lines.keys));
         rules.extend(name_rules(&lines.names));
@@ -187,6 +197,7 @@ impl Advert {
             fingerprint,
             rules,
             too_long,
+            mods_cut,
         }
     }
 }
@@ -213,17 +224,20 @@ pub fn mod_list(mods: &[(String, String)]) -> String {
 }
 
 /// The mod list as rules, each value within Steam's limit:
-/// `enshwick.mods`, then `enshwick.mods.1` and on, at most [`MOD_RULES`].
+/// `enshwick.mods`, then `enshwick.mods.1` and on, at most [`MOD_RULES`];
+/// and the number of mods that did not fit, the last in sorted order.
 #[must_use]
-pub fn mod_rules(mods: &[(String, String)]) -> Vec<(String, String)> {
+pub fn mod_rules(mods: &[(String, String)]) -> (Vec<(String, String)>, usize) {
     let mut parts: Vec<String> = vec![String::new()];
+    let mut cut = 0;
     for entry in mod_list(mods).split(',').filter(|e| !e.is_empty()) {
         let Some(last) = parts.last_mut() else {
             break;
         };
-        if !last.is_empty() && last.len() + 1 + entry.len() > RULE_LIMIT {
-            if parts.len() == MOD_RULES {
-                break;
+        if cut > 0 || (!last.is_empty() && last.len() + 1 + entry.len() > RULE_LIMIT) {
+            if cut > 0 || parts.len() == MOD_RULES {
+                cut += 1;
+                continue;
             }
             parts.push(String::new());
         }
@@ -234,11 +248,12 @@ pub fn mod_rules(mods: &[(String, String)]) -> Vec<(String, String)> {
             last.push_str(entry);
         }
     }
-    parts
+    let rules = parts
         .into_iter()
         .enumerate()
         .map(|(i, value)| (rule_name(i), value))
-        .collect()
+        .collect();
+    (rules, cut)
 }
 
 /// The name of mod list rule `index`.
@@ -417,7 +432,7 @@ mod runtime {
         let mods: Vec<&str> = advert
             .rules
             .iter()
-            .filter(|(key, _)| key.starts_with(super::RULE_MODS))
+            .filter(|(key, _)| key.starts_with(super::RULE_MODS) && key != super::RULE_MOD_COUNT)
             .map(|(_, value)| value.as_str())
             .collect();
         let synced: Vec<&str> = advert
@@ -433,6 +448,13 @@ mod runtime {
             mods.join(","),
             synced.join(", ")
         );
+        if advert.mods_cut > 0 {
+            crate::log!(
+                WARN,
+                "{} mods do not fit in the advertised mod list; joining players compare only the listed ones",
+                advert.mods_cut
+            );
+        }
         for id in &advert.too_long {
             crate::log!(
                 WARN,
@@ -687,7 +709,7 @@ mod tests {
     fn the_mod_list_is_sorted_and_spread_over_rules_that_fit() {
         assert_eq!(mod_list(&mods()), "count@0.2.0,zones@0.1.0");
         assert_eq!(
-            mod_rules(&mods()),
+            mod_rules(&mods()).0,
             [(
                 "enshwick.mods".to_owned(),
                 "count@0.2.0,zones@0.1.0".to_owned()
@@ -696,12 +718,40 @@ mod tests {
         let many: Vec<(String, String)> = (0..40)
             .map(|i| (format!("mod-{i:02}"), "1.0.0".into()))
             .collect();
-        let rules = mod_rules(&many);
+        let (rules, cut) = mod_rules(&many);
+        assert_eq!(cut, 0);
         assert!(rules.len() > 1);
         assert!(rules.iter().all(|(_, value)| value.len() <= RULE_LIMIT));
         assert_eq!(rules[1].0, "enshwick.mods.1");
         let joined: Vec<&str> = rules.iter().map(|(_, v)| v.as_str()).collect();
         assert_eq!(joined.join(","), mod_list(&many));
+    }
+
+    #[test]
+    fn a_mod_list_too_long_for_its_rules_is_cut_and_counted() {
+        let many: Vec<(String, String)> = (0..400)
+            .map(|i| (format!("a-long-mod-name-{i:03}"), "1.0.0".into()))
+            .collect();
+        let (rules, cut) = mod_rules(&many);
+        assert_eq!(rules.len(), MOD_RULES);
+        let listed = rules
+            .iter()
+            .map(|(_, v)| v.split(',').count())
+            .sum::<usize>();
+        assert_eq!(listed + cut, many.len());
+        assert!(cut > 0);
+        let joined: Vec<&str> = rules.iter().map(|(_, v)| v.as_str()).collect();
+        assert!(mod_list(&many).starts_with(&joined.join(",")));
+        let advert = Advert::new("0.1.0", "Homelab", &many, &Lines::default(), &none());
+        assert_eq!(advert.mods_cut, cut);
+        assert!(
+            advert
+                .rules
+                .contains(&(RULE_MOD_COUNT.to_owned(), "400".to_owned()))
+        );
+        let small = Advert::new("0.1.0", "Homelab", &mods(), &Lines::default(), &none());
+        assert_eq!(small.mods_cut, 0);
+        assert!(small.rules.iter().all(|(key, _)| key != RULE_MOD_COUNT));
     }
 
     #[test]

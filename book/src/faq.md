@@ -14,7 +14,9 @@ Everything is under `logs/enshwick/` in the game's folder (beside
 | `crash.log`     | Crashes, each blamed on a mod, the loader or the game |
 | `stub.log`      | What the `powrprof.dll` stub did with staged updates  |
 
-`all.log`, `loader.log` and the mod logs start empty each session. Each line
+`all.log`, `loader.log` and the mod logs start empty each session; the two
+sessions before stay as `all.1.log` and `all.2.log` (and so on for each
+file), at most 8 MiB each. Each line
 names its time (UTC), level and source:
 
 ```text

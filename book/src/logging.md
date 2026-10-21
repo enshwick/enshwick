@@ -45,8 +45,9 @@ The loader writes to `logs/enshwick/` beside the game:
 | `status.log`    | the latest [status summary](#status-summary)        |
 | `crash.log`     | each crash, blamed on a mod, the loader or the game |
 
-A line reads `hh:mm:ss.mmmZ level [source] message`, in UTC. The files of the
-previous session are truncated at start. A background thread writes them and
+A line reads `hh:mm:ss.mmmZ level [source] message`, in UTC. At start the
+files of the two sessions before are kept as `<name>.1.log` (the last) and
+`<name>.2.log`, each cut to its last 8 MiB, and older ones are deleted. A background thread writes them and
 flushes every line, so a hook never waits on the disk and the last lines
 before a crash are kept. Up to 4096 lines wait for it; a line that finds the
 queue full is dropped rather than making the game wait, and the next line
