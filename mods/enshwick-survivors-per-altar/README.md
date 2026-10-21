@@ -26,8 +26,9 @@ zone.
   cleared.
 - The survivor menu shows the worst status of the copies, so "no bed" means some
   copy still needs one.
-- When an altar is removed, the last one too, its copies go with its zone; the
-  original stays where it is.
+- When an altar is removed, the last one too, its copies go with its zone ten
+  seconds later; the original stays where it is. A copy whose altar the game
+  has not listed yet after a load stays.
 - Removing the mod lets the game remove the copies.
 - A copy staff holds 3 charges when full, shown as a bar on its slot, and its
   tooltip names how many it holds when full; the last charge uses the staff
