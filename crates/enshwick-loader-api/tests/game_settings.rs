@@ -128,5 +128,20 @@ mod tests {
             settings.change(|s| s.player_health = f32::NAN),
             Err(WorldError::Refused)
         );
+
+        assert!(
+            loader.kept_game_settings().is_empty(),
+            "a change keeps nothing"
+        );
+        settings.keep(|s| s.boss_health = 3.0).unwrap();
+        let kept = loader.kept_game_settings();
+        let held: Vec<usize> = (0..kept.len()).filter(|&i| kept[i].is_some()).collect();
+        assert_eq!(held, vec![0x6e, 0x6f], "only the bytes the change moved");
+        assert_eq!(
+            &loader.game_settings().unwrap().0[0x6c..0x70],
+            &3.0f32.to_le_bytes()
+        );
+        settings.forget_kept().unwrap();
+        assert!(loader.kept_game_settings().is_empty());
     }
 }

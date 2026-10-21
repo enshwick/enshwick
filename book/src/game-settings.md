@@ -51,26 +51,32 @@ it, the tombstone mode on the next death, the weather frequency on the next
 change of weather. A new day or night length keeps the clock's hour and only
 changes its pace ([time of day](daytime.md)).
 
-A change lasts until the server stops: nothing writes it to disk, and the
-configuration's values return with the next start. A mod that wants its
-values kept applies them again on [`WorldLoaded`](events.md).
+A change lasts until the server stops: the game writes it nowhere, and the
+configuration's values return with the next start. `keep(|s| ...)` (minor
+57) changes the settings the same way and keeps the fields whose value it
+changed with the running world: the loader applies them again each time that
+world loads, by the end of its first step, over what the configuration says.
+The loader keeps them by field name in
+`mod-data/enshwick/worlds/<key>/game-settings.toml`. `forget_kept()` forgets
+every kept field of the world, any mod's, and puts back the values the world
+loaded with.
 
 ```rust
-use enshwick_loader_api::events::WorldLoaded;
-
 fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
     let settings = load.game_settings()?;
-    load.on::<WorldLoaded>(move |()| {
-        if let Err(why) = settings.change(|s| s.plant_growth = 2.0) {
-            enshwick_loader_api::warn!("plants grow as configured: {why}");
+    load.add_command("lush", "plants grow twice as fast in this world", move |_ctx, _args| {
+        match settings.keep(|s| s.plant_growth = 2.0) {
+            Ok(_) => "kept for this world".into(),
+            Err(why) => format!("unchanged: {why}").into(),
         }
     })
 }
 ```
 
 Several mods changing settings compose as their changes do: each `change`
-edits the values in force, so mods that touch different values never meet,
-and the last change to one value wins.
+or `keep` edits the values in force, so mods that touch different values
+never meet, and the last change to one value wins; kept fields add up the
+same way.
 
 Every call works on the server's game thread, from a game event, a
 [scheduler](events.md#the-scheduler) task or a [command](commands.md); on a

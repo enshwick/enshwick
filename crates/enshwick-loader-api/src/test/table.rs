@@ -90,6 +90,8 @@ pub(crate) struct State {
     pub(crate) clock_speed: Option<f32>,
     /// The game settings' bytes and preset, settable while installed.
     pub(crate) game_settings: Option<(Vec<u8>, u32)>,
+    /// The game settings' bytes the mod kept with the world, by offset.
+    pub(crate) kept_settings: Vec<Option<u8>>,
     pub(crate) damage_filters: Vec<(DamageFilterFn, usize)>,
     pub(crate) knowledge_input_filters: Vec<(KnowledgeInputFn, usize)>,
     /// The buff types the fake knows.
@@ -219,6 +221,7 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         daytime: None,
         clock_speed: None,
         game_settings: None,
+        kept_settings: Vec::new(),
         damage_filters: Vec::new(),
         knowledge_input_filters: Vec::new(),
         buff_types: Vec::new(),
@@ -1624,6 +1627,41 @@ extern "system" fn set_game_settings(_me: ModHandle, data: *const u8, size: u32)
     })
 }
 
+extern "system" fn keep_game_settings(
+    me: ModHandle,
+    data: *const u8,
+    mask: *const u8,
+    size: u32,
+) -> Status {
+    if mask.is_null() {
+        return Status::BAD_ARGS;
+    }
+    let status = set_game_settings(me, data, size);
+    if status != Status::OK {
+        return status;
+    }
+    // SAFETY: the safe layer passes `size` bytes of each for the call.
+    let data = unsafe { core::slice::from_raw_parts(data, size as usize) };
+    // SAFETY: as above.
+    let mask = unsafe { core::slice::from_raw_parts(mask, size as usize) };
+    with(Status::MISSING, |s| {
+        s.kept_settings.resize(data.len(), None);
+        for ((kept, &byte), &set) in s.kept_settings.iter_mut().zip(data).zip(mask) {
+            if set != 0 {
+                *kept = Some(byte);
+            }
+        }
+        Status::OK
+    })
+}
+
+extern "system" fn forget_game_settings(_me: ModHandle) -> Status {
+    with(Status::MISSING, |s| {
+        s.kept_settings.clear();
+        Status::OK
+    })
+}
+
 extern "system" fn config_schema(_me: ModHandle, schema: Str) -> Status {
     // SAFETY: the mod passes text valid for the call.
     let Some(text) = (unsafe { schema.as_str() }) else {
@@ -2290,4 +2328,6 @@ pub(crate) static TABLE: HostApi = HostApi {
     replaced,
     knowledge_input_filter,
     language,
+    keep_game_settings,
+    forget_game_settings,
 };

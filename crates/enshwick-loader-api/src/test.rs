@@ -1880,6 +1880,21 @@ impl Installed {
         table::with(None, |s| s.game_settings.clone())
     }
 
+    /// The game settings' bytes the mod kept with the world, by offset:
+    /// `None` for a byte no kept field covers; empty before any is kept or
+    /// after the mod forgot them.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick_loader_api::test::FakeHost::new().install();
+    /// assert!(loader.kept_game_settings().is_empty());
+    /// ```
+    #[must_use]
+    pub fn kept_game_settings(&self) -> Vec<Option<u8>> {
+        table::with(Vec::new(), |s| s.kept_settings.clone())
+    }
+
     /// Runs the mod's damage filters on `check` as the loader does before
     /// the game applies damage; returns what they left.
     ///
