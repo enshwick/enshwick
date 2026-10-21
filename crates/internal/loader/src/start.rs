@@ -110,6 +110,7 @@ fn link_features(loader: &'static Loader) {
     crate::game_events::link(loader);
     crate::saves::link(loader);
     crate::inventory::link(loader);
+    crate::item_data::link(loader);
     crate::net::link();
     crate::chat::link(loader);
     crate::label::link(loader);
