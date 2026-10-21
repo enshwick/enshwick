@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.8.2](https://github.com/themaiby/enshwick/compare/cargo-enshwick-v0.8.1...cargo-enshwick-v0.8.2) (2026-10-21)
+
+
+### Features
+
+* **api:** name vanilla content in packs by debug name ([#193](https://github.com/themaiby/enshwick/issues/193)) ([033fda9](https://github.com/themaiby/enshwick/commit/033fda9c6fa7f616c780d690e1b5758550a086de))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * enshwick-loader bumped from 0.8.1 to 0.8.2
+
 ## [0.8.1](https://github.com/themaiby/enshwick/compare/cargo-enshwick-v0.8.0...cargo-enshwick-v0.8.1) (2026-10-21)
 
 

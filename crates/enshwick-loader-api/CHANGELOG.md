@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.8.2](https://github.com/themaiby/enshwick/compare/enshwick-loader-api-v0.8.1...enshwick-loader-api-v0.8.2) (2026-10-21)
+
+
+### Features
+
+* **api:** name vanilla content in packs by debug name ([#193](https://github.com/themaiby/enshwick/issues/193)) ([033fda9](https://github.com/themaiby/enshwick/commit/033fda9c6fa7f616c780d690e1b5758550a086de))
+* **api:** read the game's own texts and resources from its archive ([#191](https://github.com/themaiby/enshwick/issues/191)) ([ebaf029](https://github.com/themaiby/enshwick/commit/ebaf029db0cf95f6cb63602d6b0f617e8dc451e0))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * enshwick-loader-macros bumped from 0.8.1 to 0.8.2
+
 ## [0.8.1](https://github.com/themaiby/enshwick/compare/enshwick-loader-api-v0.8.0...enshwick-loader-api-v0.8.1) (2026-10-21)
 
 
