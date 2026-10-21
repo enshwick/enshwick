@@ -56,9 +56,10 @@ cannot pass for another release. From an archive only the files Enshwick
 reads are taken, and only where it keeps them: `powrprof.dll` beside the
 game, `*.dll` under `mods/`, and a content pack's `.toml` and `.png` files in
 its folder under `mods/`, never the loader's; from an unsigned one, the mod's
-DLL alone. An archive with a path that leaves the game's folder, or that
-would write another mod's DLL, another pack's folder or the loader's files,
-is refused whole.
+DLL alone, directly in `mods/`. An archive with a path that leaves the game's
+folder or uses a short `~` name or letters past ASCII, or that would write
+another mod's DLL (one switched off included), another pack's folder or the
+loader's files, is refused whole.
 
 ## On the Mods screen
 

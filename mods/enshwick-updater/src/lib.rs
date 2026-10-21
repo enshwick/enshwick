@@ -225,7 +225,12 @@ impl Offer {
             .from
             .as_deref()
             .and_then(|from| Version::parse(from).ok())
-            .is_some_and(|from| self.pick.version < from);
+            // A content pack's version carries the hash of its files, which
+            // its release does not: the same version is not older.
+            .is_some_and(|mut from| {
+                from.build = semver::BuildMetadata::EMPTY;
+                self.pick.version < from
+            });
         let missing = say::in_language("line.missing", language, &[]);
         let to = self.pick.version.to_string();
         let key = match (older, self.trust.signed()) {
@@ -1109,6 +1114,26 @@ enshwick_loader_api::declare_mod!(Updater);
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_pack_in_the_same_version_is_not_older() {
+        let offer = Offer {
+            id: "lanterns".into(),
+            name: String::new(),
+            from: Some("1.2.0+abc123".into()),
+            file: String::new(),
+            pick: Pick {
+                tag: String::new(),
+                version: Version::new(1, 2, 0),
+                archive: String::new(),
+                archive_url: String::new(),
+                signature_url: None,
+            },
+            source: String::new(),
+            trust: Trust::Installed(vec!["RW...".into()]),
+        };
+        assert_eq!(offer.line(), "lanterns: 1.2.0+abc123 \u{2192} 1.2.0");
+    }
 
     /// Reads Enshwick's own release list from GitHub, past its first page;
     /// online, so only with `ENSHWICK_ONLINE_TESTS` set.
