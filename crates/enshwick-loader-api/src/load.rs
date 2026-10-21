@@ -546,22 +546,20 @@ impl Load<'_> {
     {
         let handler = std::sync::Arc::new(handler);
         let on_world = std::sync::Arc::clone(&handler);
-        if self.api().header.abi_minor >= 46 {
-            self.subscribe(Event::WORLD_SETTINGS, move |_| {
-                let Some(host) = crate::host() else {
-                    return;
-                };
-                match read_config::<T>(host) {
-                    Ok(mut settings) => {
-                        hold(&RESTART, &mut settings, Stage::Restart);
-                        keep(&STARTED, &settings, Stage::Startup);
-                        on_world(settings);
-                        crate::info!("the world's settings apply");
-                    }
-                    Err(off) => crate::warn!("the world's settings are skipped: {off}"),
+        self.subscribe(Event::WORLD_SETTINGS, move |_| {
+            let Some(host) = crate::host() else {
+                return;
+            };
+            match read_config::<T>(host) {
+                Ok(mut settings) => {
+                    hold(&RESTART, &mut settings, Stage::Restart);
+                    keep(&STARTED, &settings, Stage::Startup);
+                    on_world(settings);
+                    crate::info!("the world's settings apply");
                 }
-            })?;
-        }
+                Err(off) => crate::warn!("the world's settings are skipped: {off}"),
+            }
+        })?;
         self.subscribe(Event::SETTINGS_CHANGED, move |_| {
             let Some(host) = crate::host() else {
                 return;
