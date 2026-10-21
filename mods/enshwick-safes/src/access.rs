@@ -152,6 +152,13 @@ impl Safe {
             .position(|a| a.name.to_lowercase() == name.to_lowercase())?;
         Some(self.allowed.remove(index))
     }
+
+    /// Takes back the use of the Safe from the player with `key`; who that
+    /// was, or `None` when they were not allowed.
+    pub fn deny_key(&mut self, key: u64) -> Option<Allowed> {
+        let index = self.allowed.iter().position(|a| a.key == key)?;
+        Some(self.allowed.remove(index))
+    }
 }
 
 /// What a player tries to do with a Safe.
@@ -306,9 +313,10 @@ impl Access {
         )
     }
 
-    /// The cell of the Safe nearest to `position`, within `max` metres, that
-    /// `player`, with the character `character`, may manage, and its record.
-    #[must_use]
+    /// The Safe within `max` metres of `position` that `player`, with the
+    /// character `character`, may manage, and its record: their own nearest
+    /// one first, else the nearest other, as an administrator's while
+    /// `admins_can_open` is on or one another mod lets them manage.
     pub fn nearest_managed(
         &self,
         player: Seen,
@@ -326,7 +334,13 @@ impl Access {
             })
             .filter(|&(distance, _)| distance <= max)
             .collect();
-        near.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
+        let theirs = |at: &Cell| owners.get(at).is_none_or(|safe| safe.owner != player.key);
+        near.sort_by(|a, b| {
+            theirs(&a.1)
+                .cmp(&theirs(&b.1))
+                .then(a.0.total_cmp(&b.0))
+                .then(a.1.cmp(&b.1))
+        });
         near.into_iter()
             .map(|(_, at)| at)
             .find(|&at| self.may_manage(at, player, character))

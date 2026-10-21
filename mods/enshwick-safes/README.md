@@ -15,23 +15,33 @@ Safe.
 
 ## Letting other players in
 
-The owner stands within 4 m of one of their Safes and types in the chat:
+Stand within 4 m of one of your Safes: the bottom of the screen shows
+"[F7] Who may open this Safe: your Safe at (x, y, z)". Press F7, and a
+window lists the players online, and those you already let in, with a
+switch each. Switch a player on, and they may open the Safe, take, put and
+sort, and craft or build from it, as you do; they never pick it up,
+dismantle it, rename it or change who may use it. Switch them off to take
+that back, even while they are away. The game confirms each change with a
+notice.
 
-- `/safe allow <player>`: the player, who must be online, may open the Safe,
-  take, put and sort, and craft or build from it, as the owner does; they never
-  pick it up, dismantle it, rename it or change who may use it;
-- `/safe deny <player>`: takes that back;
-- `/safe list`: names the players allowed.
+The same list is on the Mods screen, from the pause menu: Mods, then
+Actions under Safes. It shows one action at a time: the list, and "Name
+who may open it", which answers with a notice. The key is `actions_key` in
+the loader's settings.
 
-Each acts on the nearest Safe within 4 m the player may manage: their own,
-any for administrators while `admins_can_open` is on, or one another mod
-lets them manage (see For mod authors). The reply says
-which Safe and whose it is. Nobody else ever removes a Safe, except
-administrators while `admins_can_open` is on.
+The Safe at hand is the nearest one within 4 m you may manage, your own
+first: your own, or, for administrators while `admins_can_open` is on, any
+Safe, or one another mod lets you manage (see For mod authors). Nobody else
+ever removes a Safe, except administrators while `admins_can_open` is on.
 
-All of it works on a dedicated server and in a game a player hosts. A player
-who has just joined touches no Safe, their own included, until the server has
-registered them, a moment after they arrive.
+Chat commands do the same, for a player whose game lacks Enshwick or who
+prefers typing: `/safe allow <player>`, `/safe deny <player>` and
+`/safe list`; `/safe help` lists them. The reply names the Safe and whose
+it is.
+
+All of it works on a dedicated server, in a game a player hosts and in
+single player. A player who has just joined touches no Safe, their own
+included, until the server has registered them, a moment after they arrive.
 
 A Safe is the vanilla wooden chest underneath: without the mod it is an
 ordinary chest with every item still in it. It cannot be upgraded, since an
@@ -53,12 +63,14 @@ joined player's crafting menu shows the server's cost, and a change, or a
 world with another value, applies at once, with no restart of the game.
 `admins_can_open` lets administrators open, remove and rename every Safe, and
 applies while the game runs. `label_language` is the language of the owner's
-name on a Safe and of the `/safe` replies, a language code such as `en`, `uk`
-or `de`; anything else is refused. A change applies while the game runs, to
-Safes named from then on.
+name on a Safe and of the `/safe` replies in chat, a language code such as
+`en`, `uk` or `de`; anything else is refused. A change applies while the
+game runs, to Safes named from then on. The window and the hint speak each
+player's own language.
 
 Texts are in English and Ukrainian; German, French, Spanish and Polish name
-and describe the Safe, and `/safe` replies in them fall back to English; a server
+and describe the Safe, and the window and replies in them fall back to
+English; a server
 can change or add them in `mod-configs/safes.texts.toml`, in the form of
 [texts.toml](src/texts.toml). Owners and the players they allowed are kept per
 world, in `mod-data/safes/worlds/<world>/owners.toml`, so every world a player
@@ -81,8 +93,8 @@ side, and the mod counts in the join check.
 
 ## For mod authors
 
-Other mods change who may open, use, remove or rename a Safe, and whose
-`/safe allow` and `/safe deny` count, at the extension point
+Other mods change who may open, use, remove or rename a Safe, and who may
+manage the list of players at it, at the extension point
 `safes:access`, and may refuse outright. See
 [Extending other mods](https://github.com/themaiby/enshwick/blob/main/book/src/extending.md).
 
