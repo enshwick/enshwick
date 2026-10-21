@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.4.1](https://github.com/themaiby/enshwick/compare/enshwick-updater-v0.4.0...enshwick-updater-v0.4.1) (2026-10-21)
+
+
+### Features
+
+* **api:** draw with the game's own widgets and show its dialogs ([#129](https://github.com/themaiby/enshwick/issues/129)) ([8601c70](https://github.com/themaiby/enshwick/commit/8601c70f8a0678a50f41301467d713bf41fab855))
+* **loader:** ship build tables as signed data with a pattern fallback ([#155](https://github.com/themaiby/enshwick/issues/155)) ([1df2e3f](https://github.com/themaiby/enshwick/commit/1df2e3fdcaeaeac3ca082a18976e6a3f1d3a46c9))
+
 ## [0.4.0](https://github.com/themaiby/enshwick/compare/enshwick-updater-v0.3.0...enshwick-updater-v0.4.0) (2026-10-20)
 
 

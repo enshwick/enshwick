@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.6.0](https://github.com/themaiby/enshwick/compare/enshwick-loader-macros-v0.5.0...enshwick-loader-macros-v0.6.0) (2026-10-21)
+
+
+### ⚠ BREAKING CHANGES
+
+* **api:** check service layouts and add typed mod events ([#146](https://github.com/themaiby/enshwick/issues/146))
+* **loader:** mod settings per world ([#145](https://github.com/themaiby/enshwick/issues/145))
+
+### Features
+
+* **api:** check service layouts and add typed mod events ([#146](https://github.com/themaiby/enshwick/issues/146)) ([aa701ce](https://github.com/themaiby/enshwick/commit/aa701cef773075939cb480dc1c01e91474883196))
+* **loader:** mod settings per world ([#145](https://github.com/themaiby/enshwick/issues/145)) ([c06612b](https://github.com/themaiby/enshwick/commit/c06612bf26b00d4cd6175fd4dac343bb637a5ccc))
+* **loader:** push changed join values and edit server settings remotely ([#138](https://github.com/themaiby/enshwick/issues/138)) ([58bba7c](https://github.com/themaiby/enshwick/commit/58bba7c378f92d5bf832d1f82aa09626591a2899))
+
 ## [0.5.0](https://github.com/themaiby/enshwick/compare/enshwick-loader-macros-v0.4.0...enshwick-loader-macros-v0.5.0) (2026-10-20)
 
 
