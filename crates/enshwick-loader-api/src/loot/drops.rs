@@ -540,12 +540,23 @@ fn after_roll(
 ) -> *mut u8 {
     // SAFETY: the rest of the chain takes the arguments the game passed.
     let out = unsafe { next.get()(res, txn, generation, labels, request) };
+    // Guarded here: the detour's own guard would roll again.
+    crate::host::guard(
+        "panic in a loot roll",
+        || (),
+        || add_drops(res, txn, request),
+    );
+    out
+}
+
+/// Adds the mods' drops to a container roll the game committed.
+fn add_drops(res: *mut u8, txn: *mut u8, request: *const u8) {
     let Some(engine) = ENGINE.get() else {
-        return out;
+        return;
     };
     // SAFETY: the roll's status byte; 0 means the game commits `txn`.
     if res.is_null() || txn.is_null() || request.is_null() || unsafe { res.read() } != 0 {
-        return out;
+        return;
     }
     // SAFETY: the live arguments of the roll, on its thread.
     let (roll, _) = unsafe { engine.roll(txn, request) };
@@ -598,7 +609,6 @@ fn after_roll(
             added[0] & 0xff
         );
     }
-    out
 }
 
 /// Item id, count, rarity, level and value: the single roll's output.
@@ -616,8 +626,15 @@ fn after_roll_one(
 ) -> *mut u8 {
     // SAFETY: the rest of the chain takes the arguments the game passed.
     let ret = unsafe { next.get()(res, out, generation, labels, request) };
+    // Guarded here: the detour's own guard would roll again.
+    crate::host::guard("panic in a loot roll", || (), || add_one(res, out));
+    ret
+}
+
+/// Puts a mod's drop into a single roll that came out empty.
+fn add_one(res: *mut u8, out: *mut u8) {
     if ENGINE.get().is_none() || res.is_null() || out.is_null() {
-        return ret;
+        return;
     }
     let roll = Roll {
         kind: Kinds::DESTROYED,
@@ -634,7 +651,7 @@ fn after_roll_one(
         .filter(|d| d.from.matches(&roll))
         .find_map(|d| d.draw(dice()))
     else {
-        return ret;
+        return;
     };
     let mut stack = [0u8; ONE_SIZE];
     stack[ONE_ITEM..ONE_ITEM + 4].copy_from_slice(&item.to_le_bytes());
@@ -645,7 +662,6 @@ fn after_roll_one(
     // SAFETY: the roll's status byte.
     unsafe { res.write(0) };
     crate::debug!("loot: {count} of item {item} from a single roll");
-    ret
 }
 
 /// Links the roll of containers' loot once.

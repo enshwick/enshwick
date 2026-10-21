@@ -210,7 +210,9 @@ impl<F: FnPtr> Next<F> {
 /// The body is an ordinary function taking a [`Next`] and the target's
 /// arguments. A panic in it is caught: the mod reports a fault, the loader
 /// unlinks the mod, and this call falls through to the rest of the chain, so
-/// the game runs vanilla instead of crashing.
+/// the game runs vanilla instead of crashing. The fall-through calls the rest
+/// of the chain even when the body called it before it panicked, so a body
+/// that does work after `next` keeps that work from panicking.
 ///
 /// Optional settings follow the function: `priority = <i32>` (lower runs
 /// earlier) and `flags = <HookFlags>`. [`#[hook]`](macro@crate::hook) writes the
@@ -260,15 +262,15 @@ macro_rules! detour {
             $($unsafe)? extern "system" fn entry($($arg: $ty),*) $(-> $ret)? {
                 let next = $name.next();
                 match ::std::panic::catch_unwind(::std::panic::AssertUnwindSafe(|| $body(next, $($arg),*))) {
-                    Ok(value) => value,
-                    Err(_) => {
-                        $crate::__private::fault_in(stringify!($name));
+                    ::core::result::Result::Ok(value) => value,
+                    ::core::result::Result::Err(_) => {
+                        $crate::__private::fault_in(::core::stringify!($name));
                         $crate::detour!(@call [$($unsafe)?] next ($($arg),*))
                     }
                 }
             }
             $crate::Hook::new(
-                stringify!($name),
+                ::core::stringify!($name),
                 entry,
                 $crate::__private::or_default(&[$($priority)?], 0),
                 $crate::__private::or_default(&[$($flags)?], $crate::abi::HookFlags::NONE),
