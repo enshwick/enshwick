@@ -124,6 +124,7 @@ revision = 1
 "knowledge.player_value" = { rva = 0x99_2bb0, pattern = "40 53 48 83 EC 20 80 B9 D2 00 00 00 00 48 8B 99 98 00 00 00" }
 "knowledge.world_value" = { rva = 0x99_2ce0, pattern = "40 53 48 83 EC 20 48 8D 59 10 C7 44 24 30 00 00 00 00" }
 "knowledge.push" = { rva = 0x99_6880, pattern = "4C 8B C1 B8 01 00 00 00 F0 0F C1 41 08 FF C0 3D 00 08 00 00" }
+"player.death_sink" = { rva = 0x4_dfc0, pattern = "48 89 5C 24 20 55 56 57 41 54 41 55 48 8D AC 24 30 FE FF FF" }
 "knowledge.set_values" = { rva = 0x99_3720, pattern = "40 56 41 54 41 55 41 56 41 57 48 83 EC 40 41 0F B6 40 30" }
 "knowledge.set_world" = { rva = 0x99_3a30, pattern = "40 53 48 83 EC 20 48 83 7A 08 00 4C 8B C2 48 8B D9" }
 "knowledge.input_check" = { rva = 0x1b_5a8e, pattern = "48 8D 8B 8C 01 00 00 E8 ?? ?? ?? ?? 84 C0 74 3D F2 0F 10 83 8C 01 00 00", at = 12 }
@@ -314,6 +315,10 @@ revision = 1
 "attribute.experience_needed_slot" = 2
 "attribute.fuel" = 0x05b0_bf75
 "attribute.fuel_max_slot" = 1
+"attribute.shroud" = { value = 0x6951_df16, pattern = "48 8D 8D E0 00 00 00 4C 8B C7 BA 16 DF 51 69 E8 ?? ?? ?? ??" }
+"attribute.shroud_max_slot" = 1
+# The actor state bit of a character in the shroud that drains it.
+"actor.state_in_shroud" = { value = 0x2000, pattern = "75 07 41 81 0F 00 20 00 00 48 8B 8E 90 00 00 00" }
 # The entity world's change tracker, which writes outside a
 # system mark against.
 "ecs.change_tracker" = { value = 0xeb_c030, pattern = "49 8B 09 48 8B 11 48 81 C2 30 C0 EB 00 EB 17 48 C7 40 08 00 00 00 00" }

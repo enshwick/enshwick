@@ -1,0 +1,190 @@
+//! Player deaths with their cause.
+//!
+//! When a player's health reaches 0, the system that took it, for a hit, a
+//! fall, the shroud or drowning, hands the game's tracking a `PlayerDeath`
+//! record: the account, the cause, the place, the killer's template for a
+//! hit, whether the shroud was deadly and whether the player drowned. The
+//! loader detours that sink, which runs on the systems' worker threads,
+//! copies the record and raises [`Event::PLAYER_DIED`] after the step.
+//! Deaths no system records, such as freezing or an administrator's kill,
+//! raise nothing here.
+
+use std::sync::{Mutex, OnceLock, PoisonError};
+
+use crate::chains::Next;
+use crate::host::Loader;
+use enshwick_loader_api::abi::{Event, Header, HookFlags, PlayerDeathData};
+
+/// The most deaths kept between two steps.
+const MOST: usize = 64;
+
+type SinkFn =
+    unsafe extern "system" fn(out: *mut u8, tracker: *mut u8, death: *const u8) -> *mut u8;
+
+// SAFETY: the slot joins the chain of the death sink, whose type it names.
+static SINK_NEXT: Next<SinkFn> = unsafe { Next::new() };
+
+/// Where the record keeps what the event carries, from reflection.
+#[derive(Debug, Clone, Copy)]
+struct Record {
+    size: usize,
+    account: usize,
+    cause: usize,
+    position: usize,
+    killer: usize,
+    deadly: usize,
+    drowned: usize,
+}
+
+static RECORD: OnceLock<Record> = OnceLock::new();
+/// Deaths seen since the last step, as the records' bytes.
+static SEEN: Mutex<Vec<[u8; 64]>> = Mutex::new(Vec::new());
+
+fn record(loader: &Loader) -> Option<Record> {
+    let ty = "keen::PlayerDeath";
+    let field = |name: &str| {
+        loader
+            .reflection
+            .field_offset(ty, name)
+            .ok()
+            .and_then(|v| usize::try_from(v).ok())
+    };
+    let size = loader
+        .reflection
+        .type_info(ty)
+        .ok()
+        .and_then(|info| usize::try_from(info.size()).ok())
+        .filter(|&size| size <= 64)?;
+    Some(Record {
+        size,
+        account: field("accountIdHash")?,
+        cause: field("cause")?,
+        position: field("position")?,
+        killer: field("causeGuid")?,
+        deadly: field("wasDeadlyFog")?,
+        drowned: field("drowned")?,
+    })
+}
+
+/// Links the sink when a mod listens for deaths.
+pub(crate) fn link(loader: &'static Loader) {
+    if !loader.subscribed(Event::PLAYER_DIED) {
+        return;
+    }
+    let Some(layout) = record(loader) else {
+        crate::log!(WARN, "player deaths off: no death record in this build");
+        return;
+    };
+    let _first = RECORD.set(layout);
+    loader.link_feature(
+        "player deaths",
+        loader.address("player.death_sink"),
+        &SINK_NEXT,
+        sink,
+        HookFlags::NONE,
+    );
+}
+
+unsafe extern "system" fn sink(out: *mut u8, tracker: *mut u8, death: *const u8) -> *mut u8 {
+    if let Some(layout) = RECORD.get()
+        && !death.is_null()
+    {
+        let _caught = std::panic::catch_unwind(|| {
+            let mut bytes = [0u8; 64];
+            // SAFETY: the game hands the sink a whole record of the
+            // reflected size, valid for the call.
+            unsafe { core::ptr::copy_nonoverlapping(death, bytes.as_mut_ptr(), layout.size) };
+            let mut seen = SEEN.lock().unwrap_or_else(PoisonError::into_inner);
+            if seen.len() < MOST {
+                seen.push(bytes);
+            }
+        });
+    }
+    // SAFETY: forwarded unchanged.
+    unsafe { SINK_NEXT.get()(out, tracker, death) }
+}
+
+fn field<const N: usize>(bytes: &[u8; 64], at: usize) -> [u8; N] {
+    bytes
+        .get(at..at + N)
+        .and_then(|b| b.try_into().ok())
+        .unwrap_or([0; N])
+}
+
+/// The event data of one record, with the character of the account when it
+/// is in the game.
+fn data(layout: &Record, bytes: &[u8; 64], entity_of: impl Fn(u64) -> u32) -> PlayerDeathData {
+    let key = u64::from_le_bytes(field(bytes, layout.account));
+    let position: [u8; 12] = field(bytes, layout.position);
+    let coordinate = |i: usize| {
+        f32::from_le_bytes(
+            position
+                .get(i * 4..i * 4 + 4)
+                .and_then(|b| b.try_into().ok())
+                .unwrap_or([0; 4]),
+        )
+    };
+    PlayerDeathData {
+        header: Header::of::<PlayerDeathData>(),
+        entity: entity_of(key),
+        cause: u32::from(field::<1>(bytes, layout.cause)[0]),
+        key,
+        position: [coordinate(0), coordinate(1), coordinate(2)],
+        killer: field(bytes, layout.killer),
+        deadly_shroud: field::<1>(bytes, layout.deadly)[0],
+        drowned: field::<1>(bytes, layout.drowned)[0],
+        reserved: 0,
+    }
+}
+
+/// Raises the deaths of the last step, on the game thread after it.
+pub(crate) fn after_step(loader: &Loader) {
+    let Some(layout) = RECORD.get() else {
+        return;
+    };
+    let seen = std::mem::take(&mut *SEEN.lock().unwrap_or_else(PoisonError::into_inner));
+    if seen.is_empty() {
+        return;
+    }
+    let players = crate::world::players(loader).unwrap_or_default();
+    for bytes in &seen {
+        let death = data(layout, bytes, |key| {
+            players
+                .iter()
+                .find(|p| p.key == key)
+                .map_or(0, |p| p.entity)
+        });
+        loader.emit(Event::PLAYER_DIED, None, (&raw const death).cast());
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_record_reads_into_the_event() {
+        let layout = Record {
+            size: 48,
+            account: 0,
+            cause: 12,
+            position: 16,
+            killer: 28,
+            deadly: 44,
+            drowned: 45,
+        };
+        let mut bytes = [0u8; 64];
+        bytes[..8].copy_from_slice(&7u64.to_le_bytes());
+        bytes[12] = 3;
+        bytes[16..20].copy_from_slice(&1.5f32.to_le_bytes());
+        bytes[28] = 0xab;
+        bytes[45] = 1;
+        let death = data(&layout, &bytes, |key| if key == 7 { 2 } else { 0 });
+        assert_eq!(death.entity, 2);
+        assert_eq!(death.key, 7);
+        assert_eq!(death.cause, PlayerDeathData::SUFFOCATED);
+        assert!((death.position[0] - 1.5).abs() < f32::EPSILON);
+        assert_eq!(death.killer[0], 0xab);
+        assert_eq!((death.deadly_shroud, death.drowned), (0, 1));
+    }
+}

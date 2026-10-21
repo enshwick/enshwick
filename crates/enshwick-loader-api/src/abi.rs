@@ -14,7 +14,7 @@ use core::sync::atomic::AtomicUsize;
 pub const ABI_MAJOR: u16 = 1;
 
 /// The minor version of this interface. A newer minor only appends fields.
-pub const ABI_MINOR: u16 = 59;
+pub const ABI_MINOR: u16 = 60;
 
 /// Whether `id` is a valid mod id: 1 to 64 characters of `[a-z0-9-]`.
 ///
@@ -544,6 +544,67 @@ impl Event {
     /// again); no data. The settings that wait for a start apply too.
     /// Raised on the server's game thread. Since minor 46.
     pub const WORLD_SETTINGS: Self = Self(19);
+    /// A player died, from a hit, a fall, the shroud or drowning; data is a
+    /// [`PlayerDeathData`]. Raised on the game thread after the step.
+    /// Deaths the game keeps no record of, such as freezing or an
+    /// administrator's kill, raise none. Server only. Since minor 60.
+    pub const PLAYER_DIED: Self = Self(20);
+}
+
+/// The data of [`Event::PLAYER_DIED`].
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::abi::{Header, PlayerDeathData};
+///
+/// let fell = PlayerDeathData {
+///     header: Header::of::<PlayerDeathData>(),
+///     entity: 2,
+///     cause: PlayerDeathData::FALL,
+///     key: 7,
+///     position: [10.0, 50.0, -3.0],
+///     killer: [0; 16],
+///     deadly_shroud: 0,
+///     drowned: 0,
+///     reserved: 0,
+/// };
+/// assert_eq!(fell.cause, PlayerDeathData::FALL);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PlayerDeathData {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// The player's character; 0 when the account left in the same step.
+    pub entity: u32,
+    /// [`PlayerDeathData::HIT`], [`PlayerDeathData::FALL`],
+    /// [`PlayerDeathData::SHROUD`] or [`PlayerDeathData::SUFFOCATED`].
+    pub cause: u32,
+    /// The account, as [`PlayerInfo::key`].
+    pub key: u64,
+    /// Where, in metres.
+    pub position: [f32; 3],
+    /// For a hit, the template GUID of what dealt it, a creature's or an
+    /// impact's; zero for other causes.
+    pub killer: [u8; 16],
+    /// 1 when the shroud was the deadly kind.
+    pub deadly_shroud: u8,
+    /// 1 when the player drowned.
+    pub drowned: u8,
+    /// Zero.
+    pub reserved: u16,
+}
+
+impl PlayerDeathData {
+    /// A hit.
+    pub const HIT: u32 = 0;
+    /// A fall.
+    pub const FALL: u32 = 1;
+    /// The shroud.
+    pub const SHROUD: u32 = 2;
+    /// Out of breath, under water.
+    pub const SUFFOCATED: u32 = 3;
 }
 
 /// The data of [`Event::KNOWLEDGE_CHANGED`].
@@ -5285,6 +5346,7 @@ const _: () = {
     assert!(core::mem::offset_of!(HostApi, quests) == 24 + 86 * 8);
     assert!(size_of::<KnowledgeInfo>() == 8 + 16);
     assert!(size_of::<KnowledgeData>() == 8 + 12);
+    assert!(size_of::<PlayerDeathData>() == 8 + 8 + 8 + 12 + 16 + 4);
     assert!(size_of::<QuestData>() == 8 + 8);
     assert!(core::mem::offset_of!(HostApi, weather_at) == 24 + 87 * 8);
     assert!(core::mem::offset_of!(HostApi, set_weather) == 24 + 89 * 8);

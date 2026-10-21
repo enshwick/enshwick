@@ -419,8 +419,15 @@ impl Checks {
         }
     }
 
-    /// Compares `entity`'s vitals with the health the server replicates.
+    /// Compares `entity`'s vitals with the health the server replicates,
+    /// and logs its time in the shroud.
     fn compare(&self, entity: Entity) {
+        enshwick_loader_api::info!(
+            "shroud of entity {}: {:?}, in it {:?}",
+            entity.0,
+            self.world.shroud_time(entity),
+            self.world.in_shroud(entity)
+        );
         let vitals = self.world.vitals(entity);
         let replicated = self
             .world

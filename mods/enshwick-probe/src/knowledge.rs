@@ -4,7 +4,7 @@
 
 use std::time::Duration;
 
-use enshwick_loader_api::events::{KnowledgeChanged, QuestCompleted};
+use enshwick_loader_api::events::{KnowledgeChanged, PlayerDied, QuestCompleted};
 use enshwick_loader_api::knowledge::{Grant, Knowledge, Revoke};
 use enshwick_loader_api::schedule::Scheduler;
 use enshwick_loader_api::{Load, Off};
@@ -33,6 +33,20 @@ impl KnowledgeChecks {
                 changed.value
             );
         })?;
+        match load.on::<PlayerDied>(|death| {
+            enshwick_loader_api::info!(
+                "event: player {} died, cause {}, at {:?}, killer {:02x?}, deadly shroud {}, drowned {}",
+                death.entity,
+                death.cause,
+                death.position,
+                death.killer,
+                death.deadly_shroud,
+                death.drowned
+            );
+        }) {
+            Ok(()) => enshwick_loader_api::info!("PASS player deaths subscribed"),
+            Err(off) => enshwick_loader_api::warn!("FAIL player deaths: {off}"),
+        }
         load.on::<QuestCompleted>(|done| {
             enshwick_loader_api::info!("event: quest {} completed by {}", done.quest, done.entity);
         })?;

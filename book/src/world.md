@@ -130,6 +130,13 @@ own entity, a `Meter` with the count and its maximum, and
 count, kept between 0 and the maximum. The game saves it with the world and
 shows it on the item's slot.
 
+`shroud_time(entity)` reads how long a character holds out in the shroud
+before it drains health, in seconds, as a `Meter` with the most it holds,
+and `change_shroud_time(entity, change)` sets it, kept between 0 and that
+most; clients see it from the next step. The game refills it outside the
+shroud and saves none of it. `in_shroud(entity)` tells whether a character
+stands in the shroud where it drains them, outside the altars' reach.
+
 ## Writing components
 
 A write goes to the component the server owns, and the loader marks it

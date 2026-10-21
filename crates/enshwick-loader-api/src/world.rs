@@ -929,6 +929,65 @@ impl World {
         self.write_stat(pide, stats::Pool::Meter, change)
     }
 
+    /// How long `entity`, a character, holds out in the shroud before it
+    /// drains health, in seconds, and the most it holds; `None` for an
+    /// entity without it, off the game thread, or on a build without it.
+    /// It runs down in the shroud and refills outside.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// fn left(world: &enshwick_loader_api::world::World, player: &enshwick_loader_api::world::Player) -> i32 {
+    ///     world.shroud_time(player.entity).map_or(0, |time| time.current)
+    /// }
+    /// ```
+    #[must_use]
+    pub fn shroud_time(&self, entity: Entity) -> Option<Meter> {
+        self.stats?.shroud(self, entity)
+    }
+
+    /// Sets how long `entity` holds out in the shroud to what `change` makes
+    /// of it, in seconds, kept between 0 and its most, and returns it;
+    /// clients see it from the next step. Not saved: the game refills it
+    /// outside the shroud. On the game thread only.
+    ///
+    /// # Errors
+    ///
+    /// [`WorldError::Lacks`] for an entity without it;
+    /// [`WorldError::Missing`] on a build without it; otherwise as for
+    /// [`World::update`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// fn refill(world: &enshwick_loader_api::world::World, player: &enshwick_loader_api::world::Player) {
+    ///     let _full = world.change_shroud_time(player.entity, |_| i32::MAX);
+    /// }
+    /// ```
+    pub fn change_shroud_time(
+        &self,
+        entity: Entity,
+        change: impl FnOnce(i32) -> i32,
+    ) -> Result<Meter, WorldError> {
+        self.write_stat(entity, stats::Pool::Shroud, change)
+    }
+
+    /// Whether `entity`, a character, stands in the shroud where it drains
+    /// them, outside the altars' reach; `None` for an entity that is no
+    /// actor, off the game thread, or on a build without it.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// fn exposed(world: &enshwick_loader_api::world::World, player: &enshwick_loader_api::world::Player) -> bool {
+    ///     world.in_shroud(player.entity) == Some(true)
+    /// }
+    /// ```
+    #[must_use]
+    pub fn in_shroud(&self, entity: Entity) -> Option<bool> {
+        self.stats?.in_shroud(self, entity)
+    }
+
     fn write_stat(
         &self,
         entity: Entity,

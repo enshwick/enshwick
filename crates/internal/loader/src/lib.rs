@@ -33,6 +33,8 @@ mod damage;
 #[cfg(windows)]
 mod daytime;
 #[cfg(windows)]
+mod deaths;
+#[cfg(windows)]
 mod detour;
 pub mod diag;
 #[cfg(windows)]
