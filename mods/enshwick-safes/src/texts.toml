@@ -14,6 +14,7 @@
 "command.not_allowed" = "{name} is not allowed at your Safe at {at}."
 "command.list" = "Allowed at your Safe at {at}: {names}."
 "command.list_empty" = "Only you may open your Safe at {at}."
+"command.refused" = "You may not change who opens your Safe at {at}."
 
 [uk]
 "safe.name" = "Сейф"
@@ -31,6 +32,7 @@
 "command.not_allowed" = "{name} не має доступу до вашого сейфа в {at}."
 "command.list" = "Доступ до вашого сейфа в {at}: {names}."
 "command.list_empty" = "Ваш сейф у {at} можете відкривати лише ви."
+"command.refused" = "Ви не можете змінювати, хто відкриває ваш сейф у {at}."
 
 [de]
 "safe.name" = "Tresor"

@@ -282,6 +282,30 @@ impl Access {
         }
     }
 
+    /// Whether `player`, with the character `character`, may change who uses
+    /// the Safe kept at `at`; false when none is kept there.
+    #[must_use]
+    pub fn may_manage(&self, at: Cell, player: Seen, character: Entity) -> bool {
+        let owners = self.owners.load();
+        let Some(safe) = owners.get(&at) else {
+            return false;
+        };
+        let chest = self
+            .safes
+            .load()
+            .iter()
+            .find_map(|(&entity, &(_, kept))| (kept == at).then_some(Entity(entity)))
+            .unwrap_or_default();
+        let admins_open = self.admins_open.load(Ordering::Relaxed);
+        decide(
+            safe,
+            Some(player),
+            admins_open,
+            Action::Manage,
+            (character, chest),
+        )
+    }
+
     /// The owner of `chest` and the cell it is kept at, when it is a Safe
     /// with a known owner, learning it on first sight from the item it was
     /// placed from and where it stands.
@@ -363,22 +387,22 @@ impl Access {
         });
     }
 
-    /// Forgets a Safe picked up or torn down; false when `entity` was none.
-    pub fn removed(&self, entity: u32) -> bool {
-        let Some(&(_, at)) = self.safes.load().get(&entity) else {
-            return false;
-        };
+    /// Forgets a Safe picked up or torn down; its cell and record, or
+    /// `None` when `entity` was none.
+    pub fn removed(&self, entity: u32) -> Option<(Cell, Safe)> {
+        let &(owner, at) = self.safes.load().get(&entity)?;
         self.safes.rcu(|safes| {
             let mut safes = HashMap::clone(safes);
             safes.remove(&entity);
             safes
         });
+        let mut gone = None;
         self.owners.rcu(|owners| {
             let mut owners = HashMap::clone(owners);
-            owners.remove(&at);
+            gone = owners.remove(&at);
             owners
         });
-        true
+        Some((at, gone.unwrap_or_else(|| Safe::new(owner, ""))))
     }
 
     /// Changes the Safe kept at `at` with `change`; what it returns, or
@@ -521,7 +545,7 @@ mod tests {
         ));
         access.admins_open.store(false, Ordering::Relaxed);
         assert!(access.refused_seen(500, Entity(13)));
-        assert!(access.removed(500));
+        assert!(access.removed(500).is_some());
         assert!(!access.refused_seen(500, Entity(12)));
         assert!(access.owners.load().is_empty());
         assert_eq!(access.change((0, 0, 0), |_| ()), None);
@@ -570,7 +594,7 @@ mod tests {
         assert!(!ask(Kind::Stock, 12, None));
         assert!(ask(Kind::Dismantle, 10, safe));
         assert!(!ask(Kind::Upgrade, 10, safe), "nobody upgrades a Safe");
-        assert!(ACCESS.removed(700));
+        assert!(ACCESS.removed(700).is_some());
         assert!(ask(Kind::Upgrade, 10, Some(1)), "another piece upgrades");
     }
 }
