@@ -31,6 +31,7 @@ pub(crate) const TABLE_IDS: &[&str] = &[
     "buffs.record_level",
     "buffs.record_lifetime",
     "buffs.record_remaining",
+    "buffs.record_size",
     "buffs.record_strength",
     "buffs.record_type",
     "buffs.registry",
@@ -43,8 +44,9 @@ pub(crate) const TABLE_IDS: &[&str] = &[
     "world.time",
 ];
 
-/// The size of the saved-buff record the restore reads.
-const RECORD: usize = 0x78;
+/// The room the loader keeps for the saved-buff record the restore reads;
+/// the build's record must fit.
+const RECORD: usize = 0x100;
 /// More buff types than any build has: a count past it is not a count.
 const MAX_TYPES: u32 = 1 << 16;
 /// The value of the record's strength the game's own apply gives a buff.
@@ -176,6 +178,12 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
                 function("buffs.cleanse")?,
                 function("world.time")?,
             );
+            if loader
+                .offset("buffs.record_size")
+                .is_none_or(|size| size > RECORD)
+            {
+                return None;
+            }
             Some(Layout {
                 // SAFETY: each symbol is the game function with this
                 // signature on this build.

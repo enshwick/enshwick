@@ -54,8 +54,11 @@ const LOGGED: u32 = 64;
 /// definition.
 #[derive(Debug, Clone, Copy)]
 struct Site {
-    /// The action in the input row `rbx`.
+    /// The action in the input row `rbx`, a trigger request: its id first,
+    /// its definition kind and its value.
     action: usize,
+    kind: usize,
+    value: usize,
     /// A player definition's experience id and skill points.
     experience: usize,
     skill_points: usize,
@@ -116,6 +119,8 @@ fn site(loader: &Loader) -> Option<Site> {
     };
     Some(Site {
         action: loader.offset("knowledge.input_action")?,
+        kind: loader.offset("knowledge.request_kind")?,
+        value: loader.offset("knowledge.request_value")?,
         experience: field("experienceGainId")?,
         skill_points: field("unlockedSkillPoints")?,
     })
@@ -311,13 +316,13 @@ unsafe extern "system" fn check(registers: *mut Registers, _user: *mut c_void) {
         };
         let action = address(registers.rbx).wrapping_add(site.action);
         // SAFETY: at the site `rbx` is the player's input row, which holds
-        // the action `{id u32, kind u8, value u32 at 8}`; `rdi` is the
+        // the action, a trigger request with its id first; `rdi` is the
         // system's query context; 1.0 build 1269579.
         let id: u32 = unsafe { read(action, 0) };
         // SAFETY: as above.
-        let kind: u8 = unsafe { read(action, 4) };
+        let kind: u8 = unsafe { read(action, site.kind) };
         // SAFETY: as above.
-        let value: u32 = unsafe { read(action, 8) };
+        let value: u32 = unsafe { read(action, site.value) };
         let player = crate::ecs::resolved().map_or(0, |engine| {
             // SAFETY: as above.
             unsafe {

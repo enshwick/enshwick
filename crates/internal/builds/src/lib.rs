@@ -1084,7 +1084,12 @@ mod tests {
         let server = newest(&tables, Side::Server).unwrap().resolve();
         let client = newest(&tables, Side::Client).unwrap().resolve();
         for (id, value) in server.constants() {
-            assert_eq!(client.constant(id), Some(*value), "{id}");
+            let expected = match id.as_str() {
+                // The client's weather instances carry 8 bytes more.
+                "weather.entry_size" => 0x50,
+                _ => *value,
+            };
+            assert_eq!(client.constant(id), Some(expected), "{id}");
         }
         for (id, _) in server.symbols() {
             assert!(client.symbol(id).is_some(), "{id}");
@@ -1449,6 +1454,6 @@ age = 1
 
     /// How many symbols and constants the patterns of each side's table find
     /// on its own build, at least; raised as patterns are added.
-    const COVERED_SERVER: (usize, usize) = (121, 247);
-    const COVERED_CLIENT: (usize, usize) = (183, 403);
+    const COVERED_SERVER: (usize, usize) = (121, 271);
+    const COVERED_CLIENT: (usize, usize) = (183, 427);
 }

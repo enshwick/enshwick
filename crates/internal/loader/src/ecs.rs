@@ -32,6 +32,34 @@ pub(crate) const TABLE_IDS: &[&str] = &[
 static ENGINE: OnceLock<Engine> = OnceLock::new();
 
 /// The helpers on this build, resolved once; `None` when the table lacks one.
+/// Checks that `system` still reads and writes the components the loader's
+/// iterator layout for it assumes, in that order: the layout moves when
+/// they change, on a build found by patterns too.
+///
+/// # Errors
+///
+/// A line for the log naming what the build's system has instead.
+pub(crate) fn components_match(
+    loader: &Loader,
+    system: &str,
+    reads: &[&str],
+    writes: &[&str],
+) -> Result<(), String> {
+    let found = loader
+        .reflection
+        .system(system)
+        .map_err(|e| format!("no system {system}: {e}"))?;
+    if found.reads() == reads && found.writes() == writes {
+        Ok(())
+    } else {
+        Err(format!(
+            "{system} reads {:?} and writes {:?}, not the components its iterator layout assumes",
+            found.reads(),
+            found.writes()
+        ))
+    }
+}
+
 pub(crate) fn engine(loader: &Loader) -> Option<&'static Engine> {
     if let Some(engine) = ENGINE.get() {
         return Some(engine);

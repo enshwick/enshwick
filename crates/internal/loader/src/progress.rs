@@ -33,7 +33,10 @@ pub(crate) const TABLE_IDS: &[&str] = &[
 /// `Level` and `PlayerTracking`, each with its change tracking (two stamps,
 /// entity record, type and flags, tracker), then `BalancingRegistry`,
 /// `BasicPlayerInfos`, `AttributeRegistry` and the `LevelUpEvent` writer.
-/// Found on the 1.0 build 1269579, server and client.
+/// Found on the 1.0 build 1269579, server and client, and checked against
+/// the system's reflected components on every build.
+const READS: [&str; 1] = ["CurrentTransform"];
+const WRITES: [&str; 3] = ["Experience", "Level", "PlayerTracking"];
 const WORDS: usize = 24;
 const EXPERIENCE: usize = 2;
 const STAMP_A: usize = 3;
@@ -202,10 +205,18 @@ pub(crate) fn link(loader: &'static Loader) {
         symbol(loader, "skill.fly_mode_gate_return").unwrap_or(0),
         Ordering::Relaxed,
     );
-    let player_level = loader
-        .reflection
-        .system("player_level")
-        .map_or(0, enshwick_loader_reflect::System::entry);
+    let player_level = match crate::ecs::components_match(loader, "player_level", &READS, &WRITES) {
+        Ok(()) => loader
+            .reflection
+            .system("player_level")
+            .map_or(0, enshwick_loader_reflect::System::entry),
+        Err(why) => {
+            if wants[2] {
+                crate::log!(WARN, "experience filters off: {why}");
+            }
+            0
+        }
+    };
     let address = |name| loader.address(name);
     if wants[0]
         && loader.link_feature(

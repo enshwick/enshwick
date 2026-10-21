@@ -85,7 +85,9 @@ pub(crate) const TABLE_IDS: &[&str] = &[
 const MOVE_WINDOW: Duration = Duration::from_secs(2);
 /// `ui_npc_status`'s iterator: a header, `ClientActiveNpcState`,
 /// `NetworkComfort`, `RenderTransform`, UI offsets, `UiPlayData`.
-/// Found on the 1.0 build 1269579, server and client.
+/// Found on the 1.0 build 1269579, server and client, and checked against
+/// the system's reflected components on every build.
+const UI_READS: [&str; 3] = ["ClientActiveNpcState", "NetworkComfort", "RenderTransform"];
 const UI_WORDS: usize = 6;
 const UI_STATE: usize = 1;
 const UI_PLAY_DATA: usize = 5;
@@ -529,11 +531,17 @@ pub(crate) fn link(loader: &'static Loader) {
         );
     }
     if status {
-        let menu = loader
-            .reflection
-            .system("ui_npc_status")
-            .ok()
-            .map(enshwick_loader_reflect::System::entry);
+        let menu = match crate::ecs::components_match(loader, "ui_npc_status", &UI_READS, &[]) {
+            Ok(()) => loader
+                .reflection
+                .system("ui_npc_status")
+                .ok()
+                .map(enshwick_loader_reflect::System::entry),
+            Err(why) => {
+                crate::log!(WARN, "survivor menu off: {why}");
+                None
+            }
+        };
         loader.link_feature(
             "survivor menu",
             menu,
