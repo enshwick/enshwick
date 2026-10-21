@@ -137,7 +137,7 @@ with_data! {
     /// [`Event::BUILDING_REMOVED`].
     BuildingRemoved = BUILDING_REMOVED: BuildingData, size_of::<BuildingData>();
     /// [`Event::PLAYER_DIED`].
-    PlayerDied = PLAYER_DIED: PlayerDeathData, size_of::<PlayerDeathData>();
+    PlayerDied = PLAYER_DIED: PlayerDeathData, core::mem::offset_of!(PlayerDeathData, killer_entity);
 }
 
 #[cfg(test)]
@@ -165,6 +165,27 @@ mod tests {
         assert!(unsafe { PlayerJoined::data((&raw const short).cast()) }.is_none());
         // SAFETY: no data is read.
         assert!(unsafe { WorldSaved::data(core::ptr::null()) }.is_some());
+    }
+
+    #[test]
+    fn a_death_from_minor_60_reads_without_its_killer_entity() {
+        let mut death = PlayerDeathData {
+            header: Header::of::<PlayerDeathData>(),
+            entity: 3,
+            cause: PlayerDeathData::HIT,
+            key: 7,
+            position: [0.0; 3],
+            killer: [1; 16],
+            deadly_shroud: 0,
+            drowned: 0,
+            reserved: 0,
+            killer_entity: 9,
+            reserved_tail: 0,
+        };
+        death.header.size = 56;
+        // SAFETY: a valid death, as long as its header says.
+        let read = unsafe { PlayerDied::data((&raw const death).cast()) }.unwrap();
+        assert_eq!((read.entity, read.killer_entity), (3, 0));
     }
 
     #[test]
