@@ -2088,6 +2088,41 @@ fn input(s: &mut State, text: &str) -> Option<super::Input> {
     Some(s.inputs.remove(at).1)
 }
 
+/// A progress bar's filled part, as the loader draws it; `None` for a bar
+/// the loader refuses.
+fn fraction(w: &UiWidget) -> Option<f32> {
+    let fine = w.min.is_finite() && w.max.is_finite() && w.value.is_finite() && w.min < w.max;
+    fine.then(|| (w.value.clamp(w.min, w.max) - w.min) / (w.max - w.min))
+}
+
+/// Draws a slider row as the loader does, taking its waiting input.
+fn slider(
+    s: &mut State,
+    w: &mut UiWidget,
+    label: String,
+    read_only: bool,
+) -> Result<super::Drawn, Status> {
+    if !(w.min.is_finite() && w.max.is_finite() && w.value.is_finite()) {
+        return Err(Status::BAD_ARGS);
+    }
+    let (min, max) = (w.min.min(w.max), w.max.max(w.min));
+    w.value = w.value.clamp(min, max);
+    if let (false, Some(super::Input::Value(value))) = (read_only, input(s, &label))
+        && value.is_finite()
+    {
+        w.value = value.clamp(min, max);
+        w.result = 1;
+    }
+    Ok(super::Drawn::Slider {
+        label,
+        value: w.value,
+        min: w.min,
+        max: w.max,
+        steps: w.steps,
+        read_only,
+    })
+}
+
 /// Records a HUD callback's widget; `None` outside a HUD callback.
 fn hud_widget(s: &mut State, frame: u64, w: &UiWidget, label: &str) -> Option<Status> {
     let (token, list) = s.hud.as_mut()?;
@@ -2099,8 +2134,9 @@ fn hud_widget(s: &mut State, frame: u64, w: &UiWidget, label: &str) -> Option<St
             text: label.to_owned(),
             style: w.style,
         },
-        UiWidget::PROGRESS => super::Drawn::Progress {
-            fraction: (w.value - w.min) / (w.max - w.min),
+        UiWidget::PROGRESS => match fraction(w) {
+            Some(fraction) => super::Drawn::Progress { fraction },
+            None => return Some(Status::BAD_ARGS),
         },
         _ => return Some(Status::REFUSED),
     };
@@ -2167,20 +2203,10 @@ extern "system" fn ui_widget(_me: ModHandle, frame: u64, widget: *mut UiWidget) 
                     read_only,
                 }
             }
-            UiWidget::SLIDER => {
-                if let (false, Some(Input::Value(value))) = (read_only, input(s, &label)) {
-                    w.value = value.clamp(w.min, w.max);
-                    w.result = 1;
-                }
-                Drawn::Slider {
-                    label,
-                    value: w.value,
-                    min: w.min,
-                    max: w.max,
-                    steps: w.steps,
-                    read_only,
-                }
-            }
+            UiWidget::SLIDER => match slider(s, w, label, read_only) {
+                Ok(drawn) => drawn,
+                Err(status) => return status,
+            },
             UiWidget::DROPDOWN => {
                 if let (false, Some(Input::Pick(index))) = (read_only, input(s, &label))
                     && index < options.len()
@@ -2195,8 +2221,9 @@ extern "system" fn ui_widget(_me: ModHandle, frame: u64, widget: *mut UiWidget) 
                     read_only,
                 }
             }
-            UiWidget::PROGRESS => Drawn::Progress {
-                fraction: (w.value - w.min) / (w.max - w.min),
+            UiWidget::PROGRESS => match fraction(w) {
+                Some(fraction) => Drawn::Progress { fraction },
+                None => return Status::BAD_ARGS,
             },
             _ => return Status::MISSING,
         };

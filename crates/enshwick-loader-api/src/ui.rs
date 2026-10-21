@@ -879,24 +879,36 @@ impl Frame<'_> {
     /// Draws a slider row showing `value`; true in the frame the player
     /// changes it, with `value` changed and kept in the slider's range.
     ///
+    /// A range with an end that is not finite draws nothing and gives false.
+    /// A reversed range slides between the same ends, and a `value` that is
+    /// not finite shows at the smaller end.
+    ///
     /// # Examples
     ///
     /// See [`Slider`].
     pub fn slider(&mut self, slider: Slider<'_>, value: &mut f32) -> bool {
-        let (min, max) = slider.range.into_inner();
+        let (start, end) = slider.range.into_inner();
+        if !(start.is_finite() && end.is_finite()) {
+            return false;
+        }
+        let (min, max) = (start.min(end), start.max(end));
         let mut widget = UiWidget {
             kind: UiWidget::SLIDER,
             flags: read_only_flag(slider.read_only),
             steps: slider.steps,
             text: Str::new(slider.label),
-            value: *value,
+            value: if value.is_finite() {
+                value.clamp(min, max)
+            } else {
+                min
+            },
             min,
             max,
             ..UiWidget::EMPTY
         };
-        let changed = self.draw(&mut widget);
+        let changed = self.draw(&mut widget) && widget.value.is_finite();
         if changed {
-            *value = widget.value.clamp(min.min(max), max.max(min));
+            *value = widget.value.clamp(min, max);
         }
         changed
     }
@@ -946,7 +958,11 @@ impl Frame<'_> {
     pub fn progress(&mut self, fraction: f32) {
         let _drawn = self.draw(&mut UiWidget {
             kind: UiWidget::PROGRESS,
-            value: fraction.clamp(0.0, 1.0),
+            value: if fraction.is_finite() {
+                fraction.clamp(0.0, 1.0)
+            } else {
+                0.0
+            },
             min: 0.0,
             max: 1.0,
             ..UiWidget::EMPTY

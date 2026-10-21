@@ -28,6 +28,8 @@ mod tests {
             let mut fast = false;
             let mut volume = 0.5f32;
             let mut mode = 0usize;
+            let mut wild = 0.5f32;
+            let mut reversed = f32::NAN;
             load.on_frame(move |frame| {
                 if !open {
                     return;
@@ -37,6 +39,9 @@ mod tests {
                     w.toggle(Toggle::new("Fast"), &mut fast);
                     w.slider(Slider::new("Volume", 0.0..=1.0).steps(11), &mut volume);
                     w.dropdown(Dropdown::new("Mode", &["Off", "On"]), &mut mode);
+                    assert!(!w.slider(Slider::new("Wild", f32::NAN..=1.0), &mut wild));
+                    w.slider(Slider::new("Reversed", 10.0..=0.0), &mut reversed);
+                    w.progress(f32::NAN);
                     w.toggle(Toggle::new("Synced").read_only(true), &mut fast);
                     w.progress(volume);
                     if w.button("Close") {
@@ -76,9 +81,22 @@ mod tests {
             }
         );
         assert_eq!(first.last(), Some(&Drawn::End));
+        assert!(
+            !first
+                .iter()
+                .any(|d| matches!(d, Drawn::Slider { label, .. } if label == "Wild"))
+        );
+        assert!(first.iter().any(|d| matches!(
+            d,
+            Drawn::Slider { label, value, min, max, .. }
+                if label == "Reversed" && [*value, *min, *max].map(f32::to_bits) == [0.0f32, 0.0, 10.0].map(f32::to_bits)
+        )));
+        assert!(first.contains(&Drawn::Progress { fraction: 0.0 }));
 
         loader.input("Fast", Input::Toggle(true));
         loader.input("Volume", Input::Value(0.8));
+        loader.input("Wild", Input::Value(0.7));
+        loader.input("Reversed", Input::Value(12.0));
         loader.input("Mode", Input::Pick(1));
         loader.input("Synced", Input::Toggle(false));
         let second = loader.draw_frame();
@@ -95,6 +113,9 @@ mod tests {
                 .iter()
                 .any(|d| matches!(d, Drawn::Dropdown { label, index: 1, .. } if label == "Mode"))
         );
+        assert!(second.iter().any(
+            |d| matches!(d, Drawn::Slider { label, value, .. } if label == "Reversed" && value.to_bits() == 10.0f32.to_bits())
+        ));
 
         // A read-only row keeps its value: the mod's `fast` stayed on.
         let third = loader.draw_frame();
