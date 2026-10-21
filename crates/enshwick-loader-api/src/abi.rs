@@ -480,12 +480,12 @@ impl Event {
     /// A simulation step ran; data is a [`TickData`]. Raised on the server's
     /// game thread after the step, about 20 times a second with nobody online
     /// and 60 with players, from before [`Event::WORLD_LOADED`]. Server only.
-    pub const TICK: Self = Self(3);
+    pub const TICKED: Self = Self(3);
     /// The world finished loading and the server runs; no data. Raised on the
     /// game thread. Server only.
     pub const WORLD_LOADED: Self = Self(4);
     /// A save of the world finished writing to disk; no data. Raised on the
-    /// game thread; the final save runs after [`Event::SHUTDOWN`]. Server only.
+    /// game thread; the final save runs after [`Event::SHUTDOWN_STARTED`]. Server only.
     pub const WORLD_SAVED: Self = Self(5);
     /// A player's character entered the world; data is a [`PlayerData`].
     /// Raised on the game thread. Server only.
@@ -496,7 +496,7 @@ impl Event {
     /// The server begins an orderly stop with the world and players still
     /// alive; no data. Raised on the game thread; a killed process raises
     /// nothing. Server only.
-    pub const SHUTDOWN: Self = Self(8);
+    pub const SHUTDOWN_STARTED: Self = Self(8);
     /// A player placed a building piece or prop; data is a [`BuildingData`].
     /// Raised on the game thread after the step that placed it. Server only.
     pub const BUILDING_PLACED: Self = Self(9);
@@ -510,7 +510,7 @@ impl Event {
     /// server runs and where they come from. Raised on the game thread once
     /// the player closed the loader's note: a handler leaves downloads to a
     /// thread of its own. Client only. Since minor 10.
-    pub const JOIN_MISSING: Self = Self(11);
+    pub const JOIN_REFUSED: Self = Self(11);
     /// The Flame Altars of the server's world changed: one was placed or
     /// removed, moved, raised a level or had its zone built anew; no data.
     /// [`HostApi::altars`] lists them as they are now. Raised on the game
@@ -541,11 +541,11 @@ impl Event {
     /// entities are gone; data is a [`ChunkData`]. Raised on the game thread
     /// after the step. Server only. Since minor 33.
     pub const CHUNK_UNLOADED: Self = Self(18);
-    /// The settings a mod reads changed whole, as a world loads in this
+    /// The settings a mod reads were replaced whole, as a world loads in this
     /// process (its own settings from then on) or stops (the settings file
     /// again); no data. The settings that wait for a start apply too.
     /// Raised on the server's game thread. Since minor 46.
-    pub const WORLD_SETTINGS: Self = Self(19);
+    pub const SETTINGS_REPLACED: Self = Self(19);
     /// A player died, from a hit, a fall, the shroud or drowning; data is a
     /// [`PlayerDeathData`]. Raised on the game thread after the step.
     /// Deaths the game keeps no record of, such as freezing or an
@@ -877,7 +877,7 @@ impl PlayerInfo {
     pub const CAN_RECEIVE_EXP: u8 = 1 << 5;
 }
 
-/// The data of [`Event::TICK`].
+/// The data of [`Event::TICKED`].
 ///
 /// # Examples
 ///
@@ -4235,7 +4235,7 @@ pub struct HostApi {
     /// client's DLL path when it has the mod (empty otherwise) and the
     /// source the server advertises, else the client's own source for the
     /// mod. The strings stay valid for the process. Empty before a refused
-    /// join; see [`Event::JOIN_MISSING`]. Since minor 10.
+    /// join; see [`Event::JOIN_REFUSED`]. Since minor 10.
     pub join_missing: extern "system" fn(
         me: ModHandle,
         out: *mut ModInfo,

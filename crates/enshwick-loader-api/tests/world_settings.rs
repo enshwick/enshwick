@@ -60,7 +60,7 @@ mod tests {
         assert_eq!(LIMIT.load(Ordering::Relaxed), 4);
         assert_eq!(RATE.load(Ordering::Relaxed), 2);
         assert_eq!(WORKERS.load(Ordering::Relaxed), 2);
-        assert_eq!(loader.raise::<events::WorldSettings>(&()), 1);
+        assert_eq!(loader.raise::<events::SettingsReplaced>(&()), 1);
         assert_eq!(LIMIT.load(Ordering::Relaxed), 9);
         assert_eq!(
             WORKERS.load(Ordering::Relaxed),

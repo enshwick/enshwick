@@ -413,7 +413,7 @@ pub(crate) fn world_event(loader: &Loader, event: Event) {
             }
             *QUEUE.lock().unwrap_or_else(PoisonError::into_inner) = Queue { key, waiting };
         }
-        Event::SHUTDOWN => {
+        Event::SHUTDOWN_STARTED => {
             WAITING.store(false, Ordering::Release);
             *QUEUE.lock().unwrap_or_else(PoisonError::into_inner) = Queue::default();
             RAISED

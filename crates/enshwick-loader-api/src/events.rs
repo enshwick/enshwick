@@ -5,6 +5,10 @@
 //! from the built-in server while it hosts a game, solo play included; each
 //! hosted game starts with [`WorldLoaded`] and ends with [`ShutdownStarted`], so
 //! state of one game is reset there.
+//!
+//! Each event is named for what happened, a subject and a verb in the past
+//! tense, and its [`Event`] constant is the same name in capitals:
+//! [`PlayerJoined`] is [`Event::PLAYER_JOINED`].
 
 use core::ffi::c_void;
 
@@ -101,26 +105,26 @@ without_data! {
     WorldLoaded = WORLD_LOADED;
     /// [`Event::WORLD_SAVED`].
     WorldSaved = WORLD_SAVED;
-    /// [`Event::SHUTDOWN`].
-    ShutdownStarted = SHUTDOWN;
-    /// [`Event::JOIN_MISSING`]; [`crate::mods::join_missing`] lists the mods.
-    JoinRefused = JOIN_MISSING;
+    /// [`Event::SHUTDOWN_STARTED`].
+    ShutdownStarted = SHUTDOWN_STARTED;
+    /// [`Event::JOIN_REFUSED`]; [`crate::mods::join_missing`] lists the mods.
+    JoinRefused = JOIN_REFUSED;
     /// [`Event::ALTARS_CHANGED`]; [`crate::altars::Altars::list`] lists them.
     AltarsChanged = ALTARS_CHANGED;
     /// [`Event::DAY_STARTED`]; [`crate::daytime::Clock::now`] reads the clock.
     DayStarted = DAY_STARTED;
     /// [`Event::NIGHT_STARTED`].
     NightStarted = NIGHT_STARTED;
-    /// [`Event::WORLD_SETTINGS`]; [`Load::on_config_change`](crate::Load::on_config_change)
+    /// [`Event::SETTINGS_REPLACED`]; [`Load::on_config_change`](crate::Load::on_config_change)
     /// re-reads the settings for you, the ones that wait for a start too.
-    WorldSettings = WORLD_SETTINGS;
+    SettingsReplaced = SETTINGS_REPLACED;
 }
 
 // Each event names its data and the size that data had in the minor that
 // added the event, the part every loader that runs the mod writes.
 with_data! {
-    /// [`Event::TICK`].
-    Ticked = TICK: TickData, size_of::<TickData>();
+    /// [`Event::TICKED`].
+    Ticked = TICKED: TickData, size_of::<TickData>();
     /// [`Event::PLAYER_JOINED`].
     PlayerJoined = PLAYER_JOINED: PlayerData, size_of::<PlayerData>();
     /// [`Event::PLAYER_LEFT`].

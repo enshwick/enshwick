@@ -286,7 +286,7 @@ mod live {
         crate::log!(INFO, "world settings: world {key}");
         set_current(Some(key));
         crate::recipes::world_changed(loader);
-        loader.emit(Event::WORLD_SETTINGS, None, core::ptr::null());
+        loader.emit(Event::SETTINGS_REPLACED, None, core::ptr::null());
     }
 
     /// The world stopped: every mod reads its settings file again.
@@ -296,7 +296,7 @@ mod live {
         }
         set_current(None);
         crate::recipes::world_changed(loader);
-        loader.emit(Event::WORLD_SETTINGS, None, core::ptr::null());
+        loader.emit(Event::SETTINGS_REPLACED, None, core::ptr::null());
     }
 }
 

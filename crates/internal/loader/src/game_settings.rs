@@ -354,7 +354,7 @@ pub(crate) fn world_event(loader: &Loader, event: Event) {
             PENDING.store(true, Ordering::Release);
             settle(loader);
         }
-        Event::SHUTDOWN => {
+        Event::SHUTDOWN_STARTED => {
             PENDING.store(false, Ordering::Release);
             *KEPT.lock().unwrap_or_else(PoisonError::into_inner) = Kept::default();
         }

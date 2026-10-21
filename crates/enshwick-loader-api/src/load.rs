@@ -617,7 +617,7 @@ impl Load<'_> {
     {
         let handler = std::sync::Arc::new(handler);
         let on_world = std::sync::Arc::clone(&handler);
-        self.on_raw_event(Event::WORLD_SETTINGS, move |_| {
+        self.on_raw_event(Event::SETTINGS_REPLACED, move |_| {
             let Some(host) = crate::host() else {
                 return;
             };

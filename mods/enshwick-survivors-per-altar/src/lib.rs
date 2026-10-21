@@ -509,7 +509,7 @@ copy_staff_boss_chance = 0.0
         use enshwick_loader_api::abi::{
             AltarInfo, BedCheck, Bounds, Header, Status, SurvivorLookup,
         };
-        use enshwick_loader_api::events::WorldSettings;
+        use enshwick_loader_api::events::SettingsReplaced;
 
         let loader = host().install();
         // SAFETY: the exports of `declare_mod!` above.
@@ -539,7 +539,7 @@ copy_staff_boss_chance = 0.0
 copy_staff_locked_chest_chance = 0.0
 ",
         );
-        assert!(loader.raise::<WorldSettings>(&()) >= 1);
+        assert!(loader.raise::<SettingsReplaced>(&()) >= 1);
         assert!(!PER_ALTAR.load(Ordering::Relaxed));
         assert_eq!(
             loader.survivor_lookup(7, 10, unique, 11, [120, 0, 10], &[]),

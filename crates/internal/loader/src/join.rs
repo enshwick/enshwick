@@ -8,7 +8,7 @@
 //!
 //! A client kept out tells its mods which of the server's mods it lacks, with
 //! the versions, update sources and author keys the server advertises
-//! ([`Event::JOIN_MISSING`](enshwick_loader_api::abi::Event::JOIN_MISSING)), so an
+//! ([`Event::JOIN_REFUSED`](enshwick_loader_api::abi::Event::JOIN_REFUSED)), so an
 //! updater can offer them.
 //!
 //! The game asks to change servers with a request that starts with the server's

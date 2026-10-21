@@ -174,7 +174,7 @@ mod tests {
         // A settings change reaches the handler; a broken file is skipped.
         let watched = [
             Event::LOADER_SETTINGS_CHANGED,
-            Event::WORLD_SETTINGS,
+            Event::SETTINGS_REPLACED,
             Event::SETTINGS_CHANGED,
         ];
         assert_eq!(loader.subscriptions(), watched);

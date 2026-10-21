@@ -129,7 +129,7 @@ own settings, never inside the game's save. While a world runs in the
 process, a mod reads that world's settings with its own `client` settings
 over them; with no world, as in the main menu, the template. A mod reads its
 settings as before: when a world loads or stops, the loader raises
-[`Event::WORLD_SETTINGS`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs),
+[`Event::SETTINGS_REPLACED`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs),
 and `on_config_change` gets the world's settings, its `startup` values too:
 they apply when the world loads, with no restart of the game, so a mod applies
 them in its handler: a recipe added with `add_recipe_with` and rebuilt, drops

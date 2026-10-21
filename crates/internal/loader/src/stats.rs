@@ -1012,7 +1012,7 @@ pub(crate) fn world_event(loader: &Loader, event: Event) {
             });
             snapshot().store(Arc::new(Snapshot::default()));
         }
-        Event::WORLD_SAVED | Event::SHUTDOWN => save(loader),
+        Event::WORLD_SAVED | Event::SHUTDOWN_STARTED => save(loader),
         _ => {}
     }
 }
