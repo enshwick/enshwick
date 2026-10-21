@@ -58,10 +58,10 @@ The loader's build tables hold what several mods share: the ECS iterator,
 component reads, chat, labels, inventories and so on. They are data, one TOML
 file per game build in
 [`crates/internal/builds/tables`](https://github.com/themaiby/enshwick/tree/main/crates/internal/builds/tables),
-as SKSE's Address Library is: the loader embeds the tables known at its
-release, and the updater fetches the table of a newer game build, signed with
-Enshwick's key, so a game update needs a new table, not a new loader. Ids a
-single mod uses go in that mod's rows.
+as SKSE's Address Library is, embedded in the loader. A game update needs a
+loader build with the new build's table; until then the loader finds each
+entry of the newest table by its code pattern, and what no pattern finds stays
+off. Ids a single mod uses go in that mod's rows.
 
 ## Build rows in the manifest
 

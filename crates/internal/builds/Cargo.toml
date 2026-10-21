@@ -1,7 +1,7 @@
 [package]
 name = "enshwick-loader-builds"
 version = "0.0.0-dev"
-description = "Internal, not for mods: the per-build tables of engine addresses the Enshwick loader pins, as signed data"
+description = "Internal, not for mods: the per-build tables of engine addresses the Enshwick loader pins, embedded as data"
 keywords = ["enshrouded", "modding", "address-library"]
 categories = ["game-development"]
 readme = "README.md"
@@ -14,7 +14,6 @@ publish.workspace = true
 [dependencies]
 enshwick-loader-api.workspace = true
 enshwick-loader-reflect.workspace = true
-minisign-verify.workspace = true
 serde.workspace = true
 thiserror.workspace = true
 toml.workspace = true

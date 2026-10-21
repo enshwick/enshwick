@@ -2,15 +2,13 @@
 //! reflection does not describe, pinned by symbolic id as SKSE's Address
 //! Library does.
 //!
-//! The tables come as data (`enshwick-loader-builds`): the ones the loader
-//! embeds, and the ones the updater fetched into `mods/enshwick/builds/`,
-//! each used only when the project key signed it. A build with its own table
+//! The tables come as data (`enshwick-loader-builds`), embedded in the
+//! loader. A build with its own table
 //! uses it whole, after its systems are checked against reflection. On a
 //! build without one, the newest table of the same side finds each entry by
 //! its code pattern, and what it cannot find stays missing: the features and
 //! mods that need it turn off, the rest runs.
 
-use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use enshwick_loader_api::abi::Side;
@@ -18,10 +16,6 @@ use enshwick_loader_builds::{self as tables, Resolved, Table};
 use enshwick_loader_reflect::Fingerprint;
 
 pub use enshwick_loader_builds::Kind;
-
-/// The folder under `mods/enshwick/` that holds the tables the updater
-/// fetched, each beside its signature.
-pub const FETCHED_DIR: &str = "builds";
 
 /// Whether a build without a table runs on patterns; set from the settings.
 static PATTERNS: AtomicBool = AtomicBool::new(true);
@@ -100,11 +94,11 @@ fn side(side: Side) -> Option<tables::Side> {
     }
 }
 
-/// Every table the loader may use: the embedded ones and those in `fetched`
-/// the project key signed; a refused file is logged and skipped.
+/// Every table the loader embeds; one that does not read is logged and
+/// skipped.
 #[must_use]
-pub fn load(fetched: &Path) -> Vec<Table> {
-    let mut out: Vec<Table> = tables::embedded()
+pub fn load() -> Vec<Table> {
+    tables::embedded()
         .iter()
         .filter_map(|(file, text)| match Table::parse(text) {
             Ok(table) => Some(table),
@@ -113,42 +107,7 @@ pub fn load(fetched: &Path) -> Vec<Table> {
                 None
             }
         })
-        .collect();
-    let Ok(entries) = std::fs::read_dir(fetched) else {
-        return out;
-    };
-    for entry in entries.filter_map(Result::ok) {
-        let path = entry.path();
-        let Some(file) = path.file_name().and_then(|n| n.to_str()).filter(|_| {
-            path.extension()
-                .is_some_and(|e| e.eq_ignore_ascii_case("toml"))
-        }) else {
-            continue;
-        };
-        match fetched_table(&path, file) {
-            Ok(table) => out.push(table),
-            Err(reason) => crate::log!(
-                WARN,
-                "build table mods/{}/{FETCHED_DIR}/{file} not used: {reason}",
-                crate::settings::LOADER_ID
-            ),
-        }
-    }
-    out
-}
-
-fn fetched_table(path: &Path, file: &str) -> Result<Table, String> {
-    let text = std::fs::read(path).map_err(|e| e.to_string())?;
-    let signature_path = path.with_file_name(format!("{file}{}", tables::SIGNATURE_SUFFIX));
-    let signature = std::fs::read_to_string(&signature_path)
-        .map_err(|_| "it has no signature beside it".to_owned())?;
-    tables::verify(&text, &signature, file).map_err(|e| e.to_string())?;
-    let text = core::str::from_utf8(&text).map_err(|_| "it is not UTF-8".to_owned())?;
-    let table = Table::parse(text).map_err(|e| e.to_string())?;
-    if table.file_name() != file {
-        return Err(format!("it is the table of {}", table.file_name()));
-    }
-    Ok(table)
+        .collect()
 }
 
 /// The table for the running build among `tables`: its own when there is
@@ -203,7 +162,7 @@ pub fn by_patterns(tables: &[Table], running: Side, code: (&[u8], u64)) -> Optio
 #[cfg(test)]
 #[must_use]
 pub fn embedded(running: Side) -> KnownBuild {
-    let tables = load(Path::new("no such folder"));
+    let tables = load();
     let side = side(running).unwrap();
     let table = tables::newest(&tables, side).unwrap();
     KnownBuild {
@@ -219,7 +178,7 @@ mod tests {
 
     #[test]
     fn a_known_build_resolves_its_symbols() {
-        let tables = load(Path::new("no such folder"));
+        let tables = load();
         let server = embedded(Side::SERVER);
         let fingerprint = tables
             .iter()
@@ -236,7 +195,7 @@ mod tests {
 
     #[test]
     fn an_unknown_build_falls_back_only_when_allowed_and_given_code() {
-        let tables = load(Path::new("no such folder"));
+        let tables = load();
         let unknown = Fingerprint::new([0xee; 16], 1);
         let code = [0u8; 64];
         let found = select(&tables, Side::SERVER, unknown, Some((&code, 0x1000))).unwrap();
@@ -246,28 +205,6 @@ mod tests {
         assert!(!found.missing().is_empty());
         assert!(select(&tables, Side::SERVER, unknown, None).is_none());
         assert!(select(&tables, Side::BOTH, unknown, Some((&code, 0x1000))).is_none());
-    }
-
-    #[test]
-    fn a_fetched_table_needs_the_project_key_and_its_own_name() {
-        let dir = std::env::temp_dir().join(format!("enshwick-builds-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
-        let (file, text) = tables::embedded()[0];
-        std::fs::write(dir.join(file), text).unwrap();
-        assert!(
-            fetched_table(&dir.join(file), file)
-                .unwrap_err()
-                .contains("no signature")
-        );
-        std::fs::write(
-            dir.join(format!("{file}.minisig")),
-            include_str!("../../builds/testdata/table.minisig"),
-        )
-        .unwrap();
-        assert!(fetched_table(&dir.join(file), file).is_err());
-        let embedded = tables::embedded().len();
-        assert_eq!(load(&dir).len(), embedded);
-        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     /// Every symbol with a `.bytes` constant reads those bytes in the client
@@ -284,7 +221,7 @@ mod tests {
             None,
         )
         .unwrap();
-        let tables = load(Path::new("no such folder"));
+        let tables = load();
         let client =
             tables::exact(&tables, tables::Side::Client, image.fingerprint().unwrap()).unwrap();
         let mut checked = 0;

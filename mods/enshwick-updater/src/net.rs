@@ -180,15 +180,6 @@ impl Client {
         self.plain(url, MAX_ARCHIVE)
     }
 
-    /// A build table.
-    ///
-    /// # Errors
-    ///
-    /// As [`Client::api`].
-    pub(crate) fn table(&self, url: &str) -> Result<Vec<u8>, Failure> {
-        self.plain(url, MAX_JSON)
-    }
-
     /// A signature file, as text.
     ///
     /// # Errors

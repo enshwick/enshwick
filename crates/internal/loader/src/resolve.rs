@@ -45,6 +45,11 @@ pub struct Plan {
     pub replaced: Vec<(usize, usize)>,
 }
 
+/// Why a mod made for the other side of the game is skipped, which is
+/// expected rather than a fault: `enshwick.zip` carries client mods to
+/// servers too.
+pub const OTHER_SIDE: &str = "not for this side of the game";
+
 /// Whether a mod for `mod_side` loads in the game binary `process`. The
 /// dedicated server loads server mods; the client loads every mod, since it
 /// runs the server's code while it hosts a game, solo play included.
@@ -60,7 +65,7 @@ pub fn resolve(candidates: &[Candidate], side: Side) -> Plan {
     let mut by_id: BTreeMap<&str, usize> = BTreeMap::new();
     for (i, candidate) in candidates.iter().enumerate() {
         if !loads(candidate.side, side) {
-            skipped.insert(i, "not for this side of the game".into());
+            skipped.insert(i, OTHER_SIDE.into());
         } else if let Some(&first) = by_id.get(candidate.id.as_str()) {
             skipped.insert(
                 i,

@@ -56,9 +56,7 @@ cargo enshwick compat server/enshrouded_server.exe --mods server/mods
   Starting mods needs Windows.
 
 `--patterns` takes the table by patterns even when one is made for the build,
-to see what the patterns alone carry. `--tables <dir>` adds tables, such as a
-game's `mods/enshwick/builds/`, each used only with the project key's
-signature beside it. `--report <file>` writes the Markdown report there. The
+to see what the patterns alone carry. `--report <file>` writes the Markdown report there. The
 exit code is 0 when everything works, 2 when something does not, and 1 on an
 error.
 
@@ -118,8 +116,7 @@ immediate.
    game.
 5. **Open a pull request** with the new table, the rows and the report's
    summary. Never commit an executable or anything else from the game. Once
-   it is merged, the release workflow signs the table with Enshwick's key and
-   publishes it in the `build-tables` release, where the updater fetches it.
+   it is merged, the next loader build embeds the table.
 
 `--patterns <exe>` rewrites the patterns of the table for that executable's
 build from the executable itself, for a table that has none yet. With
