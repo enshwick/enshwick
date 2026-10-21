@@ -701,6 +701,7 @@ fn keep_zmm_by_value(code: &mut Code, masks: Masks, call: impl Fn(&mut Code)) {
         code.or3_zmm(0, n, n + 1);
         code.or3_zmm(1, n + 15, n + 16);
     }
+    code.or3_zmm(1, 30, 31);
     code.or_zmm(0, 0, 15);
     // Whether an upper half of ymm0-ymm15 is in use, then whether an upper
     // half of zmm0-zmm15, zmm16-zmm31 or a mask register is.
@@ -1098,6 +1099,37 @@ mod tests {
         )
     }
 
+    /// Holds `value` in the top quarter of `zmm31` alone across the marked
+    /// `nop`, the wide registers other tests touch clear, then returns it.
+    #[unsafe(naked)]
+    extern "system" fn zmm31_only(value: u32) -> u32 {
+        core::arch::naked_asm!(
+            "vzeroupper",
+            "vpxord xmm16, xmm16, xmm16",
+            "kxorw k1, k1, k1",
+            "kxorw k2, k2, k2",
+            "kxorw k3, k3, k3",
+            "kxorw k4, k4, k4",
+            "kxorw k5, k5, k5",
+            "kxorw k6, k6, k6",
+            "kxorw k7, k7, k7",
+            "vpbroadcastd zmm31, ecx",
+            ".byte 0x0f, 0x1f, 0x44, 0x00, 0x00",
+            "vextracti32x4 xmm2, zmm31, 3",
+            "vmovd eax, xmm2",
+            "vzeroupper",
+            "ret",
+            ".fill 64, 1, 0xcc",
+        )
+    }
+
+    extern "system" fn clear_zmm31(_registers: *mut Registers, _context: usize) {
+        // SAFETY: clobbers `zmm31`, which no code of this crate keeps live.
+        unsafe {
+            core::arch::asm!("vpxord zmm31, zmm31, zmm31");
+        }
+    }
+
     /// Holds `value` in `k1` alone across the marked `nop`, then returns it.
     #[unsafe(naked)]
     extern "system" fn mask_only(value: u32) -> u32 {
@@ -1135,6 +1167,11 @@ mod tests {
             ) {
                 continue;
             }
+            assert_eq!(
+                hook_mark(zmm31_only, (clear_zmm31 as *const ()).addr(), vectors)(77),
+                77,
+                "{name}"
+            );
             assert_eq!(hook_mark(wide_zmm, handler, vectors)(21), 63, "{name}");
             assert_eq!(
                 hook_mark(mask_only, handler, vectors)(0x4321),

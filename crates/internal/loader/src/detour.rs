@@ -357,7 +357,9 @@ fn write_all(prepared: &[&Pending], code: &[Bytes<'_>]) -> bool {
     }
     // SAFETY: no preconditions.
     let process = unsafe { GetCurrentProcess() };
-    for (address, len, old, changed) in protections {
+    // Backwards: two writes on one page saw the first one's protection, so
+    // the first one's `old` is the page's own and must come last.
+    for (address, len, old, changed) in protections.into_iter().rev() {
         if changed {
             let mut ignored = 0;
             // SAFETY: restores what was there before.
@@ -602,6 +604,9 @@ impl Threads {
                 }
                 // SAFETY: a thread of our own process, opened with suspend rights.
                 if unsafe { SuspendThread(next) } != u32::MAX {
+                    // A suspension only takes hold once the thread's context
+                    // is read.
+                    let _settled = control(next);
                     self.held.push((next, id));
                     fresh = true;
                 }
@@ -641,6 +646,7 @@ impl Threads {
                 // SAFETY: a thread of our own process, opened with suspend
                 // rights; a null handle fails the call.
                 if !thread.is_null() && unsafe { SuspendThread(thread) } != u32::MAX {
+                    let _settled = control(thread);
                     self.held.push((thread, id));
                 } else if !thread.is_null() {
                     // SAFETY: opened above, not kept.

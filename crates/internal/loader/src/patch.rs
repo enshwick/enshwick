@@ -484,7 +484,11 @@ fn unarmed(chains: &mut Chains, mids: &Mids, patches: &[CodePatch], reason: &str
     Armed {
         failures: chains
             .iter_mut()
-            .map(|c| Failure::chain(c.target, reason))
+            .map(|c| {
+                // Never armed: a reload must not link into it.
+                c.head = None;
+                Failure::chain(c.target, reason)
+            })
             .chain(
                 mids.addresses()
                     .into_iter()

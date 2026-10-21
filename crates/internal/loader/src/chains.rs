@@ -204,11 +204,14 @@ impl Chain {
                 .find(|l| !faulted(l.owner))
                 .map_or(original, |l| l.entry())
         };
+        // From the end back to the head: a slot is pointed at a link only
+        // once that link's own `next` is set, so a game thread entering the
+        // chain meanwhile never calls through an empty slot.
+        for (i, link) in links.iter().enumerate().rev() {
+            link.next.store(after(i + 1), Ordering::Release);
+        }
         if let Some(head) = self.head {
             head.store(after(0), Ordering::Release);
-        }
-        for (i, link) in links.iter().enumerate() {
-            link.next.store(after(i + 1), Ordering::Release);
         }
     }
 }
