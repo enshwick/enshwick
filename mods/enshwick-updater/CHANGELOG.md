@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.4.4](https://github.com/themaiby/enshwick/compare/enshwick-updater-v0.4.3...enshwick-updater-v0.4.4) (2026-10-21)
+
+
+### Features
+
+* **loader:** show mod catalogs with updates and mods on the Mods screen ([#180](https://github.com/themaiby/enshwick/issues/180)) ([2e93fb7](https://github.com/themaiby/enshwick/commit/2e93fb7ec219b7c4b4fcab0ff45dcd4c409340d6))
+* **updater:** page through releases, word dialogs in the game language ([#170](https://github.com/themaiby/enshwick/issues/170)) ([c6bd27a](https://github.com/themaiby/enshwick/commit/c6bd27a947073a2e4a40dc822f2e3f64606c20a4))
+
 ## [0.4.3](https://github.com/themaiby/enshwick/compare/enshwick-updater-v0.4.2...enshwick-updater-v0.4.3) (2026-10-21)
 
 

@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.2](https://github.com/themaiby/enshwick/compare/enshwick-survivors-per-altar-v0.6.1...enshwick-survivors-per-altar-v0.6.2) (2026-10-21)
+
+
+### Bug Fixes
+
+* **survivors-per-altar:** sync copy_staffs, forget a last altar removed ([#176](https://github.com/themaiby/enshwick/issues/176)) ([551ab93](https://github.com/themaiby/enshwick/commit/551ab93eccbf0bc3b8913613635ce9f6419ee940))
+
 ## [0.6.1](https://github.com/themaiby/enshwick/compare/enshwick-survivors-per-altar-v0.6.0...enshwick-survivors-per-altar-v0.6.1) (2026-10-21)
 
 ## [0.6.0](https://github.com/themaiby/enshwick/compare/enshwick-survivors-per-altar-v0.5.0...enshwick-survivors-per-altar-v0.6.0) (2026-10-21)

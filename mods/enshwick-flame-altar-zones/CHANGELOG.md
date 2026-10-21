@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.4](https://github.com/themaiby/enshwick/compare/enshwick-flame-altar-zones-v0.4.3...enshwick-flame-altar-zones-v0.4.4) (2026-10-21)
+
+
+### Bug Fixes
+
+* **flame-altar-zones:** sync building_across_seams ([#177](https://github.com/themaiby/enshwick/issues/177)) ([ab85310](https://github.com/themaiby/enshwick/commit/ab85310d8ef64b04d061aed80a87f2e3ad38b174))
+
 ## [0.4.3](https://github.com/themaiby/enshwick/compare/enshwick-flame-altar-zones-v0.4.2...enshwick-flame-altar-zones-v0.4.3) (2026-10-21)
 
 ## [0.4.2](https://github.com/themaiby/enshwick/compare/enshwick-flame-altar-zones-v0.4.1...enshwick-flame-altar-zones-v0.4.2) (2026-10-21)

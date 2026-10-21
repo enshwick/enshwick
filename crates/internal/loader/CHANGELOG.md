@@ -1,5 +1,35 @@
 # Changelog
 
+## [0.8.1](https://github.com/themaiby/enshwick/compare/enshwick-loader-v0.8.0...enshwick-loader-v0.8.1) (2026-10-21)
+
+
+### Features
+
+* **loader:** filter drowning, freezing and admin kills ([#181](https://github.com/themaiby/enshwick/issues/181)) ([215297f](https://github.com/themaiby/enshwick/commit/215297f9059d2a21c0d741f34b014988bc5e0993))
+* **loader:** keep game settings with the world ([#179](https://github.com/themaiby/enshwick/issues/179)) ([3a1d819](https://github.com/themaiby/enshwick/commit/3a1d819f5f4e34570ce1547b6b8e55368d74f664))
+* **loader:** keep items of removed mods as stand-ins until they return ([#184](https://github.com/themaiby/enshwick/issues/184)) ([6c5c09d](https://github.com/themaiby/enshwick/commit/6c5c09d3c624f07b61fdcb76b5f1b0c301aff348))
+* **loader:** refuse knowledge a client grants itself ([#173](https://github.com/themaiby/enshwick/issues/173)) ([a6c2ee7](https://github.com/themaiby/enshwick/commit/a6c2ee7376ec8166b0aa7de9b5cda90b7c28fafa))
+* **loader:** report player deaths and read the shroud timer ([#185](https://github.com/themaiby/enshwick/issues/185)) ([9bcd23c](https://github.com/themaiby/enshwick/commit/9bcd23c64665aeb814bf0bc08109ce48ec62eeed))
+* **loader:** show mod catalogs with updates and mods on the Mods screen ([#180](https://github.com/themaiby/enshwick/issues/180)) ([2e93fb7](https://github.com/themaiby/enshwick/commit/2e93fb7ec219b7c4b4fcab0ff45dcd4c409340d6))
+* **loader:** take knowledge back and change it for absent players ([#183](https://github.com/themaiby/enshwick/issues/183)) ([13e4883](https://github.com/themaiby/enshwick/commit/13e4883e75df99ecd6101754608161c87c39633d))
+* **loader:** watch knowledge requests by default before refusing them ([#190](https://github.com/themaiby/enshwick/issues/190)) ([ba2efcd](https://github.com/themaiby/enshwick/commit/ba2efcd87974e62d758b6c9a85fef53f46d2f026))
+* **loader:** word the Mods screen in the game language ([#189](https://github.com/themaiby/enshwick/issues/189)) ([b23066b](https://github.com/themaiby/enshwick/commit/b23066b6937c963cbc8ae0a235976b651764b554))
+* **updater:** page through releases, word dialogs in the game language ([#170](https://github.com/themaiby/enshwick/issues/170)) ([c6bd27a](https://github.com/themaiby/enshwick/commit/c6bd27a947073a2e4a40dc822f2e3f64606c20a4))
+
+
+### Bug Fixes
+
+* **loader:** close crash paths found in the loader audit ([#182](https://github.com/themaiby/enshwick/issues/182)) ([7e4fab8](https://github.com/themaiby/enshwick/commit/7e4fab8a0b70efe438d43b6d9649af97c112e9cb))
+* **loader:** forget altars by steps and time, the last one too ([#172](https://github.com/themaiby/enshwick/issues/172)) ([77e90d5](https://github.com/themaiby/enshwick/commit/77e90d5383af513c04a54076c8a8844597ce8b5e))
+* **loader:** keep settings texts for the life of the process ([#175](https://github.com/themaiby/enshwick/issues/175)) ([1d56467](https://github.com/themaiby/enshwick/commit/1d5646749a7a9f9f60ebdb966352393d2ab3f499))
+* **loader:** keep the full vector state across mid-function hooks ([#174](https://github.com/themaiby/enshwick/issues/174)) ([97c6716](https://github.com/themaiby/enshwick/commit/97c6716ffb8ed02af5e4c27e3af359560f6920e0))
+* **loader:** move return addresses out of the bytes a hook replaces ([#178](https://github.com/themaiby/enshwick/issues/178)) ([09be0dc](https://github.com/themaiby/enshwick/commit/09be0dca985e1b55f49c95252e8519ae6bdd5501))
+
+
+### Performance
+
+* **loader:** pick the cheapest vector save per processor at mid hooks ([#187](https://github.com/themaiby/enshwick/issues/187)) ([856f9b2](https://github.com/themaiby/enshwick/commit/856f9b27674e3cbc1cf2b64d37fdbf5b34902900))
+
 ## [0.8.0](https://github.com/themaiby/enshwick/compare/enshwick-loader-v0.7.0...enshwick-loader-v0.8.0) (2026-10-21)
 
 

@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.2](https://github.com/themaiby/enshwick/compare/enshwick-safes-v0.6.1...enshwick-safes-v0.6.2) (2026-10-21)
+
+
+### Bug Fixes
+
+* **safes:** keep owners per world and refuse players not registered yet ([#168](https://github.com/themaiby/enshwick/issues/168)) ([1bfdb8c](https://github.com/themaiby/enshwick/commit/1bfdb8cb5d96975c26c33e40a81848f9b344b6e2))
+
 ## [0.6.1](https://github.com/themaiby/enshwick/compare/enshwick-safes-v0.6.0...enshwick-safes-v0.6.1) (2026-10-21)
 
 ## [0.6.0](https://github.com/themaiby/enshwick/compare/enshwick-safes-v0.5.0...enshwick-safes-v0.6.0) (2026-10-21)

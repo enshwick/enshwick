@@ -1,5 +1,34 @@
 # Changelog
 
+## [0.8.1](https://github.com/themaiby/enshwick/compare/enshwick-loader-api-v0.8.0...enshwick-loader-api-v0.8.1) (2026-10-21)
+
+
+### Features
+
+* **api:** read the skill nodes a character unlocked ([#186](https://github.com/themaiby/enshwick/issues/186)) ([1a56dde](https://github.com/themaiby/enshwick/commit/1a56dde397e0ef4fad18a0ab9a4250ed17712d85))
+* **loader:** filter drowning, freezing and admin kills ([#181](https://github.com/themaiby/enshwick/issues/181)) ([215297f](https://github.com/themaiby/enshwick/commit/215297f9059d2a21c0d741f34b014988bc5e0993))
+* **loader:** keep game settings with the world ([#179](https://github.com/themaiby/enshwick/issues/179)) ([3a1d819](https://github.com/themaiby/enshwick/commit/3a1d819f5f4e34570ce1547b6b8e55368d74f664))
+* **loader:** refuse knowledge a client grants itself ([#173](https://github.com/themaiby/enshwick/issues/173)) ([a6c2ee7](https://github.com/themaiby/enshwick/commit/a6c2ee7376ec8166b0aa7de9b5cda90b7c28fafa))
+* **loader:** report player deaths and read the shroud timer ([#185](https://github.com/themaiby/enshwick/issues/185)) ([9bcd23c](https://github.com/themaiby/enshwick/commit/9bcd23c64665aeb814bf0bc08109ce48ec62eeed))
+* **loader:** show mod catalogs with updates and mods on the Mods screen ([#180](https://github.com/themaiby/enshwick/issues/180)) ([2e93fb7](https://github.com/themaiby/enshwick/commit/2e93fb7ec219b7c4b4fcab0ff45dcd4c409340d6))
+* **loader:** take knowledge back and change it for absent players ([#183](https://github.com/themaiby/enshwick/issues/183)) ([13e4883](https://github.com/themaiby/enshwick/commit/13e4883e75df99ecd6101754608161c87c39633d))
+* **loader:** watch knowledge requests by default before refusing them ([#190](https://github.com/themaiby/enshwick/issues/190)) ([ba2efcd](https://github.com/themaiby/enshwick/commit/ba2efcd87974e62d758b6c9a85fef53f46d2f026))
+* **updater:** page through releases, word dialogs in the game language ([#170](https://github.com/themaiby/enshwick/issues/170)) ([c6bd27a](https://github.com/themaiby/enshwick/commit/c6bd27a947073a2e4a40dc822f2e3f64606c20a4))
+
+
+### Bug Fixes
+
+* **loader:** close crash paths found in the loader audit ([#182](https://github.com/themaiby/enshwick/issues/182)) ([7e4fab8](https://github.com/themaiby/enshwick/commit/7e4fab8a0b70efe438d43b6d9649af97c112e9cb))
+* **loader:** keep settings texts for the life of the process ([#175](https://github.com/themaiby/enshwick/issues/175)) ([1d56467](https://github.com/themaiby/enshwick/commit/1d5646749a7a9f9f60ebdb966352393d2ab3f499))
+* **survivors-per-altar:** sync copy_staffs, forget a last altar removed ([#176](https://github.com/themaiby/enshwick/issues/176)) ([551ab93](https://github.com/themaiby/enshwick/commit/551ab93eccbf0bc3b8913613635ce9f6419ee940))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * enshwick-loader-macros bumped from 0.8.0 to 0.8.1
+
 ## [0.8.0](https://github.com/themaiby/enshwick/compare/enshwick-loader-api-v0.7.0...enshwick-loader-api-v0.8.0) (2026-10-21)
 
 

@@ -1,5 +1,7 @@
 # Changelog
 
+## [0.5.1](https://github.com/themaiby/enshwick/compare/enshwick-optimizer-v0.5.0...enshwick-optimizer-v0.5.1) (2026-10-21)
+
 ## [0.5.0](https://github.com/themaiby/enshwick/compare/enshwick-optimizer-v0.4.2...enshwick-optimizer-v0.5.0) (2026-10-21)
 
 
