@@ -36,6 +36,9 @@ static CONTEXT: Mutex<String> = Mutex::new(String::new());
 /// Turns measure mode on or off; `context` names the platform and what runs.
 pub(crate) fn set(on: bool, context: String) {
     ON.store(on, Ordering::Relaxed);
+    if !on {
+        LAST.lock().unwrap_or_else(PoisonError::into_inner).clear();
+    }
     *CONTEXT.lock().unwrap_or_else(PoisonError::into_inner) = context;
 }
 
@@ -297,7 +300,17 @@ fn read_from(path: &Path, offset: u64) -> Option<(String, u64)> {
     let _at = file.seek(SeekFrom::Start(from)).ok()?;
     let mut bytes = Vec::new();
     let _read = file.take(len - from).read_to_end(&mut bytes).ok()?;
-    Some((String::from_utf8_lossy(&bytes).into_owned(), len))
+    // A line the game is still writing waits for the next read whole, or a
+    // warning cut in two would match neither half.
+    let complete = bytes
+        .iter()
+        .rposition(|&b| b == b'\n')
+        .map_or(0, |at| at + 1);
+    bytes.truncate(complete);
+    Some((
+        String::from_utf8_lossy(&bytes).into_owned(),
+        from + u64::try_from(complete).unwrap_or(0),
+    ))
 }
 
 impl Meter {
@@ -458,6 +471,31 @@ pub(crate) fn run(wine: bool) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_warning_cut_by_a_read_counts_once_it_is_whole() {
+        let path =
+            std::env::temp_dir().join(format!("enshwick-optimizer-log-{}", std::process::id()));
+        std::fs::write(&path, "[W 00:10:02,000] [server] Bad Perf").unwrap();
+        let (text, at) = read_from(&path, 0).unwrap();
+        assert_eq!((text.as_str(), at), ("", 0), "the half line waits");
+        let mut file = std::fs::OpenOptions::new()
+            .append(true)
+            .open(&path)
+            .unwrap();
+        std::io::Write::write_all(&mut file, b"ormance 900 us (peak: 900 us)\n").unwrap();
+        drop(file);
+        let (text, _) = read_from(&path, at).unwrap();
+        assert_eq!(warnings(&text).count, 1);
+        let _gone = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn turning_measure_off_drops_the_last_line() {
+        LAST.lock().unwrap().push_str("old");
+        set(false, String::new());
+        assert!(last().is_empty());
+    }
 
     #[test]
     fn warnings_are_counted_with_the_worst_pass() {
