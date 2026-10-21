@@ -34,7 +34,13 @@ Once the world has loaded, and again on `/probe check`:
   run once the weather checks are done, since moving the clock ends the fronts;
 - game settings: a typed read, the perk cost raised by a half that reads
   back with the preset custom, a night of zero refused, and the settings put
-  back;
+  back; then the bosses' health kept at 1.25, read back and forgotten, the
+  world's own value back. With `keep_across_restart` the run keeps it for
+  the next start instead, and the next run with that setting on sees it come
+  back with the world and forgets it: until then the world plays with that
+  boss health. Whatever the probe still keeps when the server stops in order
+  is forgotten then, unless kept across the restart on purpose; a killed
+  server keeps it until the next run;
 - buffs: the types of the running game; on the first entity that holds
   buffs, its buffs, a shown buff given for 30 seconds that reads back, and
   its removal, gone a second later (skipped without such an entity);
@@ -101,6 +107,9 @@ refuse_building = false
 # Halve every damage, to see the damage filter in game; the probe counts
 # the damage it sees by cause and logs the counts every minute either way.
 soften_damage = false
+# Keep the bosses' health at 1.25 for the next start, to see a kept game
+# setting come back with the world; the next run with this on forgets it.
+keep_across_restart = false
 ```
 
 Licensed under [MIT](../../LICENSE).
