@@ -79,8 +79,40 @@ pub fn open(dir: &Path) {
     }
 }
 
+/// Whether lines go to [`CAPTURED`] instead of the files.
+static CAPTURING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+/// Lines kept in memory instead of written, for a dry run.
+static CAPTURED: std::sync::Mutex<Option<Vec<(Level, String, String)>>> =
+    std::sync::Mutex::new(None);
+
+/// Keeps every line from now on in memory, for [`captured`].
+pub fn capture() {
+    if let Ok(mut lines) = CAPTURED.lock() {
+        *lines = Some(Vec::new());
+    }
+    CAPTURING.store(true, std::sync::atomic::Ordering::Release);
+}
+
+/// The lines kept since [`capture`]: level, source and message.
+#[must_use]
+pub fn captured() -> Vec<(Level, String, String)> {
+    CAPTURED
+        .lock()
+        .ok()
+        .and_then(|lines| lines.clone())
+        .unwrap_or_default()
+}
+
 /// Writes one line under `source`, the loader or a mod id.
 pub fn write(level: Level, source: &str, message: &str) {
+    if CAPTURING.load(std::sync::atomic::Ordering::Acquire) {
+        if let Ok(mut lines) = CAPTURED.lock()
+            && let Some(lines) = lines.as_mut()
+        {
+            lines.push((level, source.to_owned(), message.to_owned()));
+        }
+        return;
+    }
     let Some(lines) = LINES.get() else {
         return;
     };

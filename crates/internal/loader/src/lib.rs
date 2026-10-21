@@ -92,6 +92,8 @@ mod spawns;
 #[cfg(windows)]
 mod start;
 #[cfg(windows)]
+pub use start::{DryMod, DryRun, dry_run};
+#[cfg(windows)]
 mod stats;
 #[cfg(windows)]
 mod status;

@@ -67,7 +67,9 @@ name = "cargo-enshwick"
 version = "0.7.0"
 dependencies = [
  "clap",
+ "enshwick-loader",
  "enshwick-loader-api",
+ "enshwick-loader-builds",
  "enshwick-loader-reflect",
  "iced-x86",
  "memchr",

@@ -968,3 +968,241 @@ fn exports_of(module: HMODULE, file: &str) -> Option<Library> {
         ready,
     })
 }
+
+/// What the loader would do on a game build: its table and how each mod
+/// fared when it started.
+#[derive(Debug, Clone)]
+pub struct DryRun {
+    /// The table's name for the log.
+    pub table: String,
+    /// Whether the table was made for the build.
+    pub exact: bool,
+    /// The table's entries the build lacks.
+    pub missing: Vec<String>,
+    /// Every mod in `mods/`, in load order, then the skipped ones.
+    pub mods: Vec<DryMod>,
+    /// Every line the loader and the mods logged.
+    pub lines: Vec<(enshwick_loader_api::abi::Level, String, String)>,
+}
+
+/// How one mod fared in a [`DryRun`].
+#[derive(Debug, Clone)]
+pub struct DryMod {
+    /// The DLL's file name.
+    pub file: String,
+    /// The mod id; empty when its manifest did not read.
+    pub id: String,
+    /// The mod's version.
+    pub version: String,
+    /// Whether it started and stayed on.
+    pub running: bool,
+    /// Why not, when it did not.
+    pub reason: String,
+}
+
+/// Starts the loader on the game executable `exe` without running the game:
+/// the executable's image is mapped at its preferred base, the build table
+/// taken as the loader takes it (only by patterns with `patterns`), and
+/// every mod in `game_dir/mods/` resolved and initialised as at a start.
+/// Nothing is hooked or patched, and no mod's `ready` runs. Once per
+/// process: the loader keeps its state for the process.
+///
+/// # Errors
+///
+/// When the executable is not the game, cannot be mapped, or no table
+/// serves it.
+pub fn dry_run(exe: &Path, game_dir: &Path, patterns: bool) -> Result<DryRun, String> {
+    let name = exe
+        .file_name()
+        .and_then(|n| n.to_str())
+        .map(str::to_ascii_lowercase)
+        .unwrap_or_default();
+    let side = match name.as_str() {
+        "enshrouded_server.exe" => Side::SERVER,
+        "enshrouded.exe" => Side::CLIENT,
+        _ => return Err(format!("{} is not the game", exe.display())),
+    };
+    log::capture();
+    let bytes = std::fs::read(exe).map_err(|e| format!("{}: {e}", exe.display()))?;
+    let (base, mapped) = map_image(&bytes)?;
+    let image = Image::parse(mapped, Layout::Mapped, Some(base)).map_err(|e| e.to_string())?;
+    let image: &'static Image<'static> = Box::leak(Box::new(image));
+    let fingerprint = image
+        .fingerprint()
+        .ok_or("the executable has no fingerprint")?;
+    let reflection = Reflection::scan(image);
+    let mods_dir = game_dir.join("mods");
+    let tables = builds::load(
+        &mods_dir
+            .join(crate::settings::LOADER_ID)
+            .join(builds::FETCHED_DIR),
+    );
+    let code = image.section(".text").and_then(|text| {
+        let range = image.range(text);
+        image
+            .read(range.start, range.end - range.start)
+            .map(|bytes| (bytes, range.start - base))
+    });
+    let build = if patterns {
+        code.and_then(|code| builds::by_patterns(&tables, side, code))
+    } else {
+        builds::select(&tables, side, fingerprint, code)
+    }
+    .ok_or("no build table serves this build")?;
+    let build: &'static builds::KnownBuild = Box::leak(Box::new(build));
+    for dir in ["mods", "mod-configs", "mod-data", "logs"] {
+        std::fs::create_dir_all(game_dir.join(dir)).map_err(|e| e.to_string())?;
+    }
+    let data_dir = game_dir.join("mod-data");
+    let (libraries, candidates) = libraries(&mods_dir);
+    let plan = resolve::resolve(&candidates, side);
+    let loader = Loader {
+        side,
+        base,
+        fingerprint,
+        build,
+        reflection,
+        configs_dir: game_dir.join("mod-configs"),
+        data_dir,
+        mods_dir,
+        mods: records(&libraries, &candidates, &plan),
+        chains: Mutex::new(Chains::default()),
+        mids: Mutex::default(),
+        caller_frame: read_frame,
+        subscriptions: Mutex::default(),
+        delivery: OnceLock::new(),
+    };
+    let loader = host::install(loader).ok_or("the loader already ran in this process")?;
+    let order: Vec<&Library> = plan.order.iter().map(|&i| &libraries[i]).collect();
+    initialise(loader, &order);
+    let lines = log::captured();
+    let mods = outcomes(loader, &order, &libraries, &candidates, &plan, &lines);
+    Ok(DryRun {
+        table: build.name.clone(),
+        exact: build.kind == builds::Kind::Exact,
+        missing: build.missing().to_vec(),
+        mods,
+        lines,
+    })
+}
+
+/// How each mod fared, in load order, then the skipped ones, with the
+/// reason a mod that is off gave in `lines`.
+fn outcomes(
+    loader: &Loader,
+    order: &[&Library],
+    libraries: &[Library],
+    candidates: &[Candidate],
+    plan: &resolve::Plan,
+    lines: &[(enshwick_loader_api::abi::Level, String, String)],
+) -> Vec<DryMod> {
+    let reason_of = |id: &str| {
+        lines
+            .iter()
+            .filter(|(_, source, _)| source == id)
+            .find_map(|(_, _, text)| text.strip_prefix("off: "))
+            .unwrap_or_default()
+            .to_owned()
+    };
+    let mut mods: Vec<DryMod> = loader
+        .mods
+        .iter()
+        .zip(order)
+        .map(|(record, library)| {
+            let running = !record.off.load(Ordering::Acquire);
+            DryMod {
+                file: library.file.clone(),
+                id: record.id.clone(),
+                version: record.version.clone(),
+                running,
+                reason: if running {
+                    String::new()
+                } else {
+                    reason_of(&record.id)
+                },
+            }
+        })
+        .collect();
+    mods.extend(plan.skipped.iter().map(|(index, reason)| DryMod {
+        file: libraries[*index].file.clone(),
+        id: candidates[*index].id.clone(),
+        version: candidates[*index].version.to_string(),
+        running: false,
+        reason: format!("skipped: {reason}"),
+    }));
+    mods
+}
+
+/// Maps the executable `bytes` at its preferred base as Windows would, its
+/// sections where their headers put them, without relocations or imports;
+/// the base and the image, which live for the process.
+fn map_image(bytes: &[u8]) -> Result<(u64, &'static [u8]), String> {
+    use windows_sys::Win32::System::Memory::{
+        MEM_COMMIT, MEM_RESERVE, PAGE_READWRITE, VirtualAlloc,
+    };
+
+    let u16_at = |at: usize| {
+        bytes
+            .get(at..at + 2)
+            .and_then(|b| b.try_into().ok())
+            .map(u16::from_le_bytes)
+    };
+    let u32_at = |at: usize| {
+        bytes
+            .get(at..at + 4)
+            .and_then(|b| b.try_into().ok())
+            .map(u32::from_le_bytes)
+    };
+    let u64_at = |at: usize| {
+        bytes
+            .get(at..at + 8)
+            .and_then(|b| b.try_into().ok())
+            .map(u64::from_le_bytes)
+    };
+    let pe = u32_at(0x3c).ok_or("no PE header")? as usize;
+    let optional = pe + 24;
+    let base = u64_at(optional + 24).ok_or("no image base")?;
+    let size = u32_at(optional + 56).ok_or("no image size")? as usize;
+    let headers = u32_at(optional + 60).ok_or("no header size")? as usize;
+    let sections = usize::from(u16_at(pe + 6).ok_or("no section count")?);
+    let table = optional + usize::from(u16_at(pe + 20).ok_or("no optional header")?);
+    let at = usize::try_from(base).map_err(|e| e.to_string())?;
+    // SAFETY: asks for fresh pages at the image's preferred base; the result
+    // is checked before use.
+    let memory = unsafe {
+        VirtualAlloc(
+            core::ptr::with_exposed_provenance(at),
+            size,
+            MEM_RESERVE | MEM_COMMIT,
+            PAGE_READWRITE,
+        )
+    };
+    if memory.is_null() || memory.addr() != at {
+        return Err(format!("the image cannot be mapped at {base:#x}"));
+    }
+    // SAFETY: `size` committed bytes at `memory`, ours for the process.
+    let image = unsafe { core::slice::from_raw_parts_mut(memory.cast::<u8>(), size) };
+    let copy = |image: &mut [u8], to: usize, from: usize, len: usize| {
+        if let (Some(dst), Some(src)) = (image.get_mut(to..to + len), bytes.get(from..from + len)) {
+            dst.copy_from_slice(src);
+        }
+    };
+    copy(image, 0, 0, headers.min(size));
+    for i in 0..sections {
+        let header = table + 40 * i;
+        let (Some(virtual_address), Some(raw_size), Some(raw_at)) = (
+            u32_at(header + 12),
+            u32_at(header + 16),
+            u32_at(header + 20),
+        ) else {
+            continue;
+        };
+        copy(
+            image,
+            virtual_address as usize,
+            raw_at as usize,
+            raw_size as usize,
+        );
+    }
+    Ok((base, image))
+}

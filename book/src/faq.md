@@ -101,7 +101,8 @@ Whatever those patterns do not find stays off: a loader feature logs
 off with `symbol <id>: missing on this game build`. Everything else runs. The
 [updater](https://github.com/themaiby/enshwick/tree/main/mods/enshwick-updater)
 fetches the table for the new build once it is published; restart the game or
-the server afterwards.
+the server afterwards. `cargo enshwick compat <exe> --mods <dir>` shows the
+same verdicts without starting the game.
 
 ### The mod was skipped
 

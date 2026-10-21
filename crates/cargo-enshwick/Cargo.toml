@@ -14,6 +14,7 @@ publish.workspace = true
 [dependencies]
 clap = { workspace = true }
 enshwick-loader-api = { workspace = true, features = ["schema"] }
+enshwick-loader-builds.workspace = true
 enshwick-loader-reflect.workspace = true
 iced-x86.workspace = true
 memchr.workspace = true
@@ -24,6 +25,7 @@ semver.workspace = true
 zip.workspace = true
 
 [target.'cfg(windows)'.dependencies]
+enshwick-loader = { path = "../internal/loader", version = "0.7.0" }
 windows-sys = { workspace = true, features = ["Win32_Foundation", "Win32_System_LibraryLoader"] }
 
 [lints]
