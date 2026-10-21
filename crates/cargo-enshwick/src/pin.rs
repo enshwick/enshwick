@@ -178,8 +178,8 @@ fn port_mods(args: &Args, old: &Exe<'_>, new: &Exe<'_>) -> Result<Vec<report::Se
             );
             let title = format!("{:?} row", row.side).to_lowercase();
             if args.write {
-                let (at, indent) = row.insertion(&src);
-                inserts.push((at, format!("\n{indent}{text},")));
+                let (at, lead) = row.insertion(&src);
+                inserts.push((at, format!("{lead}{text},")));
             }
             sections.push(report::Section {
                 file: file.clone(),
