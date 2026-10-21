@@ -17,7 +17,7 @@ use enshwick_loader_api::abi::ResourceKey;
 use rustc_hash::FxHashMap;
 
 /// A content hash as the game keeps it: the size, then three words.
-pub(crate) type ContentHash = [u32; 4];
+pub type ContentHash = [u32; 4];
 
 /// The header's magic, `KFC4`.
 const MAGIC: u32 = 0x3443_464b;
@@ -55,7 +55,7 @@ struct Chunk {
 
 /// One archive of the game, opened.
 #[derive(Debug)]
-pub(crate) struct Archive {
+pub struct Archive {
     dir: PathBuf,
     name: String,
     header: Box<[u8]>,
@@ -78,7 +78,8 @@ fn location(header: &[u8], field: usize) -> Option<(usize, usize)> {
 impl Archive {
     /// The archive `<dir>/<name>.kfc`; `None` when it is missing or in a
     /// format the loader does not read.
-    pub(crate) fn open(dir: &Path, name: &str) -> Option<Self> {
+    #[must_use]
+    pub fn open(dir: &Path, name: &str) -> Option<Self> {
         let header = std::fs::read(dir.join(format!("{name}.kfc"))).ok()?;
         Self::from_header(dir, name, header.into_boxed_slice())
     }
@@ -130,7 +131,8 @@ impl Archive {
 
     /// The bytes of content `hash`; `None` for a hash the archive lacks or
     /// keeps compressed.
-    pub(crate) fn content(&self, hash: &ContentHash) -> Option<Vec<u8>> {
+    #[must_use]
+    pub fn content(&self, hash: &ContentHash) -> Option<Vec<u8>> {
         let (container, offset) = find_content(&self.header, hash)?;
         let path = self.dir.join(format!("{}_{container:03}.dat", self.name));
         let mut file = File::open(path).ok()?;
@@ -142,7 +144,8 @@ impl Archive {
 
     /// The bytes of resource `key`, as the game reads them before it
     /// resolves their references; `None` for a key the archive lacks.
-    pub(crate) fn resource(&self, key: &ResourceKey) -> Option<Vec<u8>> {
+    #[must_use]
+    pub fn resource(&self, key: &ResourceKey) -> Option<Vec<u8>> {
         let place = *self.resources.get(&(key.guid, key.type_hash, key.part))?;
         let (start, len) = (place.at, place.len);
         let end = start.checked_add(len)?;
@@ -198,7 +201,7 @@ impl Archive {
     }
 
     /// Lets go of the unpacked chunks kept for later reads.
-    pub(crate) fn trim(&self) {
+    pub fn trim(&self) {
         self.cache
             .lock()
             .unwrap_or_else(PoisonError::into_inner)

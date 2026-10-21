@@ -83,11 +83,30 @@ made at it.
 | `station_recipe` | How the station is crafted, a [`StationRecipe`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/content/workshops.rs) with the recipe's content id and a cost factor; `None` adds no recipe. |
 | `debug_name` | The item's name in the registry's debug list. |
 
-[`stations`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/content/workshops.rs)
-lists the vanilla stations known to clone; it holds `WORKBENCH` today. A
-`Station` with other GUIDs works if the item places that template, the
-template has all three crafting components and the workshop registry has an
-entry for the item.
+[`stations::WORKBENCH`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/content/workshops.rs)
+is the Workbench. Any other crafting station comes from the game's data:
+[`Vanilla::game()`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/content/vanilla.rs)
+finds an item by its debug name and `station(item)` reads the template the
+item places, after checking that the workshop registry has a workshop of the
+item's own that is no survivor's and that the template has all three
+crafting components. `workshop(item)` is the station's own workshop, for
+recipes made at the vanilla station.
+
+```rust
+use enshwick_loader_api::Off;
+use enshwick_loader_api::content::vanilla::Vanilla;
+
+fn forge() -> Result<enshwick_loader_api::content::workshops::Station, Off> {
+    let vanilla = Vanilla::game().ok_or_else(|| Off::new("no game data"))?;
+    let item = vanilla
+        .item("Prop_Production_T1_Forge")
+        .map_err(|why| Off::new(why.to_string()))?;
+    vanilla.station(item).map_err(|why| Off::new(why.to_string()))
+}
+```
+
+On build 1269579 that covers over thirty crafting stations, the Forge,
+Kiln, Smelter, Loom, Alchemy Station, Oven and Kitchen among them.
 
 Every [content id](../content.md#content-ids) is the mod's own and fixed for
 good: saves keep the template GUID of each placed station and the item id of

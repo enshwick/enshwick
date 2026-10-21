@@ -6,6 +6,7 @@ use std::io::Write as _;
 use std::path::{Path, PathBuf};
 
 use clap::Subcommand;
+use enshwick_loader_api::content::vanilla::Vanilla;
 use enshwick_loader_api::packs::{MANIFEST_FILE, Pack, PackFiles, PackManifest};
 
 /// What `cargo enshwick pack` does.
@@ -16,6 +17,11 @@ pub(crate) enum Command {
     Check {
         /// The pack folder, holding `pack.toml`.
         dir: PathBuf,
+        /// The game folder, holding `enshrouded.exe` or
+        /// `enshrouded_server.exe`, whose data checks the vanilla debug
+        /// names and stations the pack names; `ENSHROUDED_DIR` when omitted.
+        #[arg(long, env = "ENSHROUDED_DIR")]
+        game: Option<PathBuf>,
     },
     /// Writes the JSON Schemas of a pack's files, `<file>.schema.json`, for
     /// editors that check TOML against them.
@@ -38,14 +44,73 @@ pub(crate) enum Command {
 /// Runs `command`; what it did, or why it failed.
 pub(crate) fn run(command: &Command) -> Result<String, String> {
     match command {
-        Command::Check { dir } => check(dir).map(|(summary, _, _)| summary),
+        Command::Check { dir, game } => {
+            let vanilla = game.as_deref().map(vanilla).transpose()?;
+            check(dir, vanilla.as_ref()).map(|(summary, _, _)| summary)
+        }
         Command::Schema { out } => schema(out),
         Command::Zip { dir, out } => zip(dir, out.as_deref()),
     }
 }
 
-/// Reads and checks the pack in `dir`: a summary, its manifest and files.
-fn check(dir: &Path) -> Result<(String, PackManifest, PackFiles), String> {
+/// The vanilla content of the game in `game`: the layouts from its
+/// executable's reflection, the data from its archive.
+#[cfg(windows)]
+fn vanilla(game: &Path) -> Result<Vanilla, String> {
+    use enshwick_loader_api::Off;
+    use enshwick_loader_api::content::items::ItemLayout;
+    use enshwick_loader_api::content::workshops::WorkshopLayout;
+    use enshwick_loader_reflect::{Image, Layout, Reflection};
+
+    let (exe, name) = ["enshrouded", "enshrouded_server"]
+        .into_iter()
+        .map(|name| (game.join(format!("{name}.exe")), name))
+        .find(|(exe, _)| exe.is_file())
+        .ok_or_else(|| {
+            format!(
+                "{}: no enshrouded.exe or enshrouded_server.exe",
+                game.display()
+            )
+        })?;
+    let bytes = std::fs::read(&exe).map_err(|e| format!("{}: {e}", exe.display()))?;
+    let image = Image::parse(&bytes, Layout::File, None).map_err(|e| e.to_string())?;
+    let reflection = Reflection::scan(&image);
+    let field = |ty: &str, name: &str| {
+        reflection
+            .field_offset(ty, name)
+            .ok()
+            .and_then(|o| usize::try_from(o).ok())
+            .ok_or_else(|| Off::new(format!("{ty}.{name} is not reflected")))
+    };
+    let size = |ty: &str| {
+        reflection
+            .type_info(ty)
+            .ok()
+            .and_then(|info| usize::try_from(info.size()).ok())
+            .ok_or_else(|| Off::new(format!("{ty} is not reflected")))
+    };
+    let items = ItemLayout::with_lookup(field, size).map_err(|off| off.to_string())?;
+    let workshops = WorkshopLayout::with_lookup(field, size).map_err(|off| off.to_string())?;
+    let archive = enshwick::archive::Archive::open(game, name)
+        .ok_or_else(|| format!("{}: {name}.kfc does not read", game.display()))?;
+    Ok(Vanilla::new(items, workshops, move |key| {
+        archive.resource(&key)
+    }))
+}
+
+/// Vanilla names need the game's archive, which only the Windows build
+/// reads.
+#[cfg(not(windows))]
+fn vanilla(_game: &Path) -> Result<Vanilla, String> {
+    Err("--game reads the game's data on Windows only".to_owned())
+}
+
+/// Reads and checks the pack in `dir`, with the game's vanilla names when
+/// `vanilla` is given: a summary, its manifest and files.
+fn check(
+    dir: &Path,
+    vanilla: Option<&Vanilla>,
+) -> Result<(String, PackManifest, PackFiles), String> {
     let manifest_path = dir.join(MANIFEST_FILE);
     let text = std::fs::read_to_string(&manifest_path)
         .map_err(|e| format!("{}: {e}", manifest_path.display()))?;
@@ -53,7 +118,8 @@ fn check(dir: &Path) -> Result<(String, PackManifest, PackFiles), String> {
     semver::Version::parse(&manifest.version)
         .map_err(|e| format!("{MANIFEST_FILE}: version {:?}: {e}", manifest.version))?;
     let files = PackFiles::read_dir(dir)?;
-    let pack = Pack::parse(&manifest.id, &files).map_err(|errors| errors.to_string())?;
+    let pack =
+        Pack::parse_with(&manifest.id, &files, vanilla).map_err(|errors| errors.to_string())?;
     let summary = format!(
         "{} {}: {} content ids, {} loot drops; join hash {:08x}",
         manifest.id,
@@ -83,7 +149,7 @@ fn schema(out: &Path) -> Result<String, String> {
 }
 
 fn zip(dir: &Path, out: Option<&Path>) -> Result<String, String> {
-    let (summary, manifest, files) = check(dir)?;
+    let (summary, manifest, files) = check(dir, None)?;
     let out = out.map_or_else(
         || PathBuf::from(format!("{}.zip", manifest.id)),
         Path::to_path_buf,
@@ -140,7 +206,7 @@ mod tests {
             "good",
             "[[item]]\nid = \"lantern\"\nlike = \"6943053a-32c1-4718-ae22-e61427ddf54d\"\n",
         );
-        let (summary, _, _) = check(&dir).unwrap();
+        let (summary, _, _) = check(&dir, None).unwrap();
         assert!(
             summary.starts_with("lanterns 1.0.0: 1 content ids"),
             "{summary}"
@@ -163,11 +229,42 @@ mod tests {
     #[test]
     fn a_bad_pack_names_the_line() {
         let dir = pack("bad", "[[item]]\nid = \"lantern\"\nlike = \"torch\"\n");
-        let why = check(&dir).unwrap_err();
+        let why = check(&dir, None).unwrap_err();
         assert!(
             why.starts_with("items.toml:1:1: no item \"torch\""),
             "{why}"
         );
+        let _gone = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The installed client, when `ENSHWICK_CLIENT_DIR` names its folder
+    /// (build 1269579): vanilla names and a forge clone check against its
+    /// data, and a misspelt name is explained.
+    #[cfg(windows)]
+    #[test]
+    fn the_game_s_data_checks_vanilla_names() {
+        let Ok(game) = std::env::var("ENSHWICK_CLIENT_DIR") else {
+            return;
+        };
+        let vanilla = vanilla(Path::new(&game)).unwrap();
+        let dir = pack(
+            "names",
+            "[[item]]\nid = \"bench\"\nlike = \"Craftingstation_Workbench\"\n",
+        );
+        std::fs::write(
+            dir.join("workshops.toml"),
+            "[[workshop]]\nid = \"forge\"\nlike = \"Prop_Production_T1_Forge\"\n",
+        )
+        .unwrap();
+        let (summary, _, _) = check(&dir, Some(&vanilla)).unwrap();
+        assert!(summary.contains("2 content ids"), "{summary}");
+        std::fs::write(
+            dir.join("items.toml"),
+            "[[item]]\nid = \"bench\"\nlike = \"Craftingstation_Workbenhc\"\n",
+        )
+        .unwrap();
+        let why = check(&dir, Some(&vanilla)).unwrap_err();
+        assert!(why.contains("near: Craftingstation_Workbench"), "{why}");
         let _gone = std::fs::remove_dir_all(&dir);
     }
 

@@ -23,6 +23,7 @@ postcard.workspace = true
 schemars = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
 serde.workspace = true
+strsim.workspace = true
 thiserror.workspace = true
 toml.workspace = true
 

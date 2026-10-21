@@ -14,6 +14,7 @@ use crate::{Load, Off};
 pub mod icons;
 pub mod items;
 pub mod recipes;
+pub mod vanilla;
 pub mod workshops;
 
 /// A GUID in memory order: the `bytes_le` of its textual form.

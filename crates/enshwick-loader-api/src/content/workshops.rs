@@ -177,6 +177,8 @@ pub struct WorkshopLayout {
     pub entry_item: usize,
     /// `WorkshopResource.itemRef`.
     pub entry_item_ref: usize,
+    /// `WorkshopResource.isNpc`: set for a survivor's workshop.
+    pub entry_npc: usize,
 }
 
 impl WorkshopLayout {
@@ -196,11 +198,36 @@ impl WorkshopLayout {
     /// }
     /// ```
     pub fn resolve(load: &Load<'_>) -> Result<Self, Off> {
-        let field = |ty: &str, name: &str| {
-            load.field_offset(ty, name)
-                .map(|o| usize::try_from(o).unwrap_or(usize::MAX))
-        };
-        let size = |ty: &str| load.type_size(ty).map(|s| s as usize);
+        Self::with_lookup(
+            |ty, name| {
+                load.field_offset(ty, name)
+                    .map(|o| usize::try_from(o).unwrap_or(usize::MAX))
+            },
+            |ty| load.type_size(ty).map(|s| s as usize),
+        )
+    }
+
+    /// The layout of a game whose reflection `field` (a type's field offset)
+    /// and `size` (a type's size) read, for a tool that reads a game image
+    /// rather than running in the game.
+    ///
+    /// # Errors
+    ///
+    /// The first [`Off`] a lookup returns.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_loader_api::Off;
+    /// use enshwick_loader_api::content::workshops::WorkshopLayout;
+    ///
+    /// let none = WorkshopLayout::with_lookup(|ty, f| Err(Off::new(format!("{ty}.{f}"))), |_| Ok(0));
+    /// assert!(none.is_err());
+    /// ```
+    pub fn with_lookup(
+        field: impl Fn(&str, &str) -> Result<usize, Off>,
+        size: impl Fn(&str) -> Result<usize, Off>,
+    ) -> Result<Self, Off> {
         let entry = |name: &str| field("keen::WorkshopResource", name);
         Ok(Self {
             components: field("keen::ecs::TemplateResource", "components")?,
@@ -228,6 +255,7 @@ impl WorkshopLayout {
             entry_name: entry("name")?,
             entry_item: entry("item")?,
             entry_item_ref: entry("itemRef")?,
+            entry_npc: entry("isNpc")?,
         })
     }
 }
@@ -526,10 +554,10 @@ impl Load<'_> {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
 
-    const LAYOUT: WorkshopLayout = WorkshopLayout {
+    pub(crate) const LAYOUT: WorkshopLayout = WorkshopLayout {
         components: 16,
         crafting: [0, 16, 20],
         interaction: [12, 28, 32],
@@ -543,6 +571,7 @@ mod tests {
         entry_name: 24,
         entry_item: 28,
         entry_item_ref: 32,
+        entry_npc: 0,
     };
     const ITEMS: ItemLayout = ItemLayout {
         id: 0,
@@ -585,7 +614,7 @@ mod tests {
 
     /// A template with a transform-like component and the three crafting
     /// ones, all at the old workshop; returns the blob and each data offset.
-    fn station(components: &[(u32, usize)]) -> (Blob, Vec<usize>) {
+    pub(crate) fn station(components: &[(u32, usize)]) -> (Blob, Vec<usize>) {
         let mut blob = Blob::new(&[0u8; 24]);
         let variants = blob.append(&vec![0; components.len() * VARIANT], 4);
         let mut data = Vec::new();

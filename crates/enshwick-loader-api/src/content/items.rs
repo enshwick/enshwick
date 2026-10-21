@@ -308,10 +308,36 @@ impl ItemLayout {
     /// }
     /// ```
     pub fn resolve(load: &Load<'_>) -> Result<Self, Off> {
-        let field = |ty: &str, name: &str| {
-            load.field_offset(ty, name)
-                .map(|o| usize::try_from(o).unwrap_or(usize::MAX))
-        };
+        Self::with_lookup(
+            |ty, name| {
+                load.field_offset(ty, name)
+                    .map(|o| usize::try_from(o).unwrap_or(usize::MAX))
+            },
+            |ty| load.type_size(ty).map(|s| s as usize),
+        )
+    }
+
+    /// The layout of a game whose reflection `field` (a type's field offset)
+    /// and `size` (a type's size) read, for a tool that reads a game image
+    /// rather than running in the game.
+    ///
+    /// # Errors
+    ///
+    /// The first [`Off`] a lookup returns.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_loader_api::Off;
+    /// use enshwick_loader_api::content::items::ItemLayout;
+    ///
+    /// let none = ItemLayout::with_lookup(|ty, f| Err(Off::new(format!("{ty}.{f}"))), |_| Ok(0));
+    /// assert!(none.is_err());
+    /// ```
+    pub fn with_lookup(
+        field: impl Fn(&str, &str) -> Result<usize, Off>,
+        size: impl Fn(&str) -> Result<usize, Off>,
+    ) -> Result<Self, Off> {
         let item = |name: &str| field("keen::ItemInfo", name);
         let value = |name: &str| field("keen::ImpactUiValue", name);
         Ok(Self {
@@ -324,7 +350,7 @@ impl ItemLayout {
             ui_values: item("uiValues")?,
             icon_image: item("iconImage")?,
             ui_value: [
-                load.type_size("keen::ImpactUiValue")? as usize,
+                size("keen::ImpactUiValue")?,
                 value("locaId")?,
                 value("valueFormat")?,
                 value("value")?,

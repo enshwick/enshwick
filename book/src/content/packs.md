@@ -63,7 +63,21 @@ of `[a-z0-9_./-]` and unique across the pack's files. A reference is one of:
 
 - a name of the pack: `lantern`;
 - another mod's content id: `safes:safe`;
-- a vanilla GUID: `6943053a-32c1-4718-ae22-e61427ddf54d`.
+- a vanilla GUID: `6943053a-32c1-4718-ae22-e61427ddf54d`;
+- a vanilla item's debug name, as the game's item registry lists it:
+  `Craftingstation_Workbench`. Where a recipe names a workshop, a crafting
+  station's debug name names the station's workshop:
+  `workshop = "Prop_Production_T1_Forge"`.
+
+The pack's own names come first, so a debug name is looked up only when the
+pack defines no such name. The loader reads the debug names from the game's
+archive when it loads the pack, on the server and the client alike; a name
+the game lacks, or that several items carry, is a problem at its line, with
+the names that look like it:
+
+```text
+error [lanterns] items.toml:7:1: no item "Torchh" in this pack, and no vanilla item "Torchh"; near: Torch
+```
 
 `cargo enshwick id lanterns:lantern` prints a name's GUID and game id.
 
@@ -100,7 +114,13 @@ recipe = { cost = 2 }
 A station with a workshop of its own, as [`add_workshop`](workshops.md) makes
 it: the station item is `<id>`, its template `<id>.template`, its workshop
 `<id>.workshop`, and with `recipe` it is crafted like the vanilla station for
-`cost` times its ingredients. `like` names the station cloned: `workbench`.
+`cost` times its ingredients. `like` names the vanilla station cloned:
+`workbench`, or any crafting station by its item's debug name or GUID, such
+as `Prop_Production_T1_Forge`, `Prop_Production_T2_Kiln` or
+`Prop_Production_T3_Alchemy_Station`. The loader checks that the game lists
+a workshop of its own for the item, that it is no survivor's, and that the
+template the item places has the crafting components; any other item is a
+problem at its line.
 
 ## `recipes.toml`
 
@@ -116,8 +136,9 @@ workshop = "lantern-bench"
 
 A copy of the recipe that makes `like`, making `count` of `output` for `cost`
 times the copied ingredients, as [`add_recipe`](recipes.md) makes it.
-`workshop` names a workshop of the pack, or another by GUID or content id;
-the copied recipe's when left out.
+`workshop` names a workshop of the pack, another by GUID or content id, or a
+vanilla station's by the station item's debug name; the copied recipe's when
+left out.
 
 ## `loot.toml`
 
@@ -144,16 +165,20 @@ overrides them as it does a mod's.
 ## Problems
 
 The loader checks every file before the pack adds anything: unknown fields,
-names defined twice, references to names the pack lacks, text keys without
-text, icons the pack lacks, chances outside 0 to 1. Each problem is a line
+names defined twice, references to names neither the pack nor the game has,
+stations that cannot be cloned, text keys without text, icons the pack
+lacks, chances outside 0 to 1. Each problem is a line
 in the pack's log with its file, line and column, and the pack stays off:
 
 ```text
 error [lanterns] items.toml:7:1: no item "torch" in this pack; name another mod's as <mod>:<name> or a vanilla one by its GUID
 ```
 
-`cargo enshwick pack check mods/lanterns` gives the same lines before you
-ship. `cargo enshwick pack schema` writes the JSON Schema of each file;
+`cargo enshwick pack check mods/lanterns --game <game folder>` gives the
+same lines before you ship, reading vanilla names from that game's data
+(`ENSHROUDED_DIR` when `--game` is left out). Without a game folder it
+checks everything else, and a debug name or a station other than the
+workbench is a problem that asks for the game's data. `cargo enshwick pack schema` writes the JSON Schema of each file;
 name one at the top of a file, `#:schema ./items.schema.json`, and an
 editor with TOML support completes and checks fields as you type.
 
