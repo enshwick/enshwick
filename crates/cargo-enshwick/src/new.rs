@@ -41,7 +41,7 @@ fn files(id: &str, side: Side) -> Result<Vec<(PathBuf, String)>, String> {
             .replace("{type}", &type_name(id))
             .replace("{name}", &display_name(id))
             .replace("{side}", side)
-            .replace("{api}", enshwick_loader_api::VERSION)
+            .replace("{api}", &api_source())
     };
     Ok(vec![
         ("Cargo.toml".into(), fill(CARGO_TOML)),
@@ -49,6 +49,17 @@ fn files(id: &str, side: Side) -> Result<Vec<(PathBuf, String)>, String> {
         ("README.md".into(), fill(README)),
         (".gitignore".into(), "/target\n".into()),
     ])
+}
+
+/// Where a new mod takes the API from: the tag of this API's release, or
+/// `main` for a development build, which has no release.
+fn api_source() -> String {
+    let version = enshwick_loader_api::VERSION;
+    if version.contains('-') {
+        "branch = \"main\"".to_owned()
+    } else {
+        format!("tag = \"enshwick-loader-api-v{version}\"")
+    }
 }
 
 /// `flame-altar-zones` as `Flame altar zones`, the name players read until
@@ -95,7 +106,7 @@ publish = false
 crate-type = ["cdylib"]
 
 [dependencies]
-enshwick-loader-api = { git = "https://github.com/themaiby/enshwick", tag = "enshwick-loader-api-v{api}" }
+enshwick-loader-api = { git = "https://github.com/themaiby/enshwick", {api} }
 serde = { version = "1", features = ["derive"] }
 
 [profile.release]
@@ -194,10 +205,7 @@ mod tests {
                 .1
         };
         assert!(text("Cargo.toml").contains("name = \"area-loot\""));
-        assert!(text("Cargo.toml").contains(&format!(
-            "enshwick-loader-api-v{}",
-            enshwick_loader_api::VERSION
-        )));
+        assert!(text("Cargo.toml").contains(&api_source()));
         assert!(text("src/lib.rs").contains("id: \"area-loot\",\n            side: BOTH,"));
         assert!(text("src/lib.rs").contains("// signed_by: [\"RW..."));
         assert!(text("src/lib.rs").contains("declare_mod!(AreaLoot)"));

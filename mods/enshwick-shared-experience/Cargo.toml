@@ -1,6 +1,6 @@
 [package]
 name = "enshwick-shared-experience"
-version = "0.4.7"
+version = "0.0.0-dev"
 description = "Every character on a server keeps up with the one furthest ahead in experience"
 keywords = ["enshrouded", "mod", "experience", "level"]
 categories = ["game-development"]

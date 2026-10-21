@@ -1,6 +1,6 @@
 [package]
 name = "enshwick-furniture-comfort"
-version = "0.3.7"
+version = "0.0.0-dev"
 description = "More comfort from furniture, so every house reaches the rested bonus"
 keywords = ["enshrouded", "mod", "comfort"]
 categories = ["game-development"]

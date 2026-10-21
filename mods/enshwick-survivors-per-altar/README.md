@@ -66,12 +66,13 @@ settings apply after a restart.
 
 ## Install
 
-Download [`enshwick-survivors-per-altar.zip`](https://github.com/themaiby/enshwick/releases/latest/download/enshwick-survivors-per-altar.zip),
-always the newest version of this mod, and extract it into the folder that
-holds `enshrouded.exe` or `enshrouded_server.exe`. It needs Enshwick Loader:
-[`enshwick-loader.zip`](https://github.com/themaiby/enshwick/releases/latest/download/enshwick-loader.zip)
-alone, or [`enshwick.zip`](https://github.com/themaiby/enshwick/releases/latest/download/enshwick.zip)
-with every mod.
+Download [`enshwick-survivors-per-altar.zip`](https://github.com/themaiby/enshwick/releases/download/dev/enshwick-survivors-per-altar.zip)
+and extract it into the folder that holds `enshrouded.exe` or
+`enshrouded_server.exe`. It needs Enshwick Loader:
+[`enshwick-loader.zip`](https://github.com/themaiby/enshwick/releases/download/dev/enshwick-loader.zip)
+alone, or [`enshwick.zip`](https://github.com/themaiby/enshwick/releases/download/dev/enshwick.zip)
+with every mod. These are development builds of the newest commit: until
+the first release, 1.0.0, there are no others.
 
 ## Who needs it
 

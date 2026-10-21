@@ -21,6 +21,11 @@ volume mounted there, at fixed versions:
 
 Avoid `releases/latest/download/...` in a build: it changes under you.
 
+Until the first release, 1.0.0, there are no versioned releases, only the
+development build at `releases/download/dev/<file>`, which every new build
+replaces. Download it once, keep the files in your own storage and build from
+there; the trusted comment of its signatures is `dev <short sha> <file>`.
+
 A template to fill in; every `<...>` is yours to set:
 
 ```dockerfile

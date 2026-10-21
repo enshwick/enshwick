@@ -1,0 +1,86 @@
+# A development build of the commit it runs on, until the first public
+# release, 1.0.0. It packs the same archives as a release (tools/pack.sh),
+# signs each with minisign, trusted comment `dev <short sha> <file>`, and
+# puts them on the single prerelease `dev`, whose tag moves to the commit.
+name: dev-build
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: dev-build
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    steps:
+      # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Build
+        run: cargo build --release --workspace --locked
+
+      - name: Archives
+        run: bash tools/pack.sh "$RUNNER_TEMP/mods.tsv"
+
+      - name: Signing tool
+        run: cargo install --locked rsign2@0.6.7
+
+      - name: Sign
+        env:
+          MINISIGN_SECRET_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
+        run: |
+          short=$(git rev-parse --short=7 HEAD)
+          key="$RUNNER_TEMP/minisign.key"
+          trap 'rm -f "$key"' EXIT
+          printf '%s\n' "$MINISIGN_SECRET_KEY" > "$key"
+          files="enshwick.zip enshwick-loader.zip $(cut -f1 "$RUNNER_TEMP/mods.tsv" | sed 's/$/.zip/' | tr '\n' ' ')"
+          for file in $files; do
+            rsign sign -W -s "$key" -x "$file.minisig" -t "dev $short $file" "$file" < /dev/null
+          done
+          echo "$files" > "$RUNNER_TEMP/files"
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          short=$(git rev-parse --short=7 HEAD)
+          title="Enshwick dev $short"
+          notes="Development build of $GITHUB_SHA: $(git log -1 --format=%s).
+
+          Until the first public release, 1.0.0, this prerelease is the only build to download; every run replaces it. Each archive has its minisign signature beside it, by the key in the README."
+          assets=()
+          for file in $(cat "$RUNNER_TEMP/files"); do
+            assets+=("$file" "$file.minisig")
+          done
+          if gh release view dev --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/git/refs/tags/dev" -f sha="$GITHUB_SHA" -F force=true > /dev/null
+            gh release edit dev --repo "$GITHUB_REPOSITORY" --title "$title" --notes "$notes" --prerelease --latest=false
+            gh release upload dev "${assets[@]}" --clobber --repo "$GITHUB_REPOSITORY"
+            # Files of an earlier build that this one no longer has, such as a
+            # renamed mod's archive, go.
+            gh release view dev --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' | tr -d '\r' |
+              while read -r name; do
+                case " ${assets[*]} " in
+                  *" $name "*) ;;
+                  *) gh release delete-asset dev "$name" --yes --repo "$GITHUB_REPOSITORY" ;;
+                esac
+              done
+          else
+            # A tag left without its release moves too; gh would build on it as it is.
+            if gh api "repos/$GITHUB_REPOSITORY/git/refs/tags/dev" > /dev/null 2>&1; then
+              gh api -X PATCH "repos/$GITHUB_REPOSITORY/git/refs/tags/dev" -f sha="$GITHUB_SHA" -F force=true > /dev/null
+            fi
+            gh release create dev "${assets[@]}" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+              --title "$title" --notes "$notes" --prerelease --latest=false
+          fi

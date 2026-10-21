@@ -10,8 +10,9 @@ A mod is a Windows DLL. You need:
 - Rust 1.98 or newer through [rustup](https://rustup.rs), with the target
   `x86_64-pc-windows-msvc`;
 - on Windows, the MSVC build tools;
-- the Enshwick loader in the game's folder: extract `enshwick.zip` from the
-  [latest release](https://github.com/themaiby/enshwick/releases) next to
+- the Enshwick loader in the game's folder: extract
+  [`enshwick.zip`](https://github.com/themaiby/enshwick/releases/download/dev/enshwick.zip),
+  the development build until the first release, 1.0.0, next to
   `enshrouded.exe` or `enshrouded_server.exe`.
 
 ```bash

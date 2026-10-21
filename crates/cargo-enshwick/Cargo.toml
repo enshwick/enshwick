@@ -1,6 +1,6 @@
 [package]
 name = "cargo-enshwick"
-version = "0.9.1"
+version = "0.0.0-dev"
 description = "Cargo subcommand for Enshwick mods: start a mod, build it, install it into the game and port build rows to a new game build"
 keywords = ["enshrouded", "modding", "cargo", "cli"]
 categories = ["development-tools::cargo-plugins", "game-development"]
@@ -25,7 +25,7 @@ semver.workspace = true
 zip.workspace = true
 
 [target.'cfg(windows)'.dependencies]
-enshwick-loader = { path = "../internal/loader", version = "0.9.1" }
+enshwick-loader = { path = "../internal/loader", version = "0.0.0-dev" }
 windows-sys = { workspace = true, features = ["Win32_Foundation", "Win32_System_LibraryLoader"] }
 
 [lints]
