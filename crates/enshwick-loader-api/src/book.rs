@@ -47,6 +47,7 @@ chapters! {
     Hooks => "hooks.md",
     MidFunctionHooks => "mid-function-hooks.md",
     CodePatches => "code-patches.md",
+    Pacing => "pacing.md",
     GameFrame => "game-frame.md",
     Ecs => "ecs.md",
     Content => "content.md",

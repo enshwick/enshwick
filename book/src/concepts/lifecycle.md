@@ -20,7 +20,12 @@ The loader takes every mod through five steps, all at game start.
    are refused after `init`.
 4. **Arm.** Once every mod is initialised, the loader writes one detour per
    hooked function and wires each chain past the mods that are off. On the
-   client it first waits for the game's window, at most 15 seconds.
+   dedicated server the server's own code has not started yet: it waits at
+   its entry point until the hooks are armed, at most 10 seconds, so a hook
+   sees even the server's start-up, such as its task system. On the client,
+   whose start-up runs under Steam's DRM wrapper, the loader instead waits
+   for the game's window, at most 15 seconds, and the game's start-up has
+   run by then.
 5. **Ready.** `Mod::ready` runs for every mod still on, in load order. Start
    background threads here.
 

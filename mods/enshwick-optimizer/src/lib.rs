@@ -1,75 +1,94 @@
-//! Less CPU for the server under Wine and Proton, and the numbers to tell.
+//! Less CPU for the Enshrouded server, on Windows and under Wine or Proton,
+//! and the numbers to tell.
 //!
-//! - At start, one line in the log and the status summary names what the
-//!   server runs on: the Wine version and host, the fast synchronisation
-//!   available, the CPU governor, the container's CPU limit and the CPUs the
-//!   game saw. Nothing changes for it.
-//! - Exact waits (on by default under Wine only): the engine's event loop
-//!   sleeps the last fraction of a millisecond before a deadline instead of
-//!   polling its handles in a loop.
-//! - Server wait cap (vanilla by default): the server's game loop may wait
-//!   longer between its passes while players are online, never past the next
-//!   simulation step.
-//! - Measure mode: a line a minute with the CPU used, the loop and step rates
-//!   and the server's "Bad Performance" warnings.
+//! The mod knows where it runs, the dedicated server or the game, on
+//! Windows or under Wine, and turns on by default only the changes that A/B
+//! runs showed to help there (one table in `platform.rs`). A setting can force a
+//! change anywhere.
+//!
+//! - Exact waits: the engine's event loop sleeps the last fraction of a
+//!   millisecond before a deadline instead of polling its handles.
+//! - Task workers: under Wine in a container with a CPU limit, the task
+//!   groups start no more workers than the limit allows.
+//! - Server wait cap: the server's game loop may wait longer between its
+//!   passes while players are online, never past the next simulation step.
+//! - Measure mode: a line a minute with the CPU used, by thread group, the
+//!   loop and step rates and the server's "Bad Performance" warnings.
+//! - At start, one line names what the server runs on: Wine or Windows, the
+//!   fast synchronisation available, the CPU governor, the container's CPU
+//!   limit and the CPUs the game saw.
 //!
 //! Waits are never throttled across the board: an earlier fix that delayed
 //! every wait of every thread put players under the ground and broke
-//! gliding. The mod changes two sites, and the first only ever sleeps time
-//! the game would have spent polling.
+//! gliding. The exact waits only sleep time the game would have spent
+//! polling.
 
 use std::sync::OnceLock;
 
+use enshwick_loader_api::abi::Side;
+use enshwick_loader_api::pacing::{self, TaskWorkers};
 use enshwick_loader_api::{Host, Load, Mod, Off, events};
+
+use crate::env::CpuLimit;
+use crate::platform::{Change, Platform, default_on};
 
 mod env;
 mod measure;
+mod platform;
 mod sys;
 mod waits;
 
-/// When the exact waits run.
+/// Whether a change runs.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Switch {
-    /// Under Wine and Proton only.
+    /// Where it was measured to help.
     #[default]
     Auto,
-    /// Always, Windows included.
+    /// Everywhere.
     On,
-    /// Never.
+    /// Nowhere.
     Off,
 }
 
 impl Switch {
-    /// Whether the exact waits run on this system.
+    /// Whether the change runs where its default is `default`.
     #[must_use]
-    pub fn applies(self, wine: bool) -> bool {
+    pub fn applies(self, default: bool) -> bool {
         match self {
-            Self::Auto => wine,
+            Self::Auto => default,
             Self::On => true,
             Self::Off => false,
         }
     }
 }
 
-/// Proton optimizer settings.
+/// Optimizer settings.
 #[derive(Debug, serde::Deserialize, serde::Serialize, enshwick_loader_api::Config)]
 #[serde(deny_unknown_fields)]
 pub struct Settings {
-    /// Exact short waits in the engine's event loop: "auto" under Wine and
-    /// Proton only, "on" everywhere, Windows included, "off" never.
-    /// Turning them on takes effect at the next start when they were off at
-    /// start; turning them off takes effect at once.
+    /// Exact short waits in the engine's event loop: "auto" on the dedicated
+    /// server, on Windows and under Wine, where they were measured to help;
+    /// "on" in the game too; "off" never. Turning them off takes effect at
+    /// once; turning them on takes effect at the next start when they were
+    /// off at start.
     #[config(runtime, choices = [Switch::Auto, Switch::On, Switch::Off])]
     pub exact_waits: Switch,
+    /// The most worker threads each task group of the dedicated server
+    /// starts, 1 to 64. 0 is automatic: under Wine in a container with a CPU
+    /// limit, that limit rounded up and at least 2; elsewhere as many as the
+    /// game picks.
+    #[config(startup, range = 0..=64)]
+    pub task_workers: u32,
     /// The longest the server's game loop waits between its passes while
     /// players are online, in milliseconds, 1 to 8, never past the next
-    /// simulation step. 1 is vanilla. 2 to 4 saves CPU, but check gliding,
-    /// joining and combat before keeping it.
+    /// simulation step. 1 is vanilla. Check gliding, joining and combat
+    /// before keeping more.
     #[config(runtime, range = 1..=8)]
     pub server_wait_cap_ms: u32,
-    /// A line a minute in the log and the status summary: CPU, loop and step
-    /// rates, exact waits and the server's Bad Performance warnings.
+    /// A line a minute in the log and the status summary: CPU, by thread
+    /// group, loop and step rates, exact waits and the server's Bad
+    /// Performance warnings.
     #[config(runtime)]
     pub measure: bool,
 }
@@ -78,28 +97,84 @@ impl Default for Settings {
     fn default() -> Self {
         Self {
             exact_waits: Switch::Auto,
+            task_workers: 0,
             server_wait_cap_ms: 1,
             measure: true,
         }
     }
 }
 
+/// The task worker cap for the `task_workers` setting on `platform` under
+/// `limit`: `None` leaves the game's own count.
+#[must_use]
+pub(crate) fn worker_cap(setting: u32, platform: Platform, limit: Option<CpuLimit>) -> Option<u8> {
+    if setting > 0 {
+        return u8::try_from(setting).ok();
+    }
+    if !default_on(Change::TaskWorkers, platform) {
+        return None;
+    }
+    match limit? {
+        CpuLimit::Cpus(cpus) => {
+            #[expect(
+                clippy::cast_possible_truncation,
+                clippy::cast_sign_loss,
+                reason = "clamped to 2 to 64 first"
+            )]
+            let cap = cpus.ceil().clamp(2.0, 64.0) as u8;
+            Some(cap)
+        }
+        CpuLimit::Unlimited => None,
+    }
+}
+
 /// What init found, for the status summary and the settings handler.
 #[derive(Debug)]
 struct Found {
-    wine: bool,
+    platform: Platform,
     summary: String,
     linked: waits::Linked,
+    workers: Option<u8>,
 }
 
 static FOUND: OnceLock<Found> = OnceLock::new();
+
+/// The platform and what runs on it, for the measure lines and the status
+/// summary.
+fn running(found: &Found, settings: &Settings) -> String {
+    let workers = match found.workers {
+        Some(cap) => format!("task workers at most {cap}"),
+        None => "task workers as the game picks".to_owned(),
+    };
+    let cap = if settings.server_wait_cap_ms > 1 {
+        format!("server wait cap {} ms", settings.server_wait_cap_ms)
+    } else {
+        "server wait vanilla".to_owned()
+    };
+    format!(
+        "{}: exact waits {}, {workers}, {cap}",
+        found.platform,
+        if waits::exact_on() { "on" } else { "off" },
+    )
+}
+
+/// Logs a change forced on where it was not measured to help.
+fn note_forced(change: Change, forced: bool, platform: Platform) {
+    if forced && !default_on(change, platform) {
+        enshwick_loader_api::info!(
+            "{change}: forced on; off by default on a {platform}, where it was not measured to help"
+        );
+    }
+}
 
 /// Applies `settings` to the running hooks.
 fn apply(settings: &Settings) {
     let Some(found) = FOUND.get() else {
         return;
     };
-    let exact = settings.exact_waits.applies(found.wine);
+    let exact = settings
+        .exact_waits
+        .applies(default_on(Change::ExactWaits, found.platform));
     if exact && !found.linked.exact {
         enshwick_loader_api::info!("exact waits: on at the next start");
     }
@@ -108,13 +183,12 @@ fn apply(settings: &Settings) {
         enshwick_loader_api::info!("server wait cap: from the next start");
     }
     waits::set_cap(settings.server_wait_cap_ms);
-    measure::set(settings.measure);
+    let running = running(found, settings);
     enshwick_loader_api::info!(
-        "exact waits {}, server wait cap {} ms, measure mode {}",
-        if waits::exact_on() { "on" } else { "off" },
-        settings.server_wait_cap_ms,
-        if settings.measure { "on" } else { "off" },
+        "{running}; measure mode {}",
+        if settings.measure { "on" } else { "off" }
     );
+    measure::set(settings.measure, running);
 }
 
 /// The status lines.
@@ -122,18 +196,7 @@ fn status() -> String {
     let Some(found) = FOUND.get() else {
         return String::new();
     };
-    let mut lines = vec![
-        found.summary.clone(),
-        format!(
-            "exact waits {}, server loop wait {}",
-            if waits::exact_on() { "on" } else { "off" },
-            if found.linked.server {
-                "hooked"
-            } else {
-                "not hooked"
-            },
-        ),
-    ];
+    let mut lines = vec![found.summary.clone(), measure::context()];
     let last = measure::last();
     if !last.is_empty() {
         lines.push(last);
@@ -143,15 +206,15 @@ fn status() -> String {
 
 /// The mod. Its running state is in statics the hooks read.
 #[derive(Debug)]
-pub struct ProtonOptimizer;
+pub struct Optimizer;
 
-impl Mod for ProtonOptimizer {
+impl Mod for Optimizer {
     fn manifest() -> &'static enshwick_loader_api::abi::Manifest {
         enshwick_loader_api::manifest!(
-            id: "proton-optimizer",
+            id: "optimizer",
             side: BOTH,
-            name: "Proton optimizer",
-            updates: github("themaiby/enshwick", "enshwick-proton-optimizer"),
+            name: "Optimizer",
+            updates: github("themaiby/enshwick", "enshwick-optimizer"),
             signed_by: ["RWTjqgtfpy3lSOLC4uaUXuvvKSLQKOFf6nUnEytoiFjSzxMEhLnoAdJF"],
         )
     }
@@ -160,25 +223,48 @@ impl Mod for ProtonOptimizer {
         let settings: Settings = load.config()?;
         let environment = env::Environment::probe(&measure::game_log_text());
         let wine = environment.is_wine();
+        let platform = Platform::of(load.host().build().side == Side::SERVER, wine);
         let summary = environment.summary();
         enshwick_loader_api::info!("environment: {summary}");
-        if !wine {
-            waits::set_slack(sys::timer_resolution_ns().unwrap_or(waits::MILLISECOND_NS));
+        for advice in environment.advice() {
+            enshwick_loader_api::info!("advice: {advice}");
         }
-        let exact = settings.exact_waits.applies(wine);
+        if !wine {
+            waits::tune_for_windows();
+        }
+        let exact = settings
+            .exact_waits
+            .applies(default_on(Change::ExactWaits, platform));
+        note_forced(
+            Change::ExactWaits,
+            settings.exact_waits == Switch::On,
+            platform,
+        );
+        note_forced(Change::TaskWorkers, settings.task_workers > 0, platform);
+        let mut workers = worker_cap(settings.task_workers, platform, environment.cpu_limit);
+        if let Some(cap) = workers
+            && !pacing::cap_task_workers(load, TaskWorkers::at_most(cap))?
+        {
+            enshwick_loader_api::info!(
+                "task workers: only the dedicated server starts fewer; here the game picks"
+            );
+            workers = None;
+        }
         let server_loop = settings.measure || settings.server_wait_cap_ms > 1;
         let linked = waits::link(load, exact, server_loop)?;
         enshwick_loader_api::info!(
-            "hooked: exact waits {}, message wait {}, server loop wait {}",
+            "hooked: exact waits {}, message wait {}, server loop wait {}, task workers {}",
             linked.exact,
             linked.message,
-            linked.server
+            linked.server,
+            workers.is_some()
         );
         load.on::<events::Ticked>(|_| waits::stepped())?;
         let _first = FOUND.set(Found {
-            wine,
+            platform,
             summary: format!("environment: {summary}"),
             linked,
+            workers,
         });
         load.add_status(status)?;
         load.on_config_change(|settings: Settings| apply(&settings))?;
@@ -187,9 +273,11 @@ impl Mod for ProtonOptimizer {
     }
 
     fn ready(&'static self, _host: Host) {
-        let wine = FOUND.get().is_some_and(|found| found.wine);
+        let wine = FOUND.get().is_some_and(|found| {
+            matches!(found.platform, Platform::WineServer | Platform::WineClient)
+        });
         let started = std::thread::Builder::new()
-            .name("enshwick-proton-optimizer".into())
+            .name("enshwick-optimizer".into())
             .spawn(move || measure::run(wine));
         if let Err(e) = started {
             enshwick_loader_api::warn!("measure mode does not run: {e}");
@@ -197,7 +285,7 @@ impl Mod for ProtonOptimizer {
     }
 }
 
-enshwick_loader_api::declare_mod!(ProtonOptimizer);
+enshwick_loader_api::declare_mod!(Optimizer);
 
 #[cfg(test)]
 mod tests {
@@ -207,7 +295,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn auto_follows_wine() {
+    fn auto_follows_the_table() {
         assert!(Switch::Auto.applies(true));
         assert!(!Switch::Auto.applies(false));
         assert!(Switch::On.applies(false));
@@ -215,19 +303,38 @@ mod tests {
     }
 
     #[test]
-    fn the_defaults_are_vanilla_on_windows() {
+    fn task_workers_follow_the_cpu_limit_under_wine_only() {
+        let four = Some(CpuLimit::Cpus(3.5));
+        assert_eq!(worker_cap(0, Platform::WineServer, four), Some(4));
+        assert_eq!(
+            worker_cap(0, Platform::WineServer, Some(CpuLimit::Cpus(0.5))),
+            Some(2)
+        );
+        assert_eq!(
+            worker_cap(0, Platform::WineServer, Some(CpuLimit::Unlimited)),
+            None
+        );
+        assert_eq!(worker_cap(0, Platform::WineServer, None), None);
+        assert_eq!(worker_cap(0, Platform::WindowsServer, four), None);
+        assert_eq!(worker_cap(6, Platform::WindowsServer, None), Some(6));
+    }
+
+    #[test]
+    fn the_defaults_parse_and_ranges_hold() {
         let settings: Settings = toml::from_str(&Settings::template()).unwrap();
         assert_eq!(settings.exact_waits, Switch::Auto);
+        assert_eq!(settings.task_workers, 0);
         assert_eq!(settings.server_wait_cap_ms, 1);
         assert!(settings.measure);
         assert!(settings.validate().is_ok());
-        let wide: Settings =
-            toml::from_str("exact_waits = \"on\"\nserver_wait_cap_ms = 9\nmeasure = false")
-                .unwrap();
+        let wide: Settings = toml::from_str(
+            "exact_waits = \"on\"\ntask_workers = 0\nserver_wait_cap_ms = 9\nmeasure = false",
+        )
+        .unwrap();
         assert!(wide.validate().is_err());
         assert!(
             toml::from_str::<Settings>(
-                "exact_waits = \"maybe\"\nserver_wait_cap_ms = 1\nmeasure = true"
+                "exact_waits = \"maybe\"\ntask_workers = 0\nserver_wait_cap_ms = 1\nmeasure = true"
             )
             .is_err()
         );
@@ -273,7 +380,9 @@ mod tests {
         let server = base + 0x40 + 22 + 34 + 0x10 + 35;
         let loader = enshwick_loader_api::test::FakeHost::new()
             .code(code)
-            .settings("exact_waits = \"on\"\nserver_wait_cap_ms = 4\nmeasure = true\n")
+            .settings(
+                "exact_waits = \"on\"\ntask_workers = 0\nserver_wait_cap_ms = 4\nmeasure = true\n",
+            )
             .install();
         // SAFETY: the export of `declare_mod!` above. Without `ready` no
         // measuring thread sets the slack to the timer resolution.
@@ -335,7 +444,9 @@ mod tests {
         assert_eq!(registers.r9, 40_000_000);
 
         // Off at once.
-        loader.set_settings("exact_waits = \"off\"\nserver_wait_cap_ms = 1\nmeasure = true\n");
+        loader.set_settings(
+            "exact_waits = \"off\"\ntask_workers = 0\nserver_wait_cap_ms = 1\nmeasure = true\n",
+        );
         assert_eq!(loader.raise::<events::SettingsChanged>(&()), 1);
         let mut registers = enshwick_loader_api::Registers {
             r9: 1_000_000,

@@ -1,12 +1,12 @@
 [package]
-name = "enshwick-proton-optimizer"
+name = "enshwick-optimizer"
 version = "0.4.2"
-description = "Exact short waits in the engine's event loop under Wine and Proton, with an environment report and CPU measurements"
+description = "Less server CPU on Windows and under Wine or Proton: exact short waits, task workers within a container's CPU limit, measurements and an environment report"
 keywords = ["enshrouded", "mod", "wine", "proton", "performance"]
 categories = ["game-development"]
 readme = "README.md"
 authors.workspace = true
-homepage = "https://github.com/themaiby/enshwick/tree/main/mods/enshwick-proton-optimizer"
+homepage = "https://github.com/themaiby/enshwick/tree/main/mods/enshwick-optimizer"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -22,6 +22,7 @@ serde.workspace = true
 windows-sys = { workspace = true, features = [
     "Win32_Foundation",
     "Win32_System_Diagnostics_ToolHelp",
+    "Win32_Security",
     "Win32_System_LibraryLoader",
     "Win32_System_SystemInformation",
     "Win32_System_Threading",

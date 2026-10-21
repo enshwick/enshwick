@@ -39,10 +39,10 @@ they are never released.
 
 ### Server
 
-| Mod                                                | What it does                                                      |
-| -------------------------------------------------- | ----------------------------------------------------------------- |
-| [Admin tools](mods/enshwick-admin-tools)           | `/admin` commands and a command file run as the server console    |
-| [Proton optimizer](mods/enshwick-proton-optimizer) | less server CPU under Wine and Proton, with a report and measures |
+| Mod                                      | What it does                                                              |
+| ---------------------------------------- | ------------------------------------------------------------------------- |
+| [Admin tools](mods/enshwick-admin-tools) | `/admin` commands and a command file run as the server console            |
+| [Optimizer](mods/enshwick-optimizer)     | less CPU on Windows and under Wine and Proton, with a report and measures |
 
 ### For players
 

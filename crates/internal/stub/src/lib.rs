@@ -4,9 +4,12 @@
 //! export to the system copy, then, outside the loader lock, moves staged
 //! updates from `mods/.staged/` into place, loads `mods/enshwick/enshwick.dll`
 //! and calls its `enshwick_start`. Without the loader the game runs vanilla.
+//! On the dedicated server the server's own code waits until the loader has
+//! armed its hooks.
 
 #![cfg(windows)]
 
+mod gate;
 mod proxy;
 mod staged;
 
@@ -17,11 +20,16 @@ use windows_sys::Win32::System::LibraryLoader::{
 };
 use windows_sys::Win32::System::SystemServices::DLL_PROCESS_ATTACH;
 
-/// `enshwick_start(stub_abi, missing_forwards)`, exported by the loader.
-type Start = unsafe extern "system" fn(stub_abi: u32, missing_forwards: u32);
+/// `enshwick_start(stub_abi, missing_forwards, release)`, exported by the
+/// loader; it calls `release` once its hooks are armed.
+type Start = unsafe extern "system" fn(
+    stub_abi: u32,
+    missing_forwards: u32,
+    release: extern "system" fn() -> u32,
+);
 
 /// The contract between this stub and the loader's `enshwick_start`.
-const STUB_ABI: u32 = 1;
+const STUB_ABI: u32 = 2;
 /// No forward could be installed at all.
 const NO_SYSTEM_COPY: u32 = u32::MAX;
 
@@ -34,19 +42,27 @@ const NO_SYSTEM_COPY: u32 = u32::MAX;
 pub unsafe extern "system" fn DllMain(
     _module: *mut c_void,
     reason: u32,
-    _reserved: *mut c_void,
+    reserved: *mut c_void,
 ) -> i32 {
     if reason == DLL_PROCESS_ATTACH {
         // The forwards come first and never depend on the loader: the game
         // calls through them whatever happens below.
         let missing = proxy::install().unwrap_or(NO_SYSTEM_COPY);
+        // Loaded as an import, before the game's entry point runs.
+        if !reserved.is_null() {
+            gate::hold();
+        }
         // The rest waits until Windows releases the loader lock DllMain holds.
         // A thread that cannot start leaves the game vanilla; it is detached.
-        drop(
-            std::thread::Builder::new()
-                .name("enshwick-loader-stub".into())
-                .spawn(move || std::panic::catch_unwind(|| start(missing))),
-        );
+        let spawned = std::thread::Builder::new()
+            .name("enshwick-loader-stub".into())
+            .spawn(move || {
+                let _started = std::panic::catch_unwind(|| start(missing));
+                gate::release();
+            });
+        if spawned.is_err() {
+            gate::release();
+        }
     }
     1
 }
@@ -82,7 +98,7 @@ fn start(missing: u32) {
     // SAFETY: the loader exports `enshwick_start` with the `Start` signature.
     let start: Start = unsafe { core::mem::transmute(start) };
     // SAFETY: called once, from this thread, outside the loader lock.
-    unsafe { start(STUB_ABI, missing) };
+    unsafe { start(STUB_ABI, missing, gate::release) };
 }
 
 /// `<game folder>\mods\enshwick\enshwick.dll`, NUL-terminated.

@@ -1,10 +1,12 @@
-//! Measure mode: once a minute, a line with the CPU the process and its two
-//! busiest game threads used, the server loop's passes and steps, the exact
-//! waits slept and the server's "Bad Performance" warnings.
+//! Measure mode: once a minute, a line with the CPU the process, its main
+//! thread, the server loop's thread and its busiest groups of threads used,
+//! the server loop's passes and steps, the exact waits slept and the server's
+//! "Bad Performance" warnings.
 //!
 //! The warnings come from the game's own log beside the game,
 //! `logs/<game>.log`, read from where the last minute stopped.
 
+use std::collections::HashMap;
 use std::fmt::Write as _;
 use std::io::{Read as _, Seek as _, SeekFrom};
 use std::path::{Path, PathBuf};
@@ -13,7 +15,7 @@ use std::sync::{Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
 use crate::sys::{self, Thread};
-use crate::waits::{self, CAPPED, PASSES, SERVER_THREAD, SLEEPS, SLEPT_NS, STEPS};
+use crate::waits::{self, CAPPED, LATE_NS, PASSES, SERVER_THREAD, SLEEPS, SLEPT_NS, STEPS};
 
 /// How often a line is written.
 pub(crate) const PERIOD: Duration = Duration::from_mins(1);
@@ -21,15 +23,28 @@ pub(crate) const PERIOD: Duration = Duration::from_mins(1);
 const BAD_PERFORMANCE: &str = "[server] Bad Performance ";
 /// The most of the game log read in one minute.
 const MOST_READ: u64 = 4 << 20;
+/// How many groups of threads a line names.
+const THREAD_GROUPS: usize = 6;
 
 /// Whether the lines are written.
 static ON: AtomicBool = AtomicBool::new(false);
 /// The last line, for the status summary.
 static LAST: Mutex<String> = Mutex::new(String::new());
+/// The platform and what runs on it, ahead of each line.
+static CONTEXT: Mutex<String> = Mutex::new(String::new());
 
-/// Turns measure mode on or off.
-pub(crate) fn set(on: bool) {
+/// Turns measure mode on or off; `context` names the platform and what runs.
+pub(crate) fn set(on: bool, context: String) {
     ON.store(on, Ordering::Relaxed);
+    *CONTEXT.lock().unwrap_or_else(PoisonError::into_inner) = context;
+}
+
+/// The platform and what runs on it.
+pub(crate) fn context() -> String {
+    CONTEXT
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .clone()
 }
 
 /// The last line written, empty before the first.
@@ -70,7 +85,7 @@ pub(crate) fn warnings(text: &str) -> Warnings {
 }
 
 /// Counters over one period.
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub(crate) struct Minute {
     /// Wall time, in seconds.
     pub(crate) seconds: f64,
@@ -90,8 +105,62 @@ pub(crate) struct Minute {
     pub(crate) sleeps: u64,
     /// Nanoseconds they slept.
     pub(crate) slept_ns: u64,
+    /// Nanoseconds they woke past the deadline.
+    pub(crate) late_ns: u64,
     /// The server's warnings.
     pub(crate) warnings: Option<Warnings>,
+    /// The busiest groups of threads, busiest first.
+    pub(crate) threads: Vec<Group>,
+}
+
+/// Threads that share a name but for a number, such as the task workers.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) struct Group {
+    /// The name without its number.
+    pub(crate) name: String,
+    /// How many threads.
+    pub(crate) count: u32,
+    /// Their CPU, in 100 ns units.
+    pub(crate) cpu: u64,
+}
+
+/// The group a thread named `name` belongs to: the name without a trailing
+/// number and the engine's `keen ` prefix.
+#[must_use]
+pub(crate) fn group_name(name: &str) -> &str {
+    let name = name.trim();
+    let name = name.strip_prefix("keen ").unwrap_or(name);
+    let name = name
+        .trim_end_matches(|c: char| c.is_ascii_digit())
+        .trim_end();
+    if name.is_empty() { "unnamed" } else { name }
+}
+
+/// The `most` busiest groups of `threads`, `(name, cpu)` each, busiest first;
+/// idle groups are left out.
+#[must_use]
+pub(crate) fn groups<'a>(
+    threads: impl IntoIterator<Item = (&'a str, u64)>,
+    most: usize,
+) -> Vec<Group> {
+    let mut found: Vec<Group> = Vec::new();
+    for (name, cpu) in threads {
+        let name = group_name(name);
+        if let Some(group) = found.iter_mut().find(|g| g.name == name) {
+            group.count += 1;
+            group.cpu += cpu;
+        } else {
+            found.push(Group {
+                name: name.to_owned(),
+                count: 1,
+                cpu,
+            });
+        }
+    }
+    found.retain(|g| g.cpu > 0);
+    found.sort_by(|a, b| b.cpu.cmp(&a.cpu).then_with(|| a.name.cmp(&b.name)));
+    found.truncate(most);
+    found
 }
 
 /// CPU in 100 ns units over `seconds` as a share of one core, in percent.
@@ -135,7 +204,9 @@ pub(crate) fn line(minute: &Minute) -> String {
     if minute.sleeps > 0 {
         #[expect(clippy::cast_precision_loss, reason = "a mean to one decimal")]
         let mean = minute.slept_ns as f64 / minute.sleeps as f64 / 1_000.0;
-        let _ = write!(out, " of {mean:.0} µs on average");
+        #[expect(clippy::cast_precision_loss, reason = "a mean to one decimal")]
+        let late = minute.late_ns as f64 / minute.sleeps as f64 / 1_000.0;
+        let _ = write!(out, " of {mean:.0} µs on average, {late:.0} µs late");
     }
     match minute.warnings {
         Some(found) if found.count > 0 => {
@@ -148,6 +219,17 @@ pub(crate) fn line(minute: &Minute) -> String {
         }
         Some(_) => out.push_str("; Bad Performance 0"),
         None => {}
+    }
+    if !minute.threads.is_empty() {
+        out.push_str("; threads:");
+        for (i, group) in minute.threads.iter().enumerate() {
+            let sep = if i == 0 { " " } else { ", " };
+            let _ = write!(out, "{sep}{}", group.name);
+            if group.count > 1 {
+                let _ = write!(out, " x{}", group.count);
+            }
+            let _ = write!(out, " {:.1}%", percent(group.cpu, s));
+        }
     }
     out
 }
@@ -164,6 +246,15 @@ struct Mark {
     steps: u64,
     sleeps: u64,
     slept_ns: u64,
+    late_ns: u64,
+}
+
+/// A thread followed across periods.
+#[derive(Debug)]
+struct Followed {
+    thread: Thread,
+    name: String,
+    cpu: u64,
 }
 
 /// The measuring thread's state.
@@ -173,6 +264,7 @@ struct Meter {
     server: Option<Thread>,
     log: Option<(PathBuf, u64)>,
     mark: Mark,
+    threads: HashMap<u32, Followed>,
 }
 
 /// The game's own log: `logs/<exe name>.log` beside the game.
@@ -215,12 +307,57 @@ impl Meter {
             (path, len)
         });
         let main = sys::main_thread();
-        Self {
+        let mut meter = Self {
             mark: Self::mark(main.as_ref(), None),
             main,
             server: None,
             log,
+            threads: HashMap::new(),
+        };
+        let _first = meter.thread_groups();
+        meter
+    }
+
+    /// The CPU each group of threads used since the last call; a thread
+    /// first seen counts from its start, one that ended drops out.
+    fn thread_groups(&mut self) -> Vec<Group> {
+        let main = self.main.as_ref().map(|t| t.id);
+        let ids = sys::thread_ids();
+        self.threads.retain(|id, _| ids.contains(id));
+        let mut used: Vec<(u32, u64)> = Vec::with_capacity(ids.len());
+        for id in ids {
+            let followed = match self.threads.entry(id) {
+                std::collections::hash_map::Entry::Occupied(e) => e.into_mut(),
+                std::collections::hash_map::Entry::Vacant(e) => {
+                    let Some(thread) = Thread::open(id) else {
+                        continue;
+                    };
+                    e.insert(Followed {
+                        thread,
+                        name: String::new(),
+                        cpu: 0,
+                    })
+                }
+            };
+            if followed.name.is_empty() {
+                followed.name = if Some(id) == main {
+                    "main".to_owned()
+                } else {
+                    followed.thread.name()
+                };
+            }
+            let Some(cpu) = followed.thread.cpu() else {
+                continue;
+            };
+            used.push((id, cpu.saturating_sub(followed.cpu)));
+            followed.cpu = cpu;
         }
+        let threads = &self.threads;
+        groups(
+            used.iter()
+                .filter_map(|(id, cpu)| Some((threads.get(id)?.name.as_str(), *cpu))),
+            THREAD_GROUPS,
+        )
     }
 
     fn mark(main: Option<&Thread>, server: Option<&Thread>) -> Mark {
@@ -234,6 +371,7 @@ impl Meter {
             steps: STEPS.load(Ordering::Relaxed),
             sleeps: SLEEPS.load(Ordering::Relaxed),
             slept_ns: SLEPT_NS.load(Ordering::Relaxed),
+            late_ns: LATE_NS.load(Ordering::Relaxed),
         }
     }
 
@@ -249,6 +387,9 @@ impl Meter {
     }
 
     fn warnings(&mut self) -> Option<Warnings> {
+        if self.log.is_none() {
+            self.log = game_log().map(|path| (path, 0));
+        }
         let (path, offset) = self.log.as_mut()?;
         let (text, end) = read_from(path, *offset)?;
         *offset = end;
@@ -259,6 +400,7 @@ impl Meter {
     fn minute(&mut self) -> Minute {
         let fresh_server = self.follow_server();
         let warnings = self.warnings();
+        let threads = self.thread_groups();
         let now = Self::mark(self.main.as_ref(), self.server.as_ref());
         let was = &self.mark;
         let delta = |a: Option<u64>, b: Option<u64>| Some(a?.saturating_sub(b?));
@@ -277,7 +419,9 @@ impl Meter {
             steps: now.steps - was.steps,
             sleeps: now.sleeps - was.sleeps,
             slept_ns: now.slept_ns - was.slept_ns,
+            late_ns: now.late_ns - was.late_ns,
             warnings,
+            threads,
         };
         self.mark = now;
         minute
@@ -289,14 +433,22 @@ impl Meter {
 /// resolution the game set.
 pub(crate) fn run(wine: bool) {
     let mut meter = Meter::new();
+    let mut workers_told = false;
     loop {
         if !wine {
-            waits::set_slack(sys::timer_resolution_ns().unwrap_or(waits::MILLISECOND_NS));
+            waits::tune_for_windows();
         }
         std::thread::sleep(PERIOD);
         let minute = meter.minute();
+        if !workers_told {
+            let game = crate::env::parse_game_log(&game_log_text());
+            if !game.workers.is_empty() {
+                workers_told = true;
+                enshwick_loader_api::info!("{}", game.started());
+            }
+        }
         if ON.load(Ordering::Relaxed) {
-            let text = line(&minute);
+            let text = format!("{}; {}", context(), line(&minute));
             enshwick_loader_api::info!("measure: {text}");
             *LAST.lock().unwrap_or_else(PoisonError::into_inner) = text;
         }
@@ -345,16 +497,18 @@ mod tests {
             steps: 3_600,
             sleeps: 3_600,
             slept_ns: 3_600 * 600_000,
+            late_ns: 0,
             warnings: Some(Warnings {
                 count: 2,
                 worst_us: 34_012,
             }),
+            threads: groups([("keen Session", 120_000_000), ("main", 30_000_000)], 6),
         };
         assert_eq!(
             line(&minute),
             "CPU: process 50.0%, main thread 5.0%, server loop thread ? (100% = one core); \
-             server loop 900/s, steps 60.0/s; exact waits 60/s of 600 µs on average; \
-             Bad Performance 2 (worst 34.0 ms)"
+             server loop 900/s, steps 60.0/s; exact waits 60/s of 600 µs on average, 0 µs late; \
+             Bad Performance 2 (worst 34.0 ms); threads: Session 20.0%, main 5.0%"
         );
         let quiet = Minute {
             seconds: 60.0,
@@ -369,8 +523,41 @@ mod tests {
     }
 
     #[test]
+    fn threads_group_by_name_without_their_number() {
+        assert_eq!(group_name("keen Task-Default07"), "Task-Default");
+        assert_eq!(group_name("CNet Encrypt:0"), "CNet Encrypt:");
+        assert_eq!(group_name("  "), "unnamed");
+        assert_eq!(group_name("main"), "main");
+        let found = groups(
+            [
+                ("keen Task-Default00", 10),
+                ("keen Task-Default01", 30),
+                ("keen GameServer", 25),
+                ("idle", 0),
+                ("keen Session", 5),
+            ],
+            2,
+        );
+        assert_eq!(
+            found,
+            [
+                Group {
+                    name: "Task-Default".into(),
+                    count: 2,
+                    cpu: 40
+                },
+                Group {
+                    name: "GameServer".into(),
+                    count: 1,
+                    cpu: 25
+                },
+            ]
+        );
+    }
+
+    #[test]
     fn the_log_is_read_on_from_where_it_stopped() {
-        let dir = std::env::temp_dir().join(format!("proton-optimizer-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("optimizer-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("game.log");
         std::fs::write(&path, "one\n").unwrap();

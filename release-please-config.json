@@ -154,9 +154,9 @@
       "package-name": "enshwick-admin-tools",
       "component": "enshwick-admin-tools"
     },
-    "mods/enshwick-proton-optimizer": {
-      "package-name": "enshwick-proton-optimizer",
-      "component": "enshwick-proton-optimizer"
+    "mods/enshwick-optimizer": {
+      "package-name": "enshwick-optimizer",
+      "component": "enshwick-optimizer"
     }
   }
 }

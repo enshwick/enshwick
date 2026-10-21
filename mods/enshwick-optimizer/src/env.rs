@@ -43,6 +43,23 @@ pub(crate) struct GameCpus {
     pub(crate) workers: Vec<(String, u32)>,
 }
 
+impl GameCpus {
+    /// What the game started with, one line.
+    #[must_use]
+    pub(crate) fn started(&self) -> String {
+        let workers: Vec<String> = self
+            .workers
+            .iter()
+            .map(|(name, count)| format!("{name} {count}"))
+            .collect();
+        let mut line = format!("the game started task workers: {}", workers.join(", "));
+        if let Some(logical) = self.logical {
+            let _ = write!(line, " (it saw {logical} logical CPUs)");
+        }
+        line
+    }
+}
+
 /// The environment, as read at start.
 #[derive(Clone, Debug, Default)]
 pub(crate) struct Environment {
@@ -119,6 +136,13 @@ pub(crate) fn parse_game_log(text: &str) -> GameCpus {
     game
 }
 
+/// The major and minor version of a Linux release such as `6.12.1-arch1`.
+#[must_use]
+pub(crate) fn kernel_version(release: &str) -> Option<(u32, u32)> {
+    let mut parts = release.split(|c: char| !c.is_ascii_digit());
+    Some((parts.next()?.parse().ok()?, parts.next()?.parse().ok()?))
+}
+
 /// The first line of a small host file, trimmed.
 fn first_line(path: &Path) -> Option<String> {
     let text = std::fs::read_to_string(path).ok()?;
@@ -169,6 +193,51 @@ impl Environment {
     #[must_use]
     pub(crate) fn is_wine(&self) -> bool {
         self.wine.is_some()
+    }
+
+    /// What the host could change for less CPU, one line each; empty on
+    /// Windows and when nothing is known to help.
+    #[must_use]
+    pub(crate) fn advice(&self) -> Vec<String> {
+        let mut advice = Vec::new();
+        if !self.is_wine() {
+            return advice;
+        }
+        let set = |name: &str, value: &str| {
+            self.sync_variables
+                .iter()
+                .any(|(k, v)| k == name && v == value)
+        };
+        let kernel = self
+            .host
+            .as_ref()
+            .and_then(|(_, release)| kernel_version(release));
+        if !self.ntsync_device {
+            if kernel.is_some_and(|version| version >= (6, 14)) {
+                advice.push(
+                    "no /dev/ntsync: load the module on the host (modprobe ntsync) and pass the \
+                     device into the container (--device /dev/ntsync); recent Wine and Proton wait \
+                     through it for less CPU"
+                        .to_owned(),
+                );
+            }
+            if set("WINEFSYNC", "0") || set("PROTON_NO_FSYNC", "1") {
+                advice.push(
+                    "fsync is turned off: without ntsync, fsync (WINEFSYNC=1) waits in the \
+                     kernel instead of the Wine server"
+                        .to_owned(),
+                );
+            }
+        }
+        if let Some(governor) = &self.governor
+            && governor != "performance"
+        {
+            advice.push(format!(
+                "CPU governor {governor}: the performance governor keeps the clock up between \
+                 the game loop's short bursts"
+            ));
+        }
+        advice
     }
 
     /// The report, one line.
@@ -263,7 +332,37 @@ mod tests {
             game.workers,
             [("Default".to_owned(), 10), ("Background".to_owned(), 8)]
         );
+        assert_eq!(
+            game.started(),
+            "the game started task workers: Default 10, Background 8 (it saw 32 logical CPUs)"
+        );
         assert_eq!(parse_game_log("nothing here"), GameCpus::default());
+    }
+
+    #[test]
+    fn advice_names_what_the_host_lacks() {
+        assert_eq!(kernel_version("6.14.2-arch1"), Some((6, 14)));
+        assert_eq!(kernel_version("7.0.14-linuxkit"), Some((7, 0)));
+        assert_eq!(kernel_version("x"), None);
+        let bare = Environment {
+            wine: Some("11.0".into()),
+            host: Some(("Linux".into(), "6.15.0".into())),
+            sync_variables: vec![("WINEFSYNC".into(), "0".into())],
+            governor: Some("powersave".into()),
+            ..Environment::default()
+        };
+        let advice = bare.advice();
+        assert_eq!(advice.len(), 3, "{advice:?}");
+        assert!(advice[0].contains("ntsync"));
+        let good = Environment {
+            wine: Some("11.0".into()),
+            host: Some(("Linux".into(), "6.15.0".into())),
+            ntsync_device: true,
+            governor: Some("performance".into()),
+            ..Environment::default()
+        };
+        assert!(good.advice().is_empty());
+        assert!(Environment::default().advice().is_empty());
     }
 
     #[test]
