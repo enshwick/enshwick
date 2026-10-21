@@ -303,8 +303,8 @@ impl<'a> Image<'a> {
             Layout::File => section.raw_size,
             Layout::Mapped => section.virtual_size,
         };
-        let start = self.base + section.rva;
-        start..start + len
+        let start = self.base.saturating_add(section.rva);
+        start..start.saturating_add(len)
     }
 
     /// `len` bytes at virtual address `va`, when they lie inside the image
@@ -323,7 +323,7 @@ impl<'a> Image<'a> {
                     .sections
                     .iter()
                     .find(|s| s.rva <= rva && rva < s.rva + s.raw_size)?;
-                if rva + len > s.rva + s.raw_size {
+                if rva.checked_add(len)? > s.rva + s.raw_size {
                     return None;
                 }
                 s.raw_offset + (rva - s.rva)
@@ -374,12 +374,17 @@ impl<'a> Image<'a> {
     }
 
     fn codeview(&self, rva: u64, size: u64) -> Option<Fingerprint> {
-        (0..size / DEBUG_ENTRY).find_map(|entry| {
-            let record = self.read(self.base + rva + entry * DEBUG_ENTRY, DEBUG_ENTRY)?;
+        // A real directory holds a handful of entries.
+        (0..(size / DEBUG_ENTRY).min(64)).find_map(|entry| {
+            let at = self
+                .base
+                .checked_add(rva)?
+                .checked_add(entry * DEBUG_ENTRY)?;
+            let record = self.read(at, DEBUG_ENTRY)?;
             if u32_at(record, 12)? != DEBUG_TYPE_CODEVIEW {
                 return None;
             }
-            let data = self.read(self.base + u64::from(u32_at(record, 20)?), 24)?;
+            let data = self.read(self.base.checked_add(u64::from(u32_at(record, 20)?))?, 24)?;
             if data.get(..4)? != b"RSDS" {
                 return None;
             }
