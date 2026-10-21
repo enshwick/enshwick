@@ -14,7 +14,7 @@ use core::sync::atomic::AtomicUsize;
 pub const ABI_MAJOR: u16 = 1;
 
 /// The minor version of this interface. A newer minor only appends fields.
-pub const ABI_MINOR: u16 = 55;
+pub const ABI_MINOR: u16 = 56;
 
 /// Whether `id` is a valid mod id: 1 to 64 characters of `[a-z0-9-]`.
 ///
@@ -4816,6 +4816,11 @@ pub struct HostApi {
     /// only. Since minor 55.
     pub knowledge_input_filter:
         extern "system" fn(me: ModHandle, callback: KnowledgeInputFn, user: *mut c_void) -> Status,
+    /// The game language the client last asked a text in, as the game
+    /// numbers them (see [`crate::i18n::Language`]); `0`, the fallback, on a
+    /// server and before the client's first text. Any thread. Since minor
+    /// 56.
+    pub language: extern "system" fn(me: ModHandle) -> u32,
 }
 
 /// Flags of [`HostApi::entity_data_open`].
@@ -5167,7 +5172,8 @@ const _: () = {
     assert!(size_of::<StatSource>() == 20);
     assert!(size_of::<StatModify>() == 8 + 8 + 12 + 4 + 8);
     assert!(size_of::<StatChange>() == 8 + 24);
-    assert!(size_of::<HostApi>() == 24 + 127 * 8);
+    assert!(size_of::<HostApi>() == 24 + 128 * 8);
+    assert!(core::mem::offset_of!(HostApi, language) == 24 + 127 * 8);
     assert!(core::mem::offset_of!(HostApi, replaced) == 24 + 125 * 8);
     assert!(core::mem::offset_of!(HostApi, entity_data_open) == 24 + 124 * 8);
     assert!(core::mem::offset_of!(HostApi, knowledge_input_filter) == 24 + 126 * 8);

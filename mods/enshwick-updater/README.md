@@ -85,8 +85,21 @@ prereleases = false
   (`RW...`). For an author who changed keys; add only keys you trust.
 - `prereleases`: offer prereleases too.
 
-GitHub allows 60 requests an hour without a token; the updater asks once per
-repository per check. The log is `logs/enshwick/mods/updater.log`.
+GitHub allows 60 requests an hour without a token. The updater reads a
+repository's release list a page of 100 at a time, newest first, and stops
+once it has seen every mod it updates from there, at most 10 pages. It keeps
+each page in `mod-data/updater/cache/` and asks GitHub whether it changed: an
+unchanged page costs nothing of the hourly limit. When GitHub refuses, the
+updater leaves it alone until the time GitHub names and checks again at a
+later start. A download that breaks off or a server error is tried twice
+more; an archive is installed only once its signature checks out, so a
+download cut short is never staged. The log is
+`logs/enshwick/mods/updater.log`.
+
+The dialogs follow the game's language, English and Ukrainian for now. A
+file `mod-configs/updater.texts.toml` rewords them or adds a language, in the
+form of the updater's own
+[`texts.toml`](src/texts.toml); the log stays in English.
 
 ## For mod authors
 

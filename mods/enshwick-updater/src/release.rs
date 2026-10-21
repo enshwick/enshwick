@@ -143,6 +143,32 @@ fn pick(release: &Release, repository: &str, component: &str) -> Option<Pick> {
     })
 }
 
+/// Whether `releases` hold a release of each of `components`: GitHub lists
+/// releases newest first, so the pages read so far hold the newest of each.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_updater::release::{Release, seen_all};
+///
+/// let release = Release {
+///     tag_name: "enshwick-safes-v0.2.0".into(),
+///     draft: false,
+///     prerelease: false,
+///     assets: Vec::new(),
+/// };
+/// assert!(seen_all(&[release.clone()], &["enshwick-safes"]));
+/// assert!(!seen_all(&[release], &["enshwick-safes", "enshwick-updater"]));
+/// ```
+#[must_use]
+pub fn seen_all(releases: &[Release], components: &[&str]) -> bool {
+    components.iter().all(|component| {
+        releases
+            .iter()
+            .any(|release| version_of(&release.tag_name, component).is_some())
+    })
+}
+
 /// The API address of `repository`'s release list.
 #[must_use]
 pub fn list_url(repository: &str) -> String {

@@ -15,8 +15,55 @@
 
 use std::collections::{BTreeMap, HashMap};
 
+use crate::abi::HostApi;
 use crate::content::Id;
-use crate::{Load, Off};
+use crate::{Host, Load, Off};
+
+/// The language the player reads the game in, for a mod's own texts in its
+/// dialogs and windows; the fallback on a server.
+///
+/// The fallback, too, before the client's first text and under a loader
+/// older than ABI minor 56.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::i18n::{Texts, language};
+///
+/// let texts = Texts::parse("[en]\ngreeting = \"Hello\"\n[uk]\ngreeting = \"Привіт\"\n")?;
+/// let greeting = texts.fill("greeting", language(), &[]);
+/// assert!(!greeting.is_empty());
+/// # Ok::<(), enshwick_loader_api::Off>(())
+/// ```
+#[must_use]
+pub fn language() -> Language {
+    crate::host().map_or(Language::FALLBACK, |host| host.language())
+}
+
+impl Host {
+    /// The language the player reads the game in; see [`language`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// if let Some(host) = enshwick_loader_api::host() {
+    ///     enshwick_loader_api::info!("texts in {}", host.language().code());
+    /// }
+    /// ```
+    #[must_use]
+    pub fn language(&self) -> Language {
+        let end = core::mem::offset_of!(HostApi, language) + size_of::<usize>();
+        if !self.api().header.covers(end) {
+            return Language::FALLBACK;
+        }
+        let language = Language((self.api().language)(self.handle()));
+        if language.code().is_empty() {
+            Language::FALLBACK
+        } else {
+            language
+        }
+    }
+}
 
 /// A game language, as the game numbers them.
 ///
@@ -188,6 +235,47 @@ impl Texts {
         find(language).or_else(|| find(Language::FALLBACK))
     }
 
+    /// The text of `key` in `language` with each `{name}` in it replaced by
+    /// the value `args` pairs with `name`; the key itself when no language
+    /// has a text for it, so a missing text shows rather than vanishes.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_loader_api::i18n::{Language, Texts};
+    ///
+    /// let texts = Texts::parse("[en]\nupdate = \"{name}: {from} to {to}\"\n")?;
+    /// let line = texts.fill("update", Language::UK_UA, &[("name", "Safes"), ("from", "0.1.0"), ("to", "0.2.0")]);
+    /// assert_eq!(line, "Safes: 0.1.0 to 0.2.0");
+    /// assert_eq!(texts.fill("missing", Language::FALLBACK, &[]), "missing");
+    /// # Ok::<(), enshwick_loader_api::Off>(())
+    /// ```
+    #[must_use]
+    pub fn fill(&self, key: &str, language: Language, args: &[(&str, &str)]) -> String {
+        let text = self.get(key, language).unwrap_or(key);
+        let mut out = String::with_capacity(text.len());
+        let mut rest = text;
+        while let Some(open) = rest.find('{') {
+            out.push_str(&rest[..open]);
+            let after = &rest[open + 1..];
+            let value = after.find('}').and_then(|close| {
+                let name = &after[..close];
+                args.iter()
+                    .find(|(arg, _)| *arg == name)
+                    .map(|(_, value)| (*value, close))
+            });
+            if let Some((value, close)) = value {
+                out.push_str(value);
+                rest = &after[close + 1..];
+            } else {
+                out.push('{');
+                rest = after;
+            }
+        }
+        out.push_str(rest);
+        out
+    }
+
     /// The texts as TOML, a table per language code, as [`Texts::parse`]
     /// reads them.
     ///
@@ -277,7 +365,7 @@ impl Load<'_> {
         let api = self.host().api();
         if api
             .header
-            .covers(core::mem::offset_of!(crate::abi::HostApi, texts) + size_of::<usize>())
+            .covers(core::mem::offset_of!(HostApi, texts) + size_of::<usize>())
         {
             let toml = texts.to_toml();
             let _kept = (api.texts)(self.host().handle(), crate::abi::Str::new(&toml));
@@ -334,6 +422,19 @@ mod tests {
         assert_eq!(Language::ALL.len(), 35);
         assert_eq!(Language::from_code("PT-BR"), Some(Language::PT_BR));
         assert_eq!(Language::from_code("xx"), None);
+    }
+
+    #[test]
+    fn placeholders_take_their_values_and_others_stay() {
+        let texts =
+            Texts::parse("[en]\na = \"{x} and {y} and {unknown} and {\"\n[uk]\na = \"{y}, {x}\"\n")
+                .unwrap();
+        let args = [("x", "1"), ("y", "{x}")];
+        assert_eq!(
+            texts.fill("a", Language::FALLBACK, &args),
+            "1 and {x} and {unknown} and {"
+        );
+        assert_eq!(texts.fill("a", Language::UK_UA, &args), "{x}, 1");
     }
 
     #[test]

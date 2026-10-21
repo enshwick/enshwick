@@ -5,9 +5,6 @@ use std::sync::OnceLock;
 
 use enshwick_loader_api::ui::{Dialog, Response, Ui};
 
-/// Every dialog's title.
-const TITLE: &str = "Enshwick updater";
-
 static UI: OnceLock<Ui> = OnceLock::new();
 
 /// Keeps the interface the updater asks through.
@@ -26,7 +23,8 @@ fn ask(text: &str, buttons: &[Response]) -> Option<Response> {
         return None;
     };
     let (message, detail) = split(text);
-    let dialog = Dialog::new(TITLE, message).detail(detail).buttons(buttons);
+    let title = crate::say::text("title", &[]);
+    let dialog = Dialog::new(&title, message).detail(detail).buttons(buttons);
     match ui.ask(&dialog) {
         Ok(answer) => answer,
         Err(e) => {

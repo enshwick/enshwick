@@ -84,6 +84,9 @@ also serves the mod's own strings, such as chat replies:
 
 - `get(key, language)` returns the text in `language`, else in `en`, else
   `None`;
+- `fill(key, language, args)` returns the text with each `{name}` in it
+  replaced by its value in `args`, or the key itself when no language has a
+  text for it, so a missing text shows rather than vanishes;
 - `translations(key)` lists every language with a text for the key;
 - `merge(other)` adds `other`'s texts over these;
 - `Texts::parse(toml)` reads a texts file without a `Load`, for tests.
@@ -100,7 +103,22 @@ assert_eq!(texts.get("greeting", Language::FALLBACK), Some("Hi"));
 assert_eq!(Language::from_code("pt-BR"), Some(Language::PT_BR));
 ```
 
-The server does not know a player's language. [`enshwick-safes`](https://github.com/themaiby/enshwick/tree/main/mods/enshwick-safes)
+On a client,
+[`i18n::language()`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/i18n.rs)
+is the language the player reads the game in, for the mod's own dialogs and
+windows; [`enshwick-updater`](https://github.com/themaiby/enshwick/tree/main/mods/enshwick-updater)
+words its dialogs with it:
+
+```rust
+use enshwick_loader_api::i18n::{Texts, language};
+
+let texts = Texts::parse("[en]\nfound = \"{count} updates\"\n[uk]\nfound = \"Оновлень: {count}\"\n").unwrap();
+let line = texts.fill("found", language(), &[("count", "3")]);
+assert!(line.contains('3'));
+```
+
+The server does not know a player's language, and `language()` there is
+`Language::FALLBACK`. [`enshwick-safes`](https://github.com/themaiby/enshwick/tree/main/mods/enshwick-safes)
 answers its `/safe` command in one language from its settings, falling back
 to `Language::FALLBACK`.
 

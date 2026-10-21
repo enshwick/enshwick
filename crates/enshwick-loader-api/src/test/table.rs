@@ -2155,6 +2155,10 @@ extern "system" fn texts(_me: ModHandle, toml: Str) -> Status {
     })
 }
 
+extern "system" fn language(_me: ModHandle) -> u32 {
+    with(0, |s| s.host.language)
+}
+
 pub(crate) static TABLE: HostApi = HostApi {
     header: Header::of::<HostApi>(),
     host_version: Str::new("0.0.0-test"),
@@ -2285,4 +2289,5 @@ pub(crate) static TABLE: HostApi = HostApi {
     entity_data_open,
     replaced,
     knowledge_input_filter,
+    language,
 };
