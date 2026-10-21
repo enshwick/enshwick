@@ -14,7 +14,7 @@ mod solver;
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use enshwick_loader_api::events::AltarsChanged;
+use enshwick_loader_api::events::{AltarsChanged, ShutdownStarted};
 use enshwick_loader_api::{Load, Mod, Off};
 
 /// Whether pieces may be placed across seams, from the settings in force:
@@ -76,6 +76,9 @@ impl Mod for FlameAltarZones {
         if settings.clusters {
             let control = load.control_altar_zones()?;
             load.on::<AltarsChanged>(move |()| solver::request(control))?;
+            // The loader drops the sizes with a hosted game; the next game,
+            // the same world again included, is solved afresh.
+            load.on::<ShutdownStarted>(|()| solver::forget())?;
         }
         Ok(Self {
             clusters: settings.clusters,
