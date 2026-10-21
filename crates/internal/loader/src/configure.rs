@@ -51,8 +51,12 @@ pub fn help() -> String {
 }
 
 /// The value of `key` in the settings file `text`, as TOML; the field's
-/// default when the file lacks it.
+/// default when the file lacks it, and a mark for a secret, which a reply
+/// never shows.
 fn current(text: &str, field: &Field) -> String {
+    if field.secret {
+        return texts::fill("config.secret", &[]);
+    }
     text.parse::<toml::Table>()
         .ok()
         .and_then(|table| table.get(&field.key).map(ToString::to_string))
@@ -232,6 +236,9 @@ pub fn set(
     value: &str,
 ) -> Result<Change, String> {
     let field = field(id, schema, key)?;
+    if field.secret {
+        return Err(texts::fill("remote.secret", &[("key", key)]));
+    }
     let mut new = typed(field, value)?;
     let mut doc: DocumentMut = text.parse().map_err(|e: toml_edit::TomlError| {
         texts::fill("refused.toml", &[("id", id), ("error", e.message())])
@@ -287,6 +294,7 @@ mod tests {
                 Field::new("radius", Stage::Runtime, &8.5),
                 Field::new("language", Stage::Runtime, "en").with_choices(&["en", "uk"]),
                 Field::new("note", Stage::Client, "hi"),
+                Field::new("token", Stage::Runtime, "").with_secret(true),
             ],
         )
     }
@@ -322,6 +330,25 @@ mod tests {
             get("safes", &schema(), FILE, "nope")
                 .unwrap_err()
                 .contains("it has limit")
+        );
+    }
+
+    #[test]
+    fn a_secret_is_never_shown_or_changed_by_a_reply() {
+        let file = format!("{FILE}token = \"hunter2\"\n");
+        let all = list("safes", &schema(), &file);
+        let one = get("safes", &schema(), &file, "token").unwrap();
+        assert!(
+            !all.contains("hunter2") && all.contains("token = (secret)"),
+            "{all}"
+        );
+        assert!(
+            !one.contains("hunter2") && one.contains("(secret)"),
+            "{one}"
+        );
+        assert_eq!(
+            set("safes", &schema(), &file, "token", "\"x\"").unwrap_err(),
+            "token is changed in the server's file only."
         );
     }
 
