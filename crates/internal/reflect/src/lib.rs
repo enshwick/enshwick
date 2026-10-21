@@ -342,9 +342,12 @@ impl<'a> Reflection<'a> {
         };
 
         let mut va = rdata.start;
-        while va + SLICE <= rdata.end {
+        while va.checked_add(SLICE).is_some_and(|end| end <= rdata.end) {
             if let Some(name) = reader.slice(va) {
-                if let Some(info) = reader.descriptor(va - DESCRIPTOR_SHORT_NAME) {
+                if let Some(info) = va
+                    .checked_sub(DESCRIPTOR_SHORT_NAME)
+                    .and_then(|at| reader.descriptor(at))
+                {
                     types.entry(info.name).or_default().push(info);
                 } else if is_system_name(name)
                     && let Some(system) = reader.system(va, name, &text)
@@ -476,7 +479,7 @@ impl<'a> Reader<'_, 'a> {
     /// bytes NUL-terminated right at the length.
     fn slice(&self, va: u64) -> Option<&'a str> {
         let ptr = self.image.u64(va)?;
-        let len = self.image.u64(va + 8)?;
+        let len = self.image.u64(va.checked_add(8)?)?;
         if len == 0 || len >= MAX_NAME || !self.rdata.contains(&ptr) {
             return None;
         }
@@ -488,16 +491,17 @@ impl<'a> Reader<'_, 'a> {
     }
 
     fn descriptor(&self, va: u64) -> Option<TypeInfo<'a>> {
-        self.slice(va + DESCRIPTOR_SHORT_NAME)?;
-        let name = self.slice(va + DESCRIPTOR_FULL_NAME)?;
-        if self.image.u32(va + DESCRIPTOR_HASH)? != fnv1a32(name.as_bytes()) {
+        let at = |offset: u64| va.checked_add(offset);
+        self.slice(at(DESCRIPTOR_SHORT_NAME)?)?;
+        let name = self.slice(at(DESCRIPTOR_FULL_NAME)?)?;
+        if self.image.u32(at(DESCRIPTOR_HASH)?)? != fnv1a32(name.as_bytes()) {
             return None;
         }
-        let size = self.image.u32(va + DESCRIPTOR_SIZE_ALIGN)?;
-        let align = self.image.u16(va + DESCRIPTOR_SIZE_ALIGN + 4)?;
-        let count = self.image.u32(va + DESCRIPTOR_FIELD_COUNT)?;
+        let size = self.image.u32(at(DESCRIPTOR_SIZE_ALIGN)?)?;
+        let align = self.image.u16(at(DESCRIPTOR_SIZE_ALIGN + 4)?)?;
+        let count = self.image.u32(at(DESCRIPTOR_FIELD_COUNT)?)?;
         let fields = if count > 0 && count <= MAX_FIELDS {
-            self.fields(self.image.u64(va + DESCRIPTOR_FIELDS)?, count)
+            self.fields(self.image.u64(at(DESCRIPTOR_FIELDS)?)?, count)
         } else {
             Vec::new()
         };
@@ -512,17 +516,19 @@ impl<'a> Reader<'_, 'a> {
 
     fn fields(&self, table: u64, count: u32) -> Vec<Field<'a>> {
         (0..u64::from(count))
-            .map(|i| table + i * FIELD_RECORD)
+            .map(|i| table.checked_add(i * FIELD_RECORD))
             .map_while(|record| {
+                let record = record?;
                 let name = self.slice(record)?;
-                let type_name = self
-                    .image
-                    .u64(record + FIELD_TYPE)
+                let type_name = record
+                    .checked_add(FIELD_TYPE)
+                    .and_then(|at| self.image.u64(at))
                     .and_then(|ptr| ptr.checked_sub(DESCRIPTOR_SHORT_NAME))
-                    .and_then(|descriptor| self.slice(descriptor + DESCRIPTOR_FULL_NAME));
+                    .and_then(|descriptor| descriptor.checked_add(DESCRIPTOR_FULL_NAME))
+                    .and_then(|at| self.slice(at));
                 Some(Field {
                     name,
-                    offset: self.image.u64(record + FIELD_OFFSET)?,
+                    offset: self.image.u64(record.checked_add(FIELD_OFFSET)?)?,
                     type_name,
                 })
             })
@@ -530,11 +536,12 @@ impl<'a> Reader<'_, 'a> {
     }
 
     fn system(&self, va: u64, name: &'a str, text: &Range<u64>) -> Option<System<'a>> {
-        let entry = self.image.u64(va + SYSTEM_ENTRY)?;
+        let entry = self.image.u64(va.checked_add(SYSTEM_ENTRY)?)?;
         if entry != 0 && !text.contains(&entry) {
             return None;
         }
-        let [triggers, reads, writes] = SYSTEM_LISTS.map(|at| self.list(va + at));
+        let [triggers, reads, writes] =
+            SYSTEM_LISTS.map(|at| va.checked_add(at).map_or_else(Vec::new, |at| self.list(at)));
         if triggers.is_empty() && reads.is_empty() && writes.is_empty() {
             return None;
         }
@@ -548,14 +555,17 @@ impl<'a> Reader<'_, 'a> {
     }
 
     fn list(&self, va: u64) -> Vec<&'a str> {
-        let (Some(ptr), Some(count)) = (self.image.u64(va), self.image.u64(va + 8)) else {
+        let (Some(ptr), Some(count)) = (
+            self.image.u64(va),
+            va.checked_add(8).and_then(|at| self.image.u64(at)),
+        ) else {
             return Vec::new();
         };
         if ptr == 0 || count == 0 || count > MAX_LIST || !self.rdata.contains(&ptr) {
             return Vec::new();
         }
         (0..count)
-            .map_while(|i| self.slice(ptr + i * SLICE))
+            .map_while(|i| self.slice(ptr.checked_add(i * SLICE)?))
             .collect()
     }
 }
@@ -653,6 +663,23 @@ mod tests {
         assert_eq!(image.read(rdata(0x10), 4), Some(&b"abcd"[..]));
         assert_eq!(image.read(rdata(SIZE - 2), 4), None);
         assert!(image.fingerprint().is_none());
+    }
+
+    #[test]
+    fn an_image_at_the_top_of_the_address_space_reads_nothing_and_does_not_panic() {
+        let mut fake = Fake::new();
+        // A debug directory of 0xffff_ffff bytes at `.rdata`.
+        let optional = 0x98;
+        let debug = optional + 112 + 6 * 8;
+        let rva = u32::try_from(RDATA).unwrap();
+        fake.bytes[debug..debug + 4].copy_from_slice(&rva.to_le_bytes());
+        fake.bytes[debug + 4..debug + 8].copy_from_slice(&u32::MAX.to_le_bytes());
+        let top = u64::MAX - 0x100;
+        let image = Image::parse(&fake.bytes, Layout::File, Some(top)).unwrap();
+        assert!(image.fingerprint().is_none());
+        assert_eq!(image.read(top, u64::MAX), None);
+        let reflection = Reflection::scan(&image);
+        assert_eq!(reflection.type_names().count(), 0);
     }
 
     #[test]
