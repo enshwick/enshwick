@@ -818,11 +818,6 @@ impl<'a> RecipeRule<'a> {
 fn rule(rule: RecipeRule<'_>, disable: bool) -> Result<(), Off> {
     let host = crate::host().ok_or_else(|| Off::new("recipe rules: no loader"))?;
     let api = host.api();
-    crate::load::offered(
-        api,
-        core::mem::offset_of!(crate::abi::HostApi, recipe_rule),
-        "recipe rules",
-    )?;
     let (kind, what, name) = rule.parts();
     if name.trim().is_empty() {
         return Err(Off::new(format!("recipe rule {what}: no name")));
@@ -846,7 +841,7 @@ fn rule(rule: RecipeRule<'_>, disable: bool) -> Result<(), Off> {
 ///
 /// # Errors
 ///
-/// [`Off`] under a loader older than ABI minor 64, or for an empty name.
+/// [`Off`] outside the game, or for an empty name.
 ///
 /// # Examples
 ///
@@ -879,8 +874,7 @@ pub fn enable(rule: RecipeRule<'_>) -> Result<(), Off> {
 
 /// Whether the recipe `recipe` is disabled in this process now, by the
 /// server's recipe file or a mod's rule; on a client joined to a server, by
-/// the server's. `false` outside the game and under a loader older than ABI
-/// minor 64.
+/// the server's. `false` outside the game.
 ///
 /// # Examples
 ///
@@ -897,10 +891,6 @@ pub fn is_disabled(recipe: Guid) -> bool {
         return false;
     };
     let api = host.api();
-    let end = core::mem::offset_of!(crate::abi::HostApi, recipe_disabled) + size_of::<usize>();
-    if !api.header.covers(end) {
-        return false;
-    }
     let mut out = 0u32;
     (api.recipe_disabled)(host.handle(), recipe.id(), &raw mut out).is_ok() && out != 0
 }

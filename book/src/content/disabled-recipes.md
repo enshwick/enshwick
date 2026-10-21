@@ -120,4 +120,4 @@ any recipe a mod disables, and a mod's `enable` takes back only its own
 rules. A name the loader cannot resolve is logged in the mod's log and the
 loader's. On a client joined to a server, the server's rules apply, mods'
 rules on the server included, and the client's mods' rules wait until it
-hosts or plays alone. It needs ABI minor 64.
+hosts or plays alone.
