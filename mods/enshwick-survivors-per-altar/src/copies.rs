@@ -63,9 +63,11 @@ pub(crate) enum Refusal {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Verdict {
     Keep,
-    /// A second copy in a slot that already has one, or a copy left outside
-    /// every zone.
+    /// A second copy in a slot that already has one.
     Remove,
+    /// A copy outside every known zone: its altar is gone, or not known yet
+    /// while the altars arrive. It stays filed until the caller removes it.
+    Outside,
 }
 
 #[derive(Debug, Default)]
@@ -201,8 +203,7 @@ impl Copies {
             if entity == original || original == 0 {
                 return Verdict::Keep;
             }
-            self.drop_home(entity);
-            return Verdict::Remove;
+            return Verdict::Outside;
         };
         match self.slots.get(&(survivor, altar)) {
             None => {
@@ -381,9 +382,12 @@ mod tests {
         copies.observe(SMITH, 11, [90, 10, 10], 10);
         assert_eq!(
             copies.observe(SMITH, 11, [900, 10, 10], 10),
-            Verdict::Remove
+            Verdict::Outside
         );
         assert_eq!(copies.count(SMITH), 0);
+        assert_eq!(copies.copy_count(SMITH), 1, "filed until it is removed");
+        copies.forget(11);
+        assert_eq!(copies.copy_count(SMITH), 0);
     }
 
     #[test]
@@ -428,7 +432,10 @@ mod tests {
         copies.observe(SMITH, 11, [90, 10, 10], 10);
         copies.set_altars([(1, zone(0))]);
         assert_eq!(copies.count(SMITH), 0);
-        assert_eq!(copies.observe(SMITH, 11, [90, 10, 10], 10), Verdict::Remove);
+        assert_eq!(
+            copies.observe(SMITH, 11, [90, 10, 10], 10),
+            Verdict::Outside
+        );
     }
 
     #[test]
@@ -468,7 +475,10 @@ mod tests {
         copies.set_altars([]);
         assert!(copies.knows_altars(), "the last altar went");
         assert_eq!(copies.count(SMITH), 0);
-        assert_eq!(copies.observe(SMITH, 11, [90, 10, 10], 10), Verdict::Remove);
+        assert_eq!(
+            copies.observe(SMITH, 11, [90, 10, 10], 10),
+            Verdict::Outside
+        );
         assert_eq!(copies.observe(SMITH, 10, [10, 10, 10], 10), Verdict::Keep);
         assert_eq!(
             copies.copy_staff(SMITH, [10, 10, 10], 10),

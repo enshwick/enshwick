@@ -28,6 +28,11 @@ use crate::copies::{Copies, CopyStaff, Verdict, Zone};
 /// How often the uniqueness pass lets go of copies it no longer sees.
 const SWEEP: Duration = Duration::from_secs(2);
 const FORGET_AFTER: Duration = Duration::from_secs(3);
+/// How long a copy stands outside every known zone before it goes: the
+/// altars arrive from the game's passes one batch at a time after a load,
+/// and a copy whose altar is not listed yet must not be taken for one whose
+/// altar is gone.
+const OUTSIDE_GRACE: Duration = Duration::from_secs(10);
 
 /// How the staffs behave, from the settings; whether copy staffs work at
 /// all is [`crate::COPY_STAFFS`], which may change while the game runs.
@@ -62,6 +67,8 @@ struct Shared {
     originals: BTreeMap<u32, u32>,
     /// When the uniqueness pass last saw each copy.
     seen: BTreeMap<u32, Instant>,
+    /// Since when each copy has stood outside every known zone.
+    outside: BTreeMap<u32, Instant>,
     swept: Instant,
     /// When the uniqueness pass last ran.
     last_pass: Instant,
@@ -73,6 +80,7 @@ impl Shared {
             copies: Copies::default(),
             originals: BTreeMap::new(),
             seen: BTreeMap::new(),
+            outside: BTreeMap::new(),
             swept: Instant::now(),
             last_pass: Instant::now(),
         }
@@ -161,7 +169,7 @@ fn answer(shared: &mut Shared, lookup: &Lookup) -> Answer {
             let now = Instant::now();
             if now.duration_since(shared.last_pass) >= FORGET_AFTER {
                 // The server stalled: nobody could be seen meanwhile.
-                for seen in shared.seen.values_mut() {
+                for seen in shared.seen.values_mut().chain(shared.outside.values_mut()) {
                     *seen = now;
                 }
             }
@@ -245,16 +253,24 @@ fn file_copy(
     // Right after a load the zones are not known yet: keep every copy until
     // they are, or each would look like one outside the zones.
     if !shared.copies.knows_altars() {
-        return if found == 0 {
-            Answer::Nobody
-        } else {
-            Answer::Entity(Entity(me))
-        };
+        return keep(found, me);
     }
     let original = if found == 0 { me } else { found };
-    match shared.copies.observe(npc, me, home, original) {
-        Verdict::Keep if found == 0 => Answer::Nobody,
-        Verdict::Keep => Answer::Entity(Entity(me)),
+    let verdict = shared.copies.observe(npc, me, home, original);
+    if verdict != Verdict::Outside {
+        shared.outside.remove(&me);
+    }
+    match verdict {
+        Verdict::Outside if !outside_long_enough(&mut shared.outside, me, now) => keep(found, me),
+        Verdict::Outside => {
+            shared.outside.remove(&me);
+            shared.copies.forget(me);
+            enshwick_loader_api::info!(
+                "survivor {npc:#010x}: copy {me} outside every zone removed"
+            );
+            Answer::Entity(Entity(original))
+        }
+        Verdict::Keep => keep(found, me),
         Verdict::Remove => {
             let holder = shared.copies.at(npc, home, original);
             enshwick_loader_api::info!(
@@ -263,6 +279,23 @@ fn file_copy(
             Answer::Entity(Entity(if holder == me { original } else { holder }))
         }
     }
+}
+
+/// The uniqueness answer that keeps `me`: nobody else when the game's record
+/// names no entity yet.
+fn keep(found: u32, me: u32) -> Answer {
+    if found == 0 {
+        Answer::Nobody
+    } else {
+        Answer::Entity(Entity(me))
+    }
+}
+
+/// Whether the copy `me`, outside every known zone now, has stood outside
+/// for [`OUTSIDE_GRACE`]; the first sight starts the count.
+fn outside_long_enough(outside: &mut BTreeMap<u32, Instant>, me: u32, now: Instant) -> bool {
+    let since = *outside.entry(me).or_insert(now);
+    now.duration_since(since) >= OUTSIDE_GRACE
 }
 
 /// Whether a copy keeps a bed the game kept: not one at another altar than
@@ -409,6 +442,7 @@ fn sweep(shared: &mut Shared, now: Instant) {
         .collect();
     for entity in gone {
         shared.seen.remove(&entity);
+        shared.outside.remove(&entity);
         shared.copies.forget(entity);
     }
 }
@@ -416,6 +450,62 @@ fn sweep(shared: &mut Shared, now: Instant) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_copy_outside_every_zone_goes_only_after_the_grace() {
+        let mut shared = Shared::new();
+        shared.copies.set_altars([
+            (1, Zone::new([0, 0, 0], [80, 80, 80])),
+            (2, Zone::new([100, 0, 0], [180, 80, 80])),
+        ]);
+        let t0 = Instant::now();
+        assert_eq!(
+            file_copy(&mut shared, 7, 10, 10, [10, 0, 10], t0),
+            Answer::Entity(Entity(10))
+        );
+        assert_eq!(
+            file_copy(&mut shared, 7, 10, 11, [120, 0, 10], t0),
+            Answer::Entity(Entity(11))
+        );
+        // Right after a load only one altar is listed yet: the copy at the
+        // other one waits for its zone.
+        shared
+            .copies
+            .set_altars([(1, Zone::new([0, 0, 0], [80, 80, 80]))]);
+        let soon = t0 + Duration::from_secs(1);
+        assert_eq!(
+            file_copy(&mut shared, 7, 10, 11, [120, 0, 10], soon),
+            Answer::Entity(Entity(11)),
+            "kept while the altars arrive"
+        );
+        shared.copies.set_altars([
+            (1, Zone::new([0, 0, 0], [80, 80, 80])),
+            (2, Zone::new([100, 0, 0], [180, 80, 80])),
+        ]);
+        let later = t0 + OUTSIDE_GRACE + Duration::from_secs(1);
+        assert_eq!(
+            file_copy(&mut shared, 7, 10, 11, [120, 0, 10], later),
+            Answer::Entity(Entity(11)),
+            "filed at its altar once it is listed"
+        );
+        assert!(shared.outside.is_empty());
+        // The altar is really gone: the copy goes once the grace ran out.
+        shared
+            .copies
+            .set_altars([(1, Zone::new([0, 0, 0], [80, 80, 80]))]);
+        assert_eq!(
+            file_copy(&mut shared, 7, 10, 11, [120, 0, 10], later),
+            Answer::Entity(Entity(11))
+        );
+        let gone = later + OUTSIDE_GRACE;
+        assert_eq!(
+            file_copy(&mut shared, 7, 10, 11, [120, 0, 10], gone),
+            Answer::Entity(Entity(10)),
+            "the original keeps the survivor"
+        );
+        assert_eq!(shared.copies.copy_count(7), 1);
+        assert!(shared.outside.is_empty());
+    }
 
     #[test]
     fn only_the_last_charge_takes_the_staff() {
