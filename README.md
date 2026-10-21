@@ -11,13 +11,13 @@ every mod is a DLL in the `mods/` folder beside it. Four things make it up:
   one crate a mod depends on. Its `test` feature adds a fake loader for unit
   tests.
 - **[`cargo enshwick`](crates/cargo-enshwick)**, the one tool: it starts a mod,
-  builds and installs it, shows a DLL's manifest, and ports the build rows to a
-  new game build.
+  builds and installs it, shows a DLL's manifest, and writes the build table
+  of a new game build.
 - **Mods**, grouped by purpose below.
 
 The crates under [`crates/internal`](crates/internal) (the loader DLL, the
-stub, the reflection reader and the macros) are parts of the loader, not for
-mods.
+stub, the reflection reader, the build tables and the macros) are parts of the
+loader, not for mods.
 [`examples`](examples) holds small mods that show one part of the API each;
 they are never released.
 

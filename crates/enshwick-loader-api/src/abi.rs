@@ -14,7 +14,7 @@ use core::sync::atomic::AtomicUsize;
 pub const ABI_MAJOR: u16 = 1;
 
 /// The minor version of this interface. A newer minor only appends fields.
-pub const ABI_MINOR: u16 = 50;
+pub const ABI_MINOR: u16 = 51;
 
 /// Whether `id` is a valid mod id: 1 to 64 characters of `[a-z0-9-]`.
 ///
@@ -934,13 +934,14 @@ pub struct Fingerprint {
 /// # Examples
 ///
 /// ```
-/// use enshwick_loader_api::abi::{BuildInfo, Fingerprint, Header, Side};
+/// use enshwick_loader_api::abi::{BuildInfo, BuildTable, Fingerprint, Header, Side};
 ///
 /// let build = BuildInfo {
 ///     header: Header::of::<BuildInfo>(),
 ///     side: Side::SERVER,
 ///     base: 0x1_4000_0000,
 ///     fingerprint: Fingerprint { guid: [0; 16], age: 0 },
+///     table: BuildTable::EXACT,
 /// };
 /// assert_eq!(build.side, Side::SERVER);
 /// ```
@@ -955,6 +956,31 @@ pub struct BuildInfo {
     pub base: u64,
     /// The build fingerprint.
     pub fingerprint: Fingerprint,
+    /// Whether the loader's build table was made for this build. Since
+    /// minor 51; older loaders run only on builds with their own table.
+    pub table: BuildTable,
+}
+
+/// Where the loader's build table for the running build comes from.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::abi::BuildTable;
+///
+/// assert_ne!(BuildTable::EXACT, BuildTable::PATTERNS);
+/// ```
+#[repr(transparent)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub struct BuildTable(pub u8);
+
+impl BuildTable {
+    /// The table was made for this build: every entry it pins is there.
+    pub const EXACT: Self = Self(0);
+    /// The build has no table yet: the newest table of its side found what
+    /// it could by code patterns, and the rest is missing until the table
+    /// for this build arrives.
+    pub const PATTERNS: Self = Self(1);
 }
 
 /// One symbol pinned for one game build: a name and its address relative to

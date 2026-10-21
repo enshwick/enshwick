@@ -22,21 +22,27 @@ cargo enshwick install --game "C:/Program Files (x86)/Steam/steamapps/common/Ens
 - `id <mod:name>...` prints the GUID and the game id of each
   [content id](../../book/src/content.md#content-ids), as `Guid::named`
   derives them: `cargo enshwick id safes:safe`.
-- `pin --old <exe> --new <exe>` ports the build rows of the loader and the
-  mods in an Enshwick checkout to a new game build, for maintainers. See
-  [below](#porting-build-rows-pin).
+- `pin --old <exe> --new <exe>` writes the loader's build table for a new game
+  build and ports the mods' build rows, in an Enshwick checkout, for
+  maintainers. See [below](#porting-build-rows-pin).
 
 ## Porting build rows (`pin`)
 
-`cargo enshwick pin` ports the build rows to a new game build. Every game
-update changes the build fingerprint and moves functions, and until rows for
-the new build exist the loader leaves the game vanilla. This tool writes those rows where it
-can prove them and lists the rest for a human. It never guesses.
+`cargo enshwick pin` writes the build table of a new game build. Every game
+update changes the build fingerprint and moves functions. Until the new
+build's table exists, the loader runs it on the code patterns of the newest
+table, and whatever they miss stays off. This tool writes the table where it
+can prove each entry and lists the rest for a human. It never guesses.
 
-It reads the rows from the sources: the loader's table in
-[`crates/internal/loader/src/builds.rs`](../internal/loader/src/builds.rs) and
-the `builds:` rows of every `manifest!` under `mods/`. It ports each row whose
-fingerprint is the old executable's.
+It reads the loader's tables, one TOML file per build in
+[`crates/internal/builds/tables`](../internal/builds/tables), and the
+`builds:` rows of every `manifest!` under `mods/`. It ports each table and row
+whose fingerprint is the old executable's. Each entry of the new table also
+gets the code pattern that finds it on a later build without a table, taken
+from the new executable: for a symbol, the smallest window of instructions
+around it that is unique in the code, with moving parts masked; for a
+constant, such a window around code that uses it as a field offset or an
+immediate.
 
 ### Workflow
 
@@ -65,20 +71,30 @@ fingerprint is the old executable's.
      --build 1300000 --write --report pin-client.md
    ```
 
-   `--write` puts each new row right after its old one. Without it the report
-   carries the new rows instead. The exit code is 0 when nothing needs a
-   human, 2 when something does, and 1 on an error.
+   `--write` writes the new table file beside the old one and puts each new
+   mod row right after its old one; it needs `--build`. Without it the report
+   carries the new table and rows instead. The exit code is 0 when nothing
+   needs a human, 2 when something does, and 1 on an error.
 4. **Review.** The report lists every entry with its verdict. Settle each item
-   under "For a human": a dropped symbol has a `// pin:` note where it was, and
-   a flagged constant has one above it. Read `git diff`, build, and try the
-   new build in game.
-5. **Open a pull request** with the new rows and the report's summary. Never
-   commit an executable or anything else from the game.
+   under "For a human": a dropped entry has a `pin:` note (above its table's
+   header in the table file, where it was in a mod's row), and a flagged
+   constant has one above it. Read `git diff`, build, and try the new build in
+   game.
+5. **Open a pull request** with the new table, the rows and the report's
+   summary. Never commit an executable or anything else from the game. Once
+   it is merged, the release workflow signs the table with Enshwick's key and
+   publishes it in the `build-tables` release, where the updater fetches it.
+
+`--patterns <exe>` rewrites the patterns of the table for that executable's
+build from the executable itself, for a table that has none yet. With
+`--write` it writes the table file; without, it prints it.
 
 ### How it decides
 
 - **Checks** are systems the loader compares with reflection: their new value
   is the reflected entry in the new executable.
+- **Values** past `0x7fff_ffff_ffff_ffff` are written as hex strings, as TOML
+  integers are signed.
 - **Symbols.** The tool decodes the code around the old address with
   [iced-x86](https://github.com/icedland/iced) and masks what moves between
   builds: RIP-relative displacements, rel32 branch and call targets, and
@@ -118,20 +134,22 @@ repository:
 ENSHWICK_PIN_EXE=path/to/enshrouded_server.exe cargo test --release -p cargo-enshwick -- --ignored
 ```
 
-`a_build_ports_to_itself` ports every row of the executable's build to the
-same executable, and every symbol and check must map to itself.
+`a_build_ports_to_itself` ports every table and row of the executable's build
+to the same executable, and every symbol and check must map to itself.
 `moved_code_is_followed` moves all the code 16 bytes on, function table
 included, and rewrites one function. Every other symbol in code must follow
 the move, and the rewritten one must come out `missing`. The same command
-works with `enshrouded.exe`.
+works with `enshrouded.exe`. With `ENSH_SERVER_EXE` and `ENSH_CLIENT_EXE` set,
+`cargo nextest run -p enshwick-loader-builds` checks that each table's
+patterns find every patterned entry on its own build.
 
 ### Game build watch
 
 [`game-build-watch.yml`](../../.github/workflows/game-build-watch.yml) runs
 weekly. It asks steamcmd for the public build id of the dedicated server and
-opens an issue when the loader's table has no server row named after it. It
-downloads no game files. It stays off until the repository variable
-`GAME_BUILD_WATCH` is `true`.
+opens an issue when no server table names it in `build`. It downloads no game
+files. It stays off until the repository variable `GAME_BUILD_WATCH` is
+`true`.
 
 ## More
 

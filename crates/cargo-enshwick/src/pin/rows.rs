@@ -1,8 +1,9 @@
-//! Build rows as the sources spell them: the loader's `KnownBuild` table and
-//! the `builds:` rows of each mod's `manifest!`.
+//! Build rows: the loader's tables (read by [`super::table`]) and the
+//! `builds:` rows of each mod's `manifest!` as the sources spell them.
 //!
-//! The parser keeps the span of every value, so a new row is the old row's
-//! text with values replaced: comments and layout carry over.
+//! The parser keeps the span of every value in a mod's source, so a new row
+//! is the old row's text with values replaced: comments and layout carry
+//! over.
 
 use std::fmt::Write as _;
 use std::ops::Range;
@@ -19,7 +20,7 @@ pub(crate) enum Side {
 /// Which table a row belongs to.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Table {
-    /// The loader's `BUILDS`.
+    /// A loader build table.
     Loader,
     /// A mod's `manifest!` `builds:`.
     Mod,
@@ -80,47 +81,12 @@ pub(crate) enum Edit {
     Note(String),
 }
 
-/// Every row in `src`, a loader build table or a mod source.
+/// Every `builds:` row in a mod source.
 pub(crate) fn parse(src: &str) -> Result<Vec<Row>, String> {
-    if let Some(table) = find_code(src, 0, src.len(), "pub static BUILDS") {
-        loader_rows(src, table)
-    } else if let Some(builds) = find_code(src, 0, src.len(), "builds: [") {
-        mod_rows(src, builds + "builds: ".len())
-    } else {
-        Ok(Vec::new())
+    match find_code(src, 0, src.len(), "builds: [") {
+        Some(builds) => mod_rows(src, builds + "builds: ".len()),
+        None => Ok(Vec::new()),
     }
-}
-
-fn loader_rows(src: &str, from: usize) -> Result<Vec<Row>, String> {
-    let mut rows = Vec::new();
-    let mut at = from;
-    while let Some(start) = find_code(src, at, src.len(), "KnownBuild {") {
-        let open = start + "KnownBuild ".len();
-        let close = matching(src, open).ok_or("an unclosed KnownBuild")?;
-        let name_at = field(src, open, close, "name: \"")?;
-        let name_span = name_at..string_end(src, name_at)?;
-        let side_at = field(src, open, close, "side: Side::")?;
-        let guid_at = field(src, open, close, "guid(b\"")?;
-        let guid_span = guid_at..string_end(src, guid_at)?;
-        let age_from = guid_span.end + "\"), ".len();
-        let age_span = age_from..age_from + digits(src, age_from);
-        rows.push(Row {
-            table: Table::Loader,
-            side: side(src, side_at, "Side::")?,
-            guid: src[guid_span.clone()].to_owned(),
-            age: number(&src[age_span.clone()])?,
-            name: Some(src[name_span.clone()].to_owned()),
-            span: start..close + 1,
-            guid_span,
-            age_span,
-            name_span: Some(name_span),
-            checks: list(src, open, close, "checks: &[", Style::Tuple)?,
-            symbols: list(src, open, close, "symbols: &[", Style::Tuple)?,
-            constants: list(src, open, close, "constants: &[", Style::Tuple)?,
-        });
-        at = close;
-    }
-    Ok(rows)
 }
 
 fn mod_rows(src: &str, open: usize) -> Result<Vec<Row>, String> {
@@ -161,6 +127,32 @@ fn mod_rows(src: &str, open: usize) -> Result<Vec<Row>, String> {
 }
 
 impl Row {
+    /// A loader table's row; its text is a table file, not a span.
+    pub(crate) fn loader(
+        side: Side,
+        guid: String,
+        age: u32,
+        name: String,
+        checks: Vec<Entry>,
+        symbols: Vec<Entry>,
+        constants: Vec<Entry>,
+    ) -> Self {
+        Self {
+            table: Table::Loader,
+            side,
+            guid,
+            age,
+            name: Some(name),
+            span: 0..0,
+            guid_span: 0..0,
+            age_span: 0..0,
+            name_span: None,
+            checks,
+            symbols,
+            constants,
+        }
+    }
+
     /// The row's text for a new build: `guid`/`age`, `name` for a loader row,
     /// and each entry edited as `edits` says (by id; missing ids are kept).
     pub(crate) fn render(
@@ -250,21 +242,15 @@ pub(crate) fn guid_hex(guid: [u8; 16]) -> String {
     })
 }
 
-#[derive(Clone, Copy)]
-enum Style {
-    Tuple,
-    Arrow,
-}
-
 fn optional_list(src: &str, from: usize, to: usize, name: &str) -> Result<Vec<Entry>, String> {
     if find_code(src, from, to, name).is_some() {
-        list(src, from, to, name, Style::Arrow)
+        list(src, from, to, name)
     } else {
         Ok(Vec::new())
     }
 }
 
-fn list(src: &str, from: usize, to: usize, name: &str, style: Style) -> Result<Vec<Entry>, String> {
+fn list(src: &str, from: usize, to: usize, name: &str) -> Result<Vec<Entry>, String> {
     let open = field(src, from, to, name)? - 1;
     let close = matching(src, open).ok_or_else(|| format!("an unclosed {name}"))?;
     let mut entries = Vec::new();
@@ -272,22 +258,13 @@ fn list(src: &str, from: usize, to: usize, name: &str, style: Style) -> Result<V
     while at < close {
         let bytes = src.as_bytes();
         let entry_start = at;
-        if let Style::Tuple = style {
-            if bytes.get(at) != Some(&b'(') {
-                return Err(format!("{name}: an entry expected at byte {at}"));
-            }
-            at += 1;
-        }
         if bytes.get(at) != Some(&b'"') {
             return Err(format!("{name}: an id expected at byte {at}"));
         }
         let id_end = string_end(src, at + 1)?;
         let id = src[at + 1..id_end].to_owned();
         at = skip_trivia(src, id_end + 1);
-        let separator = match style {
-            Style::Tuple => ",",
-            Style::Arrow => "=>",
-        };
+        let separator = "=>";
         if !src[at..].starts_with(separator) {
             return Err(format!("{name}: {id} has no value"));
         }
@@ -305,9 +282,6 @@ fn list(src: &str, from: usize, to: usize, name: &str, style: Style) -> Result<V
         }
         let value_span = value_start..value_start + src[value_start..end].trim_end().len();
         let value = evaluate(&src[value_span.clone()]).map_err(|e| format!("{id}: {e}"))?;
-        if let Style::Tuple = style {
-            end += 1;
-        }
         let line_start = src[..entry_start].rfind('\n').map_or(0, |i| i + 1);
         let line_end = src[end..].find('\n').map_or(src.len(), |i| end + i);
         entries.push(Entry {
@@ -457,26 +431,6 @@ fn matching(src: &str, open: usize) -> Option<usize> {
 mod tests {
     use super::*;
 
-    const LOADER: &str = r#"
-pub static BUILDS: &[KnownBuild] = &[
-    KnownBuild {
-        name: "1.0 server (1269579)",
-        side: Side::SERVER,
-        fingerprint: Fingerprint::new(guid(b"1c129660cd6efc4f9f0b21652d5ff2bf"), 387),
-        checks: &[("upgrade_building_range", 0x90a60)],
-        symbols: &[
-            ("ecs.iterator_init", 0x65_b8c0),
-            // A comment with symbols: &[ in it.
-            ("npc.move", 0x1e_ca40),
-        ],
-        constants: &[
-            ("ecs.context_row", 8),
-            ("inventory.copy_a8", 0x18 << 32 | 0xa8),
-        ],
-    },
-];
-"#;
-
     const MOD: &str = r#"
         enshwick_loader_api::manifest!(
             id: "safes",
@@ -504,22 +458,6 @@ pub static BUILDS: &[KnownBuild] = &[
 "#;
 
     #[test]
-    fn the_loader_table_parses_with_its_expressions() {
-        let rows = parse(LOADER).unwrap();
-        assert_eq!(rows.len(), 1);
-        let row = &rows[0];
-        assert_eq!(row.table, Table::Loader);
-        assert_eq!(row.side, Side::Server);
-        assert_eq!(row.age, 387);
-        assert_eq!(row.name.as_deref(), Some("1.0 server (1269579)"));
-        assert_eq!(row.checks[0].value, 0x90a60);
-        let ids: Vec<&str> = row.symbols.iter().map(|e| e.id.as_str()).collect();
-        assert_eq!(ids, ["ecs.iterator_init", "npc.move"]);
-        assert_eq!(row.constants[1].value, 0x18 << 32 | 0xa8);
-        assert_eq!(&LOADER[row.symbols[1].value_span.clone()], "0x1e_ca40");
-    }
-
-    #[test]
     fn mod_rows_parse_with_and_without_constants() {
         let rows = parse(MOD).unwrap();
         assert_eq!(rows.len(), 2);
@@ -536,38 +474,6 @@ pub static BUILDS: &[KnownBuild] = &[
         let edits = [(&row.symbols[0], Edit::Drop("gone".into()))];
         let text = row.render(MOD, &row.guid, row.age, None, &edits);
         assert!(text.contains("symbols: [/* pin: gone */],"));
-    }
-
-    #[test]
-    fn a_rendered_row_keeps_its_layout_and_comments() {
-        let row = &parse(LOADER).unwrap()[0];
-        let edits = [
-            (&row.symbols[0], Edit::Set(0x66_0000)),
-            (
-                &row.symbols[1],
-                Edit::Drop("npc.move: missing; was 0x1e_ca40".into()),
-            ),
-            (&row.constants[0], Edit::Note("unverified".into())),
-            (&row.checks[0], Edit::Set(0x90a60)),
-        ];
-        let text = row.render(LOADER, "ab".repeat(16).as_str(), 400, Some("x (2)"), &edits);
-        assert!(text.starts_with("KnownBuild {\n        name: \"x (2)\""));
-        assert!(text.contains(&format!("guid(b\"{}\"), 400)", "ab".repeat(16))));
-        assert!(text.contains("(\"ecs.iterator_init\", 0x66_0000),"));
-        assert!(text.contains("            // pin: npc.move: missing; was 0x1e_ca40\n"));
-        assert!(!text.contains("0x1e_ca40)"));
-        assert!(text.contains("// pin: unverified\n            (\"ecs.context_row\", 8)"));
-        assert!(
-            text.contains("(\"upgrade_building_range\", 0x90a60)"),
-            "an equal value stays as written"
-        );
-        assert!(text.contains("// A comment with symbols: &[ in it."));
-        assert!(
-            parse(&format!(
-                "pub static BUILDS: &[KnownBuild] = &[\n    {text},\n];"
-            ))
-            .is_ok()
-        );
     }
 
     #[test]

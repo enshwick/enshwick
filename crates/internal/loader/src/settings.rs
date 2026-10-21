@@ -17,6 +17,10 @@ pub const STATUS_MINUTES: u32 = 10;
     Debug, PartialEq, Eq, serde::Deserialize, serde::Serialize, enshwick_loader_api::Config,
 )]
 #[serde(default, deny_unknown_fields)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "each is a switch of its own in the settings file"
+)]
 pub struct Settings {
     /// The most detailed lines kept in `logs/enshwick`: "error", "warn", "info" or "debug".
     pub log_level: Level,
@@ -35,6 +39,10 @@ pub struct Settings {
     /// Only log what mods' migrations would change, without changing their
     /// files or recording them in mod-data/enshwick/migrations.toml.
     pub migrations_dry_run: bool,
+    /// On a game build without a build table yet, find the table's entries
+    /// by their code patterns and run what they cover; false leaves such a
+    /// build vanilla until its table arrives. Read at start.
+    pub build_patterns: bool,
 }
 
 impl Default for Settings {
@@ -46,6 +54,7 @@ impl Default for Settings {
             diagnostics_timing: false,
             status_minutes: STATUS_MINUTES,
             migrations_dry_run: false,
+            build_patterns: true,
         }
     }
 }

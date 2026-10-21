@@ -73,6 +73,7 @@ dependencies = [
  "memchr",
  "serde",
  "serde_json",
+ "toml_edit",
  "windows-sys 0.61.2",
 ]
 
@@ -315,6 +316,7 @@ dependencies = [
  "arrayvec",
  "base64",
  "enshwick-loader-api",
+ "enshwick-loader-builds",
  "enshwick-loader-reflect",
  "iced-x86",
  "postcard",
@@ -335,12 +337,25 @@ dependencies = [
  "const-sha1",
  "enshwick-loader-macros",
  "fastrand",
+ "memchr",
  "postcard",
  "serde",
  "thiserror",
  "toml",
  "zune-core",
  "zune-png",
+]
+
+[[package]]
+name = "enshwick-loader-builds"
+version = "0.5.0"
+dependencies = [
+ "enshwick-loader-api",
+ "enshwick-loader-reflect",
+ "minisign-verify",
+ "serde",
+ "thiserror",
+ "toml",
 ]
 
 [[package]]

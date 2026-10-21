@@ -15,7 +15,7 @@ pub(crate) struct Section {
     /// One line per entry.
     pub(crate) lines: Vec<Line>,
     /// The new row's text, when it is not written into the file.
-    pub(crate) text: Option<String>,
+    pub(crate) text: Option<(String, &'static str)>,
 }
 
 /// The report for every section.
@@ -74,8 +74,8 @@ pub(crate) fn render(old: &str, new: &str, sections: &[Section]) -> String {
             );
         }
         out.push('\n');
-        if let Some(text) = &section.text {
-            let _w = writeln!(out, "New row:\n\n```rust\n{text}\n```\n");
+        if let Some((text, language)) = &section.text {
+            let _w = writeln!(out, "New row:\n\n```{language}\n{text}\n```\n");
         }
     }
     out
@@ -104,7 +104,7 @@ mod tests {
                 file: "x.rs".to_owned(),
                 title: "server".to_owned(),
                 lines: vec![line("a", Status::Unchanged), line("b", Status::Ambiguous)],
-                text: Some("{ }".to_owned()),
+                text: Some(("{ }".to_owned(), "rust")),
             }],
         );
         assert!(report.contains("2 entries: 1 unchanged, 0 moved, 1 ambiguous"));

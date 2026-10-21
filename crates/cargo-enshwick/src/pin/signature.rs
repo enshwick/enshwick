@@ -27,11 +27,20 @@ pub(crate) struct Insn {
     pub(crate) displacement: Option<u64>,
     /// An immediate that is not a branch target or a pointer.
     pub(crate) immediate: Option<u64>,
+    /// Whether the displacement is off `rsp` or `rbp`: a stack slot rather
+    /// than a field.
+    pub(crate) on_stack: bool,
     /// Where the instruction points, when it does.
     pub(crate) reference: Option<Reference>,
 }
 
 impl Insn {
+    /// Whether the instruction carries `value` as a field offset (a positive
+    /// displacement off anything but the stack) or as an immediate.
+    pub(crate) fn uses_as_field(&self, value: u64) -> bool {
+        (self.displacement == Some(value) && !self.on_stack) || self.immediate == Some(value)
+    }
+
     /// Whether the instruction carries `value` as a displacement (either
     /// sign) or an immediate.
     pub(crate) fn uses(&self, value: u64) -> bool {
@@ -81,6 +90,7 @@ impl Masked {
                 displacement: None,
                 immediate: None,
                 reference: None,
+                on_stack: false,
             };
             if offsets.has_displacement() {
                 if instruction.is_ip_rel_memory_operand() {
@@ -90,6 +100,10 @@ impl Masked {
                     || instruction.memory_index() != Register::None
                 {
                     insn.displacement = Some(instruction.memory_displacement64());
+                    insn.on_stack = matches!(
+                        instruction.memory_base(),
+                        Register::RSP | Register::RBP | Register::ESP | Register::EBP
+                    );
                 }
             }
             if offsets.has_immediate() {

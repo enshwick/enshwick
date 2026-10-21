@@ -22,6 +22,8 @@
 pub struct Pattern {
     /// Each byte, `None` for a wildcard.
     bytes: Vec<Option<u8>>,
+    /// The longest run of fixed bytes, which a search looks for first.
+    anchor: core::ops::Range<usize>,
 }
 
 /// A pattern that does not parse.
@@ -87,10 +89,26 @@ impl Pattern {
                 _ => Err(PatternError::Token(token.to_owned())),
             })
             .collect::<Result<Vec<_>, _>>()?;
-        if bytes.iter().all(Option::is_none) {
-            return Err(PatternError::Empty);
-        }
-        Ok(Self { bytes })
+        let anchor = longest_run(&bytes).ok_or(PatternError::Empty)?;
+        Ok(Self { bytes, anchor })
+    }
+
+    /// Whether the byte at `at` must match; `None` past the pattern's end.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_loader_api::code::Pattern;
+    ///
+    /// let pattern = Pattern::parse("E8 ?? C3")?;
+    /// assert_eq!(pattern.is_fixed(0), Some(true));
+    /// assert_eq!(pattern.is_fixed(1), Some(false));
+    /// assert_eq!(pattern.is_fixed(3), None);
+    /// # Ok::<(), enshwick_loader_api::code::PatternError>(())
+    /// ```
+    #[must_use]
+    pub fn is_fixed(&self, at: usize) -> Option<bool> {
+        self.bytes.get(at).map(Option::is_some)
     }
 
     /// How many bytes the pattern spans.
@@ -158,18 +176,26 @@ impl Pattern {
     /// # Ok::<(), enshwick_loader_api::code::PatternError>(())
     /// ```
     pub fn find_all<'a>(&'a self, code: &'a [u8]) -> impl Iterator<Item = usize> + 'a {
-        // Anchor on the first fixed byte: a cheap scan, then the full compare.
-        let (anchor, first) = self
-            .bytes
+        // The longest fixed run through memchr's SIMD search, then the full
+        // compare at each hit.
+        let needle: Vec<u8> = self.bytes[self.anchor.clone()]
             .iter()
-            .enumerate()
-            .find_map(|(i, b)| b.map(|b| (i, b)))
-            .unwrap_or((0, 0));
-        let starts = code
-            .len()
-            .checked_sub(self.bytes.len())
-            .map_or(0, |last| last + 1);
-        (0..starts).filter(move |&at| code[at + anchor] == first && self.matches(&code[at..]))
+            .map(|b| b.unwrap_or(0))
+            .collect();
+        let lead = self.anchor.start;
+        let hay = code.get(lead..).unwrap_or_default();
+        let finder = memchr::memmem::Finder::new(&needle).into_owned();
+        let mut from = 0;
+        core::iter::from_fn(move || {
+            while let Some(hit) = hay.get(from..).and_then(|rest| finder.find(rest)) {
+                let start = from + hit;
+                from = start + 1;
+                if code.get(start..).is_some_and(|rest| self.matches(rest)) {
+                    return Some(start);
+                }
+            }
+            None
+        })
     }
 
     /// The one offset in `code` where the pattern matches.
@@ -190,6 +216,26 @@ impl Pattern {
             None => Ok(first),
         }
     }
+}
+
+/// The longest run of fixed bytes in `bytes`; `None` when every byte is a
+/// wildcard.
+fn longest_run(bytes: &[Option<u8>]) -> Option<core::ops::Range<usize>> {
+    let mut best: Option<core::ops::Range<usize>> = None;
+    let mut start = None;
+    for (i, byte) in bytes.iter().chain([&None]).enumerate() {
+        match (byte, start) {
+            (Some(_), None) => start = Some(i),
+            (None, Some(from)) => {
+                if best.as_ref().is_none_or(|b| i - from > b.len()) {
+                    best = Some(from..i);
+                }
+                start = None;
+            }
+            _ => {}
+        }
+    }
+    best
 }
 
 impl core::str::FromStr for Pattern {
