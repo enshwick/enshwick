@@ -830,8 +830,8 @@ fn put_headed_list<T: Copy>(items: &[T], out: *mut T, capacity: u32, count: *mut
             let entry = unsafe { out.cast::<u8>().add(index * stride) };
             // SAFETY: as above; `known` bytes fit both the entry and `item`.
             unsafe {
-                core::ptr::copy_nonoverlapping((&raw const *item).cast::<u8>(), entry, known)
-            };
+                core::ptr::copy_nonoverlapping((&raw const *item).cast::<u8>(), entry, known);
+            }
             // SAFETY: the header's size is the entry's first field.
             unsafe { entry.cast::<u32>().write_unaligned(size) };
         }

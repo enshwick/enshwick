@@ -146,8 +146,8 @@ fn value<T: Copy>() -> T {
     unsafe {
         (&raw mut value)
             .cast::<Header>()
-            .write_unaligned(Header::of::<T>())
-    };
+            .write_unaligned(Header::of::<T>());
+    }
     value
 }
 
@@ -180,16 +180,12 @@ fn round_trip<T: Copy>(name: &str, zero: bool) {
     if !zero {
         set_size(&mut from, 0, full);
         // SAFETY: a whole `T` in a larger buffer, a non-zero pattern each.
-        assert!(
-            unsafe { get_headed(from.as_ptr().cast::<T>(), full) }.is_some(),
-            "{name}"
-        );
+        let whole = unsafe { get_headed(from.as_ptr().cast::<T>(), full) };
+        assert!(whole.is_some(), "{name}");
         set_size(&mut from, 0, room);
         // SAFETY: as above, shorter.
-        assert!(
-            unsafe { get_headed(from.as_ptr().cast::<T>(), full) }.is_none(),
-            "{name}"
-        );
+        let short = unsafe { get_headed(from.as_ptr().cast::<T>(), full) };
+        assert!(short.is_none(), "{name}");
         return;
     }
     // SAFETY: a header of `room` bytes in a larger buffer.
