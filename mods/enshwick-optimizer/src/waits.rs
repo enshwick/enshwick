@@ -253,7 +253,7 @@ pub(crate) fn link(
     let mut linked = Linked::default();
     if exact_waits {
         if sys::init() {
-            let found = pacing::on_loop_wait(load, exact)?;
+            let found = load.on_loop_wait(exact)?;
             linked.exact = found.handles;
             linked.message = found.messages;
             if !found.handles {
@@ -264,7 +264,7 @@ pub(crate) fn link(
         }
     }
     if server_loop {
-        linked.server = pacing::on_server_wait(load, server)?;
+        linked.server = load.on_server_wait(server)?;
         if !linked.server {
             enshwick_loader_api::warn!("the server loop's wait was not found");
         }

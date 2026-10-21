@@ -1,13 +1,13 @@
 //! How the engine paces its loops and sizes its thread pools: the places a
 //! mod changes to make the game use less CPU.
 //!
-//! - [`on_loop_wait`]: the engine's event loop, about to wait on its handles.
+//! - [`Load::on_loop_wait`]: the engine's event loop, about to wait on its handles.
 //!   It turns the time left before its deadline into whole milliseconds,
 //!   truncating, so with less than a millisecond left it waits 0 ms, again
 //!   and again, until the deadline passes.
-//! - [`on_server_wait`]: the server's game loop picking how long it waits
+//! - [`Load::on_server_wait`]: the server's game loop picking how long it waits
 //!   between its passes.
-//! - [`cap_task_workers`]: the most worker threads each task group starts
+//! - [`Load::cap_task_workers`]: the most worker threads each task group starts
 //!   with, which the engine sizes from the logical CPUs it sees.
 //!
 //! Every site is found by its bytes, on the server and on the client, and a
@@ -16,10 +16,8 @@
 //! # Examples
 //!
 //! ```
-//! use enshwick_loader_api::pacing;
-//!
 //! fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
-//!     let found = pacing::on_loop_wait(load, |wait| {
+//!     let found = load.on_loop_wait(|wait| {
 //!         if wait.ms == 0 && wait.left_ns > 0 {
 //!             // Sleep `left_ns` here instead of letting the game poll.
 //!         }
@@ -90,7 +88,7 @@ pub struct LoopWait {
     pub left_ns: i64,
 }
 
-/// Which of the event loop's waits [`on_loop_wait`] found and hooked.
+/// Which of the event loop's waits [`Load::on_loop_wait`] found and hooked.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct LoopWaits {
@@ -134,95 +132,6 @@ fn site(load: &Load<'_>, pattern: &str, at: u64) -> Option<u64> {
     load.find_code(pattern).ok().map(|found| found + at)
 }
 
-/// Runs `handler` before every wait of the engine's event loop on its
-/// handles, on the thread that waits: the app's main loop, the server's
-/// game loop and its session, and on the client its message wait too. A
-/// handler that sleeps must never sleep past `left_ns`, and must leave the
-/// waiting to the game, so it sees every event. Allowed during
-/// [`Mod::init`](crate::Mod::init) only.
-///
-/// # Errors
-///
-/// [`Off`] when the loader refuses a hook. A wait this build lacks is
-/// reported as not found in the result.
-///
-/// # Examples
-///
-/// ```
-/// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
-///     let found = enshwick_loader_api::pacing::on_loop_wait(load, |wait| {
-///         let _ = (wait.ms, wait.left_ns);
-///     })?;
-///     let _ = found.messages;
-///     Ok(())
-/// }
-/// ```
-pub fn on_loop_wait<F>(load: &mut Load<'_>, handler: F) -> Result<LoopWaits, Off>
-where
-    F: Fn(LoopWait) + Clone + Send + Sync + 'static,
-{
-    let code = load.code()?;
-    let mut found = LoopWaits::default();
-    let wait = |ms: u64, left: u64| LoopWait {
-        ms: u32::try_from(ms & 0xffff_ffff).unwrap_or(u32::MAX),
-        left_ns: i64::from_ne_bytes(left.to_ne_bytes()),
-    };
-    if let Some(at) = site(load, WAIT, WAIT_AT).filter(|&at| checks(code, at)) {
-        let handler = handler.clone();
-        load.hook_at(at, move |registers: &mut Registers| {
-            handler(wait(registers.r9, registers.rbx));
-        })?;
-        found.handles = true;
-    }
-    if let Some(at) = site(load, MESSAGE_WAIT, WAIT_AT).filter(|&at| checks(code, at)) {
-        load.hook_at(at, move |registers: &mut Registers| {
-            handler(wait(registers.r8, registers.rbx));
-        })?;
-        found.messages = true;
-    }
-    Ok(found)
-}
-
-/// Runs `handler` where the server's game loop has picked its wait between
-/// two passes, in nanoseconds: [`SERVER_IDLE_WAIT_NS`],
-/// [`SERVER_ONLINE_WAIT_NS`] or [`SERVER_SLOW_WAIT_NS`]. The handler may
-/// change it; the loop waits on its handles for that long, so events still
-/// end the wait early. On the server's game thread, once a pass; `false`
-/// when this build lacks the site. Allowed during
-/// [`Mod::init`](crate::Mod::init) only.
-///
-/// # Errors
-///
-/// [`Off`] when the loader refuses the hook.
-///
-/// # Examples
-///
-/// ```
-/// use enshwick_loader_api::pacing;
-///
-/// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
-///     let hooked = pacing::on_server_wait(load, |wait_ns| {
-///         if *wait_ns == pacing::SERVER_ONLINE_WAIT_NS {
-///             *wait_ns = 2 * pacing::SERVER_ONLINE_WAIT_NS;
-///         }
-///     })?;
-///     let _ = hooked;
-///     Ok(())
-/// }
-/// ```
-pub fn on_server_wait<F>(load: &mut Load<'_>, handler: F) -> Result<bool, Off>
-where
-    F: Fn(&mut u64) + Send + Sync + 'static,
-{
-    let Some(at) = site(load, SERVER_WAIT, SERVER_WAIT_AT) else {
-        return Ok(false);
-    };
-    load.hook_at(at, move |registers: &mut Registers| {
-        handler(&mut registers.r9);
-    })?;
-    Ok(true)
-}
-
 /// The most worker threads the task groups start with; 0 leaves a group
 /// as the game sizes it.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -252,49 +161,140 @@ impl TaskWorkers {
     }
 }
 
-/// Caps the worker threads of the task groups as the task system starts.
-/// The engine sizes them from the logical CPUs it sees, which under Wine
-/// are the host's, whatever a container allows. Only the dedicated server
-/// starts its task system after the loader arms hooks; on the client it has
-/// started already and the result is `false`, as it is when this build lacks
-/// the site. The game's log shows the counts it started with:
-/// `[task] Group 'Default' Worker:…`. Allowed during
-/// [`Mod::init`](crate::Mod::init) only.
-///
-/// # Errors
-///
-/// [`Off`] when the loader refuses a hook.
-///
-/// # Examples
-///
-/// ```
-/// use enshwick_loader_api::pacing::{self, TaskWorkers};
-///
-/// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
-///     if !pacing::cap_task_workers(load, TaskWorkers::at_most(4))? {
-///         enshwick_loader_api::info!("task workers stay as the game sizes them");
-///     }
-///     Ok(())
-/// }
-/// ```
-pub fn cap_task_workers(load: &mut Load<'_>, caps: TaskWorkers) -> Result<bool, Off> {
-    if load.host().build().side != crate::abi::Side::SERVER {
-        return Ok(false);
-    }
-    let Some(at) = site(load, WORKERS, 0) else {
-        return Ok(false);
-    };
-    for (offset, cap) in [
-        (DEFAULT_WORKERS_AT, caps.default),
-        (BACKGROUND_WORKERS_AT, caps.background),
-    ] {
-        if cap > 0 {
-            load.hook_at(at + offset, move |registers: &mut Registers| {
-                registers.rax = registers.rax.min(u64::from(cap));
+impl Load<'_> {
+    /// Runs `handler` before every wait of the engine's event loop on its
+    /// handles, on the thread that waits: the app's main loop, the server's
+    /// game loop and its session, and on the client its message wait too. A
+    /// handler that sleeps must never sleep past `left_ns`, and must leave the
+    /// waiting to the game, so it sees every event. Allowed during
+    /// [`Mod::init`](crate::Mod::init) only.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] when the loader refuses a hook. A wait this build lacks is
+    /// reported as not found in the result.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+    ///     let found = load.on_loop_wait(|wait| {
+    ///         let _ = (wait.ms, wait.left_ns);
+    ///     })?;
+    ///     let _ = found.messages;
+    ///     Ok(())
+    /// }
+    /// ```
+    pub fn on_loop_wait<F>(&mut self, handler: F) -> Result<LoopWaits, Off>
+    where
+        F: Fn(LoopWait) + Clone + Send + Sync + 'static,
+    {
+        let code = self.code()?;
+        let mut found = LoopWaits::default();
+        let wait = |ms: u64, left: u64| LoopWait {
+            ms: u32::try_from(ms & 0xffff_ffff).unwrap_or(u32::MAX),
+            left_ns: i64::from_ne_bytes(left.to_ne_bytes()),
+        };
+        if let Some(at) = site(self, WAIT, WAIT_AT).filter(|&at| checks(code, at)) {
+            let handler = handler.clone();
+            self.hook_at(at, move |registers: &mut Registers| {
+                handler(wait(registers.r9, registers.rbx));
             })?;
+            found.handles = true;
         }
+        if let Some(at) = site(self, MESSAGE_WAIT, WAIT_AT).filter(|&at| checks(code, at)) {
+            self.hook_at(at, move |registers: &mut Registers| {
+                handler(wait(registers.r8, registers.rbx));
+            })?;
+            found.messages = true;
+        }
+        Ok(found)
     }
-    Ok(true)
+
+    /// Runs `handler` where the server's game loop has picked its wait between
+    /// two passes, in nanoseconds: [`SERVER_IDLE_WAIT_NS`],
+    /// [`SERVER_ONLINE_WAIT_NS`] or [`SERVER_SLOW_WAIT_NS`]. The handler may
+    /// change it; the loop waits on its handles for that long, so events still
+    /// end the wait early. On the server's game thread, once a pass; `false`
+    /// when this build lacks the site. Allowed during
+    /// [`Mod::init`](crate::Mod::init) only.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] when the loader refuses the hook.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_loader_api::pacing;
+    ///
+    /// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+    ///     let hooked = load.on_server_wait(|wait_ns| {
+    ///         if *wait_ns == pacing::SERVER_ONLINE_WAIT_NS {
+    ///             *wait_ns = 2 * pacing::SERVER_ONLINE_WAIT_NS;
+    ///         }
+    ///     })?;
+    ///     let _ = hooked;
+    ///     Ok(())
+    /// }
+    /// ```
+    pub fn on_server_wait<F>(&mut self, handler: F) -> Result<bool, Off>
+    where
+        F: Fn(&mut u64) + Send + Sync + 'static,
+    {
+        let Some(at) = site(self, SERVER_WAIT, SERVER_WAIT_AT) else {
+            return Ok(false);
+        };
+        self.hook_at(at, move |registers: &mut Registers| {
+            handler(&mut registers.r9);
+        })?;
+        Ok(true)
+    }
+
+    /// Caps the worker threads of the task groups as the task system starts.
+    /// The engine sizes them from the logical CPUs it sees, which under Wine
+    /// are the host's, whatever a container allows. Only the dedicated server
+    /// starts its task system after the loader arms hooks; on the client it has
+    /// started already and the result is `false`, as it is when this build lacks
+    /// the site. The game's log shows the counts it started with:
+    /// `[task] Group 'Default' Worker:…`. Allowed during
+    /// [`Mod::init`](crate::Mod::init) only.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] when the loader refuses a hook.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_loader_api::pacing::TaskWorkers;
+    ///
+    /// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+    ///     if !load.cap_task_workers(TaskWorkers::at_most(4))? {
+    ///         enshwick_loader_api::info!("task workers stay as the game sizes them");
+    ///     }
+    ///     Ok(())
+    /// }
+    /// ```
+    pub fn cap_task_workers(&mut self, caps: TaskWorkers) -> Result<bool, Off> {
+        if self.host().build().side != crate::abi::Side::SERVER {
+            return Ok(false);
+        }
+        let Some(at) = site(self, WORKERS, 0) else {
+            return Ok(false);
+        };
+        for (offset, cap) in [
+            (DEFAULT_WORKERS_AT, caps.default),
+            (BACKGROUND_WORKERS_AT, caps.background),
+        ] {
+            if cap > 0 {
+                self.hook_at(at + offset, move |registers: &mut Registers| {
+                    registers.rax = registers.rax.min(u64::from(cap));
+                })?;
+            }
+        }
+        Ok(true)
+    }
 }
 
 #[cfg(test)]

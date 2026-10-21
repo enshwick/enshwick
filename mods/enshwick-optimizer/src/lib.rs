@@ -26,7 +26,7 @@
 use std::sync::OnceLock;
 
 use enshwick_loader_api::abi::Side;
-use enshwick_loader_api::pacing::{self, TaskWorkers};
+use enshwick_loader_api::pacing::TaskWorkers;
 use enshwick_loader_api::{Host, Load, Mod, Off, events};
 
 use crate::env::CpuLimit;
@@ -244,7 +244,7 @@ impl Mod for Optimizer {
         note_forced(Change::TaskWorkers, settings.task_workers > 0, platform);
         let mut workers = worker_cap(settings.task_workers, platform, environment.cpu_limit);
         if let Some(cap) = workers
-            && !pacing::cap_task_workers(load, TaskWorkers::at_most(cap))?
+            && !load.cap_task_workers(TaskWorkers::at_most(cap))?
         {
             enshwick_loader_api::info!(
                 "task workers: only the dedicated server starts fewer; here the game picks"

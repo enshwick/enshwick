@@ -1018,7 +1018,7 @@ mod tests {
     fn derived_copies_double_the_output_of_the_chosen_recipes_only() {
         let mut blob = Blob::new(&[0u8; 16]);
         let first = blob.append(&[0; 0xa8 * 2], 8);
-        for (i, (name, made)) in [(&b"Block_A "[..], 100u32), (&b"Prop_B "[..], 1)]
+        for (i, (name, made)) in [(&b"Block_A\0"[..], 100u32), (&b"Prop_B\0"[..], 1)]
             .iter()
             .enumerate()
         {

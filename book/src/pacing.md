@@ -21,10 +21,8 @@ instead saves the polling; it must never sleep past `left_ns`, and it leaves
 the wait itself to the game, which then sees every event:
 
 ```rust
-use enshwick_loader_api::pacing;
-
 fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
-    let found = pacing::on_loop_wait(load, |wait| {
+    let found = load.on_loop_wait(|wait| {
         if wait.ms == 0 && wait.left_ns > 0 {
             // Sleep a little less than `left_ns` here.
         }
@@ -52,7 +50,7 @@ them.
 use enshwick_loader_api::pacing;
 
 fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
-    pacing::on_server_wait(load, |wait_ns| {
+    load.on_server_wait(|wait_ns| {
         if *wait_ns == pacing::SERVER_ONLINE_WAIT_NS {
             *wait_ns = 2 * pacing::SERVER_ONLINE_WAIT_NS;
         }
@@ -72,10 +70,10 @@ the dedicated server starts it after the loader arms its hooks (see
 Worker:…`.
 
 ```rust
-use enshwick_loader_api::pacing::{self, TaskWorkers};
+use enshwick_loader_api::pacing::TaskWorkers;
 
 fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
-    if !pacing::cap_task_workers(load, TaskWorkers::at_most(4))? {
+    if !load.cap_task_workers(TaskWorkers::at_most(4))? {
         enshwick_loader_api::info!("the task workers stay as the game sizes them");
     }
     Ok(())
