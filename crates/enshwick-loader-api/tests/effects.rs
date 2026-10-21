@@ -1,16 +1,16 @@
-//! Actions: typed game events and teleports, as the loader receives them.
+//! Effects: typed game events and teleports, as the loader receives them.
 
 #[cfg(test)]
 mod tests {
     use std::sync::OnceLock;
 
     use enshwick_loader_api::abi::{Status, TeleportRequest};
-    use enshwick_loader_api::actions::{Actions, NpcOrder, Spawn, Teleport};
     use enshwick_loader_api::ecs::Entity;
+    use enshwick_loader_api::effects::{Effects, NpcOrder, Spawn, Teleport};
     use enshwick_loader_api::world::WorldError;
     use enshwick_loader_api::{Load, Mod, Off};
 
-    static ACTIONS: OnceLock<Actions> = OnceLock::new();
+    static EFFECTS: OnceLock<Effects> = OnceLock::new();
 
     struct Acting;
 
@@ -20,7 +20,7 @@ mod tests {
         }
 
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
-            let _first = ACTIONS.set(load.actions());
+            let _first = EFFECTS.set(load.effects());
             Ok(Self)
         }
     }
@@ -32,7 +32,7 @@ mod tests {
     }
 
     #[test]
-    fn typed_actions_lay_out_their_events_and_teleports_their_requests() {
+    fn typed_effects_lay_out_their_events_and_teleports_their_requests() {
         let npc = "keen::ecs::NpcCommandEvent";
         let threat = "keen::ecs::AddThreatTargetEvent";
         let ping = "keen::ecs::UiPingEvent";
@@ -59,15 +59,15 @@ mod tests {
         // SAFETY: the exports of `declare_mod!` above.
         let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
-        let actions = ACTIONS.get().unwrap();
+        let effects = EFFECTS.get().unwrap();
 
-        actions
+        effects
             .npc_command(42, NpcOrder::GoTo([1.0, 2.0, -3.0]))
             .unwrap();
-        actions.add_threat(Entity(5), Entity(6), 2.5).unwrap();
-        actions.ping(Entity(6), [0.5, 0.0, 0.0]).unwrap();
+        effects.add_threat(Entity(5), Entity(6), 2.5).unwrap();
+        effects.ping(Entity(6), [0.5, 0.0, 0.0]).unwrap();
         assert_eq!(
-            actions.set_toggle(Entity(5), 9, true),
+            effects.set_toggle(Entity(5), 9, true),
             Err(WorldError::Missing),
             "the toggle event is not on this fake build"
         );
@@ -91,18 +91,18 @@ mod tests {
         let (_, pinged) = &emits[2];
         assert_eq!(i64::from_le_bytes(word(pinged, 16)), 1 << 31);
 
-        actions
+        effects
             .teleport(Entity(5), [10.0, 20.0, 30.0], Teleport::new().best_spawn())
             .unwrap();
         assert_eq!(
-            actions.teleport(Entity(7), [0.0; 3], Teleport::new()),
+            effects.teleport(Entity(7), [0.0; 3], Teleport::new()),
             Err(WorldError::Gone)
         );
-        let spawned = actions
+        let spawned = effects
             .spawn([7; 16], [1.0, 2.0, 3.0], Spawn::new().level(4))
             .unwrap();
         assert_eq!(
-            actions.spawn([0; 16], [0.0; 3], Spawn::new()),
+            effects.spawn([0; 16], [0.0; 3], Spawn::new()),
             Err(WorldError::Refused)
         );
         let spawns = loader.spawns();

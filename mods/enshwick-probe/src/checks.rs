@@ -4,8 +4,8 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
-use enshwick_loader_api::actions::{Actions, Spawn, Teleport};
 use enshwick_loader_api::ecs::Entity;
+use enshwick_loader_api::effects::{Effects, Spawn, Teleport};
 use enshwick_loader_api::entity_data::{EntityData, Replication};
 use enshwick_loader_api::game_events::{EventType, RawGameEvent};
 use enshwick_loader_api::schedule::Scheduler;
@@ -60,7 +60,7 @@ pub(crate) struct Checks {
     scheduler: Scheduler,
     /// Whether the world refused the replicated health as a writable type.
     copies_refused: bool,
-    actions: Actions,
+    effects: Effects,
     died: EventType,
     /// Set from the ping the probe raised until the game hands it back.
     ping_sent: AtomicBool,
@@ -95,7 +95,7 @@ impl Checks {
             copies_refused: world
                 .writable_type(load, "keen::ecs::NetworkHealth")
                 .is_err(),
-            actions: load.actions(),
+            effects: load.effects(),
             died: load.event_type("keen::ecs::EntityDiedEvent")?,
             ping_sent: AtomicBool::new(false),
             marks: load.entity_data("mark", Replication::Server)?,
@@ -112,7 +112,7 @@ impl Checks {
         self.queries();
         self.stats();
         self.writes();
-        self.actions();
+        self.effects();
         self.spawns();
         let now: Vec<(u32, u64)> = self
             .world
@@ -286,8 +286,8 @@ impl Checks {
 
     /// Raises a ping and checks two refusals: a type off the allow list and
     /// a teleport of an entity not in the world.
-    fn actions(&self) {
-        match self.actions.ping(Entity(0), PING_AT) {
+    fn effects(&self) {
+        match self.effects.ping(Entity(0), PING_AT) {
             Ok(()) => {
                 self.ping_sent.store(true, Ordering::Release);
                 pass("ping raised; the game should hand it back next step");
@@ -295,12 +295,12 @@ impl Checks {
             Err(why) => fail(&format!("ping: {why}")),
         }
         let bytes = vec![0u8; self.died.size() as usize];
-        match self.actions.emit_raw(self.died, &bytes) {
+        match self.effects.emit_raw(self.died, &bytes) {
             Err(WorldError::Refused) => pass("emit refuses a type off the allow list"),
             other => fail(&format!("emit of a death: {other:?}")),
         }
         match self
-            .actions
+            .effects
             .teleport(Entity(u32::MAX - 1), [0.0; 3], Teleport::new())
         {
             Err(WorldError::Gone) => pass("teleport refuses an entity not in the world"),
@@ -328,7 +328,7 @@ impl Checks {
     /// Spawns one entity of `template` at `at` and follows it through
     /// writes, a teleport and its destruction.
     pub(crate) fn spawn(&self, template: [u8; 16], at: [f64; 3]) -> String {
-        let entity = match self.actions.spawn(template, at, Spawn::new()) {
+        let entity = match self.effects.spawn(template, at, Spawn::new()) {
             Ok(entity) => entity,
             Err(why) => {
                 fail(&format!("spawn of {template:02x?}: {why}"));
@@ -340,7 +340,7 @@ impl Checks {
             entity.0
         ));
         let world = self.world;
-        let actions = self.actions;
+        let effects = self.effects;
         let scheduler = self.scheduler;
         let network_health = self.network_health;
         let teleport_parts = self.teleport_parts;
@@ -368,7 +368,7 @@ impl Checks {
             }
             let to = [at[0] + 5.0, at[1], at[2]];
             let movable = world.component(entity, teleport_parts[1]).is_some();
-            match actions.teleport(entity, to, Teleport::new()) {
+            match effects.teleport(entity, to, Teleport::new()) {
                 Ok(()) if movable => pass(&format!("teleport of entity {} asked", entity.0)),
                 Err(WorldError::Refused) if !movable => {
                     pass(&format!(
@@ -522,7 +522,7 @@ impl Checks {
             return format!("entity {} has no place", entity.0);
         };
         let to = [from[0] + by[0], from[1] + by[1], from[2] + by[2]];
-        if let Err(why) = self.actions.teleport(entity, to, Teleport::new()) {
+        if let Err(why) = self.effects.teleport(entity, to, Teleport::new()) {
             fail(&format!(
                 "R7 teleport of entity {} to {to:?}: {why}",
                 entity.0

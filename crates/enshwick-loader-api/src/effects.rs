@@ -1,4 +1,4 @@
-//! Actions in the server's world: game events a mod raises, teleports and
+//! Effects in the server's world: game events a mod raises, teleports and
 //! spawns.
 //!
 //! An event goes where the game's own events go: the loader puts it into
@@ -17,15 +17,15 @@
 //! # Examples
 //!
 //! ```
-//! use enshwick_loader_api::actions::Teleport;
+//! use enshwick_loader_api::effects::Teleport;
 //!
 //! fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
-//!     let actions = load.actions();
+//!     let effects = load.effects();
 //!     load.add_command("home", "takes you to the world's centre", move |ctx, _args| {
 //!         let Some(me) = ctx.character() else {
 //!             return "the console has no character".into();
 //!         };
-//!         match actions.teleport(me, [0.0, 100.0, 0.0], Teleport::new().best_spawn()) {
+//!         match effects.teleport(me, [0.0, 100.0, 0.0], Teleport::new().best_spawn()) {
 //!             Ok(()) => "on your way".into(),
 //!             Err(why) => format!("no teleport: {why}").into(),
 //!         }
@@ -39,7 +39,7 @@ use crate::game_events::{EventType, Field, Scalar};
 use crate::world::WorldError;
 use crate::{Host, Load, Off};
 
-/// How an entity arrives, for [`Actions::teleport`].
+/// How an entity arrives, for [`Effects::teleport`].
 ///
 /// # Examples
 ///
@@ -85,7 +85,7 @@ impl Teleport {
     /// # Examples
     ///
     /// ```
-    /// use enshwick_loader_api::actions::Teleport;
+    /// use enshwick_loader_api::effects::Teleport;
     ///
     /// let north = Teleport::new().facing_yaw(0.0);
     /// assert_eq!(north.facing, Some([0.0, 0.0, 0.0, 1.0]));
@@ -98,13 +98,13 @@ impl Teleport {
     }
 }
 
-/// How an entity starts, for [`Actions::spawn`].
+/// How an entity starts, for [`Effects::spawn`].
 ///
 /// # Examples
 ///
 /// ```
 /// use core::time::Duration;
-/// use enshwick_loader_api::actions::Spawn;
+/// use enshwick_loader_api::effects::Spawn;
 ///
 /// let brief = Spawn::new().level(10).despawn_after(Duration::from_secs(60));
 /// assert_eq!(brief.level, Some(10));
@@ -163,7 +163,7 @@ impl Spawn {
     /// # Examples
     ///
     /// ```
-    /// use enshwick_loader_api::actions::Spawn;
+    /// use enshwick_loader_api::effects::Spawn;
     ///
     /// assert!(Spawn::new().facing_yaw(1.0).facing.is_some());
     /// ```
@@ -218,12 +218,12 @@ struct Ping {
     position: u64,
 }
 
-/// What a survivor does on [`Actions::npc_command`].
+/// What a survivor does on [`Effects::npc_command`].
 ///
 /// # Examples
 ///
 /// ```
-/// use enshwick_loader_api::actions::NpcOrder;
+/// use enshwick_loader_api::effects::NpcOrder;
 ///
 /// let order = NpcOrder::GoTo([10.0, 50.0, -3.0]);
 /// assert_ne!(order, NpcOrder::Reset);
@@ -237,14 +237,14 @@ pub enum NpcOrder {
     Reset,
 }
 
-/// The actions a mod takes in the server's world; get them from
-/// [`Load::actions`].
+/// The effects a mod has on the server's world; get them from
+/// [`Load::effects`].
 ///
 /// # Examples
 ///
 /// See the [module](self).
 #[derive(Clone, Copy, Debug)]
-pub struct Actions {
+pub struct Effects {
     host: Host,
     npc: Option<NpcCommand>,
     toggle: Option<SetToggle>,
@@ -252,7 +252,7 @@ pub struct Actions {
     ping: Option<Ping>,
 }
 
-impl Actions {
+impl Effects {
     pub(crate) fn resolve(load: &Load<'_>) -> Self {
         let host = load.host();
         let transform = |base: u64| -> Result<TransformAt, Off> {
@@ -319,10 +319,10 @@ impl Actions {
     /// # Examples
     ///
     /// ```
-    /// use enshwick_loader_api::actions::{Actions, NpcOrder};
+    /// use enshwick_loader_api::effects::{Effects, NpcOrder};
     ///
-    /// fn gather(actions: &Actions, survivor: u32, at: [f64; 3]) {
-    ///     if let Err(why) = actions.npc_command(survivor, NpcOrder::GoTo(at)) {
+    /// fn gather(effects: &Effects, survivor: u32, at: [f64; 3]) {
+    ///     if let Err(why) = effects.npc_command(survivor, NpcOrder::GoTo(at)) {
     ///         enshwick_loader_api::debug!("survivor {survivor} stays: {why}");
     ///     }
     /// }
@@ -349,13 +349,13 @@ impl Actions {
     ///
     /// # Errors
     ///
-    /// As for [`Actions::npc_command`].
+    /// As for [`Effects::npc_command`].
     ///
     /// # Examples
     ///
     /// ```
-    /// fn open(actions: &enshwick_loader_api::actions::Actions, lever: enshwick_loader_api::ecs::Entity, signal: u32) {
-    ///     let _sent = actions.set_toggle(lever, signal, true);
+    /// fn open(effects: &enshwick_loader_api::effects::Effects, lever: enshwick_loader_api::ecs::Entity, signal: u32) {
+    ///     let _sent = effects.set_toggle(lever, signal, true);
     /// }
     /// ```
     pub fn set_toggle(&self, sender: Entity, signal: u32, on: bool) -> Result<(), WorldError> {
@@ -372,15 +372,15 @@ impl Actions {
     ///
     /// # Errors
     ///
-    /// As for [`Actions::npc_command`].
+    /// As for [`Effects::npc_command`].
     ///
     /// # Examples
     ///
     /// ```
     /// use enshwick_loader_api::ecs::Entity;
     ///
-    /// fn taunt(actions: &enshwick_loader_api::actions::Actions, enemy: Entity, player: Entity) {
-    ///     let _noticed = actions.add_threat(enemy, player, 100.0);
+    /// fn taunt(effects: &enshwick_loader_api::effects::Effects, enemy: Entity, player: Entity) {
+    ///     let _noticed = effects.add_threat(enemy, player, 100.0);
     /// }
     /// ```
     pub fn add_threat(
@@ -402,13 +402,13 @@ impl Actions {
     ///
     /// # Errors
     ///
-    /// As for [`Actions::npc_command`].
+    /// As for [`Effects::npc_command`].
     ///
     /// # Examples
     ///
     /// ```
-    /// fn mark(actions: &enshwick_loader_api::actions::Actions, player: &enshwick_loader_api::world::Player, at: [f64; 3]) {
-    ///     let _pinged = actions.ping(player.entity, at);
+    /// fn mark(effects: &enshwick_loader_api::effects::Effects, player: &enshwick_loader_api::world::Player, at: [f64; 3]) {
+    ///     let _pinged = effects.ping(player.entity, at);
     /// }
     /// ```
     pub fn ping(&self, sender: Entity, position: [f64; 3]) -> Result<(), WorldError> {
@@ -433,11 +433,11 @@ impl Actions {
     ///
     /// ```
     /// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
-    ///     let actions = load.actions();
+    ///     let effects = load.effects();
     ///     let ping = load.event_type("keen::ecs::UiPingEvent")?;
     ///     load.add_command("ping-origin", "pings the world origin", move |_ctx, _args| {
     ///         let bytes = vec![0u8; ping.size() as usize];
-    ///         format!("{:?}", actions.emit_raw(ping, &bytes)).into()
+    ///         format!("{:?}", effects.emit_raw(ping, &bytes)).into()
     ///     })
     /// }
     /// ```
@@ -489,7 +489,7 @@ impl Actions {
     }
 }
 
-impl Actions {
+impl Effects {
     /// Asks the server to spawn an entity of `template`, its GUID as
     /// [`World::template`](crate::world::World::template) gives it, at
     /// `position` in metres, as its admin spawn does: an enemy, an animal,
@@ -505,10 +505,10 @@ impl Actions {
     /// # Examples
     ///
     /// ```
-    /// use enshwick_loader_api::actions::Spawn;
+    /// use enshwick_loader_api::effects::Spawn;
     ///
     /// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
-    ///     let actions = load.actions();
+    ///     let effects = load.effects();
     ///     let world = load.world()?;
     ///     load.add_command("clone", "spawns a copy of an entity beside you: /clone <entity>", move |ctx, args| {
     ///         let Some(me) = ctx.character() else {
@@ -518,7 +518,7 @@ impl Actions {
     ///         let (Some(template), Some([x, y, z])) = (source.and_then(|e| world.template(e)), world.position(me)) else {
     ///             return "/clone <entity>".into();
     ///         };
-    ///         format!("{:?}", actions.spawn(template, [x + 2.0, y, z], Spawn::new())).into()
+    ///         format!("{:?}", effects.spawn(template, [x + 2.0, y, z], Spawn::new())).into()
     ///     })
     /// }
     /// ```
@@ -601,7 +601,7 @@ fn put_quaternion(bytes: &mut [u8], at: u64, value: [f32; 4]) -> Result<(), Worl
 }
 
 impl Load<'_> {
-    /// The mod's [`Actions`] in the server's world: game events it raises
+    /// The mod's [`Effects`] in the server's world: game events it raises
     /// and teleports; on a client, the built-in server's while it hosts a
     /// game. An action whose event this build lacks answers
     /// [`WorldError::Missing`].
@@ -610,7 +610,7 @@ impl Load<'_> {
     ///
     /// See the [module](self).
     #[must_use]
-    pub fn actions(&mut self) -> Actions {
-        Actions::resolve(self)
+    pub fn effects(&mut self) -> Effects {
+        Effects::resolve(self)
     }
 }
