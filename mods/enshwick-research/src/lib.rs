@@ -7,8 +7,9 @@
 //! at join attempts (what a refused join leaves behind). On both sides it
 //! logs the entities near each player, so a client's and a server's log can
 //! be joined (which ids a client gives the server's entities), the health
-//! the game's impact programs set (heals, revives, scripted kills), and
-//! whether any thread runs on a fiber.
+//! the game's impact programs set (heals, revives, scripted kills), how
+//! skills are unlocked and taken back, where a player's spawn target
+//! points, and whether any thread runs on a fiber.
 //! `/research mark` starts a new section of the log while the client hosts
 //! a game.
 
@@ -17,6 +18,8 @@ mod fibers;
 mod health;
 mod join;
 mod memory;
+mod respawn;
+mod skills;
 mod tooltip;
 mod ui;
 
@@ -74,6 +77,14 @@ struct Settings {
     #[serde(default = "yes")]
     #[config(client)]
     fibers: bool,
+    /// Log every unlock and refund of a skill node.
+    #[serde(default = "yes")]
+    #[config(client)]
+    skills: bool,
+    /// Log each player's spawn target when it changes; on the server.
+    #[serde(default = "yes")]
+    #[config(client)]
+    respawn: bool,
     /// The least time between two dumps of one tooltip function, in
     /// milliseconds, unless a mark comes between.
     #[serde(default = "interval_ms")]
@@ -95,6 +106,8 @@ impl Default for Settings {
             entities: yes(),
             impact_health: yes(),
             fibers: yes(),
+            skills: yes(),
+            respawn: yes(),
             dump_interval_ms: interval_ms(),
             max_dumps: max_dumps(),
         }
@@ -139,6 +152,7 @@ impl Mod for Research {
                     "research.type_index" => 0x9a_5080,
                     "research.component_read_raw" => 0x9a_5ec0,
                     "research.impact_attribute" => 0x3e_2cc0,
+                    "research.skill_change" => 0xe5_f220,
                 ],
             }, {
                 side: SERVER,
@@ -146,6 +160,7 @@ impl Mod for Research {
                 age: 387,
                 symbols: [
                     "research.impact_attribute" => 0x18_4b90,
+                    "research.skill_change" => 0x91_3960,
                 ],
             }],
         )
@@ -164,6 +179,18 @@ impl Mod for Research {
             match health::link(load) {
                 Ok(()) => enshwick_loader_api::info!("R17 impact health writes looked at"),
                 Err(off) => enshwick_loader_api::warn!("R17 off: {off}"),
+            }
+        }
+        if settings.skills {
+            match skills::link(load) {
+                Ok(()) => enshwick_loader_api::info!("R19 skill changes looked at"),
+                Err(off) => enshwick_loader_api::warn!("R19 off: {off}"),
+            }
+        }
+        if settings.respawn {
+            match load.world().and_then(|world| respawn::link(load, world)) {
+                Ok(()) => enshwick_loader_api::info!("R20 spawn targets read every 5 s"),
+                Err(off) => enshwick_loader_api::warn!("R20 off: {off}"),
             }
         }
         if client {

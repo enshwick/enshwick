@@ -41,6 +41,12 @@ play.
   thread is stopped for a moment; threads whose stack pointer lies outside
   the stack their thread block records, or that were made fibers, are
   listed in one `R18` line at the end.
+- Skills: every unlock and refund of a skill node, with the node, whether a
+  level was added or taken, the answer and the node's level before and
+  after. Lines start with `R19 skill change`.
+- Spawn targets, on the server: every five seconds, each player's spawn
+  target (slot 9 of `SelectedTargets`: an entity and a place) when it
+  changes, with where the player stands. Lines start with `R20`.
 
 ## Commands
 
@@ -66,6 +72,9 @@ entities = true
 # Log the health impact programs set, and look for threads on fibers.
 impact_health = true
 fibers = true
+# Log skill unlocks and refunds, and each player's spawn target.
+skills = true
+respawn = true
 # The least time between two dumps of one tooltip function, unless a mark
 # comes between, and the most dumps between two marks.
 dump_interval_ms = 1000
