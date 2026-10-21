@@ -12,8 +12,10 @@ The loader comes in two parts:
 - `mods/enshwick/enshwick.dll`, the loader. It identifies the game build,
   loads the mods, initialises them, arms their hooks and answers their calls.
 
-On a game build the loader does not know, it loads no mod and the game runs
-vanilla; see [Finding the game](../finding-the-game.md).
+On a game build the loader has no table for, it finds what it needs by code
+patterns; a mod whose entries are not found stays off with the reason, and
+`build_patterns = false` keeps such a build vanilla instead; see
+[Finding the game](../finding-the-game.md).
 
 ## How mods are found
 
