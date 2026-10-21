@@ -46,6 +46,19 @@ pub struct Plan {
 }
 
 impl Plan {
+    /// Whether the client joins: the server runs no mod it lacks.
+    #[must_use]
+    pub fn joins(&self) -> bool {
+        self.missing.is_empty()
+    }
+
+    /// The client's mods to turn off now: none when it stays out, since
+    /// it never reaches the server that lacks them.
+    #[must_use]
+    pub fn turned_off(&self) -> &[String] {
+        if self.joins() { &self.turn_off } else { &[] }
+    }
+
     /// The note for the player, if any, naming mods by `names`; `blocking`
     /// when the client stays out.
     #[must_use]
@@ -289,7 +302,9 @@ pub fn query_rules(server: SocketAddr) -> std::io::Result<Vec<u8>> {
     socket.set_read_timeout(Some(QUERY_TIMEOUT))?;
     socket.connect(server)?;
     let mut request = vec![0xff, 0xff, 0xff, 0xff, b'V', 0xff, 0xff, 0xff, 0xff];
-    let mut reply = vec![0u8; 4096];
+    // A reply larger than the buffer fails to read on Windows, which would
+    // let the join through unchecked.
+    let mut reply = vec![0u8; 65_536];
     for _ in 0..3 {
         socket.send(&request)?;
         let len = socket.recv(&mut reply)?;
@@ -391,10 +406,10 @@ mod runtime {
             server.as_ref().map(|(f, m)| (f.as_str(), m.as_str())),
             &names,
         );
-        if plan.missing.is_empty() {
+        if plan.joins() {
             crate::host::apply_join_values(&values);
         }
-        for id in &plan.turn_off {
+        for id in plan.turned_off() {
             crate::host::turn_off_mod(
                 id,
                 "the server does not run it; restart the game to use it again",
@@ -478,6 +493,18 @@ mod tests {
             "{text}"
         );
         assert!(plan("ab", "a@1", Some(("cd", "a@1")), &names).other_loader);
+    }
+
+    #[test]
+    fn a_client_kept_out_turns_nothing_off() {
+        let names = Names::new();
+        let both = plan("ab", "a@1,b@1", Some(("cd", "a@2")), &names);
+        assert_eq!(both.turn_off, ["b"]);
+        assert!(!both.joins());
+        assert!(both.turned_off().is_empty());
+        let extra = plan("ab", "a@1,b@1", Some(("cd", "a@1")), &names);
+        assert!(extra.joins());
+        assert_eq!(extra.turned_off(), ["b"]);
     }
 
     #[test]
