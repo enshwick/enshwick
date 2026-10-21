@@ -95,6 +95,7 @@ static STARTED: AtomicBool = AtomicBool::new(false);
 fn link_features(loader: &'static Loader) {
     crate::crash::link(loader);
     crate::events::link(loader);
+    crate::world::link(loader);
     crate::vetoes::link(loader);
     crate::daytime::link(loader);
     crate::damage::link(loader);

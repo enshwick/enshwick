@@ -1,17 +1,21 @@
 //! Reads of the server's world for mods: components, templates and players.
-//! Every read happens on the game thread, between steps or inside a game
-//! event, where no ECS system runs; elsewhere it is refused.
+//! Reads happen on the game thread; elsewhere they are refused. Calls that
+//! change the world also wait for a quiet moment: between steps, or inside
+//! a game event, where no ECS system runs. The world-step link tells the two
+//! apart, since the game thread runs systems itself while it steps.
 //!
 //! The game thread is the dedicated server's, or on a client that hosts a
 //! game the built-in server's `GameServer` thread; each hosted game has its
 //! own server and thread, captured by the post-step link.
 
+use core::cell::Cell;
 use core::ffi::c_void;
 use std::sync::OnceLock;
-use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
 
-use enshwick_loader_api::abi::{Header, PlayerInfo, Status};
+use enshwick_loader_api::abi::{Header, HookFlags, PlayerInfo, Status};
 
+use crate::chains::Next;
 use crate::host::Loader;
 
 /// The server object, seen by the post-step hook.
@@ -41,6 +45,70 @@ pub(crate) fn release() {
     SERVER_WORLD.store(0, Ordering::Release);
     SERVER.store(0, Ordering::Release);
     GAME_THREAD.store(0, Ordering::Release);
+}
+
+thread_local! {
+    /// World steps this thread is inside.
+    static STEPPING: Cell<u32> = const { Cell::new(0) };
+    /// Loader hand-overs to mods inside a step where no system runs.
+    static QUIET: Cell<u32> = const { Cell::new(0) };
+}
+
+/// Whether the world-step link is made; without it, writes are gated by
+/// the thread alone.
+static STEP_LINKED: AtomicBool = AtomicBool::new(false);
+
+type WorldStepFn = unsafe extern "system" fn(world: *mut u8) -> usize;
+// SAFETY: the slot joins the chain of the world step.
+static WORLD_STEP_NEXT: Next<WorldStepFn> = unsafe { Next::new() };
+
+/// Links the world step, which runs every ECS system of a world, the
+/// server's on its game thread and on a client its own as well.
+pub(crate) fn link(loader: &'static Loader) {
+    let target = loader.address("world.step");
+    let linked = loader.link_feature(
+        "world-step gate",
+        target,
+        &WORLD_STEP_NEXT,
+        world_step,
+        HookFlags::NONE,
+    );
+    STEP_LINKED.store(linked, Ordering::Release);
+    if !linked {
+        crate::log!(WARN, "world writes are gated by the game thread only");
+    }
+}
+
+unsafe extern "system" fn world_step(world: *mut u8) -> usize {
+    STEPPING.set(STEPPING.get().wrapping_add(1));
+    // SAFETY: forwarded unchanged.
+    let result = unsafe { WORLD_STEP_NEXT.get()(world) };
+    STEPPING.set(STEPPING.get().wrapping_sub(1));
+    result
+}
+
+/// Marks a hand-over to mods inside a step where no system runs, such as
+/// the game events at its start, until dropped.
+#[derive(Debug)]
+pub(crate) struct Quiet(());
+
+impl Quiet {
+    pub(crate) fn enter() -> Self {
+        QUIET.set(QUIET.get().wrapping_add(1));
+        Self(())
+    }
+}
+
+impl Drop for Quiet {
+    fn drop(&mut self) {
+        QUIET.set(QUIET.get().wrapping_sub(1));
+    }
+}
+
+/// Whether this thread may change the world now: outside a world step, or
+/// in a quiet hand-over inside one.
+fn quiet() -> bool {
+    !STEP_LINKED.load(Ordering::Relaxed) || STEPPING.get() == 0 || QUIET.get() != 0
 }
 
 /// Whether a server has been seen and not released.
@@ -160,7 +228,7 @@ pub(crate) unsafe fn read<T: Copy>(base: usize, offset: usize) -> T {
 }
 
 /// The server, when the caller is on the game thread.
-pub(crate) fn server() -> Result<usize, Status> {
+pub(crate) fn reader() -> Result<usize, Status> {
     let server = SERVER.load(Ordering::Acquire);
     if server == 0 {
         return Err(Status::MISSING);
@@ -168,6 +236,16 @@ pub(crate) fn server() -> Result<usize, Status> {
     // SAFETY: no preconditions.
     let me = unsafe { windows_sys::Win32::System::Threading::GetCurrentThreadId() };
     if me != GAME_THREAD.load(Ordering::Acquire) {
+        return Err(Status::WRONG_THREAD);
+    }
+    Ok(server)
+}
+
+/// The server, when the caller is on the game thread at a quiet moment,
+/// where the world may change: [`Status::WRONG_THREAD`] inside a step.
+pub(crate) fn server() -> Result<usize, Status> {
+    let server = reader()?;
+    if !quiet() {
         return Err(Status::WRONG_THREAD);
     }
     Ok(server)
@@ -184,7 +262,7 @@ fn entity_world(layout: &Layout, server: usize) -> Option<usize> {
 /// type `hash`, when the caller is on the game thread.
 pub(crate) fn type_index(loader: &Loader, hash: u32) -> Result<(usize, *const u16), Status> {
     let layout = layout(loader).ok_or(Status::MISSING)?;
-    let world = entity_world(layout, server()?).ok_or(Status::MISSING)?;
+    let world = entity_world(layout, reader()?).ok_or(Status::MISSING)?;
     // SAFETY: the entity world starts with its component registry.
     let registry: usize = unsafe { read(world, 0) };
     if registry == 0 {
@@ -230,7 +308,7 @@ pub(crate) fn component(loader: &Loader, entity: u32, hash: u32) -> Result<*cons
 /// An entity's template GUID.
 pub(crate) fn template(loader: &Loader, entity: u32) -> Result<[u8; 16], Status> {
     let layout = layout(loader).ok_or(Status::MISSING)?;
-    let world = entity_world(layout, server()?).ok_or(Status::MISSING)?;
+    let world = entity_world(layout, reader()?).ok_or(Status::MISSING)?;
     // SAFETY: the entity world's id-to-slot map, on the game thread.
     let slot = unsafe {
         (layout.entity_slot)(
@@ -276,7 +354,7 @@ pub(crate) fn fixed_position(loader: &Loader, entity: u32) -> Option<[i64; 3]> {
 
 pub(crate) fn players(loader: &Loader) -> Result<Vec<PlayerInfo>, Status> {
     let layout = layout(loader).ok_or(Status::MISSING)?;
-    let server = server()?;
+    let server = reader()?;
     // SAFETY: the server's player infos object, for permissions.
     let infos: usize = unsafe { read(server, layout.server_players) };
     Ok((0..layout.slot_count)
@@ -298,7 +376,7 @@ pub(crate) fn players(loader: &Loader) -> Result<Vec<PlayerInfo>, Status> {
 /// the server's network code names a connection by.
 pub(crate) fn machines(loader: &Loader) -> Result<Vec<(u64, u32)>, Status> {
     let layout = layout(loader).ok_or(Status::MISSING)?;
-    let server = server()?;
+    let server = reader()?;
     Ok((0..layout.slot_count)
         .filter_map(|index| {
             let slot = server + layout.slots + index * layout.slot_size;
@@ -370,4 +448,24 @@ pub(crate) fn type_hash(loader: &Loader, descriptor: u64) -> Option<u32> {
     let value: u64 = unsafe { read(address, 0) };
     #[expect(clippy::cast_possible_truncation, reason = "the hash is the low half")]
     Some(value as u32)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn changes_wait_for_a_quiet_moment_inside_a_step() {
+        STEP_LINKED.store(true, Ordering::Relaxed);
+        assert!(quiet());
+        STEPPING.set(1);
+        assert!(!quiet());
+        {
+            let _quiet = Quiet::enter();
+            assert!(quiet());
+        }
+        assert!(!quiet());
+        STEPPING.set(0);
+        assert!(quiet());
+    }
 }

@@ -174,10 +174,13 @@ fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_
 }
 ```
 
-Writes work where reads work, on the game thread, and need ABI minor 22. They
-fail with a `WorldError`: `Gone` for an entity not in the world, `Lacks` when
-it lacks the component, `Refused` for a type the loader will not write,
-`WrongThread` off the game thread and `Missing` under an older loader. A field
+Writes work on the game thread between steps, in a game event, a scheduled
+task or a chat command, and need ABI minor 22. The game thread runs ECS
+systems itself while it steps, so a write from a filter or a hook on a system
+is refused even there. They fail with a `WorldError`: `Gone` for an entity not
+in the world, `Lacks` when it lacks the component, `Refused` for a type the
+loader will not write, `WrongThread` off the game thread or inside a step, and
+`Missing` under an older loader. A field
 of an engine type means what the engine makes of it: a write the engine does
 not expect, such as a value its systems keep elsewhere, may be overwritten or
 do nothing, so check a new write on a test server first.

@@ -330,7 +330,7 @@ impl Status {
     /// The mod has faulted and is off.
     pub const FAULTED: Self = Self(6);
     /// Called from a thread the function does not serve, such as a game
-    /// read off the server's game thread.
+    /// read off the server's game thread, or a world change inside a step.
     pub const WRONG_THREAD: Self = Self(7);
 
     /// Whether this is [`Status::OK`].
