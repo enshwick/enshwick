@@ -237,6 +237,7 @@ Playing the game:
 | `set_settings(text)`              | Replaces the settings file's text; raise `SettingsChanged` after it.        |
 | `set_server_synced(values)`       | Sets the joined server's join values; raise `SettingsChanged` after it.     |
 | `command(name, &player, args)`    | Runs the mod's chat command; its reply, or `None` without such a command.   |
+| `ask_actions(kind, &player, ..)`  | Asks the mod's [player actions](actions.md) as the loader does.             |
 | `rename(entity, player, text)`    | Asks the mod's rename filters; whether every filter lets it through.        |
 | `build_resource(&key, base)`      | Builds a served resource from base bytes with the mod's patch.              |
 | `finish_inventory(outcome, ops)`  | Finishes the oldest open inventory request; false when none is open.        |

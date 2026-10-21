@@ -1820,6 +1820,62 @@ impl Installed {
         Some(run_handler(callback, user, name, player, args))
     }
 
+    /// Asks the mod's player actions as the loader does: `kind` is one of
+    /// [`ActionCall::SHEET`](crate::abi::ActionCall::SHEET),
+    /// [`ActionCall::RUN`](crate::abi::ActionCall::RUN) or
+    /// [`ActionCall::HINTS`](crate::abi::ActionCall::HINTS), for `player`
+    /// reading `language`; `action` and `args` for a run. `None` when the
+    /// mod has no actions.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_loader_api::abi::{ActionCall, Header, PlayerInfo};
+    ///
+    /// let loader = enshwick_loader_api::test::FakeHost::new().install();
+    /// let player = PlayerInfo {
+    ///     header: Header::of::<PlayerInfo>(),
+    ///     slot: 0,
+    ///     entity: 2,
+    ///     key: 7,
+    ///     permissions: 0,
+    ///     name_len: 0,
+    ///     name: [0; 64],
+    /// };
+    /// assert_eq!(loader.ask_actions(ActionCall::SHEET, &player, 0, "", ""), None);
+    /// ```
+    #[must_use]
+    pub fn ask_actions(
+        &self,
+        kind: u32,
+        player: &PlayerInfo,
+        language: u32,
+        action: &str,
+        args: &str,
+    ) -> Option<String> {
+        let (callback, user) = table::with(None, |s| s.actions)?;
+        let call = crate::abi::ActionCall {
+            header: Header::of::<crate::abi::ActionCall>(),
+            kind,
+            language,
+            player: *player,
+            action: Str::new(action),
+            args: Str::new(args),
+        };
+        let mut reply = Str::EMPTY;
+        // SAFETY: a valid call; `user` is the pointer the mod registered
+        // with.
+        unsafe {
+            callback(
+                &raw const call,
+                core::ptr::with_exposed_provenance_mut(user),
+                &raw mut reply,
+            );
+        }
+        // SAFETY: the reply stays valid until the callback runs again.
+        Some(unsafe { reply.as_str() }.unwrap_or("").to_owned())
+    }
+
     /// The command lines the mod ran as the console with
     /// `enshwick_loader_api::commands::run`, in order.
     ///

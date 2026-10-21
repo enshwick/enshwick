@@ -594,6 +594,7 @@ pub(crate) fn client_received(text: &str) -> bool {
             let fresh = state(|s| s.peers.insert(NetMessage::SERVER, Peer::new()).is_none());
             if fresh {
                 crate::log!(INFO, "mod messages: the server answered");
+                crate::actions::joined();
             }
         } else if single
             && let Some(records) = frame.part.strip_prefix(control(ITEM_DATA).as_slice())
@@ -674,6 +675,17 @@ pub(crate) fn forget_peer(key: u64) {
 /// hello; on a client, the server once it answered ([`NetMessage::SERVER`]).
 pub(crate) fn ready(peer: u64) -> bool {
     state(|s| s.peers.contains_key(&peer))
+}
+
+/// The account keys of the clients that said hello, on the server.
+pub(crate) fn clients() -> Vec<u64> {
+    state(|s| {
+        s.peers
+            .keys()
+            .copied()
+            .filter(|&k| k != NetMessage::SERVER)
+            .collect()
+    })
 }
 
 /// Sends `data` on `channel` from mod `owner`: to the server for

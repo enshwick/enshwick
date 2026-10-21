@@ -95,6 +95,8 @@ enum Page {
         schema: Option<enshwick_loader_api::config::Schema>,
         news: u64,
     },
+    /// The actions the server offers.
+    Actions(super::actions::View),
 }
 
 struct Screen {
@@ -242,6 +244,9 @@ pub(super) unsafe fn draw(loader: &Loader, engine: &Engine, context: usize, fram
                 window: Window::screen(layer, GAP),
             });
             BACK.store(0, Ordering::Relaxed);
+            if opened == FROM_PAUSE {
+                let _asked = crate::actions::ask_server();
+            }
         }
         let Some(screen) = slot.as_mut() else {
             return;
@@ -292,6 +297,12 @@ fn back(screen: &mut Screen) -> bool {
             open_server_list(screen);
             false
         }
+        Page::Actions(ref mut view) => {
+            if view.back() {
+                screen.page = Page::List { first: 0 };
+            }
+            false
+        }
         Page::List { .. } => true,
     }
 }
@@ -321,6 +332,7 @@ fn title(loader: &Loader, page: &Page) -> super::engine::UiText {
         Page::ServerSettings { id, .. } => {
             copy(&[texts::fill("mods.server.of", &[("id", id)]).as_bytes()])
         }
+        Page::Actions(view) => copy(&[view.title().as_bytes()]),
     }
 }
 
@@ -362,6 +374,9 @@ unsafe fn show(loader: &Loader, engine: &Engine, context: usize, screen: &mut Sc
                     );
                 }
                 Listed::Picked(message) => screen.message = Some(message),
+                Listed::Actions(id) => {
+                    go(screen, Page::Actions(super::actions::View::new(id, None)));
+                }
                 Listed::Nothing => {}
             }
             paint.button(texts::text("mods.back").as_bytes(), true)
@@ -408,6 +423,13 @@ unsafe fn show(loader: &Loader, engine: &Engine, context: usize, screen: &mut Sc
             }
             if paint.button(texts::text("mods.back").as_bytes(), true) {
                 open_server_list(screen);
+            }
+            false
+        }
+        Page::Actions(view) => {
+            super::actions::body(&paint, view);
+            if paint.button(texts::text("mods.back").as_bytes(), true) && view.back() {
+                go(screen, Page::List { first: 0 });
             }
             false
         }
@@ -538,6 +560,8 @@ enum Listed {
     Settings(usize),
     /// Picked an update; what the screen says about it.
     Picked((String, bool)),
+    /// Opened the actions of the mod with this id, or of every mod.
+    Actions(Option<String>),
 }
 
 /// Moves the screen to `page`, with no message.
@@ -569,6 +593,9 @@ fn list(loader: &Loader, paint: &Painter<'_>, first: &mut usize) -> Listed {
     let mods = &loader.mods;
     let updates = updates(loader);
     let mut done = Listed::Nothing;
+    if super::actions::any_offered() && paint.button(texts::text("actions").as_bytes(), true) {
+        done = Listed::Actions(None);
+    }
     if crate::world::hosting() && JUMP_SHOWN.load(Ordering::Relaxed) != 0 {
         paint.label(
             texts::text("mods.world.here").as_bytes(),
@@ -629,6 +656,11 @@ fn list(loader: &Loader, paint: &Painter<'_>, first: &mut usize) -> Listed {
             if update.ready && paint.button(texts::text("mods.update").as_bytes(), true) {
                 done = Listed::Picked(pick(loader, *owner, update));
             }
+        }
+        if super::actions::offers(&record.id)
+            && paint.button(texts::text("actions").as_bytes(), true)
+        {
+            done = Listed::Actions(Some(record.id.clone()));
         }
         let world = record.schema.lock().is_ok_and(|s| {
             s.as_ref()

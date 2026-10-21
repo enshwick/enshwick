@@ -353,6 +353,7 @@ unsafe fn after_step(loader: &'static Loader, offsets: &Offsets, server: *mut u8
         crate::interactions::after_step(loader, step)
     );
     part!("stat steps", crate::stats::after_step(loader, step));
+    part!("action hints", crate::actions::after_step(loader));
     part!(
         "knowledge change steps",
         crate::knowledge::changes::after_step(loader, step)
@@ -417,6 +418,7 @@ fn end_session() {
     crate::altars::forget();
     crate::survivors::forget();
     crate::interactions::forget();
+    crate::actions::forget();
     crate::bases::forget();
     crate::saves::forget();
     crate::daytime::forget();

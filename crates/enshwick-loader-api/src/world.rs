@@ -1190,24 +1190,29 @@ impl World {
     /// ```
     #[must_use]
     pub fn players(&self) -> Vec<Player> {
-        const MAX: usize = 64;
-        let mut infos = [blank_info(); MAX];
-        let mut count = 0u32;
-        let status = (self.host.api().players)(
-            self.host.handle(),
-            infos.as_mut_ptr(),
-            u32::try_from(MAX).unwrap_or(0),
-            &raw mut count,
-        );
-        if !status.is_ok() {
-            return Vec::new();
-        }
-        infos
-            .iter()
-            .take(usize::try_from(count).unwrap_or(0).min(MAX))
-            .map(Player::from_info)
-            .collect()
+        online(self.host)
     }
+}
+
+/// The players connected now, from the loader.
+pub(crate) fn online(host: Host) -> Vec<Player> {
+    const MAX: usize = 64;
+    let mut infos = [blank_info(); MAX];
+    let mut count = 0u32;
+    let status = (host.api().players)(
+        host.handle(),
+        infos.as_mut_ptr(),
+        u32::try_from(MAX).unwrap_or(0),
+        &raw mut count,
+    );
+    if !status.is_ok() {
+        return Vec::new();
+    }
+    infos
+        .iter()
+        .take(usize::try_from(count).unwrap_or(0).min(MAX))
+        .map(Player::from_info)
+        .collect()
 }
 
 /// The key of the world the server runs, from the loader.

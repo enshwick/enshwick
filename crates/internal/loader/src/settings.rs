@@ -56,6 +56,9 @@ pub struct Settings {
     /// at start.
     #[config(choices = [KnowledgeGuard::Watch, KnowledgeGuard::Enforce, KnowledgeGuard::Off])]
     pub knowledge_guard: KnowledgeGuard,
+    /// The key that opens a mod's actions where the HUD hints at one: "F1"
+    /// to "F12", a letter or a digit; "off" for none. Read at start.
+    pub actions_key: String,
 }
 
 /// What the knowledge guard does with a request a vanilla client never makes.
@@ -83,6 +86,7 @@ impl Default for Settings {
             build_patterns: true,
             dev_reload: false,
             knowledge_guard: KnowledgeGuard::Watch,
+            actions_key: "F7".to_owned(),
         }
     }
 }

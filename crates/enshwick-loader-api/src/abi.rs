@@ -14,7 +14,7 @@ use core::sync::atomic::{AtomicU32, AtomicUsize};
 pub const ABI_MAJOR: u16 = 1;
 
 /// The minor version of this interface. A newer minor only appends fields.
-pub const ABI_MINOR: u16 = 65;
+pub const ABI_MINOR: u16 = 66;
 
 /// Whether `id` is a valid mod id: 1 to 64 characters of `[a-z0-9-]`.
 ///
@@ -967,6 +967,70 @@ pub struct CommandCall {
 /// reply stays valid until the handler runs again; empty for none.
 pub type CommandCallFn =
     unsafe extern "system" fn(call: *const CommandCall, user: *mut c_void, reply: *mut Str);
+
+/// A question the loader asks a mod about its player actions, registered
+/// with [`HostApi::actions`].
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::abi::{ActionCall, Header, PlayerInfo, Str};
+///
+/// let call = ActionCall {
+///     header: Header::of::<ActionCall>(),
+///     kind: ActionCall::RUN,
+///     language: 0,
+///     player: PlayerInfo {
+///         header: Header::of::<PlayerInfo>(),
+///         slot: 0,
+///         entity: 2,
+///         key: 7,
+///         permissions: 0,
+///         name_len: 0,
+///         name: [0; 64],
+///     },
+///     action: Str::new("access"),
+///     args: Str::new("p0000000000000009\tb1"),
+/// };
+/// assert_eq!(call.kind, ActionCall::RUN);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct ActionCall {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// What the loader asks: [`ActionCall::SHEET`], [`ActionCall::RUN`] or
+    /// [`ActionCall::HINTS`].
+    pub kind: u32,
+    /// The language the player reads the game in, a
+    /// [`Language`](crate::i18n::Language) value.
+    pub language: u32,
+    /// The player the question is about.
+    pub player: PlayerInfo,
+    /// The action's id, for [`ActionCall::RUN`]; valid for the call.
+    pub action: Str,
+    /// The action's arguments in the sheet's encoding, for
+    /// [`ActionCall::RUN`]; valid for the call.
+    pub args: Str,
+}
+
+impl ActionCall {
+    /// The actions the player may use now, as a sheet: the reply is the
+    /// sheet's text.
+    pub const SHEET: u32 = 0;
+    /// The player runs an action from the interface: the reply is `1` or
+    /// `0`, whether it was done, and the text the player reads.
+    pub const RUN: u32 = 1;
+    /// The actions with a hint that the player has at hand now: a line
+    /// `<id><TAB><label><TAB><subject>` each.
+    pub const HINTS: u32 = 2;
+}
+
+/// A mod's answer to the loader's questions about its player actions: the
+/// call, the pointer given at registration and where to write the reply,
+/// which stays valid until the callback runs again.
+pub type ActionFn =
+    unsafe extern "system" fn(call: *const ActionCall, user: *mut c_void, reply: *mut Str);
 
 /// A mod's status source: the pointer given at registration and where to
 /// write the mod's lines for the loader's status summary. The text stays
@@ -5053,6 +5117,12 @@ pub struct HostApi {
         value: *mut c_void,
         verdict: *mut PointVerdict,
     ) -> Status,
+    /// Registers the mod's player actions: the loader asks `callback` with
+    /// `user`, on the server's game thread, for the actions a player may
+    /// use, to run one a player picked in the interface, and for the hints
+    /// a player has at hand. One registration per mod. Allowed during
+    /// `enshwick_mod_init` only. Since minor 66.
+    pub actions: extern "system" fn(me: ModHandle, callback: ActionFn, user: *mut c_void) -> Status,
 }
 
 /// What a recipe rule of [`HostApi::recipe_rule`] names.
@@ -5620,7 +5690,7 @@ const _: () = {
     assert!(size_of::<StatModify>() == 8 + 8 + 12 + 4 + 8);
     assert!(size_of::<StatChange>() == 8 + 24);
     assert!(core::mem::offset_of!(HostApi, language) == 24 + 127 * 8);
-    assert!(size_of::<HostApi>() == 24 + 142 * 8);
+    assert!(size_of::<HostApi>() == 24 + 143 * 8);
     assert!(core::mem::offset_of!(HostApi, recipe_rule) == 24 + 137 * 8);
     assert!(core::mem::offset_of!(HostApi, recipe_disabled) == 24 + 138 * 8);
     assert!(core::mem::offset_of!(HostApi, rebuild_resource) == 24 + 136 * 8);
@@ -5691,6 +5761,8 @@ const _: () = {
     assert!(size_of::<MidHookSpec>() == 32);
     assert!(core::mem::offset_of!(HostApi, status) == 24 + 39 * 8);
     assert!(core::mem::offset_of!(HostApi, run_command) == 24 + 40 * 8);
+    assert!(core::mem::offset_of!(HostApi, actions) == 24 + 142 * 8);
+    assert!(size_of::<ActionCall>() == 8 + 8 + 96 + 16 + 16);
     assert!(core::mem::offset_of!(HostApi, altars_open) == 24 + 41 * 8);
     assert!(core::mem::offset_of!(HostApi, zone_check_filter) == 24 + 45 * 8);
     assert!(core::mem::offset_of!(HostApi, survivor_lookup) == 24 + 46 * 8);

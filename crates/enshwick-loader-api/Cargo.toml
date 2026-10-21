@@ -37,6 +37,10 @@ test = []
 schema = ["dep:schemars", "dep:serde_json"]
 
 [[test]]
+name = "actions"
+required-features = ["test"]
+
+[[test]]
 name = "effects"
 required-features = ["test"]
 

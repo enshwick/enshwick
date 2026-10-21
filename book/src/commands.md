@@ -1,5 +1,9 @@
 # Commands and chat
 
+For anything a player does, declare a [player action](actions.md) instead:
+it shows in the game's interface and answers as a command too. Plain
+commands suit administrators' and developers' tools.
+
 A mod can answer chat commands: a player types `/name words...`, and the
 server hands the line to the mod that registered `name`. The line never
 reaches anyone's chat, and the reply goes to that player alone.

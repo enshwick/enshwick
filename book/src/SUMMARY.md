@@ -33,6 +33,7 @@
 - [Character progress](progress.md)
 - [Buffs](buffs.md)
 - [Knowledge and quests](knowledge.md)
+- [Player actions](actions.md)
 - [Commands and chat](commands.md)
 - [Messages between server and client](messages.md)
 - [The interface](interface.md)
