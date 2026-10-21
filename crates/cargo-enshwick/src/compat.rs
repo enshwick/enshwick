@@ -29,7 +29,7 @@ pub(crate) struct Args {
     /// The game executable: `enshrouded_server.exe` or `enshrouded.exe`.
     exe: PathBuf,
     /// Mod DLLs, or folders whose `*.dll` files are mods, to start against
-    /// the build.
+    /// the build; starting them runs their code, so only DLLs you trust.
     #[arg(long)]
     mods: Vec<PathBuf>,
     /// Writes the report here instead of to standard output.
