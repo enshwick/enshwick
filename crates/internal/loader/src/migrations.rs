@@ -104,14 +104,19 @@ pub struct Record {
 }
 
 impl Record {
-    /// Reads the record in `data_dir`; an empty one when there is none or it
-    /// does not parse.
-    #[must_use]
-    pub fn read(data_dir: &Path) -> Self {
-        std::fs::read_to_string(data_dir.join(RECORD))
-            .ok()
-            .and_then(|text| toml::from_str(&text).ok())
-            .unwrap_or_default()
+    /// Reads the record in `data_dir`; an empty one when there is none.
+    ///
+    /// # Errors
+    ///
+    /// When the file is there but does not read, or is empty, as a write cut
+    /// short leaves it: an empty record would run every migration again.
+    pub fn read(data_dir: &Path) -> Result<Self, String> {
+        match std::fs::read_to_string(data_dir.join(RECORD)) {
+            Ok(text) if text.trim().is_empty() => Err("the file is empty".to_owned()),
+            Ok(text) => toml::from_str(&text).map_err(|e| e.to_string()),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Self::default()),
+            Err(e) => Err(e.to_string()),
+        }
     }
 
     /// Writes the record to `data_dir`, through a temporary file.
@@ -427,7 +432,9 @@ mod live {
                 )
             });
         // SAFETY: the text stays valid until the mod's next map call.
-        let text = unsafe { out.as_str() }.unwrap_or_default().to_owned();
+        let Some(text) = (unsafe { out.as_str() }).map(str::to_owned) else {
+            return Err("the result is not UTF-8".to_owned());
+        };
         if status.is_ok() {
             Ok(text)
         } else if text.is_empty() {
@@ -489,17 +496,35 @@ mod live {
         Some(unsafe { core::slice::from_raw_parts(ptr, count as usize) })
     }
 
-    /// Runs `f` on the record, writing it back unless in a dry run.
-    fn with_record<R>(loader: &Loader, f: impl FnOnce(&mut Record) -> R) -> R {
+    /// Runs `f` on the record, writing it back unless in a dry run; `None`,
+    /// logged once, while the record does not read, so no migration runs
+    /// twice.
+    fn with_record<R>(loader: &Loader, f: impl FnOnce(&mut Record) -> R) -> Option<R> {
+        static REPORTED: std::sync::Once = std::sync::Once::new();
         let mut held = RECORD.lock().unwrap_or_else(PoisonError::into_inner);
-        let record = held.get_or_insert_with(|| Record::read(&loader.data_dir));
+        if held.is_none() {
+            match Record::read(&loader.data_dir) {
+                Ok(read) => *held = Some(read),
+                Err(e) => {
+                    REPORTED.call_once(|| {
+                        crate::log!(
+                            ERROR,
+                            "migrations off: mod-data/{} does not read ({e}); fix or remove it",
+                            super::RECORD
+                        );
+                    });
+                    return None;
+                }
+            }
+        }
+        let record = held.as_mut()?;
         let result = f(record);
         if !dry_run()
             && let Err(e) = record.write(&loader.data_dir)
         {
             crate::log!(WARN, "migrations: the record was not written: {e}");
         }
-        result
+        Some(result)
     }
 
     /// Logs a run's outcome under mod `id`.
@@ -548,7 +573,8 @@ mod live {
                 &|m, s, input| call(&reg, m, s, input),
                 dry_run(),
             )
-        });
+        })
+        .unwrap_or(Ok(None));
         report(&record.id, "the settings file", &outcome);
         if outcome.is_err() {
             return Status::REFUSED;
@@ -582,7 +608,8 @@ mod live {
                     &|m, s, input| call(reg, m, s, input),
                     dry_run(),
                 )
-            });
+            })
+            .unwrap_or(Ok(None));
             report(&record.id, &format!("world {key}"), &outcome);
             if let Err((_, reason)) = outcome {
                 loader.turn_off(
@@ -756,7 +783,13 @@ mod tests {
             "limit = 4\n"
         );
         record.write(&dir).unwrap();
-        assert_eq!(Record::read(&dir), record);
+        assert_eq!(Record::read(&dir), Ok(record));
+        std::fs::write(dir.join(RECORD), "").unwrap();
+        assert!(Record::read(&dir).is_err());
+        std::fs::write(dir.join(RECORD), "settings = [").unwrap();
+        assert!(Record::read(&dir).is_err());
+        std::fs::remove_file(dir.join(RECORD)).unwrap();
+        assert_eq!(Record::read(&dir), Ok(Record::default()));
         let _gone = std::fs::remove_dir_all(&dir);
     }
 
