@@ -58,6 +58,9 @@ widgets draw only inside one. The widgets:
 | `sound`                  | plays a click, confirmation, back or refusal  |                           |
 
 Rows take `read_only(true)`: they show the value and do not take changes.
+A slider whose range has an end that is not finite draws nothing; a reversed
+range slides between the same ends, and a value that is not finite shows at
+the smaller end. `progress` draws a fraction that is not finite as 0.
 Styles are the game's named ones: `Body`, `Secondary`, `H1` to `H3`,
 `Warning`, `Positive` and `Negative`.
 
