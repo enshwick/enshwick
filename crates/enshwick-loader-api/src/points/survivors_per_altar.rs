@@ -4,8 +4,9 @@
 /// `survivors-per-altar:copy-limit`: the answer is the most entities of the
 /// survivor, its original included, before a copy staff is refused.
 ///
-/// The mod answers with the number of altars; each altar still holds one
-/// copy at most, so a higher answer changes nothing. Asked on the server's
+/// The mod answers with the number of altars. Each altar still holds one
+/// entity at most, so a higher answer adds one at most: a copy at every
+/// altar while the original stands outside them. Asked on the server's
 /// game thread when a copy staff would place a new copy.
 ///
 /// # Examples
@@ -26,7 +27,8 @@ pub struct CopyLimit {
     pub survivor: u32,
     /// How many altars stand.
     pub altars: u32,
-    /// How many entities of the survivor the altars hold now.
+    /// How many entities of the survivor stand now, its original included
+    /// wherever it is.
     pub copies: u32,
 }
 
@@ -56,7 +58,8 @@ pub struct CopyLimit {
 pub struct ChargeCost {
     /// The survivor, the number of its [`SurvivorId`](crate::survivors::SurvivorId).
     pub survivor: u32,
-    /// How many entities of the survivor the altars hold now.
+    /// How many entities of the survivor stand now, its original included
+    /// wherever it is.
     pub copies: u32,
     /// The charges the staff holds; a full staff's for one from before
     /// charges.

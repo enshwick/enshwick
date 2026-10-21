@@ -514,7 +514,7 @@ fn judge(shared: &Shared, summon: &Summon, staffs: Staffs) -> SummonVerdict {
                 CopyStaff::Place => (Answer::Nobody, true),
             };
         let cost = if places {
-            let copies = shared.copies.copy_count(survivor);
+            let copies = shared.copies.entity_count(survivor, original);
             let Some(cost) = charge_cost(survivor, copies, summon.meter, charges.full) else {
                 enshwick_loader_api::info!(
                     "copy staff of {} at {:?}: refused at survivors-per-altar:charge-cost",
