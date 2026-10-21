@@ -44,9 +44,11 @@ The types are in
 | `ShutdownStarted` | none | an orderly stop begins, with the world and players alive; the final save follows | game |
 | `BuildingPlaced` | `BuildingData` | a player placed a building piece or prop; raised after the step that placed it | game |
 | `BuildingRemoved` | `BuildingData` | a player picked up or tore down a placed piece; the entity no longer exists | game |
-| `SettingsChanged` | none | the mod's settings file changed, or a client's join values changed | loader |
+| `SettingsChanged` | none | the mod's settings file changed, `/config` or the Mods screen changed a setting, or a client's join values changed | not fixed: loader or game |
 | `LoaderSettingsChanged` | none | `mod-configs/enshwick.toml` changed | loader |
 | `JoinRefused` | none | the join check kept this client out of a server | game |
+| `AltarsChanged` | none | a Flame Altar of the server's world was placed, removed, moved, raised a level or had its zone built anew, for a mod that called `load.altars()` ([altars](altars.md)) | game |
+| `WorldSettings` | none | a world loaded in this process, so its own settings apply, or stopped, so the settings file applies again | game |
 | `DayStarted` | none | the day began in the server's world, by the clock or a time a mod set ([time of day](daytime.md)) | game |
 | `NightStarted` | none | the night began in the server's world | game |
 | `KnowledgeChanged` | `KnowledgeData` (`entity`, `id`, `value`) | a knowledge value of a player (or the world, entity 0) changed ([knowledge](knowledge.md)) | game |

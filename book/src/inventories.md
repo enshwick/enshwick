@@ -76,7 +76,7 @@ Both return a
 | `count(root, item)` | How many of item id `item` the inventory holds. |
 | `slot(slot_ref)` | What one slot holds, with `Category::UNKNOWN`. |
 | `root(slot_ref)` | The inventory a slot belongs to at the root, the chest or player; `None` when its sub-inventory has no owner. |
-| `durability(pide)` | An item entity's durability as clients see it: a `Bar` with `current` and `max`. |
+| `durability(pide)` | An item entity's durability as clients see it: a `Bar` with `current` and `max`; `None` for an item without durability. |
 | `meter(pide)` | An item entity's [meter](content/items.md#meters), a `Bar`; `None` for an item without one. |
 
 A [`Slot`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/inventory.rs)

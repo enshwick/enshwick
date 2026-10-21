@@ -106,11 +106,9 @@ A row applies only when its side and both parts of its fingerprint match the
 running binary. Rows for other builds are ignored, so a mod can carry rows for
 several builds at once.
 
-[`enshwick-survivors-per-altar`](https://github.com/themaiby/enshwick/tree/main/mods/enshwick-survivors-per-altar)
-pins the call sites it tells apart and the offsets it reads in rows for both
-binaries;
-[`enshwick-shared-experience`](https://github.com/themaiby/enshwick/tree/main/mods/enshwick-shared-experience)
-pins two game functions the same way.
+[`enshwick-research`](https://github.com/themaiby/enshwick/blob/main/mods/enshwick-research/src/lib.rs)
+pins the client functions it studies in a `CLIENT` row and two server
+functions in a `SERVER` row.
 
 When the game updates, the new build's table and rows come from
 [`cargo enshwick pin`](https://github.com/themaiby/enshwick/blob/main/crates/cargo-enshwick/README.md#porting-build-rows-pin):

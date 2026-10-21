@@ -12,5 +12,5 @@ workspace and are never released.
 
 The book's chapter [Services between mods](../book/src/services.md) walks
 through the trading post and the market stalls, and
-[Testing](../book/src/testing.md#reloading-a-mod-on-a-development-server) the
+[Testing](../book/src/testing.md#reloading-a-mod-while-the-game-runs) the
 reload.

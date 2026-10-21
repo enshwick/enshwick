@@ -122,7 +122,7 @@ Send recipes to the workshop with its `WorkshopId`:
 
 A `WorkshopId` is only a GUID with the game's id beside it. `add_workshop`
 returns one, and
-[`WorkshopId::new`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/load.rs)
+[`WorkshopId::new`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/content/workshops.rs)
 names any workshop, a vanilla one included:
 
 ```rust
@@ -146,4 +146,4 @@ first reads them, and turns the mod off then.
 
 When the mod is removed, placed stations load as the vanilla station they
 were cloned from: see [Content](../content.md#when-a-mod-is-removed). The
-station items players hold disappear, like any item of a removed mod.
+station items players hold stay as stand-ins, like any item of a removed mod.

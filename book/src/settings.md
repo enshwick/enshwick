@@ -249,7 +249,11 @@ applies an edited file without a restart:
 
 - the loader looks at every settings file once a second, so the handler runs
   about a second after the file changes;
-- it runs on the loader's settings thread, not the game thread;
+- it also runs at once after `/config` or the Mods screen changes a setting,
+  and as a world loads or stops;
+- its thread is not fixed: the settings watcher for an edited file, the thread
+  that made the change for `/config` or the Mods screen, the game thread as a
+  world loads or stops;
 - the file is parsed and validated first. A file that no longer parses or
   validates is logged as skipped, the handler is not called, and the running
   values stay;

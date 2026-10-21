@@ -28,7 +28,7 @@ client hosts:
 - while no game is hosted, the server features rest: the world reads return
   nothing and no game events come.
 
-[`Host::hosting`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/ecs.rs)
+[`Host::hosting`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/host.rs)
 tells whether this process runs a server now: always on the dedicated server,
 on the client from the built-in server's first step until the game stops.
 

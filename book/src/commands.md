@@ -80,8 +80,9 @@ The loader answers `/enshwick` itself:
 | `/enshwick ui-demo`               | administrators only, from a client that runs Enshwick: opens a window of every [interface](interface.md) widget on that client, for a visual check |
 | `/config <mod> [key] [value]`     | administrators only: read and change a mod's settings; see [The schema and `/config`](settings.md#the-schema-and-config)                           |
 
-No mod may register `enshwick` or `config`. A `/` command no one has gets `Unknown command /name. /enshwick help lists
-the commands.`
+No mod may register `enshwick`, `config` or `enshwick-net`, which carries the
+loader's own messages between client and server. A `/` command no one has gets
+`Unknown command /name. /enshwick help lists the commands.`
 
 ## Running a command line
 

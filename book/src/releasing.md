@@ -9,8 +9,9 @@ how an updater installs them, and how releases are signed.
 Enshwick Loader has one version, such as Enshwick Loader 0.2.0: the loader
 (`enshwick-loader`), the `powrprof.dll` stub (`enshwick-loader-stub`),
 `enshwick-loader-api` with its test fake and its macros
-(`enshwick-loader-macros`), `enshwick-loader-reflect` and `cargo-enshwick`
-always carry the same number and are released together. Mods have versions of their own, released apart from the
+(`enshwick-loader-macros`), `enshwick-loader-reflect`, the build tables
+(`enshwick-loader-builds`) and `cargo-enshwick` always carry the same number
+and are released together. Mods have versions of their own, released apart from the
 platform and from each other.
 
 Which loader a mod runs under is not read from that version but from the ABI

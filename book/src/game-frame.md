@@ -11,9 +11,9 @@ such code fast and keep the game alive.
 In the common case a hook does not allocate, lock, format or log.
 
 - **No allocation.** No `Vec`, `String`, `Box` or `format!` per call. Use stack
-  arrays, or a `thread_local!` buffer reused between calls, as
-  [`enshwick-flame-altar-zones`](https://github.com/themaiby/enshwick/blob/main/mods/enshwick-flame-altar-zones/src/altars.rs)
-  does.
+  arrays, or a `thread_local!` value reused between calls, as
+  [`enshwick-survivors-per-altar`](https://github.com/themaiby/enshwick/blob/main/mods/enshwick-survivors-per-altar/src/policy.rs)
+  does for its plan.
 - **No locks** on the fast path. A lock held by another thread stalls the
   frame; a lock the hook already holds, entered again through a nested hooked
   call, deadlocks it. Where a lock cannot be avoided, take it only after the
@@ -60,8 +60,8 @@ or swapped whole:
   such as settings applied by `on_config_change`: readers load it without a
   lock, the writer stores a new one.
 
-[`enshwick-flame-altar-count`](https://github.com/themaiby/enshwick/blob/main/mods/enshwick-flame-altar-count/src/bases.rs)
-keeps its zone table in an `ArcSwap` and its zone count in an `AtomicU32`.
+[`enshwick-flame-altar-count`](https://github.com/themaiby/enshwick/blob/main/mods/enshwick-flame-altar-count/src/lib.rs)
+keeps its altar table in an `ArcSwap` and the cap in force in an `AtomicU8`.
 
 ## Work that can wait
 

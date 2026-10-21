@@ -33,7 +33,8 @@ armour and other items with durability or a level, and items with a
 [meter](content/items.md#meters). An
 [`ItemInstance`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/item_data.rs)
 is that entity and the item id it holds; `ItemInstance::of(&slot)` takes it
-from an [inventory](inventories.md) slot.
+from an [inventory](inventories.md) slot, or gives `None` for an empty slot or
+an item without an entity of its own.
 
 The game saves an item's entity under its id and creates it with the same
 id on load, so the value stays with the item across saves, moves between

@@ -518,8 +518,9 @@ impl Load<'_> {
     }
 
     /// Calls `handler` with the mod's settings each time `mod-configs/<id>.toml`
-    /// changes, on a loader thread. A file that no longer parses or validates
-    /// is logged and skipped, and the running values stay.
+    /// changes, after `/config` or the Mods screen sets one of them, and as a
+    /// world loads or stops; the thread is not fixed. A file that no longer
+    /// parses or validates is logged and skipped, and the running values stay.
     ///
     /// On a client, it also runs when the join values change: on joining a
     /// server, `handler` gets the settings with the server's
