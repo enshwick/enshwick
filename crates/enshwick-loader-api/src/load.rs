@@ -12,11 +12,19 @@ use crate::services::{Emitter, ModEvent, Service};
 /// Why a mod turns itself off during initialisation; the loader logs the
 /// reason and keeps the game vanilla where the mod would have acted.
 ///
+/// Every error type of this crate turns into an `Off` with `?`, its message
+/// the reason.
+///
 /// # Examples
 ///
 /// ```
 /// let off = enshwick_loader_api::Off::new("this game build is not supported");
 /// assert_eq!(off.to_string(), "this game build is not supported");
+///
+/// fn calls(load: &enshwick_loader_api::Load<'_>) -> Result<usize, enshwick_loader_api::Off> {
+///     let pattern = enshwick_loader_api::code::Pattern::parse("E8 ?? ?? ?? ??")?;
+///     Ok(pattern.find_all(load.code()?).count())
+/// }
 /// ```
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 #[error("{reason}")]
@@ -51,6 +59,37 @@ impl Off {
         Self::new(format!("{what}: {why}"))
     }
 }
+
+/// `From<E> for Off` with `E`'s message as the reason.
+macro_rules! off_from {
+    ($($error:ty),* $(,)?) => {$(
+        impl From<$error> for Off {
+            fn from(error: $error) -> Self {
+                Self::new(error.to_string())
+            }
+        }
+    )*};
+}
+
+off_from!(
+    crate::affixes::RollError,
+    crate::altars::SetSizesError,
+    crate::code::FindError,
+    crate::code::PatternError,
+    crate::commands::RunError,
+    ConfigError,
+    crate::content::vanilla::VanillaError,
+    crate::inventory::BatchError,
+    crate::item_data::SetError,
+    crate::migrations::MigrationError,
+    crate::net::SendError,
+    crate::packs::PackError,
+    crate::packs::ReadPackError,
+    crate::services::LayoutError,
+    crate::stats::ModifyError,
+    crate::ui::UiError,
+    crate::world::WorldError,
+);
 
 /// A mod: what the loader initialises when it loads the DLL.
 ///
@@ -88,7 +127,7 @@ pub trait Mod: Sized + Send + Sync + 'static {
     fn ready(&'static self, _host: Host) {}
 
     /// Runs before a development reload unloads the mod (only for a mod
-    /// with `reload = true` in its manifest): stop every thread and timer
+    /// with `reload: true` in its manifest): stop every thread and timer
     /// the mod started and write what the next copy reads back. The loader
     /// has unlinked the mod's hooks and events already.
     fn shutdown(&'static self) {}
@@ -578,7 +617,7 @@ impl Load<'_> {
     {
         let handler = std::sync::Arc::new(handler);
         let on_world = std::sync::Arc::clone(&handler);
-        self.subscribe(Event::WORLD_SETTINGS, move |_| {
+        self.on_raw_event(Event::WORLD_SETTINGS, move |_| {
             let Some(host) = crate::host() else {
                 return;
             };
@@ -594,7 +633,7 @@ impl Load<'_> {
                 Err(off) => crate::warn!("the world's settings are skipped: {off}"),
             }
         })?;
-        self.subscribe(Event::SETTINGS_CHANGED, move |_| {
+        self.on_raw_event(Event::SETTINGS_CHANGED, move |_| {
             let Some(host) = crate::host() else {
                 return;
             };
@@ -683,7 +722,7 @@ impl Load<'_> {
         &mut self,
         handler: impl Fn(&E::Data) + Send + Sync + 'static,
     ) -> Result<(), Off> {
-        self.subscribe(E::EVENT, move |raw| {
+        self.on_raw_event(E::EVENT, move |raw| {
             // SAFETY: the loader passes this event's data, valid for the call.
             if let Some(data) = unsafe { E::data(raw) } {
                 handler(&data);
@@ -705,10 +744,10 @@ impl Load<'_> {
     /// use enshwick_loader_api::abi::Event;
     ///
     /// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
-    ///     load.subscribe(Event::SETTINGS_CHANGED, |_| enshwick_loader_api::info!("settings edited"))
+    ///     load.on_raw_event(Event::SETTINGS_CHANGED, |_| enshwick_loader_api::info!("settings edited"))
     /// }
     /// ```
-    pub fn subscribe<F>(&mut self, event: Event, handler: F) -> Result<(), Off>
+    pub fn on_raw_event<F>(&mut self, event: Event, handler: F) -> Result<(), Off>
     where
         F: Fn(*const c_void) + Send + Sync + 'static,
     {
@@ -1250,7 +1289,7 @@ fn with_server<T: Config>(settings: &mut T, server: &str) -> Result<(), ConfigEr
 }
 
 /// Runs a subscribed handler; `user` is the handler boxed by
-/// [`Load::subscribe`], alive for the process.
+/// [`Load::on_raw_event`], alive for the process.
 unsafe extern "system" fn deliver<F: Fn(*const c_void)>(
     _event: Event,
     data: *const c_void,

@@ -472,7 +472,7 @@ impl Load<'_> {
             let tag = self.declare(tag)?;
             let mut any = false;
             for (language, text) in texts.translations(key) {
-                self.add_text(tag, language.0, text)?;
+                self.add_text(tag, language, text)?;
                 any = true;
             }
             if !any {

@@ -491,6 +491,7 @@ impl Op {
 /// assert_eq!(empty.check(), Err(enshwick_loader_api::inventory::BatchError::Empty));
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, thiserror::Error)]
+#[non_exhaustive]
 pub enum BatchError {
     /// No operations.
     #[error("the batch is empty")]

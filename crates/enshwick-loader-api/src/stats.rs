@@ -4,7 +4,7 @@
 //!
 //! A stat kind has a namespaced id (`<mod>:<name>`) and a [`StatDef`]: what
 //! it is ([`StatType`]), its default, its range and the text key that names
-//! it. A mod defines its own kinds with [`Load::stat`] and opens any other,
+//! it. A mod defines its own kinds with [`Load::define_stat`] and opens any other,
 //! the platform's built-in ones in [`builtin`] among them, with
 //! [`Load::open_stat`]; every mod that opens one id shares its values.
 //!
@@ -26,7 +26,7 @@
 //! use enshwick_loader_api::stats::{Lasting, Modifier, Op, StatDef, builtin};
 //!
 //! fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
-//!     let luck = load.stat("luck", &StatDef::additive("stat.luck").range(0.0, 1.0))?;
+//!     let luck = load.define_stat("luck", &StatDef::additive("stat.luck").range(0.0, 1.0))?;
 //!     let health = load.open_stat(builtin::HEALTH_MAX)?;
 //!     let stats = load.stats()?;
 //!     load.add_command("bless", "more health and luck for a minute", move |ctx, _args| {
@@ -298,7 +298,7 @@ pub enum StatType {
     Flag,
 }
 
-/// A stat kind's definition, for [`Load::stat`].
+/// A stat kind's definition, for [`Load::define_stat`].
 ///
 /// # Examples
 ///
@@ -526,7 +526,7 @@ impl StatDef {
 )]
 pub struct StatKey(pub u32);
 
-/// A stat kind, from [`Load::stat`] or [`Load::open_stat`]. Copy it
+/// A stat kind, from [`Load::define_stat`] or [`Load::open_stat`]. Copy it
 /// anywhere.
 ///
 /// # Examples
@@ -1225,7 +1225,7 @@ impl Load<'_> {
     /// # Examples
     ///
     /// See the [module](self).
-    pub fn stat(&mut self, name: &str, def: &StatDef) -> Result<Stat, Off> {
+    pub fn define_stat(&mut self, name: &str, def: &StatDef) -> Result<Stat, Off> {
         def.check()
             .map_err(|why| Off::new(format!("stat {name:?}: {why}")))?;
         self.open_stat_with(name, Some(def))

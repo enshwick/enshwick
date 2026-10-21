@@ -34,13 +34,13 @@ same version of it:
 # struct MyMod;
 # impl enshwick_loader_api::Mod for MyMod {
 fn manifest() -> &'static enshwick_loader_api::abi::Manifest {
-    enshwick_loader_api::manifest!(id: "my-mod", side: BOTH, join = true)
+    enshwick_loader_api::manifest!(id: "my-mod", side: BOTH, join: true)
 }
 #     fn init(_: &mut enshwick_loader_api::Load<'_>) -> Result<Self, enshwick_loader_api::Off> { Ok(Self) }
 # }
 ```
 
-`join = true` puts the mod in the mod set the server advertises, so a player
+`join: true` puts the mod in the mod set the server advertises, so a player
 without it is warned before joining; see [The join check](concepts/join-check.md).
 [`enshwick-safes`](https://github.com/themaiby/enshwick/tree/main/mods/enshwick-safes)
 and

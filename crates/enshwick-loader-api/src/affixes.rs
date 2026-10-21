@@ -2,12 +2,12 @@
 //! "of the Bear" giving 10 to 30 extra health, rolled onto single items as
 //! they drop or are crafted and kept with the item.
 //!
-//! A mod defines its affixes with [`Load::affix`]: the [`Modifier`](crate::stats::Modifier)s'
+//! A mod defines its affixes with [`Load::define_affix`]: the [`Modifier`](crate::stats::Modifier)s'
 //! ranges, a weight against the other affixes, a [`Rarity`], the item
 //! [`Categories`] it rolls on and an optional group whose affixes never roll
 //! together. Every mod's affixes form one pool. [`Affixes::roll`] rolls an
-//! item from it on the server; [`Load::affixes_on_loot`] and
-//! [`Load::affixes_on_craft`] roll the items that drop from random loot or
+//! item from it on the server; [`Load::add_loot_affixes`] and
+//! [`Load::add_craft_affixes`] roll the items that drop from random loot or
 //! come out of crafting. What an item rolled is part of its
 //! [`ItemStats`], so the entity that wears it gets
 //! the modifiers, and [`Affixes::lines`] lists them for a tooltip.
@@ -24,13 +24,13 @@
 //!
 //! fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
 //!     let health = load.open_stat(builtin::HEALTH_MAX)?;
-//!     load.affix(
+//!     load.define_affix(
 //!         "bear",
 //!         &AffixDef::new("affix.bear", Categories::EQUIPMENT)
 //!             .with(Range::new(health, Op::Add, 10.0, 30.0).step(1.0))
 //!             .rarity(Rarity::Uncommon),
 //!     )?;
-//!     load.affixes_on_loot(AffixLoot::new(Source::bosses(), 0.5).count(1, 2))
+//!     load.add_loot_affixes(AffixLoot::new(Source::bosses(), 0.5).count(1, 2))
 //! }
 //! ```
 
@@ -227,7 +227,7 @@ impl Range {
     }
 }
 
-/// An affix's definition, for [`Load::affix`].
+/// An affix's definition, for [`Load::define_affix`].
 ///
 /// # Examples
 ///
@@ -905,7 +905,7 @@ impl Affixes {
     }
 }
 
-/// Rolls on random loot, for [`Load::affixes_on_loot`].
+/// Rolls on random loot, for [`Load::add_loot_affixes`].
 ///
 /// # Examples
 ///
@@ -966,7 +966,7 @@ impl AffixLoot {
     }
 }
 
-/// Rolls on crafted items, for [`Load::affixes_on_craft`].
+/// Rolls on crafted items, for [`Load::add_craft_affixes`].
 ///
 /// # Examples
 ///
@@ -1031,7 +1031,7 @@ impl Load<'_> {
     /// # Examples
     ///
     /// See the [module](self).
-    pub fn affix(&mut self, name: &str, def: &AffixDef) -> Result<u32, Off> {
+    pub fn define_affix(&mut self, name: &str, def: &AffixDef) -> Result<u32, Off> {
         def.check()
             .map_err(|why| Off::new(format!("affix {name:?}: {why}")))?;
         let host = self.host();
@@ -1066,7 +1066,7 @@ impl Load<'_> {
     /// # Examples
     ///
     /// See the [module](self).
-    pub fn affixes_on_loot(&mut self, rule: AffixLoot) -> Result<(), Off> {
+    pub fn add_loot_affixes(&mut self, rule: AffixLoot) -> Result<(), Off> {
         if !(0.0..=1.0).contains(&rule.chance) {
             return Err(Off::new(format!(
                 "affix loot: chance {} is not between 0 and 1",
@@ -1108,10 +1108,10 @@ impl Load<'_> {
     /// use enshwick_loader_api::affixes::{AffixCraft, RollRules};
     ///
     /// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
-    ///     load.affixes_on_craft(AffixCraft::new(0.2, RollRules::new(1, 1)))
+    ///     load.add_craft_affixes(AffixCraft::new(0.2, RollRules::new(1, 1)))
     /// }
     /// ```
-    pub fn affixes_on_craft(&mut self, rule: AffixCraft) -> Result<(), Off> {
+    pub fn add_craft_affixes(&mut self, rule: AffixCraft) -> Result<(), Off> {
         if !(0.0..=1.0).contains(&rule.chance) {
             return Err(Off::new(format!(
                 "affix craft: chance {} is not between 0 and 1",

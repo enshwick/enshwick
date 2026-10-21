@@ -109,7 +109,7 @@ loader build.
 let manifest = enshwick_loader_api::manifest!(
     id: "safes",
     side: BOTH,
-    join = true,
+    join: true,
     updates: github("themaiby/enshwick", "enshwick-safes"),
     signed_by: ["RWTjqgtfpy3lSOLC4uaUXuvvKSLQKOFf6nUnEytoiFjSzxMEhLnoAdJF"],
 );

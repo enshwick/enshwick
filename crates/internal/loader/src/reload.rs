@@ -3,7 +3,7 @@
 //!
 //! Every mod is loaded from a copy under `mods/enshwick/reload/`, so its DLL
 //! in `mods/` stays writable. A thread watches those DLLs; when one changes
-//! and its mod allows it (`reload = true` in the manifest), the loader wires
+//! and its mod allows it (`reload: true` in the manifest), the loader wires
 //! the mod's hooks past it and drops its events, waits for calls in flight,
 //! runs its `shutdown`, loads the new copy and initialises it again with the
 //! same handle, then runs its `ready`. The old copy stays loaded until the
@@ -322,7 +322,7 @@ fn reload(loader: &'static Loader, mod_: &mut Watched) -> Result<String, String>
     let index = mod_.index;
     let record = loader.mods.get(index).ok_or("no such mod")?;
     if !record.manifest.flags.contains(ManifestFlags::RELOAD) {
-        return Err("its manifest does not allow it (`reload = true`); restart the game".into());
+        return Err("its manifest does not allow it (`reload: true`); restart the game".into());
     }
     if held(&record.id) {
         return Err("the server's join turned it off; restart the game".into());

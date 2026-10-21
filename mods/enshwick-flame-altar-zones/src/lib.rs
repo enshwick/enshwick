@@ -54,7 +54,7 @@ impl Mod for FlameAltarZones {
             id: "flame-altar-zones",
             side: BOTH,
             name: "Flame altar zones",
-            join = true,
+            join: true,
             updates: github("themaiby/enshwick", "enshwick-flame-altar-zones"),
             signed_by: ["RWTjqgtfpy3lSOLC4uaUXuvvKSLQKOFf6nUnEytoiFjSzxMEhLnoAdJF"],
         )

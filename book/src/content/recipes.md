@@ -129,7 +129,7 @@ has:
 - `scale_inputs(by)`, each ingredient count times `by`.
 
 The server and the client serve the same patched registry, so the crafting
-menu shows the new counts; give the mod `side: BOTH` and `join = true`, and
+menu shows the new counts; give the mod `side: BOTH` and `join: true`, and
 mark the settings the patch reads `#[config(sync)]` so a joined player runs
 with the server's. When those values change after the registry was built,
 as on joining a server and leaving it, `content::recipes::rebuild_recipes()`

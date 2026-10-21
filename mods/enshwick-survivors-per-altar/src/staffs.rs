@@ -173,7 +173,7 @@ pub(crate) fn add(load: &mut Load<'_>, texts: &Texts, charges: u16) -> Result<()
             }
             for (language, template) in translations {
                 let survivor = survivor_name(staff, language);
-                load.add_text(tag, language.0, &fill(template, &survivor))?;
+                load.add_text(tag, language, &fill(template, &survivor))?;
             }
         }
         load.add_item(NewItem {

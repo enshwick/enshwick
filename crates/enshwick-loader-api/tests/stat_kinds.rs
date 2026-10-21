@@ -35,14 +35,15 @@ mod tests {
         }
 
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
-            let luck = load.stat("luck", &StatDef::additive("stat.luck").range(0.0, 1.0))?;
+            let luck = load.define_stat("luck", &StatDef::additive("stat.luck").range(0.0, 1.0))?;
             let fire = load.open_stat(builtin::RESISTANCE_FIRE)?;
             assert!(
-                load.stat("other:luck", &StatDef::additive("x")).is_err(),
+                load.define_stat("other:luck", &StatDef::additive("x"))
+                    .is_err(),
                 "another mod's namespace"
             );
             assert!(
-                load.stat("luck", &StatDef::additive("x")).is_err(),
+                load.define_stat("luck", &StatDef::additive("x")).is_err(),
                 "defined twice"
             );
             load.buff_modifiers(BuffId(BLESSED), &[Modifier::new(luck, Op::Add, 0.25)])?;

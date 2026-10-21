@@ -200,8 +200,8 @@ const SAFE_NAME: Id = Id::new("my-mod:safe.name");
 
 fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
     let tag = load.declare(SAFE_NAME)?;
-    load.add_text(tag, Language::FALLBACK.0, "Safe")?;
-    load.add_text(tag, Language::DE_DE.0, "Tresor")
+    load.add_text(tag, Language::FALLBACK, "Safe")?;
+    load.add_text(tag, Language::DE_DE, "Tresor")
 }
 ```
 

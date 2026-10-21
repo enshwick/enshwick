@@ -137,7 +137,7 @@ impl Mod for AltarCount {
             id: "flame-altar-count",
             side: BOTH,
             name: "Flame altar count",
-            join = true,
+            join: true,
             updates: github("themaiby/enshwick", "enshwick-flame-altar-count"),
             signed_by: ["RWTjqgtfpy3lSOLC4uaUXuvvKSLQKOFf6nUnEytoiFjSzxMEhLnoAdJF"],
         )

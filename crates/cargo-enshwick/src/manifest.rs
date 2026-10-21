@@ -187,7 +187,7 @@ join check: no"
             authors: ["themaiby", "a friend"],
             license: "MIT",
             homepage: "https://github.com/themaiby/enshwick",
-            join = true,
+            join: true,
             requires: ["flame-altar-zones" => ">=0.1, <1.0"],
             after: ["flame-altar-count"],
             recommends: ["flame-altar-count" => ""],

@@ -34,15 +34,16 @@ mod tests {
         }
 
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
-            let luck = load.stat("luck", &StatDef::additive("stat.luck").range(0.0, 10.0))?;
-            load.affix(
+            let luck =
+                load.define_stat("luck", &StatDef::additive("stat.luck").range(0.0, 10.0))?;
+            load.define_affix(
                 "lucky",
                 &AffixDef::new("affix.lucky", Categories::EQUIPMENT)
                     .with(Range::new(luck, Op::Add, 1.0, 5.0).step(1.0))
                     .rarity(Rarity::Rare),
             )?;
             assert!(
-                load.affix("lucky", &AffixDef::new("x", Categories::EQUIPMENT))
+                load.define_affix("lucky", &AffixDef::new("x", Categories::EQUIPMENT))
                     .is_err(),
                 "no modifiers"
             );

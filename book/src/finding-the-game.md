@@ -236,14 +236,14 @@ fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_
 [`code::Pattern`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/code.rs)
 is the same parser and search, for use on any slice: `parse`, `matches`,
 `find_all` and `find_unique`. `load.code()` returns the game's code section as
-a `&'static [u8]` that starts at its absolute address, for a mod that reads
-the bytes around a match:
+a `&[u8]` that starts at its absolute address, for a mod that reads the bytes
+around a match during `init`; it borrows the `Load`, since arming writes into
+the code afterwards:
 
 ```rust
 fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
     let code = load.code()?;
-    let pattern = enshwick_loader_api::code::Pattern::parse("E8 ?? ?? ?? ?? 84 C0")
-        .map_err(|e| enshwick_loader_api::Off::new(e.to_string()))?;
+    let pattern = enshwick_loader_api::code::Pattern::parse("E8 ?? ?? ?? ?? 84 C0")?;
     let calls = pattern.find_all(code).count();
     enshwick_loader_api::info!("{calls} calls followed by a test of al");
     Ok(())

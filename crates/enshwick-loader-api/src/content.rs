@@ -814,8 +814,7 @@ impl Load<'_> {
         crate::load::ok(status, Guid(out), || format!("content id {id}"))
     }
 
-    /// Gives `LocaTag` `tag` the text `text` in `language` (a
-    /// [`Language`](crate::i18n::Language) number); the client shows it
+    /// Gives `LocaTag` `tag` the text `text` in `language`; the client shows it
     /// wherever the game asks for the tag, such as the name of an item whose
     /// `name` field holds `tag`. [`Load::add_texts`] gives many at once.
     ///
@@ -832,16 +831,21 @@ impl Load<'_> {
     /// const SAFE_NAME: Guid = Guid::parse("b7c1d2e3-4f50-4a61-8b72-c3d4e5f60718");
     ///
     /// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
-    ///     load.add_text(SAFE_NAME, Language::FALLBACK.0, "Safe")?;
-    ///     load.add_text(SAFE_NAME, Language::UK_UA.0, "Сейф")
+    ///     load.add_text(SAFE_NAME, Language::FALLBACK, "Safe")?;
+    ///     load.add_text(SAFE_NAME, Language::UK_UA, "Сейф")
     /// }
     /// ```
-    pub fn add_text(&mut self, tag: Guid, language: u32, text: &str) -> Result<(), Off> {
+    pub fn add_text(
+        &mut self,
+        tag: Guid,
+        language: crate::i18n::Language,
+        text: &str,
+    ) -> Result<(), Off> {
         let api = self.host().api();
         let status = (api.add_text)(
             self.host().handle(),
             tag.id(),
-            language,
+            language.0,
             crate::abi::Str::new(text),
         );
         crate::load::ok(status, (), || "add text".to_owned())

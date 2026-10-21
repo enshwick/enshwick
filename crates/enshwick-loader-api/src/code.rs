@@ -36,6 +36,7 @@ pub struct Pattern {
 /// assert!(Pattern::parse("B9 0").is_err());
 /// ```
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+#[non_exhaustive]
 pub enum PatternError {
     /// No byte at all, or only wildcards.
     #[error("a pattern needs at least one fixed byte")]
@@ -58,6 +59,7 @@ pub enum PatternError {
 /// # Ok::<(), enshwick_loader_api::code::PatternError>(())
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
+#[non_exhaustive]
 pub enum FindError {
     /// Nothing matches.
     #[error("no match")]
