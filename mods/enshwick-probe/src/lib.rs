@@ -43,7 +43,7 @@ const CENSUS_PERIOD: Duration = Duration::from_secs(60);
 /// How long after the world loads the checks run.
 const CHECK_DELAY: Duration = Duration::from_secs(10);
 /// The commands, for `/enshwick help` and a malformed `/probe`.
-const HELP: &str = "/probe census|check|vitals <id>|vitals me [shown values]|teleport me [dx dy dz]|destroy <id>|spawn <id>|notice <text>|stat <id> <value|off>|stats|affix";
+const HELP: &str = "/probe census|check|vitals <id>|vitals me [shown values]|teleport me [dx dy dz]|destroy <id>|spawn <id>|notice <text>|stat <id> <value|off>|stats|affix|key|knowledge <id>|learn <id> [bit]|unlearn <id> [bit]|learn-later <key> <id> [bit]";
 
 /// Probe settings, read at start.
 #[derive(Debug, Default, serde::Deserialize, serde::Serialize, enshwick_loader_api::Config)]
@@ -152,6 +152,7 @@ fn commands(
     run_all: Arc<dyn Fn() + Send + Sync>,
     affix_checks: Option<Arc<affixes::AffixChecks>>,
 ) -> Result<(), Off> {
+    let knowledge = load.knowledge()?;
     let raw_stats = raw_stats::RawStats::new(load)
         .inspect_err(|off| enshwick_loader_api::warn!("FAIL raw stats: {off}"))
         .ok();
@@ -173,6 +174,11 @@ fn commands(
         ["destroy", id] => checks.destroy(id).into(),
         ["spawn", id] => checks.spawn_copy(id).into(),
         ["notice", words @ ..] => checks.notice(&ctx.player, &words.join(" ")).into(),
+        ["key"] => format!("your account key: {:016x}", ctx.player.key).into(),
+        [
+            word @ ("knowledge" | "learn" | "unlearn" | "learn-later"),
+            rest @ ..,
+        ] => knowledge::command(knowledge, ctx.player.entity, word, rest).into(),
         [word @ ("stat" | "stats" | "affix"), rest @ ..] => {
             affixes::command(affix_checks.as_deref(), &ctx.player, word, rest).into()
         }
