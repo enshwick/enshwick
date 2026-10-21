@@ -69,6 +69,11 @@ impl ModRecord {
         self.meta.label(&self.id)
     }
 
+    /// Whether it takes part in the join check while it runs.
+    pub(crate) fn joins_when_on(&self) -> bool {
+        self.manifest.flags.contains(ManifestFlags::JOIN)
+    }
+
     /// Whether the mod runs and counts in the join check.
     pub(crate) fn joins(&self) -> bool {
         !self.off.load(Ordering::Acquire) && self.manifest.flags.contains(ManifestFlags::JOIN)
@@ -569,6 +574,9 @@ impl Loader {
         chains.rewire(faulted);
         drop(chains);
         crate::points::rearm(faulted);
+        if record.joins_when_on() {
+            crate::advertise::wake();
+        }
     }
 
     /// Ends subscribing: from now on events go to the subscriptions made so
@@ -2208,6 +2216,7 @@ extern "system" fn sync(me: ModHandle, synced: Str, out: *mut Str) -> Status {
                 && (loader.side == Side::SERVER || crate::world::hosting())
             {
                 crate::remote::push_sync(&record.id, now.as_deref().unwrap_or("{}"));
+                crate::advertise::wake();
             }
             *reported = now;
         }

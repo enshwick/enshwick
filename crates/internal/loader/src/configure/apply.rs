@@ -57,16 +57,17 @@ pub(crate) fn apply(
         Destination::Next => crate::worlds::overlay(&global, &change.text, None),
     };
     crate::host::check_settings(index, &read).map_err(|why| refused(&why))?;
-    crate::worlds::write_target(&path, &change.text).map_err(|e| {
-        texts::fill(
-            "refused.write",
-            &[
-                ("path", &path.display().to_string()),
-                ("error", &e.to_string()),
-            ],
-        )
-    })?;
-    crate::watch::wrote(&path);
+    crate::watch::write_noted(&path, || crate::worlds::write_target(&path, &change.text)).map_err(
+        |e| {
+            texts::fill(
+                "refused.write",
+                &[
+                    ("path", &path.display().to_string()),
+                    ("error", &e.to_string()),
+                ],
+            )
+        },
+    )?;
     crate::log!(INFO, "{who} set {id} {key} = {}", change.value);
     change.destination = destination.clone();
     if destination != Destination::Next {
