@@ -161,7 +161,7 @@ impl Copies {
             Some(&e) if e == original => CopyStaff::Refuse(Refusal::OriginalThere),
             Some(&e) => CopyStaff::Move(e),
             None => {
-                let count = self.copy_count(survivor);
+                let count = self.entity_count(survivor, original);
                 if count >= limit(self.altars.len(), count) {
                     CopyStaff::Refuse(Refusal::Full)
                 } else {
@@ -255,6 +255,14 @@ impl Copies {
     /// How many kept copies of `survivor` there are.
     pub(crate) fn copy_count(&self, survivor: Survivor) -> usize {
         self.counts.get(&survivor).copied().unwrap_or(0)
+    }
+
+    /// How many entities `survivor` has, its `original` counted wherever it
+    /// stands: unseen, such as out in the world where no player is near, it
+    /// still exists.
+    pub(crate) fn entity_count(&self, survivor: Survivor, original: Entity) -> usize {
+        let unseen = original != 0 && !self.homes.contains_key(&original);
+        self.copy_count(survivor) + usize::from(unseen)
     }
 
     fn set_home(&mut self, entity: Entity, survivor: Survivor, home: [i64; 3]) {
@@ -392,6 +400,21 @@ mod tests {
             copies.copy_staff(SMITH, [90, 10, 10], 10, altars),
             CopyStaff::Refuse(Refusal::Full)
         );
+    }
+
+    #[test]
+    fn an_unseen_original_still_counts_toward_the_limit() {
+        let mut copies = two_altars();
+        copies.observe(SMITH, 10, [900, 10, 10], 10);
+        copies.observe(SMITH, 11, [10, 10, 10], 10);
+        // Its chunk unloads: the uniqueness pass no longer sees it.
+        copies.forget(10);
+        assert_eq!(copies.entity_count(SMITH, 10), 2);
+        assert_eq!(
+            copies.copy_staff(SMITH, [90, 10, 10], 10, altars),
+            CopyStaff::Refuse(Refusal::Full)
+        );
+        assert_eq!(copies.entity_count(SMITH, 0), 1, "an unknown original");
     }
 
     #[test]
