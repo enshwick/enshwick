@@ -37,7 +37,9 @@ admin placed 3
 
 Each line runs once. Lines already in the file when the server starts are
 skipped, and a line runs only once it ends with a line break. Emptying the
-file starts it over.
+file starts it over a second later: a file that got shorter or changed waits
+for one more read, so an editor's save caught half written runs no line
+twice.
 
 ## Settings
 

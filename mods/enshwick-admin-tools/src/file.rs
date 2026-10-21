@@ -5,7 +5,8 @@
 //! Only complete lines run, so a line still being written waits for its line
 //! break. Lines already in the file when the server starts are skipped; a
 //! file that shrinks, or whose part already read changed (emptied or
-//! replaced), is read again from its start.
+//! replaced), is read again from its start once it reads the same twice in
+//! a row, so an editor's save caught half written runs nothing twice.
 
 /// Where the command file has been read up to.
 ///
@@ -20,12 +21,15 @@
 /// assert_eq!(tail.feed(b"/admin mods\n/admin world\n/admin help\n"), ["/admin help"]);
 /// ```
 ///
-/// A file replaced by a longer one is read from its start:
+/// A file replaced by a longer one is read from its start, once it reads
+/// the same again:
 ///
 /// ```
 /// use enshwick_admin_tools::file::Tail;
 ///
 /// let mut tail = Tail::at(b"/admin mods\n");
+/// assert!(tail.feed(b"/admin world\n/admin help\n").is_empty());
+/// assert!(tail.waits());
 /// assert_eq!(tail.feed(b"/admin world\n/admin help\n"), ["/admin world", "/admin help"]);
 /// ```
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -33,6 +37,9 @@ pub struct Tail {
     offset: usize,
     /// A hash of the part read, to see the file replaced.
     read: u64,
+    /// A hash of the whole file last seen replaced or shorter, which waits
+    /// for a second read before it counts.
+    changed: Option<u64>,
 }
 
 /// A hash of `bytes`, the same throughout the process.
@@ -55,7 +62,19 @@ impl Tail {
         Self {
             offset,
             read: hash(&content[..offset]),
+            changed: None,
         }
+    }
+
+    /// Whether a replaced or shorter file waits for another read, even if it
+    /// does not change.
+    ///
+    /// # Examples
+    ///
+    /// See [`Tail`].
+    #[must_use]
+    pub const fn waits(&self) -> bool {
+        self.changed.is_some()
     }
 
     /// The command lines `content`, the whole file now, holds past the last
@@ -70,9 +89,15 @@ impl Tail {
             .get(..self.offset)
             .is_none_or(|read| hash(read) != self.read)
         {
+            let whole = hash(content);
+            if self.changed != Some(whole) {
+                self.changed = Some(whole);
+                return Vec::new();
+            }
             self.offset = 0;
             self.read = hash(&[]);
         }
+        self.changed = None;
         let end = complete(content);
         if end <= self.offset {
             return Vec::new();
@@ -148,8 +173,18 @@ mod tests {
     #[test]
     fn a_file_that_shrinks_is_read_from_its_start() {
         let mut tail = Tail::at(b"/admin mods\n/admin world\n");
+        assert!(tail.feed(b"/admin help\n").is_empty());
         assert_eq!(tail.feed(b"/admin help\n"), ["/admin help"]);
         assert!(tail.feed(b"").is_empty());
+        assert!(tail.feed(b"").is_empty());
         assert_eq!(tail.feed(b"/admin mods\n"), ["/admin mods"]);
+    }
+
+    #[test]
+    fn a_save_caught_half_written_runs_no_line_twice() {
+        let mut tail = Tail::at(b"a\nb\n");
+        assert!(tail.feed(b"a\n").is_empty(), "truncated mid-save");
+        assert_eq!(tail.feed(b"a\nb\nc\n"), ["/c"]);
+        assert!(!tail.waits());
     }
 }

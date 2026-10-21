@@ -107,6 +107,14 @@ impl Mod for AdminTools {
         let world = load.world()?;
         let inventories = load.inventories().ok();
         load.on::<BuildingPlaced>(remember)?;
+        // Entity ids belong to one game: a hosted game's next world starts
+        // with nothing placed.
+        load.on::<enshwick_loader_api::events::ShutdownStarted>(|()| {
+            PLACED
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .clear();
+        })?;
         let tools = Arc::new(Tools {
             world,
             inventories,
@@ -290,7 +298,7 @@ fn watch(path: &Path, scheduler: Scheduler) {
     loop {
         std::thread::sleep(POLL);
         let now = stamp(path);
-        if now == seen {
+        if now == seen && !tail.waits() {
             continue;
         }
         seen = now;
@@ -393,5 +401,42 @@ mod tests {
         assert!(logs.iter().any(|(_, l)| l.contains("Enshwick 0.0.0-test")));
         assert!(logs.iter().any(|(_, l)| l.contains("no players online")));
         assert!(loader.faults().is_empty());
+    }
+
+    #[test]
+    fn a_hosted_game_s_next_world_starts_with_nothing_placed() {
+        use enshwick_loader_api::abi::BuildingData;
+        use enshwick_loader_api::events::ShutdownStarted;
+
+        let loader = enshwick_loader_api::test::FakeHost::new()
+            .type_hash("keen::ecs::CurrentTransform", 1)
+            .type_hash("keen::ecs::UsedItem", 2)
+            .settings(
+                "enabled = true
+",
+            )
+            .install();
+        // SAFETY: the exports of `declare_mod!` above.
+        let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+        assert_eq!(status, Status::OK);
+        let piece = BuildingData {
+            header: Header::of::<BuildingData>(),
+            entity: 900,
+            player: 7,
+            item: 5,
+            kind: 0,
+            replay: 0,
+            template: [0; 16],
+            position: [1.0, 2.0, 3.0],
+        };
+        assert_eq!(loader.raise::<BuildingPlaced>(&piece), 1);
+        let admin = player(PlayerInfo::CAN_KICK_BAN);
+        let before = loader.command("admin", &admin, "placed").unwrap();
+        assert!(before.contains("900"), "{before}");
+        assert!(loader.raise::<ShutdownStarted>(&()) >= 1);
+        assert_eq!(
+            loader.command("admin", &admin, "placed").as_deref(),
+            Some("nothing placed since the server started")
+        );
     }
 }
