@@ -26,6 +26,7 @@ use rustc_hash::FxHashSet;
 
 use crate::host::Loader;
 
+pub(crate) mod changes;
 pub(crate) mod guard;
 
 type PlayerValueFn =
@@ -245,6 +246,13 @@ fn lookup(map: usize, id: u32, stride: usize) -> Option<usize> {
         .map(|i| values + i * stride)
 }
 
+/// How many player records the store holds.
+fn records(layout: &Layout, state: usize) -> usize {
+    // SAFETY: the store holds the number of its player records.
+    let count: u64 = unsafe { read(state, layout.record_count) };
+    usize::try_from(count).unwrap_or(0)
+}
+
 /// The player record of the character `entity`, active, or why not.
 fn record(layout: &Layout, state: usize, entity: u32) -> Result<usize, Status> {
     // SAFETY: the store holds its player records and their number.
@@ -325,6 +333,9 @@ pub(crate) fn grant(
     }
     let target = if scope == KnowledgeInfo::PLAYER {
         record(layout, state, entity)?;
+        if !changes::character_loaded(loader, entity) {
+            return Err(Status::REFUSED);
+        }
         // One player: a 1 in the low byte and the character in the high
         // half, as the game targets a player.
         1 | ((entity & 0xffff) << 16)

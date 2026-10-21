@@ -102,6 +102,11 @@ pub(crate) struct State {
     pub(crate) knowledge: Vec<(u32, KnowledgeInfo)>,
     /// The grants the mod asked for: character, id, kind, value.
     pub(crate) grants: Vec<(u32, u32, u32, u32)>,
+    /// The revokes the mod asked for: character, id, kind, value.
+    pub(crate) revokes: Vec<(u32, u32, u32, u32)>,
+    /// The changes the mod asked for accounts: key, id, kind, value,
+    /// whether a revoke.
+    pub(crate) account_changes: Vec<(u64, u32, u32, u32, bool)>,
     /// The quest ids the fake knows.
     pub(crate) quests: Vec<u32>,
     /// The weather weights everywhere and the fronts, settable.
@@ -232,6 +237,8 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         buffs: std::collections::HashMap::new(),
         knowledge: Vec::new(),
         grants: Vec::new(),
+        revokes: Vec::new(),
+        account_changes: Vec::new(),
         quests: Vec::new(),
         weather: None,
         forecasts: Vec::new(),
@@ -1668,6 +1675,33 @@ extern "system" fn forget_game_settings(_me: ModHandle) -> Status {
     })
 }
 
+extern "system" fn revoke_knowledge(
+    _me: ModHandle,
+    entity: u32,
+    id: u32,
+    kind: u32,
+    value: u32,
+) -> Status {
+    with(Status::MISSING, |s| {
+        s.revokes.push((entity, id, kind, value));
+        Status::OK
+    })
+}
+
+extern "system" fn account_knowledge(
+    _me: ModHandle,
+    key: u64,
+    id: u32,
+    kind: u32,
+    value: u32,
+    revoke: u32,
+) -> Status {
+    with(Status::MISSING, |s| {
+        s.account_changes.push((key, id, kind, value, revoke != 0));
+        Status::OK
+    })
+}
+
 extern "system" fn config_schema(_me: ModHandle, schema: Str) -> Status {
     // SAFETY: the mod passes text valid for the call.
     let Some(text) = (unsafe { schema.as_str() }) else {
@@ -2363,4 +2397,6 @@ pub(crate) static TABLE: HostApi = HostApi {
     forget_game_settings,
     catalog_set,
     catalog_pick,
+    revoke_knowledge,
+    account_knowledge,
 };

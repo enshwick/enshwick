@@ -292,6 +292,7 @@ unsafe fn after_step(loader: &'static Loader, offsets: &Offsets, server: *mut u8
     let step = STEPS.fetch_add(1, Ordering::Relaxed) + 1;
     crate::interactions::after_step(loader, step);
     crate::stats::after_step(loader, step);
+    crate::knowledge::changes::after_step(loader, step);
     let tick = TickData {
         header: Header::of::<TickData>(),
         step,

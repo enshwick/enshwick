@@ -7,7 +7,12 @@
 //! player's flags knowledge (seen bit 0, crafted bit 1); a quest's id is a
 //! player's bool the game sets when it rewards the quest. A grant goes the
 //! game's way: the next step applies it with what follows, such as
-//! experience, unlocks chained on it, the clients and the save.
+//! experience, unlocks chained on it, the clients and the save. A revoke
+//! takes a value back at once and sends it to the clients again; what the
+//! grant brought, such as experience, stays. A player's knowledge lives in
+//! the character's save on the player's machine, so a change for an account
+//! that is not in the game waits with the world until its character loads
+//! there.
 //! [`KnowledgeChanged`](crate::events::KnowledgeChanged) and
 //! [`QuestCompleted`](crate::events::QuestCompleted) report what each step
 //! changed.
@@ -160,6 +165,32 @@ pub enum Grant {
     Flag(u32),
 }
 
+/// What a revoke takes back, by the kind of the knowledge.
+///
+/// # Examples
+///
+/// See [`Knowledge::revoke`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum Revoke {
+    /// Clears a bool.
+    Clear,
+    /// Takes from a counter, down to 0.
+    Sub(u32),
+    /// Clears one bit of flags.
+    Unflag(u32),
+}
+
+impl Revoke {
+    const fn raw(self) -> (u32, u32) {
+        match self {
+            Self::Clear => (KnowledgeInfo::BOOL as u32, 0),
+            Self::Sub(amount) => (KnowledgeInfo::COUNTER as u32, amount),
+            Self::Unflag(bit) => (KnowledgeInfo::FLAGS as u32, bit),
+        }
+    }
+}
+
 impl Grant {
     const fn raw(self) -> (u32, u32) {
         match self {
@@ -178,6 +209,8 @@ impl Grant {
 #[derive(Clone, Copy, Debug)]
 pub struct Knowledge {
     host: Host,
+    /// Whether the loader takes revokes and account changes.
+    changes: bool,
 }
 
 fn result(status: Status) -> Result<(), WorldError> {
@@ -275,6 +308,140 @@ impl Knowledge {
     /// ```
     pub fn grant_world(&self, id: u32, grant: Grant) -> Result<(), WorldError> {
         self.grant(Entity(0), id, grant)
+    }
+
+    /// Takes knowledge `id` back from the player whose character is
+    /// `player` (or from the world, for an id of the world's): a bool
+    /// cleared, a counter lowered, a bit cleared. It applies at once, the
+    /// clients get it again, and the next save keeps it; what the grant
+    /// brought, such as experience or unlocks chained on it, stays, and a
+    /// quest whose steps still hold is rewarded again.
+    /// [`KnowledgeChanged`](crate::events::KnowledgeChanged) reports it
+    /// after the next step.
+    ///
+    /// # Errors
+    ///
+    /// [`WorldError::Refused`] for an id the game does not know, a revoke
+    /// that does not fit the id's kind, a bit past 31, or a player not in
+    /// the game or whose save has not loaded yet;
+    /// [`WorldError::WrongThread`] off the game thread;
+    /// [`WorldError::Missing`] on a build without it or under a loader
+    /// older than ABI minor 59.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_loader_api::knowledge::Revoke;
+    ///
+    /// fn unlearn(knowledge: &enshwick_loader_api::knowledge::Knowledge, player: enshwick_loader_api::ecs::Entity, recipe: u32) {
+    ///     let _taken = knowledge.revoke(player, recipe, Revoke::Unflag(1));
+    /// }
+    /// ```
+    pub fn revoke(&self, player: Entity, id: u32, revoke: Revoke) -> Result<(), WorldError> {
+        if !self.changes {
+            return Err(WorldError::Missing);
+        }
+        let (kind, value) = revoke.raw();
+        result((self.host.api().revoke_knowledge)(
+            self.host.handle(),
+            player.0,
+            id,
+            kind,
+            value,
+        ))
+    }
+
+    /// Takes knowledge `id` of the world's back, as [`Knowledge::revoke`]
+    /// does.
+    ///
+    /// # Errors
+    ///
+    /// As for [`Knowledge::revoke`]; a player's id is refused.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_loader_api::knowledge::Revoke;
+    ///
+    /// fn hide(knowledge: &enshwick_loader_api::knowledge::Knowledge, place: u32) {
+    ///     let _taken = knowledge.revoke_world(place, Revoke::Clear);
+    /// }
+    /// ```
+    pub fn revoke_world(&self, id: u32, revoke: Revoke) -> Result<(), WorldError> {
+        self.revoke(Entity(0), id, revoke)
+    }
+
+    /// Grants knowledge `id` of a player's to the account whose
+    /// [`Player::key`](crate::world::Player::key) is `account`, as
+    /// [`Knowledge::grant`] does: now when its character is in the game,
+    /// else once its next character has loaded in this world. The loader
+    /// keeps waiting changes with the world, so they outlast restarts.
+    ///
+    /// # Errors
+    ///
+    /// [`WorldError::Refused`] for an id the game does not know, an id of
+    /// the world's or a grant that does not fit the id's kind, and as for
+    /// [`Knowledge::grant`] when the character is in the game;
+    /// [`WorldError::WrongThread`] off the game thread;
+    /// [`WorldError::Missing`] while no world runs or under a loader older
+    /// than ABI minor 59.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_loader_api::knowledge::Grant;
+    ///
+    /// fn reward(knowledge: &enshwick_loader_api::knowledge::Knowledge, account: u64, recipe: u32) {
+    ///     let _queued = knowledge.grant_account(account, recipe, Grant::Flag(0));
+    /// }
+    /// ```
+    pub fn grant_account(&self, account: u64, id: u32, grant: Grant) -> Result<(), WorldError> {
+        let (kind, value) = grant.raw();
+        self.for_account(account, id, kind, value, false)
+    }
+
+    /// Takes knowledge `id` of a player's back from the account whose
+    /// [`Player::key`](crate::world::Player::key) is `account`, as
+    /// [`Knowledge::revoke`] does, now or once its next character has
+    /// loaded in this world, as [`Knowledge::grant_account`] waits.
+    ///
+    /// # Errors
+    ///
+    /// As for [`Knowledge::grant_account`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_loader_api::knowledge::Revoke;
+    ///
+    /// fn punish(knowledge: &enshwick_loader_api::knowledge::Knowledge, account: u64, recipe: u32) {
+    ///     let _queued = knowledge.revoke_account(account, recipe, Revoke::Unflag(1));
+    /// }
+    /// ```
+    pub fn revoke_account(&self, account: u64, id: u32, revoke: Revoke) -> Result<(), WorldError> {
+        let (kind, value) = revoke.raw();
+        self.for_account(account, id, kind, value, true)
+    }
+
+    fn for_account(
+        &self,
+        account: u64,
+        id: u32,
+        kind: u32,
+        value: u32,
+        revoke: bool,
+    ) -> Result<(), WorldError> {
+        if !self.changes {
+            return Err(WorldError::Missing);
+        }
+        result((self.host.api().account_knowledge)(
+            self.host.handle(),
+            account,
+            id,
+            kind,
+            value,
+            u32::from(revoke),
+        ))
     }
 
     /// Every quest id of the running game; empty off the game thread or
@@ -494,6 +661,12 @@ impl Load<'_> {
             core::mem::offset_of!(HostApi, quests),
             "knowledge",
         )?;
-        Ok(Knowledge { host })
+        let changes = crate::load::offered(
+            host.api(),
+            core::mem::offset_of!(HostApi, account_knowledge),
+            "knowledge changes",
+        )
+        .is_ok();
+        Ok(Knowledge { host, changes })
     }
 }

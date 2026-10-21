@@ -2042,6 +2042,33 @@ impl Installed {
         table::with(Vec::new(), |s| s.grants.clone())
     }
 
+    /// The knowledge revokes the mod asked for: character, id, kind, value.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick_loader_api::test::FakeHost::new().install();
+    /// assert!(loader.revokes().is_empty());
+    /// ```
+    #[must_use]
+    pub fn revokes(&self) -> Vec<(u32, u32, u32, u32)> {
+        table::with(Vec::new(), |s| s.revokes.clone())
+    }
+
+    /// The knowledge changes the mod asked for accounts: the account's key,
+    /// id, kind, value, and whether it takes the knowledge back.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick_loader_api::test::FakeHost::new().install();
+    /// assert!(loader.account_changes().is_empty());
+    /// ```
+    #[must_use]
+    pub fn account_changes(&self) -> Vec<(u64, u32, u32, u32, bool)> {
+        table::with(Vec::new(), |s| s.account_changes.clone())
+    }
+
     /// Sets the weather the fake reports: the weights everywhere (clear,
     /// rain, snow, blizzard) and the fronts; until then no world runs.
     ///
