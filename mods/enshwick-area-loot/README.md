@@ -9,7 +9,10 @@ in vanilla.
 - When the inventory fills up, the mod stops at that container: what does not
   fit stays in it, and the containers further away stay untouched.
 - A container another player has open, or opened in the last 10 seconds, is
-  left to them.
+  left to them, also when they open it while the containers before it are
+  being emptied: each container is checked again right before its turn. The
+  seconds count only while the server runs, so a stalled server hands nothing
+  to the wrong player.
 - Chests, quest containers, items a player dropped and items on the ground keep
   the vanilla behaviour.
 

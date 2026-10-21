@@ -1,9 +1,10 @@
 //! What the mod remembers of the loot containers it saw: whether each was
 //! empty, who last opened it and since when, where it stands, and which ones
-//! a take in flight holds.
+//! a take in flight holds. Times are the mod's step clock
+//! ([`crate::clock`]).
 
 use std::collections::HashMap;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use enshwick_loader_api::ecs::Entity;
 use enshwick_loader_api::loot::{Container, near};
@@ -22,22 +23,31 @@ struct Seen {
     guest: Entity,
     accepted_at: i64,
     /// When the mod first saw the current guest and time.
-    since: Instant,
-    last: Instant,
+    since: Duration,
+    last: Duration,
+}
+
+/// A container a take holds: until when, and its last interaction when the
+/// take gathered it.
+#[derive(Clone, Copy, Debug)]
+struct Held {
+    until: Duration,
+    guest: Entity,
+    accepted_at: i64,
 }
 
 /// The containers seen and the ones held.
 #[derive(Debug, Default)]
 pub(crate) struct Tracker {
     seen: HashMap<Entity, Seen>,
-    held: HashMap<Entity, Instant>,
+    held: HashMap<Entity, Held>,
 }
 
 impl Tracker {
     /// Records `container` as seen at `now`. Returns who emptied it when it
     /// just turned empty and a take does not hold it: the entity that last
     /// opened or looted it.
-    pub(crate) fn observe(&mut self, container: &Container, now: Instant) -> Option<Entity> {
+    pub(crate) fn observe(&mut self, container: &Container, now: Duration) -> Option<Entity> {
         let (guest, accepted_at) = container
             .offer
             .map_or((Entity::NONE, 0), |o| (o.guest, o.accepted_at));
@@ -66,7 +76,7 @@ impl Tracker {
         &self,
         container: &Container,
         player: Entity,
-        now: Instant,
+        now: Duration,
         window: Duration,
     ) -> bool {
         let Some(offer) = container.offer else {
@@ -80,7 +90,7 @@ impl Tracker {
             .get(&container.entity)
             .filter(|s| (s.guest, s.accepted_at) == (offer.guest, offer.accepted_at))
             .map_or(now, |s| s.since);
-        now.saturating_duration_since(since) < window
+        now.saturating_sub(since) < window
     }
 
     /// The containers seen within `radius` across and `height` up or down
@@ -91,7 +101,7 @@ impl Tracker {
         radius: f64,
         height: f64,
         except: Entity,
-        now: Instant,
+        now: Duration,
     ) -> Vec<Entity> {
         let mut found: Vec<(f64, Entity)> = self
             .seen
@@ -112,8 +122,32 @@ impl Tracker {
     }
 
     /// Holds `container` for a take until `now` plus [`HOLD`].
-    pub(crate) fn hold(&mut self, container: Entity, now: Instant) {
-        self.held.insert(container, now + HOLD);
+    pub(crate) fn hold(&mut self, container: Entity, now: Duration) {
+        let (guest, accepted_at) = self
+            .seen
+            .get(&container)
+            .map_or((Entity::NONE, 0), |s| (s.guest, s.accepted_at));
+        self.held.insert(
+            container,
+            Held {
+                until: now + HOLD,
+                guest,
+                accepted_at,
+            },
+        );
+    }
+
+    /// Whether the take of `player` may still empty the held `container`:
+    /// the hold runs, the container was last seen full, and nobody but
+    /// `player` opened or looted it since the take gathered it.
+    pub(crate) fn still_free(&self, container: Entity, player: Entity, now: Duration) -> bool {
+        let (Some(held), Some(seen)) = (self.held.get(&container), self.seen.get(&container))
+        else {
+            return false;
+        };
+        let untouched = (seen.guest, seen.accepted_at) == (held.guest, held.accepted_at)
+            || seen.guest == player;
+        now < held.until && !seen.empty && untouched
     }
 
     /// Lets go of `container`.
@@ -126,15 +160,14 @@ impl Tracker {
         self.seen.remove(&container);
     }
 
-    fn holds(&self, container: Entity, now: Instant) -> bool {
-        self.held.get(&container).is_some_and(|&until| now < until)
+    fn holds(&self, container: Entity, now: Duration) -> bool {
+        self.held.get(&container).is_some_and(|h| now < h.until)
     }
 
     /// Drops containers unseen for [`FORGET`] and holds that ran out.
-    pub(crate) fn prune(&mut self, now: Instant) {
-        self.seen
-            .retain(|_, s| now.saturating_duration_since(s.last) < FORGET);
-        self.held.retain(|_, &mut until| now < until);
+    pub(crate) fn prune(&mut self, now: Duration) {
+        self.seen.retain(|_, s| now.saturating_sub(s.last) < FORGET);
+        self.held.retain(|_, h| now < h.until);
     }
 
     /// Forgets everything, for a new game.
@@ -176,7 +209,7 @@ mod tests {
     #[test]
     fn emptying_reports_the_last_guest_once() {
         let mut t = Tracker::default();
-        let now = Instant::now();
+        let now = Duration::ZERO;
         assert_eq!(
             t.observe(&corpse(9, 0.0, false, Entity::NONE, 0), now),
             None
@@ -200,7 +233,7 @@ mod tests {
     #[test]
     fn a_held_container_starts_nothing_until_the_hold_runs_out() {
         let mut t = Tracker::default();
-        let now = Instant::now();
+        let now = Duration::ZERO;
         t.observe(&corpse(9, 0.0, false, OTHER, 5), now);
         t.hold(Entity(9), now);
         assert_eq!(t.observe(&corpse(9, 0.0, true, OTHER, 5), now), None);
@@ -223,7 +256,7 @@ mod tests {
     fn another_players_interaction_keeps_a_container_busy_for_the_window() {
         let window = Duration::from_secs(10);
         let mut t = Tracker::default();
-        let now = Instant::now();
+        let now = Duration::ZERO;
         let opened = corpse(9, 0.0, false, OTHER, 77);
         t.observe(&opened, now);
         assert!(t.busy(&opened, PLAYER, now + Duration::from_secs(9), window));
@@ -240,9 +273,32 @@ mod tests {
     }
 
     #[test]
+    fn a_held_container_another_player_opens_is_no_longer_free() {
+        let mut t = Tracker::default();
+        let now = Duration::ZERO;
+        t.observe(&corpse(9, 0.0, false, Entity::NONE, 0), now);
+        t.hold(Entity(9), now);
+        assert!(t.still_free(Entity(9), PLAYER, now));
+        // The player's own interaction keeps it.
+        t.observe(&corpse(9, 0.0, false, PLAYER, 4), now);
+        assert!(t.still_free(Entity(9), PLAYER, now));
+        // Another player opens it while the take waits its turn.
+        t.observe(&corpse(9, 0.0, false, OTHER, 5), now);
+        assert!(!t.still_free(Entity(9), PLAYER, now));
+        // Emptied meanwhile, or the hold ran out.
+        t.observe(&corpse(10, 0.0, false, OTHER, 1), now);
+        t.hold(Entity(10), now);
+        assert!(t.still_free(Entity(10), PLAYER, now));
+        assert!(!t.still_free(Entity(10), PLAYER, now + HOLD));
+        t.observe(&corpse(10, 0.0, true, OTHER, 1), now);
+        assert!(!t.still_free(Entity(10), PLAYER, now));
+        assert!(!t.still_free(Entity(11), PLAYER, now), "never held");
+    }
+
+    #[test]
     fn around_lists_nearest_first_without_empty_held_or_far_ones() {
         let mut t = Tracker::default();
-        let now = Instant::now();
+        let now = Duration::ZERO;
         for (id, x, empty) in [
             (1, 0.0, true),
             (2, 8.0, false),
@@ -266,7 +322,7 @@ mod tests {
     #[test]
     fn prune_forgets_unseen_containers_and_ended_holds() {
         let mut t = Tracker::default();
-        let now = Instant::now();
+        let now = Duration::ZERO;
         t.observe(&corpse(1, 0.0, false, Entity::NONE, 0), now);
         t.observe(&corpse(2, 0.0, false, Entity::NONE, 0), now + FORGET);
         t.hold(Entity(2), now);
