@@ -54,7 +54,8 @@ enabled = false
 ```
 
 `/admin` answers administrators only. The tools stay off until
-`enabled = true`: until then `/admin` tells administrators to turn them on,
+`enabled = true`: until then `/admin` tells administrators to turn them on with
+`/config admin-tools enabled true`,
 and lines appended to the command file are skipped, not kept for later. Keep
 them off on a server people play on. A change applies
 at once, without a restart.
