@@ -1,6 +1,6 @@
 //! Damage filters: counts the damage the filter sees by cause, logs each
-//! fall and shroud damage and the hits on or by a player, and halves every
-//! damage when the settings say so.
+//! damage but hits and the hits on or by a player, and halves every damage
+//! when the settings say so.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
@@ -13,10 +13,22 @@ use enshwick_loader_api::{Load, Off};
 /// The most hits on or by a player logged one by one.
 const MOST_HIT_LINES: u32 = 200;
 
-/// What the damage filter saw, by cause: hits, falls, shroud, deadly shroud.
+/// The causes counted, in the order of [`DamageSeen::counts`].
+const CAUSES: [DamageCause; 8] = [
+    DamageCause::Hit,
+    DamageCause::Fall,
+    DamageCause::Shroud,
+    DamageCause::ShroudDeath,
+    DamageCause::Drowning,
+    DamageCause::DrowningDeath,
+    DamageCause::Freezing,
+    DamageCause::AdminKill,
+];
+
+/// What the damage filter saw, by cause.
 #[derive(Debug, Default)]
 pub(crate) struct DamageSeen {
-    counts: [AtomicU64; 4],
+    counts: [AtomicU64; CAUSES.len()],
     hit_lines: AtomicU32,
 }
 
@@ -28,13 +40,10 @@ impl DamageSeen {
         let seen = Arc::new(Self::default());
         let counted = Arc::clone(&seen);
         load.on_damage(move |damage| {
-            let index = match damage.cause() {
-                DamageCause::Hit => 0,
-                DamageCause::Fall => 1,
-                DamageCause::Shroud => 2,
-                _ => 3,
-            };
-            counted.counts[index].fetch_add(1, Ordering::Relaxed);
+            let cause = damage.cause();
+            if let Some(index) = CAUSES.iter().position(|&c| c == cause) {
+                counted.counts[index].fetch_add(1, Ordering::Relaxed);
+            }
             let before = damage.total();
             if soften {
                 damage.scale(0.5);
@@ -73,13 +82,11 @@ impl DamageSeen {
 
     /// The counts, for the log.
     pub(crate) fn line(&self) -> String {
-        let [hits, falls, shroud, death] = &self.counts;
-        format!(
-            "damage seen: {} hits, {} falls, {} shroud, {} deadly shroud",
-            hits.load(Ordering::Relaxed),
-            falls.load(Ordering::Relaxed),
-            shroud.load(Ordering::Relaxed),
-            death.load(Ordering::Relaxed),
-        )
+        let counts: Vec<String> = CAUSES
+            .iter()
+            .zip(&self.counts)
+            .map(|(cause, count)| format!("{cause:?} {}", count.load(Ordering::Relaxed)))
+            .collect();
+        format!("damage seen: {}", counts.join(", "))
     }
 }
