@@ -23,7 +23,6 @@ use crate::host::{Loader, Registered, take};
 
 /// How long a staff's move reaches only the entity it was answered.
 const MOVE_WINDOW: Duration = Duration::from_secs(2);
-const TYPE_SEARCH: u16 = 4096;
 /// `ui_npc_status`'s iterator: a header, `ClientActiveNpcState`,
 /// `NetworkComfort`, `RenderTransform`, UI offsets, `UiPlayData`.
 /// Found on the 1.0 build 1269579, server and client.
@@ -50,9 +49,7 @@ struct Offsets {
     unique_context: u64,
     unique_saved_state: u64,
     unique_transform: u64,
-    bed_context: u64,
     bed_transform: u64,
-    bed_npc_common_type: u64,
     npc_common_bed: u64,
     assign_context: u64,
     assign_targets: u64,
@@ -127,10 +124,12 @@ struct Sealed {
 
 static SEALED: OnceLock<Sealed> = OnceLock::new();
 
-/// The type index of `CurrentTransform`, learned from the bed binding.
+/// The registry index of `CurrentTransform`, looked up after a step.
 static TRANSFORM_TYPE: AtomicU16 = AtomicU16::new(u16::MAX);
-/// The type index of `NpcCommon`, read from the bed binding's frame.
+/// The registry index of `NpcCommon`, looked up after a step.
 static NPC_COMMON_TYPE: AtomicU16 = AtomicU16::new(u16::MAX);
+/// The type hashes of `CurrentTransform` and `NpcCommon`.
+static TYPE_HASHES: OnceLock<Option<[u32; 2]>> = OnceLock::new();
 /// The survivor and entity a staff moves, and since when.
 static MOVING: Mutex<Option<(u32, u32, Instant)>> = Mutex::new(None);
 static MOVE_ACTIVE: AtomicBool = AtomicBool::new(false);
@@ -213,9 +212,7 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
                     unique_context: c("unique_context")?,
                     unique_saved_state: c("unique_saved_state")?,
                     unique_transform: c("unique_transform")?,
-                    bed_context: c("bed_context")?,
                     bed_transform: c("bed_transform")?,
-                    bed_npc_common_type: c("bed_npc_common_type")?,
                     npc_common_bed: c("npc_common_bed")?,
                     assign_context: c("assign_context")?,
                     assign_targets: c("assign_targets")?,
@@ -493,6 +490,48 @@ pub(crate) fn link(loader: &'static Loader) {
     }
 }
 
+/// Looks up the registry indexes of the component types the lookups read,
+/// once per hosted world, on the game thread after a step.
+pub(crate) fn after_step(loader: &Loader) {
+    if LOADED.get().is_none()
+        || (TRANSFORM_TYPE.load(Ordering::Relaxed) != u16::MAX
+            && NPC_COMMON_TYPE.load(Ordering::Relaxed) != u16::MAX)
+    {
+        return;
+    }
+    learn_types(loader);
+}
+
+#[cold]
+fn learn_types(loader: &Loader) {
+    let Some(hashes) = TYPE_HASHES.get_or_init(|| {
+        let hash = |name: &str| {
+            let info = loader.reflection.type_info(name).ok()?;
+            crate::world::type_hash(loader, info.va())
+        };
+        Some([
+            hash("keen::ecs::CurrentTransform")?,
+            hash("keen::ecs::NpcCommon")?,
+        ])
+    }) else {
+        return;
+    };
+    let index = |hash: u32| {
+        let (_, index) = crate::world::type_index(loader, hash).ok()?;
+        // SAFETY: the registry's index entry for the type, on the game thread.
+        Some(unsafe { index.read_unaligned() })
+    };
+    let (Some(transform), Some(common)) = (index(hashes[0]), index(hashes[1])) else {
+        return;
+    };
+    TRANSFORM_TYPE.store(transform, Ordering::Release);
+    NPC_COMMON_TYPE.store(common, Ordering::Release);
+    crate::log!(
+        INFO,
+        "survivors: CurrentTransform is component type {transform}, NpcCommon {common}"
+    );
+}
+
 pub(crate) fn forget() {
     TRANSFORM_TYPE.store(u16::MAX, Ordering::Release);
     NPC_COMMON_TYPE.store(u16::MAX, Ordering::Release);
@@ -642,20 +681,10 @@ unsafe fn resolve(
         return Some(answer);
     }
     if caller == c.bed {
-        // SAFETY: the bed binding keeps its context here.
-        let ctx: *mut u64 = unsafe { read_at(stack, o.bed_context) };
-        // SAFETY: and the bed's transform here.
+        // SAFETY: the bed binding keeps the bed's transform here.
         let transform: u64 = unsafe { read_at(stack, o.bed_transform) };
-        // SAFETY: and a pointer to the `NpcCommon` type index here.
-        let kind_ptr: u64 = unsafe { read_at(stack, o.bed_npc_common_type) };
-        // SAFETY: the binding's live context and the bed's transform.
-        unsafe { calibrate(engine, ctx, transform) };
         if transform == 0 {
             return None;
-        }
-        if kind_ptr != 0 {
-            // SAFETY: the type index the pointer names.
-            NPC_COMMON_TYPE.store(unsafe { read_at(kind_ptr, 0) }, Ordering::Release);
         }
         // SAFETY: the bed's position, 32.32 fixed point.
         let position: [i64; 3] = unsafe { read_at(transform, 0) };
@@ -737,31 +766,6 @@ unsafe extern "system" fn bed_of(token: *mut c_void, entity: u32) -> u32 {
     }
     // SAFETY: `NpcCommon.bedId` at this offset.
     unsafe { read_at(common.addr() as u64, token.offset) }
-}
-
-/// Learns the type index of `CurrentTransform` from a bed whose transform the
-/// caller already holds.
-///
-/// # Safety
-///
-/// `ctx` is the binding's live context and `transform` the bed's transform.
-unsafe fn calibrate(engine: &Engine, ctx: *mut u64, transform: u64) {
-    if TRANSFORM_TYPE.load(Ordering::Acquire) != u16::MAX || ctx.is_null() || transform == 0 {
-        return;
-    }
-    // SAFETY: a live query context.
-    let bed = unsafe { engine.entity(ctx) };
-    if bed == 0 {
-        return;
-    }
-    for kind in 0..TYPE_SEARCH {
-        // SAFETY: reading a component of the bed in its live context.
-        if unsafe { engine.component(ctx, kind, bed) }.addr() as u64 == transform {
-            TRANSFORM_TYPE.store(kind, Ordering::Release);
-            crate::log!(INFO, "survivors: CurrentTransform is component type {kind}");
-            return;
-        }
-    }
 }
 
 /// Where an entity stands, in whole cells, once the transform type is known.
