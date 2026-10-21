@@ -31,6 +31,26 @@ use crate::host::Loader;
 use crate::settings::LOADER_ID;
 use crate::texts;
 
+/// The build table ids this part of the loader names.
+pub(crate) const TABLE_IDS: &[&str] = &[
+    "chat.client_queue",
+    "chat.client_send",
+    "chat.client_store",
+    "chat.mark_delivered",
+    "chat.max_text",
+    "chat.node_delivered",
+    "chat.post",
+    "chat.post_return",
+    "chat.receive_return_a",
+    "chat.receive_return_b",
+    "chat.reply_type",
+    "chat.store_slot_count",
+    "chat.store_slot_size",
+    "chat.store_slots",
+    "chat.store_tail",
+    "server.chat_store",
+];
+
 /// Lines posted per drain: the game's chat pool drops undelivered lines
 /// when it fills.
 const LINES_PER_DRAIN: usize = 16;

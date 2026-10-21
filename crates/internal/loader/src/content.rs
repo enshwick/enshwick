@@ -22,6 +22,16 @@ use enshwick_loader_api::abi::{HookFlags, ResourceKey, ResourcePatchFn, Side, St
 use crate::chains::Next;
 use crate::host::Loader;
 
+/// The build table ids this part of the loader names.
+pub(crate) const TABLE_IDS: &[&str] = &[
+    "resource.key_of",
+    "resource.open",
+    "resource.resolve",
+    "text.lookup",
+    "text.lookup_english",
+    "text.pool_language",
+];
+
 /// Marks a handle the loader made.
 const SERVED: u32 = 0x8000_0000;
 /// The `resolve` result's third word for resident data, as the game writes it.

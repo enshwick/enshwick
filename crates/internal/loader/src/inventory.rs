@@ -33,6 +33,57 @@ use crate::chains::LOADER;
 use crate::host::Loader;
 use crate::mid::MidLink;
 
+/// The build table ids this part of the loader names.
+pub(crate) const TABLE_IDS: &[&str] = &[
+    "ecs.context_entity_world",
+    "ecs.row_entity",
+    "ecs.slot_root",
+    "inventory.actions_row",
+    "inventory.actor_flag",
+    "inventory.copy_100",
+    "inventory.copy_150",
+    "inventory.copy_198",
+    "inventory.copy_a8",
+    "inventory.copy_discovered",
+    "inventory.copy_empty_state",
+    "inventory.copy_equipment",
+    "inventory.copy_full_events",
+    "inventory.copy_item_registry",
+    "inventory.copy_owners",
+    "inventory.copy_pickup_events",
+    "inventory.copy_setup",
+    "inventory.copy_slot_hints",
+    "inventory.copy_slots",
+    "inventory.copy_transform",
+    "inventory.desc_actor",
+    "inventory.desc_context",
+    "inventory.desc_other",
+    "inventory.desc_size",
+    "inventory.desc_zero",
+    "inventory.destroy_slot",
+    "inventory.give",
+    "inventory.move_all",
+    "inventory.move_amount",
+    "inventory.move_slot",
+    "inventory.resend",
+    "inventory.row_bytes",
+    "inventory.take",
+    "inventory.txn_commit",
+    "inventory.txn_drop",
+    "inventory.txn_init",
+    "inventory.txn_new",
+    "inventory.txn_rollback",
+    "inventory.txn_size",
+    "inventory.view_actors",
+    "inventory.view_fill",
+    "inventory.view_fill_bytes",
+    "inventory.view_frame",
+    "inventory.view_item_registry",
+    "inventory.view_owners",
+    "inventory.view_replication",
+    "item.info",
+];
+
 /// The most operations one request may hold; the game's op log takes 0x200
 /// records and an operation writes one per slot it changes.
 pub(crate) const MAX_OPS: usize = 64;

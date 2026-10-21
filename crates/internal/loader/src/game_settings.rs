@@ -27,6 +27,13 @@ use enshwick_loader_api::abi::{Event, Status};
 
 use crate::host::Loader;
 
+/// The build table ids this part of the loader names.
+pub(crate) const TABLE_IDS: &[&str] = &[
+    "server.game_settings",
+    "server.game_settings_preset",
+    "server.game_settings_resend",
+];
+
 /// The kept fields' file in a world's folder.
 const FILE: &str = "game-settings.toml";
 

@@ -18,6 +18,18 @@ use enshwick_loader_api::abi::{Header, Status, TerrainEdit, TerrainMaterialInfo}
 
 use crate::host::Loader;
 
+/// The build table ids this part of the loader names.
+pub(crate) const TABLE_IDS: &[&str] = &[
+    "server.player_infos",
+    "terrain.add",
+    "terrain.dig",
+    "terrain.editor",
+    "terrain.flatten",
+    "terrain.registry",
+    "terrain.registry_resource",
+    "terrain.voxel_world",
+];
+
 /// The materials the edits work on: terrain, not air nor buildings.
 const TERRAIN: core::ops::RangeInclusive<u8> = 1..=0x7f;
 /// Materials a voxel can have.

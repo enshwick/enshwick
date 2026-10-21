@@ -12,6 +12,15 @@ use enshwick_loader_api::abi::{EntityPlace, Status};
 
 use crate::host::Loader;
 
+/// The build table ids this part of the loader names.
+pub(crate) const TABLE_IDS: &[&str] = &[
+    "ecs.command_buffers",
+    "ecs.destroy_request",
+    "ecs.entities_entry_size",
+    "ecs.entities_entry_transform",
+    "ecs.entities_with",
+];
+
 /// The engine's growable array the query fills; the loader gives it no grow
 /// function, so a full array ends the walk with 0.
 #[repr(C)]

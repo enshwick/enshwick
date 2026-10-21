@@ -21,6 +21,19 @@ use enshwick_loader_reflect::fnv1a32;
 use crate::chains::Next;
 use crate::host::Loader;
 
+/// The build table ids this part of the loader names.
+pub(crate) const TABLE_IDS: &[&str] = &[
+    "save.flags",
+    "save.path",
+    "save.path_data",
+    "save.path_lengths",
+    "save.path_parts",
+    "save.phase",
+    "server.save_blocked",
+    "server.save_request",
+    "server.save_system",
+];
+
 /// The file name extension of a world save.
 const WORLD_EXTENSION: &str = "ksd";
 

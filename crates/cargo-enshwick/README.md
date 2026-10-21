@@ -13,6 +13,9 @@ cargo enshwick install --game "C:/Program Files (x86)/Steam/steamapps/common/Ens
 - `new <id>` creates a mod crate in `<dir>/<id>` (`--dir`, default the current
   folder) for `--side server`, `client` or `both`. It builds and loads as it is:
   settings in `mod-configs/<id>.toml`, a line in `logs/enshwick/mods/<id>.log`.
+  Inside a Cargo workspace the crate joins it: its folder goes into the
+  workspace's `members` unless a pattern there covers it, and the release
+  profile is left to the workspace root.
 - `manifest <dll>` prints what a built mod says about itself: id, version,
   side, join check and dependencies. With `--expect-version <version>` it fails
   when the DLL reports another version, which release pipelines can check.
@@ -48,7 +51,10 @@ cargo enshwick compat server/enshrouded_server.exe --mods server/mods
   them), or the newest table of the same side carried over by patterns, with
   the entries they miss.
 - **Loader features.** Each part of the loader with the table entries it
-  names, and which the build lacks: works, partly or off.
+  names, and which the build lacks: works, partly or off. Every part declares
+  its entries in a `TABLE_IDS` list beside its code, and the loader's tests
+  hold each list to the code and the tables. Needs a Windows build of the
+  tool.
 - **Mods.** With `--mods` (DLLs or folders of them) it runs the loader itself
   on the executable, in a process of its own: the image mapped at its base,
   the mods resolved and initialised as at a start, nothing hooked and no
@@ -107,7 +113,8 @@ immediate.
 
    `--write` writes the new table file beside the old one and puts each new
    mod row right after its old one; it needs `--build`. Without it the report
-   carries the new table and rows instead. The exit code is 0 when nothing
+   carries the new table and rows instead. It writes every file or none:
+   when one cannot be written, the others stay as they were. The exit code is 0 when nothing
    needs a human, 2 when something does, and 1 on an error.
 4. **Review.** The report lists every entry with its verdict. Settle each item
    under "For a human": a dropped entry has a `pin:` note (above its table's

@@ -25,6 +25,22 @@ use crate::chains::LOADER;
 use crate::host::{Loader, Registered, take};
 use crate::mid::MidLink;
 
+/// The build table ids this part of the loader names.
+pub(crate) const TABLE_IDS: &[&str] = &[
+    "damage.admin_kill",
+    "damage.drowning",
+    "damage.drowning_death",
+    "damage.faction_kill",
+    "damage.fall",
+    "damage.freezing",
+    "damage.hit",
+    "damage.hit_source",
+    "damage.hit_target",
+    "damage.hit_vector",
+    "damage.shroud",
+    "damage.shroud_death",
+];
+
 /// Damage types in a hit's vector.
 const TYPES: usize = 13;
 /// The healing entry of a hit's vector.

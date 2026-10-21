@@ -22,6 +22,18 @@ use rustc_hash::FxHashSet;
 use crate::chains::Next;
 use crate::host::Loader;
 
+/// The build table ids this part of the loader names.
+pub(crate) const TABLE_IDS: &[&str] = &[
+    "ecs.event_merge",
+    "ecs.event_record_align",
+    "ecs.event_record_header",
+    "ecs.event_record_size",
+    "ecs.event_stream_count",
+    "ecs.event_stream_size",
+    "ecs.event_stream_used",
+    "ecs.event_streams",
+];
+
 /// A mod's handler for one event type, or for all with hash 0.
 #[derive(Debug, Clone, Copy)]
 struct Subscriber {

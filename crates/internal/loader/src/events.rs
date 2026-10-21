@@ -24,6 +24,27 @@ use enshwick_loader_api::abi::{
 use crate::chains::Next;
 use crate::host::Loader;
 
+/// The build table ids this part of the loader names.
+pub(crate) const TABLE_IDS: &[&str] = &[
+    "building.ctx_player",
+    "building.ctx_replay",
+    "building.pickup",
+    "building.spawn_prop",
+    "server.entry_state",
+    "server.player_remove",
+    "server.player_slot_count",
+    "server.player_slot_entity",
+    "server.player_slot_key",
+    "server.player_slot_size",
+    "server.player_slot_state",
+    "server.player_slots",
+    "server.post_step",
+    "server.save_step",
+    "server.set_state",
+    "server.world",
+    "world.entities",
+];
+
 /// Server states, from the game's state machine.
 const STATE_RUN: u8 = 5;
 const STATE_SHUTDOWN: u8 = 6;

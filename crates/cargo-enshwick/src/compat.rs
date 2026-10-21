@@ -16,7 +16,12 @@ use std::path::{Path, PathBuf};
 use enshwick_loader_builds::{self as tables, Kind, Resolved, Table};
 use enshwick_loader_reflect::{Fingerprint, Image, Layout, Reflection};
 
-include!(concat!(env!("OUT_DIR"), "/loader_map.rs"));
+/// Each part of the loader with the build table ids it names; only a
+/// Windows build carries the loader.
+#[cfg(windows)]
+const MODULE_IDS: &[(&str, &[&str])] = enshwick::TABLE_IDS;
+#[cfg(not(windows))]
+const MODULE_IDS: &[(&str, &[&str])] = &[];
 
 /// What `cargo enshwick compat` is given.
 #[derive(Debug, clap::Args)]
@@ -147,7 +152,6 @@ struct Feature {
 fn features(table: &Resolved, known: &BTreeSet<&str>) -> Vec<Feature> {
     MODULE_IDS
         .iter()
-        .filter(|(name, _)| *name != "builds")
         .filter_map(|&(name, ids)| {
             let named: Vec<&'static str> = ids
                 .iter()
@@ -256,6 +260,13 @@ pub(crate) fn run(args: &Args) -> Result<bool, String> {
 fn write_features(out: &mut String, table: &Resolved, known: &BTreeSet<&str>) {
     let features = features(table, known);
     let _w = writeln!(*out, "## Loader features\n");
+    if MODULE_IDS.is_empty() {
+        let _w = writeln!(
+            *out,
+            "Only a Windows build of this tool knows the loader's features.\n"
+        );
+        return;
+    }
     let _w = writeln!(*out, "| Feature | Status | Missing |\n| --- | --- | --- |");
     for feature in &features {
         let status = if feature.missing.is_empty() {
@@ -487,6 +498,7 @@ mod tests {
         assert!(side_of(Path::new("game.exe")).is_err());
     }
 
+    #[cfg(windows)]
     #[test]
     fn features_name_what_the_build_lacks() {
         let all = known_tables().unwrap();
@@ -498,7 +510,6 @@ mod tests {
             exact.iter().all(|f| f.missing.is_empty()),
             "an exact table lacks nothing"
         );
-        assert!(exact.iter().all(|f| f.name != "builds"));
         let nothing = server.fall_back(&[0; 64], 0x1000);
         let fallback = features(&nothing, &known);
         assert!(fallback.iter().all(|f| f.missing.len() == f.named));

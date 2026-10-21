@@ -17,6 +17,14 @@ use enshwick_loader_api::abi::Status;
 
 use crate::host::Loader;
 
+/// The build table ids this part of the loader names.
+pub(crate) const TABLE_IDS: &[&str] = &[
+    "ecs.event_push",
+    "ecs.event_streams",
+    "world.entities",
+    "world.time",
+];
+
 /// The longest notice text, in bytes.
 pub(crate) const MAX_TEXT: usize = 255;
 /// Text tags the loader cycles through, so a notice still on screen keeps

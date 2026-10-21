@@ -37,6 +37,9 @@ use crate::code::{CodePatch, Verdict};
 use crate::ecs::read_at;
 use crate::host::Loader;
 
+/// The build table ids this part of the loader names.
+pub(crate) const TABLE_IDS: &[&str] = &["building.max_altars"];
+
 /// The grouping's first bytes.
 const GROUPING: &str = "48 89 5C 24 10 48 89 6C 24 18 48 89 74 24 20 57 41 54 41 55 41 56 41 57 \
                         48 83 EC 50 45 33 E4 4C 8B F2 4C 8B E9 41 8B EC 44 39 61 24";

@@ -108,6 +108,10 @@ mod status;
 #[cfg(windows)]
 mod survivors;
 #[cfg(windows)]
+mod table_ids;
+#[cfg(windows)]
+pub use table_ids::TABLE_IDS;
+#[cfg(windows)]
 mod terrain;
 mod texts;
 #[cfg(windows)]

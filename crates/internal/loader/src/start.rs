@@ -20,6 +20,10 @@ use crate::patch::{self, FrameSlot};
 use crate::resolve::{self, Candidate};
 use crate::{builds, log, modlist};
 
+/// The build table ids this part of the loader names.
+#[cfg(windows)]
+pub(crate) const TABLE_IDS: &[&str] = &["net.server_change"];
+
 /// The client starts under Steam's DRM wrapper, which may check the game's code
 /// before it runs. The game opens its window only once its own code runs, so
 /// hooks wait for that window, and at most this long.

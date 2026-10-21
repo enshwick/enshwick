@@ -25,6 +25,13 @@ use enshwick_loader_api::abi::{
 use crate::chains::Next;
 use crate::host::{Loader, Registered, take};
 
+/// The build table ids this part of the loader names.
+pub(crate) const TABLE_IDS: &[&str] = &[
+    "building.cursor_check",
+    "building.cursor_item_info",
+    "building.cursor_no_permission",
+];
+
 static CRAFT_FILTERS: Mutex<Vec<Registered<CraftCheckFn>>> = Mutex::new(Vec::new());
 static BUILD_FILTERS: Mutex<Vec<Registered<BuildCheckFn>>> = Mutex::new(Vec::new());
 static CRAFT_SEALED: OnceLock<Box<[Registered<CraftCheckFn>]>> = OnceLock::new();

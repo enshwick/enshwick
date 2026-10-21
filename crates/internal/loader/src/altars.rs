@@ -31,6 +31,17 @@ use crate::chains::Next;
 use crate::ecs::{Engine, Query, read_at};
 use crate::host::{Loader, Registered};
 
+/// The build table ids this part of the loader names.
+pub(crate) const TABLE_IDS: &[&str] = &[
+    "building.corner_size",
+    "building.seam_check",
+    "building.zone_entry_ignored",
+    "building.zone_entry_shape",
+    "building.zone_entry_size",
+    "building.zone_list_count",
+    "building.zone_list_entries",
+];
+
 const FORGET_AFTER: Duration = Duration::from_secs(2);
 /// Server steps an altar stays known without a pass seeing it, together
 /// with [`FORGET_AFTER`].

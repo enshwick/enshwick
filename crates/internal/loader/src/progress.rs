@@ -17,6 +17,18 @@ use enshwick_loader_api::abi::{
 use crate::ecs::Engine;
 use crate::host::Loader;
 
+/// The build table ids this part of the loader names.
+pub(crate) const TABLE_IDS: &[&str] = &[
+    "comfort.base_register",
+    "experience.gained",
+    "experience.level_cap",
+    "experience.need",
+    "experience.need_for_level",
+    "experience.progress",
+    "skill.fly_mode_gate_return",
+    "skill.node_unlocked",
+];
+
 /// `player_level`'s iterator: context, `CurrentTransform`, then `Experience`,
 /// `Level` and `PlayerTracking`, each with its change tracking (two stamps,
 /// entity record, type and flags, tracker), then `BalancingRegistry`,

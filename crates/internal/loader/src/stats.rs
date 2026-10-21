@@ -37,6 +37,22 @@ use crate::host::{Loader, Registered};
 use crate::ids::Space;
 use crate::settings::LOADER_ID;
 
+/// The build table ids this part of the loader names.
+pub(crate) const TABLE_IDS: &[&str] = &[
+    "attribute.health",
+    "attribute.health_adder_slot",
+    "attribute.health_max_slot",
+    "attribute.mana",
+    "attribute.mana_adder_slot",
+    "attribute.mana_max_slot",
+    "attribute.stamina",
+    "attribute.stamina_adder_slot",
+    "attribute.stamina_max_slot",
+    "ecs.attribute_count",
+    "ecs.level_data_offset",
+    "ecs.level_flags",
+];
+
 /// Steps between two looks at what watched entities wear and have.
 const LOOK_EVERY: u64 = 30;
 /// The file of a world's saved modifiers.

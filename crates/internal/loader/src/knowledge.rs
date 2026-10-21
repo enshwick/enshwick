@@ -26,6 +26,43 @@ use rustc_hash::FxHashSet;
 
 use crate::host::Loader;
 
+/// The build table ids this part of the loader names.
+pub(crate) const TABLE_IDS: &[&str] = &[
+    "knowledge.connection_created",
+    "knowledge.connection_loaded",
+    "knowledge.connection_size",
+    "knowledge.defs",
+    "knowledge.defs_blob",
+    "knowledge.input_action",
+    "knowledge.input_check",
+    "knowledge.journal",
+    "knowledge.journal_blob",
+    "knowledge.log_entry_size",
+    "knowledge.object",
+    "knowledge.player_value",
+    "knowledge.push",
+    "knowledge.queue",
+    "knowledge.record_active",
+    "knowledge.record_changes",
+    "knowledge.record_count",
+    "knowledge.record_log",
+    "knowledge.record_log_count",
+    "knowledge.record_size",
+    "knowledge.records",
+    "knowledge.replication",
+    "knowledge.resend_player",
+    "knowledge.resend_world",
+    "knowledge.set_values",
+    "knowledge.set_world",
+    "knowledge.state",
+    "knowledge.step",
+    "knowledge.world_log",
+    "knowledge.world_log_count",
+    "knowledge.world_touched",
+    "knowledge.world_value",
+    "server.player_infos",
+];
+
 pub(crate) mod changes;
 pub(crate) mod guard;
 
