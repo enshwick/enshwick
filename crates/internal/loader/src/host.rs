@@ -3,7 +3,7 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Mutex, OnceLock};
+use std::sync::{Mutex, MutexGuard, OnceLock};
 
 use enshwick_loader_api::abi as api_frame;
 use enshwick_loader_api::abi::{
@@ -448,9 +448,7 @@ impl Loader {
             flags,
             hop: None,
         };
-        self.chains
-            .lock()
-            .map_or(Status::REFUSED, |mut chains| chains.add(target, link))
+        relock(&self.chains, "the hook chains").add(target, link)
     }
 
     /// [`Loader::link`] for a feature, logging why it stays off: a target
@@ -921,12 +919,11 @@ extern "system" fn hook(me: ModHandle, spec: *const HookSpec) -> Status {
             flags: spec.flags,
             hop: None,
         };
-        match loader.chains.lock() {
-            Ok(mut chains) if crate::reload::reinitialising(index) => {
-                chains.relink(spec.target, link)
-            }
-            Ok(mut chains) => chains.add(spec.target, link),
-            Err(_) => Status::REFUSED,
+        let mut chains = relock(&loader.chains, "the hook chains");
+        if crate::reload::reinitialising(index) {
+            chains.relink(spec.target, link)
+        } else {
+            chains.add(spec.target, link)
         }
     })
 }
@@ -948,10 +945,7 @@ extern "system" fn hook_at(me: ModHandle, spec: *const MidHookSpec) -> Status {
             priority: spec.priority,
             flags: spec.flags,
         };
-        match loader.mids.lock() {
-            Ok(mut mids) => mids.add(spec.address, link),
-            Err(_) => Status::REFUSED,
-        }
+        relock(&loader.mids, "the mid-function hooks").add(spec.address, link)
     })
 }
 
@@ -1380,6 +1374,20 @@ fn entry<R: Fallback>(name: &'static str, body: impl FnOnce() -> R) -> R {
     crate::reload::note(name);
     std::panic::catch_unwind(std::panic::AssertUnwindSafe(body))
         .unwrap_or_else(|_| entry_fault(name))
+}
+
+/// Locks `mutex`, taking its state over from a thread that panicked
+/// holding it: logged once, since the poison is cleared, and never a reason
+/// to give up on hooks.
+pub(crate) fn relock<'a, T>(mutex: &'a Mutex<T>, what: &str) -> MutexGuard<'a, T> {
+    mutex.lock().unwrap_or_else(|poisoned| {
+        crate::log!(
+            WARN,
+            "{what}: a thread panicked holding them; their state is kept"
+        );
+        mutex.clear_poison();
+        poisoned.into_inner()
+    })
 }
 
 #[cold]
@@ -3529,6 +3537,22 @@ mod tests {
     fn read(text: Str) -> Option<&'static str> {
         // SAFETY: the tests read texts of stores that live to their end.
         unsafe { text.as_str() }
+    }
+
+    #[test]
+    fn a_poisoned_lock_is_taken_over_with_its_state() {
+        let mutex = std::sync::Arc::new(Mutex::new(vec![1]));
+        let held = std::sync::Arc::clone(&mutex);
+        let panicked = std::thread::spawn(move || {
+            let mut guard = held.lock().unwrap();
+            guard.push(2);
+            panic!("poisons the lock");
+        })
+        .join();
+        assert!(panicked.is_err() && mutex.is_poisoned());
+        relock(&mutex, "the test list").push(3);
+        assert!(!mutex.is_poisoned());
+        assert_eq!(*relock(&mutex, "the test list"), [1, 2, 3]);
     }
 
     #[test]

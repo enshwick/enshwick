@@ -32,10 +32,16 @@ use windows_sys::Win32::Storage::FileSystem::{
     FILE_SHARE_WRITE, FlushFileBuffers, OPEN_ALWAYS, SetEndOfFile, SetFilePointerEx, WriteFile,
 };
 use windows_sys::Win32::System::Diagnostics::Debug::{
-    AddVectoredExceptionHandler, CONTEXT, EXCEPTION_POINTERS, LPTOP_LEVEL_EXCEPTION_FILTER,
-    RtlLookupFunctionEntry, RtlVirtualUnwind, SetUnhandledExceptionFilter, UNW_FLAG_NHANDLER,
+    AddVectoredExceptionHandler, CONTEXT, EXCEPTION_POINTERS, IMAGE_RUNTIME_FUNCTION_ENTRY,
+    LPTOP_LEVEL_EXCEPTION_FILTER, RtlLookupFunctionEntry, RtlVirtualUnwind,
+    SetUnhandledExceptionFilter, UNW_FLAG_NHANDLER,
 };
 use windows_sys::Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryW};
+use windows_sys::Win32::System::Memory::{
+    MEM_COMMIT, MEMORY_BASIC_INFORMATION, PAGE_EXECUTE_READ, PAGE_EXECUTE_READWRITE,
+    PAGE_EXECUTE_WRITECOPY, PAGE_GUARD, PAGE_NOACCESS, PAGE_READONLY, PAGE_READWRITE,
+    PAGE_WRITECOPY, VirtualQuery,
+};
 use windows_sys::Win32::System::ProcessStatus::{GetModuleInformation, MODULEINFO};
 use windows_sys::Win32::System::SystemInformation::GetSystemTime;
 use windows_sys::Win32::System::Threading::{
@@ -415,8 +421,29 @@ type DumpFn = unsafe extern "system" fn(
 // SAFETY: joins the chain of `MiniDumpWriteDump`, whose type it names.
 static DUMP_NEXT: Next<DumpFn> = unsafe { Next::new() };
 
-/// The game's crash handler writes a dump: the fault is fatal, so report
-/// it first.
+/// Whether a dump written for a fault coded `code` is of a crash: only the
+/// faults [`FATAL`] names are, never the breakpoints, C++ exceptions or
+/// reports a handler writes a dump for and survives.
+fn fatal(code: NTSTATUS) -> bool {
+    FATAL.contains(&code)
+}
+
+/// The code of the fault `pointers` names, `None` when either pointer is
+/// null.
+///
+/// # Safety
+///
+/// `pointers` is null or points at the fault's pointers in this process.
+unsafe fn fault_code(pointers: *const EXCEPTION_POINTERS) -> Option<NTSTATUS> {
+    // SAFETY: as the caller guarantees.
+    let pointers = unsafe { pointers.as_ref() }?;
+    // SAFETY: the record of the fault, valid while its thread waits in it.
+    let record = unsafe { pointers.ExceptionRecord.as_ref() }?;
+    Some(record.ExceptionCode)
+}
+
+/// The game's crash handler writes a dump: report the fault first when it
+/// is one that ends the process.
 unsafe extern "system" fn dump(
     process: HANDLE,
     process_id: u32,
@@ -433,6 +460,8 @@ unsafe extern "system" fn dump(
     // SAFETY: the caller's parameter, null for a dump of no fault.
     if let Some(exception) = unsafe { exception.as_ref() }
         && (exception.client_pointers == 0 || ours)
+        // SAFETY: pointers into this process, as checked above.
+        && unsafe { fault_code(exception.pointers) }.is_some_and(fatal)
     {
         let (pointers, thread) = (exception.pointers, exception.thread);
         // SAFETY: pointers into this process, of the thread the dump names,
@@ -585,48 +614,286 @@ pub(crate) fn reassert() {
     }
 }
 
-/// The return addresses of the faulting thread's stack, innermost first,
-/// unwound from `context`; how many were found.
+/// The protections whose pages read without a fault.
+const READABLE: u32 = PAGE_READONLY
+    | PAGE_READWRITE
+    | PAGE_WRITECOPY
+    | PAGE_EXECUTE_READ
+    | PAGE_EXECUTE_READWRITE
+    | PAGE_EXECUTE_WRITECOPY;
+
+/// The end of the readable run `address` lies in, from the region
+/// `VirtualQuery` reports for it; `None` when its page does not read.
+fn readable_end(
+    base: usize,
+    size: usize,
+    state: u32,
+    protect: u32,
+    address: usize,
+) -> Option<usize> {
+    let end = base.checked_add(size)?;
+    (state == MEM_COMMIT
+        && protect & READABLE != 0
+        && protect & (PAGE_GUARD | PAGE_NOACCESS) == 0
+        && (base..end).contains(&address))
+    .then_some(end)
+}
+
+/// The first byte and the end of the readable region `address` lies in.
+fn readable(address: usize) -> Option<(usize, usize)> {
+    let mut info = MEMORY_BASIC_INFORMATION {
+        BaseAddress: core::ptr::null_mut(),
+        AllocationBase: core::ptr::null_mut(),
+        AllocationProtect: 0,
+        PartitionId: 0,
+        RegionSize: 0,
+        State: 0,
+        Protect: 0,
+        Type: 0,
+    };
+    // SAFETY: querying any address is allowed; the struct is writable.
+    let known = unsafe {
+        VirtualQuery(
+            core::ptr::with_exposed_provenance(address),
+            &raw mut info,
+            size_of::<MEMORY_BASIC_INFORMATION>(),
+        )
+    };
+    if known == 0 {
+        return None;
+    }
+    let base = info.BaseAddress.addr();
+    readable_end(base, info.RegionSize, info.State, info.Protect, address).map(|end| (base, end))
+}
+
+/// The word at `address`, `None` unless all its bytes read without a fault.
+fn read_word(address: usize) -> Option<u64> {
+    let (_, end) = readable(address)?;
+    if address.checked_add(8)? > end {
+        return None;
+    }
+    // SAFETY: the eight bytes lie in one committed, readable region.
+    Some(unsafe { core::ptr::with_exposed_provenance::<u64>(address).read_unaligned() })
+}
+
+/// What unwinding one function's frame reads, from its `UNWIND_INFO`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct Reach {
+    /// The frame register's number and its offset below the frame's base.
+    frame: Option<(u8, usize)>,
+    /// The bytes above the frame's base the unwind reads, the return
+    /// address included.
+    bytes: usize,
+    /// The `UNWIND_INFO` the frame's unwinding continues in.
+    chained: Option<u32>,
+}
+
+/// The longest `UNWIND_INFO`: the header, 256 code slots and a chained
+/// entry.
+const UNWIND_INFO: usize = 4 + 256 * 2 + 12;
+
+/// What unwinding reads for the `UNWIND_INFO` in `info`; `None` for a
+/// version or code this does not know, or info cut short.
+fn reach(info: &[u8]) -> Option<Reach> {
+    let (&head, &count, &frame) = (info.first()?, info.get(2)?, info.get(3)?);
+    if !matches!(head & 7, 1 | 2) {
+        return None;
+    }
+    let count = usize::from(count);
+    let codes = info.get(4..4 + count * 2)?;
+    let slot = |i: usize| -> Option<usize> {
+        let bytes = codes.get(i * 2..i * 2 + 2)?;
+        Some(usize::from(u16::from_le_bytes([bytes[0], bytes[1]])))
+    };
+    let wide = |i: usize| -> Option<usize> { Some(slot(i)? | (slot(i + 1)? << 16)) };
+    let (mut size, mut saves, mut i) = (0usize, 0usize, 0usize);
+    while i < count {
+        let byte = codes[i * 2 + 1];
+        let op_info = usize::from(byte >> 4);
+        match byte & 0xf {
+            0 => (size, i) = (size + 8, i + 1),
+            1 if op_info == 0 => (size, i) = (size + slot(i + 1)? * 8, i + 2),
+            1 => (size, i) = (size + wide(i + 1)?, i + 3),
+            2 => (size, i) = (size + op_info * 8 + 8, i + 1),
+            3 => i += 1,
+            4 => (saves, i) = (saves.max(slot(i + 1)? * 8 + 8), i + 2),
+            5 => (saves, i) = (saves.max(wide(i + 1)? + 8), i + 3),
+            6 => i += 2,
+            8 => (saves, i) = (saves.max(slot(i + 1)? * 16 + 16), i + 2),
+            9 => (saves, i) = (saves.max(wide(i + 1)? + 16), i + 3),
+            10 => (size, i) = (size + if op_info == 0 { 40 } else { 48 }, i + 1),
+            _ => return None,
+        }
+    }
+    let chained = if (head >> 3) & 4 == 0 {
+        None
+    } else {
+        let at = 4 + count.next_multiple_of(2) * 2 + 8;
+        let bytes = info.get(at..at + 4)?;
+        Some(u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]))
+    };
+    let register = frame & 0xf;
+    Some(Reach {
+        frame: (register != 0).then_some((register, usize::from(frame >> 4) * 16)),
+        bytes: (size + 8).max(saves),
+        chained,
+    })
+}
+
+/// What unwinding the function of `entry` in the image at `image` reads,
+/// its chained entries included.
 ///
 /// # Safety
 ///
-/// `context` is the faulting thread's context, on that thread.
+/// `entry` is the function entry Windows found in the loaded image at
+/// `image`.
+unsafe fn reach_of(image: usize, entry: *const IMAGE_RUNTIME_FUNCTION_ENTRY) -> Option<Reach> {
+    // SAFETY: as the caller guarantees.
+    let anonymous = unsafe { (*entry).Anonymous };
+    // SAFETY: every field of the union is the same `u32`.
+    let mut rva = unsafe { anonymous.UnwindData };
+    let mut total: Option<Reach> = None;
+    for _ in 0..32 {
+        let at = image.checked_add(rva as usize)?;
+        let (_, end) = readable(at)?;
+        // SAFETY: the bytes up to `end` lie in one committed, readable
+        // region of the image.
+        let info = unsafe {
+            core::slice::from_raw_parts(
+                core::ptr::with_exposed_provenance::<u8>(at),
+                (end - at).min(UNWIND_INFO),
+            )
+        };
+        let step = reach(info)?;
+        let merged = match total {
+            None => step,
+            Some(first) => Reach {
+                bytes: first.bytes + step.bytes - 8,
+                chained: step.chained,
+                ..first
+            },
+        };
+        match merged.chained {
+            Some(next) => (total, rva) = (Some(merged), next),
+            None => return Some(merged),
+        }
+    }
+    None
+}
+
+/// The value of the register numbered `number` as unwind codes number
+/// them.
+fn register(context: &CONTEXT, number: u8) -> Option<u64> {
+    Some(match number {
+        0 => context.Rax,
+        1 => context.Rcx,
+        2 => context.Rdx,
+        3 => context.Rbx,
+        4 => context.Rsp,
+        5 => context.Rbp,
+        6 => context.Rsi,
+        7 => context.Rdi,
+        8 => context.R8,
+        9 => context.R9,
+        10 => context.R10,
+        11 => context.R11,
+        12 => context.R12,
+        13 => context.R13,
+        14 => context.R14,
+        15 => context.R15,
+        _ => return None,
+    })
+}
+
+/// Whether unwinding a frame that reads `reach` from the stack pointer
+/// `rsp`, and from the frame register's base when it has one, stays in the
+/// readable stack `low..end`.
+fn fits(reach: &Reach, rsp: usize, frame: Option<usize>, low: usize, end: usize) -> bool {
+    let within = |base: usize| {
+        base >= low
+            && base
+                .checked_add(reach.bytes)
+                .is_some_and(|last| last <= end)
+    };
+    within(rsp) && frame.is_none_or(within)
+}
+
+/// The return addresses of the faulting thread's stack, innermost first,
+/// unwound from `context`; how many were found. Every read stays in the
+/// committed, readable region of the stack, so a broken stack ends the
+/// walk instead of faulting, on whichever thread reports.
+///
+/// # Safety
+///
+/// `context` is the context of a thread stopped in the fault or running
+/// this.
 unsafe fn unwind(context: &CONTEXT, frames: &mut [usize; FRAMES]) -> usize {
-    let mut context = *context;
+    let mut aligned = Aligned(*context);
+    let context = &mut aligned.0;
     let mut found = 0;
     while found < FRAMES {
         let rip = context.Rip;
+        let Ok(rsp) = usize::try_from(context.Rsp) else {
+            break;
+        };
         if rip == 0 {
             break;
         }
+        let Some((low, end)) = readable(rsp) else {
+            break;
+        };
         let mut image = 0u64;
         // SAFETY: no preconditions beyond a readable out pointer.
         let entry = unsafe { RtlLookupFunctionEntry(rip, &raw mut image, core::ptr::null_mut()) };
         if entry.is_null() {
             // A leaf function: its return address is on top of the stack.
-            let rsp = usize::try_from(context.Rsp).unwrap_or(0);
-            if rsp == 0 {
+            let Some(back) = read_word(rsp) else {
                 break;
-            }
-            // SAFETY: the stack pointer of a leaf function points at its
-            // return address, on the faulting thread's committed stack.
-            context.Rip = unsafe { core::ptr::with_exposed_provenance::<u64>(rsp).read() };
+            };
+            context.Rip = back;
             context.Rsp += 8;
         } else {
-            let (mut handler, mut frame) = (core::ptr::null_mut(), 0u64);
+            let Ok(base) = usize::try_from(image) else {
+                break;
+            };
+            // SAFETY: the function entry Windows found in the image at
+            // `base`.
+            let Some(reach) = (unsafe { reach_of(base, entry) }) else {
+                break;
+            };
+            let frame = match reach.frame {
+                None => None,
+                Some((number, offset)) => {
+                    let value = register(context, number)
+                        .and_then(|value| usize::try_from(value).ok())
+                        .and_then(|value| value.checked_sub(offset));
+                    if value.is_none() {
+                        break;
+                    }
+                    value
+                }
+            };
+            if !fits(&reach, rsp, frame, low, end) {
+                break;
+            }
+            let (mut handler, mut establisher) = (core::ptr::null_mut(), 0u64);
             // SAFETY: the function entry Windows found for `rip`, and a
-            // context of the same thread.
+            // context whose stack holds every byte the entry's unwind
+            // codes read, as checked above.
             unsafe {
                 RtlVirtualUnwind(
                     UNW_FLAG_NHANDLER,
                     image,
                     rip,
                     entry,
-                    &raw mut context,
+                    &raw mut *context,
                     &raw mut handler,
-                    &raw mut frame,
+                    &raw mut establisher,
                     core::ptr::null_mut(),
                 );
+            }
+            if context.Rsp <= context_rsp(rsp) || context.Rsp > context_rsp(end) {
+                break;
             }
         }
         if context.Rip == rip || context.Rip == 0 {
@@ -636,6 +903,16 @@ unsafe fn unwind(context: &CONTEXT, frames: &mut [usize; FRAMES]) -> usize {
         found += 1;
     }
     found
+}
+
+/// A `CONTEXT` on the 16-byte boundary Windows writes it with aligned
+/// stores; the windows-sys type does not ask for it.
+#[repr(C, align(16))]
+struct Aligned(CONTEXT);
+
+/// `address` as a context register holds it.
+fn context_rsp(address: usize) -> u64 {
+    u64::try_from(address).unwrap_or(u64::MAX)
 }
 
 /// Writes `bytes` to the open file `handle`.
@@ -848,6 +1125,130 @@ mod tests {
             text(Blame::Game, 0x77_0000, None)
                 .ends_with("in the game: no mod's code on the stack\r\n")
         );
+    }
+
+    #[test]
+    fn only_faults_that_end_the_process_count_as_crashes_in_a_dump() {
+        assert!(fatal(EXCEPTION_ACCESS_VIOLATION));
+        assert!(fatal(EXCEPTION_STACK_OVERFLOW));
+        // A breakpoint, a C++ exception and a debugger print: dumps a
+        // handler writes and survives.
+        for code in [0x8000_0003_u32, 0xe06d_7363, 0x4001_0006] {
+            assert!(!fatal(code.cast_signed()));
+        }
+        // SAFETY: null pointers.
+        assert_eq!(unsafe { fault_code(core::ptr::null()) }, None);
+    }
+
+    #[test]
+    fn a_region_reads_only_where_committed_and_readable() {
+        let end = readable_end(0x1000, 0x2000, MEM_COMMIT, PAGE_READWRITE, 0x1800);
+        assert_eq!(end, Some(0x3000));
+        assert_eq!(
+            readable_end(0x1000, 0x2000, MEM_COMMIT, PAGE_READWRITE, 0x3000),
+            None
+        );
+        assert_eq!(
+            readable_end(0x1000, 0x2000, 0x2000, PAGE_READWRITE, 0x1800),
+            None
+        );
+        assert_eq!(
+            readable_end(0x1000, 0x2000, MEM_COMMIT, PAGE_NOACCESS, 0x1800),
+            None
+        );
+        let guarded = PAGE_READWRITE | PAGE_GUARD;
+        assert_eq!(
+            readable_end(0x1000, 0x2000, MEM_COMMIT, guarded, 0x1800),
+            None
+        );
+        assert_eq!(
+            readable_end(usize::MAX, 2, MEM_COMMIT, PAGE_READONLY, usize::MAX),
+            None
+        );
+    }
+
+    #[test]
+    fn a_word_is_read_only_from_memory_that_reads() {
+        use windows_sys::Win32::System::Memory::{
+            MEM_RELEASE, MEM_RESERVE, VirtualAlloc, VirtualFree,
+        };
+        let word = 0x1122_3344_5566_7788_u64;
+        assert_eq!(read_word((&raw const word).addr()), Some(word));
+        assert_eq!(read_word(0), None);
+        assert_eq!(read_word(16), None);
+        // SAFETY: a fresh page, released below.
+        let page = unsafe { VirtualAlloc(core::ptr::null(), 4096, MEM_RESERVE, PAGE_READWRITE) };
+        assert!(!page.is_null());
+        assert_eq!(read_word(page.addr()), None, "reserved, not committed");
+        // SAFETY: the page reserved above.
+        unsafe { VirtualFree(page, 0, MEM_RELEASE) };
+        assert_eq!(read_word(page.addr()), None, "released");
+    }
+
+    #[test]
+    fn unwind_codes_say_how_far_a_frame_reads() {
+        // Version 1, three codes: sub rsp, 0x28 (alloc small, 4 * 8 + 8),
+        // push rbx, and a save of rsi at rsp + 0x60.
+        let info = [
+            1, 0x10, 4, 0, 0x08, 0x42, 0x04, 0x00, 0x0c, 0x34, 0x0c, 0x00,
+        ];
+        assert_eq!(
+            reach(&info),
+            Some(Reach {
+                frame: None,
+                bytes: 0x68,
+                chained: None,
+            })
+        );
+        // rbp as the frame register, offset 2 * 16, set_fpreg plus a large
+        // allocation of 0x1000 bytes in one more slot.
+        let framed = [1, 0x10, 3, 0x25, 0x10, 0x01, 0x00, 0x02, 0x08, 0x03];
+        assert_eq!(
+            reach(&framed),
+            Some(Reach {
+                frame: Some((5, 32)),
+                bytes: 0x1008,
+                chained: None,
+            })
+        );
+        // Chained: one code, padded to two, then the parent entry.
+        let mut chained = vec![(4 << 3) | 1, 0, 1, 0, 0x00, 0x30, 0, 0];
+        chained.extend_from_slice(&[0, 0, 0, 0, 0, 0, 0, 0, 0x78, 0x56, 0x34, 0x12]);
+        assert_eq!(reach(&chained).and_then(|r| r.chained), Some(0x1234_5678));
+        assert_eq!(reach(&[3, 0, 0, 0]), None, "an unknown version");
+        assert_eq!(reach(&[1, 0, 2, 0, 0, 0x07]), None, "cut short");
+        assert_eq!(reach(&[1, 0, 1, 0, 0, 0x0f]), None, "an unknown code");
+    }
+
+    #[test]
+    fn a_frame_unwinds_only_when_its_reads_stay_on_the_stack() {
+        let reach = Reach {
+            frame: None,
+            bytes: 0x40,
+            chained: None,
+        };
+        assert!(fits(&reach, 0x1000, None, 0x800, 0x2000));
+        assert!(!fits(&reach, 0x1fd0, None, 0x800, 0x2000));
+        assert!(!fits(&reach, 0x1000, Some(0x700), 0x800, 0x2000));
+        assert!(!fits(&reach, usize::MAX - 8, None, 0, usize::MAX));
+    }
+
+    #[test]
+    fn the_bounded_walk_unwinds_a_live_stack_and_stops_on_a_broken_one() {
+        use windows_sys::Win32::System::Diagnostics::Debug::RtlCaptureContext;
+        // SAFETY: an all-zero context is a valid value to capture into.
+        let mut aligned = Aligned(unsafe { core::mem::zeroed() });
+        // SAFETY: a writable context on its 16-byte boundary.
+        unsafe { RtlCaptureContext(&raw mut aligned.0) };
+        let context = aligned.0;
+        let mut frames = [0usize; FRAMES];
+        // SAFETY: this thread's own context.
+        let found = unsafe { unwind(&context, &mut frames) };
+        assert!(found >= 2, "{found} frames");
+        let mut broken = context;
+        broken.Rsp = 0x10;
+        // SAFETY: a context whose stack does not read; the walk checks it.
+        assert_eq!(unsafe { unwind(&broken, &mut frames) }, 0);
     }
 
     #[test]

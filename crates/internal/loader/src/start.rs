@@ -761,9 +761,8 @@ fn initialise(loader: &Loader, order: &[&Library]) {
 /// Arms every chain and mid-function hook past the mods that are off; an
 /// address that fails turns off the mods hooked on it.
 fn arm(loader: &Loader, frame: Option<FrameSlot>) {
-    let (Ok(mut chains), Ok(mut mids)) = (loader.chains.lock(), loader.mids.lock()) else {
-        return;
-    };
+    let mut chains = host::relock(&loader.chains, "the hook chains");
+    let mut mids = host::relock(&loader.mids, "the mid-function hooks");
     chains.seal();
     mids.seal();
     let patches = crate::code::seal();
