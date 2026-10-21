@@ -257,8 +257,16 @@ pub fn admit(
     Ok(())
 }
 
+/// One [`Message::Sync`] per mod of `values`, its join values by mod id.
+fn sync_messages(values: std::collections::BTreeMap<String, String>) -> Vec<Message> {
+    values
+        .into_iter()
+        .map(|(id, values)| Message::Sync { id, values })
+        .collect()
+}
+
 #[cfg(windows)]
-pub(crate) use live::{client, forget, heard, push_sync, server};
+pub(crate) use live::{client, forget, heard, push_sync, server, sync_to};
 
 #[cfg(windows)]
 mod live {
@@ -321,6 +329,15 @@ mod live {
             id: id.to_owned(),
             values: values.to_owned(),
         });
+    }
+
+    /// Sends the client of `key`, which just said hello, the join values
+    /// of every running join mod: the values it read before it joined may
+    /// be older, and a hosted game advertises none.
+    pub(crate) fn sync_to(key: u64) {
+        for message in super::sync_messages(crate::host::join_values()) {
+            crate::net::to_player(key, &message);
+        }
     }
 
     /// Takes a message the server sent, on the client.
@@ -505,6 +522,25 @@ mod live {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_client_that_says_hello_gets_every_mod_s_join_values() {
+        let values = std::collections::BTreeMap::from([
+            ("safes".to_owned(), "{cost = 5}".to_owned()),
+            ("zones".to_owned(), "{clusters = false}".to_owned()),
+        ]);
+        let messages = sync_messages(values);
+        assert_eq!(messages.len(), 2);
+        for message in &messages {
+            assert_eq!(
+                Message::read(message.kind(), &message.body()).as_ref(),
+                Some(message)
+            );
+        }
+        assert!(
+            matches!(&messages[0], Message::Sync { id, values } if id == "safes" && values == "{cost = 5}")
+        );
+    }
     use enshwick_loader_api::config::{Field, Stage};
 
     fn schema() -> Schema {

@@ -35,6 +35,23 @@ pub(crate) fn wrote(path: &Path) {
     );
 }
 
+/// Writes `path` with `write` and notes the write, holding the list of the
+/// loader's writes all the while: a watcher that sees the new file first
+/// waits for the note, so the event is raised once.
+///
+/// # Errors
+///
+/// What `write` returns; nothing is noted then.
+pub(crate) fn write_noted(
+    path: &Path,
+    write: impl FnOnce() -> std::io::Result<()>,
+) -> std::io::Result<()> {
+    let mut written = WRITTEN.lock().unwrap_or_else(PoisonError::into_inner);
+    write()?;
+    note(&mut written, path, stamp(path));
+    Ok(())
+}
+
 /// Keeps the latest write of `path` only: an older one can never match
 /// again, and a file no watcher looks at must not pile up writes.
 fn note(written: &mut Vec<(PathBuf, Stamp)>, path: &Path, now: Stamp) {
@@ -232,6 +249,31 @@ fn changed(loader: &Loader, owner: Option<usize>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_noted_write_is_the_loader_s_own_once() {
+        let dir = std::env::temp_dir().join(format!("enshwick-watch-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("safes.toml");
+        write_noted(&path, || {
+            std::fs::write(
+                &path,
+                "limit = 3
+",
+            )
+        })
+        .unwrap();
+        let now = stamp(&path);
+        assert!(ours(&path, now), "the watcher takes it as the loader's");
+        assert!(!ours(&path, now), "and only once");
+        assert!(
+            write_noted(&dir.join("no/such/file"), || Err(
+                std::io::ErrorKind::NotFound.into()
+            ))
+            .is_err()
+        );
+        let _gone = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn writes_to_one_file_keep_only_the_latest() {

@@ -289,7 +289,7 @@ pub fn configured_name(json: &str) -> Option<String> {
 }
 
 #[cfg(windows)]
-pub(crate) use runtime::start;
+pub(crate) use runtime::{start, wake};
 
 #[cfg(windows)]
 mod runtime {
@@ -318,6 +318,18 @@ mod runtime {
     /// server turns off stops being advertised.
     pub(crate) type JoinMods = fn() -> Vec<(String, String)>;
 
+    /// The advertising thread, once it runs.
+    static THREAD: std::sync::OnceLock<std::thread::Thread> = std::sync::OnceLock::new();
+
+    /// Sets the advertisement again now, not at the next round: the join
+    /// values or the join mods changed, and a player who checks before the
+    /// round would read the old ones.
+    pub(crate) fn wake() {
+        if let Some(thread) = THREAD.get() {
+            thread.unpark();
+        }
+    }
+
     /// Starts the thread that advertises the mod set.
     pub(crate) fn start(game_dir: &Path, mods: JoinMods, lines: super::Lines, synced: Synced) {
         let config = std::fs::read_to_string(game_dir.join("enshrouded_server.json")).ok();
@@ -327,6 +339,7 @@ mod runtime {
         let spawned = std::thread::Builder::new()
             .name("enshwick-advertise".into())
             .spawn(move || {
+                let _first = THREAD.set(std::thread::current());
                 if std::panic::catch_unwind(|| run(&configured, mods, &lines, synced)).is_err() {
                     crate::log!(WARN, "mod set advertisement stopped: it panicked");
                 }
@@ -395,7 +408,7 @@ mod runtime {
                 unsafe { (api.set_key_value)(server, key.as_ptr(), value.as_ptr()) };
             }
             last = Some(advert);
-            std::thread::sleep(REASSERT);
+            std::thread::park_timeout(REASSERT);
         }
     }
 

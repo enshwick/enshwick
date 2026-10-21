@@ -538,6 +538,7 @@ pub(crate) fn server_received(key: u64, args: &str) {
                     item_data(key, &records);
                 }
                 crate::recipes::hello(key);
+                crate::remote::sync_to(key);
             }
             return;
         }
