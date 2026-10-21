@@ -212,6 +212,27 @@ its links, and the call that panicked continues to the rest of the chain with
 the arguments the game passed. The game runs vanilla where the mod was and
 never crashes for it.
 
+The entry point cannot tell whether the body called `next` before the panic,
+so a panic after `next` runs the rest of the chain, and the game's function, a
+second time. Work after `next` goes in `Hook::after_next`: a panic there turns
+the mod off the same way, and the detour returns what `next` gave. The guard
+costs nothing until a panic.
+
+```rust
+# use std::sync::atomic::{AtomicU32, Ordering};
+# static RAISED: AtomicU32 = AtomicU32::new(0);
+enshwick_loader_api::detour! {
+    static RAISE: extern "system" fn(level: u32) -> u32 = raise;
+}
+
+fn raise(next: enshwick_loader_api::Next<extern "system" fn(u32) -> u32>, level: u32) -> u32 {
+    let raised = next.get()(level);
+    let _counted = RAISE.after_next(|| RAISED.fetch_add(raised - level, Ordering::Relaxed));
+    raised
+}
+# fn main() {}
+```
+
 A panic is a last resort, not error handling. A hook that can fail returns to
 vanilla on its own, as
 [`enshwick-area-loot`](https://github.com/themaiby/enshwick/blob/main/mods/enshwick-area-loot/src/take.rs)

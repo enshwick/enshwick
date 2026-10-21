@@ -148,6 +148,39 @@ impl<F: FnPtr> Hook<F> {
         }
     }
 
+    /// Runs `work` that a detour does after calling `next`, so that a panic
+    /// in it turns the mod off without running the rest of the chain again.
+    ///
+    /// A panic in the body falls through to the rest of the chain, which is
+    /// right before `next` and wrong after it: the game's function would run
+    /// twice. Work after `next` belongs in here. A panic in `work` reports a
+    /// fault, as a panic in the body does, and gives `None`; the detour then
+    /// returns what `next` gave. The guard costs nothing until a panic.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::sync::atomic::{AtomicU32, Ordering};
+    ///
+    /// static RAISED: AtomicU32 = AtomicU32::new(0);
+    ///
+    /// enshwick_loader_api::detour! {
+    ///     static RAISE: extern "system" fn(level: u32) -> u32 = raise;
+    /// }
+    ///
+    /// fn raise(next: enshwick_loader_api::Next<extern "system" fn(u32) -> u32>, level: u32) -> u32 {
+    ///     let raised = next.get()(level);
+    ///     let _counted = RAISE.after_next(|| RAISED.fetch_add(raised - level, Ordering::Relaxed));
+    ///     raised
+    /// }
+    /// # let _ = &RAISE;
+    /// ```
+    pub fn after_next<R>(&self, work: impl FnOnce() -> R) -> Option<R> {
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(work))
+            .inspect_err(|_| fault_after_next(self.name))
+            .ok()
+    }
+
     pub(crate) fn spec(&'static self, target: u64) -> crate::abi::HookSpec {
         crate::abi::HookSpec {
             target,
@@ -159,6 +192,14 @@ impl<F: FnPtr> Hook<F> {
     }
 }
 
+#[cold]
+#[inline(never)]
+fn fault_after_next(hook: &str) {
+    if let Some(host) = crate::host() {
+        host.fault(&format!("panic in hook {hook} after next"));
+    }
+}
+
 fn address<F: FnPtr>(f: F) -> usize {
     // SAFETY: `FnPtr` implementors are function pointers the size of `usize`.
     unsafe { core::mem::transmute_copy(&f) }
@@ -167,7 +208,8 @@ fn address<F: FnPtr>(f: F) -> usize {
 /// What a detour calls to continue: the next link, or the game's original
 /// function.
 ///
-/// One atomic load and an indirect call; copy it freely.
+/// One atomic load and an indirect call; copy it freely. Work a detour does
+/// after calling it goes in [`Hook::after_next`].
 ///
 /// # Examples
 ///
@@ -210,9 +252,10 @@ impl<F: FnPtr> Next<F> {
 /// The body is an ordinary function taking a [`Next`] and the target's
 /// arguments. A panic in it is caught: the mod reports a fault, the loader
 /// unlinks the mod, and this call falls through to the rest of the chain, so
-/// the game runs vanilla instead of crashing. The fall-through calls the rest
-/// of the chain even when the body called it before it panicked, so a body
-/// that does work after `next` keeps that work from panicking.
+/// the game runs vanilla instead of crashing. The fall-through cannot tell
+/// whether the body already called `next`, and calls the rest of the chain
+/// again if it did: the game's function runs twice. Work after `next` goes
+/// in [`Hook::after_next`], whose panic turns the mod off without that.
 ///
 /// Optional settings follow the function: `priority = <i32>` (lower runs
 /// earlier) and `flags = <HookFlags>`. [`#[hook]`](macro@crate::hook) writes the
@@ -263,6 +306,9 @@ macro_rules! detour {
                 let next = $name.next();
                 match ::std::panic::catch_unwind(::std::panic::AssertUnwindSafe(|| $body(next, $($arg),*))) {
                     ::core::result::Result::Ok(value) => value,
+                    // Whether the body called `next` is not known here: tracking it
+                    // would cost every call a thread-local write, and the value it
+                    // returned is gone anyway.
                     ::core::result::Result::Err(_) => {
                         $crate::__private::fault_in(::core::stringify!($name));
                         $crate::detour!(@call [$($unsafe)?] next ($($arg),*))
