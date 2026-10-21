@@ -65,6 +65,31 @@ impl Guid {
         Self(bytes)
     }
 
+    /// [`Guid::parse`] for text read at run time; `None` when malformed.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_loader_api::content::Guid;
+    ///
+    /// let text = "6943053a-32c1-4718-ae22-e61427ddf54d";
+    /// assert_eq!(Guid::try_parse(text), Some(Guid::parse(text)));
+    /// assert_eq!(Guid::try_parse("6943053a"), None);
+    /// ```
+    #[must_use]
+    pub fn try_parse(text: &str) -> Option<Self> {
+        let bytes = text.as_bytes();
+        let shaped = bytes.len() == 36
+            && bytes.iter().enumerate().all(|(i, &b)| {
+                if matches!(i, 8 | 13 | 18 | 23) {
+                    b == b'-'
+                } else {
+                    b.is_ascii_hexdigit()
+                }
+            });
+        shaped.then(|| Self::parse(text))
+    }
+
     /// The game's 32-bit id for this GUID: FNV-1a over its memory bytes, as
     /// items and recipes are numbered.
     ///

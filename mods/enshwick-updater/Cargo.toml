@@ -23,7 +23,7 @@ semver.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 ureq = { version = "3.4.2", default-features = false, features = ["rustls"] }
-zip = { version = "9.0.5", default-features = false, features = ["deflate-flate2-zlib-rs"] }
+zip.workspace = true
 
 [lints]
 workspace = true

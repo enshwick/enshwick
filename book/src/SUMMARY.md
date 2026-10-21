@@ -59,6 +59,7 @@
   - [Random loot](content/random-loot.md)
   - [Served resources](content/resources.md)
   - [Texts](content/texts.md)
+  - [Content packs](content/packs.md)
 - [Inventories](inventories.md)
 - [Item data](item-data.md)
 - [Stats](stats.md)

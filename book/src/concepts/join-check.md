@@ -15,7 +15,8 @@ running join mods (the ones that are on):
 - the Steam rule `enshwick`: the fingerprint, eight hex digits over the loader
   version, every `id@version` and every mod's join values;
 - `enshwick.mods`, `enshwick.mods.1`, ...: the mods, `id@version`, sorted and
-  split to fit Steam's rule length;
+  split to fit Steam's rule length; a [content pack](../content/packs.md)'s
+  version carries the hash of its files, `lanterns@1.0.0+3f2a9c1e`;
 - `enshwick.sync.<id>`: a mod's join values, as an inline TOML table;
 - `enshwick.src.<id>`: a mod's update source, `github:<owner/name>:<component>`
   or `url:<url>`;

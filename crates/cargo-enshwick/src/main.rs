@@ -11,6 +11,7 @@ use enshwick_loader_api::content::Guid;
 mod install;
 mod manifest;
 mod new;
+mod pack;
 mod pin;
 
 /// Cargo runs a subcommand as `cargo-enshwick enshwick <args>`.
@@ -63,6 +64,9 @@ enum Command {
     /// Ports the build rows of the loader and the mods in an Enshwick
     /// checkout to a new game build. Exits with 2 when an entry needs a human.
     Pin(pin::Args),
+    /// Checks, describes and packages content packs.
+    #[command(subcommand)]
+    Pack(pack::Command),
     /// Prints the GUID and game id of each content id, `<mod>:<name>`.
     Id {
         /// The content ids.
@@ -117,6 +121,7 @@ fn main() -> ExitCode {
             expect_version,
         } => manifest::show(&dll, expect_version.as_deref()),
         Command::Id { names } => ids(&names),
+        Command::Pack(command) => pack::run(&command),
     };
     match outcome {
         Ok(done) => {

@@ -59,6 +59,8 @@ pub(crate) struct ModRecord {
     pub(crate) check: OnceLock<(api_frame::ConfigCheckFn, usize)>,
     /// The texts the mod handed the loader, for its settings' labels.
     pub(crate) texts: Mutex<Option<enshwick_loader_api::i18n::Texts>>,
+    /// Whether it is a content pack, a folder of data the loader runs.
+    pub(crate) pack: bool,
 }
 
 impl ModRecord {
@@ -71,7 +73,20 @@ impl ModRecord {
     pub(crate) fn joins(&self) -> bool {
         !self.off.load(Ordering::Acquire) && self.manifest.flags.contains(ManifestFlags::JOIN)
     }
+
+    /// The version the join check compares: a pack's carries the hash of its
+    /// files, so other files of one version differ.
+    pub(crate) fn join_version(&self) -> String {
+        match self.pack.then(|| crate::packs::hash_of(&self.id)).flatten() {
+            Some(hash) => format!("{}+{hash}", self.version),
+            None => self.version.clone(),
+        }
+    }
 }
+
+/// The handle of the loader itself, which its own copy of the API uses to
+/// log and read while it runs content packs.
+pub(crate) const LOADER_HANDLE: ModHandle = ModHandle(0);
 
 /// A mod's handler for one event.
 #[derive(Clone, Copy, Debug)]
@@ -449,6 +464,9 @@ impl Loader {
             return;
         }
         crate::log::write(Level::ERROR, &record.id, &format!("off: {reason}"));
+        if record.pack {
+            crate::packs::forget(&record.id);
+        }
         crate::diag::turned_off(&record.id, reason);
         if let Ok(chains) = self.chains.lock() {
             chains.rewire(|owner| {
@@ -843,8 +861,15 @@ extern "system" fn hook(me: ModHandle, spec: *const HookSpec) -> Status {
         let Some(next) = (unsafe { spec.next.as_ref::<'static>() }) else {
             return Status::BAD_ARGS;
         };
+        // A pack's links are the API's own code in the loader, shared by
+        // every pack: they stay when one pack turns off.
+        let owner = if loader.mods[index].pack {
+            crate::chains::LOADER
+        } else {
+            index
+        };
         let link = Link {
-            owner: index,
+            owner,
             detour: spec.detour,
             next,
             priority: spec.priority,
@@ -907,8 +932,13 @@ extern "system" fn log(me: ModHandle, level: Level, message: Str) {
         let Some(loader) = loader() else {
             return;
         };
-        if let (Some((_, record)), Some(message)) = (loader.record(me), text(message)) {
-            crate::log::write(level, &record.id, message);
+        let id = if me == LOADER_HANDLE {
+            Some(crate::settings::LOADER_ID)
+        } else {
+            loader.record(me).map(|(_, record)| record.id.as_str())
+        };
+        if let (Some(id), Some(message)) = (id, text(message)) {
+            crate::log::write(level, id, message);
         }
     });
 }
@@ -1307,8 +1337,12 @@ fn calling(me: ModHandle) -> Result<(&'static Loader, usize, &'static ModRecord)
     Ok((loader, index, record))
 }
 
-/// [`calling`], for an entry point that needs only the loader.
+/// [`calling`], for an entry point that needs only the loader; the
+/// loader's own handle passes too.
 fn caller(me: ModHandle) -> Result<&'static Loader, Status> {
+    if me == LOADER_HANDLE {
+        return loader().ok_or(Status::BAD_ARGS);
+    }
     calling(me).map(|(loader, _, _)| loader)
 }
 

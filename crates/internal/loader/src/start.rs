@@ -36,11 +36,14 @@ type InitFn = unsafe extern "system" fn(*const HostApi, ModHandle) -> Status;
 type ReadyFn = unsafe extern "system" fn(*const HostApi, ModHandle);
 type Export = unsafe extern "system" fn() -> isize;
 
-/// A mod DLL with its exports.
+/// A mod DLL with its exports, or a content pack with the loader's.
 struct Library {
     file: String,
-    /// The loaded DLL, freed again when the mod list turns its id off.
+    /// The loaded DLL, freed again when the mod list turns its id off; null
+    /// for a pack.
     module: HMODULE,
+    /// Whether it is a content pack.
+    pack: bool,
     /// Where the DLL is mapped, for crash attribution.
     range: Option<(usize, usize)>,
     manifest: &'static Manifest,
@@ -131,6 +134,10 @@ pub(crate) fn start(stub_abi: u32, missing_forwards: u32) {
         crate::profile::start(loader.mods.len());
     }
     let order: Vec<&Library> = plan.order.iter().map(|&i| &libraries[i]).collect();
+    // SAFETY: the loader's table lives for the process.
+    unsafe {
+        enshwick_loader_api::__private::install_host(&raw const host::API, host::LOADER_HANDLE);
+    }
     attribute_crashes(loader, &order);
     initialise(loader, &order);
     crate::stats::seal();
@@ -212,6 +219,7 @@ fn records(
             schema: Mutex::new(None),
             check: OnceLock::new(),
             texts: Mutex::new(None),
+            pack: libraries[i].pack,
         })
         .collect()
 }
@@ -326,7 +334,7 @@ fn joined(loader: &Loader) -> Vec<(String, String)> {
         .mods
         .iter()
         .filter(|m| m.joins())
-        .map(|m| (m.id.clone(), m.version.clone()))
+        .map(|m| (m.id.clone(), m.join_version()))
         .collect()
 }
 
@@ -520,7 +528,18 @@ fn libraries(mods_dir: &Path) -> (Vec<Library>, Vec<Candidate>) {
     let mut changed = !list_file.exists();
     let mut libraries = Vec::new();
     let mut candidates = Vec::new();
-    for library in discover(mods_dir, &list) {
+    let packs = crate::packs::discover(mods_dir)
+        .into_iter()
+        .map(|found| Library {
+            file: found.file,
+            module: core::ptr::null_mut(),
+            pack: true,
+            range: None,
+            manifest: found.manifest,
+            init: crate::packs::init,
+            ready: crate::packs::ready,
+        });
+    for library in discover(mods_dir, &list).into_iter().chain(packs) {
         // SAFETY: the manifest is static data inside its loaded DLL.
         match unsafe { crate::manifest::parse(library.manifest) } {
             Ok(candidate) => {
@@ -533,8 +552,10 @@ fn libraries(mods_dir: &Path) -> (Vec<Library>, Vec<Candidate>) {
                         candidate.id,
                         modlist::LIST_PATH
                     );
-                    // SAFETY: loaded by `discover`; none of its code is in use.
-                    unsafe { FreeLibrary(library.module) };
+                    if !library.module.is_null() {
+                        // SAFETY: loaded by `discover`; none of its code is in use.
+                        unsafe { FreeLibrary(library.module) };
+                    }
                     continue;
                 }
                 candidates.push(candidate);
@@ -572,11 +593,16 @@ fn write_lock(loader: &'static Loader, files: Vec<(String, String)>) {
                 .filter(|m| !m.off.load(Ordering::Acquire))
                 .filter_map(|m| {
                     let (_, file) = files.iter().find(|(id, _)| *id == m.id)?;
+                    let sha256 = if m.pack {
+                        crate::packs::sha256_of(&m.id).unwrap_or_default()
+                    } else {
+                        hash(&loader.mods_dir.join(file))
+                    };
                     Some(modlist::Locked {
                         id: m.id.clone(),
                         version: m.version.clone(),
                         file: file.clone(),
-                        sha256: hash(&loader.mods_dir.join(file)),
+                        sha256,
                     })
                 })
                 .collect();
@@ -935,6 +961,7 @@ fn exports_of(module: HMODULE, file: &str) -> Option<Library> {
     Some(Library {
         file: file.to_owned(),
         module,
+        pack: false,
         range: crate::crash::range_of(module),
         manifest,
         init,
