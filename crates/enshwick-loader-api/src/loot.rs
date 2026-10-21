@@ -486,10 +486,10 @@ impl Load<'_> {
     {
         let containers = Containers::resolve(self)?;
         let worlds = crate::ecs::Worlds::resolve(self)?;
+        let system = self.system(SYSTEM)?;
         if PASS.set((containers, worlds, Box::new(handler))).is_err() {
             return Err(Off::new("one loot pass handler per mod"));
         }
-        let system = self.system(SYSTEM)?;
         self.hook(&CHECK, system)
     }
 }

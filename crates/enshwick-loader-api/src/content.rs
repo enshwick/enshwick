@@ -714,10 +714,17 @@ unsafe extern "system" fn build(
     out: *mut *const u8,
     out_len: *mut usize,
 ) -> Status {
+    if user.is_null() || out.is_null() || out_len.is_null() {
+        return Status::BAD_ARGS;
+    }
     // SAFETY: `user` is the leaked builder this function was registered with.
     let builder = unsafe { &*user.cast::<Builder>() };
-    // SAFETY: the loader passes the base's bytes for the call.
-    let base = unsafe { core::slice::from_raw_parts(base, base_len) };
+    let base = if base.is_null() || base_len == 0 {
+        &[][..]
+    } else {
+        // SAFETY: the loader passes the base's bytes for the call.
+        unsafe { core::slice::from_raw_parts(base, base_len) }
+    };
     let built = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| builder(base)));
     let Ok(Some(bytes)) = built else {
         return Status::REFUSED;
@@ -872,6 +879,29 @@ impl Load<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_builder_reads_a_null_base_as_empty() {
+        let builder: Builder = Box::new(|base: &[u8]| Some(vec![u8::from(base.is_empty())]));
+        let user = core::ptr::from_ref(&builder).cast_mut().cast();
+        let (mut out, mut out_len) = (core::ptr::null::<u8>(), 0usize);
+        // SAFETY: a null base, the builder as user and writable out pointers.
+        let status = unsafe { build(core::ptr::null(), 0, user, &raw mut out, &raw mut out_len) };
+        assert_eq!(status, Status::OK);
+        // SAFETY: the leaked bytes the builder made.
+        assert_eq!(unsafe { core::slice::from_raw_parts(out, out_len) }, [1]);
+        // SAFETY: null out pointers are refused before anything is written.
+        let refused = unsafe {
+            build(
+                core::ptr::null(),
+                0,
+                user,
+                core::ptr::null_mut(),
+                &raw mut out_len,
+            )
+        };
+        assert_eq!(refused, Status::BAD_ARGS);
+    }
 
     #[test]
     fn a_guid_parses_to_memory_order_and_its_game_id() {
