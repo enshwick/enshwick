@@ -6,14 +6,16 @@ each comfort category counts, as in vanilla.
 
 ## Settings
 
-`mod-configs/furniture-comfort.toml`, written on first start:
+`mod-configs/furniture-comfort.toml`, written on first start; each
+world keeps its own copy of it (see [Settings](../../README.md#settings)):
 
 ```toml
 multiplier = 2.0
 ```
 
-`multiplier` goes from 0 to 100; 1 is vanilla. An edit takes effect about a
-second after saving the file, without a restart.
+`multiplier` goes from 0 to 100; 1 is vanilla, and 0 takes all comfort from
+furniture. Each piece's comfort is rounded to a whole number. A change applies
+at once, without a restart.
 
 ## Install
 
@@ -27,7 +29,8 @@ the first release, 1.0.0, there are no others.
 
 ## Who needs it
 
-Only the server. Players without the mod see the higher comfort and rested time;
-item tooltips keep their vanilla numbers. It does not count in the join check.
+Only the server, the dedicated one or a game a player hosts. Players without
+the mod see the higher comfort and rested time; item tooltips keep their
+vanilla numbers. It does not count in the join check.
 
 Licensed under [MIT](../../LICENSE).

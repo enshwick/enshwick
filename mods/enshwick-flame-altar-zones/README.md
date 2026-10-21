@@ -3,20 +3,23 @@
 For friends who build next to each other. When the zones of two or more Flame
 Altars touch or overlap, they form a cluster:
 
-- every altar of the cluster grows by the same amount on every side, until the
-  cluster covers as much ground as its altars would apart, so overlap loses
-  nothing;
+- every altar of the cluster grows by the same amount on every horizontal
+  side, until the cluster covers as much ground as its altars would apart, to
+  the nearest grid cell, so overlap loses nothing; clusters that grow into
+  each other become one;
 - no zone ever shrinks, when an altar is placed or a Flame level rises, nor
   while the server stalls for a moment;
 - every altar of a cluster takes the height of the tallest one;
 - a piece may be placed across the seam between two zones of a cluster, which
   vanilla refuses.
 
-Altars that stand apart keep their vanilla zones.
+Altars that stand apart keep their vanilla zones, and so does a tilted altar,
+even beside others.
 
 ## Settings
 
-`mod-configs/flame-altar-zones.toml`, written on first start:
+`mod-configs/flame-altar-zones.toml`, written on first start; each
+world keeps its own copy of it (see [Settings](../../README.md#settings)):
 
 ```toml
 clusters = true

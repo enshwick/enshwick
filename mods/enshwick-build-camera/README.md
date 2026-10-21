@@ -15,13 +15,14 @@ Everything else stays vanilla:
 
 ## Settings
 
-`mod-configs/build-camera.toml`, written on first start:
+`mod-configs/build-camera.toml`, written on first start; each
+world keeps its own copy of it (see [Settings](../../README.md#settings)):
 
 ```toml
 enabled = true
 ```
 
-`false` asks for the skill again, as in vanilla. An edited file applies while
+`false` asks for the skill again, as in vanilla. A change applies while
 the game runs.
 
 ## Install

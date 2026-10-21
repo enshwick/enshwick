@@ -24,15 +24,14 @@ play.
   answers (0 when the join check refused it), and for 30 seconds after, once
   a second, how many main- and pause-menu entries were drawn. Lines start
   with `R8`.
-- Entity ids, on the client and on the server: every five seconds, the
-  entities within 20 m of each player, with their id, template GUID and
-  position, and the entity ids that `DespawnLink`, `OwnerRelationship`,
-  `NetworkComfort` and `AggroTargetNetworkData` hold with what those ids name
-  on the same side. The client adds each entity's slot and record. Joining a
-  client's and a server's log by template and position shows which ids a
-  client gives the server's entities. Lines start with `R11 client` or
-  `R11 server`; a server without players sweeps once around its first
-  entity.
+- Entity ids, on the client and on the server: every five seconds, the entities
+  within 20 m of each player, at most 40 a sweep, with their id, template GUID
+  and position, and the entity ids that `DespawnLink`, `OwnerRelationship`,
+  `NetworkComfort` and `AggroTargetNetworkData` hold with what those ids name on
+  the same side. The client adds each entity's slot and record. Joining a
+  client's and a server's log by template and position shows which ids a client
+  gives the server's entities. Lines start with `R11 client` or `R11 server`; a
+  server without players sweeps once around its first entity.
 - Health set by the game's impact programs, outside hits: heals, revives,
   scripted kills. For the first 300 of a run, on the client and on the
   server, the entity, the value's type and the value set. Lines start with
@@ -41,16 +40,17 @@ play.
   thread is stopped for a moment; threads whose stack pointer lies outside
   the stack their thread block records, or that were made fibers, are
   listed in one `R18` line at the end.
-- Skills: every unlock and refund of a skill node, with the node, whether a
-  level was added or taken, the answer and the node's level before and
-  after. Lines start with `R19 skill change`.
+- Skills: the first 500 unlocks and refunds of skill nodes in a run, each with
+  the node, whether a level was added or taken, the answer and the node's level
+  before and after. Lines start with `R19 skill change`.
 - Spawn targets, on the server: every five seconds, each player's spawn
   target (slot 9 of `SelectedTargets`: an entity and a place) when it
   changes, with where the player stands. Lines start with `R20`.
 
 ## Commands
 
-From the chat as an administrator while the client hosts a game:
+From the chat as an administrator, on a dedicated server or while the client
+hosts a game:
 
 | Command                  | What it does                                                                                                                       |
 | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |

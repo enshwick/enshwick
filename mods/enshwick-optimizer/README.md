@@ -57,11 +57,11 @@ An idle dedicated server, process CPU, 100 % being one core (details under
   server loop's thread and its busiest groups of threads, the loop and step
   rates, the exact waits slept and how late they woke, and the server's "Bad
   Performance" warnings.
-- **Environment report.** At start, one line names what the server runs on:
-  the Wine version and host, the fast synchronisation available (ntsync,
-  esync, fsync), the CPU governor, the container's CPU limit and the CPUs the
-  game saw, and a line of advice for each thing on the host that is known to
-  help and missing.
+- **Environment report.** At start, one line names what the server runs on.
+  Under Wine: the Wine version and host, the fast synchronisation available
+  (ntsync, esync, fsync), the CPU governor, the container's CPU limit and the
+  CPUs the game saw, and a line of advice for each thing on the host that is
+  known to help and missing. On Windows: the logical CPUs.
 
 An earlier community fix made every wait of every thread longer; CPU went
 down, but players spawned under the ground and gliding broke. This mod does
@@ -76,7 +76,8 @@ info  [optimizer] measure: Wine server: exact waits on, task workers at most 4, 
 
 ## Settings
 
-`mod-configs/optimizer.toml`, written on first start:
+`mod-configs/optimizer.toml`, written on first start; each
+world keeps its own copy of it (see [Settings](../../README.md#settings)):
 
 ```toml
 exact_waits = "auto"
@@ -96,7 +97,8 @@ measure = true
 - `measure`: the line a minute. It costs a few atomic counters and a look at
   the threads once a minute.
 
-A setting that forces a change where the table says off is logged as such.
+A setting that forces exact waits or a task worker cap where the table says
+off is logged as such.
 
 ## On the host
 

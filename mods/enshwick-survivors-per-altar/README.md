@@ -43,23 +43,32 @@ zone.
 
 ## Settings
 
-`mod-configs/survivors-per-altar.toml`, written on first start:
+`mod-configs/survivors-per-altar.toml`, written on first start; each
+world keeps its own copy of it (see [Settings](../../README.md#settings)):
 
 ```toml
 per_altar = true
 copy_staffs = true
-# The charges of a full copy staff, from 1 to 100.
 copy_staff_charges = 3
-# A dropped staff holds from this many up to copy_staff_charges, at random;
-# 0 drops every staff full.
 copy_staff_charges_min = 0
-# From 0 to 1; 0 turns that source off.
 copy_staff_boss_chance = 0.10
 copy_staff_locked_chest_chance = 0.02
-# true: the survivor's own staff places a copy at an altar without one and
-# moves the copy an altar has, as before copy staffs.
 vanilla_staff_places_copies = false
 ```
+
+- `per_altar`: `false` turns the mod off.
+- `copy_staffs`: whether copy staffs drop and work.
+- `copy_staff_charges`: the charges of a full copy staff, 1 to 100.
+- `copy_staff_charges_min`: a dropped staff holds from this many up to
+  `copy_staff_charges`, at random; 0 drops every staff full. It may not be
+  above `copy_staff_charges`.
+- `copy_staff_boss_chance`, `copy_staff_locked_chest_chance`: the chance that a
+  boss's corpse holds a staff, and that a chest which needs a key or a lockpick
+  holds one, from 0 to 1; 0 turns that source off. A value above 1 counts as 1
+  and below 0 as 0, with a warning in the log.
+- `vanilla_staff_places_copies`: `true` lets the survivor's own staff place a
+  copy at an altar without one and move the copy an altar has, as before copy
+  staffs; `false` moves the survivor itself, as in vanilla.
 
 `copy_staffs` is the server's: a joined player runs with the server's value,
 and a change applies while the game runs. Off, copy staffs neither drop nor
