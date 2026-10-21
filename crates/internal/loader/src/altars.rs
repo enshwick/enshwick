@@ -745,11 +745,14 @@ unsafe fn level_sizes(
     }
     // SAFETY: the balancing registry of the row.
     let size_of = |l: usize| unsafe { engine.zone_size(words[UPGRADE_BALANCING], l) };
-    let current = size_of(level)?;
     let mut sizes = Sizes::new();
     for l in 1..=level {
         sizes.try_push(size_of(l)?).ok()?;
     }
+    let current = match sizes.last() {
+        Some(&current) => current,
+        None => size_of(level)?,
+    };
     Some((current, sizes))
 }
 
