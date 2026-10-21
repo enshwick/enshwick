@@ -4015,11 +4015,11 @@ impl UiDialog {
 /// not unwind.
 pub type UiAnswerFn = unsafe extern "system" fn(answer: u32, user: *mut c_void);
 
-/// A mod's answer to the player picking entry `id` of its catalog on the
-/// Mods screen ([`HostApi::catalog_set`]), with the pointer given at
+/// A mod's answer to the player pressing Update under mod `id` on the Mods
+/// screen ([`HostApi::updates_set`]), with the pointer given at
 /// registration. It runs on the thread that draws the interface, must
 /// return at once and must not unwind.
-pub type CatalogPickFn = unsafe extern "system" fn(id: Str, user: *mut c_void);
+pub type UpdatePickFn = unsafe extern "system" fn(id: Str, user: *mut c_void);
 
 /// A mod's check of a new text of its settings file, before the loader
 /// writes it: [`Status::OK`] to accept it; else the reason, written to
@@ -4917,17 +4917,16 @@ pub struct HostApi {
     /// the values it loaded with. On the server's game thread only. Since
     /// minor 57.
     pub forget_game_settings: extern "system" fn(me: ModHandle) -> Status,
-    /// Replaces the mod's catalog on the Mods screen with `toml`, the
-    /// entries as [`crate::catalog::to_toml`] writes them: updates of
-    /// installed mods and mods the player may add, each with a button when
-    /// it is ready. [`Status::BAD_ARGS`] for text that is no catalog;
-    /// [`Status::MISSING`] on a server. Any thread. Since minor 58.
-    pub catalog_set: extern "system" fn(me: ModHandle, toml: Str) -> Status,
+    /// Replaces the updates of installed mods the mod shows on the Mods
+    /// screen with `toml`, as [`crate::updates::to_toml`] writes them, each
+    /// with a button when it is ready. [`Status::BAD_ARGS`] for text that is
+    /// no such list; [`Status::MISSING`] on a server. Any thread. Since
+    /// minor 58.
+    pub updates_set: extern "system" fn(me: ModHandle, toml: Str) -> Status,
     /// Makes `callback` with `user` the mod's answer to the player picking
-    /// one of its catalog's entries; [`Status::REFUSED`] for a second
-    /// callback. Allowed during `enshwick_mod_init` only. Since minor 58.
-    pub catalog_pick:
-        extern "system" fn(me: ModHandle, callback: CatalogPickFn, user: *mut c_void) -> Status,
+    /// one of its updates; [`Status::REFUSED`] for a second callback. Allowed during `enshwick_mod_init` only. Since minor 58.
+    pub update_pick:
+        extern "system" fn(me: ModHandle, callback: UpdatePickFn, user: *mut c_void) -> Status,
     /// Takes knowledge `id`, of `kind`, back from the player whose character
     /// is `entity`, or from the world for 0 or an id of the world's, and has
     /// the clients sent it again: a [`KnowledgeInfo::BOOL`] cleared, `value`
@@ -5333,7 +5332,7 @@ const _: () = {
     assert!(size_of::<HostApi>() == 24 + 136 * 8);
     assert!(core::mem::offset_of!(HostApi, game_text) == 24 + 135 * 8);
     assert!(core::mem::offset_of!(HostApi, account_knowledge) == 24 + 133 * 8);
-    assert!(core::mem::offset_of!(HostApi, catalog_pick) == 24 + 131 * 8);
+    assert!(core::mem::offset_of!(HostApi, update_pick) == 24 + 131 * 8);
     assert!(core::mem::offset_of!(HostApi, replaced) == 24 + 125 * 8);
     assert!(core::mem::offset_of!(HostApi, entity_data_open) == 24 + 124 * 8);
     assert!(core::mem::offset_of!(HostApi, knowledge_input_filter) == 24 + 126 * 8);

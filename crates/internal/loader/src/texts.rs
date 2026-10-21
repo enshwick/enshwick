@@ -146,10 +146,7 @@ mod tests {
         let texts = read(Some(&path));
         assert_eq!(texts.get("mods.back", Language::UK_UA), Some("Повернутися"));
         assert_eq!(texts.get("mods.back", Language::DE_DE), Some("Zurück"));
-        assert_eq!(
-            texts.get("mods.install", Language::UK_UA),
-            Some("Встановити")
-        );
+        assert_eq!(texts.get("mods.update", Language::UK_UA), Some("Оновити"));
         std::fs::write(&path, "[xx]\n").unwrap();
         let texts = read(Some(&path));
         assert_eq!(texts.get("mods.back", Language::UK_UA), Some("Назад"));

@@ -300,8 +300,8 @@ marked "init only" are allowed during `enshwick_mod_init` only.
 | `language`               | The game language the client last asked a text in; 0 on a server; any thread                         | 56          |
 | `keep_game_settings`     | Changes the game settings and keeps the marked fields with the world; server game thread only        | 57          |
 | `forget_game_settings`   | Forgets the world's kept game settings and puts back its loaded values; server game thread only      | 57          |
-| `catalog_set`            | Replaces the mod's catalog of updates and mods on the Mods screen; client only; any thread           | 58          |
-| `catalog_pick`           | The mod's answer to the player picking an entry of its catalog; init only                            | 58          |
+| `updates_set`            | Replaces the updates of installed mods the mod shows on the Mods screen; client only; any thread     | 58          |
+| `update_pick`            | The mod's answer to the player pressing Update under a mod; init only                                | 58          |
 | `revoke_knowledge`       | Takes knowledge back and has the clients sent it again; server game thread only                      | 59          |
 | `account_knowledge`      | Grants or takes back an account's knowledge now or once its character loads; server game thread only | 59          |
 | `resource_read`          | Copies a vanilla resource from the game's archive files; any thread                                  | 61          |
@@ -380,8 +380,8 @@ the mod off with a reason, which the mod's log shows as `off: <reason>`:
 | 55          | `Load::on_knowledge_input`                             | Off: `knowledge input filters: needs a newer loader`      |
 | 56          | `i18n::language()`                                     | `Language::FALLBACK`                                      |
 | 57          | `GameSettings::keep`, `forget_kept`                    | `WorldError::Missing`                                     |
-| 58          | `catalog::publish`                                     | `Err(Off)`; nothing shows                                 |
-| 58          | `Load::on_catalog_pick`                                | Off: `catalog: needs a newer loader`                      |
+| 58          | `updates::publish`                                     | `Err(Off)`; nothing shows                                 |
+| 58          | `Load::on_update_pick`                                 | Off: `updates: needs a newer loader`                      |
 | 59          | `Knowledge::revoke`, `grant_account`, `revoke_account` | `WorldError::Missing`                                     |
 
 A mod that can do without a feature catches the `Off` and goes on without it

@@ -72,7 +72,6 @@ pub mod altars;
 #[cfg(doctest)]
 mod book;
 pub mod buffs;
-pub mod catalog;
 pub mod code;
 pub mod commands;
 pub mod config;
@@ -111,6 +110,7 @@ pub mod terrain;
 #[cfg(feature = "test")]
 pub mod test;
 pub mod ui;
+pub mod updates;
 pub mod vetoes;
 pub mod weather;
 pub mod world;

@@ -17,12 +17,11 @@
 //! that sets a mod's join values, those rows show the server's values and
 //! take no changes.
 //!
-//! Mods that publish a catalog (see [`crate::catalog`]), such as the
-//! updater, add to the screen: an installed mod with an update on offer
-//! shows the new version and, when the publishing mod can install it, an
-//! Update button; mods the player may add sit on a page of their own behind
-//! "Available mods". A button only tells the publishing mod which entry the
-//! player picked: the mod asks the player and downloads, never the loader.
+//! Mods that publish updates (see [`crate::updates`]), such as the updater,
+//! add to the screen: an installed mod with an update on offer shows the new
+//! version and, when the publishing mod can install it, an Update button.
+//! The button only tells the publishing mod which update the player picked:
+//! the mod asks the player and downloads, never the loader.
 //!
 //! The world settings view shows the same rows under its last tab, inside
 //! its scroll area, from a hook after the tab's own rows: read-only where the
@@ -86,8 +85,6 @@ enum Page {
     },
     /// The joined server's mods with settings, from `first`.
     ServerList { first: usize },
-    /// The mods the catalogs offer that are not installed, from `first`.
-    Catalog { first: usize },
     /// The joined server's settings of mod `id`, from row `first`, as last
     /// heard (`news`).
     ServerSettings {
@@ -283,7 +280,7 @@ pub(super) unsafe fn draw(loader: &Loader, engine: &Engine, context: usize, fram
 fn back(screen: &mut Screen) -> bool {
     screen.message = None;
     match screen.page {
-        Page::Settings { .. } | Page::ServerList { .. } | Page::Catalog { .. } => {
+        Page::Settings { .. } | Page::ServerList { .. } => {
             screen.page = Page::List { first: 0 };
             false
         }
@@ -317,7 +314,6 @@ fn title(loader: &Loader, page: &Page) -> super::engine::UiText {
             |m| copy(&[m.label().as_bytes()]),
         ),
         Page::ServerList { .. } => copy(&[texts::text("mods.server").as_bytes()]),
-        Page::Catalog { .. } => copy(&[texts::text("mods.available").as_bytes()]),
         Page::ServerSettings { id, .. } => {
             copy(&[texts::fill("mods.server.of", &[("id", id)]).as_bytes()])
         }
@@ -361,7 +357,6 @@ unsafe fn show(loader: &Loader, engine: &Engine, context: usize, screen: &mut Sc
                         },
                     );
                 }
-                Listed::Catalog => go(screen, Page::Catalog { first: 0 }),
                 Listed::Picked(message) => screen.message = Some(message),
                 Listed::Nothing => {}
             }
@@ -392,16 +387,6 @@ unsafe fn show(loader: &Loader, engine: &Engine, context: usize, screen: &mut Sc
                     news: 0,
                 };
             } else if paint.button(texts::text("mods.back").as_bytes(), true) {
-                screen.page = Page::List { first: 0 };
-                screen.message = None;
-            }
-            false
-        }
-        Page::Catalog { first } => {
-            if let Some(message) = available(loader, &paint, first) {
-                screen.message = Some(message);
-            }
-            if paint.button(texts::text("mods.back").as_bytes(), true) {
                 screen.page = Page::List { first: 0 };
                 screen.message = None;
             }
@@ -530,9 +515,9 @@ fn server_settings(
     message
 }
 
-/// The catalogs' entries of the mods that are on, with the publishing mod.
-fn catalog(loader: &Loader) -> Vec<(usize, enshwick_loader_api::catalog::Entry)> {
-    crate::catalog::entries(|owner| {
+/// The updates the mods that are on publish, with the publishing mod.
+fn updates(loader: &Loader) -> Vec<(usize, enshwick_loader_api::updates::Update)> {
+    crate::updates::all(|owner| {
         loader
             .mods
             .get(owner)
@@ -545,8 +530,6 @@ enum Listed {
     Nothing,
     /// Opened mod `index`'s settings.
     Settings(usize),
-    /// Opened the mods on offer.
-    Catalog,
     /// Picked an update; what the screen says about it.
     Picked((String, bool)),
 }
@@ -557,86 +540,29 @@ fn go(screen: &mut Screen, page: Page) {
     screen.message = None;
 }
 
-/// Draws "Available mods" when the catalogs offer mods that are not
-/// installed; true when the player pressed it.
-fn available_button(loader: &Loader, paint: &Painter<'_>) -> bool {
-    let offered = catalog(loader)
-        .iter()
-        .filter(|(_, entry)| entry.installed.is_none())
-        .count();
-    offered > 0 && {
-        let count = offered.to_string();
-        let text = texts::fill("mods.available.count", &[("count", &count)]);
-        paint.button(text.as_bytes(), true)
-    }
-}
-
-/// Hands the player's pick of `entry` to `owner`, the mod that offered it;
+/// Hands the player's pick of `update` to `owner`, the mod that offered it;
 /// what the screen says about it.
 fn pick(
     loader: &Loader,
     owner: usize,
-    entry: &enshwick_loader_api::catalog::Entry,
+    update: &enshwick_loader_api::updates::Update,
 ) -> (String, bool) {
     let by = loader
         .mods
         .get(owner)
         .map_or_else(String::new, crate::host::ModRecord::label);
-    if crate::catalog::pick(owner, &entry.id) {
+    if crate::updates::pick(owner, &update.id) {
         (texts::fill("mods.picked", &[("mod", &by)]), true)
     } else {
         (texts::fill("mods.picked.refused", &[("mod", &by)]), false)
     }
 }
 
-/// Draws a page of the mods the catalogs offer that are not installed; the
-/// outcome of a pick.
-fn available(loader: &Loader, paint: &Painter<'_>, first: &mut usize) -> Option<(String, bool)> {
-    let offered: Vec<_> = catalog(loader)
-        .into_iter()
-        .filter(|(_, entry)| entry.installed.is_none())
-        .collect();
-    if offered.is_empty() {
-        paint.label(
-            texts::text("mods.available.none").as_bytes(),
-            UiWidget::STYLE_SECONDARY,
-            false,
-            true,
-        );
-    }
-    let mut message = None;
-    for (owner, entry) in offered.iter().skip(*first).take(MODS_PER_PAGE) {
-        let heading = format!("{} {}", entry.label(), entry.version);
-        paint.label(heading.as_bytes(), UiWidget::STYLE_H3, false, false);
-        if !entry.source.is_empty() {
-            let from = texts::fill("mods.from", &[("source", &entry.source)]);
-            paint.label(from.as_bytes(), UiWidget::STYLE_SECONDARY, true, false);
-        }
-        if !entry.note.is_empty() {
-            paint.label(
-                entry.note.as_bytes(),
-                UiWidget::STYLE_SECONDARY,
-                true,
-                false,
-            );
-        }
-        if entry.ready && paint.button(texts::text("mods.install").as_bytes(), true) {
-            message = Some(pick(loader, *owner, entry));
-        }
-    }
-    pages(paint, first, offered.len(), MODS_PER_PAGE);
-    message
-}
-
 /// Draws a page of the mod list; what the player did.
 fn list(loader: &Loader, paint: &Painter<'_>, first: &mut usize) -> Listed {
     let mods = &loader.mods;
-    let updates = catalog(loader);
-    let mut done = if available_button(loader, paint) {
-        Listed::Catalog
-    } else {
-        Listed::Nothing
-    };
+    let updates = updates(loader);
+    let mut done = Listed::Nothing;
     if crate::world::hosting() && JUMP_SHOWN.load(Ordering::Relaxed) != 0 {
         paint.label(
             texts::text("mods.world.here").as_bytes(),
@@ -675,22 +601,19 @@ fn list(loader: &Loader, paint: &Painter<'_>, first: &mut usize) -> Listed {
         if !credits.is_empty() {
             paint.label(credits.as_bytes(), UiWidget::STYLE_SECONDARY, true, false);
         }
-        let update = updates
-            .iter()
-            .find(|(_, entry)| entry.installed.is_some() && entry.id == record.id);
-        if let Some((owner, entry)) = update {
-            let line = texts::fill("mods.update.version", &[("version", &entry.version)]);
+        if let Some((owner, update)) = updates.iter().find(|(_, u)| u.id == record.id) {
+            let line = texts::fill("mods.update.version", &[("version", &update.version)]);
             paint.label(line.as_bytes(), UiWidget::STYLE_POSITIVE, false, false);
-            if !entry.note.is_empty() {
+            if !update.note.is_empty() {
                 paint.label(
-                    entry.note.as_bytes(),
+                    update.note.as_bytes(),
                     UiWidget::STYLE_SECONDARY,
                     true,
                     false,
                 );
             }
-            if entry.ready && paint.button(texts::text("mods.update").as_bytes(), true) {
-                done = Listed::Picked(pick(loader, *owner, entry));
+            if update.ready && paint.button(texts::text("mods.update").as_bytes(), true) {
+                done = Listed::Picked(pick(loader, *owner, update));
             }
         }
         let world = record.schema.lock().is_ok_and(|s| {
