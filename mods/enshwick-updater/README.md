@@ -46,6 +46,18 @@ and `*.dll` under `mods/`. An archive with a path that leaves the game's
 folder, or that would write another mod's DLL or the loader's files, is
 refused whole.
 
+## Build tables
+
+After a game update the loader may not have a build table for the new game
+build yet. It then runs the game on the code patterns of an older table, and
+the features those patterns miss stay off. The updater asks Enshwick's
+`build-tables` release for the table of the running build, on the client and
+on the dedicated server alike, without asking: the table is data, and both the
+updater and the loader use it only when Enshwick's key signed it for that
+build. It lands in `mods/enshwick/builds/` and takes effect at the next start;
+the client says so in a dialog, the server in the log. With `enabled = false`
+nothing is fetched.
+
 ## Settings
 
 `mod-configs/updater.toml`, written on first start:
@@ -113,7 +125,8 @@ minisign -S -s my.key -m my-mod-1.2.0.zip -t "my-mod-v1.2.0 my-mod-1.2.0.zip"
 
 ## Who needs it
 
-Players. The server does not run it; its loader advertises where each of
-its mods comes from and who signs it.
+Players, and servers for the build tables. On a dedicated server it fetches
+only those: the server's loader advertises where each of its mods comes from
+and who signs it, and players' updaters offer them.
 
 Licensed under [MIT](../../LICENSE).

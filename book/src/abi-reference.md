@@ -12,7 +12,7 @@ raw table. The exact types and signatures are in the
 | Constant                                                                                            | Value | Meaning                                         |
 | --------------------------------------------------------------------------------------------------- | ----- | ----------------------------------------------- |
 | [`ABI_MAJOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 1     | A loader refuses a mod built for another major. |
-| [`ABI_MINOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 50    | A newer minor only appends.                     |
+| [`ABI_MINOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 51    | A newer minor only appends.                     |
 
 The ABI version is apart from Enshwick Loader's version (such as 0.2.0, see
 [Releasing and updates](releasing.md#versions)): a platform release raises
@@ -163,7 +163,7 @@ marked "init only" are allowed during `enshwick_mod_init` only.
 | --------------------- | ----------------------------------------------------------------------------------------------- | ----------- |
 | `header`              | Size and version of the table                                                                   | 0           |
 | `host_version`        | The loader's own version                                                                        | 0           |
-| `build`               | Writes the running game's side, image base and build fingerprint                                | 0           |
+| `build`               | Writes the running game's side, image base, build fingerprint and where its build table is from | 0           |
 | `symbol`              | Resolves a symbolic id for the running build: the mod's own rows first, then the loader's table | 0           |
 | `system`              | Resolves an ECS system's update function by its reflected name                                  | 0           |
 | `field_offset`        | Resolves a field's offset in a reflected type                                                   | 0           |
@@ -354,6 +354,7 @@ the mod off with a reason, which the mod's log shows as `off: <reason>`:
 | 48          | `ItemInfo::category`            | 0                                                         |
 | 49          | `Load::migrate`                 | Off: `migrations: needs a newer loader`                   |
 | 50          | content ids, the content calls  | Off: `content ids: needs a newer loader`                  |
+| 51          | `BuildInfo::table`              | `BuildTable::EXACT`                                       |
 
 A mod that can do without a feature catches the `Off` and goes on without it
 instead of returning it from `init`.

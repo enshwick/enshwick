@@ -88,10 +88,10 @@ fn hook_name(loader: &Loader, target: u64) -> String {
         .or_else(|| {
             loader
                 .build
-                .symbols
+                .symbols()
                 .iter()
                 .find(|&&(_, rva)| loader.base + rva == target)
-                .map(|&(name, _)| name.to_owned())
+                .map(|(name, _)| name.clone())
         })
         .unwrap_or_else(|| format!("game+{:#x}", target.wrapping_sub(loader.base)))
 }
@@ -154,7 +154,7 @@ pub(crate) fn summary(loader: &Loader) -> Summary {
     };
     Summary {
         version: env!("CARGO_PKG_VERSION").to_owned(),
-        game: loader.build.name.to_owned(),
+        game: loader.build.name.clone(),
         hosting: loader.side == Side::SERVER || crate::world::hosting(),
         uptime: STARTED.get().map_or(Duration::ZERO, Instant::elapsed),
         last_crash: crate::crash::last().map(str::to_owned),

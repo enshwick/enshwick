@@ -86,6 +86,15 @@ impl Client {
         self.get(url, None, MAX_ARCHIVE)
     }
 
+    /// A build table.
+    ///
+    /// # Errors
+    ///
+    /// As [`Client::api`].
+    pub(crate) fn table(&self, url: &str) -> Result<Vec<u8>, Failure> {
+        self.get(url, None, MAX_JSON)
+    }
+
     /// A signature file, as text.
     ///
     /// # Errors

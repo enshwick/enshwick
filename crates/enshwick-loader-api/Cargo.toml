@@ -18,6 +18,7 @@ const-sha1.workspace = true
 zune-core.workspace = true
 zune-png.workspace = true
 fastrand.workspace = true
+memchr.workspace = true
 postcard.workspace = true
 serde.workspace = true
 thiserror.workspace = true

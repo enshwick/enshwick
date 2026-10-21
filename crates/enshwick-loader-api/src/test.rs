@@ -369,6 +369,7 @@ pub struct FakeHost {
     side: Side,
     base: u64,
     fingerprint: Fingerprint,
+    table: crate::abi::BuildTable,
     handle: ModHandle,
     symbols: HashMap<String, u64>,
     systems: HashMap<String, u64>,
@@ -424,6 +425,7 @@ impl FakeHost {
                 guid: [0; 16],
                 age: 0,
             },
+            table: crate::abi::BuildTable::EXACT,
             handle: ModHandle(1),
             symbols: HashMap::new(),
             systems: HashMap::new(),
@@ -530,6 +532,25 @@ impl FakeHost {
     #[must_use]
     pub fn fingerprint(mut self, fingerprint: Fingerprint) -> Self {
         self.fingerprint = fingerprint;
+        self
+    }
+
+    /// Where the build table comes from; [`BuildTable::EXACT`](crate::abi::BuildTable::EXACT)
+    /// by default.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_loader_api::abi::BuildTable;
+    ///
+    /// let loader = enshwick_loader_api::test::FakeHost::new()
+    ///     .build_table(BuildTable::PATTERNS)
+    ///     .install();
+    /// # let _ = loader;
+    /// ```
+    #[must_use]
+    pub fn build_table(mut self, table: crate::abi::BuildTable) -> Self {
+        self.table = table;
         self
     }
 

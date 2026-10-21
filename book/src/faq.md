@@ -82,14 +82,26 @@ when the mod itself returned `Err(Off)` from `init`, the line before it, at
 
 ### Nothing loads at all
 
-| Message in `loader.log`                                                             | What it means                                                    |
-| ----------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
-| `unknown game build <guid>/<age>; the game runs vanilla until Enshwick supports it` | The game was updated; Enshwick needs a release for the new build |
-| `<name> is not where the build table says; nothing loads`                           | The build looks known but does not match; treat it as unknown    |
-| `this is not Enshrouded or its dedicated server; nothing loads`                     | `powrprof.dll` was loaded by another program                     |
+| Message in `loader.log`                                                                         | What it means                                                                         |
+| ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `unknown game build <guid>/<age>; the game runs vanilla until Enshwick has its build table`     | The game was updated and `build_patterns = false` in `mod-configs/enshwick.toml`      |
+| `<name> is not where the build table says; nothing loads`                                       | The build looks known but does not match; treat it as unknown                         |
+| `this is not Enshrouded or its dedicated server; nothing loads`                                 | `powrprof.dll` was loaded by another program                                          |
 
 On an unknown build every mod's hold applies; see
 [The game stops before the world loads](#the-game-stops-before-the-world-loads).
+
+### Some features are off after a game update
+
+`loader.log` reads `game build <guid>/<age> has no build table yet: <n>
+entries found by their code patterns, <m> missing`. The game was updated, and
+the loader runs it on the code patterns of the newest build table it has.
+Whatever those patterns do not find stays off: a loader feature logs
+`<feature> off: not in this build`, and a mod that needs a missing entry turns
+off with `symbol <id>: missing on this game build`. Everything else runs. The
+[updater](https://github.com/themaiby/enshwick/tree/main/mods/enshwick-updater)
+fetches the table for the new build once it is published; restart the game or
+the server afterwards.
 
 ### The mod was skipped
 

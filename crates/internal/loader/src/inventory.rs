@@ -294,9 +294,12 @@ fn build(loader: &Loader) -> Option<Executor> {
             .constant(name)
             .and_then(|v| usize::try_from(v).ok())
     };
+    if loader.build.lacks_any("inventory.copy_") {
+        return None;
+    }
     let copies: Vec<(usize, usize)> = loader
         .build
-        .constants
+        .constants()
         .iter()
         .filter(|(name, _)| name.starts_with("inventory.copy_"))
         .filter_map(|&(_, packed)| {
@@ -1081,7 +1084,7 @@ mod tests {
 
     #[test]
     fn the_server_row_has_every_piece_the_executor_reads() {
-        let server = &crate::builds::BUILDS[0];
+        let server = crate::builds::embedded(Side::SERVER);
         let symbols = [
             "inventory.actions_row",
             "inventory.view_fill",
@@ -1125,7 +1128,7 @@ mod tests {
             assert!(server.constant(name).is_some(), "{name}");
         }
         let copies = server
-            .constants
+            .constants()
             .iter()
             .filter(|(name, _)| name.starts_with("inventory.copy_"))
             .count();

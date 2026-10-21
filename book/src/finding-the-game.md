@@ -12,8 +12,8 @@ where it would have acted.
 | `load.field_offset(type, field)` | a field's offset in a reflected type | yes |
 | `load.type_size(type)` | a reflected type's size | yes |
 | `load.find_code(pattern)` | the one place in the game's code that matches a byte pattern | while those bytes stay |
-| `load.symbol(id)` | an engine function or address pinned per build | needs a new row |
-| `load.constant(id)` | an engine offset, size or value pinned per build | needs a new row |
+| `load.symbol(id)` | an engine function or address pinned per build | needs a new table or row |
+| `load.constant(id)` | an engine offset, size or value pinned per build | needs a new table or row |
 
 ## Reflection: systems, fields and sizes
 
@@ -54,10 +54,14 @@ and returns an absolute address: the row holds an offset from the game's image
 base, and the loader adds the base. `constant` looks in the same two places and
 returns the value as it is.
 
-The loader's table, in
-[`builds.rs`](https://github.com/themaiby/enshwick/blob/main/crates/internal/loader/src/builds.rs),
-holds what several mods share: the ECS iterator, component reads, chat, labels,
-inventories and so on. Ids a single mod uses go in that mod's rows.
+The loader's build tables hold what several mods share: the ECS iterator,
+component reads, chat, labels, inventories and so on. They are data, one TOML
+file per game build in
+[`crates/internal/builds/tables`](https://github.com/themaiby/enshwick/tree/main/crates/internal/builds/tables),
+as SKSE's Address Library is: the loader embeds the tables known at its
+release, and the updater fetches the table of a newer game build, signed with
+Enshwick's key, so a game update needs a new table, not a new loader. Ids a
+single mod uses go in that mod's rows.
 
 ## Build rows in the manifest
 
@@ -108,26 +112,33 @@ binaries;
 [`enshwick-shared-experience`](https://github.com/themaiby/enshwick/tree/main/mods/enshwick-shared-experience)
 pins two game functions the same way.
 
-When the game updates, the rows of the new build come from
+When the game updates, the new build's table and rows come from
 [`cargo enshwick pin`](https://github.com/themaiby/enshwick/blob/main/crates/cargo-enshwick/README.md#porting-build-rows-pin):
 given the old and the new executable, it finds every pinned symbol of the
-loader's table and of each mod's rows again and writes the new rows next to
-the old ones. What it cannot place for sure it leaves out with a `// pin:`
-note, for a human to settle. Rows that pin the start of a function or a call
-site port best; an address in the middle of code that changed does not.
+loader's table and of each mod's rows again, writes the new table file and
+puts the new rows next to the old ones. What it cannot place for sure it
+leaves out with a `pin:` note, for a human to settle. Rows that pin the start
+of a function or a call site port best; an address in the middle of code that
+changed does not.
 
 ## When the build is unknown or an id is missing
 
-- **Unknown build.** The loader identifies the binary by its fingerprint and
-  looks it up in its own table. On a build it does not know, it logs the
-  fingerprint and loads nothing: no mod runs and the game is vanilla. The
-  loader also checks a few systems of each row against reflection, and loads
-  nothing when they disagree. A mod's own rows cannot make an unknown build
-  known. A mod that set a [hold](state.md) stops the game instead, so a world
-  that needs the mod is not opened without it.
-- **Missing id.** On a known build, an id that neither the mod's rows nor the
-  loader's table pins gives `Off` with "missing on this game build". Only the
-  mod that asked turns off; the others load.
+- **A build without a table.** The loader identifies the binary by its
+  fingerprint and looks for the table made for it. When there is one, it
+  checks a few systems of the table against reflection and loads nothing
+  when they disagree. When there is none, as right after a game update, it
+  takes the newest table of the same side and finds each entry by the code
+  pattern the table keeps for it: a symbol where its pattern matches exactly
+  once, a constant where the code that used it is still found. What no
+  pattern finds is missing, so only the loader features and the mods that
+  need it turn off, and the log names the build. With `build_patterns =
+  false` in `mod-configs/enshwick.toml` such a build stays vanilla instead,
+  and a mod that set a [hold](state.md) stops the game, so a world that needs
+  the mod is not opened without it. A mod's own rows cannot make an unknown
+  build known.
+- **Missing id.** An id that neither the mod's rows nor the loader's table
+  pins, or that no pattern found, gives `Off` with "missing on this game
+  build". Only the mod that asked turns off; the others load.
 
 Find every address before registering anything, as
 [the loader's base limit](https://github.com/themaiby/enshwick/blob/main/crates/internal/loader/src/bases.rs)

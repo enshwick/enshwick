@@ -1,0 +1,412 @@
+# The engine addresses Enshwick pins on one game build. `cargo enshwick
+# pin` writes it; the release workflow signs it with the project key.
+
+name = "1.0 server (1269579)"
+side = "server"
+guid = "1c129660cd6efc4f9f0b21652d5ff2bf"
+age = 387
+build = 1269579
+revision = 1
+
+# Systems whose reflected entry must equal the pinned address: the
+# table applies only to the binary it was made for.
+[checks]
+"upgrade_building_range" = 0x90a60
+"add_buildzones_server" = 0xe90e0
+"inventory_actions" = 0x19_f540
+
+# Engine functions and addresses by symbolic id, relative to the image
+# base. A `pattern` finds the symbol on a build without its own table:
+# its unique match in the code, plus `at` bytes.
+[symbols]
+"ecs.iterator_init" = { rva = 0x65_b8c0, pattern = "48 89 5C 24 10 55 56 57 41 54 41 55 41 56 41 57 48 83 EC 60" }
+"ecs.iterator_next" = { rva = 0x65_6690, pattern = "40 57 48 83 EC 20 4C 8B 01 48 8B FA 8B 41 08 4C 8B C9" }
+"ecs.attribute_find" = { rva = 0x98_4940, pattern = "89 54 24 10 53 48 83 EC 20 48 8B D9 48 8D 54 24 38 49 8D 48 68" }
+"ecs.mark_changed" = { rva = 0x66_6a90, pattern = "48 89 5C 24 08 48 89 6C 24 10 48 89 74 24 18 48 89 7C 24 20 41 54 41 56 41 57 48 83 EC 30 48 8B B1 90 02 00 00" }
+"ecs.component_read" = 0x3_46c0
+"balancing.zone_size" = { rva = 0x92_7560, pattern = "4C 8B 4A 20 4D 85 C9 74 42 41 8B 81 CC 01 00 00" }
+"building.seam_check" = { rva = 0x93_e210, pattern = "48 89 5C 24 08 48 89 6C 24 10 48 89 74 24 18 57 48 83 EC 30 33 FF" }
+"building.max_altars" = { rva = 0x93_1860, pattern = "48 8B 41 20 48 85 C0 75 06 B8 01 00 00 00 C3 48 05 B8 01 00 00" }
+"skill.node_unlocked" = { rva = 0x93_fe30, pattern = "40 53 48 83 EC 20 48 8B DA 89 4C 24 30 49 8D 88 F8 00 00 00" }
+"npc.lookup" = 0x20_2e80
+"npc.lookup_cursor" = 0x20_2e30
+"npc.move" = { rva = 0x1e_ca40, pattern = "48 89 5C 24 20 57 48 83 EC 70 4C 8B 81 D8 04 00 00" }
+"npc.update" = 0x20_55f0
+"npc.bed_check" = { rva = 0x1e_e250, pattern = "40 53 48 83 EC 40 48 8B D9 48 8B 89 28 03 00 00" }
+"comfort.base_register" = { rva = 0x1f_f520, pattern = "48 8B C4 48 89 58 08 48 89 70 10 57 48 83 EC 40 F3 0F 10 15 ?? ?? ?? ?? 0F 57 C0 F3 49 0F 2A 01" }
+"server.post_step" = { rva = 0x7b_6d20, pattern = "48 8B C4 55 53 41 54 41 55 41 57 48 8D A8 88 FE FF FF" }
+"server.set_state" = { rva = 0x7a_d250, pattern = "48 89 74 24 20 88 54 24 10 57 48 81 EC A0 00 00 00" }
+"server.save_step" = { rva = 0x7b_81b0, pattern = "4C 89 44 24 18 48 89 54 24 10 48 89 4C 24 08 55 53 57 41 54" }
+"server.player_remove" = { rva = 0x7a_2300, pattern = "48 8B C4 48 89 70 18 57 48 81 EC 80 00 00 00 83 3A 00" }
+"ecs.type_index" = 0x64_5cc0
+"ecs.component_read_raw" = { rva = 0x64_6b00, pattern = "48 89 5C 24 08 48 89 74 24 10 44 89 4C 24 20 57 48 83 EC 20 48 8D BA 48 01 00 00" }
+"ecs.entity_slot" = 0x64_8cb0
+"ecs.slot_root" = { rva = 0x93_5420, pattern = "48 89 5C 24 08 48 89 6C 24 10 48 89 74 24 18 57 48 83 EC 30 48 8B C2" }
+"building.spawn_prop" = { rva = 0x21_dcc0, pattern = "48 89 5C 24 10 55 56 57 41 56 41 57 48 8D 6C 24 90" }
+"building.pickup" = { rva = 0x22_1590, pattern = "40 55 53 56 57 41 55 41 56 41 57 48 8D 6C 24 D9 48 81 EC A0 00 00 00" }
+"resource.open" = { rva = 0x81_de90, pattern = "48 89 5C 24 08 48 89 74 24 10 57 48 83 EC 20 48 8B F9 49 8B D8" }
+"resource.resolve" = { rva = 0x81_d9a0, pattern = "48 89 5C 24 08 48 89 74 24 10 57 48 83 EC 40 48 8B F9 41 8B D8" }
+"resource.key_of" = { rva = 0x81_c190, pattern = "48 89 5C 24 08 57 48 83 EC 20 41 8B D8 48 8B F9" }
+"chat.post" = { rva = 0x90_8ce0, pattern = "40 55 56 41 54 41 55 41 57 48 83 EC 30 49 8B 41 08" }
+"chat.post_return" = { rva = 0x7b_2d9e, pattern = "89 44 24 20 C6 45 20 00 E8 ?? ?? ?? ?? 48 8B 4C 24 50 48 85 C9 0F 84 ?? ?? ?? ??", at = 13 }
+"chat.mark_delivered" = { rva = 0x94_2740, pattern = "8B 42 20 44 0F AB C0 89 42 20 41 8B C0 48 8D 14 40" }
+"label.find" = { rva = 0x64_6e30, pattern = "48 89 5C 24 08 48 89 6C 24 10 48 89 74 24 20 57 48 83 EC 30 48 8B E9" }
+"label.replace" = { rva = 0x90_9660, pattern = "48 89 5C 24 10 55 56 57 41 54 41 57 48 83 EC 30" }
+"label.add" = { rva = 0x5f_52a0, pattern = "48 83 EC 38 41 0F 10 01 48 81 C1 C0 5D E1 00 4C 8D 4C 24 20" }
+"label.rename_return" = { rva = 0x7b_25e5, pattern = "48 89 45 78 E8 ?? ?? ?? ?? 44 38 65 08 74 1A 48 8B 4C 24 50", at = 9 }
+"ecs.row_entity" = { rva = 0x65_3a80, pattern = "8B 41 08 4C 8B C2 85 C0 75 06 89 02 48 8B C2 C3 8D 50 FF 48 8B 01 48 03 D2 48 8B 88 28 08 00 00 8B 04 D1" }
+"inventory.actions_row" = { rva = 0x19_f5f0, pattern = "66 0F 1F 84 00 00 00 00 00 4C 8B 65 B0 48 8D 95 70 02 00 00", at = 9 }
+"inventory.view_fill" = { rva = 0x19_f56f, pattern = "0F 85 ?? ?? ?? ?? 41 B8 B0 01 00 00 48 8D 55 A0 49 8B CD E8 ?? ?? ?? ??", at = 12 }
+"inventory.skip_entity" = 0x131_6740
+"inventory.desc_zero" = { rva = 0x6_a430, pattern = "33 C0 66 C7 01 00 00 48 89 41 08 48 89 41 10 48 89 41 18" }
+"inventory.actor_flag" = { rva = 0x1b_0780, pattern = "48 89 5C 24 08 57 48 83 EC 30 41 8B D8 48 8B FA" }
+"inventory.txn_new" = { rva = 0x3_aba0, pattern = "33 D2 33 C0 48 89 11 48 89 51 08 48 89 51 10 48 89 51 18 48 89 51 20 48 89 51 28 48 89 51 30 48 89 51 38 48 89 51 40 48 89 51 48 48 89 51 50 48 89 51 58 48 89 51 60 48 89 51 68 48 89 51 70 48 89 51 78 48 89 81 80 00 00 00" }
+"inventory.txn_init" = { rva = 0x1b_2bf0, pattern = "C6 81 A8 71 00 00 00 48 8B 42 08 48 89 01 48 8B 42 10" }
+"inventory.txn_commit" = { rva = 0x1a_91f0, pattern = "40 55 53 41 55 48 8D AC 24 30 FC FF FF 48 81 EC D0 04 00 00" }
+"inventory.txn_rollback" = { rva = 0x1b_1c60, pattern = "4C 8B DC 55 56 41 55 41 56 41 57 49 8D 6B A1 48 81 EC C0 00 00 00" }
+"inventory.txn_drop" = { rva = 0x3_acf0, pattern = "48 89 5C 24 08 48 89 74 24 10 57 48 83 EC 20 48 8B F9 45 33 C0 48 81 C1 40 71 00 00" }
+"inventory.give" = { rva = 0x1a_b8e0, pattern = "4C 89 4C 24 20 48 89 54 24 10 48 89 4C 24 08 55 53 56 57 41 54 41 55 41 56 48 8D AC 24 60 FF FF FF" }
+"loot.roll" = { rva = 0x16_6970, pattern = "40 55 56 41 54 41 57 48 8D AC 24 38 CC FF FF B8 C8 34 00 00" }
+"loot.roll_one" = { rva = 0x16_6cd0, pattern = "40 55 53 57 41 55 41 57 48 8D AC 24 E0 CB FF FF" }
+"inventory.take" = { rva = 0x1a_a720, pattern = "48 89 5C 24 08 48 89 74 24 18 48 89 7C 24 20 48 89 54 24 10 55 41 54 41 55 41 56 41 57 48 8D AC 24 20 FF FF FF" }
+"inventory.destroy_slot" = { rva = 0x1a_c130, pattern = "48 89 5C 24 18 48 89 6C 24 20 57 48 83 EC 40 48 8B F9" }
+"inventory.move_slot" = { rva = 0x1a_e5f0, pattern = "48 89 5C 24 08 48 89 6C 24 10 48 89 74 24 18 57 48 83 EC 60 0F B6 84 24 A8 00 00 00 41 8B F9 44 8B 8C 24 90 00 00 00" }
+"inventory.move_amount" = { rva = 0x1a_e540, pattern = "48 89 5C 24 08 48 89 6C 24 10 48 89 74 24 18 57 48 83 EC 60 0F B6 84 24 A8 00 00 00 41 8B F9 44 0F B7 8C 24 90 00 00 00" }
+"inventory.move_all" = { rva = 0x1a_d940, pattern = "48 89 4C 24 08 55 53 56 57 41 54 41 56 48 8D AC 24 A8 FC FF FF" }
+"inventory.resend" = 0x23_8450
+"item.info" = { rva = 0x92_ef80, pattern = "89 4C 24 08 48 83 EC 28 85 C9 74 1B 48 8D 4A 38" }
+"skill.fly_mode_gate_return" = { rva = 0xc_4875, pattern = "48 8B 95 88 00 00 00 8B 0D ?? ?? ?? ?? E8 ?? ?? ?? ?? 84 C0 74 04 B3 01", at = 18 }
+"experience.need_for_level" = { rva = 0x93_22c0, pattern = "4C 8B 4A 20 44 8B D1 4D 85 C9 75 06 B8 01 00 00 00" }
+"experience.level_cap" = { rva = 0x93_3f30, pattern = "48 8B 41 20 48 85 C0 75 06 B8 01 00 00 00 C3 8B 40 10" }
+"access.offer_test" = { rva = 0x9_e270, pattern = "48 8B C4 48 89 58 08 4C 89 40 18 55 56 57 41 54 41 55 41 56 41 57 48 8D A8 B8 FE FF FF" }
+"access.transfer" = { rva = 0x19_81f0, pattern = "40 55 53 56 41 54 41 57 48 8D AC 24 C0 8D FF FF" }
+"access.sort" = { rva = 0x19_8cf0, pattern = "48 89 4C 24 08 55 53 57 41 56 48 8D AC 24 78 7F FF FF" }
+"access.base_stock" = { rva = 0x20_1800, pattern = "48 89 5C 24 08 48 89 6C 24 10 48 89 74 24 20 57 48 83 EC 40" }
+"access.dismantle_method" = { rva = 0x9_67f0, pattern = "48 8B C4 48 89 58 08 48 89 68 18 56 57 41 54 41 56 41 57 48 81 EC B0 00 00 00" }
+"survivors.spawn_return" = { rva = 0x4_05cb, pattern = "48 8B 8E 88 01 00 00 48 8D 55 98 E8 ?? ?? ?? ?? 44 8B F8 85 C0 74 6E", at = 16 }
+"survivors.unique_return_a" = { rva = 0x1f_4929, pattern = "80 38 00 75 78 0F B6 78 08 E8 ?? ?? ?? ?? 8B D8 40 84 FF 75 6F E8 ?? ?? ?? ??", at = 14 }
+"survivors.unique_return_b" = { rva = 0x1f_499d, pattern = "E8 ?? ?? ?? ?? 8B D8 48 8B CE 85 DB 75 2B 48 8D 94 24 90 00 00 00", at = 5 }
+"survivors.bed_return" = { rva = 0x1f_29ff, pattern = "44 39 2A 0F 84 ?? ?? ?? ?? 48 8B 4D 80 E8 ?? ?? ?? ?? 8B F8 85 C0 0F 84 ?? ?? ?? ?? 8B D0", at = 18 }
+"survivors.bed_init_return" = { rva = 0x1f_2d76, pattern = "48 8B 55 EF 48 8B 4D 1F E8 ?? ?? ?? ?? 85 C0 0F 84 ?? ?? ?? ?? 8B D0 48 8B CB", at = 13 }
+"survivors.cursor_return_a" = { rva = 0x9_9fe8, pattern = "48 8D 95 80 01 00 00 48 85 C9 74 07 E8 ?? ?? ?? ?? EB 09 48 8B 4E 50 E8 ?? ?? ?? ?? 8B D0", at = 17 }
+"survivors.cursor_return_b" = { rva = 0x9_9ff3, pattern = "48 8B 4E 50 E8 ?? ?? ?? ?? 8B D0 48 8B 86 08 01 00 00 4C 8B B0 F0 00 00 00", at = 9 }
+"survivors.assign_return_a" = { rva = 0xb_f541, pattern = "48 8D 95 88 00 00 00 E8 ?? ?? ?? ?? 4C 8B 64 24 68 49 8B CD", at = 12 }
+"survivors.assign_return_b" = { rva = 0xb_f5e4, pattern = "48 8B 4C 24 58 48 8B D3 E8 ?? ?? ?? ?? 85 C0 74 1C 48 8B 54 24 68", at = 13 }
+"survivors.roaming_return" = { rva = 0x1f_24f8, pattern = "49 8D 96 BC 01 00 00 48 8B 8C 24 80 00 00 00 E8 ?? ?? ?? ?? 8B D8 85 C0 74 58", at = 20 }
+"survivors.spawn" = { rva = 0x3_e170, pattern = "40 55 56 41 54 41 56 48 8D AC 24 28 9A FE FF B8 D8 66 01 00" }
+"survivors.registry_load" = { rva = 0x95_f900, pattern = "40 56 57 48 83 EC 68 48 83 79 20 00 48 8D 79 18" }
+"survivors.map_find_slot" = 0x94_4290
+"ecs.event_merge" = { rva = 0x6b_8d20, pattern = "40 56 41 55 41 56 48 83 EC 40 48 8B 31 45 33 ED" }
+"ecs.entities_with" = { rva = 0x64_7e10, pattern = "40 56 57 41 54 41 55 48 83 EC 38 4C 8B 2A 4C 8B E2" }
+"ecs.destroy_request" = { rva = 0x5f_4b50, pattern = "40 53 48 83 EC 30 41 8B D8 8B C2 45 85 C0 74 24 48 8D 51 10 89 44 24 20 41 B9 10 00 00 00 41 B0 01" }
+"server.save_request" = { rva = 0x7a_db60, pattern = "40 53 48 83 EC 20 80 B9 AA 18 00 00 00 48 8B D9" }
+"save.path" = { rva = 0x96_b590, pattern = "48 89 5C 24 08 55 56 57 41 56 41 57 48 8D AC 24 F0 F7 FF FF" }
+"ecs.component_write" = { rva = 0x64_6840, pattern = "48 89 5C 24 08 48 89 6C 24 10 48 89 74 24 18 48 89 7C 24 20 41 56 48 83 EC 40 49 8B E9" }
+"ecs.event_push" = { rva = 0x5f_5d00, pattern = "48 83 EC 28 4C 8B D9 41 81 F8 00 01 00 00 73 64" }
+"ecs.command_append" = { rva = 0x5f_2d00, pattern = "48 89 74 24 10 57 48 83 EC 20 44 8B 52 10 48 8B FA" }
+"world.time" = { rva = 0x65_1a50, pattern = "8B 91 9C 62 E1 00 48 8B 81 80 62 E1 00 48 85 D2" }
+"ecs.spawn_request" = { rva = 0x5f_40d0, pattern = "40 53 48 83 EC 30 4C 89 4C 24 20 48 8B DA 44 8B 0D ?? ?? ?? ??" }
+"building.cursor_check" = { rva = 0x9_b040, pattern = "48 89 5C 24 08 48 89 74 24 10 48 89 7C 24 18 55 41 56 41 57 48 8D 6C 24 C0" }
+"daytime.set_time" = { rva = 0x94_cf50, pattern = "40 53 48 83 EC 20 48 8B D9 4C 89 41 10 E8 ?? ?? ?? ?? FF 43 24" }
+"daytime.set_speed" = { rva = 0x94_ec80, pattern = "48 89 5C 24 08 57 48 83 EC 30 0F 29 74 24 20 49 8B D0" }
+"damage.hit" = { rva = 0x17_8760, pattern = "48 8D 4D F0 E8 ?? ?? ?? ?? 0F 10 45 F0 48 8B 95 B8 03 00 00", at = 9 }
+"damage.fall" = { rva = 0x8_5d6d, pattern = "F3 44 0F 2C CF 4C 03 C3 45 89 0C 88 48 8B CB E8 ?? ?? ?? ??", at = 8 }
+"damage.shroud" = { rva = 0xb_d83b, pattern = "F3 0F 2C C6 4C 03 C3 41 29 04 88 48 8B D7 48 8B CB", at = 7 }
+"damage.shroud_death" = { rva = 0xb_d781, pattern = "44 0F B7 43 04 4C 03 C3 41 89 14 88 E9 ?? ?? ?? ?? 48 8D 95 00 01 00 00", at = 8 }
+"buffs.type_by_id" = { rva = 0x92_70e0, pattern = "48 89 5C 24 08 48 89 6C 24 10 48 89 74 24 20 57 85 C9" }
+"buffs.restore" = { rva = 0x79_c840, pattern = "4C 89 4C 24 20 48 89 4C 24 08 55 53 57 41 55 41 56 41 57 48 8D AC 24 B8 FC FF FF" }
+"buffs.cleanse" = { rva = 0x5_9090, pattern = "45 33 C9 4C 8D 41 04 41 8B C1 4C 8B D1 0F 1F 00" }
+"knowledge.player_value" = { rva = 0x99_2bb0, pattern = "40 53 48 83 EC 20 80 B9 D2 00 00 00 00 48 8B 99 98 00 00 00" }
+"knowledge.world_value" = { rva = 0x99_2ce0, pattern = "40 53 48 83 EC 20 48 8D 59 10 C7 44 24 30 00 00 00 00" }
+"knowledge.push" = { rva = 0x99_6880, pattern = "4C 8B C1 B8 01 00 00 00 F0 0F C1 41 08 FF C0 3D 00 08 00 00" }
+"weather.sample" = { rva = 0xa1_5260, pattern = "48 8B C4 48 89 58 20 4C 89 40 18 48 89 48 08 55 56 57 41 54 41 55 41 56 41 57 48 81 EC 10 01 00 00" }
+"weather.clock" = { rva = 0x23_2610, pattern = "40 53 48 83 EC 20 48 8B D9 48 8B 49 08 E8 ?? ?? ?? ?? 48 8B 8B D0 02 00 00" }
+"weather.resource_lock" = 0xa1_4940
+"weather.resource_release" = { rva = 0x82_10c0, pattern = "48 8B 81 F0 07 00 00 48 85 C0 74 03 48 FF E0 C3" }
+"weather.free" = { rva = 0xa1_4e50, pattern = "85 D2 0F 84 ?? ?? ?? ?? 89 54 24 10 53 57 48 83 EC 28 8B DA" }
+"weather.spawn" = { rva = 0xa1_6120, pattern = "48 89 5C 24 18 55 56 57 41 54 41 55 41 56 41 57 48 81 EC A0 00 00 00" }
+"chunks.step" = { rva = 0x6b_ee40, pattern = "4C 89 44 24 18 55 53 56 41 54 41 55 41 56 41 57" }
+"terrain.add" = { rva = 0xa3_1840, pattern = "48 8B C4 48 89 58 08 48 89 70 10 48 89 78 18 55 41 56 41 57 48 8D A8 C8 FE FF FF" }
+"terrain.dig" = { rva = 0xa3_11f0, pattern = "48 8B C4 48 89 58 10 48 89 48 08 55 56 57 41 54 41 55 41 56 41 57 48 8D A8 68 FE FF FF" }
+"terrain.flatten" = { rva = 0xa3_0ef0, pattern = "48 8B C4 48 89 58 10 48 89 70 18 48 89 78 20 48 89 48 08 55 41 54 41 55 41 56 41 57 48 8D A8 28 FF FF FF" }
+
+# Engine offsets, sizes and values by symbolic id. A `pattern` holds
+# code that uses the value; on a build without its own table the value
+# is kept only where that code is still found once.
+[constants]
+"ecs.context_row" = 8
+"ecs.descriptor_entity_records" = { value = 0x828, pattern = "48 8B 01 48 03 D2 48 8B 88 28 08 00 00 8B 04 D1 41 89 00" }
+"ecs.entity_record_size" = { value = 0x10, pattern = "33 D2 33 C0 48 89 11 48 89 51 08 48 89 51 10 48 89 51 18 48 89 51 20 48 89 51 28 48 89 51 30 48 89 51 38 48 89 51 40 48 89 51 48 48 89 51 50 48 89 51 58 48 89 51 60 48 89 51 68 48 89 51 70 48 89 51 78 48 89 81 80 00 00 00" }
+"ecs.level_data_offset" = 4
+"ecs.level_flags" = 6
+"ecs.attribute_slot" = 0xc
+"altar.level_attribute" = 0x724b_f568
+"building.zone_list_entries" = { value = 0x10, pattern = "33 D2 33 C0 48 89 11 48 89 51 08 48 89 51 10 48 89 51 18 48 89 51 20 48 89 51 28 48 89 51 30 48 89 51 38 48 89 51 40 48 89 51 48 48 89 51 50 48 89 51 58 48 89 51 60 48 89 51 68 48 89 51 70 48 89 51 78 48 89 81 80 00 00 00" }
+"building.zone_list_count" = { value = 0x18, pattern = "33 D2 33 C0 48 89 11 48 89 51 08 48 89 51 10 48 89 51 18 48 89 51 20 48 89 51 28 48 89 51 30 48 89 51 38 48 89 51 40 48 89 51 48 48 89 51 50 48 89 51 58 48 89 51 60 48 89 51 68 48 89 51 70 48 89 51 78 48 89 81 80 00 00 00" }
+"building.zone_entry_size" = { value = 0x48, pattern = "48 89 51 10 48 89 51 18 48 89 51 20 48 89 51 28 48 89 51 30 48 89 51 38 48 89 51 40 48 89 51 48 48 89 51 50 48 89 51 58 48 89 51 60 48 89 51 68 48 89 51 70 48 89 51 78 48 89 81 80 00 00 00" }
+"building.zone_entry_shape" = { value = 0x44, pattern = "48 89 5C 24 68 E8 ?? ?? ?? ?? 89 33 41 39 77 44 49 8D 5F 44 74 71" }
+"building.zone_entry_ignored" = { value = 0x46, pattern = "48 8B 4E 10 48 03 CB 80 79 46 00 75 26 0F 28 D6" }
+"building.corner_size" = { value = 0x18, pattern = "33 D2 33 C0 48 89 11 48 89 51 08 48 89 51 10 48 89 51 18 48 89 51 20 48 89 51 28 48 89 51 30 48 89 51 38 48 89 51 40 48 89 51 48 48 89 51 50 48 89 51 58 48 89 51 60 48 89 51 68 48 89 51 70 48 89 51 78 48 89 81 80 00 00 00" }
+"server.entry_state" = { value = 0x18, pattern = "33 D2 33 C0 48 89 11 48 89 51 08 48 89 51 10 48 89 51 18 48 89 51 20 48 89 51 28 48 89 51 30 48 89 51 38 48 89 51 40 48 89 51 48 48 89 51 50 48 89 51 58 48 89 51 60 48 89 51 68 48 89 51 70 48 89 51 78 48 89 81 80 00 00 00" }
+"server.player_slots" = { value = 0x1e0, pattern = "48 8D AC 24 20 FF FF FF 48 81 EC E0 01 00 00 44 8B BD 38 01 00 00" }
+"server.player_slot_size" = { value = 0x148, pattern = "48 85 C9 74 31 0F B6 86 62 01 00 00 4C 8B 8E 58 01 00 00 4C 8B 86 50 01 00 00 48 8B 96 48 01 00 00 88 44 24 28 0F B7 86 60 01 00 00 66 89 44 24 20 E8 ?? ?? ?? ?? 48 83 FB 28" }
+"server.player_slot_count" = { value = 0x10, pattern = "33 D2 33 C0 48 89 11 48 89 51 08 48 89 51 10 48 89 51 18 48 89 51 20 48 89 51 28 48 89 51 30 48 89 51 38 48 89 51 40 48 89 51 48 48 89 51 50 48 89 51 58 48 89 51 60 48 89 51 68 48 89 51 70 48 89 51 78 48 89 81 80 00 00 00" }
+"server.player_slot_state" = 0x0a
+"server.player_slot_entity" = { value = 0x18, pattern = "33 D2 33 C0 48 89 11 48 89 51 08 48 89 51 10 48 89 51 18 48 89 51 20 48 89 51 28 48 89 51 30 48 89 51 38 48 89 51 40 48 89 51 48 48 89 51 50 48 89 51 58 48 89 51 60 48 89 51 68 48 89 51 70 48 89 51 78 48 89 81 80 00 00 00" }
+"server.player_slot_key" = { value = 0x48, pattern = "48 89 51 10 48 89 51 18 48 89 51 20 48 89 51 28 48 89 51 30 48 89 51 38 48 89 51 40 48 89 51 48 48 89 51 50 48 89 51 58 48 89 51 60 48 89 51 68 48 89 51 70 48 89 51 78 48 89 81 80 00 00 00" }
+"server.player_slot_name" = { value = 0x20, pattern = "33 D2 33 C0 48 89 11 48 89 51 08 48 89 51 10 48 89 51 18 48 89 51 20 48 89 51 28 48 89 51 30 48 89 51 38 48 89 51 40 48 89 51 48 48 89 51 50 48 89 51 58 48 89 51 60 48 89 51 68 48 89 51 70 48 89 51 78 48 89 81 80 00 00 00" }
+"server.world" = { value = 0x1d0, pattern = "0F B6 87 D2 01 00 00 4C 8B 8F C8 01 00 00 4C 8B 87 C0 01 00 00 48 8B 97 B8 01 00 00 88 44 24 28 0F B7 87 D0 01 00 00 66 89 44 24 20 E8 ?? ?? ?? ?? 48 8B 87 B0 01 00 00 80 38 01 75 54" }
+"server.player_infos" = { value = 0x1d8, pattern = "39 4C 2B 14 75 B4 48 8B 8F D8 01 00 00 48 85 C9" }
+# The server's live game settings (a pointer), the preset it
+# runs (u8) and its flag for the settings in the next info
+# message to the clients (u8).
+"server.game_settings" = 0x1758
+"server.game_settings_preset" = 0x1760
+"server.game_settings_resend" = 0x18e0
+"server.permission_table" = 0x498
+"server.permission_entry_size" = { value = 0xa0, pattern = "48 8D 81 18 01 00 00 48 89 91 90 00 00 00 48 89 91 98 00 00 00 48 89 91 A0 00 00 00 48 89 91 A8 00 00 00 48 89 91 B8 00 00 00" }
+"server.permission_mask" = 0x9d
+"world.entities" = { value = 0xe1_5dc0, pattern = "41 0F 10 01 48 81 C1 C0 5D E1 00 4C 8D 4C 24 20" }
+"ecs.registry_type_map" = { value = 0x30, pattern = "33 D2 33 C0 48 89 11 48 89 51 08 48 89 51 10 48 89 51 18 48 89 51 20 48 89 51 28 48 89 51 30 48 89 51 38 48 89 51 40 48 89 51 48 48 89 51 50 48 89 51 58 48 89 51 60 48 89 51 68 48 89 51 70 48 89 51 78 48 89 81 80 00 00 00" }
+"ecs.registry_type_map_fallback" = { value = 0x88, pattern = "48 89 81 80 00 00 00 89 81 88 00 00 00 88 81 B0 00 00 00" }
+"ecs.entity_map" = { value = 0x148, pattern = "48 85 C9 74 31 0F B6 86 62 01 00 00 4C 8B 8E 58 01 00 00 4C 8B 86 50 01 00 00 48 8B 96 48 01 00 00 88 44 24 28 0F B7 86 60 01 00 00 66 89 44 24 20 E8 ?? ?? ?? ?? 48 83 FB 28" }
+"ecs.entity_map_capacity" = { value = 0x158, pattern = "0F 1F 84 00 00 00 00 00 48 8B 8E 68 01 00 00 48 85 C9 74 31 0F B6 86 62 01 00 00 4C 8B 8E 58 01 00 00 4C 8B 86 50 01 00 00 48 8B 96 48 01 00 00 88 44 24 28 0F B7 86 60 01 00 00" }
+"ecs.entity_records" = { value = 0x188, pattern = "48 85 C0 0F 84 ?? ?? ?? ?? 48 8B 8E 88 01 00 00 48 8D 55 98" }
+"ecs.record_template" = { value = 0x28, pattern = "33 D2 33 C0 48 89 11 48 89 51 08 48 89 51 10 48 89 51 18 48 89 51 20 48 89 51 28 48 89 51 30 48 89 51 38 48 89 51 40 48 89 51 48 48 89 51 50 48 89 51 58 48 89 51 60 48 89 51 68 48 89 51 70 48 89 51 78 48 89 81 80 00 00 00" }
+"ecs.context_entity_world" = { value = 0x30, pattern = "33 D2 33 C0 48 89 11 48 89 51 08 48 89 51 10 48 89 51 18 48 89 51 20 48 89 51 28 48 89 51 30 48 89 51 38 48 89 51 40 48 89 51 48 48 89 51 50 48 89 51 58 48 89 51 60 48 89 51 68 48 89 51 70 48 89 51 78 48 89 81 80 00 00 00" }
+"reflect.type_hash" = { value = 0x90, pattern = "48 8D 81 18 01 00 00 48 89 91 90 00 00 00 48 89 91 98 00 00 00" }
+"building.ctx_player" = 0x14c
+"building.ctx_replay" = 0x151
+"server.player_slot_machine" = 0x04
+"server.chat_store" = { value = 0x60, pattern = "48 89 51 40 48 89 51 48 48 89 51 50 48 89 51 58 48 89 51 60 48 89 51 68 48 89 51 70 48 89 51 78 48 89 81 80 00 00 00" }
+"server.custom_strings" = { value = 0x58, pattern = "48 89 51 30 48 89 51 38 48 89 51 40 48 89 51 48 48 89 51 50 48 89 51 58 48 89 51 60 48 89 51 68 48 89 51 70 48 89 51 78 48 89 81 80 00 00 00" }
+"chat.store_slots" = 0x0c
+"chat.store_slot_size" = 0x0c
+"chat.store_slot_count" = { value = 0x20, pattern = "33 D2 33 C0 48 89 11 48 89 51 08 48 89 51 10 48 89 51 18 48 89 51 20 48 89 51 28 48 89 51 30 48 89 51 38 48 89 51 40 48 89 51 48 48 89 51 50 48 89 51 58 48 89 51 60 48 89 51 68 48 89 51 70 48 89 51 78 48 89 81 80 00 00 00" }
+"chat.store_tail" = { value = 0x1c8, pattern = "49 8B CE E8 ?? ?? ?? ?? 49 8B 0E 49 8B BC 24 C8 01 00 00 8B 18 E8 ?? ?? ?? ??" }
+"chat.node_delivered" = { value = 0x20, pattern = "33 D2 33 C0 48 89 11 48 89 51 08 48 89 51 10 48 89 51 18 48 89 51 20 48 89 51 28 48 89 51 30 48 89 51 38 48 89 51 40 48 89 51 48 48 89 51 50 48 89 51 58 48 89 51 60 48 89 51 68 48 89 51 70 48 89 51 78 48 89 81 80 00 00 00" }
+"chat.max_text" = { value = 0x400, pattern = "80 7F 54 00 0F 85 ?? ?? ?? ?? 48 8B 4F 60 48 81 C1 00 04 00 00" }
+"chat.reply_type" = 4
+"label.max_text" = { value = 0xff, pattern = "48 8B 97 80 01 00 00 4C 8D 46 20 41 B1 FF 89 5C 24 20" }
+"label.rename_entity" = { value = 0x100, pattern = "48 89 91 F8 00 00 00 48 C7 81 00 01 00 00 00 02 00 00" }
+# The first 8 code bytes at `inventory.actions_row` and
+# `inventory.view_fill`, little-endian: the loop head, and the
+# view fill that names `rbp - 0x60` and `r13`.
+"inventory.row_bytes" = 0x7095_8d48_b065_8b4c
+"inventory.view_fill_bytes" = "0xe8cd_8b49_a055_8d48"
+"inventory.view_frame" = { value = 0x60, pattern = "48 89 51 40 48 89 51 48 48 89 51 50 48 89 51 58 48 89 51 60 48 89 51 68 48 89 51 70 48 89 51 78 48 89 81 80 00 00 00" }
+"inventory.view_owners" = { value = 0x178, pattern = "48 8D 8D B0 05 00 00 E8 ?? ?? ?? ?? 0F B6 8F 78 01 00 00 83 E9 01" }
+"inventory.view_actors" = { value = 0x118, pattern = "88 81 B0 00 00 00 48 8D 81 18 01 00 00 48 89 91 90 00 00 00" }
+"inventory.view_replication" = { value = 0xf8, pattern = "48 89 91 10 01 00 00 48 89 91 F8 00 00 00 48 C7 81 00 01 00 00 00 02 00 00" }
+"inventory.view_item_registry" = { value = 0xd8, pattern = "48 89 91 C8 00 00 00 48 89 91 D0 00 00 00 48 89 91 D8 00 00 00 48 89 91 E0 00 00 00 48 89 81 F0 00 00 00" }
+"inventory.desc_size" = { value = 0xf0, pattern = "48 89 91 E0 00 00 00 48 89 81 F0 00 00 00 48 8D 05 ?? ?? ?? ??" }
+"inventory.desc_context" = 0x08
+"inventory.desc_actor" = { value = 0xc8, pattern = "48 89 91 A8 00 00 00 48 89 91 B8 00 00 00 48 89 91 C0 00 00 00 48 89 91 C8 00 00 00 48 89 91 D0 00 00 00 48 89 91 D8 00 00 00" }
+"inventory.desc_other" = { value = 0xcc, pattern = "89 81 E0 00 00 00 8B 82 CC 00 00 00 89 81 E4 00 00 00" }
+# Descriptor fields copied from the view: `desc << 32 | view`.
+"inventory.copy_item_registry" = 0x10_0000_00d8
+"inventory.copy_a8" = 0x18_0000_00a8
+"inventory.copy_setup" = 0x28_0000_0160
+"inventory.copy_slots" = 0x30_0000_0148
+"inventory.copy_slot_hints" = 0x38_0000_0190
+"inventory.copy_equipment" = 0x40_0000_0168
+"inventory.copy_owners" = 0x48_0000_0178
+"inventory.copy_empty_state" = 0x58_0000_0158
+"inventory.copy_transform" = 0x78_0000_0110
+"inventory.copy_100" = 0x80_0000_0100
+"inventory.copy_150" = 0x88_0000_0150
+"inventory.copy_pickup_events" = 0xa0_0000_01a8
+"inventory.copy_full_events" = 0xa8_0000_01a0
+"inventory.copy_198" = 0xb8_0000_0198
+"inventory.copy_discovered" = 0xc0_0000_00f0
+"inventory.txn_size" = 0x71b0
+"loot.txn_context" = 0
+"loot.txn_entity" = { value = 0xe0, pattern = "48 89 91 D8 00 00 00 48 89 91 E0 00 00 00 48 89 81 F0 00 00 00" }
+"loot.request_node" = 0
+"loot.request_labels" = 4
+"experience.gained" = 0x1d7d_d102
+"experience.progress" = 0x8dcd_daf4
+"experience.need" = 0x0472_3f62
+"access.state_input" = { value = 0x10, pattern = "33 D2 33 C0 48 89 11 48 89 51 08 48 89 51 10 48 89 51 18 48 89 51 20 48 89 51 28 48 89 51 30 48 89 51 38 48 89 51 40 48 89 51 48 48 89 51 50 48 89 51 58 48 89 51 60 48 89 51 68 48 89 51 70 48 89 51 78 48 89 81 80 00 00 00" }
+"access.state_owner_index" = { value = 0x178, pattern = "48 8D 8D B0 05 00 00 E8 ?? ?? ?? ?? 0F B6 8F 78 01 00 00 83 E9 01" }
+"access.transfer_source" = 0x0c
+"access.transfer_target" = { value = 0x10, pattern = "33 D2 33 C0 48 89 11 48 89 51 08 48 89 51 10 48 89 51 18 48 89 51 20 48 89 51 28 48 89 51 30 48 89 51 38 48 89 51 40 48 89 51 48 48 89 51 50 48 89 51 58 48 89 51 60 48 89 51 68 48 89 51 70 48 89 51 78 48 89 81 80 00 00 00" }
+"access.transfer_source_slot" = { value = 0x14, pattern = "49 8B 94 24 E8 00 00 00 4C 8D 43 14 48 8D 4C 24 50" }
+"access.transfer_target_slot" = { value = 0x1c, pattern = "66 89 44 24 20 E8 ?? ?? ?? ?? 48 8B 8D B8 00 00 00 B2 1C E8 ?? ?? ?? ?? 84 C0" }
+"access.sort_target" = { value = 0x74, pattern = "E8 ?? ?? ?? ?? 8B 4C 24 6C 41 B9 74 00 00 00 89 4C 24 20 41 B0 03" }
+"access.object_id" = { value = 0x10, pattern = "33 D2 33 C0 48 89 11 48 89 51 08 48 89 51 10 48 89 51 18 48 89 51 20 48 89 51 28 48 89 51 30 48 89 51 38 48 89 51 40 48 89 51 48 48 89 51 50 48 89 51 58 48 89 51 60 48 89 51 68 48 89 51 70 48 89 51 78 48 89 81 80 00 00 00" }
+"access.object_kind" = { value = 0x18, pattern = "33 D2 33 C0 48 89 11 48 89 51 08 48 89 51 10 48 89 51 18 48 89 51 20 48 89 51 28 48 89 51 30 48 89 51 38 48 89 51 40 48 89 51 48 48 89 51 50 48 89 51 58 48 89 51 60 48 89 51 68 48 89 51 70 48 89 51 78 48 89 81 80 00 00 00" }
+"access.deposit_target" = { value = 0x100, pattern = "48 89 91 F8 00 00 00 48 C7 81 00 01 00 00 00 02 00 00" }
+"access.deposit_version" = { value = 0x108, pattern = "48 8D 05 ?? ?? ?? ?? 48 89 81 08 01 00 00 48 8D 81 40 69 00 00" }
+"access.consumed_deposit" = { value = 0x48, pattern = "48 89 51 10 48 89 51 18 48 89 51 20 48 89 51 28 48 89 51 30 48 89 51 38 48 89 51 40 48 89 51 48 48 89 51 50 48 89 51 58 48 89 51 60 48 89 51 68 48 89 51 70 48 89 51 78 48 89 81 80 00 00 00" }
+"access.upgrade_target" = { value = 0x10c, pattern = "89 58 48 48 8B 4D 10 49 8D BC 24 0C 01 00 00 48 85 C9" }
+"access.upgrade_version" = { value = 0x144, pattern = "E8 ?? ?? ?? ?? 48 8B 45 E8 41 8B 8C 24 44 01 00 00 39 48 4C" }
+"access.consumed_upgrade" = { value = 0x4c, pattern = "C7 40 0C 8F 12 10 7A 66 C7 40 4C 08 00 48 89 48 6C" }
+"survivors.unique_context" = { value = 0x38, pattern = "33 D2 33 C0 48 89 11 48 89 51 08 48 89 51 10 48 89 51 18 48 89 51 20 48 89 51 28 48 89 51 30 48 89 51 38 48 89 51 40 48 89 51 48 48 89 51 50 48 89 51 58 48 89 51 60 48 89 51 68 48 89 51 70 48 89 51 78 48 89 81 80 00 00 00" }
+"survivors.unique_saved_state" = { value = 0x40, pattern = "48 89 11 48 89 51 08 48 89 51 10 48 89 51 18 48 89 51 20 48 89 51 28 48 89 51 30 48 89 51 38 48 89 51 40 48 89 51 48 48 89 51 50 48 89 51 58 48 89 51 60 48 89 51 68 48 89 51 70 48 89 51 78 48 89 81 80 00 00 00" }
+"survivors.unique_transform" = { value = 0x48, pattern = "48 89 51 10 48 89 51 18 48 89 51 20 48 89 51 28 48 89 51 30 48 89 51 38 48 89 51 40 48 89 51 48 48 89 51 50 48 89 51 58 48 89 51 60 48 89 51 68 48 89 51 70 48 89 51 78 48 89 81 80 00 00 00" }
+"survivors.bed_context" = { value = 0x40, pattern = "48 89 11 48 89 51 08 48 89 51 10 48 89 51 18 48 89 51 20 48 89 51 28 48 89 51 30 48 89 51 38 48 89 51 40 48 89 51 48 48 89 51 50 48 89 51 58 48 89 51 60 48 89 51 68 48 89 51 70 48 89 51 78 48 89 81 80 00 00 00" }
+"survivors.bed_transform" = { value = 0x48, pattern = "48 89 51 10 48 89 51 18 48 89 51 20 48 89 51 28 48 89 51 30 48 89 51 38 48 89 51 40 48 89 51 48 48 89 51 50 48 89 51 58 48 89 51 60 48 89 51 68 48 89 51 70 48 89 51 78 48 89 81 80 00 00 00" }
+"survivors.bed_npc_common_type" = { value = 0xa0, pattern = "48 8D 81 18 01 00 00 48 89 91 90 00 00 00 48 89 91 98 00 00 00 48 89 91 A0 00 00 00 48 89 91 A8 00 00 00 48 89 91 B8 00 00 00" }
+"survivors.npc_common_bed" = { value = 0x48, pattern = "48 89 51 10 48 89 51 18 48 89 51 20 48 89 51 28 48 89 51 30 48 89 51 38 48 89 51 40 48 89 51 48 48 89 51 50 48 89 51 58 48 89 51 60 48 89 51 68 48 89 51 70 48 89 51 78 48 89 81 80 00 00 00" }
+"survivors.assign_context" = { value = 0x30, pattern = "33 D2 33 C0 48 89 11 48 89 51 08 48 89 51 10 48 89 51 18 48 89 51 20 48 89 51 28 48 89 51 30 48 89 51 38 48 89 51 40 48 89 51 48 48 89 51 50 48 89 51 58 48 89 51 60 48 89 51 68 48 89 51 70 48 89 51 78 48 89 81 80 00 00 00" }
+"survivors.assign_targets" = { value = 0x40, pattern = "48 89 11 48 89 51 08 48 89 51 10 48 89 51 18 48 89 51 20 48 89 51 28 48 89 51 30 48 89 51 38 48 89 51 40 48 89 51 48 48 89 51 50 48 89 51 58 48 89 51 60 48 89 51 68 48 89 51 70 48 89 51 78 48 89 81 80 00 00 00" }
+"survivors.assign_bed" = { value = 0x85c, pattern = "48 8B 4C 24 50 8B 52 38 8B BF 5C 08 00 00 E8 ?? ?? ?? ?? 89 85 88 00 00 00" }
+"survivors.roaming_context" = { value = 0x40, pattern = "48 89 11 48 89 51 08 48 89 51 10 48 89 51 18 48 89 51 20 48 89 51 28 48 89 51 30 48 89 51 38 48 89 51 40 48 89 51 48 48 89 51 50 48 89 51 58 48 89 51 60 48 89 51 68 48 89 51 70 48 89 51 78 48 89 81 80 00 00 00" }
+"survivors.spawn_target" = { value = 0x18, pattern = "33 D2 33 C0 48 89 11 48 89 51 08 48 89 51 10 48 89 51 18 48 89 51 20 48 89 51 28 48 89 51 30 48 89 51 38 48 89 51 40 48 89 51 48 48 89 51 50 48 89 51 58 48 89 51 60 48 89 51 68 48 89 51 70 48 89 51 78 48 89 81 80 00 00 00" }
+"survivors.move_survivor" = { value = 0x450, pattern = "41 FF C1 8B D0 48 8B 87 50 04 00 00 48 8D 34 2B" }
+"survivors.npc_transform" = { value = 0x168, pattern = "0F 1F 84 00 00 00 00 00 48 8B 8E 68 01 00 00 48 85 C9" }
+"survivors.npc_saved_state" = { value = 0x1e0, pattern = "48 8D AC 24 20 FF FF FF 48 81 EC E0 01 00 00 44 8B BD 38 01 00 00" }
+"survivors.npc_common" = { value = 0x300, pattern = "66 89 44 24 20 E8 ?? ?? ?? ?? 48 8B 83 00 03 00 00 48 89 7C 24 50" }
+"survivors.npc_state" = { value = 0x450, pattern = "41 FF C1 8B D0 48 8B 87 50 04 00 00 48 8D 34 2B" }
+"survivors.spawn_template" = 0x08
+"survivors.spawn_used_slot" = { value = 0x90, pattern = "48 8D 81 18 01 00 00 48 89 91 90 00 00 00 48 89 91 98 00 00 00" }
+"survivors.spawn_used_item" = { value = 0x98, pattern = "48 8D 81 18 01 00 00 48 89 91 90 00 00 00 48 89 91 98 00 00 00 48 89 91 A0 00 00 00" }
+"survivors.spawn_used_pide" = { value = 0x9c, pattern = "41 80 BE 94 00 00 00 00 75 31 41 83 BE 9C 00 00 00 00 75 27" }
+"survivors.spawn_ammo_item" = { value = 0xac, pattern = "41 8B 84 24 DC 04 00 00 89 83 A8 00 00 00 44 88 B3 AC 00 00 00 B0 01" }
+"survivors.spawn_consume" = { value = 0xe0, pattern = "48 89 91 D8 00 00 00 48 89 91 E0 00 00 00 48 89 81 F0 00 00 00" }
+"survivors.registry_loaded" = { value = 0x20, pattern = "33 D2 33 C0 48 89 11 48 89 51 08 48 89 51 10 48 89 51 18 48 89 51 20 48 89 51 28 48 89 51 30 48 89 51 38 48 89 51 40 48 89 51 48 48 89 51 50 48 89 51 58 48 89 51 60 48 89 51 68 48 89 51 70 48 89 51 78 48 89 81 80 00 00 00" }
+"survivors.registry_item_map" = { value = 0xa8, pattern = "48 89 91 98 00 00 00 48 89 91 A0 00 00 00 48 89 91 A8 00 00 00 48 89 91 B8 00 00 00 48 89 91 C0 00 00 00" }
+"survivors.map_bits" = 0x08
+"survivors.map_capacity" = { value = 0x10, pattern = "33 D2 33 C0 48 89 11 48 89 51 08 48 89 51 10 48 89 51 18 48 89 51 20 48 89 51 28 48 89 51 30 48 89 51 38 48 89 51 40 48 89 51 48 48 89 51 50 48 89 51 58 48 89 51 60 48 89 51 68 48 89 51 70 48 89 51 78 48 89 81 80 00 00 00" }
+"survivors.map_keys" = { value = 0x28, pattern = "33 D2 33 C0 48 89 11 48 89 51 08 48 89 51 10 48 89 51 18 48 89 51 20 48 89 51 28 48 89 51 30 48 89 51 38 48 89 51 40 48 89 51 48 48 89 51 50 48 89 51 58 48 89 51 60 48 89 51 68 48 89 51 70 48 89 51 78 48 89 81 80 00 00 00" }
+"survivors.map_values" = { value = 0x40, pattern = "48 89 11 48 89 51 08 48 89 51 10 48 89 51 18 48 89 51 20 48 89 51 28 48 89 51 30 48 89 51 38 48 89 51 40 48 89 51 48 48 89 51 50 48 89 51 58 48 89 51 60 48 89 51 68 48 89 51 70 48 89 51 78 48 89 81 80 00 00 00" }
+"survivors.map_count" = { value = 0x54, pattern = "74 07 41 81 0F 00 40 00 00 80 7F 54 00 0F 85 ?? ?? ?? ?? 48 8B 4F 60" }
+"ecs.event_streams" = 0xeb_9ef0
+"ecs.event_stream_count" = { value = 0xeb_9ef8, pattern = "48 8B 31 45 33 ED 4C 8B F1 4C 39 A9 F8 9E EB 00 0F 86 ?? ?? ?? ??" }
+"ecs.event_stream_size" = { value = 0x18, pattern = "33 D2 33 C0 48 89 11 48 89 51 08 48 89 51 10 48 89 51 18 48 89 51 20 48 89 51 28 48 89 51 30 48 89 51 38 48 89 51 40 48 89 51 48 48 89 51 50 48 89 51 58 48 89 51 60 48 89 51 68 48 89 51 70 48 89 51 78 48 89 81 80 00 00 00" }
+"ecs.event_stream_used" = { value = 0x10, pattern = "33 D2 33 C0 48 89 11 48 89 51 08 48 89 51 10 48 89 51 18 48 89 51 20 48 89 51 28 48 89 51 30 48 89 51 38 48 89 51 40 48 89 51 48 48 89 51 50 48 89 51 58 48 89 51 60 48 89 51 68 48 89 51 70 48 89 51 78 48 89 81 80 00 00 00" }
+"ecs.event_record_size" = 6
+"ecs.event_record_header" = 8
+"ecs.event_record_align" = 8
+"ecs.entities_entry_size" = { value = 0x40, pattern = "48 89 11 48 89 51 08 48 89 51 10 48 89 51 18 48 89 51 20 48 89 51 28 48 89 51 30 48 89 51 38 48 89 51 40 48 89 51 48 48 89 51 50 48 89 51 58 48 89 51 60 48 89 51 68 48 89 51 70 48 89 51 78 48 89 81 80 00 00 00" }
+"ecs.entities_entry_transform" = 8
+"ecs.command_buffers" = 0xeb_9f08
+"server.save_system" = { value = 0x20, pattern = "33 D2 33 C0 48 89 11 48 89 51 08 48 89 51 10 48 89 51 18 48 89 51 20 48 89 51 28 48 89 51 30 48 89 51 38 48 89 51 40 48 89 51 48 48 89 51 50 48 89 51 58 48 89 51 60 48 89 51 68 48 89 51 70 48 89 51 78 48 89 81 80 00 00 00" }
+"server.save_blocked" = { value = 0x18aa, pattern = "40 53 48 83 EC 20 80 B9 AA 18 00 00 00 48 8B D9" }
+"save.flags" = { value = 0x70, pattern = "48 89 51 50 48 89 51 58 48 89 51 60 48 89 51 68 48 89 51 70 48 89 51 78 48 89 81 80 00 00 00 89 81 88 00 00 00 88 81 B0 00 00 00" }
+"save.phase" = { value = 0x78, pattern = "48 89 51 60 48 89 51 68 48 89 51 70 48 89 51 78 48 89 81 80 00 00 00 89 81 88 00 00 00 88 81 B0 00 00 00" }
+"save.path_data" = 8
+"save.path_lengths" = { value = 0x830, pattern = "8B 41 08 4C 8B C9 49 3B 80 30 08 00 00 75 08 32 C0" }
+"save.path_parts" = 4
+# Attribute sets by the id of their first attribute, which a set
+# keeps, and the slots of the attributes read from them.
+"ecs.attribute_count" = 7
+"attribute.health" = { value = 0x8eb8_4995, pattern = "4C 8B C7 48 8D 4D 30 BA 95 49 B8 8E E8 ?? ?? ?? ?? 0F B6 7D 30" }
+"attribute.health_max_slot" = 7
+"attribute.stamina" = 0x04b6_aa8b
+"attribute.stamina_max_slot" = 2
+"attribute.mana" = 0x6aa2_574e
+"attribute.mana_max_slot" = 1
+"attribute.health_adder_slot" = 3
+"attribute.stamina_adder_slot" = 7
+"attribute.mana_adder_slot" = 7
+"attribute.level" = 0x724b_f568
+"attribute.experience" = 0x8dcd_daf4
+"attribute.experience_needed_slot" = 2
+"attribute.fuel" = 0x05b0_bf75
+"attribute.fuel_max_slot" = 1
+# The entity world's change tracker, which writes outside a
+# system mark against.
+"ecs.change_tracker" = { value = 0xeb_c030, pattern = "49 8B 09 48 8B 11 48 81 C2 30 C0 EB 00 EB 17 48 C7 40 08 00 00 00 00" }
+# A command buffer's record list, and the fields of a record
+# that sets a component: its hash, size and bytes.
+"ecs.command_records" = { value = 0x10, pattern = "33 D2 33 C0 48 89 11 48 89 51 08 48 89 51 10 48 89 51 18 48 89 51 20 48 89 51 28 48 89 51 30 48 89 51 38 48 89 51 40 48 89 51 48 48 89 51 50 48 89 51 58 48 89 51 60 48 89 51 68 48 89 51 70 48 89 51 78 48 89 81 80 00 00 00" }
+"ecs.command_set_hash" = 0x0c
+"ecs.command_set_size" = { value = 0x4c, pattern = "C7 40 0C 8F 12 10 7A 66 C7 40 4C 08 00 48 89 48 6C" }
+"ecs.command_set_data" = { value = 0x6c, pattern = "C7 40 0C 8F 12 10 7A 66 C7 40 4C 08 00 48 89 48 6C EB 26" }
+# The cursor check's placement holds the placed item's static
+# data here; the flag it sets without building permission.
+"building.cursor_item_info" = { value = 0x60, pattern = "48 89 51 40 48 89 51 48 48 89 51 50 48 89 51 58 48 89 51 60 48 89 51 68 48 89 51 70 48 89 51 78 48 89 81 80 00 00 00" }
+"building.cursor_no_permission" = { value = 0x4000, pattern = "84 C0 74 07 41 81 0F 00 40 00 00 80 7F 54 00 0F 85 ?? ?? ?? ??" }
+# The server's game object holds the clock, `g38_daytime::Daytime`,
+# here; its anchor (the ECS time and the game time of the last
+# change), the clock's speed (f32), day and night bounds and real
+# lengths, the time of day it works out each step, and whether
+# it is day (u8). Times are i64 nanoseconds.
+"daytime.object" = { value = 0x2d0, pattern = "48 8B 49 08 E8 ?? ?? ?? ?? 48 8B 8B D0 02 00 00 48 8B D0 48 83 C4 20" }
+"daytime.anchor" = { value = 0x10, pattern = "33 D2 33 C0 48 89 11 48 89 51 08 48 89 51 10 48 89 51 18 48 89 51 20 48 89 51 28 48 89 51 30 48 89 51 38 48 89 51 40 48 89 51 48 48 89 51 50 48 89 51 58 48 89 51 60 48 89 51 68 48 89 51 70 48 89 51 78 48 89 81 80 00 00 00" }
+"daytime.game_time" = { value = 0x18, pattern = "33 D2 33 C0 48 89 11 48 89 51 08 48 89 51 10 48 89 51 18 48 89 51 20 48 89 51 28 48 89 51 30 48 89 51 38 48 89 51 40 48 89 51 48 48 89 51 50 48 89 51 58 48 89 51 60 48 89 51 68 48 89 51 70 48 89 51 78 48 89 81 80 00 00 00" }
+"daytime.speed" = { value = 0x20, pattern = "33 D2 33 C0 48 89 11 48 89 51 08 48 89 51 10 48 89 51 18 48 89 51 20 48 89 51 28 48 89 51 30 48 89 51 38 48 89 51 40 48 89 51 48 48 89 51 50 48 89 51 58 48 89 51 60 48 89 51 68 48 89 51 70 48 89 51 78 48 89 81 80 00 00 00" }
+"daytime.day_start" = { value = 0x28, pattern = "33 D2 33 C0 48 89 11 48 89 51 08 48 89 51 10 48 89 51 18 48 89 51 20 48 89 51 28 48 89 51 30 48 89 51 38 48 89 51 40 48 89 51 48 48 89 51 50 48 89 51 58 48 89 51 60 48 89 51 68 48 89 51 70 48 89 51 78 48 89 81 80 00 00 00" }
+"daytime.day_end" = { value = 0x30, pattern = "33 D2 33 C0 48 89 11 48 89 51 08 48 89 51 10 48 89 51 18 48 89 51 20 48 89 51 28 48 89 51 30 48 89 51 38 48 89 51 40 48 89 51 48 48 89 51 50 48 89 51 58 48 89 51 60 48 89 51 68 48 89 51 70 48 89 51 78 48 89 81 80 00 00 00" }
+"daytime.day_length" = { value = 0x38, pattern = "33 D2 33 C0 48 89 11 48 89 51 08 48 89 51 10 48 89 51 18 48 89 51 20 48 89 51 28 48 89 51 30 48 89 51 38 48 89 51 40 48 89 51 48 48 89 51 50 48 89 51 58 48 89 51 60 48 89 51 68 48 89 51 70 48 89 51 78 48 89 81 80 00 00 00" }
+"daytime.night_length" = { value = 0x40, pattern = "48 89 11 48 89 51 08 48 89 51 10 48 89 51 18 48 89 51 20 48 89 51 28 48 89 51 30 48 89 51 38 48 89 51 40 48 89 51 48 48 89 51 50 48 89 51 58 48 89 51 60 48 89 51 68 48 89 51 70 48 89 51 78 48 89 81 80 00 00 00" }
+"daytime.clock" = { value = 0x48, pattern = "48 89 51 10 48 89 51 18 48 89 51 20 48 89 51 28 48 89 51 30 48 89 51 38 48 89 51 40 48 89 51 48 48 89 51 50 48 89 51 58 48 89 51 60 48 89 51 68 48 89 51 70 48 89 51 78 48 89 81 80 00 00 00" }
+"daytime.is_day" = { value = 0x58, pattern = "48 89 51 30 48 89 51 38 48 89 51 40 48 89 51 48 48 89 51 50 48 89 51 58 48 89 51 60 48 89 51 68 48 89 51 70 48 89 51 78 48 89 81 80 00 00 00" }
+# At the hit site in `ApplyDamage`: the damage vector below
+# `rbp`, the target and the source above it.
+"damage.hit_vector" = { value = 0x10, pattern = "33 D2 33 C0 48 89 11 48 89 51 08 48 89 51 10 48 89 51 18 48 89 51 20 48 89 51 28 48 89 51 30 48 89 51 38 48 89 51 40 48 89 51 48 48 89 51 50 48 89 51 58 48 89 51 60 48 89 51 68 48 89 51 70 48 89 51 78 48 89 81 80 00 00 00" }
+"damage.hit_target" = { value = 0x158, pattern = "0F 1F 84 00 00 00 00 00 48 8B 8E 68 01 00 00 48 85 C9 74 31 0F B6 86 62 01 00 00 4C 8B 8E 58 01 00 00 4C 8B 86 50 01 00 00 48 8B 96 48 01 00 00 88 44 24 28 0F B7 86 60 01 00 00" }
+"damage.hit_source" = 0x15c
+# The game object holds its buff registry here, the registry
+# its types' blob, and the game object its balancing registry.
+"buffs.registry" = 0x248
+"buffs.registry_blob" = { value = 0x20, pattern = "33 D2 33 C0 48 89 11 48 89 51 08 48 89 51 10 48 89 51 18 48 89 51 20 48 89 51 28 48 89 51 30 48 89 51 38 48 89 51 40 48 89 51 48 48 89 51 50 48 89 51 58 48 89 51 60 48 89 51 68 48 89 51 70 48 89 51 78 48 89 81 80 00 00 00" }
+"game.balancing" = { value = 0x1f0, pattern = "74 55 45 8B 86 9C 00 00 00 49 8B CC 48 8B 96 F0 01 00 00 E8 ?? ?? ?? ?? 45 8B 86 9C 00 00 00" }
+# The saved-buff record the restore of a character's buffs
+# reads: type, total and remaining time, level and whether it
+# is set, the strength (f32) and whether it is set.
+"buffs.record_type" = 0x00
+"buffs.record_lifetime" = 0x08
+"buffs.record_remaining" = { value = 0x10, pattern = "33 D2 33 C0 48 89 11 48 89 51 08 48 89 51 10 48 89 51 18 48 89 51 20 48 89 51 28 48 89 51 30 48 89 51 38 48 89 51 40 48 89 51 48 48 89 51 50 48 89 51 58 48 89 51 60 48 89 51 68 48 89 51 70 48 89 51 78 48 89 81 80 00 00 00" }
+"buffs.record_level" = { value = 0x18, pattern = "33 D2 33 C0 48 89 11 48 89 51 08 48 89 51 10 48 89 51 18 48 89 51 20 48 89 51 28 48 89 51 30 48 89 51 38 48 89 51 40 48 89 51 48 48 89 51 50 48 89 51 58 48 89 51 60 48 89 51 68 48 89 51 70 48 89 51 78 48 89 81 80 00 00 00" }
+"buffs.record_has_level" = { value = 0x19, pattern = "66 89 44 24 20 E8 ?? ?? ?? ?? 48 8B 8D B8 00 00 00 B2 19 E8 ?? ?? ?? ?? 84 C0" }
+"buffs.record_strength" = { value = 0x24, pattern = "F3 0F 11 8D A8 00 00 00 66 0F 6E 48 24 F3 0F 11 95 B0 00 00 00" }
+"buffs.record_has_strength" = { value = 0x28, pattern = "33 D2 33 C0 48 89 11 48 89 51 08 48 89 51 10 48 89 51 18 48 89 51 20 48 89 51 28 48 89 51 30 48 89 51 38 48 89 51 40 48 89 51 48 48 89 51 50 48 89 51 58 48 89 51 60 48 89 51 68 48 89 51 70 48 89 51 78 48 89 81 80 00 00 00" }
+# The game object holds its knowledge object here, which holds
+# the store; the store holds the definitions' holder (its blob
+# at `defs_blob`), the player records (count u64, record size,
+# active byte), the update counter (u32) and the world's change
+# log (pointer, count u32); a record its change log the same
+# way; log entries are `{id, value}` at `log_entry_size`. The
+# game object holds the trigger queue and the journal registry,
+# which holds the journal's blob.
+"knowledge.object" = { value = 0x1b8, pattern = "C3 4B 8D 04 49 41 C6 84 82 B8 01 00 00 01 B0 01" }
+"knowledge.state" = 0x08
+"knowledge.defs" = 0x08
+"knowledge.defs_blob" = { value = 0x10, pattern = "33 D2 33 C0 48 89 11 48 89 51 08 48 89 51 10 48 89 51 18 48 89 51 20 48 89 51 28 48 89 51 30 48 89 51 38 48 89 51 40 48 89 51 48 48 89 51 50 48 89 51 58 48 89 51 60 48 89 51 68 48 89 51 70 48 89 51 78 48 89 81 80 00 00 00" }
+"knowledge.records" = { value = 0x98, pattern = "48 8D 81 18 01 00 00 48 89 91 90 00 00 00 48 89 91 98 00 00 00 48 89 91 A0 00 00 00" }
+"knowledge.record_count" = { value = 0xa0, pattern = "48 8D 81 18 01 00 00 48 89 91 90 00 00 00 48 89 91 98 00 00 00 48 89 91 A0 00 00 00 48 89 91 A8 00 00 00 48 89 91 B8 00 00 00" }
+"knowledge.record_size" = { value = 0x90, pattern = "48 8D 81 18 01 00 00 48 89 91 90 00 00 00 48 89 91 98 00 00 00" }
+"knowledge.record_active" = { value = 0x8a, pattern = "48 03 D9 80 BB 8A 00 00 00 00 C7 44 24 30 00 00 00 00" }
+"knowledge.step" = { value = 0x90, pattern = "48 8D 81 18 01 00 00 48 89 91 90 00 00 00 48 89 91 98 00 00 00" }
+"knowledge.world_log" = { value = 0x68, pattern = "48 89 51 48 48 89 51 50 48 89 51 58 48 89 51 60 48 89 51 68 48 89 51 70 48 89 51 78 48 89 81 80 00 00 00" }
+"knowledge.world_log_count" = { value = 0x70, pattern = "48 89 51 50 48 89 51 58 48 89 51 60 48 89 51 68 48 89 51 70 48 89 51 78 48 89 81 80 00 00 00 89 81 88 00 00 00 88 81 B0 00 00 00" }
+"knowledge.record_log" = { value = 0x58, pattern = "48 89 51 30 48 89 51 38 48 89 51 40 48 89 51 48 48 89 51 50 48 89 51 58 48 89 51 60 48 89 51 68 48 89 51 70 48 89 51 78 48 89 81 80 00 00 00" }
+"knowledge.record_log_count" = { value = 0x60, pattern = "48 89 51 40 48 89 51 48 48 89 51 50 48 89 51 58 48 89 51 60 48 89 51 68 48 89 51 70 48 89 51 78 48 89 81 80 00 00 00" }
+"knowledge.log_entry_size" = { value = 0x10, pattern = "33 D2 33 C0 48 89 11 48 89 51 08 48 89 51 10 48 89 51 18 48 89 51 20 48 89 51 28 48 89 51 30 48 89 51 38 48 89 51 40 48 89 51 48 48 89 51 50 48 89 51 58 48 89 51 60 48 89 51 68 48 89 51 70 48 89 51 78 48 89 81 80 00 00 00" }
+"knowledge.queue" = { value = 0x1d0, pattern = "0F B6 87 D2 01 00 00 4C 8B 8F C8 01 00 00 4C 8B 87 C0 01 00 00 48 8B 97 B8 01 00 00 88 44 24 28 0F B7 87 D0 01 00 00 66 89 44 24 20 E8 ?? ?? ?? ?? 48 8B 87 B0 01 00 00 80 38 01 75 54" }
+"knowledge.journal" = 0x1e8
+"knowledge.journal_blob" = { value = 0x48, pattern = "48 89 51 10 48 89 51 18 48 89 51 20 48 89 51 28 48 89 51 30 48 89 51 38 48 89 51 40 48 89 51 48 48 89 51 50 48 89 51 58 48 89 51 60 48 89 51 68 48 89 51 70 48 89 51 78 48 89 81 80 00 00 00" }
+# The server holds its weather system here; the system its
+# resource manager, handle and generation, its instance pool
+# (pages, page count, shift, mask) and its layer slots and their
+# number; an instance its phenomenon (u8), place, radius and end.
+"weather.system" = 0x1798
+"weather.manager" = 0x00
+"weather.resource" = 0x0c
+"weather.generation" = { value = 0x10, pattern = "33 D2 33 C0 48 89 11 48 89 51 08 48 89 51 10 48 89 51 18 48 89 51 20 48 89 51 28 48 89 51 30 48 89 51 38 48 89 51 40 48 89 51 48 48 89 51 50 48 89 51 58 48 89 51 60 48 89 51 68 48 89 51 70 48 89 51 78 48 89 81 80 00 00 00" }
+"weather.pages" = { value = 0x28, pattern = "33 D2 33 C0 48 89 11 48 89 51 08 48 89 51 10 48 89 51 18 48 89 51 20 48 89 51 28 48 89 51 30 48 89 51 38 48 89 51 40 48 89 51 48 48 89 51 50 48 89 51 58 48 89 51 60 48 89 51 68 48 89 51 70 48 89 51 78 48 89 81 80 00 00 00" }
+"weather.page_count" = { value = 0x30, pattern = "33 D2 33 C0 48 89 11 48 89 51 08 48 89 51 10 48 89 51 18 48 89 51 20 48 89 51 28 48 89 51 30 48 89 51 38 48 89 51 40 48 89 51 48 48 89 51 50 48 89 51 58 48 89 51 60 48 89 51 68 48 89 51 70 48 89 51 78 48 89 81 80 00 00 00" }
+"weather.page_shift" = { value = 0x50, pattern = "48 89 51 20 48 89 51 28 48 89 51 30 48 89 51 38 48 89 51 40 48 89 51 48 48 89 51 50 48 89 51 58 48 89 51 60 48 89 51 68 48 89 51 70 48 89 51 78 48 89 81 80 00 00 00" }
+"weather.page_mask" = { value = 0x60, pattern = "48 89 51 40 48 89 51 48 48 89 51 50 48 89 51 58 48 89 51 60 48 89 51 68 48 89 51 70 48 89 51 78 48 89 81 80 00 00 00" }
+"weather.layers" = { value = 0xc8, pattern = "48 89 91 A8 00 00 00 48 89 91 B8 00 00 00 48 89 91 C0 00 00 00 48 89 91 C8 00 00 00 48 89 91 D0 00 00 00 48 89 91 D8 00 00 00" }
+"weather.layer_count" = { value = 0xd0, pattern = "48 89 91 B8 00 00 00 48 89 91 C0 00 00 00 48 89 91 C8 00 00 00 48 89 91 D0 00 00 00 48 89 91 D8 00 00 00 48 89 91 E0 00 00 00 48 89 81 F0 00 00 00" }
+"weather.instance_phenomenon" = 0x01
+"weather.instance_position" = 0x08
+"weather.instance_radius" = { value = 0x24, pattern = "F3 0F 11 8D A8 00 00 00 66 0F 6E 48 24 F3 0F 11 95 B0 00 00 00" }
+"weather.instance_despawn" = { value = 0x38, pattern = "33 D2 33 C0 48 89 11 48 89 51 08 48 89 51 10 48 89 51 18 48 89 51 20 48 89 51 28 48 89 51 30 48 89 51 38 48 89 51 40 48 89 51 48 48 89 51 50 48 89 51 58 48 89 51 60 48 89 51 68 48 89 51 70 48 89 51 78 48 89 81 80 00 00 00" }
+# The entity world holds its chunk manager here; the manager
+# its grid's width and height (u32); a chunk its index (u32).
+"chunks.manager" = { value = 0xeb_c028, pattern = "45 33 F6 48 8B DA 4C 8B A9 28 C0 EB 00 4C 8B E1" }
+"chunks.width" = { value = 0x10, pattern = "33 D2 33 C0 48 89 11 48 89 51 08 48 89 51 10 48 89 51 18 48 89 51 20 48 89 51 28 48 89 51 30 48 89 51 38 48 89 51 40 48 89 51 48 48 89 51 50 48 89 51 58 48 89 51 60 48 89 51 68 48 89 51 70 48 89 51 78 48 89 81 80 00 00 00" }
+"chunks.height" = { value = 0x14, pattern = "49 8B 94 24 E8 00 00 00 4C 8D 43 14 48 8D 4C 24 50" }
+"chunks.index" = { value = 0x30, pattern = "33 D2 33 C0 48 89 11 48 89 51 08 48 89 51 10 48 89 51 18 48 89 51 20 48 89 51 28 48 89 51 30 48 89 51 38 48 89 51 40 48 89 51 48 48 89 51 50 48 89 51 58 48 89 51 60 48 89 51 68 48 89 51 70 48 89 51 78 48 89 81 80 00 00 00" }
+# The server holds its voxel world (its allocator first) and
+# voxel editor here; the game object its terraforming registry,
+# which holds its resource once loaded.
+"terrain.voxel_world" = 0x1770
+"terrain.editor" = 0x1778
+"terrain.registry" = 0x258
+"terrain.registry_resource" = { value = 0x38, pattern = "33 D2 33 C0 48 89 11 48 89 51 08 48 89 51 10 48 89 51 18 48 89 51 20 48 89 51 28 48 89 51 30 48 89 51 38 48 89 51 40 48 89 51 48 48 89 51 50 48 89 51 58 48 89 51 60 48 89 51 68 48 89 51 70 48 89 51 78 48 89 81 80 00 00 00" }

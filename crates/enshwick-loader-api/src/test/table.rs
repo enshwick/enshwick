@@ -309,6 +309,7 @@ extern "system" fn build(out: *mut BuildInfo) {
             side: host.side,
             base: host.base,
             fingerprint: host.fingerprint,
+            table: host.table,
         },
     );
 }

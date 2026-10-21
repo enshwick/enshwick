@@ -12,10 +12,15 @@
 //! has in another version, the updater offers the server's versions the
 //! same way, each checked against the author key the server names for it.
 //! Settings files are never touched.
+//!
+//! On a game build the loader has no table for yet, on the client and the
+//! dedicated server alike, the updater fetches the table for that build (see
+//! [`tables`]); the loader uses it from the next start.
 
 pub mod document;
 pub mod release;
 pub mod stage;
+pub mod tables;
 pub mod trust;
 pub mod verify;
 
@@ -27,6 +32,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, SystemTime};
 
+use enshwick_loader_api::abi::{BuildTable, Side};
 use enshwick_loader_api::events::JoinRefused;
 use enshwick_loader_api::mods::{LOADER_FILES, LOADER_ID, ModEntry, Updates};
 use enshwick_loader_api::{Load, Mod, Off};
@@ -335,6 +341,73 @@ fn at_start() {
         &offers,
         "They take effect the next time you start the game.",
     );
+}
+
+/// On a build the loader runs on patterns: the table for it, when the
+/// project has published one.
+fn fetch_table() {
+    std::thread::sleep(START_DELAY);
+    let (Some(context), Some(host)) = (context(), enshwick_loader_api::host()) else {
+        return;
+    };
+    let build = host.build();
+    if build.table != BuildTable::PATTERNS || !context.settings.enabled {
+        return;
+    }
+    let Some(file) = tables::file_name(build.side, build.fingerprint) else {
+        return;
+    };
+    if context.game.join(tables::DIR).join(&file).exists() {
+        enshwick_loader_api::info!("the build table {file} waits for the next start");
+        return;
+    }
+    let repository = enshwick_loader_api::mods()
+        .into_iter()
+        .find(|m| m.id == LOADER_ID)
+        .and_then(|m| match m.updates {
+            Some(Updates::GitHub { repository, .. }) => Some(repository),
+            _ => None,
+        });
+    let Some(repository) = repository else {
+        enshwick_loader_api::info!(
+            "the loader names no GitHub source, so no build table is fetched"
+        );
+        return;
+    };
+    let client = Client::new();
+    let url = tables::url(&repository, &file);
+    let fetched = client
+        .table(&url)
+        .and_then(|table| Ok((table, client.signature(&format!("{url}.minisig"))?)));
+    let (table, signature) = match fetched {
+        Ok(fetched) => fetched,
+        Err(Failure::NotFound) => {
+            enshwick_loader_api::info!(
+                "no build table is published for this game build yet; the loader runs on patterns until there is"
+            );
+            return;
+        }
+        Err(failure) => {
+            enshwick_loader_api::warn!("the build table was not fetched: {failure}");
+            return;
+        }
+    };
+    if let Err(why) = tables::store(&context.game, &file, &table, &signature) {
+        enshwick_loader_api::warn!("the build table {file} is not used: {why}");
+        return;
+    }
+    if build.side == Side::CLIENT {
+        enshwick_loader_api::info!("fetched the build table {file}");
+        ask::tell(
+            "Enshwick downloaded what it needs for this version of the game.
+
+Restart the game to use every mod again.",
+        );
+    } else {
+        enshwick_loader_api::warn!(
+            "fetched the build table {file}: restart the server to use every mod again"
+        );
+    }
 }
 
 /// After a refused join: the server's versions of the mods this game lacks,
@@ -719,7 +792,7 @@ impl Mod for Updater {
     fn manifest() -> &'static enshwick_loader_api::abi::Manifest {
         enshwick_loader_api::manifest!(
             id: "updater",
-            side: CLIENT,
+            side: BOTH,
             name: "Updater",
             updates: github("themaiby/enshwick", "enshwick-updater"),
             signed_by: ["RWTjqgtfpy3lSOLC4uaUXuvvKSLQKOFf6nUnEytoiFjSzxMEhLnoAdJF"],
@@ -728,7 +801,10 @@ impl Mod for Updater {
 
     fn init(load: &mut Load<'_>) -> Result<Self, Off> {
         let settings: Settings = load.config()?;
-        ask::set(load.ui()?);
+        let client = load.host().build().side == Side::CLIENT;
+        if client {
+            ask::set(load.ui()?);
+        }
         let data = load.data_dir()?;
         let game = data
             .parent()
@@ -740,6 +816,10 @@ impl Mod for Updater {
         load.on_config_change(move |settings: Settings| {
             set_context(settings, &game_dir, &data_dir);
         })?;
+        spawn("enshwick-updater-table", fetch_table);
+        if !client {
+            return Ok(Self);
+        }
         if load
             .on::<JoinRefused>(|()| spawn("enshwick-updater-join", after_refused_join))
             .is_err()
@@ -763,7 +843,7 @@ mod tests {
         ModEntry {
             id: id.into(),
             version: "1.0.0".into(),
-            side: enshwick_loader_api::abi::Side::BOTH,
+            side: Side::BOTH,
             join: true,
             running: true,
             file: file.into(),

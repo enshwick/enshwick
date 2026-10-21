@@ -755,6 +755,10 @@ extern "system" fn build(out: *mut BuildInfo) {
                     guid: loader.fingerprint.guid(),
                     age: loader.fingerprint.age(),
                 },
+                table: match loader.build.kind {
+                    crate::builds::Kind::Exact => enshwick_loader_api::abi::BuildTable::EXACT,
+                    crate::builds::Kind::Fallback => enshwick_loader_api::abi::BuildTable::PATTERNS,
+                },
             },
         );
     });

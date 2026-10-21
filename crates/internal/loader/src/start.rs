@@ -93,7 +93,7 @@ pub(crate) fn start(stub_abi: u32, missing_forwards: u32) {
         return;
     };
     let data_dir = mods_dir.with_file_name("mod-data");
-    let Some(game) = game(&data_dir) else {
+    let Some(game) = game(&mods_dir, &data_dir) else {
         return;
     };
     let (libraries, candidates) = libraries(&mods_dir);
@@ -382,6 +382,7 @@ fn begin(stub_abi: u32, missing_forwards: u32) -> Option<PathBuf> {
     let (settings, problem) = crate::settings::Settings::read(&settings_file);
     crate::status::mark_start();
     crate::diag::configure(&settings);
+    builds::configure(settings.build_patterns);
     log::set_levels(settings);
     log::open(&game_dir.join("logs").join(crate::settings::LOADER_ID));
     crate::log!(INFO, "Enshwick {} starting", env!("CARGO_PKG_VERSION"));
@@ -405,9 +406,10 @@ fn begin(stub_abi: u32, missing_forwards: u32) -> Option<PathBuf> {
     Some(mods_dir)
 }
 
-/// Identifies the running game; `None`, logged, when the loader cannot serve it.
-/// On a build it does not know, a mod's hold under `data_dir` stops the game.
-fn game(data_dir: &Path) -> Option<Game> {
+/// Identifies the running game and its build table; `None`, logged, when the
+/// loader cannot serve it. On a build it has no table for, a mod's hold under
+/// `data_dir` stops the game.
+fn game(mods_dir: &Path, data_dir: &Path) -> Option<Game> {
     let Some((side, base, image_len)) = identify() else {
         crate::log!(
             ERROR,
@@ -433,17 +435,28 @@ fn game(data_dir: &Path) -> Option<Game> {
         reflection.type_count(),
         reflection.system_count()
     );
-    let Some(build) = builds::find(side, fingerprint) else {
+    let tables = builds::load(
+        &mods_dir
+            .join(crate::settings::LOADER_ID)
+            .join(builds::FETCHED_DIR),
+    );
+    let code = image.section(".text").and_then(|text| {
+        let range = image.range(text);
+        image
+            .read(range.start, range.end - range.start)
+            .map(|bytes| (bytes, range.start - base))
+    });
+    let Some(build) = builds::select(&tables, side, fingerprint, code) else {
         crate::log!(
             ERROR,
-            "unknown game build {}/{}; the game runs vanilla until Enshwick supports it",
+            "unknown game build {}/{}; the game runs vanilla until Enshwick has its build table",
             hex(&fingerprint.guid()),
             fingerprint.age()
         );
         crate::holds::enforce(data_dir, &[], true);
         return None;
     };
-    for &(name, rva) in build.checks {
+    for (name, rva) in build.checks() {
         let entry = reflection
             .system(name)
             .map_or(0, enshwick_loader_reflect::System::entry);
@@ -456,7 +469,25 @@ fn game(data_dir: &Path) -> Option<Game> {
             return None;
         }
     }
-    crate::log!(INFO, "game: {}", build.name);
+    let build: &'static builds::KnownBuild = Box::leak(Box::new(build));
+    match build.kind {
+        builds::Kind::Exact => crate::log!(INFO, "game: {}", build.name),
+        builds::Kind::Fallback => crate::log!(
+            WARN,
+            "game build {}/{} has no build table yet: {} entries found by their code patterns, {} missing; features and mods that need a missing one stay off until the table arrives (the updater fetches it, then restart)",
+            hex(&fingerprint.guid()),
+            fingerprint.age(),
+            build.entries(),
+            build.missing().len()
+        ),
+    }
+    if build.kind == builds::Kind::Fallback {
+        crate::log!(
+            DEBUG,
+            "missing on this build: {}",
+            build.missing().join(", ")
+        );
+    }
     Some(Game {
         side,
         base,
@@ -552,7 +583,7 @@ fn write_lock(loader: &'static Loader, files: Vec<(String, String)>) {
             let lock = modlist::Lock {
                 loader: env!("CARGO_PKG_VERSION").to_owned(),
                 loader_sha256: hash(&dir.join(format!("{}.dll", crate::settings::LOADER_ID))),
-                game: loader.build.name.to_owned(),
+                game: loader.build.name.clone(),
                 mods,
             };
             let path = dir.join(modlist::LOCK_FILE);

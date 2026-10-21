@@ -144,3 +144,56 @@ jobs:
             --jq '[.[] | select(.tagName | startswith("enshwick-loader-v"))][0].tagName // empty' | tr -d '\r')
           [ -n "$tag" ] || exit 0
           gh release edit "$tag" --title "Enshwick Loader ${tag##*-v}" --latest --repo "$GITHUB_REPOSITORY"
+
+  # The loader's build tables, crates/internal/builds/tables/*.toml, go up as
+  # files of the release `build-tables`, each with a minisign signature whose
+  # trusted comment is `build-table <file>`. The updater fetches the table of
+  # a game build the loader has none for, and the loader uses it only with
+  # that signature, so a game patch needs a new table, not a loader release.
+  build-tables:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Changed tables
+        id: changed
+        env:
+          BEFORE: ${{ github.event.before }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Every table goes up when the release does not exist yet or the
+          # previous commit is unknown; otherwise only on a change.
+          if ! gh release view build-tables --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1 \
+            || ! git cat-file -e "$BEFORE^{commit}" 2> /dev/null \
+            || ! git diff --quiet "$BEFORE" "$GITHUB_SHA" -- crates/internal/builds/tables; then
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Signing tool
+        if: steps.changed.outputs.publish == 'true'
+        run: cargo install --locked rsign2@0.6.7
+
+      - name: Publish
+        if: steps.changed.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MINISIGN_SECRET_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
+        run: |
+          key="$RUNNER_TEMP/minisign.key"
+          trap 'rm -f "$key"' EXIT
+          printf '%s\n' "$MINISIGN_SECRET_KEY" > "$key"
+          if ! gh release view build-tables --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            gh release create build-tables --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+              --title "Build tables" --latest=false \
+              --notes "The loader's build table for each game build, signed with Enshwick's key. The updater fetches the one a new game build needs; nothing here is downloaded by hand."
+          fi
+          cd crates/internal/builds/tables
+          for file in *.toml; do
+            rsign sign -W -s "$key" -x "$file.minisig" -t "build-table $file" "$file" < /dev/null
+            gh release upload build-tables "$file" "$file.minisig" --clobber --repo "$GITHUB_REPOSITORY"
+          done

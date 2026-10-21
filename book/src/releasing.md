@@ -86,6 +86,13 @@ and `enshwick.zip` (everything that goes next to the game), each with its
 `cargo enshwick manifest --expect-version` that every released mod's DLL
 reports the version of its tag.
 
+The loader's build tables (see [Finding the game](finding-the-game.md)) are
+released apart from any version: on every merge that changes one, the workflow
+signs each table with the trusted comment `build-table <file>` and uploads it
+with its `.minisig` to the `build-tables` release. A game update therefore
+needs a merged table, not a loader release; the updater fetches the table of
+the running build when the loader has none.
+
 ## Where updates come from
 
 `updates:` in the manifest names the source of new releases:

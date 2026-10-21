@@ -19,6 +19,7 @@
         "enshwick-loader-api",
         "enshwick-loader-macros",
         "enshwick-loader-reflect",
+        "enshwick-loader-builds",
         "cargo-enshwick"
       ],
       "merge": false
@@ -120,6 +121,10 @@
     "crates/internal/reflect": {
       "package-name": "enshwick-loader-reflect",
       "component": "enshwick-loader-reflect"
+    },
+    "crates/internal/builds": {
+      "package-name": "enshwick-loader-builds",
+      "component": "enshwick-loader-builds"
     },
     "mods/enshwick-safes": {
       "package-name": "enshwick-safes",

@@ -123,6 +123,7 @@ impl Host {
                 guid: [0; 16],
                 age: 0,
             },
+            table: crate::abi::BuildTable::EXACT,
         };
         (self.api.build)(&raw mut out);
         out

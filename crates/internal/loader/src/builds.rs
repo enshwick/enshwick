@@ -1,1071 +1,260 @@
-//! The game builds the loader knows, and the engine functions it pins on each.
+//! The running build's table of engine functions and constants that
+//! reflection does not describe, pinned by symbolic id as SKSE's Address
+//! Library does.
 //!
-//! Systems resolve by name through reflection and survive updates on their
-//! own. Engine helpers that reflection does not describe are pinned here by
-//! symbolic id, as SKSE's Address Library does, so mods name them and a game
-//! update needs only a new row. Each row also lists systems whose addresses
-//! must match reflection, so a row is never applied to the wrong binary.
-//! Addresses specific to one mod, such as the call sites it tells apart, live
-//! in that mod's own rows.
+//! The tables come as data (`enshwick-loader-builds`): the ones the loader
+//! embeds, and the ones the updater fetched into `mods/enshwick/builds/`,
+//! each used only when the project key signed it. A build with its own table
+//! uses it whole, after its systems are checked against reflection. On a
+//! build without one, the newest table of the same side finds each entry by
+//! its code pattern, and what it cannot find stays missing: the features and
+//! mods that need it turn off, the rest runs.
+
+use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use enshwick_loader_api::abi::Side;
+use enshwick_loader_builds::{self as tables, Resolved, Table};
 use enshwick_loader_reflect::Fingerprint;
 
-/// One known game build.
+pub use enshwick_loader_builds::Kind;
+
+/// The folder under `mods/enshwick/` that holds the tables the updater
+/// fetched, each beside its signature.
+pub const FETCHED_DIR: &str = "builds";
+
+/// Whether a build without a table runs on patterns; set from the settings.
+static PATTERNS: AtomicBool = AtomicBool::new(true);
+
+/// Sets whether a build without a table runs on its patterns.
+pub fn configure(patterns: bool) {
+    PATTERNS.store(patterns, Ordering::Release);
+}
+
+/// The table the running build uses.
 #[derive(Debug)]
 pub struct KnownBuild {
     /// For the log, such as `1.0 server (1269579)`.
-    pub name: &'static str,
-    /// Server or client.
-    pub side: Side,
-    /// The build's identity.
-    pub fingerprint: Fingerprint,
-    /// Systems whose reflected entry must equal the pinned address.
-    pub checks: &'static [(&'static str, u64)],
-    /// Symbolic id and address relative to the image base.
-    pub symbols: &'static [(&'static str, u64)],
-    /// Engine constants by symbolic id: offsets and sizes reflection does not
-    /// describe.
-    pub constants: &'static [(&'static str, u64)],
+    pub name: String,
+    /// Whether the table was made for this build.
+    pub kind: Kind,
+    table: Resolved,
 }
 
 impl KnownBuild {
     /// The engine constant `name` on this build.
     #[must_use]
     pub fn constant(&self, name: &str) -> Option<u64> {
-        self.constants
-            .iter()
-            .find(|(id, _)| *id == name)
-            .map(|&(_, value)| value)
+        self.table.constant(name)
     }
 
     /// The address of `name` on this build, relative to the image base.
     #[must_use]
     pub fn symbol(&self, name: &str) -> Option<u64> {
-        self.symbols
-            .iter()
-            .find(|(id, _)| *id == name)
-            .map(|&(_, rva)| rva)
+        self.table.symbol(name)
+    }
+
+    /// Systems whose reflected entry must equal the pinned address.
+    #[must_use]
+    pub fn checks(&self) -> &[(String, u64)] {
+        self.table.checks()
+    }
+
+    /// The entries of the source table this build lacks.
+    #[must_use]
+    pub fn missing(&self) -> &[String] {
+        self.table.missing()
+    }
+
+    /// Every symbol, sorted by id.
+    #[must_use]
+    pub fn symbols(&self) -> &[(String, u64)] {
+        self.table.symbols()
+    }
+
+    /// Every constant, sorted by id.
+    #[must_use]
+    pub fn constants(&self) -> &[(String, u64)] {
+        self.table.constants()
+    }
+
+    /// Whether an entry whose id starts with `prefix` is missing, for
+    /// entries that only work as a whole set.
+    #[must_use]
+    pub fn lacks_any(&self, prefix: &str) -> bool {
+        self.table.missing().iter().any(|id| id.starts_with(prefix))
+    }
+
+    /// How many symbols and constants this build has.
+    #[must_use]
+    pub fn entries(&self) -> usize {
+        self.table.symbols().len() + self.table.constants().len()
     }
 }
 
-/// The row for a build, if the loader knows it.
-#[must_use]
-pub fn find(side: Side, fingerprint: Fingerprint) -> Option<&'static KnownBuild> {
-    BUILDS
-        .iter()
-        .find(|b| b.side == side && b.fingerprint == fingerprint)
+fn side(side: Side) -> Option<tables::Side> {
+    match side {
+        Side::SERVER => Some(tables::Side::Server),
+        Side::CLIENT => Some(tables::Side::Client),
+        _ => None,
+    }
 }
 
-const fn guid(hex: &[u8; 32]) -> [u8; 16] {
-    let mut out = [0u8; 16];
-    let mut i = 0;
-    while i < 16 {
-        out[i] = (digit(hex[2 * i]) << 4) | digit(hex[2 * i + 1]);
-        i += 1;
+/// Every table the loader may use: the embedded ones and those in `fetched`
+/// the project key signed; a refused file is logged and skipped.
+#[must_use]
+pub fn load(fetched: &Path) -> Vec<Table> {
+    let mut out: Vec<Table> = tables::embedded()
+        .iter()
+        .filter_map(|(file, text)| match Table::parse(text) {
+            Ok(table) => Some(table),
+            Err(e) => {
+                crate::log!(ERROR, "embedded build table {file}: {e}");
+                None
+            }
+        })
+        .collect();
+    let Ok(entries) = std::fs::read_dir(fetched) else {
+        return out;
+    };
+    for entry in entries.filter_map(Result::ok) {
+        let path = entry.path();
+        let Some(file) = path.file_name().and_then(|n| n.to_str()).filter(|_| {
+            path.extension()
+                .is_some_and(|e| e.eq_ignore_ascii_case("toml"))
+        }) else {
+            continue;
+        };
+        match fetched_table(&path, file) {
+            Ok(table) => out.push(table),
+            Err(reason) => crate::log!(
+                WARN,
+                "build table mods/{}/{FETCHED_DIR}/{file} not used: {reason}",
+                crate::settings::LOADER_ID
+            ),
+        }
     }
     out
 }
 
-#[expect(
-    clippy::panic,
-    reason = "const evaluation: a malformed literal fails the build"
-)]
-const fn digit(c: u8) -> u8 {
-    match c {
-        b'0'..=b'9' => c - b'0',
-        b'a'..=b'f' => c - b'a' + 10,
-        _ => panic!("a fingerprint is lowercase hex"),
+fn fetched_table(path: &Path, file: &str) -> Result<Table, String> {
+    let text = std::fs::read(path).map_err(|e| e.to_string())?;
+    let signature_path = path.with_file_name(format!("{file}{}", tables::SIGNATURE_SUFFIX));
+    let signature = std::fs::read_to_string(&signature_path)
+        .map_err(|_| "it has no signature beside it".to_owned())?;
+    tables::verify(&text, &signature, file).map_err(|e| e.to_string())?;
+    let text = core::str::from_utf8(&text).map_err(|_| "it is not UTF-8".to_owned())?;
+    let table = Table::parse(text).map_err(|e| e.to_string())?;
+    if table.file_name() != file {
+        return Err(format!("it is the table of {}", table.file_name()));
     }
+    Ok(table)
 }
 
-/// Every build the loader knows.
-pub static BUILDS: &[KnownBuild] = &[
+/// The table for the running build among `tables`: its own when there is
+/// one; else, unless the settings turned it off, the newest table of its side
+/// carried over by patterns in `code` (the code section and its RVA).
+#[must_use]
+pub fn select(
+    tables: &[Table],
+    running: Side,
+    fingerprint: Fingerprint,
+    code: Option<(&[u8], u64)>,
+) -> Option<KnownBuild> {
+    let side = side(running)?;
+    if let Some(table) = tables::exact(tables, side, fingerprint) {
+        return Some(KnownBuild {
+            name: table.name().to_owned(),
+            kind: Kind::Exact,
+            table: table.resolve(),
+        });
+    }
+    if !PATTERNS.load(Ordering::Acquire) {
+        return None;
+    }
+    let (code, code_rva) = code?;
+    let base = tables::newest(tables, side)?;
+    let table = base.fall_back(code, code_rva);
+    Some(KnownBuild {
+        name: table.name().to_owned(),
+        kind: Kind::Fallback,
+        table,
+    })
+}
+
+/// The embedded table of `side`'s newest build, for tests.
+///
+/// # Panics
+///
+/// When no table of `running`'s side is embedded.
+#[cfg(test)]
+#[must_use]
+pub fn embedded(running: Side) -> KnownBuild {
+    let tables = load(Path::new("no such folder"));
+    let side = side(running).unwrap();
+    let table = tables::newest(&tables, side).unwrap();
     KnownBuild {
-        name: "1.0 server (1269579)",
-        side: Side::SERVER,
-        fingerprint: Fingerprint::new(guid(b"1c129660cd6efc4f9f0b21652d5ff2bf"), 387),
-        checks: &[
-            ("upgrade_building_range", 0x90a60),
-            ("add_buildzones_server", 0xe90e0),
-            ("inventory_actions", 0x19_f540),
-        ],
-        symbols: &[
-            ("ecs.iterator_init", 0x65_b8c0),
-            ("ecs.iterator_next", 0x65_6690),
-            ("ecs.attribute_find", 0x98_4940),
-            ("ecs.mark_changed", 0x66_6a90),
-            ("ecs.component_read", 0x3_46c0),
-            ("balancing.zone_size", 0x92_7560),
-            ("building.seam_check", 0x93_e210),
-            ("building.max_altars", 0x93_1860),
-            ("skill.node_unlocked", 0x93_fe30),
-            ("npc.lookup", 0x20_2e80),
-            ("npc.lookup_cursor", 0x20_2e30),
-            ("npc.move", 0x1e_ca40),
-            ("npc.update", 0x20_55f0),
-            ("npc.bed_check", 0x1e_e250),
-            ("comfort.base_register", 0x1f_f520),
-            ("server.post_step", 0x7b_6d20),
-            ("server.set_state", 0x7a_d250),
-            ("server.save_step", 0x7b_81b0),
-            ("server.player_remove", 0x7a_2300),
-            ("ecs.type_index", 0x64_5cc0),
-            ("ecs.component_read_raw", 0x64_6b00),
-            ("ecs.entity_slot", 0x64_8cb0),
-            ("ecs.slot_root", 0x93_5420),
-            ("building.spawn_prop", 0x21_dcc0),
-            ("building.pickup", 0x22_1590),
-            ("resource.open", 0x81_de90),
-            ("resource.resolve", 0x81_d9a0),
-            ("resource.key_of", 0x81_c190),
-            ("chat.post", 0x90_8ce0),
-            ("chat.post_return", 0x7b_2d9e),
-            ("chat.mark_delivered", 0x94_2740),
-            ("label.find", 0x64_6e30),
-            ("label.replace", 0x90_9660),
-            ("label.add", 0x5f_52a0),
-            ("label.rename_return", 0x7b_25e5),
-            ("ecs.row_entity", 0x65_3a80),
-            ("inventory.actions_row", 0x19_f5f0),
-            ("inventory.view_fill", 0x19_f56f),
-            ("inventory.skip_entity", 0x131_6740),
-            ("inventory.desc_zero", 0x6_a430),
-            ("inventory.actor_flag", 0x1b_0780),
-            ("inventory.txn_new", 0x3_aba0),
-            ("inventory.txn_init", 0x1b_2bf0),
-            ("inventory.txn_commit", 0x1a_91f0),
-            ("inventory.txn_rollback", 0x1b_1c60),
-            ("inventory.txn_drop", 0x3_acf0),
-            ("inventory.give", 0x1a_b8e0),
-            ("loot.roll", 0x16_6970),
-            ("loot.roll_one", 0x16_6cd0),
-            ("inventory.take", 0x1a_a720),
-            ("inventory.destroy_slot", 0x1a_c130),
-            ("inventory.move_slot", 0x1a_e5f0),
-            ("inventory.move_amount", 0x1a_e540),
-            ("inventory.move_all", 0x1a_d940),
-            ("inventory.resend", 0x23_8450),
-            ("item.info", 0x92_ef80),
-            ("skill.fly_mode_gate_return", 0xc_4875),
-            ("experience.need_for_level", 0x93_22c0),
-            ("experience.level_cap", 0x93_3f30),
-            ("access.offer_test", 0x9_e270),
-            ("access.transfer", 0x19_81f0),
-            ("access.sort", 0x19_8cf0),
-            ("access.base_stock", 0x20_1800),
-            ("access.dismantle_method", 0x9_67f0),
-            ("survivors.spawn_return", 0x4_05cb),
-            ("survivors.unique_return_a", 0x1f_4929),
-            ("survivors.unique_return_b", 0x1f_499d),
-            ("survivors.bed_return", 0x1f_29ff),
-            ("survivors.bed_init_return", 0x1f_2d76),
-            ("survivors.cursor_return_a", 0x9_9fe8),
-            ("survivors.cursor_return_b", 0x9_9ff3),
-            ("survivors.assign_return_a", 0xb_f541),
-            ("survivors.assign_return_b", 0xb_f5e4),
-            ("survivors.roaming_return", 0x1f_24f8),
-            ("survivors.spawn", 0x3_e170),
-            ("survivors.registry_load", 0x95_f900),
-            ("survivors.map_find_slot", 0x94_4290),
-            ("ecs.event_merge", 0x6b_8d20),
-            ("ecs.entities_with", 0x64_7e10),
-            ("ecs.destroy_request", 0x5f_4b50),
-            ("server.save_request", 0x7a_db60),
-            ("save.path", 0x96_b590),
-            ("ecs.component_write", 0x64_6840),
-            ("ecs.event_push", 0x5f_5d00),
-            ("ecs.command_append", 0x5f_2d00),
-            ("world.time", 0x65_1a50),
-            ("ecs.spawn_request", 0x5f_40d0),
-            ("building.cursor_check", 0x9_b040),
-            ("daytime.set_time", 0x94_cf50),
-            ("daytime.set_speed", 0x94_ec80),
-            ("damage.hit", 0x17_8760),
-            ("damage.fall", 0x8_5d6d),
-            ("damage.shroud", 0xb_d83b),
-            ("damage.shroud_death", 0xb_d781),
-            ("buffs.type_by_id", 0x92_70e0),
-            ("buffs.restore", 0x79_c840),
-            ("buffs.cleanse", 0x5_9090),
-            ("knowledge.player_value", 0x99_2bb0),
-            ("knowledge.world_value", 0x99_2ce0),
-            ("knowledge.push", 0x99_6880),
-            ("weather.sample", 0xa1_5260),
-            ("weather.clock", 0x23_2610),
-            ("weather.resource_lock", 0xa1_4940),
-            ("weather.resource_release", 0x82_10c0),
-            ("weather.free", 0xa1_4e50),
-            ("weather.spawn", 0xa1_6120),
-            ("chunks.step", 0x6b_ee40),
-            ("terrain.add", 0xa3_1840),
-            ("terrain.dig", 0xa3_11f0),
-            ("terrain.flatten", 0xa3_0ef0),
-        ],
-        constants: &[
-            ("ecs.context_row", 8),
-            ("ecs.descriptor_entity_records", 0x828),
-            ("ecs.entity_record_size", 0x10),
-            ("ecs.level_data_offset", 4),
-            ("ecs.level_flags", 6),
-            ("ecs.attribute_slot", 0xc),
-            ("altar.level_attribute", 0x724b_f568),
-            ("building.zone_list_entries", 0x10),
-            ("building.zone_list_count", 0x18),
-            ("building.zone_entry_size", 0x48),
-            ("building.zone_entry_shape", 0x44),
-            ("building.zone_entry_ignored", 0x46),
-            ("building.corner_size", 0x18),
-            ("server.entry_state", 0x18),
-            ("server.player_slots", 0x1e0),
-            ("server.player_slot_size", 0x148),
-            ("server.player_slot_count", 16),
-            ("server.player_slot_state", 0x0a),
-            ("server.player_slot_entity", 0x18),
-            ("server.player_slot_key", 0x48),
-            ("server.player_slot_name", 0x20),
-            ("server.world", 0x1d0),
-            ("server.player_infos", 0x1d8),
-            // The server's live game settings (a pointer), the preset it
-            // runs (u8) and its flag for the settings in the next info
-            // message to the clients (u8).
-            ("server.game_settings", 0x1758),
-            ("server.game_settings_preset", 0x1760),
-            ("server.game_settings_resend", 0x18e0),
-            ("server.permission_table", 0x498),
-            ("server.permission_entry_size", 0xa0),
-            ("server.permission_mask", 0x9d),
-            ("world.entities", 0xe1_5dc0),
-            ("ecs.registry_type_map", 0x30),
-            ("ecs.registry_type_map_fallback", 0x88),
-            ("ecs.entity_map", 0x148),
-            ("ecs.entity_map_capacity", 0x158),
-            ("ecs.entity_records", 0x188),
-            ("ecs.record_template", 0x28),
-            ("ecs.context_entity_world", 0x30),
-            ("reflect.type_hash", 0x90),
-            ("building.ctx_player", 0x14c),
-            ("building.ctx_replay", 0x151),
-            ("server.player_slot_machine", 0x04),
-            ("server.chat_store", 0x60),
-            ("server.custom_strings", 0x58),
-            ("chat.store_slots", 0x0c),
-            ("chat.store_slot_size", 0x0c),
-            ("chat.store_slot_count", 32),
-            ("chat.store_tail", 0x1c8),
-            ("chat.node_delivered", 0x20),
-            ("chat.max_text", 0x400),
-            ("chat.reply_type", 4),
-            ("label.max_text", 0xff),
-            ("label.rename_entity", 0x100),
-            // The first 8 code bytes at `inventory.actions_row` and
-            // `inventory.view_fill`, little-endian: the loop head, and the
-            // view fill that names `rbp - 0x60` and `r13`.
-            ("inventory.row_bytes", 0x7095_8d48_b065_8b4c),
-            ("inventory.view_fill_bytes", 0xe8cd_8b49_a055_8d48),
-            ("inventory.view_frame", 0x60),
-            ("inventory.view_owners", 0x178),
-            ("inventory.view_actors", 0x118),
-            ("inventory.view_replication", 0xf8),
-            ("inventory.view_item_registry", 0xd8),
-            ("inventory.desc_size", 0xf0),
-            ("inventory.desc_context", 0x08),
-            ("inventory.desc_actor", 0xc8),
-            ("inventory.desc_other", 0xcc),
-            // Descriptor fields copied from the view: `desc << 32 | view`.
-            ("inventory.copy_item_registry", 0x10 << 32 | 0xd8),
-            ("inventory.copy_a8", 0x18 << 32 | 0xa8),
-            ("inventory.copy_setup", 0x28 << 32 | 0x160),
-            ("inventory.copy_slots", 0x30 << 32 | 0x148),
-            ("inventory.copy_slot_hints", 0x38 << 32 | 0x190),
-            ("inventory.copy_equipment", 0x40 << 32 | 0x168),
-            ("inventory.copy_owners", 0x48 << 32 | 0x178),
-            ("inventory.copy_empty_state", 0x58 << 32 | 0x158),
-            ("inventory.copy_transform", 0x78 << 32 | 0x110),
-            ("inventory.copy_100", 0x80 << 32 | 0x100),
-            ("inventory.copy_150", 0x88 << 32 | 0x150),
-            ("inventory.copy_pickup_events", 0xa0 << 32 | 0x1a8),
-            ("inventory.copy_full_events", 0xa8 << 32 | 0x1a0),
-            ("inventory.copy_198", 0xb8 << 32 | 0x198),
-            ("inventory.copy_discovered", 0xc0 << 32 | 0xf0),
-            ("inventory.txn_size", 0x71b0),
-            ("loot.txn_context", 0),
-            ("loot.txn_entity", 0xe0),
-            ("loot.request_node", 0),
-            ("loot.request_labels", 4),
-            ("experience.gained", 0x1d7d_d102),
-            ("experience.progress", 0x8dcd_daf4),
-            ("experience.need", 0x0472_3f62),
-            ("access.state_input", 0x10),
-            ("access.state_owner_index", 0x178),
-            ("access.transfer_source", 0x0c),
-            ("access.transfer_target", 0x10),
-            ("access.transfer_source_slot", 0x14),
-            ("access.transfer_target_slot", 0x1c),
-            ("access.sort_target", 0x74),
-            ("access.object_id", 0x10),
-            ("access.object_kind", 0x18),
-            ("access.deposit_target", 0x100),
-            ("access.deposit_version", 0x108),
-            ("access.consumed_deposit", 0x48),
-            ("access.upgrade_target", 0x10c),
-            ("access.upgrade_version", 0x144),
-            ("access.consumed_upgrade", 0x4c),
-            ("survivors.unique_context", 0x38),
-            ("survivors.unique_saved_state", 0x40),
-            ("survivors.unique_transform", 0x48),
-            ("survivors.bed_context", 0x40),
-            ("survivors.bed_transform", 0x48),
-            ("survivors.bed_npc_common_type", 0xa0),
-            ("survivors.npc_common_bed", 0x48),
-            ("survivors.assign_context", 0x30),
-            ("survivors.assign_targets", 0x40),
-            ("survivors.assign_bed", 0x85c),
-            ("survivors.roaming_context", 0x40),
-            ("survivors.spawn_target", 0x18),
-            ("survivors.move_survivor", 0x450),
-            ("survivors.npc_transform", 0x168),
-            ("survivors.npc_saved_state", 0x1e0),
-            ("survivors.npc_common", 0x300),
-            ("survivors.npc_state", 0x450),
-            ("survivors.spawn_template", 0x08),
-            ("survivors.spawn_used_slot", 0x90),
-            ("survivors.spawn_used_item", 0x98),
-            ("survivors.spawn_used_pide", 0x9c),
-            ("survivors.spawn_ammo_item", 0xac),
-            ("survivors.spawn_consume", 0xe0),
-            ("survivors.registry_loaded", 0x20),
-            ("survivors.registry_item_map", 0xa8),
-            ("survivors.map_bits", 0x08),
-            ("survivors.map_capacity", 0x10),
-            ("survivors.map_keys", 0x28),
-            ("survivors.map_values", 0x40),
-            ("survivors.map_count", 0x54),
-            ("ecs.event_streams", 0xeb_9ef0),
-            ("ecs.event_stream_count", 0xeb_9ef8),
-            ("ecs.event_stream_size", 0x18),
-            ("ecs.event_stream_used", 0x10),
-            ("ecs.event_record_size", 6),
-            ("ecs.event_record_header", 8),
-            ("ecs.event_record_align", 8),
-            ("ecs.entities_entry_size", 0x40),
-            ("ecs.entities_entry_transform", 8),
-            ("ecs.command_buffers", 0xeb_9f08),
-            ("server.save_system", 0x20),
-            ("server.save_blocked", 0x18aa),
-            ("save.flags", 0x70),
-            ("save.phase", 0x78),
-            ("save.path_data", 8),
-            ("save.path_lengths", 0x830),
-            ("save.path_parts", 4),
-            // Attribute sets by the id of their first attribute, which a set
-            // keeps, and the slots of the attributes read from them.
-            ("ecs.attribute_count", 7),
-            ("attribute.health", 0x8eb8_4995),
-            ("attribute.health_max_slot", 7),
-            ("attribute.stamina", 0x04b6_aa8b),
-            ("attribute.stamina_max_slot", 2),
-            ("attribute.mana", 0x6aa2_574e),
-            ("attribute.mana_max_slot", 1),
-            ("attribute.health_adder_slot", 3),
-            ("attribute.stamina_adder_slot", 7),
-            ("attribute.mana_adder_slot", 7),
-            ("attribute.level", 0x724b_f568),
-            ("attribute.experience", 0x8dcd_daf4),
-            ("attribute.experience_needed_slot", 2),
-            ("attribute.fuel", 0x05b0_bf75),
-            ("attribute.fuel_max_slot", 1),
-            // The entity world's change tracker, which writes outside a
-            // system mark against.
-            ("ecs.change_tracker", 0xeb_c030),
-            // A command buffer's record list, and the fields of a record
-            // that sets a component: its hash, size and bytes.
-            ("ecs.command_records", 0x10),
-            ("ecs.command_set_hash", 0x0c),
-            ("ecs.command_set_size", 0x4c),
-            ("ecs.command_set_data", 0x6c),
-            // The cursor check's placement holds the placed item's static
-            // data here; the flag it sets without building permission.
-            ("building.cursor_item_info", 0x60),
-            ("building.cursor_no_permission", 0x4000),
-            // The server's game object holds the clock, `g38_daytime::Daytime`,
-            // here; its anchor (the ECS time and the game time of the last
-            // change), the clock's speed (f32), day and night bounds and real
-            // lengths, the time of day it works out each step, and whether
-            // it is day (u8). Times are i64 nanoseconds.
-            ("daytime.object", 0x2d0),
-            ("daytime.anchor", 0x10),
-            ("daytime.game_time", 0x18),
-            ("daytime.speed", 0x20),
-            ("daytime.day_start", 0x28),
-            ("daytime.day_end", 0x30),
-            ("daytime.day_length", 0x38),
-            ("daytime.night_length", 0x40),
-            ("daytime.clock", 0x48),
-            ("daytime.is_day", 0x58),
-            // At the hit site in `ApplyDamage`: the damage vector below
-            // `rbp`, the target and the source above it.
-            ("damage.hit_vector", 0x10),
-            ("damage.hit_target", 0x158),
-            ("damage.hit_source", 0x15c),
-            // The game object holds its buff registry here, the registry
-            // its types' blob, and the game object its balancing registry.
-            ("buffs.registry", 0x248),
-            ("buffs.registry_blob", 0x20),
-            ("game.balancing", 0x1f0),
-            // The saved-buff record the restore of a character's buffs
-            // reads: type, total and remaining time, level and whether it
-            // is set, the strength (f32) and whether it is set.
-            ("buffs.record_type", 0x00),
-            ("buffs.record_lifetime", 0x08),
-            ("buffs.record_remaining", 0x10),
-            ("buffs.record_level", 0x18),
-            ("buffs.record_has_level", 0x19),
-            ("buffs.record_strength", 0x24),
-            ("buffs.record_has_strength", 0x28),
-            // The game object holds its knowledge object here, which holds
-            // the store; the store holds the definitions' holder (its blob
-            // at `defs_blob`), the player records (count u64, record size,
-            // active byte), the update counter (u32) and the world's change
-            // log (pointer, count u32); a record its change log the same
-            // way; log entries are `{id, value}` at `log_entry_size`. The
-            // game object holds the trigger queue and the journal registry,
-            // which holds the journal's blob.
-            ("knowledge.object", 0x1b8),
-            ("knowledge.state", 0x08),
-            ("knowledge.defs", 0x08),
-            ("knowledge.defs_blob", 0x10),
-            ("knowledge.records", 0x98),
-            ("knowledge.record_count", 0xa0),
-            ("knowledge.record_size", 0x90),
-            ("knowledge.record_active", 0x8a),
-            ("knowledge.step", 0x90),
-            ("knowledge.world_log", 0x68),
-            ("knowledge.world_log_count", 0x70),
-            ("knowledge.record_log", 0x58),
-            ("knowledge.record_log_count", 0x60),
-            ("knowledge.log_entry_size", 0x10),
-            ("knowledge.queue", 0x1d0),
-            ("knowledge.journal", 0x1e8),
-            ("knowledge.journal_blob", 0x48),
-            // The server holds its weather system here; the system its
-            // resource manager, handle and generation, its instance pool
-            // (pages, page count, shift, mask) and its layer slots and their
-            // number; an instance its phenomenon (u8), place, radius and end.
-            ("weather.system", 0x1798),
-            ("weather.manager", 0x00),
-            ("weather.resource", 0x0c),
-            ("weather.generation", 0x10),
-            ("weather.pages", 0x28),
-            ("weather.page_count", 0x30),
-            ("weather.page_shift", 0x50),
-            ("weather.page_mask", 0x60),
-            ("weather.layers", 0xc8),
-            ("weather.layer_count", 0xd0),
-            ("weather.instance_phenomenon", 0x01),
-            ("weather.instance_position", 0x08),
-            ("weather.instance_radius", 0x24),
-            ("weather.instance_despawn", 0x38),
-            // The entity world holds its chunk manager here; the manager
-            // its grid's width and height (u32); a chunk its index (u32).
-            ("chunks.manager", 0xeb_c028),
-            ("chunks.width", 0x10),
-            ("chunks.height", 0x14),
-            ("chunks.index", 0x30),
-            // The server holds its voxel world (its allocator first) and
-            // voxel editor here; the game object its terraforming registry,
-            // which holds its resource once loaded.
-            ("terrain.voxel_world", 0x1770),
-            ("terrain.editor", 0x1778),
-            ("terrain.registry", 0x258),
-            ("terrain.registry_resource", 0x38),
-        ],
-    },
-    KnownBuild {
-        name: "1.0 client (1269579)",
-        side: Side::CLIENT,
-        fingerprint: Fingerprint::new(guid(b"69f0e9573b32c24a8838d3fff550824c"), 410),
-        // The client holds the whole server, run on its `GameServer` thread
-        // while it hosts a game: the server's symbols have twins here and its
-        // constants hold unchanged.
-        checks: &[
-            ("add_buildzones_client", 0x32_88e0),
-            ("add_buildzones_server", 0x32_8df0),
-            ("upgrade_building_range", 0x27_f030),
-            ("inventory_actions", 0x3f_d610),
-        ],
-        symbols: &[
-            ("ecs.iterator_init", 0x9b_ab60),
-            ("ecs.iterator_next", 0x9b_5a50),
-            ("ecs.attribute_find", 0x121_bea0),
-            ("ecs.mark_changed", 0x9c_5df0),
-            ("ecs.component_read", 0x21_2f60),
-            ("ecs.template_guid", 0x9b_3220),
-            ("balancing.zone_size", 0xe7_2e50),
-            ("building.seam_check", 0xe8_99f0),
-            ("building.max_altars", 0xe7_d070),
-            ("skill.node_unlocked", 0xe8_b610),
-            ("npc.lookup", 0x46_98b0),
-            ("npc.lookup_cursor", 0x46_9860),
-            ("npc.move", 0x44_f040),
-            ("npc.update", 0x46_bf80),
-            ("npc.bed_check", 0x45_0e20),
-            ("comfort.base_register", 0x46_6040),
-            ("server.post_step", 0xe4_c620),
-            ("server.set_state", 0xe4_2fe0),
-            ("server.save_step", 0xe4_d9d0),
-            ("server.player_remove", 0xe3_84d0),
-            ("ecs.type_index", 0x9a_5080),
-            ("ecs.component_read_raw", 0x9a_5ec0),
-            ("ecs.entity_slot", 0x9a_8070),
-            ("ecs.slot_root", 0xe8_0c10),
-            ("building.spawn_prop", 0x48_5a80),
-            ("building.pickup", 0x48_9300),
-            ("net.server_change", 0x107_d200),
-            ("resource.open", 0x106_34f0),
-            ("resource.resolve", 0x106_3000),
-            ("resource.key_of", 0x106_1800),
-            ("text.lookup", 0x11f_8510),
-            ("text.lookup_english", 0x11f_80b0),
-            // Mod textures: the resource database's content request, its
-            // completion post and wake-up, the key listing, the UI image
-            // registry's fill and the event signal.
-            ("textures.request", 0x106_5ae0),
-            ("textures.request_ring", 0x106_5c2e),
-            ("textures.request_post", 0x106_5c66),
-            ("textures.request_signal", 0x106_5c88),
-            ("textures.keys", 0x106_4120),
-            ("textures.registry_fill", 0xa4_7c00),
-            ("textures.registry_listed_at", 0xa4_7c06),
-            ("textures.signal", 0xf3_5f10),
-            ("chat.post", 0xe5_46e0),
-            ("chat.post_return", 0xe4_86cf),
-            ("chat.mark_delivered", 0xe8_df20),
-            ("label.find", 0x9a_61f0),
-            ("label.replace", 0xe5_5060),
-            ("label.add", 0x95_49a0),
-            ("label.rename_return", 0xe4_7fb2),
-            ("ecs.row_entity", 0x9b_2e40),
-            ("inventory.actions_row", 0x3f_d6c0),
-            ("inventory.view_fill", 0x3f_d63f),
-            ("inventory.skip_entity", 0x1d8_cda0),
-            ("inventory.desc_zero", 0x25_7ab0),
-            ("inventory.actor_flag", 0x40_fbb0),
-            ("inventory.txn_new", 0x21_dd00),
-            ("inventory.txn_init", 0x41_1df0),
-            ("inventory.txn_commit", 0x40_8b50),
-            ("inventory.txn_rollback", 0x41_0e60),
-            ("inventory.txn_drop", 0x21_de50),
-            ("inventory.give", 0x40_b170),
-            ("loot.roll", 0x3c_2200),
-            ("loot.roll_one", 0x3c_2560),
-            ("inventory.take", 0x40_a080),
-            ("inventory.destroy_slot", 0x40_b920),
-            ("inventory.move_slot", 0x40_dde0),
-            ("inventory.move_amount", 0x40_dd30),
-            ("inventory.move_all", 0x40_d130),
-            ("inventory.resend", 0x49_ee40),
-            ("item.info", 0xe7_a870),
-            ("skill.fly_mode_gate_return", 0x2d_8295),
-            ("experience.need_for_level", 0xe7_dad0),
-            ("experience.level_cap", 0xe7_f720),
-            ("access.offer_test", 0x2a_0850),
-            ("access.transfer", 0x3f_62e0),
-            ("access.sort", 0x3f_6de0),
-            ("access.base_stock", 0x46_82e0),
-            ("access.base_stock_ui_return", 0x2b_884b),
-            ("access.dismantle_method", 0x28_a170),
-            ("survivors.cursor_return", 0x29_63a8),
-            ("survivors.spawn_return", 0x22_368b),
-            ("survivors.unique_return_a", 0x45_b299),
-            ("survivors.unique_return_b", 0x45_b30d),
-            ("survivors.bed_return", 0x45_744f),
-            ("survivors.bed_init_return", 0x45_77c6),
-            ("survivors.cursor_return_a", 0x29_63a8),
-            ("survivors.cursor_return_b", 0x29_63b3),
-            ("survivors.assign_return_a", 0x2d_2f61),
-            ("survivors.assign_return_b", 0x2d_3004),
-            ("survivors.roaming_return", 0x45_6f48),
-            ("survivors.spawn", 0x22_1230),
-            ("survivors.registry_load", 0xea_a500),
-            ("survivors.map_find_slot", 0xe8_fa70),
-            ("ecs.event_merge", 0xa1_77b0),
-            ("ecs.entities_with", 0x9a_71d0),
-            ("ecs.destroy_request", 0x95_4250),
-            ("server.save_request", 0xe4_38f0),
-            ("save.path", 0x102_2160),
-            ("ecs.component_write", 0x9a_5c00),
-            ("ecs.event_push", 0x95_5400),
-            ("ecs.command_append", 0x95_2400),
-            ("world.time", 0x9b_0e10),
-            ("ecs.spawn_request", 0x95_37d0),
-            ("building.cursor_check", 0x29_7370),
-            ("daytime.set_time", 0xe9_8630),
-            ("daytime.set_speed", 0xe9_9ab0),
-            ("damage.hit", 0x3d_6970),
-            ("damage.fall", 0x27_433d),
-            ("damage.shroud", 0x2d_125b),
-            ("damage.shroud_death", 0x2d_11a1),
-            ("buffs.type_by_id", 0xe7_29d0),
-            ("buffs.restore", 0xe3_2ca0),
-            ("buffs.cleanse", 0x23_c640),
-            ("knowledge.player_value", 0x11f_c410),
-            ("knowledge.world_value", 0x11f_c540),
-            ("knowledge.push", 0x120_0600),
-            ("weather.sample", 0xa9_b9e0),
-            ("weather.clock", 0x49_9740),
-            ("weather.resource_lock", 0xa9_aac0),
-            ("weather.resource_release", 0x106_6670),
-            ("weather.free", 0xa9_b560),
-            ("weather.spawn", 0xa9_c700),
-            ("chunks.step", 0xa1_d8d0),
-            ("terrain.add", 0xa8_4d10),
-            ("terrain.dig", 0xa8_46c0),
-            ("terrain.flatten", 0xa8_43c0),
-            ("chat.receive_return_a", 0x84_0b59),
-            ("chat.receive_return_b", 0x86_9b1b),
-            ("chat.client_send", 0x86_64d0),
-            ("chat.client_queue", 0xe9_73b0),
-            ("ui.popup", 0xb9_d860),
-            ("ui.window_begin", 0xa3_1020),
-            ("ui.window_end", 0xa3_1580),
-            ("ui.frame_from_node", 0xa2_e680),
-            ("ui.frame_open", 0xa2_e6c0),
-            ("ui.frame_close", 0xa3_1b70),
-            ("ui.frame_stretch", 0xa3_b4d0),
-            ("ui.frame_color", 0xa3_9110),
-            ("ui.node_padding", 0x11b_1410),
-            ("ui.node_spacing", 0x11b_1580),
-            ("ui.node_align", 0x11b_0f70),
-            ("ui.node_width", 0x11b_10a0),
-            ("ui.node_height", 0x11b_1020),
-            ("ui.node_stretch", 0x11b_1560),
-            ("ui.panel", 0xce_d910),
-            ("ui.nav_init", 0xa3_1120),
-            ("ui.nav_input", 0xd3_75c0),
-            ("ui.nav_set", 0xa4_33f0),
-            ("ui.nav_push", 0xa4_31f0),
-            ("ui.nav_end", 0xa4_3700),
-            ("ui.nav_drop", 0xa3_3450),
-            ("ui.label_new", 0xb0_c760),
-            ("ui.label_draw", 0xb1_3f50),
-            ("ui.button", 0xb5_c4c0),
-            ("ui.toggle", 0xac_f220),
-            ("ui.slider_init", 0xb1_2a80),
-            ("ui.slider", 0xc8_ad80),
-            ("ui.dropdown_init", 0xb1_27c0),
-            ("ui.dropdown", 0xac_d060),
-            ("ui.progress", 0xb4_7a10),
-            ("ui.sound", 0xa4_0ec0),
-            ("ui.loca_id", 0x42_7650),
-            ("ui.loca_text", 0xae_f3d0),
-            ("ui.context", 0x281_b498),
-            ("ui.hud", 0xbd_be70),
-            ("ui.hud_visible", 0xd4_e4a0),
-            ("ui.main_entry", 0xc1_b7a0),
-            ("ui.pause_entry", 0xc9_ffe0),
-            ("ui.action_new", 0xb1_2ff0),
-            ("ui.action_query", 0xd8_f6f0),
-            ("ui.main_menu_site", 0xc1_a7e0),
-            ("ui.pause_menu_site", 0xcc_1a87),
-            ("ui.world_settings_site", 0xb8_32bb),
-        ],
-        constants: &[
-            ("text.pool_language", 0xd8),
-            // The first eight code bytes at each mod textures symbol, and
-            // the layouts they rely on: a content request (0x48 bytes:
-            // buffer, size, hash, completion context, offset), the
-            // requester's completion ring (24-byte records) and the UI
-            // registry's "listed" byte.
-            ("textures.request_bytes", 0x4157_5310_2454_8948),
-            ("textures.request_ring_bytes", 0xd233_0000_0080_8f8b),
-            ("textures.request_post_bytes", 0x490c_8d48_4847_8b48),
-            ("textures.request_signal_bytes", 0x0fc9_8548_084f_8b48),
-            ("textures.keys_bytes", 0x7c89_4818_245c_8948),
-            ("textures.registry_fill_bytes", 0xb980_40ec_8348_5740),
-            ("textures.registry_listed_bytes", 0x4801_0000_36c0_b980),
-            ("textures.signal_bytes", 0x90ec_8148_53dc_8b4c),
-            ("textures.request_size", 0x48),
-            ("textures.request_hash", 0x10),
-            ("textures.request_context", 0x30),
-            ("textures.request_offset", 0x40),
-            ("textures.ring_records", 0x48),
-            ("textures.ring_head", 0x80),
-            ("textures.ring_last", 0x50),
-            ("textures.ring_tail", 0xc0),
-            ("textures.ring_tail_next", 0x100),
-            ("textures.ring_event", 8),
-            ("textures.registry_listed", 0x36c0),
-            // A UI image resource (`UiImage` as the game builds it): its
-            // content hash, size, flags, pixel format and mip levels.
-            ("ui_image.content", 0),
-            ("ui_image.width", 0x28),
-            ("ui_image.height", 0x2c),
-            ("ui_image.flags", 0x30),
-            ("ui_image.format", 0x31),
-            ("ui_image.levels", 0x32),
-            ("ecs.context_row", 8),
-            ("ecs.descriptor_entity_records", 0x828),
-            ("ecs.entity_record_size", 0x10),
-            ("ecs.level_data_offset", 4),
-            ("ecs.level_flags", 6),
-            ("ecs.attribute_slot", 0xc),
-            ("altar.level_attribute", 0x724b_f568),
-            ("building.zone_list_entries", 0x10),
-            ("building.zone_list_count", 0x18),
-            ("building.zone_entry_size", 0x48),
-            ("building.zone_entry_shape", 0x44),
-            ("building.zone_entry_ignored", 0x46),
-            ("building.corner_size", 0x18),
-            ("server.entry_state", 0x18),
-            ("server.player_slots", 0x1e0),
-            ("server.player_slot_size", 0x148),
-            ("server.player_slot_count", 16),
-            ("server.player_slot_state", 0x0a),
-            ("server.player_slot_entity", 0x18),
-            ("server.player_slot_key", 0x48),
-            ("server.player_slot_name", 0x20),
-            ("server.world", 0x1d0),
-            ("server.player_infos", 0x1d8),
-            // The server's live game settings (a pointer), the preset it
-            // runs (u8) and its flag for the settings in the next info
-            // message to the clients (u8).
-            ("server.game_settings", 0x1758),
-            ("server.game_settings_preset", 0x1760),
-            ("server.game_settings_resend", 0x18e0),
-            ("server.permission_table", 0x498),
-            ("server.permission_entry_size", 0xa0),
-            ("server.permission_mask", 0x9d),
-            ("world.entities", 0xe1_5dc0),
-            ("ecs.registry_type_map", 0x30),
-            ("ecs.registry_type_map_fallback", 0x88),
-            ("ecs.entity_map", 0x148),
-            ("ecs.entity_map_capacity", 0x158),
-            ("ecs.entity_records", 0x188),
-            ("ecs.record_template", 0x28),
-            ("ecs.context_entity_world", 0x30),
-            ("reflect.type_hash", 0x90),
-            ("building.ctx_player", 0x14c),
-            ("building.ctx_replay", 0x151),
-            ("server.player_slot_machine", 0x04),
-            ("server.chat_store", 0x60),
-            ("server.custom_strings", 0x58),
-            ("chat.store_slots", 0x0c),
-            ("chat.store_slot_size", 0x0c),
-            ("chat.store_slot_count", 32),
-            ("chat.store_tail", 0x1c8),
-            ("chat.node_delivered", 0x20),
-            ("chat.max_text", 0x400),
-            ("chat.reply_type", 4),
-            ("label.max_text", 0xff),
-            ("label.rename_entity", 0x100),
-            // The first 8 code bytes at `inventory.actions_row` and
-            // `inventory.view_fill`, little-endian: the loop head, and the
-            // view fill that names `rbp - 0x60` and `r13`.
-            ("inventory.row_bytes", 0x7095_8d48_b065_8b4c),
-            ("inventory.view_fill_bytes", 0xe8cd_8b49_a055_8d48),
-            ("inventory.view_frame", 0x60),
-            ("inventory.view_owners", 0x178),
-            ("inventory.view_actors", 0x118),
-            ("inventory.view_replication", 0xf8),
-            ("inventory.view_item_registry", 0xd8),
-            ("inventory.desc_size", 0xf0),
-            ("inventory.desc_context", 0x08),
-            ("inventory.desc_actor", 0xc8),
-            ("inventory.desc_other", 0xcc),
-            // Descriptor fields copied from the view: `desc << 32 | view`.
-            ("inventory.copy_item_registry", 0x10 << 32 | 0xd8),
-            ("inventory.copy_a8", 0x18 << 32 | 0xa8),
-            ("inventory.copy_setup", 0x28 << 32 | 0x160),
-            ("inventory.copy_slots", 0x30 << 32 | 0x148),
-            ("inventory.copy_slot_hints", 0x38 << 32 | 0x190),
-            ("inventory.copy_equipment", 0x40 << 32 | 0x168),
-            ("inventory.copy_owners", 0x48 << 32 | 0x178),
-            ("inventory.copy_empty_state", 0x58 << 32 | 0x158),
-            ("inventory.copy_transform", 0x78 << 32 | 0x110),
-            ("inventory.copy_100", 0x80 << 32 | 0x100),
-            ("inventory.copy_150", 0x88 << 32 | 0x150),
-            ("inventory.copy_pickup_events", 0xa0 << 32 | 0x1a8),
-            ("inventory.copy_full_events", 0xa8 << 32 | 0x1a0),
-            ("inventory.copy_198", 0xb8 << 32 | 0x198),
-            ("inventory.copy_discovered", 0xc0 << 32 | 0xf0),
-            ("inventory.txn_size", 0x71b0),
-            ("loot.txn_context", 0),
-            ("loot.txn_entity", 0xe0),
-            ("loot.request_node", 0),
-            ("loot.request_labels", 4),
-            ("experience.gained", 0x1d7d_d102),
-            ("experience.progress", 0x8dcd_daf4),
-            ("experience.need", 0x0472_3f62),
-            ("access.state_input", 0x10),
-            ("access.state_owner_index", 0x178),
-            ("access.transfer_source", 0x0c),
-            ("access.transfer_target", 0x10),
-            ("access.transfer_source_slot", 0x14),
-            ("access.transfer_target_slot", 0x1c),
-            ("access.sort_target", 0x74),
-            ("access.object_id", 0x10),
-            ("access.object_kind", 0x18),
-            ("access.deposit_target", 0x100),
-            ("access.deposit_version", 0x108),
-            ("access.consumed_deposit", 0x48),
-            ("access.upgrade_target", 0x10c),
-            ("access.upgrade_version", 0x144),
-            ("access.consumed_upgrade", 0x4c),
-            ("survivors.unique_context", 0x38),
-            ("survivors.unique_saved_state", 0x40),
-            ("survivors.unique_transform", 0x48),
-            ("survivors.bed_context", 0x40),
-            ("survivors.bed_transform", 0x48),
-            ("survivors.bed_npc_common_type", 0xa0),
-            ("survivors.npc_common_bed", 0x48),
-            ("survivors.assign_context", 0x30),
-            ("survivors.assign_targets", 0x40),
-            ("survivors.assign_bed", 0x85c),
-            ("survivors.roaming_context", 0x40),
-            ("survivors.spawn_target", 0x18),
-            ("survivors.move_survivor", 0x450),
-            ("survivors.npc_transform", 0x168),
-            ("survivors.npc_saved_state", 0x1e0),
-            ("survivors.npc_common", 0x300),
-            ("survivors.npc_state", 0x450),
-            ("survivors.spawn_template", 0x08),
-            ("survivors.spawn_used_slot", 0x90),
-            ("survivors.spawn_used_item", 0x98),
-            ("survivors.spawn_used_pide", 0x9c),
-            ("survivors.spawn_ammo_item", 0xac),
-            ("survivors.spawn_consume", 0xe0),
-            ("survivors.registry_loaded", 0x20),
-            ("survivors.registry_item_map", 0xa8),
-            ("survivors.map_bits", 0x08),
-            ("survivors.map_capacity", 0x10),
-            ("survivors.map_keys", 0x28),
-            ("survivors.map_values", 0x40),
-            ("survivors.map_count", 0x54),
-            ("survivors.state_status", 0x14),
-            ("survivors.ui_map_bits", 0x46_3e98),
-            ("survivors.ui_map_capacity", 0x46_3ea0),
-            ("survivors.ui_map_keys", 0x46_3eb8),
-            ("survivors.ui_map_values", 0x46_3ed0),
-            ("survivors.ui_map_count", 0x46_3ee4),
-            ("survivors.ui_record_size", 0x928),
-            ("survivors.ui_record_status", 0x880),
-            ("ecs.event_streams", 0xeb_9ef0),
-            ("ecs.event_stream_count", 0xeb_9ef8),
-            ("ecs.event_stream_size", 0x18),
-            ("ecs.event_stream_used", 0x10),
-            ("ecs.event_record_size", 6),
-            ("ecs.event_record_header", 8),
-            ("ecs.event_record_align", 8),
-            ("ecs.entities_entry_size", 0x40),
-            ("ecs.entities_entry_transform", 8),
-            ("ecs.command_buffers", 0xeb_9f08),
-            ("server.save_system", 0x20),
-            ("server.save_blocked", 0x18aa),
-            ("save.flags", 0x70),
-            ("save.phase", 0x78),
-            ("save.path_data", 8),
-            ("save.path_lengths", 0x830),
-            ("save.path_parts", 4),
-            // Attribute sets by the id of their first attribute, which a set
-            // keeps, and the slots of the attributes read from them.
-            ("ecs.attribute_count", 7),
-            ("attribute.health", 0x8eb8_4995),
-            ("attribute.health_max_slot", 7),
-            ("attribute.stamina", 0x04b6_aa8b),
-            ("attribute.stamina_max_slot", 2),
-            ("attribute.mana", 0x6aa2_574e),
-            ("attribute.mana_max_slot", 1),
-            ("attribute.health_adder_slot", 3),
-            ("attribute.stamina_adder_slot", 7),
-            ("attribute.mana_adder_slot", 7),
-            ("attribute.level", 0x724b_f568),
-            ("attribute.experience", 0x8dcd_daf4),
-            ("attribute.experience_needed_slot", 2),
-            ("attribute.fuel", 0x05b0_bf75),
-            ("attribute.fuel_max_slot", 1),
-            // The entity world's change tracker, which writes outside a
-            // system mark against.
-            ("ecs.change_tracker", 0xeb_c030),
-            // A command buffer's record list, and the fields of a record
-            // that sets a component: its hash, size and bytes.
-            ("ecs.command_records", 0x10),
-            ("ecs.command_set_hash", 0x0c),
-            ("ecs.command_set_size", 0x4c),
-            ("ecs.command_set_data", 0x6c),
-            // The cursor check's placement holds the placed item's static
-            // data here; the flag it sets without building permission.
-            ("building.cursor_item_info", 0x60),
-            ("building.cursor_no_permission", 0x4000),
-            // The server's game object holds the clock, `g38_daytime::Daytime`,
-            // here; its anchor (the ECS time and the game time of the last
-            // change), the clock's speed (f32), day and night bounds and real
-            // lengths, the time of day it works out each step, and whether
-            // it is day (u8). Times are i64 nanoseconds.
-            ("daytime.object", 0x2d0),
-            ("daytime.anchor", 0x10),
-            ("daytime.game_time", 0x18),
-            ("daytime.speed", 0x20),
-            ("daytime.day_start", 0x28),
-            ("daytime.day_end", 0x30),
-            ("daytime.day_length", 0x38),
-            ("daytime.night_length", 0x40),
-            ("daytime.clock", 0x48),
-            ("daytime.is_day", 0x58),
-            // At the hit site in `ApplyDamage`: the damage vector below
-            // `rbp`, the target and the source above it.
-            ("damage.hit_vector", 0x10),
-            ("damage.hit_target", 0x158),
-            ("damage.hit_source", 0x15c),
-            // The game object holds its buff registry here, the registry
-            // its types' blob, and the game object its balancing registry.
-            ("buffs.registry", 0x248),
-            ("buffs.registry_blob", 0x20),
-            ("game.balancing", 0x1f0),
-            // The saved-buff record the restore of a character's buffs
-            // reads: type, total and remaining time, level and whether it
-            // is set, the strength (f32) and whether it is set.
-            ("buffs.record_type", 0x00),
-            ("buffs.record_lifetime", 0x08),
-            ("buffs.record_remaining", 0x10),
-            ("buffs.record_level", 0x18),
-            ("buffs.record_has_level", 0x19),
-            ("buffs.record_strength", 0x24),
-            ("buffs.record_has_strength", 0x28),
-            // The game object holds its knowledge object here, which holds
-            // the store; the store holds the definitions' holder (its blob
-            // at `defs_blob`), the player records (count u64, record size,
-            // active byte), the update counter (u32) and the world's change
-            // log (pointer, count u32); a record its change log the same
-            // way; log entries are `{id, value}` at `log_entry_size`. The
-            // game object holds the trigger queue and the journal registry,
-            // which holds the journal's blob.
-            ("knowledge.object", 0x1b8),
-            ("knowledge.state", 0x08),
-            ("knowledge.defs", 0x08),
-            ("knowledge.defs_blob", 0x10),
-            ("knowledge.records", 0x98),
-            ("knowledge.record_count", 0xa0),
-            ("knowledge.record_size", 0x90),
-            ("knowledge.record_active", 0x8a),
-            ("knowledge.step", 0x90),
-            ("knowledge.world_log", 0x68),
-            ("knowledge.world_log_count", 0x70),
-            ("knowledge.record_log", 0x58),
-            ("knowledge.record_log_count", 0x60),
-            ("knowledge.log_entry_size", 0x10),
-            ("knowledge.queue", 0x1d0),
-            ("knowledge.journal", 0x1e8),
-            ("knowledge.journal_blob", 0x48),
-            // The server holds its weather system here; the system its
-            // resource manager, handle and generation, its instance pool
-            // (pages, page count, shift, mask) and its layer slots and their
-            // number; an instance its phenomenon (u8), place, radius and end.
-            ("weather.system", 0x1798),
-            ("weather.manager", 0x00),
-            ("weather.resource", 0x0c),
-            ("weather.generation", 0x10),
-            ("weather.pages", 0x28),
-            ("weather.page_count", 0x30),
-            ("weather.page_shift", 0x50),
-            ("weather.page_mask", 0x60),
-            ("weather.layers", 0xc8),
-            ("weather.layer_count", 0xd0),
-            ("weather.instance_phenomenon", 0x01),
-            ("weather.instance_position", 0x08),
-            ("weather.instance_radius", 0x24),
-            ("weather.instance_despawn", 0x38),
-            // The entity world holds its chunk manager here; the manager
-            // its grid's width and height (u32); a chunk its index (u32).
-            ("chunks.manager", 0xeb_c028),
-            ("chunks.width", 0x10),
-            ("chunks.height", 0x14),
-            ("chunks.index", 0x30),
-            // The server holds its voxel world (its allocator first) and
-            // voxel editor here; the game object its terraforming registry,
-            // which holds its resource once loaded.
-            ("terrain.voxel_world", 0x1770),
-            ("terrain.editor", 0x1778),
-            ("terrain.registry", 0x258),
-            ("terrain.registry_resource", 0x38),
-            // The client's own chat: the game client holds it here.
-            ("chat.client_store", 0xf8),
-            // The first 8 code bytes of each interface function, little-endian.
-            ("ui.popup.bytes", 0xa88d_4856_55c4_8b48),
-            ("ui.window_begin.bytes", 0x7489_4808_245c_8948),
-            ("ui.window_end.bytes", 0x8948_20ec_8348_5340),
-            ("ui.frame_from_node.bytes", 0x8b48_20ec_8348_5340),
-            ("ui.frame_open.bytes", 0x8b48_20ec_8348_5340),
-            ("ui.frame_close.bytes", 0x7489_4818_245c_8948),
-            ("ui.frame_stretch.bytes", 0xff3_20ec_8348_5340),
-            ("ui.frame_color.bytes", 0x8348_5708_245c_8948),
-            ("ui.node_padding.bytes", 0xa8_8111_0f02_100f),
-            ("ui.node_spacing.bytes", 0x2_0000_00b8_81c7),
-            ("ui.node_align.bytes", 0xc36c_4189_6602_b70f),
-            ("ui.node_width.bytes", 0x9081_c7c0_570f),
-            ("ui.node_height.bytes", 0x9481_c7c0_570f),
-            ("ui.node_stretch.bytes", 0xc300_0000_9091_8948),
-            ("ui.panel.bytes", 0x8d48_5641_55c4_8b48),
-            ("ui.nav_init.bytes", 0x7489_4808_245c_8948),
-            ("ui.nav_input.bytes", 0x5756_5518_245c_8948),
-            ("ui.nav_set.bytes", 0xf02_100f_0010_7980),
-            ("ui.nav_push.bytes", 0x851_8948_0841_8b48),
-            ("ui.nav_end.bytes", 0x5741_5441_5755_5340),
-            ("ui.nav_drop.bytes", 0x8348_5708_245c_8948),
-            ("ui.label_new.bytes", 0x7489_4808_245c_8948),
-            ("ui.label_draw.bytes", 0x246c_8d48_5756_5540),
-            ("ui.button.bytes", 0x5518_5889_48c4_8b48),
-            ("ui.toggle.bytes", 0x5510_5089_48c4_8b48),
-            ("ui.slider_init.bytes", 0x650d_100f_28ec_8348),
-            ("ui.slider.bytes", 0x4155_4157_5653_5540),
-            ("ui.dropdown_init.bytes", 0x250d_100f_28ec_8348),
-            ("ui.dropdown.bytes", 0x4818_5889_48c4_8b48),
-            ("ui.progress.bytes", 0x4808_5889_48c4_8b48),
-            ("ui.sound.bytes", 0x4c10_7889_48c4_8b48),
-            ("ui.loca_id.bytes", 0xc535_c98b_4c01_b60f),
-            ("ui.loca_text.bytes", 0x7489_4810_245c_8948),
-            ("ui.hud.bytes", 0x5756_5508_245c_8948),
-            ("ui.hud_visible.bytes", 0x8b48_20ec_8348_5740),
-            ("ui.main_entry.bytes", 0x4157_5653_55c4_8b48),
-            ("ui.pause_entry.bytes", 0x8818_4088_44c4_8b48),
-            ("ui.action_new.bytes", 0x3345_40ec_8348_5340),
-            ("ui.action_query.bytes", 0xc8ec_8148_5741_5340),
-            ("ui.main_menu_site.bytes", 0x0001_4824_44c7_c033),
-            ("ui.pause_menu_site.bytes", 0x4c01_b59a_0a05_8b48),
-            ("ui.world_settings_site.bytes", 0xe800_0017_588d_8d48),
-        ],
-    },
-];
+        name: table.name().to_owned(),
+        kind: Kind::Exact,
+        table: table.resolve(),
+    }
+}
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn rows_are_unique_and_ids_are_unique_within_a_row() {
-        for (i, build) in BUILDS.iter().enumerate() {
-            assert!(
-                BUILDS[..i]
-                    .iter()
-                    .all(|b| b.side != build.side || b.fingerprint != build.fingerprint)
-            );
-            for (j, (id, rva)) in build.symbols.iter().enumerate() {
-                assert!(
-                    build.symbols[..j].iter().all(|(other, _)| other != id),
-                    "{id} twice"
-                );
-                assert_ne!(*rva, 0, "{id}");
-            }
-        }
+    fn a_known_build_resolves_its_symbols() {
+        let tables = load(Path::new("no such folder"));
+        let server = embedded(Side::SERVER);
+        let fingerprint = tables
+            .iter()
+            .find(|t| t.name() == server.name)
+            .unwrap()
+            .fingerprint();
+        let found = select(&tables, Side::SERVER, fingerprint, None).unwrap();
+        assert_eq!(found.kind, Kind::Exact);
+        assert_eq!(found.symbol("npc.lookup"), Some(0x20_2e80));
+        assert_eq!(found.symbol("npc.nope"), None);
+        assert!(!found.checks().is_empty());
+        assert!(select(&tables, Side::CLIENT, fingerprint, None).is_none());
     }
 
     #[test]
-    fn a_known_build_resolves_its_symbols() {
-        let server = &BUILDS[0];
-        let found = find(Side::SERVER, server.fingerprint).unwrap();
-        assert_eq!(found.symbol("npc.lookup"), Some(0x20_2e80));
-        assert_eq!(found.symbol("npc.nope"), None);
-        assert!(find(Side::CLIENT, server.fingerprint).is_none());
+    fn an_unknown_build_falls_back_only_when_allowed_and_given_code() {
+        let tables = load(Path::new("no such folder"));
+        let unknown = Fingerprint::new([0xee; 16], 1);
+        let code = [0u8; 64];
+        let found = select(&tables, Side::SERVER, unknown, Some((&code, 0x1000))).unwrap();
+        assert_eq!(found.kind, Kind::Fallback);
+        assert_eq!(found.symbol("npc.lookup"), None);
+        assert!(found.checks().is_empty());
+        assert!(!found.missing().is_empty());
+        assert!(select(&tables, Side::SERVER, unknown, None).is_none());
+        assert!(select(&tables, Side::BOTH, unknown, Some((&code, 0x1000))).is_none());
+    }
+
+    #[test]
+    fn a_fetched_table_needs_the_project_key_and_its_own_name() {
+        let dir = std::env::temp_dir().join(format!("enshwick-builds-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let (file, text) = tables::embedded()[0];
+        std::fs::write(dir.join(file), text).unwrap();
+        assert!(
+            fetched_table(&dir.join(file), file)
+                .unwrap_err()
+                .contains("no signature")
+        );
+        std::fs::write(
+            dir.join(format!("{file}.minisig")),
+            include_str!("../../builds/testdata/table.minisig"),
+        )
+        .unwrap();
+        assert!(fetched_table(&dir.join(file), file).is_err());
+        let embedded = tables::embedded().len();
+        assert_eq!(load(&dir).len(), embedded);
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     /// Every symbol with a `.bytes` constant reads those bytes in the client
@@ -1082,12 +271,19 @@ mod tests {
             None,
         )
         .unwrap();
-        let client = &BUILDS[1];
-        assert_eq!(image.fingerprint(), Some(client.fingerprint));
+        let tables = load(Path::new("no such folder"));
+        let client =
+            tables::exact(&tables, tables::Side::Client, image.fingerprint().unwrap()).unwrap();
         let mut checked = 0;
-        for &(id, rva) in client.symbols {
-            if let Some(expected) = client.constant(&format!("{id}.bytes")) {
-                assert_eq!(image.u64(image.base() + rva), Some(expected), "{id}");
+        for symbol in client.symbols() {
+            let resolved = client.resolve();
+            if let Some(expected) = resolved.constant(&format!("{}.bytes", symbol.id())) {
+                assert_eq!(
+                    image.u64(image.base() + symbol.rva()),
+                    Some(expected),
+                    "{}",
+                    symbol.id()
+                );
                 checked += 1;
             }
         }
@@ -1114,17 +310,5 @@ mod tests {
                 "{ty}.{field}"
             );
         }
-    }
-
-    #[test]
-    fn the_client_row_carries_every_server_constant_and_engine_symbol() {
-        let (server, client) = (&BUILDS[0], &BUILDS[1]);
-        for &(id, value) in server.constants {
-            assert_eq!(client.constant(id), Some(value), "{id}");
-        }
-        for &(id, _) in server.symbols {
-            assert!(client.symbol(id).is_some(), "{id}");
-        }
-        assert_eq!(client.symbol("npc.lookup"), Some(0x46_98b0));
     }
 }
