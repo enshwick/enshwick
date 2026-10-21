@@ -359,6 +359,7 @@ fn at_start() {
     let Some(context) = context() else {
         return;
     };
+    delete_replaced_of_fresh(&context);
     if !context.settings.enabled {
         enshwick_loader_api::info!("updates are off in the settings");
         return;
@@ -430,6 +431,25 @@ fn at_start() {
     let mut screen = SCREEN.lock().unwrap_or_else(PoisonError::into_inner);
     screen.1.extend(staged);
     show(&screen);
+}
+
+/// Deletes the DLLs of the mods that a mod installed at the last start
+/// replaces, now that it runs and the loader lists them.
+fn delete_replaced_of_fresh(context: &Context) {
+    let installed = enshwick_loader_api::mods();
+    let (deleted, kept) = stage::delete_replaced_of_fresh(
+        &context.game,
+        &context.data,
+        &installed,
+        &enshwick_loader_api::mods::replaced(),
+        &taken("", &installed),
+    );
+    for (file, by) in deleted {
+        enshwick_loader_api::info!("deleted {file}, which {by} replaces");
+    }
+    for why in kept {
+        enshwick_loader_api::warn!("not deleted: {why}");
+    }
 }
 
 /// On a build the loader runs on patterns: the table for it, when the
@@ -907,6 +927,11 @@ fn install_all(client: &Client, context: &Context, offers: &[Offer], next: &str)
                 enshwick_loader_api::info!("staged {}: {}", offer.line(), files.join(", "));
                 staged.push(offer.id.clone());
                 done.push(offer.said());
+                if offer.from.is_none()
+                    && let Err(e) = stage::note_fresh(&context.data, &offer.id)
+                {
+                    enshwick_loader_api::warn!("cannot note the new {}: {e}", offer.id);
+                }
                 let taken = taken("", &enshwick_loader_api::mods());
                 let (deleted, kept) =
                     stage::delete_replaced(&context.game, &offer.id, &replaced, &taken);
