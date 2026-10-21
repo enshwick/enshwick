@@ -137,3 +137,35 @@ fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_
 - Tasks run only while steps run: on a dedicated server, or on a client while
   it hosts a game. Timing follows steps, so a task is late by up to one step.
 - An idle step costs one atomic load.
+
+## The step clock
+
+The scheduler's delays are wall-clock time. A wait that should not run out
+while the server stands still, such as a hold on a container or a grace
+period after a player's action, counts in the server's steps instead:
+[`load.step_clock()`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/time.rs)
+returns the mod's
+[`StepClock`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/time.rs),
+which every `Ticked` moves on by the step's real length, at most
+`StepClock::MAX_STEP` (250 ms). A stalled server, a world loading or a
+debugger's pause takes no steps, so the clock stands still with it.
+
+```rust
+use std::time::Duration;
+
+fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+    let clock = load.step_clock()?;
+    let started = clock.now();
+    load.on::<enshwick_loader_api::events::Ticked>(move |_| {
+        if clock.now().saturating_sub(started) > Duration::from_secs(10) {
+            enshwick_loader_api::info!("ten seconds of world time");
+        }
+    })
+}
+```
+
+- Get it during `init`; every call returns the same clock, a
+  `&'static StepClock` to copy anywhere.
+- `now()` reads it from any thread without a lock.
+- A unit test makes its own with `StepClock::new()` and moves it with
+  `step(instant)`.

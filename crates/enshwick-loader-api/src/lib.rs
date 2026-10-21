@@ -109,6 +109,7 @@ pub mod survivors;
 pub mod terrain;
 #[cfg(feature = "test")]
 pub mod test;
+pub mod time;
 pub mod ui;
 pub mod updates;
 pub mod vetoes;
