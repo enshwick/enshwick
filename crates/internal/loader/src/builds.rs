@@ -280,7 +280,7 @@ mod tests {
         let text = image.section(".text").unwrap();
         let range = image.range(text);
         let code = image.read(range.start, range.end - range.start).unwrap();
-        let tables = load(Path::new("no such folder"));
+        let tables = load();
         let started = std::time::Instant::now();
         let found = by_patterns(&tables, Side::SERVER, (code, range.start - image.base())).unwrap();
         let took = started.elapsed();
