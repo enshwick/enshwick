@@ -54,16 +54,25 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
                     adder: slot(&format!("attribute.{pool}_adder_slot"))?,
                 })
             };
-            Some(Layout {
-                data_offset: slot("ecs.level_data_offset")?,
-                flags: slot("ecs.level_flags")?,
-                count: slot("ecs.attribute_count")?,
-                sets: [
-                    set("keen::ecs::Health", "health")?,
-                    set("keen::ecs::Stamina", "stamina")?,
-                    set("keen::ecs::Mana", "mana")?,
-                ],
-            })
+            let layout = (|| {
+                Some(Layout {
+                    data_offset: slot("ecs.level_data_offset")?,
+                    flags: slot("ecs.level_flags")?,
+                    count: slot("ecs.attribute_count")?,
+                    sets: [
+                        set("keen::ecs::Health", "health")?,
+                        set("keen::ecs::Stamina", "stamina")?,
+                        set("keen::ecs::Mana", "mana")?,
+                    ],
+                })
+            })();
+            if layout.is_none() {
+                crate::log!(
+                    WARN,
+                    "stat maxima off: this game build lacks the attribute layout; maximum health, stamina and mana stay the game's"
+                );
+            }
+            layout
         })
         .as_ref()
 }

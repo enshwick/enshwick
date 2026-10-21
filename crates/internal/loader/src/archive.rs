@@ -316,7 +316,7 @@ pub(crate) fn open_game(
         if archive.is_none() {
             crate::log!(
                 WARN,
-                "the game's archive {name}.kfc does not read: attribute slots, vanilla names and texts are unknown"
+                "the game's archive {name}.kfc does not read: attribute slots come only from a build table, vanilla names and texts are unknown"
             );
         }
         archive

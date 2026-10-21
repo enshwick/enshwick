@@ -3,8 +3,8 @@
 //! with their names, and the game looks slots up there at run time, so no
 //! code holds them (game build 1269579). The build tables name each slot
 //! they pin by its attribute; the loader reads the slot at start, so the
-//! slots hold on a build without a table, and the pinned values serve as a
-//! cross-check.
+//! slots hold on a build without a table; a pinned value that differs is
+//! logged, and the game's data holds.
 
 use rustc_hash::FxHashMap;
 
@@ -131,7 +131,11 @@ pub(crate) fn supply(
     let slots = match read(archive, reflection) {
         Ok(slots) => slots,
         Err(why) => {
-            crate::log!(WARN, "{why}: attribute slots are the build table's");
+            let held = match build.kind {
+                crate::builds::Kind::Exact => "attribute slots are the build table's",
+                crate::builds::Kind::Fallback => "attribute slots stay unknown",
+            };
+            crate::log!(WARN, "{why}: {held}");
             return;
         }
     };
