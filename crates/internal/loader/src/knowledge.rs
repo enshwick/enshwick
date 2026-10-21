@@ -51,6 +51,9 @@ pub(crate) const TABLE_IDS: &[&str] = &[
     "knowledge.record_size",
     "knowledge.records",
     "knowledge.replication",
+    "knowledge.request_kind",
+    "knowledge.request_target",
+    "knowledge.request_value",
     "knowledge.resend_player",
     "knowledge.resend_world",
     "knowledge.set_values",
@@ -76,6 +79,8 @@ type PushFn = unsafe extern "system" fn(queue: *mut u8, request: *const [u8; 16]
 const MAX_RECORDS: u64 = 4096;
 /// More changes than one update logs: a count past it is a misread.
 const MAX_LOG: u32 = 1 << 16;
+/// The bytes of a trigger request, which the game's push copies whole.
+const REQUEST: usize = 16;
 
 /// Where the store and its parts lie, from the build table and reflection.
 #[derive(Debug)]
@@ -99,6 +104,10 @@ struct Layout {
     record_log: usize,
     record_log_count: usize,
     log_entry: usize,
+    /// A trigger request's definition kind, value and target, after its id.
+    request_kind: usize,
+    request_value: usize,
+    request_target: usize,
     journal: usize,
     journal_blob: usize,
     world_map: usize,
@@ -173,6 +182,9 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
                 record_log: offset("knowledge.record_log")?,
                 record_log_count: offset("knowledge.record_log_count")?,
                 log_entry: offset("knowledge.log_entry_size")?,
+                request_kind: offset("knowledge.request_kind")?,
+                request_value: offset("knowledge.request_value")?,
+                request_target: offset("knowledge.request_target")?,
                 journal: offset("knowledge.journal")?,
                 journal_blob: offset("knowledge.journal_blob")?,
                 world_map: field(defs, "worldKnowledge")?,
@@ -382,11 +394,16 @@ pub(crate) fn grant(
     } else {
         0
     };
-    let mut request = [0u8; 16];
-    request[0..4].copy_from_slice(&id.to_le_bytes());
-    request[4] = def_kind;
-    request[8..12].copy_from_slice(&value.to_le_bytes());
-    request[12..16].copy_from_slice(&target.to_le_bytes());
+    let mut request = [0u8; REQUEST];
+    let mut put = |at: usize, bytes: &[u8]| {
+        if let Some(out) = request.get_mut(at..at + bytes.len()) {
+            out.copy_from_slice(bytes);
+        }
+    };
+    put(0, &id.to_le_bytes());
+    put(layout.request_kind, &[def_kind]);
+    put(layout.request_value, &value.to_le_bytes());
+    put(layout.request_target, &target.to_le_bytes());
     // SAFETY: the game object holds its knowledge trigger queue.
     let queue: usize = unsafe { read(game, layout.queue) };
     if queue == 0 {

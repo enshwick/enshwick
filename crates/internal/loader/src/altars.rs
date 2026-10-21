@@ -50,17 +50,19 @@ const FORGET_STEPS: u64 = 60;
 const EXPIRE_EVERY: u64 = 16;
 /// `add_buildzones_server`'s iterator: context, `BaseIdComponent`,
 /// `CurrentTransform`, `TriggerShape`, `BuildZoneSystem`.
-/// Found on the 1.0 build 1269579, server and client.
+/// Found on the 1.0 build 1269579, server and client, and checked against
+/// the system's reflected components on every build.
+const ZONES_READS: [&str; 3] = ["BaseIdComponent", "CurrentTransform", "TriggerShape"];
 const ZONES_WORDS: usize = 5;
 const ZONES_TRANSFORM: usize = 2;
 const ZONES_SHAPE: usize = 3;
-/// `CurrentTransform`: position at 0, orientation at 0x18.
-/// Found on the 1.0 build 1269579, server and client.
-const TRANSFORM_ORIENTATION: usize = 0x18;
 /// `upgrade_building_range`'s iterator: context, `Level`, `TriggerShape`, two
 /// stamps, entity record, type and flags, tracker, `BalancingRegistry`,
 /// `AttributeRegistry`.
-/// Found on the 1.0 build 1269579, server and client.
+/// Found on the 1.0 build 1269579, server and client, and checked against
+/// the system's reflected components on every build.
+const UPGRADE_READS: [&str; 1] = ["Level"];
+const UPGRADE_WRITES: [&str; 1] = ["TriggerShape"];
 const UPGRADE_WORDS: usize = 10;
 const UPGRADE_LEVEL: usize = 1;
 const UPGRADE_SHAPE: usize = 2;
@@ -71,9 +73,6 @@ const UPGRADE_KIND: usize = 6;
 const UPGRADE_TRACKER: usize = 7;
 const UPGRADE_BALANCING: usize = 8;
 const UPGRADE_ATTRIBUTES: usize = 9;
-/// `TriggerShape`: half extents at 4.
-/// Found on the 1.0 build 1269579, server and client.
-const SHAPE_RANGE: usize = 4;
 /// Vanilla writes half the level's size.
 /// Found on the 1.0 build 1269579, server and client.
 const HALF: f32 = 0.5;
@@ -159,6 +158,35 @@ static STATE: Mutex<State> = Mutex::new(State {
 type Targets = BTreeMap<u32, (usize, [f32; 3])>;
 
 static WANTED: AtomicBool = AtomicBool::new(false);
+static FIELDS: OnceLock<Fields> = OnceLock::new();
+
+/// Where a trigger shape keeps its half extents and a current transform its
+/// position and orientation, from reflection.
+#[derive(Debug, Clone, Copy)]
+struct Fields {
+    range: usize,
+    position: usize,
+    orientation: usize,
+}
+
+impl Fields {
+    fn read(loader: &Loader) -> Result<Self, String> {
+        let field = |ty: &str, name: &str| {
+            loader
+                .reflection
+                .field_offset(ty, name)
+                .ok()
+                .and_then(|v| usize::try_from(v).ok())
+                .ok_or(format!("no {ty}.{name} in this build"))
+        };
+        let transform = field("keen::ecs::CurrentTransform", "transform")?;
+        Ok(Self {
+            range: field("keen::ecs::TriggerShape", "rangeX")?,
+            position: transform + field("keen::WorldTransform", "position")?,
+            orientation: transform + field("keen::WorldTransform", "orientation")?,
+        })
+    }
+}
 static OPENERS: Mutex<Vec<usize>> = Mutex::new(Vec::new());
 /// The index of the mod that controls the zones, plus one; 0 for none.
 static CONTROLLER: AtomicUsize = AtomicUsize::new(0);
@@ -376,6 +404,26 @@ pub(crate) fn link(loader: &'static Loader) {
         crate::log!(WARN, "altars off: this build lacks their engine helpers");
         return;
     }
+    let checked = Fields::read(loader).and_then(|fields| {
+        crate::ecs::components_match(loader, "add_buildzones_server", &ZONES_READS, &[])?;
+        crate::ecs::components_match(
+            loader,
+            "upgrade_building_range",
+            &UPGRADE_READS,
+            &UPGRADE_WRITES,
+        )?;
+        Ok(fields)
+    });
+    match checked {
+        Ok(fields) => {
+            let _first = FIELDS.set(fields);
+        }
+        Err(why) => {
+            crate::log!(WARN, "altars off: {why}");
+            OFF.store(true, Ordering::Release);
+            return;
+        }
+    }
     let controlled = CONTROLLER.load(Ordering::Acquire) != 0;
     let upgrade_flags = if controlled {
         HookFlags::EXCLUSIVE
@@ -590,6 +638,9 @@ unsafe fn observe_into(
     placed: &mut Vec<(u32, Placed)>,
     built: &mut Vec<(u32, [f32; 3])>,
 ) {
+    let Some(fields) = FIELDS.get() else {
+        return;
+    };
     // Vanilla left the row counter at the end: walk again from the start and
     // restore it.
     // SAFETY: the system's live context.
@@ -607,11 +658,11 @@ unsafe fn observe_into(
         // SAFETY: the system's live context.
         let id = unsafe { engine.entity(ctx) };
         // SAFETY: the row's trigger shape holds its half extents here.
-        let range: [f32; 3] = unsafe { read_at(shape, SHAPE_RANGE) };
-        // SAFETY: the row's transform holds its position at 0.
-        let position: [i64; 3] = unsafe { read_at(transform, 0) };
+        let range: [f32; 3] = unsafe { read_at(shape, fields.range) };
+        // SAFETY: the row's transform holds its position here.
+        let position: [i64; 3] = unsafe { read_at(transform, fields.position) };
         // SAFETY: and its orientation here.
-        let orientation: [f32; 4] = unsafe { read_at(transform, TRANSFORM_ORIENTATION) };
+        let orientation: [f32; 4] = unsafe { read_at(transform, fields.orientation) };
         built.push((id, range));
         placed.push((
             id,
@@ -687,6 +738,9 @@ unsafe fn write_ranges(engine: &Engine, ctx: *mut u64) {
 ///
 /// `ctx` is the live context of `upgrade_building_range`.
 unsafe fn write_ranges_into(engine: &Engine, ctx: *mut u64, levels: &mut Vec<(u32, Sizes)>) {
+    let Some(range_at) = FIELDS.get().map(|fields| fields.range) else {
+        return;
+    };
     let targets = TARGETS.load();
     // SAFETY: the system's live context.
     let mut query: Query<'_, UPGRADE_WORDS> = unsafe { engine.query(ctx) };
@@ -712,7 +766,7 @@ unsafe fn write_ranges_into(engine: &Engine, ctx: *mut u64, levels: &mut Vec<(u3
             continue;
         }
         // SAFETY: the trigger shape this system writes holds its range here.
-        let written: [f32; 3] = unsafe { read_at(shape, SHAPE_RANGE) };
+        let written: [f32; 3] = unsafe { read_at(shape, range_at) };
         if written.map(f32::to_bits) != target.map(f32::to_bits) {
             // SAFETY: the change-tracking words of the current row.
             unsafe {
@@ -727,7 +781,7 @@ unsafe fn write_ranges_into(engine: &Engine, ctx: *mut u64, levels: &mut Vec<(u3
             // SAFETY: as above.
             unsafe {
                 shape
-                    .wrapping_add(SHAPE_RANGE)
+                    .wrapping_add(range_at)
                     .cast::<[f32; 3]>()
                     .write_unaligned(target);
             }

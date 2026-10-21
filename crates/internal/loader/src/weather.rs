@@ -35,6 +35,9 @@ pub(crate) const TABLE_IDS: &[&str] = &[
     "chunks.width",
     "server.player_infos",
     "weather.clock",
+    "weather.entry_data",
+    "weather.entry_generation",
+    "weather.entry_size",
     "weather.free",
     "weather.generation",
     "weather.instance_despawn",
@@ -45,24 +48,27 @@ pub(crate) const TABLE_IDS: &[&str] = &[
     "weather.layers",
     "weather.manager",
     "weather.page_count",
+    "weather.page_entries",
+    "weather.page_entry_count",
     "weather.page_mask",
     "weather.page_shift",
+    "weather.page_size",
     "weather.pages",
     "weather.resource",
     "weather.resource_lock",
     "weather.resource_release",
     "weather.sample",
+    "weather.slot_current",
+    "weather.slot_next",
+    "weather.slot_phenomenon",
+    "weather.slot_size",
+    "weather.slot_time",
     "weather.spawn",
     "weather.system",
 ];
 
 /// The effect value that asks the game to choose.
 pub(crate) const ANY: u32 = u32::MAX;
-/// A layer slot's bytes: next time, last phenomenon, two handles.
-const SLOT: usize = 0x18;
-/// An instance pool page descriptor's bytes, and an entry's.
-const PAGE: usize = 0x40;
-const ENTRY: usize = 0x48;
 /// The side of a chunk, in metres.
 const CHUNK_METRES: u32 = 256;
 /// A chunk's states.
@@ -109,8 +115,24 @@ struct Layout {
     page_count: usize,
     shift: usize,
     mask: usize,
+    /// A page descriptor of the instance pool: its size, its entries and
+    /// their number.
+    page_size: usize,
+    page_entries: usize,
+    page_entry_count: usize,
+    /// An entry of a page: its size, its generation and its data.
+    entry_size: usize,
+    entry_generation: usize,
+    entry_data: usize,
     layers: usize,
     layer_count: usize,
+    /// A layer slot: its size, the time of its next phenomenon, its last
+    /// phenomenon and the handles of its current and next instances.
+    slot_size: usize,
+    slot_time: usize,
+    slot_phenomenon: usize,
+    slot_current: usize,
+    slot_next: usize,
     instance_phenomenon: usize,
     instance_position: usize,
     instance_radius: usize,
@@ -180,8 +202,19 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
                 page_count: loader.offset("weather.page_count")?,
                 shift: loader.offset("weather.page_shift")?,
                 mask: loader.offset("weather.page_mask")?,
+                page_size: loader.offset("weather.page_size")?,
+                page_entries: loader.offset("weather.page_entries")?,
+                page_entry_count: loader.offset("weather.page_entry_count")?,
+                entry_size: loader.offset("weather.entry_size")?,
+                entry_generation: loader.offset("weather.entry_generation")?,
+                entry_data: loader.offset("weather.entry_data")?,
                 layers: loader.offset("weather.layers")?,
                 layer_count: loader.offset("weather.layer_count")?,
+                slot_size: loader.offset("weather.slot_size")?,
+                slot_time: loader.offset("weather.slot_time")?,
+                slot_phenomenon: loader.offset("weather.slot_phenomenon")?,
+                slot_current: loader.offset("weather.slot_current")?,
+                slot_next: loader.offset("weather.slot_next")?,
                 instance_phenomenon: loader.offset("weather.instance_phenomenon")?,
                 instance_position: loader.offset("weather.instance_position")?,
                 instance_radius: loader.offset("weather.instance_radius")?,
@@ -327,19 +360,19 @@ fn instance(layout: &Layout, system: usize, handle: u32) -> Option<usize> {
     if pages == 0 || page >= page_count {
         return None;
     }
-    let descriptor = pages + page * PAGE;
+    let descriptor = pages + page * layout.page_size;
     // SAFETY: a page descriptor of the pool: its entries and their number.
-    let entries: usize = unsafe { read(descriptor, 8) };
+    let entries: usize = unsafe { read(descriptor, layout.page_entries) };
     // SAFETY: as above.
-    let entry_count: usize = unsafe { read(descriptor, 0x10) };
+    let entry_count: usize = unsafe { read(descriptor, layout.page_entry_count) };
     let index = slot & mask;
     if entries == 0 || index >= entry_count {
         return None;
     }
-    let entry = entries + index * ENTRY;
+    let entry = entries + index * layout.entry_size;
     // SAFETY: an entry of the page: its generation, then its data.
-    let generation: u32 = unsafe { read(entry, 0) };
-    ((generation & 0x7fff_ffff) == handle >> 16).then_some(entry + 8)
+    let generation: u32 = unsafe { read(entry, layout.entry_generation) };
+    ((generation & 0x7fff_ffff) == handle >> 16).then_some(entry + layout.entry_data)
 }
 
 /// The current front of each layer.
@@ -357,7 +390,7 @@ pub(crate) fn fronts(loader: &Loader) -> Result<Vec<WeatherFront>, Status> {
     let mut out = Vec::new();
     for layer in 0..usize::try_from(layer_count).unwrap_or(0) {
         // SAFETY: a slot of the layer array: the current instance's handle.
-        let current: u32 = unsafe { read(layers + layer * SLOT, 0x10) };
+        let current: u32 = unsafe { read(layers + layer * layout.slot_size, layout.slot_current) };
         let Some(data) = instance(layout, system, current) else {
             continue;
         };
@@ -417,8 +450,8 @@ pub(crate) fn set(loader: &Loader, effect: u32, duration: i64) -> Result<(), Sta
         .min(layer_def_count);
     let system_mut = core::ptr::with_exposed_provenance_mut::<u8>(system);
     for layer in 0..layer_count {
-        let slot = layers + layer * SLOT;
-        for at in [0x10, 0x14] {
+        let slot = layers + layer * layout.slot_size;
+        for at in [layout.slot_current, layout.slot_next] {
             // SAFETY: a handle of the slot.
             let handle: u32 = unsafe { read(slot, at) };
             if handle != 0 {
@@ -428,13 +461,13 @@ pub(crate) fn set(loader: &Loader, effect: u32, duration: i64) -> Result<(), Sta
             }
         }
         // SAFETY: the slot, emptied as the game's reset empties it.
-        unsafe {
-            write(slot, 0, i64::MIN);
-        };
+        unsafe { write(slot, layout.slot_time, i64::MIN) };
         // SAFETY: as above.
-        unsafe { write(slot, 8, u64::MAX) };
-        // SAFETY: as above.
-        unsafe { write(slot, 0x10, 0u64) };
+        unsafe { write(slot, layout.slot_phenomenon, u64::MAX) };
+        for at in [layout.slot_current, layout.slot_next] {
+            // SAFETY: as above.
+            unsafe { write(slot, at, 0u32) };
+        }
         if effect == ANY {
             continue;
         }

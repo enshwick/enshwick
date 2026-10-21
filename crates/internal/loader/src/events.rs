@@ -30,6 +30,8 @@ pub(crate) const TABLE_IDS: &[&str] = &[
     "building.ctx_player",
     "building.ctx_replay",
     "building.pickup",
+    "building.pickup_entity",
+    "building.pickup_mode",
     "building.spawn_prop",
     "server.entry_state",
     "server.player_remove",
@@ -66,6 +68,9 @@ struct Offsets {
     slot_key: usize,
     ctx_player: usize,
     ctx_replay: usize,
+    /// The pickup target's entity id and mode byte.
+    pickup_entity: usize,
+    pickup_mode: usize,
     server_world: usize,
     entities: usize,
 }
@@ -204,6 +209,8 @@ pub(crate) fn link(loader: &'static Loader) {
             slot_key: constant("server.player_slot_key")?,
             ctx_player: constant("building.ctx_player")?,
             ctx_replay: constant("building.ctx_replay")?,
+            pickup_entity: constant("building.pickup_entity")?,
+            pickup_mode: constant("building.pickup_mode")?,
             server_world: constant("server.world")?,
             entities: constant("world.entities")?,
         })
@@ -553,10 +560,10 @@ unsafe extern "system" fn pickup(context: *mut u8, target: *const u8, tool: u32)
     let before = loaded()
         .filter(|_| !context.is_null() && !target.is_null())
         .map(|(_, offsets)| {
-            // SAFETY: the target starts with the entity id, then the mode byte.
-            let entity: u32 = unsafe { read(target, 0) };
+            // SAFETY: the target holds the entity id and the mode byte.
+            let entity: u32 = unsafe { read(target, offsets.pickup_entity) };
             // SAFETY: as above.
-            let mode: u8 = unsafe { read(target, 4) };
+            let mode: u8 = unsafe { read(target, offsets.pickup_mode) };
             // SAFETY: the build context holds the acting player and the replay flag.
             let player: u32 = unsafe { read(context, offsets.ctx_player) };
             // SAFETY: as above.

@@ -185,8 +185,8 @@ the run stays unique without them.
   value a table pins is a cross-check, and a slot that differs is logged and
   the game's data holds.
 
-On build 1269579 the patterns find every symbol of both tables, 247 of the
-server's 256 constants and 403 of the client's 412, and the game's data gives
+On build 1269579 the patterns find every symbol of both tables, 271 of the
+server's 280 constants and 427 of the client's 436, and the game's data gives
 the other nine, the slots of attributes: on a build without a table every
 entry is found, and every loader feature and mod of this repository runs.
 `cargo enshwick compat --patterns <exe>` shows what the patterns alone find

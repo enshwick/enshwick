@@ -38,7 +38,16 @@ use crate::ecs::read_at;
 use crate::host::Loader;
 
 /// The build table ids this part of the loader names.
-pub(crate) const TABLE_IDS: &[&str] = &["building.max_altars"];
+pub(crate) const TABLE_IDS: &[&str] = &[
+    "bases.count",
+    "bases.members",
+    "bases.stride",
+    "bases.zone_high",
+    "bases.zone_list",
+    "bases.zone_list_len",
+    "bases.zone_size",
+    "building.max_altars",
+];
 
 /// The grouping's first bytes.
 const GROUPING: &str = "48 89 5C 24 10 48 89 6C 24 18 48 89 74 24 20 57 41 54 41 55 41 56 41 57 \
@@ -90,17 +99,39 @@ const MAX_ALTARS_REACHED: u32 = 0x40;
 /// Found on the 1.0 build 1269579, server and client.
 const ITEM_ALTAR: usize = 0x43;
 
-/// The bases object: the count, each base 0x130 apart with its members mask
-/// at +0x140 and the zone boxes at +0x1330, 0x20 bytes each with the low
-/// corner at 0 and the high one at 0x10.
-/// Found on the 1.0 build 1269579, server and client.
-const BASE_COUNT: usize = 0x24;
-const BASE_STRIDE: usize = 0x130;
-const BASE_MEMBERS: usize = 0x140;
-const ZONE_LIST: usize = 0x1330;
-const ZONE_LIST_LEN: usize = 0x1338;
-const ZONE_SIZE: usize = 0x20;
-const ZONE_HIGH: usize = 0x10;
+/// The bases object's fields, from the build table: the count, each base
+/// `stride` apart with its members mask at `members`, and the zone boxes in
+/// a list of `zone_size` bytes each, the low corner first and the high one
+/// at `zone_high`.
+#[derive(Debug, Clone, Copy)]
+struct Fields {
+    count: usize,
+    stride: usize,
+    members: usize,
+    zone_list: usize,
+    zone_list_len: usize,
+    zone_size: usize,
+    zone_high: usize,
+}
+
+impl Fields {
+    fn read(loader: &Loader) -> Result<Self, String> {
+        let f = |id: &str| {
+            loader
+                .offset(id)
+                .ok_or(format!("{id} is not in this build"))
+        };
+        Ok(Self {
+            count: f("bases.count")?,
+            stride: f("bases.stride")?,
+            members: f("bases.members")?,
+            zone_list: f("bases.zone_list")?,
+            zone_list_len: f("bases.zone_list_len")?,
+            zone_size: f("bases.zone_size")?,
+            zone_high: f("bases.zone_high")?,
+        })
+    }
+}
 /// The game lists at most 255 zones.
 /// Found on the 1.0 build 1269579, server and client.
 const MAX_LISTED: usize = 0xff;
@@ -111,6 +142,7 @@ struct Sites {
     new_base: u64,
     cursor: u64,
     balancing: usize,
+    fields: Fields,
     /// The first byte of every patch.
     patches: Box<[usize]>,
 }
@@ -198,7 +230,7 @@ pub(crate) fn raise(loader: &Loader, owner: usize) -> Status {
     ) else {
         return Status::MISSING;
     };
-    let patches = match find_sites(code) {
+    let patches = match Fields::read(loader).and_then(|fields| find_sites(code, fields)) {
         Ok(found) => found,
         Err(reason) => {
             crate::log!(WARN, "bases keep 16 altar zones: {reason}");
@@ -212,6 +244,7 @@ pub(crate) fn raise(loader: &Loader, owner: usize) -> Status {
         new_base: start + sites.new_base,
         cursor: start + sites.cursor,
         balancing: sites.balancing,
+        fields: sites.fields,
         patches: patches.iter().map(|&(at, _, _)| text.0 + at).collect(),
     };
     let needs: Box<[u64]> = Box::new([sites.grouping, sites.new_base, sites.cursor]);
@@ -237,7 +270,7 @@ pub(crate) fn raise(loader: &Loader, owner: usize) -> Status {
 type Patch = (usize, Vec<u8>, Vec<u8>);
 
 /// The sites as offsets into `code`, and the patches they need.
-fn find_sites(code: &[u8]) -> Result<(Sites, Vec<Patch>), String> {
+fn find_sites(code: &[u8], fields: Fields) -> Result<(Sites, Vec<Patch>), String> {
     let find = |pattern: &str| crate::code::find(code, pattern);
     let grouping = find(GROUPING)?;
     let new_base = find(NEW_BASE)?;
@@ -280,6 +313,7 @@ fn find_sites(code: &[u8]) -> Result<(Sites, Vec<Patch>), String> {
         new_base: new_base as u64,
         cursor: cursor as u64,
         balancing,
+        fields,
         patches: Box::default(),
     };
     Ok((sites, patches))
@@ -395,15 +429,16 @@ unsafe extern "system" fn group(bases: *mut u8, world: *mut u8) {
 ///
 /// `bases` is the bases object the grouping just filled.
 unsafe fn keep(bases: *const u8) {
-    let Some(known) = ZONES.get() else {
+    let (Some(known), Some(sites)) = (ZONES.get(), SITES.get()) else {
         return;
     };
+    let fields = sites.fields;
     // SAFETY: forwarded from the caller.
-    let count = unsafe { read_at::<u32>(bases, BASE_COUNT) };
+    let count = unsafe { read_at::<u32>(bases, fields.count) };
     // SAFETY: as above.
-    let list = unsafe { read_at::<*const u8>(bases, ZONE_LIST) };
+    let list = unsafe { read_at::<*const u8>(bases, fields.zone_list) };
     // SAFETY: as above.
-    let len = unsafe { read_at::<usize>(bases, ZONE_LIST_LEN) };
+    let len = unsafe { read_at::<usize>(bases, fields.zone_list_len) };
     if (list.is_null() && len != 0) || len > MAX_LISTED {
         return;
     }
@@ -411,14 +446,14 @@ unsafe fn keep(bases: *const u8) {
     let mut members = 0u32;
     for base in 0..count as usize {
         // SAFETY: base `base` is below the count, inside the array of 16.
-        members |= unsafe { read_at::<u32>(bases, base * BASE_STRIDE + BASE_MEMBERS) };
+        members |= unsafe { read_at::<u32>(bases, base * fields.stride + fields.members) };
     }
     let zone = |i: usize| -> Zone {
-        let at = i * ZONE_SIZE;
+        let at = i * fields.zone_size;
         // SAFETY: zone `i` is below the list's length.
         let min = unsafe { read_at::<[f32; 3]>(list, at) };
         // SAFETY: as above.
-        let max = unsafe { read_at::<[f32; 3]>(list, at + ZONE_HIGH) };
+        let max = unsafe { read_at::<[f32; 3]>(list, at + fields.zone_high) };
         Zone {
             bounds: Aabb { min, max },
             based: i < MAX_ZONES && members >> i & 1 == 1,
@@ -455,8 +490,11 @@ unsafe fn keep(bases: *const u8) {
 }
 
 unsafe extern "system" fn add_base(bases: *mut u8, zone: *const u8, index: u32) {
-    // SAFETY: the grouping passes its bases object.
-    if raised() && !bases.is_null() && unsafe { read_at::<u32>(bases, BASE_COUNT) } >= MAX_BASES {
+    let count = SITES.get().map(|sites| sites.fields.count);
+    if let Some(count) = count.filter(|_| raised() && !bases.is_null())
+        // SAFETY: the grouping passes its bases object.
+        && unsafe { read_at::<u32>(bases, count) } >= MAX_BASES
+    {
         return;
     }
     // SAFETY: the original takes the arguments the game passed.
