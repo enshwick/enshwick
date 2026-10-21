@@ -6,13 +6,13 @@ returns the
 of the server's world: the values the game keeps for the world and for each
 player, which recipes, quests, journal pages, skill points and much more
 read. It is `Copy`; get it during `init` and move it into handlers, tasks and
-commands. It needs ABI minor 32.
+commands.
 
 ```rust
 use enshwick_loader_api::events::QuestCompleted;
 
 fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
-    let knowledge = load.knowledge()?;
+    let knowledge = load.knowledge();
     let world = load.world()?;
     load.on::<QuestCompleted>(move |done| {
         let entity = enshwick_loader_api::ecs::Entity(done.entity);
@@ -62,7 +62,7 @@ its requirement asks for keeps it whole.
 
 ## Taking back
 
-`revoke(player, id, revoke)` and `revoke_world(id, revoke)` (minor 59) take
+`revoke(player, id, revoke)` and `revoke_world(id, revoke)` take
 knowledge back: `Revoke::Clear` clears a bool, `Revoke::Sub(n)` lowers a
 counter down to 0, `Revoke::Unflag(bit)` clears one bit of flags. The value
 changes at once, the clients get it again (the world's to every client, a
@@ -77,7 +77,7 @@ does, and for a player whose save has not loaded yet.
 A player's knowledge lives in the character's save on the player's machine;
 the server holds it only while the player is in the game, once that save has
 loaded. `grant_account(account, id, grant)` and
-`revoke_account(account, id, revoke)` (minor 59) take the account's
+`revoke_account(account, id, revoke)` take the account's
 [`Player::key`](world.md) instead of a character: when the account's
 character is in the game the change applies now, otherwise it waits with the
 world, in `mod-data/enshwick/worlds/<key>/knowledge.toml`, and applies once
@@ -115,7 +115,7 @@ logged as `knowledge guard: would refuse, let through ...` or
 `knowledge guard: refused ...`, the first 64 of a run; the status summary
 counts them all.
 
-`load.on_knowledge_input(filter)` (minor 55) runs `filter` on every request
+`load.on_knowledge_input(filter)` runs `filter` on every request
 after the guard, with the guard's reason (`refusal`, given in every mode) and
 the verdict so far (`allowed`); its answer replaces the verdict, so a mod can
 refuse more or allow what the guard refuses. A filter's refusal stands in

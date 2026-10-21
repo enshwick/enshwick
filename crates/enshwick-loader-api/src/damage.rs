@@ -31,7 +31,7 @@
 
 use core::ffi::c_void;
 
-use crate::abi::{DamageCheck, HostApi};
+use crate::abi::DamageCheck;
 use crate::ecs::Entity;
 use crate::{Load, Off};
 
@@ -199,8 +199,7 @@ impl Damage<'_> {
     }
 
     /// Who dealt a hit: the attacker, also for its arrows and spells; `None`
-    /// for other causes. Under a loader older than minor 45, the same as
-    /// [`Damage::source`].
+    /// for other causes.
     ///
     /// # Examples
     ///
@@ -360,8 +359,7 @@ impl Load<'_> {
     ///
     /// # Errors
     ///
-    /// [`Off`] after init, on a build without the damage sites, or under a
-    /// loader older than ABI minor 30.
+    /// [`Off`] after init or on a build without the damage sites.
     ///
     /// # Examples
     ///
@@ -371,11 +369,6 @@ impl Load<'_> {
         F: Fn(&mut Damage<'_>) + Send + Sync + 'static,
     {
         let host = self.host();
-        crate::load::offered(
-            host.api(),
-            core::mem::offset_of!(HostApi, damage_filter),
-            "damage filters",
-        )?;
         crate::load::hand_over(
             filter,
             |user| (host.api().damage_filter)(host.handle(), run_damage::<F>, user),

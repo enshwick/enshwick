@@ -20,7 +20,7 @@
 
 use core::ffi::c_void;
 
-use crate::abi::{HostApi, Interaction as RawInteraction};
+use crate::abi::Interaction as RawInteraction;
 use crate::ecs::Entity;
 use crate::{Load, Off};
 
@@ -121,8 +121,7 @@ impl Load<'_> {
     ///
     /// # Errors
     ///
-    /// [`Off`] after init, on a build that lacks a piece, or with a loader
-    /// older than the API.
+    /// [`Off`] after init or on a build that lacks a piece.
     ///
     /// # Examples
     ///
@@ -132,11 +131,6 @@ impl Load<'_> {
         F: Fn(&Interaction) -> bool + Send + Sync + 'static,
     {
         let host = self.host();
-        crate::load::offered(
-            host.api(),
-            core::mem::offset_of!(HostApi, interaction_filter),
-            "interaction filters",
-        )?;
         crate::load::hand_over(
             filter,
             |user| (host.api().interaction_filter)(host.handle(), run_filter::<F>, user),

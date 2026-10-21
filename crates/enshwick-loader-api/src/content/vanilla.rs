@@ -139,8 +139,8 @@ impl Vanilla {
     }
 
     /// The running game's vanilla content, read from its archive through
-    /// [`super::game_resource`]; `None` outside the game, under a loader
-    /// older than ABI minor 61, or when a layout is not reflected.
+    /// [`super::game_resource`]; `None` outside the game or when a layout is
+    /// not reflected.
     ///
     /// # Examples
     ///

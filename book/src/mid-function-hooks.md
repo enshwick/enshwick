@@ -82,8 +82,7 @@ run and the function goes on.
 
 - a second handler of the same mod on one address;
 - a handler on an address another mod holds exclusively;
-- a call after `init`;
-- a loader older than ABI minor 11, which has no mid-function hooks.
+- a call after `init`.
 
 The checks on the instructions run at arming, after every mod is initialised.
 An address refused there gets no jump, and every mod with a handler on it is

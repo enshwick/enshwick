@@ -57,7 +57,7 @@ impl AffixChecks {
             .weight(30),
         )?;
         Ok(Self {
-            affixes: load.affixes()?,
+            affixes: load.affixes(),
             stats: load.stats()?,
             inventories: load.inventories()?,
             setup: world.component_type(load, "keen::ecs::InventorySetup")?,

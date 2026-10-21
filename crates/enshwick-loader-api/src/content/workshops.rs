@@ -480,8 +480,8 @@ impl Load<'_> {
     ///
     /// # Errors
     ///
-    /// [`Off`] when the loader is too old, a layout is not reflected or the
-    /// loader refuses one of its ids (see [`Load::declare`]); a station whose
+    /// [`Off`] when a layout is not reflected or the loader refuses one of
+    /// its ids (see [`Load::declare`]); a station whose
     /// components or item do not match turns the mod off when the game first
     /// reads them.
     ///

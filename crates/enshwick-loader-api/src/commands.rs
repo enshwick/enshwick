@@ -12,7 +12,7 @@
 use core::ffi::c_void;
 use std::cell::RefCell;
 
-use crate::abi::{CommandCall, HostApi, RenameCall, Status, Str, read_headed};
+use crate::abi::{CommandCall, RenameCall, Status, Str, read_headed};
 use crate::ecs::Entity;
 use crate::world::Player;
 use crate::{Load, Off};
@@ -221,8 +221,8 @@ pub enum RunError {
     /// Not on the server's game thread, or no server runs.
     #[error("commands run on the server's game thread only")]
     NotOnGameThread,
-    /// The loader is older than the API or not there (a unit test).
-    #[error("commands need a newer loader")]
+    /// No loader runs, as in a unit test.
+    #[error("no loader runs commands here")]
     NoLoader,
     /// The loader refused for another reason, with its status.
     #[error("refused by the loader (status {0})")]
@@ -256,10 +256,6 @@ pub fn run(line: &str) -> Result<Reply, RunError> {
         return Err(RunError::NotACommand);
     }
     let host = crate::host().ok_or(RunError::NoLoader)?;
-    let end = core::mem::offset_of!(HostApi, run_command) + size_of::<usize>();
-    if !host.api().header.covers(end) {
-        return Err(RunError::NoLoader);
-    }
     let mut out = Str::EMPTY;
     let status = (host.api().run_command)(host.handle(), Str::new(line), &raw mut out);
     match status {
@@ -349,8 +345,7 @@ impl Load<'_> {
     ///
     /// # Errors
     ///
-    /// [`Off`] when the name is malformed or another mod holds it, or with a
-    /// loader older than the API.
+    /// [`Off`] when the name is malformed or another mod holds it.
     ///
     /// # Examples
     ///
@@ -374,11 +369,6 @@ impl Load<'_> {
             )));
         }
         let host = self.host();
-        crate::load::offered(
-            host.api(),
-            core::mem::offset_of!(HostApi, command),
-            "chat commands",
-        )?;
         crate::load::hand_over(
             handler,
             |user| {
@@ -401,7 +391,7 @@ impl Load<'_> {
     ///
     /// # Errors
     ///
-    /// [`Off`] with a loader older than the API.
+    /// [`Off`] when the loader refuses the filter, as after init.
     ///
     /// # Examples
     ///
@@ -416,11 +406,6 @@ impl Load<'_> {
         F: Fn(&Rename) -> bool + Send + Sync + 'static,
     {
         let host = self.host();
-        crate::load::offered(
-            host.api(),
-            core::mem::offset_of!(HostApi, rename_filter),
-            "rename filters",
-        )?;
         crate::load::hand_over(
             filter,
             |user| (host.api().rename_filter)(host.handle(), run_filter::<F>, user),

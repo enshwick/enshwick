@@ -58,7 +58,10 @@ fn fault(reason: &str) {
 }
 
 impl Host {
-    /// Wraps the loader's table for the mod `me`.
+    /// Wraps the loader's table for the mod `me`; `None` for a table of
+    /// another major or one shorter than this build's. The loader refuses a
+    /// mod built for a newer minor before it starts, so a mod meets a table
+    /// at least as long as its own.
     ///
     /// # Safety
     ///
@@ -67,7 +70,9 @@ impl Host {
     pub(crate) unsafe fn new(api: *const HostApi, me: ModHandle) -> Option<Self> {
         // SAFETY: the caller guarantees `api` is valid for the process.
         let api = unsafe { api.as_ref() }?;
-        (api.header.abi_major == crate::abi::ABI_MAJOR).then_some(Self { api, me })
+        let current = api.header.abi_major == crate::abi::ABI_MAJOR
+            && api.header.covers(size_of::<HostApi>());
+        current.then_some(Self { api, me })
     }
 
     /// Makes this the answer of [`host`]; the first call wins.
@@ -131,8 +136,7 @@ impl Host {
 
     /// Whether this process runs a game server now: always on the dedicated
     /// server; on the client while it hosts a game, solo play included, from
-    /// the built-in server's first step until the game stops. Under a loader
-    /// older than ABI minor 8, whether this is the dedicated server.
+    /// the built-in server's first step until the game stops.
     ///
     /// # Examples
     ///
@@ -143,23 +147,13 @@ impl Host {
     /// ```
     #[must_use]
     pub fn hosting(&self) -> bool {
-        let end = core::mem::offset_of!(HostApi, hosting) + size_of::<usize>();
-        if self.api.header.covers(end) {
-            (self.api.hosting)() != 0
-        } else {
-            self.build().side == Side::SERVER
-        }
+        (self.api.hosting)() != 0
     }
 
     /// The entity world of the game server this process runs, 0 while none
-    /// runs, before its first step, or under a loader older than ABI minor 8.
+    /// runs or before its first step.
     pub(crate) fn server_world(&self) -> u64 {
-        let end = core::mem::offset_of!(HostApi, server_world) + size_of::<usize>();
-        if self.api.header.covers(end) {
-            (self.api.server_world)()
-        } else {
-            0
-        }
+        (self.api.server_world)()
     }
 
     /// Writes `message` to the log under this mod's id.
@@ -174,8 +168,7 @@ impl Host {
     }
 
     /// The most detailed level the loader keeps for this mod's lines, from
-    /// `mod-configs/enshwick.toml`; [`Level::DEBUG`] under a loader older
-    /// than ABI minor 1.
+    /// `mod-configs/enshwick.toml`.
     ///
     /// # Examples
     ///
@@ -188,12 +181,7 @@ impl Host {
     /// ```
     #[must_use]
     pub fn log_level(&self) -> Level {
-        let end = core::mem::offset_of!(HostApi, log_level) + size_of::<usize>();
-        if self.api.header.covers(end) {
-            (self.api.log_level)(self.me)
-        } else {
-            Level::DEBUG
-        }
+        (self.api.log_level)(self.me)
     }
 
     /// The text of this mod's settings file, written from `defaults` when
@@ -207,26 +195,17 @@ impl Host {
         Ok(text.to_owned())
     }
 
-    /// Hands the loader this mod's settings schema; nothing under a loader
-    /// older than ABI minor 35.
+    /// Hands the loader this mod's settings schema.
     pub(crate) fn config_schema(&self, schema: &str) {
-        let end = core::mem::offset_of!(HostApi, config_schema) + size_of::<usize>();
-        if self.api.header.covers(end) {
-            let status = (self.api.config_schema)(self.me, Str::new(schema));
-            if !status.is_ok() {
-                crate::warn!("the loader refused the settings schema ({})", status.0);
-            }
+        let status = (self.api.config_schema)(self.me, Str::new(schema));
+        if !status.is_ok() {
+            crate::warn!("the loader refused the settings schema ({})", status.0);
         }
     }
 
     /// Reports this mod's join values, `synced`, and returns the server's to
-    /// run with over them; `None` when there are none or under a loader older
-    /// than ABI minor 6.
+    /// run with over them; `None` when there are none.
     pub(crate) fn sync(&self, synced: &str) -> Option<String> {
-        let end = core::mem::offset_of!(HostApi, sync) + size_of::<usize>();
-        if !self.api.header.covers(end) {
-            return None;
-        }
         let mut text = Str::EMPTY;
         let status = (self.api.sync)(self.me, Str::new(synced), &raw mut text);
         if !status.is_ok() {
@@ -237,15 +216,9 @@ impl Host {
         (!text.is_empty()).then(|| text.to_owned())
     }
 
-    /// Subscribes `callback` to `event`; [`Status::MISSING`] under a loader
-    /// older than ABI minor 2.
+    /// Subscribes `callback` to `event`.
     pub(crate) fn subscribe(&self, event: Event, callback: EventFn, user: *mut c_void) -> Status {
-        let end = core::mem::offset_of!(HostApi, subscribe) + size_of::<usize>();
-        if self.api.header.covers(end) {
-            (self.api.subscribe)(self.me, event, callback, user)
-        } else {
-            Status::MISSING
-        }
+        (self.api.subscribe)(self.me, event, callback, user)
     }
 
     /// Reports that this mod failed at run time. The loader unlinks every hook

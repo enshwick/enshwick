@@ -26,7 +26,7 @@ impl BuffChecks {
     pub(crate) fn new(load: &mut Load<'_>, scheduler: Scheduler) -> Result<Self, Off> {
         let world = load.world()?;
         Ok(Self {
-            buffs: load.buffs()?,
+            buffs: load.buffs(),
             container: world.component_type(load, "keen::ecs::BuffContainer")?,
             world,
             scheduler,

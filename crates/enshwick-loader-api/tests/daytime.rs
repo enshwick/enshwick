@@ -23,7 +23,7 @@ mod tests {
         }
 
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
-            let _first = CLOCK.set((load.clock()?, load.clock_speed()?));
+            let _first = CLOCK.set((load.clock(), load.clock_speed()?));
             load.on::<NightStarted>(|()| enshwick_loader_api::info!("night"))?;
             Ok(Self)
         }

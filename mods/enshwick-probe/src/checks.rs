@@ -95,7 +95,7 @@ impl Checks {
             copies_refused: world
                 .writable_type(load, "keen::ecs::NetworkHealth")
                 .is_err(),
-            actions: load.actions()?,
+            actions: load.actions(),
             died: load.event_type("keen::ecs::EntityDiedEvent")?,
             ping_sent: AtomicBool::new(false),
             marks: load.entity_data("mark", Replication::Server)?,

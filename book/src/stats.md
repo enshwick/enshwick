@@ -5,7 +5,7 @@ damage factor, whether a character glows. Items, buffs and mods modify them;
 the server works the values out once per change, and any mod reads them for
 free. The
 [`stats`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/stats.rs)
-module holds the API. It needs ABI minor 45.
+module holds the API.
 
 ```rust
 use core::time::Duration;

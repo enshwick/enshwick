@@ -62,12 +62,12 @@ A mod and the loader are built separately, so they talk through a C ABI,
 
 - `ABI_MAJOR` changes only with an incompatible change. A loader refuses a mod
   built for another major.
-- `ABI_MINOR` grows when fields are appended. Structs that either side may
-  outgrow start with a `Header` (size, major, minor), so an older reader
-  ignores what it does not know.
+- `ABI_MINOR` grows when fields are appended. A loader refuses a mod built
+  for a newer minor, so a mod always meets a loader that has every call it
+  knows. Structs that either side may outgrow start with a `Header` (size,
+  major, minor), and the loader reads and writes a mod of an older minor
+  only as far as that mod knows each struct.
 - `HostApi` is the loader's table of functions, passed to the mod at init.
-  The safe layer checks `Header::covers` before it calls a field newer than
-  the loader, and falls back or reports `Off` where the loader is too old.
 
 A mod rarely touches the ABI. [`Load`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/load.rs)
 wraps the table during init, and

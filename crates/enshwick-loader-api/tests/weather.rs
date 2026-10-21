@@ -21,7 +21,7 @@ mod tests {
         }
 
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
-            let _first = WEATHER.set(load.weather()?);
+            let _first = WEATHER.set(load.weather());
             load.on::<ChunkLoaded>(|chunk| {
                 enshwick_loader_api::info!("chunk {},{} loaded", chunk.x, chunk.z);
             })?;

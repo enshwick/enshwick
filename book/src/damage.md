@@ -4,8 +4,7 @@
 runs a filter on damage about to reach an entity's health in the server's
 world, before the game applies it. The filter gets a
 [`Damage`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/damage.rs)
-to read and change; what it leaves is what the game applies. It needs ABI
-minor 30.
+to read and change; what it leaves is what the game applies.
 
 ```rust
 use enshwick_loader_api::damage::{DamageCause, DamageType};

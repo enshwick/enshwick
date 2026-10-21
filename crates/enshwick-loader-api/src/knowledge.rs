@@ -36,7 +36,7 @@
 //! use enshwick_loader_api::knowledge::Grant;
 //!
 //! fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
-//!     let knowledge = load.knowledge()?;
+//!     let knowledge = load.knowledge();
 //!     load.add_command("learn", "learns a recipe: /learn <recipe id>", move |ctx, args| {
 //!         let Some(me) = ctx.character() else {
 //!             return "the console has no character".into();
@@ -51,7 +51,7 @@
 
 use core::ffi::c_void;
 
-use crate::abi::{Header, HostApi, KnowledgeInfo, KnowledgeInput, Status};
+use crate::abi::{Header, KnowledgeInfo, KnowledgeInput, Status};
 use crate::ecs::Entity;
 use crate::world::WorldError;
 use crate::{Host, Load, Off};
@@ -213,8 +213,6 @@ impl Grant {
 #[derive(Clone, Copy, Debug)]
 pub struct Knowledge {
     host: Host,
-    /// Whether the loader takes revokes and account changes.
-    changes: bool,
 }
 
 impl Knowledge {
@@ -320,8 +318,7 @@ impl Knowledge {
     /// that does not fit the id's kind, a bit past 31, or a player not in
     /// the game or whose save has not loaded yet;
     /// [`WorldError::WrongThread`] off the game thread;
-    /// [`WorldError::Missing`] on a build without it or under a loader
-    /// older than ABI minor 59.
+    /// [`WorldError::Missing`] on a build without it.
     ///
     /// # Examples
     ///
@@ -333,9 +330,6 @@ impl Knowledge {
     /// }
     /// ```
     pub fn revoke(&self, player: Entity, id: u32, revoke: Revoke) -> Result<(), WorldError> {
-        if !self.changes {
-            return Err(WorldError::Missing);
-        }
         let (kind, value) = revoke.raw();
         WorldError::from_status((self.host.api().revoke_knowledge)(
             self.host.handle(),
@@ -378,8 +372,7 @@ impl Knowledge {
     /// the world's or a grant that does not fit the id's kind, and as for
     /// [`Knowledge::grant`] when the character is in the game;
     /// [`WorldError::WrongThread`] off the game thread;
-    /// [`WorldError::Missing`] while no world runs or under a loader older
-    /// than ABI minor 59.
+    /// [`WorldError::Missing`] while no world runs.
     ///
     /// # Examples
     ///
@@ -426,9 +419,6 @@ impl Knowledge {
         value: u32,
         revoke: bool,
     ) -> Result<(), WorldError> {
-        if !self.changes {
-            return Err(WorldError::Missing);
-        }
         WorldError::from_status((self.host.api().account_knowledge)(
             self.host.handle(),
             account,
@@ -609,8 +599,7 @@ impl Load<'_> {
     ///
     /// # Errors
     ///
-    /// [`Off`] after init, on a build without the input site, or under a
-    /// loader older than ABI minor 55.
+    /// [`Off`] after init or on a build without the input site.
     ///
     /// # Examples
     ///
@@ -630,11 +619,6 @@ impl Load<'_> {
         F: Fn(&KnowledgeRequest) -> bool + Send + Sync + 'static,
     {
         let host = self.host();
-        crate::load::offered(
-            host.api(),
-            core::mem::offset_of!(HostApi, knowledge_input_filter),
-            "knowledge input filters",
-        )?;
         crate::load::hand_over(
             filter,
             |user| (host.api().knowledge_input_filter)(host.handle(), run_input::<F>, user),
@@ -645,26 +629,11 @@ impl Load<'_> {
     /// The [`Knowledge`] of the server's world; on a client, the built-in
     /// server's while it hosts a game.
     ///
-    /// # Errors
-    ///
-    /// [`Off`] under a loader older than ABI minor 32.
-    ///
     /// # Examples
     ///
     /// See the [module](self).
-    pub fn knowledge(&mut self) -> Result<Knowledge, Off> {
-        let host = self.host();
-        crate::load::offered(
-            host.api(),
-            core::mem::offset_of!(HostApi, quests),
-            "knowledge",
-        )?;
-        let changes = crate::load::offered(
-            host.api(),
-            core::mem::offset_of!(HostApi, account_knowledge),
-            "knowledge changes",
-        )
-        .is_ok();
-        Ok(Knowledge { host, changes })
+    #[must_use]
+    pub fn knowledge(&mut self) -> Knowledge {
+        Knowledge { host: self.host() }
     }
 }

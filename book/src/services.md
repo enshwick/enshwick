@@ -212,4 +212,3 @@ lists every service and event with its publisher and subscribers.
 | `only v2 from <id> <version> is published`               | The user was built for another major                      |
 | `... fields this mod needs: <field> and later are newer` | The publisher is older than the user's declaration        |
 | `field <n> is <name> here and <name> at the publisher`   | A field differs: the two mods compiled other declarations |
-| `services and mod events: needs a newer loader`          | The loader is older than ABI minor 47                     |

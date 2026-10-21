@@ -5,7 +5,7 @@ use core::marker::PhantomData;
 use std::sync::Mutex;
 
 use super::{Label, client_only};
-use crate::abi::{HostApi, Str, UiFrame, UiWidget};
+use crate::abi::{Str, UiFrame, UiWidget};
 use crate::{Host, Load, Off};
 
 /// Where on the HUD a line or bar shows; items at one anchor stack in the
@@ -155,8 +155,7 @@ impl Load<'_> {
     ///
     /// # Errors
     ///
-    /// [`Off`] on a server, after `init`, or under a loader older than ABI
-    /// minor 36.
+    /// [`Off`] on a server or after `init`.
     ///
     /// # Examples
     ///
@@ -167,11 +166,6 @@ impl Load<'_> {
     {
         let host = self.host();
         client_only(host, "HUD callbacks")?;
-        crate::load::offered(
-            host.api(),
-            core::mem::offset_of!(HostApi, ui_markers),
-            "HUD callbacks",
-        )?;
         crate::load::hand_over(
             Drawer {
                 draw: Mutex::new(draw),

@@ -383,11 +383,7 @@ fn build(layout: &ImageLayout, base: &[u8], pixels: Pixels) -> Vec<u8> {
 
 /// Whether this client shows served icons now.
 pub(crate) fn ready() -> bool {
-    crate::host().is_some_and(|host| {
-        let offset = core::mem::offset_of!(HostApi, icons_ready);
-        host.api().header.covers(offset + size_of::<usize>())
-            && (host.api().icons_ready)(host.handle()).is_ok()
-    })
+    crate::host().is_some_and(|host| (host.api().icons_ready)(host.handle()).is_ok())
 }
 
 impl Load<'_> {
@@ -397,7 +393,7 @@ impl Load<'_> {
     ///
     /// # Errors
     ///
-    /// [`Off`] when the loader is too old for icons or refuses the icon's id
+    /// [`Off`] when the loader refuses the icon's id
     /// (see [`Load::declare`]).
     ///
     /// # Examples
@@ -415,11 +411,6 @@ impl Load<'_> {
     /// }
     /// ```
     pub fn add_icon(&mut self, icon: Icon) -> Result<(), Off> {
-        crate::load::offered(
-            self.host().api(),
-            core::mem::offset_of!(HostApi, icons_ready),
-            "icons",
-        )?;
         self.declare(icon.id)?;
         // A build without the layout, such as the dedicated server, shows
         // no icons: the item keeps its vanilla one.

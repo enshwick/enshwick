@@ -157,7 +157,7 @@ fn commands(
     run_all: Arc<dyn Fn() + Send + Sync>,
     affix_checks: Option<Arc<affixes::AffixChecks>>,
 ) -> Result<(), Off> {
-    let knowledge = load.knowledge()?;
+    let knowledge = load.knowledge();
     let raw_stats = raw_stats::RawStats::new(load)
         .inspect_err(|off| enshwick_loader_api::warn!("FAIL raw stats: {off}"))
         .ok();

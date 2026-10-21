@@ -47,7 +47,7 @@ mod tests {
                 "no modifiers"
             );
             let _first = KIT.set(Kit {
-                affixes: load.affixes()?,
+                affixes: load.affixes(),
                 stats: load.stats()?,
                 luck,
             });

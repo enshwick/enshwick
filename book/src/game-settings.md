@@ -6,7 +6,7 @@ returns the server's
 the difficulty and gameplay values of its configuration (`gameSettings` in
 `enshrouded_server.json`) or of the host's world menu, read typed and changed
 while the world runs. It is `Copy`; get it during `init` and move it into
-handlers, tasks and commands. It needs ABI minor 29.
+handlers, tasks and commands.
 
 ```rust
 fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {

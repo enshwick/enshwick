@@ -468,18 +468,13 @@ impl Load<'_> {
     ///
     /// # Errors
     ///
-    /// [`Off`] for a malformed declaration, a second call, a migration that
-    /// fails on the settings file, or a loader older than the API.
+    /// [`Off`] for a malformed declaration, a second call, or a migration
+    /// that fails on the settings file.
     ///
     /// # Examples
     ///
     /// See [`Migrations`].
     pub fn migrate(&mut self, migrations: Migrations) -> Result<(), Off> {
-        crate::load::offered(
-            self.host().api(),
-            core::mem::offset_of!(abi::HostApi, migrate),
-            "migrations",
-        )?;
         migrations
             .check()
             .map_err(|reason| Off::new(format!("migrations: {reason}")))?;

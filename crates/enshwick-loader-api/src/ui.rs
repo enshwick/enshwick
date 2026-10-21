@@ -47,7 +47,7 @@ use core::marker::PhantomData;
 use core::ops::RangeInclusive;
 use std::sync::Mutex;
 
-use crate::abi::{Header, HostApi, Status, Str, UiDialog, UiFrame, UiWidget};
+use crate::abi::{Header, Status, Str, UiDialog, UiFrame, UiWidget};
 use crate::{Host, Load, Off};
 
 mod hud;
@@ -93,8 +93,7 @@ pub struct Ui {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
 #[non_exhaustive]
 pub enum UiError {
-    /// This process draws no interface, as on a server, or the loader is
-    /// too old for the call. A client whose interface the loader could not
+    /// This process draws no interface, as on a server. A client whose interface the loader could not
     /// link still shows dialogs, as system message boxes.
     #[error("no interface to show it in")]
     Unavailable,
@@ -299,11 +298,6 @@ where
 }
 
 impl Ui {
-    fn offers(api: &HostApi) -> bool {
-        api.header
-            .covers(core::mem::offset_of!(HostApi, ui_dialog) + size_of::<usize>())
-    }
-
     /// Queues `dialog` and runs `on_answer` with the player's answer, or
     /// `None` when it closed without one, as when the game quits. Dialogs
     /// show one at a time, in order. Any thread; `on_answer` runs on the
@@ -356,9 +350,6 @@ impl Ui {
         F: FnOnce(Option<Response>) + Send + 'static,
     {
         let api = self.host.api();
-        if !Self::offers(api) {
-            return Err(UiError::Unavailable);
-        }
         let raw = dialog.to_raw(flags);
         let user = Box::into_raw(Box::new(Answer { on_answer }));
         let status = (api.ui_dialog)(
@@ -1037,7 +1028,7 @@ impl Load<'_> {
     ///
     /// # Errors
     ///
-    /// [`Off`] on a server or under a loader older than ABI minor 39.
+    /// [`Off`] on a server.
     ///
     /// # Examples
     ///
@@ -1045,11 +1036,6 @@ impl Load<'_> {
     pub fn ui(&mut self) -> Result<Ui, Off> {
         let host = self.host();
         client_only(host, "the interface")?;
-        crate::load::offered(
-            host.api(),
-            core::mem::offset_of!(HostApi, ui_dialog),
-            "the interface",
-        )?;
         Ok(Ui { host })
     }
 
@@ -1059,8 +1045,7 @@ impl Load<'_> {
     ///
     /// # Errors
     ///
-    /// [`Off`] on a server, after `init`, or under a loader older than ABI
-    /// minor 39. When the loader could not link the interface on this game
+    /// [`Off`] on a server or after `init`. When the loader could not link the interface on this game
     /// build, `draw` never runs.
     ///
     /// # Examples
@@ -1072,11 +1057,6 @@ impl Load<'_> {
     {
         let host = self.host();
         client_only(host, "frame callbacks")?;
-        crate::load::offered(
-            host.api(),
-            core::mem::offset_of!(HostApi, ui_dialog),
-            "frame callbacks",
-        )?;
         crate::load::hand_over(
             Drawer {
                 draw: Mutex::new(draw),

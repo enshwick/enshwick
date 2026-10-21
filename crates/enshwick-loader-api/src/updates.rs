@@ -21,7 +21,7 @@
 
 use core::ffi::c_void;
 
-use crate::abi::{HostApi, Str};
+use crate::abi::Str;
 use crate::{Load, Off};
 
 /// An update of an installed mod.
@@ -132,8 +132,7 @@ pub fn from_toml(text: &str) -> Result<Vec<Update>, Off> {
 ///
 /// # Errors
 ///
-/// [`Off`] on a server, outside a mod, or under a loader older than ABI
-/// minor 58.
+/// [`Off`] on a server or outside a mod.
 ///
 /// # Examples
 ///
@@ -141,7 +140,6 @@ pub fn from_toml(text: &str) -> Result<Vec<Update>, Off> {
 pub fn publish(updates: &[Update]) -> Result<(), Off> {
     let host = crate::host().ok_or_else(|| Off::new("updates: outside a mod"))?;
     let api = host.api();
-    crate::load::offered(api, core::mem::offset_of!(HostApi, updates_set), "updates")?;
     let text = to_toml(updates);
     let status = (api.updates_set)(host.handle(), Str::new(&text));
     crate::load::ok(status, (), || "updates".to_owned())
@@ -168,8 +166,7 @@ impl Load<'_> {
     ///
     /// # Errors
     ///
-    /// [`Off`] on a server, after `init`, for a second callback, or under a
-    /// loader older than ABI minor 58.
+    /// [`Off`] on a server, after `init`, or for a second callback.
     ///
     /// # Examples
     ///
@@ -182,11 +179,6 @@ impl Load<'_> {
         if host.build().side == crate::abi::Side::SERVER {
             return Err(Off::new("updates: on clients only"));
         }
-        crate::load::offered(
-            host.api(),
-            core::mem::offset_of!(HostApi, update_pick),
-            "updates",
-        )?;
         let picker: Picker = Box::new(pick);
         crate::load::hand_over(
             picker,

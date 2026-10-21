@@ -1,7 +1,7 @@
 //! Markers on the client's map.
 
 use super::{Ui, UiError};
-use crate::abi::{Header, HostApi, Status, Str, UiMarker};
+use crate::abi::{Header, Status, Str, UiMarker};
 
 /// The most markers a mod shows at once.
 pub const MAX_MARKERS: usize = 256;
@@ -114,20 +114,13 @@ impl Ui {
     ///
     /// # Errors
     ///
-    /// [`UiError::Refused`] past [`MAX_MARKERS`], [`UiError::Unavailable`]
-    /// under a loader older than ABI minor 40.
+    /// [`UiError::Refused`] past [`MAX_MARKERS`].
     ///
     /// # Examples
     ///
     /// See [`Marker`].
     pub fn set_markers(&self, markers: &[Marker<'_>]) -> Result<(), UiError> {
         let api = self.host.api();
-        if !api
-            .header
-            .covers(core::mem::offset_of!(HostApi, ui_markers) + size_of::<usize>())
-        {
-            return Err(UiError::Unavailable);
-        }
         if markers.len() > MAX_MARKERS {
             return Err(UiError::Refused);
         }

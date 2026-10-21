@@ -20,7 +20,7 @@
 //! use enshwick_loader_api::actions::Teleport;
 //!
 //! fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
-//!     let actions = load.actions()?;
+//!     let actions = load.actions();
 //!     load.add_command("home", "takes you to the world's centre", move |ctx, _args| {
 //!         let Some(me) = ctx.character() else {
 //!             return "the console has no character".into();
@@ -33,7 +33,7 @@
 //! }
 //! ```
 
-use crate::abi::{Header, HostApi, SpawnRequest, TeleportRequest};
+use crate::abi::{Header, SpawnRequest, TeleportRequest};
 use crate::ecs::Entity;
 use crate::game_events::{EventType, Field, Scalar};
 use crate::world::WorldError;
@@ -253,13 +253,8 @@ pub struct Actions {
 }
 
 impl Actions {
-    pub(crate) fn resolve(load: &Load<'_>) -> Result<Self, Off> {
+    pub(crate) fn resolve(load: &Load<'_>) -> Self {
         let host = load.host();
-        crate::load::offered(
-            host.api(),
-            core::mem::offset_of!(HostApi, teleport),
-            "actions",
-        )?;
         let transform = |base: u64| -> Result<TransformAt, Off> {
             Ok(TransformAt {
                 position: base + load.field_offset("keen::WorldTransform", "position")?,
@@ -302,13 +297,13 @@ impl Actions {
                 position: load.field_offset(ty.name(), "position")?,
             })
         })();
-        Ok(Self {
+        Self {
             host,
             npc: keep("survivor orders", npc),
             toggle: keep("toggles", toggle),
             threat: keep("threat", threat),
             ping: keep("pings", ping),
-        })
+        }
     }
 
     /// Orders survivor `npc`, by its survivor id, as the game does when a
@@ -432,14 +427,13 @@ impl Actions {
     ///
     /// [`WorldError::Refused`] for a type the loader does not allow, a size
     /// that is not the type's, or a full step; [`WorldError::WrongThread`]
-    /// off the game thread; [`WorldError::Missing`] under a loader older
-    /// than ABI minor 23.
+    /// off the game thread.
     ///
     /// # Examples
     ///
     /// ```
     /// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
-    ///     let actions = load.actions()?;
+    ///     let actions = load.actions();
     ///     let ping = load.event_type("keen::ecs::UiPingEvent")?;
     ///     load.add_command("ping-origin", "pings the world origin", move |_ctx, _args| {
     ///         let bytes = vec![0u8; ping.size() as usize];
@@ -506,8 +500,7 @@ impl Actions {
     /// # Errors
     ///
     /// [`WorldError::Refused`] for a zero template or a request the world
-    /// turns away, [`WorldError::WrongThread`] off the game thread and
-    /// [`WorldError::Missing`] under a loader older than ABI minor 24.
+    /// turns away and [`WorldError::WrongThread`] off the game thread.
     ///
     /// # Examples
     ///
@@ -515,7 +508,7 @@ impl Actions {
     /// use enshwick_loader_api::actions::Spawn;
     ///
     /// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
-    ///     let actions = load.actions()?;
+    ///     let actions = load.actions();
     ///     let world = load.world()?;
     ///     load.add_command("clone", "spawns a copy of an entity beside you: /clone <entity>", move |ctx, args| {
     ///         let Some(me) = ctx.character() else {
@@ -536,12 +529,6 @@ impl Actions {
         how: Spawn,
     ) -> Result<Entity, WorldError> {
         let api = self.host.api();
-        if !api
-            .header
-            .covers(core::mem::offset_of!(HostApi, spawn) + size_of::<usize>())
-        {
-            return Err(WorldError::Missing);
-        }
         let lifetime = how.despawn_after.map_or(0, |time| {
             u64::try_from(time.as_nanos()).unwrap_or(u64::MAX).max(1)
         });
@@ -619,14 +606,11 @@ impl Load<'_> {
     /// game. An action whose event this build lacks answers
     /// [`WorldError::Missing`].
     ///
-    /// # Errors
-    ///
-    /// [`Off`] under a loader older than ABI minor 23.
-    ///
     /// # Examples
     ///
     /// See the [module](self).
-    pub fn actions(&mut self) -> Result<Actions, Off> {
+    #[must_use]
+    pub fn actions(&mut self) -> Actions {
         Actions::resolve(self)
     }
 }

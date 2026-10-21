@@ -15,15 +15,13 @@
 
 use std::collections::{BTreeMap, HashMap};
 
-use crate::abi::HostApi;
 use crate::content::Id;
 use crate::{Host, Load, Off};
 
 /// The language the player reads the game in, for a mod's own texts in its
 /// dialogs and windows; the fallback on a server.
 ///
-/// The fallback, too, before the client's first text and under a loader
-/// older than ABI minor 56.
+/// The fallback, too, before the client's first text.
 ///
 /// # Examples
 ///
@@ -52,10 +50,6 @@ impl Host {
     /// ```
     #[must_use]
     pub fn language(&self) -> Language {
-        let end = core::mem::offset_of!(HostApi, language) + size_of::<usize>();
-        if !self.api().header.covers(end) {
-            return Language::FALLBACK;
-        }
         let language = Language((self.api().language)(self.handle()));
         if language.code().is_empty() {
             Language::FALLBACK
@@ -72,8 +66,7 @@ impl Host {
 /// `id` is a text tag's game id, [`Guid::id`](crate::content::Guid::id) of
 /// the tag an item's or a template's data names. The text is read from the
 /// game's archive and stays valid for the process. `None` for a tag the
-/// game lacks, always on a server, whose archive holds no texts, and under
-/// a loader older than ABI minor 61.
+/// game lacks, and always on a server, whose archive holds no texts.
 ///
 /// # Examples
 ///
@@ -120,10 +113,6 @@ impl Host {
     #[must_use]
     pub fn game_text(&self, id: u32, language: Language) -> Option<&'static str> {
         let api = self.api();
-        let end = core::mem::offset_of!(HostApi, game_text) + size_of::<usize>();
-        if !api.header.covers(end) {
-            return None;
-        }
         let mut out = crate::abi::Str::EMPTY;
         if !(api.game_text)(self.handle(), id, language.0, &raw mut out).is_ok() {
             return None;
@@ -439,25 +428,21 @@ impl Load<'_> {
             }
         }
         let api = self.host().api();
-        if api
-            .header
-            .covers(core::mem::offset_of!(HostApi, texts) + size_of::<usize>())
-        {
-            // The loader keeps the last texts it was given, so it gets all
-            // of this mod's, a pack's added to the mod's own.
-            let me = self.host().handle();
-            let mut handed = HANDED
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
-            let all = if let Some((_, kept)) = handed.iter_mut().find(|(owner, _)| *owner == me) {
-                kept.merge(texts.clone());
-                kept.to_toml()
-            } else {
-                handed.push((me, texts.clone()));
-                texts.to_toml()
-            };
-            let _kept = (api.texts)(me, crate::abi::Str::new(&all));
-        }
+        // The loader keeps the last texts it was given, so it gets all
+        // of this mod's, a pack's added to the mod's own.
+        let me = self.host().handle();
+        let mut handed = HANDED
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let all = if let Some((_, kept)) = handed.iter_mut().find(|(owner, _)| *owner == me) {
+            kept.merge(texts.clone());
+            kept.to_toml()
+        } else {
+            handed.push((me, texts.clone()));
+            texts.to_toml()
+        };
+        let _kept = (api.texts)(me, crate::abi::Str::new(&all));
+
         Ok(texts)
     }
 
@@ -467,8 +452,8 @@ impl Load<'_> {
     ///
     /// # Errors
     ///
-    /// [`Off`] when the loader is too old, refuses a tag's id (see
-    /// [`Load::declare`]) or a key has no text at all.
+    /// [`Off`] when the loader refuses a tag's id (see [`Load::declare`]) or
+    /// a key has no text at all.
     ///
     /// # Examples
     ///

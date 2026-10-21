@@ -136,10 +136,10 @@ The mod's log has `off: <reason>` at `warn`, then the loader's
 | `settings: <parse error>`                              | `mod-configs/<id>.toml` does not parse into the settings type          |
 | `hook REWARD: refused by the loader`                   | Another mod holds the function exclusively, or the mod hooked it twice |
 | `service <name> v<major>: <reason>`                    | No running mod publishes it, or its table lacks or changed a field     |
-| `...: needs a newer loader`                            | The loader is older than the ABI minor the feature needs               |
 
-See [ABI reference](abi-reference.md#under-an-older-loader) for the features
-each minor added. A settings file that stops parsing while the game runs does
+A mod built for a newer ABI minor than the loader's never starts: the log
+shows `built for ABI 1.<n>, newer than the loader's 1.<m>: update Enshwick`.
+A settings file that stops parsing while the game runs does
 not turn the mod off: the mod logs
 `settings change skipped, the running values stay: ...` and keeps its values.
 

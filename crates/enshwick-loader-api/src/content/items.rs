@@ -644,7 +644,7 @@ impl Load<'_> {
     ///
     /// # Errors
     ///
-    /// [`Off`] when the loader is too old, the item layout is not reflected,
+    /// [`Off`] when the item layout is not reflected,
     /// the meter's maximum is 0, or the loader refuses one of its content ids
     /// (see [`Load::declare`]).
     ///

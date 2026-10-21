@@ -97,9 +97,6 @@ Subscribe during `init`. The loader links the engine's move only when a mod
 subscribed to a game event, so unused events cost nothing; with
 subscribers, the move costs one hash lookup per event. On a client the events
 come from the built-in server while it hosts a game, as server events do.
-Game events need ABI minor 20; under an older loader `on_game` and
-`on_raw_game_event` turn the mod off with
-`game events: needs a newer loader`.
 
 ## Testing
 

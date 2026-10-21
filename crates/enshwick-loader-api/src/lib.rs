@@ -444,7 +444,6 @@ pub mod __private {
         };
         let host = host.install();
         MAX_LEVEL.store(host.log_level().0, Ordering::Relaxed);
-        // An older loader has no events; the level then stays as read.
         let _watched = host.subscribe(
             crate::abi::Event::LOADER_SETTINGS_CHANGED,
             refresh_level,

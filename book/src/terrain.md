@@ -5,14 +5,13 @@ returns the
 [`Terrain`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/terrain.rs)
 of the server's world: the terrain materials, and adding, digging and
 flattening ground as the game's terraforming does. It is `Copy`; get it
-during `init` and move it into handlers, tasks and commands. It needs ABI
-minor 34.
+during `init` and move it into handlers, tasks and commands.
 
 ```rust
 use enshwick_loader_api::terrain::Shape;
 
 fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
-    let terrain = load.terrain()?;
+    let terrain = load.terrain();
     let world = load.world()?;
     load.add_command("level", "flattens the ground around you", move |ctx, _args| {
         let Some(me) = ctx.character() else {

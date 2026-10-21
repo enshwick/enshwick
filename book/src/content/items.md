@@ -216,8 +216,7 @@ item: see [Content ids](../content.md#content-ids).
 
 ## Errors
 
-`add_item` returns `Err(Off)` when the loader is too old for served
-resources, when the game's reflection lacks a field the clone writes, when
+`add_item` returns `Err(Off)` when the game's reflection lacks a field the clone writes, when
 another mod serves the same item GUID from another vanilla item, when the
 meter's maximum is 0, or when the loader refuses one of its content ids. An
 item whose game id a vanilla item has turns the mod off when the game first

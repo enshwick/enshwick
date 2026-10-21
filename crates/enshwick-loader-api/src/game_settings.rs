@@ -33,7 +33,6 @@
 
 use core::time::Duration;
 
-use crate::abi::HostApi;
 use crate::world::WorldError;
 use crate::{Host, Load, Off};
 
@@ -426,7 +425,6 @@ pub struct GameSettings {
     host: Host,
     offsets: Offsets,
     size: usize,
-    keeps: bool,
 }
 
 impl GameSettings {
@@ -477,8 +475,7 @@ impl GameSettings {
     ///
     /// # Errors
     ///
-    /// As for [`change`](Self::change); [`WorldError::Missing`] also under
-    /// a loader older than ABI minor 57.
+    /// As for [`change`](Self::change).
     ///
     /// # Examples
     ///
@@ -495,9 +492,6 @@ impl GameSettings {
     /// }
     /// ```
     pub fn keep(&self, change: impl FnOnce(&mut Settings)) -> Result<Settings, WorldError> {
-        if !self.keeps {
-            return Err(WorldError::Missing);
-        }
         let (before, _preset) = self.raw()?;
         let (bytes, settings) = self.changed(change)?;
         let mask: Vec<u8> = before
@@ -521,8 +515,7 @@ impl GameSettings {
     /// # Errors
     ///
     /// [`WorldError::WrongThread`] off the game thread,
-    /// [`WorldError::Missing`] while no world runs or under a loader older
-    /// than ABI minor 57.
+    /// [`WorldError::Missing`] while no world runs.
     ///
     /// # Examples
     ///
@@ -532,9 +525,6 @@ impl GameSettings {
     /// }
     /// ```
     pub fn forget_kept(&self) -> Result<(), WorldError> {
-        if !self.keeps {
-            return Err(WorldError::Missing);
-        }
         WorldError::from_status((self.host.api().forget_game_settings)(self.host.handle()))
     }
 
@@ -577,32 +567,19 @@ impl Load<'_> {
     ///
     /// # Errors
     ///
-    /// [`Off`] under a loader older than ABI minor 29, or on a build whose
-    /// settings lack a field this API knows.
+    /// [`Off`] on a build whose settings lack a field this API knows.
     ///
     /// # Examples
     ///
     /// See the [module](self).
     pub fn game_settings(&mut self) -> Result<GameSettings, Off> {
         let host = self.host();
-        crate::load::offered(
-            host.api(),
-            core::mem::offset_of!(HostApi, set_game_settings),
-            "game settings",
-        )?;
         let size =
             usize::try_from(self.type_size(TYPE)?).map_err(|_| Off::new("game settings: size"))?;
-        let keeps = crate::load::offered(
-            host.api(),
-            core::mem::offset_of!(HostApi, forget_game_settings),
-            "kept game settings",
-        )
-        .is_ok();
         Ok(GameSettings {
             host,
             offsets: Offsets::resolve(self, size)?,
             size,
-            keeps,
         })
     }
 }
