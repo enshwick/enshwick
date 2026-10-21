@@ -9,7 +9,7 @@
 pub mod advertise;
 #[cfg(windows)]
 mod altars;
-mod archive;
+pub mod archive;
 #[cfg(windows)]
 mod bases;
 #[cfg(windows)]

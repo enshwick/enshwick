@@ -42,6 +42,7 @@ use toml::Spanned;
 use crate::content::icons::{Icon, Pixels, Tint};
 use crate::content::items::{Meter, NewItem, Stat, StatFormat};
 use crate::content::recipes::NewRecipe;
+use crate::content::vanilla::Vanilla;
 use crate::content::workshops::{NewWorkshop, Station, StationRecipe, WorkshopId, stations};
 use crate::content::{Guid, Id};
 use crate::i18n::Texts;
@@ -748,6 +749,8 @@ struct Reader<'a> {
     errors: Vec<PackError>,
     /// Names the pack defines, with what each is.
     defined: BTreeMap<String, &'static str>,
+    /// The game's content, for vanilla names.
+    vanilla: Option<&'a Vanilla>,
 }
 
 impl Reader<'_> {
@@ -831,16 +834,57 @@ impl Reader<'_> {
             return guid.map(|g| (g, Ref::Elsewhere));
         }
         let full = self.own(reference);
-        if self.defined.get(&full) != Some(&what) {
-            self.error(
-                file,
-                text,
-                at,
-                format!("no {what} {reference:?} in this pack; name another mod's as <mod>:<name> or a vanilla one by its GUID"),
-            );
-            return None;
+        if self.defined.get(&full) == Some(&what) {
+            return Guid::try_named(&format!("{full}{suffix}")).map(|g| (g, Ref::Own));
         }
-        Guid::try_named(&format!("{full}{suffix}")).map(|g| (g, Ref::Own))
+        let found = match self.vanilla {
+            None => Err(format!(
+                "no {what} {reference:?} in this pack; name another mod's as <mod>:<name>, or a vanilla one by its GUID or, where the game's data is at hand, its debug name"
+            )),
+            Some(vanilla) => vanilla
+                .item(reference)
+                .and_then(|item| match what {
+                    "workshop" => vanilla.workshop(item).map(WorkshopId::guid),
+                    _ => Ok(item),
+                })
+                .map_err(|why| format!("no {what} {reference:?} in this pack, and {why}")),
+        };
+        match found {
+            Ok(guid) => Some((guid, Ref::Elsewhere)),
+            Err(why) => {
+                self.error(file, text, at, why);
+                None
+            }
+        }
+    }
+
+    /// The vanilla station `like` names: `workbench`, a station item's debug
+    /// name or its GUID.
+    fn station(
+        &mut self,
+        file: &str,
+        text: &str,
+        at: usize,
+        id: &str,
+        like: &str,
+    ) -> Option<Station> {
+        if like == "workbench" {
+            return Some(stations::WORKBENCH);
+        }
+        let found = match (self.vanilla, Guid::try_parse(like)) {
+            (_, Some(item)) if item == stations::WORKBENCH.item => Ok(stations::WORKBENCH),
+            (None, _) => Err(format!(
+                "like {like:?}: a station other than the workbench needs the game's data at hand"
+            )),
+            (Some(vanilla), Some(item)) => vanilla.station(item).map_err(|why| why.to_string()),
+            (Some(vanilla), None) => vanilla
+                .item(like)
+                .and_then(|item| vanilla.station(item))
+                .map_err(|why| why.to_string()),
+        };
+        found
+            .map_err(|why| self.error(file, text, at, format!("workshop {id}: {why}")))
+            .ok()
     }
 
     /// A text key the pack's texts must hold.
@@ -903,24 +947,53 @@ fn source_of(from: &FromEntry) -> Result<Source, String> {
 
 impl Pack {
     /// Reads and checks the pack `files` in the namespace `namespace`, the
-    /// id of the mod or pack that adds it.
+    /// id of the mod or pack that adds it, with the running game's vanilla
+    /// names ([`Vanilla::game`]) when there is a game.
     ///
     /// # Errors
     ///
     /// Every problem found, each with its file, line and column: a file
     /// that is no TOML of its form, an unknown field, a name defined twice,
-    /// a reference to a name the pack lacks, a text key without text, an
-    /// icon the pack lacks, a chance outside 0 to 1.
+    /// a reference to a name neither the pack nor the game has, or that
+    /// several vanilla items carry, a station that cannot be cloned, a text
+    /// key without text, an icon the pack lacks, a chance outside 0 to 1.
     ///
     /// # Examples
     ///
     /// See the [module](self).
     pub fn parse(namespace: &str, files: &PackFiles) -> Result<Self, PackErrors> {
+        Self::parse_with(namespace, files, Vanilla::game())
+    }
+
+    /// Reads and checks a pack as [`Pack::parse`] does, with the vanilla
+    /// names of `vanilla`; without it, a pack names vanilla content by GUID
+    /// only and clones only the workbench.
+    ///
+    /// # Errors
+    ///
+    /// As [`Pack::parse`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_loader_api::packs::{Pack, PackFiles};
+    ///
+    /// let files = PackFiles::new().with("items.toml", "[[item]]\nid = \"torch\"\nlike = \"Torch\"\n");
+    /// let errors = Pack::parse_with("lights", &files, None).err().ok_or("parsed")?;
+    /// assert!(errors.to_string().contains("items.toml:1"));
+    /// # Ok::<(), &str>(())
+    /// ```
+    pub fn parse_with(
+        namespace: &str,
+        files: &PackFiles,
+        vanilla: Option<&Vanilla>,
+    ) -> Result<Self, PackErrors> {
         let mut reader = Reader {
             namespace,
             files,
             errors: Vec::new(),
             defined: BTreeMap::new(),
+            vanilla,
         };
         let texts_text = match files.text(TEXTS_FILE) {
             Ok(text) => text.unwrap_or("").to_owned(),
@@ -1195,21 +1268,7 @@ fn workshops(
     for entry in &workshops_file.workshop {
         let at = entry.span().start;
         let e = entry.get_ref();
-        let like = match e.like.as_str() {
-            "workbench" => Some(stations::WORKBENCH),
-            other => {
-                reader.error(
-                    file,
-                    text,
-                    at,
-                    format!(
-                        "workshop {}: like {other:?} is no station Enshwick knows: workbench",
-                        e.id
-                    ),
-                );
-                None
-            }
-        };
+        let like = reader.station(file, text, at, &e.id, &e.like);
         let name = e
             .name
             .as_deref()
@@ -1547,6 +1606,51 @@ mod tests {
                 .iter()
                 .any(|l| l.contains("text key \"missing\" has no text")),
             "{lines:?}"
+        );
+    }
+
+    #[test]
+    fn vanilla_content_is_named_by_its_debug_name() {
+        let torch = Guid([1; 16]);
+        let vanilla = crate::content::vanilla::tests::game(&[
+            (torch, "Torch"),
+            (Guid([5; 16]), "Forge"),
+            (Guid([7; 16]), "Prop"),
+        ]);
+        let items = "[[item]]\nid = \"lantern\"\nlike = \"Torch\"\nname = \"lantern.name\"\n";
+        let workshops = "[[workshop]]\nid = \"forge\"\nlike = \"Forge\"\n\n\
+                         [[workshop]]\nid = \"bench\"\nlike = \"workbench\"\n";
+        let recipes = "[[recipe]]\nid = \"lantern.recipe\"\nlike = \"Torch\"\n\
+                       output = \"lantern\"\nworkshop = \"Forge\"\n";
+        let named = files(items)
+            .with(WORKSHOPS_FILE, workshops)
+            .with(RECIPES_FILE, recipes);
+        let pack = Pack::parse_with("lights", &named, Some(&vanilla)).unwrap();
+        assert_eq!(pack.items[0].like, torch);
+        assert_eq!(pack.workshops[0].like.template, Guid([8; 16]));
+        assert_eq!(pack.workshops[1].like, stations::WORKBENCH);
+        assert_eq!(pack.recipes[0].workshop, Some(Guid([10; 16])));
+
+        let wrong = files("[[item]]\nid = \"lantern\"\nlike = \"Torchh\"\n").with(
+            WORKSHOPS_FILE,
+            "[[workshop]]\nid = \"forge\"\nlike = \"Prop\"\n",
+        );
+        let errors = Pack::parse_with("lights", &wrong, Some(&vanilla)).unwrap_err();
+        let lines: Vec<String> = errors.list().iter().map(ToString::to_string).collect();
+        let unknown = "items.toml:1:1: no item \"Torchh\" in this pack, \
+                       and no vanilla item \"Torchh\"; near: Torch";
+        assert!(lines.iter().any(|l| l == unknown), "{lines:?}");
+        assert!(
+            lines
+                .iter()
+                .any(|l| l.starts_with("workshops.toml:1:1: workshop forge:")
+                    && l.contains("no crafting station")),
+            "{lines:?}"
+        );
+        let errors = Pack::parse_with("lights", &wrong, None).unwrap_err();
+        assert!(
+            errors.to_string().contains("needs the game's data"),
+            "{errors}"
         );
     }
 
