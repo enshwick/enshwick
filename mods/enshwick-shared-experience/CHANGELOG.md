@@ -1,5 +1,7 @@
 # Changelog
 
+## [0.4.7](https://github.com/themaiby/enshwick/compare/enshwick-shared-experience-v0.4.6...enshwick-shared-experience-v0.4.7) (2026-10-21)
+
 ## [0.4.6](https://github.com/themaiby/enshwick/compare/enshwick-shared-experience-v0.4.5...enshwick-shared-experience-v0.4.6) (2026-10-21)
 
 ## [0.4.5](https://github.com/themaiby/enshwick/compare/enshwick-shared-experience-v0.4.4...enshwick-shared-experience-v0.4.5) (2026-10-21)

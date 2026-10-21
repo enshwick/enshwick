@@ -1,6 +1,6 @@
 [package]
 name = "enshwick-flame-altar-count"
-version = "0.4.6"
+version = "0.4.7"
 description = "How many Flame Altars each Flame level allows, from a table in the settings"
 keywords = ["enshrouded", "mod", "altar"]
 categories = ["game-development"]

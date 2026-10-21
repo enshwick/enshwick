@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.1](https://github.com/themaiby/enshwick/compare/enshwick-updater-v0.5.0...enshwick-updater-v0.5.1) (2026-10-21)
+
+
+### Bug Fixes
+
+* **updater:** delete a renamed mod's old DLL after a fresh install ([#206](https://github.com/themaiby/enshwick/issues/206)) ([58d2134](https://github.com/themaiby/enshwick/commit/58d2134d700786f92cae1fd917998eac9376b1df))
+
 ## [0.5.0](https://github.com/themaiby/enshwick/compare/enshwick-updater-v0.4.5...enshwick-updater-v0.5.0) (2026-10-21)
 
 

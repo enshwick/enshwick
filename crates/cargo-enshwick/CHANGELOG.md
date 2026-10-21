@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.9.1](https://github.com/themaiby/enshwick/compare/cargo-enshwick-v0.9.0...cargo-enshwick-v0.9.1) (2026-10-21)
+
+
+### Other
+
+* **cargo-enshwick:** Synchronize enshwick versions
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * enshwick-loader bumped from 0.9.0 to 0.9.1
+
 ## [0.9.0](https://github.com/themaiby/enshwick/compare/cargo-enshwick-v0.8.2...cargo-enshwick-v0.9.0) (2026-10-21)
 
 

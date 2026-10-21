@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.1](https://github.com/themaiby/enshwick/compare/enshwick-loader-v0.9.0...enshwick-loader-v0.9.1) (2026-10-21)
+
+
+### Features
+
+* **loader:** translate chat replies and settings refusals ([#205](https://github.com/themaiby/enshwick/issues/205)) ([c041636](https://github.com/themaiby/enshwick/commit/c04163673fadcf012b3573f1e5d342b2b0947aef))
+
 ## [0.9.0](https://github.com/themaiby/enshwick/compare/enshwick-loader-v0.8.2...enshwick-loader-v0.9.0) (2026-10-21)
 
 

@@ -1,6 +1,6 @@
 [package]
 name = "enshwick-example-trading-post"
-version = "0.1.6"
+version = "0.1.7"
 description = "Example: a mod that publishes a typed service and sends a mod event"
 keywords = ["enshrouded", "mod", "example"]
 categories = ["game-development"]
@@ -16,7 +16,7 @@ publish.workspace = true
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-enshwick-example-trading-post-api = { path = "../trading-post-api", version = "0.1.6" }
+enshwick-example-trading-post-api = { path = "../trading-post-api", version = "0.1.7" }
 enshwick-loader-api.workspace = true
 
 [dev-dependencies]
