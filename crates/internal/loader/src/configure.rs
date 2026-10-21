@@ -67,6 +67,7 @@ fn current(text: &str, field: &Field) -> String {
 fn stage_note(stage: Stage) -> String {
     let key = match stage {
         Stage::Startup => "stage.startup",
+        Stage::Restart => "stage.restart",
         Stage::Client => "stage.client",
         Stage::Sync => "stage.sync",
         _ => "stage.runtime",
@@ -273,6 +274,7 @@ pub fn changed(id: &str, key: &str, change: &Change) -> String {
     match (&change.destination, change.stage) {
         (Destination::Next, _) => texts::fill("change.next", &args),
         (_, Stage::Startup) => texts::fill("change.startup", &args),
+        (_, Stage::Restart) => texts::fill("change.restart", &args),
         (_, Stage::Sync) => texts::fill("change.sync", &args),
         (_, Stage::Client) => texts::fill("change.client", &args),
         _ => texts::fill("change.runtime", &args),

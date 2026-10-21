@@ -90,18 +90,20 @@ A server in Docker or Kubernetes: see
 ## Settings
 
 `mod-configs/<id>.toml` holds a mod's settings as each new world starts with
-them, and the few settings that are each player's own. A world takes a copy
+them, the few settings that are each player's own, and the few that only a
+start of the game sets up, which every world shares. A world takes a copy
 when it first loads, single player, hosted or on a dedicated server, and
 keeps it in `mod-data/<id>/worlds/<world>/settings.toml`; from then on that
 copy is the one in force, so an edit of `mod-configs/<id>.toml` reaches only
-worlds made later, and each player's own settings. A world's settings are
+worlds made later, each player's own settings and the ones read at start. A world's settings are
 changed in the game, while hosting or on the screen that creates or starts a
 world: the world settings list every mod's settings under their last tab.
 On a dedicated server an administrator changes them with
 `/config <mod> <key> <value>` in the chat, or from "Server settings" on the
 Mods screen. Such a change applies at once, except where a mod's page says it
-waits for the world to load again. A hand edit of the running world's copy
-applies about a second after it is saved, as such a change does.
+waits for the world to load again or for the game to start again. A hand
+edit of the running world's copy applies about a second after it is saved, as
+such a change does.
 
 ## For mod authors
 

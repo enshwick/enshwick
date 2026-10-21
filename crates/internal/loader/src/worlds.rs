@@ -15,7 +15,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, PoisonError};
 
-use enshwick_loader_api::config::{Schema, Stage};
+use enshwick_loader_api::config::{Schema, Scope, Stage};
 use toml_edit::DocumentMut;
 
 /// The key of the world this process runs, while one runs.
@@ -67,19 +67,20 @@ pub enum Destination {
 #[must_use]
 pub fn destination(stage: Stage, current: Option<&str>) -> Destination {
     match (stage, current) {
-        (Stage::Client, _) => Destination::Global,
+        (stage, _) if stage.scope() == Scope::User => Destination::Global,
         (_, Some(key)) => Destination::World(key.to_owned()),
         (_, None) => Destination::Next,
     }
 }
 
-/// The keys of `schema`'s settings each player keeps for themselves.
+/// The keys of `schema`'s settings kept in the settings file for every
+/// world: each player's own, and the ones read as the game starts.
 #[must_use]
 pub fn client_keys(schema: &Schema) -> Vec<&str> {
     schema
         .fields
         .iter()
-        .filter(|f| f.stage == Stage::Client)
+        .filter(|f| f.scope == Scope::User)
         .map(|f| f.key.as_str())
         .collect()
 }
@@ -345,6 +346,7 @@ mod tests {
     #[test]
     fn changes_go_by_scope_and_world() {
         assert_eq!(destination(Stage::Client, Some("w")), Destination::Global);
+        assert_eq!(destination(Stage::Restart, Some("w")), Destination::Global);
         assert_eq!(
             destination(Stage::Runtime, Some("w")),
             Destination::World("w".into())

@@ -46,13 +46,14 @@ admins_can_open = true
 label_language = "en"
 ```
 
-`cost_multiplier`, 1 to 100, scales the Safe's recipe and applies after a
-restart.
+`cost_multiplier`, 1 to 100, scales the Safe's recipe. It is the server's: a
+joined player's crafting menu shows the server's cost, and a change, or a
+world with another value, applies at once, with no restart of the game.
 `admins_can_open` lets administrators open, remove and rename every Safe, and
 applies while the game runs. `label_language` is the language of the owner's
 name on a Safe and of the `/safe` replies, a language code such as `en`, `uk`
-or `de`; anything else is refused. A change applies after a restart, to Safes
-named from then on.
+or `de`; anything else is refused. A change applies while the game runs, to
+Safes named from then on.
 
 Texts are in English and Ukrainian; German, French, Spanish and Polish name
 and describe the Safe, and `/safe` replies in them fall back to English; a server

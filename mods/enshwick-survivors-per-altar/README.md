@@ -56,7 +56,8 @@ copy_staff_locked_chest_chance = 0.02
 vanilla_staff_places_copies = false
 ```
 
-- `per_altar`: `false` turns the mod off.
+- `per_altar`: `false` leaves survivors and staffs as in vanilla in that
+  world; copy staffs neither drop nor work there.
 - `copy_staffs`: whether copy staffs drop and work.
 - `copy_staff_charges`: the charges of a full copy staff, 1 to 100.
 - `copy_staff_charges_min`: a dropped staff holds from this many up to
@@ -72,8 +73,14 @@ vanilla_staff_places_copies = false
 
 `copy_staffs` is the server's: a joined player runs with the server's value,
 and a change applies while the game runs. Off, copy staffs neither drop nor
-work, and the staffs players hold stay for when they are on again. The other
-settings apply after a restart.
+work, and the staffs players hold stay for when they are on again. The
+chances, `copy_staff_charges_min` and `vanilla_staff_places_copies` apply
+while the game runs too, and each world's own values apply when it loads.
+`per_altar` applies when the world loads.
+
+`copy_staff_charges` is part of the staff item the game builds as it starts:
+it is read from `mod-configs/survivors-per-altar.toml` for every world, and a
+change takes effect when the game starts again.
 
 ## Install
 

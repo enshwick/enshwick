@@ -2,6 +2,8 @@
 //! of a Safe lets other players use it, acting on their nearest own Safe
 //! within reach.
 
+use std::sync::atomic::{AtomicU32, Ordering};
+
 use enshwick_loader_api::commands::{CommandContext, Reply};
 use enshwick_loader_api::i18n::{Language, Texts};
 use enshwick_loader_api::world::{Player, World};
@@ -17,16 +19,31 @@ pub const REACH: f64 = 4.0;
 pub struct Phrases {
     /// Every text the mod has.
     pub texts: Texts,
-    /// The language picked in the settings.
-    pub language: Language,
+    /// The language picked in the settings in force.
+    language: AtomicU32,
 }
 
 impl Phrases {
+    /// `texts` in `language`.
+    #[must_use]
+    pub const fn new(texts: Texts, language: Language) -> Self {
+        Self {
+            texts,
+            language: AtomicU32::new(language.0),
+        }
+    }
+
+    /// Speaks `language` from now on.
+    pub fn set_language(&self, language: Language) {
+        self.language.store(language.0, Ordering::Relaxed);
+    }
+
     /// The text `key` with each `{name}` replaced by its value; the key
     /// itself when there is no text.
     #[must_use]
     pub fn say(&self, key: &str, values: &[(&str, &str)]) -> String {
-        fill(self.texts.get(key, self.language).unwrap_or(key), values)
+        let language = Language(self.language.load(Ordering::Relaxed));
+        fill(self.texts.get(key, language).unwrap_or(key), values)
     }
 }
 

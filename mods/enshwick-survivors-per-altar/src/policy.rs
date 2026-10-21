@@ -9,7 +9,7 @@
 use std::cell::Cell;
 use std::collections::BTreeMap;
 use std::sync::atomic::Ordering;
-use std::sync::{PoisonError, RwLock};
+use std::sync::{Mutex, PoisonError, RwLock};
 use std::time::{Duration, Instant};
 
 use enshwick_loader_api::abi::Side;
@@ -34,15 +34,14 @@ const FORGET_AFTER: Duration = Duration::from_secs(3);
 /// altar is gone.
 const OUTSIDE_GRACE: Duration = Duration::from_secs(10);
 
-/// How the staffs behave, from the settings; whether copy staffs work at
-/// all is [`crate::COPY_STAFFS`], which may change while the game runs.
+/// How the staffs behave, from the settings read as the game starts;
+/// whether copy staffs work at all is [`crate::COPY_STAFFS`], and whether the
+/// survivor's own staff places copies [`crate::VANILLA_PLACES`], which may
+/// change while the game runs.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct Staffs {
     /// The copy staffs' charges.
     pub(crate) charges: Charges,
-    /// Whether the survivor's own staff places and moves copies, as before
-    /// copy staffs.
-    pub(crate) vanilla_places: bool,
 }
 
 /// A staff's use under way on this thread: its survivor and what the spawn
@@ -98,13 +97,19 @@ pub(crate) fn link(load: &mut Load<'_>, staffs: Staffs) -> Result<(), Off> {
     forget();
     load.on::<AltarsChanged>(move |()| read_altars(altars))?;
     load.on_survivor_lookup(|lookup| {
+        if !crate::PER_ALTAR.load(Ordering::Relaxed) {
+            return Answer::Vanilla;
+        }
         match lookup.purpose {
             Purpose::Uniqueness { .. } => write(|shared| answer(shared, lookup)),
             _ => read(|shared| answer_reading(shared, lookup)),
         }
         .unwrap_or(Answer::Vanilla)
     })?;
-    load.on_survivor_bed_check(|check| read(|shared| keeps(shared, check)).unwrap_or(true))?;
+    load.on_survivor_bed_check(|check| {
+        !crate::PER_ALTAR.load(Ordering::Relaxed)
+            || read(|shared| keeps(shared, check)).unwrap_or(true)
+    })?;
     load.on_summon(move |summon| {
         PLAN.with(|plan| plan.set(None));
         read(|shared| judge(shared, summon, staffs)).unwrap_or(SummonVerdict::Allow)
@@ -120,18 +125,44 @@ pub(crate) fn link(load: &mut Load<'_>, staffs: Staffs) -> Result<(), Off> {
         let (staff, slot, item) = (summon.pide, summon.slot, summon.item);
         if summon.meter.is_some() {
             if let Some(staff) = staff {
-                scheduler.next_tick(move || spend(&world, staff));
+                owe(staff);
+                scheduler.next_tick(move || settle_spends(|staff| spend(&world, staff)));
             }
         } else if let Some(inventories) = inventories {
             // A staff from before charges: one spent of a full one.
             scheduler.next_tick(move || renew_spent(&inventories, slot, item, charges));
         }
     })?;
-    if load.host().build().side == Side::CLIENT {
-        // Entities belong to one hosted game; the next starts clean.
-        load.on::<ShutdownStarted>(|()| forget())?;
-    }
+    let client = load.host().build().side == Side::CLIENT;
+    load.on::<ShutdownStarted>(move |()| {
+        // The final save runs after this: a charge owed since the last
+        // step is spent before it.
+        settle_spends(|staff| spend(&world, staff));
+        if client {
+            // Entities belong to one hosted game; the next starts clean.
+            forget();
+        }
+    })?;
     Ok(())
+}
+
+/// Copy staffs that placed a copy and owe their charge, spent on the game
+/// thread after the step of the use, or at the latest as the game stops.
+static OWED: Mutex<Vec<Entity>> = Mutex::new(Vec::new());
+
+/// Notes that `staff` owes a charge.
+fn owe(staff: Entity) {
+    OWED.lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .push(staff);
+}
+
+/// Spends every charge owed, each once.
+fn settle_spends(mut spend: impl FnMut(Entity)) {
+    let owed = core::mem::take(&mut *OWED.lock().unwrap_or_else(PoisonError::into_inner));
+    for staff in owed {
+        spend(staff);
+    }
 }
 
 /// Lets the altars of the running game count as all listed.
@@ -412,7 +443,8 @@ fn judge(shared: &Shared, summon: &Summon, staffs: Staffs) -> SummonVerdict {
         {
             return SummonVerdict::Allow;
         }
-        if !crate::COPY_STAFFS.load(Ordering::Relaxed) {
+        if !crate::COPY_STAFFS.load(Ordering::Relaxed) || !crate::PER_ALTAR.load(Ordering::Relaxed)
+        {
             enshwick_loader_api::info!("copy staff of {}: refused, copy staffs are off", staff.key);
             return SummonVerdict::Refuse;
         }
@@ -453,11 +485,14 @@ fn judge(shared: &Shared, summon: &Summon, staffs: Staffs) -> SummonVerdict {
             SummonVerdict::Allow
         };
     }
+    if !crate::PER_ALTAR.load(Ordering::Relaxed) {
+        return SummonVerdict::Allow;
+    }
     // The survivor's own staff moves the original, as in vanilla; a copy at
     // the target's altar then gives way to it.
     let vanilla =
         WorkshopSurvivor::by_staff(summon.item).is_some_and(|s| summon.template == s.template());
-    if vanilla && !staffs.vanilla_places {
+    if vanilla && !crate::VANILLA_PLACES.load(Ordering::Relaxed) {
         // Always the original, however many copies stand in the world.
         let answer = if original == 0 {
             Answer::Vanilla
@@ -604,6 +639,19 @@ mod tests {
         assert!(!last_charge(charges(2), 3));
         assert!(last_charge(charges(1), 3));
         assert!(last_charge(charges(0), 3), "an empty staff goes on its use");
+    }
+
+    #[test]
+    fn an_owed_charge_is_spent_once_even_when_the_game_stops_first() {
+        let mut spent = Vec::new();
+        owe(Entity(4));
+        owe(Entity(5));
+        // The game stops before the step's tasks run: the stop spends them.
+        settle_spends(|staff| spent.push(staff.0));
+        assert_eq!(spent, [4, 5]);
+        // The task queued after the use finds nothing left to spend.
+        settle_spends(|staff| spent.push(staff.0));
+        assert_eq!(spent, [4, 5]);
         assert!(
             !last_charge(None, 3),
             "a staff from before charges counts as full"

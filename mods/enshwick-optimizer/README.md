@@ -90,7 +90,9 @@ measure = true
   the game included, `"off"` never. Turning them off takes effect at once;
   turning them on takes effect at the next start if they were off at start.
 - `task_workers`: the most workers each task group of the dedicated server
-  starts, 1 to 64, read at start. 0 is automatic: the container's CPU limit
+  starts, 1 to 64. The server starts its workers once, so the value is read
+  from `mod-configs/optimizer.toml` for every world, and a change takes
+  effect when the server starts again. 0 is automatic: the container's CPU limit
   under Wine, rounded up and at least 2, else as many as the game picks.
 - `server_wait_cap_ms`: 1 to 8. 1 is vanilla. Before keeping more, check in
   game that gliding, joining or respawning and combat feel the same.

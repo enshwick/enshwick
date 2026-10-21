@@ -65,8 +65,8 @@ pub struct Row {
     pub widget: Widget,
     /// Whether it takes changes.
     pub lock: Lock,
-    /// A change takes effect when the world loads again.
-    pub restart: bool,
+    /// When a change takes effect.
+    pub stage: Stage,
 }
 
 /// `max_altars` as `Max altars`.
@@ -215,7 +215,7 @@ pub fn rows(
                     .unwrap_or_else(|| field.doc.clone()),
                 widget,
                 lock,
-                restart: field.stage.needs_restart(),
+                stage: field.stage,
             }
         })
         .collect()
@@ -288,7 +288,7 @@ mod tests {
         let rows = rows(&schema(), file, None, None);
         assert_eq!(rows[0].widget, Widget::Toggle(false));
         assert_eq!(rows[1].label, "Max altars");
-        assert!(rows[1].restart);
+        assert_eq!(rows[1].stage, Stage::Startup);
         assert_eq!(
             rows[1].widget,
             Widget::Slider {
