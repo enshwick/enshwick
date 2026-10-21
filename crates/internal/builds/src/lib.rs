@@ -407,7 +407,7 @@ impl Table {
         let found_symbols = search(&self.symbols, |s| {
             let (pattern, at) = s.pattern()?;
             let start = pattern.find_unique(code).ok()?;
-            let offset = start as u64 + at;
+            let offset = (start as u64).checked_add(at)?;
             let bytes_ok = self
                 .constant_value(&format!("{}.bytes", s.id))
                 .is_none_or(|want| expected_bytes(code, offset, want, pattern, at));
@@ -486,11 +486,22 @@ fn search<T: Sync, R: Send>(
     std::thread::scope(|scope| {
         let workers: Vec<_> = entries
             .chunks(chunk)
-            .map(|part| scope.spawn(|| part.iter().map(&find).collect::<Vec<_>>()))
+            .map(|part| {
+                (
+                    part.len(),
+                    scope.spawn(|| part.iter().map(&find).collect::<Vec<_>>()),
+                )
+            })
             .collect();
+        // A chunk that panicked counts as not found, entry for entry, so the
+        // entries after it keep their places.
         workers
             .into_iter()
-            .flat_map(|worker| worker.join().unwrap_or_else(|_| Vec::new()))
+            .flat_map(|(len, worker)| {
+                worker
+                    .join()
+                    .unwrap_or_else(|_| core::iter::repeat_with(|| None).take(len).collect())
+            })
             .collect()
     })
 }
@@ -679,6 +690,18 @@ pub fn verify_with(key: &str, text: &[u8], signature: &str, file: &str) -> Resul
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_panicking_search_keeps_the_other_entries_in_place() {
+        let entries: Vec<u32> = (0..100).collect();
+        let found = search(&entries, |&n| {
+            assert!(n != 3, "a broken pattern");
+            Some(n)
+        });
+        assert_eq!(found.len(), entries.len());
+        assert_eq!(found[3], None);
+        assert_eq!(found[99], Some(99));
+    }
 
     fn tables() -> Vec<Table> {
         embedded()
