@@ -25,7 +25,9 @@ The owner stands within 4 m of one of their Safes and types in the chat:
 Each acts on the owner's Safe nearest to them, and the reply says which.
 Nobody else ever removes a Safe.
 
-All of it works on a dedicated server and in a game a player hosts.
+All of it works on a dedicated server and in a game a player hosts. A player
+who has just joined touches no Safe, their own included, until the server has
+registered them, a moment after they arrive.
 
 A Safe is the vanilla wooden chest underneath: without the mod it is an
 ordinary chest with every item still in it. It cannot be upgraded, since an
@@ -50,8 +52,9 @@ on.
 Texts are in English and Ukrainian; German, French, Spanish and Polish name
 and describe the Safe, and `/safe` replies in them fall back to English; a server
 can change or add them in `mod-configs/safes.texts.toml`, in the form of
-[texts.toml](src/texts.toml). Owners and the players they allowed are kept in
-`mod-data/safes/owners.toml`; files from 0.1 load as they are.
+[texts.toml](src/texts.toml). Owners and the players they allowed are kept per
+world, in `mod-data/safes/worlds/<world>/owners.toml`, so every world a player
+hosts has its own; files from 0.1 load as they are.
 
 ## Who needs it
 
