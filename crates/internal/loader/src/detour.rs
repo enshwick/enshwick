@@ -7,29 +7,32 @@
 //! Installing prepares every relay and trampoline first, seals their pages
 //! executable, then suspends the other threads of the process for the few
 //! writes to the targets, moving any thread that stood inside the replaced
-//! bytes into the trampoline.
+//! bytes, and any return address into them on a thread's stack, into the
+//! trampoline. Threads that live on fibers of their own are not seen: a
+//! fiber that is not running keeps its stack where no thread points.
 
 use std::sync::Mutex;
 
+use enshwick_loader_api::abi::Level;
 use iced_x86::{
     BlockEncoder, BlockEncoderOptions, Decoder, DecoderOptions, FlowControl, Instruction,
     InstructionBlock,
 };
-use windows_sys::Win32::Foundation::{CloseHandle, HANDLE, INVALID_HANDLE_VALUE};
+use windows_sys::Win32::Foundation::{CloseHandle, HANDLE};
 use windows_sys::Win32::System::Diagnostics::Debug::{
     CONTEXT, CONTEXT_CONTROL_AMD64, FlushInstructionCache, GetThreadContext, SetThreadContext,
-};
-use windows_sys::Win32::System::Diagnostics::ToolHelp::{
-    CreateToolhelp32Snapshot, TH32CS_SNAPTHREAD, THREADENTRY32, Thread32First, Thread32Next,
 };
 use windows_sys::Win32::System::Memory::{
     MEM_COMMIT, MEM_FREE, MEM_RESERVE, MEMORY_BASIC_INFORMATION, PAGE_EXECUTE_READ,
     PAGE_EXECUTE_READWRITE, PAGE_READWRITE, VirtualAlloc, VirtualProtect, VirtualQuery,
 };
 use windows_sys::Win32::System::Threading::{
-    GetCurrentProcess, GetCurrentProcessId, GetCurrentThreadId, OpenThread, ResumeThread,
-    SuspendThread, THREAD_GET_CONTEXT, THREAD_SET_CONTEXT, THREAD_SUSPEND_RESUME,
+    GetCurrentProcess, GetCurrentThreadId, GetThreadId, ResumeThread, SuspendThread,
+    THREAD_GET_CONTEXT, THREAD_QUERY_LIMITED_INFORMATION, THREAD_SET_CONTEXT,
+    THREAD_SUSPEND_RESUME,
 };
+
+use crate::settings::LOADER_ID;
 
 /// The jump written over a target: `jmp rel32`.
 const PATCH: usize = 5;
@@ -44,6 +47,14 @@ const GRANULARITY: usize = 0x1_0000;
 const BLOCK: usize = GRANULARITY;
 /// How far a `rel32` reaches, kept clear of the edge for the block's length.
 const REACH: usize = 0x7fff_0000 - BLOCK;
+/// How often the writes wait for threads to leave the code being patched.
+const SETTLE_TRIES: u32 = 50;
+/// How long each wait lasts.
+const SETTLE_WAIT: std::time::Duration = std::time::Duration::from_millis(2);
+/// The most threads the writes suspend; the room is taken before any is.
+const MAX_THREADS: usize = 4096;
+/// `STATUS_NO_MORE_ENTRIES`: past the last thread.
+const NO_MORE_ENTRIES: i32 = 0x8000_001a_u32.cast_signed();
 
 /// A hook to install: the function and where its callers should go instead.
 #[derive(Clone, Copy, Debug)]
@@ -270,25 +281,57 @@ fn allocate_near(target: usize) -> Option<usize> {
 /// Writes every hook jump and code patch with the other threads suspended;
 /// false when any target could not be made writable, in which case none is
 /// written.
+///
+/// A suspended thread may stand inside the bytes a hook replaces, or have
+/// called out of them, with a return address into them on its stack; both
+/// move to the same instruction in the trampoline. A code patch has no
+/// trampoline, so the writes wait, a few times, until no thread stands or
+/// returns inside one.
 fn write_all(prepared: &[&Pending], code: &[Bytes<'_>]) -> bool {
-    let writes: Vec<(usize, &[u8], Option<&Pending>)> = prepared
+    let writes: Vec<(usize, &[u8])> = prepared
         .iter()
-        .map(|&p| (p.target, &p.patch[..], Some(p)))
-        .chain(code.iter().map(|c| (c.address, c.bytes, None)))
+        .map(|&p| (p.target, &p.patch[..]))
+        .chain(code.iter().map(|c| (c.address, c.bytes)))
         .collect();
     if writes.is_empty() {
         return true;
     }
+    let moved = moved_instructions(prepared);
+    let patched: Vec<(usize, usize)> = code
+        .iter()
+        .map(|c| (c.address, c.address + c.bytes.len()))
+        .collect();
+    let returns = patch_returns(code);
     // Nothing below allocates while the other threads stand still: one of
     // them may hold the heap's lock.
     let mut protections = Vec::with_capacity(writes.len());
-    let threads = other_threads();
-    for &thread in &threads {
-        // SAFETY: a thread handle opened with suspend rights.
-        unsafe { SuspendThread(thread) };
+    let mut threads = Threads::new();
+    let mut tries = 0;
+    loop {
+        if !threads.suspend() {
+            threads.resume();
+            return false;
+        }
+        let busy = !patched.is_empty()
+            && threads
+                .iter()
+                .any(|thread| in_flight(thread, &patched, &returns));
+        if !busy || tries == SETTLE_TRIES {
+            if busy {
+                crate::log::write(
+                    Level::WARN,
+                    LOADER_ID,
+                    "a thread still stands in or returns into the code being patched",
+                );
+            }
+            break;
+        }
+        threads.resume();
+        tries += 1;
+        std::thread::sleep(SETTLE_WAIT);
     }
     let mut writable = true;
-    for &(address, bytes, _) in &writes {
+    for &(address, bytes) in &writes {
         let mut old = 0;
         // SAFETY: the target's code pages; restored below.
         let ok = unsafe {
@@ -303,16 +346,14 @@ fn write_all(prepared: &[&Pending], code: &[Bytes<'_>]) -> bool {
         protections.push((address, bytes.len(), old, ok != 0));
     }
     if writable {
-        for &(address, bytes, hook) in &writes {
+        for &(address, bytes) in &writes {
             // SAFETY: the target is writable now; a hook's first `stolen`
             // bytes were moved to the trampoline, and a code patch's bytes
             // were checked against what its owner expected.
             unsafe { (address as *mut u8).copy_from_nonoverlapping(bytes.as_ptr(), bytes.len()) };
-            if let Some(p) = hook {
-                for &thread in &threads {
-                    relocate(thread, p);
-                }
-            }
+        }
+        for thread in threads.iter() {
+            relocate(thread, &moved);
         }
     }
     // SAFETY: no preconditions.
@@ -326,31 +367,156 @@ fn write_all(prepared: &[&Pending], code: &[Bytes<'_>]) -> bool {
             unsafe { FlushInstructionCache(process, address as *const _, len) };
         }
     }
-    for &thread in &threads {
-        // SAFETY: suspended above.
-        unsafe { ResumeThread(thread) };
-        // SAFETY: opened in `other_threads`.
-        unsafe { CloseHandle(thread) };
-    }
+    threads.resume();
     writable
 }
 
-/// Moves a suspended thread standing in the replaced bytes into the trampoline.
-fn relocate(thread: HANDLE, p: &Pending) {
+/// Where each instruction a hook moves stands in the target and in the
+/// trampoline, by its address in the target, sorted; the first instruction
+/// of each is left out, since the jump starts there.
+fn moved_instructions(prepared: &[&Pending]) -> Vec<(usize, usize)> {
+    let mut moved: Vec<(usize, usize)> = prepared
+        .iter()
+        .flat_map(|p| {
+            p.moved
+                .iter()
+                .filter(|&&(old, _)| old != 0)
+                .map(|&(old, new)| (p.target + old, p.trampoline + new))
+        })
+        .collect();
+    moved.sort_unstable();
+    moved
+}
+
+/// Addresses inside the code patches that follow a call there in the code
+/// as it is now, sorted: where a thread that called out of a patch returns.
+fn patch_returns(code: &[Bytes<'_>]) -> Vec<usize> {
+    let mut returns: Vec<usize> = code
+        .iter()
+        .flat_map(|c| {
+            (c.address + 1..c.address + c.bytes.len()).filter(|&at| follows_call(c.address, at))
+        })
+        .collect();
+    returns.sort_unstable();
+    returns.dedup();
+    returns
+}
+
+/// Whether a call starting at or after `start` ends at `at`.
+fn follows_call(start: usize, at: usize) -> bool {
+    /// The longest call: `call qword [rip + disp32]` with a prefix.
+    const LONGEST: usize = 7;
+    let from = start.max(at.saturating_sub(LONGEST));
+    // SAFETY: the bytes from the patch's start, which the patch's check read
+    // inside the game's code section.
+    let before = unsafe { core::slice::from_raw_parts(from as *const u8, at - from) };
+    (2..=before.len()).any(|len| {
+        let mut decoder = Decoder::with_ip(
+            64,
+            &before[before.len() - len..],
+            (at - len) as u64,
+            DecoderOptions::NONE,
+        );
+        let instruction = decoder.decode();
+        instruction.len() == len
+            && matches!(
+                instruction.flow_control(),
+                FlowControl::Call | FlowControl::IndirectCall
+            )
+    })
+}
+
+/// A suspended thread's stack pointer and instruction pointer, with the
+/// context read for writing it back.
+fn control(thread: HANDLE) -> Option<CONTEXT> {
     let mut context: CONTEXT = unsafe_zeroed_context();
     context.ContextFlags = CONTEXT_CONTROL_AMD64;
     // SAFETY: a suspended thread opened with context rights.
-    if unsafe { GetThreadContext(thread, &raw mut context) } == 0 {
-        return;
+    (unsafe { GetThreadContext(thread, &raw mut context) } != 0).then_some(context)
+}
+
+/// The words on a suspended thread's stack from `rsp` up to its base.
+fn stack(rsp: u64) -> Option<&'static mut [usize]> {
+    let rsp = usize::try_from(rsp)
+        .ok()?
+        .next_multiple_of(size_of::<usize>());
+    let mut info = MEMORY_BASIC_INFORMATION {
+        BaseAddress: core::ptr::null_mut(),
+        AllocationBase: core::ptr::null_mut(),
+        AllocationProtect: 0,
+        PartitionId: 0,
+        RegionSize: 0,
+        State: 0,
+        Protect: 0,
+        Type: 0,
+    };
+    // SAFETY: querying any address is allowed; the struct is writable.
+    let known = unsafe {
+        VirtualQuery(
+            rsp as *const _,
+            &raw mut info,
+            size_of::<MEMORY_BASIC_INFORMATION>(),
+        )
+    };
+    if known == 0 || info.State != MEM_COMMIT || info.Protect != PAGE_READWRITE {
+        return None;
     }
+    let end = info.BaseAddress.addr() + info.RegionSize;
+    let words = end.checked_sub(rsp)? / size_of::<usize>();
+    // SAFETY: committed read-write pages of a thread that stands still, from
+    // its stack pointer to the end of the region, the stack's base.
+    Some(unsafe { core::slice::from_raw_parts_mut(rsp as *mut usize, words) })
+}
+
+/// Whether a suspended thread stands inside a patched range or holds a
+/// return address into one on its stack.
+fn in_flight(thread: HANDLE, patched: &[(usize, usize)], returns: &[usize]) -> bool {
+    let Some(context) = control(thread) else {
+        return false;
+    };
     let rip = usize::try_from(context.Rip).unwrap_or(0);
-    let Some(offset) = rip.checked_sub(p.target).filter(|&o| o < p.stolen) else {
+    if patched.iter().any(|&(start, end)| start < rip && rip < end) {
+        return true;
+    }
+    let (Some(&low), Some(&high)) = (returns.first(), returns.last()) else {
+        return false;
+    };
+    stack(context.Rsp).is_some_and(|words| {
+        words
+            .iter()
+            .any(|&word| (low..=high).contains(&word) && returns.binary_search(&word).is_ok())
+    })
+}
+
+/// Moves a suspended thread standing in replaced bytes into the trampoline,
+/// and the return addresses into them on its stack.
+fn relocate(thread: HANDLE, moved: &[(usize, usize)]) {
+    let (Some(&(low, _)), Some(&(high, _))) = (moved.first(), moved.last()) else {
         return;
     };
-    if let Some(&(_, new)) = p.moved.iter().find(|&&(old, _)| old == offset) {
-        context.Rip = (p.trampoline + new) as u64;
-        // SAFETY: as above; the trampoline holds the same instruction.
+    let find = |address: usize| {
+        (low..=high)
+            .contains(&address)
+            .then(|| moved.binary_search_by_key(&address, |&(old, _)| old).ok())
+            .flatten()
+            .map(|i| moved[i].1)
+    };
+    let Some(mut context) = control(thread) else {
+        return;
+    };
+    if let Some(new) = find(usize::try_from(context.Rip).unwrap_or(0)) {
+        context.Rip = new as u64;
+        // SAFETY: as in `control`; the trampoline holds the same instruction.
         unsafe { SetThreadContext(thread, &raw const context) };
+    }
+    if let Some(words) = stack(context.Rsp) {
+        for word in words {
+            if let Some(new) = find(*word) {
+                // A return address, or a stale copy of one: either way the
+                // trampoline's instruction is the same one.
+                *word = new;
+            }
+        }
     }
 }
 
@@ -359,54 +525,106 @@ fn unsafe_zeroed_context() -> CONTEXT {
     unsafe { core::mem::zeroed() }
 }
 
-/// Handles to every other thread of the process, with suspend and context
-/// rights.
-fn other_threads() -> Vec<HANDLE> {
-    // SAFETY: no preconditions.
-    let process = unsafe { GetCurrentProcessId() };
-    // SAFETY: no preconditions.
-    let me = unsafe { GetCurrentThreadId() };
-    // SAFETY: a thread snapshot of the system.
-    let snapshot = unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0) };
-    if snapshot == INVALID_HANDLE_VALUE {
-        return Vec::new();
+#[link(name = "ntdll", kind = "raw-dylib")]
+unsafe extern "system" {
+    /// The thread of `process` after `thread`, or its first for null.
+    fn NtGetNextThread(
+        process: HANDLE,
+        thread: HANDLE,
+        access: u32,
+        attributes: u32,
+        flags: u32,
+        next: *mut HANDLE,
+    ) -> i32;
+}
+
+/// The other threads of the process, suspended together.
+struct Threads {
+    held: Vec<(HANDLE, u32)>,
+}
+
+impl Threads {
+    /// Room for the threads, taken before any is suspended.
+    fn new() -> Self {
+        Self {
+            held: Vec::with_capacity(MAX_THREADS),
+        }
     }
-    let mut entry = THREADENTRY32 {
-        dwSize: u32::try_from(size_of::<THREADENTRY32>()).unwrap_or(0),
-        cntUsage: 0,
-        th32ThreadID: 0,
-        th32OwnerProcessID: 0,
-        tpBasePri: 0,
-        tpDeltaPri: 0,
-        dwFlags: 0,
-    };
-    let mut threads = Vec::new();
-    // SAFETY: a valid snapshot and entry.
-    let mut more = unsafe { Thread32First(snapshot, &raw mut entry) } != 0;
-    while more {
-        if entry.th32OwnerProcessID == process && entry.th32ThreadID != me {
-            // SAFETY: opening a thread of our own process.
-            let thread = unsafe {
-                OpenThread(
-                    THREAD_SUSPEND_RESUME | THREAD_GET_CONTEXT | THREAD_SET_CONTEXT,
-                    0,
-                    entry.th32ThreadID,
-                )
-            };
-            if !thread.is_null() {
-                threads.push(thread);
+
+    /// Suspends every other thread, including those started meanwhile;
+    /// false when there are more than [`MAX_THREADS`] or none can be listed.
+    fn suspend(&mut self) -> bool {
+        // SAFETY: no preconditions.
+        let me = unsafe { GetCurrentThreadId() };
+        // SAFETY: no preconditions.
+        let process = unsafe { GetCurrentProcess() };
+        let access = THREAD_SUSPEND_RESUME
+            | THREAD_GET_CONTEXT
+            | THREAD_SET_CONTEXT
+            | THREAD_QUERY_LIMITED_INFORMATION;
+        loop {
+            let mut fresh = false;
+            let mut cursor: HANDLE = core::ptr::null_mut();
+            loop {
+                let mut next: HANDLE = core::ptr::null_mut();
+                // SAFETY: our own process; `cursor` is null or a handle from
+                // the previous call.
+                let status =
+                    unsafe { NtGetNextThread(process, cursor, access, 0, 0, &raw mut next) };
+                let kept = self.held.iter().any(|&(h, _)| h == cursor);
+                if !cursor.is_null() && !kept {
+                    // SAFETY: a handle from the previous call, not kept.
+                    unsafe { CloseHandle(cursor) };
+                }
+                if status < 0 {
+                    if self.held.is_empty() && status != NO_MORE_ENTRIES {
+                        return false;
+                    }
+                    break;
+                }
+                cursor = next;
+                // SAFETY: a thread handle opened with query rights.
+                let id = unsafe { GetThreadId(next) };
+                if id == me || self.held.iter().any(|&(_, known)| known == id) {
+                    continue;
+                }
+                if self.held.len() == self.held.capacity() {
+                    // SAFETY: as above; the cursor is not kept.
+                    unsafe { CloseHandle(next) };
+                    return false;
+                }
+                // SAFETY: a thread of our own process, opened with suspend rights.
+                if unsafe { SuspendThread(next) } != u32::MAX {
+                    self.held.push((next, id));
+                    fresh = true;
+                }
+            }
+            if !fresh {
+                return true;
             }
         }
-        // SAFETY: as above.
-        more = unsafe { Thread32Next(snapshot, &raw mut entry) } != 0;
     }
-    // SAFETY: the snapshot is ours.
-    unsafe { CloseHandle(snapshot) };
-    threads
+
+    /// The suspended threads.
+    fn iter(&self) -> impl Iterator<Item = HANDLE> + '_ {
+        self.held.iter().map(|&(handle, _)| handle)
+    }
+
+    /// Resumes and lets go of every thread.
+    fn resume(&mut self) {
+        for (thread, _) in self.held.drain(..) {
+            // SAFETY: suspended in `suspend`.
+            unsafe { ResumeThread(thread) };
+            // SAFETY: opened in `suspend`.
+            unsafe { CloseHandle(thread) };
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::sync::atomic::{AtomicU32, Ordering};
+
     use super::*;
 
     type Unary = extern "system" fn(u32) -> u32;
@@ -526,5 +744,97 @@ mod tests {
         // ret; int3...
         let target = function(&[0xc3, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc]);
         assert!(hook(target).is_err());
+    }
+
+    /// Sets `flags[1]`, then waits for `flags[0]` and returns; `r8` points at
+    /// the flags. Touches no stack, so any alignment does.
+    const SPIN: [u8; 16] = [
+        0x41, 0xc7, 0x40, 0x04, 0x01, 0x00, 0x00, 0x00, // mov dword [r8 + 4], 1
+        0x41, 0x8b, 0x00, // mov eax, [r8]
+        0x85, 0xc0, // test eax, eax
+        0x74, 0xf9, // jz -7
+        0xc3, // ret
+    ];
+
+    type Calling = extern "system" fn(u32, usize, *const AtomicU32) -> u32;
+
+    /// A thread running `entry(5, spin, flags)`, once it waits inside the
+    /// spin.
+    fn waiting_in(entry: usize, flags: &'static [AtomicU32; 2]) -> std::thread::JoinHandle<u32> {
+        let spin = function(&SPIN);
+        // SAFETY: each caller's code takes these arguments.
+        let call = unsafe { core::mem::transmute::<usize, Calling>(entry) };
+        let thread = std::thread::spawn(move || call(5, spin, flags.as_ptr()));
+        while flags[1].load(Ordering::Acquire) == 0 {
+            std::thread::yield_now();
+        }
+        thread
+    }
+
+    #[test]
+    fn a_thread_that_called_out_of_the_hooked_bytes_returns_into_the_trampoline() {
+        static FLAGS: [AtomicU32; 2] = [AtomicU32::new(0), AtomicU32::new(0)];
+        let target = function(&[
+            0xff, 0xd2, // call rdx <- returns inside the jump
+            0x90, 0x90, 0x90, // nop
+            0x8d, 0x41, 0x07, // lea eax, [rcx + 7]
+            0xc3, // ret
+            0xcc, 0xcc, 0xcc,
+        ]);
+        let thread = waiting_in(target, &FLAGS);
+        let original = hook(target).unwrap();
+        FLAGS[0].store(1, Ordering::Release);
+        assert_eq!(thread.join().unwrap(), 12);
+        assert_eq!(callable(target)(5), 105);
+        assert_ne!(original, target);
+    }
+
+    #[test]
+    fn a_code_patch_waits_for_a_thread_that_returns_into_it() {
+        static FLAGS: [AtomicU32; 2] = [AtomicU32::new(0), AtomicU32::new(0)];
+        let target = function(&[
+            0xff, 0xd2, // call rdx <- returns inside the patch
+            0xb8, 0x01, 0x00, 0x00, 0x00, // mov eax, 1
+            0xc3, // ret
+            0xcc, 0xcc,
+        ]);
+        let thread = waiting_in(target, &FLAGS);
+        let release = std::thread::spawn(|| {
+            std::thread::sleep(std::time::Duration::from_millis(30));
+            FLAGS[0].store(1, Ordering::Release);
+        });
+        let patch = [Bytes {
+            address: target,
+            // mov eax, 2; nop; nop
+            bytes: &[0xb8, 0x02, 0x00, 0x00, 0x00, 0x90, 0x90],
+        }];
+        assert!(commit(&[], &patch));
+        assert_eq!(thread.join().unwrap(), 1);
+        release.join().unwrap();
+        assert_eq!(callable(target)(0), 2);
+    }
+
+    #[test]
+    fn only_instructions_after_the_first_move_and_only_returns_after_calls_count() {
+        let pending = Pending {
+            original: 0x9000,
+            target: 0x1000,
+            patch: [0; PATCH],
+            stolen: 6,
+            trampoline: 0x9000,
+            moved: vec![(0, 0), (2, 2), (4, 7)],
+        };
+        assert_eq!(
+            moved_instructions(&[&pending]),
+            [(0x1002, 0x9002), (0x1004, 0x9007)]
+        );
+        // call rdx; mov eax, 1; ret
+        let code = function(&[0xff, 0xd2, 0xb8, 0x01, 0x00, 0x00, 0x00, 0xc3]);
+        let bytes = [0; 7];
+        let patch = [Bytes {
+            address: code,
+            bytes: &bytes,
+        }];
+        assert_eq!(patch_returns(&patch), [code + 2]);
     }
 }
