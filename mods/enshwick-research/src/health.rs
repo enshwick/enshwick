@@ -45,7 +45,9 @@ enshwick_loader_api::detour! {
 
 /// Links the impact programs' attribute writer.
 pub(crate) fn link(load: &mut Load<'_>) -> Result<(), Off> {
-    load.hook(&WRITER, load.symbol("research.impact_attribute")?)
+    let writer = load.symbol("research.impact_attribute")?;
+    // SAFETY: the mod's row names the attribute writer `WRITER` declares.
+    unsafe { load.hook(&WRITER, writer) }
 }
 
 /// How many health writes and other attribute writes were seen.

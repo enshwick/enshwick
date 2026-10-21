@@ -275,9 +275,12 @@ thread_local! {
 }
 
 /// A borrowed string as text, empty when it is not UTF-8.
-fn text_of<'a>(value: Str) -> &'a str {
-    // SAFETY: strings the loader passes are valid for the call this text
-    // lives in.
+///
+/// # Safety
+///
+/// `value` is a string the loader passed, valid for as long as `'a`.
+unsafe fn text_of<'a>(value: Str) -> &'a str {
+    // SAFETY: forwarded from the caller.
     unsafe { value.as_str() }.unwrap_or("")
 }
 
@@ -295,9 +298,11 @@ where
     let handler = unsafe { &*user.cast::<F>() };
     let ctx = CommandContext {
         player: (call.player.entity != 0).then(|| Player::from_info(&call.player)),
-        name: text_of(call.name).to_owned(),
+        // SAFETY: the loader's name, valid for the call.
+        name: unsafe { text_of(call.name) }.to_owned(),
     };
-    let args = split_args(text_of(call.args));
+    // SAFETY: the loader's arguments, valid for the call.
+    let args = split_args(unsafe { text_of(call.args) });
     let reply = crate::host::guard("panic in a command handler", Reply::none, || {
         handler(&ctx, &args)
     });
@@ -327,7 +332,8 @@ where
     let rename = Rename {
         entity: Entity(call.entity),
         player: (call.known != 0).then(|| Player::from_info(&call.player)),
-        text: text_of(call.text).to_owned(),
+        // SAFETY: the loader's text, valid for the call.
+        text: unsafe { text_of(call.text) }.to_owned(),
     };
     u8::from(crate::host::guard(
         "panic in a rename filter",

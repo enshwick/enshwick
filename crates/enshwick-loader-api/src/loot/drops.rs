@@ -671,7 +671,9 @@ fn add_one(res: *mut u8, out: *mut u8) {
 fn link_roll(load: &mut Load<'_>) -> Result<(), Off> {
     if ENGINE.get().is_none() {
         let engine = Engine::resolve(load)?;
-        load.hook(&ROLL, load.symbol("loot.roll")?)?;
+        let roll = load.symbol("loot.roll")?;
+        // SAFETY: the build table's `loot.roll` is the roll `ROLL` declares.
+        unsafe { load.hook(&ROLL, roll) }?;
         let _first = ENGINE.set(engine);
     }
     Ok(())
@@ -727,7 +729,10 @@ impl Load<'_> {
         drop.check()?;
         link_roll(self)?;
         if drop.from.kinds.contains(Kinds::DESTROYED) && !ONE_LINKED.load(Ordering::Acquire) {
-            self.hook(&ROLL_ONE, self.symbol("loot.roll_one")?)?;
+            let roll_one = self.symbol("loot.roll_one")?;
+            // SAFETY: the build table's `loot.roll_one` is the single roll
+            // `ROLL_ONE` declares.
+            unsafe { self.hook(&ROLL_ONE, roll_one) }?;
             ONE_LINKED.store(true, Ordering::Release);
         }
         DROPS

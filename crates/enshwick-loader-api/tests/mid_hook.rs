@@ -19,11 +19,15 @@ mod tests {
         fn init(
             load: &mut enshwick_loader_api::Load<'_>,
         ) -> Result<Self, enshwick_loader_api::Off> {
-            load.hook_at(load.symbol("site")?, |registers| {
-                registers.rdx = 1;
-                assert_ne!(registers.rcx, 13, "unlucky");
-                registers.rax = registers.rcx * 2;
-            })?;
+            let site = load.symbol("site")?;
+            // SAFETY: the fake runs the handler on its own registers.
+            unsafe {
+                load.hook_at(site, |registers| {
+                    registers.rdx = 1;
+                    assert_ne!(registers.rcx, 13, "unlucky");
+                    registers.rax = registers.rcx * 2;
+                })
+            }?;
             Ok(Self)
         }
     }

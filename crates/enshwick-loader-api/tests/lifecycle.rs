@@ -75,8 +75,10 @@ mod tests {
             let settings: Settings = load.settings("limit = 1\n")?;
             assert_eq!(load.symbol("npc.lookup")?, 0x1_4020_2e80);
             assert!(load.symbol("nope").is_err());
-            load.hook(&DOUBLE, load.system("anything")?)?;
-            load.hook(&HALVE, load.symbol("tripled")?)?;
+            // SAFETY: the fake's symbol is a function of the hook's type.
+            unsafe { load.hook(&DOUBLE, load.system("anything")?) }?;
+            // SAFETY: the fake's symbol is a function of the hook's type.
+            unsafe { load.hook(&HALVE, load.symbol("tripled")?) }?;
             enshwick_loader_api::info!("limit {}", settings.limit);
             enshwick_loader_api::debug!("{}", evaluated());
             for _ in 0..3 {

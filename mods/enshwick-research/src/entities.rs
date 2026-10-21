@@ -213,7 +213,9 @@ pub(crate) fn link_client(load: &mut Load<'_>, world: &World) -> Result<(), Off>
         start: Instant::now(),
     };
     let _first = ENGINE.set(engine);
-    load.hook(&CLIENT_CURSOR, cursor as u64)
+    // SAFETY: the pattern finds the client's cursor function, of the type
+    // `CLIENT_CURSOR` declares.
+    unsafe { load.hook(&CLIENT_CURSOR, cursor as u64) }
 }
 
 /// Links the server side: a sweep every five seconds on the server's game

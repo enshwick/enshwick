@@ -58,7 +58,8 @@ pub enum Peer {
     /// The server, as a client sees it.
     Server,
     /// A player's client, by the account key, as the server sees it; the
-    /// key [`Player::key`](crate::world::Player::key) gives.
+    /// key [`Player::key`](crate::world::Player::key) gives. No player has
+    /// the key 0, which the loader reads as every client.
     Player(u64),
 }
 
@@ -142,6 +143,9 @@ impl<M: serde::Serialize> Channel<M> {
     ///
     /// See the [module](self).
     pub fn send(&self, to: Peer, message: &M) -> Result<(), SendError> {
+        if to == Peer::Player(0) {
+            return Err(SendError::NotReady);
+        }
         let bytes = postcard::to_allocvec(message).map_err(|e| SendError::Encode(e.to_string()))?;
         send_raw(self.host, self.id, to.to_raw(), &bytes)
     }
@@ -176,6 +180,9 @@ impl<M> Channel<M> {
     /// See the [module](self).
     #[must_use]
     pub fn is_ready(&self, peer: Peer) -> bool {
+        if peer == Peer::Player(0) {
+            return false;
+        }
         let api = self.host.api();
         (api.net_ready)(self.host.handle(), peer.to_raw()).is_ok()
     }

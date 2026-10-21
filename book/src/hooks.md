@@ -35,7 +35,9 @@ fn max_altars(next: Next<MaxAltars>, balancing: u64, level: u32) -> u8 {
 }
 
 fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
-    load.hook(&MAX_ALTARS, load.symbol("building.max_altars")?)
+    let max_altars = load.symbol("building.max_altars")?;
+    // SAFETY: the game's altar limit has the type `MAX_ALTARS` declares.
+    unsafe { load.hook(&MAX_ALTARS, max_altars) }
 }
 ```
 
@@ -47,7 +49,9 @@ fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_
   through `Next` costs one atomic load and one indirect call. `Next` is `Copy`.
 - `load.hook(&HOOK, address)` puts the link into the chain of the function at
   `address` (an absolute address from [Finding the game](finding-the-game.md)).
-  Hooks are linked during `init` only; nothing runs until arming.
+  Hooks are linked during `init` only; nothing runs until arming. The call is
+  `unsafe`: its `SAFETY` comment says why the function at `address` has the
+  hook's type, which the loader cannot check.
 
 [`#[hook]`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/lib.rs)
 writes the same declaration from the body. The static is named after the
@@ -63,7 +67,9 @@ fn upgrade(next: Next<unsafe extern "system" fn(*mut u64)>, ctx: *mut u64) {
 }
 
 fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
-    load.hook(&UPGRADE, load.system("upgrade_building_range")?)
+    let target = load.system("upgrade_building_range")?;
+    // SAFETY: the system takes the building context, as `UPGRADE` does.
+    unsafe { load.hook(&UPGRADE, target) }
 }
 ```
 
@@ -154,7 +160,9 @@ fn node_unlocked(next: Next<NodeUnlocked>, node: u32, bits: *const u64) -> u8 {
 
 fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
     GATE.store(load.symbol("my-mod.gate_return")?, Ordering::Relaxed);
-    load.hook(&NODE_UNLOCKED, load.symbol("skill.node_unlocked")?)
+    let node_unlocked = load.symbol("skill.node_unlocked")?;
+    // SAFETY: the game's node unlock has the type `NODE_UNLOCKED` declares.
+    unsafe { load.hook(&NODE_UNLOCKED, node_unlocked) }
 }
 ```
 
@@ -191,7 +199,9 @@ impl Mod for MyMod {
     }
 
     fn init(load: &mut Load<'_>) -> Result<Self, Off> {
-        load.hook(&MAX_ALTARS, load.symbol("building.max_altars")?)?;
+        let max_altars = load.symbol("building.max_altars")?;
+        // SAFETY: the game's altar limit has the type `MAX_ALTARS` declares.
+        unsafe { load.hook(&MAX_ALTARS, max_altars) }?;
         Ok(Self { altars: 16 })
     }
 }

@@ -44,14 +44,25 @@ enshwick_loader_api::detour! {
 
 /// Links the server change and the menu entries, and logs refused joins.
 pub(crate) fn link(load: &mut Load<'_>) -> Result<(), Off> {
-    load.hook(&SERVER_CHANGE, load.symbol("net.server_change")?)?;
+    let server_change = load.symbol("net.server_change")?;
+    // SAFETY: the table's `net.server_change` is the function
+    // `SERVER_CHANGE` declares.
+    unsafe { load.hook(&SERVER_CHANGE, server_change) }?;
+    let (main_entry, pause_entry) = (
+        load.symbol("ui.main_entry")?,
+        load.symbol("ui.pause_entry")?,
+    );
     for (hook, symbol) in [
         (
-            load.hook(&MAIN_ENTRY, load.symbol("ui.main_entry")?),
+            // SAFETY: the table's `ui.main_entry` is the function
+            // `MAIN_ENTRY` declares.
+            unsafe { load.hook(&MAIN_ENTRY, main_entry) },
             "main menu",
         ),
         (
-            load.hook(&PAUSE_ENTRY, load.symbol("ui.pause_entry")?),
+            // SAFETY: the table's `ui.pause_entry` is the function
+            // `PAUSE_ENTRY` declares.
+            unsafe { load.hook(&PAUSE_ENTRY, pause_entry) },
             "pause menu",
         ),
     ] {

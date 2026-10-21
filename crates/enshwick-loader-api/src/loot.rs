@@ -180,7 +180,9 @@ struct Layout {
 ///
 /// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
 ///     let _ = CONTAINERS.set(Containers::resolve(load)?);
-///     load.hook(&CHECK, load.system(SYSTEM)?)
+///     let system = load.system(SYSTEM)?;
+///     // SAFETY: the reflected system takes its context, as `CHECK` does.
+///     unsafe { load.hook(&CHECK, system) }
 /// }
 /// ```
 #[derive(Clone, Copy, Debug)]
@@ -492,7 +494,8 @@ impl Load<'_> {
         if PASS.set((containers, worlds, Box::new(handler))).is_err() {
             return Err(Off::new("one loot pass handler per mod"));
         }
-        self.hook(&CHECK, system)
+        // SAFETY: the reflected system is the check `CHECK` declares.
+        unsafe { self.hook(&CHECK, system) }
     }
 }
 
