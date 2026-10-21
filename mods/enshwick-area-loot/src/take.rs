@@ -1,11 +1,14 @@
 //! After each loot container check the mod notices a container a player
 //! emptied and queues the full ones around it; each is then emptied into that
-//! player, nearest first, through the game's own inventory transactions.
+//! player, nearest first, through the game's own inventory transactions,
+//! once it is checked again that nobody else opened it meanwhile.
 
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::{Mutex, MutexGuard, OnceLock, PoisonError};
 use std::time::{Duration, Instant};
+
+use crate::clock::Clock;
 
 use enshwick_loader_api::ecs::Entity;
 use enshwick_loader_api::inventory::{Batch, Inventories, Op, Outcome};
@@ -25,7 +28,9 @@ const PRUNE_EVERY: Duration = Duration::from_secs(60);
 
 static INVENTORIES: OnceLock<Inventories> = OnceLock::new();
 static TRACKER: Mutex<Option<Tracker>> = Mutex::new(None);
-static LAST_PRUNE: Mutex<Option<Instant>> = Mutex::new(None);
+static LAST_PRUNE: Mutex<Option<Duration>> = Mutex::new(None);
+/// The time the holds and the busy window count in: the server's steps.
+static CLOCK: Clock = Clock::new();
 static ENABLED: AtomicBool = AtomicBool::new(true);
 /// Radius and height in metres, as `f32` bits.
 static RADIUS: AtomicU32 = AtomicU32::new(0x4140_0000);
@@ -57,6 +62,7 @@ fn tracker() -> MutexGuard<'static, Option<Tracker>> {
 pub(crate) fn link(load: &mut Load<'_>) -> Result<(), Off> {
     let _first = INVENTORIES.set(load.inventories()?);
     *tracker() = Some(Tracker::default());
+    load.on::<enshwick_loader_api::events::Ticked>(|_| CLOCK.step(Instant::now()))?;
     load.on_loot_pass(check)?;
     // Entity ids belong to one game.
     load.on::<enshwick_loader_api::events::ShutdownStarted>(|()| {
@@ -80,7 +86,7 @@ fn check(loot: &LootPass<'_>) {
 
 /// Watches every container and starts a take for each one a player emptied.
 fn pass(loot: &LootPass<'_>) {
-    let now = Instant::now();
+    let now = CLOCK.now();
     let mut emptied: Vec<(Container, Entity)> = Vec::new();
     {
         let mut guard = tracker();
@@ -93,7 +99,7 @@ fn pass(loot: &LootPass<'_>) {
             }
         });
         let mut last = LAST_PRUNE.lock().unwrap_or_else(PoisonError::into_inner);
-        if last.is_none_or(|at| now.saturating_duration_since(at) >= PRUNE_EVERY) {
+        if last.is_none_or(|at| now.saturating_sub(at) >= PRUNE_EVERY) {
             t.prune(now);
             *last = Some(now);
         }
@@ -120,7 +126,7 @@ fn gather(
     loot: &LootPass<'_>,
     emptied: &Container,
     player: Entity,
-    now: Instant,
+    now: Duration,
 ) -> VecDeque<Entity> {
     let radius = f64::from(f32::from_bits(RADIUS.load(Ordering::Relaxed)));
     let height = f64::from(f32::from_bits(HEIGHT.load(Ordering::Relaxed)));
@@ -171,8 +177,21 @@ fn take_next(player: Entity, mut queue: VecDeque<Entity>, game: u64) {
         }
         return;
     }
-    let Some(container) = queue.pop_front() else {
-        return;
+    // Each container is checked again right before its turn: another
+    // player may have opened it since the take gathered it.
+    let container = loop {
+        let Some(next) = queue.pop_front() else {
+            return;
+        };
+        let mut guard = tracker();
+        let Some(t) = guard.as_mut() else {
+            return;
+        };
+        if t.still_free(next, player, CLOCK.now()) {
+            break next;
+        }
+        t.release(next);
+        enshwick_loader_api::debug!("area loot for {} skips {}: opened since", player.0, next.0);
     };
     let batch = Batch::new()
         .with(Op::MoveAll {
