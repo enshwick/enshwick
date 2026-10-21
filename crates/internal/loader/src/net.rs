@@ -350,7 +350,7 @@ pub(crate) fn notice(key: u64, entity: u32, text: &str) -> Result<(), Status> {
     data.extend_from_slice(&entity.to_le_bytes());
     data.extend_from_slice(text.as_bytes());
     for line in control_frames(&data).ok_or(Status::BAD_ARGS)? {
-        crate::chat::send(key, &line);
+        crate::chat::send_frame(key, &line);
     }
     Ok(())
 }
@@ -372,7 +372,7 @@ pub(crate) fn item_data(key: u64, records: &[u8]) {
     };
     for peer in peers.into_iter().filter(|&p| p != NetMessage::SERVER) {
         for line in &lines {
-            crate::chat::send(peer, line);
+            crate::chat::send_frame(peer, line);
         }
     }
 }
@@ -388,7 +388,7 @@ pub(crate) fn ui_demo(key: u64, at: Option<[i64; 3]>) -> Result<(), Status> {
         data.extend_from_slice(&axis.to_le_bytes());
     }
     for line in control_frames(&data).ok_or(Status::BAD_ARGS)? {
-        crate::chat::send(key, &line);
+        crate::chat::send_frame(key, &line);
     }
     Ok(())
 }
@@ -425,7 +425,7 @@ pub(crate) fn to_player(key: u64, message: &crate::remote::Message) {
         return;
     }
     for line in remote_frames(message) {
-        crate::chat::send(key, &line);
+        crate::chat::send_frame(key, &line);
     }
 }
 
@@ -444,7 +444,7 @@ pub(crate) fn broadcast_control(message: &crate::remote::Message) {
     }
     for key in keys {
         for line in &lines {
-            crate::chat::send(key, line);
+            crate::chat::send_frame(key, line);
         }
     }
 }
@@ -514,7 +514,7 @@ pub(crate) fn server_received(key: u64, args: &str) {
                 crate::log!(INFO, "mod messages: the client of {key:016x} said hello");
             }
             for line in frames(CONTROL, 0, &control(WELCOME)).unwrap_or_default() {
-                crate::chat::send(key, &line);
+                crate::chat::send_frame(key, &line);
             }
             if fresh {
                 for records in crate::item_data::hello() {
@@ -698,7 +698,7 @@ fn send_to_clients(channel: u32, peer: u64, data: &[u8]) -> Result<(), Status> {
         Ok(out)
     })?;
     for (key, line) in lines {
-        crate::chat::send(key, &line);
+        crate::chat::send_frame(key, &line);
     }
     Ok(())
 }

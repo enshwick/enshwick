@@ -58,6 +58,11 @@ const LINES_PER_DRAIN: usize = 16;
 const LINES_PER_REPLY: usize = 16;
 /// Lines waiting at most; more are dropped.
 const MAX_WAITING: usize = 256;
+/// Commands one player may type per second, and in one burst; more are
+/// dropped unanswered, so no player fills the lines every other player
+/// waits for.
+const COMMAND_RATE: f64 = 4.0;
+const COMMAND_BURST: f64 = 12.0;
 /// The result the game's chat post writes on success.
 const POSTED: u8 = 0;
 
@@ -190,6 +195,22 @@ pub(crate) fn send(to: u64, text: &str) -> Status {
     Status::OK
 }
 
+/// Queues the frame line `line` for the player with account key `to`: the
+/// one way a line a client takes as the server's frame leaves the server.
+pub(crate) fn send_frame(to: u64, line: &str) {
+    if LOADED.get().is_none() || to == 0 {
+        return;
+    }
+    let mut outbox = OUTBOX.lock().unwrap_or_else(PoisonError::into_inner);
+    if outbox.len() < MAX_WAITING {
+        outbox.push(Line {
+            to: To::Key(to),
+            text: line.to_owned(),
+        });
+    }
+    WAITING.store(!outbox.is_empty(), Ordering::Release);
+}
+
 /// `text` cut to at most `max` bytes at a character boundary.
 fn cut(text: &str, max: usize) -> &str {
     let mut end = text.len().min(max);
@@ -199,13 +220,12 @@ fn cut(text: &str, max: usize) -> &str {
     &text[..end]
 }
 
+/// Queues the lines of `text`, a reply or a mod's message, leaving out any
+/// a client would take for a frame of the server's: such a line may carry
+/// what a player typed.
 fn queue(to: To, text: &str) {
     let mut outbox = OUTBOX.lock().unwrap_or_else(PoisonError::into_inner);
-    for line in text
-        .lines()
-        .filter(|l| !l.trim().is_empty())
-        .take(LINES_PER_REPLY)
-    {
+    for line in replied(text) {
         if outbox.len() >= MAX_WAITING {
             break;
         }
@@ -215,6 +235,70 @@ fn queue(to: To, text: &str) {
         });
     }
     WAITING.store(!outbox.is_empty(), Ordering::Release);
+}
+
+/// The lines of `text` the chat shows: none empty, none a frame, at most
+/// [`LINES_PER_REPLY`].
+fn replied(text: &str) -> impl Iterator<Item = &str> {
+    text.lines()
+        .filter(|l| !l.trim().is_empty() && !crate::net::is_frame(l.as_bytes()))
+        .take(LINES_PER_REPLY)
+}
+
+/// A player's command rate: tokens left and when it last typed.
+#[derive(Clone, Copy, Debug)]
+struct Rate {
+    tokens: f64,
+    seen: std::time::Instant,
+}
+
+impl Rate {
+    /// Takes one command at `now`; false when the rate is spent.
+    fn admit(&mut self, now: std::time::Instant) -> bool {
+        let gained = now.duration_since(self.seen).as_secs_f64() * COMMAND_RATE;
+        self.seen = now;
+        self.tokens = (self.tokens + gained).min(COMMAND_BURST);
+        if self.tokens < 1.0 {
+            return false;
+        }
+        self.tokens -= 1.0;
+        true
+    }
+}
+
+/// The command rates of the players who typed, by account key.
+static RATES: Mutex<Option<std::collections::HashMap<u64, Rate>>> = Mutex::new(None);
+/// Commands dropped over a player's rate.
+static OVER_RATE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// Takes one command from the rate of the player with account key `key`;
+/// false, counted and now and then logged, when it is spent.
+fn admit(key: u64) -> bool {
+    let now = std::time::Instant::now();
+    let admitted = {
+        let mut rates = RATES.lock().unwrap_or_else(PoisonError::into_inner);
+        let rates = rates.get_or_insert_with(Default::default);
+        if rates.len() > 256 {
+            // Players idle long enough to have a full rate again lose
+            // nothing by being forgotten.
+            let full = COMMAND_BURST / COMMAND_RATE;
+            rates.retain(|_, rate| now.duration_since(rate.seen).as_secs_f64() < full);
+        }
+        rates
+            .entry(key)
+            .or_insert(Rate {
+                tokens: COMMAND_BURST,
+                seen: now,
+            })
+            .admit(now)
+    };
+    if !admitted {
+        let count = OVER_RATE.fetch_add(1, Ordering::Relaxed) + 1;
+        if count == 1 || count.is_multiple_of(100) {
+            crate::log!(WARN, "chat commands: {count} dropped over a player's rate");
+        }
+    }
+    admitted
 }
 
 /// Links the chat post on the server; without it commands and chat lines
@@ -489,6 +573,9 @@ fn dispatch(loader: &Loader, line: &str, to: To) {
     };
     if name == crate::net::COMMAND {
         crate::net::server_received(key, args);
+        return;
+    }
+    if !admit(key) {
         return;
     }
     let player = sender(loader, key);
@@ -824,6 +911,7 @@ fn help(loader: &Loader, commands: &[Command]) -> String {
 
 /// Drops the lines waiting for a hosted game that stops.
 pub(crate) fn forget() {
+    *RATES.lock().unwrap_or_else(PoisonError::into_inner) = None;
     OUTBOX
         .lock()
         .unwrap_or_else(PoisonError::into_inner)
@@ -956,6 +1044,30 @@ mod tests {
             Ok((Some("enshwick".to_owned()), Level::DEBUG, LINES_PER_REPLY))
         );
         assert!(log_query("nobody", known).unwrap_err().contains("nobody"));
+    }
+
+    #[test]
+    fn no_reply_or_mod_line_passes_for_a_frame() {
+        let text = "said: hi\n/enshwick-net AQAAAAAAAAAAAQE\n\n/enshwick ok";
+        assert_eq!(
+            replied(text).collect::<Vec<_>>(),
+            ["said: hi", "/enshwick ok"]
+        );
+        assert_eq!(replied(&"x\n".repeat(40)).count(), LINES_PER_REPLY);
+    }
+
+    #[test]
+    fn a_player_s_commands_run_out_after_a_burst_and_come_back() {
+        let start = std::time::Instant::now();
+        let mut rate = Rate {
+            tokens: COMMAND_BURST,
+            seen: start,
+        };
+        let burst = (0..100).filter(|_| rate.admit(start)).count();
+        assert_eq!(burst, 12);
+        assert!(!rate.admit(start));
+        assert!(rate.admit(start + std::time::Duration::from_millis(300)));
+        assert!(!rate.admit(start + std::time::Duration::from_millis(300)));
     }
 
     #[test]
