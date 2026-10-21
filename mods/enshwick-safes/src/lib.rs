@@ -33,7 +33,7 @@ use enshwick_loader_api::state::{Store, WorldStore};
 use enshwick_loader_api::world::{ComponentType, World};
 use enshwick_loader_api::{Load, Mod, Off};
 
-use crate::access::{ACCESS, Action, Allowed, Cell, Safe, Seen, permits};
+use crate::access::{ACCESS, Action, Allowed, Cell, Safe, Seen};
 use crate::command::Phrases;
 
 /// Safe settings.
@@ -295,6 +295,7 @@ fn guard(load: &mut Load<'_>, phrases: &'static Phrases) -> Result<(), Off> {
         Box::leak(Box::new(load.world_store::<Owners>("owners")?));
     load.on::<WorldLoaded>(move |()| open_world(store, &dir))?;
 
+    let _first = access::POINT.set(load.define_point()?);
     load.on_interaction(access::filter)?;
     track_players(load, world)?;
     load.on::<BuildingPlaced>(move |placed| {
@@ -391,7 +392,8 @@ fn may_rename(world: World, rename: &Rename) -> bool {
     let owners = ACCESS.owners.load();
     let fallback = Safe::new(owner, "");
     let safe = owners.get(&at).unwrap_or(&fallback);
-    let allowed = permits(safe, Some(seen), admins_open, Action::Manage);
+    let entities = (player.entity, rename.entity);
+    let allowed = access::decide(safe, Some(seen), admins_open, Action::Manage, entities);
     if !allowed {
         enshwick_loader_api::info!("{} may not rename Safe {}", player.name, rename.entity.0);
     }

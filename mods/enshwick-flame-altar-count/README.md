@@ -72,4 +72,10 @@ bases. It counts in the join check, so a player with a different version cannot
 join. The table is a join value: a player who joins runs with the server's
 table, whatever their own file says.
 
+## For mod authors
+
+Other mods change how many altars a Flame level allows at the extension
+point `flame-altar-count:limit`; the answer stays between 1 and the cap. See
+[Extending other mods](https://github.com/themaiby/enshwick/blob/main/book/src/extending.md).
+
 Licensed under [MIT](../../LICENSE).

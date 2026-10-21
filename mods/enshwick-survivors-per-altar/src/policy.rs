@@ -4,12 +4,14 @@
 //!
 //! The game asks from many places every frame, so lookups share a read
 //! lock: only the uniqueness pass, which files copies, writes. Altar zones
-//! are read when the altars change, never in a lookup.
+//! are read when the altars change, never in a lookup. Other mods change the
+//! copy limit and the charges a new copy costs at the extension points
+//! `survivors-per-altar:copy-limit` and `survivors-per-altar:charge-cost`.
 
 use std::cell::Cell;
 use std::collections::BTreeMap;
 use std::sync::atomic::Ordering;
-use std::sync::{Mutex, PoisonError, RwLock};
+use std::sync::{Mutex, OnceLock, PoisonError, RwLock};
 use std::time::{Duration, Instant};
 
 use enshwick_loader_api::abi::Side;
@@ -17,6 +19,8 @@ use enshwick_loader_api::altars::Altars;
 use enshwick_loader_api::ecs::Entity;
 use enshwick_loader_api::events::{AltarsChanged, ShutdownStarted};
 use enshwick_loader_api::inventory::{Bar, Batch, Fill, Inventories, Op, SlotRef};
+use enshwick_loader_api::points::OwnedPoint;
+use enshwick_loader_api::points::survivors_per_altar::{ChargeCost, CopyLimit};
 use enshwick_loader_api::survivors::{
     Answer, BedCheck, Lookup, Purpose, Summon, SummonVerdict, WorkshopSurvivor,
 };
@@ -51,8 +55,10 @@ pub(crate) struct Staffs {
 struct Plan {
     survivor: u32,
     answer: Answer,
-    /// A copy staff placing a new copy, which spends a charge.
+    /// A copy staff placing a new copy, which spends `cost` charges.
     places: bool,
+    /// The charges placing the copy spends.
+    cost: u16,
 }
 
 thread_local! {
@@ -92,7 +98,44 @@ impl Shared {
 
 static SHARED: RwLock<Option<Shared>> = RwLock::new(None);
 
+/// The extension points, once defined.
+static COPY_LIMIT: OnceLock<OwnedPoint<CopyLimit>> = OnceLock::new();
+static CHARGE_COST: OnceLock<OwnedPoint<ChargeCost>> = OnceLock::new();
+
+/// The most entities `survivor` may have with `altars` altars standing and
+/// `copies` entities now: one per altar, or what other mods' links answer.
+fn copy_limit(survivor: u32, altars: usize, copies: usize) -> usize {
+    let Some(point) = COPY_LIMIT.get() else {
+        return altars;
+    };
+    let input = CopyLimit {
+        survivor,
+        altars: u32::try_from(altars).unwrap_or(u32::MAX),
+        copies: u32::try_from(copies).unwrap_or(u32::MAX),
+    };
+    let own = input.altars;
+    usize::try_from(point.decide(&input, own).value_or(own)).unwrap_or(altars)
+}
+
+/// The charges a new copy of `survivor` costs, 1 or what other mods' links
+/// answer; `None` when a link refuses the staff's use.
+fn charge_cost(survivor: u32, copies: usize, meter: Option<Bar>, full: u16) -> Option<u16> {
+    let Some(point) = CHARGE_COST.get() else {
+        return Some(1);
+    };
+    let input = ChargeCost {
+        survivor,
+        copies: u32::try_from(copies).unwrap_or(u32::MAX),
+        charges: meter.map_or(full, |m| m.current),
+        full,
+    };
+    let decision = point.decide(&input, 1);
+    (!decision.is_refused()).then(|| decision.value_or(1))
+}
+
 pub(crate) fn link(load: &mut Load<'_>, staffs: Staffs) -> Result<(), Off> {
+    let _first = COPY_LIMIT.set(load.define_point()?);
+    let _first = CHARGE_COST.set(load.define_point()?);
     let altars = load.altars()?;
     forget();
     load.on::<AltarsChanged>(move |()| read_altars(altars))?;
@@ -118,26 +161,30 @@ pub(crate) fn link(load: &mut Load<'_>, staffs: Staffs) -> Result<(), Off> {
     let (world, scheduler) = (load.world()?, load.scheduler()?);
     let inventories = load.inventories().ok();
     load.on_summoned(move |summon| {
-        let placed = PLAN.with(Cell::take).is_some_and(|plan| plan.places);
-        if !placed || summon.consumed {
+        let cost = PLAN
+            .with(Cell::take)
+            .filter(|plan| plan.places)
+            .map_or(0, |plan| plan.cost);
+        if cost == 0 || summon.consumed {
             return;
         }
         let (staff, slot, item) = (summon.pide, summon.slot, summon.item);
         if summon.meter.is_some() {
             if let Some(staff) = staff {
-                owe(staff);
-                scheduler.next_tick(move || settle_spends(|staff| spend(&world, staff)));
+                owe(staff, cost);
+                scheduler
+                    .next_tick(move || settle_spends(|staff, cost| spend(&world, staff, cost)));
             }
         } else if let Some(inventories) = inventories {
-            // A staff from before charges: one spent of a full one.
-            scheduler.next_tick(move || renew_spent(&inventories, slot, item, charges));
+            // A staff from before charges: the cost spent of a full one.
+            scheduler.next_tick(move || renew_spent(&inventories, slot, item, charges, cost));
         }
     })?;
     let client = load.host().build().side == Side::CLIENT;
     load.on::<ShutdownStarted>(move |()| {
         // The final save runs after this: a charge owed since the last
         // step is spent before it.
-        settle_spends(|staff| spend(&world, staff));
+        settle_spends(|staff, cost| spend(&world, staff, cost));
         if client {
             // Entities belong to one hosted game; the next starts clean.
             forget();
@@ -148,20 +195,20 @@ pub(crate) fn link(load: &mut Load<'_>, staffs: Staffs) -> Result<(), Off> {
 
 /// Copy staffs that placed a copy and owe their charge, spent on the game
 /// thread after the step of the use, or at the latest as the game stops.
-static OWED: Mutex<Vec<Entity>> = Mutex::new(Vec::new());
+static OWED: Mutex<Vec<(Entity, u16)>> = Mutex::new(Vec::new());
 
-/// Notes that `staff` owes a charge.
-fn owe(staff: Entity) {
+/// Notes that `staff` owes `cost` charges.
+fn owe(staff: Entity, cost: u16) {
     OWED.lock()
         .unwrap_or_else(PoisonError::into_inner)
-        .push(staff);
+        .push((staff, cost));
 }
 
 /// Spends every charge owed, each once.
-fn settle_spends(mut spend: impl FnMut(Entity)) {
+fn settle_spends(mut spend: impl FnMut(Entity, u16)) {
     let owed = core::mem::take(&mut *OWED.lock().unwrap_or_else(PoisonError::into_inner));
-    for staff in owed {
-        spend(staff);
+    for (staff, cost) in owed {
+        spend(staff, cost);
     }
 }
 
@@ -388,9 +435,9 @@ fn keeps(shared: &Shared, check: &BedCheck) -> bool {
     mine == beds
 }
 
-/// Spends one charge of the copy staff `staff`, on the game thread.
-fn spend(world: &enshwick_loader_api::world::World, staff: Entity) {
-    match world.change_item_meter(staff, |c| c - 1) {
+/// Spends `cost` charges of the copy staff `staff`, on the game thread.
+fn spend(world: &enshwick_loader_api::world::World, staff: Entity, cost: u16) {
+    match world.change_item_meter(staff, |c| (c - i32::from(cost)).max(0)) {
         Ok(left) => enshwick_loader_api::info!(
             "copy staff {}: {} of {} charges left",
             staff.0,
@@ -402,8 +449,8 @@ fn spend(world: &enshwick_loader_api::world::World, staff: Entity) {
 }
 
 /// Gives a staff from before charges, which just placed a copy, its meter:
-/// a full staff's charges less the one spent.
-fn renew_spent(inventories: &Inventories, slot: SlotRef, item: u32, charges: Charges) {
+/// a full staff's charges less the `cost` spent.
+fn renew_spent(inventories: &Inventories, slot: SlotRef, item: u32, charges: Charges, cost: u16) {
     let Some(root) = inventories.read().root(slot) else {
         return;
     };
@@ -412,17 +459,18 @@ fn renew_spent(inventories: &Inventories, slot: SlotRef, item: u32, charges: Cha
         root,
         item,
         count: 1,
-        fill: Fill::of(charges.full.saturating_sub(1), charges.full),
+        fill: Fill::of(charges.full.saturating_sub(cost), charges.full),
     };
     inventories.submit(&Batch::new().with(renew), |outcome| {
         enshwick_loader_api::info!("copy staff renewed after a use: {:?}", outcome.done);
     });
 }
 
-/// Whether placing a copy takes the whole staff: its last charge. A staff
-/// from before charges, without a meter, counts as full.
-pub(crate) fn last_charge(meter: Option<Bar>, full: u16) -> bool {
-    meter.map_or(full, |charges| charges.current) <= 1
+/// Whether placing a copy that costs `cost` charges takes the whole staff:
+/// its last charges. A staff from before charges, without a meter, counts as
+/// full; a free copy never takes it.
+pub(crate) fn last_charge(meter: Option<Bar>, full: u16, cost: u16) -> bool {
+    cost > 0 && meter.map_or(full, |charges| charges.current) <= cost
 }
 
 /// What a staff's use does, and the plan the spawn lookup and the handler
@@ -448,35 +496,55 @@ fn judge(shared: &Shared, summon: &Summon, staffs: Staffs) -> SummonVerdict {
             enshwick_loader_api::info!("copy staff of {}: refused, copy staffs are off", staff.key);
             return SummonVerdict::Refuse;
         }
-        let (answer, places) = match shared.copies.copy_staff(survivor, summon.target, original) {
-            CopyStaff::Refuse(why) => {
+        let limit = |altars, copies| copy_limit(survivor, altars, copies);
+        let (answer, places) =
+            match shared
+                .copies
+                .copy_staff(survivor, summon.target, original, limit)
+            {
+                CopyStaff::Refuse(why) => {
+                    enshwick_loader_api::info!(
+                        "copy staff of {} at {:?}: refused, {why:?}",
+                        staff.key,
+                        summon.target
+                    );
+                    return SummonVerdict::Refuse;
+                }
+                CopyStaff::Move(copy) => (Answer::Entity(Entity(copy)), false),
+                CopyStaff::Place => (Answer::Nobody, true),
+            };
+        let cost = if places {
+            let copies = shared.copies.copy_count(survivor);
+            let Some(cost) = charge_cost(survivor, copies, summon.meter, charges.full) else {
                 enshwick_loader_api::info!(
-                    "copy staff of {} at {:?}: refused, {why:?}",
+                    "copy staff of {} at {:?}: refused at survivors-per-altar:charge-cost",
                     staff.key,
                     summon.target
                 );
                 return SummonVerdict::Refuse;
-            }
-            CopyStaff::Move(copy) => (Answer::Entity(Entity(copy)), false),
-            CopyStaff::Place => (Answer::Nobody, true),
+            };
+            cost
+        } else {
+            0
         };
         PLAN.with(|plan| {
             plan.set(Some(Plan {
                 survivor,
                 answer,
                 places,
+                cost,
             }));
         });
-        let take = places && last_charge(summon.meter, charges.full);
+        let take = places && last_charge(summon.meter, charges.full, cost);
         enshwick_loader_api::info!(
             "copy staff of {} at {:?} with {:?} charges: {}",
             staff.key,
             summon.target,
             summon.meter.map(|m| m.current),
             match (places, take) {
-                (false, _) => "moves the copy there, free",
-                (true, true) => "places a copy, its last charge",
-                (true, false) => "places a copy, a charge spent",
+                (false, _) => "moves the copy there, free".to_owned(),
+                (true, true) => format!("places a copy, its last charges ({cost})"),
+                (true, false) => format!("places a copy, {cost} charges spent"),
             }
         );
         return if take {
@@ -504,6 +572,7 @@ fn judge(shared: &Shared, summon: &Summon, staffs: Staffs) -> SummonVerdict {
                 survivor,
                 answer,
                 places: false,
+                cost: 0,
             }));
         });
     }
@@ -635,27 +704,38 @@ mod tests {
     #[test]
     fn only_the_last_charge_takes_the_staff() {
         let charges = |current| Some(Bar { current, max: 3 });
-        assert!(!last_charge(charges(3), 3));
-        assert!(!last_charge(charges(2), 3));
-        assert!(last_charge(charges(1), 3));
-        assert!(last_charge(charges(0), 3), "an empty staff goes on its use");
+        assert!(!last_charge(charges(3), 3, 1));
+        assert!(!last_charge(charges(2), 3, 1));
+        assert!(last_charge(charges(1), 3, 1));
+        assert!(
+            last_charge(charges(0), 3, 1),
+            "an empty staff goes on its use"
+        );
+        assert!(
+            last_charge(charges(2), 3, 2),
+            "a cost of two takes the last two"
+        );
+        assert!(!last_charge(charges(1), 3, 0), "a free copy takes nothing");
+        assert!(
+            !last_charge(None, 3, 1),
+            "a staff from before charges counts as full"
+        );
+        assert!(
+            last_charge(None, 1, 1),
+            "one charge in all: its use takes it"
+        );
     }
 
     #[test]
     fn an_owed_charge_is_spent_once_even_when_the_game_stops_first() {
         let mut spent = Vec::new();
-        owe(Entity(4));
-        owe(Entity(5));
+        owe(Entity(4), 1);
+        owe(Entity(5), 2);
         // The game stops before the step's tasks run: the stop spends them.
-        settle_spends(|staff| spent.push(staff.0));
-        assert_eq!(spent, [4, 5]);
+        settle_spends(|staff, cost| spent.push((staff.0, cost)));
+        assert_eq!(spent, [(4, 1), (5, 2)]);
         // The task queued after the use finds nothing left to spend.
-        settle_spends(|staff| spent.push(staff.0));
-        assert_eq!(spent, [4, 5]);
-        assert!(
-            !last_charge(None, 3),
-            "a staff from before charges counts as full"
-        );
-        assert!(last_charge(None, 1), "one charge in all: its use takes it");
+        settle_spends(|staff, cost| spent.push((staff.0, cost)));
+        assert_eq!(spent, [(4, 1), (5, 2)]);
     }
 }

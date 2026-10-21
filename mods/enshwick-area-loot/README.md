@@ -50,4 +50,10 @@ the first release, 1.0.0, there are no others.
 Only the server, or the player who hosts the game. Players without the mod get
 the loot and see the corpses dissolve. It does not count in the join check.
 
+## For mod authors
+
+Other mods decide whether a container around the emptied one comes along
+at the extension point `area-loot:eligible`. See
+[Extending other mods](https://github.com/themaiby/enshwick/blob/main/book/src/extending.md).
+
 Licensed under [MIT](../../LICENSE).
