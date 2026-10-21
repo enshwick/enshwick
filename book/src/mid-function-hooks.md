@@ -28,10 +28,12 @@ holds the 16 general-purpose registers and `rflags`.
 - Writes to any field but `rsp` take effect when the game code goes on.
 - `rsp` is the stack pointer at `address`, for reading the function's locals;
   writes to it are ignored.
-- The loader saves and restores `xmm0` to `xmm5` around the handlers, so Rust
-  code in the handler may use them freely. It does not save the upper halves of
-  the `ymm` registers or the x87 state, and a handler cannot read or change any
-  `xmm` value the game holds.
+- The loader keeps every vector register the game holds across the handlers:
+  the `xmm` registers, the upper halves of the `ymm` registers and, where the
+  system turns AVX-512 on and the game uses it there, the `zmm` and mask
+  registers. Handler code may use any of them freely, including AVX code that
+  ends with `vzeroupper`. It does not save the x87 state, and a handler cannot
+  read or change any vector value the game holds.
 
 ## Choosing an address
 
