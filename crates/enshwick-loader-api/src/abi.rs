@@ -14,7 +14,7 @@ use core::sync::atomic::AtomicUsize;
 pub const ABI_MAJOR: u16 = 1;
 
 /// The minor version of this interface. A newer minor only appends fields.
-pub const ABI_MINOR: u16 = 53;
+pub const ABI_MINOR: u16 = 54;
 
 /// Whether `id` is a valid mod id: 1 to 64 characters of `[a-z0-9-]`.
 ///
@@ -1109,6 +1109,11 @@ impl Relation {
     /// loads first when present, and the loader notes when it is missing or
     /// in another version.
     pub const RECOMMENDS: Self = Self(3);
+    /// This mod takes the place of the other mod, an old id of the same mod
+    /// (any version; the range stays empty): while this one is present, the
+    /// loader never starts the other and names its DLL to delete. Since
+    /// minor 54.
+    pub const REPLACES: Self = Self(4);
 }
 
 /// A relation to another mod, by id and SemVer range.
@@ -1526,6 +1531,7 @@ impl CallerFrame {
 ///     author_count: 0,
 ///     license: Str::new("MIT"),
 ///     homepage: Str::EMPTY,
+///     replaced_by: Str::EMPTY,
 /// };
 /// assert_eq!(safes.off, 0);
 /// ```
@@ -1568,6 +1574,9 @@ pub struct ModInfo {
     pub license: Str,
     /// Where players read about the mod. Since minor 36.
     pub homepage: Str,
+    /// In [`HostApi::replaced`], the id of the mod that replaces this one;
+    /// empty elsewhere. Since minor 54.
+    pub replaced_by: Str,
 }
 
 impl ModInfo {
@@ -1597,6 +1606,7 @@ impl ModInfo {
         author_count: 0,
         license: Str::EMPTY,
         homepage: Str::EMPTY,
+        replaced_by: Str::EMPTY,
     };
 }
 
@@ -4708,6 +4718,17 @@ pub struct HostApi {
     /// during `enshwick_mod_init` only. Since minor 52.
     pub entity_data_open:
         extern "system" fn(me: ModHandle, id: Str, flags: EntityDataFlags, out: *mut u32) -> Status,
+    /// Lists the mods in `mods/` that a present mod replaces (see
+    /// [`Relation::REPLACES`]), which the loader never started, as
+    /// [`HostApi::mods`] lists the loaded ones, with
+    /// [`ModInfo::replaced_by`] set. Any thread. Since minor 54.
+    pub replaced: extern "system" fn(
+        me: ModHandle,
+        out: *mut ModInfo,
+        entry_size: u32,
+        capacity: u32,
+        count: *mut u32,
+    ) -> Status,
 }
 
 /// Flags of [`HostApi::entity_data_open`].
@@ -5059,7 +5080,8 @@ const _: () = {
     assert!(size_of::<StatSource>() == 20);
     assert!(size_of::<StatModify>() == 8 + 8 + 12 + 4 + 8);
     assert!(size_of::<StatChange>() == 8 + 24);
-    assert!(size_of::<HostApi>() == 24 + 125 * 8);
+    assert!(size_of::<HostApi>() == 24 + 126 * 8);
+    assert!(core::mem::offset_of!(HostApi, replaced) == 24 + 125 * 8);
     assert!(core::mem::offset_of!(HostApi, entity_data_open) == 24 + 124 * 8);
     assert!(core::mem::offset_of!(HostApi, migrate) == 24 + 122 * 8);
     assert!(core::mem::offset_of!(HostApi, declare_content) == 24 + 123 * 8);

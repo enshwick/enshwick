@@ -245,6 +245,60 @@ pub fn stage(
     Ok(unpacked.into_iter().map(|(_, to)| to).collect())
 }
 
+/// Deletes the DLLs of the mods that `id` replaces, from `replaced` as the
+/// loader lists them: each a `.dll` directly under `mods/` that no entry of
+/// `taken` names, compared without case. Returns the files deleted and,
+/// apart, why others were not.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::mods::ModEntry;
+/// use enshwick_updater::stage::delete_replaced;
+///
+/// let game = std::env::temp_dir().join(format!("enshwick-doc-replaced-{}", std::process::id()));
+/// std::fs::create_dir_all(game.join("mods"))?;
+/// std::fs::write(game.join("mods/old.dll"), b"old")?;
+/// let old = ModEntry {
+///     id: "old".into(),
+///     file: "mods/old.dll".into(),
+///     replaced_by: "new".into(),
+///     ..ModEntry::default()
+/// };
+/// let (deleted, kept) = delete_replaced(&game, "new", &[old], &[]);
+/// assert_eq!(deleted, ["mods/old.dll"]);
+/// assert!(kept.is_empty() && !game.join("mods/old.dll").exists());
+/// # std::fs::remove_dir_all(&game)?;
+/// # Ok::<(), std::io::Error>(())
+/// ```
+#[must_use]
+pub fn delete_replaced(
+    game: &Path,
+    id: &str,
+    replaced: &[enshwick_loader_api::mods::ModEntry],
+    taken: &[String],
+) -> (Vec<String>, Vec<String>) {
+    let mut deleted = Vec::new();
+    let mut kept = Vec::new();
+    for old in replaced.iter().filter(|old| old.replaced_by == id) {
+        let file = old.file.as_str();
+        let direct = file.matches('/').count() == 1
+            && Path::new(file)
+                .extension()
+                .is_some_and(|e| e.eq_ignore_ascii_case("dll"));
+        if !allowed(file) || !direct || taken.iter().any(|t| t.eq_ignore_ascii_case(file)) {
+            kept.push(format!("{file} of {} is not a file to delete", old.id));
+            continue;
+        }
+        match std::fs::remove_file(game.join(file)) {
+            Ok(()) => deleted.push(file.to_owned()),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => kept.push(format!("{file} of {}: {e}", old.id)),
+        }
+    }
+    (deleted, kept)
+}
+
 /// Whether an update of `file` already waits in `game`'s staging folder.
 #[must_use]
 pub fn waiting(game: &Path, file: &str) -> bool {
@@ -380,6 +434,57 @@ mod tests {
         assert!(!game.join("scratch").exists());
         assert!(waiting(&game, "powrprof.dll"));
         assert!(!waiting(&game, "mods/other.dll"));
+        let _gone = std::fs::remove_dir_all(&game);
+    }
+
+    fn replaced(id: &str, file: &str, by: &str) -> enshwick_loader_api::mods::ModEntry {
+        enshwick_loader_api::mods::ModEntry {
+            id: id.into(),
+            file: file.into(),
+            replaced_by: by.into(),
+            ..enshwick_loader_api::mods::ModEntry::default()
+        }
+    }
+
+    #[test]
+    fn only_the_dlls_of_the_replaced_mods_are_deleted() {
+        let game = scratch("replaced");
+        let mods = game.join("mods");
+        for file in [
+            "enshwick_proton_optimizer.dll",
+            "enshwick_optimizer.dll",
+            "enshwick_dev_tools.dll",
+            "keep.txt",
+            "enshwick/enshwick.dll",
+        ] {
+            write(&mods.join(file), b"x").unwrap();
+        }
+        let listed = [
+            replaced(
+                "proton-optimizer",
+                "mods/enshwick_proton_optimizer.dll",
+                "optimizer",
+            ),
+            replaced("dev-tools", "mods/enshwick_dev_tools.dll", "admin-tools"),
+            replaced("taken", "mods/enshwick_optimizer.dll", "optimizer"),
+            replaced("not-a-dll", "mods/keep.txt", "optimizer"),
+            replaced("loader", "mods/enshwick/enshwick.dll", "optimizer"),
+            replaced("outside", "mods/../powrprof.dll", "optimizer"),
+            replaced("gone", "mods/gone.dll", "optimizer"),
+        ];
+        let taken = ["mods/Enshwick_Optimizer.dll".to_owned()];
+        let (deleted, kept) = delete_replaced(&game, "optimizer", &listed, &taken);
+        assert_eq!(deleted, ["mods/enshwick_proton_optimizer.dll"]);
+        assert_eq!(kept.len(), 4, "{kept:?}");
+        assert!(!mods.join("enshwick_proton_optimizer.dll").exists());
+        for file in [
+            "enshwick_optimizer.dll",
+            "enshwick_dev_tools.dll",
+            "keep.txt",
+            "enshwick/enshwick.dll",
+        ] {
+            assert!(mods.join(file).exists(), "{file}");
+        }
         let _gone = std::fs::remove_dir_all(&game);
     }
 

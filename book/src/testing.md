@@ -167,6 +167,7 @@ Every method of `FakeHost` takes and returns the builder.
 | `player(info)`                       | A connected player with a character in the world.                                     |
 | `loaded(info)`                       | A loaded mod that `enshwick_loader_api::mods()` lists.                                |
 | `join_missing(info)`                 | A server mod that `enshwick_loader_api::mods::join_missing()` lists.                  |
+| `replaced(info)`                     | A mod another mod replaces, which `enshwick_loader_api::mods::replaced()` lists.      |
 | `foreign_command(name, reply)`       | The reply of a command another mod or the loader answers, for `commands::run`.        |
 | `service(&TABLE)`                    | A service another mod publishes, typed by its `#[service]` declaration.               |
 | `refuse_hook(target)`                | Refuses hooks on a target, as when another mod holds it exclusively.                  |

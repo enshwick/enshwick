@@ -208,6 +208,7 @@ has:
 | `signed_by`                                     | The author keys the manifest names, checked; empty for none                     |
 | `name`                                          | What players read; `entry.label()` gives `Name (id)`, or the id without a name  |
 | `description`, `authors`, `license`, `homepage` | The manifest's credits; empty for none                                          |
+| `replaced_by`                                   | In `mods::replaced()`, the mod that replaces this one; empty elsewhere          |
 
 ```rust
 use enshwick_loader_api::mods::Updates;
@@ -279,6 +280,11 @@ fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_
 `join_missing()` is empty before a refused join and under a loader older than
 ABI minor 10. See [The join check](concepts/join-check.md) for the check
 itself.
+
+`mods::replaced()` lists the mods in `mods/` that a present mod replaces after
+a rename (`replaces:` in the [manifest](concepts/loader-and-abi.md#the-manifest)),
+which the loader never started, each with `replaced_by` and its `file`. It is
+empty under a loader older than ABI minor 54.
 
 ## Staged updates
 

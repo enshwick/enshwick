@@ -214,6 +214,7 @@ impl Mod for Optimizer {
             id: "optimizer",
             side: BOTH,
             name: "Optimizer",
+            replaces: ["proton-optimizer"],
             updates: github("themaiby/enshwick", "enshwick-optimizer"),
             signed_by: ["RWTjqgtfpy3lSOLC4uaUXuvvKSLQKOFf6nUnEytoiFjSzxMEhLnoAdJF"],
         )

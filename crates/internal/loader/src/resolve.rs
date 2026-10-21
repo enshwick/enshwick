@@ -40,6 +40,9 @@ pub struct Plan {
     pub order: Vec<usize>,
     /// Indices of skipped candidates and why.
     pub skipped: Vec<(usize, String)>,
+    /// Skipped candidates that a present mod replaces: the replaced index
+    /// and the replacing one.
+    pub replaced: Vec<(usize, usize)>,
 }
 
 /// Whether a mod for `mod_side` loads in the game binary `process`. The
@@ -67,6 +70,32 @@ pub fn resolve(candidates: &[Candidate], side: Side) -> Plan {
             by_id.insert(&candidate.id, i);
         }
     }
+
+    // An old id gives way to every present mod that replaces it, whatever
+    // else is wrong with either; a mod never replaces the one it gave way to.
+    let mut replaced: Vec<(usize, usize)> = Vec::new();
+    for (i, candidate) in candidates.iter().enumerate() {
+        if by_id.get(candidate.id.as_str()) != Some(&i) {
+            continue;
+        }
+        for dependency in &candidate.dependencies {
+            if dependency.relation != Relation::REPLACES || dependency.id == candidate.id {
+                continue;
+            }
+            for (old, _) in candidates
+                .iter()
+                .enumerate()
+                .filter(|(_, c)| c.id == dependency.id)
+            {
+                if replaced.iter().any(|&(o, _)| o == old) || replaced.contains(&(i, old)) {
+                    continue;
+                }
+                skipped.insert(old, format!("replaced by {}", candidate.id));
+                replaced.push((old, i));
+            }
+        }
+    }
+    replaced.sort_unstable();
 
     // Requirements and conflicts, until nothing changes: skipping one mod can
     // break another's requirement.
@@ -96,6 +125,7 @@ pub fn resolve(candidates: &[Candidate], side: Side) -> Plan {
         let ready = pending.iter().position(|&i| {
             candidates[i].dependencies.iter().all(|d| {
                 d.relation == Relation::BREAKS
+                    || d.relation == Relation::REPLACES
                     || by_id
                         .get(d.id.as_str())
                         .is_none_or(|&j| placed[j] || skipped.contains_key(&j))
@@ -115,6 +145,7 @@ pub fn resolve(candidates: &[Candidate], side: Side) -> Plan {
     Plan {
         order,
         skipped: skipped.into_iter().collect(),
+        replaced,
     }
 }
 
@@ -329,6 +360,63 @@ mod tests {
                 (0, "recommends gone, which is not loaded".into()),
             ]
         );
+    }
+
+    #[test]
+    fn a_renamed_mod_replaces_its_old_id() {
+        let mods = [
+            candidate(
+                "optimizer",
+                "0.2.0",
+                Side::BOTH,
+                &[("proton-optimizer", "", Relation::REPLACES)],
+            ),
+            candidate("proton-optimizer", "0.1.0", Side::BOTH, &[]),
+            candidate("proton-optimizer", "0.1.1", Side::BOTH, &[]),
+            candidate(
+                "uses-old",
+                "1.0.0",
+                Side::BOTH,
+                &[("proton-optimizer", "", Relation::REQUIRES)],
+            ),
+        ];
+        let plan = resolve(&mods, Side::SERVER);
+        assert_eq!(plan.order, [0]);
+        assert_eq!(plan.replaced, [(1, 0), (2, 0)]);
+        assert_eq!(
+            plan.skipped,
+            [
+                (1, "replaced by optimizer".into()),
+                (2, "replaced by optimizer".into()),
+                (3, "requires proton-optimizer, which is not loaded".into()),
+            ]
+        );
+        // Alone, the old id loads.
+        let plan = resolve(&mods[1..2], Side::SERVER);
+        assert_eq!(plan.order, [0]);
+        assert!(plan.replaced.is_empty());
+    }
+
+    #[test]
+    fn replacing_needs_the_new_mod_on_this_side_and_never_goes_both_ways() {
+        let mods = [
+            candidate(
+                "new",
+                "1.0.0",
+                Side::CLIENT,
+                &[("old", "", Relation::REPLACES)],
+            ),
+            candidate("old", "1.0.0", Side::SERVER, &[]),
+        ];
+        assert_eq!(resolve(&mods, Side::SERVER).order, [1]);
+        let mutual = [
+            candidate("a", "1.0.0", Side::BOTH, &[("b", "", Relation::REPLACES)]),
+            candidate("b", "1.0.0", Side::BOTH, &[("a", "", Relation::REPLACES)]),
+            candidate("c", "1.0.0", Side::BOTH, &[("c", "", Relation::REPLACES)]),
+        ];
+        let plan = resolve(&mutual, Side::SERVER);
+        assert_eq!(plan.order, [0, 2]);
+        assert_eq!(plan.replaced, [(1, 0)]);
     }
 
     #[test]

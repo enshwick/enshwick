@@ -639,8 +639,12 @@ fn builtin(loader: &Loader, args: &str, player: &PlayerInfo) -> String {
             disabled.join(", ")
         )
     };
+    let replaced: String = crate::modlist::replaced()
+        .iter()
+        .flat_map(|old| [" ".to_owned(), old.line(), ".".to_owned()])
+        .collect();
     format!(
-        "Enshwick {}: {list}.{off} /enshwick help lists the commands.",
+        "Enshwick {}: {list}.{off}{replaced} /enshwick help lists the commands.",
         env!("CARGO_PKG_VERSION")
     )
 }

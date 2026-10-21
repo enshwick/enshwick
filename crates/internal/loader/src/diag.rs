@@ -230,6 +230,8 @@ pub struct Summary {
     pub mods: Vec<ModStatus>,
     /// Mods turned off in the mod list, by id.
     pub disabled: Vec<String>,
+    /// Mods that present mods replace, never started, a line each.
+    pub replaced: Vec<String>,
     /// Mods turned off, oldest first.
     pub turned_off: Vec<TurnedOff>,
     /// The services mods publish and the events they define, a line each.
@@ -300,6 +302,9 @@ impl Summary {
                 crate::modlist::LIST_PATH,
                 self.disabled.join(", ")
             );
+        }
+        for line in &self.replaced {
+            let _w = writeln!(out, "  not started: {line}");
         }
         if !self.turned_off.is_empty() {
             let _w = writeln!(out, "\nturned off:");
@@ -410,6 +415,7 @@ conflicts:"
             if self.hosting { ", server running" } else { "" },
             self.mods.len()
         )];
+        lines.extend(self.replaced.iter().map(|line| format!("{line}.")));
         for t in self.turned_off.iter().rev().take(3) {
             lines.push(format!("{} off: {}", t.id, t.reason));
         }
@@ -504,6 +510,9 @@ mod tests {
                 },
             ],
             disabled: vec!["probe".into()],
+            replaced: vec![
+                "proton-optimizer is replaced by optimizer; delete mods/enshwick_proton_optimizer.dll".into(),
+            ],
             turned_off: vec![TurnedOff {
                 id: "safes".into(),
                 reason: "panic in a command handler".into(),
@@ -562,6 +571,9 @@ mod tests {
              note: recommends flame-altar-count, which is not loaded\n    3 zones merged\n"
         ));
         assert!(text.contains("  safes 0.1.1 (off)\n  off in mods/enshwick/mods.toml: probe\n"));
+        assert!(text.contains(
+            "  not started: proton-optimizer is replaced by optimizer; delete mods/enshwick_proton_optimizer.dll\n"
+        ));
         assert!(text.contains("12:13:20Z safes: panic in a command handler"));
         assert!(text.contains(
             "services and events:
@@ -599,7 +611,8 @@ conflicts:
     #[test]
     fn the_chat_summary_is_short() {
         let short = summary().short();
-        assert_eq!(short.lines().count(), 4);
+        assert_eq!(short.lines().count(), 5);
+        assert!(short.contains("proton-optimizer is replaced by optimizer; delete"));
         assert!(short.starts_with("Enshwick 0.1.5, up 2h 03m, server running: 1 of 2 mods"));
         assert!(short.contains("safes off: panic in a command handler"));
         assert!(short.contains("busiest building.max_altars with 1.2M calls"));

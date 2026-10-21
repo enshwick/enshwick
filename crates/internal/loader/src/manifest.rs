@@ -345,7 +345,11 @@ unsafe fn dependency(raw: &Dependency) -> Result<resolve::Dependency, String> {
     };
     if !matches!(
         raw.relation,
-        Relation::REQUIRES | Relation::AFTER | Relation::BREAKS | Relation::RECOMMENDS
+        Relation::REQUIRES
+            | Relation::AFTER
+            | Relation::BREAKS
+            | Relation::RECOMMENDS
+            | Relation::REPLACES
     ) {
         return Err(format!("unknown relation {} to {id}", raw.relation.0));
     }

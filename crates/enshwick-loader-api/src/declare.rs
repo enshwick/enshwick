@@ -21,6 +21,9 @@
 ///   and that the loader notes as missing otherwise;
 /// - `breaks: ["id" => "range", ...]`: mods this one does not work beside in
 ///   that range; the loader skips this mod when one of them loads;
+/// - `replaces: ["id", ...]`: old ids of this mod, from before a rename;
+///   while this mod is present the loader never starts theirs, and the
+///   updater deletes their DLLs when it installs this one;
 /// - `updates: github("owner/name", "component")` or
 ///   `updates: url("https://...")`, where new releases come from (see
 ///   [`UpdateSource`](crate::abi::UpdateSource));
@@ -44,6 +47,7 @@
 ///     join = true,
 ///     requires: ["flame-altar-zones" => ">=0.1, <1.0"],
 ///     breaks: ["old-survivors" => "<0.3"],
+///     replaces: ["survivors"],
 ///     updates: github("themaiby/enshwick", "enshwick-survivors-per-altar"),
 ///     signed_by: ["RWTjqgtfpy3lSOLC4uaUXuvvKSLQKOFf6nUnEytoiFjSzxMEhLnoAdJF"],
 ///     builds: [{
@@ -54,7 +58,7 @@
 ///         constants: ["survivors.bed_id" => 0x48],
 ///     }],
 /// );
-/// assert_eq!(manifest.dependency_count, 2);
+/// assert_eq!(manifest.dependency_count, 3);
 /// assert_eq!(manifest.build_count, 1);
 /// assert_eq!(manifest.author_count, 1);
 /// // SAFETY: static strings.
@@ -102,6 +106,7 @@ macro_rules! manifest {
         $(, after: [$($after:literal),* $(,)?])?
         $(, recommends: [$($rec:literal => $rec_range:literal),* $(,)?])?
         $(, breaks: [$($breaks:literal => $breaks_range:literal),* $(,)?])?
+        $(, replaces: [$($replaces:literal),* $(,)?])?
         $(, updates: $source:ident($($source_arg:literal),* $(,)?))?
         $(, signed_by: [$($key:literal),* $(,)?])?
         $(, builds: [$({
@@ -114,6 +119,7 @@ macro_rules! manifest {
         $(,)?
     ) => {{
         const _: () = assert!($crate::abi::is_valid_id($id), "a mod id is [a-z0-9-]+");
+        $($(const _: () = assert!($crate::abi::is_valid_id($replaces), "a replaced mod id is [a-z0-9-]+");)*)?
         static DEPENDENCIES: &[$crate::abi::Dependency] = &[
             $($($crate::abi::Dependency {
                 id: $crate::abi::Str::new($req),
@@ -134,6 +140,11 @@ macro_rules! manifest {
                 id: $crate::abi::Str::new($breaks),
                 range: $crate::abi::Str::new($breaks_range),
                 relation: $crate::abi::Relation::BREAKS,
+            },)*)?
+            $($($crate::abi::Dependency {
+                id: $crate::abi::Str::new($replaces),
+                range: $crate::abi::Str::EMPTY,
+                relation: $crate::abi::Relation::REPLACES,
             },)*)?
         ];
         const AUTHOR_COUNT: usize = $crate::__private::author_count(

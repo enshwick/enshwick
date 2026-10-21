@@ -85,6 +85,7 @@ impl Mod for AdminTools {
             id: "admin-tools",
             side: SERVER,
             name: "Admin tools",
+            replaces: ["dev-tools"],
             updates: github("themaiby/enshwick", "enshwick-admin-tools"),
             signed_by: ["RWTjqgtfpy3lSOLC4uaUXuvvKSLQKOFf6nUnEytoiFjSzxMEhLnoAdJF"],
         )

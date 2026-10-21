@@ -9,7 +9,8 @@
 //! The lock is written at every start: the loader's version, the game build
 //! and each loaded mod's id, version, file and SHA-256, so a server can be
 //! set up again exactly and two servers compared. What changed since the last
-//! start goes to the log.
+//! start goes to the log. Mods that a present mod replaces are listed apart,
+//! with the mod that replaces them, since their DLLs never ran.
 
 use std::sync::OnceLock;
 
@@ -50,6 +51,20 @@ pub fn set_disabled(ids: Vec<String>) {
 #[must_use]
 pub fn disabled() -> &'static [String] {
     DISABLED.get().map_or(&[], Vec::as_slice)
+}
+
+/// The mods a present mod replaced at start.
+static REPLACED: OnceLock<Vec<Replaced>> = OnceLock::new();
+
+/// Records the mods a present mod replaced at start.
+pub fn set_replaced(replaced: Vec<Replaced>) {
+    let _first = REPLACED.set(replaced);
+}
+
+/// The mods a present mod replaced at start.
+#[must_use]
+pub fn replaced() -> &'static [Replaced] {
+    REPLACED.get().map_or(&[], Vec::as_slice)
 }
 
 /// `mods.toml`, parsed with its comments and layout kept.
@@ -153,6 +168,30 @@ pub struct Locked {
     pub sha256: String,
 }
 
+/// A mod in `mods/` that a present mod replaces, never started.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Replaced {
+    /// The old mod id.
+    pub id: String,
+    /// Its version.
+    pub version: String,
+    /// Its DLL in `mods/`.
+    pub file: String,
+    /// The id of the mod that replaces it.
+    pub by: String,
+}
+
+impl Replaced {
+    /// The line the log, the status and `/enshwick` show.
+    #[must_use]
+    pub fn line(&self) -> String {
+        format!(
+            "{} is replaced by {}; delete mods/{}",
+            self.id, self.by, self.file
+        )
+    }
+}
+
 /// The lock: the loader, the game build and the mods that loaded.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Lock {
@@ -165,6 +204,9 @@ pub struct Lock {
     /// The mods that loaded, in load order.
     #[serde(default, rename = "mod")]
     pub mods: Vec<Locked>,
+    /// The mods present mods replaced, never started.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub replaced: Vec<Replaced>,
 }
 
 impl Lock {
@@ -287,7 +329,30 @@ mod tests {
                     sha256: sha.into(),
                 })
                 .collect(),
+            replaced: Vec::new(),
         }
+    }
+
+    #[test]
+    fn replaced_mods_are_kept_apart_in_the_lock() {
+        let mut new = lock(&[("optimizer", "0.2.0", "01")]);
+        new.replaced.push(Replaced {
+            id: "proton-optimizer".into(),
+            version: "0.1.0".into(),
+            file: "enshwick_proton_optimizer.dll".into(),
+            by: "optimizer".into(),
+        });
+        let text = new.render();
+        assert!(text.contains(
+            "[[replaced]]
+id = \"proton-optimizer\""
+        ));
+        assert_eq!(Lock::parse(&text), Some(new.clone()));
+        assert!(!lock(&[]).render().contains("replaced"));
+        assert_eq!(
+            new.replaced[0].line(),
+            "proton-optimizer is replaced by optimizer; delete mods/enshwick_proton_optimizer.dll"
+        );
     }
 
     #[test]
