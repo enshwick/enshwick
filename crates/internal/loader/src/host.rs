@@ -1291,7 +1291,7 @@ extern "system" fn subscribe(
             Ok(found) => found,
             Err(status) => return status,
         };
-        if !(Event::SETTINGS_CHANGED.0..=Event::WORLD_SETTINGS.0).contains(&event.0) {
+        if !(Event::SETTINGS_CHANGED.0..=Event::PLAYER_DIED.0).contains(&event.0) {
             return Status::MISSING;
         }
         let subscription = Subscription {

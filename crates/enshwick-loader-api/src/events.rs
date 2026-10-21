@@ -8,7 +8,9 @@
 
 use core::ffi::c_void;
 
-use crate::abi::{BuildingData, ChunkData, Event, KnowledgeData, PlayerData, QuestData, TickData};
+use crate::abi::{
+    BuildingData, ChunkData, Event, KnowledgeData, PlayerData, PlayerDeathData, QuestData, TickData,
+};
 
 mod sealed {
     pub trait Sealed {}
@@ -134,6 +136,8 @@ with_data! {
     ChunkUnloaded = CHUNK_UNLOADED: ChunkData, size_of::<ChunkData>();
     /// [`Event::BUILDING_REMOVED`].
     BuildingRemoved = BUILDING_REMOVED: BuildingData, size_of::<BuildingData>();
+    /// [`Event::PLAYER_DIED`].
+    PlayerDied = PLAYER_DIED: PlayerDeathData, size_of::<PlayerDeathData>();
 }
 
 #[cfg(test)]

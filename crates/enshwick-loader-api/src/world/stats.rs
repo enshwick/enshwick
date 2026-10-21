@@ -1,5 +1,5 @@
-//! Character stats: health, stamina, mana, level and experience, and the
-//! meter of an item's own entity, read from their attribute set components
+//! Character stats: health, stamina, mana, level and experience, the time a
+//! character holds out in the shroud, and the meter of an item's own entity, read from their attribute set components
 //! and written to them. A set keeps the id
 //! of its first attribute, the values' offset, flags and count, then the
 //! values in the order of the game's attribute container.
@@ -71,6 +71,8 @@ pub(crate) enum Pool {
     Mana,
     /// An item entity's meter, the game's fuel.
     Meter,
+    /// The time a character holds out in the shroud.
+    Shroud,
 }
 
 /// A character's level and experience, from [`World::progress`].
@@ -117,6 +119,10 @@ pub(crate) struct Stats {
     experience: Set<2>,
     /// `Fuel` on an item's own entity; `None` on a build without its rows.
     meter: Option<Set<2>>,
+    shroud: Option<Set<2>>,
+    /// The actor component's state mask and its bit for standing in the
+    /// shroud.
+    in_shroud: Option<(crate::world::Field<u64>, u64)>,
 }
 
 impl Stats {
@@ -166,6 +172,21 @@ impl Stats {
                     root: value("attribute.fuel")?,
                     slots: [0, slot("attribute.fuel_max_slot")?],
                 })
+            })()
+            .ok(),
+            shroud: (|| {
+                Ok::<_, Off>(Set {
+                    ty: set("keen::ecs::FogResistance")?,
+                    root: value("attribute.shroud")?,
+                    slots: [0, slot("attribute.shroud_max_slot")?],
+                })
+            })()
+            .ok(),
+            in_shroud: (|| {
+                let field = world
+                    .writable_type(load, "keen::ecs::BaseActor")?
+                    .field::<u64>(load, "currentState")?;
+                Ok::<_, Off>((field, load.constant("actor.state_in_shroud")?))
             })()
             .ok(),
         })
@@ -220,6 +241,7 @@ impl Stats {
             Pool::Stamina => (&self.stamina, 0),
             Pool::Mana => (&self.mana, 0),
             Pool::Meter => (self.meter.as_ref().ok_or(WorldError::Missing)?, 0),
+            Pool::Shroud => (self.shroud.as_ref().ok_or(WorldError::Missing)?, 0),
         };
         let data = world.component_mut(entity, set.ty)?.cast::<u8>();
         // SAFETY: the entity's live attribute set, handed out for writing on
@@ -260,6 +282,19 @@ impl Stats {
             stamina: self.read(world, entity, &self.stamina).map(meter),
             mana: self.read(world, entity, &self.mana).map(meter),
         })
+    }
+
+    pub(crate) fn shroud(&self, world: &World, entity: Entity) -> Option<Meter> {
+        let [current, max] = self.read(world, entity, self.shroud.as_ref()?)?;
+        Some(Meter {
+            current: current.cast_signed(),
+            max: max.cast_signed(),
+        })
+    }
+
+    pub(crate) fn in_shroud(&self, world: &World, entity: Entity) -> Option<bool> {
+        let (field, bit) = self.in_shroud?;
+        world.get(entity, field).map(|state| state & bit != 0)
     }
 
     pub(crate) fn meter(&self, world: &World, pide: Entity) -> Option<Meter> {
