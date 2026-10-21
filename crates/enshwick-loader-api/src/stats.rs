@@ -46,8 +46,8 @@ use core::ffi::c_void;
 use core::time::Duration;
 
 use crate::abi::{
-    Header, HostApi, StatChange as StatChangeData, StatDefData, StatModifierData, StatModify,
-    StatRef, StatSource, Status, Str,
+    Header, StatChange as StatChangeData, StatDefData, StatModifierData, StatModify, StatRef,
+    StatSource, Status, Str,
 };
 use crate::buffs::BuffId;
 use crate::content::items::StatFormat;
@@ -1205,11 +1205,6 @@ where
 impl Load<'_> {
     fn open_stat_with(&mut self, id: &str, def: Option<&StatDef>) -> Result<Stat, Off> {
         let host = self.host();
-        crate::load::offered(
-            host.api(),
-            core::mem::offset_of!(HostApi, stat_watch),
-            "stats",
-        )?;
         let data = def.map(StatDef::to_data);
         let def_ptr = data.as_ref().map_or(core::ptr::null(), core::ptr::from_ref);
         let mut out = StatRef::default();
@@ -1223,8 +1218,8 @@ impl Load<'_> {
     ///
     /// # Errors
     ///
-    /// [`Off`] for a malformed id or definition, a kind defined twice, after
-    /// init, or with a loader older than the API.
+    /// [`Off`] for a malformed id or definition, a kind defined twice, or
+    /// after init.
     ///
     /// # Examples
     ///
@@ -1241,8 +1236,7 @@ impl Load<'_> {
     ///
     /// # Errors
     ///
-    /// [`Off`] for a malformed id, after init, or with a loader older than
-    /// the API.
+    /// [`Off`] for a malformed id or after init.
     ///
     /// # Examples
     ///
@@ -1255,18 +1249,13 @@ impl Load<'_> {
     ///
     /// # Errors
     ///
-    /// [`Off`] after init, or with a loader older than the API.
+    /// [`Off`] after init.
     ///
     /// # Examples
     ///
     /// See the [module](self).
     pub fn stats(&mut self) -> Result<Stats, Off> {
         let host = self.host();
-        crate::load::offered(
-            host.api(),
-            core::mem::offset_of!(HostApi, stat_watch),
-            "stats",
-        )?;
         Ok(Stats {
             host,
             items: self.item_data(ITEM_KIND)?,
@@ -1279,7 +1268,7 @@ impl Load<'_> {
     ///
     /// # Errors
     ///
-    /// [`Off`] after init, or with a loader older than the API.
+    /// [`Off`] after init.
     ///
     /// # Examples
     ///
@@ -1294,11 +1283,6 @@ impl Load<'_> {
     /// ```
     pub fn buff_modifiers(&mut self, buff: BuffId, modifiers: &[Modifier]) -> Result<(), Off> {
         let host = self.host();
-        crate::load::offered(
-            host.api(),
-            core::mem::offset_of!(HostApi, stat_watch),
-            "stats",
-        )?;
         let data: Vec<StatModifierData> = modifiers.iter().map(|m| m.to_data()).collect();
         let status = (host.api().stat_buff)(
             host.handle(),
@@ -1314,7 +1298,7 @@ impl Load<'_> {
     ///
     /// # Errors
     ///
-    /// [`Off`] after init, or with a loader older than the API.
+    /// [`Off`] after init.
     ///
     /// # Examples
     ///
@@ -1333,11 +1317,6 @@ impl Load<'_> {
         F: Fn(&StatChange) + Send + Sync + 'static,
     {
         let host = self.host();
-        crate::load::offered(
-            host.api(),
-            core::mem::offset_of!(HostApi, stat_watch),
-            "stats",
-        )?;
         crate::load::hand_over(
             handler,
             |user| (host.api().stats_changed)(host.handle(), run_changed::<F>, user),

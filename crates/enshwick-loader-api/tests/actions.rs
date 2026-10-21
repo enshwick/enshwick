@@ -20,7 +20,7 @@ mod tests {
         }
 
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
-            let _first = ACTIONS.set(load.actions()?);
+            let _first = ACTIONS.set(load.actions());
             Ok(Self)
         }
     }

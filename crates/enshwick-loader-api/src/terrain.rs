@@ -19,7 +19,7 @@
 //! use enshwick_loader_api::terrain::Shape;
 //!
 //! fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
-//!     let terrain = load.terrain()?;
+//!     let terrain = load.terrain();
 //!     let world = load.world()?;
 //!     load.add_command("crater", "digs a crater where you stand", move |ctx, _args| {
 //!         let Some(me) = ctx.character() else {
@@ -36,9 +36,9 @@
 //! }
 //! ```
 
-use crate::abi::{Header, HostApi, Status, TerrainEdit, TerrainMaterialInfo};
+use crate::abi::{Header, Status, TerrainEdit, TerrainMaterialInfo};
 use crate::world::WorldError;
-use crate::{Host, Load, Off};
+use crate::{Host, Load};
 
 /// The largest radius and height of an edit, in metres.
 pub const MAX_RADIUS: f32 = 16.0;
@@ -310,20 +310,14 @@ impl Load<'_> {
     /// The [`Terrain`] of the server's world; on a client, the built-in
     /// server's while it hosts a game.
     ///
-    /// # Errors
-    ///
-    /// [`Off`] under a loader older than ABI minor 34.
-    ///
     /// # Examples
     ///
     /// See the [module](self).
-    pub fn terrain(&mut self) -> Result<Terrain, Off> {
-        let host = self.host();
-        crate::load::offered(
-            host.api(),
-            core::mem::offset_of!(HostApi, terrain_edit),
-            "terrain",
-        )?;
-        Ok(Terrain { host, dry: false })
+    #[must_use]
+    pub fn terrain(&mut self) -> Terrain {
+        Terrain {
+            host: self.host(),
+            dry: false,
+        }
     }
 }

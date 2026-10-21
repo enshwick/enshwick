@@ -437,8 +437,7 @@ const fn digit(c: u8) -> u8 {
 /// on, such as an item's name tag or the template a station item places,
 /// read the same at init and later, on the server and the client.
 ///
-/// `None` for a key the archive lacks, and under a loader older than ABI
-/// minor 61. Each call reads the archive's files; keep what a mod reads
+/// `None` for a key the archive lacks. Each call reads the archive's files; keep what a mod reads
 /// more than once.
 ///
 /// # Examples
@@ -473,10 +472,6 @@ impl crate::Host {
     #[must_use]
     pub fn game_resource(&self, key: ResourceKey) -> Option<Vec<u8>> {
         let api = self.api();
-        let end = core::mem::offset_of!(crate::abi::HostApi, resource_read) + size_of::<usize>();
-        if !api.header.covers(end) {
-            return None;
-        }
         let mut buffer = vec![0u8; 64 << 10];
         loop {
             let mut len = 0u32;
@@ -761,9 +756,8 @@ unsafe extern "system" fn build(
 ///
 /// # Errors
 ///
-/// [`Off`] under a loader older than ABI minor 63, for a key the mod does
-/// not serve or did not allow to rebuild, and when the new build differs in
-/// length.
+/// [`Off`] for a key the mod does not serve or did not allow to rebuild,
+/// and when the new build differs in length.
 ///
 /// # Examples
 ///
@@ -781,11 +775,6 @@ unsafe extern "system" fn build(
 pub fn rebuild(key: ResourceKey) -> Result<(), Off> {
     let host = crate::host().ok_or_else(|| Off::new("rebuild: no loader"))?;
     let api = host.api();
-    crate::load::offered(
-        api,
-        core::mem::offset_of!(crate::abi::HostApi, rebuild_resource),
-        "rebuilding a served resource",
-    )?;
     let status = (api.rebuild_resource)(host.handle(), &raw const key);
     crate::load::ok(status, (), || "rebuild resource".to_owned())
 }
@@ -797,7 +786,7 @@ impl Load<'_> {
     ///
     /// # Errors
     ///
-    /// [`Off`] when the loader is too old, after init, for an id outside the
+    /// [`Off`] after init, for an id outside the
     /// mod's namespace, or for one whose game id another content id has,
     /// which the loader logs with both ids and both mods.
     ///
@@ -816,11 +805,6 @@ impl Load<'_> {
     /// ```
     pub fn declare(&mut self, id: Id) -> Result<Guid, Off> {
         let api = self.host().api();
-        crate::load::offered(
-            api,
-            core::mem::offset_of!(crate::abi::HostApi, declare_content),
-            "content ids",
-        )?;
         let mut out = [0u8; 16];
         let status = (api.declare_content)(
             self.host().handle(),
@@ -837,7 +821,7 @@ impl Load<'_> {
     ///
     /// # Errors
     ///
-    /// [`Off`] when the loader is too old.
+    /// [`Off`] when the loader refuses the text.
     ///
     /// # Examples
     ///
@@ -854,11 +838,6 @@ impl Load<'_> {
     /// ```
     pub fn add_text(&mut self, tag: Guid, language: u32, text: &str) -> Result<(), Off> {
         let api = self.host().api();
-        crate::load::offered(
-            api,
-            core::mem::offset_of!(crate::abi::HostApi, add_text),
-            "mod texts",
-        )?;
         let status = (api.add_text)(
             self.host().handle(),
             tag.id(),
@@ -875,7 +854,7 @@ impl Load<'_> {
     ///
     /// # Errors
     ///
-    /// [`Off`] when the loader is too old or another mod serves `key`.
+    /// [`Off`] when another mod serves `key`.
     ///
     /// # Examples
     ///
@@ -901,11 +880,6 @@ impl Load<'_> {
         builder: impl Fn(&[u8]) -> Option<Vec<u8>> + Send + Sync + 'static,
     ) -> Result<(), Off> {
         let api = self.host().api();
-        crate::load::offered(
-            api,
-            core::mem::offset_of!(crate::abi::HostApi, serve_resource),
-            "served resources",
-        )?;
         let builder: Box<Builder> = Box::new(Box::new(builder));
         let user = Box::into_raw(builder);
         let patch: ResourcePatchFn = build;
@@ -931,8 +905,7 @@ impl Load<'_> {
     ///
     /// # Errors
     ///
-    /// [`Off`] under a loader older than ABI minor 63, or for a key the mod
-    /// does not serve.
+    /// [`Off`] for a key the mod does not serve.
     ///
     /// # Examples
     ///
@@ -949,11 +922,6 @@ impl Load<'_> {
     /// ```
     pub fn allow_rebuild(&mut self, key: ResourceKey) -> Result<(), Off> {
         let api = self.host().api();
-        crate::load::offered(
-            api,
-            core::mem::offset_of!(crate::abi::HostApi, rebuild_resource),
-            "rebuilding a served resource",
-        )?;
         let status = (api.rebuild_resource)(self.host().handle(), &raw const key);
         crate::load::ok(status, (), || "allow rebuild".to_owned())
     }

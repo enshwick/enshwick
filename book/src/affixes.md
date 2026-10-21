@@ -6,7 +6,7 @@ roll affixes as they drop from random loot, come out of crafting, or when a
 mod asks; what an item rolled stays with it, and the entity that wears it
 gets the modifiers. The
 [`affixes`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/affixes.rs)
-module holds the API. It needs ABI minor 48.
+module holds the API.
 
 ```rust
 use enshwick_loader_api::affixes::{AffixCraft, AffixDef, AffixLoot, Categories, Range, Rarity, RollRules};

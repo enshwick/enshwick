@@ -23,7 +23,7 @@
 
 use core::ffi::c_void;
 
-use crate::abi::{BuildCheck, CraftCheck, HostApi};
+use crate::abi::{BuildCheck, CraftCheck};
 use crate::ecs::Entity;
 use crate::{Load, Off};
 
@@ -115,8 +115,7 @@ impl Load<'_> {
     ///
     /// # Errors
     ///
-    /// [`Off`] after init, on a build without the craft event, or under a
-    /// loader older than ABI minor 25.
+    /// [`Off`] after init or on a build without the craft event.
     ///
     /// # Examples
     ///
@@ -126,11 +125,6 @@ impl Load<'_> {
         F: Fn(&CraftRequest) -> bool + Send + Sync + 'static,
     {
         let host = self.host();
-        crate::load::offered(
-            host.api(),
-            core::mem::offset_of!(HostApi, craft_filter),
-            "craft filters",
-        )?;
         crate::load::hand_over(
             filter,
             |user| (host.api().craft_filter)(host.handle(), run_craft::<F>, user),
@@ -148,8 +142,7 @@ impl Load<'_> {
     ///
     /// # Errors
     ///
-    /// [`Off`] after init, on a build without the cursor check, or under a
-    /// loader older than ABI minor 25.
+    /// [`Off`] after init or on a build without the cursor check.
     ///
     /// # Examples
     ///
@@ -159,11 +152,6 @@ impl Load<'_> {
         F: Fn(&Placement) -> bool + Send + Sync + 'static,
     {
         let host = self.host();
-        crate::load::offered(
-            host.api(),
-            core::mem::offset_of!(HostApi, build_filter),
-            "build filters",
-        )?;
         crate::load::hand_over(
             filter,
             |user| (host.api().build_filter)(host.handle(), run_build::<F>, user),

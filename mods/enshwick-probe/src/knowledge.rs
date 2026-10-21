@@ -68,7 +68,7 @@ impl KnowledgeChecks {
             Err(off) => enshwick_loader_api::warn!("FAIL knowledge input filter: {off}"),
         }
         Ok(Self {
-            knowledge: load.knowledge()?,
+            knowledge: load.knowledge(),
             scheduler,
         })
     }

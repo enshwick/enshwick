@@ -53,7 +53,7 @@ mod tests {
                     .push(*change);
             })?;
             let stats = load.stats()?;
-            let buffs = load.buffs()?;
+            let buffs = load.buffs();
             let _first = KIT.set(Kit {
                 buffs,
                 stats,

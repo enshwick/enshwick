@@ -10,7 +10,7 @@ mod stats;
 
 use core::ffi::c_void;
 
-use crate::abi::{EntityPlace, Header, HostApi, PlayerInfo, Status, Str};
+use crate::abi::{EntityPlace, Header, PlayerInfo, Status, Str};
 use crate::ecs::Entity;
 use crate::game_events::{Field, Scalar};
 use crate::{Host, Load, Off};
@@ -243,8 +243,7 @@ pub enum Notice {
     /// On screen, as the game shows its own messages: the player's client
     /// runs Enshwick.
     OnScreen,
-    /// As a chat line: the player's client lacks Enshwick, or the loader is
-    /// older than ABI minor 27.
+    /// As a chat line: the player's client lacks Enshwick.
     Chat,
 }
 
@@ -267,7 +266,7 @@ pub enum WorldError {
     /// The entity is not in the world.
     #[error("the entity is not in the world")]
     Gone,
-    /// The loader is too old, or this game build lacks the piece.
+    /// This game build lacks the piece.
     #[error("not available on this loader or game build")]
     Missing,
     /// The world refused: a player's character, a save before the world
@@ -344,11 +343,6 @@ pub struct World {
 impl World {
     pub(crate) fn resolve(load: &Load<'_>) -> Result<Self, Off> {
         let host = load.host();
-        crate::load::offered(
-            host.api(),
-            core::mem::offset_of!(HostApi, players),
-            "world reads",
-        )?;
         let mut world = Self {
             host,
             transform: ComponentType(0),
@@ -435,8 +429,7 @@ impl World {
     /// [`WorldError::Lacks`] when it lacks the component,
     /// [`WorldError::Refused`] for a type the loader will not write,
     /// [`WorldError::WrongThread`] off the game thread and
-    /// [`WorldError::Missing`] under a loader older than ABI minor 22 or on
-    /// a build without writes.
+    /// [`WorldError::Missing`] on a build without writes.
     ///
     /// # Examples
     ///
@@ -565,9 +558,6 @@ impl World {
         entity: Entity,
         ty: ComponentType,
     ) -> Result<*mut c_void, WorldError> {
-        if !self.offers(core::mem::offset_of!(HostApi, component_write)) {
-            return Err(WorldError::Missing);
-        }
         let mut out: *mut c_void = core::ptr::null_mut();
         let status =
             (self.host.api().component_write)(self.host.handle(), entity.0, ty.0, &raw mut out);
@@ -686,11 +676,6 @@ impl World {
         players
     }
 
-    /// Whether the loader offers what was added to the table at `end`.
-    fn offers(&self, end: usize) -> bool {
-        self.host.api().header.covers(end + size_of::<usize>())
-    }
-
     /// Gives `entity` the name `text`, as a player's rename does: the game
     /// shows it on hover, sends it to every client and saves it with the
     /// world. The game keeps 255 bytes; an empty text removes the name. On
@@ -713,9 +698,6 @@ impl World {
     /// ```
     #[must_use]
     pub fn set_label(&self, entity: Entity, text: &str) -> bool {
-        if !self.offers(core::mem::offset_of!(HostApi, set_label)) {
-            return false;
-        }
         (self.host.api().set_label)(self.host.handle(), entity.0, Str::new(text)).is_ok()
     }
 
@@ -770,9 +752,7 @@ impl World {
         reason = "shown is the point; how is for the curious"
     )]
     pub fn notify(&self, player: &Player, text: &str) -> Notice {
-        if self.offers(core::mem::offset_of!(HostApi, notify))
-            && (self.host.api().notify)(self.host.handle(), player.key, Str::new(text)).is_ok()
-        {
+        if (self.host.api().notify)(self.host.handle(), player.key, Str::new(text)).is_ok() {
             return Notice::OnScreen;
         }
         self.tell(player, text);
@@ -795,9 +775,7 @@ impl World {
     }
 
     fn chat(&self, to: u64, text: &str) {
-        if self.offers(core::mem::offset_of!(HostApi, chat)) {
-            let _queued = (self.host.api().chat)(self.host.handle(), to, Str::new(text));
-        }
+        let _queued = (self.host.api().chat)(self.host.handle(), to, Str::new(text));
     }
 
     /// `entity`'s health, stamina and mana; `None` when it has no health,
@@ -1078,9 +1056,6 @@ impl World {
     /// ```
     #[must_use]
     pub fn entities(&self, ty: ComponentType) -> Vec<Placed> {
-        if !self.offers(core::mem::offset_of!(HostApi, entities)) {
-            return Vec::new();
-        }
         let entities = self.host.api().entities;
         let mut capacity = 1024u32;
         loop {
@@ -1146,8 +1121,7 @@ impl World {
     /// [`WorldError::Refused`] for a player's character,
     /// [`WorldError::Gone`] for an entity not in the world,
     /// [`WorldError::WrongThread`] off the game thread and
-    /// [`WorldError::Missing`] under a loader older than ABI minor 21 or on
-    /// any other refusal.
+    /// [`WorldError::Missing`] on any other refusal.
     ///
     /// # Examples
     ///
@@ -1159,9 +1133,6 @@ impl World {
     /// }
     /// ```
     pub fn destroy(&self, entity: Entity) -> Result<(), WorldError> {
-        if !self.offers(core::mem::offset_of!(HostApi, destroy)) {
-            return Err(WorldError::Missing);
-        }
         WorldError::check(
             (self.host.api().destroy)(self.host.handle(), entity.0),
             WorldError::Gone,
@@ -1176,8 +1147,7 @@ impl World {
     ///
     /// [`WorldError::Refused`] while the world may not be saved, as before
     /// it has loaded; [`WorldError::WrongThread`] off the game thread;
-    /// [`WorldError::Missing`] under a loader older than ABI minor 21 or on
-    /// any other refusal.
+    /// [`WorldError::Missing`] on any other refusal.
     ///
     /// # Examples
     ///
@@ -1189,16 +1159,12 @@ impl World {
     /// }
     /// ```
     pub fn save(&self) -> Result<(), WorldError> {
-        if !self.offers(core::mem::offset_of!(HostApi, save_world)) {
-            return Err(WorldError::Missing);
-        }
         WorldError::from_status((self.host.api().save_world)(self.host.handle()))
     }
 
     /// The key of the world the server runs: its save file's name and a hash
     /// of its folder, such as `world0-1a2b3c4d`, the same in every session;
-    /// `None` before the server has read the world, or under a loader older
-    /// than ABI minor 21. On a client it is the key of the game it hosts,
+    /// `None` before the server has read the world. On a client it is the key of the game it hosts,
     /// and `None` once that game ends. Any thread.
     ///
     /// # Examples
@@ -1247,10 +1213,6 @@ impl World {
 /// The key of the world the server runs, from the loader.
 pub(crate) fn world_key(host: Host) -> Option<String> {
     let api = host.api();
-    let end = core::mem::offset_of!(HostApi, world_key) + size_of::<usize>();
-    if !api.header.covers(end) {
-        return None;
-    }
     let mut out = Str::EMPTY;
     if !(api.world_key)(host.handle(), &raw mut out).is_ok() {
         return None;

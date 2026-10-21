@@ -17,11 +17,10 @@ platform and from each other.
 Which loader a mod runs under is not read from that version but from the ABI
 version `enshwick-loader-api` was built with (see
 [ABI reference](abi-reference.md#versions)). A mod built against
-`enshwick-loader-api` X.Y needs a loader of the same ABI major, and for each feature
-it uses, a loader whose ABI minor is at least the one that feature lists; under
-an older loader such a feature turns itself off with a note such as
-`mid-function hooks: needs a newer loader`. Any loader of the
-same ABI major loads a mod built against an older `enshwick-loader-api`.
+`enshwick-loader-api` X.Y needs a loader of the same ABI major whose ABI minor is
+at least the one X.Y was built with; an older loader does not start the mod
+and logs `update Enshwick`. Any loader of the same ABI major loads a mod built
+against an older `enshwick-loader-api`.
 
 A mod's version is [SemVer](https://semver.org). Leave `version` out of
 [`manifest!`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/declare.rs)
@@ -233,8 +232,7 @@ for entry in enshwick_loader_api::mods() {
 }
 ```
 
-The list is empty before the loader initialises the mod and under a loader
-older than ABI minor 5. The loader lists itself first, under
+The list is empty before the loader initialises the mod. The loader lists itself first, under
 `mods::LOADER_ID`; `mods::LOADER_FILES` names the files it is made of, the
 stub and the loader's DLL, which an update of a mod never writes.
 
@@ -268,8 +266,7 @@ on the client.
 then lists those mods: the server's version, `running` false, the client's
 DLL path when it has the mod (empty otherwise), the source the server
 advertises, else the client's own source for the mod, and in `signed_by` the
-author keys the server advertises (empty when it advertises none, or under a
-loader older than ABI minor 14).
+author keys the server advertises (empty when it advertises none).
 
 The handler runs on the game thread once the player closed the note. Hand
 downloads to a thread of your own:
@@ -289,14 +286,12 @@ fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_
 }
 ```
 
-`join_missing()` is empty before a refused join and under a loader older than
-ABI minor 10. See [The join check](concepts/join-check.md) for the check
+`join_missing()` is empty before a refused join. See [The join check](concepts/join-check.md) for the check
 itself.
 
 `mods::replaced()` lists the mods in `mods/` that a present mod replaces after
 a rename (`replaces:` in the [manifest](concepts/loader-and-abi.md#the-manifest)),
-which the loader never started, each with `replaced_by` and its `file`. It is
-empty under a loader older than ABI minor 54.
+which the loader never started, each with `replaced_by` and its `file`.
 
 ## Staged updates
 

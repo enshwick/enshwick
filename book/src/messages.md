@@ -55,7 +55,7 @@ messages now. Both send from any thread and fail with a `SendError`:
 | `TooLarge` | the message is over 4096 bytes encoded |
 | `OverRate` | the side sent more than about twenty messages a second to that peer |
 | `Encode` | the message does not encode |
-| `Refused` | a loader older than ABI minor 26 |
+| `Refused` | the loader refused the message for another reason |
 
 ## How messages travel
 

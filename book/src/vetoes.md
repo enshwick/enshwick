@@ -2,8 +2,7 @@
 
 A mod may refuse a craft or a placement before the game acts on it.
 [Interactions](interactions.md) with entities, from opening a chest to
-dismantling a piece, have their own filter. Both filters here need ABI
-minor 25; a filter that panics turns the mod off and lets the action
+dismantling a piece, have their own filter. A filter that panics turns the mod off and lets the action
 through.
 
 ## Crafting

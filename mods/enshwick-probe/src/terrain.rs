@@ -18,7 +18,7 @@ pub(crate) struct TerrainChecks {
 impl TerrainChecks {
     pub(crate) fn new(load: &mut Load<'_>) -> Result<Self, Off> {
         Ok(Self {
-            terrain: load.terrain()?,
+            terrain: load.terrain(),
             world: load.world()?,
         })
     }

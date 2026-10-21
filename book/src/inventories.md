@@ -28,8 +28,7 @@ fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_
 }
 ```
 
-`load.inventories()` returns `Err(Off)` under a loader older than ABI minor
-12, after `init`, or on a game build that lacks a piece the reads or the
+`load.inventories()` returns `Err(Off)` after `init` or on a game build that lacks a piece the reads or the
 transactions need.
 
 ## How inventories are built

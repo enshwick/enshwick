@@ -33,7 +33,7 @@ pub trait Kind: sealed::Sealed + 'static {
     type Data: Copy + 'static;
 
     /// The event's data from the raw pointer the loader passes; `None` when
-    /// it is missing. Fields an older loader does not know are zero.
+    /// it is missing.
     ///
     /// # Safety
     ///
@@ -117,7 +117,7 @@ without_data! {
 }
 
 // Each event names its data and the size that data had in the minor that
-// added the event: a field appended later is zero under an older loader.
+// added the event, the part every loader that runs the mod writes.
 with_data! {
     /// [`Event::TICK`].
     Ticked = TICK: TickData, size_of::<TickData>();

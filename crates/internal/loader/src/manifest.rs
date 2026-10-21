@@ -1,7 +1,8 @@
 //! Reading a mod's manifest into a resolver candidate.
 
 use enshwick_loader_api::abi::{
-    ABI_MAJOR, Dependency, Manifest, Relation, Side, Str, UpdateKind, UpdateSource, read_headed,
+    ABI_MAJOR, ABI_MINOR, Dependency, Manifest, Relation, Side, Str, UpdateKind, UpdateSource,
+    read_headed,
 };
 use semver::{Version, VersionReq};
 
@@ -106,12 +107,21 @@ unsafe fn own(mut manifest: Manifest) -> Manifest {
 ///
 /// # Errors
 ///
-/// A reason for the log when the manifest is malformed or from another ABI.
+/// A reason for the log when the manifest is malformed, from another ABI
+/// major, or from a newer minor than the loader's: a mod meets only loaders
+/// that know every entry it calls, and an older minor's mod is read as far
+/// as it knows each struct.
 pub unsafe fn parse(manifest: &Manifest) -> Result<Candidate, String> {
     if manifest.header.abi_major != ABI_MAJOR {
         return Err(format!(
             "built for ABI {}, the loader speaks {ABI_MAJOR}",
             manifest.header.abi_major
+        ));
+    }
+    if manifest.header.abi_minor > ABI_MINOR {
+        return Err(format!(
+            "built for ABI {ABI_MAJOR}.{}, newer than the loader's {ABI_MAJOR}.{ABI_MINOR}: update Enshwick",
+            manifest.header.abi_minor
         ));
     }
     if !manifest.header.covers(REQUIRED) {
@@ -617,5 +627,18 @@ mod tests {
         other.header.abi_major = 2;
         // SAFETY: static data.
         assert!(unsafe { parse(&other) }.unwrap_err().contains("ABI 2"));
+    }
+
+    #[test]
+    fn a_mod_of_a_newer_minor_is_refused_and_an_older_one_loads() {
+        let mut newer = manifest("ok", "0.1.0");
+        newer.header.abi_minor = ABI_MINOR + 1;
+        // SAFETY: static data.
+        let why = unsafe { parse(&newer) }.unwrap_err();
+        assert!(why.contains("update Enshwick"), "{why}");
+        let mut older = manifest("ok", "0.1.0");
+        older.header.abi_minor = ABI_MINOR - 1;
+        // SAFETY: static data.
+        assert!(unsafe { parse(&older) }.is_ok());
     }
 }

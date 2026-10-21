@@ -19,7 +19,7 @@ mod tests {
         }
 
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
-            let _first = TERRAIN.set(load.terrain()?);
+            let _first = TERRAIN.set(load.terrain());
             Ok(Self)
         }
     }

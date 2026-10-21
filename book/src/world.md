@@ -21,8 +21,7 @@ fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_
 }
 ```
 
-`load.world()` turns the mod off under a loader too old for world reads, or on
-a game build without the component types the reads need.
+`load.world()` turns the mod off on a game build without the component types the reads need.
 
 ## Where reads work
 
@@ -178,12 +177,12 @@ fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_
 ```
 
 Writes work on the game thread between steps, in a game event, a scheduled
-task or a chat command, and need ABI minor 22. The game thread runs ECS
+task or a chat command. The game thread runs ECS
 systems itself while it steps, so a write from a filter or a hook on a system
 is refused even there. They fail with a `WorldError`: `Gone` for an entity not
 in the world, `Lacks` when it lacks the component, `Refused` for a type the
 loader will not write, `WrongThread` off the game thread or inside a step, and
-`Missing` under an older loader. A field
+`Missing` on a build without writes. A field
 of an engine type means what the engine makes of it: a write the engine does
 not expect, such as a value its systems keep elsewhere, may be overwritten or
 do nothing, so check a new write on a test server first.
@@ -223,8 +222,8 @@ under way counts as asked. Before the world has loaded it is refused.
 its folder, such as `world0-1a2b3c4d`, the same in every session. A
 [world store](state.md#per-world-state) files the mod's state under it.
 
-All three need ABI minor 21 and, like the reads, the game thread; `key()`
-works from any thread.
+Like the reads, all three need the game thread; `key()` works from any
+thread.
 
 ## Players
 

@@ -21,7 +21,7 @@ mod tests {
         }
 
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
-            let _first = KNOWLEDGE.set(load.knowledge()?);
+            let _first = KNOWLEDGE.set(load.knowledge());
             load.on::<KnowledgeChanged>(|changed| {
                 enshwick_loader_api::info!(
                     "{} of {} is {}",

@@ -127,8 +127,7 @@ shows a line on the player's screen, as the game shows its own "can't do
 that" messages, and `world.notify_all(text)` on every player's. It returns
 how the line went: `Notice::OnScreen`, or `Notice::Chat` when the player's
 client lacks Enshwick and gets the line in chat instead. Call it on the game
-thread; it needs ABI minor 27, and under an older loader it always tells in
-chat. The game shows up to 255 bytes; keep it to a short line.
+thread. The game shows up to 255 bytes; keep it to a short line.
 
 ```rust
 use enshwick_loader_api::world::Notice;

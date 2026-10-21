@@ -329,7 +329,7 @@ where
 /// `summon` is null or valid for the call.
 unsafe fn read_summon(summon: *const RawSummon) -> Option<Summon> {
     // SAFETY: forwarded from the caller; the fields up to the target are
-    // there since minor 16, the rest read as zero when the loader is older.
+    // there since minor 16.
     let raw = unsafe { crate::abi::read_headed(summon, core::mem::offset_of!(RawSummon, slot)) }?;
     Some(Summon::from_raw(&raw))
 }
@@ -417,14 +417,12 @@ type Register<R> = extern "system" fn(crate::abi::ModHandle, R, *mut c_void) -> 
 impl Load<'_> {
     fn register<F, R>(
         &mut self,
-        field: usize,
         what: &str,
         pick: fn(&HostApi) -> Register<R>,
         run: R,
         handler: F,
     ) -> Result<(), Off> {
         let host = self.host();
-        crate::load::offered(host.api(), field, what)?;
         let register = pick(host.api());
         crate::load::hand_over(handler, |user| register(host.handle(), run, user), what)
     }
@@ -441,8 +439,8 @@ impl Load<'_> {
     ///
     /// # Errors
     ///
-    /// [`Off`] after init, when another mod answers already, on a build that
-    /// lacks a piece, or with a loader older than the API.
+    /// [`Off`] after init, when another mod answers already, or on a build
+    /// that lacks a piece.
     ///
     /// # Examples
     ///
@@ -452,7 +450,6 @@ impl Load<'_> {
         F: Fn(&Lookup) -> Answer + Send + Sync + 'static,
     {
         self.register(
-            core::mem::offset_of!(HostApi, survivor_lookup),
             "the survivor lookup",
             |api| api.survivor_lookup,
             run_lookup::<F> as crate::abi::SurvivorLookupFn,
@@ -482,7 +479,6 @@ impl Load<'_> {
         F: Fn(&BedCheck) -> bool + Send + Sync + 'static,
     {
         self.register(
-            core::mem::offset_of!(HostApi, survivor_bed_check),
             "the survivor bed check",
             |api| api.survivor_bed_check,
             run_bed_check::<F> as crate::abi::BedCheckFn,
@@ -521,7 +517,6 @@ impl Load<'_> {
         F: Fn(&Summon) -> SummonVerdict + Send + Sync + 'static,
     {
         self.register(
-            core::mem::offset_of!(HostApi, summon_filter),
             "the summon filter",
             |api| api.summon_filter,
             run_summon::<F> as crate::abi::SummonFn,
@@ -558,7 +553,6 @@ impl Load<'_> {
         F: Fn(&Summon) + Send + Sync + 'static,
     {
         self.register(
-            core::mem::offset_of!(HostApi, summoned),
             "the summon handler",
             |api| api.summoned,
             run_summoned::<F> as crate::abi::SummonFn,
@@ -572,8 +566,7 @@ impl Load<'_> {
     ///
     /// # Errors
     ///
-    /// [`Off`] after init, on a build that lacks the registry, or with a
-    /// loader older than the API.
+    /// [`Off`] after init or on a build that lacks the registry.
     ///
     /// # Examples
     ///
@@ -586,11 +579,6 @@ impl Load<'_> {
     /// ```
     pub fn add_summon_item(&mut self, item: u32, survivor: SurvivorId) -> Result<(), Off> {
         let host = self.host();
-        crate::load::offered(
-            host.api(),
-            core::mem::offset_of!(HostApi, summon_item),
-            "summon items",
-        )?;
         let status = (host.api().summon_item)(host.handle(), item, survivor.0);
         if status.is_ok() {
             Ok(())
@@ -627,7 +615,6 @@ impl Load<'_> {
         F: Fn(SurvivorId, &[u8]) -> Option<u8> + Send + Sync + 'static,
     {
         self.register(
-            core::mem::offset_of!(HostApi, survivor_status),
             "the survivor menu merge",
             |api| api.survivor_status,
             run_status::<F> as crate::abi::SurvivorStatusFn,

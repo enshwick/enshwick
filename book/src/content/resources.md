@@ -75,8 +75,7 @@ the resource the game holds. Nothing happens while the game has not built
 the resource yet. The game keeps reading the first build's bytes, so a
 rebuild must come out the same length: changed values qualify, added
 entries do not, and `rebuild` returns `Err(Off)` for them. Each rebuild
-keeps the new bytes for the process, so it is for rare changes. It needs
-ABI minor 63.
+keeps the new bytes for the process, so it is for rare changes.
 
 ## Patches from several mods compose
 

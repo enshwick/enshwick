@@ -16,7 +16,7 @@
 //!
 //! ```
 //! fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
-//!     let clock = load.clock()?;
+//!     let clock = load.clock();
 //!     load.add_command("noon", "sets the time to noon", move |_ctx, _args| {
 //!         match clock.set_hours(12.0) {
 //!             Ok(()) => "it is noon".into(),
@@ -28,7 +28,7 @@
 
 use core::time::Duration;
 
-use crate::abi::{DaytimeInfo, Header, HostApi, Status};
+use crate::abi::{DaytimeInfo, Header, Status};
 use crate::world::WorldError;
 use crate::{Host, Load, Off};
 
@@ -201,21 +201,12 @@ impl Load<'_> {
     /// The [`Clock`] of the server's world; on a client, the built-in
     /// server's while it hosts a game.
     ///
-    /// # Errors
-    ///
-    /// [`Off`] under a loader older than ABI minor 28.
-    ///
     /// # Examples
     ///
     /// See the [module](self).
-    pub fn clock(&mut self) -> Result<Clock, Off> {
-        let host = self.host();
-        crate::load::offered(
-            host.api(),
-            core::mem::offset_of!(HostApi, set_time_of_day),
-            "clock",
-        )?;
-        Ok(Clock { host })
+    #[must_use]
+    pub fn clock(&mut self) -> Clock {
+        Clock { host: self.host() }
     }
 
     /// The mod's [`ClockSpeed`]: its factor on how fast the server's clock
@@ -223,19 +214,13 @@ impl Load<'_> {
     ///
     /// # Errors
     ///
-    /// [`Off`] under a loader older than ABI minor 28, after init, or on a
-    /// build without the clock's speed.
+    /// [`Off`] after init or on a build without the clock's speed.
     ///
     /// # Examples
     ///
     /// See [`ClockSpeed`].
     pub fn clock_speed(&mut self) -> Result<ClockSpeed, Off> {
         let host = self.host();
-        crate::load::offered(
-            host.api(),
-            core::mem::offset_of!(HostApi, set_time_speed),
-            "clock speed",
-        )?;
         let status = (host.api().time_speed_control)(host.handle());
         crate::load::ok(status, ClockSpeed { host }, || "clock speed".to_owned())
     }

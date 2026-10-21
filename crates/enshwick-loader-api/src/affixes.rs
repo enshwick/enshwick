@@ -39,8 +39,8 @@ use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
 use crate::abi::{
-    AffixDefData, AffixModifierData, AffixRoll, Header, HostApi, ItemLine, StatModifierData,
-    StatRef, Status, Str,
+    AffixDefData, AffixModifierData, AffixRoll, Header, ItemLine, StatModifierData, StatRef,
+    Status, Str,
 };
 use crate::ecs::Entity;
 use crate::game_events::CraftRequested;
@@ -1025,8 +1025,8 @@ impl Load<'_> {
     ///
     /// # Errors
     ///
-    /// [`Off`] for a malformed id or definition, an affix defined twice,
-    /// after init, or with a loader older than the API.
+    /// [`Off`] for a malformed id or definition, an affix defined twice, or
+    /// after init.
     ///
     /// # Examples
     ///
@@ -1035,11 +1035,6 @@ impl Load<'_> {
         def.check()
             .map_err(|why| Off::new(format!("affix {name:?}: {why}")))?;
         let host = self.host();
-        crate::load::offered(
-            host.api(),
-            core::mem::offset_of!(HostApi, affix_info),
-            "affixes",
-        )?;
         let ranges = def.to_ranges();
         let data = def.to_data(&ranges);
         let mut out = StatRef::default();
@@ -1050,21 +1045,12 @@ impl Load<'_> {
 
     /// The affix pool and rolls. Call it during `init`.
     ///
-    /// # Errors
-    ///
-    /// [`Off`] after init, or with a loader older than the API.
-    ///
     /// # Examples
     ///
     /// See [`Affixes::roll`].
-    pub fn affixes(&mut self) -> Result<Affixes, Off> {
-        let host = self.host();
-        crate::load::offered(
-            host.api(),
-            core::mem::offset_of!(HostApi, affix_info),
-            "affixes",
-        )?;
-        Ok(Affixes { host })
+    #[must_use]
+    pub fn affixes(&mut self) -> Affixes {
+        Affixes { host: self.host() }
     }
 
     /// Rolls affixes onto the items with an entity that random loot puts
@@ -1087,7 +1073,7 @@ impl Load<'_> {
                 rule.chance
             )));
         }
-        let affixes = self.affixes()?;
+        let affixes = self.affixes();
         let inventories = self.inventories()?;
         let rolled = crate::loot::watch_rolls(self)?;
         let scheduler = self.scheduler()?;
@@ -1132,7 +1118,7 @@ impl Load<'_> {
                 rule.chance
             )));
         }
-        let affixes = self.affixes()?;
+        let affixes = self.affixes();
         let inventories = self.inventories()?;
         let scheduler = self.scheduler()?;
         let pending: Arc<Crafts> = Arc::default();

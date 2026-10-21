@@ -24,7 +24,7 @@
 
 use core::ffi::c_void;
 
-use crate::abi::{AltarInfo, AltarZoneSize, Bounds, HostApi, ZoneCheck as RawZoneCheck};
+use crate::abi::{AltarInfo, AltarZoneSize, Bounds, ZoneCheck as RawZoneCheck};
 use crate::ecs::Entity;
 use crate::{Host, Load, Off};
 
@@ -639,7 +639,7 @@ impl Load<'_> {
     ///
     /// # Errors
     ///
-    /// [`Off`] after init, with a loader older than the API, or on a game
+    /// [`Off`] after init, or on a game
     /// build that lacks the altar helpers.
     ///
     /// # Examples
@@ -647,11 +647,6 @@ impl Load<'_> {
     /// See the [module](self).
     pub fn altars(&mut self) -> Result<Altars, Off> {
         let host = self.host();
-        crate::load::offered(
-            host.api(),
-            core::mem::offset_of!(HostApi, altars_open),
-            "altars",
-        )?;
         let status = (host.api().altars_open)(host.handle());
         crate::load::ok(status, Altars { host }, || "altars".to_owned())
     }
@@ -668,11 +663,6 @@ impl Load<'_> {
     /// See [`ZoneControl`].
     pub fn control_altar_zones(&mut self) -> Result<ZoneControl, Off> {
         let host = self.host();
-        crate::load::offered(
-            host.api(),
-            core::mem::offset_of!(HostApi, altar_zones_control),
-            "altar zones",
-        )?;
         let status = (host.api().altar_zones_control)(host.handle());
         crate::load::ok(status, ZoneControl { host }, || {
             "altar zones, sized by one mod at a time".to_owned()
@@ -687,7 +677,7 @@ impl Load<'_> {
     ///
     /// # Errors
     ///
-    /// [`Off`] after init or with a loader older than the API.
+    /// [`Off`] after init.
     ///
     /// # Examples
     ///
@@ -709,11 +699,6 @@ impl Load<'_> {
         F: Fn(&ZoneCheck<'_>) -> bool + Send + Sync + 'static,
     {
         let host = self.host();
-        crate::load::offered(
-            host.api(),
-            core::mem::offset_of!(HostApi, zone_check_filter),
-            "zone checks",
-        )?;
         crate::load::hand_over(
             filter,
             |user| (host.api().zone_check_filter)(host.handle(), run_zone_check::<F>, user),
@@ -751,10 +736,6 @@ pub struct Grouping {
 #[must_use]
 pub fn grouping() -> Option<Grouping> {
     let host = crate::host()?;
-    let end = core::mem::offset_of!(HostApi, base_zones) + size_of::<usize>();
-    if !host.api().header.covers(end) {
-        return None;
-    }
     let (mut zones, mut bases) = (0u32, 0u32);
     let status = (host.api().base_zones)(host.handle(), &raw mut zones, &raw mut bases);
     status.is_ok().then_some(Grouping { zones, bases })
@@ -781,7 +762,7 @@ impl Load<'_> {
     /// # Errors
     ///
     /// [`Off`] after init, when another mod decides, on a build that lacks
-    /// the lookup, or with a loader older than the API.
+    /// the lookup.
     ///
     /// # Examples
     ///
@@ -795,11 +776,6 @@ impl Load<'_> {
         F: Fn(u32) -> u8 + Send + Sync + 'static,
     {
         let host = self.host();
-        crate::load::offered(
-            host.api(),
-            core::mem::offset_of!(HostApi, altar_limit),
-            "the altar limit",
-        )?;
         crate::load::hand_over(
             limit,
             |user| (host.api().altar_limit)(host.handle(), run_limit::<F>, user),
@@ -816,7 +792,7 @@ impl Load<'_> {
     ///
     /// # Errors
     ///
-    /// [`Off`] after init or with a loader older than the API.
+    /// [`Off`] after init.
     ///
     /// # Examples
     ///
@@ -831,11 +807,6 @@ impl Load<'_> {
     /// ```
     pub fn raise_base_limit(&mut self) -> Result<bool, Off> {
         let host = self.host();
-        crate::load::offered(
-            host.api(),
-            core::mem::offset_of!(HostApi, raise_base_limit),
-            "the base limit",
-        )?;
         let status = (host.api().raise_base_limit)(host.handle());
         if status.is_ok() {
             Ok(true)

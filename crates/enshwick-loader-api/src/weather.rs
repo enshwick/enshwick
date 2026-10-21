@@ -21,7 +21,7 @@
 //! use enshwick_loader_api::weather::Forecast;
 //!
 //! fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
-//!     let weather = load.weather()?;
+//!     let weather = load.weather();
 //!     load.add_command("sun", "clear skies for ten minutes", move |_ctx, _args| {
 //!         format!("{:?}", weather.set(Forecast::Clear, Some(Duration::from_mins(10)))).into()
 //!     })
@@ -30,9 +30,9 @@
 
 use core::time::Duration;
 
-use crate::abi::{Header, HostApi, Status, WeatherFront};
+use crate::abi::{Header, Status, WeatherFront};
 use crate::world::WorldError;
-use crate::{Host, Load, Off};
+use crate::{Host, Load};
 
 /// What the weather is at a place, as the game names it.
 ///
@@ -285,21 +285,12 @@ impl Load<'_> {
     /// The [`Weather`] of the server's world; on a client, the built-in
     /// server's while it hosts a game.
     ///
-    /// # Errors
-    ///
-    /// [`Off`] under a loader older than ABI minor 33.
-    ///
     /// # Examples
     ///
     /// See the [module](self).
-    pub fn weather(&mut self) -> Result<Weather, Off> {
-        let host = self.host();
-        crate::load::offered(
-            host.api(),
-            core::mem::offset_of!(HostApi, set_weather),
-            "weather",
-        )?;
-        Ok(Weather { host })
+    #[must_use]
+    pub fn weather(&mut self) -> Weather {
+        Weather { host: self.host() }
     }
 }
 

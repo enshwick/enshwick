@@ -2,7 +2,7 @@
 //! updater.
 
 use crate::Host;
-use crate::abi::{HostApi, ManifestFlags, ModInfo, Side, Str, UpdateKind, UpdateSource};
+use crate::abi::{ManifestFlags, ModInfo, Side, Str, UpdateKind, UpdateSource};
 
 /// Where a mod's new releases come from, as its manifest declares with
 /// `updates:`.
@@ -319,7 +319,7 @@ pub struct ModEntry {
     pub updates: Option<Updates>,
     /// The minisign public keys (`RW...`) the author signs releases with, as
     /// the manifest declares them with `signed_by:`; empty when it declares
-    /// none or under a loader older than ABI minor 14. In [`join_missing`],
+    /// none. In [`join_missing`],
     /// the keys the server advertises for the mod.
     pub signed_by: Vec<String>,
     /// The name players read; empty when the manifest names none. In
@@ -410,8 +410,7 @@ pub fn label(name: &str, id: &str) -> String {
 
 /// Every loaded mod, the loader first, in load order.
 ///
-/// Empty before the loader initialises this mod and under a loader older
-/// than ABI minor 5.
+/// Empty before the loader initialises this mod.
 ///
 /// # Examples
 ///
@@ -430,7 +429,7 @@ pub fn mods() -> Vec<ModEntry> {
 /// client's DLL path when it has the mod and where the server's version
 /// comes from. Read it on [`JoinRefused`](crate::events::JoinRefused).
 ///
-/// Empty before a refused join and under a loader older than ABI minor 10.
+/// Empty before a refused join.
 ///
 /// # Examples
 ///
@@ -457,7 +456,6 @@ pub fn join_missing() -> Vec<ModEntry> {
 /// loader never started, each with [`ModEntry::replaced_by`] and its `file`,
 /// which is safe to delete.
 ///
-/// Empty under a loader older than ABI minor 54.
 ///
 /// # Examples
 ///
@@ -475,7 +473,6 @@ pub fn replaced() -> Vec<ModEntry> {
 
 impl Host {
     /// The mods in `mods/` that a present mod replaces; see [`replaced`].
-    /// Empty under a loader older than ABI minor 54.
     ///
     /// # Examples
     ///
@@ -486,15 +483,11 @@ impl Host {
     /// ```
     #[must_use]
     pub fn replaced(&self) -> Vec<ModEntry> {
-        let end = core::mem::offset_of!(HostApi, replaced) + size_of::<usize>();
-        if !self.api().header.covers(end) {
-            return Vec::new();
-        }
         self.listing(self.api().replaced)
     }
 
     /// The server's join mods the last refused join found missing; see
-    /// [`join_missing`]. Empty under a loader older than ABI minor 10.
+    /// [`join_missing`].
     ///
     /// # Examples
     ///
@@ -505,15 +498,10 @@ impl Host {
     /// ```
     #[must_use]
     pub fn join_missing(&self) -> Vec<ModEntry> {
-        let end = core::mem::offset_of!(HostApi, join_missing) + size_of::<usize>();
-        if !self.api().header.covers(end) {
-            return Vec::new();
-        }
         self.listing(self.api().join_missing)
     }
 
-    /// Every loaded mod, the loader first, in load order; empty under a
-    /// loader older than ABI minor 5.
+    /// Every loaded mod, the loader first, in load order.
     ///
     /// # Examples
     ///
@@ -526,10 +514,6 @@ impl Host {
     /// ```
     #[must_use]
     pub fn mods(&self) -> Vec<ModEntry> {
-        let end = core::mem::offset_of!(HostApi, mods) + size_of::<usize>();
-        if !self.api().header.covers(end) {
-            return Vec::new();
-        }
         self.listing(self.api().mods)
     }
 
@@ -587,46 +571,26 @@ unsafe fn entry(info: &ModInfo) -> Option<ModEntry> {
     let version = unsafe { info.version.as_str() }?;
     // SAFETY: as above.
     let file = unsafe { info.file.as_str() }?;
-    let updates_end = core::mem::offset_of!(ModInfo, updates) + size_of::<UpdateSource>();
-    let updates = if info.header.covers(updates_end) {
-        // SAFETY: as above.
-        unsafe { Updates::from_abi(&info.updates) }
-    } else {
-        None
-    };
-    let keys_end = core::mem::offset_of!(ModInfo, signed_by) + size_of::<[Str; 2]>();
-    let signed_by = if info.header.covers(keys_end) {
-        // SAFETY: as above.
-        unsafe { keys_from_abi(&info.signed_by) }
-    } else {
-        Vec::new()
-    };
-    let meta_end = core::mem::offset_of!(ModInfo, homepage) + size_of::<Str>();
+    // SAFETY: as above.
+    let updates = unsafe { Updates::from_abi(&info.updates) };
+    // SAFETY: as above.
+    let signed_by = unsafe { keys_from_abi(&info.signed_by) };
     // SAFETY: as above.
     let text = |s: &Str| unsafe { s.as_str() }.unwrap_or_default().to_owned();
-    let (name, description, authors, license, homepage) = if info.header.covers(meta_end) {
-        let authors = if info.authors.is_null() {
-            &[][..]
-        } else {
-            // SAFETY: the loader points at `author_count` strings it keeps.
-            unsafe { core::slice::from_raw_parts(info.authors, info.author_count) }
-        };
-        (
-            text(&info.name),
-            text(&info.description),
-            authors.iter().map(text).collect(),
-            text(&info.license),
-            text(&info.homepage),
-        )
+    let authors = if info.authors.is_null() {
+        &[][..]
     } else {
-        Default::default()
+        // SAFETY: the loader points at `author_count` strings it keeps.
+        unsafe { core::slice::from_raw_parts(info.authors, info.author_count) }
     };
-    let replaced_end = core::mem::offset_of!(ModInfo, replaced_by) + size_of::<Str>();
-    let replaced_by = if info.header.covers(replaced_end) {
-        text(&info.replaced_by)
-    } else {
-        String::new()
-    };
+    let (name, description, authors, license, homepage) = (
+        text(&info.name),
+        text(&info.description),
+        authors.iter().map(text).collect(),
+        text(&info.license),
+        text(&info.homepage),
+    );
+    let replaced_by = text(&info.replaced_by);
     Some(ModEntry {
         id: id.to_owned(),
         version: version.to_owned(),
@@ -730,33 +694,6 @@ mod tests {
     }
 
     static AUTHORS: [Str; 2] = [Str::new("themaiby"), Str::new("someone")];
-
-    #[test]
-    fn an_entry_of_an_older_minor_has_no_keys() {
-        let mut info = ModInfo {
-            header: Header::of::<ModInfo>(),
-            id: Str::new("safes"),
-            version: Str::new("0.1.0"),
-            side: Side::BOTH,
-            flags: ManifestFlags::JOIN,
-            off: 0,
-            file: Str::new("mods/enshwick_safes.dll"),
-            updates: UpdateSource::NONE,
-            signed_by: [Str::new(KEY), Str::EMPTY],
-            name: Str::new("Safes"),
-            description: Str::EMPTY,
-            authors: core::ptr::null(),
-            author_count: 0,
-            license: Str::EMPTY,
-            homepage: Str::EMPTY,
-            replaced_by: Str::EMPTY,
-        };
-        info.header.size = u32::try_from(core::mem::offset_of!(ModInfo, signed_by)).unwrap();
-        // SAFETY: static strings.
-        let entry = unsafe { entry(&info) }.unwrap();
-        assert!(entry.signed_by.is_empty());
-        assert!(entry.name.is_empty());
-    }
 
     const KEY: &str = "RWTjqgtfpy3lSOLC4uaUXuvvKSLQKOFf6nUnEytoiFjSzxMEhLnoAdJF";
 

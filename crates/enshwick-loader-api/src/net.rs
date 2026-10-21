@@ -42,7 +42,7 @@
 use core::ffi::c_void;
 use core::marker::PhantomData;
 
-use crate::abi::{HostApi, NetMessage, Status, Str};
+use crate::abi::{NetMessage, Status, Str};
 use crate::{Host, Load, Off};
 
 /// The largest message a channel carries, encoded, in bytes.
@@ -104,7 +104,7 @@ pub enum SendError {
     /// The message does not encode.
     #[error("the message does not encode: {0}")]
     Encode(String),
-    /// The loader is older than ABI minor 26, or refused for another reason.
+    /// The loader refused for another reason.
     #[error("the loader refused the message")]
     Refused,
 }
@@ -177,13 +177,8 @@ impl<M> Channel<M> {
     #[must_use]
     pub fn is_ready(&self, peer: Peer) -> bool {
         let api = self.host.api();
-        offers(api) && (api.net_ready)(self.host.handle(), peer.to_raw()).is_ok()
+        (api.net_ready)(self.host.handle(), peer.to_raw()).is_ok()
     }
-}
-
-fn offers(api: &HostApi) -> bool {
-    api.header
-        .covers(core::mem::offset_of!(HostApi, net_ready) + size_of::<usize>())
 }
 
 fn send_raw(host: Host, id: u32, peer: u64, bytes: &[u8]) -> Result<(), SendError> {
@@ -191,9 +186,6 @@ fn send_raw(host: Host, id: u32, peer: u64, bytes: &[u8]) -> Result<(), SendErro
         return Err(SendError::TooLarge);
     }
     let api = host.api();
-    if !offers(api) {
-        return Err(SendError::Refused);
-    }
     let size = u32::try_from(bytes.len()).map_err(|_| SendError::TooLarge)?;
     match (api.net_send)(host.handle(), id, peer, bytes.as_ptr(), size) {
         Status::OK => Ok(()),
@@ -247,7 +239,7 @@ impl Load<'_> {
     /// # Errors
     ///
     /// [`Off`] for a mod that is no join mod, a name of more than 64 bytes or
-    /// opened twice, after `init`, or under a loader older than ABI minor 26.
+    /// opened twice, or after `init`.
     ///
     /// # Examples
     ///
@@ -258,11 +250,6 @@ impl Load<'_> {
         F: Fn(Peer, M) + Send + Sync + 'static,
     {
         let host = self.host();
-        crate::load::offered(
-            host.api(),
-            core::mem::offset_of!(HostApi, net_ready),
-            "mod messages",
-        )?;
         let full = format!("{name}@{version}");
         let mut id = 0u32;
         crate::load::hand_over(

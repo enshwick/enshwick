@@ -5,14 +5,14 @@ returns the
 [`Weather`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/weather.rs)
 of the server's world: how it is at a place, the fronts that make it, and
 starting new weather. It is `Copy`; get it during `init` and move it into
-handlers, tasks and commands. It needs ABI minor 33.
+handlers, tasks and commands.
 
 ```rust
 use core::time::Duration;
 use enshwick_loader_api::weather::Forecast;
 
 fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
-    let weather = load.weather()?;
+    let weather = load.weather();
     let world = load.world()?;
     load.add_command("weather", "the weather here, or new: /weather [clear|rain|storm]", move |ctx, args| {
         let Some(me) = ctx.character() else {

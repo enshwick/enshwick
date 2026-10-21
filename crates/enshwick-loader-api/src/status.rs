@@ -11,7 +11,7 @@
 use core::ffi::c_void;
 use std::cell::RefCell;
 
-use crate::abi::{HostApi, Str};
+use crate::abi::Str;
 use crate::{Load, Off};
 
 thread_local! {
@@ -45,7 +45,7 @@ impl Load<'_> {
     ///
     /// # Errors
     ///
-    /// [`Off`] with a loader older than the API.
+    /// [`Off`] when the loader refuses the source, as after init.
     ///
     /// # Examples
     ///
@@ -63,11 +63,6 @@ impl Load<'_> {
         F: Fn() -> String + Send + Sync + 'static,
     {
         let host = self.host();
-        crate::load::offered(
-            host.api(),
-            core::mem::offset_of!(HostApi, status),
-            "status lines",
-        )?;
         crate::load::hand_over(
             source,
             |user| (host.api().status)(host.handle(), run_source::<F>, user),

@@ -283,7 +283,7 @@ impl Load<'_> {
     ///
     /// # Errors
     ///
-    /// [`Off`] when the loader is too old to tell.
+    /// [`Off`] when the loader cannot name the code section.
     ///
     /// # Examples
     ///
@@ -296,11 +296,6 @@ impl Load<'_> {
     /// ```
     pub fn code(&self) -> Result<&'static [u8], Off> {
         let api = self.api();
-        offered(
-            api,
-            core::mem::offset_of!(HostApi, code_range),
-            "code searches",
-        )?;
         let (mut start, mut len) = (0u64, 0u64);
         let status = (api.code_range)(&raw mut start, &raw mut len);
         ok(status, (), || "code section".to_owned())?;
@@ -352,7 +347,7 @@ impl Load<'_> {
     ///
     /// # Errors
     ///
-    /// [`Off`] when the loader is too old, the lengths differ, the bytes are
+    /// [`Off`] when the lengths differ, the bytes are
     /// not in the game's code or another patch covers any of them. At arming,
     /// a patch whose bytes no longer read `expected` or that overlaps a hooked
     /// function's first bytes is skipped and the mod turned off. A mod's
@@ -375,11 +370,6 @@ impl Load<'_> {
         replacement: &[u8],
     ) -> Result<(), Off> {
         let api = self.api();
-        offered(
-            api,
-            core::mem::offset_of!(HostApi, patch_code),
-            "code patches",
-        )?;
         if expected.len() != replacement.len() {
             return Err(Off::new(format!(
                 "code patch at {address:#x}: {} bytes expected, {} given",
@@ -413,8 +403,7 @@ impl Load<'_> {
     /// # Errors
     ///
     /// [`Off`] when the loader refuses the hook: a second one of this mod on
-    /// `address`, another mod holding it exclusively, or a loader older than
-    /// ABI minor 11.
+    /// `address` or another mod holding it exclusively.
     ///
     /// # Examples
     ///
@@ -430,11 +419,6 @@ impl Load<'_> {
         F: Fn(&mut Registers) + Send + Sync + 'static,
     {
         let api = self.api();
-        offered(
-            api,
-            core::mem::offset_of!(HostApi, hook_at),
-            "mid-function hooks",
-        )?;
         let user = Box::into_raw(Box::new(MidHook { address, handler }));
         let spec = MidHookSpec {
             address,
@@ -600,8 +584,7 @@ impl Load<'_> {
     ///
     /// # Errors
     ///
-    /// [`Off`] when the loader is too old or the game build lacks a type the
-    /// reads need.
+    /// [`Off`] when the game build lacks a type the reads need.
     ///
     /// # Examples
     ///
@@ -615,8 +598,7 @@ impl Load<'_> {
     ///
     /// # Errors
     ///
-    /// [`Off`] under a loader older than ABI minor 12, or when this game
-    /// build lacks a piece of them.
+    /// [`Off`] when this game build lacks a piece of them.
     ///
     /// # Examples
     ///
@@ -727,7 +709,7 @@ impl Load<'_> {
     ///
     /// # Errors
     ///
-    /// [`Off`] under a loader older than ABI minor 20, or after `init`.
+    /// [`Off`] after `init`.
     ///
     /// # Examples
     ///
@@ -749,8 +731,7 @@ impl Load<'_> {
     ///
     /// # Errors
     ///
-    /// [`Off`] under a loader older than ABI minor 20, after `init`, or when
-    /// this build lacks a field of the event.
+    /// [`Off`] after `init`, or when this build lacks a field of the event.
     ///
     /// # Examples
     ///
@@ -795,11 +776,6 @@ impl Load<'_> {
         F: Fn(&crate::game_events::RawGameEvent<'_>) + Send + Sync + 'static,
     {
         let api = self.api();
-        offered(
-            api,
-            core::mem::offset_of!(HostApi, game_event),
-            "game events",
-        )?;
         let host = self.host.handle();
         hand_over(
             handler,
@@ -899,7 +875,6 @@ impl Load<'_> {
     /// }
     /// ```
     pub fn publish<T: Service>(&mut self, table: &'static T) -> Result<(), Off> {
-        services_offered(self.api())?;
         let spec = service_spec::<T>(core::ptr::from_ref(table).cast());
         let status = (self.api().publish)(self.host.handle(), &raw const spec);
         ok(status, (), || {
@@ -981,7 +956,6 @@ impl Load<'_> {
     }
 
     fn find_service<T: Service>(&self) -> Result<&'static T, (Status, String)> {
-        services_offered(self.api()).map_err(|off| (Status::MISSING, off.to_string()))?;
         let spec = service_spec::<T>(core::ptr::null());
         let mut found = crate::abi::ServiceFound::EMPTY;
         let status = (self.api().service)(self.host.handle(), &raw const spec, &raw mut found);
@@ -1018,7 +992,6 @@ impl Load<'_> {
     ///
     /// See [`Emitter`].
     pub fn define_event<E: ModEvent>(&mut self) -> Result<Emitter<E>, Off> {
-        services_offered(self.api())?;
         let spec = event_spec::<E>();
         let mut id = 0;
         let status = (self.api().define_event)(self.host.handle(), &raw const spec, &raw mut id);
@@ -1067,7 +1040,6 @@ fn subscribe_mod_event<E: ModEvent, F: Fn(&E) + Send + Sync + 'static>(
     host: Host,
     handler: F,
 ) -> Result<(), Off> {
-    services_offered(host.api())?;
     let spec = event_spec::<E>();
     hand_over(
         handler,
@@ -1080,15 +1052,6 @@ fn subscribe_mod_event<E: ModEvent, F: Fn(&E) + Send + Sync + 'static>(
             )
         },
         &format!("event {}", E::NAME),
-    )
-}
-
-/// Whether the loader has typed services and mod events.
-fn services_offered(api: &HostApi) -> Result<(), Off> {
-    offered(
-        api,
-        core::mem::offset_of!(HostApi, send_event),
-        "services and mod events",
     )
 }
 
@@ -1197,13 +1160,8 @@ impl Load<'_> {
     /// takes one.
     fn config_check<T: Config>(&self) {
         let api = self.api();
-        if api
-            .header
-            .covers(core::mem::offset_of!(HostApi, config_check) + size_of::<usize>())
-        {
-            let _checked =
-                (api.config_check)(self.host.handle(), check_text::<T>, core::ptr::null_mut());
-        }
+        let _checked =
+            (api.config_check)(self.host.handle(), check_text::<T>, core::ptr::null_mut());
     }
 }
 
@@ -1299,16 +1257,6 @@ pub(crate) fn ok<T>(status: Status, value: T, what: impl FnOnce() -> String) -> 
         Ok(value)
     } else {
         Err(Off::status(&what(), status))
-    }
-}
-
-/// An [`Off`] unless the loader's table reaches the entry at `field`, an
-/// offset into [`HostApi`].
-pub(crate) fn offered(api: &HostApi, field: usize, what: &str) -> Result<(), Off> {
-    if api.header.covers(field + size_of::<usize>()) {
-        Ok(())
-    } else {
-        Err(Off::new(format!("{what}: needs a newer loader")))
     }
 }
 

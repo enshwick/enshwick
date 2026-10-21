@@ -40,7 +40,7 @@
 
 use core::marker::PhantomData;
 
-use crate::abi::{HostApi, Status, Str};
+use crate::abi::{Status, Str};
 use crate::ecs::Entity;
 use crate::inventory::Slot;
 use crate::{Host, Load, Off};
@@ -242,8 +242,7 @@ impl Load<'_> {
     ///
     /// # Errors
     ///
-    /// [`Off`] for a malformed id, after init, or with a loader older than
-    /// the API.
+    /// [`Off`] for a malformed id or after init.
     ///
     /// # Examples
     ///
@@ -253,11 +252,6 @@ impl Load<'_> {
         T: serde::Serialize + serde::de::DeserializeOwned,
     {
         let host = self.host();
-        crate::load::offered(
-            host.api(),
-            core::mem::offset_of!(HostApi, item_data_set),
-            "item data",
-        )?;
         let mut kind = 0;
         let status = (host.api().item_data_open)(host.handle(), Str::new(id), &raw mut kind);
         crate::load::ok(

@@ -22,7 +22,7 @@ mod tests {
         }
 
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
-            let _first = BUFFS.set(load.buffs()?);
+            let _first = BUFFS.set(load.buffs());
             Ok(Self)
         }
     }

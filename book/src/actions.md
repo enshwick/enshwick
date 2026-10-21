@@ -5,13 +5,13 @@ returns the mod's
 [`Actions`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/actions.rs):
 game events it raises in the server's world, teleports and spawns. Like
 [`World`](world.md), it is `Copy`; get it during `init` and move it into
-handlers, tasks and commands. It needs ABI minor 23.
+handlers, tasks and commands.
 
 ```rust
 use enshwick_loader_api::actions::Teleport;
 
 fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
-    let actions = load.actions()?;
+    let actions = load.actions();
     load.add_command("home", "takes you to the world's centre", move |ctx, _args| {
         let Some(me) = ctx.character() else {
             return "the console has no character".into();
@@ -54,7 +54,7 @@ no room for more events, `Missing` on a build without the event.
 use enshwick_loader_api::actions::NpcOrder;
 
 fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
-    let actions = load.actions()?;
+    let actions = load.actions();
     let world = load.world()?;
     load.add_command("come", "calls a survivor to you: /come <survivor id>", move |ctx, args| {
         let Some(me) = ctx.character() else {
@@ -89,14 +89,14 @@ entity is in the world after the next step, and a template the game does not
 know spawns nothing. `Spawn::new()` takes the template as it is;
 `.level(n)` scales the entity as the game scales enemies,
 `.despawn_after(duration)` lets the game remove it after that much game time,
-and `.facing_yaw(radians)` turns it. Spawning needs ABI minor 24.
+and `.facing_yaw(radians)` turns it.
 
 ```rust
 use core::time::Duration;
 use enshwick_loader_api::actions::Spawn;
 
 fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
-    let actions = load.actions()?;
+    let actions = load.actions();
     let world = load.world()?;
     load.add_command("decoy", "spawns a copy of an entity beside you for a minute: /decoy <entity>", move |ctx, args| {
         let Some(me) = ctx.character() else {

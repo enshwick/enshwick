@@ -30,7 +30,7 @@ impl ClockChecks {
         load.on::<DayStarted>(|()| enshwick_loader_api::info!("event: day started"))?;
         load.on::<NightStarted>(|()| enshwick_loader_api::info!("event: night started"))?;
         Ok(Self {
-            clock: load.clock()?,
+            clock: load.clock(),
             speed: load.clock_speed()?,
             scheduler,
         })

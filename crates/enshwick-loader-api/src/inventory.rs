@@ -20,7 +20,7 @@ use core::ffi::c_void;
 use std::sync::{Arc, Mutex, PoisonError};
 
 use crate::abi::{
-    Header, HostApi, InventoryOp, InventoryOpResult, InventoryRequest, InventoryResult, ItemData,
+    Header, InventoryOp, InventoryOpResult, InventoryRequest, InventoryResult, ItemData,
 };
 use crate::ecs::{Components, Entity};
 use crate::raw::read_at;
@@ -176,8 +176,7 @@ pub struct ItemInfo {
     /// `ItemInfo` flags, see [`ItemData`].
     pub flags: u32,
     /// The game's `ItemCategory`: 1 equipment (armour and rings), 2
-    /// weapons, 3 tools, and so on; 0 under a loader older than ABI minor
-    /// 48.
+    /// weapons, 3 tools, and so on.
     pub category: u8,
 }
 
@@ -933,7 +932,7 @@ unsafe extern "system" fn deliver(result: *const InventoryResult, user: *mut c_v
     // SAFETY: `user` is the leaked `Pending` of `submit`, handed back once.
     let pending = unsafe { Box::from_raw(user.cast::<Pending>()) };
     // SAFETY: the loader's result, valid for the call; an all-zero result is
-    // valid. Every field is there since minor 12.
+    // valid.
     let outcome = unsafe { crate::abi::read_headed(result, size_of::<InventoryResult>()) }
         .map_or_else(
             || Outcome::not_run(Done::Unavailable),
@@ -1001,11 +1000,6 @@ pub struct Inventories {
 impl Inventories {
     pub(crate) fn resolve(load: &mut Load<'_>) -> Result<Self, Off> {
         let host = load.host();
-        crate::load::offered(
-            host.api(),
-            core::mem::offset_of!(HostApi, inventory_submit),
-            "inventories",
-        )?;
         let scheduler = load.scheduler()?;
         let status = (host.api().inventory_open)(host.handle());
         if !status.is_ok() {

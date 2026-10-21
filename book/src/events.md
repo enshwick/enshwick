@@ -55,7 +55,7 @@ The types are in
 | `QuestCompleted` | `QuestData` (`entity`, `quest`) | a player completed a quest and got its rewards | game |
 | `ChunkLoaded` | `ChunkData` (`index`, `x`, `z`, `size`) | a 256 m chunk of the server's world loaded as players came near; its entities exist now ([weather and the world's chunks](weather.md)) | game |
 | `ChunkUnloaded` | `ChunkData` | a chunk unloaded once no player was near; its entities are gone | game |
-| `PlayerDied` | `PlayerDeathData` (`entity`, `cause`, `key`, `position`, `killer`, `deadly_shroud`, `drowned`, `killer_entity`) | a player died from a hit, a fall, the shroud or drowning, with the cause; for a hit, the killer's template and the attacker of the last hit (minor 62); raised after the step; freezing and an administrator's kill raise none; any other entity's death is the game event `Died` | game |
+| `PlayerDied` | `PlayerDeathData` (`entity`, `cause`, `key`, `position`, `killer`, `deadly_shroud`, `drowned`, `killer_entity`) | a player died from a hit, a fall, the shroud or drowning, with the cause; for a hit, the killer's template and the attacker of the last hit; raised after the step; freezing and an administrator's kill raise none; any other entity's death is the game event `Died` | game |
 
 The data:
 

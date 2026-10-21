@@ -16,7 +16,7 @@ pub const RESERVED_FOR_SINGLE: usize = 16;
 
 /// The most recipes one workshop takes on the running game: [`usize::MAX`]
 /// once the loader has lifted the game's limit, else [`WORKSHOP_RECIPES`],
-/// also outside the game and with an older loader. The answer is final once
+/// also outside the game. The answer is final once
 /// the hooks are armed, before the game first reads the recipe registry.
 ///
 /// # Examples
@@ -33,10 +33,6 @@ pub fn workshop_limit() -> usize {
         return WORKSHOP_RECIPES;
     };
     let api = host.api();
-    let end = core::mem::offset_of!(crate::abi::HostApi, workshop_recipes) + size_of::<usize>();
-    if !api.header.covers(end) {
-        return WORKSHOP_RECIPES;
-    }
     match (api.workshop_recipes)() {
         u32::MAX => usize::MAX,
         limit => usize::try_from(limit).unwrap_or(WORKSHOP_RECIPES),
@@ -631,8 +627,8 @@ impl Load<'_> {
     ///
     /// # Errors
     ///
-    /// [`Off`] when the loader is too old, the recipe layout is not
-    /// reflected or the loader refuses the recipe's id (see
+    /// [`Off`] when the recipe layout is not reflected or the loader
+    /// refuses the recipe's id (see
     /// [`Load::declare`]); a `like` with no recipe turns the mod off when the
     /// game first reads the registry.
     ///
@@ -669,8 +665,7 @@ impl Load<'_> {
     ///
     /// # Errors
     ///
-    /// [`Off`] when the loader is too old or the recipe layout is not
-    /// reflected.
+    /// [`Off`] when the recipe layout is not reflected.
     ///
     /// # Examples
     ///
@@ -710,8 +705,7 @@ impl Load<'_> {
     ///
     /// # Errors
     ///
-    /// [`Off`] when the loader is too old or the recipe layout is not
-    /// reflected.
+    /// [`Off`] when the recipe layout is not reflected.
     ///
     /// # Examples
     ///
@@ -737,11 +731,7 @@ impl Load<'_> {
             crate::info!("{changed} recipes changed");
             Some(built)
         })?;
-        // Under an older loader the registry is built once.
-        if let Err(off) = self.allow_rebuild(registry) {
-            crate::debug!("recipes are built once: {off}");
-        }
-        Ok(())
+        self.allow_rebuild(registry)
     }
 }
 
@@ -754,9 +744,8 @@ impl Load<'_> {
 ///
 /// # Errors
 ///
-/// [`Off`] under a loader older than ABI minor 63, for a mod that does not
-/// modify recipes, and when another mod's patch changed the registry's
-/// length.
+/// [`Off`] for a mod that does not modify recipes, and when another mod's
+/// patch changed the registry's length.
 ///
 /// # Examples
 ///

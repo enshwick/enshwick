@@ -15,7 +15,7 @@
 use core::ffi::c_void;
 
 use crate::abi::{
-    Comfort as RawComfort, ExperiencePass, ExperienceRow, HostApi, SkillCheck as RawSkillCheck,
+    Comfort as RawComfort, ExperiencePass, ExperienceRow, SkillCheck as RawSkillCheck,
 };
 use crate::ecs::Entity;
 use crate::{Load, Off};
@@ -233,8 +233,7 @@ impl Load<'_> {
     ///
     /// # Errors
     ///
-    /// [`Off`] after init, on a build that lacks the check, or with a loader
-    /// older than the API.
+    /// [`Off`] after init or on a build that lacks the check.
     ///
     /// # Examples
     ///
@@ -244,11 +243,6 @@ impl Load<'_> {
         F: Fn(&SkillCheck) -> Option<bool> + Send + Sync + 'static,
     {
         let host = self.host();
-        crate::load::offered(
-            host.api(),
-            core::mem::offset_of!(HostApi, skill_override),
-            "skill overrides",
-        )?;
         crate::load::hand_over(
             handler,
             |user| (host.api().skill_override)(host.handle(), node, run_skill::<F>, user),
@@ -276,11 +270,6 @@ impl Load<'_> {
         F: Fn(&Comfort) -> i32 + Send + Sync + 'static,
     {
         let host = self.host();
-        crate::load::offered(
-            host.api(),
-            core::mem::offset_of!(HostApi, comfort_filter),
-            "comfort filters",
-        )?;
         crate::load::hand_over(
             filter,
             |user| (host.api().comfort_filter)(host.handle(), run_comfort::<F>, user),
@@ -319,11 +308,6 @@ impl Load<'_> {
         F: Fn(&mut [Experience], &Levels) + Send + Sync + 'static,
     {
         let host = self.host();
-        crate::load::offered(
-            host.api(),
-            core::mem::offset_of!(HostApi, experience_filter),
-            "experience filters",
-        )?;
         crate::load::hand_over(
             filter,
             |user| (host.api().experience_filter)(host.handle(), run_experience::<F>, user),

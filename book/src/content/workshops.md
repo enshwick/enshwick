@@ -139,8 +139,7 @@ vanilla workshop's; see [The workshop limit](recipes.md#the-workshop-limit).
 
 ## Errors and removal
 
-`add_workshop` returns `Err(Off)` when the loader is too old or a layout is
-not reflected. A vanilla station whose template lacks a crafting component,
+`add_workshop` returns `Err(Off)` when a layout is not reflected. A vanilla station whose template lacks a crafting component,
 or whose item does not place `like.template`, is found out when the game
 first reads them, and turns the mod off then.
 

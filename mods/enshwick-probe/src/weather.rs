@@ -34,7 +34,7 @@ impl WeatherChecks {
             enshwick_loader_api::info!("event: chunk {},{} unloaded", chunk.x, chunk.z);
         })?;
         Ok(Self {
-            weather: load.weather()?,
+            weather: load.weather(),
             world: load.world()?,
             scheduler,
         })

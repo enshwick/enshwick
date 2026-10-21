@@ -7,7 +7,7 @@ of the server's world: the time of day, and setting it.
 [`load.clock_speed()`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/daytime.rs)
 returns the mod's `ClockSpeed`, its say in how fast the clock runs. Both are
 `Copy`; get them during `init` and move them into handlers, tasks and
-commands. They need ABI minor 28.
+commands.
 
 The game's clock runs in game hours. On the 1.0 game the day lasts from 06:00 to
 22:00 and takes 30 real minutes, the night 12 by default; the server's settings change
@@ -16,7 +16,7 @@ times faster.
 
 ```rust
 fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
-    let clock = load.clock()?;
+    let clock = load.clock();
     load.add_command("time", "shows the time, or sets it: /time [hours]", move |_ctx, args| {
         if let Some(hours) = args.first().and_then(|a| a.parse::<f32>().ok()) {
             return format!("{:?}", clock.set_hours(hours)).into();

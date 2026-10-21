@@ -39,7 +39,7 @@
 
 use core::marker::PhantomData;
 
-use crate::abi::{EntityDataFlags, HostApi, Status, Str};
+use crate::abi::{EntityDataFlags, Status, Str};
 use crate::ecs::Entity;
 pub use crate::item_data::{MAX_VALUE, SetError};
 use crate::{Host, Load, Off};
@@ -188,8 +188,8 @@ impl Load<'_> {
     ///
     /// # Errors
     ///
-    /// [`Off`] for a malformed id, an id opened as an item kind, after init,
-    /// or with a loader older than the API.
+    /// [`Off`] for a malformed id, an id opened as an item kind, or after
+    /// init.
     ///
     /// # Examples
     ///
@@ -203,11 +203,6 @@ impl Load<'_> {
         T: serde::Serialize + serde::de::DeserializeOwned,
     {
         let host = self.host();
-        crate::load::offered(
-            host.api(),
-            core::mem::offset_of!(HostApi, entity_data_open),
-            "entity data",
-        )?;
         let flags = match replication {
             Replication::Server => EntityDataFlags::NONE,
             Replication::Clients => EntityDataFlags::SENT,

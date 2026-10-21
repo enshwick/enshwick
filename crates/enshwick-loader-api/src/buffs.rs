@@ -19,7 +19,7 @@
 //! use enshwick_loader_api::buffs::{Apply, BuffId};
 //!
 //! fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
-//!     let buffs = load.buffs()?;
+//!     let buffs = load.buffs();
 //!     load.add_command("bless", "gives you a buff for a minute: /bless <buff id>", move |ctx, args| {
 //!         let Some(me) = ctx.character() else {
 //!             return "the console has no character".into();
@@ -35,10 +35,10 @@
 
 use core::time::Duration;
 
-use crate::abi::{ActiveBuff, BuffRequest, BuffTypeInfo, Header, HostApi, Status};
+use crate::abi::{ActiveBuff, BuffRequest, BuffTypeInfo, Header, Status};
 use crate::ecs::Entity;
 use crate::world::WorldError;
-use crate::{Host, Load, Off};
+use crate::{Host, Load};
 
 /// A buff type's id: the FNV-1a 32 hash of its GUID's bytes.
 ///
@@ -427,21 +427,12 @@ impl Load<'_> {
     /// The [`Buffs`] of the server's world; on a client, the built-in
     /// server's while it hosts a game.
     ///
-    /// # Errors
-    ///
-    /// [`Off`] under a loader older than ABI minor 31.
-    ///
     /// # Examples
     ///
     /// See the [module](self).
-    pub fn buffs(&mut self) -> Result<Buffs, Off> {
-        let host = self.host();
-        crate::load::offered(
-            host.api(),
-            core::mem::offset_of!(HostApi, remove_buff),
-            "buffs",
-        )?;
-        Ok(Buffs { host })
+    #[must_use]
+    pub fn buffs(&mut self) -> Buffs {
+        Buffs { host: self.host() }
     }
 }
 

@@ -25,7 +25,7 @@ When the mod asks, during `init`, `patch_code` returns `Off` when:
 - the lengths differ or are zero;
 - the bytes are not all inside the game's code section;
 - another patch, of any mod or of the loader, already covers any of them;
-- `init` is over, or the loader is too old for code patches.
+- `init` is over.
 
 At arming, after every mod is initialised, the loader checks each patch again
 and skips it, turning its mod off, when:
