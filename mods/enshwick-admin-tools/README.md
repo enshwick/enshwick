@@ -12,7 +12,7 @@ as if the server's console had typed it.
 | `/admin entity <id>`              | an entity's template GUID, the item it was placed from, position                            |
 | `/admin placed [count]`           | the last pieces and props placed in this world, newest first, with entity ids; 5 by default |
 | `/admin mods`                     | every loaded mod, its version, sides and whether it runs                                    |
-| `/admin reload <mod id>`          | the mod reads `mod-configs/<mod id>.toml` again                                             |
+| `/admin reload <mod id>`          | the mod rereads the running world's settings, or else `mod-configs/<mod id>.toml`           |
 | `/admin say <text>`               | a chat line to every player                                                                 |
 | `/admin give <item> [n] [player]` | `n` new items (1 by default, at most 10000) for you or the named player                     |
 | `/enshwick status`                | the loader's status summary (any administrator, tools on or off)                            |

@@ -207,7 +207,7 @@ fn admin(tools: &Tools, ctx: &CommandContext, args: &[&str]) -> Reply {
             command::placed(&newest)
         }
         Admin::Mods => command::mods(&enshwick_loader_api::mods()),
-        Admin::Reload(id) => command::reload(&tools.game, &id),
+        Admin::Reload(id) => command::reload(&tools.game, &id, world.key().as_deref()),
         Admin::Give { item, count, to } => give(tools, ctx, item, count, to.as_deref()),
         Admin::Say(text) => {
             world.broadcast(&text);
@@ -440,7 +440,7 @@ mod tests {
         assert!(loader.raise::<ShutdownStarted>(&()) >= 1);
         assert_eq!(
             loader.command("admin", &admin, "placed").as_deref(),
-            Some("nothing placed since the server started")
+            Some("nothing placed since the world started")
         );
     }
 }
