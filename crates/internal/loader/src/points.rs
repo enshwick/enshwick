@@ -487,6 +487,13 @@ pub(crate) fn seal(mods: &impl Mods) {
             ),
         );
     }
+    for (id, point) in unmatched_links_off(crate::modlist::links_off(), &inert, mods) {
+        crate::log!(
+            WARN,
+            "{}: links_off of {id} names {point}, which {id} does not link; nothing turned off",
+            crate::modlist::LIST_PATH
+        );
+    }
     for note in &cycles {
         let (id, _) = mods.name(note.owner);
         crate::log::write(
@@ -508,6 +515,24 @@ pub(crate) fn seal(mods: &impl Mods) {
     }
     let _first = SEALED.set(points);
     let _first = INERT.set(inert);
+}
+
+/// The entries of the mod list's `links_off` that turned no link off: the
+/// mod runs but links no such point.
+fn unmatched_links_off<'a>(
+    entries: &'a [(String, String)],
+    inert: &[Inert],
+    mods: &impl Mods,
+) -> impl Iterator<Item = (&'a str, &'a str)> {
+    entries
+        .iter()
+        .filter(move |(id, point)| {
+            mods.find(id).is_some_and(|index| !mods.off(index))
+                && !inert
+                    .iter()
+                    .any(|n| n.point == *point && mods.name(n.owner).0 == id)
+        })
+        .map(|(id, point)| (id.as_str(), point.as_str()))
 }
 
 /// Counts each point's live links again, once a mod turned off: its links
@@ -574,7 +599,9 @@ pub(crate) fn lines(mods: &impl Names) -> Vec<String> {
             .map(|l| {
                 let (linker, _) = mods.name(l.owner);
                 let mut text = format!("{linker} (priority {}", l.priority);
-                if !l.is_on() {
+                if mods.off(l.owner) {
+                    text.push_str(", off: the mod is off");
+                } else if !l.is_on() {
                     text.push_str(", off: it panicked");
                 }
                 let changes = l.changes.load(Ordering::Relaxed);
@@ -623,13 +650,14 @@ fn conflict_lines(points: &[Sealed], mods: &impl Names) -> Vec<String> {
         if point.declared.mode == PointMode::OBSERVE {
             continue;
         }
-        let mut owners: Vec<usize> = point.links.iter().map(|l| l.owner).collect();
+        let running = || point.links.iter().filter(|l| !mods.off(l.owner));
+        let mut owners: Vec<usize> = running().map(|l| l.owner).collect();
         owners.sort_unstable();
         owners.dedup();
         if owners.len() < 2 {
             continue;
         }
-        let order: Vec<&str> = point.links.iter().map(|l| mods.name(l.owner).0).collect();
+        let order: Vec<&str> = running().map(|l| mods.name(l.owner).0).collect();
         let mut line = format!(
             "point {}: {}, each may change the answer",
             point.declared.name,
@@ -677,7 +705,7 @@ fn screen_lines(
             let running: Vec<&str> = p
                 .links
                 .iter()
-                .filter(|l| l.is_on())
+                .filter(|l| l.is_on() && !mods.off(l.owner))
                 .map(|l| mods.name(l.owner).0)
                 .collect();
             if running.is_empty() {
@@ -692,7 +720,7 @@ fn screen_lines(
         .flat_map(|p| p.links.iter().map(move |l| (p, l)))
         .filter(|(_, l)| l.owner == index)
         .map(|(p, l)| {
-            if l.is_on() {
+            if l.is_on() && !mods.off(index) {
                 p.declared.name.clone()
             } else {
                 format!("{} (off)", p.declared.name)
@@ -1072,6 +1100,35 @@ mod tests {
         assert!(extends.is_empty());
         let (_, extends) = super::screen_lines(&points, &inert, 3, &loaded());
         assert_eq!(extends, ["area-loot:eligible (off)"]);
+        let mut off = loaded();
+        off.0[1].2 = true;
+        assert!(super::conflict_lines(&points, &off).is_empty());
+        let (defines, _) = super::screen_lines(&points, &inert, 0, &off);
+        assert_eq!(defines, ["safes:access (safe-rules)"]);
+        let (_, extends) = super::screen_lines(&points, &inert, 1, &off);
+        assert_eq!(extends, ["safes:access (off)"]);
+    }
+
+    #[test]
+    fn a_links_off_entry_that_matches_no_link_is_named() {
+        let mut registry = Registry::default();
+        defined(&mut registry);
+        assert!(registry.attach(link(1, 0)).is_ok());
+        let (_, inert, _) = registry.seal(&loaded(), |id, point| {
+            id == "safe-viewers" && point == "safes:access"
+        });
+        let entries = [
+            ("safe-viewers", "safes:access"),
+            ("safe-viewers", "safes:gate"),
+            ("safes", "safes:access"),
+            ("not-installed", "safes:access"),
+        ]
+        .map(|(id, point)| (id.to_owned(), point.to_owned()));
+        let unmatched: Vec<_> = super::unmatched_links_off(&entries, &inert, &loaded()).collect();
+        assert_eq!(
+            unmatched,
+            [("safe-viewers", "safes:gate"), ("safes", "safes:access")]
+        );
     }
 
     #[test]
