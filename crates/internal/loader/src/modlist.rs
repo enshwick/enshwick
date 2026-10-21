@@ -64,6 +64,12 @@ pub fn set_links_off(links: Vec<(String, String)>) {
     let _first = LINKS_OFF.set(links);
 }
 
+/// The links the list turned off at start, as `(mod id, point)`.
+#[must_use]
+pub fn links_off() -> &'static [(String, String)] {
+    LINKS_OFF.get().map_or(&[], Vec::as_slice)
+}
+
 /// Whether the list turns off the link of mod `id` on `point`.
 #[must_use]
 pub fn is_link_off(id: &str, point: &str) -> bool {
