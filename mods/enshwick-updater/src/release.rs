@@ -72,7 +72,7 @@ fn semver(text: &str) -> Option<Version> {
 /// assert_eq!(named("my-mod-v1.2.0").map(|(c, _)| c), Some("my-mod"));
 /// assert_eq!(named("my-mod@1.2.0").map(|(c, _)| c), Some("my-mod"));
 /// assert_eq!(named("v1.2.0"), None);
-/// assert_eq!(named("build-tables"), None);
+/// assert_eq!(named("nightly"), None);
 /// ```
 #[must_use]
 pub fn named(tag: &str) -> Option<(&str, Version)> {

@@ -10,8 +10,8 @@ download them. Nothing is downloaded without a Yes, and this check never
 offers mods you do not have; only a server's join check can (below).
 
 Until Enshwick's first release, 1.0.0, its loader and mods have no releases,
-only the development build, which carries no version the updater can
-compare: update those by hand from the links under [Install](#install).
+only the development build: the updater checks and finds nothing to offer,
+so update those by hand from the links under [Install](#install).
 
 What you accept is downloaded from the mod's release and put in
 `mods/.staged/`. It takes effect the next time you start the game: the
