@@ -6,9 +6,12 @@
 //! effect from the next step and every client gets it. Some values act on
 //! what comes next: enemy health and damage on enemies spawned after the
 //! change, food buffs on food eaten after it, the tombstone mode on the next
-//! death. A change lasts until the server stops; the configuration's values
-//! return with the next start, so a mod that wants its values kept applies
-//! them again on [`WorldLoaded`](crate::events::WorldLoaded).
+//! death. A [`change`](GameSettings::change) lasts until the server stops;
+//! the configuration's values return with the next start.
+//! [`keep`](GameSettings::keep) changes them the same way and keeps the
+//! fields it changed with the world: the loader applies them again each time
+//! that world loads, over what the configuration says, until
+//! [`forget_kept`](GameSettings::forget_kept).
 //!
 //! Every call belongs on the server's game thread, from a game event, a
 //! [`Scheduler`](crate::schedule::Scheduler) task or a command; on a client,
@@ -423,6 +426,7 @@ pub struct GameSettings {
     host: Host,
     offsets: Offsets,
     size: usize,
+    keeps: bool,
 }
 
 impl GameSettings {
@@ -457,6 +461,88 @@ impl GameSettings {
     ///
     /// See the [module](self).
     pub fn change(&self, change: impl FnOnce(&mut Settings)) -> Result<Settings, WorldError> {
+        let (bytes, settings) = self.changed(change)?;
+        let size = u32::try_from(bytes.len()).map_err(|_| WorldError::Missing)?;
+        let status = (self.host.api().set_game_settings)(self.host.handle(), bytes.as_ptr(), size);
+        result(status).map(|()| settings)
+    }
+
+    /// Changes the settings as [`change`](Self::change) does and keeps the
+    /// fields whose value it changed with the running world: the loader
+    /// applies them again each time the world loads, by the end of its
+    /// first step, over what the configuration says. Fields it leaves as
+    /// they were are not kept.
+    /// Several mods' kept fields add up; the last value kept for a field
+    /// wins.
+    ///
+    /// # Errors
+    ///
+    /// As for [`change`](Self::change); [`WorldError::Missing`] also under
+    /// a loader older than ABI minor 57.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+    ///     let settings = load.game_settings()?;
+    ///     load.add_command("no-tombstone", "keeps everything on death, in this world", move |_ctx, _args| {
+    ///         use enshwick_loader_api::game_settings::TombstoneMode;
+    ///         match settings.keep(|s| s.tombstone = TombstoneMode::NoTombstone) {
+    ///             Ok(_) => "kept for this world".into(),
+    ///             Err(why) => format!("unchanged: {why}").into(),
+    ///         }
+    ///     })
+    /// }
+    /// ```
+    pub fn keep(&self, change: impl FnOnce(&mut Settings)) -> Result<Settings, WorldError> {
+        if !self.keeps {
+            return Err(WorldError::Missing);
+        }
+        let (before, _preset) = self.raw()?;
+        let (bytes, settings) = self.changed(change)?;
+        let mask: Vec<u8> = before
+            .iter()
+            .zip(&bytes)
+            .map(|(a, b)| if a == b { 0 } else { 0xff })
+            .collect();
+        let size = u32::try_from(bytes.len()).map_err(|_| WorldError::Missing)?;
+        let status = (self.host.api().keep_game_settings)(
+            self.host.handle(),
+            bytes.as_ptr(),
+            mask.as_ptr(),
+            size,
+        );
+        result(status).map(|()| settings)
+    }
+
+    /// Forgets every field kept for the running world, by any mod, and puts
+    /// back the values the world loaded with.
+    ///
+    /// # Errors
+    ///
+    /// [`WorldError::WrongThread`] off the game thread,
+    /// [`WorldError::Missing`] while no world runs or under a loader older
+    /// than ABI minor 57.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// fn reset(settings: &enshwick_loader_api::game_settings::GameSettings) {
+    ///     let _forgotten = settings.forget_kept();
+    /// }
+    /// ```
+    pub fn forget_kept(&self) -> Result<(), WorldError> {
+        if !self.keeps {
+            return Err(WorldError::Missing);
+        }
+        result((self.host.api().forget_game_settings)(self.host.handle()))
+    }
+
+    /// The bytes of the settings in force after `change`, and the settings.
+    fn changed(
+        &self,
+        change: impl FnOnce(&mut Settings),
+    ) -> Result<(Vec<u8>, Settings), WorldError> {
         let (mut bytes, _preset) = self.raw()?;
         let mut settings = self.offsets.decode(&bytes);
         change(&mut settings);
@@ -464,9 +550,7 @@ impl GameSettings {
             return Err(WorldError::Refused);
         }
         self.offsets.encode(&settings, &mut bytes);
-        let size = u32::try_from(bytes.len()).map_err(|_| WorldError::Missing)?;
-        let status = (self.host.api().set_game_settings)(self.host.handle(), bytes.as_ptr(), size);
-        result(status).map(|()| settings)
+        Ok((bytes, settings))
     }
 
     fn raw(&self) -> Result<(Vec<u8>, Preset), WorldError> {
@@ -517,10 +601,17 @@ impl Load<'_> {
         )?;
         let size =
             usize::try_from(self.type_size(TYPE)?).map_err(|_| Off::new("game settings: size"))?;
+        let keeps = crate::load::offered(
+            host.api(),
+            core::mem::offset_of!(HostApi, forget_game_settings),
+            "kept game settings",
+        )
+        .is_ok();
         Ok(GameSettings {
             host,
             offsets: Offsets::resolve(self, size)?,
             size,
+            keeps,
         })
     }
 }

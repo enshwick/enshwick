@@ -530,6 +530,7 @@ impl Loader {
     /// Raises `event` with `data` for every mod still on, or for mod `only`.
     pub(crate) fn emit(&self, event: Event, only: Option<usize>, data: *const core::ffi::c_void) {
         if only.is_none() {
+            crate::game_settings::world_event(self, event);
             crate::item_data::world_event(self, event);
             crate::stats::world_event(self, event);
         }
@@ -739,6 +740,8 @@ pub(crate) static API: HostApi = HostApi {
     replaced,
     knowledge_input_filter,
     language,
+    keep_game_settings,
+    forget_game_settings,
 };
 
 /// A static slice from a pointer and a count, empty for a null pointer.
@@ -2930,6 +2933,39 @@ extern "system" fn set_game_settings(me: ModHandle, data: *const u8, size: u32) 
         // SAFETY: the caller passes `size` bytes at `data`, valid for the call.
         let bytes = unsafe { core::slice::from_raw_parts(data, len) };
         match caller(me).and_then(|loader| crate::game_settings::write(loader, bytes)) {
+            Ok(()) => Status::OK,
+            Err(status) => status,
+        }
+    })
+}
+
+extern "system" fn keep_game_settings(
+    me: ModHandle,
+    data: *const u8,
+    mask: *const u8,
+    size: u32,
+) -> Status {
+    entry("keep_game_settings", || {
+        if data.is_null() || mask.is_null() {
+            return Status::BAD_ARGS;
+        }
+        let Ok(len) = usize::try_from(size) else {
+            return Status::BAD_ARGS;
+        };
+        // SAFETY: the caller passes `size` bytes at each, valid for the call.
+        let bytes = unsafe { core::slice::from_raw_parts(data, len) };
+        // SAFETY: as above.
+        let mask = unsafe { core::slice::from_raw_parts(mask, len) };
+        match caller(me).and_then(|loader| crate::game_settings::keep(loader, bytes, mask)) {
+            Ok(()) => Status::OK,
+            Err(status) => status,
+        }
+    })
+}
+
+extern "system" fn forget_game_settings(me: ModHandle) -> Status {
+    entry("forget_game_settings", || {
+        match caller(me).and_then(crate::game_settings::forget) {
             Ok(()) => Status::OK,
             Err(status) => status,
         }

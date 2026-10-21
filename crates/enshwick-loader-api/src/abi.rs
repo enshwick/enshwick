@@ -14,7 +14,7 @@ use core::sync::atomic::AtomicUsize;
 pub const ABI_MAJOR: u16 = 1;
 
 /// The minor version of this interface. A newer minor only appends fields.
-pub const ABI_MINOR: u16 = 56;
+pub const ABI_MINOR: u16 = 57;
 
 /// Whether `id` is a valid mod id: 1 to 64 characters of `[a-z0-9-]`.
 ///
@@ -4821,6 +4821,18 @@ pub struct HostApi {
     /// server and before the client's first text. Any thread. Since minor
     /// 56.
     pub language: extern "system" fn(me: ModHandle) -> u32,
+    /// Replaces the live game settings with `data` as
+    /// [`HostApi::set_game_settings`] does, and keeps the fields with a
+    /// byte set in `mask` (as long as `data`) with the running world: the
+    /// loader applies them again each time the world loads, by the end of
+    /// its first step. [`Status::MISSING`] while no world runs.
+    /// On the server's game thread only. Since minor 57.
+    pub keep_game_settings:
+        extern "system" fn(me: ModHandle, data: *const u8, mask: *const u8, size: u32) -> Status,
+    /// Forgets the game settings kept for the running world and puts back
+    /// the values it loaded with. On the server's game thread only. Since
+    /// minor 57.
+    pub forget_game_settings: extern "system" fn(me: ModHandle) -> Status,
 }
 
 /// Flags of [`HostApi::entity_data_open`].
@@ -5172,11 +5184,12 @@ const _: () = {
     assert!(size_of::<StatSource>() == 20);
     assert!(size_of::<StatModify>() == 8 + 8 + 12 + 4 + 8);
     assert!(size_of::<StatChange>() == 8 + 24);
-    assert!(size_of::<HostApi>() == 24 + 128 * 8);
     assert!(core::mem::offset_of!(HostApi, language) == 24 + 127 * 8);
+    assert!(size_of::<HostApi>() == 24 + 130 * 8);
     assert!(core::mem::offset_of!(HostApi, replaced) == 24 + 125 * 8);
     assert!(core::mem::offset_of!(HostApi, entity_data_open) == 24 + 124 * 8);
     assert!(core::mem::offset_of!(HostApi, knowledge_input_filter) == 24 + 126 * 8);
+    assert!(core::mem::offset_of!(HostApi, forget_game_settings) == 24 + 129 * 8);
     assert!(size_of::<KnowledgeInput>() == 8 + 24);
     assert!(core::mem::offset_of!(HostApi, migrate) == 24 + 122 * 8);
     assert!(core::mem::offset_of!(HostApi, declare_content) == 24 + 123 * 8);
