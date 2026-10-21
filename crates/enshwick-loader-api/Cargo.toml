@@ -1,6 +1,6 @@
 [package]
 name = "enshwick-loader-api"
-version = "0.6.0"
+version = "0.7.0"
 description = "The Enshwick Loader's modding API for Enshrouded: the one crate mods are written against"
 keywords = ["enshrouded", "modding", "game", "ffi", "hooks"]
 categories = ["game-development", "api-bindings"]
@@ -12,7 +12,7 @@ repository.workspace = true
 publish.workspace = true
 
 [dependencies]
-enshwick-loader-macros = { path = "../internal/macros", version = "0.6.0" }
+enshwick-loader-macros = { path = "../internal/macros", version = "0.7.0" }
 bcdec_rs.workspace = true
 const-sha1.workspace = true
 zune-core.workspace = true
