@@ -236,6 +236,11 @@ impl Chains {
         if target == 0 || link.detour == 0 {
             return Status::BAD_ARGS;
         }
+        // One slot joins one chain: a link whose slot is wired twice would
+        // call on into the other target's chain with this one's arguments.
+        if self.slot_taken(link.next) {
+            return Status::REFUSED;
+        }
         let chain = self.by_target.entry(target).or_insert_with(|| Chain {
             target,
             links: Vec::new(),
@@ -260,6 +265,14 @@ impl Chains {
         }
         chain.links.push(link);
         Status::OK
+    }
+
+    /// Whether `next` is already the slot of a link on any target.
+    fn slot_taken(&self, next: &AtomicUsize) -> bool {
+        self.by_target
+            .values()
+            .flat_map(|chain| &chain.links)
+            .any(|l| core::ptr::eq(l.next, next))
     }
 
     /// Every chain, for arming.
@@ -303,6 +316,13 @@ impl Chains {
         if link.flags.contains(HookFlags::CALLER_FRAME) && !chain.frame {
             return Status::TOO_LATE;
         }
+        let chain_target = chain.target;
+        if self.slot_taken(link.next) {
+            return Status::REFUSED;
+        }
+        let Some(chain) = self.by_target.get_mut(&chain_target) else {
+            return Status::TOO_LATE;
+        };
         let clash = chain.links.iter().any(|l| {
             l.owner == link.owner
                 || l.flags.contains(HookFlags::EXCLUSIVE)
@@ -376,6 +396,28 @@ mod tests {
 
     fn value(slot: &AtomicUsize) -> usize {
         slot.load(Ordering::Acquire)
+    }
+
+    #[test]
+    fn a_slot_joins_one_chain_only() {
+        let mut chains = Chains::default();
+        let first = link(0, 0xa, 0, HookFlags::NONE);
+        let next = first.next;
+        assert_eq!(chains.add(0x10, first), Status::OK);
+        let again = Link {
+            next,
+            ..link(0, 0xa, 0, HookFlags::NONE)
+        };
+        assert_eq!(chains.add(0x20, again), Status::REFUSED);
+        let other = Link {
+            next,
+            ..link(1, 0xb, 0, HookFlags::NONE)
+        };
+        assert_eq!(chains.add(0x10, other), Status::REFUSED);
+        assert_eq!(
+            chains.add(0x20, link(0, 0xa, 0, HookFlags::NONE)),
+            Status::OK
+        );
     }
 
     #[test]

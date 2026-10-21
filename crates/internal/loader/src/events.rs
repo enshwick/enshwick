@@ -216,9 +216,8 @@ pub(crate) fn link(loader: &'static Loader) {
     };
     let none = HookFlags::NONE;
     let feature = "server events";
-    if let Some(target) = link(&[], "server.post_step") {
-        loader.link_feature(feature, Some(target), &STEP_NEXT, step, none);
-    }
+    let stepped = link(&[], "server.post_step")
+        .is_some_and(|target| loader.link_feature(feature, Some(target), &STEP_NEXT, step, none));
     if let Some(target) = link(&[Event::WORLD_LOADED, Event::SHUTDOWN], "server.set_state") {
         loader.link_feature(feature, Some(target), &STATE_NEXT, set_state, none);
     }
@@ -230,6 +229,11 @@ pub(crate) fn link(loader: &'static Loader) {
         "server.player_remove",
     ) {
         loader.link_feature(feature, Some(target), &REMOVE_NEXT, remove, none);
+    }
+    // Building events wait in a queue only the step drains.
+    if !stepped {
+        crate::log!(WARN, "building events off: they need the server's step");
+        return;
     }
     if let Some(target) = link(&[Event::BUILDING_PLACED], "building.spawn_prop") {
         loader.link_feature(feature, Some(target), &PLACE_NEXT, place, none);

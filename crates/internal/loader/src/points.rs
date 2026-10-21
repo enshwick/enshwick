@@ -431,7 +431,7 @@ impl Sealed {
                     return PointVerdict::REFUSE;
                 }
                 PointVerdict::PANICKED if link.on.swap(false, Ordering::Relaxed) => {
-                    self.live.fetch_sub(1, Ordering::Relaxed);
+                    self.arm(&off);
                     panicked(self, link);
                 }
                 _ => {}
@@ -440,9 +440,14 @@ impl Sealed {
         verdict
     }
 
-    /// Sets the count the owner reads to the links that run.
-    fn arm(&self) {
-        let count = self.links.iter().filter(|l| l.is_on()).count();
+    /// Sets the count the owner reads to the links that run: on, of a mod
+    /// that is not `off`.
+    fn arm(&self, off: impl Fn(usize) -> bool) {
+        let count = self
+            .links
+            .iter()
+            .filter(|l| l.is_on() && !off(l.owner))
+            .count();
         self.live
             .store(u32::try_from(count).unwrap_or(u32::MAX), Ordering::Relaxed);
     }
@@ -499,10 +504,18 @@ pub(crate) fn seal(mods: &impl Mods) {
         );
     }
     for point in &*points {
-        point.arm();
+        point.arm(|owner| mods.off(owner));
     }
     let _first = SEALED.set(points);
     let _first = INERT.set(inert);
+}
+
+/// Counts each point's live links again, once a mod turned off: its links
+/// no longer run, and an owner reads 0 when none does.
+pub(crate) fn rearm(off: impl Fn(usize) -> bool) {
+    for point in SEALED.get().map_or(&[][..], |points| &**points) {
+        point.arm(&off);
+    }
 }
 
 /// Runs the point `id`, which the mod at `asker` defined, over `value`.
@@ -837,7 +850,7 @@ mod tests {
         assert!(inert.is_empty(), "{inert:?}");
         let order: Vec<usize> = points[0].links.iter().map(|l| l.owner).collect();
         assert_eq!(order, [3, 1, 2]);
-        points[0].arm();
+        points[0].arm(|_| false);
         assert_eq!(live.load(Ordering::Relaxed), 3);
         assert_eq!(ask(&points[0], 1), (PointVerdict::SET, 20));
         assert_eq!(points[0].links[2].undid.load(Ordering::Relaxed), 1);
@@ -915,7 +928,7 @@ mod tests {
         assert!(registry.attach(panics).is_ok());
         assert!(registry.attach(link(2, set(5))).is_ok());
         let (points, _) = seal(&mut registry);
-        points[0].arm();
+        points[0].arm(|_| false);
         let told = std::cell::Cell::new(0);
         let mut value = 1u32;
         let verdict = points[0].run(
@@ -934,6 +947,25 @@ mod tests {
     }
 
     #[test]
+    fn a_linking_mod_that_turns_off_leaves_the_count() {
+        let mut registry = Registry::default();
+        let live = defined(&mut registry);
+        assert!(registry.attach(link(1, set(5))).is_ok());
+        assert!(registry.attach(link(2, set(6))).is_ok());
+        let (points, _) = seal(&mut registry);
+        points[0].arm(|_| false);
+        assert_eq!(live.load(Ordering::Relaxed), 2);
+        points[0].arm(|owner| owner == 2);
+        assert_eq!(live.load(Ordering::Relaxed), 1);
+        points[0].arm(|owner| owner != 0);
+        assert_eq!(
+            live.load(Ordering::Relaxed),
+            0,
+            "no link runs, the owner reads 0"
+        );
+    }
+
+    #[test]
     fn a_link_the_list_turns_off_stays_inert() {
         let mut registry = Registry::default();
         let live = defined(&mut registry);
@@ -942,7 +974,7 @@ mod tests {
         let (points, inert, _) = registry.seal(&loaded(), |id, point| {
             id == "safe-viewers" && point == "safes:access"
         });
-        points[0].arm();
+        points[0].arm(|_| false);
         assert_eq!(live.load(Ordering::Relaxed), 1);
         assert_eq!(points[0].links.len(), 1);
         assert_eq!(inert.len(), 1);
