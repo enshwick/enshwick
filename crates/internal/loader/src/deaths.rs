@@ -70,7 +70,7 @@ impl History {
         // The ring of hits ends where `targetTransform` starts.
         let slots = offset(ty, "targetTransform")?.saturating_sub(entries) / entry_size;
         let history = Self {
-            hash: crate::world::type_hash(loader, r.type_info(ty).ok()?.va())?,
+            hash: crate::world::type_hash(r.type_info(ty).ok()?.va())?,
             last_index: offset(ty, "lastIndex")?,
             entries,
             slots,

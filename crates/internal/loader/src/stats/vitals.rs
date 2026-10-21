@@ -48,7 +48,7 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
             let set = |ty: &str, pool: &str| {
                 let info = loader.reflection.type_info(ty).ok()?;
                 Some(Set {
-                    ty: crate::world::type_hash(loader, info.va())?,
+                    ty: crate::world::type_hash(info.va())?,
                     root: u32::try_from(constant(&format!("attribute.{pool}"))?).ok()?,
                     max: slot(&format!("attribute.{pool}_max_slot"))?,
                     adder: slot(&format!("attribute.{pool}_adder_slot"))?,

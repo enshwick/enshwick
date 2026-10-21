@@ -164,7 +164,7 @@ pub(crate) fn link(loader: &'static Loader) {
                 .reflection
                 .type_info("keen::ecs::HandleEquipmentSlotChangedEvent")
                 .ok()?;
-            crate::world::type_hash(loader, info.va())
+            crate::world::type_hash(info.va())
         })
         .flatten();
     let sealed = Sealed {

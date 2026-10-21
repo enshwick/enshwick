@@ -16,6 +16,8 @@ pub(crate) struct Section {
     pub(crate) lines: Vec<Line>,
     /// The new row's text, when it is not written into the file.
     pub(crate) text: Option<(String, &'static str)>,
+    /// Entries whose anchor gave no pattern on the new build, and why.
+    pub(crate) unpatterned: Vec<String>,
 }
 
 /// The report for every section.
@@ -26,13 +28,14 @@ pub(crate) fn render(old: &str, new: &str, sections: &[Section]) -> String {
     let _w = writeln!(out, "# Pin report\n\nFrom build `{old}` to `{new}`.\n");
     let _w = writeln!(
         out,
-        "{} entries: {} unchanged, {} moved, {} ambiguous, {} missing; constants {} kept, {} flagged, {} unverified.\n",
+        "{} entries: {} unchanged, {} moved, {} ambiguous, {} missing; constants {} kept, {} read, {} flagged, {} unverified.\n",
         all.len(),
         count(Status::Unchanged),
         count(Status::Moved),
         count(Status::Ambiguous),
         count(Status::Missing),
         count(Status::Kept),
+        count(Status::Read),
         count(Status::Flagged),
         count(Status::Unverified),
     );
@@ -74,6 +77,13 @@ pub(crate) fn render(old: &str, new: &str, sections: &[Section]) -> String {
             );
         }
         out.push('\n');
+        if !section.unpatterned.is_empty() {
+            let _w = writeln!(out, "Without a pattern on the new build:\n");
+            for why in &section.unpatterned {
+                let _w = writeln!(out, "- {why}");
+            }
+            out.push('\n');
+        }
         if let Some((text, language)) = &section.text {
             let _w = writeln!(out, "New row:\n\n```{language}\n{text}\n```\n");
         }
@@ -105,11 +115,13 @@ mod tests {
                 title: "server".to_owned(),
                 lines: vec![line("a", Status::Unchanged), line("b", Status::Ambiguous)],
                 text: Some(("{ }".to_owned(), "rust")),
+                unpatterned: vec!["c: no unique window".to_owned()],
             }],
         );
         assert!(report.contains("2 entries: 1 unchanged, 0 moved, 1 ambiguous"));
         assert!(report.contains("## For a human\n\n- symbol `b` ambiguous: why | not\n"));
         assert!(report.contains("| symbol | `a` | 0x10 | - | unchanged | - | why / not |"));
         assert!(report.contains("```rust\n{ }\n```"));
+        assert!(report.contains("Without a pattern on the new build:\n\n- c: no unique window\n"));
     }
 }

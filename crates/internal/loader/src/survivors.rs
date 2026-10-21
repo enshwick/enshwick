@@ -567,7 +567,7 @@ fn learn_types(loader: &Loader) {
     let Some(hashes) = TYPE_HASHES.get_or_init(|| {
         let hash = |name: &str| {
             let info = loader.reflection.type_info(name).ok()?;
-            crate::world::type_hash(loader, info.va())
+            crate::world::type_hash(info.va())
         };
         Some([
             hash("keen::ecs::CurrentTransform")?,
@@ -1053,7 +1053,7 @@ static FUEL_TYPE: OnceLock<Option<u32>> = OnceLock::new();
 fn meter(loader: &Loader, pide: u32) -> [u16; 2] {
     let ty = FUEL_TYPE.get_or_init(|| {
         let info = loader.reflection.type_info("keen::ecs::NetworkFuel").ok()?;
-        crate::world::type_hash(loader, info.va())
+        crate::world::type_hash(info.va())
     });
     let Some(data) = ty.and_then(|ty| crate::world::component(loader, pide, ty).ok()) else {
         return [0; 2];

@@ -109,7 +109,7 @@ fn layout(loader: &Loader) -> Option<Layout> {
     };
     let hash = |name: &str| {
         let descriptor = loader.reflection.type_info(name).ok()?.va();
-        crate::world::type_hash(loader, descriptor)
+        crate::world::type_hash(descriptor)
     };
     Some(Layout {
         state_input: size("state_input")?,

@@ -4,10 +4,12 @@
 
 use std::collections::HashMap;
 
+use enshwick_loader_builds::Locate;
 use toml_edit::{DocumentMut, Item, Table as TomlTable, Value};
 
+use super::anchor::{self, Anchor};
 use super::exe::Exe;
-use super::patterns;
+use super::patterns::{self, ConstantPattern, SymbolPattern};
 use super::rows::{Edit, Entry, Row, Side, hex};
 
 /// Where the tables live, relative to the repository.
@@ -99,6 +101,8 @@ pub(crate) struct Patterned {
     pub(crate) symbols: (usize, usize),
     /// The constants, and how many carry a pattern.
     pub(crate) constants: (usize, usize),
+    /// Entries whose anchor gave no pattern, and why.
+    pub(crate) problems: Vec<String>,
 }
 
 /// The new identity of a rendered table.
@@ -126,6 +130,7 @@ pub(crate) fn render(
     identity: &Identity<'_>,
     edits: &[(&Entry, Edit)],
     exe: Option<&Exe<'_>>,
+    anchors: &HashMap<String, Anchor>,
 ) -> Result<(String, Patterned), String> {
     let mut doc: DocumentMut = src.parse().map_err(|e| format!("{e}"))?;
     doc["name"] = toml_edit::value(identity.name);
@@ -172,7 +177,7 @@ pub(crate) fn render(
         }
     }
     let patterned = match exe {
-        Some(exe) => patterns_into(&mut doc, exe)?,
+        Some(exe) => patterns_into(&mut doc, exe, anchors)?,
         None => Patterned::default(),
     };
     Ok((doc.to_string(), patterned))
@@ -201,98 +206,252 @@ fn set(table: &mut TomlTable, id: &str, value: u64) -> Result<(), String> {
     Ok(())
 }
 
-/// Writes every symbol's and constant's pattern from `exe` into `doc`.
-fn patterns_into(doc: &mut DocumentMut, exe: &Exe<'_>) -> Result<Patterned, String> {
-    let values = |doc: &DocumentMut, section: &str| -> Vec<(String, u64)> {
-        doc.get(section)
-            .and_then(Item::as_table)
-            .map(|t| {
-                t.iter()
-                    .filter_map(|(id, item)| Some((id.to_owned(), number(item)?)))
-                    .collect()
-            })
-            .unwrap_or_default()
-    };
+/// What a pattern search gives an entry: its new text, `None` to keep it
+/// plain, or why its anchor gave none.
+type Written = Result<Option<String>, String>;
+
+/// Writes every symbol's and constant's pattern from `exe` into `doc`: around
+/// the entry's anchor where `anchors` names one or its present pattern keeps
+/// one; else a symbol's from its own code, and a constant keeps a
+/// confirming pattern that still matches once, or stays plain.
+fn patterns_into(
+    doc: &mut DocumentMut,
+    exe: &Exe<'_>,
+    anchors: &HashMap<String, Anchor>,
+) -> Result<Patterned, String> {
+    let present =
+        enshwick_loader_builds::Table::parse(&doc.to_string()).map_err(|e| e.to_string())?;
+    let mut anchors_here = anchor::of_table(&present, exe);
+    anchors_here.extend(anchors.iter().map(|(id, a)| (id.clone(), a.clone())));
+    let (code, _) = exe.text();
+    let written = pattern_texts(doc, "constants");
+    let confirmed: HashMap<&str, String> = present
+        .constants()
+        .iter()
+        .filter(|c| c.operand().is_none())
+        .filter_map(|c| {
+            c.pattern()?.find_unique(code).ok()?;
+            Some((c.id(), written.get(c.id())?.clone()))
+        })
+        .collect();
     let symbols = values(doc, "symbols");
     let constants = values(doc, "constants");
-    let symbol_patterns = parallel(&symbols, |(_, rva)| patterns::symbol(exe, *rva));
-    let mut near: Vec<u64> = symbols.iter().map(|(_, rva)| *rva).collect();
-    near.sort_unstable();
-    near.dedup();
-    let constant_patterns = parallel(&constants, |(id, value)| {
-        if id.strip_suffix(".bytes").is_some() {
-            None
-        } else {
-            patterns::constant(exe, *value, &near)
-        }
-    });
-    let mut out = Patterned::default();
-    let found: HashMap<&str, _> = symbols
-        .iter()
-        .zip(&symbol_patterns)
-        .map(|((id, rva), p)| (id.as_str(), (*rva, p.clone())))
-        .collect();
-    if let Some(table) = doc.get_mut("symbols").and_then(Item::as_table_mut) {
-        for (id, item) in table.iter_mut() {
-            let Some((rva, pattern)) = found.get(id.get()) else {
-                continue;
-            };
-            out.symbols.0 += 1;
-            let text = match pattern {
-                Some(p) => {
-                    out.symbols.1 += 1;
-                    let at = if p.at == 0 {
-                        String::new()
-                    } else {
-                        format!(", at = {}", p.at)
-                    };
-                    format!("{{ rva = {}, pattern = \"{}\"{at} }}", hex(*rva), p.text)
-                }
-                None => hex(*rva),
-            };
-            let value: Value = text.parse().map_err(|e| format!("{}: {e}", id.get()))?;
-            *item = Item::Value(value.decorated(" ", ""));
-        }
-    }
-    let found: HashMap<&str, _> = constants
-        .iter()
-        .zip(&constant_patterns)
-        .map(|((id, value), p)| (id.as_str(), (*value, p.clone())))
-        .collect();
-    if let Some(table) = doc.get_mut("constants").and_then(Item::as_table_mut) {
-        for (id, item) in table.iter_mut() {
-            let Some((value, pattern)) = found.get(id.get()) else {
-                continue;
-            };
-            out.constants.0 += 1;
-            let Some(pattern) = pattern else {
-                if let Item::Value(Value::InlineTable(_)) = item {
-                    let plain: Value = spelled(*value).parse().map_err(|e| format!("{e}"))?;
-                    *item = Item::Value(plain.decorated(" ", ""));
-                }
-                continue;
-            };
-            out.constants.1 += 1;
-            let text = format!("{{ value = {}, pattern = \"{pattern}\" }}", spelled(*value));
-            let value: Value = text.parse().map_err(|e| format!("{}: {e}", id.get()))?;
-            *item = Item::Value(value.decorated(" ", ""));
-        }
-    }
-    Ok(out)
+    let failed = || Err("the search failed".to_owned());
+    let symbol_texts = parallel(
+        &symbols,
+        |(id, rva)| symbol_written(exe, id, *rva, anchors_here.get(id)),
+        failed,
+    );
+    let constant_texts = parallel(
+        &constants,
+        |(id, value)| {
+            if id.strip_suffix(".bytes").is_some() {
+                return Ok(None);
+            }
+            match anchors_here.get(id) {
+                Some(anchor) => constant_written(exe, id, *value, anchor),
+                None => Ok(confirmed.get(id.as_str()).map(|text| {
+                    format!("{{ value = {}, pattern = \"{text}\" }}", spelled(*value))
+                })),
+            }
+        },
+        failed,
+    );
+    let mut problems = Vec::new();
+    let symbols = write_section(doc, "symbols", &symbols, symbol_texts, hex, &mut problems)?;
+    let constants = write_section(
+        doc,
+        "constants",
+        &constants,
+        constant_texts,
+        spelled,
+        &mut problems,
+    )?;
+    problems.sort();
+    Ok(Patterned {
+        symbols,
+        constants,
+        problems,
+    })
 }
 
-/// Runs `f` over `items` on all cores, in order.
-fn parallel<T: Sync, R: Send>(items: &[T], f: impl Fn(&T) -> Option<R> + Sync) -> Vec<Option<R>> {
+/// The entries of a section with their values.
+fn values(doc: &DocumentMut, section: &str) -> Vec<(String, u64)> {
+    doc.get(section)
+        .and_then(Item::as_table)
+        .map(|t| {
+            t.iter()
+                .filter_map(|(id, item)| Some((id.to_owned(), number(item)?)))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// The pattern of the symbol `id` at `rva`: through its anchor, or from its
+/// own code.
+fn symbol_written(exe: &Exe<'_>, id: &str, rva: u64, anchor: Option<&Anchor>) -> Written {
+    match anchor {
+        Some(Anchor::Through(site)) => match patterns::symbol_through(exe, *site) {
+            Ok((pattern, target)) if target == rva => Ok(Some(symbol_text(rva, &pattern))),
+            Ok((_, target)) => Err(format!(
+                "{id}: {site:#x} reaches {target:#x}, not {}",
+                hex(rva)
+            )),
+            Err(why) => Err(format!("{id}: {why}")),
+        },
+        _ => Ok(patterns::symbol(exe, rva).map(|p| symbol_text(rva, &p))),
+    }
+}
+
+/// The pattern of the constant `id` around its anchor.
+fn constant_written(exe: &Exe<'_>, id: &str, value: u64, anchor: &Anchor) -> Written {
+    match anchor {
+        Anchor::Read(site, carrier, plus) => {
+            let read = anchor::read(exe, anchor);
+            if read != Some(value) {
+                return Err(format!(
+                    "{id}: its anchor reads {read:x?}, the table pins {}",
+                    hex(value)
+                ));
+            }
+            let pattern = patterns::constant_from(exe, *site, *carrier)
+                .map_err(|why| format!("{id}: {why}"))?;
+            Ok(Some(constant_text(value, &pattern, *plus)))
+        }
+        Anchor::Confirm(site) => {
+            let pattern =
+                patterns::constant_confirmed(exe, *site).map_err(|why| format!("{id}: {why}"))?;
+            Ok(Some(constant_text(value, &pattern, 0)))
+        }
+        other => Err(format!("{id}: a constant cannot take {other:?}")),
+    }
+}
+
+/// Writes `texts` over the entries of `section`, the value spelled plain
+/// where an entry has none; how many entries there are and how many carry a
+/// pattern.
+fn write_section(
+    doc: &mut DocumentMut,
+    section: &str,
+    entries: &[(String, u64)],
+    texts: Vec<Written>,
+    plain: fn(u64) -> String,
+    problems: &mut Vec<String>,
+) -> Result<(usize, usize), String> {
+    let found: HashMap<&str, _> = entries
+        .iter()
+        .zip(texts)
+        .map(|((id, value), text)| (id.as_str(), (*value, text)))
+        .collect();
+    let mut counts = (0, 0);
+    let Some(table) = doc.get_mut(section).and_then(Item::as_table_mut) else {
+        return Ok(counts);
+    };
+    for (id, item) in table.iter_mut() {
+        let Some((value, text)) = found.get(id.get()) else {
+            continue;
+        };
+        counts.0 += 1;
+        let text = match text {
+            Ok(Some(text)) => {
+                counts.1 += 1;
+                text.clone()
+            }
+            Ok(None) => plain(*value),
+            Err(why) => {
+                problems.push(why.clone());
+                plain(*value)
+            }
+        };
+        let value: Value = text.parse().map_err(|e| format!("{}: {e}", id.get()))?;
+        *item = Item::Value(value.decorated(" ", ""));
+    }
+    Ok(counts)
+}
+
+/// A symbol entry with its pattern, as a table spells it.
+fn symbol_text(rva: u64, pattern: &SymbolPattern) -> String {
+    let locate = match pattern.locate {
+        Locate::At(0) => String::new(),
+        Locate::At(at) => format!(", at = {at}"),
+        Locate::Rel { at, end } if end == at + 4 => format!(", rel = {at}"),
+        Locate::Rel { at, end } => format!(", rel = {at}, end = {end}"),
+        _ => String::new(),
+    };
+    format!(
+        "{{ rva = {}, pattern = \"{}\"{locate} }}",
+        hex(rva),
+        pattern.text
+    )
+}
+
+/// A constant entry with its pattern, as a table spells it.
+fn constant_text(value: u64, pattern: &ConstantPattern, plus: i64) -> String {
+    let operand = match pattern.operand {
+        None => String::new(),
+        Some((at, size)) => {
+            let neg = match (pattern.negative, pattern.shift) {
+                (true, _) => ", neg = true",
+                (false, true) => ", shl = true",
+                (false, false) => "",
+            };
+            let plus = if plus == 0 {
+                String::new()
+            } else {
+                format!(", plus = {plus}")
+            };
+            format!(", at = {at}, size = {size}{neg}{plus}")
+        }
+    };
+    format!(
+        "{{ value = {}, pattern = \"{}\"{operand} }}",
+        spelled(value),
+        pattern.text
+    )
+}
+
+/// The pattern texts written in a section, by id.
+fn pattern_texts(doc: &DocumentMut, section: &str) -> HashMap<String, String> {
+    doc.get(section)
+        .and_then(Item::as_table)
+        .map(|t| {
+            t.iter()
+                .filter_map(|(id, item)| {
+                    let Item::Value(Value::InlineTable(inline)) = item else {
+                        return None;
+                    };
+                    Some((id.to_owned(), inline.get("pattern")?.as_str()?.to_owned()))
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Runs `f` over `items` on all cores, in order; a part whose thread
+/// panicked gives `failed` for each of its items.
+fn parallel<T: Sync, R: Send>(
+    items: &[T],
+    f: impl Fn(&T) -> R + Sync,
+    failed: impl Fn() -> R,
+) -> Vec<R> {
     let threads = std::thread::available_parallelism().map_or(1, usize::from);
     let chunk = items.len().div_ceil(threads).max(1);
     std::thread::scope(|scope| {
         let workers: Vec<_> = items
             .chunks(chunk)
-            .map(|part| scope.spawn(|| part.iter().map(&f).collect::<Vec<_>>()))
+            .map(|part| {
+                (
+                    part.len(),
+                    scope.spawn(|| part.iter().map(&f).collect::<Vec<_>>()),
+                )
+            })
             .collect();
         workers
             .into_iter()
-            .flat_map(|w| w.join().unwrap_or_default())
+            .flat_map(|(len, w)| {
+                w.join()
+                    .unwrap_or_else(|_| core::iter::repeat_with(&failed).take(len).collect())
+            })
             .collect()
     })
 }
@@ -374,7 +533,7 @@ revision = 3
             build: Some(2),
             new_build: true,
         };
-        let (text, _) = render(TABLE, &row, &identity, &edits, None).unwrap();
+        let (text, _) = render(TABLE, &row, &identity, &edits, None, &HashMap::new()).unwrap();
         assert!(text.contains(
             "name = \"1.0 server (2)\"
 "

@@ -140,7 +140,7 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
             };
             let hash = |ty: &str| {
                 let info = reflection.type_info(ty).ok()?;
-                crate::world::type_hash(loader, info.va())
+                crate::world::type_hash(info.va())
             };
             let function = |name: &str| {
                 loader

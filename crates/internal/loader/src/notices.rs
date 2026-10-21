@@ -104,7 +104,7 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
                 push: unsafe { core::mem::transmute::<usize, PushFn>(push) },
                 // SAFETY: as above.
                 time: unsafe { core::mem::transmute::<usize, TimeFn>(time) },
-                hash: crate::world::type_hash(loader, info.va())?,
+                hash: crate::world::type_hash(info.va())?,
                 size: info.size(),
                 time_offset: offset("keen::ecs::GameEvent", "timeStamp")?,
                 player: offset(name, "playerEntityId")?,

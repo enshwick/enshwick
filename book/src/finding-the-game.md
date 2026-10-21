@@ -12,8 +12,8 @@ where it would have acted.
 | `load.field_offset(type, field)` | a field's offset in a reflected type | yes |
 | `load.type_size(type)` | a reflected type's size | yes |
 | `load.find_code(pattern)` | the one place in the game's code that matches a byte pattern | while those bytes stay |
-| `load.symbol(id)` | an engine function or address pinned per build | needs a new table or row |
-| `load.constant(id)` | an engine offset, size or value pinned per build | needs a new table or row |
+| `load.symbol(id)` | an engine function or address pinned per build | the loader's ids by their patterns; a mod's own rows need a new row |
+| `load.constant(id)` | an engine offset, size or value pinned per build | the loader's ids by their patterns; a mod's own rows need a new row |
 
 ## Reflection: systems, fields and sizes
 
@@ -126,8 +126,8 @@ changed does not.
   checks a few systems of the table against reflection and loads nothing
   when they disagree. When there is none, as right after a game update, it
   takes the newest table of the same side and finds each entry by the code
-  pattern the table keeps for it: a symbol where its pattern matches exactly
-  once, a constant where the code that used it is still found. What no
+  pattern the table keeps for it (see
+  [Patterns of the loader's table](#patterns-of-the-loaders-table)). What no
   pattern finds is missing, so only the loader features and the mods that
   need it turn off, and the log names the build. With `build_patterns =
   false` in `mod-configs/enshwick.toml` such a build stays vanilla instead,
@@ -141,6 +141,68 @@ changed does not.
 Find every address before registering anything, as
 [the loader's base limit](https://github.com/themaiby/enshwick/blob/main/crates/internal/loader/src/bases.rs)
 does, so a miss leaves the game untouched rather than half changed.
+
+## Patterns of the loader's table
+
+Every entry of the loader's tables carries a pattern that finds it on a
+build without a table: a run of the game's code, unique in its code
+section, with the bytes that move between builds left open (`??`): call and
+jump targets, RIP-relative addresses, and field and stack offsets wherever
+the run stays unique without them.
+
+- A **symbol's** pattern is its own code, `at` bytes into the match. A
+  function the game holds in several identical copies, or a global, is
+  found through code that reaches it: `rel` names the offset of the call's,
+  jump's or RIP-relative operand's rel32 in the match, and the symbol is
+  where it points.
+- A **constant's** pattern is the instruction that uses the value, picked
+  by hand as the use the loader relies on: a read of the field, the
+  multiplier of a stride, the id passed to a lookup. The operand that
+  carries the value is left open and read on the other build (`at` and
+  `size`), so a field Keen moves comes back with its new offset. `neg` reads
+  a frame slot below `rbp`, `shl` a size the code only shifts by, and `plus`
+  a value next to the operand, as a size from the offset of the last field.
+  A value no operand holds, such as an offset of 0, has a pattern that fixes
+  the instruction and confirms the value while that code stands.
+- A symbol's expected code bytes (`<id>.bytes`) count where its pattern
+  finds code that still starts with them.
+
+On build 1269579 the patterns find every symbol of both tables, 246 of the
+server's 256 constants and 323 of the client's 333. The rest are the nine
+slots of attributes in their sets, which the game looks up at run time from
+its data, so no code holds them, and `knowledge.journal_blob`, read only by a
+getter of two instructions too short to find for sure. On a build without a
+table, the API's stat reads, the loader's writes to maximum health, stamina
+and mana, and the knowledge guard stay off; every mod of this repository
+runs.
+`cargo enshwick compat --patterns <exe>` shows what the patterns alone find
+on any executable, and a test of the builds crate checks, when
+`ENSH_SERVER_EXE` and `ENSH_CLIENT_EXE` name the game's executables, that
+every pattern matches exactly once and yields its table's value.
+
+### Adding a pattern
+
+When an entry joins a table, pick the instruction that uses it, in the
+build the table is for, and let the tool write the pattern:
+
+```bash
+cargo enshwick pin --patterns server/enshrouded_server.exe --write \
+  --from "building.zone_entry_ignored=0x93e247" \
+  --from "npc.lookup=ref:0x1f29fa"
+```
+
+`--from <id>=<pick>` (or `--from-file` with one pick per line) takes the RVA
+of an instruction whose displacement or immediate carries the constant
+(`disp:`, `neg:`, `imm:` or `shl:` before it to choose, `+<n>` after it for a
+value next to it), `confirm:<rva>` for an instruction that only confirms it,
+or, for a symbol, `ref:<rva>` of code that calls or addresses it. The tool
+checks that the operand holds the table's value, grows the smallest unique
+window around the instruction and writes it. Once written, the entry keeps
+its instruction: later runs and
+[`pin`](https://github.com/themaiby/enshwick/blob/main/crates/cargo-enshwick/README.md#porting-build-rows-pin)
+for a new build find it by the pattern, or port it, and read the value
+there. Constants without a pick get no pattern: a value seen in some code
+says nothing about what that code means.
 
 ## Code patterns
 

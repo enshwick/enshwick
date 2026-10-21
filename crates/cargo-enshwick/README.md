@@ -79,10 +79,12 @@ It reads the loader's tables, one TOML file per build in
 `builds:` rows of every `manifest!` under `mods/`. It ports each table and row
 whose fingerprint is the old executable's. Each entry of the new table also
 gets the code pattern that finds it on a later build without a table, taken
-from the new executable: for a symbol, the smallest window of instructions
-around it that is unique in the code, with moving parts masked; for a
-constant, such a window around code that uses it as a field offset or an
-immediate.
+from the new executable: the smallest window of instructions that is unique
+in the code, with moving parts masked, and field and frame offsets too where
+the window stays unique without them. A symbol's window is its own code, or
+the code that calls or addresses it; a constant's is the instruction picked
+as its use, with the operand that carries it left open to read (see
+[Patterns of the loader's table](https://github.com/themaiby/enshwick/blob/main/book/src/finding-the-game.md#patterns-of-the-loaders-table)).
 
 ### Workflow
 
@@ -126,8 +128,23 @@ immediate.
    it is merged, the next loader build embeds the table.
 
 `--patterns <exe>` rewrites the patterns of the table for that executable's
-build from the executable itself, for a table that has none yet. With
-`--write` it writes the table file; without, it prints it.
+build from the executable itself. With `--write` it writes the table file;
+without, it prints it. `--from <id>=<pick>`, or `--from-file` with one
+`<id> <pick>` per line, builds an entry's pattern around an instruction:
+
+| Pick | For | The pattern |
+| --- | --- | --- |
+| `<rva>` | a constant | reads the displacement or immediate of the instruction at `rva` that holds the value |
+| `disp:`, `neg:`, `imm:`, `shl:<rva>` | a constant | reads that operand: the displacement, the displacement negated (`[rbp - value]`), the immediate, or `1 << immediate` |
+| `<rva>+<n>`, `<rva>-<n>` | a constant | reads the operand and adds `n`, for a value next to it |
+| `confirm:<rva>` | a constant | fixes the instruction, which confirms the value while it stands |
+| `ref:<rva>` | a symbol | follows the rel32 of the call, jump or RIP-relative operand at `rva` |
+| `direct` | a symbol | its own code |
+
+An entry keeps its instruction from then on: each run finds it again by the
+entry's pattern. A constant without a pick gets no pattern, as a value found
+in some code says nothing about what the code means. The exit code is 2 when
+a pick gives no pattern, with the reason.
 
 ### How it decides
 
@@ -155,7 +172,12 @@ build from the executable itself, for a table that has none yet. With
   Anything else is `ambiguous` or `missing` and stays out of the new row. When
   a changed function's callers still agree on its new address, the note gives
   that address to check by hand.
-- **Constants** keep their value. A constant at least `0x10` is `kept` when the
+- **Constants with a pattern that reads them** take the value their
+  instruction holds in the new build: the old pattern finds the instruction
+  while the code around it holds, else the instruction is ported like a
+  symbol. A changed value is `read`; the same one is `kept`. A constant whose
+  pattern only confirms it is `kept` while the pattern still matches once.
+- **Other constants** keep their value. A constant at least `0x10` is `kept` when the
   row's matched code still uses it as a displacement or immediate. It is
   `flagged` when all its uses lie in code that did not match, and
   `unverified` when the row's code does not use it (or the value is too small
@@ -167,7 +189,7 @@ build from the executable itself, for a table that has none yet. With
 ### Tests
 
 `cargo nextest run -p cargo-enshwick` covers the signatures, the search and the
-row parser. Two more tests need a game executable, which is never in the
+row parser. Three more tests need a game executable, which is never in the
 repository:
 
 ```bash
@@ -178,10 +200,14 @@ ENSHWICK_PIN_EXE=path/to/enshrouded_server.exe cargo test --release -p cargo-ens
 to the same executable, and every symbol and check must map to itself.
 `moved_code_is_followed` moves all the code 16 bytes on, function table
 included, and rewrites one function. Every other symbol in code must follow
-the move, and the rewritten one must come out `missing`. The same command
-works with `enshrouded.exe`. With `ENSH_SERVER_EXE` and `ENSH_CLIENT_EXE` set,
-`cargo nextest run -p enshwick-loader-builds` checks that each table's
-patterns find every patterned entry on its own build.
+the move, and the rewritten one must come out `missing`.
+`a_moved_field_is_read_on_the_new_build` moves three fields the table reads
+from code by 8 bytes: porting and the patterns alone must both give the new
+offsets. The same command works with `enshrouded.exe`. With `ENSH_SERVER_EXE`
+and `ENSH_CLIENT_EXE` set, `cargo nextest run -p enshwick-loader-builds`
+checks that every pattern of each table matches exactly once on its own
+build and yields the table's value, and that the patterns cover at least as
+many entries as they do today.
 
 ### Game build watch
 

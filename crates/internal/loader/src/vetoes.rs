@@ -123,7 +123,7 @@ fn craft_layout(loader: &Loader) -> Option<CraftLayout> {
             .and_then(|v| usize::try_from(v).ok())
     };
     Some(CraftLayout {
-        hash: crate::world::type_hash(loader, info.va())?,
+        hash: crate::world::type_hash(info.va())?,
         size: usize::try_from(info.size()).ok()?,
         player: field("craftingOperatorId")?,
         station: field("craftingStationId")?,

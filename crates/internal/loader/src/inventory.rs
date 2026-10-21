@@ -40,21 +40,36 @@ pub(crate) const TABLE_IDS: &[&str] = &[
     "ecs.slot_root",
     "inventory.actions_row",
     "inventory.actor_flag",
-    "inventory.copy_100",
-    "inventory.copy_150",
-    "inventory.copy_198",
-    "inventory.copy_a8",
-    "inventory.copy_discovered",
-    "inventory.copy_empty_state",
-    "inventory.copy_equipment",
-    "inventory.copy_full_events",
-    "inventory.copy_item_registry",
-    "inventory.copy_owners",
-    "inventory.copy_pickup_events",
-    "inventory.copy_setup",
-    "inventory.copy_slot_hints",
-    "inventory.copy_slots",
-    "inventory.copy_transform",
+    "inventory.copy_100.desc",
+    "inventory.copy_100.view",
+    "inventory.copy_150.desc",
+    "inventory.copy_150.view",
+    "inventory.copy_198.desc",
+    "inventory.copy_198.view",
+    "inventory.copy_a8.desc",
+    "inventory.copy_a8.view",
+    "inventory.copy_discovered.desc",
+    "inventory.copy_discovered.view",
+    "inventory.copy_empty_state.desc",
+    "inventory.copy_empty_state.view",
+    "inventory.copy_equipment.desc",
+    "inventory.copy_equipment.view",
+    "inventory.copy_full_events.desc",
+    "inventory.copy_full_events.view",
+    "inventory.copy_item_registry.desc",
+    "inventory.copy_item_registry.view",
+    "inventory.copy_owners.desc",
+    "inventory.copy_owners.view",
+    "inventory.copy_pickup_events.desc",
+    "inventory.copy_pickup_events.view",
+    "inventory.copy_setup.desc",
+    "inventory.copy_setup.view",
+    "inventory.copy_slot_hints.desc",
+    "inventory.copy_slot_hints.view",
+    "inventory.copy_slots.desc",
+    "inventory.copy_slots.view",
+    "inventory.copy_transform.desc",
+    "inventory.copy_transform.view",
     "inventory.desc_actor",
     "inventory.desc_context",
     "inventory.desc_other",
@@ -66,7 +81,6 @@ pub(crate) const TABLE_IDS: &[&str] = &[
     "inventory.move_amount",
     "inventory.move_slot",
     "inventory.resend",
-    "inventory.row_bytes",
     "inventory.take",
     "inventory.txn_commit",
     "inventory.txn_drop",
@@ -76,7 +90,6 @@ pub(crate) const TABLE_IDS: &[&str] = &[
     "inventory.txn_size",
     "inventory.view_actors",
     "inventory.view_fill",
-    "inventory.view_fill_bytes",
     "inventory.view_frame",
     "inventory.view_item_registry",
     "inventory.view_owners",
@@ -352,12 +365,14 @@ fn build(loader: &Loader) -> Option<Executor> {
         .build
         .constants()
         .iter()
-        .filter(|(name, _)| name.starts_with("inventory.copy_"))
-        .filter_map(|&(_, packed)| {
-            Some((
-                usize::try_from(packed >> 32).ok()?,
-                usize::try_from(packed & 0xffff_ffff).ok()?,
-            ))
+        .filter_map(|(name, view)| {
+            let field = name
+                .strip_prefix("inventory.copy_")?
+                .strip_suffix(".view")?;
+            let desc = loader
+                .build
+                .constant(&format!("inventory.copy_{field}.desc"))?;
+            Some((usize::try_from(desc).ok()?, usize::try_from(*view).ok()?))
         })
         .collect();
     let field = |name: &str| {
@@ -449,8 +464,8 @@ fn build(loader: &Loader) -> Option<Executor> {
 /// `executor` with its scratch block, when the game code at the hook reads
 /// as the build table says.
 fn checked(loader: &Loader, executor: Executor, txn_size: usize) -> Option<Executor> {
-    if !code_matches(loader, "inventory.actions_row", "inventory.row_bytes")
-        || !code_matches(loader, "inventory.view_fill", "inventory.view_fill_bytes")
+    if !code_matches(loader, "inventory.actions_row")
+        || !code_matches(loader, "inventory.view_fill")
     {
         crate::log!(
             WARN,
@@ -470,10 +485,11 @@ fn checked(loader: &Loader, executor: Executor, txn_size: usize) -> Option<Execu
     })
 }
 
-/// Whether the 8 code bytes at the symbol `at` are the constant `bytes`.
-fn code_matches(loader: &Loader, at: &str, bytes: &str) -> bool {
-    let (Some(rva), Some(expected)) = (loader.build.symbol(at), loader.build.constant(bytes))
-    else {
+/// Whether the eight bytes at `symbol` are the build table's
+/// `<symbol>.bytes`.
+fn code_matches(loader: &Loader, symbol: &str) -> bool {
+    let bytes = loader.build.constant(&format!("{symbol}.bytes"));
+    let (Some(rva), Some(expected)) = (loader.build.symbol(symbol), bytes) else {
         return false;
     };
     let Ok(address) = usize::try_from(loader.base + rva) else {
@@ -1177,8 +1193,8 @@ mod tests {
             assert!(server.symbol(name).is_some(), "{name}");
         }
         let constants = [
-            "inventory.row_bytes",
-            "inventory.view_fill_bytes",
+            "inventory.actions_row.bytes",
+            "inventory.view_fill.bytes",
             "inventory.view_frame",
             "inventory.view_owners",
             "inventory.view_actors",
@@ -1198,7 +1214,10 @@ mod tests {
             .iter()
             .filter(|(name, _)| name.starts_with("inventory.copy_"))
             .count();
-        assert_eq!(copies, 15);
+        assert_eq!(
+            copies, 30,
+            "a view and a descriptor offset for each of 15 fields"
+        );
         assert!(server.constant("inventory.desc_size").unwrap() <= DESC_AREA as u64);
     }
 

@@ -89,7 +89,7 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
             let component = |name: &str| {
                 let info = reflection.type_info(name).ok()?;
                 Some(Component {
-                    hash: crate::world::type_hash(loader, info.va())?,
+                    hash: crate::world::type_hash(info.va())?,
                     size: usize::try_from(info.size()).ok()?,
                 })
             };

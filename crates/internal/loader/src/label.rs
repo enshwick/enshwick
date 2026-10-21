@@ -114,7 +114,7 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
                 replace: unsafe { core::mem::transmute::<usize, ReplaceFn>(replace) },
                 // SAFETY: as above.
                 add: unsafe { core::mem::transmute::<usize, AddFn>(add) },
-                label_type: crate::world::type_hash(loader, descriptor)?,
+                label_type: crate::world::type_hash(descriptor)?,
                 world: constant("server.world")?,
                 strings: constant("server.custom_strings")?,
                 max_text: constant("label.max_text")?,

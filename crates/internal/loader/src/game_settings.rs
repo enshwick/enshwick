@@ -118,7 +118,7 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
                 size: size_of(settings)?,
                 day_length: offset(settings, "dayTimeDuration")?,
                 night_length: offset(settings, "nightTimeDuration")?,
-                event: crate::world::type_hash(loader, event_info.va())?,
+                event: crate::world::type_hash(event_info.va())?,
                 event_size: usize::try_from(event_info.size()).ok()?,
                 event_settings: offset(event, "newSettings")?,
             })
