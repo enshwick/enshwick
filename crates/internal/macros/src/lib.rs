@@ -574,7 +574,7 @@ fn expand_hook(
 /// Declares a service table: makes the struct `repr(C)` and implements
 /// `enshwick_loader_api::services::Service` with a layout hash per field.
 ///
-/// `#[service(name = "<publisher id>.<what>", version = <major>)]`; the
+/// `#[service(name = "<publisher id>:<what>", version = <major>)]`; the
 /// version defaults to 1. Fields are `extern "system" fn` pointers or plain
 /// data, appended over time. Examples are on `enshwick_loader_api::service`.
 #[proc_macro_attribute]
@@ -589,7 +589,7 @@ pub fn service(args: TokenStream, item: TokenStream) -> TokenStream {
             version = Some(meta.value()?.parse()?);
             Ok(())
         } else {
-            Err(meta.error("expected `name = \"<id>.<what>\"` or `version = <major>`"))
+            Err(meta.error("expected `name = \"<id>:<what>\"` or `version = <major>`"))
         }
     });
     parse_macro_input!(args with settings);
@@ -606,7 +606,7 @@ pub fn service(args: TokenStream, item: TokenStream) -> TokenStream {
 /// Declares a mod event: makes the struct `repr(C)` and implements
 /// `enshwick_loader_api::services::ModEvent` with a layout hash per field.
 ///
-/// `#[event(name = "<defining mod id>.<what>")]`; the struct is `Copy`
+/// `#[event(name = "<defining mod id>:<what>")]`; the struct is `Copy`
 /// plain data, appended over time. Examples are on
 /// `enshwick_loader_api::event`.
 #[proc_macro_attribute]
@@ -617,7 +617,7 @@ pub fn event(args: TokenStream, item: TokenStream) -> TokenStream {
             name = Some(meta.value()?.parse()?);
             Ok(())
         } else {
-            Err(meta.error("expected `name = \"<id>.<what>\"`"))
+            Err(meta.error("expected `name = \"<id>:<what>\"`"))
         }
     });
     parse_macro_input!(args with settings);
@@ -673,7 +673,6 @@ pub fn point(args: TokenStream, item: TokenStream) -> TokenStream {
         }
         let output = output
             .ok_or_else(|| syn::Error::new_spanned(&ident, "name the answer: `output = <type>`"))?;
-        let written = format!("output: {}", quote!(#output));
         let extra = quote! {
             const MODE: ::enshwick_loader_api::points::Mode =
                 ::enshwick_loader_api::points::Mode::#mode;
@@ -682,7 +681,8 @@ pub fn point(args: TokenStream, item: TokenStream) -> TokenStream {
                 &[::enshwick_loader_api::abi::LayoutField {
                     name: ::enshwick_loader_api::abi::Str::new("output"),
                     hash: ::enshwick_loader_api::services::layout_hash(
-                        #written,
+                        "output",
+                        <#output as ::enshwick_loader_api::Shape>::SHAPE,
                         ::core::mem::size_of::<#output>(),
                         ::core::mem::align_of::<#output>(),
                         0,
@@ -690,9 +690,156 @@ pub fn point(args: TokenStream, item: TokenStream) -> TokenStream {
                 }];
             type Output = #output;
         };
-        expand_declaration(&item, name, ':', &extra, &quote!(points::Point))
+        expand_declaration(&item, name, &extra, &quote!(points::Point))
     })();
     expanded.unwrap_or_else(|e| e.to_compile_error().into())
+}
+
+/// Implements `enshwick_loader_api::Shape`: the structural hash the layout
+/// checks of services, mod events and extension points reach into.
+///
+/// A struct is `repr(C)` or `repr(transparent)` and hashes its name, size,
+/// alignment and every field with its shape and offset. An enum has an
+/// integer `repr`, unit variants only, and hashes every variant with its
+/// discriminant. `#[shape(values(A, B))]` on a newtype over an integer adds
+/// the named constants `Self::A` and `Self::B` with their values. Examples
+/// are on `enshwick_loader_api::Shape`.
+#[proc_macro_derive(Shape, attributes(shape))]
+pub fn derive_shape(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+    expand_shape(&input)
+        .unwrap_or_else(syn::Error::into_compile_error)
+        .into()
+}
+
+/// The integer `repr`s an enum may have; 128-bit ones are left out, since
+/// the hash takes a discriminant as an `i128`.
+const PRIMITIVE_REPRS: [&str; 10] = [
+    "u8", "u16", "u32", "u64", "usize", "i8", "i16", "i32", "i64", "isize",
+];
+
+/// The `repr`s and the `#[shape(values(..))]` constants of a type.
+fn shape_attributes(attrs: &[Attribute]) -> syn::Result<(Vec<String>, Vec<Ident>)> {
+    let mut reprs = Vec::new();
+    let mut values = Vec::new();
+    for attr in attrs {
+        if attr.path().is_ident("repr") {
+            attr.parse_nested_meta(|meta| {
+                if let Some(repr) = meta.path.get_ident() {
+                    reprs.push(repr.to_string());
+                }
+                if meta.input.peek(syn::token::Paren) {
+                    let _skipped: proc_macro2::TokenStream = meta.input.parse()?;
+                }
+                Ok(())
+            })?;
+        } else if attr.path().is_ident("shape") {
+            attr.parse_nested_meta(|meta| {
+                if meta.path.is_ident("values") {
+                    meta.parse_nested_meta(|value| {
+                        values.push(value.path.require_ident()?.clone());
+                        Ok(())
+                    })
+                } else {
+                    Err(meta.error("expected `values(<CONSTANT>, ...)`"))
+                }
+            })?;
+        }
+    }
+    Ok((reprs, values))
+}
+
+fn expand_shape(input: &DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
+    let ident = &input.ident;
+    if !input.generics.params.is_empty() {
+        return Err(syn::Error::new_spanned(
+            &input.generics,
+            "a shape crosses DLLs and takes no generics",
+        ));
+    }
+    let (reprs, values) = shape_attributes(&input.attrs)?;
+    let name = ident.unraw().to_string();
+    let shape = quote!(::enshwick_loader_api::Shape);
+    let parts = match &input.data {
+        Data::Struct(data) => {
+            if !reprs.iter().any(|r| r == "C" || r == "transparent") {
+                return Err(syn::Error::new_spanned(
+                    ident,
+                    "a shared struct is `#[repr(C)]` or `#[repr(transparent)]`",
+                ));
+            }
+            let newtype = matches!(&data.fields, Fields::Unnamed(f) if f.unnamed.len() == 1);
+            if !values.is_empty() && !newtype {
+                return Err(syn::Error::new_spanned(
+                    ident,
+                    "`values` names the constants of a newtype over an integer",
+                ));
+            }
+            let fields = data.fields.iter().enumerate().map(|(i, field)| {
+                let ty = &field.ty;
+                let (label, member) = if let Some(f) = &field.ident {
+                    (f.unraw().to_string(), quote!(#f))
+                } else {
+                    let index = syn::Index::from(i);
+                    (i.to_string(), quote!(#index))
+                };
+                quote! {
+                    .text(#label)
+                    .number(<#ty as #shape>::SHAPE)
+                    .offset(::core::mem::offset_of!(Self, #member))
+                }
+            });
+            let named = values.iter().map(|value| {
+                let label = value.to_string();
+                quote!(.text(#label).value(Self::#value.0 as i128))
+            });
+            quote!(.text("struct") #(#fields)* #(#named)*)
+        }
+        Data::Enum(data) => {
+            if !values.is_empty() {
+                return Err(syn::Error::new_spanned(
+                    ident,
+                    "`values` names the constants of a newtype; an enum lists its variants",
+                ));
+            }
+            let Some(repr) = reprs.iter().find(|r| PRIMITIVE_REPRS.contains(&r.as_str())) else {
+                return Err(syn::Error::new_spanned(
+                    ident,
+                    "a shared enum has an integer `repr`, such as `#[repr(u8)]`",
+                ));
+            };
+            let mut variants = Vec::new();
+            for variant in &data.variants {
+                if !matches!(variant.fields, Fields::Unit) {
+                    return Err(syn::Error::new_spanned(
+                        variant,
+                        "a shared enum has unit variants only",
+                    ));
+                }
+                let v = &variant.ident;
+                let label = v.unraw().to_string();
+                variants.push(quote!(.text(#label).value(Self::#v as i128)));
+            }
+            quote!(.text("enum").text(#repr) #(#variants)*)
+        }
+        Data::Union(data) => {
+            return Err(syn::Error::new_spanned(
+                data.union_token,
+                "a union has no shape: wrap it in a struct and implement `Shape` by hand",
+            ));
+        }
+    };
+    Ok(quote! {
+        // SAFETY: the hash covers the type's name, size and alignment, and
+        // every field with its shape and offset, every variant with its
+        // discriminant, or every named value.
+        unsafe impl #shape for #ident {
+            const SHAPE: u64 = ::enshwick_loader_api::shape::ShapeHasher::new(#name)
+                .layout::<Self>()
+                #parts
+                .finish();
+        }
+    })
 }
 
 /// The struct as `repr(C)` with its layout trait: `major` is `Some` for a
@@ -707,31 +854,26 @@ fn expand_layout(
     expand_declaration(
         item,
         name,
-        '.',
         &major.unwrap_or_default(),
         &quote!(services::#trait_name),
     )
 }
 
 /// The struct as `repr(C)` with the declaration trait at
-/// `enshwick_loader_api::<trait_path>`, named `<mod id><separator><what>`,
-/// with `extra` items in the impl.
+/// `enshwick_loader_api::<trait_path>`, named `<mod id>:<what>`, with
+/// `extra` items in the impl.
 fn expand_declaration(
     item: &syn::ItemStruct,
     name: Option<syn::LitStr>,
-    separator: char,
     extra: &proc_macro2::TokenStream,
     trait_path: &proc_macro2::TokenStream,
 ) -> syn::Result<TokenStream> {
     let ident = &item.ident;
     let name = name.ok_or_else(|| {
-        syn::Error::new_spanned(
-            ident,
-            format!("name the declaration: `name = \"<id>{separator}<what>\"`"),
-        )
+        syn::Error::new_spanned(ident, "name the declaration: `name = \"<id>:<what>\"`")
     })?;
     let text = name.value();
-    let valid = text.split_once(separator).is_some_and(|(id, what)| {
+    let valid = text.split_once(':').is_some_and(|(id, what)| {
         !id.is_empty()
             && id.len() <= 64
             && id
@@ -742,7 +884,7 @@ fn expand_declaration(
     if !valid {
         return Err(syn::Error::new_spanned(
             &name,
-            format!("the name is `<mod id>{separator}<what>`, the mod id in `[a-z0-9-]`"),
+            "the name is `<mod id>:<what>`, the mod id in `[a-z0-9-]`",
         ));
     }
     if !item.generics.params.is_empty() {
@@ -767,12 +909,12 @@ fn expand_declaration(
         let field_ident = field.ident.as_ref()?;
         let ty = &field.ty;
         let field_name = field_ident.unraw().to_string();
-        let written = format!("{field_name}: {}", quote!(#ty));
         Some(quote! {
             ::enshwick_loader_api::abi::LayoutField {
                 name: ::enshwick_loader_api::abi::Str::new(#field_name),
                 hash: ::enshwick_loader_api::services::layout_hash(
-                    #written,
+                    #field_name,
+                    <#ty as ::enshwick_loader_api::Shape>::SHAPE,
                     ::core::mem::size_of::<#ty>(),
                     ::core::mem::align_of::<#ty>(),
                     ::core::mem::offset_of!(#ident, #field_ident),

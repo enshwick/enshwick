@@ -6,7 +6,7 @@
 //! of this crate keep working with a newer `trading-post`.
 
 /// Item prices, published by `trading-post`.
-#[enshwick_loader_api::service(name = "trading-post.prices", version = 1)]
+#[enshwick_loader_api::service(name = "trading-post:prices", version = 1)]
 #[derive(Debug)]
 pub struct Prices {
     /// The price of `item` in coins, 0 for an item with no price.
@@ -17,7 +17,7 @@ pub struct Prices {
 
 /// An item sold at the trading post, sent by `trading-post` on the thread
 /// that sold it.
-#[enshwick_loader_api::event(name = "trading-post.sold")]
+#[enshwick_loader_api::event(name = "trading-post:sold")]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Sold {
     /// The item sold.

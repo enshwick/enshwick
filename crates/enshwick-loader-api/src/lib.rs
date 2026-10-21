@@ -106,6 +106,7 @@ pub mod raw;
 mod refused;
 pub mod schedule;
 pub mod services;
+pub mod shape;
 pub mod state;
 pub mod stats;
 pub mod status;
@@ -121,18 +122,55 @@ pub mod weather;
 pub mod world;
 
 pub use enshwick_loader_macros::Config;
+/// Derives [`trait@Shape`] for a type that crosses between mods inside a
+/// [`#[service]`](macro@service), [`#[event]`](macro@event) or
+/// [`#[point]`](macro@point), so a change inside it refuses the link.
+///
+/// A struct is `#[repr(C)]` or `#[repr(transparent)]`; an enum has an
+/// integer `repr` and unit variants, each hashed with its discriminant.
+/// `#[shape(values(A, B))]` on a newtype over an integer hashes its named
+/// constants with their values, as
+/// [`SafeAction`](points::safes::SafeAction) does.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::Shape;
+///
+/// #[derive(Clone, Copy, Debug, Shape)]
+/// #[repr(transparent)]
+/// pub struct Coins(pub u32);
+///
+/// #[derive(Clone, Copy, Debug, Shape)]
+/// #[repr(transparent)]
+/// #[shape(values(BUY, SELL))]
+/// pub struct Deal(pub u8);
+///
+/// impl Deal {
+///     pub const BUY: Self = Self(0);
+///     pub const SELL: Self = Self(1);
+/// }
+///
+/// #[enshwick_loader_api::event(name = "trading-post:sold")]
+/// #[derive(Clone, Copy, Debug)]
+/// pub struct Sold {
+///     pub price: Coins,
+///     pub deal: Deal,
+/// }
+/// ```
+pub use enshwick_loader_macros::Shape;
 /// Declares a mod event other mods subscribe to: the struct becomes
 /// `repr(C)` and implements [`services::ModEvent`] with a layout hash per
 /// field.
 ///
-/// `#[event(name = "<defining mod id>.<what>")]`; the struct is `Copy`
+/// `#[event(name = "<defining mod id>:<what>")]`; the struct is `Copy`
 /// plain data and grows by appending fields, as a
 /// [`#[service]`](macro@service) table does.
 ///
 /// # Examples
 ///
 /// ```
-/// #[enshwick_loader_api::event(name = "trading-post.sold")]
+/// #[enshwick_loader_api::event(name = "trading-post:sold")]
 /// #[derive(Clone, Copy, Debug)]
 /// pub struct Sold {
 ///     pub item: u32,
@@ -177,8 +215,8 @@ pub use enshwick_loader_macros::hook;
 /// `#[point(name = "<owner id>:<point>", mode = Observe | Advise | Override,
 /// output = <type>, refusable)]`; `refusable` lets a link refuse, which
 /// stops the chain. The input grows by appending fields; a changed field or
-/// answer type needs a new name. Types count as written, so keep one
-/// declaration both mods compile.
+/// answer type needs a new name. Every type in it has a [`trait@Shape`], so
+/// a change deep inside a field refuses the link too.
 ///
 /// # Examples
 ///
@@ -202,16 +240,17 @@ pub use enshwick_loader_macros::point;
 /// and implements [`services::Service`] with a layout hash per field, which
 /// the loader checks when a mod asks for the service.
 ///
-/// `#[service(name = "<publisher id>.<what>", version = <major>)]`, the
+/// `#[service(name = "<publisher id>:<what>", version = <major>)]`, the
 /// version 1 when left out. Fields are `extern "system" fn` pointers or
 /// plain data. Append fields to grow the table: users built against the
 /// shorter table keep working. Change a published field only with a new
-/// major. Types count as written, so keep one declaration both mods compile.
+/// major. Every type in it has a [`trait@Shape`], so a change deep inside a
+/// field refuses the user too.
 ///
 /// # Examples
 ///
 /// ```
-/// #[enshwick_loader_api::service(name = "trading-post.prices", version = 1)]
+/// #[enshwick_loader_api::service(name = "trading-post:prices", version = 1)]
 /// pub struct Prices {
 ///     pub price: extern "system" fn(item: u32) -> u32,
 /// }
@@ -231,6 +270,7 @@ pub use hook::{FnPtr, Hook, Next};
 pub use host::{Host, host};
 pub use load::{Load, Mod, Off};
 pub use mods::mods;
+pub use shape::Shape;
 
 #[doc(hidden)]
 pub mod __private {

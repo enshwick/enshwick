@@ -1,5 +1,5 @@
 //! Example: publishes item prices as a typed service and sends
-//! `trading-post.sold` when a player sells with `/sell <item>`.
+//! `trading-post:sold` when a player sells with `/sell <item>`.
 
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -73,9 +73,9 @@ mod tests {
         // SAFETY: the exports of `declare_mod!` above.
         let status = unsafe { loader.start(super::enshwick_mod_init, super::enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
-        assert_eq!(loader.published(), [("trading-post.prices".to_owned(), 1)]);
-        assert_eq!(loader.defined_events(), ["trading-post.sold"]);
+        assert_eq!(loader.published(), [("trading-post:prices".to_owned(), 1)]);
+        assert_eq!(loader.defined_events(), ["trading-post:sold"]);
         assert_eq!(super::sell(3).text(), "sold item 3 for 10 coins");
-        assert_eq!(loader.sent_events(), ["trading-post.sold"]);
+        assert_eq!(loader.sent_events(), ["trading-post:sold"]);
     }
 }

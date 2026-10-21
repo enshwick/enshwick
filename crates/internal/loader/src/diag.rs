@@ -523,7 +523,7 @@ mod tests {
                 reason: "panic in a command handler".into(),
                 at: 44_000,
             }],
-            links: vec!["event trading-post.sold from trading-post 0.3.0 to market-stalls".into()],
+            links: vec!["event trading-post:sold from trading-post 0.3.0 to market-stalls".into()],
             served: Served {
                 resources: 4,
                 built: 4,
@@ -583,7 +583,7 @@ mod tests {
         assert!(text.contains("12:13:20Z safes: panic in a command handler"));
         assert!(text.contains(
             "services and events:
-  event trading-post.sold from trading-post 0.3.0 to market-stalls
+  event trading-post:sold from trading-post 0.3.0 to market-stalls
 "
         ));
         assert!(text.contains("4 resources served (4 built, 0 failed), 12 texts"));
