@@ -65,19 +65,24 @@ struct Settings {
     /// Halve every damage, to see the damage filter in game.
     #[config(startup)]
     soften_damage: bool,
+    /// Keep the bosses' health at 1.25 for the next start, to see a kept
+    /// game setting come back with the world; the next run with this on
+    /// forgets it. Off, a run keeps and forgets it at once.
+    #[config(startup)]
+    keep_across_restart: bool,
 }
 
 /// A check of a single feature, run after the general ones.
 pub(crate) type Check = Box<dyn Fn() + Send + Sync>;
 
 /// The checks of single features whose part of the API this build has.
-fn extras(load: &mut Load<'_>, scheduler: Scheduler) -> Vec<Check> {
+fn extras(load: &mut Load<'_>, scheduler: Scheduler, settings: &Settings) -> Vec<Check> {
     let mut extras: Vec<Check> = Vec::new();
     match clock::ClockChecks::new(load, scheduler) {
         Ok(clock) => extras.push(Box::new(move || clock.run())),
         Err(off) => enshwick_loader_api::warn!("FAIL clock: {off}"),
     }
-    match settings::SettingsChecks::new(load) {
+    match settings::SettingsChecks::new(load, settings.keep_across_restart) {
         Ok(settings) => extras.push(Box::new(move || settings.run())),
         Err(off) => enshwick_loader_api::warn!("FAIL game settings: {off}"),
     }
@@ -249,7 +254,7 @@ impl Mod for Probe {
             }
             ControlFlow::Continue(())
         });
-        let mut extras = extras(load, scheduler);
+        let mut extras = extras(load, scheduler, &settings);
         let affix_checks = affixes::AffixChecks::register(load, &mut extras);
         let extras: Arc<[Check]> = extras.into();
         let run_all = {
