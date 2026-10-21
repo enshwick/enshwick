@@ -45,14 +45,14 @@ pub(crate) struct ModRecord {
     pub(crate) notes: Vec<String>,
     /// Set when the mod is off: refused at init or faulted later.
     pub(crate) off: AtomicBool,
-    /// The settings text last handed to the mod, alive until its next call.
-    pub(crate) settings: Mutex<Option<String>>,
+    /// The settings texts handed to the mod.
+    pub(crate) settings: Kept,
     /// The join values the mod last reported, as its settings file holds them.
     pub(crate) synced: Mutex<Option<String>>,
     /// On a client, the joined server's join values for the mod.
     pub(crate) server_synced: Mutex<Option<String>>,
-    /// The text `sync` last handed to the mod, alive until its next call.
-    pub(crate) sync_out: Mutex<String>,
+    /// The texts `sync` handed to the mod.
+    pub(crate) sync_out: Kept,
     /// The settings schema the mod handed the loader.
     pub(crate) schema: Mutex<Option<enshwick_loader_api::config::Schema>>,
     /// The mod's check of new settings texts: callback and pointer.
@@ -81,6 +81,27 @@ impl ModRecord {
             Some(hash) => format!("{}+{hash}", self.version),
             None => self.version.clone(),
         }
+    }
+}
+
+/// Texts handed to a mod, kept for the life of the process: the mod may still
+/// read one on a thread of its own while another thread asks for a newer one.
+/// An equal text handed out before is handed out again, so a file read over
+/// and over keeps one copy.
+#[derive(Debug, Default)]
+pub(crate) struct Kept(Mutex<Vec<Box<str>>>);
+
+impl Kept {
+    /// `text`, kept for good; `None` when the store is poisoned.
+    pub(crate) fn keep(&self, text: &str) -> Option<Str> {
+        let mut kept = self.0.lock().ok()?;
+        let at = kept.iter().position(|k| **k == *text).unwrap_or_else(|| {
+            kept.push(text.into());
+            kept.len() - 1
+        });
+        // The box's heap text never moves or drops while the store lives,
+        // whatever the vector does with the boxes.
+        Some(Str::new(&kept[at]))
     }
 }
 
@@ -980,12 +1001,10 @@ extern "system" fn settings(me: ModHandle, defaults: Str, out: *mut Str) -> Stat
             defaults.to_owned()
         });
         let content = crate::worlds::effective(loader, record, &content);
-        let Ok(mut slot) = record.settings.lock() else {
-            return Status::REFUSED;
-        };
-        let kept = slot.insert(content);
-        // The text stays in the record until the loader drops it after init.
-        put(out, Str::new(kept))
+        match record.settings.keep(&content) {
+            Some(kept) => put(out, kept),
+            None => Status::REFUSED,
+        }
     })
 }
 
@@ -1784,12 +1803,10 @@ extern "system" fn sync(me: ModHandle, synced: Str, out: *mut Str) -> Status {
             .ok()
             .and_then(|held| held.clone())
             .unwrap_or_default();
-        let Ok(mut slot) = record.sync_out.lock() else {
-            return Status::REFUSED;
-        };
-        *slot = server;
-        // The text stays in the record until the mod's next call.
-        put(out, Str::new(slot.as_str()))
+        match record.sync_out.keep(&server) {
+            Some(kept) => put(out, kept),
+            None => Status::REFUSED,
+        }
     })
 }
 
@@ -3329,4 +3346,50 @@ extern "system" fn texts(me: ModHandle, toml: Str) -> Status {
 #[must_use]
 pub(crate) fn handle(index: usize) -> ModHandle {
     ModHandle(index + 1)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn read(text: Str) -> Option<&'static str> {
+        // SAFETY: the tests read texts of stores that live to their end.
+        unsafe { text.as_str() }
+    }
+
+    #[test]
+    fn a_kept_text_outlives_newer_ones_and_an_equal_text_is_kept_once() {
+        let kept = Kept::default();
+        let first = kept.keep("limit = 1").unwrap();
+        for n in 2..100 {
+            kept.keep(&format!("limit = {n}")).unwrap();
+        }
+        let again = kept.keep("limit = 1").unwrap();
+        assert_eq!(read(first), Some("limit = 1"));
+        assert_eq!(read(again), read(first));
+        assert_eq!(kept.0.lock().unwrap().len(), 99);
+    }
+
+    #[test]
+    fn texts_kept_on_other_threads_leave_earlier_ones_readable() {
+        let kept = std::sync::Arc::new(Kept::default());
+        let first = kept.keep("a = 0").unwrap();
+        let writers: Vec<_> = (0..4)
+            .map(|t| {
+                let kept = std::sync::Arc::clone(&kept);
+                std::thread::spawn(move || {
+                    for n in 0..200 {
+                        kept.keep(&format!("a = {t}{n}")).unwrap();
+                    }
+                })
+            })
+            .collect();
+        for _ in 0..200 {
+            assert_eq!(read(first), Some("a = 0"));
+        }
+        for writer in writers {
+            writer.join().unwrap();
+        }
+        assert_eq!(read(first), Some("a = 0"));
+    }
 }

@@ -165,10 +165,10 @@ pub(crate) struct State {
     pub(crate) grouping: Option<(u32, u32)>,
     /// The reply `run_command` last handed out, alive until the next call.
     run_out: Option<Box<str>>,
-    /// The settings text last handed out, alive until the next call.
-    settings: Option<Box<str>>,
-    /// The join values last handed out, alive until the next call.
-    sync_out: Option<Box<str>>,
+    /// The settings texts handed out, alive while the fake is installed.
+    settings: Vec<Box<str>>,
+    /// The join values handed out, alive while the fake is installed.
+    sync_out: Vec<Box<str>>,
 }
 
 static STATE: Mutex<Option<State>> = Mutex::new(None);
@@ -202,7 +202,7 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         defaults: Vec::new(),
         synced: Vec::new(),
         inventory_requests: Vec::new(),
-        sync_out: None,
+        sync_out: Vec::new(),
         commands: Vec::new(),
         chat: Vec::new(),
         labels: Vec::new(),
@@ -268,7 +268,7 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         base_limit_raised: false,
         grouping: None,
         run_out: None,
-        settings: None,
+        settings: Vec::new(),
     });
     turn
 }
@@ -406,7 +406,7 @@ extern "system" fn settings(_me: ModHandle, defaults: Str, out: *mut Str) -> Sta
         s.defaults.push(defaults);
         // The heap text stays where it is while the box lives in the state.
         let view = Str::new(&served);
-        s.settings = Some(served);
+        s.settings.push(served);
         Some(view)
     });
     found(served, out)
@@ -780,7 +780,7 @@ extern "system" fn sync(_me: ModHandle, synced: Str, out: *mut Str) -> Status {
         let served: Box<str> = s.host.server_synced.clone().unwrap_or_default().into();
         // The heap text stays where it is while the box lives in the state.
         let view = Str::new(&served);
-        s.sync_out = Some(served);
+        s.sync_out.push(served);
         view
     });
     put(out, served)
