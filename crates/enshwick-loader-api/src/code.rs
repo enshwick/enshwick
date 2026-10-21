@@ -83,9 +83,12 @@ impl Pattern {
             .split_ascii_whitespace()
             .map(|token| match token {
                 "?" | "??" => Ok(None),
-                _ if token.len() == 2 => u8::from_str_radix(token, 16)
-                    .map(Some)
-                    .map_err(|_| PatternError::Token(token.to_owned())),
+                // `from_str_radix` takes a sign, as in `+F`.
+                _ if token.len() == 2 && token.bytes().all(|b| b.is_ascii_hexdigit()) => {
+                    u8::from_str_radix(token, 16)
+                        .map(Some)
+                        .map_err(|_| PatternError::Token(token.to_owned()))
+                }
                 _ => Err(PatternError::Token(token.to_owned())),
             })
             .collect::<Result<Vec<_>, _>>()?;
@@ -287,6 +290,10 @@ mod tests {
         assert_eq!(
             Pattern::parse("0G"),
             Err(PatternError::Token("0G".to_owned()))
+        );
+        assert_eq!(
+            Pattern::parse("90 +F"),
+            Err(PatternError::Token("+F".to_owned()))
         );
         assert_eq!("e9 ?".parse::<Pattern>().unwrap().len(), 2);
     }
