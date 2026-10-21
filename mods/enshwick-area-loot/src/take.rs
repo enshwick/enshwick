@@ -1,7 +1,9 @@
 //! After each loot container check the mod notices a container a player
 //! emptied and queues the full ones around it; each is then emptied into that
 //! player, nearest first, through the game's own inventory transactions,
-//! once it is checked again that nobody else opened it meanwhile.
+//! once it is checked again that nobody else opened it meanwhile. Other mods
+//! leave containers out or take them in at the extension point
+//! `area-loot:eligible`.
 
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
@@ -11,6 +13,8 @@ use std::time::Duration;
 use enshwick_loader_api::ecs::Entity;
 use enshwick_loader_api::inventory::{Batch, Inventories, Op, Outcome};
 use enshwick_loader_api::loot::{Container, LootPass, near};
+use enshwick_loader_api::points::OwnedPoint;
+use enshwick_loader_api::points::area_loot::Eligible;
 use enshwick_loader_api::time::StepClock;
 use enshwick_loader_api::{Load, Off};
 
@@ -37,6 +41,23 @@ static HEIGHT: AtomicU32 = AtomicU32::new(0x4080_0000);
 static OFF: AtomicBool = AtomicBool::new(false);
 /// Counts the games run, so a take chain never reaches into the next one.
 static GAME: AtomicU64 = AtomicU64::new(0);
+/// The extension point `area-loot:eligible`, once defined.
+static ELIGIBLE: OnceLock<OwnedPoint<Eligible>> = OnceLock::new();
+
+/// Whether `container`, `distance` metres across the ground from the
+/// container `emptied` that `player` emptied, comes along: yes, unless
+/// another mod's link says no.
+fn eligible(player: Entity, emptied: Entity, container: Entity, distance: f32) -> bool {
+    ELIGIBLE.get().is_none_or(|point| {
+        let input = Eligible {
+            player,
+            emptied,
+            container,
+            distance,
+        };
+        point.decide(&input, true).value_or(false)
+    })
+}
 
 /// Applies `settings` from now on.
 pub(crate) fn apply(settings: &Settings) {
@@ -64,6 +85,7 @@ fn tracker() -> MutexGuard<'static, Option<Tracker>> {
 
 /// Links the pass.
 pub(crate) fn link(load: &mut Load<'_>) -> Result<(), Off> {
+    let _first = ELIGIBLE.set(load.define_point()?);
     let _first = INVENTORIES.set(load.inventories()?);
     *tracker() = Some(Tracker::default());
     let _first = CLOCK.set(load.step_clock()?);
@@ -158,10 +180,27 @@ fn gather(
                 continue;
             }
         }
+        if !eligible(
+            player,
+            emptied.entity,
+            entity,
+            ground(emptied.position, c.position),
+        ) {
+            continue;
+        }
         t.hold(entity, now);
         queue.push_back(entity);
     }
     queue
+}
+
+/// Metres between `a` and `b` across the ground.
+#[expect(
+    clippy::cast_possible_truncation,
+    reason = "distances around a player fit in f32"
+)]
+fn ground(a: [f64; 3], b: [f64; 3]) -> f32 {
+    (a[0] - b[0]).hypot(a[2] - b[2]) as f32
 }
 
 /// Empties the first container of `queue` into `player`, and the next once
@@ -260,6 +299,31 @@ mod tests {
                 remaining: 0
             }],
         }));
+    }
+
+    #[test]
+    fn other_mods_leave_containers_out() {
+        use enshwick_loader_api::abi::Status;
+        use enshwick_loader_api::points::Verdict;
+
+        assert!(
+            eligible(Entity(1), Entity(2), Entity(3), 4.0),
+            "before init"
+        );
+        let loader = enshwick_loader_api::test::FakeHost::new().install();
+        // The fake lacks the inventories, which the mod links after its
+        // point: it turns off, and the point stays defined.
+        // SAFETY: the exports of the mod's `declare_mod!`.
+        let status = unsafe { loader.start(crate::enshwick_mod_init, crate::enshwick_mod_ready) };
+        assert_ne!(status, Status::OK);
+        assert_eq!(loader.defined_points(), ["area-loot:eligible"]);
+        assert!(eligible(Entity(1), Entity(2), Entity(3), 4.0));
+        assert!(
+            loader.extend_point(|loot: &Eligible, _: &bool| { Verdict::Set(loot.distance <= 5.0) })
+        );
+        assert!(eligible(Entity(1), Entity(2), Entity(3), 4.0));
+        assert!(!eligible(Entity(1), Entity(2), Entity(3), 6.0));
+        assert!((ground([0.0, 0.0, 0.0], [3.0, 9.0, 4.0]) - 5.0).abs() < f32::EPSILON);
     }
 
     #[test]

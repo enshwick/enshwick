@@ -693,4 +693,100 @@ copy_staff_locked_chest_chance = 0.0
         assert_eq!(ask(unique, 12, [220, 0, 10]), Some(12));
         assert!(loader.faults().is_empty());
     }
+
+    #[test]
+    fn other_mods_set_the_copy_limit_and_the_charge_cost() {
+        use enshwick_loader_api::abi::{AltarInfo, Bounds, Header, Status, Summon, SurvivorLookup};
+        use enshwick_loader_api::points::Verdict;
+        use enshwick_loader_api::points::survivors_per_altar::{ChargeCost, CopyLimit};
+        use enshwick_loader_api::survivors::WORKSHOP_SURVIVORS;
+
+        let loader = host()
+            .settings(
+                "per_altar = true
+copy_staffs = true
+copy_staff_boss_chance = 0.0
+copy_staff_locked_chest_chance = 0.0
+",
+            )
+            .install();
+        // SAFETY: the exports of `declare_mod!` above.
+        let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+        assert_eq!(status, Status::OK, "{:?}", loader.logs());
+        assert_eq!(
+            loader.defined_points(),
+            [
+                "survivors-per-altar:copy-limit",
+                "survivors-per-altar:charge-cost"
+            ]
+        );
+        let altar = |entity, x| {
+            let mut info = AltarInfo::EMPTY;
+            info.entity = entity;
+            info.zone = Bounds {
+                min: [x, 0, 0],
+                max: [x + 80, 80, 80],
+            };
+            info
+        };
+        loader.set_altars(&[altar(1, 0), altar(2, 100), altar(3, 200)]);
+        policy::settle();
+        let smith = &WORKSHOP_SURVIVORS[0];
+        let survivor = smith.id().0;
+        let original = loader.survivor_lookup(
+            survivor,
+            10,
+            SurvivorLookup::UNIQUENESS,
+            10,
+            [10, 0, 10],
+            &[],
+        );
+        assert_eq!(original, Some(10));
+        let Some(staff) = staffs::STAFFS
+            .iter()
+            .find(|s| s.survivor().is_some_and(|w| w.id() == smith.id()))
+        else {
+            panic!("no copy staff of the first survivor");
+        };
+        let summon = |current| Summon {
+            header: Header::of::<Summon>(),
+            item: staff.copy.id(),
+            ammo: 0,
+            template: smith.template().0,
+            target: [130, 0, 10],
+            slot: 0,
+            pide: 0,
+            meter: [current, 3],
+            consumed: 0,
+            reserved: [0; 3],
+        };
+        assert_eq!(loader.summon(&summon(3)), 0, "a new copy, one charge");
+        assert!(loader.extend_point(|cost: &ChargeCost, _: &u16| {
+            if cost.charges == 2 {
+                Verdict::Refuse
+            } else {
+                Verdict::Set(3)
+            }
+        }));
+        assert_eq!(
+            loader.summon(&summon(3)),
+            Summon::TAKE,
+            "three charges take it"
+        );
+        assert_eq!(
+            loader.summon(&summon(2)),
+            Summon::REFUSE,
+            "refused by the link"
+        );
+        assert!(loader.extend_point(|limit: &CopyLimit, _: &u32| {
+            assert_eq!((limit.altars, limit.copies), (3, 1));
+            Verdict::Set(1)
+        }));
+        assert_eq!(
+            loader.summon(&summon(3)),
+            Summon::REFUSE,
+            "one entity in all"
+        );
+        assert!(loader.faults().is_empty());
+    }
 }

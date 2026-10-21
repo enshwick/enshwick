@@ -6,15 +6,18 @@
 //! `UsedItem`, tells a Safe from a chest. Every check runs inside the game's
 //! systems on worker threads, so it reads only lock-free snapshots. A Safe
 //! whose owner is unknown behaves as an ordinary chest: nothing is ever
-//! locked away for good.
+//! locked away for good. Other mods change the rule at the extension point
+//! `safes:access`.
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, LazyLock};
+use std::sync::{Arc, LazyLock, OnceLock};
 
 use arc_swap::ArcSwap;
 use enshwick_loader_api::ecs::Entity;
 use enshwick_loader_api::interactions::{Interaction, Kind};
+use enshwick_loader_api::points::OwnedPoint;
+use enshwick_loader_api::points::safes::{Access as AccessPoint, SafeAction};
 
 /// A position in half-metre cells.
 pub type Cell = (i64, i64, i64);
@@ -184,6 +187,52 @@ pub fn permits(safe: &Safe, player: Option<Seen>, admins_open: bool, action: Act
         || (action == Action::Use && safe.allowed.iter().any(|a| a.key == player.key))
 }
 
+impl Action {
+    /// The action as the extension point names it.
+    #[must_use]
+    pub const fn to_point(self) -> SafeAction {
+        match self {
+            Self::Use => SafeAction::USE,
+            Self::Remove => SafeAction::REMOVE,
+            Self::Manage => SafeAction::MANAGE,
+        }
+    }
+}
+
+/// The extension point `safes:access`, once defined.
+pub static POINT: OnceLock<OwnedPoint<AccessPoint>> = OnceLock::new();
+
+/// Whether `player`, with the character `character`, may do `action` with
+/// `safe`, the chest `chest`: [`permits`] first, then the links of other
+/// mods at `safes:access`. A player not registered yet is refused before
+/// any link is asked.
+#[must_use]
+pub fn decide(
+    safe: &Safe,
+    player: Option<Seen>,
+    admins_open: bool,
+    action: Action,
+    (character, chest): (Entity, Entity),
+) -> bool {
+    let own = permits(safe, player, admins_open, action);
+    let (Some(seen), Some(point)) = (player, POINT.get()) else {
+        return own;
+    };
+    if !point.is_extended() {
+        return own;
+    }
+    let input = AccessPoint {
+        player: seen.key,
+        owner: safe.owner,
+        character,
+        safe: chest,
+        action: action.to_point(),
+        admin: seen.admin,
+        allowed: safe.allowed.iter().any(|a| a.key == seen.key),
+    };
+    point.decide(&input, own).value_or(false)
+}
+
 /// What the checks read.
 #[derive(Debug)]
 pub struct Access {
@@ -216,19 +265,20 @@ impl Access {
         }
     }
 
-    /// Whether `player` may do `action` with the Safe of `owner` kept at
-    /// `at`. A character the snapshot lacks is a player who joined since it
-    /// was taken: refused, and the snapshot is asked to catch up.
+    /// Whether `player` may do `action` with `chest`, the Safe of `owner`
+    /// kept at `at`. A character the snapshot lacks is a player who joined
+    /// since it was taken: refused, and the snapshot is asked to catch up.
     #[must_use]
-    pub fn may(&self, owner: u64, at: Cell, player: Entity, action: Action) -> bool {
+    pub fn may(&self, owner: u64, at: Cell, chest: Entity, player: Entity, action: Action) -> bool {
         let seen = self.players.load().get(&player.0).copied();
         if seen.is_none() {
             self.unregistered.store(true, Ordering::Relaxed);
         }
         let admins_open = self.admins_open.load(Ordering::Relaxed);
+        let entities = (player, chest);
         match self.owners.load().get(&at) {
-            Some(safe) => permits(safe, seen, admins_open, action),
-            None => permits(&Safe::new(owner, ""), seen, admins_open, action),
+            Some(safe) => decide(safe, seen, admins_open, action, entities),
+            None => decide(&Safe::new(owner, ""), seen, admins_open, action, entities),
         }
     }
 
@@ -275,7 +325,9 @@ impl Access {
     #[must_use]
     pub fn allowed(&self, interaction: &Interaction, action: Action) -> bool {
         match self.owner(interaction.target, interaction.item, interaction.position) {
-            Some((owner, at)) => self.may(owner, at, interaction.player, action),
+            Some((owner, at)) => {
+                self.may(owner, at, interaction.target, interaction.player, action)
+            }
             None => true,
         }
     }
@@ -287,7 +339,7 @@ impl Access {
         self.safes
             .load()
             .get(&chest)
-            .is_some_and(|&(owner, at)| !self.may(owner, at, player, Action::Use))
+            .is_some_and(|&(owner, at)| !self.may(owner, at, Entity(chest), player, Action::Use))
     }
 
     /// Forgets the Safes and players of a game that stopped or the world
@@ -460,7 +512,13 @@ mod tests {
         assert!(!access.refused_seen(500, Entity(11)));
         assert!(access.refused_seen(500, Entity(12)));
         assert!(!access.refused_seen(500, Entity(13)));
-        assert!(!access.may(OWNER.key, (0, 0, 0), Entity(11), Action::Remove));
+        assert!(!access.may(
+            OWNER.key,
+            (0, 0, 0),
+            Entity(500),
+            Entity(11),
+            Action::Remove
+        ));
         access.admins_open.store(false, Ordering::Relaxed);
         assert!(access.refused_seen(500, Entity(13)));
         assert!(access.removed(500));

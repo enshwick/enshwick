@@ -224,4 +224,82 @@ label_language = \"en\"
         assert!(loader.faults().is_empty());
         let _gone = std::fs::remove_dir_all(&dir);
     }
+
+    #[test]
+    fn other_mods_change_who_may_use_a_safe_at_its_point() {
+        use std::collections::HashMap;
+        use std::sync::Arc;
+
+        use enshwick_loader_api::ecs::Entity;
+        use enshwick_loader_api::points::Verdict;
+        use enshwick_loader_api::points::safes::{Access, SafeAction};
+        use enshwick_safes::access::{Action, Seen};
+
+        let dir = std::env::temp_dir().join(format!("enshwick-safes-point-{}", std::process::id()));
+        let _gone = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let loader = host()
+            .settings(
+                "cost_multiplier = 2
+admins_can_open = true
+label_language = \"en\"
+",
+            )
+            .data_dir(dir.to_str().unwrap())
+            .world_key("world0-dd")
+            .install();
+        // SAFETY: the exports of the mod's `declare_mod!`.
+        let status = unsafe {
+            loader.start(
+                enshwick_safes::enshwick_mod_init,
+                enshwick_safes::enshwick_mod_ready,
+            )
+        };
+        assert_eq!(status, Status::OK, "{:?}", loader.logs());
+        assert_eq!(loader.defined_points(), ["safes:access"]);
+        let (owner, stranger) = (
+            Seen {
+                key: 1,
+                admin: false,
+            },
+            Seen {
+                key: 3,
+                admin: false,
+            },
+        );
+        ACCESS
+            .players
+            .store(Arc::new(HashMap::from([(10, owner), (12, stranger)])));
+        ACCESS.placed(700, (40, 2, 40), owner.key, "Ann");
+        assert!(ACCESS.refused_seen(700, Entity(12)), "vanilla Safes");
+        assert!(loader.extend_point(|access: &Access, may: &bool| {
+            match access.action {
+                SafeAction::USE if access.player == 3 => Verdict::Set(true),
+                SafeAction::REMOVE => Verdict::Refuse,
+                _ => Verdict::Set(*may),
+            }
+        }));
+        assert!(
+            !ACCESS.refused_seen(700, Entity(12)),
+            "the link lets them in"
+        );
+        assert!(
+            !ACCESS.may(
+                owner.key,
+                (40, 2, 40),
+                Entity(700),
+                Entity(10),
+                Action::Remove
+            ),
+            "the link refuses even the owner"
+        );
+        assert!(ACCESS.may(owner.key, (40, 2, 40), Entity(700), Entity(10), Action::Use));
+        assert!(
+            ACCESS.refused_seen(700, Entity(14)),
+            "a player not registered yet stays refused"
+        );
+        assert!(ACCESS.removed(700));
+        assert!(loader.faults().is_empty());
+        let _gone = std::fs::remove_dir_all(&dir);
+    }
 }

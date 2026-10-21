@@ -136,12 +136,15 @@ impl Copies {
     }
 
     /// What a copy staff of `survivor` used at `target` does; `original` is
-    /// the entity the game's own record names, 0 when unknown.
+    /// the entity the game's own record names, 0 when unknown. `limit` turns
+    /// the number of altars and the survivor's entities into the most
+    /// entities it may have, asked only before a new copy.
     pub(crate) fn copy_staff(
         &self,
         survivor: Survivor,
         target: [i64; 3],
         original: Entity,
+        limit: impl FnOnce(usize, usize) -> usize,
     ) -> CopyStaff {
         let Some(altar) = self.altar_at(target) else {
             return CopyStaff::Refuse(Refusal::OutsideZones);
@@ -157,10 +160,14 @@ impl Copies {
         match self.slots.get(&(survivor, altar)) {
             Some(&e) if e == original => CopyStaff::Refuse(Refusal::OriginalThere),
             Some(&e) => CopyStaff::Move(e),
-            None if self.copy_count(survivor) >= self.altars.len() => {
-                CopyStaff::Refuse(Refusal::Full)
+            None => {
+                let count = self.copy_count(survivor);
+                if count >= limit(self.altars.len(), count) {
+                    CopyStaff::Refuse(Refusal::Full)
+                } else {
+                    CopyStaff::Place
+                }
             }
-            None => CopyStaff::Place,
         }
     }
 
@@ -327,29 +334,51 @@ mod tests {
         copies.observe(SMITH, 11, [90, 10, 10], 10);
         // An altar without a copy: a new one.
         assert_eq!(
-            copies.copy_staff(SMITH, [170, 10, 10], 10),
+            copies.copy_staff(SMITH, [170, 10, 10], 10, altars),
             CopyStaff::Place
         );
         // An altar with a copy: that copy moves, free.
         assert_eq!(
-            copies.copy_staff(SMITH, [95, 10, 10], 10),
+            copies.copy_staff(SMITH, [95, 10, 10], 10, altars),
             CopyStaff::Move(11)
         );
         // Where the original stands: refused.
         assert_eq!(
-            copies.copy_staff(SMITH, [20, 10, 10], 10),
+            copies.copy_staff(SMITH, [20, 10, 10], 10, altars),
             CopyStaff::Refuse(Refusal::OriginalThere)
         );
         assert_eq!(
-            copies.copy_staff(SMITH, [900, 10, 10], 10),
+            copies.copy_staff(SMITH, [900, 10, 10], 10, altars),
             CopyStaff::Refuse(Refusal::OutsideZones)
         );
         // Every altar taken counts the original: one entity per altar.
         copies.observe(SMITH, 12, [170, 10, 10], 10);
         assert_eq!(copies.copy_count(SMITH), 3);
         assert_eq!(
-            copies.copy_staff(SMITH, [175, 10, 10], 10),
+            copies.copy_staff(SMITH, [175, 10, 10], 10, altars),
             CopyStaff::Move(12)
+        );
+    }
+
+    /// The limit the mod answers before other mods: one entity per altar.
+    fn altars(altars: usize, _copies: usize) -> usize {
+        altars
+    }
+
+    #[test]
+    fn another_mods_limit_refuses_or_allows_a_new_copy() {
+        let mut copies = two_altars();
+        copies.observe(SMITH, 10, [900, 10, 10], 10);
+        assert_eq!(
+            copies.copy_staff(SMITH, [90, 10, 10], 10, |_, _| 1),
+            CopyStaff::Refuse(Refusal::Full)
+        );
+        assert_eq!(
+            copies.copy_staff(SMITH, [90, 10, 10], 10, |altars, copies| {
+                assert_eq!((altars, copies), (2, 1));
+                9
+            }),
+            CopyStaff::Place
         );
     }
 
@@ -360,7 +389,7 @@ mod tests {
         copies.observe(SMITH, 10, [900, 10, 10], 10);
         copies.observe(SMITH, 11, [10, 10, 10], 10);
         assert_eq!(
-            copies.copy_staff(SMITH, [90, 10, 10], 10),
+            copies.copy_staff(SMITH, [90, 10, 10], 10, altars),
             CopyStaff::Refuse(Refusal::Full)
         );
     }
@@ -481,7 +510,7 @@ mod tests {
         );
         assert_eq!(copies.observe(SMITH, 10, [10, 10, 10], 10), Verdict::Keep);
         assert_eq!(
-            copies.copy_staff(SMITH, [10, 10, 10], 10),
+            copies.copy_staff(SMITH, [10, 10, 10], 10, altars),
             CopyStaff::Refuse(Refusal::OutsideZones)
         );
     }

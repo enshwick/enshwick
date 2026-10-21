@@ -2,18 +2,21 @@
 //!
 //! The table is a join value: a client joined to a server runs with the
 //! server's. The platform raises the game's grouping to 32 altar zones in its
-//! 16 bases; where it cannot, the table stays capped at 16.
+//! 16 bases; where it cannot, the table stays capped at 16. Other mods change
+//! the limit at the extension point `flame-altar-count:limit`.
 
 mod hold;
 
-use std::sync::Arc;
 use std::sync::atomic::{AtomicU8, Ordering};
+use std::sync::{Arc, OnceLock};
 
 use arc_swap::ArcSwap;
 use enshwick_loader_api::abi::Side;
 use enshwick_loader_api::altars::{
     RAISED_ALTAR_ZONES, VANILLA_ALTAR_ZONES, VANILLA_ALTARS_PER_FLAME_LEVEL,
 };
+use enshwick_loader_api::points::OwnedPoint;
+use enshwick_loader_api::points::flame_altar_count::AltarLimit;
 use enshwick_loader_api::{Load, Mod, Off};
 
 /// The most altars with the base limit raised.
@@ -22,6 +25,22 @@ const CAP: u8 = RAISED_ALTAR_ZONES;
 const VANILLA_CAP: u8 = VANILLA_ALTAR_ZONES;
 /// The cap in force: [`CAP`] once the base limit is lifted.
 static IN_FORCE: AtomicU8 = AtomicU8::new(VANILLA_CAP);
+
+/// The extension point `flame-altar-count:limit`, once defined.
+static LIMIT: OnceLock<OwnedPoint<AltarLimit>> = OnceLock::new();
+
+/// The altars `flame_level` allows: `table`'s answer, or what other mods'
+/// links make of it, between 1 and the cap in force.
+fn limit(flame_level: u32, table: u8) -> u8 {
+    let cap = IN_FORCE.load(Ordering::Relaxed);
+    let Some(point) = LIMIT.get() else {
+        return table;
+    };
+    point
+        .decide(&AltarLimit { flame_level, cap }, table)
+        .value_or(table)
+        .clamp(1, cap)
+}
 
 /// Flame Altar count settings.
 #[derive(Debug, serde::Deserialize, serde::Serialize, enshwick_loader_api::Config)]
@@ -143,8 +162,11 @@ impl Mod for AltarCount {
             enshwick_loader_api::warn!("the game keeps 16 altar zones in bases");
         }
         let table = AltarTable::from_settings(&settings);
+        let _first = LIMIT.set(load.define_point()?);
         load.on_altar_limit(|level| {
-            AltarCount::instance().map_or(VANILLA_CAP, |count| count.table.load().altars(level))
+            let table = AltarCount::instance()
+                .map_or(VANILLA_CAP, |count| count.table.load().altars(level));
+            limit(level, table)
         })?;
         load.on_config_change(|settings: Settings| {
             if let Some(count) = AltarCount::instance() {
@@ -220,6 +242,31 @@ mod tests {
         assert!(loader.base_limit_raised());
         assert_eq!(loader.altar_limit(1), Some(4));
         assert_eq!(loader.altar_limit(11), Some(32));
+        assert!(loader.faults().is_empty());
+    }
+
+    #[test]
+    fn other_mods_change_the_limit_within_the_cap() {
+        use enshwick_loader_api::points::Verdict;
+
+        let loader = enshwick_loader_api::test::FakeHost::new()
+            .side(Side::CLIENT)
+            .install();
+        // SAFETY: the exports of `declare_mod!` above.
+        let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+        assert_eq!(status, enshwick_loader_api::abi::Status::OK);
+        assert_eq!(loader.defined_points(), ["flame-altar-count:limit"]);
+        assert!(loader.extend_point(|limit: &AltarLimit, altars: &u8| {
+            assert_eq!(limit.cap, CAP);
+            match limit.flame_level {
+                0 => Verdict::Set(0),
+                1 => Verdict::Set(altars + 2),
+                _ => Verdict::Set(200),
+            }
+        }));
+        assert_eq!(loader.altar_limit(0), Some(1), "at least one");
+        assert_eq!(loader.altar_limit(1), Some(6));
+        assert_eq!(loader.altar_limit(5), Some(32), "at most the cap");
         assert!(loader.faults().is_empty());
     }
 }
