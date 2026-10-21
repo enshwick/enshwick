@@ -12,7 +12,7 @@ raw table. The exact types and signatures are in the
 | Constant                                                                                            | Value | Meaning                                         |
 | --------------------------------------------------------------------------------------------------- | ----- | ----------------------------------------------- |
 | [`ABI_MAJOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 1     | A loader refuses a mod built for another major. |
-| [`ABI_MINOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 53    | A newer minor only appends.                     |
+| [`ABI_MINOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 54    | A newer minor only appends.                     |
 
 The ABI version is apart from Enshwick Loader's version (such as 0.2.0, see
 [Releasing and updates](releasing.md#versions)): a platform release raises
@@ -75,6 +75,11 @@ builds:
 | `authors`      | `*const Str` and `author_count`: the authors' names                                               | 36          |
 | `license`      | An SPDX licence expression                                                                        | 36          |
 | `homepage`     | Where players read about the mod                                                                  | 36          |
+
+Since minor 54 a dependency may also be `REPLACES` (4), an old id of the mod
+with an empty range; a loader older than that skips such a mod for an unknown
+relation. `HostApi::replaced` lists the mods replaced this way, with
+`ModInfo::replaced_by` (minor 54) naming the mod that replaces each.
 
 The loader skips a mod whose manifest has another major, an invalid id, the
 loader's own id `enshwick`, a version that is not SemVer, an unknown side, or a
@@ -289,6 +294,7 @@ marked "init only" are allowed during `enshwick_mod_init` only.
 | `migrate`             | Registers the mod's migrations and runs them on its settings file; init only                    | 49          |
 | `declare_content`     | Declares a content id in the mod's namespace and returns its GUID; init only                    | 50          |
 | `entity_data_open`    | Opens an entity data kind, sent to clients or not; init only                                    | 52          |
+| `replaced`            | The mods a present mod replaces, never started; any thread                                      | 54          |
 
 ## Under an older loader
 
@@ -359,6 +365,7 @@ the mod off with a reason, which the mod's log shows as `off: <reason>`:
 | 51          | `BuildInfo::table`              | `BuildTable::EXACT`                                       |
 | 52          | `Load::entity_data`             | Off: `entity data: needs a newer loader`                  |
 | 53          | `ManifestFlags::RELOAD`         | The mod is never reloaded                                 |
+| 54          | `mods::replaced()`              | An empty list                                             |
 
 A mod that can do without a feature catches the `Off` and goes on without it
 instead of returning it from `init`.

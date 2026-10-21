@@ -715,6 +715,7 @@ pub(crate) static API: HostApi = HostApi {
     migrate,
     declare_content,
     entity_data_open,
+    replaced,
 };
 
 /// A static slice from a pointer and a count, empty for a null pointer.
@@ -1573,6 +1574,7 @@ fn loader_info() -> ModInfo {
         author_count: LOADER_AUTHORS.len(),
         license: Str::new(env!("CARGO_PKG_LICENSE")),
         homepage: Str::new(env!("CARGO_PKG_REPOSITORY")),
+        replaced_by: Str::EMPTY,
     }
 }
 
@@ -1597,6 +1599,7 @@ fn mod_info(record: &'static ModRecord) -> ModInfo {
         author_count: record.manifest.author_count,
         license: record.manifest.license,
         homepage: record.manifest.homepage,
+        replaced_by: Str::EMPTY,
     }
 }
 
@@ -1663,6 +1666,43 @@ extern "system" fn join_missing(
             .collect();
         // SAFETY: forwarded from the mod's call.
         unsafe { list(&infos, out, entry_size, capacity, count) }
+    })
+}
+
+extern "system" fn replaced(
+    me: ModHandle,
+    out: *mut ModInfo,
+    entry_size: u32,
+    capacity: u32,
+    count: *mut u32,
+) -> Status {
+    /// The listing entries, built once: the mods replaced at start never
+    /// change.
+    static INFOS: OnceLock<Vec<ModInfo>> = OnceLock::new();
+    entry("replaced", || {
+        let Some(loader) = loader() else {
+            return Status::BAD_ARGS;
+        };
+        if loader.record(me).is_none() {
+            return Status::BAD_ARGS;
+        }
+        let infos = INFOS.get_or_init(|| {
+            let text = |s: String| Str::new(Box::leak(s.into_boxed_str()));
+            crate::modlist::replaced()
+                .iter()
+                .map(|old| ModInfo {
+                    header: Header::of::<ModInfo>(),
+                    id: Str::new(&old.id),
+                    version: Str::new(&old.version),
+                    off: 1,
+                    file: text(format!("mods/{}", old.file)),
+                    replaced_by: Str::new(&old.by),
+                    ..ModInfo::EMPTY
+                })
+                .collect()
+        });
+        // SAFETY: forwarded from the mod's call.
+        unsafe { list(infos, out, entry_size, capacity, count) }
     })
 }
 

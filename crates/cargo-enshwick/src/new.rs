@@ -143,6 +143,8 @@ impl Mod for {type} {
             // beside, each with a version range ("" for any):
             // recommends: ["other-mod" => ">=0.2, <1.0"],
             // breaks: ["old-mod" => "<0.3"],
+            // After a rename, the old ids, whose DLLs then never start:
+            // replaces: ["old-id"],
             // Players get your releases from the updater once you name where
             // they come from and the minisign key you sign them with; see
             // "Releasing and updates" in the modding book.

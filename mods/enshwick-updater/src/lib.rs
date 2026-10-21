@@ -692,11 +692,22 @@ fn lines(offers: &[Offer]) -> String {
 fn install_all(client: &Client, context: &Context, offers: &[Offer], next: &str) {
     let mut done = Vec::new();
     let mut failed = Vec::new();
+    let replaced = enshwick_loader_api::mods::replaced();
     for offer in offers {
         match install(client, context, offer) {
             Ok(files) => {
                 enshwick_loader_api::info!("staged {}: {}", offer.line(), files.join(", "));
                 done.push(offer.line());
+                let taken = taken("", &enshwick_loader_api::mods());
+                let (deleted, kept) =
+                    stage::delete_replaced(&context.game, &offer.id, &replaced, &taken);
+                for file in deleted {
+                    enshwick_loader_api::info!("deleted {file}, which {} replaces", offer.id);
+                    done.push(format!("{file} deleted: {} replaces it", offer.label()));
+                }
+                for why in kept {
+                    enshwick_loader_api::warn!("not deleted: {why}");
+                }
             }
             Err(why) => {
                 enshwick_loader_api::warn!("did not install {}: {why}", offer.line());

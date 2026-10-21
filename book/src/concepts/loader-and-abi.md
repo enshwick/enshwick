@@ -46,7 +46,8 @@ is not valid TOML is left as it is and every mod loads, with a warning.
 
 `mods/enshwick/enshwick.lock` is written at every start: the loader's version
 and SHA-256, the game build, and each running mod's id, version, file and
-SHA-256, in load order. Copying it with the DLLs sets up the same server
+SHA-256, in load order, then under `[[replaced]]` the mods a present mod
+replaces (see `replaces` in [the manifest](#the-manifest)). Copying it with the DLLs sets up the same server
 again, and comparing two locks shows where two servers differ. What changed
 since the last start goes to `loader.log`, such as
 `since the last start: safes 0.3.0 -> 0.3.1`.
@@ -94,6 +95,7 @@ let manifest = enshwick_loader_api::manifest!(
     after: ["market-stalls"],
     recommends: ["caravans" => ">=0.3, <1.0"],
     breaks: ["old-market" => "<0.5"],
+    replaces: ["trade-post"],       // ids this mod had before a rename
     updates: github("themaiby/enshwick", "enshwick-trading-post"),
     signed_by: ["RWTjqgtfpy3lSOLC4uaUXuvvKSLQKOFf6nUnEytoiFjSzxMEhLnoAdJF"],
     builds: [{
@@ -104,7 +106,7 @@ let manifest = enshwick_loader_api::manifest!(
         constants: ["survivors.bed_id" => 0x48],
     }],
 );
-# assert_eq!(manifest.dependency_count, 4);
+# assert_eq!(manifest.dependency_count, 5);
 # assert_eq!(manifest.author_count, 1);
 ```
 
@@ -128,6 +130,16 @@ let manifest = enshwick_loader_api::manifest!(
 - `breaks` names mods this one does not work beside, in a version range (`""`
   for any): when one of them loads, this mod is skipped with
   `does not work beside <id> <version>; remove one of them`.
+- `replaces` names the ids this mod had before a rename. Players rarely delete
+  the old DLL, so without it both would run. While this mod is present, the
+  loader never starts a replaced mod: it unloads that DLL right after reading
+  its manifest and logs once
+  `<old> is replaced by <new>; delete mods/<file>`, which `/enshwick` and the
+  status summary repeat and the lock lists under `[[replaced]]`. When the
+  updater installs or updates this mod, it deletes those DLLs, and only them:
+  each a `.dll` directly in `mods/` that the loader listed for the replaced
+  id and that no running mod uses. Settings and data stay where they are, so
+  carry them over in the new mod if it needs them.
 - `updates` says where new releases come from, `github(...)` or
   `url("https://...")`; see [Releasing and updates](../releasing.md).
 - `signed_by` names the minisign public keys (one, or two while you change

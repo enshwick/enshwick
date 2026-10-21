@@ -389,6 +389,7 @@ pub struct FakeHost {
     hosting: bool,
     server_world: u64,
     join_missing: Vec<ModInfo>,
+    replaced: Vec<ModInfo>,
     services: Vec<FakeService>,
     refused_hooks: HashSet<u64>,
     code: (u64, u64),
@@ -445,6 +446,7 @@ impl FakeHost {
             hosting: false,
             server_world: 0,
             join_missing: Vec::new(),
+            replaced: Vec::new(),
             services: Vec::new(),
             refused_hooks: HashSet::new(),
             code: (0, 0),
@@ -902,6 +904,38 @@ impl FakeHost {
     #[must_use]
     pub fn join_missing(mut self, info: ModInfo) -> Self {
         self.join_missing.push(info);
+        self
+    }
+
+    /// A mod in `mods/` that another mod replaces, which
+    /// `enshwick_loader_api::mods::replaced()` lists, in order.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_loader_api::abi::{ModInfo, Str};
+    ///
+    /// let loader = enshwick_loader_api::test::FakeHost::new()
+    ///     .replaced(ModInfo {
+    ///         id: Str::new("proton-optimizer"),
+    ///         version: Str::new("0.1.0"),
+    ///         file: Str::new("mods/enshwick_proton_optimizer.dll"),
+    ///         replaced_by: Str::new("optimizer"),
+    ///         ..ModInfo::EMPTY
+    ///     })
+    ///     .install();
+    /// // SAFETY: the installed fake's table.
+    /// let api = unsafe { &*loader.api() };
+    /// let mut count = 0;
+    /// let size = u32::try_from(size_of::<ModInfo>())?;
+    /// let status = (api.replaced)(loader.handle(), core::ptr::null_mut(), size, 0, &mut count);
+    /// assert!(status.is_ok());
+    /// assert_eq!(count, 1);
+    /// # Ok::<(), core::num::TryFromIntError>(())
+    /// ```
+    #[must_use]
+    pub fn replaced(mut self, info: ModInfo) -> Self {
+        self.replaced.push(info);
         self
     }
 

@@ -347,6 +347,9 @@ pub struct ModEntry {
     pub license: String,
     /// Where players read about the mod; empty for none.
     pub homepage: String,
+    /// In [`replaced`], the id of the mod that replaces this one; empty
+    /// elsewhere.
+    pub replaced_by: String,
 }
 
 impl Default for ModEntry {
@@ -376,6 +379,7 @@ impl Default for ModEntry {
             authors: Vec::new(),
             license: String::new(),
             homepage: String::new(),
+            replaced_by: String::new(),
         }
     }
 }
@@ -462,7 +466,47 @@ pub fn join_missing() -> Vec<ModEntry> {
         .unwrap_or_default()
 }
 
+/// The mods in `mods/` that a present mod replaces (see
+/// [`Relation::REPLACES`](crate::abi::Relation::REPLACES)): their DLLs the
+/// loader never started, each with [`ModEntry::replaced_by`] and its `file`,
+/// which is safe to delete.
+///
+/// Empty under a loader older than ABI minor 54.
+///
+/// # Examples
+///
+/// ```
+/// for old in enshwick_loader_api::mods::replaced() {
+///     enshwick_loader_api::info!("{} is replaced by {}; delete {}", old.id, old.replaced_by, old.file);
+/// }
+/// ```
+#[must_use]
+pub fn replaced() -> Vec<ModEntry> {
+    crate::host()
+        .map(|host| host.replaced())
+        .unwrap_or_default()
+}
+
 impl Host {
+    /// The mods in `mods/` that a present mod replaces; see [`replaced`].
+    /// Empty under a loader older than ABI minor 54.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// if let Some(host) = enshwick_loader_api::host() {
+    ///     assert!(host.replaced().iter().all(|old| !old.replaced_by.is_empty()));
+    /// }
+    /// ```
+    #[must_use]
+    pub fn replaced(&self) -> Vec<ModEntry> {
+        let end = core::mem::offset_of!(HostApi, replaced) + size_of::<usize>();
+        if !self.api().header.covers(end) {
+            return Vec::new();
+        }
+        self.listing(self.api().replaced)
+    }
+
     /// The server's join mods the last refused join found missing; see
     /// [`join_missing`]. Empty under a loader older than ABI minor 10.
     ///
@@ -591,6 +635,12 @@ unsafe fn entry(info: &ModInfo) -> Option<ModEntry> {
     } else {
         Default::default()
     };
+    let replaced_end = core::mem::offset_of!(ModInfo, replaced_by) + size_of::<Str>();
+    let replaced_by = if info.header.covers(replaced_end) {
+        text(&info.replaced_by)
+    } else {
+        String::new()
+    };
     Some(ModEntry {
         id: id.to_owned(),
         version: version.to_owned(),
@@ -605,6 +655,7 @@ unsafe fn entry(info: &ModInfo) -> Option<ModEntry> {
         authors,
         license,
         homepage,
+        replaced_by,
     })
 }
 
@@ -678,6 +729,7 @@ mod tests {
             author_count: AUTHORS.len(),
             license: Str::new("MIT"),
             homepage: Str::EMPTY,
+            replaced_by: Str::EMPTY,
         };
         // SAFETY: static strings.
         let entry = unsafe { entry(&info) }.unwrap();
@@ -711,6 +763,7 @@ mod tests {
             author_count: 0,
             license: Str::EMPTY,
             homepage: Str::EMPTY,
+            replaced_by: Str::EMPTY,
         };
         info.header.size = u32::try_from(core::mem::offset_of!(ModInfo, signed_by)).unwrap();
         // SAFETY: static strings.

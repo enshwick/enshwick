@@ -136,9 +136,7 @@ pub(crate) fn start(
         .map(|(library, candidate)| (candidate.id.clone(), library.file.clone()))
         .collect();
     let plan = resolve::resolve(&candidates, game.side);
-    for (index, reason) in &plan.skipped {
-        crate::log!(WARN, "{} skipped: {reason}", libraries[*index].file);
-    }
+    skip(&libraries, &candidates, &plan);
     let frame = *FRAME.get_or_init(FrameSlot::allocate);
     let side = game.side;
     let loader = Loader {
@@ -219,6 +217,37 @@ pub(crate) fn start(
             host::join_values,
         );
     }
+}
+
+/// Logs the mods `plan` skips; unloads the DLLs of those that present mods
+/// replace, so their code never runs and the files can be deleted.
+fn skip(libraries: &[Library], candidates: &[Candidate], plan: &resolve::Plan) {
+    for (index, reason) in &plan.skipped {
+        if plan.replaced.iter().all(|&(old, _)| old != *index) {
+            crate::log!(WARN, "{} skipped: {reason}", libraries[*index].file);
+        }
+    }
+    let replaced = plan
+        .replaced
+        .iter()
+        .map(|&(old, by)| {
+            let library = &libraries[old];
+            if !library.module.is_null() {
+                // SAFETY: loaded by `discover` for its manifest; none of its
+                // code is in use, and the manifest was copied out.
+                unsafe { FreeLibrary(library.module) };
+            }
+            let replaced = modlist::Replaced {
+                id: candidates[old].id.clone(),
+                version: candidates[old].version.to_string(),
+                file: library.file.clone(),
+                by: candidates[by].id.clone(),
+            };
+            crate::log!(WARN, "{}", replaced.line());
+            replaced
+        })
+        .collect();
+    modlist::set_replaced(replaced);
 }
 
 /// With dev reload, watches the DLLs of the mods that run from copies.
@@ -666,6 +695,7 @@ fn write_lock(loader: &'static Loader, files: Vec<(String, String)>) {
                 loader_sha256: hash(&dir.join(format!("{}.dll", crate::settings::LOADER_ID))),
                 game: loader.build.name.clone(),
                 mods,
+                replaced: modlist::replaced().to_vec(),
             };
             let path = dir.join(modlist::LOCK_FILE);
             let old = std::fs::read_to_string(&path)

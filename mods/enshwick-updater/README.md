@@ -14,6 +14,12 @@ its [minisign](https://jedisct1.github.io/minisign/) signature and put in
 keeps the file it replaces as `<file>.previous`. Settings files in
 `mod-configs/` are never touched.
 
+A mod renamed since you installed it names its old id (`replaces:` in its
+manifest), and the loader no longer starts the old DLL beside it. When the
+updater installs or updates the renamed mod, it deletes that old DLL from
+`mods/`: only the file the loader lists for the old id, never another mod's
+or the loader's.
+
 When a server runs mods you lack, or has them in another version, the join
 check keeps you out and says which. The updater then offers the server's
 versions, checked the same way. A mod you have comes from its own source,
