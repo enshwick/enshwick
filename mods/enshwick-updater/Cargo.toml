@@ -19,6 +19,7 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 enshwick-loader-api.workspace = true
 minisign-verify.workspace = true
+percent-encoding = "2.3.2"
 semver.workspace = true
 serde.workspace = true
 serde_json.workspace = true

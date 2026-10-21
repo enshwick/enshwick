@@ -2,6 +2,12 @@
 //! downloaded DLL, written to `mods/.staged/`, which the `powrprof.dll` stub
 //! moves into place at the next start.
 //!
+//! Each update is one folder `mods/.staged/<unit>/`, its name all digits so
+//! the stub applies the units oldest first, holding the files as they go
+//! from the game's folder. A unit is written in full apart and renamed into
+//! the staging folder in one step: a crash while staging leaves no unit, and
+//! the stub takes nothing else.
+//!
 //! An archive holds the mod's DLL at `mods/<file>.dll`, at its root, or
 //! either of those inside one top-level folder. Only files Enshwick reads
 //! are taken, and only where it keeps them: `powrprof.dll` beside the game,
@@ -16,6 +22,8 @@ use std::path::{Path, PathBuf};
 
 /// The staging folder, relative to the game's folder.
 pub const STAGED: &str = "mods/.staged";
+/// The most digits of a unit's name.
+const UNIT_DIGITS: usize = 20;
 /// The most entries an archive may hold.
 const MAX_ENTRIES: usize = 64;
 /// The most bytes one file may unpack to.
@@ -278,8 +286,8 @@ pub struct Download<'a> {
 /// Unpacks a verified `download` into `game`'s staging folder as [`plan`]
 /// says, with `installed` and `own`; a `.dll` is staged as an archive that
 /// holds it at its root would be. Every file is unpacked under `scratch`
-/// first and only then moved into the staging folder, so a failure leaves
-/// nothing half-staged.
+/// first, and the unit they make is then renamed into the staging folder in
+/// one step, so a failure or a crash leaves nothing half-staged.
 ///
 /// Returns the staged paths, relative to the game's folder.
 ///
@@ -324,8 +332,9 @@ pub fn stage(
     refuse_taken(&files, &others)?;
     // Scratch space of earlier runs goes first.
     let _gone = std::fs::remove_dir_all(scratch);
-    let mut unpacked: Vec<(PathBuf, String)> = Vec::new();
-    for (index, (entry, to)) in files.iter().enumerate() {
+    let unit = scratch.join("unit");
+    let mut unpacked: Vec<String> = Vec::new();
+    for (entry, to) in &files {
         let name = names.get(*entry).map_or("", String::as_str);
         let bytes = match zip.as_mut() {
             None => download.bytes.to_vec(),
@@ -334,27 +343,54 @@ pub fn stage(
         if bytes.len() as u64 > MAX_FILE {
             return Err(format!("{name} is larger than {MAX_FILE} bytes"));
         }
-        let temporary = scratch.join(index.to_string());
-        write(&temporary, &bytes)?;
-        unpacked.push((temporary, to.clone()));
+        write(&unit.join(to), &bytes)?;
+        unpacked.push(to.clone());
     }
-    let mut moved: Vec<PathBuf> = Vec::new();
-    for (temporary, to) in &unpacked {
-        let target = game.join(STAGED).join(to);
-        let placed = target
-            .parent()
-            .map_or(Ok(()), std::fs::create_dir_all)
-            .and_then(|()| std::fs::rename(temporary, &target));
-        if let Err(e) = placed {
-            for staged in &moved {
-                let _gone = std::fs::remove_file(staged);
-            }
-            return Err(format!("cannot stage {to}: {e}"));
+    let staged = game.join(STAGED);
+    let placed = std::fs::create_dir_all(&staged).and_then(|()| {
+        let mut name = unit_name(std::time::SystemTime::now());
+        while staged.join(&name).exists() {
+            name = next_unit(&name);
         }
-        moved.push(target);
-    }
+        std::fs::rename(&unit, staged.join(name))
+    });
     let _gone = std::fs::remove_dir_all(scratch);
-    Ok(unpacked.into_iter().map(|(_, to)| to).collect())
+    placed.map_err(|e| format!("cannot stage the update: {e}"))?;
+    Ok(unpacked)
+}
+
+/// A unit's name for an update staged at `at`: its nanoseconds since 1970,
+/// zero-padded, so names sort as the updates came.
+fn unit_name(at: std::time::SystemTime) -> String {
+    let nanos = at
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_nanos());
+    format!("{nanos:0UNIT_DIGITS$}")
+}
+
+/// The name after `name`, for two updates staged in the same nanosecond.
+fn next_unit(name: &str) -> String {
+    let next = name.parse::<u128>().map_or(0, |n| n.saturating_add(1));
+    format!("{next:0UNIT_DIGITS$}")
+}
+
+/// Whether `name` names a unit: 1 to [`UNIT_DIGITS`] ASCII digits, as the
+/// stub reads them.
+fn is_unit(name: &str) -> bool {
+    (1..=UNIT_DIGITS).contains(&name.len()) && name.bytes().all(|b| b.is_ascii_digit())
+}
+
+/// The units in `game`'s staging folder.
+fn units(game: &Path) -> Vec<PathBuf> {
+    let Ok(entries) = std::fs::read_dir(game.join(STAGED)) else {
+        return Vec::new();
+    };
+    entries
+        .filter_map(Result::ok)
+        .filter(|entry| entry.file_type().is_ok_and(|t| t.is_dir()))
+        .filter(|entry| entry.file_name().to_str().is_some_and(is_unit))
+        .map(|entry| entry.path())
+        .collect()
 }
 
 /// The DLLs directly in `game`'s `mods/` folder, as `mods/<file>`.
@@ -496,7 +532,7 @@ pub(crate) fn delete_replaced_of_fresh(
 /// Whether an update of `file` already waits in `game`'s staging folder.
 #[must_use]
 pub fn waiting(game: &Path, file: &str) -> bool {
-    !file.is_empty() && allowed(file) && game.join(STAGED).join(file).is_file()
+    !file.is_empty() && allowed(file) && units(game).iter().any(|unit| unit.join(file).is_file())
 }
 
 fn write(path: &Path, bytes: &[u8]) -> Result<(), String> {
@@ -658,7 +694,9 @@ mod tests {
         };
         let staged = stage(download, None, false, &[], &game, &game.join("scratch")).unwrap();
         assert_eq!(staged, ["powrprof.dll", "mods/enshwick/enshwick.dll"]);
-        let root = game.join(STAGED);
+        let [root] = &units(&game)[..] else {
+            panic!("one unit");
+        };
         assert_eq!(std::fs::read(root.join("powrprof.dll")).unwrap(), b"stub");
         assert_eq!(
             std::fs::read(root.join("mods/enshwick/enshwick.dll")).unwrap(),
@@ -669,6 +707,47 @@ mod tests {
         assert!(waiting(&game, "powrprof.dll"));
         assert!(!waiting(&game, "mods/other.dll"));
         let _gone = std::fs::remove_dir_all(&game);
+    }
+
+    #[test]
+    fn each_update_is_one_unit_named_in_order_and_nothing_half_written_counts() {
+        let game = scratch("units");
+        let one = zip(&[("mods/a.dll", b"a1")]);
+        let two = zip(&[("mods/a.dll", b"a2"), ("mods/b.dll", b"b")]);
+        for bytes in [&one, &two] {
+            let download = Download {
+                name: "a.zip",
+                bytes,
+            };
+            stage(download, None, false, &[], &game, &game.join("scratch")).unwrap();
+        }
+        let mut found = units(&game);
+        found.sort();
+        assert_eq!(found.len(), 2);
+        assert_eq!(std::fs::read(found[0].join("mods/a.dll")).unwrap(), b"a1");
+        assert_eq!(std::fs::read(found[1].join("mods/a.dll")).unwrap(), b"a2");
+        assert!(waiting(&game, "mods/b.dll"));
+        // What a crash leaves while staging is no unit, so nothing waits.
+        let fresh = scratch("units-crash");
+        std::fs::create_dir_all(fresh.join(STAGED).join(".unit")).unwrap();
+        write(&fresh.join("scratch/unit/mods/c.dll"), b"half").unwrap();
+        write(&fresh.join(STAGED).join(".unit/mods/c.dll"), b"half").unwrap();
+        assert!(!waiting(&fresh, "mods/c.dll"));
+        assert!(units(&fresh).is_empty());
+        let _gone = std::fs::remove_dir_all(&game);
+        let _gone = std::fs::remove_dir_all(&fresh);
+    }
+
+    #[test]
+    fn unit_names_sort_as_the_updates_came() {
+        let at = |nanos| std::time::UNIX_EPOCH + std::time::Duration::from_nanos(nanos);
+        let (early, late) = (unit_name(at(900)), unit_name(at(1_000)));
+        assert!(early < late);
+        assert_eq!(early.len(), UNIT_DIGITS);
+        assert!(is_unit(&early) && is_unit(&next_unit(&early)));
+        assert_eq!(next_unit("00000000000000000999"), "00000000000000001000");
+        assert!(!is_unit(".unit") && !is_unit("mods") && !is_unit(""));
+        assert!(unit_name(std::time::SystemTime::now()).len() <= UNIT_DIGITS);
     }
 
     fn replaced(id: &str, file: &str, by: &str) -> enshwick_loader_api::mods::ModEntry {
@@ -839,7 +918,7 @@ mod tests {
         let staged = stage(download, installed, true, &[], &game, &game.join("scratch")).unwrap();
         assert_eq!(staged, ["mods/enshwick_my_mod.dll"]);
         assert_eq!(
-            std::fs::read(game.join(STAGED).join("mods/enshwick_my_mod.dll")).unwrap(),
+            std::fs::read(units(&game)[0].join("mods/enshwick_my_mod.dll")).unwrap(),
             b"dll"
         );
         let taken = ["mods/MyMod.dll".to_owned()];

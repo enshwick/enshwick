@@ -465,6 +465,7 @@ version = "0.0.0-dev"
 dependencies = [
  "enshwick-loader-api",
  "minisign-verify",
+ "percent-encoding",
  "semver",
  "serde",
  "serde_json",

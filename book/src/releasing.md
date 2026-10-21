@@ -299,11 +299,16 @@ empty under a loader older than ABI minor 54.
 
 ## Staged updates
 
-An updater never replaces a loaded DLL. It writes the new file to
-`mods/.staged/<path>`, where `<path>` is the file's path relative to the
-game's folder (`ModEntry::file` for a mod). On the next start, before the
-loader runs, the `powrprof.dll` stub moves each staged file to `<path>` and
-keeps the file it replaces as `<path>.previous`, for one rollback.
+An updater never replaces a loaded DLL. It writes each update as a unit, a
+folder `mods/.staged/<unit>/` named by 1 to 20 digits that sort as the
+updates came, such as the nanoseconds since 1970. The unit holds each new
+file at `<path>`, the file's path relative to the game's folder
+(`ModEntry::file` for a mod). Write the unit elsewhere on the same drive and
+rename it into `mods/.staged/` once it is complete: the stub takes only
+folders named by digits, so an update cut short is never installed. On the
+next start, before the loader runs, the `powrprof.dll` stub applies the units
+oldest first, moving each file to `<path>` and keeping the file it replaces
+as `<path>.previous`, for one rollback.
 
 A file that cannot be moved stays staged for the next start; the game starts
 anyway. The stub writes what it moved to `logs/enshwick/stub.log`.
