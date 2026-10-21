@@ -28,7 +28,7 @@ const CLIENT_ARM_DELAY: Duration = Duration::from_secs(15);
 const WINDOW_POLL: Duration = Duration::from_millis(100);
 
 /// The stub contract the loader speaks.
-const STUB_ABI: u32 = 1;
+const STUB_ABI: u32 = 2;
 
 type AbiFn = extern "system" fn() -> u32;
 type QueryFn = extern "system" fn() -> *const Manifest;
@@ -88,7 +88,11 @@ fn link_features(loader: &'static Loader) {
     crate::ui::link(loader);
 }
 
-pub(crate) fn start(stub_abi: u32, missing_forwards: u32) {
+pub(crate) fn start(
+    stub_abi: u32,
+    missing_forwards: u32,
+    release: Option<extern "system" fn() -> u32>,
+) {
     if STARTED.swap(true, Ordering::AcqRel) {
         return;
     }
@@ -156,6 +160,11 @@ pub(crate) fn start(stub_abi: u32, missing_forwards: u32) {
         );
     }
     arm(loader, frame);
+    if let Some(release) = release
+        && release() != 0
+    {
+        crate::log!(INFO, "the server's own code starts after the hooks");
+    }
     crate::ui::armed(loader);
     let running: Vec<&str> = loader
         .mods

@@ -117,13 +117,20 @@ pub mod worlds;
 #[cfg(windows)]
 mod writes;
 
-/// Starts the loader; called once by the `powrprof.dll` stub.
+/// Starts the loader; called once by the `powrprof.dll` stub, which holds
+/// the dedicated server's own code until `release` is called.
 ///
 /// # Safety
 ///
-/// Called by the stub, once, outside the Windows loader lock.
+/// Called by the stub, once, outside the Windows loader lock; `release` is
+/// valid from a stub of contract 2 or later.
 #[cfg(windows)]
 #[unsafe(no_mangle)]
-pub unsafe extern "system" fn enshwick_start(stub_abi: u32, missing_forwards: u32) {
-    let _outcome = std::panic::catch_unwind(|| start::start(stub_abi, missing_forwards));
+pub unsafe extern "system" fn enshwick_start(
+    stub_abi: u32,
+    missing_forwards: u32,
+    release: extern "system" fn() -> u32,
+) {
+    let release = (stub_abi >= 2).then_some(release);
+    let _outcome = std::panic::catch_unwind(|| start::start(stub_abi, missing_forwards, release));
 }
