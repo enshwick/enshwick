@@ -35,7 +35,7 @@ fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_
 | `Crafted` | `CraftRecipeSuccessEvent` | `workshop`, `recipe` |
 | `Interacted` | `AcceptOfferedInteractionEvent` | `player`, `target`, `offer` |
 | `Built`, `TornDown`, `PickedUp` | `BuildingPlaceEvent`, `BuildingTearDownEvent`, `BuildingPickUpEvent` | `block` (`player`, `position`, volume, `material`); `item` for `Built`, `entity` for `PickedUp` |
-| `AltarUsed` | `FlameAltarEvent` | `player`, `altar`, `kind` (`Abandon`, `Reclaim`, `RemoveWater`, `SetSpawn`) |
+| `AltarUsed` | `FlameAltarEvent` | `player`, `altar`, `action` (`Abandon`, `Reclaim`, `RemoveWater`, `SetSpawn`) |
 | `LootOpened` | `LootInteractionEvent` | `player`, `container`, `take_all` |
 | `EquipmentChanged` | `HandleEquipmentSlotChangedEvent` | `player`, `slot` |
 | `Revived` | `RevivedPlayerEvent` | `player`, `by` |

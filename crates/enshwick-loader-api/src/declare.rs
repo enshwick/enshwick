@@ -204,8 +204,8 @@ macro_rules! manifest {
     }};
 }
 
-/// Exports a [`Mod`](crate::Mod) from the DLL: the four functions the loader
-/// looks for, each catching panics.
+/// Exports a [`Mod`](crate::Mod) from the DLL: the five functions of
+/// [`abi::exports`](crate::abi::exports), each catching panics.
 ///
 /// Also adds `instance()` to the type, the mod's state once initialised.
 ///

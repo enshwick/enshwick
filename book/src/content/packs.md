@@ -154,7 +154,9 @@ meter = [1, 3]
 Each drop gives one of `items` at `chance` per roll, as
 [`add_loot`](random-loot.md) adds it. `from` is `bosses`, `locked-chests`,
 `corpses`, `chests`, `containers` or `destroyed`, or a list of the last four.
-`meter` rolls the fill of items with a meter, all of the same maximum.
+`meter` rolls the fill of items with a meter: every item of the drop must be
+one of the pack's own with a meter of the same maximum, and the range must not
+pass that maximum.
 
 ## `texts.toml`
 
@@ -171,15 +173,15 @@ lacks, chances outside 0 to 1. Each problem is a line
 in the pack's log with its file, line and column, and the pack stays off:
 
 ```text
-error [lanterns] items.toml:7:1: no item "torch" in this pack; name another mod's as <mod>:<name> or a vanilla one by its GUID
+error [lanterns] items.toml:7:1: no item "torch" in this pack; name another mod's as <mod>:<name>, or a vanilla one by its GUID or, where the game's data is at hand, its debug name
 ```
 
 `cargo enshwick pack check mods/lanterns --game <game folder>` gives the
 same lines before you ship, reading vanilla names from that game's data
 (`ENSHROUDED_DIR` when `--game` is left out). Without a game folder it
 checks everything else, and a debug name or a station other than the
-workbench is a problem that asks for the game's data. `cargo enshwick pack schema` writes the JSON Schema of each file;
-name one at the top of a file, `#:schema ./items.schema.json`, and an
+workbench is a problem that asks for the game's data. `cargo enshwick pack schema` writes the JSON Schema of
+every file but `texts.toml`; name one at the top of a file, `#:schema ./items.schema.json`, and an
 editor with TOML support completes and checks fields as you type.
 
 ## Changes while the server runs

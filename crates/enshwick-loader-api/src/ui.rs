@@ -93,8 +93,9 @@ pub struct Ui {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
 #[non_exhaustive]
 pub enum UiError {
-    /// This process draws no interface: a server, or a client whose
-    /// interface the loader could not link.
+    /// This process draws no interface, as on a server, or the loader is
+    /// too old for the call. A client whose interface the loader could not
+    /// link still shows dialogs, as system message boxes.
     #[error("no interface to show it in")]
     Unavailable,
     /// Too many dialogs wait already.
@@ -1042,9 +1043,9 @@ impl Load<'_> {
     ///
     /// # Errors
     ///
-    /// [`Off`] on a server, after `init`, when the loader could not link the
-    /// interface on this game build, or under a loader older than ABI minor
-    /// 28.
+    /// [`Off`] on a server, after `init`, or under a loader older than ABI
+    /// minor 39. When the loader could not link the interface on this game
+    /// build, `draw` never runs.
     ///
     /// # Examples
     ///

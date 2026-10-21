@@ -108,9 +108,9 @@ and every mod linked on it is turned off.
 has two flags, combined with `HookFlags(a.0 | b.0)`:
 
 - `EXCLUSIVE`: no other mod may link on this function. Use it for a link that
-  replaces the function and cannot share it.
-  [`enshwick-flame-altar-zones`](https://github.com/themaiby/enshwick/blob/main/mods/enshwick-flame-altar-zones/src/altars.rs)
-  replaces `upgrade_building_range` so.
+  replaces the function and cannot share it. The loader
+  [links](https://github.com/themaiby/enshwick/blob/main/crates/internal/loader/src/altars.rs)
+  `upgrade_building_range` so while a mod controls altar zones.
 - `CALLER_FRAME`: the loader records the game caller's stack pointer and
   callee-saved registers at entry of the chain. The link reads them with
   `host().caller_frame()`.
@@ -159,10 +159,7 @@ fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_
 ```
 
 Read the frame before calling anything hooked: it is valid until the link calls
-a hooked function. [`enshwick-build-camera`](https://github.com/themaiby/enshwick/blob/main/mods/enshwick-build-camera/src/lib.rs)
-is this hook in full, and
-[`enshwick-survivors-per-altar`](https://github.com/themaiby/enshwick/blob/main/mods/enshwick-survivors-per-altar/src/server.rs)
-answers each caller of one lookup differently.
+a hooked function.
 
 ## The mod's state in a hook
 
@@ -217,7 +214,7 @@ never crashes for it.
 
 A panic is a last resort, not error handling. A hook that can fail returns to
 vanilla on its own, as
-[`enshwick-shared-experience`](https://github.com/themaiby/enshwick/blob/main/mods/enshwick-shared-experience/src/lib.rs)
+[`enshwick-area-loot`](https://github.com/themaiby/enshwick/blob/main/mods/enshwick-area-loot/src/take.rs)
 does with its `OFF` flag.
 
 ## One function, both halves of a mod
@@ -227,9 +224,6 @@ server half and its client half in one process. When both halves need the same
 function, the mod still links it once: the loader refuses a second link of one
 mod on one function. Link one detour that answers for both, and skip the
 other half's link.
-[`enshwick-survivors-per-altar`](https://github.com/themaiby/enshwick/blob/main/mods/enshwick-survivors-per-altar/src/lib.rs)
-links the client's own cursor lookup only when its server half, whose lookup
-answers the cursor as well, could not be linked.
 
 Some functions serve both worlds of a hosting client, the client's and the
 built-in server's. A hook on one of them that should act for the server only

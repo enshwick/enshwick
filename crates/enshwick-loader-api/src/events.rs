@@ -91,8 +91,9 @@ macro_rules! with_data {
 }
 
 without_data! {
-    /// [`Event::SETTINGS_CHANGED`]; [`Load::on_config_change`](crate::Load::on_config_change)
-    /// re-reads the settings for you.
+    /// [`Event::SETTINGS_CHANGED`], on no fixed thread;
+    /// [`Load::on_config_change`](crate::Load::on_config_change) re-reads the
+    /// settings for you.
     SettingsChanged = SETTINGS_CHANGED;
     /// [`Event::LOADER_SETTINGS_CHANGED`].
     LoaderSettingsChanged = LOADER_SETTINGS_CHANGED;

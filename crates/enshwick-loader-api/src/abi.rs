@@ -469,8 +469,10 @@ impl<'de> serde::Deserialize<'de> for Level {
 pub struct Event(pub u32);
 
 impl Event {
-    /// The mod's settings file changed on disk; no data. Raised on a loader
-    /// thread, about a second after the change.
+    /// The mod's settings changed: its file on disk, a setting set by
+    /// `/config` or the Mods screen, or a client's join values; no data. The
+    /// thread is not fixed: a loader thread about a second after a file
+    /// edit, the thread that made any other change.
     pub const SETTINGS_CHANGED: Self = Self(1);
     /// The loader's settings changed, log levels among them; no data. Raised
     /// on a loader thread.
@@ -4690,8 +4692,9 @@ pub struct HostApi {
     /// Calls `callback` with `user` once per frame of the client's
     /// interface, on the thread that draws it, while the mod is on; the
     /// callback draws with [`HostApi::ui_widget`]. Client only
-    /// ([`Status::MISSING`] on a server or when the interface could not be
-    /// linked). Allowed during `enshwick_mod_init` only. Since minor 45.
+    /// ([`Status::MISSING`] on a server); when the interface could not be
+    /// linked, the callback never runs. Allowed during `enshwick_mod_init`
+    /// only. Since minor 39.
     pub ui_frame:
         extern "system" fn(me: ModHandle, callback: UiFrameFn, user: *mut c_void) -> Status,
     /// Draws `widget` in the frame `frame` names and writes back its
@@ -4703,10 +4706,11 @@ pub struct HostApi {
     pub ui_widget: extern "system" fn(me: ModHandle, frame: u64, widget: *mut UiWidget) -> Status,
     /// Queues `dialog` and calls `callback` with the answer and `user` once
     /// the player gives it; dialogs show one at a time, in order. Any
-    /// thread. Client only ([`Status::MISSING`] on a server);
-    /// [`Status::REFUSED`] when too many wait; [`Status::WRONG_THREAD`] for
-    /// [`UiDialog::WAITING`] on the thread that draws the interface. On an
-    /// error status `callback` is never called. Since minor 45.
+    /// thread. Client only ([`Status::MISSING`] on a server); when the
+    /// interface could not be linked, the dialog shows as a system message
+    /// box. [`Status::REFUSED`] when too many wait; [`Status::WRONG_THREAD`]
+    /// for [`UiDialog::WAITING`] on the thread that draws the interface. On
+    /// an error status `callback` is never called. Since minor 39.
     pub ui_dialog: extern "system" fn(
         me: ModHandle,
         dialog: *const UiDialog,

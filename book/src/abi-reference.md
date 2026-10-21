@@ -87,7 +87,7 @@ dependency range that does not parse; the reason goes to `loader.log` as
 `<file> skipped: <reason>`. A malformed update source is dropped with a
 warning and the mod loads, and so is a `signed_by` key that is not a minisign
 public key: `<file>: key ignored: the signed_by key "..." is not a minisign
-public key`.
+public key (RW..., 56 characters)`.
 
 ## Status codes
 
@@ -130,7 +130,7 @@ id through `Load::subscribe`. See [Events and the scheduler](events.md).
 
 | Id | Constant                  | Typed event             | Data              | Raised on       | Side   |
 | -- | ------------------------- | ----------------------- | ----------------- | --------------- | ------ |
-| 1  | `SETTINGS_CHANGED`        | `SettingsChanged`       | none              | a loader thread | both   |
+| 1  | `SETTINGS_CHANGED`        | `SettingsChanged`       | none              | not fixed       | both   |
 | 2  | `LOADER_SETTINGS_CHANGED` | `LoaderSettingsChanged` | none              | a loader thread | both   |
 | 3  | `TICK`                    | `Ticked`                | `TickData`        | the game thread | server |
 | 4  | `WORLD_LOADED`            | `WorldLoaded`           | none              | the game thread | server |
@@ -313,76 +313,79 @@ The safe layer checks `header.covers` before it calls a field added after
 minor 0. When the loader lacks a field, the feature either degrades or turns
 the mod off with a reason, which the mod's log shows as `off: <reason>`:
 
-| Needs minor | Feature                                                | Under an older loader                                     |
-| ----------- | ------------------------------------------------------ | --------------------------------------------------------- |
-| 1           | `Host::log_level`                                      | `Level::DEBUG` is assumed                                 |
-| 2           | `Load::on`, `Load::subscribe`                          | Off: `event <id>: missing on this game build`             |
-| 3           | `Load::world`                                          | Off: `world reads: needs a newer loader`                  |
-| 4           | served resources                                       | Off: `served resources: needs a newer loader`             |
-| 4           | mod texts                                              | Off: `mod texts: needs a newer loader`                    |
-| 5           | `mods()`                                               | An empty list                                             |
-| 6           | join values                                            | None: the mod runs with its file's values                 |
-| 7           | `Load::code`, `Load::find_code`                        | Off: `code searches: needs a newer loader`                |
-| 7           | `Load::patch_code`                                     | Off: `code patches: needs a newer loader`                 |
-| 8           | `Host::hosting`                                        | Whether this is the dedicated server                      |
-| 9           | chat commands                                          | Off: `chat commands: needs a newer loader`                |
-| 9           | rename filters                                         | Off: `rename filters: needs a newer loader`               |
-| 10          | `mods::join_missing()`                                 | An empty list                                             |
-| 11          | `Load::hook_at`                                        | Off: `mid-function hooks: needs a newer loader`           |
-| 12          | `Load::inventories`                                    | Off: `inventories: needs a newer loader`                  |
-| 13          | status lines                                           | Off: `status lines: needs a newer loader`                 |
-| 13          | `commands::run`                                        | `Err(RunError::NoLoader)`                                 |
-| 14          | `ModEntry::signed_by`                                  | Empty                                                     |
-| 15          | altars and zone checks                                 | Off: `altars: needs a newer loader`                       |
-| 16          | survivors                                              | Off: `the survivor lookup: needs a newer loader`          |
-| 17          | interaction filters                                    | Off: `interaction filters: needs a newer loader`          |
-| 18          | skills, comfort, experience                            | Off: `skill overrides: needs a newer loader` and the like |
-| 19          | altar limit and bases                                  | Off: `altars: needs a newer loader`                       |
-| 20          | game events                                            | Off: `game events: needs a newer loader`                  |
-| 21          | entity queries, destroy, saves                         | Empty, `None` or `WorldError::Missing`                    |
-| 22          | component and stat writes                              | `WorldError::Missing`                                     |
-| 23          | `Load::actions`                                        | Off: `actions: needs a newer loader`                      |
-| 24          | `Actions::spawn`                                       | `WorldError::Missing`                                     |
-| 25          | craft and build filters                                | Off: `craft filters: needs a newer loader` and the like   |
-| 26          | `Load::channel`                                        | Off: `mod messages: needs a newer loader`                 |
-| 27          | `World::notify`                                        | A chat line                                               |
-| 28          | `Load::clock`, `clock_speed`                           | Off: `clock: needs a newer loader` and the like           |
-| 29          | `Load::game_settings`                                  | Off: `game settings: needs a newer loader`                |
-| 30          | `Load::on_damage`                                      | Off: `damage filters: needs a newer loader`               |
-| 31          | `Load::buffs`                                          | Off: `buffs: needs a newer loader`                        |
-| 32          | `Load::knowledge`                                      | Off: `knowledge: needs a newer loader`                    |
-| 33          | `Load::weather`                                        | Off: `weather: needs a newer loader`                      |
-| 34          | `Load::terrain`                                        | Off: `terrain: needs a newer loader`                      |
-| 35          | settings schema                                        | `/config` does not know the mod's settings                |
-| 36          | `ModEntry` name and credits                            | Empty                                                     |
-| 37          | `Load::on_summoned`                                    | Off: `the summon handler: needs a newer loader`           |
-| 37          | `Summon` item and meter                                | `Entity::NONE` and `None`                                 |
-| 38          | `Load::item_data`                                      | Off: `item data: needs a newer loader`                    |
-| 39          | `Load::ui`, `Load::on_frame`                           | Off: `the interface: needs a newer loader`                |
-| 40          | `Load::on_hud`, markers                                | Off, or `UiError::Unavailable`                            |
-| 41          | settings check                                         | Changes are checked against the schema only               |
-| 42          | `SummonVerdict::Refuse`                                | The use goes on                                           |
-| 42          | `Op::Renew`                                            | The batch fails                                           |
-| 43          | texts for the Mods screen                              | The settings' keys in words                               |
-| 44          | `Load::add_icon`, item icons                           | Off: `icons: needs a newer loader`                        |
-| 45          | `Load::stats` and stat kinds                           | Off: `stats: needs a newer loader`                        |
-| 45          | `Damage::attacker`                                     | The hit's source                                          |
-| 46          | world settings                                         | Startup values stay until a restart                       |
-| 47          | services, mod events                                   | Off: `services and mod events: needs a newer loader`      |
-| 48          | `Load::affix` and affixes                              | Off: `affixes: needs a newer loader`                      |
-| 48          | `ItemInfo::category`                                   | 0                                                         |
-| 49          | `Load::migrate`                                        | Off: `migrations: needs a newer loader`                   |
-| 50          | content ids, the content calls                         | Off: `content ids: needs a newer loader`                  |
-| 51          | `BuildInfo::table`                                     | `BuildTable::EXACT`                                       |
-| 52          | `Load::entity_data`                                    | Off: `entity data: needs a newer loader`                  |
-| 53          | `ManifestFlags::RELOAD`                                | The mod is never reloaded                                 |
-| 54          | `mods::replaced()`                                     | An empty list                                             |
-| 55          | `Load::on_knowledge_input`                             | Off: `knowledge input filters: needs a newer loader`      |
-| 56          | `i18n::language()`                                     | `Language::FALLBACK`                                      |
-| 57          | `GameSettings::keep`, `forget_kept`                    | `WorldError::Missing`                                     |
-| 58          | `updates::publish`                                     | `Err(Off)`; nothing shows                                 |
-| 58          | `Load::on_update_pick`                                 | Off: `updates: needs a newer loader`                      |
-| 59          | `Knowledge::revoke`, `grant_account`, `revoke_account` | `WorldError::Missing`                                     |
+| Needs minor | Feature                                                | Under an older loader                                               |
+| ----------- | ------------------------------------------------------ | ------------------------------------------------------------------- |
+| 1           | `Host::log_level`                                      | `Level::DEBUG` is assumed                                           |
+| 2           | `Load::on`, `Load::subscribe`                          | Off: `event <id>: missing on this game build`                       |
+| 3           | `Load::world`                                          | Off: `world reads: needs a newer loader`                            |
+| 4           | served resources                                       | Off: `served resources: needs a newer loader`                       |
+| 4           | mod texts                                              | Off: `mod texts: needs a newer loader`                              |
+| 5           | `mods()`                                               | An empty list                                                       |
+| 6           | join values                                            | None: the mod runs with its file's values                           |
+| 7           | `Load::code`, `Load::find_code`                        | Off: `code searches: needs a newer loader`                          |
+| 7           | `Load::patch_code`                                     | Off: `code patches: needs a newer loader`                           |
+| 8           | `Host::hosting`                                        | Whether this is the dedicated server                                |
+| 9           | chat commands                                          | Off: `chat commands: needs a newer loader`                          |
+| 9           | rename filters                                         | Off: `rename filters: needs a newer loader`                         |
+| 10          | `mods::join_missing()`                                 | An empty list                                                       |
+| 11          | `Load::hook_at`                                        | Off: `mid-function hooks: needs a newer loader`                     |
+| 12          | `Load::inventories`                                    | Off: `inventories: needs a newer loader`                            |
+| 13          | status lines                                           | Off: `status lines: needs a newer loader`                           |
+| 13          | `commands::run`                                        | `Err(RunError::NoLoader)`                                           |
+| 14          | `ModEntry::signed_by`                                  | Empty                                                               |
+| 15          | altars and zone checks                                 | Off: `altars: needs a newer loader`                                 |
+| 16          | survivors                                              | Off: `the survivor lookup: needs a newer loader`                    |
+| 17          | interaction filters                                    | Off: `interaction filters: needs a newer loader`                    |
+| 18          | skills, comfort, experience                            | Off: `skill overrides: needs a newer loader` and the like           |
+| 19          | altar limit and bases                                  | Off: `the altar limit: needs a newer loader`, `the base limit: ...` |
+| 20          | game events                                            | Off: `game events: needs a newer loader`                            |
+| 21          | entity queries, destroy, saves                         | Empty, `None` or `WorldError::Missing`                              |
+| 22          | component and stat writes                              | `WorldError::Missing`                                               |
+| 23          | `Load::actions`                                        | Off: `actions: needs a newer loader`                                |
+| 24          | `Actions::spawn`                                       | `WorldError::Missing`                                               |
+| 25          | craft and build filters                                | Off: `craft filters: needs a newer loader` and the like             |
+| 26          | `Load::channel`                                        | Off: `mod messages: needs a newer loader`                           |
+| 27          | `World::notify`                                        | A chat line                                                         |
+| 28          | `Load::clock`, `clock_speed`                           | Off: `clock: needs a newer loader` and the like                     |
+| 29          | `Load::game_settings`                                  | Off: `game settings: needs a newer loader`                          |
+| 30          | `Load::on_damage`                                      | Off: `damage filters: needs a newer loader`                         |
+| 31          | `Load::buffs`                                          | Off: `buffs: needs a newer loader`                                  |
+| 32          | `Load::knowledge`                                      | Off: `knowledge: needs a newer loader`                              |
+| 33          | `Load::weather`                                        | Off: `weather: needs a newer loader`                                |
+| 34          | `Load::terrain`                                        | Off: `terrain: needs a newer loader`                                |
+| 35          | settings schema                                        | `/config` does not know the mod's settings                          |
+| 36          | `ModEntry` name and credits                            | Empty                                                               |
+| 37          | `Load::on_summoned`                                    | Off: `the summon handler: needs a newer loader`                     |
+| 37          | `Summon` item and meter                                | `Entity::NONE` and `None`                                           |
+| 38          | `Load::item_data`                                      | Off: `item data: needs a newer loader`                              |
+| 39          | `Load::ui`, `Load::on_frame`                           | Off: `the interface: needs a newer loader`                          |
+| 40          | `Load::on_hud`, markers                                | Off, or `UiError::Unavailable`                                      |
+| 41          | settings check                                         | Changes are checked against the schema only                         |
+| 42          | `SummonVerdict::Refuse`                                | The use goes on                                                     |
+| 42          | `Op::Renew`                                            | The batch fails                                                     |
+| 43          | texts for the Mods screen                              | The settings' keys in words                                         |
+| 44          | `Load::add_icon`, item icons                           | Off: `icons: needs a newer loader`                                  |
+| 45          | `Load::stats` and stat kinds                           | Off: `stats: needs a newer loader`                                  |
+| 45          | `Damage::attacker`                                     | The hit's source                                                    |
+| 46          | world settings                                         | Startup values stay until a restart                                 |
+| 47          | services, mod events                                   | Off: `services and mod events: needs a newer loader`                |
+| 48          | `Load::affix` and affixes                              | Off: `affixes: needs a newer loader`                                |
+| 48          | `ItemInfo::category`                                   | 0                                                                   |
+| 49          | `Load::migrate`                                        | Off: `migrations: needs a newer loader`                             |
+| 50          | content ids, the content calls                         | Off: `content ids: needs a newer loader`                            |
+| 51          | `BuildInfo::table`                                     | `BuildTable::EXACT`                                                 |
+| 52          | `Load::entity_data`                                    | Off: `entity data: needs a newer loader`                            |
+| 53          | `ManifestFlags::RELOAD`                                | The mod is never reloaded                                           |
+| 54          | `mods::replaced()`                                     | An empty list                                                       |
+| 55          | `Load::on_knowledge_input`                             | Off: `knowledge input filters: needs a newer loader`                |
+| 56          | `i18n::language()`                                     | `Language::FALLBACK`                                                |
+| 57          | `GameSettings::keep`, `forget_kept`                    | `WorldError::Missing`                                               |
+| 58          | `updates::publish`                                     | `Err(Off)`; nothing shows                                           |
+| 58          | `Load::on_update_pick`                                 | Off: `updates: needs a newer loader`                                |
+| 59          | `Knowledge::revoke`, `grant_account`, `revoke_account` | `WorldError::Missing`                                               |
+| 60          | `PlayerDied`                                           | Off: `event 20: missing on this game build`                         |
+| 61          | `content::game_resource`, `i18n::game_text`            | `None`                                                              |
+| 62          | `PlayerDeathData::killer_entity`                       | 0                                                                   |
 
 A mod that can do without a feature catches the `Off` and goes on without it
 instead of returning it from `init`.

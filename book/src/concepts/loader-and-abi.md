@@ -20,9 +20,10 @@ patterns; a mod whose entries are not found stays off with the reason, and
 ## How mods are found
 
 Every `*.dll` directly in `mods/` is a candidate, taken in file name order. The
-loader loads each and keeps it when it exports the four functions of
+loader loads each and keeps it when it exports the four required functions of
 [`abi::exports`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs)
-and was built for the loader's ABI major. Other DLLs are logged as "not an
+and was built for the loader's ABI major. The fifth, `enshwick_mod_shutdown`,
+is optional. Other DLLs are logged as "not an
 Enshwick mod" and unloaded. The file name is free; the id in the manifest
 names the mod. Every folder in `mods/` with a `pack.toml` is a
 [content pack](../content/packs.md), which the loader runs as a mod of its
@@ -93,6 +94,7 @@ let manifest = enshwick_loader_api::manifest!(
     license: "MIT OR Apache-2.0",
     homepage: "https://github.com/you/trading-post",
     join = true,                    // counts in the join check
+    reload = true,                  // a development server may reload it
     requires: ["market-stalls" => ">=0.2, <1.0"],
     after: ["market-stalls"],
     recommends: ["caravans" => ">=0.3, <1.0"],
@@ -124,6 +126,8 @@ let manifest = enshwick_loader_api::manifest!(
   `Cargo.toml` when left out (`homepage` falls back to `repository`); a mod
   without a name is shown by its id.
 - `join = true`: see [The join check](join-check.md).
+- `reload = true`: a development server may reload the mod while it runs; see
+  [Testing](../testing.md#reloading-a-mod-while-the-game-runs).
 - `requires` names mods that must be present in a Cargo-style version range;
   they load first. `after` names mods that load first when present.
 - `recommends` names mods that work well beside this one: they load first when
@@ -162,14 +166,17 @@ state type:
 - `manifest()` returns the `manifest!`;
 - `init(load)` registers hooks, settings, events and content, and returns the
   state or an [`Off`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/load.rs);
-- `ready(&'static self, host)`, optional, runs once the hooks are armed.
+- `ready(&'static self, host)`, optional, runs once the hooks are armed;
+- `shutdown(&'static self)`, optional, runs before a development reload
+  unloads a mod with `reload = true`.
 
 `Off::new(reason)` turns the mod off with a reason for the log. Every fallible
 call on `Load` returns `Result<_, Off>`, so `?` is the usual way out.
 
 [`declare_mod!`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/declare.rs)
 exports the type: `enshwick_mod_abi`, `enshwick_mod_query`,
-`enshwick_mod_init` and `enshwick_mod_ready`, each catching panics. It also
+`enshwick_mod_init`, `enshwick_mod_ready` and `enshwick_mod_shutdown`, each
+catching panics. It also
 adds `instance()`, the mod's state once `init` has returned it.
 
 ```rust

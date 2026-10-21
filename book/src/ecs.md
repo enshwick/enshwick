@@ -120,9 +120,8 @@ fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_
 }
 ```
 
-[`enshwick-safes`](https://github.com/themaiby/enshwick/blob/main/mods/enshwick-safes/src/access.rs)
-reads a chest's `UsedItem` and position this way, and finds slot roots in its
-inventory hook.
+[`enshwick-safes`](https://github.com/themaiby/enshwick/blob/main/mods/enshwick-safes/src/lib.rs)
+gets the `InventorySetup` type this way to find the world's Safes.
 
 ### Positions
 
@@ -154,11 +153,10 @@ reads and writes them:
 the same row, both from the query's words. Mark the component changed with
 `Ecs::mark_changed` when clients see it.
 
+For experience, `Load::on_experience` does this work and hands the mod each
+character's row (see [Progress](progress.md)), as
 [`enshwick-shared-experience`](https://github.com/themaiby/enshwick/blob/main/mods/enshwick-shared-experience/src/lib.rs)
-is the worked example: it hooks `player_level`, walks its query twice before
-vanilla runs, reads each character's level and experience with `value`, and
-for each character it raises, marks `Experience` changed and writes the gain
-with `set`. Then it restores the row and calls on.
+uses it.
 
 ## Which world: `Worlds`
 
@@ -175,7 +173,3 @@ tells them apart:
 A server feature in a hooked system checks `is_server(ctx)` first and forwards
 to `Next` otherwise. Entity ids of the two worlds are unrelated. See
 [Sides and hosting](concepts/sides-and-hosting.md).
-
-[`enshwick-survivors-per-altar`](https://github.com/themaiby/enshwick/tree/main/mods/enshwick-survivors-per-altar)
-walks queries with `Ecs` in its server half and reads the client's UI system
-in its client half.

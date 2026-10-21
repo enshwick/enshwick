@@ -45,7 +45,7 @@ fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_
 
 Field offsets change between game builds; read them with
 `load.field_offset(type, field)` and `load.type_size(type)` during `init`,
-as [`ItemLayout::resolve`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/ecs.rs)
+as [`ItemLayout::resolve`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/content/items.rs)
 does, and move them into the builder. See
 [Finding the game](../finding-the-game.md).
 

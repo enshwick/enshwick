@@ -17,6 +17,9 @@ code may call.
 - **Loader threads**: the loader's own. `on_config_change` handlers run on the
   settings watcher, about a second after a file changes; on a client joining a
   server, join values reach the handler on the thread that runs the join.
+  After `/config` or the Mods screen, the handler runs on the thread that made
+  the change, and as a world loads or stops, on the game thread, so it cannot
+  count on one thread.
   Status lines from `load.add_status` are gathered on the status writer or on the
   game thread.
 - **The loader's start thread** runs `init` and `ready`.

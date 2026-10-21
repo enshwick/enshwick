@@ -37,6 +37,8 @@ pre-push:
         - 'Cargo.toml'
         - '**/Cargo.toml'
         - 'Cargo.lock'
+        - 'book/src/*.md'
+        - 'book/src/**/*.md'
       run: cargo nextest run --workspace --no-tests=pass && cargo test --doc --workspace
     deny:
       glob:
