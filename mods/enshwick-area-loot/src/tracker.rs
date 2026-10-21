@@ -150,6 +150,23 @@ impl Tracker {
         now < held.until && !seen.empty && untouched
     }
 
+    /// Whether a player other than `player` last opened `container` and,
+    /// where `position` finds them, stands within `range` of it.
+    pub(crate) fn guest_near(
+        &self,
+        container: Entity,
+        player: Entity,
+        range: f64,
+        position: impl Fn(Entity) -> Option<[f64; 3]>,
+    ) -> bool {
+        self.seen.get(&container).is_some_and(|seen| {
+            seen.guest
+                .filter(|&guest| guest != player)
+                .and_then(position)
+                .is_some_and(|at| near(seen.position, at, range, range))
+        })
+    }
+
     /// Lets go of `container`.
     pub(crate) fn release(&mut self, container: Entity) {
         self.held.remove(&container);
@@ -293,6 +310,24 @@ mod tests {
         t.observe(&corpse(10, 0.0, true, Some(OTHER), 1), now);
         assert!(!t.still_free(Entity(10), PLAYER, now));
         assert!(!t.still_free(Entity(11), PLAYER, now), "never held");
+    }
+
+    #[test]
+    fn a_guest_standing_near_keeps_the_container() {
+        let mut t = Tracker::default();
+        let now = Duration::ZERO;
+        t.observe(&corpse(9, 0.0, false, Some(OTHER), 5), now);
+        let at = |x: f64| move |_: Entity| Some([x, 0.0, 0.0]);
+        assert!(t.guest_near(Entity(9), PLAYER, 4.0, at(3.0)));
+        assert!(!t.guest_near(Entity(9), PLAYER, 4.0, at(5.0)), "walked off");
+        assert!(!t.guest_near(Entity(9), PLAYER, 4.0, |_| None), "gone");
+        assert!(!t.guest_near(Entity(9), OTHER, 4.0, at(0.0)), "their own");
+        t.observe(&corpse(10, 0.0, false, None, 0), now);
+        assert!(!t.guest_near(Entity(10), PLAYER, 4.0, at(0.0)), "nobody's");
+        assert!(
+            !t.guest_near(Entity(11), PLAYER, 4.0, at(0.0)),
+            "never seen"
+        );
     }
 
     #[test]
