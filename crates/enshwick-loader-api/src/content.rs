@@ -379,6 +379,21 @@ impl Id {
     }
 }
 
+/// The debug name the game's data gives a resource, such as the item
+/// `Tool_Torch01_T0`: what the loader resolves against a registry where no
+/// GUID or content id is at hand.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::content::DebugName;
+///
+/// let torch = DebugName("Tool_Torch01_T0");
+/// assert_eq!(torch.0, "Tool_Torch01_T0");
+/// ```
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct DebugName<'a>(pub &'a str);
+
 impl From<Id> for Guid {
     fn from(id: Id) -> Self {
         id.guid
