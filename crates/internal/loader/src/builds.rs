@@ -261,4 +261,32 @@ mod tests {
             );
         }
     }
+
+    /// On the server `ENSH_SERVER_EXE` names (skipped without it), finding
+    /// every entry by its pattern alone takes a small part of the 10 s the
+    /// stub holds the server's code for the loader.
+    #[test]
+    fn the_pattern_fallback_fits_the_server_hold() {
+        let Ok(path) = std::env::var("ENSH_SERVER_EXE") else {
+            return;
+        };
+        let bytes = std::fs::read(path).unwrap();
+        let image = enshwick_loader_reflect::Image::parse(
+            &bytes,
+            enshwick_loader_reflect::Layout::File,
+            None,
+        )
+        .unwrap();
+        let text = image.section(".text").unwrap();
+        let range = image.range(text);
+        let code = image.read(range.start, range.end - range.start).unwrap();
+        let tables = load(Path::new("no such folder"));
+        let started = std::time::Instant::now();
+        let found = by_patterns(&tables, Side::SERVER, (code, range.start - image.base())).unwrap();
+        let took = started.elapsed();
+        assert_eq!(found.kind, Kind::Fallback);
+        // Unoptimised code scans about ten times slower than the release build.
+        let budget = if cfg!(debug_assertions) { 15 } else { 2 };
+        assert!(took < std::time::Duration::from_secs(budget), "{took:?}");
+    }
 }

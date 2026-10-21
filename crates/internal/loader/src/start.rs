@@ -125,6 +125,7 @@ pub(crate) fn start(
     if STARTED.swap(true, Ordering::AcqRel) {
         return;
     }
+    let began = std::time::Instant::now();
     let Some(mods_dir) = begin(stub_abi, missing_forwards) else {
         return;
     };
@@ -188,11 +189,7 @@ pub(crate) fn start(
         );
     }
     arm(loader, frame);
-    if let Some(release) = release
-        && release() != 0
-    {
-        crate::log!(INFO, "the server's own code starts after the hooks");
-    }
+    release_server(release, began);
     crate::ui::armed(loader);
     let running: Vec<&str> = loader
         .mods
@@ -219,6 +216,24 @@ pub(crate) fn start(
             },
             host::join_values,
         );
+    }
+}
+
+/// Lets the dedicated server's own code run once the hooks are armed, and
+/// logs whether the stub held it that long.
+fn release_server(release: Option<extern "system" fn() -> u32>, began: std::time::Instant) {
+    match release.map(|release| release()) {
+        Some(1) => crate::log!(
+            INFO,
+            "the server's own code starts after the hooks, {} ms after the loader started",
+            began.elapsed().as_millis()
+        ),
+        Some(2) => crate::log!(
+            WARN,
+            "the server's own code started before the hooks: the loader took {} ms, past the stub's hold",
+            began.elapsed().as_millis()
+        ),
+        _ => {}
     }
 }
 
