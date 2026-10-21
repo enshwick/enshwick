@@ -423,10 +423,11 @@ impl Checks {
     /// and logs its time in the shroud.
     fn compare(&self, entity: Entity) {
         enshwick_loader_api::info!(
-            "shroud of entity {}: {:?}, in it {:?}",
+            "shroud of entity {}: {:?}, in it {:?}; skills {:?}",
             entity.0,
             self.world.shroud_time(entity),
-            self.world.in_shroud(entity)
+            self.world.in_shroud(entity),
+            self.world.skills(entity)
         );
         let vitals = self.world.vitals(entity);
         let replicated = self

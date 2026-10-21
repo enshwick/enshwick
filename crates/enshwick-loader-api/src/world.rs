@@ -15,7 +15,7 @@ use crate::ecs::Entity;
 use crate::game_events::{Field, Scalar};
 use crate::{Host, Load, Off};
 
-pub use stats::{Meter, Progress, Vitals};
+pub use stats::{Meter, Progress, Skill, Vitals};
 
 /// A reflected ECS component type, resolved once at init.
 ///
@@ -986,6 +986,23 @@ impl World {
     #[must_use]
     pub fn in_shroud(&self, entity: Entity) -> Option<bool> {
         self.stats?.in_shroud(self, entity)
+    }
+
+    /// The skill nodes `entity`, a character, unlocked, with their levels;
+    /// `None` for an entity without skills, off the game thread, or on a
+    /// build without them. The game saves them with the character.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// fn skilled(world: &enshwick_loader_api::world::World, player: &enshwick_loader_api::world::Player) -> usize {
+    ///     world.skills(player.entity).map_or(0, |skills| skills.len())
+    /// }
+    /// ```
+    #[must_use]
+    pub fn skills(&self, entity: Entity) -> Option<Vec<Skill>> {
+        self.stats?;
+        stats::Stats::skills(self, entity)
     }
 
     fn write_stat(
