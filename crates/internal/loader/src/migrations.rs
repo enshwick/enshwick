@@ -8,7 +8,7 @@
 //! loader logs what it will do; in a dry run it only logs.
 
 use std::collections::BTreeMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use enshwick_loader_api::abi::MigrationStep;
@@ -261,23 +261,89 @@ pub fn apply_stores(
     migration: &Migration,
     map: MapFn<'_>,
 ) -> Result<(), String> {
+    let mut staged = Staged::default();
+    stage_stores(&mut staged, dir, index, migration, map)?;
+    staged.commit()
+}
+
+/// Files a migration changes, held until every step of it succeeded, so a
+/// step that fails leaves the files as they were and the migration runs
+/// whole on the next load: `None` for a file it removes.
+#[derive(Debug, Default)]
+struct Staged {
+    files: Vec<(PathBuf, Option<String>)>,
+}
+
+impl Staged {
+    /// The text of `path` as the steps so far leave it.
+    fn read(&self, path: &Path) -> Option<String> {
+        match self.files.iter().rev().find(|(p, _)| p == path) {
+            Some((_, text)) => text.clone(),
+            None => std::fs::read_to_string(path).ok(),
+        }
+    }
+
+    /// Whether `path` exists as the steps so far leave it.
+    fn exists(&self, path: &Path) -> bool {
+        match self.files.iter().rev().find(|(p, _)| p == path) {
+            Some((_, text)) => text.is_some(),
+            None => path.exists(),
+        }
+    }
+
+    fn put(&mut self, path: PathBuf, text: Option<String>) {
+        self.files.retain(|(p, _)| *p != path);
+        self.files.push((path, text));
+    }
+
+    /// Writes every staged file, then removes the ones staged away.
+    fn commit(self) -> Result<(), String> {
+        let name = |path: &Path| path.file_name().map(|n| n.to_string_lossy().into_owned());
+        for (path, text) in &self.files {
+            if let Some(text) = text {
+                write(path, text)
+                    .map_err(|e| format!("{}: {e}", name(path).unwrap_or_default()))?;
+            }
+        }
+        for (path, text) in &self.files {
+            if text.is_none() && path.exists() {
+                std::fs::remove_file(path)
+                    .map_err(|e| format!("{}: {e}", name(path).unwrap_or_default()))?;
+            }
+        }
+        Ok(())
+    }
+}
+
+/// Stages the store steps of migration `index` on the world folder `dir`.
+fn stage_stores(
+    staged: &mut Staged,
+    dir: &Path,
+    index: usize,
+    migration: &Migration,
+    map: MapFn<'_>,
+) -> Result<(), String> {
     let file = |name: &str| dir.join(format!("{name}.toml"));
     for (step_index, step) in migration.steps.iter().enumerate() {
         match step.kind {
             MigrationStep::RENAME_STORE => {
                 let (from, to) = (file(&step.from), file(&step.to));
-                if from.exists() && !to.exists() {
-                    std::fs::rename(&from, &to).map_err(|e| format!("store {}: {e}", step.from))?;
+                if staged.exists(&from) && !staged.exists(&to) {
+                    let text = staged
+                        .read(&from)
+                        .ok_or_else(|| format!("store {}: unreadable", step.from))?;
+                    staged.put(to, Some(text));
+                    staged.put(from, None);
                 }
             }
             MigrationStep::MAP_STORE => {
                 let path = file(&step.from);
-                let Ok(text) = std::fs::read_to_string(&path) else {
+                let Some(text) = staged.read(&path) else {
                     continue;
                 };
                 let new = map(index, step_index, &text)
                     .map_err(|e| format!("store {}: {e}", step.from))?;
-                write(&path, &new).map_err(|e| format!("store {}: {e}", step.from))?;
+                staged.put(path, Some(new));
             }
             _ => {}
         }
@@ -332,13 +398,19 @@ pub fn run(
         return Ok(Some(line));
     }
     for (index, migration) in pending {
+        let mut staged = Staged::default();
         let applied = match target {
-            Target::Settings(path) => settings_file(path, index, migration, map),
-            Target::World { dir, .. } => {
-                settings_file(&dir.join("settings.toml"), index, migration, map)
-                    .and_then(|()| apply_stores(dir, index, migration, map))
-            }
-        };
+            Target::Settings(path) => stage_settings(&mut staged, path, index, migration, map),
+            Target::World { dir, .. } => stage_settings(
+                &mut staged,
+                &dir.join("settings.toml"),
+                index,
+                migration,
+                map,
+            )
+            .and_then(|()| stage_stores(&mut staged, dir, index, migration, map)),
+        }
+        .and_then(|()| staged.commit());
         if let Err(reason) = applied {
             return Err((line, format!("migration {}: {reason}", migration.id)));
         }
@@ -347,8 +419,9 @@ pub fn run(
     Ok(Some(line))
 }
 
-/// Applies a migration's settings steps to the file at `path`, if any.
-fn settings_file(
+/// Stages a migration's settings steps on the file at `path`, if any.
+fn stage_settings(
+    staged: &mut Staged,
     path: &Path,
     index: usize,
     migration: &Migration,
@@ -357,12 +430,12 @@ fn settings_file(
     if !migration.steps.iter().any(Step::on_settings) {
         return Ok(());
     }
-    let Ok(text) = std::fs::read_to_string(path) else {
+    let Some(text) = staged.read(path) else {
         return Ok(());
     };
     let new = apply_settings(&text, index, migration, map)?;
     if new != text {
-        write(path, &new).map_err(|e| format!("settings: {e}"))?;
+        staged.put(path.to_path_buf(), Some(new));
     }
     Ok(())
 }
@@ -854,6 +927,75 @@ mod tests {
         assert!(Record::read(&dir).is_err());
         std::fs::remove_file(dir.join(RECORD)).unwrap();
         assert_eq!(Record::read(&dir), Ok(Record::default()));
+        let _gone = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_migration_that_fails_midway_changes_nothing() {
+        let dir = scratch("midway");
+        let world = dir.join("safes/worlds/w1");
+        std::fs::create_dir_all(&world).unwrap();
+        std::fs::write(
+            world.join("settings.toml"),
+            "limit = 2
+",
+        )
+        .unwrap();
+        std::fs::write(
+            world.join("owners.toml"),
+            "count = 1
+",
+        )
+        .unwrap();
+        let all = [migration(
+            "2",
+            vec![
+                step(MigrationStep::MAP_SETTING, "limit", ""),
+                step(MigrationStep::RENAME_STORE, "owners", "keepers"),
+                step(MigrationStep::MAP_STORE, "keepers", ""),
+            ],
+        )];
+        let target = Target::World {
+            key: "w1",
+            dir: &world,
+        };
+        let refuse = |_: usize, step: usize, input: &str| {
+            if step == 2 {
+                Err("refused".to_owned())
+            } else {
+                double(0, 0, input)
+            }
+        };
+        let mut record = Record::default();
+        let (_, reason) = run(&mut record, target, "safes", &all, &refuse, false).unwrap_err();
+        assert!(reason.contains("refused"), "{reason}");
+        assert!(record.worlds["w1"]["safes"].is_empty());
+        assert_eq!(
+            std::fs::read_to_string(world.join("settings.toml")).unwrap(),
+            "limit = 2
+"
+        );
+        assert!(world.join("owners.toml").exists() && !world.join("keepers.toml").exists());
+        // Run again once the map takes it: whole, once.
+        let take = |_: usize, step: usize, input: &str| {
+            if step == 2 {
+                Ok(input.replace('1', "5"))
+            } else {
+                double(0, 0, input)
+            }
+        };
+        assert!(run(&mut record, target, "safes", &all, &take, false).is_ok());
+        assert_eq!(
+            std::fs::read_to_string(world.join("settings.toml")).unwrap(),
+            "limit = 4
+"
+        );
+        assert_eq!(
+            std::fs::read_to_string(world.join("keepers.toml")).unwrap(),
+            "count = 5
+"
+        );
+        assert!(!world.join("owners.toml").exists());
         let _gone = std::fs::remove_dir_all(&dir);
     }
 
