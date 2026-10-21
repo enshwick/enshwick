@@ -5,21 +5,24 @@ Administrators get `/admin` commands in the chat, and a command file runs
 commands on the server without anyone joining: each line appended to it runs
 as if the server's console had typed it.
 
-| Command                  | What it does                                                     |
-| ------------------------ | ---------------------------------------------------------------- |
-| `/admin world`           | the players online, their slots, entities and positions          |
-| `/admin entity <id>`     | an entity's template GUID, the item it was placed from, position |
-| `/admin placed [count]`  | the last pieces and props placed, newest first, with entity ids  |
-| `/admin mods`            | every loaded mod, its version, sides and whether it runs         |
-| `/admin reload <mod id>` | the mod reads `mod-configs/<mod id>.toml` again                  |
-| `/admin say <text>`      | a chat line to every player                                      |
-| `/admin give <item> [n]` | `n` new items (an id or a GUID) for you, or `... n <player>`     |
-| `/enshwick status`       | the loader's status summary (any administrator, tools on or off) |
+| Command                           | What it does                                                                                |
+| --------------------------------- | ------------------------------------------------------------------------------------------- |
+| `/admin` or `/admin help`         | the list of commands                                                                        |
+| `/admin world`                    | the players online, their slots, entities and positions                                     |
+| `/admin entity <id>`              | an entity's template GUID, the item it was placed from, position                            |
+| `/admin placed [count]`           | the last pieces and props placed in this world, newest first, with entity ids; 5 by default |
+| `/admin mods`                     | every loaded mod, its version, sides and whether it runs                                    |
+| `/admin reload <mod id>`          | the mod reads `mod-configs/<mod id>.toml` again                                             |
+| `/admin say <text>`               | a chat line to every player                                                                 |
+| `/admin give <item> [n] [player]` | `n` new items (1 by default, at most 10000) for you or the named player                     |
+| `/enshwick status`                | the loader's status summary (any administrator, tools on or off)                            |
 
 The tools use only what Enshwick offers: world reads, chat, its inventory
 API and settings reloads. Teleporting, setting the time of day and saving on
-demand wait until the platform has them. From the command file, `/admin give`
-names the player: `/admin give 0x0c01 10 Ann`.
+demand wait until the platform has them. An item is a number, decimal or
+`0x` hex, or a GUID. `/admin placed` keeps the last 32 placements and forgets
+them when the world stops. From the command file, `/admin give` names the
+player: `/admin give 0x0c01 10 Ann`.
 
 ## The command file
 
@@ -43,24 +46,28 @@ twice.
 
 ## Settings
 
-`mod-configs/admin-tools.toml`, written on first start:
+`mod-configs/admin-tools.toml`, written on first start; each
+world keeps its own copy of it (see [Settings](../../README.md#settings)):
 
 ```toml
 enabled = false
 ```
 
-The tools stay off until `enabled = true`: `/admin` then answers administrators
-only, and the command file runs. Keep them off on a server people play on.
-An edit takes effect about a second after saving the file, without a restart.
+`/admin` answers administrators only. The tools stay off until
+`enabled = true`: until then `/admin` tells administrators to turn them on,
+and lines appended to the command file are skipped, not kept for later. Keep
+them off on a server people play on. A change applies
+at once, without a restart.
 
 ## From dev tools
 
 This mod was `enshwick-dev-tools`, id `dev-tools`. On its first start it moves
 `mod-configs/dev-tools.toml` to `mod-configs/admin-tools.toml` and
-`mod-data/dev-tools` to `mod-data/admin-tools`, unless the new ones already
-hold something. `/dev` still answers as `/admin`, with a note, until the next
-release. Delete the old `mods/enshwick-dev-tools.dll`: the updater does not
-replace a mod under another name.
+`mod-data/dev-tools` to `mod-data/admin-tools`, unless
+`mod-configs/admin-tools.toml` already exists or `mod-data/admin-tools` is not
+empty. `/dev` still answers as `/admin`, with a note. The loader never starts
+an old `mods/enshwick-dev-tools.dll` beside this mod and logs that it can be
+deleted; the updater deletes it when it installs or updates this mod.
 
 ## Install
 

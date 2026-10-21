@@ -8,17 +8,18 @@ in vanilla.
 
 - When the inventory fills up, the mod stops at that container: what does not
   fit stays in it, and the containers further away stay untouched.
-- A container another player has open, or opened in the last 10 seconds, is
-  left to them, also when they open it while the containers before it are
-  being emptied: each container is checked again right before its turn. The
-  seconds count only while the server runs, so a stalled server hands nothing
-  to the wrong player.
+- A container another player has open, opened in the last 10 seconds, or last
+  opened and still stands within 4 m of, is left to them, also when they open it
+  while the containers before it are being emptied: each container is checked
+  again right before its turn. The seconds count only while the server runs, so
+  a stalled server hands nothing to the wrong player.
 - Chests, quest containers, items a player dropped and items on the ground keep
   the vanilla behaviour.
 
 ## Settings
 
-`mod-configs/area-loot.toml`, written on first start:
+`mod-configs/area-loot.toml`, written on first start; each
+world keeps its own copy of it (see [Settings](../../README.md#settings)):
 
 ```toml
 radius = 12.0
@@ -27,9 +28,11 @@ enabled = true
 ```
 
 `radius` is measured across the ground from the emptied container, `height` up
-and down from it, both in metres: `radius` up to 50, `height` up to 20.
+and down from it, both in metres: `radius` from 0.1 to 50, `height` from 0.1
+to 20. A file with a value outside these is skipped, and the running values
+stay.
 Switched back on, the mod starts watching afresh, so nothing emptied while it
-was off is taken. An edit takes effect about a second after saving the file,
+was off is taken. A change applies at once,
 without a restart.
 
 ## Install

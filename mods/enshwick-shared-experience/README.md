@@ -22,13 +22,14 @@ worlds.
 
 ## Settings
 
-`mod-configs/shared-experience.toml`, written on first start:
+`mod-configs/shared-experience.toml`, written on first start; each
+world keeps its own copy of it (see [Settings](../../README.md#settings)):
 
 ```toml
 enabled = true
 ```
 
-An edit takes effect about a second after saving the file, without a restart.
+A change applies at once, without a restart.
 
 ## Install
 

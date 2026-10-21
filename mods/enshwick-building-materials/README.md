@@ -1,34 +1,41 @@
 # Building materials x2
 
-Будматеріали ×2.
+The vanilla recipes for building blocks, roofs, overgrowth, decor and furniture
+make twice as much for the same cost by default. Functional props (stations,
+chests, storage shelves, altars, water devices) stay as they are. The crafting
+menu shows the new counts.
 
-The vanilla recipes for building blocks, roofs, overgrowth, decor and
-furniture make twice as much for the same cost by default. Functional props
-(stations, chests, altars, water devices) stay as they are. The crafting menu
-shows the new counts.
-
-This mod replaces Building yield and its Bulk Workbench: delete
-`mods/enshwick-building-yield.dll` from the server and every client. A
+This mod replaces Building yield and its Bulk Workbench. The loader never starts
+an old `mods/enshwick-building-yield.dll` beside it and logs that it can be
+deleted; the updater deletes it when it installs or updates this mod. A
 `mod-configs/building-yield.toml` is carried over to
 `mod-configs/building-materials.toml` on the first start, without the
-`own_workbench` key. Placed Bulk Workbenches load as plain workbenches; Bulk
-Workbench items in inventories are lost.
+`own_workbench` key, when the new file does not exist yet. Placed Bulk
+Workbenches load as plain workbenches; Bulk Workbench items in inventories are
+lost.
 
 ## Settings
 
-`mod-configs/building-materials.toml`, written on first start:
+`mod-configs/building-materials.toml`, written on first start; each
+world keeps its own copy of it (see [Settings](../../README.md#settings)):
 
 ```toml
-multiplier = 2    # 2 to 100
-blocks = true     # building blocks and roofs
-overgrowth = true # overgrowth materials
-decor = true      # decor and furniture
+multiplier = 2
+blocks = true
+overgrowth = true
+decor = true
 ```
+
+- `multiplier`: 2 to 100, the output of each recipe for the same cost.
+- `blocks`: building blocks and roofs.
+- `overgrowth`: overgrowth materials.
+- `decor`: decor and furniture.
 
 The server's values are the ones in force: a player who joins sees the
 server's counts in the crafting menu, and the file's own again after leaving,
-for each server joined in a session. An edit of the file applies while the
-game runs too.
+for each server joined in a session. A change applies while the
+game runs too; when the game cannot rebuild its recipes, the log says so and
+the new counts wait for the next start.
 
 ## Install
 

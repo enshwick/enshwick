@@ -10,14 +10,17 @@ in 16 bases. The default doubles the vanilla count.
 
 ## Settings
 
-`mod-configs/flame-altar-count.toml`, written on first start:
+`mod-configs/flame-altar-count.toml`, written on first start; each
+world keeps its own copy of it (see [Settings](../../README.md#settings)):
 
 ```toml
 altars_per_flame_level = [2, 4, 8, 12, 16, 20, 22, 24, 26, 28, 30, 32]
 ```
 
-Levels past the end of the list use its last entry. Values above 32 are lowered
-to 32 and 0 is raised to 1, each with a warning in the log. An edited file
+Levels past the end of the list use its last entry, and an empty list is the
+vanilla table. Values above 32 are lowered to 32 (to 16 while the mod keeps
+the game's limit, below) and 0 is raised to 1, each with a warning in the
+log. A change
 applies while the game runs.
 
 ## Altars past 16

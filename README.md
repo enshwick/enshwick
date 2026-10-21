@@ -60,10 +60,10 @@ they are never released.
    `enshrouded_server.exe` (servers). You get `powrprof.dll` there and a `mods`
    folder beside it.
 3. Start the game or the server. Each mod writes its settings to
-   `mod-configs/<id>.toml` on first start; the log is `logs/enshwick/`
-   (`all.log`, `loader.log`, `mods/<id>.log`), and how much it keeps is set in
-   `mod-configs/enshwick.toml`. In game, "Mods" in the main menu and in the
-   pause menu lists the mods and changes their settings.
+   `mod-configs/<id>.toml` on first start (see [Settings](#settings)); the
+   log is `logs/enshwick/` (`all.log`, `loader.log`, `mods/<id>.log`), and
+   how much it keeps is set in `mod-configs/enshwick.toml`. In game, "Mods" in
+   the main menu and in the pause menu lists the mods.
 
 Players and their server need the same mods: the server advertises its mod set.
 A player's mods the server does not run are turned off for that session, with a
@@ -83,6 +83,22 @@ signature (`.minisig`) beside it, by Enshwick's public key
 
 A server in Docker or Kubernetes: see
 [Running a server in Docker or Kubernetes](book/src/servers.md).
+
+## Settings
+
+`mod-configs/<id>.toml` holds a mod's settings as each new world starts with
+them, and the few settings that are each player's own. A world takes a copy
+when it first loads, single player, hosted or on a dedicated server, and
+keeps it in `mod-data/<id>/worlds/<world>/settings.toml`; from then on that
+copy is the one in force, so an edit of `mod-configs/<id>.toml` reaches only
+worlds made later, and each player's own settings. A world's settings are
+changed in the game, while hosting or on the screen that creates or starts a
+world: the world settings list every mod's settings under their last tab.
+On a dedicated server an administrator changes them with
+`/config <mod> <key> <value>` in the chat, or from "Server settings" on the
+Mods screen. Such a change applies at once, except where a mod's page says it
+waits for the world to load again. A hand edit of the world's copy applies
+when the world loads next, which on a dedicated server is its next start.
 
 ## For mod authors
 

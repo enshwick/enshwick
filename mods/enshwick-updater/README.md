@@ -5,15 +5,21 @@ while after the game starts, the updater asks for new releases of every
 loaded mod that names where its releases come from (`updates:` in its
 manifest): GitHub, or a document at an `https://` address. It does the same
 for the loader itself. When there are any, a dialog in the game's own style
-lists them, such as `safes: 0.1.0 → 0.2.0`, and asks whether to download
-them. Nothing is downloaded without a Yes, and the updater never offers mods
-you do not have.
+lists them, such as `Safes (safes): 0.1.0 → 0.2.0`, and asks whether to
+download them. Nothing is downloaded without a Yes, and this check never
+offers mods you do not have; only a server's join check can (below).
+
+Until Enshwick's first release, 1.0.0, its loader and mods have no releases,
+only the development build, which carries no version the updater can
+compare: update those by hand from the links under [Install](#install).
 
 What you accept is downloaded from the mod's release and put in
 `mods/.staged/`. It takes effect the next time you start the game: the
 `powrprof.dll` stub moves each file into place before the loader starts and
-keeps the file it replaces as `<file>.previous`. Settings files in
-`mod-configs/` are never touched.
+keeps the file it replaces as `<file>.previous`, one step back. A file it
+cannot move stays staged for the next start; what it did is in
+`logs/enshwick/stub.log`. Settings files in `mod-configs/` are never
+touched.
 
 A mod renamed since you installed it names its old id (`replaces:` in its
 manifest), and the loader no longer starts the old DLL beside it. When the
@@ -37,9 +43,9 @@ and is at most 64 MiB. You are never asked about keys:
 - a mod that names its author's keys (`signed_by:` in its manifest), as
   Enshwick's own do, gets only updates signed by one of those keys, checked
   with [minisign](https://jedisct1.github.io/minisign/), or by one in
-  `trusted_keys`. An update signed by another key is refused with a note: it
-  may have been tampered with, or the author changed keys; update it by hand
-  if you trust it;
+  `trusted_keys`. A release without a signature is not offered. An update
+  signed by another key is refused with a note: it may have been tampered
+  with, or the author changed keys; update it by hand if you trust it;
 - a mod that names no key gets its updates unsigned, marked `(unsigned)` in
   the dialog: you trust its updates as you trusted the mod when you
   installed it. Only its own DLL is replaced;
@@ -59,7 +65,8 @@ its folder under `mods/`, never the loader's; from an unsigned one, the mod's
 DLL alone, directly in `mods/`. An archive with a path that leaves the game's
 folder or uses a short `~` name or letters past ASCII, or that would write
 another mod's DLL (one switched off included), another pack's folder or the
-loader's files, is refused whole.
+loader's files, is refused whole, and so is an archive of more than 64
+entries.
 
 ## On the Mods screen
 
@@ -82,8 +89,8 @@ prereleases = false
 ```
 
 - `enabled`: off, the updater never goes online.
-- `check_interval_hours`: hours between checks at start; `0` checks at every
-  start. A check that could not reach every source runs again at the next
+- `check_interval_hours`: 0 to 8760 hours between checks at start; `0` checks at
+  every start. A check that could not reach every source runs again at the next
   start. The offer of a server's versions does not wait for the interval.
 - `trusted_keys`: public keys accepted for updates besides the ones each
   installed mod names, each the second line of a minisign `.pub` file
@@ -99,8 +106,8 @@ each page in `mod-data/updater/cache/` and asks GitHub whether it changed: an
 unchanged page costs nothing of the hourly limit. When GitHub refuses, the
 updater leaves it alone until the time GitHub names and checks again at a
 later start. A download that breaks off or a server error is tried twice
-more; an archive is installed only once its signature checks out, so a
-download cut short is never staged. An update is staged whole or not at
+more; a signed archive is installed only once its signature checks out, so a
+signed download cut short is never staged. An update is staged whole or not at
 all: its files are written apart and moved into `mods/.staged/` in one step,
 so a crash while staging leaves nothing the next start would install. The
 log is
@@ -124,11 +131,11 @@ enshwick_loader_api::manifest!(
 )
 ```
 
-| What         | Accepted                                                                                                                |
-| ------------ | ----------------------------------------------------------------------------------------------------------------------- |
-| Tag          | `my-mod-v1.2.0`, `my-mod-1.2.0`, `my-mod@1.2.0`; in a repository of this one mod also `v1.2.0` or `1.2.0`               |
-| Release file | `my-mod.zip`; else the release's only `.zip`; else the one `.zip` whose name holds `my-mod`; else the same for a `.dll` |
-| Archive      | the DLL at `mods/<file>.dll`, at the archive's root, or either inside one top-level folder                              |
+| What         | Accepted                                                                                                                   |
+| ------------ | -------------------------------------------------------------------------------------------------------------------------- |
+| Tag          | `my-mod-v1.2.0`, `my-mod-1.2.0`, `my-mod@1.2.0`, `my-mod@v1.2.0`; in a repository of this one mod also `v1.2.0` or `1.2.0` |
+| Release file | `my-mod.zip`; else the release's only `.zip`; else the one `.zip` whose name holds `my-mod`; else the same for a `.dll`    |
+| Archive      | the DLL at `mods/<file>.dll`, at the archive's root, or either inside one top-level folder                                 |
 
 The second argument of `github(...)` is the name your tags and files use. A
 repository counts as one mod's when none of its tags names another component;

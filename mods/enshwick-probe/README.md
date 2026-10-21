@@ -7,7 +7,7 @@ line. Keep it off servers people play on.
 
 ## What it checks
 
-Once the world has loaded, and again on `/probe check`:
+Ten seconds after the world has loaded, and again on `/probe check`:
 
 - the world key, and that a per-world store opens under it; the store keeps
   a sample of placed entities, and the next check counts how many keep their
@@ -64,10 +64,10 @@ Once the world has loaded, and again on `/probe check`:
   refused;
 - a save on demand, followed by `WorldSaved`.
 
-From start it counts the damage its damage filter sees by cause, and every
-game event by type, and logs the counts every minute. It logs each typed
-game event it receives, each fall and shroud damage, and the first 200 hits
-a player takes or deals, with the amount before and after the filter; a
+While enabled, from start it counts the damage its damage filter sees by cause,
+and every game event by type, and logs the counts every minute. It logs each
+typed game event it receives, each fall and shroud damage, and the first 200
+hits a player takes or deals, with the amount before and after the filter; a
 typed event whose fields this game build lacks shows as `FAIL typed <type>`.
 
 ## Commands
@@ -90,7 +90,7 @@ From the chat as an administrator, or through the admin tools' command file
 | `/probe learn <id> [bit]`             | grants it to you: a bool set, a counter raised by `bit`, flag `bit` set (1 by default, a recipe's crafted bit)                                         |
 | `/probe unlearn <id> [bit]`           | takes it back the same way                                                                                                                             |
 | `/probe learn-later <key> <id> [bit]` | grants it to the account now, or once its character next loads in this world                                                                           |
-| `/probe stat <id> <value>`            | adds `value` to stat `id` on you (`off` removes it); no id lists them                                                                                  |
+| `/probe stat <id> <value>`            | adds `value` to stat `id` on you (`off` removes it); an unknown id lists the known ones                                                                |
 | `/probe stats`                        | your stats that differ from the defaults, and their sources                                                                                            |
 | `/probe affix`                        | rolls one to three affixes anew on everything you wear                                                                                                 |
 
@@ -111,5 +111,8 @@ soften_damage = false
 # setting come back with the world; the next run with this on forgets it.
 keep_across_restart = false
 ```
+
+`enabled` is off by default: until it is `true` the probe does nothing, no
+checks, counts or `/probe`, and the other settings have no effect.
 
 Licensed under [MIT](../../LICENSE).

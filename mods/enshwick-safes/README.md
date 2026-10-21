@@ -7,8 +7,9 @@ Safe either. The server's administrators may open every Safe unless the
 settings say otherwise.
 
 The owner shows on hover: a Safe is named after its owner when it is placed,
-"Safe · Ann" in the server's language, and older Safes get the name the first
-time a player comes near one in a session, unless they already have a name.
+"Safe · Ann" in the server's language. An older Safe without a name gets it
+a few seconds after its area loads, once the server knows the owner's name:
+from its records, or because the owner is online.
 Only the owner, and administrators when the settings allow, may rename a
 Safe.
 
@@ -23,7 +24,8 @@ The owner stands within 4 m of one of their Safes and types in the chat:
 - `/safe list`: names the players allowed.
 
 Each acts on the owner's Safe nearest to them, and the reply says which.
-Nobody else ever removes a Safe.
+Nobody else ever removes a Safe, except administrators while
+`admins_can_open` is on.
 
 All of it works on a dedicated server and in a game a player hosts. A player
 who has just joined touches no Safe, their own included, until the server has
@@ -35,7 +37,8 @@ upgrade would replace it with an ordinary chest.
 
 ## Settings
 
-`mod-configs/safes.toml`, written on first start:
+`mod-configs/safes.toml`, written on first start; each
+world keeps its own copy of it (see [Settings](../../README.md#settings)):
 
 ```toml
 cost_multiplier = 2
@@ -43,11 +46,13 @@ admins_can_open = true
 label_language = "en"
 ```
 
-`cost_multiplier` scales the Safe's recipe and applies after a restart.
+`cost_multiplier`, 1 to 100, scales the Safe's recipe and applies after a
+restart.
 `admins_can_open` lets administrators open, remove and rename every Safe, and
 applies while the game runs. `label_language` is the language of the owner's
-name on a Safe and of the `/safe` replies; a change applies after a restart, to Safes named from then
-on.
+name on a Safe and of the `/safe` replies, a language code such as `en`, `uk`
+or `de`; anything else is refused. A change applies after a restart, to Safes
+named from then on.
 
 Texts are in English and Ukrainian; German, French, Spanish and Polish name
 and describe the Safe, and `/safe` replies in them fall back to English; a server
