@@ -429,6 +429,7 @@ fn link_join(loader: &Loader) {
         .map(|m| (m.id.clone(), m.meta.name.clone()))
         .collect();
     crate::join::set_names(names);
+    crate::lobby::register();
     let status = loader.link(
         loader.base + rva,
         &crate::join::NEXT,

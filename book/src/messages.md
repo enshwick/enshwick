@@ -60,7 +60,9 @@ messages now. Both send from any thread and fail with a `SendError`:
 ## How messages travel
 
 Messages ride in chat lines no player sees. A client with Enshwick that joins
-a server advertising Enshwick says hello in such a line; the server takes it
+a server advertising Enshwick, or a game whose host's Steam lobby names
+Enshwick ([Games a client hosts](concepts/join-check.md#games-a-client-hosts)),
+says hello in such a line; the server takes it
 before the game posts it, answers, and from then on both sides send. A
 vanilla client never says hello, so the server never sends it anything, and
 the [join check](concepts/join-check.md) makes sure a client that said hello
