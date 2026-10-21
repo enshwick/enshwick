@@ -208,16 +208,21 @@ impl Row {
         text
     }
 
-    /// Where a row placed after this one goes in the source, and the
-    /// indentation it takes.
+    /// Where a row placed after this one goes in the source, and what goes
+    /// before it there: a comma when this row has none, a line break and
+    /// the indentation of the line this row starts on.
     pub(crate) fn insertion(&self, src: &str) -> (usize, String) {
         let line_start = src[..self.span.start].rfind('\n').map_or(0, |i| i + 1);
-        let indent = src[line_start..self.span.start].to_owned();
+        let line = &src[line_start..self.span.start];
+        let indent = &line[..line.len() - line.trim_start().len()];
         let mut at = self.span.end;
-        if src.as_bytes().get(at) == Some(&b',') {
+        let comma = if src.as_bytes().get(at) == Some(&b',') {
             at += 1;
-        }
-        (at, indent)
+            ""
+        } else {
+            ","
+        };
+        (at, format!("{comma}\n{indent}"))
     }
 }
 
@@ -273,6 +278,7 @@ fn list(src: &str, from: usize, to: usize, name: &str) -> Result<Vec<Entry>, Str
         let mut depth = 0usize;
         while end < close {
             match bytes.get(end) {
+                Some(b'/') if matches!(bytes.get(end + 1), Some(b'/' | b'*')) => break,
                 Some(b'(') => depth += 1,
                 Some(b')' | b',') if depth == 0 => break,
                 Some(b')') => depth -= 1,
@@ -365,17 +371,27 @@ fn string_end(src: &str, from: usize) -> Result<usize, String> {
     Err(format!("an unclosed string at byte {from}"))
 }
 
-/// Skips whitespace and line comments.
+/// Skips whitespace and comments, `//` and `/* */`.
 fn skip_trivia(src: &str, mut at: usize) -> usize {
     loop {
         let rest = &src[at.min(src.len())..];
         let trimmed = rest.trim_start();
         at += rest.len() - trimmed.len();
-        if trimmed.starts_with("//") {
-            at += trimmed.find('\n').unwrap_or(trimmed.len());
+        if trimmed.starts_with("//") || trimmed.starts_with("/*") {
+            at += comment_len(trimmed);
         } else {
             return at;
         }
+    }
+}
+
+/// The length of the comment `text` starts with, to the end of its line
+/// for `//`, past its `*/` for `/* */`.
+fn comment_len(text: &str) -> usize {
+    if text.starts_with("/*") {
+        text.find("*/").map_or(text.len(), |end| end + 2)
+    } else {
+        text.find('\n').unwrap_or(text.len())
     }
 }
 
@@ -388,8 +404,8 @@ fn find_code(src: &str, from: usize, to: usize, needle: &str) -> Option<usize> {
             return Some(at);
         }
         match bytes.get(at) {
-            Some(b'/') if bytes.get(at + 1) == Some(&b'/') => {
-                at += src[at..].find('\n').unwrap_or(src.len() - at);
+            Some(b'/') if matches!(bytes.get(at + 1), Some(b'/' | b'*')) => {
+                at += comment_len(&src[at..]);
             }
             Some(b'"') => at = string_end(src, at + 1).ok()? + 1,
             _ => at += src[at..].chars().next().map_or(1, char::len_utf8),
@@ -412,8 +428,8 @@ fn matching(src: &str, open: usize) -> Option<usize> {
                     return Some(at);
                 }
             }
-            b'/' if bytes.get(at + 1) == Some(&b'/') => {
-                at += src[at..].find('\n')?;
+            b'/' if matches!(bytes.get(at + 1), Some(b'/' | b'*')) => {
+                at += comment_len(&src[at..]);
                 continue;
             }
             b'"' => {
@@ -479,9 +495,55 @@ mod tests {
     #[test]
     fn a_row_goes_after_the_last_one_with_its_indentation() {
         let rows = parse(MOD).unwrap();
-        let (at, indent) = rows[1].insertion(MOD);
+        let (at, lead) = rows[1].insertion(MOD);
         assert_eq!(&MOD[at - 2..at], "},");
-        assert_eq!(indent, " ".repeat(16));
+        assert_eq!(lead, format!("\n{}", " ".repeat(16)));
+    }
+
+    /// Rows written `builds: [{ .. }, { .. }]`, the last without a comma.
+    const PACKED: &str = r#"
+        manifest!(
+            id: "research",
+            builds: [{
+                side: CLIENT,
+                guid: "69f0e9573b32c24a8838d3fff550824c",
+                age: 410,
+                symbols: ["a.b" => 0x10],
+            }, {
+                side: SERVER,
+                guid: "1c129660cd6efc4f9f0b21652d5ff2bf",
+                age: 387,
+                symbols: ["a.b" => 0x20],
+            }],
+        )
+"#;
+
+    #[test]
+    fn a_row_inserted_into_packed_rows_parses_back() {
+        for which in 0..2 {
+            let rows = parse(PACKED).unwrap();
+            let row = &rows[which];
+            let text = row.render(PACKED, &"ab".repeat(16), 1, None, &[]);
+            let (at, lead) = row.insertion(PACKED);
+            let mut out = PACKED.to_owned();
+            out.insert_str(at, &format!("{lead}{text},"));
+            let again = parse(&out).unwrap_or_else(|e| panic!("{e}\n{out}"));
+            assert_eq!(again.len(), 3, "{out}");
+            assert_eq!(again[which + 1].age, 1);
+        }
+    }
+
+    #[test]
+    fn notes_and_trailing_comments_parse_back() {
+        let src = "manifest!(builds: [{ side: SERVER, guid: \"00\", age: 1, symbols: [\n    \"x\" => 0x10 // the lookup\n], constants: [/* pin: gone */] }])";
+        let rows = parse(src).unwrap();
+        assert_eq!(rows[0].symbols[0].value, 0x10);
+        assert!(rows[0].constants.is_empty());
+        let row = &parse(MOD).unwrap()[1];
+        let edits = [(&row.symbols[0], Edit::Drop("gone".into()))];
+        let text = row.render(MOD, &row.guid, row.age, None, &edits);
+        let dropped = MOD.replace(&MOD[row.span.clone()], &text);
+        assert!(parse(&dropped).unwrap()[1].symbols.is_empty());
     }
 
     #[test]

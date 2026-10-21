@@ -119,19 +119,14 @@ impl<'p, 'a> Porter<'p, 'a> {
             Outcome::Found { .. } => {}
             Outcome::Ambiguous(why) => {
                 if let Some(outcome) = self.through_references(target, offset, &ported.candidates) {
-                    ported.outcome = match outcome {
-                        Ok(outcome) => {
-                            // The found copy matches the whole old function.
-                            if !ported.candidates.is_empty() {
-                                ported.proven = ported
-                                    .old_code
-                                    .as_ref()
-                                    .map(|(start, m)| *start..start + m.bytes.len() as u64);
-                            }
-                            outcome
-                        }
-                        Err(note) => Outcome::Ambiguous(format!("{why}; {note}")),
-                    };
+                    // The found copy matches the whole old function.
+                    if outcome.is_ok() && !ported.candidates.is_empty() {
+                        ported.proven = ported
+                            .old_code
+                            .as_ref()
+                            .map(|(start, m)| *start..start + m.bytes.len() as u64);
+                    }
+                    ported.outcome = settle(why, outcome, &ported.candidates, offset);
                 }
             }
             Outcome::Missing(why) => {
@@ -207,6 +202,23 @@ impl<'p, 'a> Porter<'p, 'a> {
                 many.len()
             ))),
         }
+    }
+}
+
+/// What an ambiguous address becomes through its references. A place
+/// inside a function that no whole copy proves is never taken on the
+/// references alone: they find the function's start, not that the function
+/// kept its layout up to the place.
+fn settle(why: &str, found: Result<Outcome, String>, candidates: &[u64], offset: u64) -> Outcome {
+    match found {
+        Ok(Outcome::Found { rva, .. }) if candidates.is_empty() && offset != 0 => {
+            Outcome::Ambiguous(format!(
+                "{why}; its function now starts at {:#x}, but nothing proves the place                  {offset:#x} into it: check by hand",
+                rva - offset
+            ))
+        }
+        Ok(outcome) => outcome,
+        Err(note) => Outcome::Ambiguous(format!("{why}; {note}")),
     }
 }
 
@@ -510,5 +522,37 @@ fn verify(new: &Exe<'_>, rva: u64, entry: bool, in_table: bool, pattern: Pattern
             confidence: Confidence::Medium,
             how,
         },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Confidence, Outcome, settle};
+
+    fn found(rva: u64) -> Outcome {
+        Outcome::Found {
+            rva,
+            confidence: Confidence::Medium,
+            how: "through its references".to_owned(),
+        }
+    }
+
+    #[test]
+    fn a_place_inside_an_unproven_function_is_left_to_a_person() {
+        let Outcome::Ambiguous(why) = settle("alike", Ok(found(0x1010)), &[], 0x10) else {
+            panic!("taken on the references alone");
+        };
+        assert!(
+            why.contains("0x1000") && why.contains("check by hand"),
+            "{why}"
+        );
+        assert!(matches!(
+            settle("alike", Ok(found(0x1000)), &[], 0),
+            Outcome::Found { rva: 0x1000, .. }
+        ));
+        assert!(matches!(
+            settle("alike", Ok(found(0x1010)), &[0x1010, 0x2010], 0x10),
+            Outcome::Found { rva: 0x1010, .. }
+        ));
     }
 }
