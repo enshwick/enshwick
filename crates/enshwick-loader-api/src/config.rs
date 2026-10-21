@@ -43,6 +43,19 @@ use serde::{Deserialize, Serialize};
 /// }
 /// ```
 ///
+/// Join values go to every client and into the server's public rules, so a
+/// secret that would join them fails the build:
+///
+/// ```compile_fail
+/// /// Settings.
+/// #[derive(Default, serde::Deserialize, serde::Serialize, enshwick_loader_api::Config)]
+/// struct Settings {
+///     /// A password every client would see.
+///     #[config(sync, secret)]
+///     password: String,
+/// }
+/// ```
+///
 /// The file, the schema and the checks name each field as it is written, so
 /// a serde attribute that reads another key fails the build:
 ///

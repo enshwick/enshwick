@@ -23,9 +23,10 @@ use syn::{
 /// Field attributes: one stage of `startup`, `runtime` (the default),
 /// `client` and `sync`; `range = a..=b`, `a..` or `..=b`; `choices = [..]`;
 /// `text = "key"`, the text key of the field's translated label; `secret`,
-/// a value never sent to a client and changed in the file only. The derive
-/// implements `schema`, `values`, `merge_values` and a `validate` that checks
-/// ranges and choices before the struct's own check.
+/// a value never sent to a client and changed in the file only, so never
+/// with `sync`. The derive implements `schema`, `values`, `merge_values` and
+/// a `validate` that checks ranges and choices before the struct's own
+/// check.
 #[proc_macro_derive(Config, attributes(config))]
 pub fn derive_config(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
@@ -88,6 +89,16 @@ fn field_config(attrs: &[Attribute]) -> syn::Result<FieldConfig> {
                 ))
             }
         })?;
+    }
+    if let Some(stage) = config
+        .stage
+        .as_ref()
+        .filter(|s| config.secret && *s == "Sync")
+    {
+        return Err(syn::Error::new(
+            stage.span(),
+            "a secret never reaches a client, so it cannot be `sync`",
+        ));
     }
     Ok(config)
 }
