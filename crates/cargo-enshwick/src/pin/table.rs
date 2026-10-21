@@ -376,9 +376,12 @@ fn kept_written(
         .operand()
         .map_or(0, enshwick_loader_builds::Operand::addend);
     let written = constant_text(value, &pattern, plus);
+    let within = constant.within().map_or_else(String::new, |n| {
+        format!(", within = {}", spelled(u64::from(n)))
+    });
     Ok(Some(written.replacen(
         ", pattern",
-        &format!(", via = \"{via}\", pattern"),
+        &format!(", via = \"{via}\"{within}, pattern"),
         1,
     )))
 }

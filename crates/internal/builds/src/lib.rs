@@ -282,6 +282,7 @@ pub struct Constant {
     pattern: Option<Pattern>,
     operand: Option<Operand>,
     via: Option<String>,
+    within: Option<u32>,
     attribute: Option<String>,
 }
 
@@ -319,6 +320,15 @@ impl Constant {
         self.via.as_deref()
     }
 
+    /// How many bytes from the [`Self::via`] symbol's start its pattern is
+    /// searched in, for a value in the body of a function the game holds in
+    /// identical copies: the pattern must match exactly once there. `None`
+    /// when it must match where the symbol starts.
+    #[must_use]
+    pub const fn within(&self) -> Option<u32> {
+        self.within
+    }
+
     /// The name of the attribute whose slot in its set the value is; the
     /// game looks such slots up in its data at run time, so no code holds
     /// them and the loader reads them from the game's archive.
@@ -340,16 +350,26 @@ impl Constant {
         self.read(code, start)
     }
 
-    /// The value in the code at `start`, where the pattern must match: read
-    /// from the operand, or the pinned value when the pattern only confirms
-    /// it; `None` without a pattern or a match there.
+    /// The value in the code of the symbol at `start`: where the pattern
+    /// matches at `start`, or exactly once in the [`Self::within`] bytes
+    /// from it; read from the operand, or the pinned value when the pattern
+    /// only confirms it. `None` without a pattern or such a match.
     #[must_use]
     pub fn find_at(&self, code: &[u8], start: u64) -> Option<u64> {
         let at = usize::try_from(start).ok()?;
-        if !self.pattern.as_ref()?.matches(code.get(at..)?) {
-            return None;
-        }
-        self.read(code, start)
+        let pattern = self.pattern.as_ref()?;
+        let found = match self.within {
+            Some(within) => {
+                let end = at
+                    .checked_add(usize::try_from(within).ok()?)?
+                    .min(code.len());
+                let offset = pattern.find_unique(code.get(at..end)?).ok()?;
+                start.checked_add(u64::try_from(offset).ok()?)?
+            }
+            None if pattern.matches(code.get(at..)?) => start,
+            None => return None,
+        };
+        self.read(code, found)
     }
 
     fn read(&self, code: &[u8], start: u64) -> Option<u64> {
@@ -435,6 +455,7 @@ struct ConstantFull {
     #[serde(default)]
     plus: i64,
     via: Option<String>,
+    within: Option<u32>,
     attribute: Option<String>,
 }
 
@@ -555,13 +576,18 @@ impl Table {
             .constants
             .into_iter()
             .map(|(id, value)| {
-                let (value, text, operand, via, attribute) = match value {
-                    ConstantValue::Plain(value) => (value.value(&id)?, None, None, None, None),
+                let (value, text, operand, via, within, attribute) = match value {
+                    ConstantValue::Plain(value) => {
+                        (value.value(&id)?, None, None, None, None, None)
+                    }
                     ConstantValue::Full(full) => {
                         let operand = full.operand(&id)?;
                         let bad = |why: &str| Err(TableError::Toml(format!("{id}: {why}")));
                         if full.via.is_some() && full.pattern.is_none() {
                             return bad("`via` needs a pattern");
+                        }
+                        if full.within.is_some() && full.via.is_none() {
+                            return bad("`within` needs `via`");
                         }
                         if full.attribute.is_some()
                             && (full.pattern.is_some() || full.via.is_some())
@@ -573,6 +599,7 @@ impl Table {
                             full.pattern,
                             operand,
                             full.via,
+                            full.within,
                             full.attribute,
                         )
                     }
@@ -583,6 +610,7 @@ impl Table {
                     value,
                     operand,
                     via,
+                    within,
                     attribute,
                 })
             })
@@ -1143,6 +1171,52 @@ mod tests {
         );
     }
 
+    /// A constant read `within` a symbol's code counts where its pattern
+    /// matches once in those bytes, wherever the code before it moved, and
+    /// not where it matches twice or only past them.
+    #[test]
+    fn constants_within_a_symbol_are_read_where_they_match_once() {
+        let table = Table::parse(
+            r#"
+            name = "1.0 server (1)"
+            side = "server"
+            guid = "00000000000000000000000000000001"
+            age = 2
+            [symbols]
+            "g.body" = { rva = 0x5010, pattern = "55 48 89 E5" }
+            [constants]
+            "g.field" = { value = 0x48, via = "g.body", within = 0x20, pattern = "8B 41 ?? 90", at = 2, size = 1 }
+            "g.twice" = { value = 0x10, via = "g.body", within = 0x20, pattern = "0F B6 ?? 0C", at = 2, size = 1 }
+            "g.far" = { value = 0x10, via = "g.body", within = 0x8, pattern = "8B 41 ?? 90", at = 2, size = 1 }
+            "#,
+        )
+        .unwrap();
+        let mut code = vec![0xccu8; 64];
+        code[0x10..0x14].copy_from_slice(&[0x55, 0x48, 0x89, 0xe5]);
+        code[0x1a..0x1e].copy_from_slice(&[0x8b, 0x41, 0x58, 0x90]);
+        code[0x20..0x24].copy_from_slice(&[0x0f, 0xb6, 0x01, 0x0c]);
+        code[0x28..0x2c].copy_from_slice(&[0x0f, 0xb6, 0x02, 0x0c]);
+        // Past the 0x20 bytes: a copy of the field's code in the next function.
+        code[0x32..0x36].copy_from_slice(&[0x8b, 0x41, 0x60, 0x90]);
+        let resolved = table.fall_back(&code, 0x5000);
+        assert_eq!(resolved.constant("g.field"), Some(0x58));
+        assert_eq!(resolved.missing(), ["g.far", "g.twice"]);
+        assert!(
+            Table::parse(
+                r#"
+                name = "x"
+                side = "server"
+                guid = "00000000000000000000000000000001"
+                age = 2
+                [constants]
+                "x" = { value = 1, within = 8, pattern = "90" }
+                "#
+            )
+            .is_err(),
+            "`within` needs `via`"
+        );
+    }
+
     /// A constant read via a symbol counts where the symbol is found and
     /// its code matches; a slot of an attribute waits for the loader.
     #[test]
@@ -1376,5 +1450,5 @@ age = 1
     /// How many symbols and constants the patterns of each side's table find
     /// on its own build, at least; raised as patterns are added.
     const COVERED_SERVER: (usize, usize) = (121, 247);
-    const COVERED_CLIENT: (usize, usize) = (182, 324);
+    const COVERED_CLIENT: (usize, usize) = (183, 403);
 }

@@ -35,48 +35,128 @@ use crate::host::{Loader, Registered};
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
+    "ui.action_bound",
+    "ui.action_extent",
     "ui.action_new",
+    "ui.action_node",
     "ui.action_query",
     "ui.button",
+    "ui.button_align",
+    "ui.button_centered",
+    "ui.button_enabled",
+    "ui.button_extent",
+    "ui.button_padding_x",
+    "ui.button_padding_y",
+    "ui.button_scale",
+    "ui.button_size_mode",
+    "ui.button_sound",
     "ui.context",
+    "ui.context_bundle",
+    "ui.context_host",
+    "ui.context_nav",
+    "ui.context_state",
     "ui.dropdown",
+    "ui.dropdown_capacity",
+    "ui.dropdown_count",
+    "ui.dropdown_enabled",
+    "ui.dropdown_entry_text",
+    "ui.dropdown_extent",
     "ui.dropdown_init",
+    "ui.entry_size",
+    "ui.entry_text",
+    "ui.entry_value",
     "ui.frame_close",
     "ui.frame_color",
+    "ui.frame_extent",
     "ui.frame_from_node",
+    "ui.frame_node",
     "ui.frame_open",
     "ui.frame_stretch",
+    "ui.host_answer",
+    "ui.host_answered",
     "ui.hud",
     "ui.hud_visible",
+    "ui.label_align",
     "ui.label_draw",
+    "ui.label_extent",
+    "ui.label_flags",
+    "ui.label_font_size",
     "ui.label_new",
+    "ui.label_shown",
     "ui.loca_id",
     "ui.loca_text",
     "ui.main_entry",
     "ui.main_menu_site",
+    "ui.menu_entry_extent",
+    "ui.menu_entry_font",
+    "ui.menu_entry_text",
+    "ui.nav_axis",
+    "ui.nav_config",
+    "ui.nav_config_size",
     "ui.nav_drop",
     "ui.nav_end",
+    "ui.nav_extent",
+    "ui.nav_flags",
     "ui.nav_init",
     "ui.nav_input",
+    "ui.nav_input_kind",
+    "ui.nav_kind",
+    "ui.nav_layer",
     "ui.nav_push",
     "ui.nav_set",
+    "ui.nav_sound",
+    "ui.nav_wrap",
     "ui.node_align",
     "ui.node_height",
+    "ui.node_id",
+    "ui.node_id_get",
     "ui.node_padding",
     "ui.node_spacing",
     "ui.node_stretch",
     "ui.node_width",
     "ui.panel",
+    "ui.panel_alpha",
+    "ui.panel_extent",
+    "ui.panel_kind",
     "ui.pause_entry",
     "ui.pause_menu_site",
     "ui.popup",
+    "ui.popup_active",
+    "ui.popup_buttons",
+    "ui.popup_detail",
+    "ui.popup_detail_len",
+    "ui.popup_extent",
+    "ui.popup_message",
+    "ui.popup_title",
     "ui.progress",
     "ui.slider",
+    "ui.slider_bounded",
+    "ui.slider_discrete",
+    "ui.slider_format",
     "ui.slider_init",
+    "ui.slider_max",
+    "ui.slider_min",
+    "ui.slider_on_release",
+    "ui.slider_read_only",
+    "ui.slider_steps",
+    "ui.slider_stop_capacity",
+    "ui.slider_stop_count",
+    "ui.slider_stops",
     "ui.sound",
+    "ui.state_screen",
     "ui.toggle",
+    "ui.toggle_count",
+    "ui.toggle_enabled",
+    "ui.toggle_explain",
+    "ui.toggle_explainer",
+    "ui.toggle_extent",
+    "ui.toggle_label",
+    "ui.view_read_only",
+    "ui.view_tab",
     "ui.window_begin",
     "ui.window_end",
+    "ui.window_extent",
+    "ui.window_node",
     "ui.world_settings_site",
 ];
 
@@ -372,7 +452,8 @@ pub(crate) fn link(loader: &'static Loader) {
 /// system message boxes.
 pub(crate) fn armed(loader: &Loader) {
     if loader.side == Side::CLIENT {
-        let in_game = NEXT.wired().is_some();
+        let in_game =
+            NEXT.wired().is_some() && ENGINE.get().is_some_and(|engine| engine.dialog.is_some());
         if !in_game {
             crate::log!(WARN, "interface not armed: dialogs show as system windows");
         }
@@ -387,20 +468,17 @@ unsafe extern "system" fn detour(state: *mut u8) {
         return;
     };
     let context = engine.context();
-    let nav = if context == 0 {
-        0
-    } else {
-        Engine::nav(context)
-    };
+    let nav = if context == 0 { 0 } else { engine.nav(context) };
     // SAFETY: forwarded unchanged.
     unsafe { NEXT.get()(state) };
     ARENA.with_borrow_mut(Arena::next_frame);
     if context == 0 || state.is_null() {
         return;
     }
-    Engine::restore_nav(context, nav);
+    engine.restore_nav(context, nav);
     // SAFETY: the game's popup state, its active flag.
-    let vanilla = unsafe { crate::world::read::<u8>(state.addr(), engine::POPUP_ACTIVE) } != 0;
+    let vanilla =
+        unsafe { crate::world::read::<u8>(state.addr(), engine.layout.popup_active) } != 0;
     if vanilla {
         return;
     }
@@ -417,7 +495,7 @@ unsafe extern "system" fn detour(state: *mut u8) {
         }
         // SAFETY: inside the frame, on its thread, no popup of the game's
         // showing; the slot is the popup's chain.
-        unsafe { dialog::draw(NEXT.get(), context) };
+        unsafe { dialog::draw(engine, NEXT.get(), context) };
     });
     if drawn.is_err() {
         crate::log!(ERROR, "interface: the loader panicked while drawing");
@@ -590,7 +668,7 @@ fn frames(engine: &Engine, context: usize) {
     let Some(frames) = FRAMES.get() else {
         return;
     };
-    let screen = screen(Engine::app_state(context));
+    let screen = screen(engine.app_state(context));
     let late = LATE_FRAMES.load();
     for registered in each(frames, late.as_deref()) {
         let token = NEXT_TOKEN.fetch_add(1, Ordering::Relaxed);

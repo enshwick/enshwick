@@ -13,7 +13,8 @@ Each table is a TOML file in [`tables/`](tables), named
 - On a build without a table, the loader takes the newest table of the same
   side and finds each entry by its `pattern`: a symbol at or through the
   code it matches, a constant read from the operand of the instruction that
-  uses it, or in the code of a symbol it names (`via`). The slots of
+  uses it, or in the code of a symbol it names (`via`), at its start or
+  once `within` a number of bytes from it. The slots of
   attributes name their `attribute` and come from the game's archive, which
   the loader reads on every build. What neither finds stays missing, and
   only the features and mods that need it turn off.

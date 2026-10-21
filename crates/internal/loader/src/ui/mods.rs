@@ -133,6 +133,9 @@ pub(super) fn link(loader: &Loader, engine: &Engine) {
             "the world settings' Mods rows",
         ),
     ] {
+        if site == engine.world_settings_site && engine.view.is_none() {
+            continue;
+        }
         let link = crate::mid::MidLink {
             owner: crate::chains::LOADER,
             handler,
@@ -269,7 +272,7 @@ pub(super) unsafe fn draw(loader: &Loader, engine: &Engine, context: usize, fram
         }
         // SAFETY: forwarded from the caller.
         let close = unsafe { show(loader, engine, context, screen) };
-        NODE.store(screen.window.node_id(), Ordering::Relaxed);
+        NODE.store(engine.node_id(&screen.window), Ordering::Relaxed);
         if close {
             *slot = None;
         }
@@ -798,11 +801,6 @@ fn draw_row(
     }
 }
 
-/// The world settings view's config, in `rsi` at the hook: its byte that
-/// makes every row read-only, as for a player who is no host.
-const VIEW_READ_ONLY: usize = 0x91;
-/// The view's tab state, in `r15` at the hook: the shown tab's index.
-const VIEW_TAB: usize = 8;
 /// The view's last tab, under which the mods' rows show.
 const LAST_TAB: u8 = 3;
 
@@ -876,16 +874,20 @@ unsafe extern "system" fn world_settings(registers: *mut Registers, _user: *mut 
     ) else {
         return;
     };
+    let Some(layout) = ENGINE.get().and_then(|engine| engine.view) else {
+        return;
+    };
     if view == 0 || tab_state == 0 {
         return;
     }
     // SAFETY: at the hook `r15` holds the view's tab state, read here.
-    let tab = unsafe { crate::world::read::<u8>(tab_state, VIEW_TAB) };
+    let tab = unsafe { crate::world::read::<u8>(tab_state, layout.tab) };
     if tab != LAST_TAB {
         return;
     }
-    // SAFETY: at the hook `rsi` holds the view's config.
-    let read_only = unsafe { crate::world::read::<u8>(view, VIEW_READ_ONLY) } != 0;
+    // SAFETY: at the hook `rsi` holds the view's config, whose byte at
+    // `read_only` makes every row read-only, as for a player who is no host.
+    let read_only = unsafe { crate::world::read::<u8>(view, layout.read_only) } != 0;
     let drawn = std::panic::catch_unwind(|| world(read_only));
     if drawn.is_err() {
         crate::log!(
