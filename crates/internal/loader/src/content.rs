@@ -52,6 +52,8 @@ struct Served {
     /// Whether a mod asked to keep the base for rebuilds.
     keeps_base: AtomicBool,
     state: Mutex<State>,
+    /// Held through a rebuild, so two never write over each other.
+    rebuilding: Mutex<()>,
 }
 
 #[derive(Default)]
@@ -64,6 +66,9 @@ struct State {
     failed: bool,
     /// A copy of the base as first built from, when a mod keeps it.
     base: Option<Box<[u8]>>,
+    /// The mods whose patches the first build applied: a rebuild runs the
+    /// same, since the game holds what they added, even once a mod is off.
+    built_by: Vec<usize>,
 }
 
 /// Mod texts while mods initialise: tag id, language, text.
@@ -258,6 +263,7 @@ pub(crate) fn register(
             patches: vec![patch],
             keeps_base: AtomicBool::new(false),
             state: Mutex::new(State::default()),
+            rebuilding: Mutex::new(()),
         }),
     }
     Status::OK
@@ -281,9 +287,13 @@ pub(crate) fn rebuild(owner: usize, key: ResourceKey) -> Status {
     let Some(entry) = list.iter().find(|s| serves(s)) else {
         return Status::BAD_ARGS;
     };
+    let _one_at_a_time = entry
+        .rebuilding
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner);
     // The game resolves the resource meanwhile: the patches run outside the
-    // lock, on a copy of the base.
-    let (data, len, base) = {
+    // state's lock, on a copy of the base.
+    let (data, len, base, built_by) = {
         let state = entry.state.lock().unwrap_or_else(PoisonError::into_inner);
         let Some((data, len)) = state.built else {
             // The first build takes the values in force.
@@ -292,11 +302,14 @@ pub(crate) fn rebuild(owner: usize, key: ResourceKey) -> Status {
         let Some(base) = state.base.clone() else {
             return Status::MISSING;
         };
-        (data, len, base)
+        (data, len, base, state.built_by.clone())
     };
-    let Some((built, built_len, _)) =
-        run_patches(entry, base.as_ptr().expose_provenance(), base.len())
-    else {
+    let Some((built, built_len, _)) = run_patches(
+        entry,
+        base.as_ptr().expose_provenance(),
+        base.len(),
+        Some(&built_by),
+    ) else {
         return Status::MISSING;
     };
     if built_len != len {
@@ -453,6 +466,7 @@ fn serve_stand_ins(
             patches: vec![patch(builder)],
             keeps_base: AtomicBool::new(false),
             state: Mutex::new(State::default()),
+            rebuilding: Mutex::new(()),
         });
     }
     let key = enshwick_loader_api::content::items::ITEM_REGISTRY
@@ -465,6 +479,7 @@ fn serve_stand_ins(
             patches: vec![patch(registry)],
             keeps_base: AtomicBool::new(false),
             state: Mutex::new(State::default()),
+            rebuilding: Mutex::new(()),
         }),
     }
     count
@@ -723,7 +738,7 @@ fn build(entry: &Served, database: *mut u8) -> Option<(usize, usize)> {
         // The base is not resident yet; the game asks again.
         return None;
     }
-    let Some((current, current_len, applied)) = run_patches(entry, data, len) else {
+    let Some((current, current_len, applied)) = run_patches(entry, data, len, None) else {
         state.failed = true;
         return None;
     };
@@ -737,6 +752,7 @@ fn build(entry: &Served, database: *mut u8) -> Option<(usize, usize)> {
     }
     let result = (current, current_len);
     state.built = Some(result);
+    state.built_by.clone_from(&applied);
     if entry.key == recipe_registry() {
         crate::code::recipes_served(current, current_len);
         crate::recipes::registry_built(current, current_len);
@@ -763,14 +779,20 @@ fn build(entry: &Served, database: *mut u8) -> Option<(usize, usize)> {
     Some(result)
 }
 
-/// Runs the patches of the mods still on over the `len` bytes at `data`,
-/// each on the result of the one before; a failed one turns its mod off
-/// and is skipped. The bytes built, their length and who built them; `None`
-/// when no patch did.
-fn run_patches(entry: &Served, data: usize, len: usize) -> Option<(usize, usize, Vec<usize>)> {
+/// Runs the patches of the mods still on, or of the mods `only` names,
+/// over the `len` bytes at `data`, each on the result of the one before; a
+/// failed one turns its mod off and is skipped. The bytes built, their
+/// length and who built them; `None` when no patch did.
+fn run_patches(
+    entry: &Served,
+    data: usize,
+    len: usize,
+    only: Option<&[usize]>,
+) -> Option<(usize, usize, Vec<usize>)> {
     let (mut current, mut current_len) = (data, len);
     let mut applied = Vec::new();
-    for patch in entry.patches.iter().filter(|p| mod_on(p.owner)) {
+    let runs = |owner: usize| only.map_or_else(|| mod_on(owner), |only| only.contains(&owner));
+    for patch in entry.patches.iter().filter(|p| runs(p.owner)) {
         let (mut built, mut built_len) = (core::ptr::null::<u8>(), 0usize);
         // SAFETY: the mod's patch function with the bytes so far, valid for the call.
         // SAFETY: the patch function with the bytes so far, valid for the
@@ -839,6 +861,53 @@ unsafe extern "system" fn key_of(out: *mut u8, database: *mut u8, handle: u32) -
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    unsafe extern "system" fn add_one(
+        base: *const u8,
+        base_len: usize,
+        _user: *mut c_void,
+        out: *mut *const u8,
+        out_len: *mut usize,
+    ) -> Status {
+        // SAFETY: `base` holds `base_len` bytes for the call.
+        let mut built = unsafe { core::slice::from_raw_parts(base, base_len) }.to_vec();
+        built.push(1);
+        let built: &'static [u8] = Box::leak(built.into_boxed_slice());
+        // SAFETY: the out pointer of the call.
+        unsafe { out.write(built.as_ptr()) };
+        // SAFETY: the out length of the call.
+        unsafe { out_len.write(built.len()) };
+        Status::OK
+    }
+
+    #[test]
+    fn a_rebuild_runs_the_mods_of_the_first_build_although_they_are_off() {
+        let key = ResourceKey {
+            guid: [0; 16],
+            type_hash: 1,
+            part: 0,
+        };
+        let entry = Served {
+            key,
+            base: key,
+            patches: [3, 4]
+                .map(|owner| Patch {
+                    owner,
+                    apply: add_one,
+                    user: 0,
+                })
+                .into(),
+            keeps_base: AtomicBool::new(true),
+            state: Mutex::new(State::default()),
+            rebuilding: Mutex::new(()),
+        };
+        let base = [7u8; 4];
+        let at = base.as_ptr().expose_provenance();
+        // No loader runs here, so every mod reads as off.
+        assert!(run_patches(&entry, at, base.len(), None).is_none());
+        let (_, len, by) = run_patches(&entry, at, base.len(), Some(&[3, 4])).unwrap();
+        assert_eq!((len, by), (6, vec![3, 4]));
+    }
 
     #[test]
     fn a_rebuild_writes_only_the_bytes_that_differ() {
