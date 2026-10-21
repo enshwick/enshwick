@@ -78,6 +78,13 @@ each DLL's SHA-256, in `mods/enshwick/enshwick.lock`.
 On Linux under Proton, add `WINEDLLOVERRIDES="powrprof=n,b" %command%` to the
 game's launch options.
 
+Every archive of a release has a [minisign](https://jedisct1.github.io/minisign/)
+signature (`.minisig`) beside it, by Enshwick's public key
+`RWTjqgtfpy3lSOLC4uaUXuvvKSLQKOFf6nUnEytoiFjSzxMEhLnoAdJF`.
+
+A server in Docker or Kubernetes: see
+[Running a server in Docker or Kubernetes](book/src/servers.md).
+
 ## For mod authors
 
 Mods are written in Rust against
