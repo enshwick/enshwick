@@ -6,6 +6,7 @@ use std::time::Duration;
 
 use enshwick_loader_api::actions::{Actions, Spawn, Teleport};
 use enshwick_loader_api::ecs::Entity;
+use enshwick_loader_api::entity_data::{EntityData, Replication};
 use enshwick_loader_api::game_events::{EventType, RawGameEvent};
 use enshwick_loader_api::schedule::Scheduler;
 use enshwick_loader_api::state::WorldStore;
@@ -63,6 +64,8 @@ pub(crate) struct Checks {
     died: EventType,
     /// Set from the ping the probe raised until the game hands it back.
     ping_sent: AtomicBool,
+    /// The check each sampled entity was marked at.
+    marks: EntityData<u32>,
 }
 
 fn pass(what: &str) {
@@ -95,6 +98,7 @@ impl Checks {
             actions: load.actions()?,
             died: load.event_type("keen::ecs::EntityDiedEvent")?,
             ping_sent: AtomicBool::new(false),
+            marks: load.entity_data("mark", Replication::Server)?,
         })
     }
 
@@ -129,6 +133,7 @@ impl Checks {
             Some((n, before)) if self.store.key() == key => {
                 pass(&format!("world store open, check {n} of this world"));
                 ids_across_loads(&before, &now);
+                self.entity_data(n, &before, &now);
             }
             _ => fail("world store: not open for the running world"),
         }
@@ -586,6 +591,45 @@ impl Checks {
             });
         }
         format!("{outcome:?}")
+    }
+}
+
+impl Checks {
+    /// Reads the marks the last check left on entities and marks this
+    /// check's: entity data across loads.
+    fn entity_data(&self, check: u32, before: &[(u32, u64)], now: &[(u32, u64)]) {
+        if !before.is_empty() {
+            let kept = before
+                .iter()
+                .filter(|(id, _)| self.marks.get(Entity(*id)) == Some(check - 1))
+                .count();
+            enshwick_loader_api::info!(
+                "entity data across loads: {kept} of {} marked entities keep their mark",
+                before.len()
+            );
+        }
+        let marked = now
+            .iter()
+            .filter(|(id, _)| self.marks.set(Entity(*id), &check).is_ok())
+            .count();
+        let read = now
+            .iter()
+            .filter(|(id, _)| self.marks.get(Entity(*id)) == Some(check))
+            .count();
+        if marked == now.len() && read == marked {
+            pass(&format!(
+                "entity data: {marked} entities marked and read back"
+            ));
+        } else {
+            fail(&format!(
+                "entity data: {marked} of {} marked, {read} read back",
+                now.len()
+            ));
+        }
+        match self.marks.set(Entity(u32::MAX - 1), &check) {
+            Err(_) => pass("entity data: a missing entity is refused"),
+            Ok(()) => fail("entity data: a missing entity took a value"),
+        }
     }
 }
 

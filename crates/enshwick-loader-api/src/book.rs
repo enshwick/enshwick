@@ -60,6 +60,7 @@ chapters! {
     Packs => "content/packs.md",
     Inventories => "inventories.md",
     ItemData => "item-data.md",
+    EntityData => "entity-data.md",
     Stats => "stats.md",
     Affixes => "affixes.md",
     Releasing => "releasing.md",

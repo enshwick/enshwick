@@ -80,6 +80,7 @@ pub mod damage;
 pub mod daytime;
 mod declare;
 pub mod ecs;
+pub mod entity_data;
 pub mod events;
 pub mod game_events;
 pub mod game_settings;

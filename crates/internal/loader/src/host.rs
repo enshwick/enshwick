@@ -707,6 +707,7 @@ pub(crate) static API: HostApi = HostApi {
     send_event,
     migrate,
     declare_content,
+    entity_data_open,
 };
 
 /// A static slice from a pointer and a count, empty for a null pointer.
@@ -2008,6 +2009,26 @@ extern "system" fn item_data_open(me: ModHandle, id: Str, out: *mut u32) -> Stat
             return Status::BAD_ARGS;
         };
         match caller_index(me).and_then(|(loader, index)| crate::item_data::open(loader, index, id))
+        {
+            Ok(kind) => put(out, kind),
+            Err(status) => status,
+        }
+    })
+}
+
+extern "system" fn entity_data_open(
+    me: ModHandle,
+    id: Str,
+    flags: api_frame::EntityDataFlags,
+    out: *mut u32,
+) -> Status {
+    entry("entity_data_open", || {
+        let Some(id) = text(id) else {
+            return Status::BAD_ARGS;
+        };
+        let sent = flags.0 & api_frame::EntityDataFlags::SENT.0 != 0;
+        match caller_index(me)
+            .and_then(|(loader, index)| crate::item_data::open_entity(loader, index, id, sent))
         {
             Ok(kind) => put(out, kind),
             Err(status) => status,
