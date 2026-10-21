@@ -98,6 +98,7 @@ fn link_features(loader: &'static Loader) {
     crate::vetoes::link(loader);
     crate::daytime::link(loader);
     crate::damage::link(loader);
+    crate::knowledge::guard::link(loader);
     crate::weather::link(loader);
     crate::game_events::link(loader);
     crate::saves::link(loader);
@@ -473,6 +474,7 @@ fn begin(stub_abi: u32, missing_forwards: u32) -> Option<PathBuf> {
     crate::status::mark_start();
     crate::diag::configure(&settings);
     crate::reload::configure(settings.dev_reload);
+    crate::knowledge::guard::configure(settings.knowledge_guard);
     builds::configure(settings.build_patterns);
     log::set_levels(settings);
     log::open(&game_dir.join("logs").join(crate::settings::LOADER_ID));

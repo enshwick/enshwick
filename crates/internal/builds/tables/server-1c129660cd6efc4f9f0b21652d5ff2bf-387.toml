@@ -119,6 +119,7 @@ revision = 1
 "knowledge.player_value" = { rva = 0x99_2bb0, pattern = "40 53 48 83 EC 20 80 B9 D2 00 00 00 00 48 8B 99 98 00 00 00" }
 "knowledge.world_value" = { rva = 0x99_2ce0, pattern = "40 53 48 83 EC 20 48 8D 59 10 C7 44 24 30 00 00 00 00" }
 "knowledge.push" = { rva = 0x99_6880, pattern = "4C 8B C1 B8 01 00 00 00 F0 0F C1 41 08 FF C0 3D 00 08 00 00" }
+"knowledge.input_check" = { rva = 0x1b_5a8e, pattern = "48 8D 8B 8C 01 00 00 E8 ?? ?? ?? ?? 84 C0 74 3D F2 0F 10 83 8C 01 00 00", at = 12 }
 "weather.sample" = { rva = 0xa1_5260, pattern = "48 8B C4 48 89 58 20 4C 89 40 18 48 89 48 08 55 56 57 41 54 41 55 41 56 41 57 48 81 EC 10 01 00 00" }
 "weather.clock" = { rva = 0x23_2610, pattern = "40 53 48 83 EC 20 48 8B D9 48 8B 49 08 E8 ?? ?? ?? ?? 48 8B 8B D0 02 00 00" }
 "weather.resource_lock" = 0xa1_4940
@@ -361,7 +362,9 @@ revision = 1
 # log (pointer, count u32); a record its change log the same
 # way; log entries are `{id, value}` at `log_entry_size`. The
 # game object holds the trigger queue and the journal registry,
-# which holds the journal's blob.
+# which holds the journal's blob. The input row
+# `handle_knowledge_trigger_input` checks holds the client's
+# action at `input_action`.
 "knowledge.object" = { value = 0x1b8, pattern = "C3 4B 8D 04 49 41 C6 84 82 B8 01 00 00 01 B0 01" }
 "knowledge.state" = 0x08
 "knowledge.defs" = 0x08
@@ -379,6 +382,7 @@ revision = 1
 "knowledge.queue" = { value = 0x1d0, pattern = "0F B6 87 D2 01 00 00 4C 8B 8F C8 01 00 00 4C 8B 87 C0 01 00 00 48 8B 97 B8 01 00 00 88 44 24 28 0F B7 87 D0 01 00 00 66 89 44 24 20 E8 ?? ?? ?? ?? 48 8B 87 B0 01 00 00 80 38 01 75 54" }
 "knowledge.journal" = 0x1e8
 "knowledge.journal_blob" = { value = 0x48, pattern = "48 89 51 10 48 89 51 18 48 89 51 20 48 89 51 28 48 89 51 30 48 89 51 38 48 89 51 40 48 89 51 48 48 89 51 50 48 89 51 58 48 89 51 60 48 89 51 68 48 89 51 70 48 89 51 78 48 89 81 80 00 00 00" }
+"knowledge.input_action" = { value = 0x18c, pattern = "8B 8B 98 01 00 00 39 48 5C 0F 84 ?? ?? ?? ?? 48 8D 8B 8C 01 00 00 E8 ?? ?? ?? ?? 84 C0" }
 # The server holds its weather system here; the system its
 # resource manager, handle and generation, its instance pool
 # (pages, page count, shift, mask) and its layer slots and their

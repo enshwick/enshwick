@@ -1,5 +1,6 @@
 //! Knowledge: the quests of the running game, a world counter granted and
-//! read back the next step, and the refusals.
+//! read back the next step, the refusals, and what clients ask for in their
+//! input with the guard's verdict.
 
 use std::time::Duration;
 
@@ -33,6 +34,21 @@ impl KnowledgeChecks {
         load.on::<QuestCompleted>(|done| {
             enshwick_loader_api::info!("event: quest {} completed by {}", done.quest, done.entity);
         })?;
+        match load.on_knowledge_input(|request| {
+            enshwick_loader_api::info!(
+                "event: knowledge input {:#x} ({:?} {}) from {}: {:?}, allowed {}",
+                request.id,
+                request.kind,
+                request.value,
+                request.player.0,
+                request.refusal,
+                request.allowed
+            );
+            request.allowed
+        }) {
+            Ok(()) => enshwick_loader_api::info!("PASS knowledge input filter registered"),
+            Err(off) => enshwick_loader_api::warn!("FAIL knowledge input filter: {off}"),
+        }
         Ok(Self {
             knowledge: load.knowledge()?,
             scheduler,

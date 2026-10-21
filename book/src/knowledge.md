@@ -60,6 +60,32 @@ holds the game's limit of grants; `WrongThread` off the game thread. Granting a 
 the journal may show a quest done without its steps; granting the knowledge
 its requirement asks for keeps it whole.
 
+## What clients ask for
+
+A client asks the server for knowledge in its input, for what its interface
+marks, and a vanilla server grants whatever it asks: a modified client could
+grant itself any recipe, quest or skill point. The loader's knowledge guard
+lets through only what a vanilla client asks for, a player's bools and the
+seen bit (0) of a player's flags, and refuses ids of the world's, counters,
+other flag bits, ids that give experience or skill points, and quests. It is
+on by default; `knowledge_guard = false` in `mod-configs/enshwick.toml` turns
+it off. A refused request changes nothing and is logged, the first 64 of a
+run.
+
+`load.on_knowledge_input(filter)` (minor 55) runs `filter` on every request
+after the guard, with the guard's reason (`refusal`, given whether the guard
+is on or not) and the verdict so far (`allowed`); its answer replaces the
+verdict, so a mod can refuse more or allow what the guard refuses. Filters
+run in load order on the server's worker threads, only when a client asks.
+
+```rust
+use enshwick_loader_api::knowledge::Refusal;
+
+fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+    load.on_knowledge_input(|request| request.allowed && request.refusal != Some(Refusal::FlagBit))
+}
+```
+
 ## Events
 
 [`KnowledgeChanged`](events.md) is raised on the game thread after each step
