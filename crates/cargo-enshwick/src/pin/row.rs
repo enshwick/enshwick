@@ -343,14 +343,12 @@ pub(crate) fn port_anchors<'r>(
     let in_new = anchor::of_table(table, new);
     let mut out = HashMap::new();
     for (id, anchor) in anchor::of_table(table, old) {
-        let here = match in_new.get(&id) {
-            Some(found) => found.clone(),
-            None => {
-                let Some(site) = anchor.site().and_then(|s| finder.symbol(s).outcome.rva()) else {
-                    continue;
-                };
-                anchor.moved_to(site)
-            }
+        let by_port = || {
+            let site = anchor.site().and_then(|s| finder.symbol(s).outcome.rva())?;
+            Some(anchor.moved_to(site))
+        };
+        let Some(here) = in_new.get(&id).cloned().or_else(by_port) else {
+            continue;
         };
         let Some(site) = here.site() else {
             continue;
