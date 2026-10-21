@@ -19,6 +19,18 @@ use enshwick_loader_api::abi::{
 use crate::chains::Next;
 use crate::host::Loader;
 
+/// The build table ids this part of the loader names.
+pub(crate) const TABLE_IDS: &[&str] = &[
+    "label.add",
+    "label.find",
+    "label.max_text",
+    "label.rename_entity",
+    "label.rename_return",
+    "label.replace",
+    "server.custom_strings",
+    "server.world",
+];
+
 /// The game's error for a string it could not take; the rename path then
 /// changes nothing.
 const REFUSED: u8 = 0x1f;

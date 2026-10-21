@@ -18,6 +18,35 @@ use enshwick_loader_api::abi::{Header, HookFlags, PlayerInfo, Status};
 use crate::chains::Next;
 use crate::host::Loader;
 
+/// The build table ids this part of the loader names.
+pub(crate) const TABLE_IDS: &[&str] = &[
+    "ecs.component_read_raw",
+    "ecs.entity_map",
+    "ecs.entity_map_capacity",
+    "ecs.entity_records",
+    "ecs.entity_slot",
+    "ecs.record_template",
+    "ecs.registry_type_map",
+    "ecs.registry_type_map_fallback",
+    "ecs.type_index",
+    "reflect.type_hash",
+    "server.permission_entry_size",
+    "server.permission_mask",
+    "server.permission_table",
+    "server.player_infos",
+    "server.player_slot_count",
+    "server.player_slot_entity",
+    "server.player_slot_key",
+    "server.player_slot_machine",
+    "server.player_slot_name",
+    "server.player_slot_size",
+    "server.player_slot_state",
+    "server.player_slots",
+    "server.world",
+    "world.entities",
+    "world.step",
+];
+
 /// The server object, seen by the post-step hook.
 pub(crate) static SERVER: AtomicUsize = AtomicUsize::new(0);
 /// The game thread's id, seen by the post-step hook.

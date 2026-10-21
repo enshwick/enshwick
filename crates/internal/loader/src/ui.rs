@@ -33,6 +33,53 @@ pub(crate) use map::set as set_markers;
 use crate::chains::Next;
 use crate::host::{Loader, Registered};
 
+/// The build table ids this part of the loader names.
+pub(crate) const TABLE_IDS: &[&str] = &[
+    "ui.action_new",
+    "ui.action_query",
+    "ui.button",
+    "ui.context",
+    "ui.dropdown",
+    "ui.dropdown_init",
+    "ui.frame_close",
+    "ui.frame_color",
+    "ui.frame_from_node",
+    "ui.frame_open",
+    "ui.frame_stretch",
+    "ui.hud",
+    "ui.hud_visible",
+    "ui.label_draw",
+    "ui.label_new",
+    "ui.loca_id",
+    "ui.loca_text",
+    "ui.main_entry",
+    "ui.main_menu_site",
+    "ui.nav_drop",
+    "ui.nav_end",
+    "ui.nav_init",
+    "ui.nav_input",
+    "ui.nav_push",
+    "ui.nav_set",
+    "ui.node_align",
+    "ui.node_height",
+    "ui.node_padding",
+    "ui.node_spacing",
+    "ui.node_stretch",
+    "ui.node_width",
+    "ui.panel",
+    "ui.pause_entry",
+    "ui.pause_menu_site",
+    "ui.popup",
+    "ui.progress",
+    "ui.slider",
+    "ui.slider_init",
+    "ui.sound",
+    "ui.toggle",
+    "ui.window_begin",
+    "ui.window_end",
+    "ui.world_settings_site",
+];
+
 // SAFETY: the slot joins the chain of the error popup, typed `PopupFn`.
 static NEXT: Next<PopupFn> = unsafe { Next::new() };
 static ENGINE: OnceLock<Engine> = OnceLock::new();

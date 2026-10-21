@@ -44,6 +44,12 @@ it names the crate too. The crate holds:
   `declare_mod!`;
 - `README.md` and `.gitignore`.
 
+Inside a Cargo workspace the crate joins it: `new` adds its folder to the
+workspace's `members`, unless a pattern there already covers it, and leaves
+the release profile out, since Cargo reads profiles only at the workspace
+root; put `panic = "unwind"` there. A folder the workspace excludes gets a
+workspace of its own.
+
 It builds and loads as it is: on first start it writes
 `mod-configs/my-mod.toml` and logs one line.
 

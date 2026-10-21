@@ -6,6 +6,29 @@ use std::sync::OnceLock;
 
 use crate::host::Loader;
 
+/// The build table ids this part of the loader names.
+pub(crate) const TABLE_IDS: &[&str] = &[
+    "altar.level_attribute",
+    "balancing.zone_size",
+    "ecs.attribute_find",
+    "ecs.attribute_slot",
+    "ecs.component_read",
+    "ecs.component_read_raw",
+    "ecs.context_entity_world",
+    "ecs.context_row",
+    "ecs.descriptor_entity_records",
+    "ecs.entity_record_size",
+    "ecs.iterator_init",
+    "ecs.iterator_next",
+    "ecs.level_data_offset",
+    "ecs.level_flags",
+    "ecs.mark_changed",
+    "ecs.registry_type_map",
+    "ecs.registry_type_map_fallback",
+    "ecs.slot_root",
+    "ecs.type_index",
+];
+
 static ENGINE: OnceLock<Engine> = OnceLock::new();
 
 /// The helpers on this build, resolved once; `None` when the table lacks one.

@@ -16,6 +16,9 @@ use rustc_hash::FxHashSet;
 
 use crate::host::Loader;
 
+/// The build table ids this part of the loader names.
+pub(crate) const TABLE_IDS: &[&str] = &["ecs.change_tracker", "ecs.component_write"];
+
 /// Name prefixes of the components the game derives for clients.
 const DERIVED: [&str; 2] = ["keen::ecs::Network", "keen::ecs::Client"];
 

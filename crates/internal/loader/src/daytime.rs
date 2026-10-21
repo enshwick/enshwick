@@ -28,6 +28,25 @@ use enshwick_loader_api::abi::{DaytimeInfo, Event, Header, HookFlags, Status};
 use crate::chains::Next;
 use crate::host::{Loader, is_off, take};
 
+/// The build table ids this part of the loader names.
+pub(crate) const TABLE_IDS: &[&str] = &[
+    "daytime.anchor",
+    "daytime.clock",
+    "daytime.day_end",
+    "daytime.day_length",
+    "daytime.day_start",
+    "daytime.game_time",
+    "daytime.is_day",
+    "daytime.night_length",
+    "daytime.object",
+    "daytime.set_speed",
+    "daytime.set_time",
+    "daytime.speed",
+    "server.player_infos",
+    "server.world",
+    "world.time",
+];
+
 /// Game nanoseconds in a day.
 const DAY: i64 = 24 * 3_600_000_000_000;
 /// The largest factor a mod may set on the clock's speed.

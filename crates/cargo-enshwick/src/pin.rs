@@ -17,6 +17,7 @@ mod report;
 mod row;
 mod rows;
 mod signature;
+mod staged;
 mod table;
 
 use std::fs;
@@ -27,6 +28,7 @@ use enshwick_loader_reflect::Fingerprint;
 
 use self::exe::Exe;
 use self::rows::{Row, guid_hex};
+use self::staged::Staged;
 
 /// What `cargo enshwick pin` is given.
 #[derive(Debug, clap::Args)]
@@ -85,11 +87,13 @@ pub(crate) fn run(args: &Args) -> Result<bool, String> {
     if args.write && old_fp == new_fp {
         return Err("both executables are the same build; nothing to write".to_owned());
     }
-    let mut sections = port_tables(args, &old, &new)?;
-    sections.extend(port_mods(args, &old, &new)?);
+    let mut staged = Staged::default();
+    let mut sections = port_tables(args, &old, &new, &mut staged)?;
+    sections.extend(port_mods(args, &old, &new, &mut staged)?);
     if sections.is_empty() {
         return Err(format!("no row is for the old build {}", spell(old_fp)));
     }
+    staged.commit()?;
     let text = report::render(&spell(old_fp), &spell(new_fp), &sections);
     match &args.report {
         Some(path) => fs::write(path, &text).map_err(|e| format!("{}: {e}", path.display()))?,
@@ -103,8 +107,14 @@ pub(crate) fn run(args: &Args) -> Result<bool, String> {
         .all(|l| !l.status.needs_human()))
 }
 
-/// Ports the loader's table for `old`'s build to `new`'s build.
-fn port_tables(args: &Args, old: &Exe<'_>, new: &Exe<'_>) -> Result<Vec<report::Section>, String> {
+/// Ports the loader's table for `old`'s build to `new`'s build; with
+/// `--write`, stages the new table file.
+fn port_tables(
+    args: &Args,
+    old: &Exe<'_>,
+    new: &Exe<'_>,
+    staged: &mut Staged,
+) -> Result<Vec<report::Section>, String> {
     let (Some(old_fp), Some(new_fp)) = (old.fingerprint(), new.fingerprint()) else {
         return Ok(Vec::new());
     };
@@ -136,21 +146,27 @@ fn port_tables(args: &Args, old: &Exe<'_>, new: &Exe<'_>) -> Result<Vec<report::
         };
         let (text, _) = table::render(&src, &row, &identity, &ported.edits, Some(new))
             .map_err(|e| format!("{}: {e}", path.display()))?;
-        if args.write {
-            fs::write(&target, &text).map_err(|e| format!("{}: {e}", target.display()))?;
-        }
         sections.push(report::Section {
             file: relative(&args.repo, &target),
             title: name,
             lines: ported.lines,
-            text: (!args.write).then_some((text, "toml")),
+            text: (!args.write).then(|| (text.clone(), "toml")),
         });
+        if args.write {
+            staged.create(target, text);
+        }
     }
     Ok(sections)
 }
 
-/// Ports the mods' rows for `old`'s build to `new`'s build.
-fn port_mods(args: &Args, old: &Exe<'_>, new: &Exe<'_>) -> Result<Vec<report::Section>, String> {
+/// Ports the mods' rows for `old`'s build to `new`'s build; with `--write`,
+/// stages each source with its new rows.
+fn port_mods(
+    args: &Args,
+    old: &Exe<'_>,
+    new: &Exe<'_>,
+    staged: &mut Staged,
+) -> Result<Vec<report::Section>, String> {
     let (Some(old_fp), Some(new_fp)) = (old.fingerprint(), new.fingerprint()) else {
         return Ok(Vec::new());
     };
@@ -194,7 +210,7 @@ fn port_mods(args: &Args, old: &Exe<'_>, new: &Exe<'_>) -> Result<Vec<report::Se
             for (at, text) in inserts {
                 out.insert_str(at, &text);
             }
-            fs::write(&path, out).map_err(|e| format!("{}: {e}", path.display()))?;
+            staged.replace(path, out, src);
         }
     }
     Ok(sections)
@@ -232,7 +248,9 @@ fn patterns_only(args: &Args, exe_path: &Path) -> Result<bool, String> {
             patterned.constants.0,
         );
         if args.write {
-            fs::write(&path, &text).map_err(|e| format!("{}: {e}", path.display()))?;
+            let mut staged = Staged::default();
+            staged.replace(path, text, src);
+            staged.commit()?;
             let _shown = write!(std::io::stdout(), "{summary}");
         } else {
             let _shown = write!(std::io::stdout(), "{text}");

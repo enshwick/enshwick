@@ -26,6 +26,36 @@ use enshwick_loader_api::abi::{ChunkData, Event, Header, HookFlags, Status, Weat
 use crate::chains::Next;
 use crate::host::Loader;
 
+/// The build table ids this part of the loader names.
+pub(crate) const TABLE_IDS: &[&str] = &[
+    "chunks.height",
+    "chunks.index",
+    "chunks.manager",
+    "chunks.step",
+    "chunks.width",
+    "server.player_infos",
+    "weather.clock",
+    "weather.free",
+    "weather.generation",
+    "weather.instance_despawn",
+    "weather.instance_phenomenon",
+    "weather.instance_position",
+    "weather.instance_radius",
+    "weather.layer_count",
+    "weather.layers",
+    "weather.manager",
+    "weather.page_count",
+    "weather.page_mask",
+    "weather.page_shift",
+    "weather.pages",
+    "weather.resource",
+    "weather.resource_lock",
+    "weather.resource_release",
+    "weather.sample",
+    "weather.spawn",
+    "weather.system",
+];
+
 /// The effect value that asks the game to choose.
 pub(crate) const ANY: u32 = u32::MAX;
 /// A layer slot's bytes: next time, last phenomenon, two handles.

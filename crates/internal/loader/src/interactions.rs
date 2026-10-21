@@ -15,6 +15,31 @@ use crate::chains::Next;
 use crate::ecs::{Components, Engine};
 use crate::host::{Loader, Registered, take};
 
+/// The build table ids this part of the loader names.
+pub(crate) const TABLE_IDS: &[&str] = &[
+    "access.base_stock",
+    "access.base_stock_ui_return",
+    "access.consumed_deposit",
+    "access.consumed_upgrade",
+    "access.deposit_target",
+    "access.deposit_version",
+    "access.dismantle_method",
+    "access.object_id",
+    "access.object_kind",
+    "access.offer_test",
+    "access.sort",
+    "access.sort_target",
+    "access.state_input",
+    "access.state_owner_index",
+    "access.transfer",
+    "access.transfer_source",
+    "access.transfer_source_slot",
+    "access.transfer_target",
+    "access.transfer_target_slot",
+    "access.upgrade_target",
+    "access.upgrade_version",
+];
+
 /// The offer result the game writes when it does not offer an interaction.
 /// Found on the 1.0 build 1269579, server and client.
 const NOT_OFFERED: u8 = 6;

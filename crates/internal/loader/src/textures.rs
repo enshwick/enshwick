@@ -27,6 +27,37 @@ use rustc_hash::FxHashMap;
 use crate::chains::Next;
 use crate::host::Loader;
 
+/// The build table ids this part of the loader names.
+pub(crate) const TABLE_IDS: &[&str] = &[
+    "textures.keys",
+    "textures.keys_bytes",
+    "textures.registry_fill",
+    "textures.registry_fill_bytes",
+    "textures.registry_listed",
+    "textures.registry_listed_at",
+    "textures.registry_listed_bytes",
+    "textures.request",
+    "textures.request_bytes",
+    "textures.request_context",
+    "textures.request_hash",
+    "textures.request_offset",
+    "textures.request_post",
+    "textures.request_post_bytes",
+    "textures.request_ring",
+    "textures.request_ring_bytes",
+    "textures.request_signal",
+    "textures.request_signal_bytes",
+    "textures.request_size",
+    "textures.ring_event",
+    "textures.ring_head",
+    "textures.ring_last",
+    "textures.ring_records",
+    "textures.ring_tail",
+    "textures.ring_tail_next",
+    "textures.signal",
+    "textures.signal_bytes",
+];
+
 /// The type hash of the client's UI image resource, which items name in
 /// `iconImage` and the UI registry lists.
 pub(crate) const UI_IMAGE: u32 = 0xf9e8_6997;

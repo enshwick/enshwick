@@ -13,6 +13,14 @@ use enshwick_loader_api::abi::{SpawnRequest, Status};
 
 use crate::host::Loader;
 
+/// The build table ids this part of the loader names.
+pub(crate) const TABLE_IDS: &[&str] = &[
+    "ecs.command_buffers",
+    "ecs.spawn_request",
+    "world.entities",
+    "world.time",
+];
+
 type SpawnFn = unsafe extern "system" fn(
     buffer: *mut u8,
     out: *mut u32,

@@ -23,6 +23,26 @@ use enshwick_loader_api::abi::{ActiveBuff, BuffRequest, BuffTypeInfo, Header, St
 
 use crate::host::Loader;
 
+/// The build table ids this part of the loader names.
+pub(crate) const TABLE_IDS: &[&str] = &[
+    "buffs.cleanse",
+    "buffs.record_has_level",
+    "buffs.record_has_strength",
+    "buffs.record_level",
+    "buffs.record_lifetime",
+    "buffs.record_remaining",
+    "buffs.record_strength",
+    "buffs.record_type",
+    "buffs.registry",
+    "buffs.registry_blob",
+    "buffs.restore",
+    "buffs.type_by_id",
+    "game.balancing",
+    "server.player_infos",
+    "server.world",
+    "world.time",
+];
+
 /// The size of the saved-buff record the restore reads.
 const RECORD: usize = 0x78;
 /// More buff types than any build has: a count past it is not a count.

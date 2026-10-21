@@ -22,6 +22,20 @@ use rustc_hash::FxHashMap;
 
 use crate::host::Loader;
 
+/// The build table ids this part of the loader names.
+pub(crate) const TABLE_IDS: &[&str] = &[
+    "ecs.command_append",
+    "ecs.command_buffers",
+    "ecs.command_records",
+    "ecs.command_set_data",
+    "ecs.command_set_hash",
+    "ecs.command_set_size",
+    "ecs.event_push",
+    "ecs.event_streams",
+    "world.entities",
+    "world.time",
+];
+
 /// The event types mods may raise: types the server's own systems raise on
 /// the 1.0 build 1269579, each with a consumer on the server or the clients.
 const ALLOWED: [&str; 4] = [
