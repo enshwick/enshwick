@@ -165,6 +165,9 @@ pub struct Chain {
     pub original: usize,
     /// The timed thunk in front of the original, with timing on.
     pub original_hop: Option<Hop>,
+    /// Whether the chain captures the caller frame, as decided when the
+    /// chains were sealed.
+    pub frame: bool,
 }
 
 impl Chain {
@@ -236,6 +239,7 @@ impl Chains {
             head: None,
             original: 0,
             original_hop: None,
+            frame: false,
         });
         let clash = chain.links.iter().find(|l| {
             l.owner == link.owner
@@ -265,9 +269,47 @@ impl Chains {
         self.by_target.values()
     }
 
-    /// Marks the chains armed: no more links.
+    /// Marks the chains armed: no more links, except a reloaded mod's.
     pub fn seal(&mut self) {
         self.armed = true;
+        for chain in self.by_target.values_mut() {
+            chain.frame = chain.wants_caller_frame();
+        }
+    }
+
+    /// Takes every link of `owner` out of the chains, for a mod that is
+    /// reloaded: its links must already be wired past, and no game thread
+    /// may still run in them.
+    pub fn remove_owner(&mut self, owner: usize) {
+        for chain in self.by_target.values_mut() {
+            chain.links.retain(|l| l.owner != owner);
+        }
+    }
+
+    /// Adds a reloaded mod's `link` to the armed chain of `target`; the
+    /// caller rewires. Refused for a target that has no armed chain (a new
+    /// target needs a restart), for a link that reads the caller frame on a
+    /// chain armed without it, and as [`Chains::add`] refuses.
+    pub fn relink(&mut self, target: u64, link: Link) -> Status {
+        if link.detour == 0 {
+            return Status::BAD_ARGS;
+        }
+        let Some(chain) = self.by_target.get_mut(&target).filter(|c| c.head.is_some()) else {
+            return Status::TOO_LATE;
+        };
+        if link.flags.contains(HookFlags::CALLER_FRAME) && !chain.frame {
+            return Status::TOO_LATE;
+        }
+        let clash = chain.links.iter().any(|l| {
+            l.owner == link.owner
+                || l.flags.contains(HookFlags::EXCLUSIVE)
+                || link.flags.contains(HookFlags::EXCLUSIVE)
+        });
+        if clash {
+            return Status::REFUSED;
+        }
+        chain.links.push(link);
+        Status::OK
     }
 
     /// Rewires every chain past the links of faulted mods.
@@ -372,6 +414,49 @@ mod tests {
             chains.add(0x20, link(0, 0xd, 0, HookFlags::NONE)),
             Status::TOO_LATE
         );
+    }
+
+    #[test]
+    fn a_reloaded_mod_trades_its_links_on_armed_chains_only() {
+        let mut chains = Chains::default();
+        assert_eq!(
+            chains.add(0x10, link(0, 0xa, 0, HookFlags::NONE)),
+            Status::OK
+        );
+        assert_eq!(
+            chains.add(0x10, link(1, 0xb, 0, HookFlags::NONE)),
+            Status::OK
+        );
+        let head = slot();
+        for chain in chains.iter_mut() {
+            chain.head = Some(head);
+            chain.original = 0xff;
+        }
+        chains.seal();
+        chains.rewire(|owner| owner == 1);
+        chains.remove_owner(1);
+        assert_eq!(chains.owners(0x10), [0]);
+        assert_eq!(
+            chains.relink(0x20, link(1, 0xc, 0, HookFlags::NONE)),
+            Status::TOO_LATE,
+            "a new target needs a restart"
+        );
+        assert_eq!(
+            chains.relink(0x10, link(1, 0xc, 0, HookFlags::CALLER_FRAME)),
+            Status::TOO_LATE,
+            "the chain was armed without the caller frame"
+        );
+        assert_eq!(
+            chains.relink(0x10, link(1, 0xc, -1, HookFlags::NONE)),
+            Status::OK
+        );
+        assert_eq!(
+            chains.relink(0x10, link(1, 0xd, 0, HookFlags::NONE)),
+            Status::REFUSED
+        );
+        chains.rewire(|_| false);
+        assert_eq!(value(head), 0xc);
+        assert_eq!(chains.owners(0x10), [0, 1]);
     }
 
     #[test]

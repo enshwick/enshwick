@@ -37,7 +37,7 @@ pub(crate) struct ModRecord {
     pub(crate) updates: UpdateSource,
     /// The keys its author signs releases with, checked; empty for none.
     pub(crate) signed_by: [Str; 2],
-    /// Its static manifest, inside its DLL.
+    /// Its manifest, copied out of its DLL.
     pub(crate) manifest: &'static Manifest,
     /// What its manifest tells players about it.
     pub(crate) meta: crate::manifest::Meta,
@@ -99,6 +99,9 @@ pub(crate) struct Subscription {
     pub(crate) callback: EventFn,
     /// The mod's pointer for the handler, as an address.
     pub(crate) user: usize,
+    /// The subscribing mod's reload generation; events of an older one are
+    /// dropped.
+    pub(crate) generation: u32,
 }
 
 /// Everything the loader knows once mods are resolved.
@@ -500,6 +503,7 @@ impl Loader {
                 .delivery
                 .get()
                 .is_some_and(|d| d.iter().any(|s| s.event == event))
+            || crate::reload::late().is_some_and(|late| late.iter().any(|s| s.event == event))
     }
 
     /// Raises `event` with `data` for every mod still on, or for mod `only`.
@@ -511,13 +515,16 @@ impl Loader {
         let Some(delivery) = self.delivery.get() else {
             return;
         };
-        for subscription in delivery.iter().filter(|s| {
+        let late = crate::reload::late();
+        let late = late.as_ref().map_or(&[][..], |late| late.as_slice());
+        for subscription in delivery.iter().chain(late).filter(|s| {
             s.event == event
                 && only.is_none_or(|only| only == s.owner)
                 && self
                     .mods
                     .get(s.owner)
                     .is_some_and(|m| !m.off.load(Ordering::Acquire))
+                && s.generation == crate::reload::generation(s.owner)
         }) {
             // SAFETY: the handler lives in the mod's DLL, which stays loaded;
             // the safe layer catches its panics.
@@ -878,6 +885,9 @@ extern "system" fn hook(me: ModHandle, spec: *const HookSpec) -> Status {
             hop: None,
         };
         match loader.chains.lock() {
+            Ok(mut chains) if crate::reload::reinitialising(index) => {
+                chains.relink(spec.target, link)
+            }
             Ok(mut chains) => chains.add(spec.target, link),
             Err(_) => Status::REFUSED,
         }
@@ -1251,18 +1261,24 @@ extern "system" fn subscribe(
         if !(Event::SETTINGS_CHANGED.0..=Event::WORLD_SETTINGS.0).contains(&event.0) {
             return Status::MISSING;
         }
+        let subscription = Subscription {
+            owner: index,
+            event,
+            callback,
+            user: user.expose_provenance(),
+            generation: crate::reload::generation(index),
+        };
         if loader.delivery.get().is_some() {
+            if crate::reload::reinitialising(index) {
+                crate::reload::subscribe_late(subscription);
+                return Status::OK;
+            }
             return Status::TOO_LATE;
         }
         let Ok(mut subscriptions) = loader.subscriptions.lock() else {
             return Status::REFUSED;
         };
-        subscriptions.push(Subscription {
-            owner: index,
-            event,
-            callback,
-            user: user.expose_provenance(),
-        });
+        subscriptions.push(subscription);
         Status::OK
     })
 }
@@ -1314,7 +1330,8 @@ impl Fallback for u64 {
 /// Runs the body of the entry point `name`, so a panic in the loader's own
 /// code never unwinds into the mod that called it: the call is refused and
 /// the fault logged.
-fn entry<R: Fallback>(name: &str, body: impl FnOnce() -> R) -> R {
+fn entry<R: Fallback>(name: &'static str, body: impl FnOnce() -> R) -> R {
+    crate::reload::note(name);
     std::panic::catch_unwind(std::panic::AssertUnwindSafe(body))
         .unwrap_or_else(|_| entry_fault(name))
 }

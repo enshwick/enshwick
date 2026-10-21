@@ -75,6 +75,8 @@ The keys of `mod-configs/enshwick.toml`:
 | `diagnostics`        | `false`  | count the calls of every hooked function; read at start          |
 | `diagnostics_timing` | `false`  | with `diagnostics`, also time every 256th call; read at start    |
 | `migrations_dry_run` | `false`  | only log what mods' [migrations](migrations.md) would change     |
+| `build_patterns`     | `true`   | run a build without its table on patterns; read at start         |
+| `dev_reload`         | `false`  | reload changed mods that allow it, on the server; read at start  |
 
 The file rejects unknown keys. A file that does not parse at start is logged
 and the loader runs with the defaults; a change that does not parse is logged

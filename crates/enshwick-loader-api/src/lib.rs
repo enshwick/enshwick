@@ -207,11 +207,16 @@ pub mod __private {
     use crate::{Host, Load, Mod};
 
     #[must_use]
-    pub const fn join_flag(join: &[bool]) -> ManifestFlags {
-        match join {
-            [true] => ManifestFlags::JOIN,
-            _ => ManifestFlags::NONE,
-        }
+    pub const fn flags(join: &[bool], reload: &[bool]) -> ManifestFlags {
+        let join = match join {
+            [true] => ManifestFlags::JOIN.0,
+            _ => 0,
+        };
+        let reload = match reload {
+            [true] => ManifestFlags::RELOAD.0,
+            _ => 0,
+        };
+        ManifestFlags(join | reload)
     }
 
     #[must_use]
@@ -504,6 +509,17 @@ pub mod __private {
         // SAFETY: forwarded from the caller.
         if let Some(host) = unsafe { Host::new(api, me) } {
             MAX_LEVEL.store(host.install().log_level().0, Ordering::Relaxed);
+        }
+    }
+
+    pub fn shutdown<M: Mod>(slot: &'static OnceLock<M>) {
+        let Some(state) = slot.get() else {
+            return;
+        };
+        if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| state.shutdown())).is_err()
+            && let Some(host) = crate::host()
+        {
+            host.fault("panic in shutdown");
         }
     }
 

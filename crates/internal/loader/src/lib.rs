@@ -80,6 +80,8 @@ mod patch;
 pub mod profile;
 #[cfg(windows)]
 mod progress;
+#[cfg(windows)]
+mod reload;
 pub mod remote;
 pub mod resolve;
 #[cfg(windows)]

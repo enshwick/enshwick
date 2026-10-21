@@ -297,3 +297,41 @@ one people play on, with a copy of a world:
 
 What needs a player, such as hits, levels or a character's stats, waits for
 a client that joins the server or hosts the game.
+
+## Reloading a mod on a development server
+
+With `dev_reload = true` in `mod-configs/enshwick.toml`, a dedicated server
+loads every mod from a copy under `mods/enshwick/reload/`, so its DLL in
+`mods/` stays writable, and watches those DLLs. When one changes and stays
+the same for a second, as after `cargo enshwick install`, the loader reloads
+its mod without a restart:
+
+1. it wires the mod's hooks past it and stops handing it events;
+2. it waits for calls already inside the mod to leave;
+3. it runs the mod's `shutdown`, unloads the DLL and loads the new copy;
+4. it runs the new copy's `init` with the same handle, links its hooks into
+   the armed chains, and runs its `ready`.
+
+A mod opts in with `reload = true` in its `manifest!` and keeps a contract:
+
+- **Only what a reload can unlink.** Hooks on functions it hooked at start,
+  events, lookups (symbols, constants, systems, fields, types), settings and
+  logging. Everything else a mod can register (commands, content, served
+  resources, services, mod events, code patches, mid-function hooks, filters,
+  the interface, stats and the rest) stays with the old copy, so the loader
+  refuses to reload a mod that used any of it, naming the calls, and the
+  change waits for a restart.
+- **No live state it cannot hand over.** The new copy starts with fresh
+  statics. What it needs back, it reads from its settings or its world store.
+- **Its own threads stop in `shutdown`.** A thread still running in the old
+  DLL after it is unloaded crashes the server. The loader runs `shutdown`
+  after the hooks and events are unlinked.
+- **The same manifest.** A new copy whose side, flags, dependencies or build
+  rows changed, or that hooks a function nothing hooked at start, is refused
+  or turned off; its version may change.
+
+The log says `<id> reloaded` or why not. The
+[hot-reload example](https://github.com/themaiby/enshwick/tree/main/examples/hot-reload)
+shows the contract: an event, a ticker thread stopped in `shutdown`, and a
+greeting to change. Reloads are for development only: the client ignores
+`dev_reload`, and nothing is reloaded unless the setting is on.

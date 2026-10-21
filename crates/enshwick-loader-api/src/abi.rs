@@ -14,7 +14,7 @@ use core::sync::atomic::AtomicUsize;
 pub const ABI_MAJOR: u16 = 1;
 
 /// The minor version of this interface. A newer minor only appends fields.
-pub const ABI_MINOR: u16 = 52;
+pub const ABI_MINOR: u16 = 53;
 
 /// Whether `id` is a valid mod id: 1 to 64 characters of `[a-z0-9-]`.
 ///
@@ -1155,6 +1155,11 @@ impl ManifestFlags {
     /// Server and clients must run the same version of this mod to play
     /// together; it counts in the join check.
     pub const JOIN: Self = Self(1);
+    /// The mod may be reloaded while the game runs, for development: it
+    /// keeps no state it cannot hand over, stops its own threads in
+    /// `shutdown` and uses only what a reload can unlink (hooks, events,
+    /// lookups, settings, logging). Since minor 53; see the modding book.
+    pub const RELOAD: Self = Self(2);
 
     /// Whether every flag of `other` is set.
     ///
@@ -4997,6 +5002,9 @@ pub mod exports {
     /// `extern "system" fn(*const HostApi, ModHandle)`: after every chain is
     /// armed.
     pub const READY: &str = "enshwick_mod_ready";
+    /// `extern "system" fn()`: before a development reload unloads the DLL;
+    /// the mod stops what it started. Since minor 53, optional.
+    pub const SHUTDOWN: &str = "enshwick_mod_shutdown";
 }
 
 const _: () = {

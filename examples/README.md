@@ -8,6 +8,9 @@ workspace and are never released.
 | [trading-post-api](trading-post-api/) | a service table and a mod event, declared once for two mods |
 | [trading-post](trading-post/)         | publishing the service and sending the event                |
 | [market-stalls](market-stalls/)       | using the service and subscribing to the event              |
+| [hot-reload](hot-reload/)             | a mod a development server reloads while it runs            |
 
 The book's chapter [Services between mods](../book/src/services.md) walks
-through them.
+through the trading post and the market stalls, and
+[Testing](../book/src/testing.md#reloading-a-mod-on-a-development-server) the
+reload.

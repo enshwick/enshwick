@@ -12,7 +12,7 @@ raw table. The exact types and signatures are in the
 | Constant                                                                                            | Value | Meaning                                         |
 | --------------------------------------------------------------------------------------------------- | ----- | ----------------------------------------------- |
 | [`ABI_MAJOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 1     | A loader refuses a mod built for another major. |
-| [`ABI_MINOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 52    | A newer minor only appends.                     |
+| [`ABI_MINOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 53    | A newer minor only appends.                     |
 
 The ABI version is apart from Enshwick Loader's version (such as 0.2.0, see
 [Releasing and updates](releasing.md#versions)): a platform release raises
@@ -40,16 +40,17 @@ no update source and no build rows.
 ## The exports of a mod
 
 [`declare_mod!`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/declare.rs)
-writes four exports:
+writes five exports:
 
-| Export               | Signature                                 | When the loader calls it                           |
-| -------------------- | ----------------------------------------- | -------------------------------------------------- |
-| `enshwick_mod_abi`   | `fn() -> u32`                             | First: the major the mod was built for.            |
-| `enshwick_mod_query` | `fn() -> *const Manifest`                 | Before any of the mod's code runs; static data.    |
-| `enshwick_mod_init`  | `fn(*const HostApi, ModHandle) -> Status` | Once, in load order; registers hooks and the rest. |
-| `enshwick_mod_ready` | `fn(*const HostApi, ModHandle)`           | After every chain is armed, if `init` returned OK. |
+| Export                  | Signature                                 | When the loader calls it                                  |
+| ----------------------- | ----------------------------------------- | --------------------------------------------------------- |
+| `enshwick_mod_abi`      | `fn() -> u32`                             | First: the major the mod was built for.                   |
+| `enshwick_mod_query`    | `fn() -> *const Manifest`                 | Before any of the mod's code runs; static data.           |
+| `enshwick_mod_init`     | `fn(*const HostApi, ModHandle) -> Status` | Once, in load order; registers hooks and the rest.        |
+| `enshwick_mod_ready`    | `fn(*const HostApi, ModHandle)`           | After every chain is armed, if `init` returned OK.        |
+| `enshwick_mod_shutdown` | `fn()`                                    | Before a development reload unloads it; optional (53).    |
 
-A DLL in `mods/` without all four is logged as `<file> is not an Enshwick mod`
+A DLL in `mods/` without the first four is logged as `<file> is not an Enshwick mod`
 and unloaded.
 
 ## The manifest
@@ -64,7 +65,7 @@ builds:
 | `id`           | `[a-z0-9-]`, 1 to 64 characters; names the settings file and data folder                          | 0           |
 | `version`      | SemVer                                                                                            | 0           |
 | `side`         | `SERVER` (1), `CLIENT` (2) or `BOTH` (3)                                                          | 0           |
-| `flags`        | `ManifestFlags::JOIN` (1) when the mod counts in the join check                                   | 0           |
+| `flags`        | `JOIN` (1): counts in the join check; `RELOAD` (2, minor 53): may be reloaded                     | 0           |
 | `dependencies` | `Dependency { id, range, relation }`; `REQUIRES` (0), `AFTER` (1), `BREAKS` (2), `RECOMMENDS` (3) | 0           |
 | `builds`       | `BuildRow { side, fingerprint, symbols, constants }`: symbols and constants pinned per game build | 0           |
 | `updates`      | `UpdateSource { kind, location, component }`, or null; kind `NONE`, `GITHUB` or `URL`             | 5           |
@@ -357,6 +358,7 @@ the mod off with a reason, which the mod's log shows as `off: <reason>`:
 | 50          | content ids, the content calls  | Off: `content ids: needs a newer loader`                  |
 | 51          | `BuildInfo::table`              | `BuildTable::EXACT`                                       |
 | 52          | `Load::entity_data`             | Off: `entity data: needs a newer loader`                  |
+| 53          | `ManifestFlags::RELOAD`         | The mod is never reloaded                                 |
 
 A mod that can do without a feature catches the `Off` and goes on without it
 instead of returning it from `init`.

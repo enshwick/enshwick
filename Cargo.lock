@@ -265,6 +265,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "enshwick-example-hot-reload"
+version = "0.1.0"
+dependencies = [
+ "enshwick-loader-api",
+]
+
+[[package]]
 name = "enshwick-example-market-stalls"
 version = "0.1.2"
 dependencies = [

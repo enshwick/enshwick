@@ -43,6 +43,10 @@ pub struct Settings {
     /// by their code patterns and run what they cover; false leaves such a
     /// build vanilla until its table arrives. Read at start.
     pub build_patterns: bool,
+    /// Watch the mod DLLs in mods/ and reload one that changes, when the mod
+    /// allows it (`reload = true` in its manifest). For developing mods, on
+    /// the dedicated server only. Read at start.
+    pub dev_reload: bool,
 }
 
 impl Default for Settings {
@@ -55,6 +59,7 @@ impl Default for Settings {
             status_minutes: STATUS_MINUTES,
             migrations_dry_run: false,
             build_patterns: true,
+            dev_reload: false,
         }
     }
 }
