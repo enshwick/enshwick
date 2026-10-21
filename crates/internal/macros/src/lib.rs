@@ -4,6 +4,7 @@
 use proc_macro::TokenStream;
 use proc_macro2::Span;
 use quote::quote;
+use syn::ext::IdentExt as _;
 use syn::spanned::Spanned as _;
 use syn::{
     Attribute, Data, DeriveInput, Expr, Fields, FnArg, GenericArgument, Ident, ItemFn, Lit, Meta,
@@ -69,7 +70,11 @@ fn field_config(attrs: &[Attribute]) -> syn::Result<FieldConfig> {
                 config.max = range.end.map(|e| *e);
                 Ok(())
             } else if meta.path.is_ident("choices") {
-                config.choices = Some(meta.value()?.parse()?);
+                let choices: syn::ExprArray = meta.value()?.parse()?;
+                if choices.elems.is_empty() {
+                    return Err(meta.error("name at least one choice"));
+                }
+                config.choices = Some(choices);
                 Ok(())
             } else if meta.path.is_ident("text") {
                 config.text = Some(meta.value()?.parse()?);
@@ -107,31 +112,78 @@ fn struct_config(attrs: &[Attribute]) -> syn::Result<(Option<syn::Path>, String)
     Ok((validate, title))
 }
 
-fn expand_config(input: &DeriveInput) -> syn::Result<TokenStream> {
-    let name = &input.ident;
-    let (validate, title) = struct_config(&input.attrs)?;
-    let own_check = validate.map(|path| quote!(#path(self)?;));
+/// Refuses the serde attributes that make serde read other keys than the
+/// fields' names, which the template, the schema and the checks use.
+fn same_keys_as_serde(attrs: &[Attribute]) -> syn::Result<()> {
+    const RENAMING: [&str; 6] = [
+        "rename",
+        "rename_all",
+        "flatten",
+        "skip",
+        "skip_serializing",
+        "skip_deserializing",
+    ];
+    for attr in attrs.iter().filter(|a| a.path().is_ident("serde")) {
+        let Meta::List(list) = &attr.meta else {
+            continue;
+        };
+        for token in list.tokens.clone() {
+            if let proc_macro2::TokenTree::Ident(word) = token
+                && RENAMING.iter().any(|name| word == name)
+            {
+                return Err(syn::Error::new_spanned(
+                    word,
+                    "Config writes and checks each field under its own name:                      drop this serde attribute",
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
+/// The named fields of a settings struct without generics.
+fn settings_fields(input: &DeriveInput) -> syn::Result<&syn::FieldsNamed> {
+    if !input.generics.params.is_empty() {
+        return Err(syn::Error::new_spanned(
+            &input.generics,
+            "a settings type takes no generics",
+        ));
+    }
+    same_keys_as_serde(&input.attrs)?;
     let Data::Struct(data) = &input.data else {
         return Err(syn::Error::new_spanned(
-            name,
+            &input.ident,
             "Config is derived for structs only",
         ));
     };
     let Fields::Named(fields) = &data.fields else {
-        return Err(syn::Error::new_spanned(name, "Config needs named fields"));
+        return Err(syn::Error::new_spanned(
+            &input.ident,
+            "Config needs named fields",
+        ));
     };
+    Ok(fields)
+}
+
+fn expand_config(input: &DeriveInput) -> syn::Result<TokenStream> {
+    let name = &input.ident;
+    let fields = settings_fields(input)?;
+    let (validate, title) = struct_config(&input.attrs)?;
+    let own_check = validate.map(|path| quote!(#path(self)?;));
     let mut entries = Vec::new();
     let mut described = Vec::new();
+    let mut checks = Vec::new();
     let mut staged: Vec<(Ident, &syn::Field)> = Vec::new();
     for field in &fields.named {
         let Some(ident) = field.ident.as_ref() else {
             continue;
         };
+        same_keys_as_serde(&field.attrs)?;
         let config = field_config(&field.attrs)?;
         let stage = config
             .stage
             .unwrap_or_else(|| Ident::new("Runtime", Span::call_site()));
-        let key = ident.to_string();
+        let key = ident.unraw().to_string();
         let doc = comment(&field.attrs);
         let note = if stage == "Startup" {
             "# Takes effect when the world loads.\n"
@@ -142,6 +194,9 @@ fn expand_config(input: &DeriveInput) -> syn::Result<TokenStream> {
             text.push_str(#doc);
             text.push_str(#note);
             text.push_str(&::enshwick_loader_api::config::__entry(#key, &defaults.#ident));
+        });
+        checks.push(quote! {
+            ::enshwick_loader_api::config::__check_field(&__schema, #key, &self.#ident)?;
         });
         let bound = |e: &Option<Expr>| {
             e.as_ref().map_or_else(
@@ -192,10 +247,8 @@ fn expand_config(input: &DeriveInput) -> syn::Result<TokenStream> {
             }
 
             fn validate(&self) -> ::core::result::Result<(), ::std::string::String> {
-                ::enshwick_loader_api::config::__check(
-                    &<Self as ::enshwick_loader_api::config::Config>::schema(),
-                    self,
-                )?;
+                let __schema = <Self as ::enshwick_loader_api::config::Config>::schema();
+                #(#checks)*
                 #own_check
                 ::core::result::Result::Ok(())
             }
@@ -221,7 +274,7 @@ fn stage_methods(staged: &[(Ident, &syn::Field)]) -> impl quote::ToTokens {
         }
         let variant = Ident::new(variant, Span::call_site());
         let idents: Vec<&Ident> = fields.iter().filter_map(|f| f.ident.as_ref()).collect();
-        let keys: Vec<String> = idents.iter().map(ToString::to_string).collect();
+        let keys: Vec<String> = idents.iter().map(|i| i.unraw().to_string()).collect();
         let types: Vec<&Type> = fields.iter().map(|f| &f.ty).collect();
         let locals: Vec<Ident> = idents
             .iter()
@@ -518,7 +571,8 @@ fn doc_text(attrs: &[Attribute]) -> String {
         .join(" ")
 }
 
-/// The lines of the doc comment of `attrs`.
+/// The lines of the doc comment of `attrs`; a block comment or a
+/// `#[doc = "..."]` may hold several.
 fn doc_lines(attrs: &[Attribute]) -> impl Iterator<Item = String> + '_ {
     attrs
         .iter()
@@ -532,6 +586,13 @@ fn doc_lines(attrs: &[Attribute]) -> impl Iterator<Item = String> + '_ {
                 _ => None,
             },
             _ => None,
+        })
+        .flat_map(|text| {
+            if text.is_empty() {
+                vec![text]
+            } else {
+                text.lines().map(str::to_owned).collect()
+            }
         })
 }
 

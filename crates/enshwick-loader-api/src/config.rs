@@ -43,6 +43,19 @@ use serde::{Deserialize, Serialize};
 /// }
 /// ```
 ///
+/// The file, the schema and the checks name each field as it is written, so
+/// a serde attribute that reads another key fails the build:
+///
+/// ```compile_fail
+/// /// Settings.
+/// #[derive(Default, serde::Deserialize, serde::Serialize, enshwick_loader_api::Config)]
+/// struct Settings {
+///     /// Renamed.
+///     #[serde(rename = "max-count")]
+///     limit: u32,
+/// }
+/// ```
+///
 /// # Examples
 ///
 /// ```
@@ -453,7 +466,7 @@ impl Field {
     /// See [`Field`].
     #[must_use]
     pub fn new<T: Serialize + ?Sized>(key: &str, stage: Stage, default: &T) -> Self {
-        let value = toml::Value::try_from(default).ok();
+        let value = toml::Value::try_from(default).ok().map(tidy);
         Self {
             key: key.to_owned(),
             stage,
@@ -494,7 +507,7 @@ impl Field {
         self.choices = choices
             .iter()
             .filter_map(|choice| toml::Value::try_from(choice).ok())
-            .map(|value| value.to_string())
+            .map(|value| tidy(value).to_string())
             .collect();
         self
     }
@@ -545,6 +558,7 @@ impl Field {
     ///
     /// See [`Field`].
     pub fn check(&self, value: &toml::Value) -> Result<(), String> {
+        let value = &tidy(value.clone());
         if let Some(kind) = self.kind
             && !kind.accepts(Kind::of(value))
         {
@@ -564,7 +578,15 @@ impl Field {
         {
             return Err(format!("{} is {}", self.key, self.accepts()));
         }
-        if !self.choices.is_empty() && !self.choices.contains(&value.to_string()) {
+        let chosen = |choice: &String| {
+            *choice == value.to_string()
+                || number.is_some_and(|n| {
+                    choice
+                        .parse::<f64>()
+                        .is_ok_and(|c| c.to_bits() == n.to_bits())
+                })
+        };
+        if !self.choices.is_empty() && !self.choices.iter().any(chosen) {
             return Err(format!("{} is {}", self.key, self.accepts()));
         }
         Ok(())
@@ -709,10 +731,52 @@ impl Schema {
 /// Checks the serialized fields of `settings` against `schema`, for the
 /// derive's `validate`.
 #[doc(hidden)]
-pub fn __check<T: Serialize>(schema: &Schema, settings: &T) -> Result<(), String> {
-    match toml::Value::try_from(settings) {
-        Ok(toml::Value::Table(table)) => schema.check(&table),
-        _ => Ok(()),
+pub fn __check_field<T: Serialize>(schema: &Schema, key: &str, value: &T) -> Result<(), String> {
+    let Some(field) = schema.field(key) else {
+        return Ok(());
+    };
+    // In a table, so a `None` is left out rather than refused.
+    let mut one = std::collections::BTreeMap::new();
+    one.insert(key, value);
+    match toml::Value::try_from(one) {
+        Ok(toml::Value::Table(table)) => table.get(key).map_or(Ok(()), |v| field.check(v)),
+        _ if field.min.is_none() && field.max.is_none() && field.choices.is_empty() => Ok(()),
+        _ => Err(format!(
+            "{key} cannot be checked: TOML cannot hold its value"
+        )),
+    }
+}
+
+/// `value` with each float an `f32` field gave, such as 0.10000000149011612,
+/// back at the decimal written for it, 0.1, so that bounds and texts read as
+/// the author wrote them.
+fn tidy(value: toml::Value) -> toml::Value {
+    match value {
+        #[expect(
+            clippy::cast_possible_truncation,
+            reason = "only a float an f32 holds exactly is replaced"
+        )]
+        toml::Value::Float(n) if f64::from(n as f32).to_bits() == n.to_bits() => {
+            toml::Value::Float((n as f32).to_string().parse().unwrap_or(n))
+        }
+        toml::Value::Array(items) => toml::Value::Array(items.into_iter().map(tidy).collect()),
+        toml::Value::Table(table) => {
+            toml::Value::Table(table.into_iter().map(|(k, v)| (k, tidy(v))).collect())
+        }
+        other => other,
+    }
+}
+
+/// `key` as a TOML key: bare when it may be, quoted otherwise.
+fn toml_key(key: &str) -> String {
+    let bare = !key.is_empty()
+        && key
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-');
+    if bare {
+        key.to_owned()
+    } else {
+        toml::Value::String(key.to_owned()).to_string()
     }
 }
 
@@ -772,7 +836,7 @@ impl __Values {
 #[must_use]
 pub fn __entry<T: Serialize>(key: &str, value: &T) -> String {
     match toml::Value::try_from(value) {
-        Ok(value) => format!("{key} = {value}\n\n"),
+        Ok(value) => format!("{} = {}\n\n", toml_key(key), tidy(value)),
         Err(_) => format!("# {key}: no default could be written\n\n"),
     }
 }
@@ -923,6 +987,85 @@ limit = 4"
         staged.limit = 3;
         staged.mode = "off".into();
         assert!(staged.validate().unwrap_err().contains("one of"));
+    }
+
+    #[test]
+    fn an_f32_at_its_decimal_bound_passes_and_reads_as_written() {
+        /// Ratio.
+        #[derive(Debug, serde::Deserialize, serde::Serialize, crate::Config)]
+        struct Ratio {
+            /// Share.
+            #[config(range = 0.0..=0.1, choices = [0.05, 0.1, 1.0])]
+            share: f32,
+        }
+        impl Default for Ratio {
+            fn default() -> Self {
+                Self { share: 0.1 }
+            }
+        }
+        assert!(Ratio::default().validate().is_ok());
+        assert!(Ratio::template().contains("share = 0.1\n"));
+        assert_eq!(Ratio::schema().field("share").unwrap().default, "0.1");
+        assert!(Ratio { share: 0.11 }.validate().is_err());
+        let field = &Ratio::schema().fields[0];
+        assert!(field.check(&toml::Value::Integer(1)).is_err());
+        let whole =
+            super::Field::new("whole", super::Stage::Runtime, &1.0_f64).with_choices(&[0.5, 1.0]);
+        assert!(whole.check(&toml::Value::Integer(1)).is_ok());
+        assert!(whole.check(&toml::Value::Integer(2)).is_err());
+    }
+
+    #[test]
+    fn a_field_toml_cannot_hold_still_leaves_the_others_checked() {
+        /// Mixed.
+        #[derive(Default, serde::Deserialize, serde::Serialize, crate::Config)]
+        struct Mixed {
+            /// Keyed by number, which TOML cannot write.
+            names: std::collections::HashMap<u32, String>,
+            /// Checked.
+            #[config(range = 1..=16)]
+            limit: u32,
+            /// Unset.
+            #[config(range = 1..=4)]
+            spare: Option<u8>,
+            /// Beyond TOML's integers.
+            #[config(range = 1..)]
+            seed: u64,
+        }
+        let mut mixed = Mixed {
+            names: [(1, "one".to_owned())].into(),
+            limit: 99,
+            seed: 1,
+            ..Mixed::default()
+        };
+        assert!(mixed.validate().unwrap_err().contains("limit"));
+        mixed.limit = 3;
+        assert!(mixed.validate().is_ok());
+        mixed.seed = u64::MAX;
+        assert!(mixed.validate().unwrap_err().contains("seed"));
+    }
+
+    #[test]
+    fn the_template_parses_back_whatever_the_names_and_docs() {
+        /** Block doc,
+        over two lines. */
+        #[derive(
+            Debug, Default, PartialEq, serde::Deserialize, serde::Serialize, crate::Config,
+        )]
+        struct Odd {
+            /** A raw name,
+            documented in a block. */
+            r#type: u32,
+            #[doc = "First line\nsecond line"]
+            size: u8,
+        }
+        let template = Odd::template();
+        let parsed: Odd = toml::from_str(&template).unwrap();
+        assert_eq!(parsed, Odd::default());
+        assert!(template.contains("#        over two lines."));
+        assert!(template.contains("#second line\nsize = 0"));
+        assert!(Odd::schema().field("type").is_some());
+        assert_eq!(super::__entry("größe", &0), "\"größe\" = 0\n\n");
     }
 
     #[test]
