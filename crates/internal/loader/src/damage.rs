@@ -249,7 +249,8 @@ unsafe extern "system" fn hit(registers: *mut Registers, _user: *mut c_void) {
         check.attacker = attacker;
         check.amounts = amounts;
         crate::stats::on_hit(&mut check.amounts, target, attacker);
-        check.total = amounts
+        check.total = check
+            .amounts
             .iter()
             .enumerate()
             .filter(|&(i, _)| i != HEALING)

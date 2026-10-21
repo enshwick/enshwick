@@ -1201,6 +1201,12 @@ unsafe fn merge_statuses(ctx: *mut u64) {
     STATUS_ROWS.with_borrow_mut(|(rows, bits)| {
         rows.clear();
         let mut play_data = 0u64;
+        // Vanilla left the row counter at the end: walk again from the start
+        // and restore it, as the altars' walks do.
+        // SAFETY: the system's live context.
+        let saved = unsafe { engine.row(ctx) };
+        // SAFETY: as above.
+        unsafe { engine.set_row(ctx, 0) };
         // SAFETY: the system's live context and its iterator size.
         let mut query = unsafe { engine.query::<UI_WORDS>(ctx) };
         while let Some(words) = query.next() {
@@ -1222,6 +1228,8 @@ unsafe fn merge_statuses(ctx: *mut u64) {
             let order = u32::try_from(rows.len()).unwrap_or(u32::MAX);
             rows.push((id, order, status));
         }
+        // SAFETY: the system's live context.
+        unsafe { engine.set_row(ctx, saved) };
         if play_data == 0 {
             return;
         }
