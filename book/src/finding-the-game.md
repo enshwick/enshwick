@@ -172,8 +172,9 @@ server's 256 constants and 323 of the client's 333. The rest are the nine
 slots of attributes in their sets, which the game looks up at run time from
 its data, so no code holds them, and `knowledge.journal_blob`, read only by a
 getter of two instructions too short to find for sure. On a build without a
-table, the loader's stat reads and maximum-health writes and the knowledge
-guard stay off; every mod of this repository runs.
+table, the API's stat reads, the loader's writes to maximum health, stamina
+and mana, and the knowledge guard stay off; every mod of this repository
+runs.
 `cargo enshwick compat --patterns <exe>` shows what the patterns alone find
 on any executable, and a test of the builds crate checks, when
 `ENSH_SERVER_EXE` and `ENSH_CLIENT_EXE` name the game's executables, that

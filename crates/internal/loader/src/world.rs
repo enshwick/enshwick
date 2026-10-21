@@ -29,7 +29,6 @@ pub(crate) const TABLE_IDS: &[&str] = &[
     "ecs.registry_type_map",
     "ecs.registry_type_map_fallback",
     "ecs.type_index",
-    "reflect.type_hash",
     "server.permission_entry_size",
     "server.permission_mask",
     "server.permission_table",
