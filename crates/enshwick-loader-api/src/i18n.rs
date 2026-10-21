@@ -65,6 +65,74 @@ impl Host {
     }
 }
 
+/// The game's own text of tag `id` in the language the player reads the
+/// game in, such as an item's or a survivor's name; a text missing there
+/// comes in English, as the game shows it.
+///
+/// `id` is a text tag's game id, [`Guid::id`](crate::content::Guid::id) of
+/// the tag an item's or a template's data names. The text is read from the
+/// game's archive and stays valid for the process. `None` for a tag the
+/// game lacks, always on a server, whose archive holds no texts, and under
+/// a loader older than ABI minor 61.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::i18n::game_text;
+///
+/// if let Some(text) = game_text(0x8f21_95d5) {
+///     enshwick_loader_api::info!("the game calls it {text}");
+/// }
+/// ```
+#[must_use]
+pub fn game_text(id: u32) -> Option<&'static str> {
+    game_text_in(id, language())
+}
+
+/// The game's own text of tag `id` in `language`, as [`game_text`] reads
+/// it; [`Language::FALLBACK`] asks for English.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::i18n::{Language, game_text_in};
+///
+/// let name = game_text_in(0x8f21_95d5, Language::UK_UA);
+/// assert!(name.is_none() || name.is_some_and(|n| !n.is_empty()));
+/// ```
+#[must_use]
+pub fn game_text_in(id: u32, language: Language) -> Option<&'static str> {
+    crate::host()?.game_text(id, language)
+}
+
+impl Host {
+    /// The game's own text of tag `id` in `language`; see [`game_text_in`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_loader_api::i18n::Language;
+    ///
+    /// if let Some(host) = enshwick_loader_api::host() {
+    ///     let _ = host.game_text(0x8f21_95d5, Language::DE_DE);
+    /// }
+    /// ```
+    #[must_use]
+    pub fn game_text(&self, id: u32, language: Language) -> Option<&'static str> {
+        let api = self.api();
+        let end = core::mem::offset_of!(HostApi, game_text) + size_of::<usize>();
+        if !api.header.covers(end) {
+            return None;
+        }
+        let mut out = crate::abi::Str::EMPTY;
+        if !(api.game_text)(self.handle(), id, language.0, &raw mut out).is_ok() {
+            return None;
+        }
+        // SAFETY: the loader keeps the text for the life of the process.
+        unsafe { out.as_str() }
+    }
+}
+
 /// A game language, as the game numbers them.
 ///
 /// # Examples

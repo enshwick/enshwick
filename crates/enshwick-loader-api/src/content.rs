@@ -431,6 +431,75 @@ const fn digit(c: u8) -> u8 {
     }
 }
 
+/// A vanilla resource's bytes from the game's own archive, as the game
+/// reads them before it resolves their references: game data a mod builds
+/// on, such as an item's name tag or the template a station item places,
+/// read the same at init and later, on the server and the client.
+///
+/// `None` for a key the archive lacks, and under a loader older than ABI
+/// minor 61. Each call reads the archive's files; keep what a mod reads
+/// more than once.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::content::{game_resource, types};
+/// use enshwick_loader_api::content::workshops::stations;
+///
+/// if let Some(item) = game_resource(stations::WORKBENCH.item.key(types::ITEM_INFO)) {
+///     enshwick_loader_api::info!("the Workbench item is {} bytes", item.len());
+/// }
+/// ```
+#[must_use]
+pub fn game_resource(key: ResourceKey) -> Option<Vec<u8>> {
+    crate::host()?.game_resource(key)
+}
+
+impl crate::Host {
+    /// A vanilla resource's bytes from the game's archive; see
+    /// [`game_resource`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_loader_api::content::{Guid, types};
+    ///
+    /// if let Some(host) = enshwick_loader_api::host() {
+    ///     let chest = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");
+    ///     let _ = host.game_resource(chest.key(types::ITEM_INFO));
+    /// }
+    /// ```
+    #[must_use]
+    pub fn game_resource(&self, key: ResourceKey) -> Option<Vec<u8>> {
+        let api = self.api();
+        let end = core::mem::offset_of!(crate::abi::HostApi, resource_read) + size_of::<usize>();
+        if !api.header.covers(end) {
+            return None;
+        }
+        let mut buffer = vec![0u8; 64 << 10];
+        loop {
+            let mut len = 0u32;
+            let capacity = u32::try_from(buffer.len()).ok()?;
+            let status = (api.resource_read)(
+                self.handle(),
+                &raw const key,
+                buffer.as_mut_ptr(),
+                capacity,
+                &raw mut len,
+            );
+            let len = usize::try_from(len).ok()?;
+            if status.is_ok() {
+                buffer.truncate(len);
+                return Some(buffer);
+            }
+            if status != Status::BAD_ARGS || len <= buffer.len() {
+                return None;
+            }
+            buffer.resize(len, 0);
+        }
+    }
+}
+
 /// Type hashes of resources mods commonly serve.
 pub mod types {
     /// `ItemInfo`, one item.

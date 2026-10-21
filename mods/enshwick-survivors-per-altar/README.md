@@ -10,7 +10,9 @@ zone.
   an altar zone that holds a copy, the original moves in and that copy is
   removed: one survivor per zone. Copies elsewhere stay where they are.
 - Copy staffs make copies: one per workshop survivor, such as "Copy staff:
-  Oswald Anders", its icon the survivor's staff in violet. At an altar zone:
+  Oswald Anders", its icon the survivor's staff in violet. The survivor's
+  name comes from the game in the player's language, as the game spells it
+  ("Посох копії: Освальд Андерс" in Ukrainian). At an altar zone:
   - without a copy and without the original, it places a new copy there and
     spends a charge;
   - with a copy, it moves that copy to where it is aimed, free;

@@ -11,7 +11,7 @@
 use enshwick_loader_api::content::icons::{Icon, Pixels, Tint};
 use enshwick_loader_api::content::items::{Meter, NewItem, Stat, StatFormat};
 use enshwick_loader_api::content::{Guid, Id};
-use enshwick_loader_api::i18n::Texts;
+use enshwick_loader_api::i18n::{Language, Texts};
 use enshwick_loader_api::migrations::Migrations;
 use enshwick_loader_api::survivors::WorkshopSurvivor;
 use enshwick_loader_api::{Load, Off};
@@ -35,8 +35,7 @@ const FULL_CHARGES: Id = Id::new("survivors-per-altar:copy-staff.full-charges");
 /// A workshop survivor and its copy staff.
 #[derive(Debug)]
 pub(crate) struct Staff {
-    /// The text key of the survivor's name, after `survivor.`, and its key in
-    /// the platform's table.
+    /// The survivor's key in the platform's table.
     pub key: &'static str,
     /// The copy staff.
     pub copy: Id,
@@ -134,6 +133,20 @@ fn fill(template: &str, survivor: &str) -> String {
     template.replace("{survivor}", survivor)
 }
 
+/// The survivor's name in `language` as the game shows it; without the
+/// game's texts (on a server), its role from its key, such as "Blacksmith
+/// assistant".
+fn survivor_name(staff: &Staff, language: Language) -> String {
+    if let Some(name) = staff.survivor().and_then(|s| s.name(language)) {
+        return name.to_owned();
+    }
+    let role = staff.key.replace('_', " ");
+    let mut chars = role.chars();
+    chars.next().map_or_else(String::new, |first| {
+        first.to_uppercase().chain(chars).collect()
+    })
+}
+
 /// Adds every copy staff and its texts; a full staff holds `charges`.
 pub(crate) fn add(load: &mut Load<'_>, texts: &Texts, charges: u16) -> Result<(), Off> {
     load.add_texts(texts, &[("copy.full_charges", FULL_CHARGES)])?;
@@ -149,7 +162,6 @@ pub(crate) fn add(load: &mut Load<'_>, texts: &Texts, charges: u16) -> Result<()
     };
     for staff in STAFFS {
         let vanilla = staff.survivor_or_off()?.staff();
-        let survivor_key = format!("survivor.{}", staff.key);
         for (template_key, tag) in [
             ("copy.name", staff.name),
             ("copy.description", staff.description),
@@ -160,8 +172,8 @@ pub(crate) fn add(load: &mut Load<'_>, texts: &Texts, charges: u16) -> Result<()
                 return Err(Off::new(format!("texts: no text for {template_key:?}")));
             }
             for (language, template) in translations {
-                let survivor = texts.get(&survivor_key, language).unwrap_or(staff.key);
-                load.add_text(tag, language.0, &fill(template, survivor))?;
+                let survivor = survivor_name(staff, language);
+                load.add_text(tag, language.0, &fill(template, &survivor))?;
             }
         }
         load.add_item(NewItem {
@@ -195,12 +207,10 @@ pub(crate) fn file(load: &mut Load<'_>) -> Result<(), Off> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use enshwick_loader_api::i18n::Language;
     use enshwick_loader_api::survivors::WORKSHOP_SURVIVORS;
 
     #[test]
-    fn every_staff_has_its_own_ids_and_a_name() {
-        let texts = Texts::parse(TEXTS).unwrap();
+    fn every_staff_has_its_own_ids() {
         let mut ids = std::collections::BTreeSet::new();
         for staff in STAFFS {
             for id in [staff.copy, staff.name, staff.description, staff.icon] {
@@ -214,15 +224,22 @@ mod tests {
             );
             let survivor = staff.survivor().unwrap();
             assert_ne!(staff.copy.id(), survivor.staff().id());
-            assert!(
-                texts
-                    .get(&format!("survivor.{}", staff.key), Language::FALLBACK)
-                    .is_some()
-            );
             assert_eq!(copy_staff(staff.copy.id()).map(|s| s.key), Some(staff.key));
             assert_eq!(copy_staff(survivor.staff().id()).map(|s| s.key), None);
         }
         assert_eq!(STAFFS.len(), WORKSHOP_SURVIVORS.len());
+    }
+
+    #[test]
+    fn without_the_game_s_texts_a_survivor_is_named_by_its_role() {
+        let smith = STAFFS
+            .iter()
+            .find(|s| s.key == "blacksmith_assistant")
+            .unwrap();
+        assert_eq!(
+            survivor_name(smith, Language::UK_UA),
+            "Blacksmith assistant"
+        );
     }
 
     #[test]

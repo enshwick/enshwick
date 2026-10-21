@@ -122,6 +122,46 @@ The server does not know a player's language, and `language()` there is
 answers its `/safe` command in one language from its settings, falling back
 to `Language::FALLBACK`.
 
+## The game's own texts
+
+A mod that names vanilla things, such as a survivor in its item's name,
+reads the game's own text rather than shipping a copy of it, so the player
+sees it in their language as the game spells it.
+[`i18n::game_text(id)`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/i18n.rs)
+is the text of a tag in the language the player reads the game in, and
+`game_text_in(id, language)` in any language; `id` is the tag's game id,
+`Guid::id` of the tag a resource names. A text missing in a language comes
+in English, as the game shows it.
+
+```rust
+use enshwick_loader_api::content::Guid;
+use enshwick_loader_api::content::items::vanilla_name;
+use enshwick_loader_api::i18n::Language;
+use enshwick_loader_api::survivors::WorkshopSurvivor;
+
+let chest = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");
+let chest_name = vanilla_name(chest, Language::UK_UA);
+let alchemist = WorkshopSurvivor::find("alchemist").unwrap();
+let name = alchemist.name(Language::UK_UA).unwrap_or("Alchemist");
+assert!(!name.is_empty() && chest_name.is_none_or(|n| !n.is_empty()));
+```
+
+`items::vanilla_name(item, language)` reads a vanilla item's name tag from
+its data and returns its text; `WorkshopSurvivor::name(language)` is the
+survivor's name, which the game gives its summoning staff.
+[`enshwick-survivors-per-altar`](https://github.com/themaiby/enshwick/tree/main/mods/enshwick-survivors-per-altar)
+names its copy staffs this way: it registers each staff's name during
+`init` for every language it translates, with the survivor's name in that
+language.
+
+The loader reads the texts from the game's archive files, never from the
+game's memory, so they are there during `init` and on any thread. The first
+call for a language reads that language's table, a few megabytes, and the
+loader keeps it, so the texts it hands out stay valid for the process. Only
+the client's archive holds texts: on a dedicated server every call returns
+`None`, and a mod falls back to a name of its own there, which no player
+sees.
+
 ## Overrides
 
 A file `mod-configs/<id>.texts.toml`, in the same form as the mod's own,

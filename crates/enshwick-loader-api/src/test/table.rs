@@ -1702,6 +1702,54 @@ extern "system" fn account_knowledge(
     })
 }
 
+extern "system" fn resource_read(
+    _me: ModHandle,
+    key: *const ResourceKey,
+    out: *mut u8,
+    capacity: u32,
+    len: *mut u32,
+) -> Status {
+    // SAFETY: the safe layer passes a key for the call.
+    let Some(key) = (unsafe { key.as_ref() }).copied() else {
+        return Status::BAD_ARGS;
+    };
+    let Some(data) = with(None, |s| {
+        s.host
+            .resources
+            .get(&(key.guid, key.type_hash, key.part))
+            .cloned()
+    }) else {
+        return Status::MISSING;
+    };
+    let size = u32::try_from(data.len()).unwrap_or(u32::MAX);
+    if !len.is_null() {
+        // SAFETY: the safe layer's length out pointer.
+        unsafe { len.write(size) };
+    }
+    if size > capacity || out.is_null() {
+        return Status::BAD_ARGS;
+    }
+    // SAFETY: the safe layer passes room for `capacity` bytes.
+    unsafe { out.copy_from_nonoverlapping(data.as_ptr(), data.len()) };
+    Status::OK
+}
+
+extern "system" fn game_text(_me: ModHandle, id: u32, language: u32, out: *mut Str) -> Status {
+    let english = crate::i18n::Language::EN_US.0;
+    let found = with(None, |s| {
+        let texts = &s.host.game_texts;
+        let language = if language == 0 { english } else { language };
+        texts
+            .get(&(id, language))
+            .or_else(|| texts.get(&(id, english)))
+            .copied()
+    });
+    match found {
+        Some(text) => put(out, Str::new(text)),
+        None => Status::MISSING,
+    }
+}
+
 extern "system" fn config_schema(_me: ModHandle, schema: Str) -> Status {
     // SAFETY: the mod passes text valid for the call.
     let Some(text) = (unsafe { schema.as_str() }) else {
@@ -2399,4 +2447,6 @@ pub(crate) static TABLE: HostApi = HostApi {
     catalog_pick,
     revoke_knowledge,
     account_knowledge,
+    resource_read,
+    game_text,
 };

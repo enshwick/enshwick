@@ -148,6 +148,27 @@ and
 [`workshops.rs`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/content/workshops.rs)
 are worked examples: each builds its resources with `Blob` alone.
 
+## Reading vanilla resources
+
+A builder sees only its own base. To read another vanilla resource, such as
+the template a station item places or an item's name tag,
+[`content::game_resource(key)`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/content.rs)
+returns its bytes from the game's archive files, as the game reads them
+before it resolves their references, so `Blob` reads them the same way. It
+works during `init` and later, on any thread and on both sides, and never
+touches the game's memory. Each call reads the archive, so keep what a mod
+needs more than once.
+
+```rust
+use enshwick_loader_api::content::{Blob, game_resource, types};
+use enshwick_loader_api::content::workshops::stations;
+
+if let Some(item) = game_resource(stations::WORKBENCH.item.key(types::ITEM_INFO)) {
+    let item = Blob::new(&item);
+    let _id = item.read_u32(0);
+}
+```
+
 ## One text for one tag
 
 [`Load::add_text(tag, language, text)`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/content.rs)

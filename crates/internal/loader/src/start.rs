@@ -886,6 +886,9 @@ fn ready(loader: &Loader, order: &[&Library]) {
         "ready: {running} of {} mods running",
         loader.mods.len()
     );
+    // Mods read vanilla resources at init; the chunks unpacked for them
+    // are not needed after.
+    crate::archive::trim_game();
 }
 
 fn read_frame() -> enshwick_loader_api::abi::CallerFrame {

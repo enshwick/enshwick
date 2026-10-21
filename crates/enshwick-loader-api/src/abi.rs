@@ -14,7 +14,7 @@ use core::sync::atomic::AtomicUsize;
 pub const ABI_MAJOR: u16 = 1;
 
 /// The minor version of this interface. A newer minor only appends fields.
-pub const ABI_MINOR: u16 = 60;
+pub const ABI_MINOR: u16 = 61;
 
 /// Whether `id` is a valid mod id: 1 to 64 characters of `[a-z0-9-]`.
 ///
@@ -4956,6 +4956,28 @@ pub struct HostApi {
         value: u32,
         revoke: u32,
     ) -> Status,
+    /// Copies the game's own resource `key` from its archive into `out`, at
+    /// most `capacity` bytes, as the game reads it before it resolves its
+    /// references, and writes its length to `len`; [`Status::MISSING`] for
+    /// a key the archive lacks, [`Status::BAD_ARGS`] when `capacity` is
+    /// short, with `len` written. Reads the archive's files, never the
+    /// game's memory. Any thread. Since minor 61.
+    pub resource_read: extern "system" fn(
+        me: ModHandle,
+        key: *const ResourceKey,
+        out: *mut u8,
+        capacity: u32,
+        len: *mut u32,
+    ) -> Status,
+    /// Writes the game's own text of tag `id` in `language`, as the game
+    /// numbers them (0 for English), to `out`, valid for the life of the
+    /// process; a text missing in `language` falls back to English as the
+    /// game's does. Read from the game's archive, the first call for a
+    /// language reads its table. [`Status::MISSING`] for a tag the game
+    /// lacks, and always on a server, whose archive has no texts. Any
+    /// thread. Since minor 61.
+    pub game_text:
+        extern "system" fn(me: ModHandle, id: u32, language: u32, out: *mut Str) -> Status,
 }
 
 /// Flags of [`HostApi::entity_data_open`].
@@ -5308,7 +5330,8 @@ const _: () = {
     assert!(size_of::<StatModify>() == 8 + 8 + 12 + 4 + 8);
     assert!(size_of::<StatChange>() == 8 + 24);
     assert!(core::mem::offset_of!(HostApi, language) == 24 + 127 * 8);
-    assert!(size_of::<HostApi>() == 24 + 134 * 8);
+    assert!(size_of::<HostApi>() == 24 + 136 * 8);
+    assert!(core::mem::offset_of!(HostApi, game_text) == 24 + 135 * 8);
     assert!(core::mem::offset_of!(HostApi, account_knowledge) == 24 + 133 * 8);
     assert!(core::mem::offset_of!(HostApi, catalog_pick) == 24 + 131 * 8);
     assert!(core::mem::offset_of!(HostApi, replaced) == 24 + 125 * 8);

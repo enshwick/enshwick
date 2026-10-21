@@ -750,6 +750,8 @@ pub(crate) static API: HostApi = HostApi {
     catalog_pick,
     revoke_knowledge,
     account_knowledge,
+    resource_read,
+    game_text,
 };
 
 /// A static slice from a pointer and a count, empty for a null pointer.
@@ -2243,6 +2245,50 @@ extern "system" fn content_read(
         // SAFETY: the caller passes room for `capacity` bytes at `out`.
         unsafe { out.copy_from_nonoverlapping(data.as_ptr(), data.len()) };
         Status::OK
+    })
+}
+
+extern "system" fn resource_read(
+    me: ModHandle,
+    key: *const enshwick_loader_api::abi::ResourceKey,
+    out: *mut u8,
+    capacity: u32,
+    len: *mut u32,
+) -> Status {
+    entry("resource_read", || {
+        if let Err(status) = caller(me) {
+            return status;
+        }
+        // SAFETY: the caller passes a key for the call; `as_ref` turns away null.
+        let Some(key) = (unsafe { key.as_ref() }).copied() else {
+            return Status::BAD_ARGS;
+        };
+        let Some(data) = crate::archive::game().and_then(|archive| archive.resource(&key)) else {
+            return Status::MISSING;
+        };
+        let size = u32::try_from(data.len()).unwrap_or(u32::MAX);
+        if !len.is_null() {
+            // SAFETY: the caller's length out pointer.
+            unsafe { len.write(size) };
+        }
+        if size > capacity || out.is_null() {
+            return Status::BAD_ARGS;
+        }
+        // SAFETY: the caller passes room for `capacity` bytes at `out`.
+        unsafe { out.copy_from_nonoverlapping(data.as_ptr(), data.len()) };
+        Status::OK
+    })
+}
+
+extern "system" fn game_text(me: ModHandle, id: u32, language: u32, out: *mut Str) -> Status {
+    entry("game_text", || {
+        if let Err(status) = caller(me) {
+            return status;
+        }
+        match crate::game_texts::text(id, language) {
+            Some(text) => put(out, Str::new(text)),
+            None => Status::MISSING,
+        }
     })
 }
 
