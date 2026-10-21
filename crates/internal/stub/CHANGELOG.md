@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.8.0](https://github.com/themaiby/enshwick/compare/enshwick-loader-stub-v0.7.0...enshwick-loader-stub-v0.8.0) (2026-10-21)
+
+
+### ⚠ BREAKING CHANGES
+
+* **optimizer:** rename and tune per platform for Windows and Proton ([#165](https://github.com/themaiby/enshwick/issues/165))
+
+### Performance
+
+* **optimizer:** rename and tune per platform for Windows and Proton ([#165](https://github.com/themaiby/enshwick/issues/165)) ([71cf9b5](https://github.com/themaiby/enshwick/commit/71cf9b51b0d35b09d12dd4974e2dc91d174e2c0b))
+
 ## [0.7.0](https://github.com/themaiby/enshwick/compare/enshwick-loader-stub-v0.6.0...enshwick-loader-stub-v0.7.0) (2026-10-21)
 
 

@@ -1,5 +1,7 @@
 # Changelog
 
+## [0.6.1](https://github.com/themaiby/enshwick/compare/enshwick-safes-v0.6.0...enshwick-safes-v0.6.1) (2026-10-21)
+
 ## [0.6.0](https://github.com/themaiby/enshwick/compare/enshwick-safes-v0.5.0...enshwick-safes-v0.6.0) (2026-10-21)
 
 

@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.8.0](https://github.com/themaiby/enshwick/compare/cargo-enshwick-v0.7.0...cargo-enshwick-v0.8.0) (2026-10-21)
+
+
+### Features
+
+* **cargo-enshwick:** report what works on a game build with compat ([#162](https://github.com/themaiby/enshwick/issues/162)) ([4bc3978](https://github.com/themaiby/enshwick/commit/4bc3978461c7f72bb07421bd2c96ad9fe6213e28))
+* **loader:** add content packs of TOML files, signed and reloadable ([#158](https://github.com/themaiby/enshwick/issues/158)) ([7598b97](https://github.com/themaiby/enshwick/commit/7598b977434dfb207cd5c0d30c6cdd936c0cb0cc))
+* **loader:** never start a mod that a renamed mod replaces ([#166](https://github.com/themaiby/enshwick/issues/166)) ([650993c](https://github.com/themaiby/enshwick/commit/650993c7b392be07fc16c4ca47925952c64f1487))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * enshwick-loader bumped from 0.7.0 to 0.8.0
+
 ## [0.7.0](https://github.com/themaiby/enshwick/compare/cargo-enshwick-v0.6.0...cargo-enshwick-v0.7.0) (2026-10-21)
 
 

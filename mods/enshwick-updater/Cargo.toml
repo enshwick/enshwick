@@ -1,6 +1,6 @@
 [package]
 name = "enshwick-updater"
-version = "0.4.2"
+version = "0.4.3"
 description = "Updates Enshwick and its mods from signed releases, with the player's consent"
 keywords = ["enshrouded", "mod", "updater"]
 categories = ["game-development"]

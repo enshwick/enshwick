@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.5.0](https://github.com/themaiby/enshwick/compare/enshwick-optimizer-v0.4.2...enshwick-optimizer-v0.5.0) (2026-10-21)
+
+
+### ⚠ BREAKING CHANGES
+
+* **optimizer:** rename and tune per platform for Windows and Proton ([#165](https://github.com/themaiby/enshwick/issues/165))
+
+### Features
+
+* **loader:** never start a mod that a renamed mod replaces ([#166](https://github.com/themaiby/enshwick/issues/166)) ([650993c](https://github.com/themaiby/enshwick/commit/650993c7b392be07fc16c4ca47925952c64f1487))
+
+
+### Performance
+
+* **optimizer:** rename and tune per platform for Windows and Proton ([#165](https://github.com/themaiby/enshwick/issues/165)) ([71cf9b5](https://github.com/themaiby/enshwick/commit/71cf9b51b0d35b09d12dd4974e2dc91d174e2c0b))
+
 ## [0.4.2](https://github.com/themaiby/enshwick/compare/enshwick-proton-optimizer-v0.4.1...enshwick-proton-optimizer-v0.4.2) (2026-10-21)
 
 ## [0.4.1](https://github.com/themaiby/enshwick/compare/enshwick-proton-optimizer-v0.4.0...enshwick-proton-optimizer-v0.4.1) (2026-10-21)

@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.0](https://github.com/themaiby/enshwick/compare/enshwick-loader-builds-v0.7.0...enshwick-loader-builds-v0.8.0) (2026-10-21)
+
+
+### Other
+
+* **enshwick-loader-builds:** Synchronize enshwick versions
+
 ## [0.7.0](https://github.com/themaiby/enshwick/compare/enshwick-loader-builds-v0.6.0...enshwick-loader-builds-v0.7.0) (2026-10-21)
 
 

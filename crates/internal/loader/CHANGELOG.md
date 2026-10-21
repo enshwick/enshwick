@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.8.0](https://github.com/themaiby/enshwick/compare/enshwick-loader-v0.7.0...enshwick-loader-v0.8.0) (2026-10-21)
+
+
+### ⚠ BREAKING CHANGES
+
+* **optimizer:** rename and tune per platform for Windows and Proton ([#165](https://github.com/themaiby/enshwick/issues/165))
+
+### Features
+
+* **api:** attach typed mod data to any entity, per world ([#161](https://github.com/themaiby/enshwick/issues/161)) ([b0fee70](https://github.com/themaiby/enshwick/commit/b0fee7049cf8c82f791a45716d3ff14d01267dd0))
+* **cargo-enshwick:** report what works on a game build with compat ([#162](https://github.com/themaiby/enshwick/issues/162)) ([4bc3978](https://github.com/themaiby/enshwick/commit/4bc3978461c7f72bb07421bd2c96ad9fe6213e28))
+* **loader:** add content packs of TOML files, signed and reloadable ([#158](https://github.com/themaiby/enshwick/issues/158)) ([7598b97](https://github.com/themaiby/enshwick/commit/7598b977434dfb207cd5c0d30c6cdd936c0cb0cc))
+* **loader:** never start a mod that a renamed mod replaces ([#166](https://github.com/themaiby/enshwick/issues/166)) ([650993c](https://github.com/themaiby/enshwick/commit/650993c7b392be07fc16c4ca47925952c64f1487))
+* **loader:** read recent log lines in chat with /enshwick log ([#167](https://github.com/themaiby/enshwick/issues/167)) ([24e1aa0](https://github.com/themaiby/enshwick/commit/24e1aa01b41cf813a646a5998df61735de299b68))
+* **loader:** reload mods while a development server runs ([#164](https://github.com/themaiby/enshwick/issues/164)) ([16494a1](https://github.com/themaiby/enshwick/commit/16494a1f52b8c473876b6af9ce014f93a71afbc0))
+
+
+### Performance
+
+* **optimizer:** rename and tune per platform for Windows and Proton ([#165](https://github.com/themaiby/enshwick/issues/165)) ([71cf9b5](https://github.com/themaiby/enshwick/commit/71cf9b51b0d35b09d12dd4974e2dc91d174e2c0b))
+
 ## [0.7.0](https://github.com/themaiby/enshwick/compare/enshwick-loader-v0.6.0...enshwick-loader-v0.7.0) (2026-10-21)
 
 

@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.4.3](https://github.com/themaiby/enshwick/compare/enshwick-updater-v0.4.2...enshwick-updater-v0.4.3) (2026-10-21)
+
+
+### Features
+
+* **loader:** add content packs of TOML files, signed and reloadable ([#158](https://github.com/themaiby/enshwick/issues/158)) ([7598b97](https://github.com/themaiby/enshwick/commit/7598b977434dfb207cd5c0d30c6cdd936c0cb0cc))
+* **loader:** never start a mod that a renamed mod replaces ([#166](https://github.com/themaiby/enshwick/issues/166)) ([650993c](https://github.com/themaiby/enshwick/commit/650993c7b392be07fc16c4ca47925952c64f1487))
+
 ## [0.4.2](https://github.com/themaiby/enshwick/compare/enshwick-updater-v0.4.1...enshwick-updater-v0.4.2) (2026-10-21)
 
 ## [0.4.1](https://github.com/themaiby/enshwick/compare/enshwick-updater-v0.4.0...enshwick-updater-v0.4.1) (2026-10-21)

@@ -1,5 +1,7 @@
 # Changelog
 
+## [0.4.3](https://github.com/themaiby/enshwick/compare/enshwick-flame-altar-zones-v0.4.2...enshwick-flame-altar-zones-v0.4.3) (2026-10-21)
+
 ## [0.4.2](https://github.com/themaiby/enshwick/compare/enshwick-flame-altar-zones-v0.4.1...enshwick-flame-altar-zones-v0.4.2) (2026-10-21)
 
 ## [0.4.1](https://github.com/themaiby/enshwick/compare/enshwick-flame-altar-zones-v0.4.0...enshwick-flame-altar-zones-v0.4.1) (2026-10-21)
