@@ -148,14 +148,19 @@ pub(crate) fn queue(entity: u32, text: &str) {
     }
 }
 
-/// Writes `text` into the next notice text tag; its GUID.
-fn take_slot(text: &str) -> [u8; 16] {
-    let index = NEXT_SLOT.fetch_add(1, Ordering::Relaxed) % SLOTS;
+/// `text` cut to the [`MAX_TEXT`] bytes the game shows, at a character.
+fn cut(text: &str) -> &str {
     let mut end = text.len().min(MAX_TEXT);
     while !text.is_char_boundary(end) {
         end -= 1;
     }
-    let kept = intern(&text[..end]);
+    &text[..end]
+}
+
+/// Writes `text` into the next notice text tag; its GUID.
+fn take_slot(text: &str) -> [u8; 16] {
+    let index = NEXT_SLOT.fetch_add(1, Ordering::Relaxed) % SLOTS;
+    let kept = intern(cut(text));
     SLOT_TEXTS[index].store(core::ptr::from_ref(kept).cast_mut(), Ordering::Release);
     TAGS[index]
 }
@@ -231,12 +236,24 @@ pub(crate) fn send(loader: &Loader, key: u64, text: &str) -> Result<(), Status> 
     if !crate::net::ready(key) {
         return Err(Status::MISSING);
     }
-    crate::net::notice(key, player.entity, text)
+    // Cut here too: a longer text would take several frames, which the
+    // client does not read as a notice.
+    crate::net::notice(key, player.entity, cut(text))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_sent_notice_fits_one_frame() {
+        let long = "ж".repeat(600);
+        let text = cut(&long);
+        assert!(text.len() <= MAX_TEXT && text.chars().all(|c| c == 'ж'));
+        let mut data = vec![0u8; 6];
+        data.extend_from_slice(text.as_bytes());
+        assert_eq!(crate::net::control_frames(&data).map(|f| f.len()), Some(1));
+    }
 
     #[test]
     fn a_slot_takes_a_text_cut_at_a_character_and_its_tag_finds_it() {

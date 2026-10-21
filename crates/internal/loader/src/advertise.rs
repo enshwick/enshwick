@@ -314,14 +314,12 @@ mod runtime {
     /// The join values of the running join mods, by id; read each time the
     /// advertisement is set.
     pub(crate) type Synced = fn() -> BTreeMap<String, String>;
+    /// The running join mods, `(id, version)`, read each round: a mod the
+    /// server turns off stops being advertised.
+    pub(crate) type JoinMods = fn() -> Vec<(String, String)>;
 
     /// Starts the thread that advertises the mod set.
-    pub(crate) fn start(
-        game_dir: &Path,
-        mods: Vec<(String, String)>,
-        lines: super::Lines,
-        synced: Synced,
-    ) {
+    pub(crate) fn start(game_dir: &Path, mods: JoinMods, lines: super::Lines, synced: Synced) {
         let config = std::fs::read_to_string(game_dir.join("enshrouded_server.json")).ok();
         let configured = config
             .and_then(|json| super::configured_name(&json))
@@ -329,14 +327,14 @@ mod runtime {
         let spawned = std::thread::Builder::new()
             .name("enshwick-advertise".into())
             .spawn(move || {
-                if std::panic::catch_unwind(|| run(&configured, &mods, &lines, synced)).is_err() {
+                if std::panic::catch_unwind(|| run(&configured, mods, &lines, synced)).is_err() {
                     crate::log!(WARN, "mod set advertisement stopped: it panicked");
                 }
             });
         drop(spawned);
     }
 
-    fn run(configured: &str, mods: &[(String, String)], lines: &super::Lines, synced: Synced) {
+    fn run(configured: &str, mods: JoinMods, lines: &super::Lines, synced: Synced) {
         let Some(api) = Api::load() else {
             crate::log!(
                 WARN,
@@ -366,7 +364,7 @@ mod runtime {
             let advert = super::Advert::new(
                 env!("CARGO_PKG_VERSION"),
                 configured,
-                mods,
+                &mods(),
                 lines,
                 &synced(),
             );

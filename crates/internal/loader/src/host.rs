@@ -181,6 +181,34 @@ pub(crate) fn install(loader: Loader) -> Option<&'static Loader> {
     LOADER.get()
 }
 
+/// The running join mods as the join check counts them, `(id, version)`:
+/// read each time, since a mod may turn off while the game runs.
+pub(crate) fn join_mods() -> Vec<(String, String)> {
+    loader().map_or_else(Vec::new, |loader| {
+        loader
+            .mods
+            .iter()
+            .filter(|m| m.joins())
+            .map(|m| (m.id.clone(), m.join_version()))
+            .collect()
+    })
+}
+
+/// The join mods this process loaded but turned off since: a server that
+/// runs one cannot be joined until the game starts again.
+pub(crate) fn join_mods_off() -> Vec<String> {
+    loader().map_or_else(Vec::new, |loader| {
+        loader
+            .mods
+            .iter()
+            .filter(|m| {
+                m.off.load(Ordering::Acquire) && m.manifest.flags.contains(ManifestFlags::JOIN)
+            })
+            .map(|m| m.id.clone())
+            .collect()
+    })
+}
+
 /// The join values of the running join mods, by id, as their settings files
 /// hold them.
 pub(crate) fn join_values() -> BTreeMap<String, String> {

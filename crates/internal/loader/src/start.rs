@@ -215,7 +215,7 @@ pub(crate) fn start(
     {
         crate::advertise::start(
             game_dir,
-            joined(loader),
+            host::join_mods,
             crate::advertise::Lines {
                 sources: sources(loader),
                 keys: keys(loader),
@@ -428,7 +428,7 @@ fn link_join(loader: &Loader) {
         .filter(|m| !m.meta.name.is_empty())
         .map(|m| (m.id.clone(), m.meta.name.clone()))
         .collect();
-    crate::join::set_ours(joined(loader), names);
+    crate::join::set_names(names);
     let status = loader.link(
         loader.base + rva,
         &crate::join::NEXT,
@@ -438,16 +438,6 @@ fn link_join(loader: &Loader) {
     if !status.is_ok() {
         crate::log!(WARN, "join check off: its hook was refused ({})", status.0);
     }
-}
-
-/// The running mods that count in the join check, as `(id, version)`.
-fn joined(loader: &Loader) -> Vec<(String, String)> {
-    loader
-        .mods
-        .iter()
-        .filter(|m| m.joins())
-        .map(|m| (m.id.clone(), m.join_version()))
-        .collect()
 }
 
 /// The update sources of the running join mods, `(id, source line)`.

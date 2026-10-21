@@ -127,16 +127,21 @@ pub fn resolve(candidates: &[Candidate], side: Side) -> Plan {
         .collect();
     pending.sort_by(|&a, &b| candidates[a].id.cmp(&candidates[b].id));
     while !pending.is_empty() {
-        let ready = pending.iter().position(|&i| {
-            candidates[i].dependencies.iter().all(|d| {
-                d.relation == Relation::BREAKS
-                    || d.relation == Relation::REPLACES
-                    || by_id
-                        .get(d.id.as_str())
-                        .is_none_or(|&j| placed[j] || skipped.contains_key(&j))
+        // `soft`: whether `AFTER` and `RECOMMENDS` hold the mod back too.
+        let ready = |soft: bool| {
+            pending.iter().position(|&i| {
+                candidates[i].dependencies.iter().all(|d| {
+                    d.relation == Relation::BREAKS
+                        || d.relation == Relation::REPLACES
+                        || (!soft && d.relation != Relation::REQUIRES)
+                        || by_id
+                            .get(d.id.as_str())
+                            .is_none_or(|&j| placed[j] || skipped.contains_key(&j))
+                })
             })
-        });
-        let Some(at) = ready else {
+        };
+        // A cycle of soft orders only gives way: its mods load anyway.
+        let Some(at) = ready(true).or_else(|| ready(false)) else {
             for &i in &pending {
                 skipped.insert(i, "in a dependency cycle".into());
             }
@@ -458,6 +463,28 @@ mod tests {
             [
                 (2, "in a dependency cycle".into()),
                 (3, "in a dependency cycle".into())
+            ]
+        );
+    }
+
+    #[test]
+    fn a_cycle_of_soft_orders_still_loads_every_mod() {
+        let mods = [
+            candidate("a", "1.0.0", Side::BOTH, &[("b", "", Relation::RECOMMENDS)]),
+            candidate("b", "1.0.0", Side::BOTH, &[("a", "", Relation::RECOMMENDS)]),
+            candidate("c", "1.0.0", Side::BOTH, &[("d", "", Relation::AFTER)]),
+            candidate("d", "1.0.0", Side::BOTH, &[("c", "", Relation::AFTER)]),
+            candidate("e", "1.0.0", Side::BOTH, &[("x", "", Relation::AFTER)]),
+            candidate("x", "1.0.0", Side::BOTH, &[("y", "", Relation::REQUIRES)]),
+            candidate("y", "1.0.0", Side::BOTH, &[("x", "", Relation::REQUIRES)]),
+        ];
+        let plan = resolve(&mods, Side::CLIENT);
+        assert_eq!(plan.order, [0, 1, 2, 3, 4]);
+        assert_eq!(
+            plan.skipped,
+            [
+                (5, "in a dependency cycle".into()),
+                (6, "in a dependency cycle".into())
             ]
         );
     }

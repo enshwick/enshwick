@@ -255,7 +255,7 @@ fn frames(channel: u32, message: u16, data: &[u8]) -> Option<Vec<String>> {
 }
 
 /// The frames of a control message, numbered when it takes more than one.
-fn control_frames(data: &[u8]) -> Option<Vec<String>> {
+pub(crate) fn control_frames(data: &[u8]) -> Option<Vec<String>> {
     let id = if data.len() > PART_BYTES {
         CONTROL_MESSAGE.fetch_add(1, Ordering::Relaxed)
     } else {
