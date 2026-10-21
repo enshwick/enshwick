@@ -12,8 +12,8 @@
 mod share;
 
 use std::path::Path;
-use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
+use std::sync::{Arc, OnceLock};
 
 use enshwick_loader_api::events::{ShutdownStarted, Ticked, WorldLoaded};
 use enshwick_loader_api::progress::Experience;
@@ -166,8 +166,18 @@ impl Mod for SharedExperience {
         ENABLED.store(settings.enabled, Ordering::Relaxed);
         load.on_experience(share_experience)?;
         let dir = load.data_dir()?;
+        // The store closes at shutdown in a handler of its own: the mark the
+        // last step moved goes to it first, as no tick follows.
+        let last: Arc<OnceLock<WorldStore<Saved>>> = Arc::default();
+        let closing = Arc::clone(&last);
+        load.on::<ShutdownStarted>(move |()| {
+            if let Some(store) = closing.get() {
+                keep(store);
+            }
+        })?;
         // The store opens on the world's load, before the handler below runs.
         let store = load.world_store::<Saved>("experience")?;
+        let _first = last.set(store.clone());
         let kept = store.clone();
         load.on::<Ticked>(move |_| {
             MOMENT.store(0, Ordering::Relaxed);
@@ -284,9 +294,9 @@ mod tests {
             (70, 70),
             "both catch up with the moved mark"
         );
-        tick(&loader, 2);
-        assert_eq!(loader.raise::<ShutdownStarted>(&()), 2);
-        assert_eq!(mark_of(&dir, "first"), 70);
+        // The game stops right after that step: no tick hands the mark over.
+        assert_eq!(loader.raise::<ShutdownStarted>(&()), 3);
+        assert_eq!(mark_of(&dir, "first"), 70, "kept before the store closed");
         assert_eq!(
             HIGH_WATER.load(Ordering::Relaxed),
             0,
