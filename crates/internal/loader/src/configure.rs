@@ -207,15 +207,16 @@ pub fn set(
 /// The reply to a change of `id`'s `key`, on a game server or not.
 #[must_use]
 pub fn changed(id: &str, key: &str, change: &Change) -> String {
+    use crate::texts;
     use crate::worlds::Destination;
-    let then = match (&change.destination, change.stage) {
-        (Destination::Next, _) => "saved for the next world that loads",
-        (_, Stage::Startup) => "saved for this world; it takes effect when the world loads again",
-        (_, Stage::Sync) => "saved for this world, applied now and sent to joined players",
-        (_, Stage::Client) => "saved for you, applied now",
-        _ => "saved for this world, applied now",
-    };
-    format!("{id} {key} = {}: {then}.", change.value)
+    let args = [("id", id), ("key", key), ("value", change.value.as_str())];
+    match (&change.destination, change.stage) {
+        (Destination::Next, _) => texts::fill("change.next", &args),
+        (_, Stage::Startup) => texts::fill("change.startup", &args),
+        (_, Stage::Sync) => texts::fill("change.sync", &args),
+        (_, Stage::Client) => texts::fill("change.client", &args),
+        _ => texts::fill("change.runtime", &args),
+    }
 }
 
 #[cfg(test)]
