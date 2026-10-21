@@ -29,6 +29,7 @@ use enshwick_loader_api::commands::{is_valid_name, parse_line};
 use crate::chains::Next;
 use crate::host::Loader;
 use crate::settings::LOADER_ID;
+use crate::texts;
 
 /// Lines posted per drain: the game's chat pool drops undelivered lines
 /// when it fills.
@@ -562,21 +563,21 @@ fn run(command: &Command, args: &str, player: &PlayerInfo) -> String {
 fn builtin(loader: &Loader, args: &str, player: &PlayerInfo) -> String {
     if args.eq_ignore_ascii_case("status") {
         if player.permissions & PlayerInfo::CAN_KICK_BAN == 0 {
-            return "Only administrators see the status.".to_owned();
+            return texts::fill("enshwick.status.admins", &[]);
         }
         crate::status::request();
         return crate::status::summary(loader).short();
     }
     if let Some(rest) = word(args, "profile") {
         if player.permissions & PlayerInfo::CAN_KICK_BAN == 0 {
-            return "Only administrators see what mods cost.".to_owned();
+            return texts::fill("enshwick.profile.admins", &[]);
         }
         if rest.eq_ignore_ascii_case("reset") {
             crate::status::reset_profile(loader);
-            return "Per-mod costs count from now: /enshwick profile shows them.".to_owned();
+            return texts::fill("enshwick.profile.reset", &[]);
         }
         let mut lines = crate::status::cost_lines(loader, 5, 2);
-        lines.push("Full list: logs/enshwick/status.log after /enshwick status.".to_owned());
+        lines.push(texts::fill("enshwick.profile.full", &[]));
         return lines.join(
             "
 ",
@@ -584,11 +585,11 @@ fn builtin(loader: &Loader, args: &str, player: &PlayerInfo) -> String {
     }
     if args.eq_ignore_ascii_case("conflicts") {
         if player.permissions & PlayerInfo::CAN_KICK_BAN == 0 {
-            return "Only administrators see the conflicts.".to_owned();
+            return texts::fill("enshwick.conflicts.admins", &[]);
         }
         let lines = crate::status::conflicts(loader);
         if lines.is_empty() {
-            return "No two mods share a hook, feature or resource.".to_owned();
+            return texts::fill("enshwick.conflicts.none", &[]);
         }
         return lines.join(
             "
@@ -600,7 +601,7 @@ fn builtin(loader: &Loader, args: &str, player: &PlayerInfo) -> String {
     }
     if let Some(rest) = word(args, "log") {
         if player.permissions & PlayerInfo::CAN_KICK_BAN == 0 {
-            return "Only administrators read the log.".to_owned();
+            return texts::fill("enshwick.log.admins", &[]);
         }
         return log_lines(loader, rest);
     }
@@ -613,46 +614,49 @@ fn builtin(loader: &Loader, args: &str, player: &PlayerInfo) -> String {
             .mods
             .iter()
             .find(|m| m.id.eq_ignore_ascii_case(args))
-            .map_or_else(
-                || format!("No mod {args} is loaded. /enshwick lists the mods."),
-                about,
-            );
+            .map_or_else(|| texts::fill("enshwick.unknown", &[("id", args)]), about);
     }
-    let mods: Vec<String> = loader
-        .mods
-        .iter()
-        .map(|m| {
-            let off = if m.off.load(Ordering::Acquire) {
-                " (off)"
-            } else {
-                ""
-            };
-            format!("{} {}{off}", m.label(), m.version)
-        })
-        .collect();
-    let list = if mods.is_empty() {
-        "no mods".to_owned()
+    let mods: Vec<String> = loader.mods.iter().map(name).collect();
+    let version = env!("CARGO_PKG_VERSION");
+    let mut sentences = vec![if mods.is_empty() {
+        texts::fill("enshwick.mods.none", &[("version", version)])
     } else {
-        mods.join(", ")
-    };
-    let disabled = crate::modlist::disabled();
-    let off = if disabled.is_empty() {
-        String::new()
-    } else {
-        format!(
-            " Off in {}: {}.",
-            crate::modlist::LIST_PATH,
-            disabled.join(", ")
+        texts::fill(
+            "enshwick.mods",
+            &[("version", version), ("mods", &mods.join(", "))],
         )
-    };
-    let replaced: String = crate::modlist::replaced()
-        .iter()
-        .flat_map(|old| [" ".to_owned(), old.line(), ".".to_owned()])
-        .collect();
-    format!(
-        "Enshwick {}: {list}.{off}{replaced} /enshwick help lists the commands.",
-        env!("CARGO_PKG_VERSION")
-    )
+    }];
+    let disabled = crate::modlist::disabled();
+    if !disabled.is_empty() {
+        sentences.push(texts::fill(
+            "enshwick.off-in",
+            &[
+                ("file", crate::modlist::LIST_PATH),
+                ("mods", &disabled.join(", ")),
+            ],
+        ));
+    }
+    sentences.extend(crate::modlist::replaced().iter().map(|old| {
+        texts::fill(
+            "enshwick.replaced",
+            &[("id", &old.id), ("by", &old.by), ("file", &old.file)],
+        )
+    }));
+    sentences.push(texts::fill("enshwick.more", &[]));
+    sentences.join(" ")
+}
+
+/// A mod's name and version, marked when it is off.
+fn name(record: &crate::host::ModRecord) -> String {
+    let label = record.label();
+    if record.off.load(Ordering::Acquire) {
+        texts::fill(
+            "mods.off",
+            &[("name", &label), ("version", &record.version)],
+        )
+    } else {
+        format!("{label} {}", record.version)
+    }
 }
 
 /// `/config`, for administrators: read and change mods' settings.
@@ -660,7 +664,7 @@ fn config(loader: &Loader, args: &str, player: &PlayerInfo) -> String {
     use crate::configure::{self, Request};
 
     if player.permissions & PlayerInfo::CAN_KICK_BAN == 0 {
-        return "Only administrators use /config.".to_owned();
+        return texts::fill("config.admins", &[]);
     }
     let request = configure::parse(args);
     let id = match request {
@@ -672,25 +676,22 @@ fn config(loader: &Loader, args: &str, player: &PlayerInfo) -> String {
                 .map(|m| m.id.as_str())
                 .collect();
             return if with.is_empty() {
-                "No mod describes its settings.".to_owned()
+                texts::fill("config.none", &[])
             } else {
-                format!(
-                    "Mods with settings: {}. /config <mod> lists a mod's.",
-                    with.join(", ")
-                )
+                texts::fill("config.mods", &[("mods", &with.join(", "))])
             };
         }
         Request::List(id) | Request::Get(id, _) | Request::Set(id, _, _) => id,
     };
     let Some((index, record)) = loader.mods.iter().enumerate().find(|(_, m)| m.id == id) else {
-        return format!("No mod {id} is loaded. /config lists the mods with settings.");
+        return texts::fill("config.unknown", &[("id", id)]);
     };
     let Some(schema) = record.schema.lock().ok().and_then(|s| s.clone()) else {
-        return format!("{id} does not describe its settings; edit mod-configs/{id}.toml.");
+        return texts::fill("config.no-schema", &[("id", id)]);
     };
     let path = loader.configs_dir.join(format!("{id}.toml"));
     let Ok(global) = std::fs::read_to_string(&path) else {
-        return format!("mod-configs/{id}.toml is missing; restart to write it.");
+        return texts::fill("config.missing", &[("id", id)]);
     };
     let text = crate::worlds::compose(&crate::worlds::show_text(loader, record), &global, &schema);
     match request {
@@ -709,12 +710,7 @@ fn config(loader: &Loader, args: &str, player: &PlayerInfo) -> String {
 
 /// What `record` is, for `/enshwick <mod id>`.
 fn about(record: &crate::host::ModRecord) -> String {
-    let off = if record.off.load(Ordering::Acquire) {
-        " (off)"
-    } else {
-        ""
-    };
-    let mut lines = vec![format!("{} {}{off}", record.label(), record.version)];
+    let mut lines = vec![name(record)];
     if !record.meta.description.is_empty() {
         lines.push(record.meta.description.clone());
     }
@@ -741,7 +737,7 @@ fn log_lines(loader: &Loader, args: &str) -> String {
         Ok((source, level, count)) => {
             let lines = crate::log::recent(source.as_deref(), level, count);
             if lines.is_empty() {
-                "No such lines in the log.".to_owned()
+                texts::fill("enshwick.log.none", &[])
             } else {
                 lines.join("\n")
             }
@@ -768,9 +764,7 @@ fn log_query(
         } else if word.eq_ignore_ascii_case(LOADER_ID) || known(word) {
             source = Some(word.to_ascii_lowercase());
         } else {
-            return Err(format!(
-                "{word} is no mod, level (error, warn, info, debug) or line count. Usage: /enshwick log [mod] [level] [n]"
-            ));
+            return Err(texts::fill("enshwick.log.usage", &[("word", word)]));
         }
     }
     Ok((source, level, count))
@@ -780,26 +774,22 @@ fn log_query(
 /// own client.
 fn ui_demo(loader: &Loader, player: &PlayerInfo) -> String {
     if player.permissions & PlayerInfo::CAN_KICK_BAN == 0 {
-        return "Only administrators open the interface demo.".to_owned();
+        return texts::fill("ui-demo.admins", &[]);
     }
     if player.key == 0 {
-        return "The interface demo opens on a player's client.".to_owned();
+        return texts::fill("ui-demo.player", &[]);
     }
     match crate::net::ui_demo(
         player.key,
         crate::world::fixed_position(loader, player.entity),
     ) {
-        Ok(()) => "Opening the interface demo.".to_owned(),
-        Err(_) => "Your client does not run Enshwick, or has not answered yet.".to_owned(),
+        Ok(()) => texts::fill("ui-demo.opening", &[]),
+        Err(_) => texts::fill("ui-demo.no-client", &[]),
     }
 }
 
 fn help(loader: &Loader, commands: &[Command]) -> String {
-    let mut lines = vec![
-        "/enshwick: the mods running; /enshwick <mod id>: what a mod is; /enshwick help: this list; /enshwick status: the status (administrators); /enshwick profile [reset]: what each mod costs (administrators); /enshwick conflicts: hooks, filters and resources mods share (administrators); /enshwick ui-demo: every interface widget on your screen (administrators); /enshwick log [mod] [level] [n]: the latest log lines (administrators)"
-            .to_owned(),
-        crate::configure::HELP.to_owned(),
-    ];
+    let mut lines = vec![texts::fill("enshwick.help", &[]), crate::configure::help()];
     lines.extend(commands.iter().filter_map(|c| {
         let record = loader.mods.get(c.owner)?;
         (!record.off.load(Ordering::Acquire))

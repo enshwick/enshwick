@@ -3448,9 +3448,10 @@ pub(crate) fn check_settings(index: usize, text: &str) -> Result<(), String> {
         return Ok(());
     }
     // SAFETY: the reason stays valid until the mod's next check.
-    Err(unsafe { why.as_str() }
-        .unwrap_or("refused by the mod")
-        .to_owned())
+    Err(unsafe { why.as_str() }.map_or_else(
+        || crate::texts::fill("refused.by-mod", &[]),
+        ToOwned::to_owned,
+    ))
 }
 
 extern "system" fn texts(me: ModHandle, toml: Str) -> Status {
