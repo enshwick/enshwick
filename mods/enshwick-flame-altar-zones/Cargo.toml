@@ -1,6 +1,6 @@
 [package]
 name = "enshwick-flame-altar-zones"
-version = "0.0.0-dev"
+version = "0.5.0"
 description = "Flame altar zones that touch form one cluster, grow together and can be built across"
 keywords = ["enshrouded", "mod", "altar", "building"]
 categories = ["game-development"]

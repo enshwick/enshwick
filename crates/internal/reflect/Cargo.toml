@@ -1,6 +1,6 @@
 [package]
 name = "enshwick-loader-reflect"
-version = "0.0.0-dev"
+version = "0.10.0"
 description = "Internal, not for mods: reads the reflection data and ECS system records of Keen's Holistic engine from a PE image"
 keywords = ["enshrouded", "reflection", "pe", "modding"]
 categories = ["game-development", "parser-implementations"]

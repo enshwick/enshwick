@@ -1,6 +1,6 @@
 [package]
 name = "enshwick-optimizer"
-version = "0.0.0-dev"
+version = "0.6.0"
 description = "Less server CPU on Windows and under Wine or Proton: exact short waits, task workers within a container's CPU limit, measurements and an environment report"
 keywords = ["enshrouded", "mod", "wine", "proton", "performance"]
 categories = ["game-development"]

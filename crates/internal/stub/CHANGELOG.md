@@ -1,0 +1,124 @@
+# Changelog
+
+## [0.10.0](https://github.com/themaiby/enshwick/compare/enshwick-loader-stub-v0.9.1...enshwick-loader-stub-v0.10.0) (2026-10-21)
+
+
+### ⚠ BREAKING CHANGES
+
+* **optimizer:** rename and tune per platform for Windows and Proton ([#165](https://github.com/themaiby/enshwick/issues/165))
+* consolidate into Enshwick Loader, one API crate and one tool ([#85](https://github.com/themaiby/enshwick/issues/85))
+
+### Performance
+
+* **optimizer:** rename and tune per platform for Windows and Proton ([#165](https://github.com/themaiby/enshwick/issues/165)) ([71cf9b5](https://github.com/themaiby/enshwick/commit/71cf9b51b0d35b09d12dd4974e2dc91d174e2c0b))
+
+
+### Other
+
+* consolidate into Enshwick Loader, one API crate and one tool ([#85](https://github.com/themaiby/enshwick/issues/85)) ([5ddfde4](https://github.com/themaiby/enshwick/commit/5ddfde457d24f8e000d2dee1c74508f89582d526))
+
+## [0.9.1](https://github.com/themaiby/enshwick/compare/enshwick-loader-stub-v0.9.0...enshwick-loader-stub-v0.9.1) (2026-10-21)
+
+
+### Other
+
+* **enshwick-loader-stub:** Synchronize enshwick versions
+
+## [0.9.0](https://github.com/themaiby/enshwick/compare/enshwick-loader-stub-v0.8.2...enshwick-loader-stub-v0.9.0) (2026-10-21)
+
+
+### Other
+
+* **enshwick-loader-stub:** Synchronize enshwick versions
+
+## [0.8.2](https://github.com/themaiby/enshwick/compare/enshwick-loader-stub-v0.8.1...enshwick-loader-stub-v0.8.2) (2026-10-21)
+
+
+### Other
+
+* **enshwick-loader-stub:** Synchronize enshwick versions
+
+## [0.8.1](https://github.com/themaiby/enshwick/compare/enshwick-loader-stub-v0.8.0...enshwick-loader-stub-v0.8.1) (2026-10-21)
+
+
+### Other
+
+* **enshwick-loader-stub:** Synchronize enshwick versions
+
+## [0.8.0](https://github.com/themaiby/enshwick/compare/enshwick-loader-stub-v0.7.0...enshwick-loader-stub-v0.8.0) (2026-10-21)
+
+
+### ⚠ BREAKING CHANGES
+
+* **optimizer:** rename and tune per platform for Windows and Proton ([#165](https://github.com/themaiby/enshwick/issues/165))
+
+### Performance
+
+* **optimizer:** rename and tune per platform for Windows and Proton ([#165](https://github.com/themaiby/enshwick/issues/165)) ([71cf9b5](https://github.com/themaiby/enshwick/commit/71cf9b51b0d35b09d12dd4974e2dc91d174e2c0b))
+
+## [0.7.0](https://github.com/themaiby/enshwick/compare/enshwick-loader-stub-v0.6.0...enshwick-loader-stub-v0.7.0) (2026-10-21)
+
+
+### Other
+
+* **enshwick-loader-stub:** Synchronize enshwick versions
+
+## [0.6.0](https://github.com/themaiby/enshwick/compare/enshwick-loader-stub-v0.5.0...enshwick-loader-stub-v0.6.0) (2026-10-21)
+
+
+### Other
+
+* **enshwick-loader-stub:** Synchronize enshwick versions
+
+## [0.5.0](https://github.com/themaiby/enshwick/compare/enshwick-loader-stub-v0.4.0...enshwick-loader-stub-v0.5.0) (2026-10-20)
+
+
+### Other
+
+* **enshwick-loader-stub:** Synchronize enshwick versions
+
+## [0.4.0](https://github.com/themaiby/enshwick/compare/enshwick-loader-stub-v0.3.1...enshwick-loader-stub-v0.4.0) (2026-10-20)
+
+
+### Other
+
+* **enshwick-loader-stub:** Synchronize enshwick versions
+
+## [0.3.1](https://github.com/themaiby/enshwick/compare/enshwick-loader-stub-v0.3.0...enshwick-loader-stub-v0.3.1) (2026-10-20)
+
+
+### Other
+
+* **enshwick-loader-stub:** Synchronize enshwick versions
+
+## [0.3.0](https://github.com/themaiby/enshwick/compare/enshwick-loader-stub-v0.2.0...enshwick-loader-stub-v0.3.0) (2026-10-20)
+
+
+### ⚠ BREAKING CHANGES
+
+* consolidate into Enshwick Loader, one API crate and one tool ([#85](https://github.com/themaiby/enshwick/issues/85))
+
+### Other
+
+* consolidate into Enshwick Loader, one API crate and one tool ([#85](https://github.com/themaiby/enshwick/issues/85)) ([5ddfde4](https://github.com/themaiby/enshwick/commit/5ddfde457d24f8e000d2dee1c74508f89582d526))
+
+## [0.2.0](https://github.com/themaiby/enshwick/compare/enshwick-stub-v0.1.2...enshwick-stub-v0.2.0) (2026-10-20)
+
+
+### Other
+
+* **enshwick-stub:** Synchronize enshwick versions
+
+## [0.1.2](https://github.com/themaiby/enshwick/compare/enshwick-stub-v0.1.1...enshwick-stub-v0.1.2) (2026-10-20)
+
+
+### Features
+
+* update sources in manifests and staged updates in the stub ([#57](https://github.com/themaiby/enshwick/issues/57)) ([20e72b1](https://github.com/themaiby/enshwick/commit/20e72b1025765d83f3da861ec46ccbb4a163443c))
+
+## [0.1.1](https://github.com/themaiby/enshwick/compare/enshwick-stub-v0.1.0...enshwick-stub-v0.1.1) (2026-10-19)
+
+
+### Features
+
+* **enshwick-loader:** load mods and link their hook chains ([#5](https://github.com/themaiby/enshwick/issues/5)) ([3b8dc75](https://github.com/themaiby/enshwick/commit/3b8dc75a7f84a113e8d625b92ab5cec3242619bc))

@@ -1,6 +1,6 @@
 [package]
 name = "enshwick-building-materials"
-version = "0.0.0-dev"
+version = "0.5.0"
 description = "Building blocks, roofs, overgrowth, decor and furniture: twice the output of the vanilla recipes for the same cost"
 keywords = ["enshrouded", "mod", "building", "recipes"]
 categories = ["game-development"]
