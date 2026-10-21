@@ -40,13 +40,16 @@ An idle dedicated server, process CPU, 100 % being one core (details under
   whatever the container's limit, so a server in a container limited to 4 CPUs
   on a 32-thread host runs 8 workers per group that wake hundreds of times a
   second each. With a CPU limit, the mod starts no more workers than the limit
-  rounded up. The game's own log shows the result:
+  rounded up, and at least 2. The game's own log shows the result:
   `[task] Group 'Default' Worker:6 Main:2` is 4 workers and 2 main slots. The
   dedicated server's own start-up waits for the loader, so the cap is in place
   before the task system starts.
 - **Server wait cap.** With players online the server's game loop waits 1 ms
   after each pass: 700 to 900 passes a second for 60 simulation steps. The cap
-  lets it wait longer, never past the next step. Off by default everywhere:
+  lets it wait longer, never past the next step: a wait can wake one timer
+  tick late (the timer resolution on Windows, a millisecond under Wine), so
+  the longer wait ends a tick and half a millisecond before the step is due,
+  and stays at 1 ms where that leaves less. Off by default everywhere:
   what it saves was measured only with an emulated player (see below), and
   what arrives between two steps may wait up to the cap.
 - **Measure mode.** A line a minute in the log and the status summary: the
@@ -87,7 +90,7 @@ measure = true
   turning them on takes effect at the next start if they were off at start.
 - `task_workers`: the most workers each task group of the dedicated server
   starts, 1 to 64, read at start. 0 is automatic: the container's CPU limit
-  under Wine, else as many as the game picks.
+  under Wine, rounded up and at least 2, else as many as the game picks.
 - `server_wait_cap_ms`: 1 to 8. 1 is vanilla. Before keeping more, check in
   game that gliding, joining or respawning and combat feel the same.
 - `measure`: the line a minute. It costs a few atomic counters and a look at
@@ -179,7 +182,10 @@ the first release, 1.0.0, there are no others.
 
 ## Who needs it
 
-The server, the dedicated one or a game a client hosts. Players need nothing,
-and it does not count in the join check.
+The dedicated server. In the game, hosting a game or not, every change is
+off by default, as the table says, since none was measured there; a setting
+forces one on (the task workers stay as the game picks, which only the
+dedicated server lets the mod change), and measure mode and the environment
+line run. Players need nothing, and it does not count in the join check.
 
 Licensed under [MIT](../../LICENSE).
