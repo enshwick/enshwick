@@ -19,7 +19,7 @@
 //! player's bool the game sets when it rewards the quest.
 
 use std::sync::OnceLock;
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
 use enshwick_loader_api::abi::{Event, Header, KnowledgeData, KnowledgeInfo, QuestData, Status};
 use rustc_hash::FxHashSet;
@@ -116,6 +116,8 @@ static LAYOUT: OnceLock<Option<Layout>> = OnceLock::new();
 static QUESTS: OnceLock<FxHashSet<u32>> = OnceLock::new();
 /// The knowledge update last seen after a step.
 static SEEN_STEP: AtomicU32 = AtomicU32::new(0);
+/// Set while nobody handles the changes: [`SEEN_STEP`] is stale.
+static UNSEEN: AtomicBool = AtomicBool::new(false);
 
 fn layout(loader: &Loader) -> Option<&'static Layout> {
     LAYOUT
@@ -444,6 +446,15 @@ fn quest_set(layout: &Layout, game: usize) -> Option<&'static FxHashSet<u32>> {
 /// Raises the knowledge changes and completed quests of the last step, on
 /// the game thread after it.
 pub(crate) fn after_step(loader: &Loader) {
+    if !crate::host::handles(Event::KNOWLEDGE_CHANGED)
+        && !crate::host::handles(Event::QUEST_COMPLETED)
+    {
+        // A handler that arrives later hears the updates after its first look.
+        if !UNSEEN.load(Ordering::Relaxed) {
+            UNSEEN.store(true, Ordering::Relaxed);
+        }
+        return;
+    }
     let Some(layout) = layout(loader) else {
         return;
     };
@@ -452,7 +463,11 @@ pub(crate) fn after_step(loader: &Loader) {
     };
     // SAFETY: the store's update counter.
     let step: u32 = unsafe { read(state, layout.step) };
-    if SEEN_STEP.swap(step, Ordering::Relaxed) == step {
+    let first_look = UNSEEN.load(Ordering::Relaxed);
+    if first_look {
+        UNSEEN.store(false, Ordering::Relaxed);
+    }
+    if SEEN_STEP.swap(step, Ordering::Relaxed) == step || first_look {
         return;
     }
     // SAFETY: the store's world log of the last update.

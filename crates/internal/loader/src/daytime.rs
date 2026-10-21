@@ -328,6 +328,13 @@ unsafe extern "system" fn speed(daytime: *mut u8, game: f32, now: i64) {
 /// Raises the turn of day or night the last step brought, on the game
 /// thread after it.
 pub(crate) fn after_step(loader: &Loader) {
+    if !crate::host::handles(Event::DAY_STARTED) && !crate::host::handles(Event::NIGHT_STARTED) {
+        // A handler that arrives later starts from its first look, as at start.
+        if WAS_DAY.load(Ordering::Relaxed) != 0 {
+            WAS_DAY.store(0, Ordering::Relaxed);
+        }
+        return;
+    }
     let Ok(info) = info(loader) else {
         return;
     };
