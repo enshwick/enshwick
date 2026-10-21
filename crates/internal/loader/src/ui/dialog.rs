@@ -17,7 +17,7 @@ use std::sync::{Arc, Mutex, PoisonError};
 
 use enshwick_loader_api::abi::{Status, UiAnswerFn, UiDialog};
 
-use super::engine::{self, Buf, Engine, PopupFn};
+use super::engine::{self, Buf, DialogLayout, Engine, PopupFn};
 use crate::host::Registered;
 
 /// Dialogs waiting at most.
@@ -215,36 +215,39 @@ pub(crate) fn armed(in_game: bool) {
 ///
 /// Inside a frame, on its thread, no popup of the game's showing; `next` is
 /// the rest of the popup's chain.
-pub(super) unsafe fn draw(next: PopupFn, context: usize) {
-    let host = Engine::host(context);
+pub(super) unsafe fn draw(engine: &Engine, next: PopupFn, context: usize) {
+    let Some(layout) = engine.dialog else {
+        return;
+    };
+    let host = engine.host(context);
     if host == 0 {
         return;
     }
     CURRENT.with_borrow_mut(|current| {
         if current.is_none() {
-            *current = take_next();
+            *current = take_next(&layout, engine.layout.popup_active);
         }
         let Some(shown) = current.as_mut() else {
             return;
         };
         // SAFETY: the host's answer flag, on the thread that draws it.
-        let pending = unsafe { crate::world::read::<u8>(host, engine::HOST_ANSWERED) };
+        let pending = unsafe { crate::world::read::<u8>(host, layout.answered) };
         if pending != 0 {
             // An answer of the game's own waits for its flow.
             return;
         }
-        let nav = Engine::nav(context);
+        let nav = engine.nav(context);
         // SAFETY: inside the frame, the loader's own popup state.
         unsafe { next(shown.state.ptr()) };
-        Engine::restore_nav(context, nav);
+        engine.restore_nav(context, nav);
         // SAFETY: as above.
-        let answered = unsafe { crate::world::read::<u8>(host, engine::HOST_ANSWERED) };
+        let answered = unsafe { crate::world::read::<u8>(host, layout.answered) };
         if answered == 0 {
             return;
         }
         // SAFETY: as above.
-        let index = unsafe { crate::world::read::<u8>(host, engine::HOST_ANSWER) };
-        let flag = core::ptr::with_exposed_provenance_mut::<u8>(host + engine::HOST_ANSWERED);
+        let index = unsafe { crate::world::read::<u8>(host, layout.answer) };
+        let flag = core::ptr::with_exposed_provenance_mut::<u8>(host + layout.answered);
         // SAFETY: the flag the click set, cleared on the thread that draws.
         unsafe { flag.write(0) };
         if let Some(done) = current.take() {
@@ -253,7 +256,7 @@ pub(super) unsafe fn draw(next: PopupFn, context: usize) {
     });
 }
 
-fn take_next() -> Option<Current> {
+fn take_next(layout: &DialogLayout, active: usize) -> Option<Current> {
     let dialog = WAITING
         .lock()
         .unwrap_or_else(PoisonError::into_inner)
@@ -271,18 +274,18 @@ fn take_next() -> Option<Current> {
         shown.push_back(Arc::clone(&texts));
     }
     let mut state = Box::new(Buf::<{ engine::POPUP_SIZE }>::zeroed());
-    state.u32(engine::POPUP_TITLE, tag_id(2 * slot));
-    state.u32(engine::POPUP_MESSAGE, tag_id(2 * slot + 1));
+    state.u32(layout.title, tag_id(2 * slot));
+    state.u32(layout.message, tag_id(2 * slot + 1));
     state.u16(
-        engine::POPUP_BUTTONS,
+        layout.buttons,
         u16::try_from(dialog.buttons).unwrap_or(1 << UiDialog::OK),
     );
     state.u64(
-        engine::POPUP_DETAIL,
+        layout.detail,
         texts.detail.as_ptr().expose_provenance() as u64,
     );
-    state.u64(engine::POPUP_DETAIL_LEN, texts.detail.len() as u64);
-    state.u8(engine::POPUP_ACTIVE, 1);
+    state.u64(layout.detail_len, texts.detail.len() as u64);
+    state.u8(active, 1);
     Some(Current {
         answerer: dialog.answerer,
         state,

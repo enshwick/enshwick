@@ -171,6 +171,12 @@ the run stays unique without them.
   code must match the constant's pattern where it starts, and the operand
   is read there. `knowledge.journal_blob` is read so, in the journal
   registry's two-instruction getter of its blob.
+- A value in the body of a function the game holds in identical copies is
+  read `via` that function `within` a number of bytes from its start: the
+  pattern must match exactly once there, so a pattern no longer unique in
+  the whole code still finds the instruction in its own copy. The
+  interface's toggle config (`ui.toggle_*`), read only by the 45 copies of
+  the toggle widget, is read so.
 - The slot of an attribute in its set comes from the game's data, not from
   code: the game looks slots up at run time in its attribute container,
   which lists each set's attributes in slot order with their names. Such an
@@ -180,7 +186,7 @@ the run stays unique without them.
   the game's data holds.
 
 On build 1269579 the patterns find every symbol of both tables, 247 of the
-server's 256 constants and 324 of the client's 333, and the game's data gives
+server's 256 constants and 403 of the client's 412, and the game's data gives
 the other nine, the slots of attributes: on a build without a table every
 entry is found, and every loader feature and mod of this repository runs.
 `cargo enshwick compat --patterns <exe>` shows what the patterns alone find

@@ -6,7 +6,10 @@
 //! interface context in a global for the frame. Widgets take a config buffer
 //! the caller fills; the layouts below are the ones the game's own pages and
 //! its error popup fill. Every function is pinned in the build table and its
-//! first code bytes checked before use.
+//! first code bytes checked before use, and every field the loader fills or
+//! reads is a constant of the table, read on a build without one from the
+//! code that uses it. Each object the game fills or reads has a constant for
+//! how far it reaches, checked against the loader's buffer for it.
 
 use crate::host::Loader;
 
@@ -166,34 +169,266 @@ type SoundFn = unsafe extern "system" fn(context: usize, sound: usize);
 type LocaIdFn = unsafe extern "system" fn(reference: usize) -> u32;
 type LocaTextFn = unsafe extern "system" fn(out: *mut UiText, id: u32) -> *mut UiText;
 
-/// The interface context's fields: the host, the look bundle, the current
-/// navigation group.
-const CONTEXT_HOST: usize = 0x10;
-const CONTEXT_BUNDLE: usize = 0xc8;
-const CONTEXT_NAV: usize = 0x8;
-/// The host's app state pointer, whose target's byte at `APP_STATE` says the
-/// screen: 1 to 3 menus, 4 and 5 slideshows, 6 loading, 7 in game.
-const HOST_APP: usize = 0x48;
-const APP_STATE: usize = 0xc;
-/// The answer the error popup's buttons write into the host: the button
-/// index, then a set flag.
-pub(super) const HOST_ANSWER: usize = 0x680;
-pub(super) const HOST_ANSWERED: usize = 0x681;
-/// The popup state's fields.
+/// The size of the loader's own popup states.
 pub(super) const POPUP_SIZE: usize = 0x560;
-pub(super) const POPUP_TITLE: usize = 0x10;
-pub(super) const POPUP_MESSAGE: usize = 0x14;
-pub(super) const POPUP_BUTTONS: usize = 0x1c;
-pub(super) const POPUP_DETAIL: usize = 0x20;
-pub(super) const POPUP_DETAIL_LEN: usize = 0x28;
-pub(super) const POPUP_ACTIVE: usize = 0x550;
+const WINDOW_OBJECT: usize = 0x20;
+const FRAME_SIZE: usize = 0x40;
+const NAV_SIZE: usize = 0x300;
+const NAV_CONFIG: usize = 0x58;
+const PANEL_CONFIG: usize = 0x100;
+const BUTTON_CONFIG: usize = 0x80;
+const TOGGLE_CONFIG: usize = 0xc50;
+const SLIDER_CONFIG: usize = 0x120;
+const DROPDOWN_CONFIG: usize = 0xca0;
+const MENU_ENTRY: usize = 0x20;
+const ACTION_SPEC: usize = 0x50;
+const LABEL_SIZE: usize = 0x150;
+/// The entries of a toggle: off and on.
+const TOGGLE_ENTRIES: usize = 2;
+
+/// Where the interface's fields sit on the running build, read from its
+/// table: the context's, the widgets' configs and the objects the widget
+/// functions fill.
+#[derive(Debug, Clone, Copy)]
+pub(super) struct Layout {
+    context_nav: usize,
+    context_host: usize,
+    context_bundle: usize,
+    /// The context's play state, whose record's byte at `state_screen`
+    /// says the screen: 1 to 3 menus, 4 and 5 slideshows, 6 loading, 7 in
+    /// game.
+    context_state: usize,
+    state_screen: usize,
+    pub(super) popup_active: usize,
+    frame_node: usize,
+    window_node: usize,
+    node_id: usize,
+    panel_kind: usize,
+    panel_alpha: usize,
+    /// The navigation config's fields from its start, in the order of
+    /// [`NAV_IDS`].
+    nav: [usize; 7],
+    label_align: usize,
+    label_shown: usize,
+    label_font_size: usize,
+    label_flags: usize,
+    button_align: usize,
+    button_centered: usize,
+    button_enabled: usize,
+    button_size_mode: usize,
+    button_padding: [usize; 2],
+    button_scale: usize,
+    button_sound: usize,
+    entry_size: usize,
+    entry_value: usize,
+    entry_text: usize,
+    toggle_count: usize,
+    toggle_label: usize,
+    toggle_explainer: usize,
+    toggle_explain: usize,
+    toggle_enabled: usize,
+    slider_min: usize,
+    slider_max: usize,
+    slider_bounded: usize,
+    slider_read_only: usize,
+    slider_on_release: usize,
+    slider_steps: usize,
+    slider_format: usize,
+    slider_discrete: usize,
+    slider_stop_count: usize,
+    slider_stops: usize,
+    slider_stop_capacity: usize,
+    dropdown_count: usize,
+    dropdown_enabled: usize,
+    dropdown_capacity: usize,
+    dropdown_entry_text: usize,
+    menu_entry_text: usize,
+    menu_entry_font: usize,
+    action_node: usize,
+    action_bound: usize,
+}
+
+/// The navigation group's fields the loader's config sets, as offsets in
+/// the group; its config sits at `ui.nav_config` in it.
+const NAV_IDS: [&str; 7] = [
+    "ui.nav_kind",
+    "ui.nav_wrap",
+    "ui.nav_axis",
+    "ui.nav_flags",
+    "ui.nav_input_kind",
+    "ui.nav_layer",
+    "ui.nav_sound",
+];
+
+/// The popup state's fields and the host's answer, which the loader's
+/// dialogs fill and read.
+#[derive(Debug, Clone, Copy)]
+pub(super) struct DialogLayout {
+    pub(super) title: usize,
+    pub(super) message: usize,
+    pub(super) buttons: usize,
+    pub(super) detail: usize,
+    pub(super) detail_len: usize,
+    pub(super) answer: usize,
+    pub(super) answered: usize,
+}
+
+/// The world settings view's fields at the loader's hook in it: the
+/// config's byte that makes every row read-only, and the shown tab.
+#[derive(Debug, Clone, Copy)]
+pub(super) struct ViewLayout {
+    pub(super) read_only: usize,
+    pub(super) tab: usize,
+}
+
+/// The build's constants by id.
+type Lookup<'a> = &'a dyn Fn(&str) -> Option<u64>;
+
+/// A layout constant of the build.
+fn field(lookup: Lookup<'_>, id: &'static str) -> Result<usize, Missing> {
+    lookup(id)
+        .and_then(|value| usize::try_from(value).ok())
+        .ok_or(Missing::Entry(id))
+}
+
+/// Checks a layout constant that gives how far the game reads or writes an
+/// object the loader keeps in `room` bytes.
+fn fits(lookup: Lookup<'_>, id: &'static str, room: usize) -> Result<(), Missing> {
+    if field(lookup, id)? > room {
+        return Err(Missing::Room(id));
+    }
+    Ok(())
+}
+
+impl Layout {
+    fn read(lookup: Lookup<'_>) -> Result<Self, Missing> {
+        let f = |id| field(lookup, id);
+        for (id, room) in [
+            ("ui.window_extent", WINDOW_OBJECT),
+            ("ui.frame_extent", FRAME_SIZE),
+            ("ui.nav_extent", NAV_SIZE),
+            ("ui.nav_config_size", NAV_CONFIG),
+            ("ui.panel_extent", PANEL_CONFIG),
+            ("ui.label_extent", LABEL_SIZE),
+            ("ui.button_extent", BUTTON_CONFIG),
+            ("ui.toggle_extent", TOGGLE_CONFIG),
+            ("ui.dropdown_extent", DROPDOWN_CONFIG),
+            ("ui.menu_entry_extent", MENU_ENTRY),
+            ("ui.action_extent", ACTION_SPEC),
+        ] {
+            fits(lookup, id, room)?;
+        }
+        let config = f("ui.nav_config")?;
+        let mut nav = [0; 7];
+        for (slot, id) in nav.iter_mut().zip(NAV_IDS) {
+            *slot = f(id)?.checked_sub(config).ok_or(Missing::Room(id))?;
+        }
+        Self {
+            context_nav: f("ui.context_nav")?,
+            context_host: f("ui.context_host")?,
+            context_bundle: f("ui.context_bundle")?,
+            context_state: f("ui.context_state")?,
+            state_screen: f("ui.state_screen")?,
+            popup_active: f("ui.popup_active")?,
+            frame_node: f("ui.frame_node")?,
+            window_node: f("ui.window_node")?,
+            node_id: f("ui.node_id")?,
+            panel_kind: f("ui.panel_kind")?,
+            panel_alpha: f("ui.panel_alpha")?,
+            nav,
+            label_align: f("ui.label_align")?,
+            label_shown: f("ui.label_shown")?,
+            label_font_size: f("ui.label_font_size")?,
+            label_flags: f("ui.label_flags")?,
+            button_align: f("ui.button_align")?,
+            button_centered: f("ui.button_centered")?,
+            button_enabled: f("ui.button_enabled")?,
+            button_size_mode: f("ui.button_size_mode")?,
+            button_padding: [f("ui.button_padding_x")?, f("ui.button_padding_y")?],
+            button_scale: f("ui.button_scale")?,
+            button_sound: f("ui.button_sound")?,
+            entry_size: f("ui.entry_size")?,
+            entry_value: f("ui.entry_value")?,
+            entry_text: f("ui.entry_text")?,
+            toggle_count: f("ui.toggle_count")?,
+            toggle_label: f("ui.toggle_label")?,
+            toggle_explainer: f("ui.toggle_explainer")?,
+            toggle_explain: f("ui.toggle_explain")?,
+            toggle_enabled: f("ui.toggle_enabled")?,
+            slider_min: f("ui.slider_min")?,
+            slider_max: f("ui.slider_max")?,
+            slider_bounded: f("ui.slider_bounded")?,
+            slider_read_only: f("ui.slider_read_only")?,
+            slider_on_release: f("ui.slider_on_release")?,
+            slider_steps: f("ui.slider_steps")?,
+            slider_format: f("ui.slider_format")?,
+            slider_discrete: f("ui.slider_discrete")?,
+            slider_stop_count: f("ui.slider_stop_count")?,
+            slider_stops: f("ui.slider_stops")?,
+            slider_stop_capacity: f("ui.slider_stop_capacity")?,
+            dropdown_count: f("ui.dropdown_count")?,
+            dropdown_enabled: f("ui.dropdown_enabled")?,
+            dropdown_capacity: f("ui.dropdown_capacity")?,
+            dropdown_entry_text: f("ui.dropdown_entry_text")?,
+            menu_entry_text: f("ui.menu_entry_text")?,
+            menu_entry_font: f("ui.menu_entry_font")?,
+            action_node: f("ui.action_node")?,
+            action_bound: f("ui.action_bound")?,
+        }
+        .checked()
+    }
+
+    /// Refuses a layout whose lists would run past the loader's buffers.
+    fn checked(self) -> Result<Self, Missing> {
+        let stops = self
+            .slider_stop_capacity
+            .checked_mul(4)
+            .and_then(|size| size.checked_add(self.slider_stops));
+        if stops.is_none_or(|end| end > SLIDER_CONFIG) {
+            return Err(Missing::Room("ui.slider_stop_capacity"));
+        }
+        let entries = |count: usize| count.checked_mul(self.entry_size);
+        if entries(TOGGLE_ENTRIES).is_none_or(|end| end > self.toggle_count) {
+            return Err(Missing::Room("ui.toggle_count"));
+        }
+        if entries(self.dropdown_capacity).is_none_or(|end| end > self.dropdown_count) {
+            return Err(Missing::Room("ui.dropdown_capacity"));
+        }
+        Ok(self)
+    }
+}
+
+impl DialogLayout {
+    fn read(lookup: Lookup<'_>) -> Result<Self, Missing> {
+        let f = |id| field(lookup, id);
+        fits(lookup, "ui.popup_extent", POPUP_SIZE)?;
+        Ok(Self {
+            title: f("ui.popup_title")?,
+            message: f("ui.popup_message")?,
+            buttons: f("ui.popup_buttons")?,
+            detail: f("ui.popup_detail")?,
+            detail_len: f("ui.popup_detail_len")?,
+            answer: f("ui.host_answer")?,
+            answered: f("ui.host_answered")?,
+        })
+    }
+}
+
+impl ViewLayout {
+    fn read(lookup: Lookup<'_>) -> Result<Self, Missing> {
+        Ok(Self {
+            read_only: field(lookup, "ui.view_read_only")?,
+            tab: field(lookup, "ui.view_tab")?,
+        })
+    }
+}
 
 /// A window's own objects, kept in place from its start to its end.
 pub(super) struct Window {
-    object: Buf<0x20>,
-    backdrop: Buf<0x40>,
-    panel: Buf<0x40>,
-    nav: Buf<0x300>,
+    object: Buf<WINDOW_OBJECT>,
+    backdrop: Buf<FRAME_SIZE>,
+    panel: Buf<FRAME_SIZE>,
+    nav: Buf<NAV_SIZE>,
     saved_nav: usize,
     layer: u32,
     gap: f32,
@@ -219,24 +454,13 @@ impl Window {
         window.gap = gap;
         window
     }
-
-    /// The panel's node id, for actions bound to the window.
-    pub(super) fn node_id(&self) -> u64 {
-        let node = self.panel.read_usize(8);
-        if node == 0 {
-            return 0;
-        }
-        // SAFETY: a node the game made for the panel in the last frame; its
-        // id sits at +0x30.
-        unsafe { crate::world::read::<u64>(node, 0x30) }
-    }
 }
 
 /// The HUD window's own objects, kept in place from its start to its end.
 pub(super) struct HudWindow {
-    object: Buf<0x20>,
-    root: Buf<0x40>,
-    safe: Buf<0x40>,
+    object: Buf<WINDOW_OBJECT>,
+    root: Buf<FRAME_SIZE>,
+    safe: Buf<FRAME_SIZE>,
 }
 
 impl HudWindow {
@@ -269,6 +493,11 @@ pub(crate) struct Engine {
     context: usize,
     pub(super) popup: u64,
     looks: Looks,
+    pub(super) layout: Layout,
+    /// The dialogs' fields; `None` keeps dialogs in system windows.
+    pub(super) dialog: Option<DialogLayout>,
+    /// The world settings view's fields; `None` keeps the mods' rows out.
+    pub(super) view: Option<ViewLayout>,
     window_begin: WindowBeginFn,
     window_end: OneFn,
     frame_from_node: FrameFromNodeFn,
@@ -435,16 +664,18 @@ fn looks(loader: &Loader) -> Option<Looks> {
 /// Why the interface stays off on this build.
 #[derive(Debug)]
 pub(crate) enum Missing {
-    Symbol(&'static str),
+    Entry(&'static str),
     Bytes(&'static str),
+    Room(&'static str),
     Looks,
 }
 
 impl core::fmt::Display for Missing {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            Self::Symbol(name) => write!(f, "{name} is not in this build"),
+            Self::Entry(name) => write!(f, "{name} is not in this build"),
             Self::Bytes(name) => write!(f, "{name} does not read as the build table says"),
+            Self::Room(name) => write!(f, "{name} runs past the loader's buffer"),
             Self::Looks => f.write_str("the look bundle lacks a reflected field"),
         }
     }
@@ -455,7 +686,7 @@ impl Engine {
     /// not read as expected keeps the interface off.
     pub(crate) fn resolve(loader: &Loader) -> Result<Self, Missing> {
         for name in FUNCTIONS {
-            let address = loader.address(name).ok_or(Missing::Symbol(name))?;
+            let address = loader.address(name).ok_or(Missing::Entry(name))?;
             if name == "ui.context" {
                 continue;
             }
@@ -463,7 +694,7 @@ impl Engine {
                 .build
                 .constant(&format!("{name}.bytes"))
                 .ok_or(Missing::Bytes(name))?;
-            let address = usize::try_from(address).map_err(|_| Missing::Symbol(name))?;
+            let address = usize::try_from(address).map_err(|_| Missing::Entry(name))?;
             // SAFETY: the address lies in the game's code, mapped for the
             // process; eight bytes read from a function's entry.
             let found = unsafe { crate::world::read::<u64>(address, 0) };
@@ -472,6 +703,14 @@ impl Engine {
             }
         }
         let looks = looks(loader).ok_or(Missing::Looks)?;
+        let lookup = |id: &str| loader.build.constant(id);
+        let layout = Layout::read(&lookup)?;
+        let dialog = DialogLayout::read(&lookup)
+            .inspect_err(|why| crate::log!(WARN, "interface dialogs off: {why}"))
+            .ok();
+        let view = ViewLayout::read(&lookup)
+            .inspect_err(|why| crate::log!(WARN, "the world settings' Mods rows off: {why}"))
+            .ok();
         let at = |name: &str| {
             loader
                 .address(name)
@@ -490,6 +729,9 @@ impl Engine {
             context: at("ui.context"),
             popup: loader.address("ui.popup").unwrap_or(0),
             looks,
+            layout,
+            dialog,
+            view,
             window_begin: function!("ui.window_begin", WindowBeginFn),
             window_end: function!("ui.window_end", OneFn),
             frame_from_node: function!("ui.frame_from_node", FrameFromNodeFn),
@@ -540,50 +782,62 @@ impl Engine {
         unsafe { crate::world::read::<usize>(self.context, 0) }
     }
 
-    fn bundle(context: usize) -> usize {
+    fn bundle(&self, context: usize) -> usize {
         // SAFETY: a live context holds its look bundle.
-        unsafe { crate::world::read::<usize>(context, CONTEXT_BUNDLE) }
+        unsafe { crate::world::read::<usize>(context, self.layout.context_bundle) }
     }
 
     /// The interface host of `context`.
-    pub(super) fn host(context: usize) -> usize {
+    pub(super) fn host(&self, context: usize) -> usize {
         // SAFETY: a live context holds its host.
-        unsafe { crate::world::read::<usize>(context, CONTEXT_HOST) }
+        unsafe { crate::world::read::<usize>(context, self.layout.context_host) }
     }
 
-    /// The app state byte: 1 to 3 menus, 4 and 5 slideshows, 6 loading, 7 in
-    /// game; 0 when it cannot be read.
-    pub(super) fn app_state(context: usize) -> u8 {
-        let host = Self::host(context);
-        if host == 0 {
-            return 0;
-        }
-        // SAFETY: the host holds its app state pointer.
-        let app = unsafe { crate::world::read::<usize>(host, HOST_APP) };
-        if app == 0 {
-            return 0;
-        }
-        // SAFETY: the pointer names the app state record.
-        let state = unsafe { crate::world::read::<usize>(app, 0) };
+    /// The screen byte of the context's play state: 1 to 3 menus, 4 and 5
+    /// slideshows, 6 loading, 7 in game; 0 when it cannot be read.
+    pub(super) fn app_state(&self, context: usize) -> u8 {
+        // SAFETY: a live context holds its play state pointer.
+        let state = unsafe { crate::world::read::<usize>(context, self.layout.context_state) };
         if state == 0 {
             return 0;
         }
-        // SAFETY: the record holds its state byte.
-        unsafe { crate::world::read::<u8>(state, APP_STATE) }
+        // SAFETY: the pointer names the play state's record.
+        let record = unsafe { crate::world::read::<usize>(state, 0) };
+        if record == 0 {
+            return 0;
+        }
+        // SAFETY: the record holds its screen byte.
+        unsafe { crate::world::read::<u8>(record, self.layout.state_screen) }
     }
 
     /// The navigation group the context points at.
-    pub(super) fn nav(context: usize) -> usize {
+    pub(super) fn nav(&self, context: usize) -> usize {
         // SAFETY: a live context holds its navigation group pointer.
-        unsafe { crate::world::read::<usize>(context, CONTEXT_NAV) }
+        unsafe { crate::world::read::<usize>(context, self.layout.context_nav) }
     }
 
     /// Points the context back at `nav`, after a draw that left it at an
     /// object of its own stack.
-    pub(super) fn restore_nav(context: usize, nav: usize) {
-        let slot = core::ptr::with_exposed_provenance_mut::<usize>(context + CONTEXT_NAV);
+    pub(super) fn restore_nav(&self, context: usize, nav: usize) {
+        let slot =
+            core::ptr::with_exposed_provenance_mut::<usize>(context + self.layout.context_nav);
         // SAFETY: a live context, on the thread that draws it.
         unsafe { slot.write_unaligned(nav) };
+    }
+
+    /// The node of a frame the game opened in `frame`.
+    fn frame_node<const N: usize>(&self, frame: &Buf<N>) -> usize {
+        frame.read_usize(self.layout.frame_node)
+    }
+
+    /// The id of `window`'s panel node, for actions bound to the window.
+    pub(super) fn node_id(&self, window: &Window) -> u64 {
+        let node = self.frame_node(&window.panel);
+        if node == 0 {
+            return 0;
+        }
+        // SAFETY: a node the game made for the panel in the last frame.
+        unsafe { crate::world::read::<u64>(node, self.layout.node_id) }
     }
 
     /// Starts a window: the game's popup panel over a dimmed screen, `width`
@@ -600,7 +854,7 @@ impl Engine {
         name: &UiText,
         title: &UiText,
     ) {
-        window.saved_nav = Self::nav(context);
+        window.saved_nav = self.nav(context);
         let name = [name.ptr.expose_provenance() as u64, name.len];
         // SAFETY: the window object and its name, as the popup passes them:
         // full screen, its layer, all input, flags 1.
@@ -614,7 +868,7 @@ impl Engine {
                 1,
             );
         }
-        let node = window.object.read_usize(0x10);
+        let node = window.object.read_usize(self.layout.window_node);
         // SAFETY: a frame over the window's node.
         unsafe { (self.frame_from_node)(window.backdrop.ptr(), node) };
         // SAFETY: the frame just opened.
@@ -624,7 +878,7 @@ impl Engine {
         unsafe { (self.frame_color)(window.backdrop.ptr(), &raw const dim) };
         // SAFETY: an unnamed frame inside the backdrop.
         unsafe { (self.frame_open)(window.panel.ptr(), 0) };
-        let panel = window.panel.read_usize(8);
+        let panel = self.frame_node(&window.panel);
         let padding = [90.0f32, 60.0, 90.0, 60.0];
         // SAFETY: the panel's node and four edges.
         unsafe { (self.node_padding)(panel, &raw const padding) };
@@ -638,23 +892,24 @@ impl Engine {
         unsafe { (self.node_width)(panel, WINDOW_WIDTH) };
         // SAFETY: the panel's node and no stretch.
         unsafe { (self.node_stretch)(panel, 0) };
-        let mut look = Buf::<0x100>::zeroed();
-        look.u32(0, 9);
-        look.f32(4, 1.0);
+        let mut look = Buf::<PANEL_CONFIG>::zeroed();
+        look.u32(self.layout.panel_kind, 9);
+        look.f32(self.layout.panel_alpha, 1.0);
         // SAFETY: the panel frame and its background, kind 9 as the popup's.
         unsafe { (self.panel)(window.panel.ptr(), look.ptr()) };
         if title.len > 0 {
             // SAFETY: forwarded from the caller.
             unsafe { self.title(context, title) };
         }
-        let mut nav = Buf::<0x58>::zeroed();
-        nav.u32(0, 2);
-        nav.u8(0x20, 1);
-        nav.u32(0x24, 3);
-        nav.u16(0x28, 0x101);
-        nav.u32(0x30, 2);
-        nav.u16(0x34, 0x1b);
-        nav.u16(0x48, 1);
+        let mut nav = Buf::<NAV_CONFIG>::zeroed();
+        let [kind, wrap, axis, flags, input, layer, sound] = self.layout.nav;
+        nav.u32(kind, 2);
+        nav.u8(wrap, 1);
+        nav.u32(axis, 3);
+        nav.u16(flags, 0x101);
+        nav.u32(input, 2);
+        nav.u16(layer, 0x1b);
+        nav.u16(sound, 1);
         // SAFETY: the navigation group and its config, as the popup's.
         unsafe { (self.nav_init)(window.nav.ptr(), nav.ptr()) };
         let mut input = [0u64; 2];
@@ -676,7 +931,7 @@ impl Engine {
         unsafe { (self.nav_end)(window.nav.ptr(), 0) };
         // SAFETY: as above.
         unsafe { (self.nav_drop)(window.nav.ptr()) };
-        Self::restore_nav(context, window.saved_nav);
+        self.restore_nav(context, window.saved_nav);
         // SAFETY: the frames and window the start opened, innermost first.
         unsafe { (self.frame_close)(window.panel.ptr()) };
         // SAFETY: as above.
@@ -686,20 +941,21 @@ impl Engine {
     }
 
     unsafe fn title(&self, context: usize, text: &UiText) {
-        let bundle = Self::bundle(context);
+        let layout = &self.layout;
+        let bundle = self.bundle(context);
         let mut label = Buf::<LABEL_SIZE>::zeroed();
         // SAFETY: a label over `text` in the popup's title style.
         unsafe { (self.label_new)(label.ptr(), text, bundle + self.looks.title, 0) };
-        label.u8(LABEL_SHOWN, 1);
-        let node = label.read_usize(8);
+        label.u8(layout.label_shown, 1);
+        let node = self.frame_node(&label);
         let centre: u16 = 0x202;
         // SAFETY: the label's node and an alignment word.
         unsafe { (self.node_align)(node, &raw const centre) };
-        label.u16(LABEL_ALIGN, centre);
+        label.u16(layout.label_align, centre);
         // SAFETY: the bundle holds the font size, a float.
         let size = unsafe { crate::world::read::<f32>(bundle, self.looks.title_size) };
-        label.f32(LABEL_FONT_SIZE, size);
-        label.u16(LABEL_FLAGS, label.read_u16(LABEL_FLAGS) | 8);
+        label.f32(layout.label_font_size, size);
+        label.u16(layout.label_flags, label.read_u16(layout.label_flags) | 8);
         // SAFETY: the label just made.
         unsafe { (self.label_draw)(label.ptr()) };
     }
@@ -717,7 +973,7 @@ impl Engine {
         wrap: bool,
         center: bool,
     ) {
-        let bundle = Self::bundle(context);
+        let bundle = self.bundle(context);
         let style = self
             .looks
             .styles
@@ -727,12 +983,12 @@ impl Engine {
         let mut label = Buf::<LABEL_SIZE>::zeroed();
         // SAFETY: a label over `text` in a style of the bundle.
         unsafe { (self.label_new)(label.ptr(), text, bundle + style, u8::from(wrap)) };
-        label.u8(LABEL_SHOWN, 1);
-        let node = label.read_usize(8);
+        label.u8(self.layout.label_shown, 1);
+        let node = self.frame_node(&label);
         let align: u16 = if center { 0x202 } else { 0x201 };
         // SAFETY: the label's node and an alignment word.
         unsafe { (self.node_align)(node, &raw const align) };
-        label.u16(LABEL_ALIGN, align);
+        label.u16(self.layout.label_align, align);
         if wrap {
             // SAFETY: the label's node, stretched to the window's width.
             unsafe { (self.node_stretch)(node, stretch(1.0, 0.0)) };
@@ -747,21 +1003,23 @@ impl Engine {
     ///
     /// Inside a window, on the frame's thread; `text` outlives the frame.
     pub(super) unsafe fn button(&self, text: &UiText, enabled: bool) -> bool {
-        let mut config = Buf::<0x80>::zeroed();
-        config.u32(4, 0x0001_0202);
-        config.u8(9, u8::from(enabled));
-        config.u64(0x10, 3);
-        config.f32(0x4c, 10.0);
-        config.f32(0x50, 5.0);
-        config.f32(0x54, 1.0);
-        config.u8(0x58, 1);
+        let layout = &self.layout;
+        let mut config = Buf::<BUTTON_CONFIG>::zeroed();
+        config.u16(layout.button_align, 0x202);
+        config.u8(layout.button_centered, 1);
+        config.u8(layout.button_enabled, u8::from(enabled));
+        config.u64(layout.button_size_mode, 3);
+        config.f32(layout.button_padding[0], 10.0);
+        config.f32(layout.button_padding[1], 5.0);
+        config.f32(layout.button_scale, 1.0);
+        config.u8(layout.button_sound, 1);
         // SAFETY: the button config the popup fills, and the label.
         let clicked = unsafe { (self.button)(config.ptr(), text) } != 0;
         clicked && enabled
     }
 
-    fn setting_texts(&self, context: usize) -> [UiText; 2] {
-        let bundle = Self::bundle(context);
+    fn setting_texts(&self, context: usize) -> [UiText; TOGGLE_ENTRIES] {
+        let bundle = self.bundle(context);
         [self.looks.setting_off, self.looks.setting_on].map(|offset| {
             // SAFETY: a loca reference of the bundle.
             let id = unsafe { (self.loca_id)(bundle + offset) };
@@ -785,17 +1043,19 @@ impl Engine {
         on: bool,
         read_only: bool,
     ) -> Option<bool> {
-        let mut config = Buf::<0xc50>::zeroed();
+        let layout = &self.layout;
+        let mut config = Buf::<TOGGLE_CONFIG>::zeroed();
         let texts = self.setting_texts(context);
-        for (value, (at, text)) in (0u32..).zip((0..).step_by(ENTRY_SIZE).zip(&texts)) {
-            config.u32(at, value);
-            config.text(at + 8, text);
+        let entries = (0..).step_by(layout.entry_size).zip(&texts);
+        for (value, (at, text)) in (0u32..).zip(entries) {
+            config.u32(at + layout.entry_value, value);
+            config.text(at + layout.entry_text, text);
         }
-        config.u8(0xc00, 2);
-        config.text(0xc08, label);
-        config.text(0xc20, &UiText::EMPTY);
-        config.u32(0xc38, 0x0001_0000);
-        config.u32(0xc3c, u32::from(!read_only));
+        config.u8(layout.toggle_count, 2);
+        config.text(layout.toggle_label, label);
+        config.text(layout.toggle_explainer, &UiText::EMPTY);
+        config.u8(layout.toggle_explain, 1);
+        config.u8(layout.toggle_enabled, u8::from(!read_only));
         let mut value = u8::from(on);
         // SAFETY: the selector config the game's settings pages fill, with
         // two entries.
@@ -817,25 +1077,27 @@ impl Engine {
         read_only: bool,
         on_release: bool,
     ) -> Option<f32> {
-        let mut config = Buf::<0x120>::zeroed();
+        let layout = &self.layout;
+        let mut config = Buf::<SLIDER_CONFIG>::zeroed();
         // SAFETY: the slider's constructor fills its defaults.
         unsafe { (self.slider_init)(config.ptr(), label) };
-        config.f32(0x30, min);
-        config.f32(0x34, max);
-        config.u8(0x38, 1);
-        config.u8(0x39, u8::from(read_only));
-        config.u8(0x3a, u8::from(on_release));
-        config.u32(0x4c, slider_format(min, max, steps));
-        if (2..=MAX_STOPS).contains(&steps) {
-            for (i, slot) in (0..steps).zip((0xa0..).step_by(4)) {
-                #[expect(clippy::cast_precision_loss, reason = "at most 32 stops")]
+        config.f32(layout.slider_min, min);
+        config.f32(layout.slider_max, max);
+        config.u8(layout.slider_bounded, 1);
+        config.u8(layout.slider_read_only, u8::from(read_only));
+        config.u8(layout.slider_on_release, u8::from(on_release));
+        config.u32(layout.slider_format, slider_format(min, max, steps));
+        let most = u32::try_from(layout.slider_stop_capacity).unwrap_or(0);
+        if (2..=most).contains(&steps) {
+            for (i, slot) in (0..steps).zip((layout.slider_stops..).step_by(4)) {
+                #[expect(clippy::cast_precision_loss, reason = "a few dozen stops")]
                 let at = min + (max - min) * i as f32 / (steps - 1) as f32;
                 config.f32(slot, at);
             }
-            config.u64(0x80, u64::from(steps));
-            config.u32(0x70, 1);
-        } else if steps > MAX_STOPS {
-            config.u32(0x40, steps - 1);
+            config.u64(layout.slider_stop_count, u64::from(steps));
+            config.u32(layout.slider_discrete, 1);
+        } else if steps > most {
+            config.u32(layout.slider_steps, steps - 1);
         }
         let mut current = value;
         // SAFETY: the config the constructor made, the value, no gamepad
@@ -860,19 +1122,23 @@ impl Engine {
         if options.is_empty() {
             return None;
         }
-        let mut config = Buf::<0xca0>::zeroed();
+        let layout = &self.layout;
+        let mut config = Buf::<DROPDOWN_CONFIG>::zeroed();
         // SAFETY: the dropdown's constructor fills its defaults.
         unsafe { (self.dropdown_init)(config.ptr(), label) };
-        let count = options.len().min(MAX_ENTRIES);
-        for (value, (at, text)) in (0u32..).zip((0..).step_by(ENTRY_SIZE).zip(&options[..count])) {
-            config.u32(at, value);
-            config.text(at + 8, text);
+        let capacity = layout.dropdown_capacity;
+        let count = options.len().min(capacity);
+        let entries = (0..).step_by(layout.entry_size).zip(&options[..count]);
+        for (value, (at, text)) in (0u32..).zip(entries) {
+            config.u32(at + layout.entry_value, value);
+            config.text(at + layout.dropdown_entry_text, text);
         }
-        config.u8(0xc00, u8::try_from(count).unwrap_or(0));
-        config.u8(0xc74, u8::from(!read_only));
+        config.u8(layout.dropdown_count, u8::try_from(count).unwrap_or(0));
+        config.u8(layout.dropdown_enabled, u8::from(!read_only));
         // An index past the entries, "none", stays inside the config the
         // game reads the shown entry from.
-        let shown = index.min(u32::try_from(count.min(MAX_ENTRIES - 1)).unwrap_or(0));
+        let last = count.min(capacity.saturating_sub(1));
+        let shown = index.min(u32::try_from(last).unwrap_or(0));
         let mut value = i32::try_from(shown).unwrap_or(0);
         // SAFETY: the config the constructor made with its entries, the value.
         let changed =
@@ -889,10 +1155,10 @@ impl Engine {
     ///
     /// Inside a window, on the frame's thread.
     pub(super) unsafe fn progress(&self, value: f32, min: f32, max: f32) {
-        let mut frame = Buf::<0x40>::zeroed();
+        let mut frame = Buf::<FRAME_SIZE>::zeroed();
         // SAFETY: an unnamed frame to size the bar.
         unsafe { (self.frame_open)(frame.ptr(), 0) };
-        let node = frame.read_usize(8);
+        let node = self.frame_node(&frame);
         // SAFETY: the frame's node and its height.
         unsafe { (self.node_height)(node, BAR_HEIGHT) };
         // SAFETY: the frame's node, stretched to the window's width.
@@ -930,12 +1196,12 @@ impl Engine {
         // SAFETY: the window object and its name, as the game's own HUD
         // windows pass them: full screen, the HUD's layer 5, flags 0.
         unsafe { (self.window_begin)(hud.object.ptr(), &raw const name, 1, 5, u32::MAX, 0) };
-        let node = hud.object.read_usize(0x10);
+        let node = hud.object.read_usize(self.layout.window_node);
         // SAFETY: a frame over the window's node.
         unsafe { (self.frame_from_node)(hud.root.ptr(), node) };
         // SAFETY: an unnamed frame inside it.
         unsafe { (self.frame_open)(hud.safe.ptr(), 0) };
-        let safe = hud.safe.read_usize(8);
+        let safe = self.frame_node(&hud.safe);
         // SAFETY: the frame's node, filling the screen.
         unsafe { (self.node_stretch)(safe, stretch(1.0, 1.0)) };
         let margin = [HUD_MARGIN; 4];
@@ -964,10 +1230,10 @@ impl Engine {
     ///
     /// Inside the HUD window, on the frame's thread.
     pub(super) unsafe fn hud_column(&self, align: u16, draw: impl FnOnce()) {
-        let mut column = Buf::<0x40>::zeroed();
+        let mut column = Buf::<FRAME_SIZE>::zeroed();
         // SAFETY: an unnamed frame inside the HUD window.
         unsafe { (self.frame_open)(column.ptr(), 0) };
-        let node = column.read_usize(8);
+        let node = self.frame_node(&column);
         // SAFETY: the column's node and its alignment in the window.
         unsafe { (self.node_align)(node, &raw const align) };
         // SAFETY: the column's node and its width.
@@ -999,12 +1265,12 @@ impl Engine {
         let mut label = Buf::<LABEL_SIZE>::zeroed();
         // SAFETY: a label over `text` in a style of the bundle, wrapped at
         // the column's width.
-        unsafe { (self.label_new)(label.ptr(), text, Self::bundle(context) + style, 1) };
-        label.u8(LABEL_SHOWN, 1);
-        let node = label.read_usize(8);
+        unsafe { (self.label_new)(label.ptr(), text, self.bundle(context) + style, 1) };
+        label.u8(self.layout.label_shown, 1);
+        let node = self.frame_node(&label);
         // SAFETY: the label's node and its alignment in the column.
         unsafe { (self.node_align)(node, &raw const align) };
-        label.u16(LABEL_ALIGN, align);
+        label.u16(self.layout.label_align, align);
         // SAFETY: the label's node, stretched to the column's width.
         unsafe { (self.node_stretch)(node, stretch(1.0, 0.0)) };
         // SAFETY: the label just made.
@@ -1019,9 +1285,9 @@ impl Engine {
     /// In the main menu's drawing, at the loader's hook before its Credits
     /// entry; `menu` is the menu state there; `text` outlives the frame.
     pub(super) unsafe fn main_menu_entry(&self, menu: usize, text: &UiText) -> bool {
-        let mut entry = Buf::<0x20>::zeroed();
-        entry.text(0, text);
-        entry.u32(0x18, 1);
+        let mut entry = Buf::<MENU_ENTRY>::zeroed();
+        entry.text(self.layout.menu_entry_text, text);
+        entry.u8(self.layout.menu_entry_font, 1);
         // SAFETY: forwarded from the caller; the entry as the menu's own
         // Settings entry is built: label, normal font.
         unsafe { (self.main_entry)(menu, entry.ptr()) != 0 }
@@ -1046,11 +1312,11 @@ impl Engine {
     ///
     /// Inside a frame, on its thread.
     pub(super) unsafe fn back_pressed(&self, node: u64) -> bool {
-        let mut spec = Buf::<0x50>::zeroed();
+        let mut spec = Buf::<ACTION_SPEC>::zeroed();
         // SAFETY: the action spec for Back (1), as the pause menu builds it.
         unsafe { (self.action_new)(spec.ptr(), 1, 1) };
-        spec.u64(0x40, node);
-        spec.u8(0x1b, 1);
+        spec.u64(self.layout.action_node, node);
+        spec.u8(self.layout.action_bound, 1);
         // SAFETY: the spec just built, no details out, the menus' modality.
         unsafe { (self.action_query)(spec.ptr(), core::ptr::null_mut(), 0x10) != 0 }
     }
@@ -1066,7 +1332,7 @@ impl Engine {
         };
         // SAFETY: the context and a sound of its bundle; the game queues a
         // copy.
-        unsafe { (self.sound)(context, Self::bundle(context) + offset) };
+        unsafe { (self.sound)(context, self.bundle(context) + offset) };
     }
 }
 
@@ -1078,14 +1344,6 @@ const HUD_MARGIN: f32 = 48.0;
 const HUD_WIDTH: f32 = 420.0;
 const HUD_GAP: f32 = 6.0;
 const BAR_HEIGHT: f32 = 20.0;
-const LABEL_SIZE: usize = 0x150;
-const LABEL_ALIGN: usize = 0x38;
-const LABEL_SHOWN: usize = 0x3d;
-const LABEL_FONT_SIZE: usize = 0x7c;
-const LABEL_FLAGS: usize = 0x90;
-const ENTRY_SIZE: usize = 0x30;
-const MAX_ENTRIES: usize = 64;
-const MAX_STOPS: u32 = 32;
 
 fn stretch(x: f32, y: f32) -> u64 {
     u64::from(x.to_bits()) | u64::from(y.to_bits()) << 32
@@ -1114,6 +1372,36 @@ mod tests {
             .bytes()
             .fold(FNV_BASIS, |h, b| (h ^ u64::from(b)).wrapping_mul(FNV_PRIME));
         assert_ne!(hash("ж".as_bytes()), plain);
+    }
+
+    /// The layouts of every client table fit the loader's buffers, and a
+    /// build whose label grew past them keeps the interface off.
+    #[test]
+    fn the_tables_layouts_fit_the_loader_s_buffers() {
+        let tables = enshwick_loader_builds::embedded()
+            .iter()
+            .map(|(_, text)| enshwick_loader_builds::Table::parse(text).unwrap());
+        for table in tables.filter(|t| t.side() == enshwick_loader_builds::Side::Client) {
+            let lookup = |id: &str| {
+                table
+                    .constants()
+                    .iter()
+                    .find(|c| c.id() == id)
+                    .map(enshwick_loader_builds::Constant::value)
+            };
+            let layout = Layout::read(&lookup).unwrap();
+            assert_eq!(layout.nav, [0, 0x20, 0x24, 0x28, 0x30, 0x34, 0x48]);
+            DialogLayout::read(&lookup).unwrap();
+            ViewLayout::read(&lookup).unwrap();
+            let grown = |id: &str| match id {
+                "ui.label_extent" => Some(0x200),
+                _ => lookup(id),
+            };
+            assert!(matches!(
+                Layout::read(&grown),
+                Err(Missing::Room("ui.label_extent"))
+            ));
+        }
     }
 
     #[test]
