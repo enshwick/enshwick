@@ -60,6 +60,12 @@ const RATE: f64 = 20.0;
 const BURST: f64 = 40.0;
 /// Frames waiting to leave at most, per side.
 const MAX_WAITING: usize = 512;
+/// Frames a client takes from its server per second, and in one burst. The
+/// server's chat sends at most 16 lines a step to all its players and holds
+/// at most 256 waiting, so its own frames always fit; a server that sends
+/// more is dropped from.
+const SERVER_FRAME_RATE: f64 = 1024.0;
+const SERVER_FRAME_BURST: f64 = 512.0;
 /// Seconds between a client's hellos until the server answers.
 const HELLO_EVERY: f64 = 5.0;
 
@@ -91,19 +97,28 @@ struct Peer {
 
 impl Peer {
     fn new() -> Self {
+        Self::with_tokens(BURST)
+    }
+
+    fn with_tokens(tokens: f64) -> Self {
         Self {
             partial: HashMap::new(),
-            tokens: BURST,
+            tokens,
             seen: Instant::now(),
         }
     }
 
     /// Takes one message from the peer's rate; false when it is spent.
     fn admit(&mut self) -> bool {
-        let now = Instant::now();
-        let gained = now.duration_since(self.seen).as_secs_f64() * RATE;
+        self.admit_at(Instant::now(), RATE, BURST)
+    }
+
+    /// Takes one from a rate of `rate` a second up to `burst` at `now`;
+    /// false when it is spent.
+    fn admit_at(&mut self, now: Instant, rate: f64, burst: f64) -> bool {
+        let gained = now.saturating_duration_since(self.seen).as_secs_f64() * rate;
         self.seen = now;
-        self.tokens = (self.tokens + gained).min(BURST);
+        self.tokens = (self.tokens + gained).min(burst);
         if self.tokens < 1.0 {
             return false;
         }
@@ -126,6 +141,8 @@ struct State {
     hello_at: Option<Instant>,
     /// Rates of the peers sending, by key, on the server.
     sending: HashMap<u64, Peer>,
+    /// On a client: the rate of the frames its server sends.
+    incoming: Option<Peer>,
 }
 
 static PENDING: Mutex<Vec<Channel>> = Mutex::new(Vec::new());
@@ -558,6 +575,10 @@ pub(crate) fn client_received(text: &str) -> bool {
     let Some(rest) = text.strip_prefix(PREFIX) else {
         return false;
     };
+    if !state(|s| admit_from_server(s, Instant::now())) {
+        dropped();
+        return true;
+    }
     let Some(frame) = parse(rest) else {
         dropped();
         return true;
@@ -605,6 +626,14 @@ pub(crate) fn client_received(text: &str) -> bool {
         deliver(channel, NetMessage::SERVER, &data);
     }
     true
+}
+
+/// Takes one frame from the server's rate; false when it is spent.
+fn admit_from_server(state: &mut State, now: Instant) -> bool {
+    state
+        .incoming
+        .get_or_insert_with(|| Peer::with_tokens(SERVER_FRAME_BURST))
+        .admit_at(now, SERVER_FRAME_RATE, SERVER_FRAME_BURST)
 }
 
 /// Whether `text` is a frame line, which no chat shows.
@@ -782,6 +811,29 @@ mod tests {
         assert!(hellos < 50, "{hellos}");
         assert_eq!(greet(&mut peers, 7), None);
         assert_eq!(peers[&7].partial.len(), 1);
+    }
+
+    #[test]
+    fn a_client_takes_its_server_s_frames_up_to_a_rate() {
+        let mut state = State::default();
+        let start = Instant::now();
+        let taken = (0..2000)
+            .take_while(|_| admit_from_server(&mut state, start))
+            .count();
+        assert_eq!(taken, 512, "one burst");
+        assert!(!admit_from_server(&mut state, start), "a flood is dropped");
+        let later = start + std::time::Duration::from_millis(250);
+        let refilled = (0..2000)
+            .take_while(|_| admit_from_server(&mut state, later))
+            .count();
+        assert_eq!(refilled, 256, "a quarter second of the rate");
+        // The server's own sending fits: 256 lines waiting, then 16 a step.
+        let mut honest = State::default();
+        assert!((0..256).all(|_| admit_from_server(&mut honest, start)));
+        assert!((1..=60).all(|step| {
+            let at = start + std::time::Duration::from_secs_f64(f64::from(step) / 60.0);
+            (0..16).all(|_| admit_from_server(&mut honest, at))
+        }));
     }
 
     #[test]

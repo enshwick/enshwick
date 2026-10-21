@@ -61,11 +61,14 @@ or the entity does not exist.
 The game saves an entity under its id and creates it with the same id when
 the world loads, so a value stays with its entity across saves. The server
 keeps, with each value, the template its entity had when the value was set.
-When the entity is destroyed, or its id names another thing:
+When the game destroys the entity, the server drops its values after that
+step and tells the clients. When its id names another thing:
 
 - a read on the server's game thread finds it out and the value reads as
   missing;
 - the server drops every such value when the world saves.
+
+An entity in an area that is not loaded keeps its values.
 
 Reads on other threads answer from what the server keeps, until that next
 check.

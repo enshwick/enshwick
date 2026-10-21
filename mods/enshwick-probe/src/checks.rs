@@ -344,6 +344,7 @@ impl Checks {
         let scheduler = self.scheduler;
         let network_health = self.network_health;
         let teleport_parts = self.teleport_parts;
+        let marks = self.marks;
         self.scheduler.after(DESTROY_WAIT, move || {
             if world.template(entity) == Some(template) {
                 pass(&format!("spawned entity {} is in the world", entity.0));
@@ -374,8 +375,7 @@ impl Checks {
                         "teleport of entity {} refused: the game's teleport does not move it",
                         entity.0
                     ));
-                    let destroyed = world.destroy(entity);
-                    enshwick_loader_api::info!("spawned entity {} destroyed: {destroyed:?}", entity.0);
+                    destroy_marked(world, scheduler, marks, entity);
                     return;
                 }
                 other => {
@@ -402,8 +402,7 @@ impl Checks {
                         entity.0
                     )),
                 }
-                let destroyed = world.destroy(entity);
-                enshwick_loader_api::info!("spawned entity {} destroyed: {destroyed:?}", entity.0);
+                destroy_marked(world, scheduler, marks, entity);
             });
         });
         format!("entity {}", entity.0)
@@ -666,4 +665,26 @@ fn parse(id: &str) -> Option<Entity> {
         None => id.parse().ok()?,
     };
     Some(Entity(value))
+}
+
+/// Marks a spawned entity with entity data, destroys it and checks the
+/// mark is gone a moment later, as the loader drops a destroyed entity's
+/// data.
+fn destroy_marked(world: World, scheduler: Scheduler, marks: EntityData<u32>, entity: Entity) {
+    let marked = marks.set(entity, &7).is_ok();
+    let destroyed = world.destroy(entity);
+    enshwick_loader_api::info!("spawned entity {} destroyed: {destroyed:?}", entity.0);
+    if !marked || destroyed.is_err() {
+        return;
+    }
+    scheduler.after(DESTROY_WAIT, move || match marks.get(entity) {
+        None => pass(&format!(
+            "entity data: destroyed entity {} lost its mark",
+            entity.0
+        )),
+        Some(mark) => fail(&format!(
+            "entity data: destroyed entity {} keeps its mark {mark}",
+            entity.0
+        )),
+    });
 }

@@ -39,8 +39,10 @@ an item without an entity of its own.
 The game saves an item's entity under its id and creates it with the same
 id on load, so the value stays with the item across saves, moves between
 inventories and trades. Once the entity holds another item, the value reads
-as missing; when the world saves, the server drops the values of items that
-are gone.
+as missing, and the server drops it when the world saves. When the game
+destroys the item, as a craft that uses it up does, the server drops its
+values after that step and tells the clients. An item in an area that is not
+loaded keeps its values.
 
 ## Kinds
 

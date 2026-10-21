@@ -7,7 +7,10 @@
 //! the entity's template. The game saves entities under their ids and
 //! creates them with those ids on load, so the id names the entity across
 //! saves; a record reads as missing once its entity is something else, and
-//! the save drops records whose entity is gone.
+//! the save drops the records of entities that hold something else now.
+//! Entities the game destroys lose their records after the step that asked
+//! for it: the loader follows the engine's destroy requests, which only
+//! gameplay makes; an entity in an area that unloads keeps its record.
 //!
 //! The server keeps the values and writes them, when the world saves, to
 //! `mod-data/enshwick/worlds/<key>/attachments.bin`, never into the game's
@@ -16,12 +19,17 @@
 //! keeps what it got and answers reads from it.
 
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
 use std::sync::{Mutex, OnceLock, PoisonError};
 
-use enshwick_loader_api::abi::{Event, Status};
-use rustc_hash::FxHashMap;
+use enshwick_loader_api::abi::{Event, HookFlags, Status};
+use rustc_hash::{FxHashMap, FxHashSet};
 
+use crate::chains::Next;
 use crate::host::Loader;
+
+/// The build table ids this part of the loader names.
+pub(crate) const TABLE_IDS: &[&str] = &["ecs.destroy_request"];
 
 /// The longest kind id: a mod id, a colon and a name of up to 64 each.
 const MAX_ID: usize = 129;
@@ -34,6 +42,12 @@ const MAGIC: &[u8; 4] = b"EWID";
 const VERSION: u8 = 1;
 /// Bytes of records in one message to a client.
 const MESSAGE_BYTES: usize = 680;
+/// The most records a client keeps from one server: what a server sends
+/// past it is dropped, so a server cannot fill the client's memory.
+const MAX_CLIENT_RECORDS: usize = 1 << 16;
+/// Destroy requests noted in one step at most; past it an entity keeps its
+/// record until its id holds something else.
+const DESTROYED_CAP: usize = 1024;
 
 /// One entity's value of one kind, and what the entity was: the item id an
 /// item entity held, or an entity's template id.
@@ -82,6 +96,23 @@ static KINDS: OnceLock<Box<[Kind]>> = OnceLock::new();
 static SERVER: Mutex<Option<Server>> = Mutex::new(None);
 /// What a client got from its server.
 static CLIENT: Mutex<Option<Values>> = Mutex::new(None);
+/// Whether the client said once that it dropped records over
+/// [`MAX_CLIENT_RECORDS`] from this server.
+static CLIENT_FULL: AtomicBool = AtomicBool::new(false);
+/// Whether the server keeps any record, so destroy requests are noted.
+static KEPT: AtomicBool = AtomicBool::new(false);
+/// Entities the game asked to destroy since the last step, 0 for an empty
+/// slot; written from any thread without a lock.
+static DESTROYED: [AtomicU32; DESTROYED_CAP] = [const { AtomicU32::new(0) }; DESTROYED_CAP];
+static DESTROYED_COUNT: AtomicUsize = AtomicUsize::new(0);
+
+/// `ecs.destroy_request(command_buffer, requester, entity)`: queues the
+/// entity's destroy for the playback after the next step; nonzero when
+/// queued.
+type DestroyFn = unsafe extern "system" fn(buffer: *mut u8, requester: u32, entity: u32) -> u8;
+// SAFETY: the slot joins the chain of `ecs.destroy_request`, whose type
+// `DestroyFn` names.
+static DESTROY_NEXT: Next<DestroyFn> = unsafe { Next::new() };
 /// `ecs::ItemState`'s type hash and the offset of its `itemId`.
 static ITEM_STATE: OnceLock<Option<(u32, usize)>> = OnceLock::new();
 
@@ -201,6 +232,91 @@ pub(crate) fn seal() {
     let _first = KINDS.set(kinds.into_boxed_slice());
 }
 
+/// Follows the game's destroy requests, when a mod keeps item data.
+pub(crate) fn link(loader: &Loader) {
+    if !wanted() {
+        return;
+    }
+    loader.link_feature(
+        "mod data of destroyed entities",
+        loader.address("ecs.destroy_request"),
+        &DESTROY_NEXT,
+        destroy,
+        HookFlags::NONE,
+    );
+}
+
+unsafe extern "system" fn destroy(buffer: *mut u8, requester: u32, entity: u32) -> u8 {
+    // SAFETY: forwarded unchanged.
+    let queued = unsafe { DESTROY_NEXT.get()(buffer, requester, entity) };
+    if queued != 0 && entity != 0 && KEPT.load(Ordering::Relaxed) {
+        note_destroyed(entity);
+    }
+    queued
+}
+
+/// Notes that the game asked to destroy `entity`.
+fn note_destroyed(entity: u32) {
+    let at = DESTROYED_COUNT.fetch_add(1, Ordering::AcqRel);
+    if let Some(slot) = DESTROYED.get(at) {
+        slot.store(entity, Ordering::Release);
+    }
+}
+
+/// The entities noted since the last call.
+fn take_destroyed() -> FxHashSet<u32> {
+    let count = DESTROYED_COUNT.swap(0, Ordering::AcqRel).min(DESTROYED_CAP);
+    DESTROYED[..count]
+        .iter()
+        .map(|slot| slot.swap(0, Ordering::AcqRel))
+        .filter(|&entity| entity != 0)
+        .collect()
+}
+
+/// Drops the records of the `destroyed` entities from `values`; the keys
+/// dropped.
+fn prune_destroyed(values: &mut Values, destroyed: &FxHashSet<u32>) -> Vec<(u32, u32)> {
+    let gone: Vec<(u32, u32)> = values
+        .keys()
+        .filter(|(_, pide)| destroyed.contains(pide))
+        .copied()
+        .collect();
+    for key in &gone {
+        values.remove(key);
+    }
+    gone
+}
+
+/// After the server's step: drops the records of the entities destroyed in
+/// it, and tells the clients.
+pub(crate) fn after_step() {
+    if !KEPT.load(Ordering::Relaxed) || DESTROYED_COUNT.load(Ordering::Acquire) == 0 {
+        return;
+    }
+    let destroyed = take_destroyed();
+    let gone = {
+        let mut server = SERVER.lock().unwrap_or_else(PoisonError::into_inner);
+        let Some(server) = server.as_mut() else {
+            return;
+        };
+        let gone = prune_destroyed(&mut server.values, &destroyed);
+        server.changed |= !gone.is_empty();
+        gone
+    };
+    let mut message = Vec::new();
+    for (kind, pide) in gone {
+        if let Some(spec) = self::kind(kind).filter(|k| k.sent) {
+            encode(&mut message, &spec.id, pide, 0, &[]);
+            if message.len() > MESSAGE_BYTES {
+                crate::net::item_data(0, &std::mem::take(&mut message));
+            }
+        }
+    }
+    if !message.is_empty() {
+        crate::net::item_data(0, &message);
+    }
+}
+
 /// Whether any mod keeps item data, which needs the world events and the
 /// clients' hello.
 pub(crate) fn wanted() -> bool {
@@ -305,6 +421,7 @@ pub(crate) fn set(kind: u32, pide: u32, item: u32, value: &[u8]) -> Result<(), S
                 value: value.into(),
             };
             server.values.insert((kind, pide), record);
+            KEPT.store(true, Ordering::Relaxed);
         }
         server.changed = true;
     }
@@ -395,27 +512,45 @@ pub(crate) fn received(bytes: &[u8]) {
     }
     let mut client = CLIENT.lock().unwrap_or_else(PoisonError::into_inner);
     let values = client.get_or_insert_with(Values::default);
+    if !keep(values, bytes) && !CLIENT_FULL.swap(true, Ordering::Relaxed) {
+        crate::log!(
+            WARN,
+            "mod data: the server sent more than {MAX_CLIENT_RECORDS} records; the rest are dropped"
+        );
+    }
+}
+
+/// Keeps the records in `bytes` in `values`, at most
+/// [`MAX_CLIENT_RECORDS`]; false when one was dropped for that.
+fn keep(values: &mut Values, bytes: &[u8]) -> bool {
+    let mut kept_all = true;
     for (id, pide, item, value) in decode(bytes) {
         let Some(kind) = kind_of(id) else {
             continue;
         };
         if value.is_empty() {
             values.remove(&(kind, pide));
-        } else {
-            values.insert(
-                (kind, pide),
-                Record {
-                    item,
-                    value: value.into(),
-                },
-            );
+            continue;
         }
+        if values.len() >= MAX_CLIENT_RECORDS && !values.contains_key(&(kind, pide)) {
+            kept_all = false;
+            continue;
+        }
+        values.insert(
+            (kind, pide),
+            Record {
+                item,
+                value: value.into(),
+            },
+        );
     }
+    kept_all
 }
 
 /// Forgets what the client got, when it changes servers.
 pub(crate) fn forget_client() {
     *CLIENT.lock().unwrap_or_else(PoisonError::into_inner) = None;
+    CLIENT_FULL.store(false, Ordering::Relaxed);
 }
 
 /// The file of world `key`'s values.
@@ -515,6 +650,7 @@ pub(crate) fn world_event(loader: &Loader, event: Event) {
                 values.len(),
                 key.as_deref().unwrap_or("?")
             );
+            KEPT.store(!values.is_empty(), Ordering::Relaxed);
             *SERVER.lock().unwrap_or_else(PoisonError::into_inner) = Some(Server {
                 key,
                 values,
@@ -590,6 +726,67 @@ mod tests {
         assert_eq!(full_id("probe", "Charges"), None);
         assert_eq!(full_id("probe", "a:b:c"), None);
         assert_eq!(full_id("probe", ":x"), None);
+    }
+
+    #[test]
+    fn a_destroyed_entity_loses_its_records_and_an_unloaded_one_keeps_them() {
+        let record = |item| Record {
+            item,
+            value: Box::new([1]),
+        };
+        let mut values = Values::default();
+        values.insert((0, 900), record(7));
+        values.insert((1, 900), record(0));
+        values.insert((0, 901), record(7));
+        note_destroyed(900);
+        note_destroyed(0);
+        let destroyed = take_destroyed();
+        assert!(take_destroyed().is_empty(), "each request is taken once");
+        let mut gone = prune_destroyed(&mut values, &destroyed);
+        gone.sort_unstable();
+        assert_eq!(gone, [(0, 900), (1, 900)]);
+        // 901 is merely not loaded: no destroy request names it.
+        assert_eq!(values.len(), 1);
+        assert!(values.contains_key(&(0, 901)));
+        // Past the cap in one step, requests are left for the save.
+        for entity in 1..=u32::try_from(DESTROYED_CAP).unwrap() + 10 {
+            note_destroyed(entity);
+        }
+        let destroyed = take_destroyed();
+        assert_eq!(destroyed.len(), DESTROYED_CAP);
+        assert!(!destroyed.contains(&(u32::try_from(DESTROYED_CAP).unwrap() + 1)));
+    }
+
+    #[test]
+    fn a_client_keeps_at_most_its_cap_of_a_server_s_records() {
+        let _sealed = KINDS.set(
+            vec![Kind {
+                id: "a:charges".into(),
+                scope: Scope::Item,
+                sent: true,
+            }]
+            .into_boxed_slice(),
+        );
+        let mut values = Values::default();
+        let mut bytes = Vec::new();
+        for pide in 1..=u32::try_from(MAX_CLIENT_RECORDS).unwrap() {
+            encode(&mut bytes, "a:charges", pide, 7, &[1]);
+        }
+        assert!(keep(&mut values, &bytes));
+        assert_eq!(values.len(), MAX_CLIENT_RECORDS);
+        let mut more = Vec::new();
+        encode(&mut more, "a:charges", 1, 7, &[2]);
+        encode(&mut more, "a:charges", u32::MAX, 7, &[1]);
+        assert!(
+            !keep(&mut values, &more),
+            "a new record past the cap is dropped"
+        );
+        assert_eq!(values.len(), MAX_CLIENT_RECORDS);
+        assert_eq!(&*values[&(0, 1)].value, &[2], "a known one still changes");
+        let mut removal = Vec::new();
+        encode(&mut removal, "a:charges", 1, 0, &[]);
+        assert!(keep(&mut values, &removal));
+        assert_eq!(values.len(), MAX_CLIENT_RECORDS - 1);
     }
 
     #[test]
