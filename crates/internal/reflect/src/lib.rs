@@ -522,7 +522,7 @@ impl<'a> Reader<'_, 'a> {
     fn fields(&self, table: u64, count: u32) -> Vec<Field<'a>> {
         (0..u64::from(count))
             .map(|i| table.checked_add(i * FIELD_RECORD))
-            .map_while(|record| {
+            .filter_map(|record| {
                 let record = record?;
                 let name = self.slice(record)?;
                 let type_name = record
@@ -724,6 +724,42 @@ mod tests {
             reflection.field_offset(name, "rangeZ"),
             Err(LookupError::Missing(format!("{name}.rangeZ")))
         );
+    }
+
+    #[test]
+    fn an_unreadable_field_record_drops_that_field_only() {
+        let mut fake = Fake::new();
+        let descriptor = rdata(0x100);
+        let name = "keen::ecs::TriggerShape";
+        fake.slice(
+            descriptor + DESCRIPTOR_SHORT_NAME,
+            rdata(0x800),
+            "TriggerShape",
+        );
+        fake.slice(descriptor + DESCRIPTOR_FULL_NAME, rdata(0x820), name);
+        fake.put(descriptor + DESCRIPTOR_SIZE_ALIGN, &0x10u32.to_le_bytes());
+        fake.put(descriptor + DESCRIPTOR_SIZE_ALIGN + 4, &4u16.to_le_bytes());
+        fake.put(descriptor + DESCRIPTOR_FIELD_COUNT, &3u32.to_le_bytes());
+        fake.put(
+            descriptor + DESCRIPTOR_HASH,
+            &fnv1a32(name.as_bytes()).to_le_bytes(),
+        );
+        let table = rdata(0x400);
+        fake.put_u64(descriptor + DESCRIPTOR_FIELDS, table);
+        fake.slice(table, rdata(0x840), "rangeX");
+        fake.put_u64(table + FIELD_OFFSET, 4);
+        // The second record's name points outside the image.
+        fake.put_u64(table + FIELD_RECORD, 0x10);
+        fake.put_u64(table + FIELD_RECORD + 8, 6);
+        fake.slice(table + 2 * FIELD_RECORD, rdata(0x850), "rangeZ");
+        fake.put_u64(table + 2 * FIELD_RECORD + FIELD_OFFSET, 12);
+
+        let image = Image::parse(&fake.bytes, Layout::File, None).unwrap();
+        let reflection = Reflection::scan(&image);
+        let info = reflection.type_info(name).unwrap();
+        assert_eq!(info.fields().len(), 2);
+        assert_eq!(reflection.field_offset(name, "rangeX"), Ok(4));
+        assert_eq!(reflection.field_offset(name, "rangeZ"), Ok(12));
     }
 
     #[test]

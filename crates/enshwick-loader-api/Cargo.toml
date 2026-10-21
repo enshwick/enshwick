@@ -221,6 +221,10 @@ name = "shapes"
 required-features = ["test"]
 
 [[test]]
+name = "task_workers"
+required-features = ["test"]
+
+[[test]]
 name = "points_links"
 required-features = ["test"]
 

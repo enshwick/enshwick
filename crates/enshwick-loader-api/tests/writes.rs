@@ -20,17 +20,6 @@ mod tests {
 
     static RESOLVED: OnceLock<Resolved> = OnceLock::new();
 
-    /// An attribute set: the id it keeps, the values' offset at 4, flags at
-    /// 6, count at 7, then the values.
-    #[repr(C)]
-    struct Set {
-        root: u32,
-        data: u16,
-        flags: u8,
-        count: u8,
-        values: [i32; 8],
-    }
-
     struct Writes;
 
     impl Mod for Writes {
@@ -57,14 +46,14 @@ mod tests {
 
     enshwick_loader_api::declare_mod!(Writes);
 
-    fn set(root: u32, values: [i32; 8]) -> &'static mut Set {
-        Box::leak(Box::new(Set {
-            root,
-            data: 8,
-            flags: 1,
-            count: 8,
-            values,
-        }))
+    /// An attribute set: the id it keeps, the values' offset at 4, flags at
+    /// 6, count at 7, then the values.
+    fn set(root: u32, values: [i32; 8]) -> Vec<u8> {
+        let mut bytes = root.to_le_bytes().to_vec();
+        bytes.extend(8u16.to_le_bytes());
+        bytes.extend([1, 8]);
+        bytes.extend(values.iter().flat_map(|v| v.to_le_bytes()));
+        bytes
     }
 
     #[test]
@@ -72,9 +61,6 @@ mod tests {
         let health = set(10, [150, 0, 0, 0, 0, 0, 0, 200]);
         let dead = set(10, [0, 0, 0, 0, 0, 0, 0, 200]);
         let stamina = set(20, [80, 0, 100, 0, 0, 0, 0, 0]);
-        let combat_flags: &'static mut [u8; 8] = Box::leak(Box::new([0; 8]));
-        let health_ptr = core::ptr::from_mut(health);
-        let combat_ptr = combat_flags.as_mut_ptr();
         let loader = enshwick_loader_api::test::FakeHost::new()
             .type_hash("keen::ecs::CurrentTransform", 100)
             .type_hash("keen::ecs::UsedItem", 101)
@@ -100,10 +86,10 @@ mod tests {
             .constant("attribute.level", 40)
             .constant("attribute.experience", 50)
             .constant("attribute.experience_needed_slot", 2)
-            .component(7, 1, health_ptr.cast_const().cast())
-            .component(7, 2, core::ptr::from_mut(stamina).cast_const().cast())
-            .component(7, 6, combat_ptr.cast_const().cast())
-            .component(8, 1, core::ptr::from_mut(dead).cast_const().cast())
+            .component(7, 1, &health)
+            .component(7, 2, &stamina)
+            .component(7, 6, &[0; 8])
+            .component(8, 1, &dead)
             .template(7, [1; 16])
             .template(8, [2; 16])
             .install();
@@ -137,8 +123,8 @@ mod tests {
             bytes.len()
         });
         assert_eq!(size, Ok(8));
-        // SAFETY: the flags the fake handed out, no longer borrowed.
-        assert_eq!(unsafe { combat_ptr.wrapping_add(1).read() }, 9);
+        let flag = |at: usize| loader.component_bytes(7, 6).map(|flags| flags[at]);
+        assert_eq!(flag(1), Some(9));
         assert_eq!(
             world.update(Entity(8), resolved.flags, |_| ()),
             Err(WorldError::Lacks)
@@ -150,15 +136,13 @@ mod tests {
             })
         });
         assert!(half.is_err());
-        // SAFETY: as above.
-        assert_eq!(unsafe { combat_ptr.wrapping_add(2).read() }, 0);
+        assert_eq!(flag(2), Some(0));
         let nested = world.update(Entity(7), resolved.flags, |outer| {
             outer[3] = 1;
             world.update(Entity(7), resolved.flags, |inner| inner[3])
         });
         assert_eq!(nested, Ok(Ok(0)));
-        // SAFETY: as above.
-        assert_eq!(unsafe { combat_ptr.wrapping_add(3).read() }, 1);
+        assert_eq!(flag(3), Some(1));
         assert!(loader.writes().contains(&(7, 6)));
         assert!(loader.writes().contains(&(7, 1)));
     }

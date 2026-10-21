@@ -12,17 +12,6 @@ mod tests {
 
     static WORLD: OnceLock<World> = OnceLock::new();
 
-    /// An attribute set: the id it keeps, the values' offset at 4, flags at
-    /// 6, count at 7, then the values.
-    #[repr(C)]
-    struct Set {
-        root: u32,
-        data: u16,
-        flags: u8,
-        count: u8,
-        values: [i32; 8],
-    }
-
     struct Stats;
 
     impl Mod for Stats {
@@ -38,14 +27,14 @@ mod tests {
 
     enshwick_loader_api::declare_mod!(Stats);
 
-    const fn set(root: u32, values: [i32; 8]) -> Set {
-        Set {
-            root,
-            data: 8,
-            flags: 1,
-            count: 8,
-            values,
-        }
+    /// An attribute set: the id it keeps, the values' offset at 4, flags at
+    /// 6, count at 7, then the values.
+    fn set(root: u32, values: [i32; 8]) -> Vec<u8> {
+        let mut bytes = root.to_le_bytes().to_vec();
+        bytes.extend(8u16.to_le_bytes());
+        bytes.extend([1, 8]);
+        bytes.extend(values.iter().flat_map(|v| v.to_le_bytes()));
+        bytes
     }
 
     #[test]
@@ -55,7 +44,7 @@ mod tests {
         let level = set(40, [12, 50, 0, 0, 0, 0, 0, 0]);
         let experience = set(50, [300, 4, 900, 0, 0, 0, 0, 0]);
         let wrong = set(99, [1; 8]);
-        let mut fuel = set(60, [2, 3, 0, 0, 0, 0, 0, 0]);
+        let fuel = set(60, [2, 3, 0, 0, 0, 0, 0, 0]);
         let loader = enshwick_loader_api::test::FakeHost::new()
             .type_hash("keen::ecs::CurrentTransform", 100)
             .type_hash("keen::ecs::UsedItem", 101)
@@ -79,12 +68,12 @@ mod tests {
             .type_hash("keen::ecs::Fuel", 6)
             .constant("attribute.fuel", 60)
             .constant("attribute.fuel_max_slot", 1)
-            .component(900, 6, core::ptr::from_mut(&mut fuel).cast_const().cast())
-            .component(7, 1, core::ptr::from_ref(&health).cast())
-            .component(7, 2, core::ptr::from_ref(&stamina).cast())
-            .component(7, 4, core::ptr::from_ref(&level).cast())
-            .component(7, 5, core::ptr::from_ref(&experience).cast())
-            .component(8, 1, core::ptr::from_ref(&wrong).cast())
+            .component(900, 6, &fuel)
+            .component(7, 1, &health)
+            .component(7, 2, &stamina)
+            .component(7, 4, &level)
+            .component(7, 5, &experience)
+            .component(8, 1, &wrong)
             .install();
         // SAFETY: the exports of `declare_mod!` above.
         let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };

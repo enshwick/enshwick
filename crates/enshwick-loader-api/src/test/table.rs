@@ -671,7 +671,7 @@ extern "system" fn component(
     out: *mut *const c_void,
 ) -> Status {
     let address = with(None, |s| {
-        s.host.components.get(&(entity, type_hash)).copied()
+        s.host.components.get(&(entity, type_hash)).map(|c| c.0)
     });
     found(address.map(core::ptr::with_exposed_provenance), out)
 }
@@ -1454,7 +1454,7 @@ extern "system" fn component_write(
             .host
             .components
             .get(&(entity, type_hash))
-            .copied()
+            .map(|c| c.0)
             .ok_or(Status::MISSING)?;
         s.writes.push((entity, type_hash));
         Ok(address)

@@ -65,7 +65,7 @@ The engine starts a worker thread per logical CPU in each task group, up to
 its own limits. Under Wine those are the host's CPUs, whatever a container
 allows. `cap_task_workers` lowers the limits as the task system starts. Only
 the dedicated server starts it after the loader arms its hooks (see
-[the life of a mod](concepts/lifecycle.md)); on the client it returns
+[the life of a mod](concepts/lifecycle.md)); on the client, and with both caps 0, it returns
 `false`. The game's log shows the result, `[task] Group 'Default'
 Worker:…`.
 

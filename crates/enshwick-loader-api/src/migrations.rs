@@ -15,7 +15,8 @@
 //!
 //! [`Load::migrate`]: crate::Load::migrate
 
-use std::sync::{Mutex, OnceLock, PoisonError};
+use std::cell::RefCell;
+use std::sync::OnceLock;
 
 use crate::abi::{self, MigrationStep, Status, Str};
 use crate::content::Guid;
@@ -342,10 +343,15 @@ pub(crate) fn write_value(value: &toml::Value) -> Result<String, MigrationError>
 /// The mod's migrations, kept for the process: the loader calls their maps.
 struct Kept {
     list: Vec<Migration>,
-    out: Mutex<String>,
 }
 
 static KEPT: OnceLock<Kept> = OnceLock::new();
+
+thread_local! {
+    /// The text a map handed the loader last on this thread; it stays until
+    /// the thread's next map, so a map on another thread never moves it.
+    static OUT: RefCell<String> = const { RefCell::new(String::new()) };
+}
 
 /// The GUIDs content the mod adds under `guid` was saved under before, by
 /// its migrations.
@@ -451,13 +457,14 @@ unsafe extern "system" fn run_map(
             Err(reason) => (Status::REFUSED, reason.0),
         },
     );
-    let mut held = kept.out.lock().unwrap_or_else(PoisonError::into_inner);
-    *held = text;
-    if !out.is_null() {
-        // SAFETY: the loader's out pointer; the text stays in `held` until
-        // the next call.
-        unsafe { out.write(Str::new(&held)) };
-    }
+    OUT.with_borrow_mut(|held| {
+        *held = text;
+        if !out.is_null() {
+            // SAFETY: the loader's out pointer; the text stays in this
+            // thread's `OUT` until the thread's next call.
+            unsafe { out.write(Str::new(held)) };
+        }
+    });
     status
 }
 
@@ -481,7 +488,6 @@ impl Load<'_> {
         if KEPT
             .set(Kept {
                 list: migrations.list,
-                out: Mutex::new(String::new()),
             })
             .is_err()
         {
@@ -533,8 +539,43 @@ impl Load<'_> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Migrations, parse_value, renamed_from, renamed_to, write_value};
+    use super::{
+        KEPT, Kept, Migrations, parse_value, renamed_from, renamed_to, run_map, write_value,
+    };
+    use crate::abi::{Status, Str};
     use crate::content::Guid;
+
+    /// Runs the first step's map on `input` and returns the text it handed
+    /// over, still in place.
+    fn map(input: &str) -> Str {
+        let mut out = Str::new("");
+        // SAFETY: `input` lives for the call, `out` is writable.
+        let status = unsafe { run_map(core::ptr::null_mut(), 0, 0, Str::new(input), &raw mut out) };
+        assert_eq!(status, Status::OK);
+        out
+    }
+
+    #[test]
+    fn a_map_on_another_thread_leaves_this_threads_text_alone() {
+        let list = Migrations::new()
+            .add("1", |m| {
+                m.map_setting("n", |v| {
+                    Ok(toml::Value::Integer(v.as_integer().unwrap_or(0) + 1))
+                })
+            })
+            .list;
+        assert!(KEPT.set(Kept { list }).is_ok());
+        let here = map("1");
+        let there = std::thread::spawn(|| {
+            // SAFETY: the text stays until this thread's next map.
+            unsafe { map("41").as_str() }.map(str::to_owned)
+        })
+        .join()
+        .unwrap();
+        assert_eq!(there.as_deref(), Some("42"));
+        // SAFETY: this thread ran no map since.
+        assert_eq!(unsafe { here.as_str() }, Some("2"));
+    }
 
     #[test]
     fn values_round_trip_as_text() {

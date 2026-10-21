@@ -386,7 +386,7 @@ pub struct FakeHost {
     data_dir: String,
     log_level: Level,
     caller_frame: CallerFrame,
-    components: HashMap<(u32, u32), usize>,
+    components: HashMap<(u32, u32), (usize, usize)>,
     templates: HashMap<u32, [u8; 16]>,
     players: Vec<PlayerInfo>,
     mods: Vec<ModInfo>,
@@ -714,29 +714,31 @@ impl FakeHost {
         self
     }
 
-    /// The component of type `type_hash` that `entity` has, by address; it
-    /// must stay valid while the fake is installed.
+    /// The component of type `type_hash` that `entity` has, holding a copy
+    /// of `bytes` that the fake keeps, 16-byte aligned, for the rest of the
+    /// process; the mod's writes land in that copy.
     ///
     /// # Examples
     ///
     /// ```
-    /// static HEALTH: [f32; 2] = [80.0, 100.0];
-    ///
+    /// let health = [80.0f32.to_le_bytes(), 100.0f32.to_le_bytes()].concat();
     /// let loader = enshwick_loader_api::test::FakeHost::new()
-    ///     .component(4096, 0x027a_c564, HEALTH.as_ptr().cast())
+    ///     .component(4096, 0x027a_c564, &health)
     ///     .template(4096, [0x3a; 16])
     ///     .install();
     /// # let _ = loader;
     /// ```
     #[must_use]
-    pub fn component(
-        mut self,
-        entity: u32,
-        type_hash: u32,
-        data: *const core::ffi::c_void,
-    ) -> Self {
+    pub fn component(mut self, entity: u32, type_hash: u32, bytes: &[u8]) -> Self {
+        let mut words = vec![0u128; bytes.len().div_ceil(16).max(1)].into_boxed_slice();
+        for (word, chunk) in words.iter_mut().zip(bytes.chunks(16)) {
+            let mut le = [0u8; 16];
+            le[..chunk.len()].copy_from_slice(chunk);
+            *word = u128::from_le_bytes(le);
+        }
+        let data = Box::leak(words).as_mut_ptr();
         self.components
-            .insert((entity, type_hash), data.expose_provenance());
+            .insert((entity, type_hash), (data.expose_provenance(), bytes.len()));
         self
     }
 
@@ -2739,6 +2741,27 @@ impl Installed {
     #[must_use]
     pub fn writes(&self) -> Vec<(u32, u32)> {
         table::with(Vec::new(), |s| s.writes.clone())
+    }
+
+    /// The bytes of the component [`FakeHost::component`] gave `entity`, as
+    /// the mod's writes left them.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick_loader_api::test::FakeHost::new().component(7, 1, &[4, 2]).install();
+    /// assert_eq!(loader.component_bytes(7, 1), Some(vec![4, 2]));
+    /// assert_eq!(loader.component_bytes(7, 2), None);
+    /// ```
+    #[must_use]
+    pub fn component_bytes(&self, entity: u32, type_hash: u32) -> Option<Vec<u8>> {
+        let (address, len) = table::with(None, |s| {
+            s.host.components.get(&(entity, type_hash)).copied()
+        })?;
+        let data: *const u8 = core::ptr::with_exposed_provenance(address);
+        // SAFETY: `component` leaked `len` initialised bytes at `address`,
+        // and no write of the mod's runs while the test reads.
+        Some(unsafe { core::slice::from_raw_parts(data, len) }.to_vec())
     }
 
     /// The game events the mod raised, `(type hash, bytes)`, in order.

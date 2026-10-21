@@ -189,11 +189,11 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("enshwick-safes-stock-{}", std::process::id()));
         let _gone = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
-        let item: &'static u32 = Box::leak(Box::new(enshwick_safes::content::SAFE.id()));
+        let item = enshwick_safes::content::SAFE.id().to_le_bytes();
         let loader = host()
             .type_hash("keen::ecs::InventorySetup", 3)
             .placed(3, 700, [20.0, 1.0, 20.0])
-            .component(700, 2, std::ptr::from_ref(item).cast())
+            .component(700, 2, &item)
             .settings(
                 "cost_multiplier = 2
 admins_can_open = true
@@ -355,10 +355,11 @@ label_language = \"en\"
             std::env::temp_dir().join(format!("enshwick-safes-manage-{}", std::process::id()));
         let _gone = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
-        let at = |x: f64| -> *const core::ffi::c_void {
-            let fixed: &'static [i64; 3] =
-                Box::leak(Box::new(enshwick_loader_api::ecs::fixed([x, 0.0, 0.0])));
-            std::ptr::from_ref(fixed).cast()
+        let at = |x: f64| -> Vec<u8> {
+            enshwick_loader_api::ecs::fixed([x, 0.0, 0.0])
+                .iter()
+                .flat_map(|axis| axis.to_le_bytes())
+                .collect()
         };
         let (ann, bob, cat) = (
             player(10, 1, "Ann"),
@@ -369,9 +370,9 @@ label_language = \"en\"
             .player(ann)
             .player(bob)
             .player(cat)
-            .component(10, 1, at(0.0))
-            .component(11, 1, at(100.0))
-            .component(12, 1, at(20.0))
+            .component(10, 1, &at(0.0))
+            .component(11, 1, &at(100.0))
+            .component(12, 1, &at(20.0))
             .settings(
                 "cost_multiplier = 2
 admins_can_open = true

@@ -270,7 +270,7 @@ impl Load<'_> {
     /// are the host's, whatever a container allows. Only the dedicated server
     /// starts its task system after the loader arms hooks; on the client it has
     /// started already and the result is `false`, as it is when this build lacks
-    /// the site. The game's log shows the counts it started with:
+    /// the site or both caps are 0. The game's log shows the counts it started with:
     /// `[task] Group 'Default' Worker:…`. Allowed during
     /// [`Mod::init`](crate::Mod::init) only.
     ///
@@ -291,7 +291,7 @@ impl Load<'_> {
     /// }
     /// ```
     pub fn cap_task_workers(&mut self, caps: TaskWorkers) -> Result<bool, Off> {
-        if self.host().build().side != crate::abi::Side::SERVER {
+        if caps == TaskWorkers::default() || self.host().build().side != crate::abi::Side::SERVER {
             return Ok(false);
         }
         let Some(at) = site(self, WORKERS, 0) else {
