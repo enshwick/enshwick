@@ -21,7 +21,9 @@ use syn::{
 /// set's translated title.
 ///
 /// Field attributes: one stage of `startup`, `runtime` (the default), `restart`,
-/// `client` and `sync`; `range = a..=b`, `a..` or `..=b`; `choices = [..]`;
+/// `client` and `sync`, or the pair `startup, sync`, applied when a world loads
+/// and taken from the server by a joined client; `range = a..=b`, `a..` or
+/// `..=b`; `choices = [..]`;
 /// `text = "key"`, the text key of the field's translated label; `secret`,
 /// a value never sent to a client and changed in the file only, so never
 /// with `sync`. The derive implements `schema`, `values`, `merge_values` and
@@ -42,6 +44,8 @@ struct FieldConfig {
     choices: Option<syn::ExprArray>,
     text: Option<syn::LitStr>,
     secret: bool,
+    /// `startup, sync`: a startup field a joined client takes from the server.
+    synced: bool,
 }
 
 /// The stages a field may name, as `enshwick_loader_api::config::Stage` variants.
@@ -53,16 +57,30 @@ const STAGES: [(&str, &str); 5] = [
     ("restart", "Restart"),
 ];
 
+/// The template's note above a `startup, sync` field.
+const SYNCED_NOTE: &str =
+    "# Takes effect when the world loads; joined players run with the server's value.\n";
+
 fn field_config(attrs: &[Attribute]) -> syn::Result<FieldConfig> {
     let mut config = FieldConfig::default();
     for attr in attrs.iter().filter(|a| a.path().is_ident("config")) {
         attr.parse_nested_meta(|meta| {
             if let Some((_, variant)) = STAGES.iter().find(|(name, _)| meta.path.is_ident(name)) {
-                if config.stage.is_some() {
-                    return Err(meta.error("a field has one stage"));
+                let pair = |a: &Ident, b: &str| {
+                    (a == "Startup" && b == "Sync") || (a == "Sync" && b == "Startup")
+                };
+                match config.stage.as_ref() {
+                    Some(stage) if !config.synced && pair(stage, variant) => {
+                        config.stage = Some(Ident::new("Startup", stage.span()));
+                        config.synced = true;
+                        Ok(())
+                    }
+                    Some(_) => Err(meta.error("a field has one stage, or `startup, sync`")),
+                    None => {
+                        config.stage = Some(Ident::new(variant, meta.path.span()));
+                        Ok(())
+                    }
                 }
-                config.stage = Some(Ident::new(variant, meta.path.span()));
-                Ok(())
             } else if meta.path.is_ident("range") {
                 if config.min.is_some() || config.max.is_some() {
                     return Err(meta.error("`range` is given twice"));
@@ -116,7 +134,7 @@ fn field_config(attrs: &[Attribute]) -> syn::Result<FieldConfig> {
     if let Some(stage) = config
         .stage
         .as_ref()
-        .filter(|s| config.secret && *s == "Sync")
+        .filter(|s| config.secret && (*s == "Sync" || config.synced))
     {
         return Err(syn::Error::new(
             stage.span(),
@@ -251,7 +269,7 @@ fn expand_config(input: &DeriveInput) -> syn::Result<TokenStream> {
     let mut entries = Vec::new();
     let mut described = Vec::new();
     let mut checks = Vec::new();
-    let mut staged: Vec<(Ident, &syn::Field)> = Vec::new();
+    let mut staged: Vec<(Ident, bool, &syn::Field)> = Vec::new();
     for field in &fields.named {
         let Some(ident) = field.ident.as_ref() else {
             continue;
@@ -263,7 +281,9 @@ fn expand_config(input: &DeriveInput) -> syn::Result<TokenStream> {
             .unwrap_or_else(|| Ident::new("Runtime", Span::call_site()));
         let key = ident.unraw().to_string();
         let doc = comment(&field.attrs);
-        let note = if stage == "Startup" {
+        let note = if config.synced {
+            SYNCED_NOTE
+        } else if stage == "Startup" {
             "# Takes effect when the world loads.\n"
         } else if stage == "Restart" {
             "# Takes effect when the game starts again.\n"
@@ -289,6 +309,7 @@ fn expand_config(input: &DeriveInput) -> syn::Result<TokenStream> {
         let plain = doc_text(&field.attrs);
         let label = config.text.map(|t| t.value()).unwrap_or_default();
         let secret = config.secret;
+        let synced = config.synced;
         described.push(quote! {
             ::enshwick_loader_api::config::Field::new(
                 #key,
@@ -299,8 +320,9 @@ fn expand_config(input: &DeriveInput) -> syn::Result<TokenStream> {
             #choices
             .with_doc(#plain, #label)
             .with_secret(#secret)
+            .with_synced(#synced)
         });
-        staged.push((stage, field));
+        staged.push((stage, synced, field));
     }
     let header = comment(&input.attrs);
     let header_text = doc_text(&input.attrs);
@@ -341,8 +363,9 @@ fn expand_config(input: &DeriveInput) -> syn::Result<TokenStream> {
     .into())
 }
 
-/// `values` and `merge_values` over the fields of each stage that has any.
-fn stage_methods(staged: &[(Ident, &syn::Field)]) -> impl quote::ToTokens {
+/// `values` and `merge_values` over the fields of each stage that has any; a
+/// `startup, sync` field counts at both.
+fn stage_methods(staged: &[(Ident, bool, &syn::Field)]) -> impl quote::ToTokens {
     let (table, value, stage, values) = (
         local("table"),
         local("value"),
@@ -354,8 +377,8 @@ fn stage_methods(staged: &[(Ident, &syn::Field)]) -> impl quote::ToTokens {
     for (_, variant) in STAGES {
         let fields: Vec<&syn::Field> = staged
             .iter()
-            .filter(|(stage, _)| stage == variant)
-            .map(|(_, field)| *field)
+            .filter(|(stage, synced, _)| stage == variant || (*synced && variant == "Sync"))
+            .map(|(_, _, field)| *field)
             .collect();
         if fields.is_empty() {
             continue;

@@ -21,6 +21,9 @@ use serde::{Deserialize, Serialize};
 ///   `#[config(sync)]` (the server's value applies on its joined clients) and
 ///   `#[config(restart)]` (read once at start; a change waits for the next
 ///   start of the game);
+/// - `#[config(startup, sync)]`, the one pair of stages a field may name:
+///   applied when a world loads, and a joined client runs with the server's
+///   value, which stays the same while the world runs;
 /// - `range = a..=b` (also `a..` or `..=b`) for numbers and `choices = [..]`
 ///   for values from a list, both checked whenever the file is read and
 ///   before `/config` writes a value;
@@ -32,7 +35,8 @@ use serde::{Deserialize, Serialize};
 /// `#[config(text = "key")]` names the text key of the whole set, `config`
 /// by default.
 ///
-/// A field takes one stage; two fail the build:
+/// A field takes one stage, or `startup, sync`; any other two fail the
+/// build:
 ///
 /// ```compile_fail
 /// /// Settings.
@@ -53,6 +57,30 @@ use serde::{Deserialize, Serialize};
 /// struct Settings {
 ///     /// A password every client would see.
 ///     #[config(sync, secret)]
+///     password: String,
+/// }
+/// ```
+///
+/// `sync` pairs with `startup` alone:
+///
+/// ```compile_fail
+/// /// Settings.
+/// #[derive(Default, serde::Deserialize, serde::Serialize, enshwick_loader_api::Config)]
+/// struct Settings {
+///     /// Live and from the server at once.
+///     #[config(runtime, sync)]
+///     rate: u32,
+/// }
+/// ```
+///
+/// and a `startup, sync` secret would reach every client too:
+///
+/// ```compile_fail
+/// /// Settings.
+/// #[derive(Default, serde::Deserialize, serde::Serialize, enshwick_loader_api::Config)]
+/// struct Settings {
+///     /// A password every client would see.
+///     #[config(startup, sync, secret)]
 ///     password: String,
 /// }
 /// ```
@@ -209,8 +237,9 @@ pub trait Config: serde::de::DeserializeOwned + Default {
         Ok(())
     }
 
-    /// The join values: the fields marked `#[config(sync)]`, as an inline
-    /// TOML table; `None` when the type has none.
+    /// The join values: the fields marked `#[config(sync)]` or
+    /// `#[config(startup, sync)]`, as an inline TOML table; `None` when the
+    /// type has none.
     ///
     /// A join value is one the server and its players must agree on, such as
     /// a table the client's interface also reads. The server advertises these
@@ -535,6 +564,10 @@ pub struct Field {
     /// the file only.
     #[serde(default, skip_serializing_if = "core::ops::Not::not")]
     pub secret: bool,
+    /// A `startup` setting a joined client takes from the server, as it
+    /// would a `sync` one: `#[config(startup, sync)]`.
+    #[serde(default, skip_serializing_if = "core::ops::Not::not")]
+    pub synced: bool,
 }
 
 impl Field {
@@ -626,6 +659,39 @@ impl Field {
     pub const fn with_secret(mut self, secret: bool) -> Self {
         self.secret = secret;
         self
+    }
+
+    /// The field, at [`Stage::Startup`], also taken from the server by a
+    /// joined client, or not.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_loader_api::config::{Field, Stage};
+    ///
+    /// let field = Field::new("rules", Stage::Startup, &true).with_synced(true);
+    /// assert!(field.follows_server());
+    /// ```
+    #[must_use]
+    pub const fn with_synced(mut self, synced: bool) -> Self {
+        self.synced = synced;
+        self
+    }
+
+    /// Whether a joined client runs with the server's value of the field:
+    /// a `sync` field, or a `startup` one marked `sync` too.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_loader_api::config::{Field, Stage};
+    ///
+    /// assert!(Field::new("radius", Stage::Sync, &8).follows_server());
+    /// assert!(!Field::new("limit", Stage::Startup, &4).follows_server());
+    /// ```
+    #[must_use]
+    pub fn follows_server(&self) -> bool {
+        self.stage == Stage::Sync || self.synced
     }
 
     /// Checks `value` against the field's type, range and choices.
@@ -1047,6 +1113,49 @@ mod tests {
                 volume: 1.0,
             }
         }
+    }
+
+    /// World rules a joined client takes from the server.
+    #[derive(Debug, Default, PartialEq, serde::Deserialize, serde::Serialize, crate::Config)]
+    struct Rules {
+        /// The rule of the world.
+        #[config(startup, sync)]
+        rule: bool,
+        /// Read when the world loads, this side's own.
+        #[config(startup)]
+        limit: u32,
+        /// The server's, live.
+        #[config(sync)]
+        rate: u32,
+    }
+
+    #[test]
+    fn a_startup_sync_field_waits_for_a_world_and_joins_the_server_s_values() {
+        use super::Stage;
+
+        let rules = Rules {
+            rule: true,
+            limit: 4,
+            rate: 2,
+        };
+        assert_eq!(
+            rules.values(Stage::Startup).as_deref(),
+            Some("{ limit = 4, rule = true }")
+        );
+        assert_eq!(rules.synced().as_deref(), Some("{ rate = 2, rule = true }"));
+        let mut joined = Rules::default();
+        joined.merge_synced("{ rule = true, rate = 2 }").unwrap();
+        assert_eq!((joined.rule, joined.limit, joined.rate), (true, 0, 2));
+        let schema = Rules::schema();
+        let rule = schema.field("rule").unwrap();
+        assert_eq!((rule.stage, rule.synced), (Stage::Startup, true));
+        assert!(rule.follows_server());
+        assert!(!schema.field("limit").unwrap().follows_server());
+        assert!(schema.field("rate").unwrap().follows_server());
+        assert_eq!(super::Schema::parse(&schema.to_text()).unwrap(), schema);
+        assert!(Rules::template().contains(
+            "# Takes effect when the world loads; joined players run with the server's value.\nrule = false"
+        ));
     }
 
     #[test]

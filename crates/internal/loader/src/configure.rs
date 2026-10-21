@@ -63,9 +63,19 @@ fn current(text: &str, field: &Field) -> String {
         .unwrap_or_else(|| field.default.clone())
 }
 
+/// The stage as the field's attribute names it, such as `startup, sync`.
+fn stage_name(field: &Field) -> &'static str {
+    if field.synced {
+        "startup, sync"
+    } else {
+        field.stage.name()
+    }
+}
+
 /// How a setting's stage reads in a list.
-fn stage_note(stage: Stage) -> String {
-    let key = match stage {
+fn stage_note(field: &Field) -> String {
+    let key = match field.stage {
+        Stage::Startup if field.synced => "stage.startup-sync",
         Stage::Startup => "stage.startup",
         Stage::Restart => "stage.restart",
         Stage::Client => "stage.client",
@@ -121,7 +131,7 @@ pub fn list(id: &str, schema: &Schema, text: &str) -> String {
             field.key,
             current(text, field),
             accepts(field),
-            stage_note(field.stage)
+            stage_note(field)
         )
     }));
     lines.join("\n")
@@ -159,8 +169,8 @@ pub fn get(id: &str, schema: &Schema, text: &str, key: &str) -> Result<String, S
         "config.takes",
         &[
             ("accepts", &accepts(field)),
-            ("stage", &stage_note(field.stage)),
-            ("name", field.stage.name()),
+            ("stage", &stage_note(field)),
+            ("name", stage_name(field)),
         ],
     ));
     Ok(lines.join("\n"))
@@ -222,6 +232,8 @@ pub struct Change {
     pub text: String,
     /// The setting's stage.
     pub stage: Stage,
+    /// A `startup` setting joined players take from the server.
+    pub synced: bool,
     /// The value as written.
     pub value: String,
     /// Where it was written.
@@ -267,6 +279,7 @@ pub fn set(
     Ok(Change {
         text: doc.to_string(),
         stage: field.stage,
+        synced: field.synced,
         value,
         destination: crate::worlds::Destination::Global,
     })
@@ -279,6 +292,7 @@ pub fn changed(id: &str, key: &str, change: &Change) -> String {
     let args = [("id", id), ("key", key), ("value", change.value.as_str())];
     match (&change.destination, change.stage) {
         (Destination::Next, _) => texts::fill("change.next", &args),
+        (_, Stage::Startup) if change.synced => texts::fill("change.startup-sync", &args),
         (_, Stage::Startup) => texts::fill("change.startup", &args),
         (_, Stage::Restart) => texts::fill("change.restart", &args),
         (_, Stage::Sync) => texts::fill("change.sync", &args),
@@ -339,6 +353,31 @@ mod tests {
             get("safes", &schema(), FILE, "nope")
                 .unwrap_err()
                 .contains("it has limit")
+        );
+    }
+
+    #[test]
+    fn a_startup_sync_setting_says_joined_players_get_it_when_the_world_loads() {
+        let schema = Schema::new(
+            "",
+            "config",
+            vec![Field::new("rule", Stage::Startup, &true).with_synced(true)],
+        );
+        let text = list("rules", &schema, "rule = true\n");
+        assert!(
+            text.contains(
+                "rule = true (true or false; when the world loads, joined players get it)"
+            ),
+            "{text}"
+        );
+        let one = get("rules", &schema, "rule = true\n", "rule").unwrap();
+        assert!(one.contains("(startup, sync)"), "{one}");
+        let change = set("rules", &schema, "rule = true\n", "rule", "false").unwrap();
+        assert!(change.synced);
+        assert!(
+            changed("rules", "rule", &change).contains("joined players get it then"),
+            "{}",
+            changed("rules", "rule", &change)
         );
     }
 

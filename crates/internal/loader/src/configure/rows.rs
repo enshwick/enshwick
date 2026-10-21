@@ -189,7 +189,7 @@ pub fn rows(
         .iter()
         .map(|field| {
             let from_server =
-                field.stage == Stage::Sync && server.is_some_and(|s| s.contains_key(&field.key));
+                field.follows_server() && server.is_some_and(|s| s.contains_key(&field.key));
             let value = server
                 .filter(|_| from_server)
                 .and_then(|s| s.get(&field.key))
@@ -331,6 +331,29 @@ mod tests {
             matches!(rows[2].widget, Widget::Slider { value, .. } if (value - 4.0).abs() < 1e-3)
         );
         assert_eq!(rows[0].lock, Lock::Open);
+    }
+
+    #[test]
+    fn a_joined_servers_startup_sync_value_shows_locked() {
+        let schema = Schema::new(
+            "",
+            "config",
+            vec![
+                Field::new("rule", Stage::Startup, &true).with_synced(true),
+                Field::new("limit", Stage::Startup, &4),
+            ],
+        );
+        let server: toml::Table = "rule = false\nlimit = 9".parse().unwrap();
+        let rows = rows(&schema, "rule = true\nlimit = 2", Some(&server), None);
+        assert_eq!(
+            (rows[0].lock, &rows[0].widget),
+            (Lock::Server, &Widget::Toggle(false))
+        );
+        assert_ne!(
+            rows[1].lock,
+            Lock::Server,
+            "a startup value stays this side's"
+        );
     }
 
     #[test]

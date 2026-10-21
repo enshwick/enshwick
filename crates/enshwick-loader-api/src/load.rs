@@ -525,10 +525,10 @@ impl Load<'_> {
     pub fn config<T: Config>(&mut self) -> Result<T, Off> {
         self.host.config_schema(&T::schema().to_text());
         self.config_check::<T>();
-        let settings: T = read_config(self.host)?;
-        keep(&STARTED, &settings, Stage::Startup);
-        keep(&RESTART, &settings, Stage::Restart);
-        Ok(settings)
+        read_config(self.host, |settings: &mut T| {
+            keep(&STARTED, settings, Stage::Startup);
+            keep(&RESTART, settings, Stage::Restart);
+        })
     }
 
     /// Calls `handler` with the mod's settings each time `mod-configs/<id>.toml`
@@ -582,10 +582,12 @@ impl Load<'_> {
             let Some(host) = crate::host() else {
                 return;
             };
-            match read_config::<T>(host) {
-                Ok(mut settings) => {
-                    hold(&RESTART, &mut settings, Stage::Restart);
-                    keep(&STARTED, &settings, Stage::Startup);
+            let world = |settings: &mut T| {
+                hold(&RESTART, settings, Stage::Restart);
+                keep(&STARTED, settings, Stage::Startup);
+            };
+            match read_config::<T>(host, world) {
+                Ok(settings) => {
                     on_world(settings);
                     crate::info!("the world's settings apply");
                 }
@@ -596,10 +598,12 @@ impl Load<'_> {
             let Some(host) = crate::host() else {
                 return;
             };
-            match read_config::<T>(host) {
-                Ok(mut settings) => {
-                    hold(&RESTART, &mut settings, Stage::Restart);
-                    hold(&STARTED, &mut settings, Stage::Startup);
+            let running = |settings: &mut T| {
+                hold(&RESTART, settings, Stage::Restart);
+                hold(&STARTED, settings, Stage::Startup);
+            };
+            match read_config::<T>(host, running) {
+                Ok(settings) => {
                     handler(settings);
                     crate::info!("settings reloaded");
                 }
@@ -1213,37 +1217,36 @@ impl Load<'_> {
     }
 }
 
-/// The mod's settings as `T`, parsed and validated, with the server's join
-/// values over the file's while this client is joined to a server that has
-/// them.
-fn read_config<T: Config>(host: Host) -> Result<T, Off> {
+/// Reads the file's settings, puts the values in force over them with
+/// `stages`, reports the join values in force and, while this client is
+/// joined, puts the server's over them: a `startup, sync` value comes from
+/// the server even where `stages` held this side's.
+fn read_config<T: Config>(host: Host, stages: impl FnOnce(&mut T)) -> Result<T, Off> {
     let text = host.settings_text(&T::template())?;
-    let settings: T =
+    let mut settings: T =
         toml::from_str(&text).map_err(|e| Off::new(format!("settings: {}", e.message())))?;
     settings
         .validate()
         .map_err(|why| Off::new(format!("settings: {why}")))?;
+    stages(&mut settings);
     let Some(server) = settings.synced().and_then(|local| host.sync(&local)) else {
         return Ok(settings);
     };
-    match with_server::<T>(&text, &server) {
-        Ok(joined) => {
-            crate::info!("the server's join values apply over the settings file: {server}");
-            Ok(joined)
-        }
-        Err(why) => {
-            crate::warn!("the server's join values are refused, the file's apply: {why}");
-            Ok(settings)
-        }
+    match with_server(&mut settings, &server) {
+        Ok(()) => crate::info!("the server's join values apply over the settings file: {server}"),
+        Err(why) => crate::warn!("the server's join values are refused, the file's apply: {why}"),
     }
+    Ok(settings)
 }
 
-/// The settings in `text` with the join values `server` over them, checked.
-fn with_server<T: Config>(text: &str, server: &str) -> Result<T, ConfigError> {
-    let mut joined: T = toml::from_str(text)?;
-    joined.merge_synced(server)?;
-    joined.validate()?;
-    Ok(joined)
+/// Puts the join values `server` over `settings` and checks them; an error
+/// leaves `settings` as they were.
+fn with_server<T: Config>(settings: &mut T, server: &str) -> Result<(), ConfigError> {
+    let own = settings.synced().unwrap_or_default();
+    settings.merge_synced(server)?;
+    settings.validate().inspect_err(|_| {
+        let _back = settings.merge_synced(&own);
+    })
 }
 
 /// Runs a subscribed handler; `user` is the handler boxed by
@@ -1363,10 +1366,18 @@ mod tests {
 
     #[test]
     fn the_server_values_apply_over_the_file_and_are_checked() {
-        let file = "table = [1]\nlocal = 5\n";
-        let joined: Settings = with_server(file, "{ table = [2, 4] }").unwrap();
-        assert_eq!((joined.table.as_slice(), joined.local), (&[2, 4][..], 5));
-        assert!(with_server::<Settings>(file, "{ table = [1, 2, 3, 4] }").is_err());
-        assert!(with_server::<Settings>(file, "{ table = 'x' }").is_err());
+        let mut settings = Settings {
+            table: vec![1],
+            local: 5,
+        };
+        with_server(&mut settings, "{ table = [2, 4] }").unwrap();
+        assert_eq!(
+            (settings.table.as_slice(), settings.local),
+            (&[2, 4][..], 5)
+        );
+        assert!(with_server(&mut settings, "{ table = [1, 2, 3, 4] }").is_err());
+        assert_eq!(settings.table, [2, 4], "a refused value leaves them");
+        assert!(with_server(&mut settings, "{ table = 'x' }").is_err());
+        assert_eq!(settings.table, [2, 4]);
     }
 }

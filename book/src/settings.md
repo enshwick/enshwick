@@ -73,12 +73,14 @@ settings menu names it:
 | `runtime`        | The default: applied while the game runs, through `on_config_change`                                                             |
 | `client`         | Each player's own: never sent to or taken from a server; `/config` on a dedicated server leaves it alone                         |
 | `sync`           | The server's value: a joined client runs with it ([Join values](#join-values))                                                   |
+| `startup, sync`  | Read when a world loads, as `startup`; a joined client runs with the server's value, the same while the world runs               |
 | `range = a..=b`  | Numbers from `a` to `b`; `a..` and `..=b` leave one end open. Constants work, as in `0.0..=MAX`                                  |
 | `choices = [..]` | One of these values; any type serde writes, such as an enum's variants                                                           |
 | `text = "key"`   | The key of the field's label in the mod's [texts](content/texts.md), `config.<field>` by default; its description is `<key>.doc` |
 | `secret`         | A value such as a password: never sent to a client, and changed in the file only; never with `sync`                              |
 
-A field takes one stage; two fail the build. On the struct,
+A field takes one stage, or the pair `startup, sync`; any other two fail the
+build. On the struct,
 `#[config(text = "key")]` names the key of the set's title, `config` by
 default. The field's doc comment is its English description wherever no
 translation exists.
@@ -348,6 +350,16 @@ that count in the [join check](concepts/join-check.md). Then:
 
 Apply join values in `on_config_change`. A mod without a handler runs with its
 file's values until the next start.
+
+A rule of the world that its players must share and that must not change
+under a running world, such as whether survivors keep a copy per altar, is
+`#[config(startup, sync)]`. The server applies it when the world loads and
+advertises the value in force: a change to its file waits for the next load
+and reaches no player before then. A joined client runs with the server's
+value from the join on, whatever its own file says, and with its own again
+after it leaves. `/config` and the rows say "when the world loads, joined
+players get it", and on a joined client the row shows the server's value,
+locked.
 
 A server's edited join values are advertised once the mod has read them, that
 is, once its `on_config_change` handler has run, and pushed at the same moment
