@@ -144,8 +144,8 @@ pub use enshwick_loader_macros::event;
 /// and a static [`Hook`] named after it in upper case joins it.
 ///
 /// The first argument is `next: Next<F>`, where `F` is the target's
-/// `extern "system" fn` type; the other arguments are the target's, by plain
-/// names. `#[hook(priority = <i32>, flags = <HookFlags>)]` sets the link's
+/// `extern "system" fn` type or an alias of it; the other arguments are the
+/// target's, by plain names. `#[hook(priority = <i32>, flags = <HookFlags>)]` sets the link's
 /// order and flags. The static takes the function's visibility and doc
 /// comment.
 ///

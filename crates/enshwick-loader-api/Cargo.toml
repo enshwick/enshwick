@@ -41,6 +41,10 @@ name = "actions"
 required-features = ["test"]
 
 [[test]]
+name = "hook_macro"
+required-features = ["test"]
+
+[[test]]
 name = "affixes"
 required-features = ["test"]
 

@@ -325,13 +325,13 @@ fn stage_methods(staged: &[(Ident, &syn::Field)]) -> impl quote::ToTokens {
     }
 }
 
-/// Declares a hook from its body: the function stays, and
-/// `enshwick_loader_api::detour!` declares a static `Hook` named after it in upper
-/// case.
+/// Declares a hook from its body: the function stays, and a static `Hook`
+/// named after it in upper case joins it, as `enshwick_loader_api::detour!`
+/// declares one.
 ///
 /// The first argument is `next: Next<F>` with `F` the target's
-/// `extern "system" fn` type, the rest are the target's arguments by plain
-/// names. `#[hook(priority = <i32>, flags = <HookFlags>)]` sets the link's
+/// `extern "system" fn` type or an alias of it, the rest are the target's
+/// arguments by plain names. `#[hook(priority = <i32>, flags = <HookFlags>)]` sets the link's
 /// order and flags. Examples are on `enshwick_loader_api::hook`.
 #[proc_macro_attribute]
 pub fn hook(args: TokenStream, item: TokenStream) -> TokenStream {
@@ -367,14 +367,14 @@ fn expand_hook(
         ));
     }
     let mut inputs = sig.inputs.iter();
-    let is_unsafe = inputs.next().and_then(next_is_unsafe).ok_or_else(|| {
+    let target = inputs.next().and_then(next_type).ok_or_else(|| {
         syn::Error::new_spanned(
             &sig.ident,
             "a hook body takes `next: Next<extern \"system\" fn(..)>` first",
         )
     })?;
-    let unsafety = is_unsafe.then(|| quote!(unsafe));
-    let mut args = Vec::new();
+    let mut idents = Vec::new();
+    let mut arg_types = Vec::new();
     for input in inputs {
         let FnArg::Typed(typed) = input else {
             return Err(syn::Error::new_spanned(
@@ -388,25 +388,51 @@ fn expand_hook(
                 "a hook body names each argument",
             ));
         };
-        let ident = &pat.ident;
-        let ty = &typed.ty;
-        args.push(quote!(#ident: #ty));
+        idents.push(&pat.ident);
+        arg_types.push(&typed.ty);
     }
     let output = &sig.output;
     let body = &sig.ident;
-    let name = Ident::new(&body.to_string().to_uppercase(), body.span());
+    let name = Ident::new(&body.unraw().to_string().to_uppercase(), body.span());
     let vis = &function.vis;
-    let docs = function.attrs.iter().filter(|a| a.path().is_ident("doc"));
-    let priority = priority.map(|p| quote!(, priority = #p));
-    let flags = flags.map(|f| quote!(, flags = #f));
+    let kept = function
+        .attrs
+        .iter()
+        .filter(|a| a.path().is_ident("doc") || a.path().is_ident("cfg"));
+    let priority = priority.map_or_else(|| quote!(0), |p| quote!(#p));
+    let flags = flags.map_or_else(
+        || quote!(::enshwick_loader_api::abi::HookFlags::NONE),
+        |f| quote!(#f),
+    );
+    let (entry, next, value) = (
+        Ident::new("entry", Span::mixed_site()),
+        Ident::new("next", Span::mixed_site()),
+        Ident::new("value", Span::mixed_site()),
+    );
+    // The entry point is a safe fn, which coerces to the target's type
+    // whether that is `unsafe` or not, so `F` may be any name for it.
     Ok(quote! {
         #function
 
-        ::enshwick_loader_api::detour! {
-            #(#docs)*
-            #vis static #name: #unsafety extern "system" fn(#(#args),*) #output
-                = #body #priority #flags;
-        }
+        #(#kept)*
+        #vis static #name: ::enshwick_loader_api::Hook<#target> = {
+            extern "system" fn #entry(#(#idents: #arg_types),*) #output {
+                let #next = #name.next();
+                match ::std::panic::catch_unwind(::std::panic::AssertUnwindSafe(
+                    || #body(#next, #(#idents),*),
+                )) {
+                    ::core::result::Result::Ok(#value) => #value,
+                    ::core::result::Result::Err(_) => {
+                        ::enshwick_loader_api::__private::fault_in(::core::stringify!(#name));
+                        #[allow(unused_unsafe)]
+                        // SAFETY: the rest of the chain takes the arguments
+                        // the game passed.
+                        unsafe { #next.get()(#(#idents),*) }
+                    }
+                }
+            }
+            ::enshwick_loader_api::Hook::new(::core::stringify!(#name), #entry, #priority, #flags)
+        };
     }
     .into())
 }
@@ -544,9 +570,8 @@ fn expand_layout(
     .into())
 }
 
-/// Whether the `F` of `next: Next<F>` is an `unsafe fn`; `None` when the
-/// argument has another shape.
-fn next_is_unsafe(arg: &FnArg) -> Option<bool> {
+/// The `F` of `next: Next<F>`; `None` when the argument has another shape.
+fn next_type(arg: &FnArg) -> Option<&Type> {
     let FnArg::Typed(typed) = arg else {
         return None;
     };
@@ -558,7 +583,7 @@ fn next_is_unsafe(arg: &FnArg) -> Option<bool> {
         return None;
     };
     match generics.args.first()? {
-        GenericArgument::Type(Type::FnPtr(f)) => Some(f.unsafety.is_some()),
+        GenericArgument::Type(ty) => Some(ty),
         _ => None,
     }
 }

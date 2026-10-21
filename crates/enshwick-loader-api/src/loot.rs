@@ -450,7 +450,12 @@ fn after_check(next: crate::Next<unsafe extern "system" fn(*mut u64)>, ctx: *mut
         // SAFETY: the system's live context.
         && unsafe { worlds.is_server(ctx) }
     {
-        handler(&LootPass { containers, ctx });
+        // Guarded here: the detour's own guard would run the system again.
+        crate::host::guard(
+            "panic in a loot pass handler",
+            || (),
+            || handler(&LootPass { containers, ctx }),
+        );
     }
 }
 
