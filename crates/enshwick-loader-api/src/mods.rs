@@ -16,16 +16,16 @@ use crate::abi::{HostApi, ManifestFlags, ModInfo, Side, Str, UpdateKind, UpdateS
 ///     repository: "themaiby/enshwick".into(),
 ///     component: "enshwick-safes".into(),
 /// };
-/// assert_eq!(safes.tag_prefix(), Some("enshwick-safes-v".to_owned()));
+/// assert_eq!(safes.to_line(), "github:themaiby/enshwick:enshwick-safes");
 /// ```
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Updates {
-    /// GitHub releases of `repository` (`owner/name`) tagged
-    /// `<component>-v<semver>`.
+    /// GitHub releases of `repository` (`owner/name`) whose tags name
+    /// `component`'s version, such as `<component>-v1.2.0`.
     GitHub {
         /// The repository, `owner/name`.
         repository: String,
-        /// The tag prefix before `-v<semver>`.
+        /// The mod's name in the repository's tags and release files.
         component: String,
     },
     /// A JSON document at this `https://` URL that lists the mod's versions.
@@ -33,20 +33,6 @@ pub enum Updates {
 }
 
 impl Updates {
-    /// The prefix of the tags that are this mod's releases, `<component>-v`;
-    /// `None` for a URL source.
-    ///
-    /// # Examples
-    ///
-    /// See [`Updates`].
-    #[must_use]
-    pub fn tag_prefix(&self) -> Option<String> {
-        match self {
-            Self::GitHub { component, .. } => Some(format!("{component}-v")),
-            Self::Url(_) => None,
-        }
-    }
-
     /// The source as one line, as a server advertises it:
     /// `github:<owner/name>:<component>` or `url:<url>`; [`Updates::parse`]
     /// reads it back.

@@ -14,11 +14,12 @@
 //! ```
 //!
 //! Each version is SemVer; one with a prerelease part counts only with the
-//! `prereleases` setting. `url` and `signature` are `https://` addresses, the
-//! archive's ending in `.zip`. An entry that breaks a rule is skipped, other
-//! fields are ignored, and the order is free. The archive is installed like a
-//! GitHub release's: its minisign signature's trusted comment names
-//! `<id>-v<version>`, `id` being the mod id, and the archive's file name.
+//! `prereleases` setting. `url` is an `https://` address of a `.zip` archive
+//! or the mod's `.dll`; `signature`, needed only by a mod that names author
+//! keys, is an `https://` address too. An entry that breaks a rule is
+//! skipped, other fields are ignored, and the order is free. The file is
+//! installed like a GitHub release's: a minisign signature's trusted comment
+//! names `<id>-v<version>`, `id` being the mod id, and the file's name.
 
 use semver::Version;
 
@@ -36,9 +37,10 @@ pub struct Document {
 pub struct Entry {
     /// The SemVer version, such as `1.2.0`.
     pub version: String,
-    /// Where its `.zip` archive downloads from.
+    /// Where its `.zip` archive or `.dll` downloads from.
     pub url: String,
-    /// Where the archive's minisign signature downloads from.
+    /// Where the file's minisign signature downloads from; empty for none.
+    #[serde(default)]
     pub signature: String,
 }
 
@@ -78,8 +80,8 @@ pub fn is_https(url: &str) -> bool {
         .is_some_and(|rest| !rest.is_empty() && !rest.starts_with('/'))
 }
 
-/// The archive's file name: the last segment of `url`'s path, when `url` is
-/// `https://` and the name ends in `.zip`.
+/// The file's name: the last segment of `url`'s path, when `url` is
+/// `https://` and the name ends in `.zip` or `.dll`.
 ///
 /// # Examples
 ///
@@ -87,7 +89,8 @@ pub fn is_https(url: &str) -> bool {
 /// use enshwick_updater::document::archive_name;
 ///
 /// assert_eq!(archive_name("https://example.com/a/my-mod.zip?x=1"), Some("my-mod.zip"));
-/// assert_eq!(archive_name("https://example.com/my-mod.dll"), None);
+/// assert_eq!(archive_name("https://example.com/my_mod.dll"), Some("my_mod.dll"));
+/// assert_eq!(archive_name("https://example.com/my-mod.7z"), None);
 /// ```
 #[must_use]
 pub fn archive_name(url: &str) -> Option<&str> {
@@ -101,7 +104,7 @@ pub fn archive_name(url: &str) -> Option<&str> {
         .checked_sub(".zip".len())
         .filter(|&stem| stem > 0)?;
     name.get(stem..)
-        .is_some_and(|ext| ext.eq_ignore_ascii_case(".zip"))
+        .is_some_and(|ext| ext.eq_ignore_ascii_case(".zip") || ext.eq_ignore_ascii_case(".dll"))
         .then_some(name)
 }
 
@@ -120,47 +123,52 @@ pub fn tag(id: &str, version: &Version) -> String {
     format!("{id}-v{version}")
 }
 
-/// The newest version in `document` above `installed`; prereleases count
-/// only with `prereleases`.
+/// The newest version in `document` above `installed`, with a signature
+/// when `signed`; prereleases count only with `prereleases`.
 #[must_use]
 pub fn newest(
     document: &Document,
     id: &str,
     installed: &Version,
     prereleases: bool,
+    signed: bool,
 ) -> Option<Pick> {
     document
         .versions
         .iter()
-        .filter_map(|entry| pick(entry, id))
+        .filter_map(|entry| pick(entry, id, signed))
         .filter(|pick| prereleases || pick.version.pre.is_empty())
         .filter(|pick| pick.version > *installed)
         .max_by(|a, b| a.version.cmp(&b.version))
 }
 
-/// Exactly `version` in `document`, prerelease or not.
+/// Exactly `version` in `document`, prerelease or not, with a signature
+/// when `signed`.
 #[must_use]
-pub fn exact(document: &Document, id: &str, version: &Version) -> Option<Pick> {
+pub fn exact(document: &Document, id: &str, version: &Version, signed: bool) -> Option<Pick> {
     document
         .versions
         .iter()
-        .filter_map(|entry| pick(entry, id))
+        .filter_map(|entry| pick(entry, id, signed))
         .find(|pick| pick.version == *version)
 }
 
-/// `entry` as a pick for the mod `id`, when it keeps every rule.
-fn pick(entry: &Entry, id: &str) -> Option<Pick> {
+/// `entry` as a pick for the mod `id`, when it keeps every rule and has a
+/// signature when `signed`.
+fn pick(entry: &Entry, id: &str, signed: bool) -> Option<Pick> {
     let version = Version::parse(&entry.version).ok()?;
     let archive = archive_name(&entry.url)?.to_owned();
-    if !is_https(&entry.signature) {
-        return None;
-    }
+    let signature_url = match entry.signature.as_str() {
+        "" if !signed => None,
+        url if is_https(url) => Some(url.to_owned()),
+        _ => return None,
+    };
     Some(Pick {
         tag: tag(id, &version),
         version,
         archive,
         archive_url: entry.url.clone(),
-        signature_url: entry.signature.clone(),
+        signature_url,
     })
 }
 
@@ -201,14 +209,25 @@ mod tests {
         }"#;
         let document = parse(json).unwrap();
         assert_eq!(document.versions.len(), 1);
-        let pick = newest(&document, "my-mod", &v("1.0.0"), false).unwrap();
+        let pick = newest(&document, "my-mod", &v("1.0.0"), false, true).unwrap();
         assert_eq!(pick.tag, "my-mod-v1.2.0");
         assert_eq!(pick.archive, "my-mod-1.2.0.zip");
         assert_eq!(
-            pick.signature_url,
-            "https://example.com/my-mod/my-mod-1.2.0.zip.minisig"
+            pick.signature_url.as_deref(),
+            Some("https://example.com/my-mod/my-mod-1.2.0.zip.minisig")
         );
         assert!(parse(br#"{"versions":[{"version":"1.0.0"}]}"#).is_err());
+        let unsigned =
+            br#"{"versions":[{"version":"1.3.0","url":"https://example.com/my_mod.dll"}]}"#;
+        let unsigned = parse(unsigned).unwrap();
+        let pick = newest(&unsigned, "my-mod", &v("1.0.0"), false, false).unwrap();
+        assert_eq!(pick.archive, "my_mod.dll");
+        assert_eq!(pick.signature_url, None);
+        assert_eq!(
+            newest(&unsigned, "my-mod", &v("1.0.0"), false, true),
+            None,
+            "a mod with a key needs the signature"
+        );
         assert!(parse(b"<html>").is_err());
         assert!(parse(b"{}").is_err());
     }
@@ -218,9 +237,9 @@ mod tests {
         let document = Document {
             versions: vec![good("0.1.0"), good("0.3.0"), good("0.2.0")],
         };
-        let pick = newest(&document, "my-mod", &v("0.1.0"), false).unwrap();
+        let pick = newest(&document, "my-mod", &v("0.1.0"), false, true).unwrap();
         assert_eq!(pick.version, v("0.3.0"));
-        assert_eq!(newest(&document, "my-mod", &v("0.3.0"), false), None);
+        assert_eq!(newest(&document, "my-mod", &v("0.3.0"), false, true), None);
     }
 
     #[test]
@@ -228,9 +247,9 @@ mod tests {
         let document = Document {
             versions: vec![good("0.2.0"), good("0.3.0-rc.1")],
         };
-        let stable = newest(&document, "my-mod", &v("0.1.0"), false).unwrap();
+        let stable = newest(&document, "my-mod", &v("0.1.0"), false, true).unwrap();
         assert_eq!(stable.version, v("0.2.0"));
-        let any = newest(&document, "my-mod", &v("0.1.0"), true).unwrap();
+        let any = newest(&document, "my-mod", &v("0.1.0"), true, true).unwrap();
         assert_eq!(any.version, v("0.3.0-rc.1"));
     }
 
@@ -239,10 +258,10 @@ mod tests {
         let document = Document {
             versions: vec![good("0.1.0"), good("0.2.0-beta.1")],
         };
-        let pick = exact(&document, "my-mod", &v("0.1.0")).unwrap();
+        let pick = exact(&document, "my-mod", &v("0.1.0"), true).unwrap();
         assert_eq!(pick.tag, "my-mod-v0.1.0");
-        assert!(exact(&document, "my-mod", &v("0.2.0-beta.1")).is_some());
-        assert_eq!(exact(&document, "my-mod", &v("0.9.0")), None);
+        assert!(exact(&document, "my-mod", &v("0.2.0-beta.1"), true).is_some());
+        assert_eq!(exact(&document, "my-mod", &v("0.9.0"), true), None);
     }
 
     #[test]
@@ -262,8 +281,8 @@ mod tests {
                 ),
                 entry(
                     "0.3.0",
-                    "https://example.com/my-mod.dll",
-                    "https://example.com/my-mod.dll.minisig",
+                    "https://example.com/my-mod.7z",
+                    "https://example.com/my-mod.7z.minisig",
                 ),
                 entry(
                     "one",
@@ -272,9 +291,14 @@ mod tests {
                 ),
             ],
         };
-        let pick = newest(&document, "my-mod", &v("0.1.0"), true).unwrap();
+        let pick = newest(&document, "my-mod", &v("0.1.0"), true, true).unwrap();
         assert_eq!(pick.version, v("0.2.0"));
-        assert_eq!(exact(&document, "my-mod", &v("0.5.0")), None);
+        assert_eq!(exact(&document, "my-mod", &v("0.5.0"), true), None);
+        assert_eq!(
+            exact(&document, "my-mod", &v("0.4.0"), false),
+            None,
+            "a signature given must be https:// even when none is needed"
+        );
     }
 
     #[test]
@@ -304,7 +328,7 @@ mod tests {
             )],
         };
         let check = |id: &str| {
-            let pick = exact(&document, id, &v("0.2.0")).unwrap();
+            let pick = exact(&document, id, &v("0.2.0"), true).unwrap();
             crate::verify::check(&keys, b"test", signature, &pick.tag, &pick.archive)
         };
         assert_eq!(check("enshwick-safes"), Ok(()));

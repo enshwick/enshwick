@@ -108,10 +108,10 @@ let manifest = enshwick_loader_api::manifest!(
 assert!(!manifest.updates.is_null());
 ```
 
-| Source                         | Meaning                                                            |
-| ------------------------------ | ------------------------------------------------------------------ |
-| `github("owner/name", "comp")` | GitHub releases of that repository whose tags are `comp-v<semver>` |
-| `url("https://...")`           | A JSON document at that URL that lists the mod's versions          |
+| Source                         | Meaning                                                             |
+| ------------------------------ | ------------------------------------------------------------------- |
+| `github("owner/name", "comp")` | GitHub releases of that repository whose tags name `comp`'s version |
+| `url("https://...")`           | A JSON document at that URL that lists the mod's versions           |
 
 A mod without `updates:` is updated by hand.
 
@@ -135,8 +135,9 @@ fails on a string that is not a minisign public key.
 An updater trusts a mod the way a phone trusts an app: on first install. The
 keys the installed DLL names are the ones a new release must be signed with,
 so nobody else can publish an update of your mod, even from your repository
-or your URL. Without `signed_by:` the updater does not install your updates;
-it tells the player to update the mod by hand.
+or your URL. Without `signed_by:` the updater still updates your mod,
+unsigned: it downloads the release over `https://` from the source the
+installed DLL names, and its dialog marks the update unsigned.
 
 The loader checks each key and lists it in `ModEntry::signed_by`. A key that
 is not a minisign public key is dropped with a warning such as
@@ -168,19 +169,22 @@ versions:
 
 - `version` is SemVer. A version with a prerelease part, such as
   `1.3.0-rc.1`, is offered only to players who turn `prereleases` on.
-- `url` is where the archive downloads from. It is an `https://` address
-  whose path ends in a file name with `.zip`, the archive's file name.
-- `signature` is where the archive's minisign signature downloads from, also
-  `https://`.
+- `url` is where the file downloads from. It is an `https://` address whose
+  path ends in a file name with `.zip` (an archive) or `.dll` (the mod's
+  DLL alone).
+- `signature` is where the file's minisign signature downloads from, also
+  `https://`. A mod that names no author key may leave it out; a mod that
+  names one gets only versions with a signature.
 - Versions may come in any order. Fields the format does not name are
   ignored, so a document may carry more, such as release notes.
 - An entry that breaks a rule (a version that is not SemVer, an address that
-  is not `https://`, an archive that is not a `.zip`) is skipped; the other
-  entries still count.
+  is not `https://`, a file that is neither `.zip` nor `.dll`) is skipped;
+  the other entries still count.
 
-The archive is the same as a GitHub release's: the DLL at `mods/<file>.dll`.
-Its signature's trusted comment names `<id>-v<version>`, `<id>` being the
-mod id from the manifest, and the archive's file name:
+The archive is laid out as a GitHub release's (see
+[Releasing your own mod](#releasing-your-own-mod)). A signature's trusted
+comment names `<id>-v<version>`, `<id>` being the mod id from the manifest,
+and the file's name:
 
 ```bash
 minisign -S -s my-mod.key -m my-mod-1.2.0.zip -t "my-mod-v1.2.0 my-mod-1.2.0.zip"
@@ -244,7 +248,6 @@ let safes = Updates::GitHub {
     component: "enshwick-safes".into(),
 };
 assert_eq!(safes.to_line(), "github:themaiby/enshwick:enshwick-safes");
-assert_eq!(safes.tag_prefix().as_deref(), Some("enshwick-safes-v"));
 ```
 
 When the join check keeps a client out because the server runs join mods the
@@ -307,43 +310,59 @@ is such a mod, for players:
   releases, and asks the player before it downloads anything;
 - after a refused join it offers the server's versions of the missing mods,
   from the sources the server advertises;
-- it downloads `<component>.zip` and `<component>.zip.minisig` from the
-  GitHub release, or the archive and signature a URL source's document names,
-  checks the signature, and stages the archive's DLLs;
-- it takes only `powrprof.dll` and `mods/*.dll` from an archive, and refuses
-  an archive with a path that leaves the game's folder;
+- it downloads the release's file for the mod from the GitHub release, or the
+  file a URL source's document names, over `https://` only, at most 64 MiB,
+  checks the signature when the mod names keys, and stages the DLLs;
+- it takes only `powrprof.dll`, DLLs under `mods/` and a content pack's files
+  from a signed archive, the mod's own DLL alone from an unsigned one, never
+  another mod's or the loader's files, and refuses an archive with a path
+  that leaves the game's folder;
+- it updates only mods the game has, from the source the installed DLL
+  names, never from one a server names;
 - it never touches settings files.
 
-It installs an archive only when the right key signed it and the signature's
-trusted comment names both the release's tag and the archive's file name, so a
-signed archive cannot pass for another release. For a URL source the tag is
-`<id>-v<version>`. The right key is:
+A signed update is installed only when the right key signed it and the
+signature's trusted comment names both the release's tag and the file's
+name, so a signed file cannot pass for another release. For a URL source the
+tag is `<id>-v<version>`. The right key is:
 
-| The mod is                                  | The archive must be signed by                                               |
+| The mod is                                  | The download must be signed by                                              |
 | ------------------------------------------- | --------------------------------------------------------------------------- |
 | installed and names keys in `signed_by:`    | one of those keys, or a key in `trusted_keys` of `mod-configs/updater.toml` |
-| installed without `signed_by:`              | nothing: the updater lists it as "update it by hand" and downloads nothing  |
-| not installed, offered after a refused join | the key the server advertises in `enshwick.key.<id>`                        |
+| installed without `signed_by:`              | nothing: it comes unsigned, over `https://`, and the dialog says so         |
+| not installed, offered after a refused join | the key the server advertises in `enshwick.key.<id>`, if it names one       |
 
 A release signed by another key than the installed version names is refused
 with a note: it may have been tampered with, or the author changed keys, and
 the player updates it by hand. For a mod offered after a refused join, the
-dialog shows the version, the source and the author key the server names,
-and says that the player trusts the mod because they trust the server. Mods
-of this repository released before author keys are checked against
-Enshwick's own key, which has signed all of them.
+dialog shows the version, the source and the author key the server names, or
+that it is unsigned, and says that the player trusts the mod because they
+trust the server. Mods of this repository released before author keys are
+checked against Enshwick's own key, which has signed all of them.
 
-## Signing your own releases
+## Releasing your own mod
 
-A mod outside this repository gets updates from the updater when:
+A mod outside this repository gets updates from the updater when its
+manifest says `updates: github("you/your-repo", "my-mod")` and its GitHub
+releases follow the common forms:
 
-1. its manifest says `updates: github("you/your-repo", "my-mod")`;
-2. its manifest names your public key with `signed_by: ["RW..."]`;
-3. its releases are tagged `my-mod-v<semver>`;
-4. each release carries `my-mod.zip`, with the DLL at `mods/<file>.dll`;
-5. each release carries `my-mod.zip.minisig`, a
-   [minisign](https://jedisct1.github.io/minisign/) signature by that key
-   whose trusted comment names the tag and the archive.
+| What         | Accepted                                                                                                                |
+| ------------ | ----------------------------------------------------------------------------------------------------------------------- |
+| Tag          | `my-mod-v1.2.0`, `my-mod-1.2.0`, `my-mod@1.2.0`; in a repository of this one mod also `v1.2.0` or `1.2.0`               |
+| Release file | `my-mod.zip`; else the release's only `.zip`; else the one `.zip` whose name holds `my-mod`; else the same for a `.dll` |
+| Archive      | the DLL at `mods/<file>.dll`, at the archive's root, or either inside one top-level folder                              |
+
+A repository counts as one mod's when none of its tags names another
+component. In names, `-` and `_` count as one and case does not matter, so
+`My_Mod-1.2.0-windows.zip` holds `my-mod`. A bare `.dll` release file
+replaces the installed DLL. Prereleases and versions with a prerelease part,
+such as `1.3.0-rc.1`, reach only players who turn `prereleases` on.
+
+That is all an unsigned mod needs. To sign, name your public key with
+`signed_by: ["RW..."]` and attach `<file>.minisig` beside the release file, a
+[minisign](https://jedisct1.github.io/minisign/) signature by that key whose
+trusted comment names the tag and the file. From then on only signed
+releases reach players.
 
 Releases hosted elsewhere work the same way with `updates: url("https://...")`
 and a [document](#the-document-of-a-url-source) that lists them, the tag in
@@ -355,7 +374,7 @@ Make a key pair once and keep the secret key out of the repository:
 minisign -G -p my-mod.pub -s my-mod.key
 ```
 
-Sign each archive with the tag and file name in the trusted comment:
+Sign each release file with the tag and file name in the trusted comment:
 
 ```bash
 minisign -S -s my-mod.key -m my-mod.zip -t "my-mod-v1.2.0 my-mod.zip"

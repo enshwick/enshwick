@@ -109,15 +109,6 @@ impl Client {
         }
     }
 
-    /// The JSON at a GitHub API address.
-    ///
-    /// # Errors
-    ///
-    /// When the request fails, GitHub refuses it or the reply is too long.
-    pub(crate) fn api(&self, url: &str) -> Result<Vec<u8>, Failure> {
-        self.api_reply(url).map(|reply| reply.body)
-    }
-
     /// Every page of a GitHub list from `first` on, following its `next`
     /// links up to [`MAX_PAGES`], until `enough` says the pages so far hold
     /// what the caller needs.

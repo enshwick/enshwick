@@ -1,5 +1,15 @@
-//! GitHub releases: their tags, which one is newer, and the files a release
-//! carries for a mod.
+//! GitHub releases: the version a tag names, which release is newer, and the
+//! file a release carries for a mod.
+//!
+//! A tag names a component's version as `<component>-v1.2.0`,
+//! `<component>-1.2.0`, `<component>@1.2.0` or `<component>@v1.2.0`. A bare
+//! `v1.2.0` or `1.2.0` counts too, in a repository whose tags name no other
+//! component: a repository of one mod. A release's file for a component is,
+//! in this order, `<component>.zip`, its only `.zip`, the one `.zip` whose
+//! name holds the component, `<component>.dll`, its only `.dll`, or the one
+//! `.dll` whose name holds the component; `-` and `_` count as one in names.
+//! Its signature, when the release has one, is the file's name with
+//! `.minisig` added.
 
 use semver::Version;
 
@@ -28,38 +38,97 @@ pub struct Asset {
     pub browser_download_url: String,
 }
 
-/// The release a mod updates to: its tag and version and where its archive
-/// and signature download from.
+/// The release a mod updates to: its tag and version and where its file and
+/// signature download from.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Pick {
     /// The release's tag.
     pub tag: String,
     /// The version the tag names.
     pub version: Version,
-    /// The archive's file name, `<component>.zip`.
+    /// The file's name: a `.zip` archive or the mod's `.dll`.
     pub archive: String,
-    /// Where the archive downloads from.
+    /// Where the file downloads from.
     pub archive_url: String,
-    /// Where its minisign signature downloads from.
-    pub signature_url: String,
+    /// Where its minisign signature downloads from; `None` for a release
+    /// without one.
+    pub signature_url: Option<String>,
 }
 
-/// The version a tag names for `component`: `<component>-v<semver>`; `None`
-/// for any other tag, such as another component's.
+/// The version `text` names, with or without a leading `v`.
+fn semver(text: &str) -> Option<Version> {
+    Version::parse(text.strip_prefix('v').unwrap_or(text)).ok()
+}
+
+/// The component a tag names and its version: `<component>-v1.2.0`,
+/// `<component>-1.2.0` or `<component>@1.2.0`; `None` for a bare version or
+/// a tag that names none.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_updater::release::named;
+///
+/// assert_eq!(named("my-mod-v1.2.0").map(|(c, _)| c), Some("my-mod"));
+/// assert_eq!(named("my-mod@1.2.0").map(|(c, _)| c), Some("my-mod"));
+/// assert_eq!(named("v1.2.0"), None);
+/// assert_eq!(named("build-tables"), None);
+/// ```
+#[must_use]
+pub fn named(tag: &str) -> Option<(&str, Version)> {
+    tag.char_indices()
+        .filter(|&(at, c)| at > 0 && (c == '-' || c == '@'))
+        .find_map(|(at, c)| Some((&tag[..at], semver(&tag[at + c.len_utf8()..])?)))
+}
+
+/// The version a tag names for `component`; with `bare`, a tag of a version
+/// alone counts too. `None` for any other tag, such as another component's.
 ///
 /// # Examples
 ///
 /// ```
 /// use enshwick_updater::release::version_of;
 ///
-/// let version = version_of("enshwick-safes-v0.2.0", "enshwick-safes").unwrap();
+/// let version = version_of("enshwick-safes-v0.2.0", "enshwick-safes", false).unwrap();
 /// assert_eq!(version.to_string(), "0.2.0");
-/// assert_eq!(version_of("enshwick-safes-v0.2.0", "enshwick"), None);
+/// assert_eq!(version_of("enshwick-safes-v0.2.0", "enshwick", false), None);
+/// assert!(version_of("v0.2.0", "my-mod", true).is_some());
+/// assert_eq!(version_of("v0.2.0", "my-mod", false), None);
 /// ```
 #[must_use]
-pub fn version_of(tag: &str, component: &str) -> Option<Version> {
-    let version = tag.strip_prefix(component)?.strip_prefix("-v")?;
-    Version::parse(version).ok()
+pub fn version_of(tag: &str, component: &str, bare: bool) -> Option<Version> {
+    if let Some(rest) = tag.strip_prefix(component) {
+        let rest = rest.strip_prefix('-').or_else(|| rest.strip_prefix('@'));
+        if let Some(version) = rest.and_then(semver) {
+            return Some(version);
+        }
+    }
+    if bare { semver(tag) } else { None }
+}
+
+/// Whether bare version tags count for `component` in `releases`: no tag
+/// among them names another component.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_updater::release::{Release, bare};
+///
+/// let tagged = |tag: &str| Release {
+///     tag_name: tag.into(),
+///     draft: false,
+///     prerelease: false,
+///     assets: Vec::new(),
+/// };
+/// assert!(bare(&[tagged("v1.0.0"), tagged("my-mod-v1.1.0")], "my-mod"));
+/// assert!(!bare(&[tagged("v1.0.0"), tagged("other-v1.0.0")], "my-mod"));
+/// ```
+#[must_use]
+pub fn bare(releases: &[Release], component: &str) -> bool {
+    releases
+        .iter()
+        .filter_map(|release| named(&release.tag_name))
+        .all(|(named, _)| named == component)
 }
 
 /// Releases parsed from the releases API's JSON: a list, or one release.
@@ -78,9 +147,22 @@ pub fn parse(json: &[u8]) -> Result<Vec<Release>, String> {
     releases.map_err(|e| format!("not a release list: {e}"))
 }
 
+/// The releases of `component` among `releases`, with their versions;
+/// drafts never.
+fn of<'a>(
+    releases: &'a [Release],
+    component: &'a str,
+) -> impl Iterator<Item = (&'a Release, Version)> {
+    let bare = bare(releases, component);
+    releases
+        .iter()
+        .filter(|release| !release.draft)
+        .filter_map(move |release| Some((release, version_of(&release.tag_name, component, bare)?)))
+}
+
 /// The newest of `releases` for `component` above `installed` that carries
-/// the mod's archive and signature; prereleases count only with
-/// `prereleases`, drafts never.
+/// a file for it, and its signature when `signed`; prereleases count only
+/// with `prereleases`, drafts never.
 #[must_use]
 pub fn newest(
     releases: &[Release],
@@ -88,40 +170,72 @@ pub fn newest(
     component: &str,
     installed: &Version,
     prereleases: bool,
+    signed: bool,
 ) -> Option<Pick> {
-    releases
-        .iter()
-        .filter(|release| !release.draft)
-        .filter_map(|release| Some((release, version_of(&release.tag_name, component)?)))
+    of(releases, component)
         .filter(|(release, version)| prereleases || (!release.prerelease && version.pre.is_empty()))
         .filter(|(_, version)| version > installed)
-        .filter_map(|(release, _)| pick(release, repository, component))
+        .filter_map(|(release, version)| pick(release, version, repository, component, signed))
         .max_by(|a, b| a.version.cmp(&b.version))
 }
 
 /// The release of exactly `version` for `component` among `releases`, with
-/// its archive and signature; prereleases count, drafts do not.
+/// its file, and its signature when `signed`; prereleases count, drafts do
+/// not.
 #[must_use]
 pub fn exact(
     releases: &[Release],
     repository: &str,
     component: &str,
     version: &Version,
+    signed: bool,
 ) -> Option<Pick> {
-    releases
-        .iter()
-        .filter(|release| !release.draft)
-        .filter(|release| version_of(&release.tag_name, component).as_ref() == Some(version))
-        .find_map(|release| pick(release, repository, component))
+    of(releases, component)
+        .filter(|(_, found)| found == version)
+        .find_map(|(release, version)| pick(release, version, repository, component, signed))
 }
 
-/// `release` as a pick for `component`, when it carries `<component>.zip`
-/// and `<component>.zip.minisig` downloaded from the repository's own
-/// release page.
-fn pick(release: &Release, repository: &str, component: &str) -> Option<Pick> {
-    let version = version_of(&release.tag_name, component)?;
-    let archive = format!("{component}.zip");
-    let signature = format!("{archive}.minisig");
+/// `name` folded for comparing: lower case, `_` as `-`.
+fn folded(name: &str) -> String {
+    name.to_ascii_lowercase().replace('_', "-")
+}
+
+/// The file of `release` for `component`, as the module describes.
+fn file<'a>(release: &'a Release, component: &str) -> Option<&'a Asset> {
+    let component = folded(component);
+    let pick = |extension: &str| {
+        let files: Vec<&Asset> = release
+            .assets
+            .iter()
+            .filter(|asset| folded(&asset.name).ends_with(extension))
+            .collect();
+        let exact = files
+            .iter()
+            .find(|asset| folded(&asset.name) == format!("{component}{extension}"));
+        let holding: Vec<&&Asset> = files
+            .iter()
+            .filter(|asset| folded(&asset.name).contains(&component))
+            .collect();
+        match (exact, &files[..], &holding[..]) {
+            (Some(exact), _, _) => Some(*exact),
+            (None, [only], _) => Some(*only),
+            (None, _, [only]) => Some(**only),
+            _ => None,
+        }
+    };
+    pick(".zip").or_else(|| pick(".dll"))
+}
+
+/// `release` as a pick of `version` for `component`, when it carries a file
+/// for it, and its signature when `signed`, downloaded from the
+/// repository's own release page.
+fn pick(
+    release: &Release,
+    version: Version,
+    repository: &str,
+    component: &str,
+    signed: bool,
+) -> Option<Pick> {
     let prefix = format!(
         "https://github.com/{repository}/releases/download/{}/",
         release.tag_name
@@ -134,11 +248,16 @@ fn pick(release: &Release, repository: &str, component: &str) -> Option<Pick> {
             .map(|asset| asset.browser_download_url.clone())
             .filter(|url| url.strip_prefix(&prefix) == Some(name))
     };
+    let archive = file(release, component)?.name.clone();
+    let signature_url = url(&format!("{archive}.minisig"));
+    if signed && signature_url.is_none() {
+        return None;
+    }
     Some(Pick {
         tag: release.tag_name.clone(),
         version,
         archive_url: url(&archive)?,
-        signature_url: url(&signature)?,
+        signature_url,
         archive,
     })
 }
@@ -163,9 +282,10 @@ fn pick(release: &Release, repository: &str, component: &str) -> Option<Pick> {
 #[must_use]
 pub fn seen_all(releases: &[Release], components: &[&str]) -> bool {
     components.iter().all(|component| {
+        let bare = bare(releases, component);
         releases
             .iter()
-            .any(|release| version_of(&release.tag_name, component).is_some())
+            .any(|release| version_of(&release.tag_name, component, bare).is_some())
     })
 }
 
@@ -173,12 +293,6 @@ pub fn seen_all(releases: &[Release], components: &[&str]) -> bool {
 #[must_use]
 pub fn list_url(repository: &str) -> String {
     format!("https://api.github.com/repos/{repository}/releases?per_page=100")
-}
-
-/// The API address of `repository`'s release tagged `tag`.
-#[must_use]
-pub fn tag_url(repository: &str, tag: &str) -> String {
-    format!("https://api.github.com/repos/{repository}/releases/tags/{tag}")
 }
 
 #[cfg(test)]
@@ -221,21 +335,103 @@ mod tests {
 
     #[test]
     fn tags_name_versions_of_their_own_component_only() {
+        let safes = "enshwick-safes";
         assert_eq!(
-            version_of("enshwick-safes-v0.2.0", "enshwick-safes"),
+            version_of("enshwick-safes-v0.2.0", safes, false),
             Some(v("0.2.0"))
         );
         assert_eq!(
-            version_of("enshwick-safes-v1.0.0-beta.1", "enshwick-safes"),
+            version_of("enshwick-safes-v1.0.0-beta.1", safes, false),
             Some(v("1.0.0-beta.1"))
         );
-        assert_eq!(version_of("enshwick-safes-v0.2.0", "enshwick"), None);
+        assert_eq!(version_of("enshwick-safes-v0.2.0", "enshwick", false), None);
         assert_eq!(
-            version_of("enshwick-safes-extra-v0.2.0", "enshwick-safes"),
+            version_of("enshwick-safes-extra-v0.2.0", safes, false),
             None
         );
-        assert_eq!(version_of("enshwick-safes-v0.2", "enshwick-safes"), None);
-        assert_eq!(version_of("v0.2.0", "enshwick-safes"), None);
+        assert_eq!(version_of("enshwick-safes-v0.2", safes, false), None);
+        assert_eq!(version_of("v0.2.0", safes, false), None);
+    }
+
+    #[test]
+    fn every_tag_form_names_its_version() {
+        for tag in [
+            "my-mod-v1.2.0",
+            "my-mod-1.2.0",
+            "my-mod@1.2.0",
+            "my-mod@v1.2.0",
+        ] {
+            assert_eq!(version_of(tag, "my-mod", false), Some(v("1.2.0")), "{tag}");
+            assert_eq!(named(tag), Some(("my-mod", v("1.2.0"))), "{tag}");
+        }
+        for tag in ["v1.2.0", "1.2.0"] {
+            assert_eq!(version_of(tag, "my-mod", true), Some(v("1.2.0")), "{tag}");
+            assert_eq!(version_of(tag, "my-mod", false), None, "{tag}");
+            assert_eq!(named(tag), None, "{tag}");
+        }
+        assert_eq!(
+            named("my-mod-1.2.0-rc.1"),
+            Some(("my-mod", v("1.2.0-rc.1")))
+        );
+        assert_eq!(named("my-mod2-1.0.0"), Some(("my-mod2", v("1.0.0"))));
+        assert_eq!(named("nightly"), None);
+    }
+
+    #[test]
+    fn bare_versions_count_only_in_a_repository_of_one_mod() {
+        let single = vec![
+            release("v1.1.0", false, &["my-mod.zip"]),
+            release("1.0.0", false, &["my-mod.zip"]),
+        ];
+        let pick = newest(&single, REPO, "my-mod", &v("1.0.0"), false, false).unwrap();
+        assert_eq!(pick.version, v("1.1.0"));
+        assert!(seen_all(&single, &["my-mod"]));
+        let mono = vec![
+            release("v2.0.0", false, &["my-mod.zip"]),
+            release("other-v1.0.0", false, &["other.zip"]),
+            release("my-mod-v1.1.0", false, &["my-mod.zip"]),
+        ];
+        let pick = newest(&mono, REPO, "my-mod", &v("1.0.0"), false, false).unwrap();
+        assert_eq!(pick.version, v("1.1.0"), "the bare tag is not my-mod's");
+    }
+
+    #[test]
+    fn the_file_is_the_components_zip_any_single_zip_or_a_dll() {
+        let file_of = |files: &[&str]| {
+            let release = release("my-mod-v1.0.0", false, files);
+            pick(&release, v("1.0.0"), REPO, "my-mod", false).map(|p| p.archive)
+        };
+        let named = |name: &str| Some(name.to_owned());
+        assert_eq!(file_of(&["other.zip", "my-mod.zip"]), named("my-mod.zip"));
+        assert_eq!(file_of(&["MyMod-Windows.zip"]), named("MyMod-Windows.zip"));
+        assert_eq!(
+            file_of(&["my_mod-1.0.0.zip", "sources.zip"]),
+            named("my_mod-1.0.0.zip")
+        );
+        assert_eq!(file_of(&["a.zip", "b.zip"]), None, "which zip is unclear");
+        assert_eq!(file_of(&["my_mod.dll", "README.md"]), named("my_mod.dll"));
+        assert_eq!(file_of(&["anything.dll"]), named("anything.dll"));
+        assert_eq!(file_of(&["my-mod.zip", "my_mod.dll"]), named("my-mod.zip"));
+        assert_eq!(file_of(&["README.md"]), None);
+    }
+
+    #[test]
+    fn a_signed_mod_needs_the_files_signature() {
+        let unsigned = release("my-mod-v1.0.0", false, &["my-mod.zip"]);
+        assert!(pick(&unsigned, v("1.0.0"), REPO, "my-mod", true).is_none());
+        let found = pick(&unsigned, v("1.0.0"), REPO, "my-mod", false).unwrap();
+        assert_eq!(found.signature_url, None);
+        let signed = release(
+            "my-mod-v1.0.0",
+            false,
+            &["my_mod.dll", "my_mod.dll.minisig"],
+        );
+        let found = pick(&signed, v("1.0.0"), REPO, "my-mod", true).unwrap();
+        assert!(
+            found
+                .signature_url
+                .is_some_and(|url| url.ends_with("/my_mod.dll.minisig"))
+        );
     }
 
     #[test]
@@ -246,21 +442,18 @@ mod tests {
             full("enshwick-safes-v0.2.0", "enshwick-safes"),
             full("enshwick-loader-v9.0.0", "enshwick-loader"),
         ];
-        let pick = newest(&releases, REPO, "enshwick-safes", &v("0.1.0"), false).unwrap();
+        let newest =
+            |component, installed| newest(&releases, REPO, component, &v(installed), false, true);
+        let pick = newest("enshwick-safes", "0.1.0").unwrap();
         assert_eq!(pick.tag, "enshwick-safes-v0.3.0");
         assert_eq!(pick.archive, "enshwick-safes.zip");
         assert!(
-            pick.signature_url
-                .ends_with("/enshwick-safes-v0.3.0/enshwick-safes.zip.minisig")
+            pick.signature_url.is_some_and(
+                |url| url.ends_with("/enshwick-safes-v0.3.0/enshwick-safes.zip.minisig")
+            )
         );
-        assert_eq!(
-            newest(&releases, REPO, "enshwick-safes", &v("0.3.0"), false),
-            None
-        );
-        assert_eq!(
-            newest(&releases, REPO, "enshwick-other", &v("0.0.1"), false),
-            None
-        );
+        assert_eq!(newest("enshwick-safes", "0.3.0"), None);
+        assert_eq!(newest("enshwick-other", "0.0.1"), None);
     }
 
     #[test]
@@ -278,10 +471,25 @@ mod tests {
             full("enshwick-safes-v0.3.1-rc.1", "enshwick-safes"),
             release("enshwick-safes-v0.3.0", false, &["enshwick-safes.zip"]),
         ];
-        let stable = newest(&releases, REPO, "enshwick-safes", &v("0.1.0"), false).unwrap();
-        assert_eq!(stable.version, v("0.2.0"));
-        let any = newest(&releases, REPO, "enshwick-safes", &v("0.1.0"), true).unwrap();
-        assert_eq!(any.version, v("0.4.0"));
+        let newest = |prereleases, signed| {
+            newest(
+                &releases,
+                REPO,
+                "enshwick-safes",
+                &v("0.1.0"),
+                prereleases,
+                signed,
+            )
+            .unwrap()
+            .version
+        };
+        assert_eq!(newest(false, true), v("0.2.0"));
+        assert_eq!(newest(true, true), v("0.4.0"));
+        assert_eq!(
+            newest(false, false),
+            v("0.3.0"),
+            "unsigned counts without a key"
+        );
     }
 
     #[test]
@@ -289,7 +497,7 @@ mod tests {
         let mut moved = full("enshwick-safes-v0.2.0", "enshwick-safes");
         moved.assets[0].browser_download_url = "https://example.com/enshwick-safes.zip".into();
         assert_eq!(
-            newest(&[moved], REPO, "enshwick-safes", &v("0.1.0"), false),
+            newest(&[moved], REPO, "enshwick-safes", &v("0.1.0"), false, false),
             None
         );
     }
@@ -300,9 +508,12 @@ mod tests {
             full("enshwick-safes-v0.1.0", "enshwick-safes"),
             full("enshwick-safes-v0.2.0", "enshwick-safes"),
         ];
-        let pick = exact(&releases, REPO, "enshwick-safes", &v("0.1.0")).unwrap();
+        let pick = exact(&releases, REPO, "enshwick-safes", &v("0.1.0"), true).unwrap();
         assert_eq!(pick.tag, "enshwick-safes-v0.1.0");
-        assert_eq!(exact(&releases, REPO, "enshwick-safes", &v("0.9.0")), None);
+        assert_eq!(
+            exact(&releases, REPO, "enshwick-safes", &v("0.9.0"), true),
+            None
+        );
     }
 
     #[test]

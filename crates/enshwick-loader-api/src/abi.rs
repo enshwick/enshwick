@@ -1337,8 +1337,8 @@ impl UpdateKind {
     /// No source: the mod is updated by hand.
     pub const NONE: Self = Self(0);
     /// GitHub releases of `location`, an `owner/name` repository, whose tags
-    /// are `<component>-v<semver>`, as release-please writes them for a
-    /// workspace.
+    /// name `component`'s version, such as `<component>-v1.2.0` as
+    /// release-please writes them for a workspace.
     pub const GITHUB: Self = Self(1);
     /// A JSON document at `location`, an `https://` URL, that lists the mod's
     /// versions; `component` is empty. The updater documents the format.
@@ -1388,7 +1388,8 @@ impl UpdateSource {
         component: Str::EMPTY,
     };
 
-    /// GitHub releases of `repository` tagged `<component>-v<semver>`.
+    /// GitHub releases of `repository` whose tags name `component`'s
+    /// version, such as `<component>-v1.2.0`.
     ///
     /// # Examples
     ///
