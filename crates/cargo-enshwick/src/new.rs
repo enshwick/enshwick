@@ -275,7 +275,12 @@ panic = "unwind"
 
 const LIB_RS: &str = r#"//! The {id} mod for Enshrouded.
 
+use std::sync::atomic::{AtomicBool, Ordering};
+
 use enshwick_loader_api::{Load, Mod, Off};
+
+/// Whether the mod does its work now; a settings change updates it.
+static ENABLED: AtomicBool = AtomicBool::new(true);
 
 /// {type} settings, in `mod-configs/{id}.toml`.
 #[derive(Debug, serde::Deserialize, serde::Serialize, enshwick_loader_api::Config)]
@@ -324,6 +329,10 @@ impl Mod for {type} {
 
     fn init(load: &mut Load<'_>) -> Result<Self, Off> {
         let settings: Settings = load.config()?;
+        ENABLED.store(settings.enabled, Ordering::Relaxed);
+        load.on_config_change(|settings: Settings| {
+            ENABLED.store(settings.enabled, Ordering::Relaxed);
+        })?;
         enshwick_loader_api::info!("enabled: {}", settings.enabled);
         Ok(Self)
     }

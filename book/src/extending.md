@@ -119,16 +119,19 @@ order does not matter. A mod links each point once: a second
 The linking mod's log names the point and why, and `status.log` lists every
 point with its links and every inert link:
 
-| Reason                                                   | What it means                                          |
-| -------------------------------------------------------- | ------------------------------------------------------ |
-| `<owner> does not run`                                   | The owner is missing; an info line, not a warning      |
-| `<owner> <version> is off`                               | The owner was turned off; its log says why             |
-| `<owner> <version> defines no such point; update ...`    | The owner is older than the declaration                |
-| `... fields this mod needs: <field> and later are newer` | The owner's input is older than the link's declaration |
-| `field <n> is <name> here and <name> at the owner`       | A field differs: the mods compiled other declarations  |
-| `the answer has another type here and at <owner>`        | The answer's type differs                              |
-| `<owner> declares it overridden, this mod advised`       | The mode or the refusal flag differs                   |
-| `off in mods/enshwick/mods.toml`                         | The player switched the link off                       |
+| Reason                                                                              | What it means                                          |
+| ----------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| `<owner> does not run`                                                              | The owner is missing; an info line, not a warning      |
+| `<owner> <version> is off`                                                          | The owner was turned off; its log says why             |
+| `<owner> <version> defines no such point; update <owner>`                           | The owner is older than the declaration                |
+| `<owner> <version>: ... <field> and later are newer than the owner; update <owner>` | The owner's input is older than the link's declaration |
+| `<owner> <version>: field <n> is <name> here and <name> at the owner, ...`          | A field differs: the mods compiled other declarations  |
+| `the answer has another type here and at <owner> <version>; ...`                    | The answer's type differs                              |
+| `<owner> <version> declares it overridden, this mod advised; ...`                   | The mode or the refusal flag differs                   |
+| `off in mods/enshwick/mods.toml`                                                    | The player switched the link off                       |
+
+A reason that ends in `both mods must compile one declaration` means the two
+mods were built against different versions of the point's declaration.
 
 A link that panics is turned off with one warning,
 `its link on safes:access panicked and is off; safes:access runs without it`.
