@@ -525,13 +525,15 @@ impl Loader {
         });
     }
 
-    /// Ends subscribing: from now on events go to the subscriptions made so far.
+    /// Ends subscribing: from now on events go to the subscriptions made so
+    /// far, grouped by event in subscription order, so a raise walks its own.
     pub(crate) fn seal_subscriptions(&self) {
-        let made = self
+        let mut made = self
             .subscriptions
             .lock()
             .map(|mut s| std::mem::take(&mut *s))
             .unwrap_or_default();
+        made.sort_by_key(|s| s.event.0);
         let _first = self.delivery.set(made.into_boxed_slice());
     }
 
@@ -551,7 +553,13 @@ impl Loader {
 
     /// Raises `event` with `data` for every mod still on, or for mod `only`.
     pub(crate) fn emit(&self, event: Event, only: Option<usize>, data: *const core::ffi::c_void) {
-        if only.is_none() {
+        // The world followers act on these three events alone.
+        if only.is_none()
+            && matches!(
+                event,
+                Event::WORLD_LOADED | Event::WORLD_SAVED | Event::SHUTDOWN
+            )
+        {
             crate::game_settings::world_event(self, event);
             crate::knowledge::changes::world_event(self, event);
             crate::item_data::world_event(self, event);
@@ -562,7 +570,10 @@ impl Loader {
         };
         let late = crate::reload::late();
         let late = late.as_ref().map_or(&[][..], |late| late.as_slice());
-        for subscription in delivery.iter().chain(late).filter(|s| {
+        let first = delivery.partition_point(|s| s.event.0 < event.0);
+        let end = delivery.partition_point(|s| s.event.0 <= event.0);
+        let sealed = delivery.get(first..end).unwrap_or_default();
+        for subscription in sealed.iter().chain(late).filter(|s| {
             s.event == event
                 && only.is_none_or(|only| only == s.owner)
                 && self

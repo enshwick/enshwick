@@ -228,13 +228,10 @@ pub(crate) fn after_step(loader: &Loader, step: u64) {
     if LOADED.get().is_none() || !step.is_multiple_of(PLAYERS_EVERY) {
         return;
     }
-    if let Ok(players) = crate::world::players(loader) {
-        let entities: Vec<u32> = players
-            .iter()
-            .map(|p| p.entity)
-            .filter(|&e| e != 0)
-            .collect();
-        PLAYERS.store(Some(std::sync::Arc::new(entities)));
+    if let Ok(entities) = crate::world::player_entities(loader)
+        && PLAYERS.load().as_deref().map(Vec::as_slice) != Some(entities.as_slice())
+    {
+        PLAYERS.store(Some(std::sync::Arc::new(entities.to_vec())));
     }
 }
 

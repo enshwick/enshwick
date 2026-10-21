@@ -13,6 +13,7 @@ use core::ffi::c_void;
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
 
+use arrayvec::ArrayVec;
 use enshwick_loader_api::abi::{Header, HookFlags, PlayerInfo, Status};
 
 use crate::chains::Next;
@@ -396,6 +397,28 @@ pub(crate) fn players(loader: &Loader) -> Result<Vec<PlayerInfo>, Status> {
             let entity: u32 = unsafe { read(slot, layout.slot_entity) };
             (handle != 0 && state == SLOT_IN_GAME && entity != 0)
                 .then(|| player_at(layout, slot, index, entity, infos))
+        })
+        .collect())
+}
+
+/// Player slots [`player_entities`] reads; the game has 16.
+pub(crate) const MAX_PLAYERS: usize = 64;
+
+/// The character entity of each player in game, as [`players`] lists them,
+/// without their names and permissions.
+pub(crate) fn player_entities(loader: &Loader) -> Result<ArrayVec<u32, MAX_PLAYERS>, Status> {
+    let layout = layout(loader).ok_or(Status::MISSING)?;
+    let server = reader()?;
+    Ok((0..layout.slot_count.min(MAX_PLAYERS))
+        .filter_map(|index| {
+            let slot = server + layout.slots + index * layout.slot_size;
+            // SAFETY: the server holds `slot_count` player slots.
+            let handle: u32 = unsafe { read(slot, 0) };
+            // SAFETY: as above.
+            let state: u8 = unsafe { read(slot, layout.slot_state) };
+            // SAFETY: as above.
+            let entity: u32 = unsafe { read(slot, layout.slot_entity) };
+            (handle != 0 && state == SLOT_IN_GAME && entity != 0).then_some(entity)
         })
         .collect())
 }
