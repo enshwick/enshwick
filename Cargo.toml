@@ -5,7 +5,11 @@ members = [
     "crates/enshwick-loader-api",
     "crates/internal/*",
     "mods/*",
-    "examples/*",
+    # Listed one by one: release-please reads every glob match as a crate,
+    # and examples/README.md is none.
+    "examples/market-stalls",
+    "examples/trading-post",
+    "examples/trading-post-api",
 ]
 
 [workspace.package]
