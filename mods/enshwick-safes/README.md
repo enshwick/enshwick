@@ -79,8 +79,9 @@ side, and the mod counts in the join check.
 
 ## For mod authors
 
-Other mods change who may open, use, remove or rename a Safe at the
-extension point `safes:access`, and may refuse outright. See
+Other mods change who may open, use, remove or rename a Safe, and whose
+`/safe allow` and `/safe deny` count, at the extension point
+`safes:access`, and may refuse outright. See
 [Extending other mods](https://github.com/themaiby/enshwick/blob/main/book/src/extending.md).
 
 Licensed under [MIT](../../LICENSE).

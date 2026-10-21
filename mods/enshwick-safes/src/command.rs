@@ -8,7 +8,7 @@ use enshwick_loader_api::commands::{CommandContext, Reply};
 use enshwick_loader_api::i18n::{Language, Texts};
 use enshwick_loader_api::world::{Player, World};
 
-use crate::access::{ACCESS, AllowOutcome, Cell, centre, nearest_own};
+use crate::access::{ACCESS, AllowOutcome, Cell, Seen, centre, nearest_own};
 
 /// How far from the player their Safe may be, in metres; `texts.toml` says
 /// "4 m" in its replies.
@@ -113,6 +113,14 @@ pub fn run(
         return phrases.say("command.no_safe", &[]).into();
     };
     let here = place(at);
+    let changes = matches!(request, Request::Allow(_) | Request::Deny(_));
+    let seen = Seen {
+        key: me.key,
+        admin: me.is_admin(),
+    };
+    if changes && !ACCESS.may_manage(at, seen, me.entity) {
+        return phrases.say("command.refused", &[("at", &here)]).into();
+    }
     let reply = match request {
         Request::Allow(name) => allow(world, phrases, me, at, &name, &here, &save),
         Request::Deny(name) => {
@@ -220,6 +228,7 @@ mod tests {
             "command.not_allowed",
             "command.list",
             "command.list_empty",
+            "command.refused",
         ] {
             assert!(texts.get(key, Language::FALLBACK).is_some(), "{key}");
         }

@@ -19,6 +19,7 @@ pub mod content;
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
+use std::sync::{Mutex, OnceLock, PoisonError};
 use std::time::Duration;
 
 use enshwick_loader_api::abi::BuildingData;
@@ -26,7 +27,8 @@ use enshwick_loader_api::abi::Side;
 use enshwick_loader_api::commands::Rename;
 use enshwick_loader_api::ecs::Entity;
 use enshwick_loader_api::events::{
-    BuildingPlaced, BuildingRemoved, PlayerJoined, PlayerLeft, ShutdownStarted, Ticked, WorldLoaded,
+    BuildingPlaced, BuildingRemoved, PlayerJoined, PlayerLeft, ShutdownStarted, Ticked,
+    WorldLoaded, WorldSaved,
 };
 use enshwick_loader_api::i18n::Language;
 use enshwick_loader_api::state::{Store, WorldStore};
@@ -172,10 +174,36 @@ impl Owners {
     }
 }
 
+/// Safes removed since the world last saved, with their owners: the world
+/// keeps a removal only when it saves, so a game that stops before that
+/// brings the Safe back, and its owner must still be on disk.
+static REMOVED: Mutex<Vec<(Cell, Safe)>> = Mutex::new(Vec::new());
+
+/// The running world's owners store, once the mod has asked for it.
+static STORE: OnceLock<&'static WorldStore<Owners>> = OnceLock::new();
+
+fn removed() -> std::sync::MutexGuard<'static, Vec<(Cell, Safe)>> {
+    REMOVED.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
+/// The owners as the file keeps them: the Safes in force and those removed
+/// since the world last saved, unless a Safe stands in their cell again.
+fn on_disk() -> Owners {
+    let removed = removed();
+    if removed.is_empty() {
+        return Owners::from_map(&ACCESS.owners.load());
+    }
+    let mut owners = HashMap::clone(&ACCESS.owners.load());
+    for (at, safe) in removed.iter() {
+        owners.entry(*at).or_insert_with(|| safe.clone());
+    }
+    Owners::from_map(&owners)
+}
+
 /// Hands the owners to the running world's store, which writes them when
 /// the world saves; false while no world is open.
 fn hand_over(store: &WorldStore<Owners>) -> bool {
-    let owners = Owners::from_map(&ACCESS.owners.load());
+    let owners = on_disk();
     if store.update(|kept| *kept = owners).is_none() {
         enshwick_loader_api::warn!("owners not saved: no world is open");
         return false;
@@ -234,6 +262,7 @@ fn open_world(store: &WorldStore<Owners>, dir: &Path) {
         owners.len(),
         store.key().unwrap_or_default()
     );
+    removed().clear();
     ACCESS.forget_session();
     ACCESS.load_owners(owners);
 }
@@ -290,9 +319,17 @@ fn guard(load: &mut Load<'_>, phrases: &'static Phrases) -> Result<(), Off> {
     let world = load.world()?;
     let client = load.host().build().side == Side::CLIENT;
     let dir = load.data_dir()?;
+    // Before the store's own handler, which writes what this hands over.
+    load.on::<WorldSaved>(|()| {
+        removed().clear();
+        if let Some(store) = STORE.get() {
+            let _open = hand_over(store);
+        }
+    })?;
     // The store opens on the world's load, before the handler below runs.
     let store: &'static WorldStore<Owners> =
         Box::leak(Box::new(load.world_store::<Owners>("owners")?));
+    let _first = STORE.set(store);
     load.on::<WorldLoaded>(move |()| open_world(store, &dir))?;
 
     let _first = access::POINT.set(load.define_point()?);
@@ -305,16 +342,16 @@ fn guard(load: &mut Load<'_>, phrases: &'static Phrases) -> Result<(), Off> {
         }
     })?;
     load.on::<BuildingRemoved>(move |removed| {
-        if ACCESS.removed(removed.entity) {
+        if let Some(gone) = ACCESS.removed(removed.entity) {
             enshwick_loader_api::info!("Safe {} removed", removed.entity);
-            // Written with the world: a game that stops before it saves
-            // brings the Safe back, and its owner must come back with it.
+            self::removed().push(gone);
             let _open = hand_over(store);
         }
     })?;
     if client {
         // Entities, players and owners belong to one hosted game's world.
         load.on::<ShutdownStarted>(|()| {
+            removed().clear();
             ACCESS.forget_session();
             ACCESS.load_owners(HashMap::new());
         })?;

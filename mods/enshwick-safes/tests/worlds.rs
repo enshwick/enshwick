@@ -98,7 +98,7 @@ mod tests {
     #[test]
     fn a_removed_safe_keeps_its_owner_on_disk_until_the_world_saves() {
         use enshwick_loader_api::abi::{BuildingData, Header};
-        use enshwick_loader_api::events::{BuildingRemoved, WorldSaved};
+        use enshwick_loader_api::events::{BuildingPlaced, BuildingRemoved, WorldSaved};
 
         let dir =
             std::env::temp_dir().join(format!("enshwick-safes-removed-{}", std::process::id()));
@@ -143,6 +143,28 @@ mod tests {
                 .unwrap()
                 .contains("00000000000000ff"),
             "kept on disk while the world has not saved"
+        );
+        // Placed again elsewhere, as when a Safe moves: written at once.
+        let placed = BuildingData {
+            kind: BuildingData::PLACED,
+            entity: 901,
+            item: enshwick_safes::content::SAFE.id(),
+            position: [10.0, 0.0, 10.0],
+            ..removed
+        };
+        let write = std::fs::metadata(&file).unwrap().modified().unwrap();
+        assert!(loader.raise::<BuildingPlaced>(&placed) >= 1);
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while std::fs::metadata(&file).unwrap().modified().unwrap() == write
+            && std::time::Instant::now() < deadline
+        {
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        assert!(
+            std::fs::read_to_string(&file)
+                .unwrap()
+                .contains("00000000000000ff"),
+            "a write before the world saves still keeps the removed Safe's owner"
         );
         assert!(loader.raise::<WorldSaved>(&()) >= 1);
         assert!(loader.raise::<ShutdownStarted>(&()) >= 1);
@@ -272,10 +294,12 @@ label_language = \"en\"
             .store(Arc::new(HashMap::from([(10, owner), (12, stranger)])));
         ACCESS.placed(700, (40, 2, 40), owner.key, "Ann");
         assert!(ACCESS.refused_seen(700, Entity(12)), "vanilla Safes");
+        assert!(ACCESS.may_manage((40, 2, 40), owner, Entity(10)));
+        assert!(!ACCESS.may_manage((40, 2, 40), stranger, Entity(12)));
         assert!(loader.extend_point(|access: &Access, may: &bool| {
             match access.action {
                 SafeAction::USE if access.player == 3 => Verdict::Set(true),
-                SafeAction::REMOVE => Verdict::Refuse,
+                SafeAction::REMOVE | SafeAction::MANAGE => Verdict::Refuse,
                 _ => Verdict::Set(*may),
             }
         }));
@@ -295,10 +319,14 @@ label_language = \"en\"
         );
         assert!(ACCESS.may(owner.key, (40, 2, 40), Entity(700), Entity(10), Action::Use));
         assert!(
+            !ACCESS.may_manage((40, 2, 40), owner, Entity(10)),
+            "`/safe allow` and `deny` hear the refusal too"
+        );
+        assert!(
             ACCESS.refused_seen(700, Entity(14)),
             "a player not registered yet stays refused"
         );
-        assert!(ACCESS.removed(700));
+        assert!(ACCESS.removed(700).is_some());
         assert!(loader.faults().is_empty());
         let _gone = std::fs::remove_dir_all(&dir);
     }
