@@ -12,8 +12,14 @@ pub mod geometry;
 mod seam;
 mod solver;
 
+use std::sync::atomic::{AtomicBool, Ordering};
+
 use enshwick_loader_api::events::AltarsChanged;
 use enshwick_loader_api::{Load, Mod, Off};
+
+/// Whether pieces may be placed across seams, from the settings in force:
+/// the server's on a joined client.
+static SEAMS: AtomicBool = AtomicBool::new(true);
 
 /// Flame altar zones settings, in `mod-configs/flame-altar-zones.toml`.
 #[derive(Debug, serde::Deserialize, serde::Serialize, enshwick_loader_api::Config)]
@@ -23,7 +29,8 @@ struct Settings {
     #[config(startup)]
     clusters: bool,
     /// Pieces may be placed across the seams between the zones of one cluster.
-    #[config(startup)]
+    /// A joined player runs with the server's value.
+    #[config(sync)]
     building_across_seams: bool,
 }
 
@@ -40,7 +47,6 @@ impl Default for Settings {
 #[derive(Debug)]
 pub struct FlameAltarZones {
     clusters: bool,
-    seams: bool,
 }
 
 impl Mod for FlameAltarZones {
@@ -57,16 +63,22 @@ impl Mod for FlameAltarZones {
 
     fn init(load: &mut Load<'_>) -> Result<Self, Off> {
         let settings: Settings = load.config()?;
-        if settings.building_across_seams {
-            load.on_zone_check(seam::accepts)?;
-        }
+        SEAMS.store(settings.building_across_seams, Ordering::Relaxed);
+        // Always linked: the server's value may turn seams on for a joined
+        // client, and a change applies while the game runs.
+        load.on_zone_check(|check| SEAMS.load(Ordering::Relaxed) && seam::accepts(check))?;
+        load.on_config_change(|settings: Settings| {
+            let on = settings.building_across_seams;
+            if SEAMS.swap(on, Ordering::Relaxed) != on {
+                enshwick_loader_api::info!("building across seams {on}");
+            }
+        })?;
         if settings.clusters {
             let control = load.control_altar_zones()?;
             load.on::<AltarsChanged>(move |()| solver::request(control))?;
         }
         Ok(Self {
             clusters: settings.clusters,
-            seams: settings.building_across_seams,
         })
     }
 
@@ -74,7 +86,7 @@ impl Mod for FlameAltarZones {
         enshwick_loader_api::info!(
             "clusters {}, building across seams {}",
             self.clusters,
-            self.seams
+            SEAMS.load(Ordering::Relaxed)
         );
     }
 }
@@ -144,6 +156,24 @@ mod tests {
         };
         assert!(loader.zone_check(&zones, across, 0));
         assert!(!loader.zone_check(&zones[..1], across, 0));
+        SEAMS.store(false, Ordering::Relaxed);
+        assert!(!loader.zone_check(&zones, across, 0), "seams off: vanilla");
+        SEAMS.store(true, Ordering::Relaxed);
         assert!(loader.faults().is_empty());
+    }
+
+    #[test]
+    fn a_joined_player_takes_the_server_s_seams() {
+        use enshwick_loader_api::config::Config as _;
+
+        let server = Settings {
+            building_across_seams: false,
+            ..Settings::default()
+        };
+        let synced = server.synced().unwrap();
+        assert_eq!(synced, "{ building_across_seams = false }");
+        let mut joined = Settings::default();
+        joined.merge_synced(&synced).unwrap();
+        assert!(!joined.building_across_seams);
     }
 }

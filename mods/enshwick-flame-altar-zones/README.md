@@ -6,7 +6,8 @@ Altars touch or overlap, they form a cluster:
 - every altar of the cluster grows by the same amount on every side, until the
   cluster covers as much ground as its altars would apart, so overlap loses
   nothing;
-- no zone ever shrinks, when an altar is placed or a Flame level rises;
+- no zone ever shrinks, when an altar is placed or a Flame level rises, nor
+  while the server stalls for a moment;
 - every altar of a cluster takes the height of the tallest one;
 - a piece may be placed across the seam between two zones of a cluster, which
   vanilla refuses.
@@ -21,6 +22,10 @@ Altars that stand apart keep their vanilla zones.
 clusters = true
 building_across_seams = true
 ```
+
+`building_across_seams` is the server's: a joined player runs with the
+server's value, and a change applies while the game runs. `clusters` applies
+after a restart.
 
 ## Install
 
