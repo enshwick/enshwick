@@ -10,7 +10,7 @@
 //! of the next step, as the game does. A player whose client lacks Enshwick
 //! gets the text in chat instead.
 
-use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicPtr, AtomicUsize, Ordering};
 use std::sync::{Mutex, OnceLock, PoisonError};
 
 use enshwick_loader_api::abi::Status;
@@ -41,18 +41,14 @@ const TAGS: [[u8; 16]; SLOTS] = {
     tags
 };
 
-/// One notice text: its bytes and length, written in place.
-struct Slot {
-    bytes: [AtomicU8; MAX_TEXT],
-    len: AtomicUsize,
-}
-
-static SLOT_TEXTS: [Slot; SLOTS] = [const {
-    Slot {
-        bytes: [const { AtomicU8::new(0) }; MAX_TEXT],
-        len: AtomicUsize::new(0),
-    }
-}; SLOTS];
+/// Each slot's text: an interned text, which never moves or changes, so the
+/// game may read it whenever it asks, while the slot points at another.
+static SLOT_TEXTS: [AtomicPtr<&'static str>; SLOTS] =
+    [const { AtomicPtr::new(core::ptr::null_mut()) }; SLOTS];
+/// Every notice text shown, kept for the process, so a repeated text takes
+/// no more memory.
+static INTERNED: Mutex<Option<rustc_hash::FxHashMap<&'static str, &'static &'static str>>> =
+    Mutex::new(None);
 static NEXT_SLOT: AtomicUsize = AtomicUsize::new(0);
 /// Notices waiting for the client's next step: entity and text.
 static WAITING: Mutex<Vec<(u32, String)>> = Mutex::new(Vec::new());
@@ -117,13 +113,23 @@ pub(crate) fn text(id: u32) -> Option<&'static str> {
     let slot = TAGS
         .iter()
         .position(|tag| enshwick_loader_reflect::fnv1a32(tag) == id)?;
-    let slot = &SLOT_TEXTS[slot];
-    let len = slot.len.load(Ordering::Acquire).min(MAX_TEXT);
-    // SAFETY: atomics of `u8` have the layout of `u8` and the slot lives for
-    // the process; slots rotate, so a slot is written again only eight
-    // notices after the game last asked for its text.
-    let bytes = unsafe { core::slice::from_raw_parts(slot.bytes.as_ptr().cast::<u8>(), len) };
-    core::str::from_utf8(bytes).ok()
+    let text = SLOT_TEXTS[slot].load(Ordering::Acquire);
+    // SAFETY: a non-null slot points at an interned text, leaked for the
+    // process and never written again.
+    (!text.is_null()).then(|| unsafe { *text })
+}
+
+/// `text`, kept for the process: the same address for the same text.
+fn intern(text: &str) -> &'static &'static str {
+    let mut interned = INTERNED.lock().unwrap_or_else(PoisonError::into_inner);
+    let interned = interned.get_or_insert_with(rustc_hash::FxHashMap::default);
+    if let Some(&kept) = interned.get(text) {
+        return kept;
+    }
+    let owned: &'static str = Box::leak(text.into());
+    let kept: &'static &'static str = Box::leak(Box::new(owned));
+    interned.insert(owned, kept);
+    kept
 }
 
 /// Queues a notice the server sent for the client's next step.
@@ -137,16 +143,12 @@ pub(crate) fn queue(entity: u32, text: &str) {
 /// Writes `text` into the next notice text tag; its GUID.
 fn take_slot(text: &str) -> [u8; 16] {
     let index = NEXT_SLOT.fetch_add(1, Ordering::Relaxed) % SLOTS;
-    let slot = &SLOT_TEXTS[index];
     let mut end = text.len().min(MAX_TEXT);
     while !text.is_char_boundary(end) {
         end -= 1;
     }
-    slot.len.store(0, Ordering::Release);
-    for (byte, cell) in text.as_bytes()[..end].iter().zip(&slot.bytes) {
-        cell.store(*byte, Ordering::Relaxed);
-    }
-    slot.len.store(end, Ordering::Release);
+    let kept = intern(&text[..end]);
+    SLOT_TEXTS[index].store(core::ptr::from_ref(kept).cast_mut(), Ordering::Release);
     TAGS[index]
 }
 
@@ -246,5 +248,16 @@ mod tests {
             .map(|t| enshwick_loader_reflect::fnv1a32(t))
             .collect();
         assert_eq!(ids.len(), SLOTS);
+    }
+
+    #[test]
+    fn a_text_once_shown_keeps_its_address_while_its_slot_moves_on() {
+        let first = text(enshwick_loader_reflect::fnv1a32(&take_slot("Kept text"))).unwrap();
+        for n in 0..SLOTS * 3 {
+            take_slot(&format!("other {n}"));
+        }
+        assert_eq!(first, "Kept text");
+        let again = text(enshwick_loader_reflect::fnv1a32(&take_slot("Kept text"))).unwrap();
+        assert_eq!(again.as_ptr(), first.as_ptr());
     }
 }

@@ -236,7 +236,7 @@ fn serves() -> bool {
 
 /// The value of kind `kind` on the item `pide` holding `item`, or for an
 /// entity kind on the entity `pide` (`item` 0). On the server's game thread
-/// an entity whose template changed or that is gone loses its value.
+/// an entity whose template changed loses its value.
 pub(crate) fn get(kind: u32, pide: u32, item: u32) -> Result<Box<[u8]>, Status> {
     let scope = self::kind(kind).ok_or(Status::BAD_ARGS)?.scope;
     if serves() {
@@ -245,9 +245,10 @@ pub(crate) fn get(kind: u32, pide: u32, item: u32) -> Result<Box<[u8]>, Status> 
         let record = server.values.get(&(kind, pide)).ok_or(Status::MISSING)?;
         let wanted = match scope {
             Scope::Item => item,
+            // An entity in an area that is not loaded is not in the world's
+            // map either: its value stays, unchecked.
             Scope::Entity => match template_id(pide) {
                 Some(now) => now,
-                None if crate::world::reader().is_ok() => 0,
                 None => return Ok(record.value.clone()),
             },
         };
@@ -527,7 +528,7 @@ pub(crate) fn world_event(loader: &Loader, event: Event) {
 }
 
 /// Writes the values when they changed; after a save of the game's, first
-/// drops the records whose entity is gone or holds another item.
+/// drops the records whose entity now holds another item or template.
 fn save(loader: &Loader, prune: bool) {
     let (key, bytes) = {
         let mut server = SERVER.lock().unwrap_or_else(PoisonError::into_inner);
@@ -540,9 +541,12 @@ fn save(loader: &Loader, prune: bool) {
                 let now = match self::kind(kind).map(|k| k.scope) {
                     Some(Scope::Item) => held(loader, pide),
                     Some(Scope::Entity) => template_id(pide),
-                    None => None,
+                    None => return true,
                 };
-                now == Some(record.item)
+                // An entity the world does not hold may lie in an area that
+                // is not loaded, so only one that holds something else loses
+                // its record.
+                now.is_none_or(|now| now == record.item)
             });
             server.changed |= server.values.len() != before;
         }

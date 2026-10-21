@@ -145,6 +145,17 @@ fn state<R>(f: impl FnOnce(&mut State) -> R) -> R {
     f(guard.get_or_insert_with(State::default))
 }
 
+/// [`state`] for a per-frame path: `None`, without waiting, while another
+/// thread holds the state.
+fn try_state<R>(f: impl FnOnce(&mut State) -> R) -> Option<R> {
+    let mut guard = match STATE.try_lock() {
+        Ok(guard) => guard,
+        Err(std::sync::TryLockError::Poisoned(poisoned)) => poisoned.into_inner(),
+        Err(std::sync::TryLockError::WouldBlock) => return None,
+    };
+    Some(f(guard.get_or_insert_with(State::default)))
+}
+
 /// The id of mod `id`'s channel `name`.
 fn channel_id(id: &str, name: &str) -> u32 {
     let id = enshwick_loader_reflect::fnv1a32(format!("{id}/{name}").as_bytes());
@@ -714,9 +725,10 @@ fn send_to_server(channel: u32, data: &[u8]) -> Result<(), Status> {
 }
 
 /// The lines waiting for the client's chat queue, and a hello when the
-/// server has not answered yet; on the client's thread that sends chat.
+/// server has not answered yet; on the client's thread that sends chat,
+/// every frame, so none while another thread holds the state.
 pub(crate) fn client_lines() -> Vec<String> {
-    state(|s| {
+    try_state(|s| {
         let mut lines = Vec::new();
         let answered = s.peers.contains_key(&NetMessage::SERVER);
         let due = s
@@ -732,6 +744,7 @@ pub(crate) fn client_lines() -> Vec<String> {
         }
         lines
     })
+    .unwrap_or_default()
 }
 
 /// Counts a dropped message and logs the first and every hundredth.

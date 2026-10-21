@@ -511,6 +511,18 @@ pub(crate) fn settle(loader: &Loader, failed: impl IntoIterator<Item = u64>) {
     }
 }
 
+/// A hosted game ended: its item registry is gone, and the requests still
+/// queued for its world are answered as unavailable.
+pub(crate) fn forget() {
+    REGISTRY.store(0, Ordering::Release);
+    let gone = QUEUE.drain(|_| true);
+    finish(
+        gone.iter()
+            .map(|r| Finished::without_run(r, InventoryResult::UNAVAILABLE)),
+    );
+    deliver();
+}
+
 fn finish(results: impl IntoIterator<Item = Finished>) {
     FINISHED
         .lock()
