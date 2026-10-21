@@ -137,6 +137,9 @@ let manifest = enshwick_loader_api::manifest!(
 - `breaks` names mods this one does not work beside, in a version range (`""`
   for any): when one of them loads, this mod is skipped with
   `does not work beside <id> <version>; remove one of them`.
+- A dev build, version `0.0.0-dev`, meets every range of `requires` and
+  `recommends`, and no range of `breaks` names it, as two dev builds join each
+  other.
 - `replaces` names the ids this mod had before a rename. Players rarely delete
   the old DLL, so without it both would run. While this mod is present, the
   loader never starts a replaced mod: it unloads that DLL right after reading

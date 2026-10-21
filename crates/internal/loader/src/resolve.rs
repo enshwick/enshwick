@@ -159,6 +159,18 @@ pub fn resolve(candidates: &[Candidate], side: Side) -> Plan {
     }
 }
 
+/// Whether `version` is a dev build, the version of every crate before the
+/// first release: like two dev builds joining each other, it meets every
+/// range, and no break names it.
+fn dev(version: &Version) -> bool {
+    (version.major, version.minor, version.patch) == (0, 0, 0) && version.pre.as_str() == "dev"
+}
+
+/// Whether `version` meets `range`, a dev build always.
+fn meets(range: &VersionReq, version: &Version) -> bool {
+    dev(version) || range.matches(version)
+}
+
 fn unmet(
     candidate: &Candidate,
     candidates: &[Candidate],
@@ -177,7 +189,7 @@ fn unmet(
                     return Some(format!("requires {}, which is not loaded", dependency.id));
                 };
                 if let Some(range) = &dependency.range
-                    && !range.matches(&candidates[j].version)
+                    && !meets(range, &candidates[j].version)
                 {
                     return Some(format!(
                         "requires {} {range}, found {}",
@@ -188,10 +200,9 @@ fn unmet(
             // The mod that declares the break gives way.
             Relation::BREAKS => {
                 if let Some(j) = other.filter(|&j| j != me)
-                    && dependency
-                        .range
-                        .as_ref()
-                        .is_none_or(|range| range.matches(&candidates[j].version))
+                    && dependency.range.as_ref().is_none_or(|range| {
+                        !dev(&candidates[j].version) && range.matches(&candidates[j].version)
+                    })
                 {
                     return Some(format!(
                         "does not work beside {} {}; remove one of them",
@@ -230,7 +241,7 @@ pub fn notes(candidates: &[Candidate], plan: &Plan) -> Vec<(usize, String)> {
                     match loaded(&d.id) {
                         None => Some(format!("recommends {wanted}, which is not loaded")),
                         Some(other)
-                            if d.range.as_ref().is_some_and(|r| !r.matches(&other.version)) =>
+                            if d.range.as_ref().is_some_and(|r| !meets(r, &other.version)) =>
                         {
                             Some(format!("recommends {wanted}, found {}", other.version))
                         }
@@ -282,6 +293,38 @@ mod tests {
         let plan = resolve(&mods, Side::SERVER);
         assert_eq!(plan.order, [1, 2, 0]);
         assert!(plan.skipped.is_empty());
+    }
+
+    #[test]
+    fn a_dev_build_meets_every_range_and_no_break() {
+        let mods = [
+            candidate(
+                "stalls",
+                "0.0.0-dev",
+                Side::BOTH,
+                &[
+                    ("post", ">=0.1, <1.0", Relation::REQUIRES),
+                    ("safes", ">=0.5", Relation::RECOMMENDS),
+                    ("zones", "<0.3", Relation::BREAKS),
+                ],
+            ),
+            candidate("post", "0.0.0-dev", Side::BOTH, &[]),
+            candidate("safes", "0.0.0-dev", Side::BOTH, &[]),
+            candidate("zones", "0.0.0-dev", Side::BOTH, &[]),
+        ];
+        let plan = resolve(&mods, Side::SERVER);
+        assert!(plan.skipped.is_empty(), "{:?}", plan.skipped);
+        assert!(notes(&mods, &plan).is_empty());
+        let old = [
+            candidate(
+                "stalls",
+                "0.0.0-dev",
+                Side::BOTH,
+                &[("post", "^0.2", Relation::REQUIRES)],
+            ),
+            candidate("post", "0.1.0", Side::BOTH, &[]),
+        ];
+        assert_eq!(resolve(&old, Side::SERVER).skipped.len(), 1);
     }
 
     #[test]
