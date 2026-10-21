@@ -13,13 +13,15 @@ publish.workspace = true
 
 [dependencies]
 clap = { workspace = true }
-enshwick-loader-api.workspace = true
+enshwick-loader-api = { workspace = true, features = ["schema"] }
 enshwick-loader-reflect.workspace = true
 iced-x86.workspace = true
 memchr.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 toml_edit.workspace = true
+semver.workspace = true
+zip.workspace = true
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { workspace = true, features = ["Win32_Foundation", "Win32_System_LibraryLoader"] }

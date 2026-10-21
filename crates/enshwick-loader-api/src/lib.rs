@@ -95,6 +95,7 @@ pub mod loot;
 pub mod migrations;
 pub mod mods;
 pub mod net;
+pub mod packs;
 pub mod progress;
 pub mod raw;
 pub mod schedule;
@@ -459,6 +460,49 @@ pub mod __private {
                 host.log(Level::ERROR, "off: init panicked");
                 Status::FAULTED
             }
+        }
+    }
+
+    /// Runs `init` with a [`Load`] for the content pack `me`, as the loader
+    /// does for a pack folder; the process's host stays as it is.
+    ///
+    /// # Safety
+    ///
+    /// `api` is the loader's process-wide table.
+    pub unsafe fn init_pack(
+        api: *const HostApi,
+        me: ModHandle,
+        init: impl FnOnce(&mut Load<'_>) -> Result<(), crate::Off>,
+    ) -> Status {
+        // SAFETY: forwarded from the caller.
+        let Some(host) = (unsafe { Host::new(api, me) }) else {
+            return Status::BAD_ARGS;
+        };
+        let outcome =
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| init(&mut Load::new(host))));
+        match outcome {
+            Ok(Ok(())) => Status::OK,
+            Ok(Err(off)) => {
+                host.log(Level::WARN, &format!("off: {off}"));
+                Status::REFUSED
+            }
+            Err(_) => {
+                host.log(Level::ERROR, "off: init panicked");
+                Status::FAULTED
+            }
+        }
+    }
+
+    /// Makes the table `api` with the handle `me` this process's host, for
+    /// the loader's own copy of the API, which runs content packs.
+    ///
+    /// # Safety
+    ///
+    /// `api` is the loader's process-wide table.
+    pub unsafe fn install_host(api: *const HostApi, me: ModHandle) {
+        // SAFETY: forwarded from the caller.
+        if let Some(host) = unsafe { Host::new(api, me) } {
+            MAX_LEVEL.store(host.install().log_level().0, Ordering::Relaxed);
         }
     }
 

@@ -503,7 +503,10 @@ fn server_version(
 ) -> Result<Offer, String> {
     let ours = installed.iter().find(|m| m.id == entry.id);
     let trust = trust::for_missing(entry, ours, trusted);
-    let version = Version::parse(&entry.version).map_err(|e| format!("bad version: {e}"))?;
+    let mut version = Version::parse(&entry.version).map_err(|e| format!("bad version: {e}"))?;
+    // A content pack's version carries the hash of its files for the join
+    // check; its release is the version alone.
+    version.build = semver::BuildMetadata::EMPTY;
     // A mod this game has comes from its own source, never one the server
     // names: the server could otherwise pass another release signed by the
     // same key for it.

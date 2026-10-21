@@ -1,0 +1,182 @@
+//! `cargo enshwick pack`: checks a content pack folder as the loader reads
+//! it, writes the JSON Schemas of its files for editors, and zips it for a
+//! release.
+
+use std::io::Write as _;
+use std::path::{Path, PathBuf};
+
+use clap::Subcommand;
+use enshwick_loader_api::packs::{MANIFEST_FILE, Pack, PackFiles, PackManifest};
+
+/// What `cargo enshwick pack` does.
+#[derive(Debug, Subcommand)]
+pub(crate) enum Command {
+    /// Checks a pack folder as the loader reads it and lists every problem
+    /// with its file, line and column.
+    Check {
+        /// The pack folder, holding `pack.toml`.
+        dir: PathBuf,
+    },
+    /// Writes the JSON Schemas of a pack's files, `<file>.schema.json`, for
+    /// editors that check TOML against them.
+    Schema {
+        /// The folder the schemas go into.
+        #[arg(default_value = ".")]
+        out: PathBuf,
+    },
+    /// Zips a pack folder for a release, its files under `mods/<id>/`, as
+    /// the updater installs them; sign the archive with minisign.
+    Zip {
+        /// The pack folder, holding `pack.toml`.
+        dir: PathBuf,
+        /// The archive; `<id>.zip` in the current folder when left out.
+        #[arg(long)]
+        out: Option<PathBuf>,
+    },
+}
+
+/// Runs `command`; what it did, or why it failed.
+pub(crate) fn run(command: &Command) -> Result<String, String> {
+    match command {
+        Command::Check { dir } => check(dir).map(|(summary, _, _)| summary),
+        Command::Schema { out } => schema(out),
+        Command::Zip { dir, out } => zip(dir, out.as_deref()),
+    }
+}
+
+/// Reads and checks the pack in `dir`: a summary, its manifest and files.
+fn check(dir: &Path) -> Result<(String, PackManifest, PackFiles), String> {
+    let manifest_path = dir.join(MANIFEST_FILE);
+    let text = std::fs::read_to_string(&manifest_path)
+        .map_err(|e| format!("{}: {e}", manifest_path.display()))?;
+    let manifest = PackManifest::parse(&text).map_err(|e| e.to_string())?;
+    semver::Version::parse(&manifest.version)
+        .map_err(|e| format!("{MANIFEST_FILE}: version {:?}: {e}", manifest.version))?;
+    let files = PackFiles::read_dir(dir)?;
+    let pack = Pack::parse(&manifest.id, &files).map_err(|errors| errors.to_string())?;
+    let summary = format!(
+        "{} {}: {} content ids, {} loot drops; join hash {:08x}",
+        manifest.id,
+        manifest.version,
+        pack.ids().len(),
+        pack.drops().len(),
+        files.hash()
+    );
+    Ok((summary, manifest, files))
+}
+
+fn schema(out: &Path) -> Result<String, String> {
+    std::fs::create_dir_all(out).map_err(|e| format!("{}: {e}", out.display()))?;
+    let mut written = Vec::new();
+    for (file, schema) in enshwick_loader_api::packs::schemas() {
+        let name = file.replace(".toml", ".schema.json");
+        let path = out.join(&name);
+        std::fs::write(&path, schema).map_err(|e| format!("{}: {e}", path.display()))?;
+        written.push(name);
+    }
+    Ok(format!(
+        "wrote {} in {}; name one at the top of a file: #:schema ./{}",
+        written.join(", "),
+        out.display(),
+        written.first().map_or("", String::as_str)
+    ))
+}
+
+fn zip(dir: &Path, out: Option<&Path>) -> Result<String, String> {
+    let (summary, manifest, files) = check(dir)?;
+    let out = out.map_or_else(
+        || PathBuf::from(format!("{}.zip", manifest.id)),
+        Path::to_path_buf,
+    );
+    let file = std::fs::File::create(&out).map_err(|e| format!("{}: {e}", out.display()))?;
+    let mut archive = ::zip::ZipWriter::new(file);
+    let options = ::zip::write::SimpleFileOptions::default()
+        .compression_method(::zip::CompressionMethod::Deflated);
+    for name in files.names() {
+        let entry = format!("mods/{}/{name}", manifest.id);
+        archive
+            .start_file(entry.as_str(), options)
+            .and_then(|()| {
+                archive
+                    .write_all(files.get(name).unwrap_or_default())
+                    .map_err(Into::into)
+            })
+            .map_err(|e| format!("{entry}: {e}"))?;
+    }
+    archive
+        .finish()
+        .map_err(|e| format!("{}: {e}", out.display()))?;
+    let archive = out
+        .file_name()
+        .map_or_else(String::new, |f| f.to_string_lossy().into_owned());
+    Ok(format!(
+        "{summary}\nwrote {}; sign it: minisign -S -m {} -t \"<component>-v{} {archive}\"",
+        out.display(),
+        out.display(),
+        manifest.version,
+    ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn pack(name: &str, items: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("enshwick-pack-{name}-{}", std::process::id()));
+        let _fresh = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join(MANIFEST_FILE),
+            "id = \"lanterns\"\nversion = \"1.0.0\"\n",
+        )
+        .unwrap();
+        std::fs::write(dir.join("items.toml"), items).unwrap();
+        dir
+    }
+
+    #[test]
+    fn a_good_pack_checks_and_zips_under_its_folder() {
+        let dir = pack(
+            "good",
+            "[[item]]\nid = \"lantern\"\nlike = \"6943053a-32c1-4718-ae22-e61427ddf54d\"\n",
+        );
+        let (summary, _, _) = check(&dir).unwrap();
+        assert!(
+            summary.starts_with("lanterns 1.0.0: 1 content ids"),
+            "{summary}"
+        );
+        let out = dir.join("out.zip");
+        zip(&dir, Some(&out)).unwrap();
+        let archive = ::zip::ZipArchive::new(std::fs::File::open(&out).unwrap()).unwrap();
+        let mut names: Vec<String> = archive
+            .file_names()
+            .map(|name| name.unwrap().into_owned())
+            .collect();
+        names.sort_unstable();
+        assert_eq!(
+            names,
+            ["mods/lanterns/items.toml", "mods/lanterns/pack.toml"]
+        );
+        let _gone = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_bad_pack_names_the_line() {
+        let dir = pack("bad", "[[item]]\nid = \"lantern\"\nlike = \"torch\"\n");
+        let why = check(&dir).unwrap_err();
+        assert!(
+            why.starts_with("items.toml:1:1: no item \"torch\""),
+            "{why}"
+        );
+        let _gone = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn schemas_are_written_per_file() {
+        let dir = std::env::temp_dir().join(format!("enshwick-schemas-{}", std::process::id()));
+        schema(&dir).unwrap();
+        let items = std::fs::read_to_string(dir.join("items.schema.json")).unwrap();
+        assert!(items.contains("\"like\""), "{items}");
+        let _gone = std::fs::remove_dir_all(&dir);
+    }
+}

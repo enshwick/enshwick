@@ -22,6 +22,11 @@ cargo enshwick install --game "C:/Program Files (x86)/Steam/steamapps/common/Ens
 - `id <mod:name>...` prints the GUID and the game id of each
   [content id](../../book/src/content.md#content-ids), as `Guid::named`
   derives them: `cargo enshwick id safes:safe`.
+- `pack check <dir>` checks a [content pack](../../book/src/content/packs.md)
+  folder as the loader reads it, every problem with its file and line;
+  `pack schema [dir]` writes the JSON Schema of each pack file for editors;
+  `pack zip <dir> [--out <file>]` checks the pack and zips it for a release,
+  its files under `mods/<id>/`.
 - `pin --old <exe> --new <exe>` writes the loader's build table for a new game
   build and ports the mods' build rows, in an Enshwick checkout, for
   maintainers. See [below](#porting-build-rows-pin).

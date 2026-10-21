@@ -40,11 +40,12 @@ asked about keys:
 Mods of this repository released before author keys are checked against
 Enshwick's own key, which has signed all of them. The signature's trusted
 comment must name the release's tag and the archive's file name, so a signed
-archive cannot pass for another release. From an archive only DLLs
-are taken, and only where Enshwick keeps them: `powrprof.dll` beside the game
-and `*.dll` under `mods/`. An archive with a path that leaves the game's
-folder, or that would write another mod's DLL or the loader's files, is
-refused whole.
+archive cannot pass for another release. From an archive only the files
+Enshwick reads are taken, and only where it keeps them: `powrprof.dll` beside
+the game, `*.dll` under `mods/`, and a content pack's `.toml` and `.png` files
+in its folder under `mods/`, never the loader's. An archive with a path that
+leaves the game's folder, or that would write another mod's DLL, another
+pack's folder or the loader's files, is refused whole.
 
 ## Build tables
 

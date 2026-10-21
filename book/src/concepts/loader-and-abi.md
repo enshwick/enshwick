@@ -22,7 +22,9 @@ loader loads each and keeps it when it exports the four functions of
 [`abi::exports`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs)
 and was built for the loader's ABI major. Other DLLs are logged as "not an
 Enshwick mod" and unloaded. The file name is free; the id in the manifest
-names the mod.
+names the mod. Every folder in `mods/` with a `pack.toml` is a
+[content pack](../content/packs.md), which the loader runs as a mod of its
+own; its entry's file is `<id>/pack.toml`.
 
 ## The mod list and the lock
 

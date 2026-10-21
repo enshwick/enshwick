@@ -431,7 +431,11 @@ struct Engine {
 }
 
 static ENGINE: OnceLock<Engine> = OnceLock::new();
-static DROPS: Mutex<Vec<Drop>> = Mutex::new(Vec::new());
+/// Every drop, with the group it belongs to: 0 for a mod's own, a content
+/// pack's hash for the pack's, which a reload replaces whole.
+static DROPS: Mutex<Vec<(u64, Drop)>> = Mutex::new(Vec::new());
+/// Whether the single-item roll is linked.
+static ONE_LINKED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 /// The queues of the rolls watchers asked to hear of.
 static WATCHERS: Mutex<Vec<Arc<Mutex<Vec<Roll>>>>> = Mutex::new(Vec::new());
 static DICE: OnceLock<Dice> = OnceLock::new();
@@ -557,7 +561,11 @@ fn after_roll(
     }
     let drops = DROPS.lock().unwrap_or_else(PoisonError::into_inner);
     let absent = [0u8; 16];
-    for drop in drops.iter().filter(|d| d.from.matches(&roll)) {
+    for drop in drops
+        .iter()
+        .map(|(_, d)| d)
+        .filter(|d| d.from.matches(&roll))
+    {
         let Some((item, count, fill)) = drop.draw(dice()) else {
             continue;
         };
@@ -622,6 +630,7 @@ fn after_roll_one(
     let drops = DROPS.lock().unwrap_or_else(PoisonError::into_inner);
     let Some((item, count, _)) = drops
         .iter()
+        .map(|(_, d)| d)
         .filter(|d| d.from.matches(&roll))
         .find_map(|d| d.draw(dice()))
     else {
@@ -691,19 +700,48 @@ impl Load<'_> {
     /// }
     /// ```
     pub fn add_loot(&mut self, drop: Drop) -> Result<(), Off> {
+        self.add_loot_in(0, drop)
+    }
+
+    /// [`Load::add_loot`] for the drops of group `group`.
+    pub(crate) fn add_loot_in(&mut self, group: u64, drop: Drop) -> Result<(), Off> {
         drop.check()?;
         link_roll(self)?;
-        let single = drop.from.kinds.contains(Kinds::DESTROYED);
-        let mut drops = DROPS.lock().unwrap_or_else(PoisonError::into_inner);
-        let linked = drops
-            .iter()
-            .any(|d| d.from.kinds.contains(Kinds::DESTROYED));
-        if single && !linked {
+        if drop.from.kinds.contains(Kinds::DESTROYED) && !ONE_LINKED.load(Ordering::Acquire) {
             self.hook(&ROLL_ONE, self.symbol("loot.roll_one")?)?;
+            ONE_LINKED.store(true, Ordering::Release);
         }
-        drops.push(drop);
+        DROPS
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .push((group, drop));
         Ok(())
     }
+}
+
+/// Replaces every drop of group `group` with `drops`, as a content pack's
+/// reload does; no drops forgets the group.
+///
+/// # Errors
+///
+/// Why the drops cannot take effect before a restart: a drop that is not
+/// valid, or one of a kind of roll nothing linked at start.
+pub(crate) fn replace_group(group: u64, drops: Vec<Drop>) -> Result<(), String> {
+    for drop in &drops {
+        drop.check().map_err(|off| off.to_string())?;
+        if ENGINE.get().is_none() {
+            return Err("no loot was linked at start; it takes a restart".to_owned());
+        }
+        if drop.from.kinds.contains(Kinds::DESTROYED) && !ONE_LINKED.load(Ordering::Acquire) {
+            return Err(
+                "single-item rolls were not linked at start; they take a restart".to_owned(),
+            );
+        }
+    }
+    let mut all = DROPS.lock().unwrap_or_else(PoisonError::into_inner);
+    all.retain(|(g, _)| *g != group);
+    all.extend(drops.into_iter().map(|drop| (group, drop)));
+    Ok(())
 }
 
 #[cfg(test)]

@@ -1,10 +1,13 @@
-//! Staging: a verified archive's DLLs written to `mods/.staged/`, which the
-//! `powrprof.dll` stub moves into place at the next start.
+//! Staging: a verified archive's DLLs and content pack files written to
+//! `mods/.staged/`, which the `powrprof.dll` stub moves into place at the
+//! next start.
 //!
-//! Only DLLs are taken, and only where Enshwick keeps them: `powrprof.dll`
-//! beside the game and `*.dll` under `mods/`. A name that is absolute, goes
-//! up with `..`, uses `\`, a drive or a stream, or points into the staging
-//! folder itself refuses the whole archive.
+//! Only files Enshwick reads are taken, and only where it keeps them:
+//! `powrprof.dll` beside the game, `*.dll` under `mods/`, and a content
+//! pack's `.toml` and `.png` files in its folder `mods/<id>/`, never in the
+//! loader's. A name that is absolute, goes up with `..`, uses `\`, a drive
+//! or a stream, or points into the staging folder itself refuses the whole
+//! archive.
 
 use std::io::Read as _;
 use std::path::{Path, PathBuf};
@@ -19,8 +22,9 @@ const MAX_FILE: u64 = 64 << 20;
 const MAX_DEPTH: usize = 4;
 
 /// Whether `name` is a path inside the game folder that an update may write:
-/// `powrprof.dll`, or a `.dll` under `mods/` outside the staging folder, with
-/// `/` separators and plain names only.
+/// `powrprof.dll`, a `.dll` under `mods/` outside the staging folder, or a
+/// pack's `.toml` or `.png` in a folder under `mods/` other than the
+/// loader's, with `/` separators and plain names only.
 ///
 /// # Examples
 ///
@@ -29,6 +33,10 @@ const MAX_DEPTH: usize = 4;
 ///
 /// assert!(allowed("mods/enshwick-safes.dll"));
 /// assert!(allowed("powrprof.dll"));
+/// assert!(allowed("mods/lanterns/items.toml"));
+/// assert!(allowed("mods/lanterns/icons/lantern.png"));
+/// assert!(!allowed("mods/enshwick/mods.toml"));
+/// assert!(!allowed("mods/lanterns.toml"));
 /// assert!(!allowed("mods/../powrprof.dll"));
 /// assert!(!allowed("LICENSE"));
 /// ```
@@ -52,12 +60,21 @@ pub fn allowed(name: &str) -> bool {
                 !c.is_control() && !matches!(c, '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|')
             })
     };
-    parts.len() <= MAX_DEPTH
-        && parts.iter().all(plain)
-        && parts
+    let extension = |wanted: &str| {
+        parts
             .last()
-            .is_some_and(|file| file.to_ascii_lowercase().ends_with(".dll"))
+            .and_then(|file| Path::new(file).extension())
+            .is_some_and(|e| e.eq_ignore_ascii_case(wanted))
+    };
+    let pack_data = parts.len() >= 2
+        && !parts[0].eq_ignore_ascii_case(LOADER_DIR)
+        && (extension("toml") || extension("png"));
+    parts.len() <= MAX_DEPTH && parts.iter().all(plain) && (extension("dll") || pack_data)
 }
+
+/// The loader's folder under `mods/`, which only its own update writes DLLs
+/// into and no pack.
+const LOADER_DIR: &str = "enshwick";
 
 /// Whether an archive entry `name` is unsafe and refuses the archive: a path
 /// that could leave the game folder or reach the staging folder.
@@ -101,7 +118,7 @@ pub fn plan(names: &[String], installed: Option<&str>) -> Result<Vec<(usize, Str
         .map(|(index, name)| (index, name.clone()))
         .collect();
     if files.is_empty() {
-        return Err("no DLL to install".to_owned());
+        return Err("nothing to install: no DLL and no pack files".to_owned());
     }
     let direct: Vec<usize> = files
         .iter()
@@ -121,7 +138,8 @@ pub fn plan(names: &[String], installed: Option<&str>) -> Result<Vec<(usize, Str
 }
 
 /// Refuses a plan that writes any of `taken`, files of other mods or of the
-/// loader, compared without case as Windows does.
+/// loader, compared without case as Windows does; a taken `pack.toml`
+/// takes its whole folder.
 ///
 /// # Errors
 ///
@@ -136,11 +154,21 @@ pub fn plan(names: &[String], installed: Option<&str>) -> Result<Vec<(usize, Str
 /// let taken = ["mods/Enshwick/enshwick.dll".to_owned()];
 /// assert!(refuse_taken(&files, &taken).is_err());
 /// assert!(refuse_taken(&files, &[]).is_ok());
+/// let pack = [(0, "mods/lanterns/loot.toml".to_owned())];
+/// assert!(refuse_taken(&pack, &["mods/lanterns/pack.toml".to_owned()]).is_err());
 /// ```
 pub fn refuse_taken(files: &[(usize, String)], taken: &[String]) -> Result<(), String> {
+    let holds = |taken: &str, to: &str| {
+        taken.eq_ignore_ascii_case(to)
+            || taken.strip_suffix("/pack.toml").is_some_and(|dir| {
+                to.len() > dir.len()
+                    && to.as_bytes()[dir.len()] == b'/'
+                    && to[..dir.len()].eq_ignore_ascii_case(dir)
+            })
+    };
     match files
         .iter()
-        .find(|(_, to)| taken.iter().any(|t| t.eq_ignore_ascii_case(to)))
+        .find(|(_, to)| taken.iter().any(|t| holds(t, to)))
     {
         Some((_, to)) => Err(format!("{to} belongs to another mod or the loader")),
         None => Ok(()),
