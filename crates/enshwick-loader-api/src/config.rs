@@ -926,6 +926,27 @@ impl __Values {
     }
 }
 
+/// The keys whose values differ between two inline tables of
+/// [`__Values`], sorted and joined, for a log line that shows no values: a
+/// secret field may be among them.
+pub(crate) fn changed_keys(before: &str, after: &str) -> String {
+    let table = |text| {
+        __Values::parse(text)
+            .map(|values| values.0)
+            .unwrap_or_default()
+    };
+    let (before, after) = (table(before), table(after));
+    let mut keys: Vec<&str> = before
+        .keys()
+        .chain(after.keys())
+        .filter(|key| before.get(*key) != after.get(*key))
+        .map(String::as_str)
+        .collect();
+    keys.sort_unstable();
+    keys.dedup();
+    keys.join(", ")
+}
+
 /// `key = value` for a template, from any serializable value.
 #[doc(hidden)]
 #[must_use]
@@ -1204,5 +1225,57 @@ workers = 2"
         assert_eq!(plain.synced(), None);
         assert!(plain.merge_synced("{ value = 2 }").is_ok());
         assert_eq!(plain.value, 1);
+    }
+
+    #[test]
+    fn a_held_change_names_its_keys_and_never_a_secret_value() {
+        /// Login.
+        #[derive(Default, serde::Deserialize, serde::Serialize, crate::Config)]
+        struct Login {
+            /// The server's password.
+            #[config(startup, secret)]
+            password: String,
+            /// Players at most.
+            #[config(startup)]
+            slots: u8,
+        }
+        let before = Login {
+            password: "old".to_owned(),
+            slots: 4,
+        };
+        let after = Login {
+            password: "hunter2".to_owned(),
+            slots: 4,
+        };
+        let before = before.values(super::Stage::Startup).unwrap_or_default();
+        let after = after.values(super::Stage::Startup).unwrap_or_default();
+        let line = super::changed_keys(&before, &after);
+        assert_eq!(line, "password");
+        assert!(!line.contains("hunter2"));
+    }
+
+    #[test]
+    fn generated_names_leave_the_users_constants_alone() {
+        #[expect(non_upper_case_globals, reason = "the names the derive binds")]
+        const table: u8 = 0;
+        #[expect(non_upper_case_globals, reason = "the names the derive binds")]
+        const defaults: u8 = 0;
+        /// Names.
+        #[derive(Default, serde::Deserialize, serde::Serialize, crate::Config)]
+        struct Names {
+            /// A field named as a generated local.
+            #[config(startup)]
+            table: u32,
+            /// Another.
+            #[config(startup)]
+            slots: u32,
+        }
+        let mut names = Names::default();
+        assert!(
+            names
+                .merge_values(super::Stage::Startup, "{ table = 7, slots = 3 }")
+                .is_ok()
+        );
+        assert_eq!((names.table, names.slots, table, defaults), (7, 3, 0, 0));
     }
 }

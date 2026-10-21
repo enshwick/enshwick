@@ -302,9 +302,14 @@ macro_rules! detour {
         [$($priority:expr)?] [$($flags:expr)?]) => {
         $($meta)*
         $vis static $name: $crate::Hook<$($unsafe)? extern "system" fn($($ty),*) $(-> $ret)?> = {
-            $($unsafe)? extern "system" fn entry($($arg: $ty),*) $(-> $ret)? {
+            // The arguments go to the body and, after a panic, to `next` again.
+            const _: () = {
+                $($crate::__private::hook_argument::<$ty>();)*
+            };
+            const BODY: fn($crate::Next<$($unsafe)? extern "system" fn($($ty),*) $(-> $ret)?>, $($ty),*) $(-> $ret)? = $body;
+            $($unsafe)? extern "system" fn __enshwick_entry($($arg: $ty),*) $(-> $ret)? {
                 let next = $name.next();
-                match ::std::panic::catch_unwind(::std::panic::AssertUnwindSafe(|| $body(next, $($arg),*))) {
+                match ::std::panic::catch_unwind(::std::panic::AssertUnwindSafe(|| BODY(next, $($arg),*))) {
                     ::core::result::Result::Ok(value) => value,
                     // Whether the body called `next` is not known here: tracking it
                     // would cost every call a thread-local write, and the value it
@@ -317,7 +322,7 @@ macro_rules! detour {
             }
             $crate::Hook::new(
                 ::core::stringify!($name),
-                entry,
+                __enshwick_entry,
                 $crate::__private::or_default(&[$($priority)?], 0),
                 $crate::__private::or_default(&[$($flags)?], $crate::abi::HookFlags::NONE),
             )

@@ -101,6 +101,8 @@ pub mod packs;
 pub mod points;
 pub mod progress;
 pub mod raw;
+#[cfg(doctest)]
+mod refused;
 pub mod schedule;
 pub mod services;
 pub mod state;
@@ -146,7 +148,7 @@ pub use enshwick_loader_macros::event;
 ///
 /// The first argument is `next: Next<F>`, where `F` is the target's
 /// `extern "system" fn` type or an alias of it; the other arguments are the
-/// target's, by plain names. `#[hook(priority = <i32>, flags = <HookFlags>)]` sets the link's
+/// target's, by plain names, and `Copy`. `#[hook(priority = <i32>, flags = <HookFlags>)]` sets the link's
 /// order and flags. The static takes the function's visibility and doc
 /// comment. A panic in the body falls through as with [`detour!`]; work after
 /// `next` goes in [`Hook::after_next`].
@@ -348,6 +350,9 @@ pub mod __private {
         author_names::<N>(given, cargo).0
     }
 
+    /// Compiles only for a `Copy` hook argument.
+    pub const fn hook_argument<T: Copy>() {}
+
     #[must_use]
     pub const fn or_default<T: Copy>(given: &[T], default: T) -> T {
         match given {
@@ -483,12 +488,14 @@ pub mod __private {
             M::init(&mut Load::new(host))
         }));
         match outcome {
-            Ok(Ok(state)) => {
-                if slot.set(state).is_err() {
-                    return Status::REFUSED;
+            Ok(Ok(state)) => match slot.set(state) {
+                Ok(()) => Status::OK,
+                Err(state) => {
+                    let _dropped =
+                        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| drop(state)));
+                    Status::REFUSED
                 }
-                Status::OK
-            }
+            },
             Ok(Err(off)) => {
                 host.log(Level::WARN, &format!("off: {off}"));
                 Status::REFUSED
@@ -498,6 +505,13 @@ pub mod __private {
                 Status::FAULTED
             }
         }
+    }
+
+    /// The mod's manifest, null when `manifest` panics, which the loader
+    /// takes as a refusal.
+    #[must_use]
+    pub fn query<M: Mod>() -> *const crate::abi::Manifest {
+        std::panic::catch_unwind(M::manifest).map_or(core::ptr::null(), core::ptr::from_ref)
     }
 
     /// Runs `init` with a [`Load`] for the content pack `me`, as the loader
