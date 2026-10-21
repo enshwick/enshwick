@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.5.0](https://github.com/themaiby/enshwick/compare/enshwick-survivors-per-altar-v0.4.0...enshwick-survivors-per-altar-v0.5.0) (2026-10-21)
+
+
+### ⚠ BREAKING CHANGES
+
+* **api:** name mod content <mod>:<name> and derive its GUIDs ([#154](https://github.com/themaiby/enshwick/issues/154))
+
+### Features
+
+* **api:** give items a meter, tooltip lines and fill on give ([#128](https://github.com/themaiby/enshwick/issues/128)) ([11beb9b](https://github.com/themaiby/enshwick/commit/11beb9b762be4d3d6b80cc81b2c3baffb2ab3131))
+* **api:** name mod content &lt;mod&gt;:&lt;name&gt; and derive its GUIDs ([#154](https://github.com/themaiby/enshwick/issues/154)) ([38f46ce](https://github.com/themaiby/enshwick/commit/38f46ce596e9fa6c25c0d673558ee56887160bfb))
+* **survivors-per-altar:** copies come only from copy staffs ([#140](https://github.com/themaiby/enshwick/issues/140)) ([ab540fb](https://github.com/themaiby/enshwick/commit/ab540fb687900e7350f452f3403d4bebabd9f919))
+* **survivors-per-altar:** give copy staffs a violet icon ([#144](https://github.com/themaiby/enshwick/issues/144)) ([5843f56](https://github.com/themaiby/enshwick/commit/5843f5699cf83547e6f57586ee41079e86fc6723))
+* **survivors-per-altar:** give copy staffs charges ([#131](https://github.com/themaiby/enshwick/issues/131)) ([2ff5952](https://github.com/themaiby/enshwick/commit/2ff59529267880d296fb50f43efa2a7e24b3d9d0))
+
 ## [0.4.0](https://github.com/themaiby/enshwick/compare/enshwick-survivors-per-altar-v0.3.0...enshwick-survivors-per-altar-v0.4.0) (2026-10-20)
 
 

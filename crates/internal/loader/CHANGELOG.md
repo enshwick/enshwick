@@ -1,5 +1,37 @@
 # Changelog
 
+## [0.6.0](https://github.com/themaiby/enshwick/compare/enshwick-loader-v0.5.0...enshwick-loader-v0.6.0) (2026-10-21)
+
+
+### ⚠ BREAKING CHANGES
+
+* **api:** name mod content <mod>:<name> and derive its GUIDs ([#154](https://github.com/themaiby/enshwick/issues/154))
+* **api:** check service layouts and add typed mod events ([#146](https://github.com/themaiby/enshwick/issues/146))
+* **loader:** mod settings per world ([#145](https://github.com/themaiby/enshwick/issues/145))
+
+### Features
+
+* **api:** add stat kinds, modifiers and built-in stats ([#143](https://github.com/themaiby/enshwick/issues/143)) ([dabec8b](https://github.com/themaiby/enshwick/commit/dabec8b85843c33fd3b7a3d07b17271451e7b344))
+* **api:** attach typed data to single items ([#133](https://github.com/themaiby/enshwick/issues/133)) ([4d938a9](https://github.com/themaiby/enshwick/commit/4d938a9c457857c7da77066b6fe8c2ecbe6d5ea3))
+* **api:** check service layouts and add typed mod events ([#146](https://github.com/themaiby/enshwick/issues/146)) ([aa701ce](https://github.com/themaiby/enshwick/commit/aa701cef773075939cb480dc1c01e91474883196))
+* **api:** draw lines and bars on the HUD and markers on the map ([#134](https://github.com/themaiby/enshwick/issues/134)) ([11d05b3](https://github.com/themaiby/enshwick/commit/11d05b3701942738d3fa49d73726af363af9133b))
+* **api:** draw with the game's own widgets and show its dialogs ([#129](https://github.com/themaiby/enshwick/issues/129)) ([8601c70](https://github.com/themaiby/enshwick/commit/8601c70f8a0678a50f41301467d713bf41fab855))
+* **api:** give items a meter, tooltip lines and fill on give ([#128](https://github.com/themaiby/enshwick/issues/128)) ([11beb9b](https://github.com/themaiby/enshwick/commit/11beb9b762be4d3d6b80cc81b2c3baffb2ab3131))
+* **api:** give items icons of their own ([#142](https://github.com/themaiby/enshwick/issues/142)) ([a0c0228](https://github.com/themaiby/enshwick/commit/a0c02288e4c586fc21e01e8497e1fe2da2d7ce76))
+* **api:** name mod content &lt;mod&gt;:&lt;name&gt; and derive its GUIDs ([#154](https://github.com/themaiby/enshwick/issues/154)) ([38f46ce](https://github.com/themaiby/enshwick/commit/38f46ce596e9fa6c25c0d673558ee56887160bfb))
+* **api:** roll affixes onto items from loot, crafting or a mod ([#147](https://github.com/themaiby/enshwick/issues/147)) ([c40ab9b](https://github.com/themaiby/enshwick/commit/c40ab9be39b5e6fee00652aeb5c03117067ec340))
+* **api:** run mod migrations once per world and record them ([#150](https://github.com/themaiby/enshwick/issues/150)) ([0bf89e9](https://github.com/themaiby/enshwick/commit/0bf89e9887a6518f26ab87caefba43149438b88c))
+* **loader:** a Mods screen beside Settings with each mod's settings ([#137](https://github.com/themaiby/enshwick/issues/137)) ([45c2400](https://github.com/themaiby/enshwick/commit/45c240061c0d00578d7c9e28afe26755802316a6))
+* **loader:** blame crashes on mods only when they end the game ([#153](https://github.com/themaiby/enshwick/issues/153)) ([6b60e1b](https://github.com/themaiby/enshwick/commit/6b60e1bbf49a144eb28a106587a913c4272d051e))
+* **loader:** label mods' settings in the player's language ([#141](https://github.com/themaiby/enshwick/issues/141)) ([0cbc46f](https://github.com/themaiby/enshwick/commit/0cbc46fd311d1bc187b9c89236e10d83a429b27a))
+* **loader:** mod settings per world ([#145](https://github.com/themaiby/enshwick/issues/145)) ([c06612b](https://github.com/themaiby/enshwick/commit/c06612bf26b00d4cd6175fd4dac343bb637a5ccc))
+* **loader:** mods' settings in the world settings for hosts ([#139](https://github.com/themaiby/enshwick/issues/139)) ([b4c4137](https://github.com/themaiby/enshwick/commit/b4c4137f41c0a3371f5e7698b2084c7dd2b5d47d))
+* **loader:** open every interface widget with /enshwick ui-demo ([#132](https://github.com/themaiby/enshwick/issues/132)) ([324aa82](https://github.com/themaiby/enshwick/commit/324aa825336c0f422b0625a3ebdc48af98483b64))
+* **loader:** profile each mod's costs and report where mods meet ([#152](https://github.com/themaiby/enshwick/issues/152)) ([9c2c39a](https://github.com/themaiby/enshwick/commit/9c2c39a238d0d632e64b4c7ec1cd794588826bdb))
+* **loader:** push changed join values and edit server settings remotely ([#138](https://github.com/themaiby/enshwick/issues/138)) ([58bba7c](https://github.com/themaiby/enshwick/commit/58bba7c378f92d5bf832d1f82aa09626591a2899))
+* **loader:** ship build tables as signed data with a pattern fallback ([#155](https://github.com/themaiby/enshwick/issues/155)) ([1df2e3f](https://github.com/themaiby/enshwick/commit/1df2e3fdcaeaeac3ca082a18976e6a3f1d3a46c9))
+* **survivors-per-altar:** copies come only from copy staffs ([#140](https://github.com/themaiby/enshwick/issues/140)) ([ab540fb](https://github.com/themaiby/enshwick/commit/ab540fb687900e7350f452f3403d4bebabd9f919))
+
 ## [0.5.0](https://github.com/themaiby/enshwick/compare/enshwick-loader-v0.4.0...enshwick-loader-v0.5.0) (2026-10-20)
 
 

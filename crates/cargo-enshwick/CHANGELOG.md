@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.6.0](https://github.com/themaiby/enshwick/compare/cargo-enshwick-v0.5.0...cargo-enshwick-v0.6.0) (2026-10-21)
+
+
+### ⚠ BREAKING CHANGES
+
+* **api:** name mod content <mod>:<name> and derive its GUIDs ([#154](https://github.com/themaiby/enshwick/issues/154))
+
+### Features
+
+* **api:** name mod content &lt;mod&gt;:&lt;name&gt; and derive its GUIDs ([#154](https://github.com/themaiby/enshwick/issues/154)) ([38f46ce](https://github.com/themaiby/enshwick/commit/38f46ce596e9fa6c25c0d673558ee56887160bfb))
+* **loader:** ship build tables as signed data with a pattern fallback ([#155](https://github.com/themaiby/enshwick/issues/155)) ([1df2e3f](https://github.com/themaiby/enshwick/commit/1df2e3fdcaeaeac3ca082a18976e6a3f1d3a46c9))
+
 ## [0.5.0](https://github.com/themaiby/enshwick/compare/cargo-enshwick-v0.4.0...cargo-enshwick-v0.5.0) (2026-10-20)
 
 
