@@ -611,11 +611,26 @@ fn recipe_registry() -> ResourceKey {
     RECIPE_REGISTRY.key(types::RECIPE_REGISTRY)
 }
 
-/// Whether mods serve the recipe registry.
+/// Whether mods that are on serve the recipe registry and its build has
+/// not failed; otherwise the game reads the vanilla one.
 pub(crate) fn served_recipes() -> bool {
     SERVED_LIST
         .get()
-        .is_some_and(|served| served.iter().any(|s| s.key == recipe_registry()))
+        .is_some_and(|served| serves(served, &recipe_registry(), mod_on))
+}
+
+/// Whether `served` holds `key` with a patch of a mod `on` names and a build
+/// that has not failed.
+fn serves(served: &[Served], key: &ResourceKey, on: impl Fn(usize) -> bool) -> bool {
+    served.iter().any(|s| {
+        s.key == *key
+            && s.patches.iter().any(|p| on(p.owner))
+            && !s
+                .state
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .failed
+    })
 }
 
 fn served(handle: u32) -> Option<&'static Served> {
@@ -907,6 +922,50 @@ mod tests {
         assert!(run_patches(&entry, at, base.len(), None).is_none());
         let (_, len, by) = run_patches(&entry, at, base.len(), Some(&[3, 4])).unwrap();
         assert_eq!((len, by), (6, vec![3, 4]));
+    }
+
+    unsafe extern "system" fn no_patch(
+        _: *const u8,
+        _: usize,
+        _: *mut c_void,
+        _: *mut *const u8,
+        _: *mut usize,
+    ) -> Status {
+        Status::OK
+    }
+
+    fn served_by(key: ResourceKey, owners: &[usize]) -> Served {
+        Served {
+            key,
+            base: key,
+            patches: owners
+                .iter()
+                .map(|&owner| Patch {
+                    owner,
+                    apply: no_patch,
+                    user: 0,
+                })
+                .collect(),
+            keeps_base: AtomicBool::new(false),
+            state: Mutex::new(State::default()),
+            rebuilding: Mutex::new(()),
+        }
+    }
+
+    #[test]
+    fn a_resource_counts_as_served_only_while_a_mod_is_on_and_it_built() {
+        let key = recipe_registry();
+        let served = [served_by(key, &[1, 2])];
+        assert!(serves(&served, &key, |owner| owner == 2));
+        assert!(!serves(&served, &key, |_| false));
+        served[0]
+            .state
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .failed = true;
+        assert!(!serves(&served, &key, |_| true));
+        let other = ResourceKey { part: 1, ..key };
+        assert!(!serves(&[served_by(other, &[1])], &key, |_| true));
     }
 
     #[test]

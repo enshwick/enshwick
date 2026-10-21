@@ -19,7 +19,7 @@
 //! keeps what it got and answers reads from it.
 
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock, PoisonError};
 
 use enshwick_loader_api::abi::{Event, HookFlags, Status};
@@ -101,10 +101,12 @@ static CLIENT: Mutex<Option<Values>> = Mutex::new(None);
 static CLIENT_FULL: AtomicBool = AtomicBool::new(false);
 /// Whether the server keeps any record, so destroy requests are noted.
 static KEPT: AtomicBool = AtomicBool::new(false);
-/// Entities the game asked to destroy since the last step, 0 for an empty
-/// slot; written from any thread without a lock.
-static DESTROYED: [AtomicU32; DESTROYED_CAP] = [const { AtomicU32::new(0) }; DESTROYED_CAP];
-static DESTROYED_COUNT: AtomicUsize = AtomicUsize::new(0);
+/// Entities the game asked to destroy since the last step, each in the low
+/// word under its round in the high one, 0 for an empty slot; written from
+/// any thread without a lock. A slot from an earlier round is stale.
+static DESTROYED: [AtomicU64; DESTROYED_CAP] = [const { AtomicU64::new(0) }; DESTROYED_CAP];
+/// The round in the high word and the slots taken in it in the low one.
+static DESTROYED_COUNT: AtomicU64 = AtomicU64::new(1 << 32);
 
 /// `ecs.destroy_request(command_buffer, requester, entity)`: queues the
 /// entity's destroy for the playback after the next step; nonzero when
@@ -257,18 +259,44 @@ unsafe extern "system" fn destroy(buffer: *mut u8, requester: u32, entity: u32) 
 
 /// Notes that the game asked to destroy `entity`.
 fn note_destroyed(entity: u32) {
-    let at = DESTROYED_COUNT.fetch_add(1, Ordering::AcqRel);
+    fill_destroyed(reserve_destroyed(), entity);
+}
+
+/// A slot for a destroy request: its index and its round.
+fn reserve_destroyed() -> (usize, u64) {
+    let count = DESTROYED_COUNT.fetch_add(1, Ordering::AcqRel);
+    ((count & 0xffff_ffff) as usize, count >> 32)
+}
+
+fn fill_destroyed((at, round): (usize, u64), entity: u32) {
     if let Some(slot) = DESTROYED.get(at) {
-        slot.store(entity, Ordering::Release);
+        slot.store(round << 32 | u64::from(entity), Ordering::Release);
     }
 }
 
-/// The entities noted since the last call.
+/// Whether a destroy request waits to be taken.
+fn any_destroyed() -> bool {
+    DESTROYED_COUNT.load(Ordering::Acquire) & 0xffff_ffff != 0
+}
+
+/// The entities noted since the last call. A request filled after the call
+/// that counted it is dropped, never taken in a later round, as its entity
+/// id may be another's by then.
 fn take_destroyed() -> FxHashSet<u32> {
-    let count = DESTROYED_COUNT.swap(0, Ordering::AcqRel).min(DESTROYED_CAP);
-    DESTROYED[..count]
+    let count = DESTROYED_COUNT
+        .fetch_update(Ordering::AcqRel, Ordering::Acquire, |count| {
+            Some(((count >> 32) + 1) << 32)
+        })
+        .unwrap_or_else(|count| count);
+    let (taken, round) = (
+        ((count & 0xffff_ffff) as usize).min(DESTROYED_CAP),
+        count >> 32,
+    );
+    DESTROYED[..taken]
         .iter()
         .map(|slot| slot.swap(0, Ordering::AcqRel))
+        .filter(|&noted| noted >> 32 == round)
+        .map(|noted| (noted & 0xffff_ffff) as u32)
         .filter(|&entity| entity != 0)
         .collect()
 }
@@ -290,7 +318,7 @@ fn prune_destroyed(values: &mut Values, destroyed: &FxHashSet<u32>) -> Vec<(u32,
 /// After the server's step: drops the records of the entities destroyed in
 /// it, and tells the clients.
 pub(crate) fn after_step() {
-    if !KEPT.load(Ordering::Relaxed) || DESTROYED_COUNT.load(Ordering::Acquire) == 0 {
+    if !KEPT.load(Ordering::Relaxed) || !any_destroyed() {
         return;
     }
     let destroyed = take_destroyed();
@@ -651,6 +679,7 @@ pub(crate) fn world_event(loader: &Loader, event: Event) {
                 key.as_deref().unwrap_or("?")
             );
             KEPT.store(!values.is_empty(), Ordering::Relaxed);
+            let _earlier_world = take_destroyed();
             *SERVER.lock().unwrap_or_else(PoisonError::into_inner) = Some(Server {
                 key,
                 values,
@@ -755,6 +784,15 @@ mod tests {
         let destroyed = take_destroyed();
         assert_eq!(destroyed.len(), DESTROYED_CAP);
         assert!(!destroyed.contains(&(u32::try_from(DESTROYED_CAP).unwrap() + 1)));
+        // A request filled after its round was taken never reaches a later
+        // one, where its slot is still being filled.
+        note_destroyed(1);
+        let late = reserve_destroyed();
+        assert_eq!(take_destroyed().into_iter().collect::<Vec<_>>(), [1]);
+        fill_destroyed(late, 5);
+        note_destroyed(2);
+        let _filling = reserve_destroyed();
+        assert_eq!(take_destroyed().into_iter().collect::<Vec<_>>(), [2]);
     }
 
     #[test]

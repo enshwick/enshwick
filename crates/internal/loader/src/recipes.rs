@@ -241,8 +241,9 @@ impl Index {
     pub fn read(layout: &RecipeLayout, registry: &[u8]) -> Option<Self> {
         let blob = Blob::new(registry);
         let (start, count) = blob.array(layout.recipes)?;
-        let mut recipes = Vec::with_capacity(usize::try_from(count).ok()?);
-        for at in (0..usize::try_from(count).ok()?).map(|i| start + i * layout.recipe) {
+        let count = usize::try_from(count).ok()?;
+        let mut recipes = Vec::with_capacity(count.min(registry.len() / layout.recipe.max(1)));
+        for at in (0..count).map(|i| start + i * layout.recipe) {
             let guid: [u8; 16] = registry
                 .get(at + layout.guid..at + layout.guid + 16)?
                 .try_into()
@@ -258,7 +259,7 @@ impl Index {
                 .unwrap_or_default();
             let (outputs, made) = blob.array(at + layout.output).unwrap_or((0, 0));
             let outputs = (0..usize::try_from(made).ok()?)
-                .filter_map(|i| blob.read_u32(outputs + i * layout.stack_size + layout.stack_item))
+                .map_while(|i| blob.read_u32(outputs + i * layout.stack_size + layout.stack_item))
                 .collect();
             recipes.push(Recipe {
                 guid: Guid(guid),
@@ -859,10 +860,8 @@ mod tests {
         );
     }
 
-    #[test]
-    fn an_index_reads_a_registry() {
-        use enshwick_loader_api::content::Blob;
-        let layout = RecipeLayout {
+    fn layout() -> RecipeLayout {
+        RecipeLayout {
             recipes: 8,
             recipe: 0xa8,
             guid: 0,
@@ -877,7 +876,21 @@ mod tests {
             stack_size: 24,
             stack_item: 0x10,
             stack_count: 0x14,
-        };
+        }
+    }
+
+    #[test]
+    fn an_index_of_a_registry_with_a_corrupt_count_reads_as_none() {
+        let mut registry = vec![0u8; 16];
+        registry[8..12].copy_from_slice(&8i32.to_le_bytes());
+        registry[12..16].copy_from_slice(&u32::MAX.to_le_bytes());
+        assert_eq!(Index::read(&layout(), &registry), None);
+    }
+
+    #[test]
+    fn an_index_reads_a_registry() {
+        use enshwick_loader_api::content::Blob;
+        let layout = layout();
         let mut base = vec![0u8; 16];
         base[8..12].copy_from_slice(&(-8i32).to_le_bytes());
         let mut blob = Blob::new(&base);

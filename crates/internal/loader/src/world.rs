@@ -74,6 +74,7 @@ pub(crate) fn release() {
     SERVER_WORLD.store(0, Ordering::Release);
     SERVER.store(0, Ordering::Release);
     GAME_THREAD.store(0, Ordering::Release);
+    crate::stats::forget();
 }
 
 thread_local! {

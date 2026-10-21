@@ -1169,7 +1169,8 @@ impl Stats {
     /// Watches `entity` for the items it wears and the buffs it has, or stops
     /// watching it. Players are always watched, and so is every entity a mod
     /// keeps a modifier on; watch other entities whose buffs should count,
-    /// such as an enemy a mod curses. Any thread.
+    /// such as an enemy a mod curses. Any thread, on the process that runs
+    /// the world; elsewhere it does nothing.
     ///
     /// # Examples
     ///
