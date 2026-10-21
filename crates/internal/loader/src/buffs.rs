@@ -25,6 +25,8 @@ use crate::host::Loader;
 
 /// The size of the saved-buff record the restore reads.
 const RECORD: usize = 0x78;
+/// More buff types than any build has: a count past it is not a count.
+const MAX_TYPES: u32 = 1 << 16;
 /// The value of the record's strength the game's own apply gives a buff.
 const STRENGTH: f32 = 1.0;
 /// The slot groups of `BuffContainer` in order, with their kinds.
@@ -299,6 +301,9 @@ pub(crate) fn types(loader: &Loader) -> Result<Vec<BuffTypeInfo>, Status> {
     let offset: i32 = unsafe { read(header, 0) };
     // SAFETY: as above.
     let count: u32 = unsafe { read(header, 4) };
+    if count > MAX_TYPES {
+        return Err(Status::MISSING);
+    }
     let start = header.wrapping_add_signed(offset as isize);
     Ok((0..count as usize)
         .map(|i| type_info(layout, start + i * layout.type_size))

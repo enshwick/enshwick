@@ -54,13 +54,19 @@ pub(crate) fn pick(owner: usize, id: &str) -> bool {
         .iter()
         .find(|(index, _, _)| *index == owner)
         .map(|&(_, callback, user)| (callback, user));
-    let Some((callback, user)) = found else {
+    let Some((callback, user)) = found.filter(|_| {
+        !crate::host::loader()
+            .and_then(|loader| loader.mods.get(owner))
+            .is_some_and(|m| m.off.load(std::sync::atomic::Ordering::Acquire))
+    }) else {
         return false;
     };
     // SAFETY: the mod's callback with the pointer it registered, kept for
     // the process, and an id valid for the call; the API's wrapper catches
     // panics.
-    unsafe { callback(Str::new(id), core::ptr::with_exposed_provenance_mut(user)) };
+    crate::profile::call(owner, crate::profile::Feature::Interface, || unsafe {
+        callback(Str::new(id), core::ptr::with_exposed_provenance_mut(user));
+    });
     true
 }
 
