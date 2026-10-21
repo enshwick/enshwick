@@ -49,22 +49,17 @@ mod tests {
 
     enshwick_loader_api::declare_mod!(Looter);
 
-    /// Leaked bytes for a component.
-    fn data(bytes: Vec<u8>) -> *const core::ffi::c_void {
-        Box::leak(bytes.into_boxed_slice()).as_ptr().cast()
-    }
-
-    fn setup(links: &[(u32, u8)]) -> *const core::ffi::c_void {
+    fn setup(links: &[(u32, u8)]) -> Vec<u8> {
         let mut bytes = vec![0u8; 0x54];
         for (i, &(entity, category)) in links.iter().enumerate() {
             bytes[i * 4..i * 4 + 4].copy_from_slice(&entity.to_le_bytes());
             bytes[0x40 + i] = category;
         }
         bytes[0x53] = 1;
-        data(bytes)
+        bytes
     }
 
-    fn stacks(stacks: &[(u32, u32, u32)]) -> *const core::ffi::c_void {
+    fn stacks(stacks: &[(u32, u32, u32)]) -> Vec<u8> {
         let mut bytes = vec![0u8; 0x60];
         for (i, &(item, count, pide)) in stacks.iter().enumerate() {
             let at = i * 12;
@@ -72,7 +67,7 @@ mod tests {
             bytes[at + 4..at + 8].copy_from_slice(&count.to_le_bytes());
             bytes[at + 8..at + 12].copy_from_slice(&pide.to_le_bytes());
         }
-        data(bytes)
+        bytes
     }
 
     fn world() -> FakeHost {
@@ -100,14 +95,14 @@ mod tests {
             .type_size("keen::ItemStack", 12)
             // The corpse: a generic sub-inventory, the skipped global one and
             // a virtual link to another inventory with one more.
-            .component(CORPSE, SETUP, setup(&[(41, 4), (44, 4), (42, 5)]))
-            .component(42, SETUP, setup(&[(43, 4)]))
-            .component(41, INVENTORY, stacks(&[(SWORD, 1, 900), (COIN, 7, 0)]))
-            .component(43, INVENTORY, stacks(&[(0, 0, 0), (COIN, 5, 0)]))
-            .component(44, INVENTORY, stacks(&[(COIN, 99, 0)]))
-            .component(41, OWNER, data(CORPSE.to_le_bytes().to_vec()))
-            .component(900, DURABILITY, data(vec![40, 0, 160, 0]))
-            .component(901, FUEL, data(vec![2, 0, 3, 0]))
+            .component(CORPSE, SETUP, &setup(&[(41, 4), (44, 4), (42, 5)]))
+            .component(42, SETUP, &setup(&[(43, 4)]))
+            .component(41, INVENTORY, &stacks(&[(SWORD, 1, 900), (COIN, 7, 0)]))
+            .component(43, INVENTORY, &stacks(&[(0, 0, 0), (COIN, 5, 0)]))
+            .component(44, INVENTORY, &stacks(&[(COIN, 99, 0)]))
+            .component(41, OWNER, &CORPSE.to_le_bytes())
+            .component(900, DURABILITY, &[40, 0, 160, 0])
+            .component(901, FUEL, &[2, 0, 3, 0])
             .item(SWORD, 1, ItemData::HAS_PIDE)
     }
 
