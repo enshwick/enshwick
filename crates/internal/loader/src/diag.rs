@@ -252,6 +252,8 @@ pub struct Summary {
     pub costs: Vec<String>,
     /// Hooks, features and resources mods share, a line each.
     pub conflicts: Vec<String>,
+    /// What the knowledge guard does and has counted, once it runs.
+    pub knowledge_guard: Option<String>,
 }
 
 impl Summary {
@@ -334,6 +336,9 @@ services and events:"
             "code patches: {} written, {} left out (mod off), {} skipped",
             p.written, p.off, p.skipped
         );
+        if let Some(guard) = &self.knowledge_guard {
+            let _w = writeln!(out, "knowledge guard: {guard}");
+        }
         let _w = writeln!(out, "hooks: {} functions armed", self.targets);
         match &self.hooks {
             None => {
@@ -554,6 +559,7 @@ mod tests {
                 "safes 0.20 ms/s: interaction filter 0.20 ms/s in 100 calls".into(),
             ],
             conflicts: vec!["interaction filter: safes, survivors, chained".into()],
+            knowledge_guard: Some("watching; 3 requests it would refuse let through".into()),
         }
     }
 
@@ -581,6 +587,10 @@ mod tests {
 "
         ));
         assert!(text.contains("4 resources served (4 built, 0 failed), 12 texts"));
+        assert!(text.contains(
+            "
+knowledge guard: watching; 3 requests it would refuse"
+        ));
         assert!(text.contains(
             "
 per-mod costs over 2h 03m (since start), work per second of time:
