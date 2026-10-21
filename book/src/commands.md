@@ -20,13 +20,13 @@ registers `/name` with a line of help:
 use enshwick_loader_api::commands::Reply;
 
 fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
-    load.add_command("safe", "allow, deny or list players at your nearest Safe", |ctx, args| {
+    load.add_command("players", "administrators: who is online", |ctx, args| {
+        if !ctx.is_admin() {
+            return Reply::from("Only administrators may do that.");
+        }
         match args {
-            ["list"] => match &ctx.player {
-                Some(player) => Reply::from(format!("{} asked for the list", player.name)),
-                None => Reply::from("the console has no Safes"),
-            },
-            _ => Reply::from("/safe allow <player>, /safe deny <player>, /safe list"),
+            [] => Reply::from("Ann, Bob"),
+            _ => Reply::from("/players takes no words"),
         }
     })
 }
@@ -37,7 +37,7 @@ fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_
   ([`commands::is_valid_name`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/commands.rs)).
   A malformed name, `enshwick`, or a name another mod holds is refused:
   `load.add_command` returns `Err(Off)`.
-- The player may type the name in any case: `/Safe` runs `/safe`.
+- The player may type the name in any case: `/Players` runs `/players`.
 
 ## The handler
 
@@ -164,5 +164,5 @@ at its next step.
   and runs each line appended to `mod-data/admin-tools/commands.txt` with
   `commands::run` from a scheduled task.
 - [`enshwick-safes`](https://github.com/themaiby/enshwick/tree/main/mods/enshwick-safes)
-  registers `/safe` to allow and deny players at a Safe, and guards its labels
-  with a rename filter.
+  declares who may open a Safe as [player actions](actions.md), which answer
+  `/safe` too, and guards its labels with a rename filter.

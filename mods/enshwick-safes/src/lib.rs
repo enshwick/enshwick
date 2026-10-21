@@ -1,5 +1,5 @@
 //! The Safe: a chest crafted beside the wooden chest that only the player who
-//! placed it, and the players they allow with `/safe allow`, can open or
+//! placed it, and the players they let in from the access window, can open or
 //! empty; only the owner picks it up, and nobody upgrades it away. The owner
 //! shows on hover, as the chest's name.
 //!
@@ -13,7 +13,7 @@
 //! server while it hosts a game; the client's own world is left alone.
 
 pub mod access;
-pub mod command;
+pub mod actions;
 pub mod content;
 
 use std::collections::{HashMap, HashSet};
@@ -36,7 +36,7 @@ use enshwick_loader_api::world::{ComponentType, World};
 use enshwick_loader_api::{Load, Mod, Off};
 
 use crate::access::{ACCESS, Action, Allowed, Cell, Safe, Seen};
-use crate::command::Phrases;
+use crate::actions::Phrases;
 
 /// Safe settings.
 #[derive(Debug, serde::Deserialize, serde::Serialize, enshwick_loader_api::Config)]
@@ -366,11 +366,13 @@ fn guard(load: &mut Load<'_>, phrases: &'static Phrases) -> Result<(), Off> {
     })?;
     label_seen(load, world, phrases, store)?;
     load.on_rename(move |rename| may_rename(world, rename))?;
-    load.add_command(
-        "safe",
-        &phrases.say("command.help", &[]),
-        move |ctx, args| command::run(&world, phrases, ctx, args, || save(store)),
-    )?;
+    let language = phrases.language();
+    let actions = actions::declare(load, world, phrases.texts.clone(), language, move || {
+        save(store);
+    })?;
+    load.on_config_change(move |settings: Settings| {
+        actions.set_language(settings.language().unwrap_or(Language::FALLBACK));
+    })?;
     Ok(())
 }
 

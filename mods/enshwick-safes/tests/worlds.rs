@@ -429,4 +429,90 @@ label_language = \"en\"
         assert!(loader.faults().is_empty());
         let _gone = std::fs::remove_dir_all(&dir);
     }
+
+    #[test]
+    fn the_access_window_lists_players_for_the_safe_at_hand_own_first() {
+        use enshwick_loader_api::abi::{ActionCall, PlayerInfo};
+        use enshwick_loader_api::actions::sheet::decode;
+        use enshwick_loader_api::i18n::Language;
+
+        let dir =
+            std::env::temp_dir().join(format!("enshwick-safes-window-{}", std::process::id()));
+        let _gone = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let at = |x: f64| -> Vec<u8> {
+            enshwick_loader_api::ecs::fixed([x, 0.0, 0.0])
+                .iter()
+                .flat_map(|axis| axis.to_le_bytes())
+                .collect()
+        };
+        let mut root = player(10, 1, "Root");
+        root.permissions |= PlayerInfo::CAN_KICK_BAN;
+        let (bob, cat) = (player(11, 2, "Bob"), player(12, 3, "Cat"));
+        let loader = host()
+            .player(root)
+            .player(bob)
+            .player(cat)
+            .component(10, 1, &at(0.0))
+            .component(11, 1, &at(100.0))
+            .component(12, 1, &at(200.0))
+            .settings(
+                "cost_multiplier = 2
+admins_can_open = true
+label_language = \"en\"
+",
+            )
+            .data_dir(dir.to_str().unwrap())
+            .world_key("world0-ff")
+            .install();
+        // SAFETY: the exports of the mod's `declare_mod!`.
+        let status = unsafe {
+            loader.start(
+                enshwick_safes::enshwick_mod_init,
+                enshwick_safes::enshwick_mod_ready,
+            )
+        };
+        assert_eq!(status, Status::OK, "{:?}", loader.logs());
+        assert_eq!(loader.raise::<WorldLoaded>(&()), 2, "the store and the mod");
+        // Bob's Safe is nearer, the administrator's own a little farther.
+        ACCESS.placed(700, (1, 0, 0), 2, "Bob");
+        ACCESS.placed(701, (6, 0, 0), 1, "Root");
+
+        let sheet = decode(
+            &loader
+                .ask_actions(ActionCall::SHEET, &root, Language::UK_UA.0, "", "")
+                .unwrap(),
+        );
+        let access = sheet.iter().find(|e| e.id == "access").unwrap();
+        assert_eq!(access.label, "Хто може відкривати цей сейф");
+        assert_eq!(access.subject, "ваш сейф у (3, 0, 0)", "own Safe first");
+        assert!(access.offered && access.hint);
+        let names: Vec<&str> = access.players.iter().map(|p| p.1.as_str()).collect();
+        assert_eq!(names, ["Bob", "Cat"]);
+
+        let ran = loader
+            .ask_actions(ActionCall::RUN, &root, 0, "access", "p0000000000000003	b1")
+            .unwrap();
+        assert_eq!(
+            ran,
+            "1Cat may now open your Safe at (3, 0, 0), the nearest you manage within 4 m."
+        );
+        assert_eq!(ACCESS.owners.load()[&(6, 0, 0)].allowed[0].key, 3);
+        assert!(ACCESS.owners.load()[&(1, 0, 0)].allowed.is_empty());
+
+        // Off again, and Cat may be switched off while away.
+        let ran = loader
+            .ask_actions(ActionCall::RUN, &root, 0, "access", "p0000000000000003	b0")
+            .unwrap();
+        assert!(ran.starts_with("1Cat may no longer open"), "{ran}");
+        assert_eq!(
+            loader
+                .ask_actions(ActionCall::HINTS, &bob, 0, "", "")
+                .as_deref(),
+            Some(""),
+            "Bob stands at no Safe"
+        );
+        assert!(loader.faults().is_empty());
+        let _gone = std::fs::remove_dir_all(&dir);
+    }
 }

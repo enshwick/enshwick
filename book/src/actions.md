@@ -102,6 +102,15 @@ sends the hints a player has at hand once a second while they change. The
 key is `F7`, `actions_key` in the loader's settings, read only while the
 game's window has the focus and the HUD shows.
 
+## Worked example
+
+[`enshwick-safes`](https://github.com/themaiby/enshwick/tree/main/mods/enshwick-safes)
+declares who may open a Safe as a list action with a hint: `.at` finds the
+Safe at hand, the player's own first, through the mod's own rules and its
+extension point; `on` names the players allowed there; `.verbs("allow",
+"deny")` keeps `/safe allow <player>` and `/safe deny <player>`; a second
+action, `list`, names them.
+
 ## Testing
 
 With the `test` feature, the [fake loader](testing.md) asks the actions as
