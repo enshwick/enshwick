@@ -6,8 +6,8 @@
 //! The Safe item places the vanilla wooden chest, so a Safe without the mod is
 //! an ordinary chest with every item still in it. The placed chest keeps the
 //! Safe's item id in the save, which tells the mod which chests are Safes;
-//! owners and the players they allowed are kept in
-//! `mod-data/safes/owners.toml` by position.
+//! owners and the players they allowed are kept per world, in
+//! `mod-data/safes/worlds/<world>/owners.toml`, by position.
 //!
 //! The refusals run on the dedicated server and, on a client, in the built-in
 //! server while it hosts a game; the client's own world is left alone.
@@ -17,8 +17,8 @@ pub mod command;
 pub mod content;
 
 use std::collections::{HashMap, HashSet};
-use std::sync::Mutex;
-use std::sync::atomic::Ordering;
+use std::path::Path;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 use enshwick_loader_api::abi::BuildingData;
@@ -26,10 +26,10 @@ use enshwick_loader_api::abi::Side;
 use enshwick_loader_api::commands::Rename;
 use enshwick_loader_api::ecs::Entity;
 use enshwick_loader_api::events::{
-    BuildingPlaced, BuildingRemoved, PlayerJoined, PlayerLeft, ShutdownStarted, WorldSaved,
+    BuildingPlaced, BuildingRemoved, PlayerJoined, PlayerLeft, ShutdownStarted, Ticked, WorldLoaded,
 };
 use enshwick_loader_api::i18n::Language;
-use enshwick_loader_api::state::Store;
+use enshwick_loader_api::state::{Store, WorldStore};
 use enshwick_loader_api::world::World;
 use enshwick_loader_api::{Load, Mod, Off};
 
@@ -131,20 +131,20 @@ impl Owners {
         Self { safes }
     }
 
-    fn into_map(self) -> HashMap<Cell, Safe> {
+    fn to_map(&self) -> HashMap<Cell, Safe> {
         self.safes
-            .into_iter()
+            .iter()
             .filter_map(|r| {
                 let safe = Safe {
                     owner: u64::from_str_radix(&r.owner, 16).ok()?,
-                    owner_name: r.name,
+                    owner_name: r.name.clone(),
                     allowed: r
                         .allowed
-                        .into_iter()
+                        .iter()
                         .filter_map(|a| {
                             Some(Allowed {
                                 key: u64::from_str_radix(&a.key, 16).ok()?,
-                                name: a.name,
+                                name: a.name.clone(),
                             })
                         })
                         .collect(),
@@ -155,25 +155,61 @@ impl Owners {
     }
 }
 
-/// Writes the owners on a thread of their own, one write at a time.
-fn save(store: &'static Store<Owners>) {
-    static WRITING: Mutex<()> = Mutex::new(());
+/// Hands the owners to the running world's store and writes them on a
+/// thread of their own; a write that finds nothing changed since the last
+/// one skips, so the newest owners are always the ones on disk.
+fn save(store: &'static WorldStore<Owners>) {
+    let owners = Owners::from_map(&ACCESS.owners.load());
+    if store.update(|kept| *kept = owners).is_none() {
+        enshwick_loader_api::warn!("owners not saved: no world is open");
+        return;
+    }
     let spawned = std::thread::Builder::new()
         .name("safes-save".into())
         .spawn(move || {
-            let _one = WRITING
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
-            // Read under the lock: the last write is always the newest map,
-            // never an older copy whose thread happened to run last.
-            let owners = Owners::from_map(&ACCESS.owners.load());
-            if let Err(error) = store.save(&owners) {
-                enshwick_loader_api::warn!("owners not saved: {error}");
+            if let Err(error) = store.flush() {
+                enshwick_loader_api::warn!("owners not saved yet: {error}");
             }
         });
     if spawned.is_err() {
-        enshwick_loader_api::warn!("owners not saved: no thread");
+        enshwick_loader_api::warn!("owners saved with the world: no thread");
     }
+}
+
+/// Puts the running world's owners in force for the checks. A world
+/// without owners of its own takes those of the mod-wide `owners.toml`
+/// written before owners were kept per world, once; the file is then
+/// renamed out of the way.
+fn open_world(store: &WorldStore<Owners>, dir: &Path) {
+    let mut owners = store.with(Owners::to_map).unwrap_or_default();
+    let shared = dir.join("owners.toml");
+    if owners.is_empty() && store.key().is_some() && shared.exists() {
+        match Store::<Owners>::new(dir, "owners").load() {
+            Ok(old) => {
+                owners = old.to_map();
+                store.update(|kept| *kept = old);
+                let moved = store.flush().map_err(|e| e.to_string()).and_then(|()| {
+                    std::fs::rename(&shared, dir.join("owners.toml.moved"))
+                        .map_err(|e| e.to_string())
+                });
+                match moved {
+                    Ok(()) => enshwick_loader_api::info!(
+                        "{} Safe owners moved from owners.toml into this world",
+                        owners.len()
+                    ),
+                    Err(why) => enshwick_loader_api::warn!("owners.toml stays: {why}"),
+                }
+            }
+            Err(error) => enshwick_loader_api::warn!("owners.toml not read: {error}"),
+        }
+    }
+    enshwick_loader_api::info!(
+        "{} Safe owners in world {}",
+        owners.len(),
+        store.key().unwrap_or_default()
+    );
+    ACCESS.forget_session();
+    ACCESS.load_owners(owners);
 }
 
 /// The mod's state.
@@ -226,11 +262,11 @@ impl Mod for Safes {
 fn guard(load: &mut Load<'_>, phrases: &'static Phrases) -> Result<(), Off> {
     let world = load.world()?;
     let client = load.host().build().side == Side::CLIENT;
-    let store: &'static Store<Owners> =
-        Box::leak(Box::new(Store::new(&load.data_dir()?, "owners")));
-    let owners = store.load()?.into_map();
-    enshwick_loader_api::info!("{} Safe owners loaded", owners.len());
-    ACCESS.load_owners(owners);
+    let dir = load.data_dir()?;
+    // The store opens on the world's load, before the handler below runs.
+    let store: &'static WorldStore<Owners> =
+        Box::leak(Box::new(load.world_store::<Owners>("owners")?));
+    load.on::<WorldLoaded>(move |()| open_world(store, &dir))?;
 
     load.on_interaction(access::filter)?;
     track_players(load, world)?;
@@ -246,10 +282,12 @@ fn guard(load: &mut Load<'_>, phrases: &'static Phrases) -> Result<(), Off> {
             save(store);
         }
     })?;
-    load.on::<WorldSaved>(move |()| save(store))?;
     if client {
-        // Entities and players belong to one hosted game; owners stay.
-        load.on::<ShutdownStarted>(|()| ACCESS.forget_session())?;
+        // Entities, players and owners belong to one hosted game's world.
+        load.on::<ShutdownStarted>(|()| {
+            ACCESS.forget_session();
+            ACCESS.load_owners(HashMap::new());
+        })?;
         enshwick_loader_api::info!("the Safe's checks act while this client hosts a game");
     }
     load.on_config_change(|settings: Settings| {
@@ -336,7 +374,7 @@ fn label_seen(
     load: &mut Load<'_>,
     world: World,
     phrases: &'static Phrases,
-    store: &'static Store<Owners>,
+    store: &'static WorldStore<Owners>,
 ) -> Result<(), Off> {
     let mut done: HashSet<u32> = HashSet::new();
     load.scheduler()?.every(Duration::from_secs(2), move || {
@@ -381,12 +419,31 @@ fn label_seen(
     Ok(())
 }
 
-/// Keeps the connected players' keys and administrator flags current.
-fn track_players(load: &mut Load<'_>, world: World) -> Result<(), Off> {
-    let seen = |player: &enshwick_loader_api::world::Player| Seen {
+/// How many server steps apart the players snapshot is retaken for a
+/// character it lacks.
+const CATCH_UP_STEPS: u64 = 4;
+
+fn seen(player: &enshwick_loader_api::world::Player) -> Seen {
+    Seen {
         key: player.key,
         admin: player.is_admin(),
-    };
+    }
+}
+
+/// Retakes the players snapshot from the world, on the game thread.
+fn snapshot_players(world: World) {
+    let players: HashMap<u32, Seen> = world
+        .players()
+        .iter()
+        .map(|p| (p.entity.0, seen(p)))
+        .collect();
+    ACCESS.players.store(std::sync::Arc::new(players));
+}
+
+/// Keeps the connected players' keys and administrator flags current: on
+/// joining and leaving, every 10 s for permissions, and within a few steps
+/// of a check that met a character the snapshot lacks.
+fn track_players(load: &mut Load<'_>, world: World) -> Result<(), Off> {
     load.on::<PlayerJoined>(move |joined| {
         let entity = Entity(joined.entity);
         let player = world.player(entity).map_or(
@@ -409,14 +466,20 @@ fn track_players(load: &mut Load<'_>, world: World) -> Result<(), Off> {
             players
         });
     })?;
+    let caught_up = AtomicU64::new(0);
+    load.on::<Ticked>(move |tick| {
+        if !ACCESS.unregistered.load(Ordering::Relaxed)
+            || tick.step.wrapping_sub(caught_up.load(Ordering::Relaxed)) < CATCH_UP_STEPS
+        {
+            return;
+        }
+        ACCESS.unregistered.store(false, Ordering::Relaxed);
+        caught_up.store(tick.step, Ordering::Relaxed);
+        snapshot_players(world);
+    })?;
     // Permissions can change while a player is online.
     load.scheduler()?.every(Duration::from_secs(10), move || {
-        let players: HashMap<u32, Seen> = world
-            .players()
-            .iter()
-            .map(|p| (p.entity.0, seen(p)))
-            .collect();
-        ACCESS.players.store(std::sync::Arc::new(players));
+        snapshot_players(world);
         std::ops::ControlFlow::Continue(())
     });
     Ok(())
@@ -465,7 +528,7 @@ mod tests {
         let owners = HashMap::from([((1, -2, 3), Safe::new(u64::MAX, "")), ((0, 0, 0), friendly)]);
         let text = toml::to_string(&Owners::from_map(&owners)).unwrap();
         let back: Owners = toml::from_str(&text).unwrap();
-        assert_eq!(back.into_map(), owners);
+        assert_eq!(back.to_map(), owners);
     }
 
     #[test]
@@ -473,7 +536,7 @@ mod tests {
         let old = "[[safes]]\ncell = [1, 2, 3]\nowner = \"00000000000000ff\"\n";
         let back: Owners = toml::from_str(old).unwrap();
         assert_eq!(
-            back.into_map(),
+            back.to_map(),
             HashMap::from([((1, 2, 3), Safe::new(0xff, ""))])
         );
     }

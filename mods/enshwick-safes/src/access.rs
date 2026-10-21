@@ -173,11 +173,11 @@ pub struct Seen {
 
 /// Whether `player` may do `action` with `safe`: the owner may do all, the
 /// players they allowed only use it, administrators all when `admins_open`.
-/// What is not a known player is no person and may.
+/// A player not registered yet, `None`, may do nothing until they are.
 #[must_use]
 pub fn permits(safe: &Safe, player: Option<Seen>, admins_open: bool, action: Action) -> bool {
     let Some(player) = player else {
-        return true;
+        return false;
     };
     player.key == safe.owner
         || (player.admin && admins_open)
@@ -195,6 +195,9 @@ pub struct Access {
     pub players: ArcSwap<HashMap<u32, Seen>>,
     /// Administrators may use, remove and rename every Safe.
     pub admins_open: AtomicBool,
+    /// A character the players snapshot lacks asked about a Safe: the
+    /// snapshot wants a refresh.
+    pub unregistered: AtomicBool,
 }
 
 /// The one set of snapshots.
@@ -209,14 +212,22 @@ impl Access {
             safes: ArcSwap::from_pointee(HashMap::new()),
             players: ArcSwap::from_pointee(HashMap::new()),
             admins_open: AtomicBool::new(true),
+            unregistered: AtomicBool::new(false),
         }
     }
 
     /// Whether `player` may do `action` with the Safe of `owner` kept at
-    /// `at`.
+    /// `at`. A character the snapshot lacks is a player who joined since it
+    /// was taken: refused, and the snapshot is asked to catch up.
     #[must_use]
     pub fn may(&self, owner: u64, at: Cell, player: Entity, action: Action) -> bool {
+        if player.is_none() {
+            return true;
+        }
         let seen = self.players.load().get(&player.0).copied();
+        if seen.is_none() {
+            self.unregistered.store(true, Ordering::Relaxed);
+        }
         let admins_open = self.admins_open.load(Ordering::Relaxed);
         match self.owners.load().get(&at) {
             Some(safe) => permits(safe, seen, admins_open, action),
@@ -285,8 +296,8 @@ impl Access {
             .is_some_and(|&(owner, at)| !self.may(owner, at, player, Action::Use))
     }
 
-    /// Forgets the Safes and players of a hosted game that stopped; their
-    /// entities mean nothing in the next. Owners stay.
+    /// Forgets the Safes and players of a game that stopped or the world
+    /// that loaded instead of it; their entities mean nothing in the next.
     pub fn forget_session(&self) {
         self.safes.store(Arc::new(HashMap::new()));
         self.players.store(Arc::new(HashMap::new()));
@@ -411,7 +422,7 @@ mod tests {
             assert!(!permits(&safe, Some(STRANGER), true, action));
             assert!(permits(&safe, Some(ADMIN), true, action));
             assert!(!permits(&safe, Some(ADMIN), false, action));
-            assert!(permits(&safe, None, false, action));
+            assert!(!permits(&safe, None, true, action), "not registered yet");
         }
         assert!(permits(&safe, Some(FRIEND), false, Action::Use));
         assert!(!permits(&safe, Some(FRIEND), false, Action::Remove));
@@ -462,6 +473,28 @@ mod tests {
         assert!(!access.refused_seen(500, Entity(12)));
         assert!(access.owners.load().is_empty());
         assert_eq!(access.change((0, 0, 0), |_| ()), None);
+    }
+
+    #[test]
+    fn a_player_who_joined_since_the_snapshot_waits_for_it() {
+        let access = Access::new();
+        access.players.store(Arc::new(HashMap::from([(10, OWNER)])));
+        access.placed(500, (0, 0, 0), OWNER.key, "Ann");
+        assert!(!access.unregistered.load(Ordering::Relaxed));
+        assert!(access.refused_seen(500, Entity(14)), "unknown character");
+        assert!(access.unregistered.swap(false, Ordering::Relaxed));
+        assert!(!access.refused_seen(500, Entity(10)));
+        assert!(!access.unregistered.load(Ordering::Relaxed));
+        assert!(
+            !access.refused_seen(500, Entity::NONE),
+            "no character at all"
+        );
+        access.players.rcu(|players| {
+            let mut players = HashMap::clone(players);
+            players.insert(14, OWNER);
+            players
+        });
+        assert!(!access.refused_seen(500, Entity(14)));
     }
 
     #[test]
