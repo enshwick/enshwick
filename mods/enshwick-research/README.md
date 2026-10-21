@@ -33,6 +33,14 @@ play.
   client gives the server's entities. Lines start with `R11 client` or
   `R11 server`; a server without players sweeps once around its first
   entity.
+- Health set by the game's impact programs, outside hits: heals, revives,
+  scripted kills. For the first 300 of a run, on the client and on the
+  server, the entity, the value's type and the value set. Lines start with
+  `R17 health write`.
+- Fibers: every ten seconds for five minutes after the start, each other
+  thread is stopped for a moment; threads whose stack pointer lies outside
+  the stack their thread block records, or that were made fibers, are
+  listed in one `R18` line at the end.
 
 ## Commands
 
@@ -41,7 +49,7 @@ From the chat as an administrator while the client hosts a game:
 | Command                  | What it does                                                                                                                       |
 | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
 | `/research mark [words]` | a marked line in the log; every tooltip function dumps its next call, and numbers among the words are looked for in what is dumped |
-| `/research status`       | how many tooltip dumps were written since the last mark                                                                            |
+| `/research status`       | how many tooltip dumps were written since the last mark, and how many impact writes were seen                                      |
 
 ## Settings
 
@@ -55,6 +63,9 @@ tooltip = true
 ui = true
 join = true
 entities = true
+# Log the health impact programs set, and look for threads on fibers.
+impact_health = true
+fibers = true
 # The least time between two dumps of one tooltip function, unless a mark
 # comes between, and the most dumps between two marks.
 dump_interval_ms = 1000
