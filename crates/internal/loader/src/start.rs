@@ -49,6 +49,32 @@ struct Library {
     manifest: &'static Manifest,
     init: InitFn,
     ready: ReadyFn,
+    /// With dev reload: the DLL in `mods/` and the copy the mod runs from.
+    copied: Option<(PathBuf, PathBuf)>,
+}
+
+/// A mod DLL a dev reload loaded from a new copy.
+pub(crate) struct Loaded {
+    /// The module.
+    pub(crate) module: HMODULE,
+    /// Its manifest, the loader's copy.
+    pub(crate) manifest: &'static Manifest,
+    /// Its `init`.
+    pub(crate) init: InitFn,
+    /// Its `ready`.
+    pub(crate) ready: ReadyFn,
+}
+
+/// Loads the mod DLL at `path` for a dev reload; `None`, logged, when it is
+/// no mod of this ABI.
+pub(crate) fn load_copy(path: &Path) -> Option<Loaded> {
+    let library = load_from(path, None)?;
+    Some(Loaded {
+        module: library.module,
+        manifest: library.manifest,
+        init: library.init,
+        ready: library.ready,
+    })
 }
 
 /// The game as the loader identified it.
@@ -139,6 +165,7 @@ pub(crate) fn start(stub_abi: u32, missing_forwards: u32) {
         enshwick_loader_api::__private::install_host(&raw const host::API, host::LOADER_HANDLE);
     }
     attribute_crashes(loader, &order);
+    crate::reload::prepare(loader.mods.len());
     initialise(loader, &order);
     crate::stats::seal();
     crate::item_data::seal();
@@ -165,6 +192,7 @@ pub(crate) fn start(stub_abi: u32, missing_forwards: u32) {
         .collect();
     crate::holds::enforce(&loader.data_dir, &running, false);
     ready(loader, &order);
+    watch_copies(loader, &order);
     write_lock(loader, lock_files);
     crate::watch::start(loader);
     crate::status::start(loader);
@@ -182,6 +210,22 @@ pub(crate) fn start(stub_abi: u32, missing_forwards: u32) {
             host::join_values,
         );
     }
+}
+
+/// With dev reload, watches the DLLs of the mods that run from copies.
+fn watch_copies(loader: &'static Loader, order: &[&Library]) {
+    if !crate::reload::copies() {
+        return;
+    }
+    let copied = order
+        .iter()
+        .enumerate()
+        .filter_map(|(index, library)| {
+            let (original, copy) = library.copied.clone()?;
+            Some((index, original, copy, library.module))
+        })
+        .collect();
+    crate::reload::start(loader, copied);
 }
 
 /// The records of the mods `plan` loads, in load order, with their notes
@@ -390,6 +434,7 @@ fn begin(stub_abi: u32, missing_forwards: u32) -> Option<PathBuf> {
     let (settings, problem) = crate::settings::Settings::read(&settings_file);
     crate::status::mark_start();
     crate::diag::configure(&settings);
+    crate::reload::configure(settings.dev_reload);
     builds::configure(settings.build_patterns);
     log::set_levels(settings);
     log::open(&game_dir.join("logs").join(crate::settings::LOADER_ID));
@@ -536,6 +581,7 @@ fn libraries(mods_dir: &Path) -> (Vec<Library>, Vec<Candidate>) {
             pack: true,
             range: None,
             manifest: found.manifest,
+            copied: None,
             init: crate::packs::init,
             ready: crate::packs::ready,
         });
@@ -657,7 +703,9 @@ fn initialise(loader: &Loader, order: &[&Library]) {
         let record = &loader.mods[index];
         // SAFETY: the mod exports `init` with this signature; the table lives
         // for the process.
-        let status = unsafe { (library.init)(&raw const host::API, host::handle(index)) };
+        let status = crate::reload::initialising(index, || unsafe {
+            (library.init)(&raw const host::API, host::handle(index))
+        });
         if status.is_ok() {
             crate::log!(INFO, "{} {} initialised", record.id, record.version);
         } else {
@@ -892,7 +940,24 @@ fn discover(mods_dir: &Path, list: &modlist::ModList) -> Vec<Library> {
 }
 
 fn load(path: &Path) -> Option<Library> {
-    let file = path.file_name()?.to_string_lossy().into_owned();
+    if crate::reload::copies() {
+        let mods_dir = path.parent()?;
+        let copy = crate::reload::first_copy(mods_dir, path)?;
+        let file = path.file_name()?.to_string_lossy().into_owned();
+        let mut library = load_from(&copy, Some(&file))?;
+        library.copied = Some((path.to_path_buf(), copy));
+        return Some(library);
+    }
+    load_from(path, None)
+}
+
+/// Loads the DLL at `path`, named `file` in messages (its own name when
+/// `None`).
+fn load_from(path: &Path, named: Option<&str>) -> Option<Library> {
+    let file = match named {
+        Some(file) => file.to_owned(),
+        None => path.file_name()?.to_string_lossy().into_owned(),
+    };
     let wide: Vec<u16> = path
         .as_os_str()
         .to_string_lossy()
@@ -966,6 +1031,7 @@ fn exports_of(module: HMODULE, file: &str) -> Option<Library> {
         manifest,
         init,
         ready,
+        copied: None,
     })
 }
 

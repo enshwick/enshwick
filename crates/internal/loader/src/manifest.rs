@@ -28,7 +28,74 @@ pub unsafe fn read(raw: *const Manifest) -> Result<&'static Manifest, String> {
     }
     // SAFETY: forwarded from the caller; an all-zero manifest is valid.
     let manifest = unsafe { read_headed(raw, REQUIRED) }.ok_or("the manifest is truncated")?;
-    Ok(Box::leak(Box::new(manifest)))
+    // SAFETY: the manifest's pointers are valid as the caller says.
+    Ok(Box::leak(Box::new(unsafe { own(manifest) })))
+}
+
+/// `manifest` with every string and list it points at copied into the
+/// loader's memory, so it outlives its DLL, which a development reload
+/// unloads. A string that is not UTF-8 keeps pointing into the DLL; the
+/// checks refuse such a mod.
+///
+/// # Safety
+///
+/// Every pointer and string in `manifest` is valid for the call.
+unsafe fn own(mut manifest: Manifest) -> Manifest {
+    fn text(s: Str) -> Str {
+        // SAFETY: the caller keeps the string valid for the call.
+        match unsafe { s.as_str() } {
+            Some(text) => Str::new(Box::leak(text.to_owned().into_boxed_str())),
+            None => s,
+        }
+    }
+    fn list<T: Copy>(ptr: *const T, count: usize, each: impl Fn(T) -> T) -> *const T {
+        if ptr.is_null() || count == 0 {
+            return ptr;
+        }
+        // SAFETY: the caller keeps `count` entries at `ptr` valid for the call.
+        let items = unsafe { core::slice::from_raw_parts(ptr, count) };
+        let owned: Vec<T> = items.iter().map(|&item| each(item)).collect();
+        Box::leak(owned.into_boxed_slice()).as_ptr()
+    }
+    let symbol = |s: enshwick_loader_api::abi::Symbol| enshwick_loader_api::abi::Symbol {
+        name: text(s.name),
+        ..s
+    };
+    manifest.id = text(manifest.id);
+    manifest.version = text(manifest.version);
+    manifest.dependencies = list(manifest.dependencies, manifest.dependency_count, |d| {
+        Dependency {
+            id: text(d.id),
+            range: text(d.range),
+            ..d
+        }
+    });
+    manifest.builds = list(manifest.builds, manifest.build_count, |row| {
+        enshwick_loader_api::abi::BuildRow {
+            symbols: list(row.symbols, row.symbol_count, symbol),
+            constants: list(row.constants, row.constant_count, symbol),
+            ..row
+        }
+    });
+    let updates_end = core::mem::offset_of!(Manifest, updates) + size_of::<usize>();
+    if manifest.header.covers(updates_end) && !manifest.updates.is_null() {
+        // SAFETY: as the caller says; an all-zero source is valid.
+        let source = unsafe { read_headed(manifest.updates, size_of::<UpdateSource>()) };
+        if let Some(source) = source {
+            manifest.updates = Box::leak(Box::new(UpdateSource {
+                location: text(source.location),
+                component: text(source.component),
+                ..source
+            }));
+        }
+    }
+    manifest.signed_by = manifest.signed_by.map(text);
+    manifest.name = text(manifest.name);
+    manifest.description = text(manifest.description);
+    manifest.authors = list(manifest.authors, manifest.author_count, text);
+    manifest.license = text(manifest.license);
+    manifest.homepage = text(manifest.homepage);
+    manifest
 }
 
 /// Validates `manifest` and turns it into a candidate.

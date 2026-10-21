@@ -12,6 +12,8 @@
 ///   (`description`, `authors`, `license`, `homepage` or else `repository`)
 ///   when omitted;
 /// - `join = true`: the mod counts in the join check;
+/// - `reload = true`: the mod may be reloaded while a development server runs
+///   (see [`ManifestFlags::RELOAD`](crate::abi::ManifestFlags::RELOAD));
 /// - `requires: ["id" => "range", ...]`: mods that must load first, in a
 ///   Cargo-style version range (`""` for any);
 /// - `after: ["id", ...]`: mods that load first when present;
@@ -95,6 +97,7 @@ macro_rules! manifest {
         $(, license: $license:literal)?
         $(, homepage: $homepage:literal)?
         $(, join = $join:expr)?
+        $(, reload = $reload:expr)?
         $(, requires: [$($req:literal => $range:literal),* $(,)?])?
         $(, after: [$($after:literal),* $(,)?])?
         $(, recommends: [$($rec:literal => $rec_range:literal),* $(,)?])?
@@ -166,7 +169,7 @@ macro_rules! manifest {
                 env!("CARGO_PKG_VERSION"),
             )),
             side: $crate::abi::Side::$side,
-            flags: $crate::__private::join_flag(&[$($join)?]),
+            flags: $crate::__private::flags(&[$($join)?], &[$($reload)?]),
             dependencies: DEPENDENCIES.as_ptr(),
             dependency_count: DEPENDENCIES.len(),
             builds: BUILDS.as_ptr(),
@@ -263,6 +266,12 @@ macro_rules! declare_mod {
             _me: $crate::abi::ModHandle,
         ) {
             $crate::__private::ready::<$ty>(&__ENSHWICK_INSTANCE);
+        }
+
+        /// Stops the mod before a development reload unloads it.
+        #[unsafe(no_mangle)]
+        pub extern "system" fn enshwick_mod_shutdown() {
+            $crate::__private::shutdown::<$ty>(&__ENSHWICK_INSTANCE);
         }
     };
 }

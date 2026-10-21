@@ -1,0 +1,25 @@
+[package]
+name = "enshwick-example-hot-reload"
+version = "0.1.0"
+description = "Example: a mod a development server reloads while it runs"
+keywords = ["enshrouded", "mod", "example"]
+categories = ["game-development"]
+readme = "../README.md"
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+enshwick-loader-api.workspace = true
+
+[dev-dependencies]
+enshwick-loader-api = { workspace = true, features = ["test"] }
+
+[lints]
+workspace = true
