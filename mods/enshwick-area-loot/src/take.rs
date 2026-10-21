@@ -15,6 +15,7 @@ use enshwick_loader_api::loot::{Container, LootPass, near};
 use enshwick_loader_api::points::OwnedPoint;
 use enshwick_loader_api::points::area_loot::Eligible;
 use enshwick_loader_api::time::StepClock;
+use enshwick_loader_api::world::World;
 use enshwick_loader_api::{Load, Off};
 
 use crate::Settings;
@@ -29,6 +30,8 @@ const OPEN_RANGE: f64 = 4.0;
 const PRUNE_EVERY: Duration = Duration::from_secs(60);
 
 static INVENTORIES: OnceLock<Inventories> = OnceLock::new();
+/// Where players stand, for the check right before a container's turn.
+static WORLD: OnceLock<World> = OnceLock::new();
 static TRACKER: Mutex<Option<Tracker>> = Mutex::new(None);
 static LAST_PRUNE: Mutex<Option<Duration>> = Mutex::new(None);
 /// The time the holds and the busy window count in: the server's steps.
@@ -86,6 +89,14 @@ fn tracker() -> MutexGuard<'static, Option<Tracker>> {
 pub(crate) fn link(load: &mut Load<'_>) -> Result<(), Off> {
     let _first = ELIGIBLE.set(load.define_point()?);
     let _first = INVENTORIES.set(load.inventories()?);
+    match load.world() {
+        Ok(world) => {
+            let _first = WORLD.set(world);
+        }
+        Err(off) => enshwick_loader_api::warn!(
+            "a player who walks up to a queued container may lose it: {off}"
+        ),
+    }
     *tracker() = Some(Tracker::default());
     let _first = CLOCK.set(load.step_clock()?);
     load.on_loot_pass(check)?;
@@ -221,7 +232,8 @@ fn take_next(player: Entity, mut queue: VecDeque<Entity>, game: u64) {
         return;
     }
     // Each container is checked again right before its turn: another
-    // player may have opened it since the take gathered it.
+    // player may have opened it since the take gathered it, or walked up to
+    // the one they opened last.
     let container = loop {
         let Some(next) = queue.pop_front() else {
             return;
@@ -230,11 +242,18 @@ fn take_next(player: Entity, mut queue: VecDeque<Entity>, game: u64) {
         let Some(t) = guard.as_mut() else {
             return;
         };
-        if t.still_free(next, player, now()) {
+        let guest_near = WORLD.get().is_some_and(|world| {
+            t.guest_near(next, player, OPEN_RANGE, |guest| world.position(guest))
+        });
+        if t.still_free(next, player, now()) && !guest_near {
             break next;
         }
         t.release(next);
-        enshwick_loader_api::debug!("area loot for {} skips {}: opened since", player.0, next.0);
+        enshwick_loader_api::debug!(
+            "area loot for {} skips {}: opened since or another player at it",
+            player.0,
+            next.0
+        );
     };
     let batch = Batch::new()
         .with(Op::MoveAll {
