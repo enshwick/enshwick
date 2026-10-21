@@ -454,6 +454,22 @@ pub(crate) fn register_status(
     Status::OK
 }
 
+/// `ui_npc_status`, while it reads the components its iterator layout
+/// assumes.
+fn menu_system(loader: &Loader) -> Option<u64> {
+    match crate::ecs::components_match(loader, "ui_npc_status", &UI_READS, &[]) {
+        Ok(()) => loader
+            .reflection
+            .system("ui_npc_status")
+            .ok()
+            .map(enshwick_loader_reflect::System::entry),
+        Err(why) => {
+            crate::log!(WARN, "survivor menu off: {why}");
+            None
+        }
+    }
+}
+
 pub(crate) fn link(loader: &'static Loader) {
     let sealed = Sealed {
         lookup: LOOKUP.lock().unwrap_or_else(PoisonError::into_inner).take(),
@@ -531,17 +547,7 @@ pub(crate) fn link(loader: &'static Loader) {
         );
     }
     if status {
-        let menu = match crate::ecs::components_match(loader, "ui_npc_status", &UI_READS, &[]) {
-            Ok(()) => loader
-                .reflection
-                .system("ui_npc_status")
-                .ok()
-                .map(enshwick_loader_reflect::System::entry),
-            Err(why) => {
-                crate::log!(WARN, "survivor menu off: {why}");
-                None
-            }
-        };
+        let menu = menu_system(loader);
         loader.link_feature(
             "survivor menu",
             menu,
