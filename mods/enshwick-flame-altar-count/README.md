@@ -49,6 +49,15 @@ hosting such a world must keep the mod running and up to date. Update Enshwick
 and the mod, or remove altars down to 16 with the mod running. To open the world anyway,
 at your own risk, delete `mod-data/flame-altar-count/hold.txt`.
 
+## Install
+
+Download [`enshwick-flame-altar-count.zip`](https://github.com/themaiby/enshwick/releases/latest/download/enshwick-flame-altar-count.zip),
+always the newest version of this mod, and extract it into the folder that
+holds `enshrouded.exe` or `enshrouded_server.exe`. It needs Enshwick Loader:
+[`enshwick-loader.zip`](https://github.com/themaiby/enshwick/releases/latest/download/enshwick-loader.zip)
+alone, or [`enshwick.zip`](https://github.com/themaiby/enshwick/releases/latest/download/enshwick.zip)
+with every mod.
+
 ## Who needs it
 
 The server and every player: the count shows in the game's interface, decides

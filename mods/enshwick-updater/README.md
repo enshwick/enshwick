@@ -130,6 +130,15 @@ id, and the archive's file name:
 minisign -S -s my.key -m my-mod-1.2.0.zip -t "my-mod-v1.2.0 my-mod-1.2.0.zip"
 ```
 
+## Install
+
+Download [`enshwick-updater.zip`](https://github.com/themaiby/enshwick/releases/latest/download/enshwick-updater.zip),
+always the newest version of this mod, and extract it into the folder that
+holds `enshrouded.exe` or `enshrouded_server.exe`. It needs Enshwick Loader:
+[`enshwick-loader.zip`](https://github.com/themaiby/enshwick/releases/latest/download/enshwick-loader.zip)
+alone, or [`enshwick.zip`](https://github.com/themaiby/enshwick/releases/latest/download/enshwick.zip)
+with every mod.
+
 ## Who needs it
 
 Players, and servers for the build tables. On a dedicated server it fetches

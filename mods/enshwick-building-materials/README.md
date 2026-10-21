@@ -28,6 +28,15 @@ decor = true      # decor and furniture
 A change applies at the next start of the game: the recipes are built once
 per run. Give the server and every player the same values.
 
+## Install
+
+Download [`enshwick-building-materials.zip`](https://github.com/themaiby/enshwick/releases/latest/download/enshwick-building-materials.zip),
+always the newest version of this mod, and extract it into the folder that
+holds `enshrouded.exe` or `enshrouded_server.exe`. It needs Enshwick Loader:
+[`enshwick-loader.zip`](https://github.com/themaiby/enshwick/releases/latest/download/enshwick-loader.zip)
+alone, or [`enshwick.zip`](https://github.com/themaiby/enshwick/releases/latest/download/enshwick.zip)
+with every mod.
+
 ## Who needs it
 
 The server and every player: the recipes change on each side, and the mod

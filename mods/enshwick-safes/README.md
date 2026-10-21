@@ -53,6 +53,15 @@ can change or add them in `mod-configs/safes.texts.toml`, in the form of
 [texts.toml](src/texts.toml). Owners and the players they allowed are kept in
 `mod-data/safes/owners.toml`; files from 0.1 load as they are.
 
+## Install
+
+Download [`enshwick-safes.zip`](https://github.com/themaiby/enshwick/releases/latest/download/enshwick-safes.zip),
+always the newest version of this mod, and extract it into the folder that
+holds `enshrouded.exe` or `enshrouded_server.exe`. It needs Enshwick Loader:
+[`enshwick-loader.zip`](https://github.com/themaiby/enshwick/releases/latest/download/enshwick-loader.zip)
+alone, or [`enshwick.zip`](https://github.com/themaiby/enshwick/releases/latest/download/enshwick.zip)
+with every mod.
+
 ## Who needs it
 
 The server and every player: the item and its recipe come from the mod on each
