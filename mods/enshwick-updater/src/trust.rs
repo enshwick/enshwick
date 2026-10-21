@@ -68,6 +68,9 @@ pub enum Trust {
     Installed(Vec<String>),
     /// The keys the server advertises for a mod the game lacks.
     Server(Vec<String>),
+    /// The keys of the mods this game has from the same source, for a mod
+    /// the player picks from the catalog, and the player's `trusted_keys`.
+    Source(Vec<String>),
 }
 
 impl Trust {
@@ -75,7 +78,7 @@ impl Trust {
     #[must_use]
     pub fn keys(&self) -> &[String] {
         match self {
-            Self::Installed(keys) | Self::Server(keys) => keys,
+            Self::Installed(keys) | Self::Server(keys) | Self::Source(keys) => keys,
         }
     }
 
@@ -85,6 +88,7 @@ impl Trust {
         match self {
             Self::Installed(_) => "refusal.other-key",
             Self::Server(_) => "refusal.not-server-key",
+            Self::Source(_) => "refusal.not-source-key",
         }
     }
 
@@ -97,6 +101,7 @@ impl Trust {
                 "it is signed by another key than the installed version names (possible tampering, or the author changed keys); update it by hand if you trust it"
             }
             Self::Server(_) => "it is not signed by the author key the server names",
+            Self::Source(_) => "it is not signed by a key of the mods you have from its source",
         }
     }
 }
@@ -158,6 +163,44 @@ pub fn for_installed(installed: &ModEntry, trusted: &[String]) -> Result<Trust, 
     }
     keys.extend(trusted.iter().cloned());
     Ok(Trust::Installed(keys))
+}
+
+/// Whose signature a mod the game lacks needs when the player picks it from
+/// the catalog: a key of `same_source`, the installed mods released from
+/// the same repository, or of `trusted`.
+///
+/// # Errors
+///
+/// [`Refusal::Unsigned`] when none of `same_source` names a key: such a
+/// source is not offered at all.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::mods::ModEntry;
+/// use enshwick_updater::trust::{Refusal, for_source};
+///
+/// let signed = ModEntry {
+///     signed_by: vec!["RWTjqgtfpy3lSOLC4uaUXuvvKSLQKOFf6nUnEytoiFjSzxMEhLnoAdJF".into()],
+///     ..ModEntry::default()
+/// };
+/// assert_eq!(for_source(&[&signed], &[]).unwrap().keys().len(), 1);
+/// assert_eq!(for_source(&[&ModEntry::default()], &[]), Err(Refusal::Unsigned));
+/// ```
+pub fn for_source(same_source: &[&ModEntry], trusted: &[String]) -> Result<Trust, Refusal> {
+    let mut keys: Vec<String> = Vec::new();
+    for entry in same_source {
+        for key in declared(entry) {
+            if !keys.contains(&key) {
+                keys.push(key);
+            }
+        }
+    }
+    if keys.is_empty() {
+        return Err(Refusal::Unsigned);
+    }
+    keys.extend(trusted.iter().cloned());
+    Ok(Trust::Source(keys))
 }
 
 /// Whose signature the server's version of `missing`, a mod the join check

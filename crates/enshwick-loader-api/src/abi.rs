@@ -14,7 +14,7 @@ use core::sync::atomic::AtomicUsize;
 pub const ABI_MAJOR: u16 = 1;
 
 /// The minor version of this interface. A newer minor only appends fields.
-pub const ABI_MINOR: u16 = 57;
+pub const ABI_MINOR: u16 = 58;
 
 /// Whether `id` is a valid mod id: 1 to 64 characters of `[a-z0-9-]`.
 ///
@@ -3938,6 +3938,12 @@ impl UiDialog {
 /// not unwind.
 pub type UiAnswerFn = unsafe extern "system" fn(answer: u32, user: *mut c_void);
 
+/// A mod's answer to the player picking entry `id` of its catalog on the
+/// Mods screen ([`HostApi::catalog_set`]), with the pointer given at
+/// registration. It runs on the thread that draws the interface, must
+/// return at once and must not unwind.
+pub type CatalogPickFn = unsafe extern "system" fn(id: Str, user: *mut c_void);
+
 /// A mod's check of a new text of its settings file, before the loader
 /// writes it: [`Status::OK`] to accept it; else the reason, written to
 /// `why` and valid until the mod's next call, and [`Status::REFUSED`]. It
@@ -4833,6 +4839,17 @@ pub struct HostApi {
     /// the values it loaded with. On the server's game thread only. Since
     /// minor 57.
     pub forget_game_settings: extern "system" fn(me: ModHandle) -> Status,
+    /// Replaces the mod's catalog on the Mods screen with `toml`, the
+    /// entries as [`crate::catalog::to_toml`] writes them: updates of
+    /// installed mods and mods the player may add, each with a button when
+    /// it is ready. [`Status::BAD_ARGS`] for text that is no catalog;
+    /// [`Status::MISSING`] on a server. Any thread. Since minor 58.
+    pub catalog_set: extern "system" fn(me: ModHandle, toml: Str) -> Status,
+    /// Makes `callback` with `user` the mod's answer to the player picking
+    /// one of its catalog's entries; [`Status::REFUSED`] for a second
+    /// callback. Allowed during `enshwick_mod_init` only. Since minor 58.
+    pub catalog_pick:
+        extern "system" fn(me: ModHandle, callback: CatalogPickFn, user: *mut c_void) -> Status,
 }
 
 /// Flags of [`HostApi::entity_data_open`].
@@ -5185,7 +5202,8 @@ const _: () = {
     assert!(size_of::<StatModify>() == 8 + 8 + 12 + 4 + 8);
     assert!(size_of::<StatChange>() == 8 + 24);
     assert!(core::mem::offset_of!(HostApi, language) == 24 + 127 * 8);
-    assert!(size_of::<HostApi>() == 24 + 130 * 8);
+    assert!(size_of::<HostApi>() == 24 + 132 * 8);
+    assert!(core::mem::offset_of!(HostApi, catalog_pick) == 24 + 131 * 8);
     assert!(core::mem::offset_of!(HostApi, replaced) == 24 + 125 * 8);
     assert!(core::mem::offset_of!(HostApi, entity_data_open) == 24 + 124 * 8);
     assert!(core::mem::offset_of!(HostApi, knowledge_input_filter) == 24 + 126 * 8);

@@ -742,6 +742,8 @@ pub(crate) static API: HostApi = HostApi {
     language,
     keep_game_settings,
     forget_game_settings,
+    catalog_set,
+    catalog_pick,
 };
 
 /// A static slice from a pointer and a count, empty for a null pointer.
@@ -3383,6 +3385,30 @@ extern "system" fn language(_me: ModHandle) -> u32 {
     loader()
         .filter(|loader| loader.side == Side::CLIENT)
         .map_or(0, |_| crate::content::language().0)
+}
+
+extern "system" fn catalog_set(me: ModHandle, toml: Str) -> Status {
+    entry("catalog_set", || {
+        let (loader, index, _) = match calling(me) {
+            Ok(found) => found,
+            Err(status) => return status,
+        };
+        if loader.side != Side::CLIENT {
+            return Status::MISSING;
+        }
+        text(toml).map_or(Status::BAD_ARGS, |toml| crate::catalog::set(index, toml))
+    })
+}
+
+extern "system" fn catalog_pick(
+    me: ModHandle,
+    callback: api_frame::CatalogPickFn,
+    user: *mut core::ffi::c_void,
+) -> Status {
+    entry("catalog_pick", || match calling(me) {
+        Ok((_, index, _)) => crate::catalog::on_pick(index, callback, user.expose_provenance()),
+        Err(status) => status,
+    })
 }
 
 /// Mod handles start at 1; 0 is no mod.

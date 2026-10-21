@@ -76,6 +76,8 @@ pub(crate) struct Client {
     agent: ureq::Agent,
     /// Where GitHub's lists are kept with their `ETag`; none keeps nothing.
     cache: Option<PathBuf>,
+    /// Answers from the kept lists alone and asks no one.
+    offline: bool,
 }
 
 impl Client {
@@ -93,6 +95,17 @@ impl Client {
         Self {
             agent,
             cache: cache.map(Path::to_path_buf),
+            offline: false,
+        }
+    }
+
+    /// A client that answers from the lists kept in `cache` alone and asks
+    /// no one, for a start that is not due to check.
+    #[must_use]
+    pub(crate) fn kept(cache: &Path) -> Self {
+        Self {
+            offline: true,
+            ..Self::new(Some(cache))
         }
     }
 
@@ -133,6 +146,11 @@ impl Client {
 
     fn api_reply(&self, url: &str) -> Result<Reply, Failure> {
         let cached = self.cache.as_deref().and_then(|dir| Cached::read(dir, url));
+        if self.offline {
+            return cached
+                .map(Cached::into_reply)
+                .ok_or_else(|| Failure::Other(format!("{url}: not kept")));
+        }
         let etag = cached.as_ref().map(|c| c.etag.as_str());
         match self.get(url, Some("application/vnd.github+json"), etag, MAX_JSON) {
             Ok(None) => cached
@@ -206,6 +224,9 @@ impl Client {
         etag: Option<&str>,
         limit: u64,
     ) -> Result<Option<Reply>, Failure> {
+        if self.offline {
+            return Err(Failure::Other(format!("{url}: not asked at this start")));
+        }
         let mut waits = RETRIES.iter();
         loop {
             match self.once(url, accept, etag, limit) {

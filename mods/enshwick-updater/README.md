@@ -53,6 +53,19 @@ in its folder under `mods/`, never the loader's. An archive with a path that
 leaves the game's folder, or that would write another mod's DLL, another
 pack's folder or the loader's files, is refused whole.
 
+## On the Mods screen
+
+The Mods screen shows what the last check found: `Update: <version>` under
+each mod with an update, with an Update button when it can be installed, and
+an "Available mods" page with the mods you do not have from the sources your
+mods come from. Only a GitHub repository at least one of your mods names an
+author key for counts as a source, and a mod from there is installed only if
+one of those keys signed it: the author of mods you already trust. The page
+lists every component of the repository's releases that carries a signed
+`.zip`, newest version first; what you press is asked once more in a dialog
+and then downloaded like any update. A start that is not due to check shows
+the catalog of the lists kept at the last check, without going online.
+
 ## Build tables
 
 After a game update the loader may not have a build table for the new game

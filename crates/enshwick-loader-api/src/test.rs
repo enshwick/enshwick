@@ -2888,6 +2888,41 @@ impl Installed {
         table::with(None, |s| s.published_texts.clone())
     }
 
+    /// The catalog the mod published last; empty before it published one.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick_loader_api::test::FakeHost::new().install();
+    /// assert!(loader.published_catalog().is_empty());
+    /// ```
+    #[must_use]
+    pub fn published_catalog(&self) -> Vec<crate::catalog::Entry> {
+        table::with(None, |s| s.published_catalog.clone())
+            .and_then(|text| crate::catalog::from_toml(&text).ok())
+            .unwrap_or_default()
+    }
+
+    /// Picks the entry `id` of the mod's catalog as the player would on the
+    /// Mods screen; false when the mod hears no picks.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick_loader_api::test::FakeHost::new().install();
+    /// assert!(!loader.pick_catalog("safes"));
+    /// ```
+    #[must_use]
+    pub fn pick_catalog(&self, id: &str) -> bool {
+        let Some((callback, user)) = table::with(None, |s| s.catalog_pick) else {
+            return false;
+        };
+        // SAFETY: the mod's registered callback with its own pointer and an
+        // id valid for the call.
+        unsafe { callback(Str::new(id), core::ptr::with_exposed_provenance_mut(user)) };
+        true
+    }
+
     /// The mod's markers on the map, as it set them last.
     ///
     /// # Examples

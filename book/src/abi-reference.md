@@ -12,7 +12,7 @@ raw table. The exact types and signatures are in the
 | Constant                                                                                            | Value | Meaning                                         |
 | --------------------------------------------------------------------------------------------------- | ----- | ----------------------------------------------- |
 | [`ABI_MAJOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 1     | A loader refuses a mod built for another major. |
-| [`ABI_MINOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 57    | A newer minor only appends.                     |
+| [`ABI_MINOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 58    | A newer minor only appends.                     |
 
 The ABI version is apart from Enshwick Loader's version (such as 0.2.0, see
 [Releasing and updates](releasing.md#versions)): a platform release raises
@@ -299,6 +299,8 @@ marked "init only" are allowed during `enshwick_mod_init` only.
 | `language`               | The game language the client last asked a text in; 0 on a server; any thread                    | 56          |
 | `keep_game_settings`     | Changes the game settings and keeps the marked fields with the world; server game thread only   | 57          |
 | `forget_game_settings`   | Forgets the world's kept game settings and puts back its loaded values; server game thread only | 57          |
+| `catalog_set`            | Replaces the mod's catalog of updates and mods on the Mods screen; client only; any thread      | 58          |
+| `catalog_pick`           | The mod's answer to the player picking an entry of its catalog; init only                       | 58          |
 
 ## Under an older loader
 
@@ -373,6 +375,8 @@ the mod off with a reason, which the mod's log shows as `off: <reason>`:
 | 55          | `Load::on_knowledge_input`          | Off: `knowledge input filters: needs a newer loader`      |
 | 56          | `i18n::language()`                  | `Language::FALLBACK`                                      |
 | 57          | `GameSettings::keep`, `forget_kept` | `WorldError::Missing`                                     |
+| 58          | `catalog::publish`                  | `Err(Off)`; nothing shows                                 |
+| 58          | `Load::on_catalog_pick`             | Off: `catalog: needs a newer loader`                      |
 
 A mod that can do without a feature catches the `Off` and goes on without it
 instead of returning it from `init`.

@@ -14,6 +14,7 @@ mod bases;
 #[cfg(windows)]
 mod buffs;
 pub mod builds;
+mod catalog;
 pub mod chains;
 #[cfg(windows)]
 mod chat;
