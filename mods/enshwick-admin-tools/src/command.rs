@@ -250,12 +250,12 @@ pub struct Placed {
 /// ```
 /// use enshwick_admin_tools::command::placed;
 ///
-/// assert_eq!(placed(&[]), "nothing placed since the server started");
+/// assert_eq!(placed(&[]), "nothing placed since the world started");
 /// ```
 #[must_use]
 pub fn placed(placed: &[Placed]) -> String {
     if placed.is_empty() {
-        return "nothing placed since the server started".to_owned();
+        return "nothing placed since the world started".to_owned();
     }
     placed
         .iter()
@@ -302,19 +302,24 @@ pub fn mods(entries: &[enshwick_loader_api::mods::ModEntry]) -> String {
         .join("\n")
 }
 
-/// Makes mod `id` read `mod-configs/<id>.toml` again: the file's modified
-/// time moves to now, and the loader raises its settings change within a
-/// second. The reply.
+/// Makes mod `id` read its settings again: while the world `world` runs,
+/// its own copy, `mod-data/<id>/worlds/<world>/settings.toml`, which is in
+/// force over `mod-configs/<id>.toml`; that file otherwise. The file's
+/// modified time moves to now, and the loader raises the mod's settings
+/// change within a second. The reply.
 #[must_use]
-pub fn reload(game: &Path, id: &str) -> String {
-    let path = game.join("mod-configs").join(format!("{id}.toml"));
+pub fn reload(game: &Path, id: &str, world: Option<&str>) -> String {
+    let world_file = world
+        .map(|key| format!("mod-data/{id}/worlds/{key}/settings.toml"))
+        .filter(|file| game.join(file).is_file());
+    let shown = world_file.unwrap_or_else(|| format!("mod-configs/{id}.toml"));
     let touched = std::fs::File::options()
         .append(true)
-        .open(&path)
-        .and_then(|file| file.set_modified(std::time::SystemTime::now()));
+        .open(game.join(&shown))
+        .and_then(|opened| opened.set_modified(std::time::SystemTime::now()));
     match touched {
-        Ok(()) => format!("{id} reads its settings again within a second"),
-        Err(e) => format!("{id}: mod-configs/{id}.toml: {e}"),
+        Ok(()) => format!("{id} reads {shown} again within a second"),
+        Err(e) => format!("{id}: {shown}: {e}"),
     }
 }
 
@@ -413,10 +418,45 @@ mod tests {
             .unwrap()
             .set_modified(old)
             .unwrap();
-        assert!(reload(&game, "safes").contains("within a second"));
+        assert_eq!(
+            reload(&game, "safes", None),
+            "safes reads mod-configs/safes.toml again within a second"
+        );
         assert!(std::fs::metadata(&path).unwrap().modified().unwrap() > old);
         assert_eq!(std::fs::read_to_string(&path).unwrap(), "enabled = true\n");
-        assert!(reload(&game, "missing").starts_with("missing: "));
+        assert!(reload(&game, "missing", None).starts_with("missing: "));
+        std::fs::remove_dir_all(&game).unwrap();
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore = "Miri isolates the file system")]
+    fn reload_touches_the_running_world_s_own_settings() {
+        let game = std::env::temp_dir().join(format!("admin-tools-world-{}", std::process::id()));
+        let world = game.join("mod-data/safes/worlds/world0-1a2b/settings.toml");
+        let template = game.join("mod-configs/safes.toml");
+        std::fs::create_dir_all(world.parent().unwrap()).unwrap();
+        std::fs::create_dir_all(game.join("mod-configs")).unwrap();
+        let old = std::time::SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(1_000_000);
+        for path in [&world, &template] {
+            std::fs::write(path, "enabled = true\n").unwrap();
+            std::fs::File::options()
+                .append(true)
+                .open(path)
+                .unwrap()
+                .set_modified(old)
+                .unwrap();
+        }
+        assert_eq!(
+            reload(&game, "safes", Some("world0-1a2b")),
+            "safes reads mod-data/safes/worlds/world0-1a2b/settings.toml again within a second"
+        );
+        assert!(std::fs::metadata(&world).unwrap().modified().unwrap() > old);
+        let kept = std::fs::metadata(&template).unwrap().modified().unwrap();
+        assert_eq!(kept, old, "the template stays");
+        assert!(
+            reload(&game, "safes", Some("other")).contains("mod-configs/safes.toml"),
+            "a world without its own copy reads the template"
+        );
         std::fs::remove_dir_all(&game).unwrap();
     }
 }
