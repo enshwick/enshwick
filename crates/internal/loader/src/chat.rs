@@ -804,10 +804,10 @@ fn config(loader: &Loader, args: &str, player: &PlayerInfo) -> String {
         return texts::fill("config.no-schema", &[("id", id)]);
     };
     let path = loader.configs_dir.join(format!("{id}.toml"));
-    let Ok(global) = std::fs::read_to_string(&path) else {
+    if !path.is_file() {
         return texts::fill("config.missing", &[("id", id)]);
-    };
-    let text = crate::worlds::compose(&crate::worlds::show_text(loader, record), &global, &schema);
+    }
+    let text = crate::worlds::show_text(loader, record);
     match request {
         Request::Set(_, key, value) => {
             let who = String::from_utf8_lossy(&player.name[..usize::from(player.name_len).min(64)])

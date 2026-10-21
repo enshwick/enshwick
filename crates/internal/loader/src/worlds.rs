@@ -208,17 +208,22 @@ mod live {
         }
     }
 
-    /// The text shown for the world settings of `record` on this process:
-    /// the running world's, else the template with the changes waiting for
-    /// the next world.
+    /// The text shown for the settings of `record` on this process: the
+    /// running world's, else the template with the changes waiting for the
+    /// next world, with the settings file's `user` settings over either.
     pub(crate) fn show_text(loader: &Loader, record: &ModRecord) -> String {
         let global = read(&global_path(loader, record)).unwrap_or_default();
-        if let Some(key) = current() {
-            return read(&world_file(&loader.data_dir, &record.id, &key)).unwrap_or(global);
-        }
-        match read(&next_file(&loader.data_dir, &record.id)) {
-            Some(next) => super::overlay(&global, &next, None),
-            None => global,
+        let shown = if let Some(key) = current() {
+            read(&world_file(&loader.data_dir, &record.id, &key)).unwrap_or_else(|| global.clone())
+        } else {
+            match read(&next_file(&loader.data_dir, &record.id)) {
+                Some(next) => super::overlay(&global, &next, None),
+                None => global.clone(),
+            }
+        };
+        match schema(record) {
+            Some(schema) => compose(&shown, &global, &schema),
+            None => shown,
         }
     }
 
@@ -341,6 +346,30 @@ mod tests {
             "limit = 9\nlabels = false\n"
         );
         assert_eq!(overlay("a = 1\n", "not toml [", None), "a = 1\n");
+    }
+
+    #[test]
+    fn a_restart_setting_left_in_a_world_file_shows_the_settings_files_value() {
+        let schema = Schema::new(
+            "",
+            "config",
+            vec![
+                Field::new("limit", Stage::Startup, &4),
+                Field::new("workers", Stage::Restart, &0),
+            ],
+        );
+        let world = "limit = 9
+workers = 2
+";
+        let global = "limit = 4
+workers = 6
+";
+        assert_eq!(
+            compose(world, global, &schema),
+            "limit = 9
+workers = 6
+"
+        );
     }
 
     #[test]
