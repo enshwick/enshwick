@@ -69,6 +69,9 @@ type Values = FxHashMap<(u32, u32), Record>;
 struct Server {
     key: Option<String>,
     values: Values,
+    /// The file's records of kinds no mod opened this session, as read,
+    /// written back unchanged for when their mods return.
+    unknown: Vec<u8>,
     changed: bool,
 }
 
@@ -424,32 +427,37 @@ fn file(loader: &Loader, key: &str) -> PathBuf {
         .join(FILE)
 }
 
-/// The values a world's file holds; nothing for a file that does not read.
-fn read_file(bytes: &[u8]) -> Values {
+/// The values a world's file holds, and its records of kinds no mod
+/// opened; nothing for a file that does not read.
+fn read_file(bytes: &[u8]) -> (Values, Vec<u8>) {
     let mut values = Values::default();
+    let mut unknown = Vec::new();
     let Some(records) = bytes
         .strip_prefix(MAGIC.as_slice())
         .and_then(|rest| rest.strip_prefix(&[VERSION]))
     else {
-        return values;
+        return (values, unknown);
     };
     for (id, pide, item, value) in decode(records) {
-        if let Some(kind) = kind_of(id)
-            && !value.is_empty()
-        {
-            values.insert(
-                (kind, pide),
-                Record {
-                    item,
-                    value: value.into(),
-                },
-            );
+        if value.is_empty() {
+            continue;
         }
+        let Some(kind) = kind_of(id) else {
+            encode(&mut unknown, id, pide, item, value);
+            continue;
+        };
+        values.insert(
+            (kind, pide),
+            Record {
+                item,
+                value: value.into(),
+            },
+        );
     }
-    values
+    (values, unknown)
 }
 
-fn write_file(values: &Values) -> Vec<u8> {
+fn write_file(values: &Values, unknown: &[u8]) -> Vec<u8> {
     let mut bytes = MAGIC.to_vec();
     bytes.push(VERSION);
     let mut sorted: Vec<_> = values.iter().collect();
@@ -459,6 +467,7 @@ fn write_file(values: &Values) -> Vec<u8> {
             encode(&mut bytes, id, pide, record.item, &record.value);
         }
     }
+    bytes.extend_from_slice(unknown);
     bytes
 }
 
@@ -494,7 +503,7 @@ pub(crate) fn world_event(loader: &Loader, event: Event) {
     match event {
         Event::WORLD_LOADED => {
             let key = crate::saves::world_key(loader).map(str::to_owned);
-            let values = key
+            let (values, unknown) = key
                 .as_deref()
                 .and_then(|key| std::fs::read(file(loader, key)).ok())
                 .map(|bytes| read_file(&bytes))
@@ -508,6 +517,7 @@ pub(crate) fn world_event(loader: &Loader, event: Event) {
             *SERVER.lock().unwrap_or_else(PoisonError::into_inner) = Some(Server {
                 key,
                 values,
+                unknown,
                 changed: false,
             });
         }
@@ -543,7 +553,7 @@ fn save(loader: &Loader, prune: bool) {
             return;
         };
         server.changed = false;
-        (key, write_file(&server.values))
+        (key, write_file(&server.values, &server.unknown))
     };
     let path = file(loader, &key);
     let written = path
@@ -576,6 +586,19 @@ mod tests {
         assert_eq!(full_id("probe", "Charges"), None);
         assert_eq!(full_id("probe", "a:b:c"), None);
         assert_eq!(full_id("probe", ":x"), None);
+    }
+
+    #[test]
+    fn records_of_kinds_no_mod_opened_survive_a_save() {
+        let mut bytes = MAGIC.to_vec();
+        bytes.push(VERSION);
+        encode(&mut bytes, "gone:charges", 900, 7, &[3]);
+        encode(&mut bytes, "gone:empty", 901, 7, &[]);
+        let (values, unknown) = read_file(&bytes);
+        assert!(values.is_empty());
+        let written = write_file(&values, &unknown);
+        let records = decode(&written[MAGIC.len() + 1..]);
+        assert_eq!(records, [("gone:charges", 900, 7, &[3u8][..])]);
     }
 
     #[test]

@@ -1004,16 +1004,28 @@ extern "system" fn settings(me: ModHandle, defaults: Str, out: *mut Str) -> Stat
         if !path.exists() && old.exists() && std::fs::rename(&old, &path).is_ok() {
             crate::log::write(Level::INFO, &record.id, "settings moved to mod-configs");
         }
-        let content = std::fs::read_to_string(&path).unwrap_or_else(|_| {
-            if std::fs::write(&path, defaults).is_err() {
+        let content = match std::fs::read_to_string(&path) {
+            Ok(content) => content,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                if std::fs::write(&path, defaults).is_err() {
+                    crate::log::write(
+                        Level::WARN,
+                        &record.id,
+                        "could not write the default settings",
+                    );
+                }
+                defaults.to_owned()
+            }
+            // The player's file stays as it is, for them to fix.
+            Err(e) => {
                 crate::log::write(
                     Level::WARN,
                     &record.id,
-                    "could not write the default settings",
+                    &format!("{}: {e}; the defaults apply", path.display()),
                 );
+                defaults.to_owned()
             }
-            defaults.to_owned()
-        });
+        };
         let content = crate::worlds::effective(loader, record, &content);
         match record.settings.keep(&content) {
             Some(kept) => put(out, kept),
@@ -1269,8 +1281,7 @@ extern "system" fn data_dir(me: ModHandle, out: *mut Str) -> Status {
             return Status::REFUSED;
         }
         // The path lives for the process: the mod keeps it as long as it likes.
-        let path: &'static str = Box::leak(dir.to_string_lossy().into_owned().into_boxed_str());
-        put(out, Str::new(path))
+        put(out, Str::new(keep(&dir.to_string_lossy())))
     })
 }
 
@@ -3430,6 +3441,7 @@ extern "system" fn config_check(
 pub(crate) fn check_settings(index: usize, text: &str) -> Result<(), String> {
     let Some(&(callback, user)) = loader()
         .and_then(|loader| loader.mods.get(index))
+        .filter(|record| !record.off.load(Ordering::Acquire))
         .and_then(|record| record.check.get())
     else {
         return Ok(());
@@ -3437,13 +3449,13 @@ pub(crate) fn check_settings(index: usize, text: &str) -> Result<(), String> {
     let mut why = Str::EMPTY;
     // SAFETY: the mod's check with its own pointer; the text lives for the
     // call, and the safe layer catches its panics.
-    let status = unsafe {
+    let status = crate::profile::call(index, crate::profile::Feature::Events, || unsafe {
         callback(
             Str::new(text),
             &raw mut why,
             core::ptr::with_exposed_provenance_mut(user),
         )
-    };
+    });
     if status.is_ok() {
         return Ok(());
     }
