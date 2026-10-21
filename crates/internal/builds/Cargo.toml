@@ -1,6 +1,6 @@
 [package]
 name = "enshwick-loader-builds"
-version = "0.9.0"
+version = "0.9.1"
 description = "Internal, not for mods: the per-build tables of engine addresses the Enshwick loader pins, as signed data"
 keywords = ["enshrouded", "modding", "address-library"]
 categories = ["game-development"]

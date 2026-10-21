@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.9.1](https://github.com/themaiby/enshwick/compare/enshwick-loader-api-v0.9.0...enshwick-loader-api-v0.9.1) (2026-10-21)
+
+
+### Other
+
+* **enshwick-loader-api:** Synchronize enshwick versions
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * enshwick-loader-macros bumped from 0.9.0 to 0.9.1
+
 ## [0.9.0](https://github.com/themaiby/enshwick/compare/enshwick-loader-api-v0.8.2...enshwick-loader-api-v0.9.0) (2026-10-21)
 
 

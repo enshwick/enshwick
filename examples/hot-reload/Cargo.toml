@@ -1,6 +1,6 @@
 [package]
 name = "enshwick-example-hot-reload"
-version = "0.1.4"
+version = "0.1.5"
 description = "Example: a mod a development server reloads while it runs"
 keywords = ["enshrouded", "mod", "example"]
 categories = ["game-development"]
