@@ -49,7 +49,9 @@ Enshwick, the mod is missing or off, or it cannot find its places in the game,
 Enshwick stops the server before the world loads and says why in
 `logs/enshwick/loader.log`. Only a dedicated server keeps the hold: a player
 hosting such a world must keep the mod running and up to date. Update Enshwick
-and the mod, or remove altars down to 16 with the mod running. To open the world anyway,
+and the mod, or remove altars down to 16 with the mod running: the hold goes
+once the loaded world has had 16 altar zones or fewer for a minute, so a
+restart while the world is still loading keeps it. To open the world anyway,
 at your own risk, delete `mod-data/flame-altar-count/hold.txt`.
 
 ## Install
