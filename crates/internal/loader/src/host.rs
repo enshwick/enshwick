@@ -838,6 +838,7 @@ pub(crate) static API: HostApi = HostApi {
     define_point,
     attach_point,
     run_point,
+    actions,
 };
 
 /// A static slice from a pointer and a count, empty for a null pointer.
@@ -2331,6 +2332,28 @@ extern "system" fn status(
             return Status::TOO_LATE;
         }
         crate::status::register(index, callback, user)
+    })
+}
+
+extern "system" fn actions(
+    me: ModHandle,
+    callback: api_frame::ActionFn,
+    user: *mut core::ffi::c_void,
+) -> Status {
+    entry("actions", || {
+        let (_, index, record) = match calling(me) {
+            Ok(found) => found,
+            Err(status) => return status,
+        };
+        if !crate::reload::in_init(index) {
+            return Status::TOO_LATE;
+        }
+        let again = crate::reload::reinitialising(index);
+        let status = crate::actions::register(index, callback, user, again);
+        if status.is_ok() {
+            crate::log::write(Level::DEBUG, &record.id, "player actions");
+        }
+        status
     })
 }
 

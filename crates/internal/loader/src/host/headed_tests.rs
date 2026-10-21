@@ -13,6 +13,7 @@ const GUARD: u8 = 0x11;
 macro_rules! headed {
     ($check:ident) => {
         $check!(
+            ActionCall,
             ActiveBuff,
             AffixDefData,
             AffixRoll,

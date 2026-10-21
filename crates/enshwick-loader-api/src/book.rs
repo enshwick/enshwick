@@ -38,6 +38,7 @@ chapters! {
     Interactions => "interactions.md",
     Vetoes => "vetoes.md",
     Progress => "progress.md",
+    Actions => "actions.md",
     Commands => "commands.md",
     Messages => "messages.md",
     Interface => "interface.md",

@@ -6,6 +6,8 @@
 //! A game build it does not know leaves the game vanilla, unless a mod holds
 //! the game for a world vanilla cannot open.
 
+#[cfg(windows)]
+mod actions;
 pub mod advertise;
 #[cfg(windows)]
 mod altars;

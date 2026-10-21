@@ -26,6 +26,16 @@ pub const EDIT: u8 = 9;
 pub const RESULT: u8 = 10;
 /// The server's disabled recipes.
 pub const RECIPES: u8 = 11;
+/// A client asks for the actions its player may use.
+pub const ACTIONS_QUERY: u8 = 12;
+/// The server's actions of one mod for the player.
+pub const ACTIONS_SHEET: u8 = 13;
+/// A client runs an action.
+pub const ACTION_RUN: u8 = 14;
+/// The server's answer to a run.
+pub const ACTION_RESULT: u8 = 15;
+/// The actions with a hint the player has at hand.
+pub const ACTION_HINTS: u8 = 16;
 
 /// The least time between two changes one player sends.
 pub const EDIT_GAP: Duration = Duration::from_millis(250);
@@ -84,6 +94,46 @@ pub enum Message {
         /// The recipes of this part.
         ids: Vec<u32>,
     },
+    /// A client asks for its player's actions, in the language it reads.
+    ActionsQuery {
+        /// The client's language.
+        language: u32,
+    },
+    /// The actions of mod `id` the player may use, as a sheet.
+    ActionsSheet {
+        /// Whether it is the first mod: the client forgets earlier sheets.
+        first: bool,
+        /// Whether it is the last mod.
+        last: bool,
+        /// The mod; empty when no mod has actions.
+        id: String,
+        /// Its name.
+        label: String,
+        /// The sheet's text.
+        text: String,
+    },
+    /// A client runs mod `id`'s action `action` with `args`.
+    ActionRun {
+        /// The mod.
+        id: String,
+        /// The action.
+        action: String,
+        /// The arguments, in the sheet's encoding.
+        args: String,
+    },
+    /// The server's answer to a run.
+    ActionResult {
+        /// Whether it was done.
+        ok: bool,
+        /// What the player reads.
+        text: String,
+    },
+    /// The actions with a hint the player has at hand: a line
+    /// `mod<TAB>action<TAB>label<TAB>subject` each.
+    ActionHints {
+        /// The lines.
+        text: String,
+    },
 }
 
 fn put(out: &mut Vec<u8>, text: &str) {
@@ -111,6 +161,11 @@ impl Message {
             Self::Edit { .. } => EDIT,
             Self::Result { .. } => RESULT,
             Self::Recipes { .. } => RECIPES,
+            Self::ActionsQuery { .. } => ACTIONS_QUERY,
+            Self::ActionsSheet { .. } => ACTIONS_SHEET,
+            Self::ActionRun { .. } => ACTION_RUN,
+            Self::ActionResult { .. } => ACTION_RESULT,
+            Self::ActionHints { .. } => ACTION_HINTS,
         }
     }
 
@@ -140,7 +195,7 @@ impl Message {
                 put(&mut out, key);
                 put(&mut out, value);
             }
-            Self::Result { ok, text } => {
+            Self::Result { ok, text } | Self::ActionResult { ok, text } => {
                 out.push(u8::from(*ok));
                 put(&mut out, text);
             }
@@ -150,6 +205,25 @@ impl Message {
                     out.extend_from_slice(&id.to_le_bytes());
                 }
             }
+            Self::ActionsQuery { language } => out.extend_from_slice(&language.to_le_bytes()),
+            Self::ActionsSheet {
+                first,
+                last,
+                id,
+                label,
+                text,
+            } => {
+                out.push(u8::from(*first) | (u8::from(*last) << 1));
+                put(&mut out, id);
+                put(&mut out, label);
+                put(&mut out, text);
+            }
+            Self::ActionRun { id, action, args } => {
+                put(&mut out, id);
+                put(&mut out, action);
+                put(&mut out, args);
+            }
+            Self::ActionHints { text } => put(&mut out, text),
         }
         out
     }
@@ -202,6 +276,36 @@ impl Message {
                     ids: ids.iter().map(|id| u32::from_le_bytes(*id)).collect(),
                 }
             }
+            ACTIONS_QUERY => Self::ActionsQuery {
+                language: u32::from_le_bytes(*bytes.first_chunk::<4>()?),
+            },
+            ACTIONS_SHEET => {
+                let (&flags, rest) = bytes.split_first()?;
+                *bytes = rest;
+                Self::ActionsSheet {
+                    first: flags & 1 != 0,
+                    last: flags & 2 != 0,
+                    id: take(bytes)?.to_owned(),
+                    label: take(bytes)?.to_owned(),
+                    text: take(bytes)?.to_owned(),
+                }
+            }
+            ACTION_RUN => Self::ActionRun {
+                id: take(bytes)?.to_owned(),
+                action: take(bytes)?.to_owned(),
+                args: take(bytes)?.to_owned(),
+            },
+            ACTION_RESULT => {
+                let (&ok, rest) = bytes.split_first()?;
+                *bytes = rest;
+                Self::ActionResult {
+                    ok: ok != 0,
+                    text: take(bytes)?.to_owned(),
+                }
+            }
+            ACTION_HINTS => Self::ActionHints {
+                text: take(bytes)?.to_owned(),
+            },
             _ => return None,
         })
     }
@@ -369,7 +473,19 @@ mod live {
                 heard.news += 1;
             }
             Message::Recipes { first, last, ids } => crate::recipes::received(first, last, &ids),
-            Message::Query { .. } | Message::Edit { .. } => {}
+            Message::ActionsSheet {
+                first,
+                last,
+                id,
+                label,
+                text,
+            } => crate::actions::sheet_heard(first, last, id, label, &text),
+            Message::ActionResult { ok, text } => crate::actions::result_heard(ok, text),
+            Message::ActionHints { text } => crate::actions::hints_heard(&text),
+            Message::Query { .. }
+            | Message::Edit { .. }
+            | Message::ActionsQuery { .. }
+            | Message::ActionRun { .. } => {}
         }
     }
 
@@ -425,10 +541,17 @@ mod live {
                 crate::net::to_player(key, &Message::Result { ok, text });
                 snapshot(loader, key, &id, admin);
             }
+            Message::ActionsQuery { language } => crate::actions::query(loader, key, language),
+            Message::ActionRun { id, action, args } => {
+                crate::actions::run(loader, key, &id, &action, &args);
+            }
             Message::Sync { .. }
             | Message::Snapshot { .. }
             | Message::Result { .. }
-            | Message::Recipes { .. } => {}
+            | Message::Recipes { .. }
+            | Message::ActionsSheet { .. }
+            | Message::ActionResult { .. }
+            | Message::ActionHints { .. } => {}
         }
     }
 
@@ -586,6 +709,26 @@ mod tests {
                 first: false,
                 last: true,
                 ids: Vec::new(),
+            },
+            Message::ActionsQuery { language: 34 },
+            Message::ActionsSheet {
+                first: true,
+                last: false,
+                id: "safes".into(),
+                label: "Safes".into(),
+                text: "A\taccess\t5\tWho\t\tYour Safe\n".into(),
+            },
+            Message::ActionRun {
+                id: "safes".into(),
+                action: "access".into(),
+                args: "p0000000000000007\tb1".into(),
+            },
+            Message::ActionResult {
+                ok: true,
+                text: "Ann may use it".into(),
+            },
+            Message::ActionHints {
+                text: "safes\taccess\tWho\tYour Safe\n".into(),
             },
         ] {
             assert_eq!(

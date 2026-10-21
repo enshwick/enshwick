@@ -62,6 +62,8 @@ pub(crate) struct State {
     pub(crate) defaults: Vec<String>,
     pub(crate) synced: Vec<String>,
     pub(crate) commands: Vec<(String, String, CommandCallFn, usize)>,
+    /// The mod's player actions callback, once registered.
+    pub(crate) actions: Option<(crate::abi::ActionFn, usize)>,
     pub(crate) chat: Vec<(u64, String)>,
     pub(crate) labels: Vec<(u32, String)>,
     pub(crate) rename_filters: Vec<(RenameCallFn, usize)>,
@@ -224,6 +226,7 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         inventory_requests: Vec::new(),
         sync_out: Vec::new(),
         commands: Vec::new(),
+        actions: None,
         chat: Vec::new(),
         labels: Vec::new(),
         rename_filters: Vec::new(),
@@ -911,6 +914,20 @@ extern "system" fn command(
         }
         s.commands
             .push((name, help, callback, user.expose_provenance()));
+        Status::OK
+    })
+}
+
+extern "system" fn actions(
+    _me: ModHandle,
+    callback: crate::abi::ActionFn,
+    user: *mut c_void,
+) -> Status {
+    with(Status::MISSING, |s| {
+        if s.actions.is_some() {
+            return Status::REFUSED;
+        }
+        s.actions = Some((callback, user.expose_provenance()));
         Status::OK
     })
 }
@@ -2531,4 +2548,5 @@ pub(crate) static TABLE: HostApi = HostApi {
     define_point: super::points::define_point,
     attach_point: super::points::attach_point,
     run_point: super::points::run_point,
+    actions,
 };

@@ -495,6 +495,7 @@ fn begin(stub_abi: u32, missing_forwards: u32) -> Option<PathBuf> {
     crate::diag::configure(&settings);
     crate::reload::configure(settings.dev_reload);
     crate::knowledge::guard::configure(settings.knowledge_guard);
+    crate::ui::configure_actions_key(&settings.actions_key);
     builds::configure(settings.build_patterns);
     log::set_levels(settings);
     log::open(&game_dir.join("logs").join(crate::settings::LOADER_ID));

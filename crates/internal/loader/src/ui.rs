@@ -9,6 +9,7 @@
 //! shows. Texts a mod hands in are copied into a per-frame arena, kept for a
 //! few frames, since the game may read them after the call.
 
+mod actions;
 mod demo;
 mod dialog;
 mod engine;
@@ -25,6 +26,7 @@ use enshwick_loader_api::abi::{
     HookFlags, Side, Status, Str, UiAnswerFn, UiDialog, UiFrame, UiFrameFn, UiWidget,
 };
 
+pub(crate) use actions::configure as configure_actions_key;
 pub(crate) use demo::open as open_demo;
 pub(crate) use dialog::show;
 use engine::{Engine, HudWindow, PopupFn, UiText, Window};
@@ -489,6 +491,8 @@ unsafe extern "system" fn detour(state: *mut u8) {
         frames(engine, context);
         // SAFETY: inside the frame, on its thread, no window open.
         unsafe { demo::draw(engine, context) };
+        // SAFETY: as above, the demo's window ended.
+        unsafe { actions::draw(engine, context) };
         if let Some(loader) = crate::host::loader() {
             // SAFETY: as above.
             unsafe { mods::draw(loader, engine, context, frame) };
@@ -573,6 +577,7 @@ fn hud(engine: &Engine, context: usize) {
         DRAWING.set(None);
     }
     HUD_ITEMS.with_borrow_mut(demo::hud_samples);
+    HUD_ITEMS.with_borrow_mut(actions::hud);
     HUD_ITEMS.with_borrow(|items| {
         if items.is_empty() {
             return;

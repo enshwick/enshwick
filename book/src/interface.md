@@ -174,6 +174,12 @@ their last tab, with nothing to write in the mod. See
 gamepad's B steps back from a mod's settings to the list, and from the list
 out.
 
+In a game, the screen also shows the [player actions](actions.md) the
+server offers the player: an Actions button above the list, and one under
+each mod that has actions. They show one action at a time, a list of players
+as toggle rows, five to a page, and an action with arguments as rows above
+its button.
+
 ### Updates
 
 A mod that knows of updates of installed mods, such as the updater, shows
