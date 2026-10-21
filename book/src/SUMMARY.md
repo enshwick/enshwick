@@ -47,6 +47,7 @@
 - [Mid-function hooks](mid-function-hooks.md)
 - [Code patches](code-patches.md)
 - [Code in the game's frame](game-frame.md)
+- [Pacing and threads](pacing.md)
 - [ECS inside systems](ecs.md)
 
 # Content

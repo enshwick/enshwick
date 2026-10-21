@@ -96,6 +96,7 @@ pub mod loot;
 pub mod migrations;
 pub mod mods;
 pub mod net;
+pub mod pacing;
 pub mod packs;
 pub mod progress;
 pub mod raw;
