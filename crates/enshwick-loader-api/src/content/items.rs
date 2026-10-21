@@ -21,6 +21,62 @@ pub const METER_TEMPLATE_BASE: Guid = Guid::parse("39246eb2-1b9f-4881-8c60-e0e4f
 /// maximum and starting fill in a template.
 const FUEL_SETUP: u32 = 0x139a_fbec;
 
+/// The tag of a vanilla item's name, read from the game's archive with the
+/// reflected `ItemInfo.name`; `None` for an item the archive lacks or a
+/// loader without the archive or the field.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::content::Guid;
+/// use enshwick_loader_api::content::items::vanilla_name_tag;
+///
+/// let chest = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");
+/// if let Some(tag) = vanilla_name_tag(chest) {
+///     enshwick_loader_api::info!("the chest's name is text {:#010x}", tag.id());
+/// }
+/// ```
+#[must_use]
+pub fn vanilla_name_tag(item: Guid) -> Option<Guid> {
+    let host = crate::host()?;
+    let mut offset = 0u64;
+    let status = (host.api().field_offset)(
+        crate::abi::Str::new("keen::ItemInfo"),
+        crate::abi::Str::new("name"),
+        &raw mut offset,
+    );
+    if !status.is_ok() {
+        return None;
+    }
+    let at = usize::try_from(offset).ok()?;
+    let info = host.game_resource(item.key(types::ITEM_INFO))?;
+    Some(Guid(info.get(at..at.checked_add(16)?)?.try_into().ok()?))
+}
+
+/// The name a vanilla item has in the game in `language`, as the player
+/// sees it: from the game's own data and texts, on a client (see
+/// [`crate::i18n::game_text_in`]).
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::content::Guid;
+/// use enshwick_loader_api::content::items::vanilla_name;
+/// use enshwick_loader_api::i18n::Language;
+///
+/// let chest = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");
+/// let name = vanilla_name(chest, Language::UK_UA).unwrap_or("Chest");
+/// assert!(!name.is_empty());
+/// ```
+#[must_use]
+pub fn vanilla_name(item: Guid, language: crate::i18n::Language) -> Option<&'static str> {
+    // Only the client's archive holds texts; skip reading the item there.
+    if crate::host()?.build().side == crate::abi::Side::SERVER {
+        return None;
+    }
+    crate::i18n::game_text_in(vanilla_name_tag(item)?.id(), language)
+}
+
 /// A new item for [`Load::add_item`].
 ///
 /// # Examples

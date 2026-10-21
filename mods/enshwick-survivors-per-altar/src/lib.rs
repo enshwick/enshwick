@@ -414,6 +414,50 @@ copy_staff_boss_chance = 0.0
     }
 
     #[test]
+    fn copy_staffs_take_the_survivor_s_name_in_the_game_s_language() {
+        use enshwick_loader_api::abi::Status;
+        use enshwick_loader_api::content::{Guid, types};
+        use enshwick_loader_api::i18n::Language;
+        use enshwick_loader_api::survivors::WorkshopSurvivor;
+
+        let tag = Guid::parse("ddda8053-f1f5-49fe-aab9-2a6cd460dc47");
+        let mut info = vec![0u8; 0x60];
+        info[0x48..0x58].copy_from_slice(&tag.0);
+        let alchemist = WorkshopSurvivor::find("alchemist").unwrap();
+        let loader = host()
+            .side(Side::CLIENT)
+            .settings(
+                "per_altar = true
+copy_staff_boss_chance = 0.0
+copy_staff_locked_chest_chance = 0.0
+",
+            )
+            .resource(alchemist.staff().key(types::ITEM_INFO), info)
+            .game_text(tag.id(), Language::EN_US, "Balthazar")
+            .game_text(tag.id(), Language::UK_UA, "Бальтазар")
+            .install();
+        // SAFETY: the exports of `declare_mod!` above.
+        let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+        assert_eq!(status, Status::OK, "{:?}", loader.logs());
+        let name = staffs::STAFFS
+            .iter()
+            .find(|s| s.key == "alchemist")
+            .unwrap()
+            .name
+            .id();
+        let texts = loader.texts();
+        let text = |language: Language| {
+            texts
+                .iter()
+                .find(|(id, l, _)| *id == name && *l == language.0)
+                .map(|(_, _, text)| text.as_str())
+        };
+        assert_eq!(text(Language::UK_UA), Some("Посох копії: Бальтазар"));
+        assert_eq!(text(Language::FALLBACK), Some("Copy staff: Balthazar"));
+        assert_eq!(text(Language::DE_DE), Some("Kopiestab: Balthazar"));
+    }
+
+    #[test]
     fn the_survivor_s_own_staff_moves_the_original_and_its_copy_gives_way() {
         use enshwick_loader_api::abi::{AltarInfo, Bounds, Header, Status, Summon, SurvivorLookup};
         use enshwick_loader_api::survivors::WORKSHOP_SURVIVORS;

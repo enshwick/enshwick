@@ -9,6 +9,7 @@
 pub mod advertise;
 #[cfg(windows)]
 mod altars;
+mod archive;
 #[cfg(windows)]
 mod bases;
 #[cfg(windows)]
@@ -49,6 +50,7 @@ mod events;
 mod game_events;
 #[cfg(windows)]
 mod game_settings;
+mod game_texts;
 pub mod holds;
 #[cfg(windows)]
 mod host;

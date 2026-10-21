@@ -404,6 +404,8 @@ pub struct FakeHost {
     net_peers: HashSet<u64>,
     icons_ready: bool,
     archive: std::collections::BTreeMap<[u32; 4], Vec<u8>>,
+    resources: HashMap<([u8; 16], u32, u32), Vec<u8>>,
+    game_texts: HashMap<(u32, u32), &'static str>,
 }
 
 impl Default for FakeHost {
@@ -462,6 +464,8 @@ impl FakeHost {
             net_peers: HashSet::new(),
             icons_ready: false,
             archive: std::collections::BTreeMap::new(),
+            resources: HashMap::new(),
+            game_texts: HashMap::new(),
         }
     }
 
@@ -1127,6 +1131,50 @@ impl FakeHost {
     #[must_use]
     pub fn archive(mut self, hash: [u32; 4], bytes: Vec<u8>) -> Self {
         self.archive.insert(hash, bytes);
+        self
+    }
+
+    /// Puts resource `bytes` under `key` in the game's archive, for
+    /// `resource_read`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_loader_api::content::{Guid, types};
+    ///
+    /// let key = Guid::parse("2f04a05f-697d-489b-a32f-76bb3439f5bc").key(types::ITEM_INFO);
+    /// let loader = enshwick_loader_api::test::FakeHost::new().resource(key, vec![1, 2, 3]).install();
+    /// # let _ = loader;
+    /// ```
+    #[must_use]
+    pub fn resource(mut self, key: ResourceKey, bytes: Vec<u8>) -> Self {
+        self.resources
+            .insert((key.guid, key.type_hash, key.part), bytes);
+        self
+    }
+
+    /// Gives the game the text `text` for tag `id` in `language`, for
+    /// `game_text`; a tag without a text in a language falls back to
+    /// [`Language::EN_US`](crate::i18n::Language::EN_US) as the game's does.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_loader_api::i18n::Language;
+    ///
+    /// let loader = enshwick_loader_api::test::FakeHost::new()
+    ///     .game_text(7, Language::UK_UA, "Бальтазар")
+    ///     .install();
+    /// # let _ = loader;
+    /// ```
+    #[must_use]
+    pub fn game_text(
+        mut self,
+        id: u32,
+        language: crate::i18n::Language,
+        text: &'static str,
+    ) -> Self {
+        self.game_texts.insert((id, language.0), text);
         self
     }
 

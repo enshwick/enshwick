@@ -104,6 +104,27 @@ impl WorkshopSurvivor {
         self.staff
     }
 
+    /// The survivor's name as the game shows it in `language`, such as
+    /// "Balthazar": the name of its summoning staff, from the game's own
+    /// data and texts (game build 1269579). `None` on a server, whose
+    /// archive holds no texts; see [`crate::content::items::vanilla_name`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_loader_api::i18n::Language;
+    /// use enshwick_loader_api::survivors::WorkshopSurvivor;
+    ///
+    /// let alchemist = WorkshopSurvivor::find("alchemist").ok_or("no alchemist")?;
+    /// let name = alchemist.name(Language::UK_UA).unwrap_or(alchemist.key());
+    /// assert!(!name.is_empty());
+    /// # Ok::<(), &str>(())
+    /// ```
+    #[must_use]
+    pub fn name(&self, language: crate::i18n::Language) -> Option<&'static str> {
+        crate::content::items::vanilla_name(self.staff, language)
+    }
+
     /// The survivor's template, which its staff places.
     ///
     /// # Examples

@@ -34,8 +34,7 @@ pub(crate) const UI_IMAGE: u32 = 0xf9e8_6997;
 /// by chance.
 const MARK: u32 = 0x4b57_4845;
 
-/// A content hash as the game keeps it: the size, then three words.
-pub(crate) type ContentHash = [u32; 4];
+pub(crate) use crate::archive::ContentHash;
 
 /// The content mods serve, by hash, swapped whole so requests read it
 /// without a lock; `SERVING` orders the writers.
@@ -490,165 +489,12 @@ unsafe extern "system" fn fill(registry: *mut u8) {
     unsafe { FILL_NEXT.get()(registry) };
 }
 
-/// The bytes of content `hash` from the game's own archive: the content map
-/// of `<game>/<name>.kfc`, then the container `<name>_<index>.dat`. `None`
-/// for a hash the archive lacks or keeps compressed.
-pub(crate) fn read_game(game: &std::path::Path, name: &str, hash: &ContentHash) -> Option<Vec<u8>> {
-    use std::io::{Read, Seek, SeekFrom};
-
-    let header = std::fs::read(game.join(format!("{name}.kfc"))).ok()?;
-    let (container, offset) = archive::find(&header, hash)?;
-    let mut file = std::fs::File::open(game.join(format!("{name}_{container:03}.dat"))).ok()?;
-    file.seek(SeekFrom::Start(u64::from(offset))).ok()?;
-    let mut data = vec![0u8; usize::try_from(hash[0]).ok()?];
-    file.read_exact(&mut data).ok()?;
-    Some(data)
-}
-
 /// Reads the game's archive for a mod: the loader's own copy of `kfc`
 /// lookups, free of the game's state.
 pub(crate) fn content_of(hash: &ContentHash) -> Result<Vec<u8>, Status> {
-    let loader = LOADED
-        .get()
-        .copied()
-        .or_else(crate::host::loader)
-        .ok_or(Status::MISSING)?;
-    let game = loader.mods_dir.parent().ok_or(Status::MISSING)?;
-    let name = if loader.side == Side::CLIENT {
-        "enshrouded"
-    } else {
-        "enshrouded_server"
-    };
-    read_game(game, name, hash).ok_or(Status::MISSING)
-}
-
-/// The archive's content map, read from its header.
-mod archive {
-    use super::ContentHash;
-
-    /// A location in the header: an offset from the location's own field,
-    /// and a count.
-    fn location(header: &[u8], field: usize) -> Option<(usize, usize)> {
-        let offset = u32::from_le_bytes(header.get(field..field + 4)?.try_into().ok()?);
-        let count = u32::from_le_bytes(header.get(field + 4..field + 8)?.try_into().ok()?);
-        Some((field.checked_add(offset as usize)?, count as usize))
-    }
-
-    fn word(bytes: &[u8], at: usize) -> Option<u32> {
-        Some(u32::from_le_bytes(bytes.get(at..at + 4)?.try_into().ok()?))
-    }
-
-    /// The header's magic.
-    const MAGIC: u32 = 0x3443_464b;
-    /// The content map's buckets, keys and values, as header fields.
-    const BUCKETS: usize = 0x40;
-    const KEYS: usize = 0x48;
-    const VALUES: usize = 0x50;
-
-    /// The container and offset of an uncompressed content `hash`.
-    pub(super) fn find(header: &[u8], hash: &ContentHash) -> Option<(u16, u32)> {
-        if word(header, 0)? != MAGIC {
-            return None;
-        }
-        let (buckets, bucket_count) = location(header, BUCKETS)?;
-        let (keys, _) = location(header, KEYS)?;
-        let (values, _) = location(header, VALUES)?;
-        if bucket_count == 0 || !bucket_count.is_power_of_two() {
-            return None;
-        }
-        let bucket = buckets + (hash[1] as usize & (bucket_count - 1)) * 8;
-        let (first, count) = (
-            word(header, bucket)? as usize,
-            word(header, bucket + 4)? as usize,
-        );
-        for index in first..first.checked_add(count)? {
-            let key = keys + index * 16;
-            if (0..4).all(|i| word(header, key + i * 4) == Some(hash[i])) {
-                let value = values + index * 16;
-                let offset = word(header, value)?;
-                let flags = u16::from_le_bytes(header.get(value + 4..value + 6)?.try_into().ok()?);
-                let container =
-                    u16::from_le_bytes(header.get(value + 6..value + 8)?.try_into().ok()?);
-                return (flags == 0).then_some((container, offset));
-            }
-        }
-        None
-    }
-
-    #[cfg(test)]
-    mod tests {
-        use enshwick_loader_api::content::icons::{Tint, decode, formats, tint};
-
-        use super::*;
-
-        /// A header with one bucket and two contents, the second
-        /// compressed.
-        fn header() -> Vec<u8> {
-            let mut h = vec![0u8; 0x60];
-            h[..4].copy_from_slice(&MAGIC.to_le_bytes());
-            let put = |h: &mut Vec<u8>, field: usize, at: usize, count: u32| {
-                h[field..field + 4]
-                    .copy_from_slice(&u32::try_from(at - field).unwrap().to_le_bytes());
-                h[field + 4..field + 8].copy_from_slice(&count.to_le_bytes());
-            };
-            put(&mut h, BUCKETS, 0x60, 1);
-            put(&mut h, KEYS, 0x68, 2);
-            put(&mut h, VALUES, 0x88, 2);
-            h.resize(0xa8, 0);
-            h[0x60..0x64].copy_from_slice(&0u32.to_le_bytes());
-            h[0x64..0x68].copy_from_slice(&2u32.to_le_bytes());
-            for (i, key) in [[10u32, 1, 2, 3], [20, 4, 5, 6]].iter().enumerate() {
-                for (j, w) in key.iter().enumerate() {
-                    let at = 0x68 + i * 16 + j * 4;
-                    h[at..at + 4].copy_from_slice(&w.to_le_bytes());
-                }
-            }
-            h[0x88..0x8c].copy_from_slice(&500u32.to_le_bytes());
-            h[0x8e..0x90].copy_from_slice(&7u16.to_le_bytes());
-            h[0x98..0x9c].copy_from_slice(&900u32.to_le_bytes());
-            h[0x9c..0x9e].copy_from_slice(&1u16.to_le_bytes());
-            h
-        }
-
-        #[test]
-        fn a_content_is_found_in_its_bucket() {
-            let h = header();
-            assert_eq!(find(&h, &[10, 1, 2, 3]), Some((7, 500)));
-            assert_eq!(find(&h, &[20, 4, 5, 6]), None, "compressed");
-            assert_eq!(find(&h, &[10, 1, 2, 4]), None);
-            assert_eq!(find(&h[..0x10], &[10, 1, 2, 3]), None);
-        }
-
-        /// The installed client's archive, when `ENSHWICK_CLIENT_DIR` names
-        /// its folder (build 1269579): the Blacksmith's staff icon, the
-        /// content its UI image names, reads whole.
-        #[test]
-        fn the_client_archive_holds_a_staff_icon() {
-            let Ok(dir) = std::env::var("ENSHWICK_CLIENT_DIR") else {
-                return;
-            };
-            let hash = [0x1_5570, 0xfa5b_71ba, 0x1c35_6c97, 0x170c_1f07];
-            let data =
-                super::super::read_game(std::path::Path::new(&dir), "enshrouded", &hash).unwrap();
-            assert_eq!(data.len(), 0x1_5570);
-            let mut rgba = decode(formats::BC7, 256, 256, &data).unwrap();
-            let opaque = rgba
-                .as_chunks::<4>()
-                .0
-                .iter()
-                .filter(|p| p[3] > 200)
-                .count();
-            assert!(opaque > 256 * 256 / 2, "{opaque} opaque pixels");
-            tint(
-                &mut rgba,
-                Tint {
-                    colour: [120, 170, 255],
-                    amount: 60,
-                },
-            );
-            assert!(rgba.as_chunks::<4>().0.iter().any(|p| p[2] > p[0]), "bluer");
-        }
-    }
+    crate::archive::game()
+        .and_then(|archive| archive.content(hash))
+        .ok_or(Status::MISSING)
 }
 
 #[cfg(test)]

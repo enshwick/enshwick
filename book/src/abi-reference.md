@@ -12,7 +12,7 @@ raw table. The exact types and signatures are in the
 | Constant                                                                                            | Value | Meaning                                         |
 | --------------------------------------------------------------------------------------------------- | ----- | ----------------------------------------------- |
 | [`ABI_MAJOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 1     | A loader refuses a mod built for another major. |
-| [`ABI_MINOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 60    | A newer minor only appends.                     |
+| [`ABI_MINOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 61    | A newer minor only appends.                     |
 
 The ABI version is apart from Enshwick Loader's version (such as 0.2.0, see
 [Releasing and updates](releasing.md#versions)): a platform release raises
@@ -304,6 +304,8 @@ marked "init only" are allowed during `enshwick_mod_init` only.
 | `catalog_pick`           | The mod's answer to the player picking an entry of its catalog; init only                            | 58          |
 | `revoke_knowledge`       | Takes knowledge back and has the clients sent it again; server game thread only                      | 59          |
 | `account_knowledge`      | Grants or takes back an account's knowledge now or once its character loads; server game thread only | 59          |
+| `resource_read`          | Copies a vanilla resource from the game's archive files; any thread                                  | 61          |
+| `game_text`              | The game's own text of a tag in a language, from its archive; client only, any thread                | 61          |
 
 ## Under an older loader
 
