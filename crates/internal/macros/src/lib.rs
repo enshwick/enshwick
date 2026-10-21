@@ -64,14 +64,30 @@ fn field_config(attrs: &[Attribute]) -> syn::Result<FieldConfig> {
                 config.stage = Some(Ident::new(variant, meta.path.span()));
                 Ok(())
             } else if meta.path.is_ident("range") {
+                if config.min.is_some() || config.max.is_some() {
+                    return Err(meta.error("`range` is given twice"));
+                }
                 let range: syn::ExprRange = meta.value()?.parse()?;
                 if matches!(range.limits, syn::RangeLimits::HalfOpen(_)) && range.end.is_some() {
                     return Err(meta.error("a range includes its end: write `a..=b`"));
+                }
+                if range.start.is_none() && range.end.is_none() {
+                    return Err(meta.error("a range names at least one end"));
+                }
+                if let (Some(min), Some(max)) = (
+                    range.start.as_deref().and_then(literal_number),
+                    range.end.as_deref().and_then(literal_number),
+                ) && min > max
+                {
+                    return Err(meta.error("a range starts at or below its end"));
                 }
                 config.min = range.start.map(|e| *e);
                 config.max = range.end.map(|e| *e);
                 Ok(())
             } else if meta.path.is_ident("choices") {
+                if config.choices.is_some() {
+                    return Err(meta.error("`choices` is given twice"));
+                }
                 let choices: syn::ExprArray = meta.value()?.parse()?;
                 if choices.elems.is_empty() {
                     return Err(meta.error("name at least one choice"));
@@ -79,9 +95,15 @@ fn field_config(attrs: &[Attribute]) -> syn::Result<FieldConfig> {
                 config.choices = Some(choices);
                 Ok(())
             } else if meta.path.is_ident("text") {
-                config.text = Some(meta.value()?.parse()?);
+                if config.text.is_some() {
+                    return Err(meta.error("`text` is given twice"));
+                }
+                config.text = Some(text_key(&meta)?);
                 Ok(())
             } else if meta.path.is_ident("secret") {
+                if config.secret {
+                    return Err(meta.error("`secret` is given twice"));
+                }
                 config.secret = true;
                 Ok(())
             } else {
@@ -107,33 +129,74 @@ fn field_config(attrs: &[Attribute]) -> syn::Result<FieldConfig> {
 /// The struct's `validate` path and the text key of its title.
 fn struct_config(attrs: &[Attribute]) -> syn::Result<(Option<syn::Path>, String)> {
     let mut validate = None;
-    let mut title = String::from("config");
+    let mut title = None;
     for attr in attrs.iter().filter(|a| a.path().is_ident("config")) {
         attr.parse_nested_meta(|meta| {
             if meta.path.is_ident("validate") {
+                if validate.is_some() {
+                    return Err(meta.error("`validate` is given twice"));
+                }
                 validate = Some(meta.value()?.parse()?);
                 Ok(())
             } else if meta.path.is_ident("text") {
-                title = meta.value()?.parse::<syn::LitStr>()?.value();
+                if title.is_some() {
+                    return Err(meta.error("`text` is given twice"));
+                }
+                title = Some(text_key(&meta)?.value());
                 Ok(())
             } else {
                 Err(meta.error("expected `validate = path` or `text = \"key\"`"))
             }
         })?;
     }
-    Ok((validate, title))
+    Ok((validate, title.unwrap_or_else(|| String::from("config"))))
+}
+
+/// The key of `text = "key"`, refused when empty.
+fn text_key(meta: &syn::meta::ParseNestedMeta<'_>) -> syn::Result<syn::LitStr> {
+    let key: syn::LitStr = meta.value()?.parse()?;
+    if key.value().is_empty() {
+        return Err(syn::Error::new_spanned(&key, "a text key is not empty"));
+    }
+    Ok(key)
+}
+
+/// The value of a numeric literal, negated or not; `None` for any other
+/// expression.
+fn literal_number(expr: &Expr) -> Option<f64> {
+    match expr {
+        Expr::Lit(lit) => match &lit.lit {
+            Lit::Int(int) => int.base10_parse::<f64>().ok(),
+            Lit::Float(float) => float.base10_parse::<f64>().ok(),
+            _ => None,
+        },
+        Expr::Unary(unary) if matches!(unary.op, syn::UnOp::Neg(_)) => {
+            literal_number(&unary.expr).map(|n| -n)
+        }
+        Expr::Group(group) => literal_number(&group.expr),
+        Expr::Paren(paren) => literal_number(&paren.expr),
+        _ => None,
+    }
 }
 
 /// Refuses the serde attributes that make serde read other keys than the
 /// fields' names, which the template, the schema and the checks use.
 fn same_keys_as_serde(attrs: &[Attribute]) -> syn::Result<()> {
-    const RENAMING: [&str; 6] = [
+    const RENAMING: [&str; 14] = [
         "rename",
         "rename_all",
+        "alias",
         "flatten",
         "skip",
         "skip_serializing",
         "skip_deserializing",
+        "with",
+        "serialize_with",
+        "deserialize_with",
+        "transparent",
+        "from",
+        "try_from",
+        "into",
     ];
     for attr in attrs.iter().filter(|a| a.path().is_ident("serde")) {
         let Meta::List(list) = &attr.meta else {
@@ -145,7 +208,7 @@ fn same_keys_as_serde(attrs: &[Attribute]) -> syn::Result<()> {
             {
                 return Err(syn::Error::new_spanned(
                     word,
-                    "Config writes and checks each field under its own name:                      drop this serde attribute",
+                    "Config writes and checks each field under its own name and type: drop this serde attribute",
                 ));
             }
         }
@@ -180,6 +243,7 @@ fn settings_fields(input: &DeriveInput) -> syn::Result<&syn::FieldsNamed> {
 fn expand_config(input: &DeriveInput) -> syn::Result<TokenStream> {
     let name = &input.ident;
     let fields = settings_fields(input)?;
+    let (defaults, text, schema) = (local("defaults"), local("text"), local("schema"));
     let (validate, title) = struct_config(&input.attrs)?;
     let own_check = validate.map(
         |path| quote!(#path(self).map_err(::enshwick_loader_api::config::ConfigError::invalid)?;),
@@ -207,12 +271,12 @@ fn expand_config(input: &DeriveInput) -> syn::Result<TokenStream> {
             ""
         };
         entries.push(quote! {
-            text.push_str(#doc);
-            text.push_str(#note);
-            text.push_str(&::enshwick_loader_api::config::__entry(#key, &defaults.#ident));
+            #text.push_str(#doc);
+            #text.push_str(#note);
+            #text.push_str(&::enshwick_loader_api::config::__entry(#key, &#defaults.#ident));
         });
         checks.push(quote! {
-            ::enshwick_loader_api::config::__check_field(&__schema, #key, &self.#ident)?;
+            ::enshwick_loader_api::config::__check_field(&#schema, #key, &self.#ident)?;
         });
         let bound = |e: &Option<Expr>| {
             e.as_ref().map_or_else(
@@ -223,17 +287,17 @@ fn expand_config(input: &DeriveInput) -> syn::Result<TokenStream> {
         let (min, max) = (bound(&config.min), bound(&config.max));
         let choices = config.choices.map(|c| quote!(.with_choices(&#c)));
         let plain = doc_text(&field.attrs);
-        let text = config.text.map(|t| t.value()).unwrap_or_default();
+        let label = config.text.map(|t| t.value()).unwrap_or_default();
         let secret = config.secret;
         described.push(quote! {
             ::enshwick_loader_api::config::Field::new(
                 #key,
                 ::enshwick_loader_api::config::Stage::#stage,
-                &defaults.#ident,
+                &#defaults.#ident,
             )
             .with_range(#min, #max)
             #choices
-            .with_doc(#plain, #text)
+            .with_doc(#plain, #label)
             .with_secret(#secret)
         });
         staged.push((stage, field));
@@ -244,17 +308,17 @@ fn expand_config(input: &DeriveInput) -> syn::Result<TokenStream> {
     Ok(quote! {
         impl ::enshwick_loader_api::config::Config for #name {
             fn template() -> ::std::string::String {
-                let defaults = <Self as ::core::default::Default>::default();
-                let mut text = ::std::string::String::from(#header);
-                if !text.is_empty() {
-                    text.push('\n');
+                let #defaults = <Self as ::core::default::Default>::default();
+                let mut #text = ::std::string::String::from(#header);
+                if !#text.is_empty() {
+                    #text.push('\n');
                 }
                 #(#entries)*
-                text
+                #text
             }
 
             fn schema() -> ::enshwick_loader_api::config::Schema {
-                let defaults = <Self as ::core::default::Default>::default();
+                let #defaults = <Self as ::core::default::Default>::default();
                 ::enshwick_loader_api::config::Schema::new(
                     #header_text,
                     #title,
@@ -265,7 +329,7 @@ fn expand_config(input: &DeriveInput) -> syn::Result<TokenStream> {
             fn validate(
                 &self,
             ) -> ::core::result::Result<(), ::enshwick_loader_api::config::ConfigError> {
-                let __schema = <Self as ::enshwick_loader_api::config::Config>::schema();
+                let #schema = <Self as ::enshwick_loader_api::config::Config>::schema();
                 #(#checks)*
                 #own_check
                 ::core::result::Result::Ok(())
@@ -279,6 +343,12 @@ fn expand_config(input: &DeriveInput) -> syn::Result<TokenStream> {
 
 /// `values` and `merge_values` over the fields of each stage that has any.
 fn stage_methods(staged: &[(Ident, &syn::Field)]) -> impl quote::ToTokens {
+    let (table, value, stage, values) = (
+        local("table"),
+        local("value"),
+        local("stage"),
+        local("values"),
+    );
     let mut value_arms = Vec::new();
     let mut merge_arms = Vec::new();
     for (_, variant) in STAGES {
@@ -296,22 +366,22 @@ fn stage_methods(staged: &[(Ident, &syn::Field)]) -> impl quote::ToTokens {
         let types: Vec<&Type> = fields.iter().map(|f| &f.ty).collect();
         let locals: Vec<Ident> = idents
             .iter()
-            .map(|ident| quote::format_ident!("__{}", ident))
+            .map(|ident| local(&format!("field_{}", ident.unraw())))
             .collect();
         value_arms.push(quote! {
             ::enshwick_loader_api::config::Stage::#variant => {
-                let mut table = ::enshwick_loader_api::config::__Values::default();
-                #(table.put(#keys, &self.#idents);)*
-                ::core::option::Option::Some(table.finish())
+                let mut #table = ::enshwick_loader_api::config::__Values::default();
+                #(#table.put(#keys, &self.#idents);)*
+                ::core::option::Option::Some(#table.finish())
             }
         });
         merge_arms.push(quote! {
             ::enshwick_loader_api::config::Stage::#variant => {
-                let table = ::enshwick_loader_api::config::__Values::parse(values)?;
-                #(let #locals = table.take::<#types>(#keys)?;)*
+                let #table = ::enshwick_loader_api::config::__Values::parse(#values)?;
+                #(let #locals = #table.take::<#types>(#keys)?;)*
                 #(
-                    if let ::core::option::Option::Some(value) = #locals {
-                        self.#idents = value;
+                    if let ::core::option::Option::Some(#value) = #locals {
+                        self.#idents = #value;
                     }
                 )*
                 ::core::result::Result::Ok(())
@@ -321,9 +391,9 @@ fn stage_methods(staged: &[(Ident, &syn::Field)]) -> impl quote::ToTokens {
     quote! {
         fn values(
             &self,
-            stage: ::enshwick_loader_api::config::Stage,
+            #stage: ::enshwick_loader_api::config::Stage,
         ) -> ::core::option::Option<::std::string::String> {
-            match stage {
+            match #stage {
                 #(#value_arms)*
                 _ => ::core::option::Option::None,
             }
@@ -331,11 +401,11 @@ fn stage_methods(staged: &[(Ident, &syn::Field)]) -> impl quote::ToTokens {
 
         fn merge_values(
             &mut self,
-            stage: ::enshwick_loader_api::config::Stage,
-            values: &str,
+            #stage: ::enshwick_loader_api::config::Stage,
+            #values: &str,
         ) -> ::core::result::Result<(), ::enshwick_loader_api::config::ConfigError> {
-            let _ = values;
-            match stage {
+            let _ = #values;
+            match #stage {
                 #(#merge_arms)*
                 _ => ::core::result::Result::Ok(()),
             }
@@ -378,6 +448,18 @@ fn expand_hook(
     flags: Option<&Expr>,
 ) -> syn::Result<TokenStream> {
     let sig = &function.sig;
+    if let syn::Safety::Unsafe(unsafety) = &sig.safety {
+        return Err(syn::Error::new_spanned(
+            unsafety,
+            "a hook body is a safe fn: put `unsafe` blocks inside it",
+        ));
+    }
+    if let Some(asyncness) = &sig.asyncness {
+        return Err(syn::Error::new_spanned(
+            asyncness,
+            "a hook body runs on the game's thread and is not `async`",
+        ));
+    }
     if !sig.generics.params.is_empty() {
         return Err(syn::Error::new_spanned(
             &sig.generics,
@@ -423,10 +505,16 @@ fn expand_hook(
         |f| quote!(#f),
     );
     let (entry, next, value) = (
-        Ident::new("entry", Span::mixed_site()),
+        Ident::new("__enshwick_entry", Span::mixed_site()),
         Ident::new("next", Span::mixed_site()),
         Ident::new("value", Span::mixed_site()),
     );
+    // The arguments go to the body and, after a panic, to `next` again.
+    let copies = arg_types.iter().map(|ty| {
+        quote::quote_spanned! {ty.span()=>
+            ::enshwick_loader_api::__private::hook_argument::<#ty>();
+        }
+    });
     // The entry point is a safe fn, which coerces to the target's type
     // whether that is `unsafe` or not, so `F` may be any name for it.
     Ok(quote! {
@@ -434,6 +522,9 @@ fn expand_hook(
 
         #(#kept)*
         #vis static #name: ::enshwick_loader_api::Hook<#target> = {
+            const _: () = {
+                #(#copies)*
+            };
             extern "system" fn #entry(#(#idents: #arg_types),*) #output {
                 let #next = #name.next();
                 match ::std::panic::catch_unwind(::std::panic::AssertUnwindSafe(
@@ -650,7 +741,7 @@ fn expand_declaration(
     let entries = fields.named.iter().filter_map(|field| {
         let field_ident = field.ident.as_ref()?;
         let ty = &field.ty;
-        let field_name = field_ident.to_string();
+        let field_name = field_ident.unraw().to_string();
         let written = format!("{field_name}: {}", quote!(#ty));
         Some(quote! {
             ::enshwick_loader_api::abi::LayoutField {
@@ -677,6 +768,12 @@ fn expand_declaration(
         }
     }
     .into())
+}
+
+/// A name the generated code binds: hygienic against the user's locals,
+/// and prefixed against the user's constants, which a `let` cannot shadow.
+fn local(name: &str) -> Ident {
+    Ident::new(&format!("__enshwick_{name}"), Span::mixed_site())
 }
 
 /// The `F` of `next: Next<F>`; `None` when the argument has another shape.

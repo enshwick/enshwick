@@ -1124,14 +1124,14 @@ fn hold<T: Config>(kept: &std::sync::Mutex<Option<String>>, settings: &mut T, st
         "the world loads"
     };
     match settings.merge_values(stage, &kept) {
-        Ok(()) => crate::info!("settings that take effect when {waits} changed: {now}"),
+        Ok(()) => crate::info!(
+            "settings that take effect when {waits} changed: {}",
+            crate::config::changed_keys(&kept, &now)
+        ),
         Err(why) => crate::warn!("{} settings not kept: {why}", stage.name()),
     }
 }
 
-/// The mod's settings as `T`, parsed and validated, with the server's join
-/// values over the file's while this client is joined to a server that has
-/// them.
 /// The reason a mod's check refused a settings text, kept until its next
 /// check.
 static CHECK_WHY: std::sync::Mutex<String> = std::sync::Mutex::new(String::new());
@@ -1180,6 +1180,9 @@ impl Load<'_> {
     }
 }
 
+/// The mod's settings as `T`, parsed and validated, with the server's join
+/// values over the file's while this client is joined to a server that has
+/// them.
 fn read_config<T: Config>(host: Host) -> Result<T, Off> {
     let text = host.settings_text(&T::template())?;
     let settings: T =

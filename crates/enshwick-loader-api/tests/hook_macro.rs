@@ -41,6 +41,30 @@ mod tests {
 
     static TALLIED: AtomicU32 = AtomicU32::new(0);
 
+    /// A body with the name the macros once gave their own entry point.
+    #[hook]
+    fn entry(next: Next<Count>, n: u32) -> u32 {
+        next.get()(n)
+    }
+
+    enshwick_loader_api::detour! {
+        static ENTRY_TOO: extern "system" fn(n: u32) -> u32 = entry;
+    }
+
+    struct Unwritten;
+
+    impl enshwick_loader_api::Mod for Unwritten {
+        fn manifest() -> &'static enshwick_loader_api::abi::Manifest {
+            panic!("no manifest")
+        }
+
+        fn init(
+            _load: &mut enshwick_loader_api::Load<'_>,
+        ) -> Result<Self, enshwick_loader_api::Off> {
+            Result::Ok(Self)
+        }
+    }
+
     #[hook]
     fn tally(next: Next<Count>, n: u32) -> u32 {
         let out = next.get()(n);
@@ -113,5 +137,16 @@ mod tests {
             loader.faults(),
             ["panic in hook MOVE", "panic in hook TALLY after next"]
         );
+    }
+
+    #[test]
+    fn a_body_named_entry_compiles() {
+        assert_eq!(ENTRY.name(), "ENTRY");
+        assert_eq!(ENTRY_TOO.name(), "ENTRY_TOO");
+    }
+
+    #[test]
+    fn a_panicking_manifest_reads_as_a_refusal() {
+        assert!(enshwick_loader_api::__private::query::<Unwritten>().is_null());
     }
 }

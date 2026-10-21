@@ -118,8 +118,8 @@ macro_rules! manifest {
         }),* $(,)?])?
         $(,)?
     ) => {{
-        const _: () = assert!($crate::abi::is_valid_id($id), "a mod id is [a-z0-9-]+");
-        $($(const _: () = assert!($crate::abi::is_valid_id($replaces), "a replaced mod id is [a-z0-9-]+");)*)?
+        const _: () = ::core::assert!($crate::abi::is_valid_id($id), "a mod id is [a-z0-9-]+");
+        $($(const _: () = ::core::assert!($crate::abi::is_valid_id($replaces), "a replaced mod id is [a-z0-9-]+");)*)?
         static DEPENDENCIES: &[$crate::abi::Dependency] = &[
             $($($crate::abi::Dependency {
                 id: $crate::abi::Str::new($req),
@@ -149,11 +149,11 @@ macro_rules! manifest {
         ];
         const AUTHOR_COUNT: usize = $crate::__private::author_count(
             &[$($($author),*)?],
-            env!("CARGO_PKG_AUTHORS"),
+            ::core::env!("CARGO_PKG_AUTHORS"),
         );
         static AUTHORS: [$crate::abi::Str; AUTHOR_COUNT] = $crate::__private::authors(
             &[$($($author),*)?],
-            env!("CARGO_PKG_AUTHORS"),
+            ::core::env!("CARGO_PKG_AUTHORS"),
         );
         static BUILDS: &[$crate::abi::BuildRow] = &[
             $($($crate::abi::BuildRow {
@@ -177,7 +177,7 @@ macro_rules! manifest {
             id: $crate::abi::Str::new($id),
             version: $crate::abi::Str::new($crate::__private::or_default(
                 &[$($version)?],
-                env!("CARGO_PKG_VERSION"),
+                ::core::env!("CARGO_PKG_VERSION"),
             )),
             side: $crate::abi::Side::$side,
             flags: $crate::__private::flags(&[$($join)?], &[$($reload)?]),
@@ -189,15 +189,15 @@ macro_rules! manifest {
             signed_by: $crate::__private::signed_by(&[$($($key),*)?]),
             name: $crate::abi::Str::new($crate::__private::first_text(&[$($name)?])),
             description: $crate::abi::Str::new($crate::__private::first_text(
-                &[$($description,)? env!("CARGO_PKG_DESCRIPTION")],
+                &[$($description,)? ::core::env!("CARGO_PKG_DESCRIPTION")],
             )),
             authors: AUTHORS.as_ptr(),
             author_count: AUTHOR_COUNT,
             license: $crate::abi::Str::new($crate::__private::first_text(
-                &[$($license,)? env!("CARGO_PKG_LICENSE")],
+                &[$($license,)? ::core::env!("CARGO_PKG_LICENSE")],
             )),
             homepage: $crate::abi::Str::new($crate::__private::first_text(
-                &[$($homepage,)? env!("CARGO_PKG_HOMEPAGE"), env!("CARGO_PKG_REPOSITORY")],
+                &[$($homepage,)? ::core::env!("CARGO_PKG_HOMEPAGE"), ::core::env!("CARGO_PKG_REPOSITORY")],
             )),
         };
         &MANIFEST
@@ -243,13 +243,13 @@ macro_rules! declare_mod {
         /// The interface major this mod was built for.
         #[unsafe(no_mangle)]
         pub extern "system" fn enshwick_mod_abi() -> u32 {
-            u32::from($crate::abi::ABI_MAJOR)
+            ::core::primitive::u32::from($crate::abi::ABI_MAJOR)
         }
 
         /// The mod's static manifest.
         #[unsafe(no_mangle)]
         pub extern "system" fn enshwick_mod_query() -> *const $crate::abi::Manifest {
-            <$ty as $crate::Mod>::manifest()
+            $crate::__private::query::<$ty>()
         }
 
         /// Initialises the mod.

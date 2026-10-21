@@ -204,6 +204,18 @@ required-features = ["test"]
 name = "writes"
 required-features = ["test"]
 
+[[test]]
+name = "step_clock"
+required-features = ["test"]
+
+[[test]]
+name = "points_owner"
+required-features = ["test"]
+
+[[test]]
+name = "points_links"
+required-features = ["test"]
+
 [lints]
 workspace = true
 
