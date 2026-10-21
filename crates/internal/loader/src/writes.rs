@@ -75,6 +75,7 @@ pub(crate) fn component_mut(
     if entity == 0 {
         return Err(Status::BAD_ARGS);
     }
+    crate::world::server()?;
     let (world, index) = crate::world::type_index(loader, hash)?;
     if refused(loader).contains(&hash) {
         return Err(Status::REFUSED);

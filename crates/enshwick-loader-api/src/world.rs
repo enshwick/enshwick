@@ -260,7 +260,8 @@ pub enum Notice {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
 #[non_exhaustive]
 pub enum WorldError {
-    /// Called off the server's game thread, or while no server runs.
+    /// Called off the server's game thread, inside a step (from a filter
+    /// or a hook on a system), or while no server runs.
     #[error("not on the server's game thread")]
     WrongThread,
     /// The entity is not in the world.

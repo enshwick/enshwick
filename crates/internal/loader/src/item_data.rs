@@ -228,7 +228,7 @@ fn template_id(entity: u32) -> Option<u32> {
 /// Whether this process runs the world the values belong to: the dedicated
 /// server, or a client while it hosts.
 fn serves() -> bool {
-    crate::world::server().is_ok()
+    crate::world::reader().is_ok()
 }
 
 /// The value of kind `kind` on the item `pide` holding `item`, or for an
@@ -244,7 +244,7 @@ pub(crate) fn get(kind: u32, pide: u32, item: u32) -> Result<Box<[u8]>, Status> 
             Scope::Item => item,
             Scope::Entity => match template_id(pide) {
                 Some(now) => now,
-                None if crate::world::server().is_ok() => 0,
+                None if crate::world::reader().is_ok() => 0,
                 None => return Ok(record.value.clone()),
             },
         };

@@ -170,6 +170,7 @@ unsafe extern "system" fn merge(entity_world: *mut u8) {
         .get()
         .filter(|_| !OFF.load(Ordering::Relaxed) && is_server(entity_world));
     if let Some((_, layout)) = ours {
+        let _quiet = crate::world::Quiet::enter();
         // SAFETY: the server's entity world on its game thread, before the
         // engine moves its streams.
         guarded(|| unsafe { copy(layout, entity_world) });
@@ -185,6 +186,7 @@ unsafe extern "system" fn merge(entity_world: *mut u8) {
     // SAFETY: forwarded unchanged.
     unsafe { MERGE_NEXT.get()(entity_world) };
     if let Some((loader, _)) = ours {
+        let _quiet = crate::world::Quiet::enter();
         guarded(|| deliver(loader));
     }
 }
@@ -202,7 +204,7 @@ fn guarded(work: impl FnOnce()) {
 /// Whether `entity_world` is the running server's, moved on its game thread.
 fn is_server(entity_world: *mut u8) -> bool {
     let server = crate::world::server_world();
-    server != 0 && entity_world.addr() as u64 == server && crate::world::server().is_ok()
+    server != 0 && entity_world.addr() as u64 == server && crate::world::reader().is_ok()
 }
 
 /// Copies every wanted event of the server's streams into this thread's

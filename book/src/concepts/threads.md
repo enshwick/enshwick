@@ -9,7 +9,8 @@ code may call.
   the server's game thread; on a client that hosts a game it is the built-in
   server's `GameServer` thread, a new one for each hosted game. Game events,
   scheduled tasks and chat command handlers run here, between simulation
-  steps.
+  steps. The game thread also runs ECS systems while it steps, so a filter
+  or a hook may run on it in the middle of a step.
 - **ECS worker threads**: the engine runs systems in parallel on them. A hook
   on a system's update function runs on whichever worker runs the system.
   Many other hooked game functions are called from systems too.
@@ -26,7 +27,8 @@ code may call.
 
 | Call | Where |
 | --- | --- |
-| world reads (`position`, `component`, `players`, ...), `set_label` | the game thread; elsewhere they return `None` or nothing |
+| world reads (`position`, `component`, `players`, ...) | the game thread; elsewhere they return `None` or nothing |
+| world changes (`write`, `set_label`, `spawn`, `teleport`, the clock, weather, buffs, knowledge, terrain, `commands::run`, ...) and the reads of those features | the game thread, between steps; inside a step, such as in a filter or a hook on a system, they return `WrongThread` |
 | `commands::run` | the game thread |
 | `inventories.read()` | the game thread, between steps |
 | `inventories.read_in(ctx)`, `ecs` reads | inside a hooked system, through its context |
