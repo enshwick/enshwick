@@ -47,16 +47,26 @@ pub(crate) fn install(game: &Path, package: Option<&str>) -> Result<String, Stri
     let here = std::env::current_dir().map_err(|e| e.to_string())?;
     let (package, library) = choose(&metadata.packages, package, &here)?;
     let built = Command::new(&cargo)
-        .args(["build", "--release", "--package", &package.name])
-        .status()
+        .args([
+            "build",
+            "--release",
+            "--message-format=json-render-diagnostics",
+            "--package",
+            &package.name,
+        ])
+        .stderr(std::process::Stdio::inherit())
+        .output()
         .map_err(|e| format!("cargo build: {e}"))?;
-    if !built.success() {
+    if !built.status.success() {
         return Err(format!("cargo build failed for {}", package.name));
     }
-    let from = metadata
-        .target_directory
-        .join("release")
-        .join(format!("{library}.dll"));
+    // Cargo names the file it built, wherever a build target puts it.
+    let from = built_dll(&String::from_utf8_lossy(&built.stdout), library).unwrap_or_else(|| {
+        metadata
+            .target_directory
+            .join("release")
+            .join(format!("{library}.dll"))
+    });
     let mods = game.join("mods");
     std::fs::create_dir_all(&mods).map_err(|e| format!("{}: {e}", mods.display()))?;
     let to = mods.join(format!("{}.dll", package.name));
@@ -69,6 +79,31 @@ pub(crate) fn install(game: &Path, package: Option<&str>) -> Result<String, Stri
         );
     }
     Ok(done)
+}
+
+/// The DLL cargo's JSON messages say it built for the cdylib `library`.
+fn built_dll(messages: &str, library: &str) -> Option<PathBuf> {
+    #[derive(serde::Deserialize)]
+    struct Artifact {
+        reason: String,
+        target: Option<Target>,
+        #[serde(default)]
+        filenames: Vec<PathBuf>,
+    }
+    messages
+        .lines()
+        .filter_map(|line| serde_json::from_str::<Artifact>(line).ok())
+        .filter(|a| a.reason == "compiler-artifact")
+        .filter(|a| {
+            a.target
+                .as_ref()
+                .is_some_and(|t| t.name == library && t.crate_types.iter().any(|c| c == "cdylib"))
+        })
+        .flat_map(|a| a.filenames)
+        .find(|path| {
+            path.extension()
+                .is_some_and(|e| e.eq_ignore_ascii_case("dll"))
+        })
 }
 
 /// The package to install and its library's file name: `wanted`, or else the
@@ -109,6 +144,23 @@ fn choose<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_dll_is_where_cargo_says_it_built_it() {
+        let messages = [
+            r#"{"reason":"compiler-artifact","target":{"name":"serde","crate_types":["lib"]},"filenames":["C:/t/libserde.rlib"]}"#,
+            r#"{"reason":"compiler-artifact","target":{"name":"area_loot","crate_types":["cdylib"]},"filenames":["C:/t/x86_64-pc-windows-msvc/release/area_loot.dll","C:/t/x86_64-pc-windows-msvc/release/area_loot.dll.lib"]}"#,
+            r#"{"reason":"build-finished","success":true}"#,
+        ]
+        .join("\n");
+        assert_eq!(
+            built_dll(&messages, "area_loot"),
+            Some(PathBuf::from(
+                "C:/t/x86_64-pc-windows-msvc/release/area_loot.dll"
+            ))
+        );
+        assert_eq!(built_dll(&messages, "other"), None);
+    }
 
     fn package(name: &str, dir: &str, kinds: &[&str]) -> Package {
         Package {
