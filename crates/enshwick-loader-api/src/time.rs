@@ -3,8 +3,10 @@
 //!
 //! A [`StepClock`] counts each step at its real length, up to
 //! [`StepClock::MAX_STEP`]. A server that stalls, loads a world or hangs in
-//! a debugger takes no steps, so the clock stands still with it: a hold of
-//! ten seconds is ten seconds of the world running, not of the wall clock.
+//! a debugger takes no steps, so the clock stands still with it, and the
+//! first step after counts [`StepClock::MAX_STEP`] at most: a hold of ten
+//! seconds is about ten seconds of the world running, not of the wall
+//! clock.
 //! [`Load::step_clock`] hands out the mod's clock, which the loader's
 //! [`Ticked`](crate::events::Ticked) event moves on.
 //!
@@ -80,9 +82,9 @@ impl StepClock {
         }
     }
 
-    /// Counts a step that ran at `at`: the time since the step before, up
-    /// to [`MAX_STEP`](Self::MAX_STEP). The first step only starts the
-    /// clock. [`Load::step_clock`] calls it for the mod's clock.
+    /// Counts a step that ran at `at`: the time since the latest step
+    /// before, up to [`MAX_STEP`](Self::MAX_STEP); a step earlier than that
+    /// counts nothing. The first step only starts the clock. [`Load::step_clock`] calls it for the mod's clock.
     ///
     /// # Examples
     ///
@@ -92,11 +94,10 @@ impl StepClock {
         let at = u64::try_from(at.saturating_duration_since(epoch).as_nanos())
             .unwrap_or(u64::MAX)
             .saturating_add(1);
-        let last = self.last.swap(at, Ordering::Relaxed);
-        if last != 0 {
+        let last = self.last.fetch_max(at, Ordering::Relaxed);
+        if last != 0 && at > last {
             let max = u64::try_from(Self::MAX_STEP.as_nanos()).unwrap_or(u64::MAX);
-            self.now
-                .fetch_add(at.saturating_sub(last).min(max), Ordering::Relaxed);
+            self.now.fetch_add((at - last).min(max), Ordering::Relaxed);
         }
     }
 
@@ -160,6 +161,16 @@ mod tests {
         assert_eq!(clock.now(), Duration::from_millis(16));
         clock.step(t0 + Duration::from_secs(60));
         assert_eq!(clock.now(), Duration::from_millis(16) + StepClock::MAX_STEP);
+    }
+
+    #[test]
+    fn a_late_step_out_of_order_counts_no_time_twice() {
+        let clock = StepClock::new();
+        let t0 = Instant::now();
+        for ms in [0, 100, 50, 116] {
+            clock.step(t0 + Duration::from_millis(ms));
+        }
+        assert_eq!(clock.now(), Duration::from_millis(116));
     }
 
     #[test]

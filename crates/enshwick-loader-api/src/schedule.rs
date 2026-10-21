@@ -1,6 +1,11 @@
 //! Work for the server's game thread: on the next step, after a delay, or
 //! repeatedly. Tasks run after a simulation step, where the game's own server
 //! code runs, so they may call into the game.
+//!
+//! Delays and periods are wall-clock time: after a stall, a task whose time
+//! passed runs on the next step. A wait that should stand still with the
+//! server counts on the [`StepClock`](crate::time::StepClock) instead. A
+//! panic in a task turns the mod off, as in any event handler.
 
 use std::ops::ControlFlow;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};

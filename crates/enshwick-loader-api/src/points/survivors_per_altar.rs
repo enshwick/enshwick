@@ -49,8 +49,8 @@ pub struct CopyLimit {
 ///
 /// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
 ///     // Every second copy of a survivor costs two charges.
-///     load.extend_point(&Order::new(), |cost: &ChargeCost, charges: &u16| {
-///         if cost.copies % 2 == 1 { Verdict::Set(charges * 2) } else { Verdict::Pass }
+///     load.extend_point(&Order::new(), |cost: &ChargeCost, spent: &u16| {
+///         if cost.copies % 2 == 1 { Verdict::Set(spent.saturating_mul(2)) } else { Verdict::Pass }
 ///     })
 /// }
 /// ```

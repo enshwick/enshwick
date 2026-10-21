@@ -20,7 +20,7 @@ struct Declared {
     name: String,
     input: Vec<(String, u64)>,
     output: Vec<(String, u64)>,
-    changes: bool,
+    mode: crate::abi::PointMode,
     refuse: bool,
 }
 
@@ -37,7 +37,7 @@ impl Declared {
             name: P::NAME.to_owned(),
             input: fields(P::LAYOUT),
             output: fields(P::OUTPUT),
-            changes: P::MODE.changes(),
+            mode: P::MODE.to_abi(),
             refuse: P::REFUSE,
         }
     }
@@ -47,7 +47,7 @@ impl Declared {
         self.name == link.name
             && crate::services::compare(&view(&link.input), &view(&self.input)).is_ok()
             && self.output == link.output
-            && (self.changes, self.refuse) == (link.changes, link.refuse)
+            && (self.mode, self.refuse) == (link.mode, link.refuse)
     }
 }
 
@@ -98,7 +98,7 @@ fn declared(spec: *const PointSpec) -> Option<Declared> {
         name,
         input,
         output,
-        changes: spec.mode != crate::abi::PointMode::OBSERVE,
+        mode: spec.mode,
         refuse: spec.flags.contains(crate::abi::PointFlags::REFUSE),
     })
 }
@@ -234,10 +234,13 @@ pub(crate) extern "system" fn run_point(
     verdict: *mut PointVerdict,
 ) -> Status {
     let Some((links, changes, refuse)) = with(None, |s| {
-        s.points
-            .defined
-            .get(point as usize)
-            .map(|d| (d.links.clone(), d.declared.changes, d.declared.refuse))
+        s.points.defined.get(point as usize).map(|d| {
+            (
+                d.links.clone(),
+                d.declared.mode != crate::abi::PointMode::OBSERVE,
+                d.declared.refuse,
+            )
+        })
     }) else {
         return Status::BAD_ARGS;
     };
@@ -405,7 +408,7 @@ impl Installed {
         let mut value = answer;
         let (verdict, panicked) = run(
             &links,
-            owner.changes,
+            owner.mode != crate::abi::PointMode::OBSERVE,
             owner.refuse,
             core::ptr::from_ref(input).cast(),
             (&raw mut value).cast(),

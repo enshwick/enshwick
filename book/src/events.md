@@ -148,7 +148,8 @@ returns the mod's
 [`StepClock`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/time.rs),
 which every `Ticked` moves on by the step's real length, at most
 `StepClock::MAX_STEP` (250 ms). A stalled server, a world loading or a
-debugger's pause takes no steps, so the clock stands still with it.
+debugger's pause takes no steps, so the clock stands still with it; the first
+step after counts `MAX_STEP` at most.
 
 ```rust
 use std::time::Duration;

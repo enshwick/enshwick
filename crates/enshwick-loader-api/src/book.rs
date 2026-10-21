@@ -43,7 +43,6 @@ chapters! {
     Interface => "interface.md",
     State => "state.md",
     Services => "services.md",
-    Extending => "extending.md",
     FindingTheGame => "finding-the-game.md",
     Hooks => "hooks.md",
     MidFunctionHooks => "mid-function-hooks.md",
@@ -76,3 +75,13 @@ chapters! {
 #[doc = include_str!("../../../book/src/testing.md")]
 #[expect(dead_code, reason = "the doc comment carries the chapter")]
 struct Testing;
+
+#[cfg(feature = "test")]
+#[doc = include_str!("../../../book/src/extending.md")]
+#[expect(dead_code, reason = "the doc comment carries the chapter")]
+struct Extending;
+
+#[cfg(feature = "test")]
+#[doc = include_str!("../../../book/src/migrations.md")]
+#[expect(dead_code, reason = "the doc comment carries the chapter")]
+struct Migrations;

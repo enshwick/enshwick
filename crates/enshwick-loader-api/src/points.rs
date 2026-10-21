@@ -21,7 +21,7 @@ use core::ffi::c_void;
 use core::marker::PhantomData;
 use core::sync::atomic::{AtomicU32, Ordering};
 
-use crate::abi::{LayoutField, PointFlags, PointMode, PointVerdict, Str};
+use crate::abi::{LayoutField, PointFlags, PointMode, PointVerdict, Status, Str};
 use crate::load::{hand_over, ok};
 use crate::{Host, Load, Off};
 
@@ -430,10 +430,14 @@ impl Load<'_> {
                 _point: PhantomData,
             },
             || {
-                format!(
-                    "point {}: named after another mod or defined twice",
-                    P::NAME
-                )
+                if status == Status::REFUSED {
+                    format!(
+                        "point {}: named after another mod or defined twice",
+                        P::NAME
+                    )
+                } else {
+                    format!("point {}", P::NAME)
+                }
             },
         )
     }
@@ -578,7 +582,8 @@ pub(crate) unsafe extern "system" fn run_link<
 /// that would close a cycle is dropped; its link is named in the second
 /// list.
 ///
-/// The loader and the fake call it, so both order alike.
+/// The loader and the fake call it, so both order alike; mods have no use
+/// for it.
 ///
 /// # Examples
 ///
@@ -594,6 +599,7 @@ pub(crate) unsafe extern "system" fn run_link<
 /// assert_eq!(running, [2, 0, 1]);
 /// assert!(dropped.is_empty());
 /// ```
+#[doc(hidden)]
 #[must_use]
 pub fn order(links: &[LinkPlace<'_>]) -> (Vec<usize>, Vec<usize>) {
     let n = links.len();
@@ -634,13 +640,25 @@ pub fn order(links: &[LinkPlace<'_>]) -> (Vec<usize>, Vec<usize>) {
             running.push(next);
             continue;
         }
-        // A cycle: the first link by key among the rest runs next, and the
-        // constraints holding it back are dropped.
-        let Some(next) = (0..n).filter(|&i| !placed[i]).min_by_key(|&i| key(i)) else {
+        // A cycle: among the links of a cycle that nothing outside it holds
+        // back, the first by key runs next, and only the constraints of its
+        // own cycle are dropped. A link merely waiting behind a cycle keeps
+        // its constraints.
+        let reach = reachable(&edges, &placed);
+        let Some(next) = (0..n)
+            .filter(|&i| {
+                !placed[i]
+                    && reach[i][i]
+                    && (0..n).all(|q| placed[q] || !reach[q][i] || reach[i][q])
+            })
+            .min_by_key(|&i| key(i))
+        else {
             break;
         };
-        for after in &mut edges {
-            after.retain(|&b| b != next);
+        for (a, after) in edges.iter_mut().enumerate() {
+            if !placed[a] {
+                after.retain(|&b| b != next);
+            }
         }
         dropped.push(next);
         placed[next] = true;
@@ -649,11 +667,34 @@ pub fn order(links: &[LinkPlace<'_>]) -> (Vec<usize>, Vec<usize>) {
     (running, dropped)
 }
 
+/// `reach[a][b]`: whether `b` must run after `a`, through one constraint or
+/// more between links not placed yet.
+fn reachable(edges: &[Vec<usize>], placed: &[bool]) -> Vec<Vec<bool>> {
+    let n = edges.len();
+    let mut reach = vec![vec![false; n]; n];
+    for (start, row) in reach.iter_mut().enumerate() {
+        if placed[start] {
+            continue;
+        }
+        let mut stack = vec![start];
+        while let Some(a) = stack.pop() {
+            for &b in &edges[a] {
+                if !placed[b] && !row[b] {
+                    row[b] = true;
+                    stack.push(b);
+                }
+            }
+        }
+    }
+    reach
+}
+
 /// A link's place, as [`order`] reads it.
 ///
 /// # Examples
 ///
 /// See [`order`].
+#[doc(hidden)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct LinkPlace<'a> {
     /// The linking mod's id.
@@ -670,3 +711,46 @@ pub mod area_loot;
 pub mod flame_altar_count;
 pub mod safes;
 pub mod survivors_per_altar;
+
+#[cfg(test)]
+mod tests {
+    use super::{LinkPlace, order};
+
+    fn place<'a>(id: &'a str, priority: i32, after: &'a [&'a str]) -> LinkPlace<'a> {
+        LinkPlace {
+            id,
+            priority,
+            before: &[],
+            after,
+        }
+    }
+
+    #[test]
+    fn a_cycle_drops_only_its_own_constraints() {
+        // `c` and `d` wait for each other; `x` waits for `c` and has the
+        // lowest priority, but its own constraint closes no cycle.
+        let links = [
+            place("c", 0, &["d"]),
+            place("d", 0, &["c"]),
+            place("x", -5, &["c"]),
+        ];
+        let (running, dropped) = order(&links);
+        assert_eq!(running, [0, 2, 1]);
+        assert_eq!(dropped, [0]);
+    }
+
+    #[test]
+    fn a_cycle_behind_another_waits_for_it() {
+        // `a` and `b` close one cycle, `c` and `d` another that also waits
+        // for `b`; the first cycle breaks first, whatever the priorities.
+        let links = [
+            place("a", 5, &["b"]),
+            place("b", 5, &["a"]),
+            place("c", -5, &["d", "b"]),
+            place("d", -5, &["c"]),
+        ];
+        let (running, dropped) = order(&links);
+        assert_eq!(running, [0, 1, 2, 3]);
+        assert_eq!(dropped, [0, 2]);
+    }
+}
