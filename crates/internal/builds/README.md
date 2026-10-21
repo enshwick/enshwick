@@ -8,9 +8,8 @@ reflection does not describe, by symbolic id, as SKSE's Address Library does.
 Each table is a TOML file in [`tables/`](tables), named
 `<side>-<guid>-<age>.toml` after the build's fingerprint.
 
-- The loader embeds every table of this folder. A table the updater fetches
-  for a newer game build lands in `mods/enshwick/builds/` with its minisign
-  signature, and the loader uses it only when the project key signed it.
+- The loader embeds every table of this folder, and reads no other: a table
+  for a newer game build ships with the next loader build.
 - On a build without a table, the loader takes the newest table of the same
   side and finds each entry by its `pattern`. What no pattern finds stays
   missing, and only the features and mods that need it turn off.

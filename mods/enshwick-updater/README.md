@@ -70,18 +70,6 @@ more in a dialog and then downloaded like any update. A start that is not due
 to check shows the updates of the lists kept at the last check, without going
 online.
 
-## Build tables
-
-After a game update the loader may not have a build table for the new game
-build yet. It then runs the game on the code patterns of an older table, and
-the features those patterns miss stay off. The updater asks Enshwick's
-`build-tables` release for the table of the running build, on the client and
-on the dedicated server alike, without asking: the table is data, and both the
-updater and the loader use it only when Enshwick's key signed it for that
-build. It lands in `mods/enshwick/builds/` and takes effect at the next start;
-the client says so in a dialog, the server in the log. With `enabled = false`
-nothing is fetched.
-
 ## Settings
 
 `mod-configs/updater.toml`, written on first start:
@@ -185,8 +173,8 @@ minisign -S -s my.key -m my-mod-1.2.0.zip -t "my-mod-v1.2.0 my-mod-1.2.0.zip"
 ## Install
 
 Download [`enshwick-updater.zip`](https://github.com/themaiby/enshwick/releases/download/dev/enshwick-updater.zip)
-and extract it into the folder that holds `enshrouded.exe` or
-`enshrouded_server.exe`. It needs Enshwick Loader:
+and extract it into the folder that holds `enshrouded.exe`. It needs
+Enshwick Loader:
 [`enshwick-loader.zip`](https://github.com/themaiby/enshwick/releases/download/dev/enshwick-loader.zip)
 alone, or [`enshwick.zip`](https://github.com/themaiby/enshwick/releases/download/dev/enshwick.zip)
 with every mod. These are development builds of the newest commit: until
@@ -194,8 +182,9 @@ the first release, 1.0.0, there are no others.
 
 ## Who needs it
 
-Players, and servers for the build tables. On a dedicated server it fetches
-only those: the server's loader advertises where each of its mods comes from
-and who signs it, and players' updaters offer them.
+Players. It is a client mod, and a dedicated server skips it at start: a
+server gets its files the way its owner deploys them, while its loader
+advertises where each of its mods comes from and who signs it, so players'
+updaters can offer them. The archive extracts on a server without harm.
 
 Licensed under [MIT](../../LICENSE).

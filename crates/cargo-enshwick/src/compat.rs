@@ -27,10 +27,6 @@ pub(crate) struct Args {
     /// the build.
     #[arg(long)]
     mods: Vec<PathBuf>,
-    /// A folder of more build tables, read besides the ones this tool
-    /// embeds, such as `mods/enshwick/builds/` of a game.
-    #[arg(long)]
-    tables: Option<PathBuf>,
     /// Writes the report here instead of to standard output.
     #[arg(long)]
     report: Option<PathBuf>,
@@ -89,7 +85,7 @@ fn side_of(exe: &Path) -> Result<tables::Side, String> {
 
 /// Reads the executable and takes its table; the bytes live for the
 /// process.
-fn build(exe: &Path, extra: Option<&Path>, patterns: bool) -> Result<Build, String> {
+fn build(exe: &Path, patterns: bool) -> Result<Build, String> {
     let side = side_of(exe)?;
     let bytes: &'static [u8] = std::fs::read(exe)
         .map_err(|e| format!("{}: {e}", exe.display()))?
@@ -105,7 +101,7 @@ fn build(exe: &Path, extra: Option<&Path>, patterns: bool) -> Result<Build, Stri
         .read(range.start, range.end - range.start)
         .ok_or(".text is unreadable")?;
     let reflection = Reflection::scan(&image);
-    let all = known_tables(extra)?;
+    let all = known_tables()?;
     let exact = tables::exact(&all, side, fingerprint).filter(|_| !patterns);
     let table = match exact {
         Some(table) => Some((table.resolve(), table.clone())),
@@ -124,40 +120,12 @@ fn build(exe: &Path, extra: Option<&Path>, patterns: bool) -> Result<Build, Stri
     })
 }
 
-/// The embedded tables and those in `extra` the project key signed, as the
-/// loader takes them.
-fn known_tables(extra: Option<&Path>) -> Result<Vec<Table>, String> {
-    let mut out = Vec::new();
-    for (file, text) in tables::embedded() {
-        out.push(Table::parse(text).map_err(|e| format!("{file}: {e}"))?);
-    }
-    if let Some(dir) = extra {
-        let entries = std::fs::read_dir(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
-        let mut paths: Vec<PathBuf> = entries
-            .filter_map(|e| e.ok().map(|e| e.path()))
-            .filter(|p| {
-                p.extension()
-                    .is_some_and(|e| e.eq_ignore_ascii_case("toml"))
-            })
-            .collect();
-        paths.sort();
-        for path in paths {
-            let text =
-                std::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
-            let file = path
-                .file_name()
-                .and_then(|n| n.to_str())
-                .unwrap_or_default();
-            let signature = std::fs::read_to_string(
-                path.with_file_name(format!("{file}{}", tables::SIGNATURE_SUFFIX)),
-            )
-            .map_err(|_| format!("{}: no signature beside it", path.display()))?;
-            tables::verify(text.as_bytes(), &signature, file)
-                .map_err(|e| format!("{}: {e}", path.display()))?;
-            out.push(Table::parse(&text).map_err(|e| format!("{}: {e}", path.display()))?);
-        }
-    }
-    Ok(out)
+/// The tables the loader embeds.
+fn known_tables() -> Result<Vec<Table>, String> {
+    tables::embedded()
+        .iter()
+        .map(|(file, text)| Table::parse(text).map_err(|e| format!("{file}: {e}")))
+        .collect()
 }
 
 fn spell(fingerprint: Fingerprint) -> String {
@@ -222,7 +190,7 @@ struct ModOutcome {
 
 /// `cargo enshwick compat`; `Ok(true)` when everything works.
 pub(crate) fn run(args: &Args) -> Result<bool, String> {
-    let build = build(&args.exe, args.tables.as_deref(), args.patterns)?;
+    let build = build(&args.exe, args.patterns)?;
     let mut out = String::new();
     let _w = writeln!(out, "# Compatibility report\n");
     let _w = writeln!(
@@ -444,16 +412,6 @@ fn start_mods(args: &Args, dlls: &[PathBuf]) -> Result<Vec<ModOutcome>, String> 
             std::fs::write(mods.join(name), &bytes).map_err(|e| e.to_string())?;
         }
     }
-    if let Some(tables) = &args.tables {
-        let fetched = mods.join("enshwick").join("builds");
-        std::fs::create_dir_all(&fetched).map_err(|e| e.to_string())?;
-        for entry in std::fs::read_dir(tables)
-            .map_err(|e| e.to_string())?
-            .flatten()
-        {
-            let _copied = std::fs::copy(entry.path(), fetched.join(entry.file_name()));
-        }
-    }
     let me = std::env::current_exe().map_err(|e| e.to_string())?;
     let mut command = std::process::Command::new(me);
     command
@@ -531,7 +489,7 @@ mod tests {
 
     #[test]
     fn features_name_what_the_build_lacks() {
-        let all = known_tables(None).unwrap();
+        let all = known_tables().unwrap();
         let server = tables::newest(&all, tables::Side::Server).unwrap();
         let known = known_ids(core::slice::from_ref(server));
         let exact = features(&server.resolve(), &known);

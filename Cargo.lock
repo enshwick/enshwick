@@ -373,7 +373,6 @@ version = "0.0.0-dev"
 dependencies = [
  "enshwick-loader-api",
  "enshwick-loader-reflect",
- "minisign-verify",
  "serde",
  "thiserror",
  "toml",

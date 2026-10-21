@@ -2,9 +2,8 @@
 //! constants that reflection does not describe, by symbolic id.
 //!
 //! A table is a TOML file named after the build's fingerprint (see
-//! [`file_name`]). The loader embeds the tables of `tables/` ([`embedded`])
-//! and reads the ones the updater fetched, each with a minisign signature by
-//! the project key ([`verify`]). For the running build it takes the table
+//! [`file_name`]). The loader embeds the tables of `tables/` ([`embedded`]).
+//! For the running build it takes the table
 //! made for it ([`exact`], [`Table::resolve`]); on a build without one, the
 //! newest table of the same side ([`newest`]) finds each entry by its pattern
 //! ([`Table::fall_back`]), and what no pattern finds stays missing.
@@ -13,18 +12,6 @@ use std::collections::BTreeMap;
 
 use enshwick_loader_api::code::Pattern;
 pub use enshwick_loader_reflect::Fingerprint;
-use minisign_verify::{PublicKey, Signature};
-
-/// Enshwick's release key, which signs every table the release workflow
-/// publishes.
-pub const PROJECT_KEY: &str = include_str!("../../../../mods/enshwick-updater/keys/enshwick.pub");
-
-/// The first word of a table signature's trusted comment; the second is the
-/// table's file name.
-pub const SIGNATURE_TAG: &str = "build-table";
-
-/// The suffix of a table's signature file, after the table's own name.
-pub const SIGNATURE_SUFFIX: &str = ".minisig";
 
 /// The binary a table is for.
 ///
@@ -76,20 +63,6 @@ pub enum TableError {
         /// Why.
         reason: String,
     },
-}
-
-/// Why [`verify`] refuses a table.
-#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
-pub enum VerifyError {
-    /// The signature file does not read.
-    #[error("unreadable signature: {0}")]
-    Unreadable(String),
-    /// The project key did not sign it.
-    #[error("the project key did not sign it")]
-    Unsigned,
-    /// It was signed for another file.
-    #[error("it was signed for \"{0}\"")]
-    OtherFile(String),
 }
 
 /// A pinned engine function or address.
@@ -656,37 +629,6 @@ pub fn newest(tables: &[Table], side: Side) -> Option<&Table> {
         .max_by_key(|t| (t.build.unwrap_or(0), t.revision))
 }
 
-/// Checks that the project key signed the table `text` published as `file`:
-/// `signature` is the text of its `.minisig`, whose trusted comment must be
-/// [`SIGNATURE_TAG`] and `file`, so a table cannot pass for another build's.
-///
-/// # Errors
-///
-/// [`VerifyError`] when the table is refused.
-pub fn verify(text: &[u8], signature: &str, file: &str) -> Result<(), VerifyError> {
-    verify_with(PROJECT_KEY, text, signature, file)
-}
-
-/// [`verify`] with another public key, the text of a minisign `.pub` file.
-///
-/// # Errors
-///
-/// [`VerifyError`] when the table is refused or the key does not read.
-pub fn verify_with(key: &str, text: &[u8], signature: &str, file: &str) -> Result<(), VerifyError> {
-    let key = PublicKey::decode(key.trim()).map_err(|e| VerifyError::Unreadable(e.to_string()))?;
-    let signature =
-        Signature::decode(signature).map_err(|e| VerifyError::Unreadable(e.to_string()))?;
-    key.verify(text, &signature, false)
-        .map_err(|_| VerifyError::Unsigned)?;
-    let comment = signature.trusted_comment();
-    let mut words = comment.split_whitespace();
-    if words.next() == Some(SIGNATURE_TAG) && words.next() == Some(file) && words.next().is_none() {
-        Ok(())
-    } else {
-        Err(VerifyError::OtherFile(comment.to_owned()))
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -851,36 +793,6 @@ mod tests {
         assert!(Table::parse(&unknown).is_err());
     }
 
-    /// A throwaway key and `b"table"` signed with the trusted comment
-    /// `build-table server-x.toml`.
-    const TEST_KEY: &str = include_str!("../testdata/test.pub");
-    const TEST_SIGNATURE: &str = include_str!("../testdata/table.minisig");
-
-    #[test]
-    fn a_table_signed_for_its_file_passes_and_nothing_else() {
-        let file = "server-x.toml";
-        assert_eq!(
-            verify_with(TEST_KEY, b"table", TEST_SIGNATURE, file),
-            Ok(())
-        );
-        assert_eq!(
-            verify_with(TEST_KEY, b"Table", TEST_SIGNATURE, file),
-            Err(VerifyError::Unsigned)
-        );
-        assert!(matches!(
-            verify_with(TEST_KEY, b"table", TEST_SIGNATURE, "client-x.toml"),
-            Err(VerifyError::OtherFile(_))
-        ));
-        assert_eq!(
-            verify(b"table", TEST_SIGNATURE, file),
-            Err(VerifyError::Unsigned)
-        );
-        assert!(matches!(
-            verify(b"table", "garbage", file),
-            Err(VerifyError::Unreadable(_))
-        ));
-    }
-
     /// On the executables `ENSH_SERVER_EXE` and `ENSH_CLIENT_EXE` name (each
     /// skipped without it), the patterns of their own table find every
     /// patterned entry where the table pins it.
@@ -933,10 +845,5 @@ mod tests {
             }
             assert!(found * 4 > table.symbols().len() * 3, "{var}: {found}");
         }
-    }
-
-    #[test]
-    fn the_project_key_reads() {
-        assert!(PublicKey::decode(PROJECT_KEY.trim()).is_ok());
     }
 }

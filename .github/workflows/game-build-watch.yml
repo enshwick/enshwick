@@ -94,8 +94,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          # Until 1.0.0 the only build is the dev prerelease.
           tag=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 100 --json tagName \
-            --jq '[.[] | select(.tagName | startswith("enshwick-loader-v"))][0].tagName' | tr -d '\r')
+            --jq '[.[] | select(.tagName | startswith("enshwick-loader-v"))][0].tagName // "dev"' | tr -d '\r')
           gh release download "$tag" --repo "$GITHUB_REPOSITORY" --pattern enshwick.zip --dir "$RUNNER_TEMP"
           7z x -o"$RUNNER_TEMP/released" "$RUNNER_TEMP/enshwick.zip" > /dev/null
           echo "RELEASED=$tag" >> "$GITHUB_ENV"
@@ -121,8 +122,8 @@ jobs:
             echo
             echo "Write the table with \`cargo enshwick pin\`, following"
             echo "[its README](https://github.com/${GITHUB_REPOSITORY}/blob/main/crates/cargo-enshwick/README.md#porting-build-rows-pin),"
-            echo "and open a pull request with it. Once merged, the release workflow signs"
-            echo "and publishes the table and the updater fetches it. Never commit game files."
+            echo "and open a pull request with it. Once merged, the next loader build embeds"
+            echo "it. Never commit game files."
             echo
             head -c 60000 "$RUNNER_TEMP/report.md"
           } > "$RUNNER_TEMP/body.md"

@@ -311,7 +311,7 @@ anyway. The stub writes what it moved to `logs/enshwick/stub.log`.
 ## The updater mod
 
 [The updater](https://github.com/themaiby/enshwick/tree/main/mods/enshwick-updater)
-is such a mod, for players:
+is such a mod, for players; a dedicated server skips it:
 
 - a short while after start, on a thread of its own, it asks each loaded mod's
   source (its GitHub repository or its URL source's document) for newer

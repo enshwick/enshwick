@@ -54,11 +54,10 @@ change. Never update files inside a running container or pod: the next
 restart would start a set nobody built, and replicas would drift apart.
 
 The [updater](https://github.com/themaiby/enshwick/tree/main/mods/enshwick-updater)
-fetches nothing but build tables on a server. In a container, leave it out of
-the image or set `enabled = false` in `mod-configs/updater.toml`. After a
-game update the loader embeds no table for the new build until a new loader:
-rebuild the image with that release, or bake the build's table and its
-`.minisig` from the `build-tables` release into `mods/enshwick/builds/`.
+is a client mod: a dedicated server skips it, so it never changes files in a
+container. After a game update, a loader without the new build's table runs
+on the code patterns of the newest table it embeds; rebuild the image with a
+loader that has the table.
 
 ## Check what loaded
 

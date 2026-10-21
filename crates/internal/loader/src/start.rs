@@ -129,7 +129,7 @@ pub(crate) fn start(
         return;
     };
     let data_dir = mods_dir.with_file_name("mod-data");
-    let Some(game) = game(&mods_dir, &data_dir) else {
+    let Some(game) = game(&data_dir) else {
         return;
     };
     let (libraries, candidates) = libraries(&mods_dir);
@@ -226,7 +226,12 @@ pub(crate) fn start(
 /// replace, so their code never runs and the files can be deleted.
 fn skip(libraries: &[Library], candidates: &[Candidate], plan: &resolve::Plan) {
     for (index, reason) in &plan.skipped {
-        if plan.replaced.iter().all(|&(old, _)| old != *index) {
+        if plan.replaced.iter().any(|&(old, _)| old == *index) {
+            continue;
+        }
+        if reason == resolve::OTHER_SIDE {
+            crate::log!(INFO, "{} skipped: {reason}", libraries[*index].file);
+        } else {
             crate::log!(WARN, "{} skipped: {reason}", libraries[*index].file);
         }
     }
@@ -504,7 +509,7 @@ fn begin(stub_abi: u32, missing_forwards: u32) -> Option<PathBuf> {
 /// Identifies the running game and its build table; `None`, logged, when the
 /// loader cannot serve it. On a build it has no table for, a mod's hold under
 /// `data_dir` stops the game.
-fn game(mods_dir: &Path, data_dir: &Path) -> Option<Game> {
+fn game(data_dir: &Path) -> Option<Game> {
     let Some((side, base, image_len)) = identify() else {
         crate::log!(
             ERROR,
@@ -530,11 +535,7 @@ fn game(mods_dir: &Path, data_dir: &Path) -> Option<Game> {
         reflection.type_count(),
         reflection.system_count()
     );
-    let tables = builds::load(
-        &mods_dir
-            .join(crate::settings::LOADER_ID)
-            .join(builds::FETCHED_DIR),
-    );
+    let tables = builds::load();
     let code = image.section(".text").and_then(|text| {
         let range = image.range(text);
         image
@@ -569,7 +570,7 @@ fn game(mods_dir: &Path, data_dir: &Path) -> Option<Game> {
         builds::Kind::Exact => crate::log!(INFO, "game: {}", build.name),
         builds::Kind::Fallback => crate::log!(
             WARN,
-            "game build {}/{} has no build table yet: {} entries found by their code patterns, {} missing; features and mods that need a missing one stay off until the table arrives (the updater fetches it, then restart)",
+            "game build {}/{} has no build table yet: {} entries found by their code patterns, {} missing; features and mods that need a missing one stay off until a loader build carries its table",
             hex(&fingerprint.guid()),
             fingerprint.age(),
             build.entries(),
@@ -1144,11 +1145,7 @@ pub fn dry_run(exe: &Path, game_dir: &Path, patterns: bool) -> Result<DryRun, St
         .ok_or("the executable has no fingerprint")?;
     let reflection = Reflection::scan(image);
     let mods_dir = game_dir.join("mods");
-    let tables = builds::load(
-        &mods_dir
-            .join(crate::settings::LOADER_ID)
-            .join(builds::FETCHED_DIR),
-    );
+    let tables = builds::load();
     let code = image.section(".text").and_then(|text| {
         let range = image.range(text);
         image
