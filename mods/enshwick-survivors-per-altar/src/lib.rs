@@ -169,14 +169,17 @@ impl Mod for SurvivorsPerAltar {
             charges: settings.charges(),
             vanilla_places: settings.vanilla_staff_places_copies,
         };
-        if load.host().build().side == Side::SERVER {
+        // Renewals act in the dedicated server and in the games a client
+        // hosts, solo play included: the scheduler and the world's events
+        // run only there.
+        let server = load.host().build().side == Side::SERVER;
+        if server {
             policy::link(load, staffs)?;
-            if let Err(off) = renew::link(load) {
-                enshwick_loader_api::warn!(
-                    "copy staffs from before charges stay as they are: {off}"
-                );
-            }
-        } else {
+        }
+        if let Err(off) = renew::link(load) {
+            enshwick_loader_api::warn!("copy staffs from before charges stay as they are: {off}");
+        }
+        if !server {
             // The policy acts in the games this client hosts, and for its own
             // cursor.
             if let Err(off) = policy::link(load, staffs) {
@@ -360,6 +363,7 @@ copy_staff_boss_chance = 0.0
             info
         };
         loader.set_altars(&[altar(1, 0), altar(2, 100)]);
+        policy::settle();
         let ask = |vanilla, purpose, entity, cell, beds: &[(u32, u32)]| {
             loader.survivor_lookup(7, vanilla, purpose, entity, cell, beds)
         };
@@ -410,6 +414,42 @@ copy_staff_boss_chance = 0.0
             !loader.survivor_bed_check(&check),
             "a bed at another altar is cleared"
         );
+        assert!(loader.faults().is_empty());
+    }
+
+    #[test]
+    fn old_staffs_are_renewed_in_a_hosted_game_too() {
+        use enshwick_loader_api::abi::Status;
+        use enshwick_loader_api::events::WorldLoaded;
+
+        // What the inventories need; no player and no container is
+        // read.
+        let loader = host()
+            .side(Side::CLIENT)
+            .symbol("ecs.type_index", 0x1_4064_5cc0)
+            .symbol("ecs.component_read_raw", 0x1_4064_6b00)
+            .symbol("ecs.slot_root", 0x1_4093_5420)
+            .symbol("inventory.skip_entity", 0x1_4000_0000)
+            .constant("ecs.context_entity_world", 0x30)
+            .constant("ecs.registry_type_map", 0x30)
+            .constant("ecs.registry_type_map_fallback", 0x88)
+            .type_hash("keen::ecs::InventorySetup", 3)
+            .type_hash("keen::ecs::Inventory", 4)
+            .type_hash("keen::ecs::NetworkDurability", 5)
+            .type_hash("keen::ecs::NetworkFuel", 6)
+            .type_hash("keen::ecs::OwnerRelationship", 7)
+            .field_offset("keen::ecs::InventorySetup", "linksEntities", 0)
+            .field_offset("keen::ecs::InventorySetup", "linksCategories", 0x40)
+            .field_offset("keen::ecs::InventorySetup", "isInitialized", 0x53)
+            .field_offset("keen::ItemStack", "data", 4)
+            .field_offset("keen::ecs::NetworkDurability", "durabilityMax", 2)
+            .field_offset("keen::ecs::NetworkFuel", "fuelMax", 2)
+            .type_size("keen::ItemStack", 12)
+            .install();
+        // SAFETY: the exports of `declare_mod!` above.
+        let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+        assert_eq!(status, Status::OK, "{:?}", loader.logs());
+        assert_eq!(loader.raise::<WorldLoaded>(&()), 1, "{:?}", loader.logs());
         assert!(loader.faults().is_empty());
     }
 
@@ -476,6 +516,7 @@ copy_staff_locked_chest_chance = 0.0
             info
         };
         loader.set_altars(&[altar(1, 0), altar(2, 100), altar(3, 200)]);
+        policy::settle();
         let smith = &WORKSHOP_SURVIVORS[0];
         let survivor = smith.id().0;
         let ask = |purpose, entity, cell| {
