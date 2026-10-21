@@ -124,9 +124,13 @@ has:
 The server and the client serve the same patched registry, so the crafting
 menu shows the new counts; give the mod `side: BOTH` and `join = true`, and
 mark the settings the patch reads `#[config(sync)]` so a joined player runs
-with the server's. Like the other recipe patches, `modify` sees the registry
-as it reaches it, with what mods before it added or changed, and mods after
-it see its changes. The mod's log says `<n> recipes changed`.
+with the server's. When those values change after the registry was built,
+as on joining a server and leaving it, `content::recipes::rebuild_recipes()`
+from the mod's settings handler builds it again and the counts change in
+place ([Rebuilding](resources.md#rebuilding)). Like the other recipe
+patches, `modify` sees the registry as it reaches it, with what mods before
+it added or changed, and mods after it see its changes. The mod's log says
+`<n> recipes changed`.
 
 ## The workshop limit
 

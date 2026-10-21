@@ -41,6 +41,9 @@ pub(crate) struct State {
     /// Game event handlers: type hash (0 for every type), handler, pointer.
     pub(crate) game_events: Vec<(u32, GameEventFn, usize)>,
     pub(crate) served: Vec<(ServedResource, ResourcePatchFn, usize)>,
+    /// Every rebuild of a served resource the mod asked for, at init and
+    /// after.
+    pub(crate) rebuilds: Vec<ResourceKey>,
     pub(crate) texts: Vec<(u32, u32, String)>,
     pub(crate) code_patches: Vec<(u64, Vec<u8>, Vec<u8>)>,
     pub(crate) published: Vec<super::FakeService>,
@@ -202,6 +205,7 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         subscriptions: Vec::new(),
         game_events: Vec::new(),
         served: Vec::new(),
+        rebuilds: Vec::new(),
         texts: Vec::new(),
         code_patches: Vec::new(),
         published: Vec::new(),
@@ -719,6 +723,20 @@ extern "system" fn serve_resource(
             patch,
             user.expose_provenance(),
         ));
+        Status::OK
+    })
+}
+
+extern "system" fn rebuild_resource(_me: ModHandle, key: *const ResourceKey) -> Status {
+    // SAFETY: the safe layer passes a valid key for the call; `as_ref` turns away null.
+    let Some(key) = (unsafe { key.as_ref() }).copied() else {
+        return Status::BAD_ARGS;
+    };
+    with(Status::MISSING, |s| {
+        if !s.served.iter().any(|served| served.0.key == key) {
+            return Status::BAD_ARGS;
+        }
+        s.rebuilds.push(key);
         Status::OK
     })
 }
@@ -2449,4 +2467,5 @@ pub(crate) static TABLE: HostApi = HostApi {
     account_knowledge,
     resource_read,
     game_text,
+    rebuild_resource,
 };

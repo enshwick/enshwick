@@ -14,7 +14,7 @@ use core::sync::atomic::AtomicUsize;
 pub const ABI_MAJOR: u16 = 1;
 
 /// The minor version of this interface. A newer minor only appends fields.
-pub const ABI_MINOR: u16 = 62;
+pub const ABI_MINOR: u16 = 63;
 
 /// Whether `id` is a valid mod id: 1 to 64 characters of `[a-z0-9-]`.
 ///
@@ -1039,7 +1039,9 @@ pub struct ResourceKey {
 
 /// Builds a served resource from its base: `base` is the base resource's
 /// bytes, valid for the call. On [`Status::OK`] the function writes a pointer
-/// and length of bytes that stay valid for the life of the process.
+/// and length of bytes that stay valid and writable for the life of the
+/// process: a rebuild ([`HostApi::rebuild_resource`]) writes over the last
+/// patch's bytes.
 pub type ResourcePatchFn = unsafe extern "system" fn(
     base: *const u8,
     base_len: usize,
@@ -4992,6 +4994,18 @@ pub struct HostApi {
     /// thread. Since minor 61.
     pub game_text:
         extern "system" fn(me: ModHandle, id: u32, language: u32, out: *mut Str) -> Status,
+    /// During `enshwick_mod_init`, by a mod that serves `key`: keeps the
+    /// base of `key` when it is first built, so it can be built again.
+    /// Afterwards: builds `key` again from that base with the patches of
+    /// every mod still on, as values they read changed, and writes the
+    /// bytes that differ over the resource the game holds; [`Status::OK`]
+    /// with nothing done while `key` was not built yet, as its first build
+    /// takes the values in force. Any thread. [`Status::MISSING`] when its
+    /// base was not kept, [`Status::REFUSED`] when the new build differs in length, which the
+    /// game's copy cannot take, [`Status::BAD_ARGS`] for a key the mod does
+    /// not serve. Each rebuild keeps the patches' new bytes for the process.
+    /// Since minor 63.
+    pub rebuild_resource: extern "system" fn(me: ModHandle, key: *const ResourceKey) -> Status,
 }
 
 /// Flags of [`HostApi::entity_data_open`].
@@ -5344,7 +5358,8 @@ const _: () = {
     assert!(size_of::<StatModify>() == 8 + 8 + 12 + 4 + 8);
     assert!(size_of::<StatChange>() == 8 + 24);
     assert!(core::mem::offset_of!(HostApi, language) == 24 + 127 * 8);
-    assert!(size_of::<HostApi>() == 24 + 136 * 8);
+    assert!(size_of::<HostApi>() == 24 + 137 * 8);
+    assert!(core::mem::offset_of!(HostApi, rebuild_resource) == 24 + 136 * 8);
     assert!(core::mem::offset_of!(HostApi, game_text) == 24 + 135 * 8);
     assert!(core::mem::offset_of!(HostApi, account_knowledge) == 24 + 133 * 8);
     assert!(core::mem::offset_of!(HostApi, update_pick) == 24 + 131 * 8);

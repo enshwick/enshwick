@@ -57,12 +57,26 @@ keeps the result for the life of the process. So the builder:
 
 - is `Fn(&[u8]) -> Option<Vec<u8>> + Send + Sync + 'static`: move what it
   needs into it;
-- runs at most once per resource, not per read;
+- runs once per resource, not per read, unless the mod rebuilds it;
 - returns `None` when the base does not read as expected. That turns the mod
   off. A panic in the builder counts the same.
 
 When the game has no `base` in its archive, the served key stays missing and
 the builder never runs.
+
+## Rebuilding
+
+When values a builder reads change after the game built the resource, such
+as a server's join values on a joined client, the mod can have it built
+again: `load.allow_rebuild(key)` during `init`, after `serve`, has the loader
+keep a copy of the base, and `content::rebuild(key)` later, from any thread,
+runs every mod's patch on that copy and writes the bytes that differ over
+the resource the game holds. Nothing happens while the game has not built
+the resource yet. The game keeps reading the first build's bytes, so a
+rebuild must come out the same length: changed values qualify, added
+entries do not, and `rebuild` returns `Err(Off)` for them. Each rebuild
+keeps the new bytes for the process, so it is for rare changes. It needs
+ABI minor 63.
 
 ## Patches from several mods compose
 

@@ -1651,6 +1651,21 @@ impl Installed {
         })
     }
 
+    /// The served resources the mod asked to rebuild, in order: each
+    /// [`Load::allow_rebuild`](crate::Load::allow_rebuild) at init and each
+    /// [`rebuild`](crate::content::rebuild) after.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick_loader_api::test::FakeHost::new().install();
+    /// assert!(loader.rebuilds().is_empty());
+    /// ```
+    #[must_use]
+    pub fn rebuilds(&self) -> Vec<ResourceKey> {
+        table::with(Vec::new(), |s| s.rebuilds.clone())
+    }
+
     /// Builds the served resource `key` from `base` with the mod's patches, in order, as
     /// the game's first read of it would.
     ///

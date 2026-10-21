@@ -6,9 +6,15 @@
 //! builds the resource from its base on first use and keeps it. Several mods
 //! may patch one key: their patches run in load order, each on the result of
 //! the one before. Every other key and handle goes to the game unchanged.
+//!
+//! A mod that serves a key may ask, at init, to keep its base; it can then
+//! have the key built again when values its patch reads change, such as a
+//! server's join values, and the bytes that differ are written over the
+//! resource the game holds. The game keeps reading the first build's
+//! address, so a rebuild must come out the same length.
 
 use core::ffi::c_void;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Mutex, OnceLock, PoisonError};
 
 use enshwick_loader_api::abi::{HookFlags, ResourceKey, ResourcePatchFn, Side, Status};
@@ -33,6 +39,8 @@ struct Served {
     key: ResourceKey,
     base: ResourceKey,
     patches: Vec<Patch>,
+    /// Whether a mod asked to keep the base for rebuilds.
+    keeps_base: AtomicBool,
     state: Mutex<State>,
 }
 
@@ -44,6 +52,8 @@ struct State {
     built: Option<(usize, usize)>,
     /// Set when building failed; the resource then reads as missing.
     failed: bool,
+    /// A copy of the base as first built from, when a mod keeps it.
+    base: Option<Box<[u8]>>,
 }
 
 /// Mod texts while mods initialise: tag id, language, text.
@@ -236,10 +246,90 @@ pub(crate) fn register(
             key,
             base,
             patches: vec![patch],
+            keeps_base: AtomicBool::new(false),
             state: Mutex::new(State::default()),
         }),
     }
     Status::OK
+}
+
+/// For mod `owner`, which serves `key`: during init, keeps its base when it
+/// is first built; afterwards, builds it again from that base and writes the
+/// bytes that differ over the resource the game holds.
+pub(crate) fn rebuild(owner: usize, key: ResourceKey) -> Status {
+    let serves = |s: &Served| s.key == key && s.patches.iter().any(|p| p.owner == owner);
+    let Some(list) = SERVED_LIST.get() else {
+        let pending = PENDING.lock().unwrap_or_else(PoisonError::into_inner);
+        return match pending.iter().find(|s| serves(s)) {
+            Some(entry) => {
+                entry.keeps_base.store(true, Ordering::Relaxed);
+                Status::OK
+            }
+            None => Status::BAD_ARGS,
+        };
+    };
+    let Some(entry) = list.iter().find(|s| serves(s)) else {
+        return Status::BAD_ARGS;
+    };
+    // The game resolves the resource meanwhile: the patches run outside the
+    // lock, on a copy of the base.
+    let (data, len, base) = {
+        let state = entry.state.lock().unwrap_or_else(PoisonError::into_inner);
+        let Some((data, len)) = state.built else {
+            // The first build takes the values in force.
+            return Status::OK;
+        };
+        let Some(base) = state.base.clone() else {
+            return Status::MISSING;
+        };
+        (data, len, base)
+    };
+    let Some((built, built_len, _)) =
+        run_patches(entry, base.as_ptr().expose_provenance(), base.len())
+    else {
+        return Status::MISSING;
+    };
+    if built_len != len {
+        crate::log!(
+            WARN,
+            "served resource {:08x}:{} not rebuilt: {built_len} bytes, the game holds {len}",
+            entry.key.type_hash,
+            hex(&entry.key.guid)
+        );
+        return Status::REFUSED;
+    }
+    let changed = write_differences(data, built, len);
+    crate::log!(
+        INFO,
+        "served resource {:08x}:{} rebuilt, {changed} bytes changed",
+        entry.key.type_hash,
+        hex(&entry.key.guid)
+    );
+    Status::OK
+}
+
+/// Writes the bytes of the `len` bytes at `new` that differ over those at
+/// `held`, which the game reads meanwhile; how many differed.
+fn write_differences(held: usize, new: usize, len: usize) -> usize {
+    // SAFETY: `new` is a patch's build of `len` bytes, valid for the
+    // process.
+    let new =
+        unsafe { core::slice::from_raw_parts(core::ptr::with_exposed_provenance::<u8>(new), len) };
+    let held = core::ptr::with_exposed_provenance_mut::<u8>(held);
+    let mut changed = 0;
+    for (at, &byte) in new.iter().enumerate() {
+        let slot = held.wrapping_add(at);
+        // SAFETY: `held` is the resource the game reads, `len` bytes a patch
+        // built and left writable for the process (`ResourcePatchFn`).
+        let old = unsafe { slot.read_volatile() };
+        if old != byte {
+            // SAFETY: as above; one byte at a time, so a read meanwhile sees
+            // each byte old or new.
+            unsafe { slot.write_volatile(byte) };
+            changed += 1;
+        }
+    }
+    changed
 }
 
 /// Ends registration and links the database when anything is served.
@@ -351,6 +441,7 @@ fn serve_stand_ins(
             key,
             base,
             patches: vec![patch(builder)],
+            keeps_base: AtomicBool::new(false),
             state: Mutex::new(State::default()),
         });
     }
@@ -362,6 +453,7 @@ fn serve_stand_ins(
             key,
             base: key,
             patches: vec![patch(registry)],
+            keeps_base: AtomicBool::new(false),
             state: Mutex::new(State::default()),
         }),
     }
@@ -621,7 +713,50 @@ fn build(entry: &Served, database: *mut u8) -> Option<(usize, usize)> {
         // The base is not resident yet; the game asks again.
         return None;
     }
-    // Each patch builds on the one before; a failed one is skipped.
+    let Some((current, current_len, applied)) = run_patches(entry, data, len) else {
+        state.failed = true;
+        return None;
+    };
+    if entry.keeps_base.load(Ordering::Relaxed) {
+        // SAFETY: the base the game resolved, `len` bytes, resident for the
+        // call.
+        let base = unsafe {
+            core::slice::from_raw_parts(core::ptr::with_exposed_provenance::<u8>(data), len)
+        };
+        state.base = Some(base.into());
+    }
+    let result = (current, current_len);
+    state.built = Some(result);
+    if entry.key == recipe_registry() {
+        crate::code::recipes_served(current, current_len);
+    }
+    if let Some(loader) = LOADED.get() {
+        let by: Vec<&str> = applied
+            .iter()
+            .filter_map(|&owner| {
+                if owner == crate::chains::LOADER {
+                    Some("the loader")
+                } else {
+                    loader.mods.get(owner).map(|m| m.id.as_str())
+                }
+            })
+            .collect();
+        crate::log!(
+            INFO,
+            "served resource {:08x}:{} built by {}, {current_len} bytes",
+            entry.key.type_hash,
+            hex(&entry.key.guid),
+            by.join(", ")
+        );
+    }
+    Some(result)
+}
+
+/// Runs the patches of the mods still on over the `len` bytes at `data`,
+/// each on the result of the one before; a failed one turns its mod off
+/// and is skipped. The bytes built, their length and who built them; `None`
+/// when no patch did.
+fn run_patches(entry: &Served, data: usize, len: usize) -> Option<(usize, usize, Vec<usize>)> {
     let (mut current, mut current_len) = (data, len);
     let mut applied = Vec::new();
     for patch in entry.patches.iter().filter(|p| mod_on(p.owner)) {
@@ -660,35 +795,7 @@ fn build(entry: &Served, database: *mut u8) -> Option<(usize, usize)> {
         (current, current_len) = (built.addr(), built_len);
         applied.push(patch.owner);
     }
-    if applied.is_empty() {
-        state.failed = true;
-        return None;
-    }
-    let result = (current, current_len);
-    state.built = Some(result);
-    if entry.key == recipe_registry() {
-        crate::code::recipes_served(current, current_len);
-    }
-    if let Some(loader) = LOADED.get() {
-        let by: Vec<&str> = applied
-            .iter()
-            .filter_map(|&owner| {
-                if owner == crate::chains::LOADER {
-                    Some("the loader")
-                } else {
-                    loader.mods.get(owner).map(|m| m.id.as_str())
-                }
-            })
-            .collect();
-        crate::log!(
-            INFO,
-            "served resource {:08x}:{} built by {}, {current_len} bytes",
-            entry.key.type_hash,
-            hex(&entry.key.guid),
-            by.join(", ")
-        );
-    }
-    Some(result)
+    (!applied.is_empty()).then_some((current, current_len, applied))
 }
 
 fn hex(bytes: &[u8]) -> String {
@@ -716,4 +823,28 @@ unsafe extern "system" fn key_of(out: *mut u8, database: *mut u8, handle: u32) -
         unsafe { out.copy_from_nonoverlapping(bytes.as_ptr(), bytes.len()) };
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_rebuild_writes_only_the_bytes_that_differ() {
+        let mut held = vec![1u8, 2, 3, 4, 5];
+        let new = [1u8, 9, 3, 4, 7];
+        let changed = write_differences(
+            held.as_mut_ptr().expose_provenance(),
+            new.as_ptr().expose_provenance(),
+            new.len(),
+        );
+        assert_eq!(changed, 2);
+        assert_eq!(held, new);
+        let again = write_differences(
+            held.as_mut_ptr().expose_provenance(),
+            new.as_ptr().expose_provenance(),
+            new.len(),
+        );
+        assert_eq!(again, 0);
+    }
 }

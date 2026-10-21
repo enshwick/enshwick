@@ -25,8 +25,10 @@ overgrowth = true # overgrowth materials
 decor = true      # decor and furniture
 ```
 
-A change applies at the next start of the game: the recipes are built once
-per run. Give the server and every player the same values.
+The server's values are the ones in force: a player who joins sees the
+server's counts in the crafting menu, and the file's own again after leaving,
+for each server joined in a session. An edit of the file applies while the
+game runs too.
 
 ## Install
 
