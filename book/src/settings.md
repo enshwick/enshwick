@@ -75,7 +75,7 @@ settings menu names it:
 | `range = a..=b`  | Numbers from `a` to `b`; `a..` and `..=b` leave one end open. Constants work, as in `0.0..=MAX`                                  |
 | `choices = [..]` | One of these values; any type serde writes, such as an enum's variants                                                           |
 | `text = "key"`   | The key of the field's label in the mod's [texts](content/texts.md), `config.<field>` by default; its description is `<key>.doc` |
-| `secret`         | A value such as a password: never sent to a client, and changed in the file only                                                 |
+| `secret`         | A value such as a password: never sent to a client, and changed in the file only; never with `sync`                              |
 
 A field takes one stage; two fail the build. On the struct,
 `#[config(text = "key")]` names the key of the set's title, `config` by
