@@ -1,7 +1,7 @@
 //! Tools for test servers: `/admin` commands for administrators, and a command
 //! file whose lines run as the server console's commands.
 //!
-//! Off until `enabled = true` in `mod-configs/admin-tools.toml`. While on, an
+//! Off until `enabled = true` in the world's settings. While on, an
 //! administrator types `/admin world`, `/admin mods` and the like in the chat,
 //! and every line appended to `mod-data/admin-tools/commands.txt` runs on the
 //! server's game thread as if the console had typed it, any mod's command
@@ -190,7 +190,7 @@ fn admin(tools: &Tools, ctx: &CommandContext, args: &[&str]) -> Reply {
     }
     if !ENABLED.load(Ordering::Acquire) {
         return Reply::from(
-            "Admin tools are off: set enabled = true in mod-configs/admin-tools.toml.",
+            "Admin tools are off: turn them on with /config admin-tools enabled true.",
         );
     }
     let admin = match command::parse(args) {
@@ -373,6 +373,7 @@ mod tests {
         let admin = player(PlayerInfo::CAN_KICK_BAN);
         let off = loader.command("admin", &admin, "world").unwrap();
         assert!(off.starts_with("Admin tools are off"));
+        assert!(off.contains("/config admin-tools enabled true"), "{off}");
         assert_eq!(
             loader.command("admin", &player(0), "world").as_deref(),
             Some("Only administrators use /admin.")
