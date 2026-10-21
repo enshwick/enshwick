@@ -160,15 +160,29 @@ impl Copies {
         match self.slots.get(&(survivor, altar)) {
             Some(&e) if e == original => CopyStaff::Refuse(Refusal::OriginalThere),
             Some(&e) => CopyStaff::Move(e),
-            None => {
-                let count = self.entity_count(survivor, original);
-                if count >= limit(self.altars.len(), count) {
-                    CopyStaff::Refuse(Refusal::Full)
-                } else {
-                    CopyStaff::Place
-                }
-            }
+            None if self.over_limit(survivor, original, limit) => CopyStaff::Refuse(Refusal::Full),
+            None => CopyStaff::Place,
         }
+    }
+
+    /// Whether a staff aimed at `target` would place a new copy there: an
+    /// altar zone without one.
+    pub(crate) fn places_new(&self, survivor: Survivor, target: [i64; 3]) -> bool {
+        self.altar_at(target)
+            .is_some_and(|altar| !self.slots.contains_key(&(survivor, altar)))
+    }
+
+    /// Whether `survivor` already has the most entities `limit` allows, given
+    /// the number of altars and its entities, `original` counted wherever it
+    /// stands.
+    pub(crate) fn over_limit(
+        &self,
+        survivor: Survivor,
+        original: Entity,
+        limit: impl FnOnce(usize, usize) -> usize,
+    ) -> bool {
+        let count = self.entity_count(survivor, original);
+        count >= limit(self.altars.len(), count)
     }
 
     /// The copy a bed or an order at `point` belongs to: the copy whose home
