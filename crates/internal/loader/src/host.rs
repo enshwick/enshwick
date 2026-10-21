@@ -784,6 +784,94 @@ fn put_headed<T: Copy>(out: *mut T, value: T) -> Status {
     }
 }
 
+/// Copies a struct that starts with a [`Header`] from a mod, which may know
+/// an older version of it: `None` for null or for a struct shorter than
+/// `required`, the end of the fields every version of it has.
+///
+/// # Safety
+///
+/// `raw` is null or points at the mod's version of the struct, readable for
+/// the size its header gives; every bit pattern of the bytes past `required`
+/// is valid for `T`, zero included.
+unsafe fn get_headed<T: Copy>(raw: *const T, required: usize) -> Option<T> {
+    // SAFETY: forwarded from the caller.
+    unsafe { enshwick_loader_api::abi::read_headed(raw, required) }
+}
+
+/// The size of each entry of a mod's list at `out`, from the header of its
+/// first entry: `None` when that is shorter than a [`Header`].
+///
+/// # Safety
+///
+/// `out` points at an entry that starts with a [`Header`].
+unsafe fn stride_of<T>(out: *const T) -> Option<usize> {
+    // SAFETY: forwarded from the caller.
+    let size = unsafe { out.cast::<Header>().read_unaligned() }.size as usize;
+    (size >= size_of::<Header>()).then_some(size)
+}
+
+/// Writes `items` into a mod's list of `capacity` entries, each as large as
+/// the header of its first entry says, as far as both sides know an entry,
+/// and their total through `count`.
+fn put_headed_list<T: Copy>(items: &[T], out: *mut T, capacity: u32, count: *mut u32) -> Status {
+    let Ok(total) = u32::try_from(items.len()) else {
+        return Status::BAD_ARGS;
+    };
+    if !out.is_null() && capacity > 0 {
+        // SAFETY: a non-null list from a mod holds `capacity` entries of its
+        // version of the struct, each starting with its header.
+        let Some(stride) = (unsafe { stride_of(out) }) else {
+            return Status::BAD_ARGS;
+        };
+        let known = stride.min(size_of::<T>());
+        let size = u32::try_from(known).unwrap_or(u32::MAX);
+        for (index, item) in items.iter().take(capacity as usize).enumerate() {
+            // SAFETY: as above; entry `index` starts `index * stride` bytes in.
+            let entry = unsafe { out.cast::<u8>().add(index * stride) };
+            // SAFETY: as above; `known` bytes fit both the entry and `item`.
+            unsafe {
+                core::ptr::copy_nonoverlapping((&raw const *item).cast::<u8>(), entry, known);
+            }
+            // SAFETY: the header's size is the entry's first field.
+            unsafe { entry.cast::<u32>().write_unaligned(size) };
+        }
+    }
+    put(count, total)
+}
+
+/// Copies a mod's list of `count` entries at `raw`, each as large as the
+/// header of its first entry says; `None` when an entry is shorter than
+/// `required`.
+///
+/// # Safety
+///
+/// `raw` is null with `count` zero, or points at `count` entries of the
+/// mod's version of the struct, each starting with its header; every bit
+/// pattern of the bytes past `required` is valid for `T`, zero included.
+unsafe fn get_headed_list<T: Copy>(raw: *const T, count: u32, required: usize) -> Option<Vec<T>> {
+    if count == 0 {
+        return Some(Vec::new());
+    }
+    if raw.is_null() {
+        return None;
+    }
+    // SAFETY: forwarded from the caller.
+    let stride = unsafe { stride_of(raw) }?;
+    (0..count as usize)
+        .map(|index| {
+            // SAFETY: as above; entry `index` starts `index * stride` bytes in.
+            let entry = unsafe { raw.cast::<u8>().add(index * stride) }.cast::<T>();
+            // SAFETY: as above; an entry is readable for `stride` bytes, which
+            // its header must give too.
+            if unsafe { stride_of(entry) } != Some(stride) {
+                return None;
+            }
+            // SAFETY: as above.
+            unsafe { get_headed(entry, required) }
+        })
+        .collect()
+}
+
 /// Reads a borrowed string, or `None` when it is not UTF-8.
 fn text<'a>(value: Str) -> Option<&'a str> {
     // SAFETY: every `Str` a mod passes is borrowed for the call, which outlives
@@ -1063,8 +1151,9 @@ extern "system" fn publish(me: ModHandle, spec: *const api_frame::ServiceSpec) -
             Ok(found) => found,
             Err(status) => return status,
         };
-        // SAFETY: the safe layer passes a valid spec or null.
-        let Some(spec) = (unsafe { spec.as_ref() }) else {
+        // SAFETY: a mod passes null or its version of the spec, and all of
+        // the spec is required.
+        let Some(spec) = (unsafe { get_headed(spec, size_of::<api_frame::ServiceSpec>()) }) else {
             return Status::BAD_ARGS;
         };
         // SAFETY: the spec is valid for the call.
@@ -1102,8 +1191,10 @@ extern "system" fn service(
             Ok(found) => found,
             Err(status) => return status,
         };
-        // SAFETY: the safe layer passes a valid spec or null.
-        let Some(wanted) = (unsafe { wanted.as_ref() }) else {
+        // SAFETY: a mod passes null or its version of the spec, and all of
+        // the spec is required.
+        let Some(wanted) = (unsafe { get_headed(wanted, size_of::<api_frame::ServiceSpec>()) })
+        else {
             return Status::BAD_ARGS;
         };
         // SAFETY: the spec is valid for the call.
@@ -1126,13 +1217,9 @@ extern "system" fn service(
                 status
             }
         };
-        // SAFETY: the safe layer passes a valid out pointer or null.
-        match unsafe { out.as_mut() } {
-            Some(slot) => {
-                *slot = answer;
-                status
-            }
-            None => Status::BAD_ARGS,
+        match put_headed(out, answer) {
+            Status::OK => status,
+            refused => refused,
         }
     })
 }
@@ -1150,8 +1237,9 @@ extern "system" fn define_event(
         if crate::services::sealed() {
             return Status::TOO_LATE;
         }
-        // SAFETY: the safe layer passes a valid spec or null.
-        let Some(spec) = (unsafe { spec.as_ref() }) else {
+        // SAFETY: a mod passes null or its version of the spec, and all of
+        // the spec is required.
+        let Some(spec) = (unsafe { get_headed(spec, size_of::<api_frame::EventSpec>()) }) else {
             return Status::BAD_ARGS;
         };
         // SAFETY: the spec is valid for the call.
@@ -1183,8 +1271,9 @@ extern "system" fn subscribe_event(
         if crate::services::sealed() {
             return Status::TOO_LATE;
         }
-        // SAFETY: the safe layer passes a valid spec or null.
-        let Some(spec) = (unsafe { spec.as_ref() }) else {
+        // SAFETY: a mod passes null or its version of the spec, and all of
+        // the spec is required.
+        let Some(spec) = (unsafe { get_headed(spec, size_of::<api_frame::EventSpec>()) }) else {
             return Status::BAD_ARGS;
         };
         // SAFETY: the spec is valid for the call.
@@ -1211,9 +1300,10 @@ extern "system" fn migrate(me: ModHandle, set: *const api_frame::MigrationSet) -
         if loader.delivery.get().is_some() {
             return Status::TOO_LATE;
         }
-        // SAFETY: the safe layer passes a valid set or null.
-        match unsafe { set.as_ref() } {
-            Some(set) => crate::migrations::register(loader, index, set),
+        // SAFETY: a mod passes null or its version of the set, and all of the
+        // set, its migration function included, is required.
+        match unsafe { get_headed(set, size_of::<api_frame::MigrationSet>()) } {
+            Some(set) => crate::migrations::register(loader, index, &set),
             None => Status::BAD_ARGS,
         }
     })
@@ -1457,7 +1547,7 @@ extern "system" fn player(me: ModHandle, entity: u32, out: *mut api_frame::Playe
                     .ok_or(Status::MISSING)
             });
         match found {
-            Ok(info) => put(out, info),
+            Ok(info) => put_headed(out, info),
             Err(status) => status,
         }
     })
@@ -1474,16 +1564,7 @@ extern "system" fn players(
             Ok(players) => players,
             Err(status) => return status,
         };
-        let total = u32::try_from(players.len()).unwrap_or(u32::MAX);
-        if !out.is_null() {
-            for (index, info) in players.into_iter().take(capacity as usize).enumerate() {
-                // SAFETY: the caller passes room for `capacity` entries.
-                let entry = unsafe { out.add(index) };
-                // SAFETY: as above.
-                unsafe { entry.write(info) };
-            }
-        }
-        put(count, total)
+        put_headed_list(&players, out, capacity, count)
     })
 }
 
@@ -2329,10 +2410,20 @@ extern "system" fn stat_open(
         let Some(id) = text(id) else {
             return Status::BAD_ARGS;
         };
-        // SAFETY: the caller passes a valid definition for the call, or null.
-        let def = match unsafe { def.as_ref() } {
+        let def = if def.is_null() {
+            None
+        } else {
+            // SAFETY: a mod passes its version of the definition, and all of it
+            // is required.
+            let Some(data) = (unsafe { get_headed(def, size_of::<api_frame::StatDefData>()) })
+            else {
+                return Status::BAD_ARGS;
+            };
+            Some(data)
+        };
+        let def = match def {
             // SAFETY: the definition's text is borrowed for the call.
-            Some(data) => match unsafe { enshwick_loader_api::stats::StatDef::from_data(data) } {
+            Some(data) => match unsafe { enshwick_loader_api::stats::StatDef::from_data(&data) } {
                 Some(def) => Some(def),
                 None => return Status::BAD_ARGS,
             },
@@ -2359,7 +2450,7 @@ extern "system" fn stat_info(
         }
         match crate::stats::info(stat) {
             Ok((data, name)) => {
-                let status = put(def, data);
+                let status = put_headed(def, data);
                 if status.is_ok() {
                     put(id, name)
                 } else {
@@ -2385,12 +2476,14 @@ extern "system" fn stat_value(me: ModHandle, entity: u32, stat: u32, out: *mut f
 
 extern "system" fn stat_modify(me: ModHandle, request: *const api_frame::StatModify) -> Status {
     entry("stat_modify", || {
-        // SAFETY: the caller passes a valid request for the call.
-        let Some(request) = (unsafe { request.as_ref() }) else {
+        // SAFETY: a mod passes null or its version of the request, and all of
+        // it is required.
+        let Some(request) = (unsafe { get_headed(request, size_of::<api_frame::StatModify>()) })
+        else {
             return Status::BAD_ARGS;
         };
         match caller_index(me)
-            .and_then(|(loader, index)| crate::stats::modify(loader, index, request))
+            .and_then(|(loader, index)| crate::stats::modify(loader, index, &request))
         {
             Ok(()) => Status::OK,
             Err(status) => status,
@@ -2479,12 +2572,13 @@ extern "system" fn affix_open(
         let Some(id) = text(id) else {
             return Status::BAD_ARGS;
         };
-        // SAFETY: the caller passes a valid definition for the call.
-        let Some(def) = (unsafe { def.as_ref() }) else {
+        // SAFETY: a mod passes null or its version of the definition, and all
+        // of it is required.
+        let Some(def) = (unsafe { get_headed(def, size_of::<api_frame::AffixDefData>()) }) else {
             return Status::BAD_ARGS;
         };
         match caller_index(me)
-            .and_then(|(loader, index)| crate::stats::open_affix(loader, index, id, def))
+            .and_then(|(loader, index)| crate::stats::open_affix(loader, index, id, &def))
         {
             Ok(affix) => put(out, affix),
             Err(status) => status,
@@ -2502,11 +2596,12 @@ extern "system" fn affix_roll(
             Ok(loader) => loader,
             Err(status) => return status,
         };
-        // SAFETY: the caller passes a valid request for the call.
-        let Some(roll) = (unsafe { roll.as_ref() }) else {
+        // SAFETY: a mod passes null or its version of the request, and all of
+        // it is required.
+        let Some(roll) = (unsafe { get_headed(roll, size_of::<api_frame::AffixRoll>()) }) else {
             return Status::BAD_ARGS;
         };
-        match crate::stats::roll(loader, roll) {
+        match crate::stats::roll(loader, &roll) {
             Ok(rolled) => put(count, rolled),
             Err(status) => status,
         }
@@ -3105,7 +3200,7 @@ extern "system" fn buff_types(
 ) -> Status {
     entry("buff_types", || {
         match caller(me).and_then(crate::buffs::types) {
-            Ok(types) => put_list(&types, out, capacity, count),
+            Ok(types) => put_headed_list(&types, out, capacity, count),
             Err(status) => status,
         }
     })
@@ -3120,7 +3215,7 @@ extern "system" fn buffs(
 ) -> Status {
     entry("buffs", || {
         match caller(me).and_then(|loader| crate::buffs::of(loader, entity)) {
-            Ok(list) => put_list(&list, out, capacity, count),
+            Ok(list) => put_headed_list(&list, out, capacity, count),
             Err(status) => status,
         }
     })
@@ -3266,17 +3361,7 @@ extern "system" fn weather_fronts(
 ) -> Status {
     entry("weather_fronts", || {
         match caller(me).and_then(crate::weather::fronts) {
-            Ok(fronts) => {
-                if !out.is_null() {
-                    for (i, front) in fronts.iter().take(capacity as usize).enumerate() {
-                        // SAFETY: the caller passes room for `capacity` fronts.
-                        let slot = unsafe { out.add(i) };
-                        // SAFETY: as above.
-                        unsafe { slot.write(*front) };
-                    }
-                }
-                put(count, u32::try_from(fronts.len()).unwrap_or(u32::MAX))
-            }
+            Ok(fronts) => put_headed_list(&fronts, out, capacity, count),
             Err(status) => status,
         }
     })
@@ -3299,17 +3384,7 @@ extern "system" fn terrain_materials(
 ) -> Status {
     entry("terrain_materials", || {
         match caller(me).and_then(crate::terrain::materials) {
-            Ok(materials) => {
-                if !out.is_null() {
-                    for (i, material) in materials.iter().take(capacity as usize).enumerate() {
-                        // SAFETY: the caller passes room for `capacity` entries.
-                        let slot = unsafe { out.add(i) };
-                        // SAFETY: as above.
-                        unsafe { slot.write(*material) };
-                    }
-                }
-                put(count, u32::try_from(materials.len()).unwrap_or(u32::MAX))
-            }
+            Ok(materials) => put_headed_list(&materials, out, capacity, count),
             Err(status) => status,
         }
     })
@@ -3359,11 +3434,17 @@ extern "system" fn ui_widget(
             Ok(found) => found,
             Err(status) => return status,
         };
-        // SAFETY: a non-null widget from a mod is its own, valid for the call.
-        let Some(widget) = (unsafe { widget.as_mut() }) else {
+        // SAFETY: a mod passes null or its version of the widget, and all of
+        // it is required.
+        let Some(mut copy) = (unsafe { get_headed(widget, size_of::<api_frame::UiWidget>()) })
+        else {
             return Status::BAD_ARGS;
         };
-        crate::ui::widget(loader, index, frame, widget)
+        let status = crate::ui::widget(loader, index, frame, &mut copy);
+        match put_headed(widget, copy) {
+            Status::OK => status,
+            refused => refused,
+        }
     })
 }
 
@@ -3391,15 +3472,14 @@ extern "system" fn ui_markers(
         if loader.side != Side::CLIENT {
             return Status::MISSING;
         }
-        let given = if count == 0 {
-            &[][..]
-        } else if markers.is_null() {
+        // SAFETY: a mod passes `count` markers of its version, valid for the
+        // call, and all of a marker is required.
+        let Some(given) =
+            (unsafe { get_headed_list(markers, count, size_of::<api_frame::UiMarker>()) })
+        else {
             return Status::BAD_ARGS;
-        } else {
-            // SAFETY: the mod passes `count` markers, valid for the call.
-            unsafe { core::slice::from_raw_parts(markers, count as usize) }
         };
-        crate::ui::set_markers(index, given)
+        crate::ui::set_markers(index, &given)
     })
 }
 
@@ -3414,11 +3494,12 @@ extern "system" fn ui_dialog(
             Ok(found) => found,
             Err(status) => return status,
         };
-        // SAFETY: a non-null dialog from a mod is valid for the call.
-        let Some(dialog) = (unsafe { dialog.as_ref() }) else {
+        // SAFETY: a mod passes null or its version of the dialog, and all of
+        // it is required.
+        let Some(dialog) = (unsafe { get_headed(dialog, size_of::<api_frame::UiDialog>()) }) else {
             return Status::BAD_ARGS;
         };
-        crate::ui::mod_dialog(loader, index, dialog, callback, user)
+        crate::ui::mod_dialog(loader, index, &dialog, callback, user)
     })
 }
 
@@ -3529,6 +3610,9 @@ extern "system" fn update_pick(
 pub(crate) fn handle(index: usize) -> ModHandle {
     ModHandle(index + 1)
 }
+
+#[cfg(test)]
+mod headed_tests;
 
 #[cfg(test)]
 mod tests {
