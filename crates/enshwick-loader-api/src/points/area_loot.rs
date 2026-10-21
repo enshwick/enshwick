@@ -5,9 +5,11 @@ use crate::ecs::Entity;
 /// Whether a loot container around an emptied one comes along,
 /// `area-loot:eligible`: the answer is whether it does.
 ///
-/// The mod answers true for a full enemy loot container within its radius
-/// that no other player is at. Asked on the server's game thread when a
-/// player empties a container, once per container around it.
+/// Asked only for a full enemy loot container within the mod's radius
+/// that no other player is at, with the answer true, so a link can leave
+/// it out but never take in one the mod passed over. Asked on the server's
+/// game thread when a player empties a container, once per container
+/// around it.
 ///
 /// # Examples
 ///

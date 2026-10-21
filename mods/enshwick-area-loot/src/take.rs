@@ -2,8 +2,7 @@
 //! emptied and queues the full ones around it; each is then emptied into that
 //! player, nearest first, through the game's own inventory transactions,
 //! once it is checked again that nobody else opened it meanwhile. Other mods
-//! leave containers out or take them in at the extension point
-//! `area-loot:eligible`.
+//! leave containers out at the extension point `area-loot:eligible`.
 
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
