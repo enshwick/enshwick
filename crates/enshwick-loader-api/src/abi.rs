@@ -4130,6 +4130,7 @@ pub struct HostApi {
     pub player: extern "system" fn(me: ModHandle, entity: u32, out: *mut PlayerInfo) -> Status,
     /// Up to `capacity` connected players with characters in the world, and
     /// how many there are; on the server's game thread only. Since minor 3.
+    /// Every entry is as large as the header of the first one says.
     pub players: extern "system" fn(
         me: ModHandle,
         out: *mut PlayerInfo,
@@ -4545,6 +4546,7 @@ pub struct HostApi {
         extern "system" fn(me: ModHandle, callback: DamageFilterFn, user: *mut c_void) -> Status,
     /// Up to `capacity` buff and debuff types of the running game, and how
     /// many there are. On the server's game thread only. Since minor 31.
+    /// Every entry is as large as the header of the first one says.
     pub buff_types: extern "system" fn(
         me: ModHandle,
         out: *mut BuffTypeInfo,
@@ -4554,6 +4556,7 @@ pub struct HostApi {
     /// Up to `capacity` buffs `entity` has, and how many there are;
     /// [`Status::MISSING`] for an entity that holds no buffs. On the
     /// server's game thread only. Since minor 31.
+    /// Every entry is as large as the header of the first one says.
     pub buffs: extern "system" fn(
         me: ModHandle,
         entity: u32,
@@ -4606,6 +4609,7 @@ pub struct HostApi {
     /// Up to `capacity` current weather fronts of the server's world, one per
     /// layer that has one, and how many there are. On the server's game
     /// thread only. Since minor 33.
+    /// Every entry is as large as the header of the first one says.
     pub weather_fronts: extern "system" fn(
         me: ModHandle,
         out: *mut WeatherFront,
@@ -4620,6 +4624,7 @@ pub struct HostApi {
     pub set_weather: extern "system" fn(me: ModHandle, effect: u32, duration: i64) -> Status,
     /// Up to `capacity` terrain materials of the running game, and how many
     /// there are. On the server's game thread only. Since minor 34.
+    /// Every entry is as large as the header of the first one says.
     pub terrain_materials: extern "system" fn(
         me: ModHandle,
         out: *mut TerrainMaterialInfo,
@@ -4716,6 +4721,7 @@ pub struct HostApi {
     /// `markers`, copied; none clears them. Any thread. Client only
     /// ([`Status::MISSING`] on a server); [`Status::BAD_ARGS`] past 256
     /// markers. Since minor 40.
+    /// Every entry is as large as the header of the first one says.
     pub ui_markers:
         extern "system" fn(me: ModHandle, markers: *const UiMarker, count: u32) -> Status,
     /// Makes `callback` with `user` the mod's check of a new settings text,
