@@ -26,9 +26,9 @@ const-sha1 = { version = "0.3.0", default-features = false }
 clap = { version = "4.6.7", default-features = false, features = ["std", "derive", "help", "usage", "error-context", "env"] }
 arrayvec = { version = "0.7.8", default-features = false, features = ["std"] }
 base64 = { version = "0.23.1", default-features = false, features = ["alloc"] }
-enshwick-loader-api = { path = "crates/enshwick-loader-api", version = "0.6.0" } # x-release-please-version
-enshwick-loader-builds = { path = "crates/internal/builds", version = "0.6.0" } # x-release-please-version
-enshwick-loader-reflect = { path = "crates/internal/reflect", version = "0.6.0" } # x-release-please-version
+enshwick-loader-api = { path = "crates/enshwick-loader-api", version = "0.7.0" } # x-release-please-version
+enshwick-loader-builds = { path = "crates/internal/builds", version = "0.7.0" } # x-release-please-version
+enshwick-loader-reflect = { path = "crates/internal/reflect", version = "0.7.0" } # x-release-please-version
 fastrand = { version = "2.3.0", default-features = false, features = ["std"] }
 iced-x86 = { version = "1.21.0", default-features = false, features = ["std", "decoder", "block_encoder", "instr_info"] }
 minisign-verify = { version = "0.3.0", default-features = false }

@@ -1,6 +1,6 @@
 [package]
 name = "enshwick-proton-optimizer"
-version = "0.4.1"
+version = "0.4.2"
 description = "Exact short waits in the engine's event loop under Wine and Proton, with an environment report and CPU measurements"
 keywords = ["enshrouded", "mod", "wine", "proton", "performance"]
 categories = ["game-development"]

@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.0](https://github.com/themaiby/enshwick/compare/cargo-enshwick-v0.6.0...cargo-enshwick-v0.7.0) (2026-10-21)
+
+
+### Other
+
+* **cargo-enshwick:** Synchronize enshwick versions
+
 ## [0.6.0](https://github.com/themaiby/enshwick/compare/cargo-enshwick-v0.5.0...cargo-enshwick-v0.6.0) (2026-10-21)
 
 
