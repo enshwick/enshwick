@@ -159,7 +159,12 @@ fn write_atomically(path: &Path, text: &str) -> Result<(), StoreError> {
         std::fs::create_dir_all(dir).map_err(|e| StoreError::io(dir, e))?;
     }
     let temporary = path.with_extension("toml.tmp");
-    std::fs::write(&temporary, text)
+    // On disk before the rename, so a crash leaves the old file or the new.
+    let written = std::fs::File::create(&temporary).and_then(|mut file| {
+        std::io::Write::write_all(&mut file, text.as_bytes())?;
+        file.sync_all()
+    });
+    written
         .and_then(|()| std::fs::rename(&temporary, path))
         .map_err(|e| StoreError::io(path, e))
 }
@@ -466,6 +471,8 @@ where
     /// ```
     pub fn flush(&self) -> Result<(), StoreError> {
         let mut slot = self.lock();
+        // A background write still running would land after this one.
+        let _writing = self.wait_for_writes();
         if let Some(open) = slot.open.as_mut().filter(|open| open.changed) {
             open.store.save(&open.value)?;
             open.changed = false;
@@ -585,6 +592,25 @@ mod tests {
         store.close().unwrap();
         assert_eq!(store.key(), None);
         assert!(WorldStore::<Count>::new(&dir, "a/b").is_err());
+        let _gone = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_flush_lands_after_a_background_write() {
+        let dir = std::env::temp_dir().join(format!("enshwick-world-flush-{}", std::process::id()));
+        let _gone = std::fs::remove_dir_all(&dir);
+        let store: WorldStore<Count> = WorldStore::new(&dir, "count").unwrap();
+        store.open("world0-aa").unwrap();
+        let file = dir.join("worlds/world0-aa/count.toml");
+        for n in 0..20 {
+            store.update(|c| c.n = n);
+            store.flush_in_background();
+            store.update(|c| c.n = n + 100);
+            store.flush().unwrap();
+            let saved: Count = toml::from_str(&std::fs::read_to_string(&file).unwrap()).unwrap();
+            assert_eq!(saved.n, n + 100);
+        }
+        store.close().unwrap();
         let _gone = std::fs::remove_dir_all(&dir);
     }
 }

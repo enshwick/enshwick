@@ -391,7 +391,7 @@ mod live {
     use enshwick_loader_api::abi::{Level, MigrateFn, MigrationSet, MigrationStep, Status, Str};
     use rustc_hash::FxHashMap;
 
-    use super::{Migration, Record, Step, Target, dry_run, run};
+    use super::{Migration, Record, Step, Target, dry_run, follow_renames, run};
     use crate::host::Loader;
 
     /// A mod's migrations and its map.
@@ -625,7 +625,7 @@ mod live {
     pub(crate) fn renamed(loader: &Loader) -> &'static FxHashMap<[u8; 16], [u8; 16]> {
         RENAMES.get_or_init(|| {
             let registered = REGISTERED.lock().unwrap_or_else(PoisonError::into_inner);
-            registered
+            let direct: FxHashMap<[u8; 16], [u8; 16]> = registered
                 .iter()
                 .filter(|r| {
                     loader
@@ -637,9 +637,31 @@ mod live {
                 .flat_map(|m| &m.steps)
                 .filter(|s| s.kind == MigrationStep::RENAME_CONTENT)
                 .map(|s| (s.from_guid, s.to_guid))
-                .collect()
+                .collect();
+            follow_renames(&direct)
         })
     }
+}
+
+/// Each old GUID to the end of its chain of renames, A to C for A to B and
+/// B to C; a cycle stops where it would come back.
+#[cfg(any(windows, test))]
+fn follow_renames(
+    direct: &rustc_hash::FxHashMap<[u8; 16], [u8; 16]>,
+) -> rustc_hash::FxHashMap<[u8; 16], [u8; 16]> {
+    direct
+        .iter()
+        .map(|(&from, &first)| {
+            let mut to = first;
+            for _ in 0..direct.len() {
+                match direct.get(&to) {
+                    Some(&next) if next != from => to = next,
+                    _ => break,
+                }
+            }
+            (from, to)
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -649,6 +671,22 @@ mod tests {
     use enshwick_loader_api::abi::MigrationStep;
 
     use super::*;
+
+    #[test]
+    fn renames_follow_their_chain_and_a_cycle_ends() {
+        let direct: rustc_hash::FxHashMap<[u8; 16], [u8; 16]> = [
+            ([1; 16], [2; 16]),
+            ([2; 16], [3; 16]),
+            ([7; 16], [8; 16]),
+            ([8; 16], [7; 16]),
+        ]
+        .into_iter()
+        .collect();
+        let followed = follow_renames(&direct);
+        assert_eq!(followed[&[1; 16]], [3; 16]);
+        assert_eq!(followed[&[2; 16]], [3; 16]);
+        assert_eq!(followed[&[7; 16]], [8; 16]);
+    }
 
     fn step(kind: u32, from: &str, to: &str) -> Step {
         Step {

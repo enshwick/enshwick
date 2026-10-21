@@ -45,6 +45,10 @@ name = "hook_macro"
 required-features = ["test"]
 
 [[test]]
+name = "texts_override"
+required-features = ["test"]
+
+[[test]]
 name = "affixes"
 required-features = ["test"]
 

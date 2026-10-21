@@ -391,6 +391,11 @@ impl Texts {
     }
 }
 
+/// The texts each mod, or each content pack in the loader's copy of the
+/// API, handed the loader so far.
+static HANDED: std::sync::Mutex<Vec<(crate::abi::ModHandle, Texts)>> =
+    std::sync::Mutex::new(Vec::new());
+
 impl Load<'_> {
     /// The mod's texts: `embedded`, usually `include_str!("texts.toml")`,
     /// with `mod-configs/<id>.texts.toml` over it when the server has one.
@@ -422,21 +427,36 @@ impl Load<'_> {
                 game.join("mod-configs")
                     .join(format!("{}.texts.toml", id.to_string_lossy()))
             });
-        if let Some(path) = overrides
-            && let Ok(text) = std::fs::read_to_string(&path)
-        {
-            texts.merge(
-                Texts::parse(&text)
-                    .map_err(|off| Off::new(format!("{}: {off}", path.display())))?,
-            );
+        if let Some(path) = overrides {
+            match std::fs::read_to_string(&path) {
+                Ok(text) => texts.merge(
+                    Texts::parse(&text)
+                        .map_err(|off| Off::new(format!("{}: {off}", path.display())))?,
+                ),
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                // Such as a file saved as UTF-16 or in a code page.
+                Err(error) => return Err(Off::new(format!("{}: {error}", path.display()))),
+            }
         }
         let api = self.host().api();
         if api
             .header
             .covers(core::mem::offset_of!(HostApi, texts) + size_of::<usize>())
         {
-            let toml = texts.to_toml();
-            let _kept = (api.texts)(self.host().handle(), crate::abi::Str::new(&toml));
+            // The loader keeps the last texts it was given, so it gets all
+            // of this mod's, a pack's added to the mod's own.
+            let me = self.host().handle();
+            let mut handed = HANDED
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            let all = if let Some((_, kept)) = handed.iter_mut().find(|(owner, _)| *owner == me) {
+                kept.merge(texts.clone());
+                kept.to_toml()
+            } else {
+                handed.push((me, texts.clone()));
+                texts.to_toml()
+            };
+            let _kept = (api.texts)(me, crate::abi::Str::new(&all));
         }
         Ok(texts)
     }
