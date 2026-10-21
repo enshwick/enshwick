@@ -4,8 +4,10 @@
 /// the answer is the altars.
 ///
 /// The mod answers from its table and keeps the result between 1 and
-/// `cap`. Asked whenever the game checks the limit, on the thread that
-/// checks it.
+/// `cap`, links' answers too, so a link cannot raise a level past `cap`.
+/// Asked whenever the game checks the limit, on the thread that checks it,
+/// on the server and on every client: a linking mod belongs on both sides
+/// with `join = true`, or the two disagree on the limit.
 ///
 /// # Examples
 ///

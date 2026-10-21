@@ -311,7 +311,8 @@ its mod without a restart:
 
 1. it wires the mod's hooks past it and stops handing it events;
 2. it waits for calls already inside the mod to leave;
-3. it runs the mod's `shutdown`, unloads the DLL and loads the new copy;
+3. it runs the mod's `shutdown` and loads the new copy, leaving the old DLL
+   loaded so no pointer into it can dangle;
 4. it runs the new copy's `init` with the same handle, links its hooks into
    the armed chains, and runs its `ready`.
 
@@ -323,8 +324,8 @@ A mod opts in with `reload = true` in its `manifest!` and keeps a contract:
   frame and HUD callbacks and map markers: the loader stops calling the old
   copy's callbacks, clears its markers and calls the new copy's. Everything
   else a mod can register (commands, content, served
-  resources, services, mod events, code patches, mid-function hooks, filters,
-  the interface, stats and the rest) stays with the old copy, so the loader
+  resources, services, mod events, extension points it defines or links, code
+  patches, mid-function hooks, filters, the interface, stats and the rest) stays with the old copy, so the loader
   refuses to reload a mod that used any of it, naming the calls, and the
   change waits for a restart.
 - **No live state it cannot hand over.** The new copy starts with fresh
