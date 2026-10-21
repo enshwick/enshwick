@@ -504,6 +504,14 @@ pub(crate) fn modify(loader: &Loader, owner: usize, request: &StatModify) -> Res
     if !remove && Op::from_raw(request.modifier.op).is_none() {
         return Err(Status::BAD_ARGS);
     }
+    let until = match request.duration_ms {
+        0 => None,
+        ms => Some(
+            Instant::now()
+                .checked_add(Duration::from_millis(ms))
+                .ok_or(Status::BAD_ARGS)?,
+        ),
+    };
     with_state(|state| {
         let watched = state.watched.entry(request.entity).or_default();
         if saved && !remove && watched.player.is_none() {
@@ -512,8 +520,6 @@ pub(crate) fn modify(loader: &Loader, owner: usize, request: &StatModify) -> Res
         let same = |h: &Held| h.owner == owner && h.key == request.key && h.stat == stat;
         let was_saved = watched.modifiers.iter().any(|h| same(h) && h.saved);
         watched.modifiers.retain(|h| !same(h));
-        let until = (request.duration_ms != 0)
-            .then(|| Instant::now() + Duration::from_millis(request.duration_ms));
         if !remove {
             watched.modifiers.push(Held {
                 owner,
@@ -793,7 +799,13 @@ fn follow(loader: &Loader, state: &mut State, players: &[PlayerInfo]) -> bool {
     }
     let before = state.watched.len();
     state.watched.retain(|entity, w| {
-        let keep = online.contains(entity) || w.asked || w.modifiers.iter().any(|h| !h.saved);
+        // An entry with values still to work out, or maxima points still
+        // added, stays until a step takes them back.
+        let keep = online.contains(entity)
+            || w.asked
+            || w.dirty
+            || w.applied.iter().any(|&points| points != 0)
+            || w.modifiers.iter().any(|h| !h.saved);
         keep && crate::world::template(loader, *entity).is_ok()
     });
     state.watched.len() != before
