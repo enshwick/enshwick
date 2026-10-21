@@ -145,6 +145,8 @@ revision = 1
 "knowledge.player_value" = { rva = 0x11f_c410, pattern = "40 53 48 83 EC 20 80 B9 D2 00 00 00 00 48 8B 99 98 00 00 00" }
 "knowledge.world_value" = { rva = 0x11f_c540, pattern = "40 53 48 83 EC 20 48 8D 59 10 C7 44 24 30 00 00 00 00" }
 "knowledge.push" = { rva = 0x120_0600, pattern = "4C 8B C1 B8 01 00 00 00 F0 0F C1 41 08 FF C0 3D 00 08 00 00" }
+"knowledge.set_values" = { rva = 0x11f_d050, pattern = "40 56 41 54 41 55 41 56 41 57 48 83 EC 40 41 0F B6 40 30" }
+"knowledge.set_world" = { rva = 0x11f_d360, pattern = "40 53 48 83 EC 20 48 83 7A 08 00 4C 8B C2 48 8B D9" }
 "knowledge.input_check" = { rva = 0x41_4a7e, pattern = "48 8D 8B 8C 01 00 00 E8 ?? ?? ?? ?? 84 C0 74 3D F2 0F 10 83 8C 01 00 00", at = 12 }
 "weather.sample" = { rva = 0xa9_b9e0, pattern = "48 8B C4 48 89 58 18 48 89 48 08 55 56 57 41 54 41 55 41 56 41 57 48 81 EC 20 01 00 00" }
 "weather.clock" = { rva = 0x49_9740, pattern = "40 53 48 83 EC 20 48 8B D9 48 8B 49 08 E8 ?? ?? ?? ?? 48 8B 8B D0 02 00 00" }
@@ -497,6 +499,20 @@ revision = 1
 "knowledge.journal" = 0x1e8
 "knowledge.journal_blob" = { value = 0x48, pattern = "48 89 51 10 48 89 51 18 48 89 51 20 48 89 51 28 48 89 51 30 48 89 51 38 48 89 51 40 48 89 51 48 48 89 51 50 48 89 51 58 48 89 51 60 48 89 51 68 48 89 51 70 48 89 51 78 48 89 81 80 00 00 00" }
 "knowledge.input_action" = { value = 0x18c, pattern = "8B 8B 98 01 00 00 39 48 5C 0F 84 ?? ?? ?? ?? 48 8D 8B 8C 01 00 00 E8 ?? ?? ?? ?? 84 C0" }
+# A player record's change counter (u16) and the store's mark
+# that the world's knowledge changed (u8). The game object
+# holds the knowledge replication, one connection per player
+# slot: whether it was made, whether the player's save has
+# loaded, and the requests for a full resend of the world's
+# and of the player's knowledge (u8 each).
+"knowledge.record_changes" = { value = 0x88, pattern = "48 89 81 80 00 00 00 89 81 88 00 00 00 88 81 B0 00 00 00" }
+"knowledge.world_touched" = 0xd1
+"knowledge.replication" = { value = 0x1c8, pattern = "49 8B CE E8 ?? ?? ?? ?? 49 8B 0E 49 8B BC 24 C8 01 00 00 8B 18 E8 ?? ?? ?? ??" }
+"knowledge.connection_size" = { value = 0x110, pattern = "48 89 91 E8 00 00 00 48 89 91 10 01 00 00 48 89 91 F8 00 00 00" }
+"knowledge.connection_created" = { value = 0x20, pattern = "33 D2 33 C0 48 89 11 48 89 51 08 48 89 51 10 48 89 51 18 48 89 51 20 48 89 51 28 48 89 51 30 48 89 51 38 48 89 51 40 48 89 51 48 48 89 51 50 48 89 51 58 48 89 51 60 48 89 51 68 48 89 51 70 48 89 51 78 48 89 81 80 00 00 00" }
+"knowledge.connection_loaded" = { value = 0x1e, pattern = "41 89 47 10 41 89 47 04 41 C6 07 1E E9 ?? ?? ?? ?? 48 8D 95 58 01 00 00" }
+"knowledge.resend_world" = { value = 0x1c, pattern = "66 89 4E 10 48 8B 85 F0 01 00 00 0F B7 48 1C 66 89 4E 12" }
+"knowledge.resend_player" = { value = 0x1d, pattern = "48 89 44 24 20 E8 ?? ?? ?? ?? E9 ?? ?? ?? ?? 44 38 67 1D 0F 84 ?? ?? ?? ?? 48 8B 15 ?? ?? ?? ??" }
 # The server holds its weather system here; the system its
 # resource manager, handle and generation, its instance pool
 # (pages, page count, shift, mask) and its layer slots and their

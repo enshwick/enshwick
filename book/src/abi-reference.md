@@ -12,7 +12,7 @@ raw table. The exact types and signatures are in the
 | Constant                                                                                            | Value | Meaning                                         |
 | --------------------------------------------------------------------------------------------------- | ----- | ----------------------------------------------- |
 | [`ABI_MAJOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 1     | A loader refuses a mod built for another major. |
-| [`ABI_MINOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 58    | A newer minor only appends.                     |
+| [`ABI_MINOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 59    | A newer minor only appends.                     |
 
 The ABI version is apart from Enshwick Loader's version (such as 0.2.0, see
 [Releasing and updates](releasing.md#versions)): a platform release raises
@@ -165,142 +165,144 @@ data lacks a field the event came with.
 is the table of functions the loader passes to `enshwick_mod_init`. Fields
 marked "init only" are allowed during `enshwick_mod_init` only.
 
-| Field                    | What it does                                                                                    | Since minor |
-| ------------------------ | ----------------------------------------------------------------------------------------------- | ----------- |
-| `header`                 | Size and version of the table                                                                   | 0           |
-| `host_version`           | The loader's own version                                                                        | 0           |
-| `build`                  | Writes the running game's side, image base, build fingerprint and where its build table is from | 0           |
-| `symbol`                 | Resolves a symbolic id for the running build: the mod's own rows first, then the loader's table | 0           |
-| `system`                 | Resolves an ECS system's update function by its reflected name                                  | 0           |
-| `field_offset`           | Resolves a field's offset in a reflected type                                                   | 0           |
-| `type_size`              | Resolves a reflected type's size                                                                | 0           |
-| `hook`                   | Links a detour into a function's chain; init only                                               | 0           |
-| `caller_frame`           | Writes the game caller's context at entry of the current chain, for `HookFlags::CALLER_FRAME`   | 0           |
-| `fault`                  | Reports a run-time failure; the loader unlinks the mod and turns it off                         | 0           |
-| `log`                    | Writes a line to the log under the mod's id                                                     | 0           |
-| `settings`               | The text of the mod's settings file, written from the defaults when missing                     | 0           |
-| `publish`                | Publishes a service table with its layout for other mods; init only                             | 47          |
-| `service`                | Finds a published service and checks its layout starts with the wanted one                      | 47          |
-| `constant`               | Resolves an engine constant of the running build by its symbolic id                             | 0           |
-| `data_dir`               | The mod's data folder, `mod-data/<id>`, created on first use                                    | 0           |
-| `log_level`              | The most detailed level kept for the mod's lines                                                | 1           |
-| `subscribe`              | Calls a handler on every occurrence of an event; init only                                      | 2           |
-| `type_hash`              | The ECS type hash of a reflected component type                                                 | 3           |
-| `component`              | A read-only pointer to an entity's component; server game thread only                           | 3           |
-| `entity_template`        | The template GUID of an entity; server game thread only                                         | 3           |
-| `player`                 | The connected player whose character is an entity; server game thread only                      | 3           |
-| `players`                | The connected players with characters in the world; server game thread only                     | 3           |
-| `serve_resource`         | Serves a resource built from a base resource by a patch function; init only, one mod per key    | 4           |
-| `add_text`               | Adds the text of a `LocaTag` in a language; init only                                           | 4           |
-| `mods`                   | The loaded mods, the loader first                                                               | 5           |
-| `sync`                   | Reports the mod's join values and returns the joined server's values to run with                | 6           |
-| `code_range`             | Where the game's code section is loaded and its length                                          | 7           |
-| `patch_code`             | Replaces bytes of game code that must read as expected at arming; init only                     | 7           |
-| `workshop_recipes`       | The most recipes one workshop takes: 512, or `u32::MAX` once the loader lifted the limit        | 7           |
-| `hosting`                | 1 while this process runs a game server                                                         | 8           |
-| `server_world`           | The entity world of the game server this process runs; 0 for none                               | 8           |
-| `command`                | Registers a chat command with a line of help; init only                                         | 9           |
-| `chat`                   | Sends a chat line to one player or everyone, from any thread                                    | 9           |
-| `set_label`              | Gives an entity a name, as a player's rename does; server game thread only                      | 9           |
-| `rename_filter`          | Calls a filter before the server applies a player's rename; init only                           | 9           |
-| `join_missing`           | The server's join mods the last refused join found missing on this client                       | 10          |
-| `hook_at`                | Runs a handler before an instruction inside a game function; init only                          | 11          |
-| `inventory_open`         | Asks for inventory transactions and item data; init only; `MISSING` on a build that lacks them  | 12          |
-| `item_info`              | Writes an item's static data; any thread                                                        | 12          |
-| `inventory_submit`       | Queues an inventory transaction, from any thread; the result comes on the game thread           | 12          |
-| `status`                 | Adds a source of lines for the loader's status summary                                          | 13          |
-| `run_command`            | Runs a chat command line as the server's console; server game thread only                       | 13          |
-| `altars_open`            | Asks the loader to follow the Flame Altars of the server's world; init only                     | 15          |
-| `altars`                 | The altars with their levels and zones; any thread; `REFUSED` for a mod that did not open them  | 15          |
-| `altar_zones_control`    | Makes the mod the one that sizes altar zones, one mod at a time; init only                      | 15          |
-| `set_altar_zones`        | Replaces the sizes the controlling mod gives altar zones; any thread                            | 15          |
-| `zone_check_filter`      | Calls a filter when the game refuses a placement outside a single building zone; init only      | 15          |
-| `survivor_lookup`        | Answers the game's survivor lookups, one mod at a time; init only                               | 16          |
-| `survivor_bed_check`     | Calls a filter after a survivor's own bed check kept its bed; init only                         | 16          |
-| `summon_filter`          | Calls a filter before a summoning staff spawns or moves a survivor; init only                   | 16          |
-| `summon_item`            | Files an item as a survivor's summoning staff; init only                                        | 16          |
-| `survivor_status`        | Merges the client's survivor menu statuses, one mod at a time; init only                        | 16          |
-| `interaction_filter`     | Calls a filter before a player's interaction with an entity, in the server's world; init only   | 17          |
-| `skill_override`         | Answers the game's checks of one skill node; init only                                          | 18          |
-| `comfort_filter`         | Changes the comfort each provider registers in a base; init only                                | 18          |
-| `experience_filter`      | Changes the characters' gained experience before the server applies it; init only               | 18          |
-| `altar_limit`            | Decides how many altars each Flame level allows, one mod at a time; init only                   | 19          |
-| `raise_base_limit`       | Lets the game group 32 altar zones in its 16 bases; init only; `MISSING` on an unknown build    | 19          |
-| `base_zones`             | The zones and bases of the last grouping, while the raised limit is in force                    | 19          |
-| `game_event`             | Calls a handler on every game event of a reflected type, or of all; init only                   | 20          |
-| `entities`               | The entities with a component and a place in the world; server game thread only                 | 21          |
-| `destroy`                | Asks the server to destroy an entity after the next step; server game thread only               | 21          |
-| `save_world`             | Asks the server to save the world now; server game thread only                                  | 21          |
-| `world_key`              | The key of the world the server runs: its save file's name and a folder hash                    | 21          |
-| `component_write`        | A component to write, marked changed; refuses client copies; server game thread only            | 22          |
-| `emit`                   | Raises a game event of an allowed type; server game thread only                                 | 23          |
-| `teleport`               | Moves an entity as the admin teleport does, after the next step; server game thread only        | 23          |
-| `spawn`                  | Spawns an entity from a template as the admin spawn does; server game thread only               | 24          |
-| `craft_filter`           | Calls a filter on each player's craft request in the server's world; init only                  | 25          |
-| `build_filter`           | Calls a filter after the cursor check allows a placement, on both sides; init only              | 25          |
-| `net_channel`            | Opens a join mod's channel between its server and client parts; init only                       | 26          |
-| `net_send`               | Sends a message on the mod's channel to the server or a player's client; any thread             | 26          |
-| `net_ready`              | Whether a peer takes messages now; any thread                                                   | 26          |
-| `notify`                 | Shows a line on a player's screen through the client's loader; server game thread only          | 27          |
-| `time_of_day`            | The clock of the server's world; server game thread only                                        | 28          |
-| `set_time_of_day`        | Sets the time of day; clients follow after the next step; server game thread only               | 28          |
-| `time_speed_control`     | Lets the mod set a factor on the clock's speed; init only                                       | 28          |
-| `set_time_speed`         | Sets the mod's factor on the clock's speed, 0 to 1000; server game thread only                  | 28          |
-| `game_settings`          | Copies the server's live game settings and their preset; server game thread only                | 29          |
-| `set_game_settings`      | Replaces the live game settings as the admin command does, until the server stops               | 29          |
-| `damage_filter`          | Calls a filter on damage before the game applies it, on worker threads; init only               | 30          |
-| `buff_types`             | The buff and debuff types of the running game; server game thread only                          | 31          |
-| `buffs`                  | The buffs an entity has; server game thread only                                                | 31          |
-| `apply_buff`             | Gives an entity a buff, or renews it, as the game restores saved buffs; server game thread only | 31          |
-| `remove_buff`            | Removes a buff type from an entity, as the game cleanses one; server game thread only           | 31          |
-| `knowledge`              | A knowledge value of a player or the world; server game thread only                             | 32          |
-| `grant_knowledge`        | Grants knowledge as the game does, applied the next step; server game thread only               | 32          |
-| `quests`                 | The quest ids of the running game; server game thread only                                      | 32          |
-| `weather_at`             | How clear, rainy, snowy and stormy it is at a place; server game thread only                    | 33          |
-| `weather_fronts`         | The current weather fronts of the server's world; server game thread only                       | 33          |
-| `set_weather`            | Starts new weather in every layer, or lets the game choose; server game thread only             | 33          |
-| `terrain_materials`      | The terrain materials of the running game; server game thread only                              | 34          |
-| `terrain_edit`           | Adds, digs or flattens ground as the game's terraforming does; server game thread only          | 34          |
-| `config_schema`          | Hands the loader the mod's settings schema as TOML text; any time                               | 35          |
-| `summoned`               | Calls a handler after a summoning staff's use spawned or moved a survivor; init only            | 37          |
-| `item_data_open`         | Opens an item data kind by id; init only                                                        | 38          |
-| `item_data_get`          | Copies an item's value of a kind; any thread                                                    | 38          |
-| `item_data_set`          | Sets or removes an item's value of a kind and sends it to clients; server, any thread           | 38          |
-| `ui_frame`               | Calls a callback each frame of the client's interface; init only                                | 39          |
-| `ui_widget`              | Draws a window, label, button, row, bar or sound in the mod's frame callback                    | 39          |
-| `ui_dialog`              | Queues a dialog in the game's style, answered on the thread that draws                          | 39          |
-| `ui_hud`                 | Calls a callback each frame the game draws its HUD; init only                                   | 40          |
-| `ui_markers`             | Replaces the mod's markers on the client's map; any thread                                      | 40          |
-| `config_check`           | The mod's check of a new settings text before the loader writes it; init only                   | 41          |
-| `texts`                  | Hands the loader the mod's texts, for the labels of its settings on the Mods screen             | 43          |
-| `content_serve`          | Serves bytes as game content, a served texture's pixels, and gives their hash; any thread       | 44          |
-| `content_read`           | Copies the game's own content from its archive files; any thread                                | 44          |
-| `icons_ready`            | Whether this client shows the UI images mods serve; any thread                                  | 44          |
-| `stat_open`              | Defines or opens a stat kind by id; init only                                                   | 45          |
-| `stat_info`              | A stat kind's definition and id; any thread                                                     | 45          |
-| `stat_value`             | A stat's value on an entity, without locks; any thread                                          | 45          |
-| `stat_modify`            | Sets or removes a mod's modifier on an entity; server, any thread                               | 45          |
-| `stat_buff`              | Gives a buff type modifiers; init only                                                          | 45          |
-| `stats_changed`          | Calls a handler for every stat value that changed; init only                                    | 45          |
-| `stat_sources`           | The modifiers that count toward an entity's stat; server game thread only                       | 45          |
-| `stat_watch`             | Watches an entity for its worn items and buffs; any thread                                      | 45          |
-| `define_event`           | Defines a mod event named after the mod, with its layout; init only                             | 47          |
-| `subscribe_event`        | Calls a handler on every mod event of a name whose layout serves the handler's; init only       | 47          |
-| `send_event`             | Hands a mod event the mod defined to its subscribers on this thread; any thread                 | 47          |
-| `affix_open`             | Defines an affix in the mod's namespace; init only                                              | 48          |
-| `affix_roll`             | Rolls affixes onto an item and keeps them; server game thread only                              | 48          |
-| `item_lines`             | The lines of what an item gives, own modifiers then affixes; any thread                         | 48          |
-| `affix_info`             | An affix's text key and rarity; any thread                                                      | 48          |
-| `migrate`                | Registers the mod's migrations and runs them on its settings file; init only                    | 49          |
-| `declare_content`        | Declares a content id in the mod's namespace and returns its GUID; init only                    | 50          |
-| `entity_data_open`       | Opens an entity data kind, sent to clients or not; init only                                    | 52          |
-| `replaced`               | The mods a present mod replaces, never started; any thread                                      | 54          |
-| `knowledge_input_filter` | A filter on the knowledge clients ask for in their input; server worker threads                 | 55          |
-| `language`               | The game language the client last asked a text in; 0 on a server; any thread                    | 56          |
-| `keep_game_settings`     | Changes the game settings and keeps the marked fields with the world; server game thread only   | 57          |
-| `forget_game_settings`   | Forgets the world's kept game settings and puts back its loaded values; server game thread only | 57          |
-| `catalog_set`            | Replaces the mod's catalog of updates and mods on the Mods screen; client only; any thread      | 58          |
-| `catalog_pick`           | The mod's answer to the player picking an entry of its catalog; init only                       | 58          |
+| Field                    | What it does                                                                                         | Since minor |
+| ------------------------ | ---------------------------------------------------------------------------------------------------- | ----------- |
+| `header`                 | Size and version of the table                                                                        | 0           |
+| `host_version`           | The loader's own version                                                                             | 0           |
+| `build`                  | Writes the running game's side, image base, build fingerprint and where its build table is from      | 0           |
+| `symbol`                 | Resolves a symbolic id for the running build: the mod's own rows first, then the loader's table      | 0           |
+| `system`                 | Resolves an ECS system's update function by its reflected name                                       | 0           |
+| `field_offset`           | Resolves a field's offset in a reflected type                                                        | 0           |
+| `type_size`              | Resolves a reflected type's size                                                                     | 0           |
+| `hook`                   | Links a detour into a function's chain; init only                                                    | 0           |
+| `caller_frame`           | Writes the game caller's context at entry of the current chain, for `HookFlags::CALLER_FRAME`        | 0           |
+| `fault`                  | Reports a run-time failure; the loader unlinks the mod and turns it off                              | 0           |
+| `log`                    | Writes a line to the log under the mod's id                                                          | 0           |
+| `settings`               | The text of the mod's settings file, written from the defaults when missing                          | 0           |
+| `publish`                | Publishes a service table with its layout for other mods; init only                                  | 47          |
+| `service`                | Finds a published service and checks its layout starts with the wanted one                           | 47          |
+| `constant`               | Resolves an engine constant of the running build by its symbolic id                                  | 0           |
+| `data_dir`               | The mod's data folder, `mod-data/<id>`, created on first use                                         | 0           |
+| `log_level`              | The most detailed level kept for the mod's lines                                                     | 1           |
+| `subscribe`              | Calls a handler on every occurrence of an event; init only                                           | 2           |
+| `type_hash`              | The ECS type hash of a reflected component type                                                      | 3           |
+| `component`              | A read-only pointer to an entity's component; server game thread only                                | 3           |
+| `entity_template`        | The template GUID of an entity; server game thread only                                              | 3           |
+| `player`                 | The connected player whose character is an entity; server game thread only                           | 3           |
+| `players`                | The connected players with characters in the world; server game thread only                          | 3           |
+| `serve_resource`         | Serves a resource built from a base resource by a patch function; init only, one mod per key         | 4           |
+| `add_text`               | Adds the text of a `LocaTag` in a language; init only                                                | 4           |
+| `mods`                   | The loaded mods, the loader first                                                                    | 5           |
+| `sync`                   | Reports the mod's join values and returns the joined server's values to run with                     | 6           |
+| `code_range`             | Where the game's code section is loaded and its length                                               | 7           |
+| `patch_code`             | Replaces bytes of game code that must read as expected at arming; init only                          | 7           |
+| `workshop_recipes`       | The most recipes one workshop takes: 512, or `u32::MAX` once the loader lifted the limit             | 7           |
+| `hosting`                | 1 while this process runs a game server                                                              | 8           |
+| `server_world`           | The entity world of the game server this process runs; 0 for none                                    | 8           |
+| `command`                | Registers a chat command with a line of help; init only                                              | 9           |
+| `chat`                   | Sends a chat line to one player or everyone, from any thread                                         | 9           |
+| `set_label`              | Gives an entity a name, as a player's rename does; server game thread only                           | 9           |
+| `rename_filter`          | Calls a filter before the server applies a player's rename; init only                                | 9           |
+| `join_missing`           | The server's join mods the last refused join found missing on this client                            | 10          |
+| `hook_at`                | Runs a handler before an instruction inside a game function; init only                               | 11          |
+| `inventory_open`         | Asks for inventory transactions and item data; init only; `MISSING` on a build that lacks them       | 12          |
+| `item_info`              | Writes an item's static data; any thread                                                             | 12          |
+| `inventory_submit`       | Queues an inventory transaction, from any thread; the result comes on the game thread                | 12          |
+| `status`                 | Adds a source of lines for the loader's status summary                                               | 13          |
+| `run_command`            | Runs a chat command line as the server's console; server game thread only                            | 13          |
+| `altars_open`            | Asks the loader to follow the Flame Altars of the server's world; init only                          | 15          |
+| `altars`                 | The altars with their levels and zones; any thread; `REFUSED` for a mod that did not open them       | 15          |
+| `altar_zones_control`    | Makes the mod the one that sizes altar zones, one mod at a time; init only                           | 15          |
+| `set_altar_zones`        | Replaces the sizes the controlling mod gives altar zones; any thread                                 | 15          |
+| `zone_check_filter`      | Calls a filter when the game refuses a placement outside a single building zone; init only           | 15          |
+| `survivor_lookup`        | Answers the game's survivor lookups, one mod at a time; init only                                    | 16          |
+| `survivor_bed_check`     | Calls a filter after a survivor's own bed check kept its bed; init only                              | 16          |
+| `summon_filter`          | Calls a filter before a summoning staff spawns or moves a survivor; init only                        | 16          |
+| `summon_item`            | Files an item as a survivor's summoning staff; init only                                             | 16          |
+| `survivor_status`        | Merges the client's survivor menu statuses, one mod at a time; init only                             | 16          |
+| `interaction_filter`     | Calls a filter before a player's interaction with an entity, in the server's world; init only        | 17          |
+| `skill_override`         | Answers the game's checks of one skill node; init only                                               | 18          |
+| `comfort_filter`         | Changes the comfort each provider registers in a base; init only                                     | 18          |
+| `experience_filter`      | Changes the characters' gained experience before the server applies it; init only                    | 18          |
+| `altar_limit`            | Decides how many altars each Flame level allows, one mod at a time; init only                        | 19          |
+| `raise_base_limit`       | Lets the game group 32 altar zones in its 16 bases; init only; `MISSING` on an unknown build         | 19          |
+| `base_zones`             | The zones and bases of the last grouping, while the raised limit is in force                         | 19          |
+| `game_event`             | Calls a handler on every game event of a reflected type, or of all; init only                        | 20          |
+| `entities`               | The entities with a component and a place in the world; server game thread only                      | 21          |
+| `destroy`                | Asks the server to destroy an entity after the next step; server game thread only                    | 21          |
+| `save_world`             | Asks the server to save the world now; server game thread only                                       | 21          |
+| `world_key`              | The key of the world the server runs: its save file's name and a folder hash                         | 21          |
+| `component_write`        | A component to write, marked changed; refuses client copies; server game thread only                 | 22          |
+| `emit`                   | Raises a game event of an allowed type; server game thread only                                      | 23          |
+| `teleport`               | Moves an entity as the admin teleport does, after the next step; server game thread only             | 23          |
+| `spawn`                  | Spawns an entity from a template as the admin spawn does; server game thread only                    | 24          |
+| `craft_filter`           | Calls a filter on each player's craft request in the server's world; init only                       | 25          |
+| `build_filter`           | Calls a filter after the cursor check allows a placement, on both sides; init only                   | 25          |
+| `net_channel`            | Opens a join mod's channel between its server and client parts; init only                            | 26          |
+| `net_send`               | Sends a message on the mod's channel to the server or a player's client; any thread                  | 26          |
+| `net_ready`              | Whether a peer takes messages now; any thread                                                        | 26          |
+| `notify`                 | Shows a line on a player's screen through the client's loader; server game thread only               | 27          |
+| `time_of_day`            | The clock of the server's world; server game thread only                                             | 28          |
+| `set_time_of_day`        | Sets the time of day; clients follow after the next step; server game thread only                    | 28          |
+| `time_speed_control`     | Lets the mod set a factor on the clock's speed; init only                                            | 28          |
+| `set_time_speed`         | Sets the mod's factor on the clock's speed, 0 to 1000; server game thread only                       | 28          |
+| `game_settings`          | Copies the server's live game settings and their preset; server game thread only                     | 29          |
+| `set_game_settings`      | Replaces the live game settings as the admin command does, until the server stops                    | 29          |
+| `damage_filter`          | Calls a filter on damage before the game applies it, on worker threads; init only                    | 30          |
+| `buff_types`             | The buff and debuff types of the running game; server game thread only                               | 31          |
+| `buffs`                  | The buffs an entity has; server game thread only                                                     | 31          |
+| `apply_buff`             | Gives an entity a buff, or renews it, as the game restores saved buffs; server game thread only      | 31          |
+| `remove_buff`            | Removes a buff type from an entity, as the game cleanses one; server game thread only                | 31          |
+| `knowledge`              | A knowledge value of a player or the world; server game thread only                                  | 32          |
+| `grant_knowledge`        | Grants knowledge as the game does, applied the next step; server game thread only                    | 32          |
+| `quests`                 | The quest ids of the running game; server game thread only                                           | 32          |
+| `weather_at`             | How clear, rainy, snowy and stormy it is at a place; server game thread only                         | 33          |
+| `weather_fronts`         | The current weather fronts of the server's world; server game thread only                            | 33          |
+| `set_weather`            | Starts new weather in every layer, or lets the game choose; server game thread only                  | 33          |
+| `terrain_materials`      | The terrain materials of the running game; server game thread only                                   | 34          |
+| `terrain_edit`           | Adds, digs or flattens ground as the game's terraforming does; server game thread only               | 34          |
+| `config_schema`          | Hands the loader the mod's settings schema as TOML text; any time                                    | 35          |
+| `summoned`               | Calls a handler after a summoning staff's use spawned or moved a survivor; init only                 | 37          |
+| `item_data_open`         | Opens an item data kind by id; init only                                                             | 38          |
+| `item_data_get`          | Copies an item's value of a kind; any thread                                                         | 38          |
+| `item_data_set`          | Sets or removes an item's value of a kind and sends it to clients; server, any thread                | 38          |
+| `ui_frame`               | Calls a callback each frame of the client's interface; init only                                     | 39          |
+| `ui_widget`              | Draws a window, label, button, row, bar or sound in the mod's frame callback                         | 39          |
+| `ui_dialog`              | Queues a dialog in the game's style, answered on the thread that draws                               | 39          |
+| `ui_hud`                 | Calls a callback each frame the game draws its HUD; init only                                        | 40          |
+| `ui_markers`             | Replaces the mod's markers on the client's map; any thread                                           | 40          |
+| `config_check`           | The mod's check of a new settings text before the loader writes it; init only                        | 41          |
+| `texts`                  | Hands the loader the mod's texts, for the labels of its settings on the Mods screen                  | 43          |
+| `content_serve`          | Serves bytes as game content, a served texture's pixels, and gives their hash; any thread            | 44          |
+| `content_read`           | Copies the game's own content from its archive files; any thread                                     | 44          |
+| `icons_ready`            | Whether this client shows the UI images mods serve; any thread                                       | 44          |
+| `stat_open`              | Defines or opens a stat kind by id; init only                                                        | 45          |
+| `stat_info`              | A stat kind's definition and id; any thread                                                          | 45          |
+| `stat_value`             | A stat's value on an entity, without locks; any thread                                               | 45          |
+| `stat_modify`            | Sets or removes a mod's modifier on an entity; server, any thread                                    | 45          |
+| `stat_buff`              | Gives a buff type modifiers; init only                                                               | 45          |
+| `stats_changed`          | Calls a handler for every stat value that changed; init only                                         | 45          |
+| `stat_sources`           | The modifiers that count toward an entity's stat; server game thread only                            | 45          |
+| `stat_watch`             | Watches an entity for its worn items and buffs; any thread                                           | 45          |
+| `define_event`           | Defines a mod event named after the mod, with its layout; init only                                  | 47          |
+| `subscribe_event`        | Calls a handler on every mod event of a name whose layout serves the handler's; init only            | 47          |
+| `send_event`             | Hands a mod event the mod defined to its subscribers on this thread; any thread                      | 47          |
+| `affix_open`             | Defines an affix in the mod's namespace; init only                                                   | 48          |
+| `affix_roll`             | Rolls affixes onto an item and keeps them; server game thread only                                   | 48          |
+| `item_lines`             | The lines of what an item gives, own modifiers then affixes; any thread                              | 48          |
+| `affix_info`             | An affix's text key and rarity; any thread                                                           | 48          |
+| `migrate`                | Registers the mod's migrations and runs them on its settings file; init only                         | 49          |
+| `declare_content`        | Declares a content id in the mod's namespace and returns its GUID; init only                         | 50          |
+| `entity_data_open`       | Opens an entity data kind, sent to clients or not; init only                                         | 52          |
+| `replaced`               | The mods a present mod replaces, never started; any thread                                           | 54          |
+| `knowledge_input_filter` | A filter on the knowledge clients ask for in their input; server worker threads                      | 55          |
+| `language`               | The game language the client last asked a text in; 0 on a server; any thread                         | 56          |
+| `keep_game_settings`     | Changes the game settings and keeps the marked fields with the world; server game thread only        | 57          |
+| `forget_game_settings`   | Forgets the world's kept game settings and puts back its loaded values; server game thread only      | 57          |
+| `catalog_set`            | Replaces the mod's catalog of updates and mods on the Mods screen; client only; any thread           | 58          |
+| `catalog_pick`           | The mod's answer to the player picking an entry of its catalog; init only                            | 58          |
+| `revoke_knowledge`       | Takes knowledge back and has the clients sent it again; server game thread only                      | 59          |
+| `account_knowledge`      | Grants or takes back an account's knowledge now or once its character loads; server game thread only | 59          |
 
 ## Under an older loader
 
@@ -308,75 +310,76 @@ The safe layer checks `header.covers` before it calls a field added after
 minor 0. When the loader lacks a field, the feature either degrades or turns
 the mod off with a reason, which the mod's log shows as `off: <reason>`:
 
-| Needs minor | Feature                             | Under an older loader                                     |
-| ----------- | ----------------------------------- | --------------------------------------------------------- |
-| 1           | `Host::log_level`                   | `Level::DEBUG` is assumed                                 |
-| 2           | `Load::on`, `Load::subscribe`       | Off: `event <id>: missing on this game build`             |
-| 3           | `Load::world`                       | Off: `world reads: needs a newer loader`                  |
-| 4           | served resources                    | Off: `served resources: needs a newer loader`             |
-| 4           | mod texts                           | Off: `mod texts: needs a newer loader`                    |
-| 5           | `mods()`                            | An empty list                                             |
-| 6           | join values                         | None: the mod runs with its file's values                 |
-| 7           | `Load::code`, `Load::find_code`     | Off: `code searches: needs a newer loader`                |
-| 7           | `Load::patch_code`                  | Off: `code patches: needs a newer loader`                 |
-| 8           | `Host::hosting`                     | Whether this is the dedicated server                      |
-| 9           | chat commands                       | Off: `chat commands: needs a newer loader`                |
-| 9           | rename filters                      | Off: `rename filters: needs a newer loader`               |
-| 10          | `mods::join_missing()`              | An empty list                                             |
-| 11          | `Load::hook_at`                     | Off: `mid-function hooks: needs a newer loader`           |
-| 12          | `Load::inventories`                 | Off: `inventories: needs a newer loader`                  |
-| 13          | status lines                        | Off: `status lines: needs a newer loader`                 |
-| 13          | `commands::run`                     | `Err(RunError::NoLoader)`                                 |
-| 14          | `ModEntry::signed_by`               | Empty                                                     |
-| 15          | altars and zone checks              | Off: `altars: needs a newer loader`                       |
-| 16          | survivors                           | Off: `the survivor lookup: needs a newer loader`          |
-| 17          | interaction filters                 | Off: `interaction filters: needs a newer loader`          |
-| 18          | skills, comfort, experience         | Off: `skill overrides: needs a newer loader` and the like |
-| 19          | altar limit and bases               | Off: `altars: needs a newer loader`                       |
-| 20          | game events                         | Off: `game events: needs a newer loader`                  |
-| 21          | entity queries, destroy, saves      | Empty, `None` or `WorldError::Missing`                    |
-| 22          | component and stat writes           | `WorldError::Missing`                                     |
-| 23          | `Load::actions`                     | Off: `actions: needs a newer loader`                      |
-| 24          | `Actions::spawn`                    | `WorldError::Missing`                                     |
-| 25          | craft and build filters             | Off: `craft filters: needs a newer loader` and the like   |
-| 26          | `Load::channel`                     | Off: `mod messages: needs a newer loader`                 |
-| 27          | `World::notify`                     | A chat line                                               |
-| 28          | `Load::clock`, `clock_speed`        | Off: `clock: needs a newer loader` and the like           |
-| 29          | `Load::game_settings`               | Off: `game settings: needs a newer loader`                |
-| 30          | `Load::on_damage`                   | Off: `damage filters: needs a newer loader`               |
-| 31          | `Load::buffs`                       | Off: `buffs: needs a newer loader`                        |
-| 32          | `Load::knowledge`                   | Off: `knowledge: needs a newer loader`                    |
-| 33          | `Load::weather`                     | Off: `weather: needs a newer loader`                      |
-| 34          | `Load::terrain`                     | Off: `terrain: needs a newer loader`                      |
-| 35          | settings schema                     | `/config` does not know the mod's settings                |
-| 36          | `ModEntry` name and credits         | Empty                                                     |
-| 37          | `Load::on_summoned`                 | Off: `the summon handler: needs a newer loader`           |
-| 37          | `Summon` item and meter             | `Entity::NONE` and `None`                                 |
-| 38          | `Load::item_data`                   | Off: `item data: needs a newer loader`                    |
-| 39          | `Load::ui`, `Load::on_frame`        | Off: `the interface: needs a newer loader`                |
-| 40          | `Load::on_hud`, markers             | Off, or `UiError::Unavailable`                            |
-| 41          | settings check                      | Changes are checked against the schema only               |
-| 42          | `SummonVerdict::Refuse`             | The use goes on                                           |
-| 42          | `Op::Renew`                         | The batch fails                                           |
-| 43          | texts for the Mods screen           | The settings' keys in words                               |
-| 44          | `Load::add_icon`, item icons        | Off: `icons: needs a newer loader`                        |
-| 45          | `Load::stats` and stat kinds        | Off: `stats: needs a newer loader`                        |
-| 45          | `Damage::attacker`                  | The hit's source                                          |
-| 46          | world settings                      | Startup values stay until a restart                       |
-| 47          | services, mod events                | Off: `services and mod events: needs a newer loader`      |
-| 48          | `Load::affix` and affixes           | Off: `affixes: needs a newer loader`                      |
-| 48          | `ItemInfo::category`                | 0                                                         |
-| 49          | `Load::migrate`                     | Off: `migrations: needs a newer loader`                   |
-| 50          | content ids, the content calls      | Off: `content ids: needs a newer loader`                  |
-| 51          | `BuildInfo::table`                  | `BuildTable::EXACT`                                       |
-| 52          | `Load::entity_data`                 | Off: `entity data: needs a newer loader`                  |
-| 53          | `ManifestFlags::RELOAD`             | The mod is never reloaded                                 |
-| 54          | `mods::replaced()`                  | An empty list                                             |
-| 55          | `Load::on_knowledge_input`          | Off: `knowledge input filters: needs a newer loader`      |
-| 56          | `i18n::language()`                  | `Language::FALLBACK`                                      |
-| 57          | `GameSettings::keep`, `forget_kept` | `WorldError::Missing`                                     |
-| 58          | `catalog::publish`                  | `Err(Off)`; nothing shows                                 |
-| 58          | `Load::on_catalog_pick`             | Off: `catalog: needs a newer loader`                      |
+| Needs minor | Feature                                                | Under an older loader                                     |
+| ----------- | ------------------------------------------------------ | --------------------------------------------------------- |
+| 1           | `Host::log_level`                                      | `Level::DEBUG` is assumed                                 |
+| 2           | `Load::on`, `Load::subscribe`                          | Off: `event <id>: missing on this game build`             |
+| 3           | `Load::world`                                          | Off: `world reads: needs a newer loader`                  |
+| 4           | served resources                                       | Off: `served resources: needs a newer loader`             |
+| 4           | mod texts                                              | Off: `mod texts: needs a newer loader`                    |
+| 5           | `mods()`                                               | An empty list                                             |
+| 6           | join values                                            | None: the mod runs with its file's values                 |
+| 7           | `Load::code`, `Load::find_code`                        | Off: `code searches: needs a newer loader`                |
+| 7           | `Load::patch_code`                                     | Off: `code patches: needs a newer loader`                 |
+| 8           | `Host::hosting`                                        | Whether this is the dedicated server                      |
+| 9           | chat commands                                          | Off: `chat commands: needs a newer loader`                |
+| 9           | rename filters                                         | Off: `rename filters: needs a newer loader`               |
+| 10          | `mods::join_missing()`                                 | An empty list                                             |
+| 11          | `Load::hook_at`                                        | Off: `mid-function hooks: needs a newer loader`           |
+| 12          | `Load::inventories`                                    | Off: `inventories: needs a newer loader`                  |
+| 13          | status lines                                           | Off: `status lines: needs a newer loader`                 |
+| 13          | `commands::run`                                        | `Err(RunError::NoLoader)`                                 |
+| 14          | `ModEntry::signed_by`                                  | Empty                                                     |
+| 15          | altars and zone checks                                 | Off: `altars: needs a newer loader`                       |
+| 16          | survivors                                              | Off: `the survivor lookup: needs a newer loader`          |
+| 17          | interaction filters                                    | Off: `interaction filters: needs a newer loader`          |
+| 18          | skills, comfort, experience                            | Off: `skill overrides: needs a newer loader` and the like |
+| 19          | altar limit and bases                                  | Off: `altars: needs a newer loader`                       |
+| 20          | game events                                            | Off: `game events: needs a newer loader`                  |
+| 21          | entity queries, destroy, saves                         | Empty, `None` or `WorldError::Missing`                    |
+| 22          | component and stat writes                              | `WorldError::Missing`                                     |
+| 23          | `Load::actions`                                        | Off: `actions: needs a newer loader`                      |
+| 24          | `Actions::spawn`                                       | `WorldError::Missing`                                     |
+| 25          | craft and build filters                                | Off: `craft filters: needs a newer loader` and the like   |
+| 26          | `Load::channel`                                        | Off: `mod messages: needs a newer loader`                 |
+| 27          | `World::notify`                                        | A chat line                                               |
+| 28          | `Load::clock`, `clock_speed`                           | Off: `clock: needs a newer loader` and the like           |
+| 29          | `Load::game_settings`                                  | Off: `game settings: needs a newer loader`                |
+| 30          | `Load::on_damage`                                      | Off: `damage filters: needs a newer loader`               |
+| 31          | `Load::buffs`                                          | Off: `buffs: needs a newer loader`                        |
+| 32          | `Load::knowledge`                                      | Off: `knowledge: needs a newer loader`                    |
+| 33          | `Load::weather`                                        | Off: `weather: needs a newer loader`                      |
+| 34          | `Load::terrain`                                        | Off: `terrain: needs a newer loader`                      |
+| 35          | settings schema                                        | `/config` does not know the mod's settings                |
+| 36          | `ModEntry` name and credits                            | Empty                                                     |
+| 37          | `Load::on_summoned`                                    | Off: `the summon handler: needs a newer loader`           |
+| 37          | `Summon` item and meter                                | `Entity::NONE` and `None`                                 |
+| 38          | `Load::item_data`                                      | Off: `item data: needs a newer loader`                    |
+| 39          | `Load::ui`, `Load::on_frame`                           | Off: `the interface: needs a newer loader`                |
+| 40          | `Load::on_hud`, markers                                | Off, or `UiError::Unavailable`                            |
+| 41          | settings check                                         | Changes are checked against the schema only               |
+| 42          | `SummonVerdict::Refuse`                                | The use goes on                                           |
+| 42          | `Op::Renew`                                            | The batch fails                                           |
+| 43          | texts for the Mods screen                              | The settings' keys in words                               |
+| 44          | `Load::add_icon`, item icons                           | Off: `icons: needs a newer loader`                        |
+| 45          | `Load::stats` and stat kinds                           | Off: `stats: needs a newer loader`                        |
+| 45          | `Damage::attacker`                                     | The hit's source                                          |
+| 46          | world settings                                         | Startup values stay until a restart                       |
+| 47          | services, mod events                                   | Off: `services and mod events: needs a newer loader`      |
+| 48          | `Load::affix` and affixes                              | Off: `affixes: needs a newer loader`                      |
+| 48          | `ItemInfo::category`                                   | 0                                                         |
+| 49          | `Load::migrate`                                        | Off: `migrations: needs a newer loader`                   |
+| 50          | content ids, the content calls                         | Off: `content ids: needs a newer loader`                  |
+| 51          | `BuildInfo::table`                                     | `BuildTable::EXACT`                                       |
+| 52          | `Load::entity_data`                                    | Off: `entity data: needs a newer loader`                  |
+| 53          | `ManifestFlags::RELOAD`                                | The mod is never reloaded                                 |
+| 54          | `mods::replaced()`                                     | An empty list                                             |
+| 55          | `Load::on_knowledge_input`                             | Off: `knowledge input filters: needs a newer loader`      |
+| 56          | `i18n::language()`                                     | `Language::FALLBACK`                                      |
+| 57          | `GameSettings::keep`, `forget_kept`                    | `WorldError::Missing`                                     |
+| 58          | `catalog::publish`                                     | `Err(Off)`; nothing shows                                 |
+| 58          | `Load::on_catalog_pick`                                | Off: `catalog: needs a newer loader`                      |
+| 59          | `Knowledge::revoke`, `grant_account`, `revoke_account` | `WorldError::Missing`                                     |
 
 A mod that can do without a feature catches the `Off` and goes on without it
 instead of returning it from `init`.

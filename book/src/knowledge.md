@@ -50,8 +50,8 @@ its own table, built from the game's data.
 game does: the next step applies it with everything that follows, such as
 experience, unlocks chained on it, the clients and the save. The grant must
 fit the id's kind: `Grant::Set` for a bool, `Grant::Add(n)` for a counter,
-`Grant::Flag(bit)` for one bit of flags. A grant only adds; the game has no
-way to take knowledge back.
+`Grant::Flag(bit)` for one bit of flags. A grant only adds; a revoke takes
+back.
 
 A grant fails with a [`WorldError`](world.md#writing-components): `Refused`
 for an id the game does not know, a grant that does not fit the kind, a bit
@@ -59,6 +59,40 @@ the game does not expect, a player not in the game, or a step that already
 holds the game's limit of grants; `WrongThread` off the game thread. Granting a quest's or a recipe's own id skips what leads to it, so
 the journal may show a quest done without its steps; granting the knowledge
 its requirement asks for keeps it whole.
+
+## Taking back
+
+`revoke(player, id, revoke)` and `revoke_world(id, revoke)` (minor 59) take
+knowledge back: `Revoke::Clear` clears a bool, `Revoke::Sub(n)` lowers a
+counter down to 0, `Revoke::Unflag(bit)` clears one bit of flags. The value
+changes at once, the clients get it again (the world's to every client, a
+player's to that player), and the next save keeps it; `KnowledgeChanged`
+reports it after the next step. What the grant brought stays: experience,
+unlocks chained on it, skill points already spent. A quest's id taken back
+while its steps still hold is rewarded again. A revoke fails as a grant
+does, and for a player whose save has not loaded yet.
+
+## Players not in the game
+
+A player's knowledge lives in the character's save on the player's machine;
+the server holds it only while the player is in the game, once that save has
+loaded. `grant_account(account, id, grant)` and
+`revoke_account(account, id, revoke)` (minor 59) take the account's
+[`Player::key`](world.md) instead of a character: when the account's
+character is in the game the change applies now, otherwise it waits with the
+world, in `mod-data/enshwick/worlds/<key>/knowledge.toml`, and applies once
+the account's next character has loaded in that world, whichever character
+it is. Only a player's ids qualify.
+
+```rust
+use enshwick_loader_api::knowledge::Grant;
+
+fn reward(knowledge: &enshwick_loader_api::knowledge::Knowledge, account: u64, quest_reward: u32) {
+    if let Err(why) = knowledge.grant_account(account, quest_reward, Grant::Set) {
+        enshwick_loader_api::warn!("no reward: {why}");
+    }
+}
+```
 
 ## What clients ask for
 

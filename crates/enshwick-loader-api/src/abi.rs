@@ -14,7 +14,7 @@ use core::sync::atomic::AtomicUsize;
 pub const ABI_MAJOR: u16 = 1;
 
 /// The minor version of this interface. A newer minor only appends fields.
-pub const ABI_MINOR: u16 = 58;
+pub const ABI_MINOR: u16 = 59;
 
 /// Whether `id` is a valid mod id: 1 to 64 characters of `[a-z0-9-]`.
 ///
@@ -4867,6 +4867,34 @@ pub struct HostApi {
     /// callback. Allowed during `enshwick_mod_init` only. Since minor 58.
     pub catalog_pick:
         extern "system" fn(me: ModHandle, callback: CatalogPickFn, user: *mut c_void) -> Status,
+    /// Takes knowledge `id`, of `kind`, back from the player whose character
+    /// is `entity`, or from the world for 0 or an id of the world's, and has
+    /// the clients sent it again: a [`KnowledgeInfo::BOOL`] cleared, `value`
+    /// taken from a [`KnowledgeInfo::COUNTER`] (down to 0), bit `value` of
+    /// [`KnowledgeInfo::FLAGS`] cleared. Saved with the next save; what
+    /// followed the grant, such as experience, stays.
+    /// [`Status::BAD_ARGS`] for an unknown id, a kind that is not the id's or
+    /// a bit past 31, [`Status::REFUSED`] for a player not in the game or
+    /// whose save has not loaded yet. On the server's game thread only.
+    /// Since minor 59.
+    pub revoke_knowledge:
+        extern "system" fn(me: ModHandle, entity: u32, id: u32, kind: u32, value: u32) -> Status,
+    /// Grants knowledge `id` of a player's, as [`HostApi::grant_knowledge`]
+    /// does, or takes it back as [`HostApi::revoke_knowledge`] does when
+    /// `revoke` is 1, for the account whose [`PlayerInfo::key`] is `key`:
+    /// now when its character is in the game, else once its next character
+    /// has loaded in this world; the loader keeps waiting changes with the
+    /// world. [`Status::BAD_ARGS`] for an unknown id, an id of the world's
+    /// or a kind that is not the id's, [`Status::MISSING`] while no world
+    /// runs. On the server's game thread only. Since minor 59.
+    pub account_knowledge: extern "system" fn(
+        me: ModHandle,
+        key: u64,
+        id: u32,
+        kind: u32,
+        value: u32,
+        revoke: u32,
+    ) -> Status,
 }
 
 /// Flags of [`HostApi::entity_data_open`].
@@ -5219,7 +5247,8 @@ const _: () = {
     assert!(size_of::<StatModify>() == 8 + 8 + 12 + 4 + 8);
     assert!(size_of::<StatChange>() == 8 + 24);
     assert!(core::mem::offset_of!(HostApi, language) == 24 + 127 * 8);
-    assert!(size_of::<HostApi>() == 24 + 132 * 8);
+    assert!(size_of::<HostApi>() == 24 + 134 * 8);
+    assert!(core::mem::offset_of!(HostApi, account_knowledge) == 24 + 133 * 8);
     assert!(core::mem::offset_of!(HostApi, catalog_pick) == 24 + 131 * 8);
     assert!(core::mem::offset_of!(HostApi, replaced) == 24 + 125 * 8);
     assert!(core::mem::offset_of!(HostApi, entity_data_open) == 24 + 124 * 8);

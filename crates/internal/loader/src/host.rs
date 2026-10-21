@@ -534,6 +534,7 @@ impl Loader {
     pub(crate) fn emit(&self, event: Event, only: Option<usize>, data: *const core::ffi::c_void) {
         if only.is_none() {
             crate::game_settings::world_event(self, event);
+            crate::knowledge::changes::world_event(self, event);
             crate::item_data::world_event(self, event);
             crate::stats::world_event(self, event);
         }
@@ -747,6 +748,8 @@ pub(crate) static API: HostApi = HostApi {
     forget_game_settings,
     catalog_set,
     catalog_pick,
+    revoke_knowledge,
+    account_knowledge,
 };
 
 /// A static slice from a pointer and a count, empty for a null pointer.
@@ -3098,6 +3101,41 @@ extern "system" fn knowledge(
     entry("knowledge", || {
         match caller(me).and_then(|loader| crate::knowledge::value(loader, entity, id)) {
             Ok(info) => put_headed(out, info),
+            Err(status) => status,
+        }
+    })
+}
+
+extern "system" fn revoke_knowledge(
+    me: ModHandle,
+    entity: u32,
+    id: u32,
+    kind: u32,
+    value: u32,
+) -> Status {
+    entry("revoke_knowledge", || {
+        match caller(me)
+            .and_then(|loader| crate::knowledge::changes::revoke(loader, entity, id, kind, value))
+        {
+            Ok(()) => Status::OK,
+            Err(status) => status,
+        }
+    })
+}
+
+extern "system" fn account_knowledge(
+    me: ModHandle,
+    key: u64,
+    id: u32,
+    kind: u32,
+    value: u32,
+    revoke: u32,
+) -> Status {
+    entry("account_knowledge", || {
+        match caller(me).and_then(|loader| {
+            crate::knowledge::changes::for_account(loader, key, id, kind, value, revoke != 0)
+        }) {
+            Ok(()) => Status::OK,
             Err(status) => status,
         }
     })
