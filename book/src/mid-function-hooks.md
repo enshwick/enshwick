@@ -29,11 +29,37 @@ holds the 16 general-purpose registers and `rflags`.
 - `rsp` is the stack pointer at `address`, for reading the function's locals;
   writes to it are ignored.
 - The loader keeps every vector register the game holds across the handlers:
-  the `xmm` registers, the upper halves of the `ymm` registers and, where the
-  system turns AVX-512 on and the game uses it there, the `zmm` and mask
-  registers. Handler code may use any of them freely, including AVX code that
-  ends with `vzeroupper`. It does not save the x87 state, and a handler cannot
-  read or change any vector value the game holds.
+  the `xmm` and `ymm` registers and, where the system turns AVX-512 on, the
+  `zmm` and mask registers. Handler code may use any of them freely, including
+  AVX code that ends with `vzeroupper` and AVX-512 code. It does not save the
+  x87 state, and a handler cannot read or change any vector value the game
+  holds.
+
+## Cost
+
+A stub costs a few nanoseconds per pass on top of the handlers. How it keeps
+the vector registers is chosen per processor when the hooks are armed:
+
+| Processor                  | What the stub does                                                                                                                              |
+| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| no AVX                     | saves `xmm0`-`xmm5`; the calling convention keeps the rest                                                                                      |
+| AMD with AVX, no AVX-512   | saves `ymm0`-`ymm15`                                                                                                                            |
+| Intel with AVX, no AVX-512 | saves `ymm0`-`ymm15`; when their upper halves are zero, gives them back with `vzeroupper` so the SSE code after the hook keeps its speed        |
+| AMD with AVX-512           | ORs every vector and mask register together and saves `xmm0`-`xmm5`, `ymm0`-`ymm15` or all of `zmm0`-`zmm31` and the masks, by what is not zero |
+| Intel with AVX-512         | reads the state in use with `xgetbv` (a 512-bit OR would lower the clock) and saves the same three ways                                         |
+
+Per call of a hooked 3-instruction function with an empty handler, release
+build, Ryzen 9 9950X3D (`cargo test -p enshwick-loader --release --lib
+stub_cost -- --ignored --nocapture`, which also runs the paths of other
+processors):
+
+| Path                  | Upper halves clear | `ymm` in use | `zmm` in use |
+| --------------------- | ------------------ | ------------ | ------------ |
+| AMD, AVX-512 (chosen) | +7.0 ns            | +7.3 ns      | +9.7 ns      |
+| Intel, AVX-512        | +12.5 ns           | +12.4 ns     | +14.4 ns     |
+| AMD, AVX              | +5.9 ns            | +5.9 ns      | —            |
+| Intel, AVX            | +6.1 ns            | +5.9 ns      | —            |
+| no AVX                | +5.2 ns            | —            | —            |
 
 ## Choosing an address
 
