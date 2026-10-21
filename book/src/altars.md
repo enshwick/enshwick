@@ -44,7 +44,10 @@ Each `Altar` has:
 
 `list` works from any thread and returns an empty list while no world runs.
 `AltarsChanged` is raised on the game thread after a step in which an altar
-was placed, removed, raised a level or had its zone built anew.
+was placed, removed, raised a level or had its zone built anew. A removed altar
+leaves the list a few seconds and some 60 server steps after the game last
+showed it, the last altar too, when the list turns empty; a server that stalls
+keeps its altars.
 
 ## Bases
 

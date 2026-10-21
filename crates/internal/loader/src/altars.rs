@@ -2,9 +2,11 @@
 //!
 //! The engine runs a system once per batch of entities, several times a
 //! tick, so no pass sees every altar: passes merge into what is known, and an
-//! altar no pass has seen for [`FORGET_AFTER`] is forgotten. A mod that
-//! controls the zones gets `upgrade_building_range` replaced by vanilla's own
-//! loop on the same engine helpers, writing its sizes.
+//! altar no pass has seen for [`FORGET_AFTER`] and [`FORGET_STEPS`] server
+//! steps is forgotten, the last one too. Counting steps keeps a server that
+//! stalls from forgetting altars it could not step over. A mod that controls
+//! the zones gets `upgrade_building_range` replaced by vanilla's own loop on
+//! the same engine helpers, writing its sizes.
 
 mod geometry;
 
@@ -12,7 +14,7 @@ use core::ffi::c_void;
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::sync::TryLockError;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, OnceLock, PoisonError};
 use std::time::{Duration, Instant};
 
@@ -30,6 +32,11 @@ use crate::ecs::{Engine, Query, read_at};
 use crate::host::{Loader, Registered};
 
 const FORGET_AFTER: Duration = Duration::from_secs(2);
+/// Server steps an altar stays known without a pass seeing it, together
+/// with [`FORGET_AFTER`].
+const FORGET_STEPS: u64 = 60;
+/// How many steps apart the post-step looks for altars no pass sees.
+const EXPIRE_EVERY: u64 = 16;
 /// `add_buildzones_server`'s iterator: context, `BaseIdComponent`,
 /// `CurrentTransform`, `TriggerShape`, `BuildZoneSystem`.
 /// Found on the 1.0 build 1269579, server and client.
@@ -64,9 +71,25 @@ const MAX_LEVELS: usize = 16;
 
 type Sizes = ArrayVec<[f32; 3], MAX_LEVELS>;
 
+/// When a pass last saw an entry: the time and the server step.
+#[derive(Clone, Copy, Debug)]
+struct When {
+    at: Instant,
+    step: u64,
+}
+
+impl When {
+    /// Whether an entry seen at `self` is still known at `now`: forgotten
+    /// only once both the time and the steps ran out.
+    fn fresh(self, now: Self) -> bool {
+        now.at.duration_since(self.at) < FORGET_AFTER
+            || now.step.saturating_sub(self.step) < FORGET_STEPS
+    }
+}
+
 #[derive(Debug)]
 struct Seen<T> {
-    entries: BTreeMap<u32, (T, Instant)>,
+    entries: BTreeMap<u32, (T, When)>,
 }
 
 impl<T: PartialEq> Seen<T> {
@@ -78,7 +101,7 @@ impl<T: PartialEq> Seen<T> {
 
     /// Records one batch and forgets what nobody saw lately; true when the
     /// known values changed.
-    fn merge(&mut self, batch: impl IntoIterator<Item = (u32, T)>, now: Instant) -> bool {
+    fn merge(&mut self, batch: impl IntoIterator<Item = (u32, T)>, now: When) -> bool {
         let mut changed = false;
         for (id, value) in batch {
             if let Some((known, seen)) = self.entries.get_mut(&id) {
@@ -90,10 +113,14 @@ impl<T: PartialEq> Seen<T> {
                 self.entries.insert(id, (value, now));
             }
         }
+        self.expire(now) || changed
+    }
+
+    /// Forgets what nobody saw lately; true when anything went.
+    fn expire(&mut self, now: When) -> bool {
         let before = self.entries.len();
-        self.entries
-            .retain(|_, (_, seen)| now.duration_since(*seen) < FORGET_AFTER);
-        changed || self.entries.len() != before
+        self.entries.retain(|_, (_, seen)| seen.fresh(now));
+        self.entries.len() != before
     }
 
     fn get(&self, id: u32) -> Option<&T> {
@@ -126,6 +153,8 @@ static OPENERS: Mutex<Vec<usize>> = Mutex::new(Vec::new());
 static CONTROLLER: AtomicUsize = AtomicUsize::new(0);
 static TARGETS: ArcSwapOption<Targets> = ArcSwapOption::const_empty();
 static CHANGED: AtomicBool = AtomicBool::new(false);
+/// The server steps the post-step counted.
+static STEP: AtomicU64 = AtomicU64::new(0);
 /// Set when the loader's own work in a link went wrong: from then on the
 /// links run vanilla.
 static OFF: AtomicBool = AtomicBool::new(false);
@@ -264,7 +293,27 @@ fn info(id: u32, placed: &Placed, built: Option<&[f32; 3]>, levels: Option<&Size
     altar
 }
 
+/// The time and server step now.
+fn now() -> When {
+    When {
+        at: Instant::now(),
+        step: STEP.load(Ordering::Relaxed),
+    }
+}
+
 pub(crate) fn after_step(loader: &Loader) {
+    let step = STEP.fetch_add(1, Ordering::Relaxed) + 1;
+    // No pass runs once the last altar is gone, so the post-step forgets.
+    if step.is_multiple_of(EXPIRE_EVERY)
+        && let Ok(mut state) = STATE.try_lock()
+    {
+        let now = now();
+        let state = &mut *state;
+        let gone = state.placed.expire(now) | state.built.expire(now) | state.levels.expire(now);
+        if gone {
+            CHANGED.store(true, Ordering::Release);
+        }
+    }
     if CHANGED.swap(false, Ordering::AcqRel) {
         loader.emit(Event::ALTARS_CHANGED, None, core::ptr::null());
     }
@@ -471,7 +520,7 @@ fn merge(
         }
         Err(TryLockError::WouldBlock) => STATE.lock().unwrap_or_else(PoisonError::into_inner),
     };
-    let now = Instant::now();
+    let now = now();
     let mut changed = false;
     if !placed.is_empty() {
         changed |= state.placed.merge(placed.drain(..), now);
@@ -774,14 +823,51 @@ mod tests {
 
     #[test]
     fn seen_merges_batches_and_reports_changes() {
-        let now = Instant::now();
+        let now = When {
+            at: Instant::now(),
+            step: 0,
+        };
+        let later = When {
+            at: now.at + FORGET_AFTER,
+            step: FORGET_STEPS,
+        };
         let mut seen: Seen<u8> = Seen::new();
         assert!(seen.merge([(1, 10), (2, 20)], now));
         assert!(!seen.merge([(1, 10)], now));
         assert!(seen.merge([(2, 21)], now));
         assert_eq!(seen.get(2), Some(&21));
         assert_eq!(seen.iter().count(), 2);
-        assert!(seen.merge([], now + FORGET_AFTER));
+        assert!(seen.merge([], later));
+        assert_eq!(seen.iter().count(), 0);
+    }
+
+    #[test]
+    fn a_stalled_server_keeps_its_altars_and_the_last_one_goes() {
+        let start = When {
+            at: Instant::now(),
+            step: 100,
+        };
+        let mut seen: Seen<u8> = Seen::new();
+        assert!(seen.merge([(1, 10), (2, 20)], start));
+        let stalled = When {
+            at: start.at + FORGET_AFTER * 30,
+            step: start.step + 1,
+        };
+        assert!(
+            !seen.merge([(1, 10)], stalled),
+            "a long step forgets nothing"
+        );
+        assert!(!seen.expire(stalled));
+        let fast = When {
+            at: start.at,
+            step: start.step + FORGET_STEPS * 10,
+        };
+        assert!(!seen.expire(fast), "fast steps alone forget nothing");
+        let gone = When {
+            at: stalled.at + FORGET_AFTER,
+            step: stalled.step + FORGET_STEPS,
+        };
+        assert!(seen.expire(gone), "no pass sees them any more");
         assert_eq!(seen.iter().count(), 0);
     }
 
