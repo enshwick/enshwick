@@ -299,7 +299,10 @@ unsafe extern "system" fn request(requester: *mut u8, requests: *mut Requests) {
     CONTENT_LINKED.store(true, Ordering::Release);
     let content = CONTENT.load();
     let layout = LAYOUT.get().copied().flatten();
-    let Some(content) = content.as_ref().filter(|m| !m.is_empty()) else {
+    let Some(content) = content
+        .as_ref()
+        .filter(|m| !m.is_empty() && !TEXTURES_FUSE.is_off())
+    else {
         // SAFETY: forwarded unchanged.
         return unsafe { REQUEST_NEXT.get()(requester, requests) };
     };
@@ -320,19 +323,18 @@ unsafe extern "system" fn request(requester: *mut u8, requests: *mut Requests) {
         let at = slice.data.wrapping_add(index * size);
         // SAFETY: one request of the slice.
         let hash: ContentHash = unsafe { read(at, layout.request_hash) };
-        match served(content, &hash) {
-            Some(data) => {
-                ours += 1;
-                let _done = TEXTURES_FUSE.run("the request", || {
-                    // SAFETY: a live request and its requester, on the
-                    // thread the game asks on.
-                    unsafe { answer(&layout, requester, at, data) }
-                });
-            }
-            None => {
-                // SAFETY: as above, `size` bytes.
-                kept.extend_from_slice(unsafe { core::slice::from_raw_parts(at, size) });
-            }
+        let answered = served(content, &hash).and_then(|data| {
+            TEXTURES_FUSE.run("the request", || {
+                // SAFETY: a live request and its requester, on the thread
+                // the game asks on.
+                unsafe { answer(&layout, requester, at, data) }
+            })
+        });
+        if answered.is_some() {
+            ours += 1;
+        } else {
+            // SAFETY: as above, `size` bytes.
+            kept.extend_from_slice(unsafe { core::slice::from_raw_parts(at, size) });
         }
     }
     if ours == 0 {

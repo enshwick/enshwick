@@ -178,7 +178,9 @@ fn ensure_index(loader: &Loader) -> Option<Arc<Index>> {
         return Some(index);
     }
     if crate::content::served_recipes() {
-        // Mods change the registry: wait for the game's build of it.
+        // Mods change the registry: wait for the game's build of it, and
+        // look again next poll, as the build may fail or its mods turn off.
+        DIRTY.store(true, Ordering::Release);
         return None;
     }
     let read = crate::archive::game()
@@ -241,8 +243,9 @@ fn read_names(loader: &Loader) -> Option<Names> {
     if texts_count != count {
         return None;
     }
-    let mut named = Vec::with_capacity(usize::try_from(count).ok()?);
-    for i in 0..usize::try_from(count).ok()? {
+    let count = usize::try_from(count).ok()?;
+    let mut named = Vec::with_capacity(count.min(registry.len() / 16));
+    for i in 0..count {
         let guid: [u8; 16] = registry
             .get(refs + i * 16..refs + i * 16 + 16)?
             .try_into()
@@ -256,7 +259,7 @@ fn read_names(loader: &Loader) -> Option<Names> {
     let (start, count) = blob.array(workshops.workshops)?;
     let stations = (0..usize::try_from(count).ok()?)
         .map(|i| start + i * workshops.entry)
-        .filter_map(|at| {
+        .map_while(|at| {
             Some((
                 blob.read_u32(at + workshops.entry_id)?,
                 blob.read_u32(at + workshops.entry_item)?,

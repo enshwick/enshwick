@@ -11,7 +11,7 @@
 mod geometry;
 
 use core::ffi::c_void;
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::BTreeMap;
 use std::sync::TryLockError;
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
@@ -166,6 +166,8 @@ static TARGETS: ArcSwapOption<Targets> = ArcSwapOption::const_empty();
 static CHANGED: AtomicBool = AtomicBool::new(false);
 /// The server steps the post-step counted.
 static STEP: AtomicU64 = AtomicU64::new(0);
+/// Bumped when the world goes, so threads drop what they held back from it.
+static WORLD: AtomicU64 = AtomicU64::new(0);
 /// Set when the loader's own work in a link went wrong: from then on the
 /// links run vanilla.
 static OFF: AtomicBool = AtomicBool::new(false);
@@ -196,6 +198,19 @@ thread_local! {
     static PLACED: RefCell<Vec<(u32, Placed)>> = const { RefCell::new(Vec::new()) };
     static BUILT: RefCell<Vec<(u32, [f32; 3])>> = const { RefCell::new(Vec::new()) };
     static LEVELS: RefCell<Vec<(u32, Sizes)>> = const { RefCell::new(Vec::new()) };
+    /// The world this thread's buffers hold entries of.
+    static BUFFERED_WORLD: Cell<u64> = const { Cell::new(0) };
+}
+
+/// Empties this thread's buffers when they hold entries of a world gone
+/// since; before a pass adds to them.
+fn drop_stale_buffers() {
+    let world = WORLD.load(Ordering::Acquire);
+    if BUFFERED_WORLD.replace(world) != world {
+        PLACED.with_borrow_mut(Vec::clear);
+        BUILT.with_borrow_mut(Vec::clear);
+        LEVELS.with_borrow_mut(Vec::clear);
+    }
 }
 
 type SystemFn = unsafe extern "system" fn(ctx: *mut u64);
@@ -331,6 +346,7 @@ pub(crate) fn after_step(loader: &Loader) {
 }
 
 pub(crate) fn forget() {
+    WORLD.fetch_add(1, Ordering::AcqRel);
     let mut state = STATE.lock().unwrap_or_else(PoisonError::into_inner);
     state.placed = Seen::new();
     state.levels = Seen::new();
@@ -553,6 +569,7 @@ fn merge(
 ///
 /// `ctx` is the live context of `add_buildzones_server`.
 unsafe fn observe(engine: &Engine, ctx: *mut u64) {
+    drop_stale_buffers();
     PLACED.with_borrow_mut(|placed| {
         BUILT.with_borrow_mut(|built| {
             LEVELS.with_borrow_mut(|levels| {
@@ -614,6 +631,7 @@ unsafe fn observe_into(
 ///
 /// `ctx` is the live context of `upgrade_building_range`.
 unsafe fn read_levels(engine: &Engine, ctx: *mut u64) {
+    drop_stale_buffers();
     LEVELS.with_borrow_mut(|levels| {
         // SAFETY: forwarded from the caller.
         unsafe { read_levels_into(engine, ctx, levels) };
@@ -657,6 +675,7 @@ unsafe fn read_levels_into(engine: &Engine, ctx: *mut u64, levels: &mut Vec<(u32
 ///
 /// `ctx` is the live context of `upgrade_building_range`.
 unsafe fn write_ranges(engine: &Engine, ctx: *mut u64) {
+    drop_stale_buffers();
     LEVELS.with_borrow_mut(|levels| {
         // SAFETY: forwarded from the caller.
         unsafe { write_ranges_into(engine, ctx, levels) };
@@ -834,6 +853,17 @@ unsafe fn check(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn entries_held_back_from_a_gone_world_never_reach_the_next() {
+        drop_stale_buffers();
+        BUILT.with_borrow_mut(|built| built.push((7, [1.0; 3])));
+        drop_stale_buffers();
+        assert_eq!(BUILT.with_borrow(Vec::len), 1);
+        forget();
+        drop_stale_buffers();
+        assert!(BUILT.with_borrow(Vec::is_empty));
+    }
 
     #[test]
     fn seen_merges_batches_and_reports_changes() {

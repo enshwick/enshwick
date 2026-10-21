@@ -589,6 +589,9 @@ pub(crate) fn watch(entity: u32, on: bool) -> Result<(), Status> {
     if SEALED.get().is_none() || entity == 0 {
         return Err(Status::BAD_ARGS);
     }
+    if !serves() {
+        return Err(Status::REFUSED);
+    }
     with_state(|state| {
         if on {
             let watched = state.watched.entry(entity).or_default();
@@ -1014,6 +1017,16 @@ pub(crate) fn world_event(loader: &Loader, event: Event) {
     }
 }
 
+/// The hosted game stopped: saves what changed and drops its world's
+/// entities and values, so the next world starts clean.
+pub(crate) fn forget() {
+    if let Some(loader) = crate::host::loader() {
+        save(loader);
+    }
+    *STATE.lock().unwrap_or_else(PoisonError::into_inner) = None;
+    snapshot().store(Arc::new(Snapshot::default()));
+}
+
 fn save(loader: &Loader) {
     let Some((key, bytes)) = with_state(|state| {
         if !state.saved_changed {
@@ -1044,6 +1057,24 @@ fn save(loader: &Loader) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_stopped_game_leaves_no_entities_or_values_behind() {
+        with_state(|state| {
+            state.watched.entry(7).or_default().asked = true;
+        });
+        let mut values = Snapshot::default();
+        values.values.insert(7, Box::new([2.0]));
+        snapshot().store(Arc::new(values));
+        forget();
+        assert!(
+            STATE
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .is_none()
+        );
+        assert!(snapshot().load().values.is_empty());
+    }
 
     fn sealed(kinds: &[(&str, StatDef)]) -> Sealed {
         let defs: Box<[StatDef]> = kinds.iter().map(|(_, d)| d.clone()).collect();
