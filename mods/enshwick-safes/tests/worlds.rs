@@ -94,4 +94,73 @@ mod tests {
         assert!(loader.faults().is_empty());
         let _gone = std::fs::remove_dir_all(&dir);
     }
+
+    #[test]
+    fn a_safe_nobody_looked_at_lends_its_stock_to_no_stranger() {
+        use enshwick_loader_api::abi::TickData;
+        use enshwick_loader_api::ecs::Entity;
+        use enshwick_loader_api::events::Ticked;
+        use enshwick_loader_api::interactions::{Interaction, Kind};
+        use enshwick_safes::access::{Safe, Seen};
+
+        let dir = std::env::temp_dir().join(format!("enshwick-safes-stock-{}", std::process::id()));
+        let _gone = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let item: &'static u32 = Box::leak(Box::new(enshwick_safes::content::SAFE.id()));
+        let loader = host()
+            .type_hash("keen::ecs::InventorySetup", 3)
+            .placed(3, 700, [20.0, 1.0, 20.0])
+            .component(700, 2, std::ptr::from_ref(item).cast())
+            .settings(
+                "cost_multiplier = 2
+admins_can_open = true
+label_language = \"en\"
+",
+            )
+            .data_dir(dir.to_str().unwrap())
+            .world_key("world0-bb")
+            .install();
+        // SAFETY: the exports of the mod's `declare_mod!`.
+        let status = unsafe {
+            loader.start(
+                enshwick_safes::enshwick_mod_init,
+                enshwick_safes::enshwick_mod_ready,
+            )
+        };
+        assert_eq!(status, Status::OK, "{:?}", loader.logs());
+        assert_eq!(loader.raise::<WorldLoaded>(&()), 2, "the store and the mod");
+        ACCESS.load_owners(std::collections::HashMap::from([(
+            (40, 2, 40),
+            Safe::new(1, "Ann"),
+        )]));
+        let stranger = Seen {
+            key: 3,
+            admin: false,
+        };
+        ACCESS
+            .players
+            .store(std::sync::Arc::new(std::collections::HashMap::from([(
+                10, stranger,
+            )])));
+        let stock = Interaction {
+            kind: Kind::Stock,
+            player: Entity(10),
+            target: Entity(700),
+            item: None,
+            position: None,
+        };
+        assert!(enshwick_safes::access::filter(&stock), "not seen yet");
+        std::thread::sleep(std::time::Duration::from_millis(2100));
+        let _ticked = loader.raise::<Ticked>(&TickData {
+            header: enshwick_loader_api::abi::Header::of::<TickData>(),
+            step: 1,
+        });
+        assert!(
+            !enshwick_safes::access::filter(&stock),
+            "the sweep found the Safe: {:?}",
+            loader.logs()
+        );
+        assert!(loader.faults().is_empty());
+        let _gone = std::fs::remove_dir_all(&dir);
+    }
 }
