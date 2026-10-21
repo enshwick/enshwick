@@ -147,7 +147,8 @@ pub use enshwick_loader_macros::event;
 /// `extern "system" fn` type or an alias of it; the other arguments are the
 /// target's, by plain names. `#[hook(priority = <i32>, flags = <HookFlags>)]` sets the link's
 /// order and flags. The static takes the function's visibility and doc
-/// comment.
+/// comment. A panic in the body falls through as with [`detour!`]; work after
+/// `next` goes in [`Hook::after_next`].
 ///
 /// # Examples
 ///

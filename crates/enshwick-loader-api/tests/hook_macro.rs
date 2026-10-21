@@ -1,11 +1,14 @@
 //! `#[hook]` and `detour!` on the shapes mods write: a target type by an alias, a raw
 //! body name, `Ok` and `Err` taken by a glob import; and a panicking body
-//! that falls through to the rest of the chain.
+//! that falls through to the rest of the chain, and work after `next` that
+//! panics without running the chain again.
 
 #[cfg(test)]
 mod tests {
     use enshwick_loader_api::abi::Status;
     use enshwick_loader_api::test::{FakeHost, address};
+    use std::sync::atomic::{AtomicU32, Ordering};
+
     use enshwick_loader_api::{Next, hook};
 
     #[expect(dead_code, reason = "only its variant names are imported")]
@@ -36,6 +39,20 @@ mod tests {
         static PLAIN: extern "system" fn(n: u32) -> u32 = count;
     }
 
+    static TALLIED: AtomicU32 = AtomicU32::new(0);
+
+    #[hook]
+    fn tally(next: Next<Count>, n: u32) -> u32 {
+        let out = next.get()(n);
+        let _work = TALLY.after_next(|| assert_ne!(out, 13, "unlucky"));
+        out
+    }
+
+    extern "system" fn tallied(n: u32) -> u32 {
+        TALLIED.fetch_add(1, Ordering::Relaxed);
+        n
+    }
+
     unsafe extern "system" fn upgrade(level: u32) -> u32 {
         level + 1
     }
@@ -57,6 +74,7 @@ mod tests {
             load.hook(&MOVE, load.symbol("upgrade")?)?;
             load.hook(&COUNT, load.symbol("count")?)?;
             load.hook(&PLAIN, load.symbol("plain")?)?;
+            load.hook(&TALLY, load.symbol("tallied")?)?;
             Result::Ok(Self)
         }
     }
@@ -69,6 +87,7 @@ mod tests {
             .symbol("upgrade", address(upgrade as Upgrade))
             .symbol("count", address(plain as Count))
             .symbol("plain", address(plain as Count))
+            .symbol("tallied", address(tallied as Count))
             .install();
         // SAFETY: the export of `declare_mod!` above.
         let status = unsafe { loader.init(enshwick_mod_init) };
@@ -86,5 +105,13 @@ mod tests {
         // SAFETY: as above.
         assert_eq!(unsafe { moved(13) }, 14);
         assert_eq!(loader.faults(), ["panic in hook MOVE"]);
+
+        let tally = loader.detour(&TALLY).expect("linked");
+        assert_eq!(tally(13), 13);
+        assert_eq!(TALLIED.load(Ordering::Relaxed), 1, "the original ran once");
+        assert_eq!(
+            loader.faults(),
+            ["panic in hook MOVE", "panic in hook TALLY after next"]
+        );
     }
 }

@@ -150,6 +150,7 @@ not turn the mod off: the mod logs
 | `its hook at 0x... could not be armed`                         | The loader could not detour the function; `hook at 0x... not armed: ...` says why |
 | `its code patch at 0x... was skipped`                          | The bytes no longer read as expected, or overlap a hook                           |
 | `panic in hook REWARD`                                         | A detour panicked; the call went on to the original                               |
+| `panic in hook REWARD after next`                              | Work in `REWARD.after_next` panicked; the call kept what `next` gave              |
 | `panic in the hook at 0x...`                                   | A mid-function hook's handler panicked                                            |
 | `panic in an event handler`                                    | An event handler panicked                                                         |
 | `panic in a command handler`, `panic in a rename filter`       | A chat command handler or rename filter panicked                                  |
