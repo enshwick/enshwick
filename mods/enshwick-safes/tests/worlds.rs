@@ -330,4 +330,102 @@ label_language = \"en\"
         assert!(loader.faults().is_empty());
         let _gone = std::fs::remove_dir_all(&dir);
     }
+
+    fn player(entity: u32, key: u64, name: &str) -> enshwick_loader_api::abi::PlayerInfo {
+        use enshwick_loader_api::abi::{Header, PlayerInfo};
+        let mut bytes = [0u8; 64];
+        bytes[..name.len()].copy_from_slice(name.as_bytes());
+        PlayerInfo {
+            header: Header::of::<PlayerInfo>(),
+            slot: entity,
+            entity,
+            key,
+            permissions: PlayerInfo::CAN_ACCESS_INVENTORIES,
+            name_len: u8::try_from(name.len()).unwrap(),
+            name: bytes,
+        }
+    }
+
+    #[test]
+    fn safe_commands_act_on_the_nearest_safe_the_player_may_manage() {
+        use enshwick_loader_api::points::Verdict;
+        use enshwick_loader_api::points::safes::{Access, SafeAction};
+
+        let dir =
+            std::env::temp_dir().join(format!("enshwick-safes-manage-{}", std::process::id()));
+        let _gone = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let at = |x: f64| -> *const core::ffi::c_void {
+            let fixed: &'static [i64; 3] =
+                Box::leak(Box::new(enshwick_loader_api::ecs::fixed([x, 0.0, 0.0])));
+            std::ptr::from_ref(fixed).cast()
+        };
+        let (ann, bob, cat) = (
+            player(10, 1, "Ann"),
+            player(11, 2, "Bob"),
+            player(12, 3, "Cat"),
+        );
+        let loader = host()
+            .player(ann)
+            .player(bob)
+            .player(cat)
+            .component(10, 1, at(0.0))
+            .component(11, 1, at(100.0))
+            .component(12, 1, at(20.0))
+            .settings(
+                "cost_multiplier = 2
+admins_can_open = true
+label_language = \"en\"
+",
+            )
+            .data_dir(dir.to_str().unwrap())
+            .world_key("world0-ee")
+            .install();
+        // SAFETY: the exports of the mod's `declare_mod!`.
+        let status = unsafe {
+            loader.start(
+                enshwick_safes::enshwick_mod_init,
+                enshwick_safes::enshwick_mod_ready,
+            )
+        };
+        assert_eq!(status, Status::OK, "{:?}", loader.logs());
+        assert_eq!(loader.raise::<WorldLoaded>(&()), 2, "the store and the mod");
+        ACCESS.placed(700, (2, 0, 0), 1, "Ann");
+        ACCESS.placed(701, (42, 0, 0), 2, "Bob");
+        let safe = |who, args| loader.command("safe", who, args).unwrap();
+
+        assert_eq!(
+            safe(&ann, "allow Cat"),
+            "Cat may now open your Safe at (1, 0, 0), the nearest you manage within 4 m."
+        );
+        assert_eq!(
+            safe(&cat, "list"),
+            "No Safe you manage within 4 m.",
+            "Bob's Safe is not Cat's to manage"
+        );
+        assert!(loader.extend_point(|access: &Access, may: &bool| {
+            match (access.action, access.player) {
+                (SafeAction::MANAGE, 3) => Verdict::Set(true),
+                (SafeAction::MANAGE, 1) => Verdict::Refuse,
+                _ => Verdict::Set(*may),
+            }
+        }));
+        assert_eq!(
+            safe(&cat, "allow Ann"),
+            "Ann may now open Bob's Safe at (21, 0, 0), the nearest you manage within 4 m."
+        );
+        assert_eq!(
+            safe(&cat, "list"),
+            "Allowed at Bob's Safe at (21, 0, 0): Ann."
+        );
+        assert_eq!(
+            safe(&ann, "deny Cat"),
+            "You may not change who opens your Safe at (1, 0, 0)."
+        );
+        let owners = ACCESS.owners.load();
+        assert_eq!(owners[&(2, 0, 0)].allowed.len(), 1, "Cat stays allowed");
+        assert_eq!(owners[&(42, 0, 0)].allowed[0].key, 1);
+        assert!(loader.faults().is_empty());
+        let _gone = std::fs::remove_dir_all(&dir);
+    }
 }
