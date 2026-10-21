@@ -26,8 +26,30 @@ running join mods (the ones that are on):
   as players know it.
 
 The loader sets the name and rules again now and then, since the game sets its
-name once at start and the join values may change with the settings. A client
-that hosts a game advertises nothing.
+name once at start and the join values may change with the settings.
+
+## Games a client hosts
+
+A client that hosts a game has no Steam rules. Every game, hosted or on a
+dedicated server, sits in a Steam lobby that each player enters before the
+game connects, so a hosting client with the loader puts two keys into its
+lobby's data: `enshwick`, the loader version, and `enshwick.mods`, the running
+join mods as `id@version,...`.
+
+A friend's modded client that enters such a lobby compares the lists. The
+host's join values follow over the loader's messages once the friend's game
+has connected, as on a dedicated server, until then the friend's own values
+apply. The check is weaker than a dedicated server's, since the game has
+already chosen to join when the client reads the lobby:
+
+- **The host does not run some of the player's join mods.** They are turned
+  off on the client until the game restarts, and a note lists them.
+- **The host runs join mods the player lacks or has in another version.** A
+  note lists each, and the player joins all the same; nothing keeps the
+  player out and no `JoinRefused` is raised.
+- **The host runs no Enshwick**, or a lobby without the keys. Nothing is
+  checked and the client keeps its own values, since the client cannot tell
+  such a host from a dedicated server, whose check already ran.
 
 ## What a player sees
 

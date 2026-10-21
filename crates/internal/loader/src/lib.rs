@@ -68,6 +68,7 @@ pub mod join;
 mod knowledge;
 #[cfg(windows)]
 mod label;
+mod lobby;
 pub mod log;
 pub mod manifest;
 #[cfg(windows)]

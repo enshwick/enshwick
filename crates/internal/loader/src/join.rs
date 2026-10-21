@@ -484,6 +484,11 @@ mod runtime {
         let _first = NAMES.set(names);
     }
 
+    /// The names of all the client's mods.
+    pub(crate) fn names() -> super::Names {
+        NAMES.get().cloned().unwrap_or_default()
+    }
+
     /// The loader's link on `server_change`.
     pub(crate) unsafe extern "system" fn detour(provider: *mut u8, request: *const u8) -> u64 {
         if !request.is_null() {
@@ -608,7 +613,7 @@ mod runtime {
 }
 
 #[cfg(windows)]
-pub(crate) use runtime::set_names;
+pub(crate) use runtime::{names, set_names};
 
 #[cfg(test)]
 mod tests {

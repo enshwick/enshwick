@@ -9,10 +9,13 @@
 //! the server sent, before the chat shows it.
 //!
 //! Only clients that announce themselves get frames: a client with the
-//! loader sends a hello with the protocol version when it joins, the server
-//! answers, and from then on both sides send. A vanilla client never says
-//! hello, so it never receives a frame; the join check makes sure a client
-//! that said hello runs the server's join mods.
+//! loader sends a hello with the protocol version when it joins a server
+//! whose rules name Enshwick, or a game whose host's lobby does (see the
+//! lobby module), the server answers, and from then on both sides send. A
+//! vanilla client never says hello, so it never receives a frame; the join
+//! check makes sure a client that said hello runs the server's join mods.
+//! A client never says hello to a game that names no Enshwick, whose chat
+//! would show the line.
 //!
 //! A frame is base64 of a small header and up to one line's worth of the
 //! message; a message of up to [`MAX_MESSAGE`] bytes takes up to
@@ -760,13 +763,16 @@ fn send_to_server(channel: u32, data: &[u8]) -> Result<(), Status> {
 /// server has not answered yet; on the client's thread that sends chat,
 /// every frame, so none while another thread holds the state.
 pub(crate) fn client_lines() -> Vec<String> {
+    crate::lobby::poll();
     try_state(|s| {
         let mut lines = Vec::new();
         let answered = s.peers.contains_key(&NetMessage::SERVER);
         let due = s
             .hello_at
             .is_none_or(|at| at.elapsed().as_secs_f64() >= HELLO_EVERY);
-        let modded = SERVER_RUNS_ENSHWICK.load(Ordering::Acquire) || crate::world::hosting();
+        let modded = SERVER_RUNS_ENSHWICK.load(Ordering::Acquire)
+            || crate::lobby::host_runs_enshwick()
+            || crate::world::hosting();
         if !answered && due && modded {
             s.hello_at = Some(Instant::now());
             lines.extend(frames(CONTROL, 0, &control(HELLO)).unwrap_or_default());

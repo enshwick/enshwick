@@ -346,7 +346,14 @@ that count in the [join check](concepts/join-check.md). Then:
   values over it, validated again. The file stays as it is. Joining a server
   without join values for the mod calls the handler with the file's values
   again. Server values that do not fit the fields or do not validate are
-  refused with a warning, and the file's values apply.
+  refused with a warning, and the file's values apply. The server sends its
+  join values again over the loader's messages once the client's game has
+  connected, so a value that changed since the client read the rules
+  arrives too.
+- **On a client that joins a hosted game.** A hosting client has no rules;
+  the joining client learns from the game's Steam lobby that the host runs
+  Enshwick, and the host sends its join values once the game has connected
+  (see [Games a client hosts](concepts/join-check.md#games-a-client-hosts)).
 
 Apply join values in `on_config_change`. A mod without a handler runs with its
 file's values until the next start.
