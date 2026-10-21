@@ -282,14 +282,22 @@ pub enum WorldError {
 }
 
 impl WorldError {
-    fn from_status(status: Status, entity: bool) -> Result<(), Self> {
+    /// The error the loader's `status` stands for, with `missing` for
+    /// [`Status::MISSING`]: [`Self::Gone`] where the call names an entity,
+    /// [`Self::Lacks`] where it names a component.
+    pub(crate) fn check(status: Status, missing: Self) -> Result<(), Self> {
         match status {
             Status::OK => Ok(()),
             Status::WRONG_THREAD => Err(Self::WrongThread),
-            Status::MISSING if entity => Err(Self::Gone),
             Status::REFUSED | Status::BAD_ARGS => Err(Self::Refused),
+            Status::MISSING => Err(missing),
             _ => Err(Self::Missing),
         }
+    }
+
+    /// [`Self::check`] for a call whose missing piece is the feature itself.
+    pub(crate) fn from_status(status: Status) -> Result<(), Self> {
+        Self::check(status, Self::Missing)
     }
 }
 
@@ -437,8 +445,11 @@ impl World {
     ///     let world = load.world()?;
     ///     let flags = world.writable_type(load, "keen::ecs::CombatFlags")?;
     ///     load.add_command("immune", "makes your character immune", move |ctx, _args| {
+    ///         let Some(me) = ctx.character() else {
+    ///             return "the console has no character".into();
+    ///         };
     ///         // `immune` is the first byte of `CombatFlags`.
-    ///         match world.update(ctx.player.entity, flags, |bytes| bytes[0] = 1) {
+    ///         match world.update(me, flags, |bytes| bytes[0] = 1) {
     ///             Ok(()) => "immune".into(),
     ///             Err(why) => format!("not immune: {why}").into(),
     ///         }
@@ -560,7 +571,7 @@ impl World {
         let mut out: *mut c_void = core::ptr::null_mut();
         let status =
             (self.host.api().component_write)(self.host.handle(), entity.0, ty.0, &raw mut out);
-        match WorldError::from_status(status, true) {
+        match WorldError::check(status, WorldError::Gone) {
             Ok(()) if !out.is_null() => Ok(out),
             Ok(()) => Err(WorldError::Missing),
             Err(WorldError::Gone) if self.template(entity).is_some() => Err(WorldError::Lacks),
@@ -827,8 +838,11 @@ impl World {
     /// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
     ///     let world = load.world()?;
     ///     load.add_command("full", "restores your health", move |ctx, _args| {
-    ///         let max = world.vitals(ctx.player.entity).map_or(0, |v| v.health.max);
-    ///         match world.set_health(ctx.player.entity, max) {
+    ///         let Some(me) = ctx.character() else {
+    ///             return "the console has no character".into();
+    ///         };
+    ///         let max = world.vitals(me).map_or(0, |v| v.health.max);
+    ///         match world.set_health(me, max) {
     ///             Ok(health) => format!("{} of {} health", health.current, health.max).into(),
     ///             Err(why) => format!("{why}").into(),
     ///         }
@@ -912,7 +926,7 @@ impl World {
     ///
     /// ```
     /// fn charges(world: &enshwick_loader_api::world::World, slot: &enshwick_loader_api::inventory::Slot) -> i32 {
-    ///     world.item_meter(slot.pide).map_or(0, |m| m.current)
+    ///     slot.pide.and_then(|pide| world.item_meter(pide)).map_or(0, |m| m.current)
     /// }
     /// ```
     #[must_use]
@@ -1148,9 +1162,9 @@ impl World {
         if !self.offers(core::mem::offset_of!(HostApi, destroy)) {
             return Err(WorldError::Missing);
         }
-        WorldError::from_status(
+        WorldError::check(
             (self.host.api().destroy)(self.host.handle(), entity.0),
-            true,
+            WorldError::Gone,
         )
     }
 
@@ -1178,7 +1192,7 @@ impl World {
         if !self.offers(core::mem::offset_of!(HostApi, save_world)) {
             return Err(WorldError::Missing);
         }
-        WorldError::from_status((self.host.api().save_world)(self.host.handle()), false)
+        WorldError::from_status((self.host.api().save_world)(self.host.handle()))
     }
 
     /// The key of the world the server runs: its save file's name and a hash

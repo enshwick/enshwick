@@ -132,15 +132,15 @@ pub const fn layout_hash(written: &str, size: usize, align: usize, offset: usize
 /// # Examples
 ///
 /// ```
-/// use enshwick_loader_api::services::{Mismatch, compare};
+/// use enshwick_loader_api::services::{LayoutError, compare};
 ///
 /// let wanted = [("price", 1), ("refund", 2)];
 /// let offered = [("price", 1)];
-/// assert!(matches!(compare(&wanted, &offered), Err(Mismatch::Newer { .. })));
+/// assert!(matches!(compare(&wanted, &offered), Err(LayoutError::Newer { .. })));
 /// ```
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 #[non_exhaustive]
-pub enum Mismatch {
+pub enum LayoutError {
     /// The asking side was built against a longer declaration.
     #[error(
         "the publisher has {offered} of the {wanted} fields this mod needs: `{first}` and later are newer than the publisher"
@@ -172,7 +172,7 @@ pub enum Mismatch {
 ///
 /// # Errors
 ///
-/// [`Mismatch`] with the first field that differs or is missing.
+/// [`LayoutError`] with the first field that differs or is missing.
 ///
 /// # Examples
 ///
@@ -184,10 +184,10 @@ pub enum Mismatch {
 /// assert!(compare(&older, &newer).is_ok());
 /// assert!(compare(&newer, &older).is_err());
 /// ```
-pub fn compare(wanted: &[(&str, u64)], offered: &[(&str, u64)]) -> Result<(), Mismatch> {
+pub fn compare(wanted: &[(&str, u64)], offered: &[(&str, u64)]) -> Result<(), LayoutError> {
     for (index, (want, offer)) in wanted.iter().zip(offered).enumerate() {
         if want.1 != offer.1 {
-            return Err(Mismatch::Field {
+            return Err(LayoutError::Field {
                 index,
                 wanted: want.0.to_owned(),
                 offered: offer.0.to_owned(),
@@ -195,7 +195,7 @@ pub fn compare(wanted: &[(&str, u64)], offered: &[(&str, u64)]) -> Result<(), Mi
         }
     }
     match wanted.get(offered.len()) {
-        Some(first) => Err(Mismatch::Newer {
+        Some(first) => Err(LayoutError::Newer {
             wanted: wanted.len(),
             offered: offered.len(),
             first: first.0.to_owned(),
@@ -327,7 +327,7 @@ impl<E: ModEvent> Emitter<E> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Mismatch, compare, layout_hash};
+    use super::{LayoutError, compare, layout_hash};
 
     #[crate::event(name = "probe.direct")]
     #[derive(Clone, Copy, Debug)]
@@ -370,7 +370,7 @@ mod tests {
         let newer = [("a", 1), ("b", 2), ("c", 3)];
         assert_eq!(
             compare(&newer, &older),
-            Err(Mismatch::Newer {
+            Err(LayoutError::Newer {
                 wanted: 3,
                 offered: 1,
                 first: "b".to_owned()
@@ -384,7 +384,7 @@ mod tests {
         let there = [("a", 1), ("b", 9)];
         assert_eq!(
             compare(&here, &there),
-            Err(Mismatch::Field {
+            Err(LayoutError::Field {
                 index: 1,
                 wanted: "b".to_owned(),
                 offered: "b".to_owned()

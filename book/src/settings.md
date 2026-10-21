@@ -54,9 +54,12 @@ multiplier = 2.0
 defaults parse.
 
 Every read checks each field's `range` and `choices` (below), then
-`#[config(validate = path)]`, a `fn(&Self) -> Result<(), String>` for checks of
-your own. At init, an error turns the mod off with the message, such as
-`settings: multiplier is 0 to 100`; at run time it skips the changed file.
+`#[config(validate = path)]`, a `fn(&Self) -> Result<(), E>` for checks of
+your own, `E` any `Display` such as a `String`. A refusal is a `ConfigError`:
+`Parse` for text that does not fit the type, `Value` for a field out of its
+range or choices, `Invalid` for your own check. At init it turns the mod off
+with the message, such as `settings: multiplier is 0 to 100`; at run time it
+skips the changed file.
 
 ## Stages, ranges and texts
 

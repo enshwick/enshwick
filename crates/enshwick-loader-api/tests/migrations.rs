@@ -97,7 +97,10 @@ mod tests {
             .unwrap();
         assert_eq!(new, "cost_multiplier = 3\nlimit = 8\n");
         let refused = loader.migrate_settings("limit = \"x\"\n").unwrap_err();
-        assert!(refused.contains("limit is a number"), "{refused}");
+        assert!(
+            refused.to_string().contains("limit is a number"),
+            "{refused}"
+        );
     }
 
     #[test]

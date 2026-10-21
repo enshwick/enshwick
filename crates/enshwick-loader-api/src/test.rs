@@ -98,6 +98,7 @@ use crate::abi::{
     ZoneCheck,
 };
 use crate::events::Kind;
+use crate::migrations::MigrationError;
 use crate::{FnPtr, Hook};
 
 /// A widget a frame callback drew, as [`Installed::draw_frame`] reports it.
@@ -1416,11 +1417,11 @@ impl Installed {
     ///
     /// ```
     /// let loader = enshwick_loader_api::test::FakeHost::new().install();
-    /// let mut registers = enshwick_loader_api::Registers::default();
+    /// let mut registers = enshwick_loader_api::abi::Registers::default();
     /// assert_eq!(loader.run_at(0x1_4000_1000, &mut registers), 0);
     /// ```
     #[must_use = "the count says whether the mod hooks the address"]
-    pub fn run_at(&self, address: u64, registers: &mut crate::Registers) -> usize {
+    pub fn run_at(&self, address: u64, registers: &mut crate::abi::Registers) -> usize {
         let handlers: Vec<_> = table::with(Vec::new(), |s| {
             s.mid_hooks
                 .iter()
@@ -2584,14 +2585,20 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// use enshwick_loader_api::abi::ExperienceRow;
+    /// use enshwick_loader_api::ecs::Entity;
+    /// use enshwick_loader_api::progress::Experience;
     ///
     /// let loader = enshwick_loader_api::test::FakeHost::new().install();
-    /// let mut rows = [ExperienceRow { entity: 1, level: 1, progress: 0, need: 100, gained: 5 }];
+    /// let mut rows = [Experience { entity: Entity(1), level: 1, progress: 0, need: 100, gained: 5 }];
     /// loader.experience(&mut rows, 25, |level| level * 100);
     /// assert_eq!(rows[0].gained, 5);
     /// ```
-    pub fn experience(&self, rows: &mut [ExperienceRow], cap: u32, need: fn(u32) -> u32) {
+    pub fn experience(
+        &self,
+        rows: &mut [crate::progress::Experience],
+        cap: u32,
+        need: fn(u32) -> u32,
+    ) {
         unsafe extern "system" fn need_for(token: *mut core::ffi::c_void, level: u32) -> u32 {
             // SAFETY: the token is the `need` function of the running call.
             let need = unsafe { *token.cast::<fn(u32) -> u32>() };
@@ -2602,7 +2609,7 @@ impl Installed {
         for &(callback, user) in &filters {
             let mut pass = ExperiencePass {
                 header: Header::of::<ExperiencePass>(),
-                rows: rows.as_mut_ptr(),
+                rows: rows.as_mut_ptr().cast::<ExperienceRow>(),
                 row_count: rows.len(),
                 level_cap: cap,
                 need_for: Some(need_for),
@@ -3206,10 +3213,10 @@ impl Installed {
     /// let loader = enshwick_loader_api::test::FakeHost::new().install();
     /// assert_eq!(loader.migrate_settings("a = 1\n"), Ok("a = 1\n".to_owned()));
     /// ```
-    pub fn migrate_settings(&self, old: &str) -> Result<String, String> {
+    pub fn migrate_settings(&self, old: &str) -> Result<String, MigrationError> {
         use crate::abi::MigrationStep as S;
         let migrations = table::with(None, |s| s.migrations.clone());
-        let mut table: toml::Table = toml::from_str(old).map_err(|e| e.message().to_owned())?;
+        let mut table: toml::Table = toml::from_str(old)?;
         let list = migrations.as_ref().map_or(&[][..], |m| &m.list[..]);
         for (index, (_, steps)) in list.iter().enumerate() {
             for (step, (kind, from, to)) in steps.iter().enumerate() {
@@ -3230,14 +3237,14 @@ impl Installed {
                         let text = crate::migrations::write_value(value)?;
                         let new = map
                             .call(index, step, &text)
-                            .map_err(|e| format!("setting {from}: {e}"))?;
+                            .map_err(|e| MigrationError::new(format!("setting {from}: {e}")))?;
                         table.insert(from.clone(), crate::migrations::parse_value(&new)?);
                     }
                     _ => {}
                 }
             }
         }
-        toml::to_string(&table).map_err(|e| e.to_string())
+        toml::to_string(&table).map_err(|e| MigrationError::new(e.to_string()))
     }
 
     /// Runs the store steps of every migration the mod declared on the
@@ -3255,7 +3262,7 @@ impl Installed {
     /// let migrated = loader.migrate_store("owners", "count = 1\n");
     /// assert_eq!(migrated, Ok(("owners".to_owned(), "count = 1\n".to_owned())));
     /// ```
-    pub fn migrate_store(&self, name: &str, old: &str) -> Result<(String, String), String> {
+    pub fn migrate_store(&self, name: &str, old: &str) -> Result<(String, String), MigrationError> {
         use crate::abi::MigrationStep as S;
         let migrations = table::with(None, |s| s.migrations.clone());
         let (mut name, mut text) = (name.to_owned(), old.to_owned());
@@ -3270,7 +3277,7 @@ impl Installed {
                         };
                         text = map
                             .call(index, step, &text)
-                            .map_err(|e| format!("store {from}: {e}"))?;
+                            .map_err(|e| MigrationError::new(format!("store {from}: {e}")))?;
                     }
                     _ => {}
                 }

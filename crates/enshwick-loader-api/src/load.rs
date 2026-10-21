@@ -4,7 +4,7 @@ use core::ffi::c_void;
 use std::borrow::Cow;
 
 use crate::abi::{Event, HookFlags, HostApi, MidHookSpec, Registers, Status, Str};
-use crate::config::{Config, Stage};
+use crate::config::{Config, ConfigError, Stage};
 use crate::hook::{FnPtr, Hook};
 use crate::host::Host;
 use crate::services::{Emitter, ModEvent, Service};
@@ -1172,11 +1172,12 @@ unsafe extern "system" fn check_text<T: Config>(
             // SAFETY: the loader passes the text for the call.
             let text = unsafe { text.as_str() }.unwrap_or("");
             let checked = toml::from_str::<T>(text)
-                .map_err(|e| e.message().to_owned())
+                .map_err(ConfigError::from)
                 .and_then(|settings| settings.validate());
             let Err(reason) = checked else {
                 return Status::OK;
             };
+            let reason = reason.to_string();
             let mut kept = CHECK_WHY
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner);
@@ -1229,8 +1230,8 @@ fn read_config<T: Config>(host: Host) -> Result<T, Off> {
 }
 
 /// The settings in `text` with the join values `server` over them, checked.
-fn with_server<T: Config>(text: &str, server: &str) -> Result<T, String> {
-    let mut joined: T = toml::from_str(text).map_err(|e| e.message().to_owned())?;
+fn with_server<T: Config>(text: &str, server: &str) -> Result<T, ConfigError> {
+    let mut joined: T = toml::from_str(text)?;
     joined.merge_synced(server)?;
     joined.validate()?;
     Ok(joined)

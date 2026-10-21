@@ -428,7 +428,7 @@ impl Default for Level {
 }
 
 impl core::str::FromStr for Level {
-    type Err = UnknownLevel;
+    type Err = ParseLevelError;
 
     fn from_str(name: &str) -> Result<Self, Self::Err> {
         match name {
@@ -436,7 +436,7 @@ impl core::str::FromStr for Level {
             "warn" => Ok(Self::WARN),
             "info" => Ok(Self::INFO),
             "debug" => Ok(Self::DEBUG),
-            _ => Err(UnknownLevel),
+            _ => Err(ParseLevelError),
         }
     }
 }
@@ -1063,7 +1063,7 @@ pub type ResourcePatchFn = unsafe extern "system" fn(
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
 #[error("a log level is one of \"error\", \"warn\", \"info\" or \"debug\"")]
-pub struct UnknownLevel;
+pub struct ParseLevelError;
 
 /// A game build's identity: the CodeView GUID, in file order, and age.
 ///

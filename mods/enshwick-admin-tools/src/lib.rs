@@ -231,10 +231,13 @@ fn give(tools: &Tools, ctx: &CommandContext, item: u32, count: u32, to: Option<&
     };
     let player = match to {
         Some(name) => tools.world.players_named(name).into_iter().next(),
-        None if ctx.player.entity.0 != 0 => Some(ctx.player.clone()),
-        None => {
-            return "the console names the player: /admin give <item> <count> <player>".to_owned();
-        }
+        None => match &ctx.player {
+            Some(me) => Some(me.clone()),
+            None => {
+                return "the console names the player: /admin give <item> <count> <player>"
+                    .to_owned();
+            }
+        },
     };
     let Some(player) = player else {
         return format!("no player {} online", to.unwrap_or_default());

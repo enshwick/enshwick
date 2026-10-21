@@ -16,8 +16,8 @@ use syn::{
 /// The settings file a player sees on first start is generated from the type:
 /// the struct's doc comment heads the file, each field's doc comment precedes
 /// its key, and each value comes from `Default`. Struct attributes:
-/// `#[config(validate = path)]` names a `fn(&Self) -> Result<(), String>`
-/// that checks parsed values, `#[config(text = "key")]` the text key of the
+/// `#[config(validate = path)]` names a `fn(&Self) -> Result<(), E>`, `E`
+/// any `Display` such as a `String`, that checks parsed values, `#[config(text = "key")]` the text key of the
 /// set's translated title.
 ///
 /// Field attributes: one stage of `startup`, `runtime` (the default),
@@ -169,7 +169,9 @@ fn expand_config(input: &DeriveInput) -> syn::Result<TokenStream> {
     let name = &input.ident;
     let fields = settings_fields(input)?;
     let (validate, title) = struct_config(&input.attrs)?;
-    let own_check = validate.map(|path| quote!(#path(self)?;));
+    let own_check = validate.map(
+        |path| quote!(#path(self).map_err(::enshwick_loader_api::config::ConfigError::invalid)?;),
+    );
     let mut entries = Vec::new();
     let mut described = Vec::new();
     let mut checks = Vec::new();
@@ -246,7 +248,9 @@ fn expand_config(input: &DeriveInput) -> syn::Result<TokenStream> {
                 )
             }
 
-            fn validate(&self) -> ::core::result::Result<(), ::std::string::String> {
+            fn validate(
+                &self,
+            ) -> ::core::result::Result<(), ::enshwick_loader_api::config::ConfigError> {
                 let __schema = <Self as ::enshwick_loader_api::config::Config>::schema();
                 #(#checks)*
                 #own_check
@@ -315,7 +319,7 @@ fn stage_methods(staged: &[(Ident, &syn::Field)]) -> impl quote::ToTokens {
             &mut self,
             stage: ::enshwick_loader_api::config::Stage,
             values: &str,
-        ) -> ::core::result::Result<(), ::std::string::String> {
+        ) -> ::core::result::Result<(), ::enshwick_loader_api::config::ConfigError> {
             let _ = values;
             match stage {
                 #(#merge_arms)*

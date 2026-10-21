@@ -57,7 +57,7 @@ pub const MAX_VALUE: usize = 512;
 /// use enshwick_loader_api::inventory::{Category, Slot, SlotRef};
 /// use enshwick_loader_api::item_data::ItemInstance;
 ///
-/// let slot = Slot { at: SlotRef::new(Entity(41), 0), category: Category::GENERIC, item: 0x5e01, count: 1, pide: Entity(900) };
+/// let slot = Slot { at: SlotRef::new(Entity(41), 0), category: Category::GENERIC, item: 0x5e01, count: 1, pide: Some(Entity(900)) };
 /// assert_eq!(ItemInstance::of(&slot), Some(ItemInstance { pide: Entity(900), item: 0x5e01 }));
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -77,13 +77,13 @@ impl ItemInstance {
     /// See [`ItemInstance`].
     #[must_use]
     pub const fn of(slot: &Slot) -> Option<Self> {
-        if slot.is_empty() || slot.pide.is_none() {
-            return None;
+        match slot.pide {
+            Some(pide) if !slot.is_empty() => Some(Self {
+                pide,
+                item: slot.item,
+            }),
+            _ => None,
         }
-        Some(Self {
-            pide: slot.pide,
-            item: slot.item,
-        })
     }
 }
 
@@ -284,7 +284,7 @@ mod tests {
             category: Category::GENERIC,
             item,
             count,
-            pide: Entity(pide),
+            pide: Entity::from_raw(pide),
         };
         assert!(ItemInstance::of(&slot(7, 1, 900)).is_some());
         assert!(ItemInstance::of(&slot(7, 5, 0)).is_none());

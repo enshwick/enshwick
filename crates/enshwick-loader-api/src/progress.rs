@@ -14,9 +14,50 @@
 
 use core::ffi::c_void;
 
-pub use crate::abi::ExperienceRow;
-use crate::abi::{Comfort as RawComfort, ExperiencePass, HostApi, SkillCheck as RawSkillCheck};
+use crate::abi::{
+    Comfort as RawComfort, ExperiencePass, ExperienceRow, HostApi, SkillCheck as RawSkillCheck,
+};
+use crate::ecs::Entity;
 use crate::{Load, Off};
+
+/// One character's experience before the server applies it, from
+/// [`Load::on_experience`]: a filter may change `gained`.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::ecs::Entity;
+/// use enshwick_loader_api::progress::Experience;
+///
+/// let row = Experience { entity: Entity(4096), level: 3, progress: 10, need: 100, gained: 5 };
+/// assert_eq!(row.need - row.progress, 90);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Experience {
+    /// The character.
+    pub entity: Entity,
+    /// Its level.
+    pub level: u32,
+    /// Experience inside the level.
+    pub progress: u32,
+    /// What the level needs.
+    pub need: u32,
+    /// Gained experience the game applies next, at most one level a tick.
+    pub gained: u32,
+}
+
+// The loader's rows are read in place as `Experience`.
+const _: () = {
+    use core::mem::{align_of, offset_of, size_of};
+    assert!(size_of::<Experience>() == size_of::<ExperienceRow>());
+    assert!(align_of::<Experience>() == align_of::<ExperienceRow>());
+    assert!(offset_of!(Experience, entity) == offset_of!(ExperienceRow, entity));
+    assert!(offset_of!(Experience, level) == offset_of!(ExperienceRow, level));
+    assert!(offset_of!(Experience, progress) == offset_of!(ExperienceRow, progress));
+    assert!(offset_of!(Experience, need) == offset_of!(ExperienceRow, need));
+    assert!(offset_of!(Experience, gained) == offset_of!(ExperienceRow, gained));
+};
 
 /// The Airborne Architect node, which opens the building fly mode.
 pub const AIRBORNE_ARCHITECT: u32 = 0x4475_e8dd;
@@ -157,7 +198,7 @@ where
 
 unsafe extern "system" fn run_experience<F>(pass: *mut ExperiencePass, user: *mut c_void)
 where
-    F: Fn(&mut [ExperienceRow], &Levels),
+    F: Fn(&mut [Experience], &Levels),
 {
     // SAFETY: the loader passes a valid pass for the duration of the call.
     let Some(pass) = (unsafe { pass.as_mut() }) else {
@@ -166,8 +207,9 @@ where
     let rows = if pass.rows.is_null() || pass.row_count == 0 {
         &mut [][..]
     } else {
-        // SAFETY: `row_count` writable rows, valid for the call.
-        unsafe { core::slice::from_raw_parts_mut(pass.rows, pass.row_count) }
+        // SAFETY: `row_count` writable rows, valid for the call; an
+        // `Experience` has the layout of an `ExperienceRow`.
+        unsafe { core::slice::from_raw_parts_mut(pass.rows.cast::<Experience>(), pass.row_count) }
     };
     let levels = Levels {
         cap: pass.level_cap,
@@ -274,7 +316,7 @@ impl Load<'_> {
     /// ```
     pub fn on_experience<F>(&mut self, filter: F) -> Result<(), Off>
     where
-        F: Fn(&mut [ExperienceRow], &Levels) + Send + Sync + 'static,
+        F: Fn(&mut [Experience], &Levels) + Send + Sync + 'static,
     {
         let host = self.host();
         crate::load::offered(

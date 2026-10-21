@@ -146,8 +146,9 @@ fn gather(
         if t.busy(&c, player, now, BUSY) {
             continue;
         }
-        let guest = c.offer.map_or(Entity::NONE, |o| o.guest);
-        if guest != player && !guest.is_none() {
+        if let Some(guest) = c.offer.and_then(|o| o.guest)
+            && guest != player
+        {
             let at = loot.position(guest);
             if at.is_some_and(|at| near(c.position, at, OPEN_RANGE, OPEN_RANGE)) {
                 continue;

@@ -32,7 +32,8 @@ server's worker threads for every base: keep it to arithmetic.
 
 `load.on_experience(filter)` sees every spawned character's experience before
 the server applies it: level, progress inside the level, what the level needs
-and the gained experience the game applies next. Changes to `gained` are
+and the gained experience the game applies next, one `Experience` per
+character. Changes to `gained` are
 written back and sent to the players. `Levels` gives the level cap and what
 each level needs.
 

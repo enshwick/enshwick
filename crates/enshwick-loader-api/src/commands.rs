@@ -136,27 +136,52 @@ impl From<&str> for Reply {
 /// use enshwick_loader_api::commands::{CommandContext, Reply};
 ///
 /// fn whoami(ctx: &CommandContext, _args: &[&str]) -> Reply {
+///     let Some(player) = &ctx.player else {
+///         return "the console".into();
+///     };
 ///     let role = if ctx.is_admin() { "an administrator" } else { "a player" };
-///     format!("{} is {role}", ctx.player.name).into()
+///     format!("{} is {role}", player.name).into()
 /// }
 /// ```
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CommandContext {
-    /// The player who typed the command.
-    pub player: Player,
+    /// The player who typed the command; `None` for the server's console,
+    /// an administrator without a character.
+    pub player: Option<Player>,
     /// The command's name, as registered.
     pub name: String,
 }
 
 impl CommandContext {
-    /// Whether the player is one of the server's administrators.
+    /// Whether the command comes from one of the server's administrators,
+    /// the console included.
     ///
     /// # Examples
     ///
     /// See [`CommandContext`].
     #[must_use]
-    pub const fn is_admin(&self) -> bool {
-        self.player.is_admin()
+    pub fn is_admin(&self) -> bool {
+        self.player.as_ref().is_none_or(Player::is_admin)
+    }
+
+    /// The character of the player who typed the command; `None` for the
+    /// console.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_loader_api::commands::{CommandContext, Reply};
+    ///
+    /// fn here(world: &enshwick_loader_api::world::World, ctx: &CommandContext) -> Reply {
+    ///     match ctx.character().and_then(|me| world.position(me)) {
+    ///         Some([x, y, z]) => format!("{x:.0} {y:.0} {z:.0}").into(),
+    ///         None => "no character".into(),
+    ///     }
+    /// }
+    /// ```
+    #[must_use]
+    pub fn character(&self) -> Option<Entity> {
+        self.player.as_ref().map(|player| player.entity)
     }
 }
 
@@ -184,38 +209,30 @@ pub struct Rename {
 ///
 /// assert_eq!(run("no slash"), Err(RunError::NotACommand));
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
 #[non_exhaustive]
 pub enum RunError {
     /// The line does not start with `/name`.
+    #[error("not a command: commands start with /")]
     NotACommand,
     /// No mod and not the loader answers that name.
+    #[error("no mod has that command")]
     Unknown,
     /// Not on the server's game thread, or no server runs.
+    #[error("commands run on the server's game thread only")]
     NotOnGameThread,
     /// The loader is older than the API or not there (a unit test).
+    #[error("commands need a newer loader")]
     NoLoader,
     /// The loader refused for another reason, with its status.
+    #[error("refused by the loader (status {0})")]
     Refused(u32),
 }
 
-impl core::fmt::Display for RunError {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        match self {
-            Self::NotACommand => f.write_str("not a command: commands start with /"),
-            Self::Unknown => f.write_str("no mod has that command"),
-            Self::NotOnGameThread => f.write_str("commands run on the server's game thread only"),
-            Self::NoLoader => f.write_str("commands need a newer loader"),
-            Self::Refused(status) => write!(f, "refused by the loader (status {status})"),
-        }
-    }
-}
-
-impl std::error::Error for RunError {}
-
 /// Runs the chat command line `line`, such as `/enshwick status`, as the
-/// server's console: an administrator with no character (entity 0, account
-/// key 0). Returns the reply the command gave.
+/// server's console: an administrator without a character, whose handlers
+/// get a [`CommandContext`] without a player. Returns the reply the command
+/// gave.
 ///
 /// Call it on the server's game thread, from a scheduled task or a game
 /// event, where command handlers expect to run.
@@ -281,7 +298,7 @@ where
     // SAFETY: `user` is the leaked `F` this function was registered with.
     let handler = unsafe { &*user.cast::<F>() };
     let ctx = CommandContext {
-        player: Player::from_info(&call.player),
+        player: (call.player.entity != 0).then(|| Player::from_info(&call.player)),
         name: text_of(call.name).to_owned(),
     };
     let args = split_args(text_of(call.args));
@@ -342,7 +359,7 @@ impl Load<'_> {
     ///
     /// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
     ///     load.add_command("hello", "greets you", |ctx, args| match args {
-    ///         [] => Reply::from(format!("Hello, {}", ctx.player.name)),
+    ///         [] => Reply::from(format!("Hello, {}", ctx.player.as_ref().map_or("console", |p| p.name.as_str()))),
     ///         [name, ..] => Reply::from(format!("Hello, {name}")),
     ///     })
     /// }
@@ -467,7 +484,8 @@ mod tests {
     #[test]
     fn a_handler_gets_the_player_and_words_and_its_reply_comes_back() {
         let handler = |ctx: &CommandContext, args: &[&str]| -> Reply {
-            format!("{} {} {}", ctx.player.name, ctx.is_admin(), args.join("+")).into()
+            let name = ctx.player.as_ref().map_or("console", |p| p.name.as_str());
+            format!("{name} {} {}", ctx.is_admin(), args.join("+")).into()
         };
         let call = CommandCall {
             header: Header::of::<CommandCall>(),

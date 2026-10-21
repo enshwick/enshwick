@@ -16,7 +16,7 @@ use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 
 use enshwick_loader_api::events::{ShutdownStarted, Ticked, WorldLoaded};
-use enshwick_loader_api::progress::ExperienceRow;
+use enshwick_loader_api::progress::Experience;
 use enshwick_loader_api::state::{Store, WorldStore};
 use enshwick_loader_api::{Load, Mod, Off};
 
@@ -54,7 +54,7 @@ static STORED: AtomicU64 = AtomicU64::new(0);
 /// characters in two batches is still one moment.
 static MOMENT: AtomicU32 = AtomicU32::new(0);
 
-const fn character(row: &ExperienceRow) -> Character {
+const fn character(row: &Experience) -> Character {
     Character {
         level: row.level,
         progress: row.progress,
@@ -64,7 +64,7 @@ const fn character(row: &ExperienceRow) -> Character {
 }
 
 /// Moves the high-water mark and raises every character below it.
-fn share_experience(rows: &mut [ExperienceRow], table: &enshwick_loader_api::progress::Levels) {
+fn share_experience(rows: &mut [Experience], table: &enshwick_loader_api::progress::Levels) {
     if !ENABLED.load(Ordering::Relaxed) || rows.is_empty() {
         return;
     }
@@ -262,15 +262,15 @@ mod tests {
         assert!(!dir.join("experience.toml").exists());
         assert!(dir.join("experience.toml.moved").exists());
         let mut rows = [
-            ExperienceRow {
-                entity: 1,
+            Experience {
+                entity: enshwick_loader_api::ecs::Entity(1),
                 level: 1,
                 progress: 0,
                 need: 100,
                 gained: 40,
             },
-            ExperienceRow {
-                entity: 2,
+            Experience {
+                entity: enshwick_loader_api::ecs::Entity(2),
                 level: 1,
                 progress: 0,
                 need: 100,
@@ -361,8 +361,8 @@ mod tests {
         assert_eq!(status, enshwick_loader_api::abi::Status::OK);
         HIGH_WATER.store(0, Ordering::Relaxed);
         STORED.store(0, Ordering::Relaxed);
-        let row = |entity, progress, gained| ExperienceRow {
-            entity,
+        let row = |entity, progress, gained| Experience {
+            entity: enshwick_loader_api::ecs::Entity(entity),
             level: 1,
             progress,
             need: 1000,

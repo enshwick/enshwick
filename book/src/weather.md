@@ -15,12 +15,15 @@ fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_
     let weather = load.weather()?;
     let world = load.world()?;
     load.add_command("weather", "the weather here, or new: /weather [clear|rain|storm]", move |ctx, args| {
+        let Some(me) = ctx.character() else {
+            return "the console has no character".into();
+        };
         let forecast = match args.first() {
             Some(&"clear") => Forecast::Clear,
             Some(&"rain") => Forecast::Rain,
             Some(&"storm") => Forecast::Blizzard,
             _ => {
-                let here = world.position(ctx.player.entity).unwrap_or_default();
+                let here = world.position(me).unwrap_or_default();
                 return format!("{:?}", weather.at(here).map(|now| now.state())).into();
             }
         };

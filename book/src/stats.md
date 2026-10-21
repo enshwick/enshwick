@@ -18,7 +18,10 @@ fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_
     let health = load.open_stat(builtin::HEALTH_MAX)?;
     let stats = load.stats()?;
     load.add_command("bless", "more health and luck for a minute", move |ctx, _args| {
-        let player = ctx.player.entity;
+        let Some(me) = ctx.character() else {
+            return "the console has no character".into();
+        };
+        let player = me;
         let minute = Lasting::For(Duration::from_secs(60));
         let _health = stats.set(player, "bless", Modifier::new(health, Op::Add, 50.0), minute);
         let _luck = stats.set(player, "bless", Modifier::new(luck, Op::Add, 0.1), minute);

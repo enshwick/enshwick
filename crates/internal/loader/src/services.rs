@@ -6,7 +6,7 @@
 use std::sync::{Mutex, OnceLock, PoisonError};
 
 use enshwick_loader_api::abi::{ModEventFn, Status};
-use enshwick_loader_api::services::{Mismatch, compare};
+use enshwick_loader_api::services::{LayoutError, compare};
 
 /// A layout as `(field name, hash)` per field.
 pub(crate) type Fields = Vec<(String, u64)>;
@@ -169,7 +169,7 @@ impl Registry {
         }
         compare(&view(fields), &view(&published.fields)).map_err(|mismatch| {
             let advice = match mismatch {
-                Mismatch::Newer { .. } => format!("; update {id}"),
+                LayoutError::Newer { .. } => format!("; update {id}"),
                 _ => "; both mods must compile one declaration".to_owned(),
             };
             (

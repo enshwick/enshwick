@@ -52,7 +52,7 @@ holds what one container is and holds, read in one go:
 | `offer` | Its interaction offer, an [`Offer`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/loot.rs); `None` without one. |
 
 An `Offer` names who last opened or looted the container (`guest`,
-`Entity::NONE` before anyone did), when (`accepted_at`, in the game's
+`None` before anyone did), when (`accepted_at`, in the game's
 nanoseconds, changing with each interaction) and whether the game offers no
 interaction now (`disabled`).
 

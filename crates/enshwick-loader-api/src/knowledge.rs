@@ -38,10 +38,13 @@
 //! fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
 //!     let knowledge = load.knowledge()?;
 //!     load.add_command("learn", "learns a recipe: /learn <recipe id>", move |ctx, args| {
+//!         let Some(me) = ctx.character() else {
+//!             return "the console has no character".into();
+//!         };
 //!         let Some(recipe) = args.first().and_then(|a| a.parse().ok()) else {
 //!             return "/learn <recipe id>".into();
 //!         };
-//!         format!("{:?}", knowledge.grant(ctx.player.entity, recipe, Grant::Flag(0))).into()
+//!         format!("{:?}", knowledge.grant(me, recipe, Grant::Flag(0))).into()
 //!     })
 //! }
 //! ```
@@ -214,15 +217,6 @@ pub struct Knowledge {
     changes: bool,
 }
 
-fn result(status: Status) -> Result<(), WorldError> {
-    match status {
-        Status::OK => Ok(()),
-        Status::WRONG_THREAD => Err(WorldError::WrongThread),
-        Status::REFUSED | Status::BAD_ARGS => Err(WorldError::Refused),
-        _ => Err(WorldError::Missing),
-    }
-}
-
 impl Knowledge {
     fn read(&self, entity: u32, id: u32) -> Option<Known> {
         let mut info = KnowledgeInfo {
@@ -283,7 +277,7 @@ impl Knowledge {
     /// See the [module](self).
     pub fn grant(&self, player: Entity, id: u32, grant: Grant) -> Result<(), WorldError> {
         let (kind, value) = grant.raw();
-        result((self.host.api().grant_knowledge)(
+        WorldError::from_status((self.host.api().grant_knowledge)(
             self.host.handle(),
             player.0,
             id,
@@ -343,7 +337,7 @@ impl Knowledge {
             return Err(WorldError::Missing);
         }
         let (kind, value) = revoke.raw();
-        result((self.host.api().revoke_knowledge)(
+        WorldError::from_status((self.host.api().revoke_knowledge)(
             self.host.handle(),
             player.0,
             id,
@@ -435,7 +429,7 @@ impl Knowledge {
         if !self.changes {
             return Err(WorldError::Missing);
         }
-        result((self.host.api().account_knowledge)(
+        WorldError::from_status((self.host.api().account_knowledge)(
             self.host.handle(),
             account,
             id,

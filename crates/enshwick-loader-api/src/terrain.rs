@@ -22,7 +22,10 @@
 //!     let terrain = load.terrain()?;
 //!     let world = load.world()?;
 //!     load.add_command("crater", "digs a crater where you stand", move |ctx, _args| {
-//!         let Some(here) = world.position(ctx.player.entity) else {
+//!         let Some(me) = ctx.character() else {
+//!             return "the console has no character".into();
+//!         };
+//!         let Some(here) = world.position(me) else {
 //!             return "nowhere".into();
 //!         };
 //!         match terrain.dig(here, 4.0, Shape::Round, &[]) {
@@ -299,12 +302,7 @@ impl Terrain {
         let mut amount = 0.0f32;
         let status =
             (self.host.api().terrain_edit)(self.host.handle(), &raw const edit, &raw mut amount);
-        match status {
-            Status::OK => Ok(amount),
-            Status::WRONG_THREAD => Err(WorldError::WrongThread),
-            Status::REFUSED | Status::BAD_ARGS => Err(WorldError::Refused),
-            _ => Err(WorldError::Missing),
-        }
+        WorldError::from_status(status).map(|()| amount)
     }
 }
 

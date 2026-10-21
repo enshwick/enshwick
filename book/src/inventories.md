@@ -82,7 +82,7 @@ Both return a
 A [`Slot`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/inventory.rs)
 holds `at` (its `SlotRef`), `category` (equipment, currency, ordinary
 storage, ...), `item` (the item id, 0 for none), `count` and `pide`
-(`Entity::NONE` for items without an entity). `is_empty()` is true when
+(`None` for items without an entity). `is_empty()` is true when
 `item` or `count` is 0.
 
 Item ids are [`Guid::id`](content/items.md#guids-and-item-ids) of the

@@ -22,7 +22,10 @@
 //! fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
 //!     let actions = load.actions()?;
 //!     load.add_command("home", "takes you to the world's centre", move |ctx, _args| {
-//!         match actions.teleport(ctx.player.entity, [0.0, 100.0, 0.0], Teleport::new().best_spawn()) {
+//!         let Some(me) = ctx.character() else {
+//!             return "the console has no character".into();
+//!         };
+//!         match actions.teleport(me, [0.0, 100.0, 0.0], Teleport::new().best_spawn()) {
 //!             Ok(()) => "on your way".into(),
 //!             Err(why) => format!("no teleport: {why}").into(),
 //!         }
@@ -30,7 +33,7 @@
 //! }
 //! ```
 
-use crate::abi::{Header, HostApi, SpawnRequest, Status, TeleportRequest};
+use crate::abi::{Header, HostApi, SpawnRequest, TeleportRequest};
 use crate::ecs::Entity;
 use crate::game_events::{EventType, Field, Scalar};
 use crate::world::WorldError;
@@ -447,7 +450,7 @@ impl Actions {
     pub fn emit_raw(&self, ty: EventType, bytes: &[u8]) -> Result<(), WorldError> {
         let size = u32::try_from(bytes.len()).map_err(|_| WorldError::Refused)?;
         let status = (self.host.api().emit)(self.host.handle(), ty.hash(), bytes.as_ptr(), size);
-        world_result(status, false)
+        WorldError::from_status(status)
     }
 
     /// Asks the server to move `entity` to `position`, in metres, after the
@@ -485,9 +488,9 @@ impl Actions {
             position: crate::ecs::fixed(position),
             orientation: how.facing.unwrap_or([0.0, 0.0, 0.0, 1.0]),
         };
-        world_result(
+        WorldError::check(
             (self.host.api().teleport)(self.host.handle(), &raw const request),
-            true,
+            WorldError::Gone,
         )
     }
 }
@@ -515,8 +518,11 @@ impl Actions {
     ///     let actions = load.actions()?;
     ///     let world = load.world()?;
     ///     load.add_command("clone", "spawns a copy of an entity beside you: /clone <entity>", move |ctx, args| {
+    ///         let Some(me) = ctx.character() else {
+    ///             return "the console has no character".into();
+    ///         };
     ///         let source = args.first().and_then(|a| a.parse().ok()).map(enshwick_loader_api::ecs::Entity);
-    ///         let (Some(template), Some([x, y, z])) = (source.and_then(|e| world.template(e)), world.position(ctx.player.entity)) else {
+    ///         let (Some(template), Some([x, y, z])) = (source.and_then(|e| world.template(e)), world.position(me)) else {
     ///             return "/clone <entity>".into();
     ///         };
     ///         format!("{:?}", actions.spawn(template, [x + 2.0, y, z], Spawn::new())).into()
@@ -549,10 +555,11 @@ impl Actions {
             lifetime_ns: lifetime,
         };
         let mut entity = 0u32;
-        world_result(
-            (api.spawn)(self.host.handle(), &raw const request, &raw mut entity),
-            false,
-        )?;
+        WorldError::from_status((api.spawn)(
+            self.host.handle(),
+            &raw const request,
+            &raw mut entity,
+        ))?;
         Ok(Entity(entity))
     }
 }
@@ -565,16 +572,6 @@ fn keep<T>(what: &str, found: Result<T, Off>) -> Option<T> {
 }
 
 /// The result of a world call that returned `status`.
-fn world_result(status: Status, entity: bool) -> Result<(), WorldError> {
-    match status {
-        Status::OK => Ok(()),
-        Status::WRONG_THREAD => Err(WorldError::WrongThread),
-        Status::MISSING if entity => Err(WorldError::Gone),
-        Status::REFUSED | Status::BAD_ARGS => Err(WorldError::Refused),
-        _ => Err(WorldError::Missing),
-    }
-}
-
 /// An all-zero event of type `ty`.
 fn blank(ty: EventType) -> Result<Vec<u8>, WorldError> {
     usize::try_from(ty.size())

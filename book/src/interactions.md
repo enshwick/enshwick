@@ -29,6 +29,7 @@ Each refusal takes the game's own path for a refused action, so nothing moves
 and nothing is lost. `Stock` is asked without the target's item or position:
 answer it from what the mod has already seen of the target.
 
-The filters run in the server's world only, in the dedicated server or a
+An interaction without a player's character or without a target is allowed
+without asking. The filters run in the server's world only, in the dedicated server or a
 hosting client, on the thread of the system that checks the interaction: keep
 them quick and never block. Several mods may filter; any refusal wins.

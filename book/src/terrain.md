@@ -15,7 +15,10 @@ fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_
     let terrain = load.terrain()?;
     let world = load.world()?;
     load.add_command("level", "flattens the ground around you", move |ctx, _args| {
-        let (Some(here), Some(fill)) = (world.position(ctx.player.entity), terrain.materials().first().map(|m| m.id)) else {
+        let Some(me) = ctx.character() else {
+            return "the console has no character".into();
+        };
+        let (Some(here), Some(fill)) = (world.position(me), terrain.materials().first().map(|m| m.id)) else {
             return "nowhere".into();
         };
         format!("{:?}", terrain.flatten(here, 6.0, fill, Shape::Round)).into()

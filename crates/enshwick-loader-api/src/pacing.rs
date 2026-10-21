@@ -31,7 +31,8 @@
 //! }
 //! ```
 
-use crate::{Load, Off, Registers};
+use crate::abi::Registers;
+use crate::{Load, Off};
 
 /// The wait helper after it clamped the milliseconds into `r9d`: `cmp rdx,
 /// max; mov r9d, max; cmovl r9d, edx`, then the arguments of

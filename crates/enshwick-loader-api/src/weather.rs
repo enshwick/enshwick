@@ -171,15 +171,6 @@ pub struct Weather {
     host: Host,
 }
 
-fn result(status: Status) -> Result<(), WorldError> {
-    match status {
-        Status::OK => Ok(()),
-        Status::WRONG_THREAD => Err(WorldError::WrongThread),
-        Status::REFUSED | Status::BAD_ARGS => Err(WorldError::Refused),
-        _ => Err(WorldError::Missing),
-    }
-}
-
 impl Weather {
     /// How the weather is at `position`, in metres; `None` off the game
     /// thread or while no world runs.
@@ -282,7 +273,7 @@ impl Weather {
         let duration = lasting.map_or(0, |d| {
             i64::try_from(d.as_nanos()).unwrap_or(i64::MAX).max(1)
         });
-        result((self.host.api().set_weather)(
+        WorldError::from_status((self.host.api().set_weather)(
             self.host.handle(),
             effect,
             duration,

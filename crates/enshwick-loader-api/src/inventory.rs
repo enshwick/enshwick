@@ -129,7 +129,7 @@ impl Category {
 /// use enshwick_loader_api::ecs::Entity;
 /// use enshwick_loader_api::inventory::{Category, Slot, SlotRef};
 ///
-/// let slot = Slot { at: SlotRef::new(Entity(9), 0), category: Category::GENERIC, item: 0, count: 0, pide: Entity::NONE };
+/// let slot = Slot { at: SlotRef::new(Entity(9), 0), category: Category::GENERIC, item: 0, count: 0, pide: None };
 /// assert!(slot.is_empty());
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -143,7 +143,7 @@ pub struct Slot {
     /// How many.
     pub count: u32,
     /// The item's own entity, for items with durability or a level.
-    pub pide: Entity,
+    pub pide: Option<Entity>,
 }
 
 impl Slot {
@@ -1436,7 +1436,7 @@ impl Reader<'_> {
             // SAFETY: as above.
             count: unsafe { read_at(slots, at + layout.stack_count) },
             // SAFETY: as above.
-            pide: Entity(unsafe { read_at(slots, at + layout.stack_pide) }),
+            pide: Entity::from_raw(unsafe { read_at(slots, at + layout.stack_pide) }),
         }
     }
 
@@ -1510,7 +1510,7 @@ impl Reader<'_> {
     ///
     /// ```
     /// fn worn(reader: &enshwick_loader_api::inventory::Reader<'_>, slot: &enshwick_loader_api::inventory::Slot) -> bool {
-    ///     reader.durability(slot.pide).is_some_and(|d| d.current * 4 < d.max)
+    ///     slot.pide.and_then(|pide| reader.durability(pide)).is_some_and(|d| d.current * 4 < d.max)
     /// }
     /// ```
     #[must_use]
@@ -1527,7 +1527,7 @@ impl Reader<'_> {
     ///
     /// ```
     /// fn charges(reader: &enshwick_loader_api::inventory::Reader<'_>, slot: &enshwick_loader_api::inventory::Slot) -> u16 {
-    ///     reader.meter(slot.pide).map_or(0, |m| m.current)
+    ///     slot.pide.and_then(|pide| reader.meter(pide)).map_or(0, |m| m.current)
     /// }
     /// ```
     #[must_use]

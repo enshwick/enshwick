@@ -13,7 +13,10 @@ use enshwick_loader_api::actions::Teleport;
 fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
     let actions = load.actions()?;
     load.add_command("home", "takes you to the world's centre", move |ctx, _args| {
-        match actions.teleport(ctx.player.entity, [0.0, 100.0, 0.0], Teleport::new().best_spawn()) {
+        let Some(me) = ctx.character() else {
+            return "the console has no character".into();
+        };
+        match actions.teleport(me, [0.0, 100.0, 0.0], Teleport::new().best_spawn()) {
             Ok(()) => "on your way".into(),
             Err(why) => format!("no teleport: {why}").into(),
         }
@@ -54,7 +57,10 @@ fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_
     let actions = load.actions()?;
     let world = load.world()?;
     load.add_command("come", "calls a survivor to you: /come <survivor id>", move |ctx, args| {
-        let (Some(at), Some(id)) = (world.position(ctx.player.entity), args.first().and_then(|a| a.parse().ok())) else {
+        let Some(me) = ctx.character() else {
+            return "the console has no character".into();
+        };
+        let (Some(at), Some(id)) = (world.position(me), args.first().and_then(|a| a.parse().ok())) else {
             return "/come <survivor id>".into();
         };
         format!("{:?}", actions.npc_command(id, NpcOrder::GoTo(at))).into()
@@ -93,8 +99,11 @@ fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_
     let actions = load.actions()?;
     let world = load.world()?;
     load.add_command("decoy", "spawns a copy of an entity beside you for a minute: /decoy <entity>", move |ctx, args| {
+        let Some(me) = ctx.character() else {
+            return "the console has no character".into();
+        };
         let source = args.first().and_then(|a| a.parse().ok()).map(enshwick_loader_api::ecs::Entity);
-        let (Some(template), Some([x, y, z])) = (source.and_then(|e| world.template(e)), world.position(ctx.player.entity)) else {
+        let (Some(template), Some([x, y, z])) = (source.and_then(|e| world.template(e)), world.position(me)) else {
             return "/decoy <entity>".into();
         };
         let how = Spawn::new().despawn_after(Duration::from_secs(60));

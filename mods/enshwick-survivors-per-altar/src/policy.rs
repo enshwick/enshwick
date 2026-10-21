@@ -119,7 +119,9 @@ pub(crate) fn link(load: &mut Load<'_>, staffs: Staffs) -> Result<(), Off> {
         }
         let (staff, slot, item) = (summon.pide, summon.slot, summon.item);
         if summon.meter.is_some() {
-            scheduler.next_tick(move || spend(&world, staff));
+            if let Some(staff) = staff {
+                scheduler.next_tick(move || spend(&world, staff));
+            }
         } else if let Some(inventories) = inventories {
             // A staff from before charges: one spent of a full one.
             scheduler.next_tick(move || renew_spent(&inventories, slot, item, charges));

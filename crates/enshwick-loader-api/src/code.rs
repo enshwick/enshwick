@@ -50,15 +50,15 @@ pub enum PatternError {
 /// # Examples
 ///
 /// ```
-/// use enshwick_loader_api::code::{Pattern, Unique};
+/// use enshwick_loader_api::code::{Pattern, FindError};
 ///
 /// let pattern = Pattern::parse("C3")?;
-/// assert_eq!(pattern.find_unique(&[0x90]), Err(Unique::None));
-/// assert_eq!(pattern.find_unique(&[0xc3, 0xc3]), Err(Unique::Many));
+/// assert_eq!(pattern.find_unique(&[0x90]), Err(FindError::None));
+/// assert_eq!(pattern.find_unique(&[0xc3, 0xc3]), Err(FindError::Many));
 /// # Ok::<(), enshwick_loader_api::code::PatternError>(())
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
-pub enum Unique {
+pub enum FindError {
     /// Nothing matches.
     #[error("no match")]
     None,
@@ -205,17 +205,17 @@ impl Pattern {
     ///
     /// # Errors
     ///
-    /// [`Unique::None`] when nothing matches, [`Unique::Many`] when more than
+    /// [`FindError::None`] when nothing matches, [`FindError::Many`] when more than
     /// one place does.
     ///
     /// # Examples
     ///
     /// See [`Pattern`].
-    pub fn find_unique(&self, code: &[u8]) -> Result<usize, Unique> {
+    pub fn find_unique(&self, code: &[u8]) -> Result<usize, FindError> {
         let mut found = self.find_all(code);
-        let first = found.next().ok_or(Unique::None)?;
+        let first = found.next().ok_or(FindError::None)?;
         match found.next() {
-            Some(_) => Err(Unique::Many),
+            Some(_) => Err(FindError::Many),
             None => Ok(first),
         }
     }
@@ -260,14 +260,14 @@ mod tests {
         code[20..29].copy_from_slice(&[0x4c, 0x8d, 0x05, 1, 2, 3, 4, 0x33, 0xc9]);
         assert_eq!(pattern.find_unique(&code), Ok(20));
         code[28] = 0xca;
-        assert_eq!(pattern.find_unique(&code), Err(Unique::None));
+        assert_eq!(pattern.find_unique(&code), Err(FindError::None));
     }
 
     #[test]
     fn a_second_match_is_ambiguous() {
         let pattern = Pattern::parse("66 3B C1").unwrap();
         let code = [0x66, 0x3b, 0xc1, 0x90, 0x66, 0x3b, 0xc1];
-        assert_eq!(pattern.find_unique(&code), Err(Unique::Many));
+        assert_eq!(pattern.find_unique(&code), Err(FindError::Many));
         assert_eq!(pattern.find_all(&code).collect::<Vec<_>>(), [0, 4]);
     }
 
@@ -275,8 +275,8 @@ mod tests {
     fn a_match_may_end_at_the_last_byte_but_not_beyond() {
         let pattern = Pattern::parse("?? C3").unwrap();
         assert_eq!(pattern.find_unique(&[0x90, 0x90, 0xc3]), Ok(1));
-        assert_eq!(pattern.find_unique(&[0xc3]), Err(Unique::None));
-        assert_eq!(pattern.find_unique(&[]), Err(Unique::None));
+        assert_eq!(pattern.find_unique(&[0xc3]), Err(FindError::None));
+        assert_eq!(pattern.find_unique(&[]), Err(FindError::None));
     }
 
     #[test]

@@ -57,8 +57,7 @@ walks the system's query with the engine's own iterator:
   `set_row(ctx, row)` moves it. A pass of the mod's own sets it to 0 first and
   puts back the saved row afterwards, so vanilla's walk starts where it would
   have.
-- `entity(ctx)` is the entity of the current row, `Entity::NONE` before the
-  first.
+- `entity(ctx)` is the entity of the current row, `None` before the first.
 - `mark_changed(tracker, stamp_a, stamp_b, entity, kind)` marks a written
   component changed, so replication sends it to clients. The arguments are the
   change-tracking words of the current row of a system that writes the

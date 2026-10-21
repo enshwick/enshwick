@@ -30,7 +30,7 @@
 //!     .with("texts.toml", "[en]\n\"lantern.name\" = \"Lantern\"\n");
 //! let pack = Pack::parse("lanterns", &files)?;
 //! assert_eq!(pack.ids(), ["lanterns:lantern"]);
-//! # Ok::<(), enshwick_loader_api::packs::PackErrors>(())
+//! # Ok::<(), enshwick_loader_api::packs::ParsePackError>(())
 //! ```
 
 use std::collections::BTreeMap;
@@ -86,7 +86,8 @@ pub const MAX_FILE: u64 = 4 << 20;
 /// assert_eq!(errors.list()[0].line, 1);
 /// assert!(errors.to_string().starts_with("items.toml:1:1: "), "{errors}");
 /// ```
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+#[error("{file}:{line}:{column}: {message}")]
 pub struct PackError {
     /// The file, as the pack names it, such as `items.toml`.
     pub file: String,
@@ -98,21 +99,6 @@ pub struct PackError {
     pub message: String,
 }
 
-impl core::fmt::Display for PackError {
-    /// `file:line:column: message`.
-    ///
-    /// # Examples
-    ///
-    /// See [`PackError`].
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(
-            f,
-            "{}:{}:{}: {}",
-            self.file, self.line, self.column, self.message
-        )
-    }
-}
-
 /// Every problem [`Pack::parse`] found, in file order.
 ///
 /// # Examples
@@ -120,9 +106,9 @@ impl core::fmt::Display for PackError {
 /// See [`PackError`].
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 #[error("{}", self.lines())]
-pub struct PackErrors(Vec<PackError>);
+pub struct ParsePackError(Vec<PackError>);
 
-impl PackErrors {
+impl ParsePackError {
     /// The problems.
     ///
     /// # Examples
@@ -142,10 +128,39 @@ impl PackErrors {
     }
 }
 
-impl From<PackErrors> for Off {
-    fn from(errors: PackErrors) -> Self {
+impl From<ParsePackError> for Off {
+    fn from(errors: ParsePackError) -> Self {
         Self::new(format!("content pack: {errors}"))
     }
+}
+
+/// Why [`PackFiles::read_dir`] could not read a pack's folder.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::packs::ReadPackError;
+///
+/// let large = ReadPackError::TooLarge { file: "items.toml".into() };
+/// assert_eq!(large.to_string(), "items.toml: larger than 4194304 bytes");
+/// ```
+#[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
+pub enum ReadPackError {
+    /// A file could not be read.
+    #[error("{file}: {source}")]
+    Io {
+        /// The file, as the pack names it.
+        file: String,
+        /// Why.
+        source: std::io::Error,
+    },
+    /// A file is larger than [`MAX_FILE`].
+    #[error("{file}: larger than {MAX_FILE} bytes")]
+    TooLarge {
+        /// The file, as the pack names it.
+        file: String,
+    },
 }
 
 /// The files of a pack: their names, such as `items.toml` or
@@ -192,7 +207,8 @@ impl PackFiles {
     ///
     /// # Errors
     ///
-    /// The file that could not be read, or is larger than [`MAX_FILE`].
+    /// [`ReadPackError`] naming the file that could not be read, or is
+    /// larger than [`MAX_FILE`].
     ///
     /// # Examples
     ///
@@ -201,16 +217,22 @@ impl PackFiles {
     ///
     /// let files = PackFiles::read_dir(std::path::Path::new("no such folder"))?;
     /// assert!(files.names().next().is_none());
-    /// # Ok::<(), String>(())
+    /// # Ok::<(), enshwick_loader_api::packs::ReadPackError>(())
     /// ```
-    pub fn read_dir(dir: &Path) -> Result<Self, String> {
+    pub fn read_dir(dir: &Path) -> Result<Self, ReadPackError> {
         let mut files = Self::new();
-        let read = |path: &Path, name: &str, files: &mut Self| -> Result<(), String> {
-            let meta = std::fs::metadata(path).map_err(|e| format!("{name}: {e}"))?;
+        let read = |path: &Path, name: &str, files: &mut Self| -> Result<(), ReadPackError> {
+            let io = |source| ReadPackError::Io {
+                file: name.to_owned(),
+                source,
+            };
+            let meta = std::fs::metadata(path).map_err(io)?;
             if meta.len() > MAX_FILE {
-                return Err(format!("{name}: larger than {MAX_FILE} bytes"));
+                return Err(ReadPackError::TooLarge {
+                    file: name.to_owned(),
+                });
             }
-            let bytes = std::fs::read(path).map_err(|e| format!("{name}: {e}"))?;
+            let bytes = std::fs::read(path).map_err(io)?;
             files.files.insert(name.to_owned(), bytes);
             Ok(())
         };
@@ -961,7 +983,7 @@ impl Pack {
     /// # Examples
     ///
     /// See the [module](self).
-    pub fn parse(namespace: &str, files: &PackFiles) -> Result<Self, PackErrors> {
+    pub fn parse(namespace: &str, files: &PackFiles) -> Result<Self, ParsePackError> {
         Self::parse_with(namespace, files, Vanilla::game())
     }
 
@@ -987,7 +1009,7 @@ impl Pack {
         namespace: &str,
         files: &PackFiles,
         vanilla: Option<&Vanilla>,
-    ) -> Result<Self, PackErrors> {
+    ) -> Result<Self, ParsePackError> {
         let mut reader = Reader {
             namespace,
             files,
@@ -1067,7 +1089,7 @@ impl Pack {
         if reader.errors.is_empty() {
             Ok(pack)
         } else {
-            Err(PackErrors(reader.errors))
+            Err(ParsePackError(reader.errors))
         }
     }
 
@@ -1101,7 +1123,7 @@ impl Pack {
     /// "#);
     /// let pack = Pack::parse("lanterns", &files)?;
     /// assert_eq!(pack.drops().len(), 1);
-    /// # Ok::<(), enshwick_loader_api::packs::PackErrors>(())
+    /// # Ok::<(), enshwick_loader_api::packs::ParsePackError>(())
     /// ```
     #[must_use]
     pub fn drops(&self) -> &[Drop] {
@@ -1122,7 +1144,7 @@ impl Pack {
     /// let before = Pack::parse("lanterns", &loot("0.1"))?;
     /// let after = Pack::parse("lanterns", &loot("0.5"))?;
     /// assert!(before.same_content(&after));
-    /// # Ok::<(), enshwick_loader_api::packs::PackErrors>(())
+    /// # Ok::<(), enshwick_loader_api::packs::ParsePackError>(())
     /// ```
     #[must_use]
     pub fn same_content(&self, other: &Self) -> bool {
@@ -1143,7 +1165,7 @@ impl Pack {
     ///
     /// let files = PackFiles::new();
     /// assert_eq!(Pack::parse("empty", &files)?.hash(), files.hash());
-    /// # Ok::<(), enshwick_loader_api::packs::PackErrors>(())
+    /// # Ok::<(), enshwick_loader_api::packs::ParsePackError>(())
     /// ```
     #[must_use]
     pub fn hash(&self) -> u32 {
