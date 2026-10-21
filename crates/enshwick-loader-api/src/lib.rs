@@ -61,8 +61,8 @@
 /// The version of this crate, which a mod's generated `Cargo.toml` pins.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
-// The derive names this crate by its path, as mods see it.
-#[cfg(test)]
+// The macros name this crate by its path, as mods see it, and the points of
+// Enshwick's own mods are declared with them.
 extern crate self as enshwick_loader_api;
 
 pub mod abi;
@@ -98,6 +98,7 @@ pub mod mods;
 pub mod net;
 pub mod pacing;
 pub mod packs;
+pub mod points;
 pub mod progress;
 pub mod raw;
 pub mod schedule;
@@ -166,6 +167,34 @@ pub use enshwick_loader_macros::event;
 /// assert_eq!(UPGRADE.name(), "UPGRADE");
 /// ```
 pub use enshwick_loader_macros::hook;
+/// Declares an extension point other mods extend: the input struct becomes
+/// `repr(C)` and implements [`points::Point`] with a layout hash per field
+/// and one for the answer, which the loader checks for every link.
+///
+/// `#[point(name = "<owner id>:<point>", mode = Observe | Advise | Override,
+/// output = <type>, refusable)]`; `refusable` lets a link refuse, which
+/// stops the chain. The input grows by appending fields; a changed field or
+/// answer type needs a new name. Types count as written, so keep one
+/// declaration both mods compile.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::points::{Order, Verdict};
+///
+/// #[enshwick_loader_api::point(name = "trading-post:price", mode = Override, output = u32, refusable)]
+/// #[derive(Clone, Copy, Debug)]
+/// pub struct Price {
+///     pub item: u32,
+/// }
+///
+/// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+///     load.extend_point(&Order::new(), |price: &Price, _coins: &u32| {
+///         if price.item == 0 { Verdict::Refuse } else { Verdict::Pass }
+///     })
+/// }
+/// ```
+pub use enshwick_loader_macros::point;
 /// Declares a service table other mods use: the struct becomes `repr(C)`
 /// and implements [`services::Service`] with a layout hash per field, which
 /// the loader checks when a mod asks for the service.

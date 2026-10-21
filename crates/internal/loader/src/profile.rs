@@ -54,10 +54,12 @@ pub enum Feature {
     Resources,
     /// Migrations.
     Migrations,
+    /// Links on other mods' extension points.
+    Points,
 }
 
 /// How many features there are.
-pub const FEATURES: usize = 18;
+pub const FEATURES: usize = 19;
 
 impl Feature {
     /// The feature in the report.
@@ -82,6 +84,7 @@ impl Feature {
             Self::Status => "status lines",
             Self::Resources => "resources",
             Self::Migrations => "migrations",
+            Self::Points => "extension points",
         }
     }
 
@@ -104,6 +107,7 @@ impl Feature {
         Self::Status,
         Self::Resources,
         Self::Migrations,
+        Self::Points,
     ];
 }
 

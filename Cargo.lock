@@ -280,6 +280,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "enshwick-example-safe-viewers"
+version = "0.0.0-dev"
+dependencies = [
+ "arc-swap",
+ "enshwick-loader-api",
+ "serde",
+]
+
+[[package]]
 name = "enshwick-example-trading-post"
 version = "0.0.0-dev"
 dependencies = [

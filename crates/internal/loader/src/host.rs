@@ -800,6 +800,9 @@ pub(crate) static API: HostApi = HostApi {
     rebuild_resource,
     recipe_rule,
     recipe_disabled,
+    define_point,
+    attach_point,
+    run_point,
 };
 
 /// A static slice from a pointer and a count, empty for a null pointer.
@@ -1166,6 +1169,12 @@ extern "system" fn settings(me: ModHandle, defaults: Str, out: *mut Str) -> Stat
     })
 }
 
+impl crate::points::Mods for Loader {
+    fn find(&self, id: &str) -> Option<usize> {
+        self.mods.iter().position(|m| m.id == id)
+    }
+}
+
 impl crate::services::Names for Loader {
     fn name(&self, index: usize) -> (&str, &str) {
         self.mods
@@ -1338,6 +1347,161 @@ extern "system" fn subscribe_event(
             user.expose_provenance(),
         );
         Status::OK
+    })
+}
+
+/// The declaration a point spec carries; `None` for a bad one.
+///
+/// # Safety
+///
+/// `spec` is null or a mod's version of the spec, valid for the call.
+unsafe fn point_parts(spec: *const api_frame::PointSpec) -> Option<crate::points::Declared> {
+    // SAFETY: forwarded from the caller; all of the spec is required.
+    let spec = unsafe { get_headed(spec, size_of::<api_frame::PointSpec>()) }?;
+    // SAFETY: the spec is valid for the call.
+    unsafe { declared(&spec) }
+}
+
+/// The declaration of a point spec read through its header.
+///
+/// # Safety
+///
+/// The spec's name and layouts are valid for the call.
+unsafe fn declared(spec: &api_frame::PointSpec) -> Option<crate::points::Declared> {
+    // SAFETY: forwarded from the caller.
+    let (name, input) = unsafe { spec_parts(spec.name, &spec.input) }?;
+    // SAFETY: as above.
+    let output = unsafe { enshwick_loader_api::services::read_layout(&spec.output) }?;
+    Some(crate::points::Declared {
+        name: name.to_owned(),
+        input,
+        output,
+        mode: spec.mode,
+        refuse: spec.flags.contains(api_frame::PointFlags::REFUSE),
+    })
+}
+
+/// The ids a link names.
+///
+/// # Safety
+///
+/// `raw` is null or points at `count` strings valid for the call.
+unsafe fn point_ids(raw: *const Str, count: u32) -> Option<Vec<String>> {
+    if count == 0 {
+        return Some(Vec::new());
+    }
+    if raw.is_null() {
+        return None;
+    }
+    // SAFETY: the caller guarantees `count` readable strings.
+    let ids = unsafe { core::slice::from_raw_parts(raw, count as usize) };
+    ids.iter().map(|id| text(*id).map(str::to_owned)).collect()
+}
+
+extern "system" fn define_point(
+    me: ModHandle,
+    spec: *const api_frame::PointSpec,
+    out: *mut api_frame::PointHandle,
+) -> Status {
+    entry("define_point", || {
+        let (_, index, record) = match calling(me) {
+            Ok(found) => found,
+            Err(status) => return status,
+        };
+        if crate::points::sealed() {
+            return Status::TOO_LATE;
+        }
+        // SAFETY: a mod passes null or its version of the spec, and all of
+        // the spec is required.
+        let Some(spec) = (unsafe { get_headed(spec, size_of::<api_frame::PointSpec>()) }) else {
+            return Status::BAD_ARGS;
+        };
+        // SAFETY: the spec is valid for the call.
+        let Some(declared) = (unsafe { declared(&spec) }) else {
+            return Status::BAD_ARGS;
+        };
+        let defined = crate::points::registry().define(index, &record.id, declared);
+        match defined {
+            Ok((id, live)) => put_headed(
+                out,
+                api_frame::PointHandle {
+                    header: Header::of::<api_frame::PointHandle>(),
+                    id,
+                    live,
+                },
+            ),
+            Err(reason) => {
+                crate::log::write(Level::WARN, &record.id, &reason);
+                Status::REFUSED
+            }
+        }
+    })
+}
+
+extern "system" fn attach_point(
+    me: ModHandle,
+    link: *const api_frame::PointLink,
+    callback: api_frame::PointFn,
+    user: *mut core::ffi::c_void,
+) -> Status {
+    entry("attach_point", || {
+        let (_, index, record) = match calling(me) {
+            Ok(found) => found,
+            Err(status) => return status,
+        };
+        if crate::points::sealed() {
+            return Status::TOO_LATE;
+        }
+        // SAFETY: a mod passes null or its version of the link, and all of
+        // the link is required.
+        let Some(link) = (unsafe { get_headed(link, size_of::<api_frame::PointLink>()) }) else {
+            return Status::BAD_ARGS;
+        };
+        // SAFETY: the link's spec is valid for the call.
+        let declared = unsafe { point_parts(link.point) };
+        // SAFETY: the link's ids are valid for the call.
+        let before = unsafe { point_ids(link.before, link.before_count) };
+        // SAFETY: as above.
+        let after = unsafe { point_ids(link.after, link.after_count) };
+        let parts = (declared, before, after);
+        let (Some(declared), Some(before), Some(after)) = parts else {
+            return Status::BAD_ARGS;
+        };
+        let attached = crate::points::registry().attach(crate::points::Pending {
+            owner: index,
+            declared,
+            priority: link.priority,
+            before,
+            after,
+            callback,
+            user: user.expose_provenance(),
+        });
+        match attached {
+            Ok(()) => Status::OK,
+            Err(reason) => {
+                crate::log::write(Level::WARN, &record.id, &reason);
+                Status::REFUSED
+            }
+        }
+    })
+}
+
+extern "system" fn run_point(
+    me: ModHandle,
+    point: u32,
+    input: *const core::ffi::c_void,
+    value: *mut core::ffi::c_void,
+    verdict: *mut api_frame::PointVerdict,
+) -> Status {
+    entry("run_point", || {
+        let index = match caller_index(me) {
+            Ok((_, index)) => index,
+            Err(status) => return status,
+        };
+        match crate::points::run(index, point, input, value) {
+            Ok(answer) => put(verdict, answer),
+            Err(status) => status,
+        }
     })
 }
 

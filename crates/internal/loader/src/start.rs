@@ -183,6 +183,7 @@ pub(crate) fn start(
     crate::item_data::seal();
     loader.seal_subscriptions();
     crate::services::seal(loader);
+    crate::points::seal(loader);
     crate::content::seal_and_link(loader);
     link_features(loader);
     if side == Side::CLIENT {
@@ -678,6 +679,7 @@ fn libraries(mods_dir: &Path) -> (Vec<Library>, Vec<Candidate>) {
         }
     }
     modlist::set_disabled(list.off());
+    modlist::set_links_off(list.links_off());
     if changed
         && writable
         && let Err(e) = std::fs::write(&list_file, list.render())

@@ -39,6 +39,7 @@
 - [State and data folders](state.md)
 - [Migrations](migrations.md)
 - [Services between mods](services.md)
+- [Extending other mods](extending.md)
 
 # Reaching into the game
 

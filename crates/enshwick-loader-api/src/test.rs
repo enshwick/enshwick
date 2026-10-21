@@ -72,6 +72,7 @@
 //! # Ok::<(), &str>(())
 //! ```
 
+mod points;
 mod stats;
 mod table;
 

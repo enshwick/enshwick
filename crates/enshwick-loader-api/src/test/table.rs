@@ -171,6 +171,8 @@ pub(crate) struct State {
     pub(crate) summon_items: Vec<(u32, u32)>,
     /// Stat kinds, modifiers and worn items.
     pub(crate) stats: super::stats::FakeStats,
+    /// Extension points the mod defined and links it attached.
+    pub(crate) points: super::points::FakePoints,
     pub(crate) survivor_status: Option<(SurvivorStatusFn, usize)>,
     pub(crate) interaction_filters: Vec<(InteractionFn, usize)>,
     pub(crate) skills: Vec<(u32, SkillCheckFn, usize)>,
@@ -282,6 +284,7 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         item_values: std::collections::BTreeMap::new(),
         summon_items: Vec::new(),
         stats: super::stats::FakeStats::default(),
+        points: super::points::FakePoints::default(),
         survivor_status: None,
         interaction_filters: Vec::new(),
         skills: Vec::new(),
@@ -2525,4 +2528,7 @@ pub(crate) static TABLE: HostApi = HostApi {
     rebuild_resource,
     recipe_rule,
     recipe_disabled,
+    define_point: super::points::define_point,
+    attach_point: super::points::attach_point,
+    run_point: super::points::run_point,
 };

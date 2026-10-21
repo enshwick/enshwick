@@ -82,6 +82,8 @@ mod notices;
 mod packs;
 #[cfg(windows)]
 mod patch;
+#[cfg(windows)]
+mod points;
 #[cfg(target_arch = "x86_64")]
 pub mod profile;
 #[cfg(windows)]

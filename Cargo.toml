@@ -9,6 +9,7 @@ members = [
     # and examples/README.md is none.
     "examples/hot-reload",
     "examples/market-stalls",
+    "examples/safe-viewers",
     "examples/trading-post",
     "examples/trading-post-api",
 ]

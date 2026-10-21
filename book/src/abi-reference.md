@@ -11,7 +11,7 @@ chapter is for reading logs and the rare call to the raw table. The exact types 
 | Constant                                                                                            | Value | Meaning                                         |
 | --------------------------------------------------------------------------------------------------- | ----- | ----------------------------------------------- |
 | [`ABI_MAJOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 1     | A loader refuses a mod built for another major. |
-| [`ABI_MINOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 64    | A newer minor only appends.                     |
+| [`ABI_MINOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 65    | A newer minor only appends.                     |
 
 The ABI version is apart from Enshwick Loader's version (such as 0.2.0, see
 [Releasing and updates](releasing.md#versions)): a platform release raises
@@ -23,7 +23,7 @@ The policy:
   loader of another major does not load it and logs
   `<file> is built for ABI 2, the loader speaks 1`.
 - **Minor.** A loader refuses a mod built for a newer minor and logs
-  `built for ABI 1.64, newer than the loader's 1.63: update Enshwick`, so a
+  `built for ABI 1.66, newer than the loader's 1.65: update Enshwick`, so a
   mod always meets a loader that has every entry of the host table it knows,
   and the safe layer calls them without checks. Structs the other side may
   know an older version of start with a
@@ -44,13 +44,13 @@ newer one waits for a loader update.
 [`declare_mod!`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/declare.rs)
 writes five exports:
 
-| Export                  | Signature                                 | When the loader calls it                                  |
-| ----------------------- | ----------------------------------------- | --------------------------------------------------------- |
-| `enshwick_mod_abi`      | `fn() -> u32`                             | First: the major the mod was built for.                   |
-| `enshwick_mod_query`    | `fn() -> *const Manifest`                 | Before any of the mod's code runs; static data.           |
-| `enshwick_mod_init`     | `fn(*const HostApi, ModHandle) -> Status` | Once, in load order; registers hooks and the rest.        |
-| `enshwick_mod_ready`    | `fn(*const HostApi, ModHandle)`           | After every chain is armed, if `init` returned OK.        |
-| `enshwick_mod_shutdown` | `fn()`                                    | Before a development reload unloads it; optional (53).    |
+| Export                  | Signature                                 | When the loader calls it                               |
+| ----------------------- | ----------------------------------------- | ------------------------------------------------------ |
+| `enshwick_mod_abi`      | `fn() -> u32`                             | First: the major the mod was built for.                |
+| `enshwick_mod_query`    | `fn() -> *const Manifest`                 | Before any of the mod's code runs; static data.        |
+| `enshwick_mod_init`     | `fn(*const HostApi, ModHandle) -> Status` | Once, in load order; registers hooks and the rest.     |
+| `enshwick_mod_ready`    | `fn(*const HostApi, ModHandle)`           | After every chain is armed, if `init` returned OK.     |
+| `enshwick_mod_shutdown` | `fn()`                                    | Before a development reload unloads it; optional (53). |
 
 A DLL in `mods/` without the first four is logged as `<file> is not an Enshwick mod`
 and unloaded.
@@ -129,28 +129,28 @@ and the types in
 or with a raw [`Event`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs)
 id through `Load::subscribe`. See [Events and the scheduler](events.md).
 
-| Id | Constant                  | Typed event             | Data              | Raised on       | Side   |
-| -- | ------------------------- | ----------------------- | ----------------- | --------------- | ------ |
-| 1  | `SETTINGS_CHANGED`        | `SettingsChanged`       | none              | not fixed       | both   |
-| 2  | `LOADER_SETTINGS_CHANGED` | `LoaderSettingsChanged` | none              | a loader thread | both   |
-| 3  | `TICK`                    | `Ticked`                | `TickData`        | the game thread | server |
-| 4  | `WORLD_LOADED`            | `WorldLoaded`           | none              | the game thread | server |
-| 5  | `WORLD_SAVED`             | `WorldSaved`            | none              | the game thread | server |
-| 6  | `PLAYER_JOINED`           | `PlayerJoined`          | `PlayerData`      | the game thread | server |
-| 7  | `PLAYER_LEFT`             | `PlayerLeft`            | `PlayerData`      | the game thread | server |
-| 8  | `SHUTDOWN`                | `ShutdownStarted`       | none              | the game thread | server |
-| 9  | `BUILDING_PLACED`         | `BuildingPlaced`        | `BuildingData`    | the game thread | server |
-| 10 | `BUILDING_REMOVED`        | `BuildingRemoved`       | `BuildingData`    | the game thread | server |
-| 11 | `JOIN_MISSING`            | `JoinRefused`           | none              | the game thread | client |
-| 12 | `ALTARS_CHANGED`          | `AltarsChanged`         | none              | the game thread | server |
-| 13 | `DAY_STARTED`             | `DayStarted`            | none              | the game thread | server |
-| 14 | `NIGHT_STARTED`           | `NightStarted`          | none              | the game thread | server |
-| 15 | `KNOWLEDGE_CHANGED`       | `KnowledgeChanged`      | `KnowledgeData`   | the game thread | server |
-| 16 | `QUEST_COMPLETED`         | `QuestCompleted`        | `QuestData`       | the game thread | server |
-| 17 | `CHUNK_LOADED`            | `ChunkLoaded`           | `ChunkData`       | the game thread | server |
-| 18 | `CHUNK_UNLOADED`          | `ChunkUnloaded`         | `ChunkData`       | the game thread | server |
-| 19 | `WORLD_SETTINGS`          | `WorldSettings`         | none              | the game thread | server |
-| 20 | `PLAYER_DIED`             | `PlayerDied`            | `PlayerDeathData` | the game thread | server |
+| Id  | Constant                  | Typed event             | Data              | Raised on       | Side   |
+| --- | ------------------------- | ----------------------- | ----------------- | --------------- | ------ |
+| 1   | `SETTINGS_CHANGED`        | `SettingsChanged`       | none              | not fixed       | both   |
+| 2   | `LOADER_SETTINGS_CHANGED` | `LoaderSettingsChanged` | none              | a loader thread | both   |
+| 3   | `TICK`                    | `Ticked`                | `TickData`        | the game thread | server |
+| 4   | `WORLD_LOADED`            | `WorldLoaded`           | none              | the game thread | server |
+| 5   | `WORLD_SAVED`             | `WorldSaved`            | none              | the game thread | server |
+| 6   | `PLAYER_JOINED`           | `PlayerJoined`          | `PlayerData`      | the game thread | server |
+| 7   | `PLAYER_LEFT`             | `PlayerLeft`            | `PlayerData`      | the game thread | server |
+| 8   | `SHUTDOWN`                | `ShutdownStarted`       | none              | the game thread | server |
+| 9   | `BUILDING_PLACED`         | `BuildingPlaced`        | `BuildingData`    | the game thread | server |
+| 10  | `BUILDING_REMOVED`        | `BuildingRemoved`       | `BuildingData`    | the game thread | server |
+| 11  | `JOIN_MISSING`            | `JoinRefused`           | none              | the game thread | client |
+| 12  | `ALTARS_CHANGED`          | `AltarsChanged`         | none              | the game thread | server |
+| 13  | `DAY_STARTED`             | `DayStarted`            | none              | the game thread | server |
+| 14  | `NIGHT_STARTED`           | `NightStarted`          | none              | the game thread | server |
+| 15  | `KNOWLEDGE_CHANGED`       | `KnowledgeChanged`      | `KnowledgeData`   | the game thread | server |
+| 16  | `QUEST_COMPLETED`         | `QuestCompleted`        | `QuestData`       | the game thread | server |
+| 17  | `CHUNK_LOADED`            | `ChunkLoaded`           | `ChunkData`       | the game thread | server |
+| 18  | `CHUNK_UNLOADED`          | `ChunkUnloaded`         | `ChunkData`       | the game thread | server |
+| 19  | `WORLD_SETTINGS`          | `WorldSettings`         | none              | the game thread | server |
+| 20  | `PLAYER_DIED`             | `PlayerDied`            | `PlayerDeathData` | the game thread | server |
 
 Subscribing needs minor 2; `JOIN_MISSING` came with minor 10 and
 `ALTARS_CHANGED`, raised for mods that opened altars, with minor 15;
@@ -307,3 +307,9 @@ marked "init only" are allowed during `enshwick_mod_init` only.
 | `account_knowledge`      | Grants or takes back an account's knowledge now or once its character loads; server game thread only | 59          |
 | `resource_read`          | Copies a vanilla resource from the game's archive files; any thread                                  | 61          |
 | `game_text`              | The game's own text of a tag in a language, from its archive; client only, any thread                | 61          |
+| `rebuild_resource`       | Builds a served resource again from its kept base with every mod's patches; any thread               | 63          |
+| `recipe_rule`            | Adds or takes back the mod's rule that disables recipes by recipe, item or workshop; any thread      | 64          |
+| `recipe_disabled`        | Whether a recipe is disabled in this process now; any thread                                         | 64          |
+| `define_point`           | Defines an extension point named after the mod, with its layouts and mode; init only                 | 65          |
+| `attach_point`           | Attaches a link to another mod's extension point, with its order; init only                          | 65          |
+| `run_point`              | Runs the live links of the mod's own extension point over its answer; any thread                     | 65          |

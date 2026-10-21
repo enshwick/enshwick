@@ -510,6 +510,75 @@ pub fn event(args: TokenStream, item: TokenStream) -> TokenStream {
         .unwrap_or_else(|e| e.to_compile_error().into())
 }
 
+/// Declares an extension point: makes the input struct `repr(C)` and
+/// implements `enshwick_loader_api::points::Point` with a layout hash per
+/// field and one for the answer.
+///
+/// `#[point(name = "<owner id>:<point>", mode = Observe | Advise | Override,
+/// output = <type>, refusable)]`; `refusable` lets a link refuse. Examples
+/// are on `enshwick_loader_api::point`.
+#[proc_macro_attribute]
+pub fn point(args: TokenStream, item: TokenStream) -> TokenStream {
+    let mut name: Option<syn::LitStr> = None;
+    let mut mode: Option<Ident> = None;
+    let mut output: Option<Type> = None;
+    let mut refusable = false;
+    let settings = syn::meta::parser(|meta| {
+        if meta.path.is_ident("name") {
+            name = Some(meta.value()?.parse()?);
+        } else if meta.path.is_ident("mode") {
+            mode = Some(meta.value()?.parse()?);
+        } else if meta.path.is_ident("output") {
+            output = Some(meta.value()?.parse()?);
+        } else if meta.path.is_ident("refusable") {
+            refusable = true;
+        } else {
+            return Err(meta.error(
+                "expected `name = \"<id>:<point>\"`, `mode = Override`, `output = <type>` or `refusable`",
+            ));
+        }
+        Ok(())
+    });
+    parse_macro_input!(args with settings);
+    let item = parse_macro_input!(item as syn::ItemStruct);
+    let ident = item.ident.clone();
+    let expanded = (|| {
+        let mode = mode.ok_or_else(|| {
+            syn::Error::new_spanned(
+                &ident,
+                "choose a mode: `mode = Observe`, `Advise` or `Override`",
+            )
+        })?;
+        if !["Observe", "Advise", "Override"].contains(&mode.to_string().as_str()) {
+            return Err(syn::Error::new_spanned(
+                &mode,
+                "the mode is `Observe`, `Advise` or `Override`",
+            ));
+        }
+        let output = output
+            .ok_or_else(|| syn::Error::new_spanned(&ident, "name the answer: `output = <type>`"))?;
+        let written = format!("output: {}", quote!(#output));
+        let extra = quote! {
+            const MODE: ::enshwick_loader_api::points::Mode =
+                ::enshwick_loader_api::points::Mode::#mode;
+            const REFUSE: bool = #refusable;
+            const OUTPUT: &'static [::enshwick_loader_api::abi::LayoutField] =
+                &[::enshwick_loader_api::abi::LayoutField {
+                    name: ::enshwick_loader_api::abi::Str::new("output"),
+                    hash: ::enshwick_loader_api::services::layout_hash(
+                        #written,
+                        ::core::mem::size_of::<#output>(),
+                        ::core::mem::align_of::<#output>(),
+                        0,
+                    ),
+                }];
+            type Output = #output;
+        };
+        expand_declaration(&item, name, ':', &extra, &quote!(points::Point))
+    })();
+    expanded.unwrap_or_else(|e| e.to_compile_error().into())
+}
+
 /// The struct as `repr(C)` with its layout trait: `major` is `Some` for a
 /// service.
 fn expand_layout(
@@ -518,12 +587,35 @@ fn expand_layout(
     major: Option<proc_macro2::TokenStream>,
     trait_name: &proc_macro2::TokenStream,
 ) -> syn::Result<TokenStream> {
+    let major = major.map(|major| quote!(const MAJOR: u32 = #major;));
+    expand_declaration(
+        item,
+        name,
+        '.',
+        &major.unwrap_or_default(),
+        &quote!(services::#trait_name),
+    )
+}
+
+/// The struct as `repr(C)` with the declaration trait at
+/// `enshwick_loader_api::<trait_path>`, named `<mod id><separator><what>`,
+/// with `extra` items in the impl.
+fn expand_declaration(
+    item: &syn::ItemStruct,
+    name: Option<syn::LitStr>,
+    separator: char,
+    extra: &proc_macro2::TokenStream,
+    trait_path: &proc_macro2::TokenStream,
+) -> syn::Result<TokenStream> {
     let ident = &item.ident;
     let name = name.ok_or_else(|| {
-        syn::Error::new_spanned(ident, "name the declaration: `name = \"<id>.<what>\"`")
+        syn::Error::new_spanned(
+            ident,
+            format!("name the declaration: `name = \"<id>{separator}<what>\"`"),
+        )
     })?;
     let text = name.value();
-    let valid = text.split_once('.').is_some_and(|(id, what)| {
+    let valid = text.split_once(separator).is_some_and(|(id, what)| {
         !id.is_empty()
             && id.len() <= 64
             && id
@@ -534,7 +626,7 @@ fn expand_layout(
     if !valid {
         return Err(syn::Error::new_spanned(
             &name,
-            "the name is `<mod id>.<what>`, the mod id in `[a-z0-9-]`",
+            format!("the name is `<mod id>{separator}<what>`, the mod id in `[a-z0-9-]`"),
         ));
     }
     if !item.generics.params.is_empty() {
@@ -572,16 +664,15 @@ fn expand_layout(
             }
         })
     });
-    let major = major.map(|major| quote!(const MAJOR: u32 = #major;));
     Ok(quote! {
         #[repr(C)]
         #item
 
         // SAFETY: the layout lists every field of the `repr(C)` struct in
         // order, with its size, alignment and offset.
-        unsafe impl ::enshwick_loader_api::services::#trait_name for #ident {
+        unsafe impl ::enshwick_loader_api::#trait_path for #ident {
             const NAME: &'static str = #name;
-            #major
+            #extra
             const LAYOUT: &'static [::enshwick_loader_api::abi::LayoutField] = &[#(#entries),*];
         }
     }
