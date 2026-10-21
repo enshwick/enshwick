@@ -65,6 +65,7 @@ chapters! {
     Stats => "stats.md",
     Affixes => "affixes.md",
     Releasing => "releasing.md",
+    Servers => "servers.md",
     AbiReference => "abi-reference.md",
     Faq => "faq.md",
 }

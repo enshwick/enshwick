@@ -71,6 +71,7 @@
 
 - [Testing](testing.md)
 - [Releasing and updates](releasing.md)
+- [Running a server in Docker or Kubernetes](servers.md)
 
 # Reference
 

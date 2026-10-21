@@ -396,6 +396,29 @@ Players need nothing else: the key comes with the DLL they install. Keep the
 secret key safe; a release signed with a lost key cannot reach players who
 have your mod, and one signed with a stolen key can.
 
+## Where to publish
+
+Players get your updates only from a source the updater can read, so:
+
+- **Publish every release in a repository**: GitHub releases with
+  `updates: github(...)`, or any `https://` host with a
+  [document](#the-document-of-a-url-source) and `updates: url(...)`. Use the
+  tag and file forms of [Releasing your own mod](#releasing-your-own-mod),
+  such as tag `my-mod-v1.2.0` with `my-mod.zip`, so the updater finds them
+  without guessing.
+- **Sign with minisign and name the key in `signed_by:`**. Players then get
+  an update checked against the key that came with the DLL they installed,
+  and nobody else can publish one in your name. An unsigned update still
+  installs, but the dialog and the Mods screen mark it unsigned.
+- **Treat Nexus as a mirror, not the only source.** Nexus downloads need a
+  login, and through its API a Premium account, so neither the updater nor a
+  server's automation can fetch from it. Upload there too if you like, with
+  the same files as the release.
+- **Publish your public key** where players and server admins can compare
+  it, such as your README; admins who bake mods into a server image check the
+  signatures with it (see
+  [Running a server in Docker or Kubernetes](servers.md)).
+
 ## Removed mods and holds
 
 A mod that keeps a world the vanilla game cannot open safely can set a
