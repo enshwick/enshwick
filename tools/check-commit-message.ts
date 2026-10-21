@@ -27,6 +27,12 @@ const problems = (message: string): string[] => {
       );
     }
 
+    // release-please reads a release pull request's notes back as HTML: a
+    // `<word>` in a changelog line hides the releases after it.
+    if (/[<>]/u.test(header)) {
+      found.push('the header has < or >, which break the release notes');
+    }
+
     const length = header.replace(SQUASH_SUFFIX, '').length;
     if (length > MAX_HEADER) {
       found.push(`the header is ${length} characters, at most ${MAX_HEADER}`);
