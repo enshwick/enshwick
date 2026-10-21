@@ -9,10 +9,10 @@
 mod share;
 
 use std::sync::OnceLock;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 
 use enshwick_loader_api::abi::Side;
-use enshwick_loader_api::events::{ShutdownStarted, WorldLoaded, WorldSaved};
+use enshwick_loader_api::events::{ShutdownStarted, Ticked, WorldLoaded, WorldSaved};
 use enshwick_loader_api::progress::ExperienceRow;
 use enshwick_loader_api::state::Store;
 use enshwick_loader_api::{Load, Mod, Off};
@@ -44,6 +44,10 @@ struct Saved {
 static LEVELS: OnceLock<Levels> = OnceLock::new();
 static ENABLED: AtomicBool = AtomicBool::new(true);
 static HIGH_WATER: AtomicU64 = AtomicU64::new(0);
+/// The largest gain counted in this server step: the engine hands the
+/// characters over in several batches a step, and one kill shared by
+/// characters in two batches is still one moment.
+static MOMENT: AtomicU32 = AtomicU32::new(0);
 
 const fn character(row: &ExperienceRow) -> Character {
     Character {
@@ -77,11 +81,16 @@ fn share_experience(rows: &mut [ExperienceRow], table: &enshwick_loader_api::pro
         .map(|r| levels.total(character(r)))
         .max()
         .unwrap_or(0);
-    let previous = HIGH_WATER.load(Ordering::Relaxed);
-    let mark = high_water(previous, most_gained, furthest);
-    if mark != previous {
-        HIGH_WATER.store(mark, Ordering::Relaxed);
-    }
+    let counted = MOMENT.fetch_max(most_gained, Ordering::Relaxed);
+    let new_gain = most_gained.saturating_sub(counted);
+    let moved = HIGH_WATER.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |previous| {
+        let mark = high_water(previous, new_gain, furthest);
+        (mark != previous).then_some(mark)
+    });
+    let mark = match moved {
+        Ok(previous) => high_water(previous, new_gain, furthest),
+        Err(unchanged) => unchanged,
+    };
     for row in rows {
         row.gained += levels.catch_up(character(row), mark);
     }
@@ -133,6 +142,7 @@ impl Mod for SharedExperience {
         let settings: Settings = load.config()?;
         ENABLED.store(settings.enabled, Ordering::Relaxed);
         load.on_experience(share_experience)?;
+        load.on::<Ticked>(|_| MOMENT.store(0, Ordering::Relaxed))?;
         if load.host().build().side == Side::SERVER {
             let store: &'static Store<Saved> =
                 Box::leak(Box::new(Store::new(&load.data_dir()?, "experience")));
@@ -211,6 +221,55 @@ mod tests {
         assert_eq!(loader.raise::<ShutdownStarted>(&()), 1);
         let text = std::fs::read_to_string(dir.join("experience.toml")).unwrap();
         assert_eq!(toml::from_str::<Saved>(&text).unwrap().high_water, 40);
+        let _cleaned = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn one_kill_shared_across_batches_counts_once() {
+        use enshwick_loader_api::abi::{Header, TickData};
+
+        let dir =
+            std::env::temp_dir().join(format!("shared-experience-moment-{}", std::process::id()));
+        let loader = enshwick_loader_api::test::FakeHost::new()
+            .settings(
+                "enabled = true
+",
+            )
+            .data_dir(dir.to_str().unwrap())
+            .install();
+        // SAFETY: the exports of `declare_mod!`.
+        let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+        assert_eq!(status, enshwick_loader_api::abi::Status::OK);
+        HIGH_WATER.store(0, Ordering::Relaxed);
+        let row = |entity, progress, gained| ExperienceRow {
+            entity,
+            level: 1,
+            progress,
+            need: 1000,
+            gained,
+        };
+        let tick = |step| {
+            let _ran = loader.raise::<Ticked>(&TickData {
+                header: Header::of::<TickData>(),
+                step,
+            });
+        };
+        tick(1);
+        // A and B share a kill worth 120, in two batches of one step.
+        let mut a = [row(1, 0, 120)];
+        let mut b = [row(2, 0, 120)];
+        loader.experience(&mut a, 10, |_| 1000);
+        loader.experience(&mut b, 10, |_| 1000);
+        assert_eq!(HIGH_WATER.load(Ordering::Relaxed), 120);
+        assert_eq!((a[0].gained, b[0].gained), (120, 120));
+        tick(2);
+        let mut both = [row(1, 120, 0), row(2, 120, 0)];
+        loader.experience(&mut both, 10, |_| 1000);
+        assert_eq!((both[0].gained, both[1].gained), (0, 0), "nobody is behind");
+        // The next step's kill counts again.
+        let mut a = [row(1, 120, 50)];
+        loader.experience(&mut a, 10, |_| 1000);
+        assert_eq!(HIGH_WATER.load(Ordering::Relaxed), 170);
         let _cleaned = std::fs::remove_dir_all(&dir);
     }
 
