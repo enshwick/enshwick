@@ -389,6 +389,7 @@ mod tests {
         // measuring thread sets the slack to the timer resolution.
         let status = unsafe { loader.init(enshwick_mod_init) };
         waits::set_slack(0);
+        waits::set_wake(0);
         assert_eq!(status, Status::OK, "{:?}", loader.logs());
         assert_eq!(loader.mid_hooks(), [wait, server]);
 

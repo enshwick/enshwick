@@ -16,7 +16,9 @@
 //! **Server wait cap.** With players online the server's game loop waits a
 //! fixed 1 ms after each pass, about 900 passes a second for 60 simulation
 //! steps. The cap lengthens that wait up to a limit, never past the next
-//! step. The idle 40 ms wait and the short wait after a slow pass stay.
+//! step: the wait wakes up to one timer tick late, so it ends a tick and a
+//! margin before the step is due. The idle 40 ms wait and the short wait
+//! after a slow pass stay.
 
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
@@ -43,6 +45,9 @@ static PRECISE: AtomicBool = AtomicBool::new(false);
 /// What a sleep leaves to the clock's granularity, in ns: the timer
 /// resolution on Windows, 0 under Wine.
 static SLACK_NS: AtomicU64 = AtomicU64::new(0);
+/// How late a timed wait of the event loop may wake, in ns: the timer
+/// resolution on Windows, a millisecond under Wine.
+static WAKE_NS: AtomicU64 = AtomicU64::new(MILLISECOND_NS);
 /// The longest server wait with players online, in ns.
 static CAP_NS: AtomicU64 = AtomicU64::new(VANILLA_SERVER_WAIT_NS);
 /// The clock the hooks read.
@@ -91,17 +96,25 @@ pub(crate) fn sleep_ticks(ms: u64, left_ns: i64, slack_ns: u64) -> Option<u64> {
 }
 
 /// The server loop's wait, in ns, at `now_ns` after a step at `last_step_ns`
-/// (0 for none yet): the vanilla `wait_ns` unless it is the 1 ms wait with
-/// players online, which grows up to `cap_ns` but ends
-/// [`STEP_MARGIN_NS`] before the next step is due.
+/// (0 for none yet), for a wait that wakes up to `wake_ns` late: the vanilla
+/// `wait_ns` unless it is the 1 ms wait with players online, which grows up
+/// to `cap_ns` but, woken late, still ends [`STEP_MARGIN_NS`] before the
+/// next step is due. Where that leaves less than vanilla, vanilla.
 #[must_use]
-pub(crate) fn server_wait(wait_ns: u64, now_ns: u64, last_step_ns: u64, cap_ns: u64) -> u64 {
+pub(crate) fn server_wait(
+    wait_ns: u64,
+    now_ns: u64,
+    last_step_ns: u64,
+    cap_ns: u64,
+    wake_ns: u64,
+) -> u64 {
     if wait_ns != VANILLA_SERVER_WAIT_NS || cap_ns <= wait_ns || last_step_ns == 0 {
         return wait_ns;
     }
     let left = (last_step_ns + STEP_NS)
         .saturating_sub(now_ns)
-        .saturating_sub(STEP_MARGIN_NS);
+        .saturating_sub(STEP_MARGIN_NS)
+        .saturating_sub(wake_ns);
     left.clamp(wait_ns, cap_ns)
 }
 
@@ -160,7 +173,13 @@ fn server(wait_ns: &mut u64) {
     let Some(now) = now_ns() else {
         return;
     };
-    let wait = server_wait(*wait_ns, now, LAST_STEP_NS.load(Ordering::Relaxed), cap);
+    let wait = server_wait(
+        *wait_ns,
+        now,
+        LAST_STEP_NS.load(Ordering::Relaxed),
+        cap,
+        WAKE_NS.load(Ordering::Relaxed),
+    );
     if wait != *wait_ns {
         *wait_ns = wait;
         CAPPED.fetch_add(1, Ordering::Relaxed);
@@ -187,10 +206,12 @@ pub(crate) const PRECISE_SLACK_NS: u64 = 50_000;
 pub(crate) fn tune_for_windows() {
     let precise = sys::precise_timers();
     set_precise(precise);
+    let resolution = sys::timer_resolution_ns().unwrap_or(MILLISECOND_NS);
+    WAKE_NS.store(resolution, Ordering::Relaxed);
     let slack = if precise {
         PRECISE_SLACK_NS
     } else {
-        sys::timer_resolution_ns().unwrap_or(MILLISECOND_NS)
+        resolution
     };
     set_slack(slack);
 }
@@ -198,6 +219,12 @@ pub(crate) fn tune_for_windows() {
 /// Makes the exact waits sleep on a high-resolution timer.
 pub(crate) fn set_precise(on: bool) {
     PRECISE.store(on, Ordering::Relaxed);
+}
+
+/// Sets how late a timed wait may wake.
+#[cfg(test)]
+pub(crate) fn set_wake(ns: u64) {
+    WAKE_NS.store(ns, Ordering::Relaxed);
 }
 
 /// Sets what each exact sleep leaves to the clock's granularity.
@@ -282,40 +309,74 @@ mod tests {
         let step = 10 * STEP_NS;
         // Right after a step, the cap holds.
         assert_eq!(
-            server_wait(MILLISECOND_NS, step + 1_000, step, 4 * MILLISECOND_NS),
+            server_wait(MILLISECOND_NS, step + 1_000, step, 4 * MILLISECOND_NS, 0),
             4 * MILLISECOND_NS
         );
         // Near the next step, the wait ends a margin before it.
         let now = step + STEP_NS - 3 * MILLISECOND_NS;
         assert_eq!(
-            server_wait(MILLISECOND_NS, now, step, 4 * MILLISECOND_NS),
+            server_wait(MILLISECOND_NS, now, step, 4 * MILLISECOND_NS, 0),
             3 * MILLISECOND_NS - STEP_MARGIN_NS
         );
         // Late or close: never under vanilla.
         assert_eq!(
-            server_wait(MILLISECOND_NS, step + STEP_NS, step, 4 * MILLISECOND_NS),
+            server_wait(MILLISECOND_NS, step + STEP_NS, step, 4 * MILLISECOND_NS, 0),
             MILLISECOND_NS
         );
         assert_eq!(
-            server_wait(MILLISECOND_NS, step + 5 * STEP_NS, step, 4 * MILLISECOND_NS),
+            server_wait(
+                MILLISECOND_NS,
+                step + 5 * STEP_NS,
+                step,
+                4 * MILLISECOND_NS,
+                0
+            ),
             MILLISECOND_NS
         );
         // Vanilla cap, no step yet, the idle wait and the short wait stay.
         assert_eq!(
-            server_wait(MILLISECOND_NS, step, step, MILLISECOND_NS),
+            server_wait(MILLISECOND_NS, step, step, MILLISECOND_NS, 0),
             MILLISECOND_NS
         );
         assert_eq!(
-            server_wait(MILLISECOND_NS, step, 0, 4 * MILLISECOND_NS),
+            server_wait(MILLISECOND_NS, step, 0, 4 * MILLISECOND_NS, 0),
             MILLISECOND_NS
         );
         assert_eq!(
-            server_wait(40 * MILLISECOND_NS, step, step, 4 * MILLISECOND_NS),
+            server_wait(40 * MILLISECOND_NS, step, step, 4 * MILLISECOND_NS, 0),
             40 * MILLISECOND_NS
         );
         assert_eq!(
-            server_wait(100_000, step, step, 4 * MILLISECOND_NS),
+            server_wait(100_000, step, step, 4 * MILLISECOND_NS, 0),
             100_000
+        );
+    }
+
+    #[test]
+    fn a_wait_that_wakes_late_still_ends_before_the_step() {
+        let step = 10 * STEP_NS;
+        let cap = 8 * MILLISECOND_NS;
+        for wake in [0, 500_000, MILLISECOND_NS, 2 * MILLISECOND_NS] {
+            for after in (0..STEP_NS).step_by(250_000) {
+                let wait = server_wait(MILLISECOND_NS, step + after, step, cap, wake);
+                if wait > MILLISECOND_NS {
+                    assert!(
+                        step + after + wait + wake + STEP_MARGIN_NS <= step + STEP_NS,
+                        "wake {wake}, {after} ns after the step: {wait}"
+                    );
+                }
+            }
+        }
+        // A coarse timer leaves the wait vanilla.
+        assert_eq!(
+            server_wait(MILLISECOND_NS, step, step, cap, 15_625_000),
+            MILLISECOND_NS
+        );
+        // A tick late near the step: shorter by that tick.
+        let now = step + STEP_NS - 6 * MILLISECOND_NS;
+        assert_eq!(
+            server_wait(MILLISECOND_NS, now, step, cap, MILLISECOND_NS),
+            5 * MILLISECOND_NS - STEP_MARGIN_NS
         );
     }
 }
