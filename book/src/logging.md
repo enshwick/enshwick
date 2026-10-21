@@ -110,7 +110,8 @@ after start, then every `status_minutes`, and whenever an administrator types
   and homepage, notes such as a recommended mod that is missing, and the lines
   the mod adds;
 - the mods turned off, and why;
-- what mods serve and patch;
+- what mods serve and patch, every service, mod event and extension point
+  with the mods on it, and the links left inert with the reason;
 - the number of hooked functions, and with `diagnostics` their calls;
 - with `diagnostics`, what each mod costs ([Per-mod costs](#per-mod-costs));
 - where mods meet ([Conflicts](#conflicts)).
@@ -151,7 +152,8 @@ thunks count nothing and a hooked call runs as before.
 With `diagnostics = true` the loader also times every call it makes into a
 mod: event, game event and mod event handlers, commands, messages, interface
 frames, filters and vetoes, survivor and altar callbacks, stat changes,
-inventory results, status lines, resource patches and migrations. A
+inventory results, status lines, resource patches, migrations and links on
+extension points, each link apart. A
 callback's time leaves out the callbacks it causes in other mods, which count
 for those. With `diagnostics_timing = true` as well, every link and every
 original has a timed thunk in front of it, and a link's own time is its
@@ -185,6 +187,8 @@ The summary and `/enshwick conflicts` (administrators) list where mods meet:
 | `skill override: a, b, asked in load order`               | the first answer decides                                        |
 | `<feature>: a holds it; refused: b`                       | one mod at a time, such as the altar limit or a command name    |
 | `the item registry: patched by a then b`                  | both change one resource, each patch on the one before          |
+| `point <name>: a then b, each may change the answer`      | both extend one [extension point](extending.md), in that order  |
+| `...; b changed the answer a had set, 3 times`            | `b` overturned `a`'s answer that often since start              |
 
 `conflicts: none` means no two mods share anything.
 

@@ -7,14 +7,14 @@
 //! layer of this crate instead of these types.
 
 use core::ffi::c_void;
-use core::sync::atomic::AtomicUsize;
+use core::sync::atomic::{AtomicU32, AtomicUsize};
 
 /// The major version of this interface. A loader refuses a mod built for
 /// another major.
 pub const ABI_MAJOR: u16 = 1;
 
 /// The minor version of this interface. A newer minor only appends fields.
-pub const ABI_MINOR: u16 = 64;
+pub const ABI_MINOR: u16 = 65;
 
 /// Whether `id` is a valid mod id: 1 to 64 characters of `[a-z0-9-]`.
 ///
@@ -1562,7 +1562,7 @@ impl HookFlags {
 /// # Examples
 ///
 /// ```
-/// use core::sync::atomic::AtomicUsize;
+/// use core::sync::atomic::{AtomicU32, AtomicUsize};
 /// use enshwick_loader_api::abi::{HookFlags, HookSpec};
 ///
 /// static NEXT: AtomicUsize = AtomicUsize::new(0);
@@ -5023,6 +5023,36 @@ pub struct HostApi {
     /// in this process now, else 0: on a client joined to a server, by the
     /// server's rules. Any thread. Since minor 64.
     pub recipe_disabled: extern "system" fn(me: ModHandle, recipe: u32, out: *mut u32) -> Status,
+    /// Defines the extension point `spec` describes, named
+    /// `<id>:<point>` after the defining mod, and writes its id and the
+    /// count of its live links to `out`; [`Status::REFUSED`] for a name
+    /// outside the mod's id or defined twice. Allowed during
+    /// `enshwick_mod_init` only. Since minor 65.
+    pub define_point:
+        extern "system" fn(me: ModHandle, spec: *const PointSpec, out: *mut PointHandle) -> Status,
+    /// Attaches `callback` with `user` to the extension point `link`
+    /// names, in the order it asks for. Matched against the point's
+    /// definition once every mod is initialised; a point no running mod
+    /// defines, or one whose layout or mode differs, leaves the link inert.
+    /// Allowed during `enshwick_mod_init` only. Since minor 65.
+    pub attach_point: extern "system" fn(
+        me: ModHandle,
+        link: *const PointLink,
+        callback: PointFn,
+        user: *mut c_void,
+    ) -> Status,
+    /// Runs the live links of the mod's own extension point `point` over
+    /// `value`, which holds the mod's own answer, on this thread, and writes
+    /// to `verdict` whether the answer was kept, changed or refused.
+    /// [`Status::REFUSED`] for a point another mod defined. Any thread.
+    /// Since minor 65.
+    pub run_point: extern "system" fn(
+        me: ModHandle,
+        point: u32,
+        input: *const c_void,
+        value: *mut c_void,
+        verdict: *mut PointVerdict,
+    ) -> Status,
 }
 
 /// What a recipe rule of [`HostApi::recipe_rule`] names.
@@ -5322,6 +5352,197 @@ pub struct EventSpec {
 /// and the pointer given at subscription.
 pub type ModEventFn = unsafe extern "system" fn(data: *const c_void, user: *mut c_void);
 
+/// How the links of an extension point act on its answer, as the defining
+/// mod chooses.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::abi::PointMode;
+///
+/// assert_ne!(PointMode::OBSERVE, PointMode::OVERRIDE);
+/// ```
+#[repr(transparent)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct PointMode(pub u32);
+
+impl PointMode {
+    /// Links see the answer and change nothing.
+    pub const OBSERVE: Self = Self(0);
+    /// Links may change the answer; the defining mod may ignore the change.
+    pub const ADVISE: Self = Self(1);
+    /// Links may change the answer, and the defining mod takes it.
+    pub const OVERRIDE: Self = Self(2);
+}
+
+/// Flags of a [`PointSpec`].
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::abi::PointFlags;
+///
+/// assert!(PointFlags::REFUSE.contains(PointFlags::REFUSE));
+/// assert!(!PointFlags::NONE.contains(PointFlags::REFUSE));
+/// ```
+#[repr(transparent)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct PointFlags(pub u32);
+
+impl PointFlags {
+    /// No flag.
+    pub const NONE: Self = Self(0);
+    /// A link may refuse: the chain stops and the answer is a refusal.
+    pub const REFUSE: Self = Self(1);
+
+    /// Whether every flag of `other` is set.
+    ///
+    /// # Examples
+    ///
+    /// See [`PointFlags`].
+    #[must_use]
+    pub const fn contains(self, other: Self) -> bool {
+        self.0 & other.0 == other.0
+    }
+}
+
+/// An extension point a mod defines, or the one a link attaches to.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::abi::{Header, Layout, PointFlags, PointMode, PointSpec, Str};
+///
+/// let empty = Layout { fields: core::ptr::null(), count: 0, size: 0 };
+/// let spec = PointSpec {
+///     header: Header::of::<PointSpec>(),
+///     name: Str::new("safes:access"),
+///     mode: PointMode::OVERRIDE,
+///     flags: PointFlags::REFUSE,
+///     input: empty,
+///     output: empty,
+/// };
+/// assert_eq!(spec.mode, PointMode::OVERRIDE);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct PointSpec {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// The point's name, `<defining mod id>:<point>`.
+    pub name: Str,
+    /// How links act on the answer.
+    pub mode: PointMode,
+    /// Point flags.
+    pub flags: PointFlags,
+    /// The fields of the input links read; inputs grow by appending.
+    pub input: Layout,
+    /// The answer, one field: its type, size and alignment.
+    pub output: Layout,
+}
+
+/// A link a mod attaches to another mod's extension point, with its place
+/// in the chain.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::abi::{Header, PointLink};
+///
+/// let link = PointLink {
+///     header: Header::of::<PointLink>(),
+///     point: core::ptr::null(),
+///     before: core::ptr::null(),
+///     after: core::ptr::null(),
+///     before_count: 0,
+///     after_count: 0,
+///     priority: 0,
+/// };
+/// assert_eq!(link.priority, 0);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct PointLink {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// The point, as the attaching mod declares it.
+    pub point: *const PointSpec,
+    /// Ids of mods whose links run after this one.
+    pub before: *const Str,
+    /// Ids of mods whose links run before this one.
+    pub after: *const Str,
+    /// How many ids `before` points at.
+    pub before_count: u32,
+    /// How many ids `after` points at.
+    pub after_count: u32,
+    /// Among links the ids leave free, lower runs earlier.
+    pub priority: i32,
+}
+
+/// What [`HostApi::define_point`] hands back.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::abi::PointHandle;
+///
+/// assert!(PointHandle::EMPTY.live.is_null());
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct PointHandle {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// The id [`HostApi::run_point`] takes.
+    pub id: u32,
+    /// How many links run, valid for the process: 0 until every mod is
+    /// initialised and whenever none is live, so the defining mod skips
+    /// [`HostApi::run_point`].
+    pub live: *const AtomicU32,
+}
+
+impl PointHandle {
+    /// Nothing defined yet, for the loader to fill.
+    pub const EMPTY: Self = Self {
+        header: Header::of::<Self>(),
+        id: 0,
+        live: core::ptr::null(),
+    };
+}
+
+/// A link's answer, and the chain's.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::abi::PointVerdict;
+///
+/// assert_ne!(PointVerdict::PASS, PointVerdict::SET);
+/// ```
+#[repr(transparent)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct PointVerdict(pub u32);
+
+impl PointVerdict {
+    /// The answer stays as it was.
+    pub const PASS: Self = Self(0);
+    /// The link wrote a new answer over the value.
+    pub const SET: Self = Self(1);
+    /// The link refused: the chain stops.
+    pub const REFUSE: Self = Self(2);
+    /// The link panicked; the loader turns it off.
+    pub const PANICKED: Self = Self(3);
+}
+
+/// A mod's link on an extension point: the input, valid for the call, the
+/// answer so far, which the link may overwrite and then answers
+/// [`PointVerdict::SET`], and the pointer given at attaching.
+pub type PointFn = unsafe extern "system" fn(
+    input: *const c_void,
+    value: *mut c_void,
+    user: *mut c_void,
+) -> PointVerdict;
+
 /// The exports a mod DLL provides, by name.
 ///
 /// # Examples
@@ -5399,7 +5620,7 @@ const _: () = {
     assert!(size_of::<StatModify>() == 8 + 8 + 12 + 4 + 8);
     assert!(size_of::<StatChange>() == 8 + 24);
     assert!(core::mem::offset_of!(HostApi, language) == 24 + 127 * 8);
-    assert!(size_of::<HostApi>() == 24 + 139 * 8);
+    assert!(size_of::<HostApi>() == 24 + 142 * 8);
     assert!(core::mem::offset_of!(HostApi, recipe_rule) == 24 + 137 * 8);
     assert!(core::mem::offset_of!(HostApi, recipe_disabled) == 24 + 138 * 8);
     assert!(core::mem::offset_of!(HostApi, rebuild_resource) == 24 + 136 * 8);
@@ -5418,6 +5639,10 @@ const _: () = {
     assert!(size_of::<Migration>() == 16 + 8 + 8);
     assert!(size_of::<MigrationSet>() == 8 + 8 + 8 + 8 + 8);
     assert!(core::mem::offset_of!(HostApi, define_event) == 24 + 115 * 8);
+    assert!(core::mem::offset_of!(HostApi, define_point) == 24 + 139 * 8);
+    assert!(size_of::<PointSpec>() == 8 + 16 + 4 + 4 + 16 + 16);
+    assert!(size_of::<PointLink>() == 8 + 3 * 8 + 3 * 4 + 4);
+    assert!(size_of::<PointHandle>() == 8 + 8 + 8);
     // Frozen: written as an array.
     assert!(size_of::<LayoutField>() == 24);
     assert!(size_of::<Layout>() == 16);

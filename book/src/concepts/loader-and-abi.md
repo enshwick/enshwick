@@ -43,7 +43,8 @@ file = "enshwick-safes.dll"
 
 A file whose entry says `enabled = false` is never loaded, so none of its code
 runs; `loader.log` says `enshwick-safes.dll skipped: off in
-mods/enshwick/mods.toml`. Changes take effect at the next start. A list that
+mods/enshwick/mods.toml`. `links_off = ["safes:access"]` in an entry keeps the
+mod on and only its link on that [extension point](../extending.md) off. Changes take effect at the next start. A list that
 is not valid TOML is left as it is and every mod loads, with a warning.
 `/enshwick` and the status summary name the mods that are off.
 

@@ -1,0 +1,27 @@
+[package]
+name = "enshwick-example-safe-viewers"
+version = "0.0.0-dev"
+description = "Example: a mod that extends the Safes mod's access rule through its extension point"
+keywords = ["enshrouded", "mod", "example"]
+categories = ["game-development"]
+readme = "../README.md"
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+arc-swap.workspace = true
+enshwick-loader-api.workspace = true
+serde.workspace = true
+
+[dev-dependencies]
+enshwick-loader-api = { workspace = true, features = ["test"] }
+
+[lints]
+workspace = true

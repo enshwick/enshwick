@@ -163,7 +163,8 @@ never run and dialogs show as system message boxes instead.
 
 The loader adds a "Mods" entry to the title screen's main menu and to the
 pause menu, beside Settings. It opens a screen of the loader's own that lists
-every mod and edits each player's own settings of each mod that derives
+every mod, with the [extension points](extending.md) it defines and the ones
+it extends, and edits each player's own settings of each mod that derives
 `Config`; a world's settings are edited in the game's world settings, under
 their last tab, with nothing to write in the mod. See
 [Settings per world](settings.md#settings-per-world). Back, Escape or the

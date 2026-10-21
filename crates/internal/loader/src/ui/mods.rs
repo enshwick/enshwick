@@ -602,6 +602,13 @@ fn list(loader: &Loader, paint: &Painter<'_>, first: &mut usize) -> Listed {
         if !credits.is_empty() {
             paint.label(credits.as_bytes(), UiWidget::STYLE_SECONDARY, true, false);
         }
+        let (defines, extends) = crate::points::screen(index, loader);
+        for (key, points) in [("mods.points", defines), ("mods.extends", extends)] {
+            if !points.is_empty() {
+                let line = texts::fill(key, &[("points", &points.join(", "))]);
+                paint.label(line.as_bytes(), UiWidget::STYLE_SECONDARY, true, false);
+            }
+        }
         if let Some((owner, update)) = updates.iter().find(|(_, u)| u.id == record.id) {
             let line = texts::fill("mods.update.version", &[("version", &update.version)]);
             paint.label(line.as_bytes(), UiWidget::STYLE_POSITIVE, false, false);

@@ -43,6 +43,7 @@ chapters! {
     Interface => "interface.md",
     State => "state.md",
     Services => "services.md",
+    Extending => "extending.md",
     FindingTheGame => "finding-the-game.md",
     Hooks => "hooks.md",
     MidFunctionHooks => "mid-function-hooks.md",

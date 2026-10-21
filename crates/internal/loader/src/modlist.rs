@@ -4,7 +4,8 @@
 //! The list names every mod the loader has found, by id, with its file and
 //! `enabled`. The loader adds a mod on its first start, turned on, and keeps
 //! everything else the player wrote, comments included. A file whose entry is
-//! off is never loaded, so its code never runs.
+//! off is never loaded, so its code never runs. `links_off` lists extension
+//! points whose link of that mod stays off while the mod runs.
 //!
 //! The lock is written at every start: the loader's version, the game build
 //! and each loaded mod's id, version, file and SHA-256, so a server can be
@@ -29,7 +30,9 @@ pub const LIST_PATH: &str = "mods/enshwick/mods.toml";
 const LIST_HEADER: &str = "\
 # The mods Enshwick found in mods/. Set enabled = false to turn one off
 # without deleting its DLL; the loader then never loads that file. Mods found
-# later are added here, turned on. Changes take effect at the next start.
+# later are added here, turned on. links_off = [\"safes:access\"] keeps a mod
+# on but its link on that extension point off. Changes take effect at the
+# next start.
 
 ";
 
@@ -51,6 +54,22 @@ pub fn set_disabled(ids: Vec<String>) {
 #[must_use]
 pub fn disabled() -> &'static [String] {
     DISABLED.get().map_or(&[], Vec::as_slice)
+}
+
+/// The links turned off in the list at start, as `(mod id, point)`.
+static LINKS_OFF: OnceLock<Vec<(String, String)>> = OnceLock::new();
+
+/// Records the links turned off at start.
+pub fn set_links_off(links: Vec<(String, String)>) {
+    let _first = LINKS_OFF.set(links);
+}
+
+/// Whether the list turns off the link of mod `id` on `point`.
+#[must_use]
+pub fn is_link_off(id: &str, point: &str) -> bool {
+    LINKS_OFF
+        .get()
+        .is_some_and(|links| links.iter().any(|(m, p)| m == id && p == point))
 }
 
 /// The mods a present mod replaced at start.
@@ -128,6 +147,26 @@ impl ModList {
             .map(|(id, _)| id)
             .filter(|id| self.is_off(id))
             .map(str::to_owned)
+            .collect()
+    }
+
+    /// The links the entries turn off, as `(mod id, point)`, from each
+    /// entry's `links_off = ["<owner id>:<point>", ...]`.
+    #[must_use]
+    pub fn links_off(&self) -> Vec<(String, String)> {
+        self.doc
+            .iter()
+            .filter_map(|(id, entry)| {
+                let points = entry.get("links_off")?.as_array()?;
+                Some(
+                    points
+                        .iter()
+                        .filter_map(|p| p.as_str())
+                        .map(|p| (id.to_owned(), p.to_owned()))
+                        .collect::<Vec<_>>(),
+                )
+            })
+            .flatten()
             .collect()
     }
 
@@ -303,6 +342,24 @@ mod tests {
         assert!(text.contains("enabled = false # broken for now"));
         assert!(text.contains("file = \"safes-renamed.dll\""));
         assert!(text.contains("[area-loot]\nenabled = true"));
+    }
+
+    #[test]
+    fn links_turned_off_are_read_per_mod() {
+        let text = "[safe-viewers]
+enabled = true
+file = \"a.dll\"
+links_off = [\"safes:access\"]
+
+[safes]
+enabled = true
+";
+        let list = ModList::parse(text).unwrap();
+        assert_eq!(
+            list.links_off(),
+            [("safe-viewers".to_owned(), "safes:access".to_owned())]
+        );
+        assert!(!list.is_off("safe-viewers"));
     }
 
     #[test]

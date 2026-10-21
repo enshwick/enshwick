@@ -166,7 +166,11 @@ pub(crate) fn summary(loader: &Loader) -> Summary {
             .map(crate::modlist::Replaced::line)
             .collect(),
         turned_off: crate::diag::history(),
-        links: crate::services::lines(loader),
+        links: {
+            let mut links = crate::services::lines(loader);
+            links.extend(crate::points::lines(loader));
+            links
+        },
         served: crate::content::summary(),
         patches: crate::diag::patches(),
         targets,
@@ -414,5 +418,7 @@ pub(crate) fn conflicts(loader: &Loader) -> Vec<String> {
         .into_iter()
         .map(|(key, owners)| (key, owners.into_iter().map(name).collect()))
         .collect();
-    crate::conflicts::report(&hooks, &crate::conflicts::claims(), &resources, name)
+    let mut lines = crate::conflicts::report(&hooks, &crate::conflicts::claims(), &resources, name);
+    lines.extend(crate::points::conflicts(loader));
+    lines
 }
