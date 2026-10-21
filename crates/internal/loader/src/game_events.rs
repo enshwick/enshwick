@@ -13,13 +13,14 @@
 
 use core::cell::RefCell;
 use core::ffi::c_void;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::Ordering;
 use std::sync::{Mutex, OnceLock, PoisonError};
 
 use enshwick_loader_api::abi::{GameEventData, GameEventFn, Header, HookFlags, Side, Status};
 use rustc_hash::FxHashSet;
 
 use crate::chains::Next;
+use crate::fuse::Fuse;
 use crate::host::Loader;
 
 /// The build table ids this part of the loader names.
@@ -123,9 +124,10 @@ static SEALED: OnceLock<Sealed> = OnceLock::new();
 static LOADED: OnceLock<(&'static Loader, Layout)> = OnceLock::new();
 // SAFETY: each slot joins the chain of the function its type names.
 static MERGE_NEXT: Next<MergeFn> = unsafe { Next::new() };
-/// Set once the loader's own work in the link panicked: from then on the link
-/// only forwards.
-static OFF: AtomicBool = AtomicBool::new(false);
+/// Game events, off once the loader's own copy or delivery panicked.
+static EVENTS_FUSE: Fuse = Fuse::new("game events");
+/// The client's notices from its server, off once raising one panicked.
+static NOTICES_FUSE: Fuse = Fuse::new("server notices");
 
 thread_local! {
     static BATCH: RefCell<Batch> = RefCell::new(Batch::default());
@@ -212,12 +214,14 @@ pub(crate) fn link(loader: &'static Loader) {
 unsafe extern "system" fn merge(entity_world: *mut u8) {
     let ours = LOADED
         .get()
-        .filter(|_| !OFF.load(Ordering::Relaxed) && is_server(entity_world));
+        .filter(|_| !EVENTS_FUSE.is_off() && is_server(entity_world));
     if let Some((_, layout)) = ours {
         let _quiet = crate::world::Quiet::enter();
         // SAFETY: the server's entity world on its game thread, before the
         // engine moves its streams.
-        guarded(|| unsafe { copy(layout, entity_world) });
+        let _copied = EVENTS_FUSE.run("the event link's copy", || unsafe {
+            copy(layout, entity_world);
+        });
     } else if let Some((loader, _)) = LOADED.get()
         && loader.side == Side::CLIENT
         && !entity_world.is_null()
@@ -225,23 +229,15 @@ unsafe extern "system" fn merge(entity_world: *mut u8) {
     {
         // SAFETY: the client's own entity world on its thread, before the
         // engine moves its streams.
-        guarded(|| unsafe { crate::notices::raise(loader, entity_world.addr()) });
+        let _raised = NOTICES_FUSE.run("the event link", || unsafe {
+            crate::notices::raise(loader, entity_world.addr());
+        });
     }
     // SAFETY: forwarded unchanged.
     unsafe { MERGE_NEXT.get()(entity_world) };
     if let Some((loader, _)) = ours {
         let _quiet = crate::world::Quiet::enter();
-        guarded(|| deliver(loader));
-    }
-}
-
-/// Runs the link's own work; a panic in it turns game events off instead of
-/// unwinding into the game.
-fn guarded(work: impl FnOnce()) {
-    if std::panic::catch_unwind(std::panic::AssertUnwindSafe(work)).is_err()
-        && !OFF.swap(true, Ordering::Relaxed)
-    {
-        crate::log!(ERROR, "game events off: the event link panicked");
+        let _delivered = EVENTS_FUSE.run("the event link's delivery", || deliver(loader));
     }
 }
 

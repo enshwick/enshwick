@@ -113,9 +113,17 @@ impl Plan {
 }
 
 /// The plan for joining a server that advertises `server` (fingerprint and
-/// mod list), or no Enshwick at all; notes name mods by `names`.
+/// mod list), or no Enshwick at all; notes name mods by `names`. A list that
+/// is not `complete` holds only the first of the server's mods, so a mod of
+/// ours it does not name may still run there and stays on.
 #[must_use]
-pub fn plan(ours: &str, ours_mods: &str, server: Option<(&str, &str)>, names: &Names) -> Plan {
+pub fn plan(
+    ours: &str,
+    ours_mods: &str,
+    server: Option<(&str, &str)>,
+    complete: bool,
+    names: &Names,
+) -> Plan {
     let ids = |list: &str| -> Vec<String> { entries(list).map(|(id, _)| id.to_owned()).collect() };
     match server {
         Some((fingerprint, _)) if fingerprint == ours => Plan::default(),
@@ -127,14 +135,14 @@ pub fn plan(ours: &str, ours_mods: &str, server: Option<(&str, &str)>, names: &N
             let theirs = ids(mods);
             let turn_off: Vec<String> = ids(ours_mods)
                 .into_iter()
-                .filter(|id| !theirs.contains(id))
+                .filter(|id| complete && !theirs.contains(id))
                 .collect();
             let missing: Vec<String> = differences(mods, ours_mods, names)
                 .into_iter()
                 .filter(|(_, on_server, _)| *on_server)
                 .map(|(_, _, line)| line)
                 .collect();
-            let other_loader = missing.is_empty() && turn_off.is_empty();
+            let other_loader = complete && missing.is_empty() && turn_off.is_empty();
             Plan {
                 turn_off,
                 missing,
@@ -269,6 +277,16 @@ pub fn mod_rules_value(reply: &[u8]) -> String {
         .filter(|part| !part.is_empty())
         .collect::<Vec<_>>()
         .join(",")
+}
+
+/// Whether the mod list across the mod rules is the server's whole list: a
+/// server whose list did not fit gives its number of mods in
+/// [`crate::advertise::RULE_MOD_COUNT`].
+#[must_use]
+pub fn mods_complete(reply: &[u8]) -> bool {
+    rule(reply, crate::advertise::RULE_MOD_COUNT)
+        .and_then(|count| count.parse::<usize>().ok())
+        .is_none_or(|count| entries(&mod_rules_value(reply)).count() >= count)
 }
 
 /// The join values a server advertises for mod `id` across its rules, `None`
@@ -520,10 +538,18 @@ mod runtime {
                 }
             }
         }
+        let complete = super::mods_complete(&reply);
+        if !complete {
+            crate::log!(
+                WARN,
+                "joining {address}: the server lists only part of its mods; mods it does not list stay on"
+            );
+        }
         let plan = super::plan(
             &ours,
             &ours_mods,
             server.as_ref().map(|(f, m)| (f.as_str(), m.as_str())),
+            complete,
             &names,
         );
         if plan.joins() {
@@ -592,19 +618,19 @@ mod tests {
     fn mods_the_server_lacks_are_turned_off_and_only_the_rest_warn() {
         let names = Names::from([("c".to_owned(), "Cats".to_owned())]);
         assert_eq!(
-            plan("ab", "a@1,b@1", Some(("ab", "a@1,b@1")), &names),
+            plan("ab", "a@1,b@1", Some(("ab", "a@1,b@1")), true, &names),
             Plan::default()
         );
-        let none = plan("ab", "a@1,b@1", None, &names);
+        let none = plan("ab", "a@1,b@1", None, true, &names);
         assert_eq!(none.turn_off, ["a", "b"]);
         assert_eq!(
             none.message(&names).map(|(_, blocking)| blocking),
             Some(false)
         );
-        let extra = plan("ab", "a@1,b@1", Some(("cd", "a@1")), &names);
+        let extra = plan("ab", "a@1,b@1", Some(("cd", "a@1")), true, &names);
         assert_eq!(extra.turn_off, ["b"]);
         assert!(extra.missing.is_empty());
-        let missing = plan("ab", "a@1", Some(("cd", "a@2,c@1")), &names);
+        let missing = plan("ab", "a@1", Some(("cd", "a@2,c@1")), true, &names);
         assert!(missing.turn_off.is_empty());
         let (text, blocking) = missing.message(&names).unwrap();
         assert!(blocking);
@@ -613,17 +639,17 @@ mod tests {
                 && text.contains("Cats (c): server 1, not installed"),
             "{text}"
         );
-        assert!(plan("ab", "a@1", Some(("cd", "a@1")), &names).other_loader);
+        assert!(plan("ab", "a@1", Some(("cd", "a@1")), true, &names).other_loader);
     }
 
     #[test]
     fn a_client_kept_out_turns_nothing_off() {
         let names = Names::new();
-        let both = plan("ab", "a@1,b@1", Some(("cd", "a@2")), &names);
+        let both = plan("ab", "a@1,b@1", Some(("cd", "a@2")), true, &names);
         assert_eq!(both.turn_off, ["b"]);
         assert!(!both.joins());
         assert!(both.turned_off().is_empty());
-        let extra = plan("ab", "a@1,b@1", Some(("cd", "a@1")), &names);
+        let extra = plan("ab", "a@1,b@1", Some(("cd", "a@1")), true, &names);
         assert!(extra.joins());
         assert_eq!(extra.turned_off(), ["b"]);
     }
@@ -661,7 +687,7 @@ count turned off"
         );
         // The client's set without the mod that is off: the join is refused.
         let names = Names::new();
-        let plan = plan("x", "", Some(("y", "count@0.2.0")), &names);
+        let plan = plan("x", "", Some(("y", "count@0.2.0")), true, &names);
         assert!(!plan.joins());
     }
 
@@ -709,6 +735,31 @@ count turned off"
             reply.push(0);
         }
         assert_eq!(mod_rules_value(&reply), "a@1,b@1,c@1");
+        assert!(mods_complete(&reply));
+    }
+
+    #[test]
+    fn a_cut_mod_list_turns_off_none_of_ours_it_does_not_name() {
+        let names = Names::new();
+        let cut = reply(&[
+            ("enshwick", "cd"),
+            ("enshwick.mods", "a@1"),
+            ("enshwick.mods.count", "3"),
+        ]);
+        assert!(!mods_complete(&cut));
+        let plan_cut = plan("ab", "a@1,z@1", Some(("cd", "a@1")), false, &names);
+        assert!(plan_cut.turn_off.is_empty() && plan_cut.joins());
+        assert_eq!(plan_cut.message(&names), None);
+        let whole = reply(&[
+            ("enshwick", "cd"),
+            ("enshwick.mods", "a@1,b@1,c@1"),
+            ("enshwick.mods.count", "3"),
+        ]);
+        assert!(mods_complete(&whole));
+        let plan_whole = plan("ab", "a@1,z@1", Some(("cd", "a@1")), true, &names);
+        assert_eq!(plan_whole.turn_off, ["z"]);
+        // A server without a cut list sends no count.
+        assert!(mods_complete(&reply(&[("enshwick.mods", "a@1")])));
     }
 
     fn reply(rules: &[(&str, &str)]) -> Vec<u8> {
@@ -811,7 +862,7 @@ count turned off"
                 ("pack".to_owned(), "0.1.0+ab12".to_owned())
             ]
         );
-        let missing = plan("ab", "", Some(("cd", server)), &Names::new());
+        let missing = plan("ab", "", Some(("cd", server)), true, &Names::new());
         assert_eq!(missing.missing.len(), 2, "{:?}", missing.missing);
         let reply = reply(&[
             ("enshwick.name.ok", "Safes\n\nVerified by Enshwick"),

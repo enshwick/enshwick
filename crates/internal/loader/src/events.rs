@@ -14,7 +14,7 @@
 //! queue what happened; the post-step link raises it on the game thread.
 
 use core::ffi::c_void;
-use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock, PoisonError};
 
 use enshwick_loader_api::abi::{
@@ -22,6 +22,7 @@ use enshwick_loader_api::abi::{
 };
 
 use crate::chains::Next;
+use crate::fuse::Fuse;
 use crate::host::Loader;
 
 /// The build table ids this part of the loader names.
@@ -139,26 +140,32 @@ static BUILDING: Mutex<Vec<BuildingData>> = Mutex::new(Vec::new());
 static STEPS: AtomicU64 = AtomicU64::new(0);
 /// The handle of the player seen joining in each slot, 0 for none.
 static JOINED: [AtomicU32; MAX_SLOTS] = [const { AtomicU32::new(0) }; MAX_SLOTS];
-/// Set once the loader's own work in a link panicked: from then on the links
-/// only forward, and game events stay silent.
-static OFF: AtomicBool = AtomicBool::new(false);
+/// One fuse per link: a panic in the loader's own work of a link turns off
+/// only that link's events, and the link forwards from then on.
+static STEP_FUSE: Fuse = Fuse::new("step events");
+static STATE_FUSE: Fuse = Fuse::new("world loaded and shutdown events");
+static SAVE_FUSE: Fuse = Fuse::new("world saved events");
+static REMOVE_FUSE: Fuse = Fuse::new("player left events");
+static BUILDING_FUSE: Fuse = Fuse::new("building events");
 
-/// The links' state, unless the events are off.
+/// The links' state once linked.
 fn loaded() -> Option<&'static (&'static Loader, Offsets)> {
-    if OFF.load(Ordering::Relaxed) {
-        return None;
-    }
     LOADED.get()
 }
 
-/// Runs a link's own work; a panic in it turns the game events off instead
-/// of unwinding into the game, which would end the process.
-fn guarded(link: &str, work: impl FnOnce()) {
-    if std::panic::catch_unwind(std::panic::AssertUnwindSafe(work)).is_err()
-        && !OFF.swap(true, Ordering::Relaxed)
-    {
-        crate::log!(ERROR, "game events off: the {link} link panicked");
-    }
+/// Runs a link's own work under its fuse; a panic in it turns that link off
+/// instead of unwinding into the game, which would end the process.
+fn guarded(fuse: &Fuse, link: &str, work: impl FnOnce()) {
+    let _ran = fuse.run(link, work);
+}
+
+/// Runs one part of the post-step work under a fuse of its own, so a panic
+/// in one feature's step leaves the others and the tick running.
+macro_rules! part {
+    ($feature:literal, $work:expr) => {{
+        static FUSE: Fuse = Fuse::new($feature);
+        let _ran = FUSE.run("the post-step link", || $work);
+    }};
 }
 
 type StepFn = unsafe extern "system" fn(server: *mut u8);
@@ -267,11 +274,11 @@ fn player(slot_index: usize, slot: *const u8, offsets: &Offsets) -> PlayerData {
 unsafe extern "system" fn step(server: *mut u8) {
     // SAFETY: forwarded unchanged.
     unsafe { STEP_NEXT.get()(server) };
-    let Some((loader, offsets)) = loaded() else {
+    let Some((loader, offsets)) = loaded().filter(|_| !STEP_FUSE.is_off()) else {
         return;
     };
     // SAFETY: the game's server, as passed to the step.
-    guarded("post-step", || unsafe {
+    guarded(&STEP_FUSE, "the post-step link", || unsafe {
         after_step(loader, offsets, server);
     });
 }
@@ -306,33 +313,49 @@ unsafe fn after_step(loader: &'static Loader, offsets: &Offsets, server: *mut u8
         offsets.entities,
     );
     let built = std::mem::take(&mut *BUILDING.lock().unwrap_or_else(PoisonError::into_inner));
-    for data in &built {
-        let event = if data.kind == BuildingData::PLACED {
-            Event::BUILDING_PLACED
-        } else {
-            Event::BUILDING_REMOVED
-        };
-        loader.emit(event, None, (&raw const *data).cast());
+    if !BUILDING_FUSE.is_off() {
+        guarded(&BUILDING_FUSE, "the post-step link", || {
+            for data in &built {
+                let event = if data.kind == BuildingData::PLACED {
+                    Event::BUILDING_PLACED
+                } else {
+                    Event::BUILDING_REMOVED
+                };
+                loader.emit(event, None, (&raw const *data).cast());
+            }
+        });
     }
-    crate::inventory::deliver();
-    crate::altars::after_step(loader);
-    crate::daytime::after_step(loader);
-    crate::knowledge::after_step(loader);
-    crate::deaths::after_step(loader);
-    crate::survivors::after_step(loader);
-    crate::item_data::after_step();
-    crate::game_settings::after_step(loader);
-    crate::weather::after_step(loader);
+    part!("inventory deliveries", crate::inventory::deliver());
+    part!("altar steps", crate::altars::after_step(loader));
+    part!("day steps", crate::daytime::after_step(loader));
+    part!("knowledge steps", crate::knowledge::after_step(loader));
+    part!("death steps", crate::deaths::after_step(loader));
+    part!("survivor steps", crate::survivors::after_step(loader));
+    part!("item data steps", crate::item_data::after_step());
+    part!(
+        "game settings steps",
+        crate::game_settings::after_step(loader)
+    );
+    part!("weather steps", crate::weather::after_step(loader));
     let step = STEPS.fetch_add(1, Ordering::Relaxed) + 1;
-    crate::interactions::after_step(loader, step);
-    crate::stats::after_step(loader, step);
-    crate::knowledge::changes::after_step(loader, step);
+    part!(
+        "interaction steps",
+        crate::interactions::after_step(loader, step)
+    );
+    part!("stat steps", crate::stats::after_step(loader, step));
+    part!(
+        "knowledge change steps",
+        crate::knowledge::changes::after_step(loader, step)
+    );
     let tick = TickData {
         header: Header::of::<TickData>(),
         step,
     };
-    loader.emit(Event::TICK, None, (&raw const tick).cast::<c_void>());
-    crate::chat::drain();
+    part!(
+        "tick events",
+        loader.emit(Event::TICK, None, (&raw const tick).cast::<c_void>())
+    );
+    part!("chat sending", crate::chat::drain());
     if server.is_null() {
         return;
     }
@@ -351,8 +374,10 @@ unsafe fn after_step(loader: &'static Loader, offsets: &Offsets, server: *mut u8
         } else if state == SLOT_IN_GAME && entity != 0 && joined.load(Ordering::Relaxed) != handle {
             joined.store(handle, Ordering::Relaxed);
             let data = player(index, slot, offsets);
-            crate::stats::player_joined(loader, &data);
-            loader.emit(Event::PLAYER_JOINED, None, (&raw const data).cast());
+            part!("player joined events", {
+                crate::stats::player_joined(loader, &data);
+                loader.emit(Event::PLAYER_JOINED, None, (&raw const data).cast());
+            });
         }
     }
 }
@@ -407,10 +432,10 @@ unsafe extern "system" fn set_state(entry: *mut u8, state: u8) {
         .map(|(_, offsets)| unsafe { read::<u8>(entry, offsets.entry_state) });
     // SAFETY: forwarded unchanged.
     unsafe { STATE_NEXT.get()(entry, state) };
-    let (Some((loader, _)), Some(old)) = (loaded(), old) else {
+    let (Some((loader, _)), Some(old)) = (loaded().filter(|_| !STATE_FUSE.is_off()), old) else {
         return;
     };
-    guarded("server state", || match state {
+    guarded(&STATE_FUSE, "the server state link", || match state {
         STATE_RUN if old != STATE_RUN => {
             if loader.side == Side::CLIENT {
                 SESSION
@@ -439,7 +464,7 @@ unsafe extern "system" fn save(out: *mut u8, save: *mut u8, context: *mut u8) ->
     // SAFETY: the game wrote its result's first byte through `out`.
     let done = !out.is_null() && unsafe { out.read() } == 0;
     if done && let Some((loader, _)) = loaded() {
-        guarded("save", || {
+        guarded(&SAVE_FUSE, "the save link", || {
             loader.emit(Event::WORLD_SAVED, None, core::ptr::null());
         });
     }
@@ -462,7 +487,7 @@ unsafe extern "system" fn remove(server: *mut u8, slot: *mut u8) {
             joined.store(0, Ordering::Relaxed);
             let data = player(index, slot, offsets);
             crate::net::forget_peer(data.key);
-            guarded("player removal", || {
+            guarded(&REMOVE_FUSE, "the player removal link", || {
                 loader.emit(Event::PLAYER_LEFT, None, (&raw const data).cast());
             });
         }
@@ -472,7 +497,10 @@ unsafe extern "system" fn remove(server: *mut u8, slot: *mut u8) {
 }
 
 fn queue(data: BuildingData) {
-    guarded("building", || {
+    if BUILDING_FUSE.is_off() {
+        return;
+    }
+    guarded(&BUILDING_FUSE, "a building link", || {
         BUILDING
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
@@ -560,13 +588,27 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_panic_in_a_link_s_work_turns_the_events_off_and_stays_inside() {
+    fn a_panic_in_a_link_s_work_turns_off_that_link_alone() {
+        let (one, other) = (Fuse::new("one"), Fuse::new("other"));
         let mut ran = false;
-        guarded("test", || ran = true);
-        assert!(ran && !OFF.load(Ordering::Relaxed));
-        guarded("test", || panic!("a loader bug"));
-        assert!(OFF.load(Ordering::Relaxed));
-        assert!(loaded().is_none());
+        guarded(&one, "test", || ran = true);
+        assert!(ran && !one.is_off());
+        guarded(&one, "test", || panic!("a loader bug"));
+        assert!(one.is_off());
+        guarded(&other, "test", || ran = false);
+        assert!(!ran && !other.is_off());
+    }
+
+    #[test]
+    fn a_panic_in_one_step_part_leaves_the_others_running() {
+        let mut later = 0;
+        for round in 0..3 {
+            part!("test part that breaks", {
+                assert!(round > 0, "a loader bug");
+            });
+            part!("test part after it", later += 1);
+        }
+        assert_eq!(later, 3);
     }
 
     #[test]
