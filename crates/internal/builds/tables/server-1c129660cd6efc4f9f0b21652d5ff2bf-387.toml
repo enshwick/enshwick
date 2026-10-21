@@ -127,6 +127,8 @@ revision = 1
 "knowledge.player_value" = { rva = 0x99_2bb0, pattern = "40 53 48 83 EC 20 80 B9 ?? ?? ?? ?? 00 48 8B 99 ?? ?? ?? ?? 75 0E 41 FF C8" }
 "knowledge.world_value" = { rva = 0x99_2ce0, pattern = "40 53 48 83 EC 20 48 8D 59 ?? C7 44 24 ?? 00 00 00 00 48 8B CB" }
 "knowledge.push" = { rva = 0x99_6880, pattern = "4C 8B C1 B8 01 00 00 00 F0 0F C1 41 ?? FF C0 3D 00 08 00 00" }
+# The journal registry's getter of its blob, found through a call.
+"knowledge.journal_blob_get" = { rva = 0x92_f620, pattern = "48 8B D9 E8 ?? ?? ?? ?? 48 8B 4D ?? E8 ?? ?? ?? ?? 4C 8B E8 48 85 C0 0F 84 ?? ?? ?? ??", rel = 13 }
 "player.death_sink" = { rva = 0x4_dfc0, pattern = "48 89 5C 24 ?? 55 56 57 41 54 41 55 48 8D AC 24 ?? ?? ?? ?? 48 81 EC D0 02 00 00" }
 "knowledge.set_values" = { rva = 0x99_3720, pattern = "40 56 41 54 41 55 41 56 41 57 48 83 EC 40 41 0F B6 40 ??" }
 "knowledge.set_world" = { rva = 0x99_3a30, pattern = "40 53 48 83 EC 20 48 83 7A ?? 00 4C 8B C2 48 8B D9" }
@@ -321,21 +323,21 @@ revision = 1
 # keeps, and the slots of the attributes read from them.
 "ecs.attribute_count" = { value = 0x7, pattern = "48 89 44 24 ?? 48 8D 4C 24 ?? 0F B6 43 ?? 45 33 C9 48 89 44 24 ??", at = 13, size = 1 }
 "attribute.health" = { value = 0x8eb8_4995, pattern = "4C 8B 85 ?? ?? ?? ?? 48 8D 4C 24 ?? BA ?? ?? ?? ?? E8 ?? ?? ?? ?? 44 0F B6 64 24 ?? 33 FF", at = 13, size = 4 }
-"attribute.health_max_slot" = 0x7
+"attribute.health_max_slot" = { value = 0x7, attribute = "Health_Max" }
 "attribute.stamina" = { value = 0x4b6_aa8b, pattern = "4C 8B 85 ?? ?? ?? ?? 48 8D 4C 24 ?? BA ?? ?? ?? ?? E8 ?? ?? ?? ?? 44 0F B6 74 24 ?? 44 88 74 24 ??", at = 13, size = 4 }
-"attribute.stamina_max_slot" = 0x2
+"attribute.stamina_max_slot" = { value = 0x2, attribute = "Stamina_Max" }
 "attribute.mana" = { value = 0x6aa2_574e, pattern = "4C 8B 85 ?? ?? ?? ?? 48 8D 4C 24 ?? BA ?? ?? ?? ?? E8 ?? ?? ?? ?? 44 0F B6 7C 24 ?? 44 88 BD ?? ?? ?? ??", at = 13, size = 4 }
-"attribute.mana_max_slot" = 0x1
-"attribute.health_adder_slot" = 0x3
-"attribute.stamina_adder_slot" = 0x7
-"attribute.mana_adder_slot" = 0x7
+"attribute.mana_max_slot" = { value = 0x1, attribute = "Mana_Max" }
+"attribute.health_adder_slot" = { value = 0x3, attribute = "Health_Max_Adder" }
+"attribute.stamina_adder_slot" = { value = 0x7, attribute = "Stamina_Max_Adder" }
+"attribute.mana_adder_slot" = { value = 0x7, attribute = "Mana_Max_Adder" }
 "attribute.level" = { value = 0x724b_f568, pattern = "74 26 0F B6 45 ?? 4C 8B 4D ?? 4C 8B 45 ?? 48 8B 55 ?? 88 44 24 ?? 0F B7 45 ?? 66 89 44 24 ?? E8 ?? ?? ?? ?? 48 8B 5D ?? 48 85 DB 74 49 F6 43 ?? 01 74 43 4C 8B C7 48 8D 4D ?? BA ?? ?? ?? ?? E8 ?? ?? ?? ?? 44 0F B6 65 ?? 45 84 E4 75 2B 48 8B 4D ?? 8B 03 39 01 74 05 41 B4 2C EB 1C 0F B7 51 ?? 0F B7 4B ?? 48 03 CB 45 32 E4 8B 04 91 89 85 ?? ?? ?? ??", at = 59, size = 4 }
 "attribute.experience" = { value = 0x8dcd_daf4, pattern = "0F B7 44 24 ?? 66 89 44 24 ?? E8 ?? ?? ?? ?? 48 8B 5C 24 ?? 48 8D 4D ?? 4C 8B C7 BA ?? ?? ?? ?? E8 ?? ?? ?? ?? 0F B6 4D ?? 84 C9 74 08 33 C0 84 C9", at = 28, size = 4 }
-"attribute.experience_needed_slot" = 0x2
+"attribute.experience_needed_slot" = { value = 0x2, attribute = "Experience_Required" }
 "attribute.fuel" = { value = 0x5b0_bf75, pattern = "53 56 41 55 41 56 48 8D 6C 24 ?? 48 81 EC 90 00 00 00 41 B8 48 00 00 00 48 8D 55 ?? 4C 8B F1 E8 ?? ?? ?? ?? 4C 8B 45 ?? 48 8D 4D ?? BA ?? ?? ?? ?? E8 ?? ?? ?? ?? 0F B6 5D ?? 45 33 ED 84 DB 74 06 41 0F B7 F5 EB 0A 48 8B 45 ?? 32 DB 0F B7 70 ?? 4C 8B 45 ?? 48 8D 4D ?? BA 01 26 0E A0", at = 45, size = 4 }
-"attribute.fuel_max_slot" = 0x1
+"attribute.fuel_max_slot" = { value = 0x1, attribute = "Fuel_Max" }
 "attribute.shroud" = { value = 0x6951_df16, pattern = "E8 ?? ?? ?? ?? 4C 8B 45 ?? 48 8D 4D ?? BA ?? ?? ?? ?? E8 ?? ?? ?? ?? 4C 8B 45 ?? 48 8D 4D ?? BA 60 96 C0 11", at = 14, size = 4 }
-"attribute.shroud_max_slot" = 0x1
+"attribute.shroud_max_slot" = { value = 0x1, attribute = "FogResistance_Max" }
 # The actor state bit of a character in the shroud that drains it.
 "actor.state_in_shroud" = { value = 0x2000, pattern = "E8 ?? ?? ?? ?? 48 8B 44 24 ?? 48 81 88 ?? ?? ?? ?? ?? ?? ?? ?? 48 8B 4D ?? 48 8B 7D ?? 48 85 C9", at = 17, size = 4 }
 # The entity world's change tracker, which writes outside a
@@ -412,7 +414,7 @@ revision = 1
 "knowledge.log_entry_size" = { value = 0x10, pattern = "80 78 ?? 02 75 0E 48 83 C0 ?? 48 FF 4C 24 ?? 48 89 44 24 ??", at = 9, size = 1 }
 "knowledge.queue" = { value = 0x1d0, pattern = "48 89 87 ?? ?? ?? ?? E8 ?? ?? ?? ?? 48 89 87 ?? ?? ?? ?? 4C 8D 85 ?? ?? ?? ?? 49 8B 86 ?? ?? ?? ?? 49 8B CF", at = 15, size = 4 }
 "knowledge.journal" = { value = 0x1e8, pattern = "49 8B CF E8 ?? ?? ?? ?? 48 89 87 ?? ?? ?? ?? 4C 8D 85 ?? ?? ?? ?? 49 8B 86 ?? ?? ?? ?? 49 8B CF", at = 11, size = 4 }
-"knowledge.journal_blob" = 0x48
+"knowledge.journal_blob" = { value = 0x48, via = "knowledge.journal_blob_get", pattern = "48 8B 41 ?? C3", at = 3, size = 1 }
 "knowledge.input_action" = { value = 0x18c, pattern = "84 C0 74 3D F2 0F 10 83 ?? ?? ?? ?? 48 8D 55 ?? 8B 83 ?? ?? ?? ?? 48 8B CF", at = 8, size = 4 }
 # A player record's change counter (u16) and the store's mark
 # that the world's knowledge changed (u8). The game object

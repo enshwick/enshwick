@@ -166,15 +166,23 @@ the run stays unique without them.
   the instruction and confirms the value while that code stands.
 - A symbol's expected code bytes (`<id>.bytes`) count where its pattern
   finds code that still starts with them.
+- A value only a function too short to find on its own holds is read `via`
+  that function: the function is a symbol found through a call to it, its
+  code must match the constant's pattern where it starts, and the operand
+  is read there. `knowledge.journal_blob` is read so, in the journal
+  registry's two-instruction getter of its blob.
+- The slot of an attribute in its set comes from the game's data, not from
+  code: the game looks slots up at run time in its attribute container,
+  which lists each set's attributes in slot order with their names. Such an
+  entry names its `attribute` (`Health_Max`, `Fuel_Max`), and the loader
+  reads the container from the game's archive at start, on every build; the
+  value a table pins is a cross-check, and a slot that differs is logged and
+  the game's data holds.
 
-On build 1269579 the patterns find every symbol of both tables, 246 of the
-server's 256 constants and 323 of the client's 333. The rest are the nine
-slots of attributes in their sets, which the game looks up at run time from
-its data, so no code holds them, and `knowledge.journal_blob`, read only by a
-getter of two instructions too short to find for sure. On a build without a
-table, the API's stat reads, the loader's writes to maximum health, stamina
-and mana, and the knowledge guard stay off; every mod of this repository
-runs.
+On build 1269579 the patterns find every symbol of both tables, 247 of the
+server's 256 constants and 324 of the client's 333, and the game's data gives
+the other nine, the slots of attributes: on a build without a table every
+entry is found, and every loader feature and mod of this repository runs.
 `cargo enshwick compat --patterns <exe>` shows what the patterns alone find
 on any executable, and a test of the builds crate checks, when
 `ENSH_SERVER_EXE` and `ENSH_CLIENT_EXE` name the game's executables, that

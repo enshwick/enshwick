@@ -199,6 +199,21 @@ impl Archive {
         (out.len() == usize::try_from(len).ok()?).then_some(out)
     }
 
+    /// The keys of the resources of type `type_hash`, the fnv1a32 hash of
+    /// the type's qualified name, for a type the game keeps one resource of.
+    #[must_use]
+    pub fn keys_of(&self, type_hash: u32) -> Vec<ResourceKey> {
+        self.resources
+            .keys()
+            .filter(|(_, ty, _)| *ty == type_hash)
+            .map(|&(guid, type_hash, part)| ResourceKey {
+                guid,
+                type_hash,
+                part,
+            })
+            .collect()
+    }
+
     /// Unpacked chunk `index`, from the cache or the file.
     fn chunk(&self, index: usize) -> Option<Arc<[u8]>> {
         if let Some((_, bytes)) = self
@@ -277,10 +292,22 @@ fn find_content(header: &[u8], hash: &ContentHash) -> Option<(u16, u32)> {
 /// is not installed or the archive does not read.
 #[cfg(windows)]
 pub(crate) fn game() -> Option<&'static Archive> {
+    if let Some(archive) = GAME.get() {
+        return archive.as_ref();
+    }
+    let loader = crate::host::loader()?;
+    open_game(loader.mods_dir.parent()?, loader.side)
+}
+
+/// The archive of the game in `dir` on `side`, opened once for the process,
+/// before the loader is installed.
+#[cfg(windows)]
+pub(crate) fn open_game(
+    dir: &Path,
+    side: enshwick_loader_api::abi::Side,
+) -> Option<&'static Archive> {
     GAME.get_or_init(|| {
-        let loader = crate::host::loader()?;
-        let dir = loader.mods_dir.parent()?;
-        let name = if loader.side == enshwick_loader_api::abi::Side::CLIENT {
+        let name = if side == enshwick_loader_api::abi::Side::CLIENT {
             "enshrouded"
         } else {
             "enshrouded_server"
@@ -289,7 +316,7 @@ pub(crate) fn game() -> Option<&'static Archive> {
         if archive.is_none() {
             crate::log!(
                 WARN,
-                "the game's archive {name}.kfc does not read: vanilla names and texts are unknown"
+                "the game's archive {name}.kfc does not read: attribute slots, vanilla names and texts are unknown"
             );
         }
         archive

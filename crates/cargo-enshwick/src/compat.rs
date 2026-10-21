@@ -70,6 +70,19 @@ struct Build {
     code_rva: u64,
     /// The table the loader would use; `None` leaves the game vanilla.
     table: Option<(Resolved, Table)>,
+    /// The attribute slots read from the game's data, or why none were.
+    slots: Result<Slots, String>,
+}
+
+/// The attribute slots the game's data beside the executable gives.
+#[derive(Debug, Default)]
+struct Slots {
+    /// How many of the table's slots it gives.
+    found: usize,
+    /// How many the table names.
+    named: usize,
+    /// Slots the table pins otherwise.
+    differ: Vec<String>,
 }
 
 fn side_of(exe: &Path) -> Result<tables::Side, String> {
@@ -108,10 +121,14 @@ fn build(exe: &Path, patterns: bool) -> Result<Build, String> {
     let reflection = Reflection::scan(&image);
     let all = known_tables()?;
     let exact = tables::exact(&all, side, fingerprint).filter(|_| !patterns);
-    let table = match exact {
+    let mut table = match exact {
         Some(table) => Some((table.resolve(), table.clone())),
         None => tables::newest(&all, side)
             .map(|table| (table.fall_back(code, range.start - base), table.clone())),
+    };
+    let slots = match &mut table {
+        Some((resolved, _)) => supply_slots(exe, &reflection, resolved),
+        None => Ok(Slots::default()),
     };
     Ok(Build {
         side,
@@ -122,7 +139,54 @@ fn build(exe: &Path, patterns: bool) -> Result<Build, String> {
         code,
         code_rva: range.start - base,
         table,
+        slots,
     })
+}
+
+/// Gives `table` the attribute slots the game's archive beside `exe`
+/// holds, as the loader does at start.
+#[cfg(windows)]
+fn supply_slots(
+    exe: &Path,
+    reflection: &Reflection<'_>,
+    table: &mut Resolved,
+) -> Result<Slots, String> {
+    let wanted = table.attributes().to_vec();
+    let mut slots = Slots {
+        named: wanted.len(),
+        ..Slots::default()
+    };
+    if wanted.is_empty() {
+        return Ok(slots);
+    }
+    let dir = exe
+        .parent()
+        .filter(|d| !d.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    let name = exe.file_stem().and_then(|n| n.to_str()).unwrap_or_default();
+    let archive = enshwick::archive::Archive::open(dir, name).ok_or_else(|| {
+        format!("the game's archive {name}.kfc beside the executable does not read")
+    })?;
+    let found = enshwick::attribute_slots::read(&archive, reflection)?;
+    for (id, attribute) in &wanted {
+        let Some(slot) = found.get(attribute).and_then(|&s| u64::try_from(s).ok()) else {
+            continue;
+        };
+        slots.found += 1;
+        if let Some(pinned) = table.supply(id, slot)
+            && pinned != slot
+        {
+            slots.differ.push(format!(
+                "`{id}`: the game's data puts {attribute} in slot {slot}, the table in {pinned}"
+            ));
+        }
+    }
+    Ok(slots)
+}
+
+#[cfg(not(windows))]
+fn supply_slots(_: &Path, _: &Reflection<'_>, _: &mut Resolved) -> Result<Slots, String> {
+    Err("only a Windows build reads the game's archive".to_owned())
 }
 
 /// The tables the loader embeds.
@@ -221,7 +285,10 @@ pub(crate) fn run(args: &Args) -> Result<bool, String> {
                 "## Build table\n\n`{}`, made for this build.\n",
                 table.name()
             );
-            let problems = check_exact(&build, source);
+            let mut problems = check_exact(&build, source);
+            if let Ok(slots) = &build.slots {
+                problems.extend(slots.differ.iter().cloned());
+            }
             if problems.is_empty() {
                 let _w = writeln!(
                     out,
@@ -258,12 +325,25 @@ pub(crate) fn run(args: &Args) -> Result<bool, String> {
                 "Patterns find {} of {} symbols and {} of {} constants.\n",
                 table.symbols().len(),
                 source.symbols().len(),
-                table.constants().len(),
+                table.constants().len() - build.slots.as_ref().map_or(0, |s| s.found),
                 source.constants().len()
             );
             if !table.missing().is_empty() {
                 let _w = writeln!(out, "Missing: {}.\n", code_list(table.missing()));
             }
+        }
+    }
+    match &build.slots {
+        Ok(slots) if slots.named > 0 => {
+            let _w = writeln!(
+                out,
+                "The game's data beside the executable gives {} of the table's {} attribute slots.\n",
+                slots.found, slots.named
+            );
+        }
+        Ok(_) => {}
+        Err(why) => {
+            let _w = writeln!(out, "Attribute slots: {why}.\n");
         }
     }
     write_features(&mut out, table, &known);
@@ -392,7 +472,9 @@ fn check_exact(build: &Build, table: &Table) -> Vec<String> {
         }
     }
     for constant in table.constants() {
-        if constant.pattern().is_some() && constant.find(build.code) != Some(constant.value()) {
+        if constant.pattern().is_some()
+            && table.find_pinned(constant, build.code, build.code_rva) != Some(constant.value())
+        {
             problems.push(format!(
                 "the pattern of `{}` does not find its value once",
                 constant.id()

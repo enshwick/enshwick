@@ -49,7 +49,9 @@ cargo enshwick compat server/enshrouded_server.exe --mods server/mods
   for the build, checked against the executable (its systems against
   reflection, each pattern and the expected bytes where the table pins
   them), or the newest table of the same side carried over by patterns, with
-  the entries they miss.
+  the entries they miss. The slots of attributes come from the game's
+  archive beside the executable, as the loader reads them at start (a
+  Windows build of the tool).
 - **Loader features.** Each part of the loader with the table entries it
   names, and which the build lacks: works, partly or off. Every part declares
   its entries in a `TABLE_IDS` list beside its code, and the loader's tests
@@ -83,7 +85,9 @@ from the new executable: the smallest window of instructions that is unique
 in the code, with moving parts masked, and field and frame offsets too where
 the window stays unique without them. A symbol's window is its own code, or
 the code that calls or addresses it; a constant's is the instruction picked
-as its use, with the operand that carries it left open to read (see
+as its use, with the operand that carries it left open to read. A constant
+read `via` a symbol is read again in that symbol's code, and a slot named by
+its `attribute` is kept as it is (see
 [Patterns of the loader's table](https://github.com/themaiby/enshwick/blob/main/book/src/finding-the-game.md#patterns-of-the-loaders-table)).
 
 ### Workflow

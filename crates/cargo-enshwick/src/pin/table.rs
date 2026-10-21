@@ -236,6 +236,12 @@ fn patterns_into(
         .collect();
     let symbols = values(doc, "symbols");
     let constants = values(doc, "constants");
+    let kept: HashMap<&str, &enshwick_loader_builds::Constant> = present
+        .constants()
+        .iter()
+        .filter(|c| c.via().is_some() || c.attribute().is_some())
+        .map(|c| (c.id(), c))
+        .collect();
     let failed = || Err("the search failed".to_owned());
     let symbol_texts = parallel(
         &symbols,
@@ -247,6 +253,9 @@ fn patterns_into(
         |(id, value)| {
             if id.strip_suffix(".bytes").is_some() {
                 return Ok(None);
+            }
+            if let Some(constant) = kept.get(id.as_str()) {
+                return kept_written(exe, constant, &symbols, written.get(id));
             }
             match anchors_here.get(id) {
                 Some(anchor) => constant_written(exe, id, *value, anchor),
@@ -325,6 +334,53 @@ fn constant_written(exe: &Exe<'_>, id: &str, value: u64, anchor: &Anchor) -> Wri
         }
         other => Err(format!("{id}: a constant cannot take {other:?}")),
     }
+}
+
+/// A constant read from the game's data, or read via a symbol in its code
+/// at the symbol's address in `exe`.
+fn kept_written(
+    exe: &Exe<'_>,
+    constant: &enshwick_loader_builds::Constant,
+    symbols: &[(String, u64)],
+    pattern: Option<&String>,
+) -> Written {
+    let id = constant.id();
+    if let Some(name) = constant.attribute() {
+        return Ok(Some(format!(
+            "{{ value = {}, attribute = \"{name}\" }}",
+            spelled(constant.value())
+        )));
+    }
+    let (Some(via), Some(text)) = (constant.via(), pattern) else {
+        return Err(format!("{id}: no symbol or pattern to read it via"));
+    };
+    let Some((_, rva)) = symbols.iter().find(|(symbol, _)| symbol == via) else {
+        return Err(format!("{id}: the table has no {via}"));
+    };
+    let (code, code_rva) = exe.text();
+    let value = rva
+        .checked_sub(code_rva)
+        .and_then(|at| constant.find_at(code, at))
+        .ok_or_else(|| format!("{id}: the code at {via} does not match its pattern"))?;
+    let pattern = ConstantPattern {
+        text: text.clone(),
+        operand: constant.operand().map(|o| (o.at(), o.size())),
+        negative: constant
+            .operand()
+            .is_some_and(enshwick_loader_builds::Operand::is_negative),
+        shift: constant
+            .operand()
+            .is_some_and(enshwick_loader_builds::Operand::is_shift),
+    };
+    let plus = constant
+        .operand()
+        .map_or(0, enshwick_loader_builds::Operand::addend);
+    let written = constant_text(value, &pattern, plus);
+    Ok(Some(written.replacen(
+        ", pattern",
+        &format!(", via = \"{via}\", pattern"),
+        1,
+    )))
 }
 
 /// Writes `texts` over the entries of `section`, the value spelled plain

@@ -10,6 +10,7 @@ pub mod advertise;
 #[cfg(windows)]
 mod altars;
 pub mod archive;
+pub mod attribute_slots;
 #[cfg(windows)]
 mod bases;
 #[cfg(windows)]
