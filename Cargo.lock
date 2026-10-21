@@ -414,7 +414,7 @@ dependencies = [
 
 [[package]]
 name = "enshwick-research"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "enshwick-loader-api",
  "enshwick-loader-reflect",
