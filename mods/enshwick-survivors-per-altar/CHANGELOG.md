@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.3](https://github.com/themaiby/enshwick/compare/enshwick-survivors-per-altar-v0.6.2...enshwick-survivors-per-altar-v0.6.3) (2026-10-21)
+
+
+### Features
+
+* **api:** read the game's own texts and resources from its archive ([#191](https://github.com/themaiby/enshwick/issues/191)) ([ebaf029](https://github.com/themaiby/enshwick/commit/ebaf029db0cf95f6cb63602d6b0f617e8dc451e0))
+
 ## [0.6.2](https://github.com/themaiby/enshwick/compare/enshwick-survivors-per-altar-v0.6.1...enshwick-survivors-per-altar-v0.6.2) (2026-10-21)
 
 

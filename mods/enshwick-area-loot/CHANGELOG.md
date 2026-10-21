@@ -1,5 +1,7 @@
 # Changelog
 
+## [0.4.5](https://github.com/themaiby/enshwick/compare/enshwick-area-loot-v0.4.4...enshwick-area-loot-v0.4.5) (2026-10-21)
+
 ## [0.4.4](https://github.com/themaiby/enshwick/compare/enshwick-area-loot-v0.4.3...enshwick-area-loot-v0.4.4) (2026-10-21)
 
 ## [0.4.3](https://github.com/themaiby/enshwick/compare/enshwick-area-loot-v0.4.2...enshwick-area-loot-v0.4.3) (2026-10-21)
