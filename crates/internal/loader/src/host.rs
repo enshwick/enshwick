@@ -2,7 +2,7 @@
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Mutex, MutexGuard, OnceLock};
 
 use enshwick_loader_api::abi as api_frame;
@@ -159,6 +159,21 @@ pub(crate) struct Loader {
 }
 
 static LOADER: OnceLock<Loader> = OnceLock::new();
+/// The events some mod handles, a bit per event id.
+static HANDLED: AtomicU64 = AtomicU64::new(0);
+
+/// Whether a mod's handler takes `event`, so work that only raises it may
+/// be skipped otherwise. One load, for the game's hot paths.
+pub(crate) fn handles(event: Event) -> bool {
+    1u64.checked_shl(event.0)
+        .is_none_or(|bit| HANDLED.load(Ordering::Relaxed) & bit != 0)
+}
+
+fn mark_handled(event: Event) {
+    if let Some(bit) = 1u64.checked_shl(event.0) {
+        HANDLED.fetch_or(bit, Ordering::Relaxed);
+    }
+}
 
 /// Makes `loader` the one the API table answers for.
 pub(crate) fn install(loader: Loader) -> Option<&'static Loader> {
@@ -534,6 +549,9 @@ impl Loader {
             .map(|mut s| std::mem::take(&mut *s))
             .unwrap_or_default();
         made.sort_by_key(|s| s.event.0);
+        for subscription in &made {
+            mark_handled(subscription.event);
+        }
         let _first = self.delivery.set(made.into_boxed_slice());
     }
 
@@ -1432,6 +1450,7 @@ extern "system" fn subscribe(
         };
         if loader.delivery.get().is_some() {
             if crate::reload::reinitialising(index) {
+                mark_handled(event);
                 crate::reload::subscribe_late(subscription);
                 return Status::OK;
             }
