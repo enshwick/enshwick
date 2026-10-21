@@ -1,22 +1,22 @@
-# Actions
+# Effects
 
-[`load.actions()`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/actions.rs)
+[`load.effects()`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/effects.rs)
 returns the mod's
-[`Actions`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/actions.rs):
+[`Effects`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/effects.rs):
 game events it raises in the server's world, teleports and spawns. Like
 [`World`](world.md), it is `Copy`; get it during `init` and move it into
 handlers, tasks and commands.
 
 ```rust
-use enshwick_loader_api::actions::Teleport;
+use enshwick_loader_api::effects::Teleport;
 
 fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
-    let actions = load.actions();
+    let effects = load.effects();
     load.add_command("home", "takes you to the world's centre", move |ctx, _args| {
         let Some(me) = ctx.character() else {
             return "the console has no character".into();
         };
-        match actions.teleport(me, [0.0, 100.0, 0.0], Teleport::new().best_spawn()) {
+        match effects.teleport(me, [0.0, 100.0, 0.0], Teleport::new().best_spawn()) {
             Ok(()) => "on your way".into(),
             Err(why) => format!("no teleport: {why}").into(),
         }
@@ -51,10 +51,10 @@ thread, `Refused` for a type the loader does not allow or when the step has
 no room for more events, `Missing` on a build without the event.
 
 ```rust
-use enshwick_loader_api::actions::NpcOrder;
+use enshwick_loader_api::effects::NpcOrder;
 
 fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
-    let actions = load.actions();
+    let effects = load.effects();
     let world = load.world()?;
     load.add_command("come", "calls a survivor to you: /come <survivor id>", move |ctx, args| {
         let Some(me) = ctx.character() else {
@@ -63,7 +63,7 @@ fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_
         let (Some(at), Some(id)) = (world.position(me), args.first().and_then(|a| a.parse().ok())) else {
             return "/come <survivor id>".into();
         };
-        format!("{:?}", actions.npc_command(id, NpcOrder::GoTo(at))).into()
+        format!("{:?}", effects.npc_command(id, NpcOrder::GoTo(at))).into()
     })
 }
 ```
@@ -93,10 +93,10 @@ and `.facing_yaw(radians)` turns it.
 
 ```rust
 use core::time::Duration;
-use enshwick_loader_api::actions::Spawn;
+use enshwick_loader_api::effects::Spawn;
 
 fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
-    let actions = load.actions();
+    let effects = load.effects();
     let world = load.world()?;
     load.add_command("decoy", "spawns a copy of an entity beside you for a minute: /decoy <entity>", move |ctx, args| {
         let Some(me) = ctx.character() else {
@@ -107,7 +107,7 @@ fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_
             return "/decoy <entity>".into();
         };
         let how = Spawn::new().despawn_after(Duration::from_secs(60));
-        format!("{:?}", actions.spawn(template, [x + 2.0, y, z], how)).into()
+        format!("{:?}", effects.spawn(template, [x + 2.0, y, z], how)).into()
     })
 }
 ```

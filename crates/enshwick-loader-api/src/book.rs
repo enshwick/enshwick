@@ -25,7 +25,7 @@ chapters! {
     Events => "events.md",
     GameEvents => "game-events.md",
     World => "world.md",
-    Actions => "actions.md",
+    Effects => "effects.md",
     Daytime => "daytime.md",
     GameSettings => "game-settings.md",
     Damage => "damage.md",
