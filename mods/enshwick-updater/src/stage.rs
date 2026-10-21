@@ -1,13 +1,15 @@
-//! Staging: a verified archive's DLLs and content pack files written to
-//! `mods/.staged/`, which the `powrprof.dll` stub moves into place at the
-//! next start.
+//! Staging: a downloaded archive's DLLs and content pack files, or a
+//! downloaded DLL, written to `mods/.staged/`, which the `powrprof.dll` stub
+//! moves into place at the next start.
 //!
-//! Only files Enshwick reads are taken, and only where it keeps them:
-//! `powrprof.dll` beside the game, `*.dll` under `mods/`, and a content
-//! pack's `.toml` and `.png` files in its folder `mods/<id>/`, never in the
-//! loader's. A name that is absolute, goes up with `..`, uses `\`, a drive
-//! or a stream, or points into the staging folder itself refuses the whole
-//! archive.
+//! An archive holds the mod's DLL at `mods/<file>.dll`, at its root, or
+//! either of those inside one top-level folder. Only files Enshwick reads
+//! are taken, and only where it keeps them: `powrprof.dll` beside the game,
+//! `*.dll` under `mods/`, and a content pack's `.toml` and `.png` files in
+//! its folder `mods/<id>/`, never in the loader's; an unsigned update takes
+//! the mod's own DLL alone. A name that is absolute, goes up with `..`, uses
+//! `\`, a drive or a stream, or points into the staging folder itself
+//! refuses the whole archive.
 
 use std::io::Read as _;
 use std::path::{Path, PathBuf};
@@ -86,14 +88,51 @@ fn hostile(name: &str) -> bool {
         || name.starts_with(STAGED)
 }
 
+/// Whether `name`'s extension is `.dll`, in any case.
+fn is_dll(name: &str) -> bool {
+    Path::new(name)
+        .extension()
+        .is_some_and(|e| e.eq_ignore_ascii_case("dll"))
+}
+
+/// The archive's names as paths from the game's folder: one top-level
+/// folder that holds every entry, other than `mods/`, is dropped, and a DLL
+/// at the root other than `powrprof.dll` goes under `mods/`.
+fn laid_out(names: &[String]) -> Vec<String> {
+    let top = names
+        .first()
+        .and_then(|name| name.split_once('/'))
+        .map(|(top, _)| top)
+        .filter(|top| !top.eq_ignore_ascii_case("mods"))
+        .filter(|top| {
+            names
+                .iter()
+                .all(|name| name.split_once('/').is_some_and(|(first, _)| first == *top))
+        });
+    names
+        .iter()
+        .map(|name| {
+            let name = top.map_or(name.as_str(), |top| &name[top.len() + 1..]);
+            if !name.contains('/') && is_dll(name) && !name.eq_ignore_ascii_case("powrprof.dll") {
+                format!("mods/{name}")
+            } else {
+                name.to_owned()
+            }
+        })
+        .collect()
+}
+
 /// Where each entry of an archive goes, relative to the game's folder:
 /// `(entry index, path)`. With `installed`, the mod's DLL as the loader
 /// lists it, an archive with one DLL directly under `mods/` writes that DLL
-/// to `installed`, so a renamed DLL is replaced rather than doubled.
+/// to `installed`, so a renamed DLL is replaced rather than doubled. With
+/// `own`, for an unsigned update, only the mod's DLL is taken: the one with
+/// the installed DLL's file name, or the archive's only DLL.
 ///
 /// # Errors
 ///
-/// Why the archive is refused: a hostile name, too many entries or no DLL.
+/// Why the archive is refused: a hostile name, too many entries, no DLL, or
+/// with `own` no single DLL that is the mod's.
 ///
 /// # Examples
 ///
@@ -101,22 +140,34 @@ fn hostile(name: &str) -> bool {
 /// use enshwick_updater::stage::plan;
 ///
 /// let names = ["LICENSE".to_owned(), "mods/enshwick-safes.dll".to_owned()];
-/// let to = plan(&names, Some("mods/enshwick_safes.dll")).unwrap();
+/// let to = plan(&names, Some("mods/enshwick_safes.dll"), false).unwrap();
 /// assert_eq!(to, [(1, "mods/enshwick_safes.dll".to_owned())]);
+/// let root = ["my-mod-1.2.0/".to_owned(), "my-mod-1.2.0/my_mod.dll".to_owned()];
+/// assert_eq!(plan(&root, None, true).unwrap(), [(1, "mods/my_mod.dll".to_owned())]);
 /// ```
-pub fn plan(names: &[String], installed: Option<&str>) -> Result<Vec<(usize, String)>, String> {
+pub fn plan(
+    names: &[String],
+    installed: Option<&str>,
+    own: bool,
+) -> Result<Vec<(usize, String)>, String> {
     if names.len() > MAX_ENTRIES {
         return Err(format!("{} entries, more than {MAX_ENTRIES}", names.len()));
     }
     if let Some(name) = names.iter().find(|name| hostile(name)) {
         return Err(format!("the entry {name:?} points outside the game folder"));
     }
-    let mut files: Vec<(usize, String)> = names
-        .iter()
+    let installed = installed.filter(|path| !path.is_empty());
+    if let Some(installed) = installed.filter(|path| !allowed(path)) {
+        return Err(format!("the installed path {installed:?} is not a mod's"));
+    }
+    let mut files: Vec<(usize, String)> = laid_out(names)
+        .into_iter()
         .enumerate()
         .filter(|(_, name)| allowed(name))
-        .map(|(index, name)| (index, name.clone()))
         .collect();
+    if own {
+        return own_dll(files, installed).map(|file| vec![file]);
+    }
     if files.is_empty() {
         return Err("nothing to install: no DLL and no pack files".to_owned());
     }
@@ -126,15 +177,40 @@ pub fn plan(names: &[String], installed: Option<&str>) -> Result<Vec<(usize, Str
         .filter(|(_, (_, name))| name.matches('/').count() == 1)
         .map(|(at, _)| at)
         .collect();
-    if let (Some(installed), [only]) = (installed.filter(|path| !path.is_empty()), &direct[..]) {
-        if !allowed(installed) {
-            return Err(format!("the installed path {installed:?} is not a mod's"));
-        }
-        if let Some(file) = files.get_mut(*only) {
-            installed.clone_into(&mut file.1);
-        }
+    if let (Some(installed), [only]) = (installed, &direct[..])
+        && let Some(file) = files.get_mut(*only)
+    {
+        installed.clone_into(&mut file.1);
     }
     Ok(files)
+}
+
+/// The mod's own DLL among `files`, written to `installed` when the game
+/// has the mod.
+fn own_dll(
+    files: Vec<(usize, String)>,
+    installed: Option<&str>,
+) -> Result<(usize, String), String> {
+    let file_name = |path: &str| path.rsplit('/').next().unwrap_or(path).to_ascii_lowercase();
+    let dlls: Vec<(usize, String)> = files
+        .into_iter()
+        .filter(|(_, name)| is_dll(name) && name.starts_with("mods/"))
+        .collect();
+    let wanted = installed.map(file_name);
+    let same = dlls
+        .iter()
+        .find(|(_, name)| Some(file_name(name)) == wanted);
+    let (index, path) = match (same, &dlls[..]) {
+        (Some(found), _) | (None, [found]) => found.clone(),
+        (None, []) => return Err("nothing to install: no DLL".to_owned()),
+        (None, _) => {
+            return Err(format!(
+                "{} DLLs, and none has the installed one's name",
+                dlls.len()
+            ));
+        }
+    };
+    Ok((index, installed.map_or(path, str::to_owned)))
 }
 
 /// Refuses a plan that writes any of `taken`, files of other mods or of the
@@ -175,50 +251,65 @@ pub fn refuse_taken(files: &[(usize, String)], taken: &[String]) -> Result<(), S
     }
 }
 
-/// Unpacks a verified `archive` into `game`'s staging folder as [`plan`]
-/// says. Every file is unpacked under `scratch` first and only then moved
-/// into the staging folder, so a failure leaves nothing half-staged.
+/// What an update downloaded: its file name, a `.zip` archive or a `.dll`,
+/// and its bytes.
+#[derive(Clone, Copy, Debug)]
+pub struct Download<'a> {
+    /// The file's name, such as `my-mod.zip` or `my_mod.dll`.
+    pub name: &'a str,
+    /// The file's bytes.
+    pub bytes: &'a [u8],
+}
+
+/// Unpacks a verified `download` into `game`'s staging folder as [`plan`]
+/// says, with `installed` and `own`; a `.dll` is staged as an archive that
+/// holds it at its root would be. Every file is unpacked under `scratch`
+/// first and only then moved into the staging folder, so a failure leaves
+/// nothing half-staged.
 ///
 /// Returns the staged paths, relative to the game's folder.
 ///
 /// # Errors
 ///
-/// Why the archive was not staged.
+/// Why the download was not staged.
 pub fn stage(
-    archive: &[u8],
+    download: Download<'_>,
     installed: Option<&str>,
+    own: bool,
     taken: &[String],
     game: &Path,
     scratch: &Path,
 ) -> Result<Vec<String>, String> {
-    let mut zip = zip::ZipArchive::new(std::io::Cursor::new(archive))
-        .map_err(|e| format!("not a zip archive: {e}"))?;
-    let names: Vec<String> = (0..zip.len())
-        .map(|index| {
-            zip.name_for_index(index)
-                .and_then(Result::ok)
-                .map(std::borrow::Cow::into_owned)
-        })
-        .collect::<Option<_>>()
-        .ok_or("an entry name is unreadable")?;
-    let files = plan(&names, installed)?;
+    let mut zip = if is_dll(download.name) {
+        None
+    } else {
+        Some(
+            zip::ZipArchive::new(std::io::Cursor::new(download.bytes))
+                .map_err(|e| format!("not a zip archive: {e}"))?,
+        )
+    };
+    let names: Vec<String> = match &zip {
+        None => vec![download.name.to_owned()],
+        Some(zip) => (0..zip.len())
+            .map(|index| {
+                zip.name_for_index(index)
+                    .and_then(Result::ok)
+                    .map(std::borrow::Cow::into_owned)
+            })
+            .collect::<Option<_>>()
+            .ok_or("an entry name is unreadable")?,
+    };
+    let files = plan(&names, installed, own)?;
     refuse_taken(&files, taken)?;
     // Scratch space of earlier runs goes first.
     let _gone = std::fs::remove_dir_all(scratch);
     let mut unpacked: Vec<(PathBuf, String)> = Vec::new();
     for (index, (entry, to)) in files.iter().enumerate() {
         let name = names.get(*entry).map_or("", String::as_str);
-        let mut file = zip
-            .by_index(*entry)
-            .map_err(|e| format!("cannot read {name}: {e}"))?;
-        if file.size() > MAX_FILE {
-            return Err(format!("{name} is larger than {MAX_FILE} bytes"));
-        }
-        let mut bytes = Vec::new();
-        file.by_ref()
-            .take(MAX_FILE + 1)
-            .read_to_end(&mut bytes)
-            .map_err(|e| format!("cannot unpack {name}: {e}"))?;
+        let bytes = match zip.as_mut() {
+            None => download.bytes.to_vec(),
+            Some(zip) => unpack(zip, *entry, name)?,
+        };
         if bytes.len() as u64 > MAX_FILE {
             return Err(format!("{name} is larger than {MAX_FILE} bytes"));
         }
@@ -243,6 +334,26 @@ pub fn stage(
     }
     let _gone = std::fs::remove_dir_all(scratch);
     Ok(unpacked.into_iter().map(|(_, to)| to).collect())
+}
+
+/// Entry `entry` of `zip`, named `name`, read up to the size limit.
+fn unpack(
+    zip: &mut zip::ZipArchive<std::io::Cursor<&[u8]>>,
+    entry: usize,
+    name: &str,
+) -> Result<Vec<u8>, String> {
+    let mut file = zip
+        .by_index(entry)
+        .map_err(|e| format!("cannot read {name}: {e}"))?;
+    if file.size() > MAX_FILE {
+        return Err(format!("{name} is larger than {MAX_FILE} bytes"));
+    }
+    let mut bytes = Vec::new();
+    file.by_ref()
+        .take(MAX_FILE + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|e| format!("cannot unpack {name}: {e}"))?;
+    Ok(bytes)
 }
 
 /// Deletes the DLLs of the mods that `id` replaces, from `replaced` as the
@@ -380,18 +491,18 @@ mod tests {
             "mods/.staged/powrprof.dll",
         ] {
             let list = names(&["mods/a.dll", bad]);
-            assert!(plan(&list, None).is_err(), "{bad}");
+            assert!(plan(&list, None, false).is_err(), "{bad}");
         }
-        assert!(plan(&names(&["LICENSE"]), None).is_err());
+        assert!(plan(&names(&["LICENSE"]), None, false).is_err());
         let many: Vec<String> = (0..=MAX_ENTRIES).map(|i| format!("mods/{i}.dll")).collect();
-        assert!(plan(&many, None).is_err());
+        assert!(plan(&many, None, false).is_err());
     }
 
     #[test]
     fn archive_paths_are_kept_and_a_mods_dll_follows_its_installed_name() {
         let loader = names(&["LICENSE", "powrprof.dll", "mods/enshwick/enshwick.dll"]);
         assert_eq!(
-            plan(&loader, Some("mods/enshwick/enshwick.dll")).unwrap(),
+            plan(&loader, Some("mods/enshwick/enshwick.dll"), false).unwrap(),
             [
                 (1, "powrprof.dll".to_owned()),
                 (2, "mods/enshwick/enshwick.dll".to_owned())
@@ -399,17 +510,17 @@ mod tests {
         );
         let safes = names(&["mods/", "mods/enshwick-safes.dll", "LICENSE"]);
         assert_eq!(
-            plan(&safes, None).unwrap(),
+            plan(&safes, None, false).unwrap(),
             [(1, "mods/enshwick-safes.dll".to_owned())]
         );
         assert_eq!(
-            plan(&safes, Some("mods/enshwick_safes.dll")).unwrap(),
+            plan(&safes, Some("mods/enshwick_safes.dll"), false).unwrap(),
             [(1, "mods/enshwick_safes.dll".to_owned())]
         );
-        assert!(plan(&safes, Some("../evil.dll")).is_err());
+        assert!(plan(&safes, Some("../evil.dll"), false).is_err());
         let two = names(&["mods/a.dll", "mods/b.dll"]);
         assert_eq!(
-            plan(&two, Some("mods/c.dll")).unwrap(),
+            plan(&two, Some("mods/c.dll"), false).unwrap(),
             [(0, "mods/a.dll".to_owned()), (1, "mods/b.dll".to_owned())]
         );
     }
@@ -422,7 +533,11 @@ mod tests {
             ("powrprof.dll", b"stub"),
             ("mods/enshwick/enshwick.dll", b"loader"),
         ]);
-        let staged = stage(&archive, None, &[], &game, &game.join("scratch")).unwrap();
+        let download = Download {
+            name: "enshwick-loader.zip",
+            bytes: &archive,
+        };
+        let staged = stage(download, None, false, &[], &game, &game.join("scratch")).unwrap();
         assert_eq!(staged, ["powrprof.dll", "mods/enshwick/enshwick.dll"]);
         let root = game.join(STAGED);
         assert_eq!(std::fs::read(root.join("powrprof.dll")).unwrap(), b"stub");
@@ -492,9 +607,85 @@ mod tests {
     fn a_hostile_archive_stages_nothing() {
         let game = scratch("hostile");
         let archive = zip(&[("mods/a.dll", b"a"), ("../../x.dll", b"x")]);
-        assert!(stage(&archive, None, &[], &game, &game.join("scratch")).is_err());
+        let staged = |name, bytes| {
+            stage(
+                Download { name, bytes },
+                None,
+                false,
+                &[],
+                &game,
+                &game.join("scratch"),
+            )
+        };
+        assert!(staged("a.zip", &archive).is_err());
         assert!(!game.join(STAGED).exists());
-        assert!(stage(b"not a zip", None, &[], &game, &game.join("scratch")).is_err());
+        assert!(staged("a.zip", b"not a zip").is_err());
+        assert!(staged("../a.dll", b"dll").is_err());
+        let _gone = std::fs::remove_dir_all(&game);
+    }
+
+    #[test]
+    fn the_dll_sits_under_mods_at_the_root_or_in_one_folder() {
+        let to = |list: &[&str]| plan(&names(list), Some("mods/my_mod.dll"), false).unwrap();
+        let mine = |at: usize| vec![(at, "mods/my_mod.dll".to_owned())];
+        assert_eq!(to(&["mods/my-mod.dll", "LICENSE"]), mine(0));
+        assert_eq!(to(&["LICENSE", "my-mod.dll"]), mine(1));
+        assert_eq!(to(&["my-mod-1.2.0/", "my-mod-1.2.0/my-mod.dll"]), mine(1));
+        assert_eq!(to(&["my-mod/README.md", "my-mod/mods/my-mod.dll"]), mine(1));
+        assert!(
+            plan(&names(&["my-mod/a.dll", "other/b.dll"]), None, false).is_err(),
+            "files in two folders are not where Enshwick keeps them"
+        );
+        assert_eq!(
+            plan(&names(&["powrprof.dll"]), None, false).unwrap(),
+            [(0, "powrprof.dll".to_owned())]
+        );
+    }
+
+    #[test]
+    fn an_unsigned_update_takes_the_mods_own_dll_alone() {
+        let own = |list: &[&str], installed| plan(&names(list), installed, true);
+        let installed = Some("mods/enshwick_my_mod.dll");
+        assert_eq!(
+            own(
+                &["my_mod.dll", "mods/pack/items.toml", "powrprof.dll"],
+                installed
+            )
+            .unwrap(),
+            [(0, "mods/enshwick_my_mod.dll".to_owned())]
+        );
+        assert_eq!(
+            own(&["mods/helper.dll", "mods/enshwick_MY_mod.dll"], installed).unwrap(),
+            [(1, "mods/enshwick_my_mod.dll".to_owned())],
+            "the DLL with the installed name"
+        );
+        assert!(own(&["mods/a.dll", "mods/b.dll"], installed).is_err());
+        assert!(own(&["README.md"], installed).is_err());
+        assert_eq!(
+            own(&["x/my_mod.dll"], None).unwrap(),
+            [(0, "mods/my_mod.dll".to_owned())]
+        );
+    }
+
+    #[test]
+    fn a_downloaded_dll_is_staged_as_the_mods_dll() {
+        let game = scratch("dll");
+        let download = Download {
+            name: "MyMod.dll",
+            bytes: b"dll",
+        };
+        let installed = Some("mods/enshwick_my_mod.dll");
+        let staged = stage(download, installed, true, &[], &game, &game.join("scratch")).unwrap();
+        assert_eq!(staged, ["mods/enshwick_my_mod.dll"]);
+        assert_eq!(
+            std::fs::read(game.join(STAGED).join("mods/enshwick_my_mod.dll")).unwrap(),
+            b"dll"
+        );
+        let taken = ["mods/MyMod.dll".to_owned()];
+        assert!(
+            stage(download, None, true, &taken, &game, &game.join("scratch")).is_err(),
+            "never another mod's file"
+        );
         let _gone = std::fs::remove_dir_all(&game);
     }
 }

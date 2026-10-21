@@ -1,17 +1,17 @@
-//! Updates Enshwick and its mods from their signed releases, with the
-//! player's consent.
+//! Updates Enshwick and its mods from their releases, with the player's
+//! consent.
 //!
 //! At start, on a thread of its own, the updater lists the loaded mods, asks
-//! each mod's source for its releases (a GitHub repository, or the document
-//! of a `url(...)` source, see [`document`]) and, when newer ones exist, asks
-//! the player. What the player accepts is downloaded, checked against
-//! its minisign signature by a key the installed version names (see
-//! [`trust`]) and staged in `mods/.staged/`, which the
-//! `powrprof.dll` stub moves into place at the next start. When the join
-//! check keeps the player out of a server that runs mods this game lacks or
-//! has in another version, the updater offers the server's versions the
-//! same way, each checked against the author key the server names for it.
-//! Settings files are never touched.
+//! each mod's source for its releases (a GitHub repository, see [`release`],
+//! or the document of a `url(...)` source, see [`document`]) and, when newer
+//! ones exist, asks the player. What the player accepts is downloaded over
+//! `https://`, checked against its minisign signature when the installed
+//! version names author keys (see [`trust`]) and staged in `mods/.staged/`,
+//! which the `powrprof.dll` stub moves into place at the next start. When
+//! the join check keeps the player out of a server that runs mods this game
+//! lacks or has in another version, the updater offers the server's versions
+//! the same way, a mod the game lacks checked against the author key the
+//! server names for it, if any. Settings files are never touched.
 //!
 //! On a game build the loader has no table for yet, on the client and the
 //! dedicated server alike, the updater fetches the table for that build (see
@@ -43,7 +43,7 @@ use semver::Version;
 use crate::document::Document;
 use crate::net::{Client, Failure};
 use crate::release::Pick;
-use crate::trust::{Refusal, Trust};
+use crate::trust::Trust;
 
 /// How long after start the updater looks, so the game's window is up.
 const START_DELAY: Duration = Duration::from_secs(15);
@@ -151,9 +151,8 @@ pub struct Offer {
     pub pick: Pick,
     /// Where the release comes from, as the player reads it.
     pub source: String,
-    /// The keys one of which must have signed it, or why it is not installed
-    /// automatically.
-    pub trust: Result<Trust, Refusal>,
+    /// The keys one of which must have signed it; none for an unsigned mod.
+    pub trust: Trust,
 }
 
 impl Offer {
@@ -164,7 +163,7 @@ impl Offer {
     /// ```
     /// use enshwick_updater::Offer;
     /// use enshwick_updater::release::Pick;
-    /// use enshwick_updater::trust::Refusal;
+    /// use enshwick_updater::trust::Trust;
     ///
     /// let offer = Offer {
     ///     id: "safes".into(),
@@ -176,22 +175,23 @@ impl Offer {
     ///         version: semver::Version::new(0, 2, 0),
     ///         archive: "enshwick-safes.zip".into(),
     ///         archive_url: String::new(),
-    ///         signature_url: String::new(),
+    ///         signature_url: None,
     ///     },
     ///     source: "github.com/themaiby/enshwick".into(),
-    ///     trust: Err(Refusal::Unsigned),
+    ///     trust: Trust::Installed(vec!["RW...".into()]),
     /// };
     /// assert_eq!(offer.line(), "Safes (safes): 0.1.0 \u{2192} 0.2.0");
     /// let ukrainian = offer.line_in(enshwick_loader_api::i18n::Language::UK_UA);
     /// assert_eq!(ukrainian, "Safes (safes): 0.1.0 \u{2192} 0.2.0");
     /// ```
     ///
-    /// A version older than the installed one says so:
+    /// A version older than the installed one says so, and so does an
+    /// unsigned one:
     ///
     /// ```
     /// # use enshwick_updater::Offer;
     /// # use enshwick_updater::release::Pick;
-    /// # use enshwick_updater::trust::Refusal;
+    /// # use enshwick_updater::trust::Trust;
     /// # let offer = Offer {
     /// #     id: "safes".into(),
     /// #     name: String::new(),
@@ -202,12 +202,12 @@ impl Offer {
     /// #         version: semver::Version::new(0, 2, 0),
     /// #         archive: String::new(),
     /// #         archive_url: String::new(),
-    /// #         signature_url: String::new(),
+    /// #         signature_url: None,
     /// #     },
     /// #     source: String::new(),
-    /// #     trust: Err(Refusal::Unsigned),
+    /// #     trust: Trust::Unsigned,
     /// # };
-    /// assert_eq!(offer.line(), "safes: 0.3.0 \u{2192} 0.2.0 (older)");
+    /// assert_eq!(offer.line(), "safes: 0.3.0 \u{2192} 0.2.0 (older, unsigned)");
     /// ```
     #[must_use]
     pub fn line(&self) -> String {
@@ -228,8 +228,14 @@ impl Offer {
             .is_some_and(|from| self.pick.version < from);
         let missing = say::in_language("line.missing", language, &[]);
         let to = self.pick.version.to_string();
+        let key = match (older, self.trust.signed()) {
+            (false, true) => "line",
+            (true, true) => "line.older",
+            (false, false) => "line.unsigned",
+            (true, false) => "line.older-unsigned",
+        };
         say::in_language(
-            if older { "line.older" } else { "line" },
+            key,
             language,
             &[
                 ("name", &self.label()),
@@ -255,16 +261,20 @@ impl Offer {
 
     /// The offer's lines in the question after a refused join, for a mod the
     /// game lacks: the version, where it comes from and the key the server
-    /// names.
+    /// names, or that it is unsigned.
     fn server_lines(&self) -> String {
-        let keys = self.trust.as_ref().map_or(&[][..], Trust::keys).join(", ");
+        let signed = if self.trust.signed() {
+            say::text("server.key", &[("keys", &self.trust.keys().join(", "))])
+        } else {
+            say::text("server.unsigned", &[])
+        };
         say::text(
             "server.line",
             &[
                 ("name", &self.label()),
                 ("version", &self.pick.version.to_string()),
                 ("source", &self.source),
-                ("keys", &keys),
+                ("signed", &signed),
             ],
         )
     }
@@ -406,23 +416,13 @@ fn at_start() {
         enshwick_loader_api::info!("everything is up to date");
         return;
     }
-    let (offers, by_hand) = signed(offers);
-    let by_hand =
-        (!by_hand.is_empty()).then(|| format!("{}\n\n{by_hand}", say::text("not-downloaded", &[])));
-    if offers.is_empty() {
-        if let Some(by_hand) = by_hand {
-            ask::tell(&format!("{}\n\n{by_hand}", say::text("available", &[])));
-        }
-        return;
-    }
-    let mut question = vec![format!(
+    let question = format!(
         "{}\n\n{}\n\n{}",
         say::text("available.list", &[]),
         said_lines(&offers),
         say::text("available.ask", &[])
-    )];
-    question.extend(by_hand);
-    if !ask::confirm(&question.join("\n\n")) {
+    );
+    if !ask::confirm(&question) {
         enshwick_loader_api::info!("the player declined {}", lines(&offers).replace('\n', ", "));
         return;
     }
@@ -528,10 +528,6 @@ fn after_refused_join() {
     }
     let _busy = BUSY.lock().unwrap_or_else(PoisonError::into_inner);
     let offers = unoffered(offers);
-    let (offers, by_hand) = signed(offers);
-    if !by_hand.is_empty() {
-        unavailable.push(by_hand);
-    }
     let runs = say::text("server.runs", &[]);
     let unavailable = (!unavailable.is_empty()).then(|| {
         format!(
@@ -606,39 +602,40 @@ fn server_version(
         Some(ours) => ours.updates.as_ref(),
         None => entry.updates.as_ref(),
     };
+    let signed = trust.signed();
     let pick = match updates {
         Some(Updates::GitHub {
             repository,
             component,
         }) => {
-            let tag = format!("{component}-v{version}");
             if let Some(until) = paused(&context.data) {
                 return Err(said(&Failure::RateLimited { until }));
             }
-            let json = client
-                .api(&release::tag_url(repository, &tag))
+            let found = |releases: &[release::Release]| {
+                release::exact(releases, repository, component, &version, signed)
+            };
+            let releases = releases_of(client, repository, |releases| found(releases).is_some())
                 .map_err(|failure| match failure {
-                    Failure::NotFound => say::text(
-                        "why.no-release",
-                        &[("tag", &tag), ("repository", repository)],
-                    ),
                     Failure::RateLimited { until } => {
                         pause(&context.data, until);
                         said(&failure)
                     }
-                    other @ Failure::Other(_) => other.to_string(),
+                    other => other.to_string(),
                 })?;
-            let releases = release::parse(&json)?;
-            release::exact(&releases, repository, component, &version).ok_or_else(|| {
+            found(&releases).ok_or_else(|| {
                 say::text(
-                    "why.no-archive",
-                    &[("tag", &tag), ("archive", &format!("{component}.zip"))],
+                    "why.no-release",
+                    &[
+                        ("repository", repository),
+                        ("component", component),
+                        ("version", &version.to_string()),
+                    ],
                 )
             })?
         }
         Some(Updates::Url(url)) => {
             let document = fetch_document(client, url)?;
-            document::exact(&document, &entry.id, &version).ok_or_else(|| {
+            document::exact(&document, &entry.id, &version, signed).ok_or_else(|| {
                 say::text(
                     "why.not-listed",
                     &[("url", url), ("version", &version.to_string())],
@@ -670,8 +667,8 @@ fn fetch_document(client: &Client, url: &str) -> Result<Document, String> {
     document::parse(&json).map_err(|e| format!("{url}: {e}"))
 }
 
-/// The releases of `repository`, page by page until the pages hold a
-/// release of each of `components`.
+/// The releases of `repository`, page by page until the pages read so far
+/// are `enough`.
 ///
 /// # Errors
 ///
@@ -679,7 +676,7 @@ fn fetch_document(client: &Client, url: &str) -> Result<Document, String> {
 fn releases_of(
     client: &Client,
     repository: &str,
-    components: &[&str],
+    enough: impl Fn(&[release::Release]) -> bool,
 ) -> Result<Vec<release::Release>, Failure> {
     let mut releases = Vec::new();
     let mut unreadable = None;
@@ -688,7 +685,7 @@ fn releases_of(
             Ok(more) => releases.extend(more),
             Err(e) => unreadable = Some(e),
         }
-        unreadable.is_some() || release::seen_all(&releases, components)
+        unreadable.is_some() || enough(&releases)
     })?;
     match unreadable {
         Some(e) => Err(Failure::Other(format!("{repository}: {e}"))),
@@ -719,7 +716,8 @@ fn newer(
             continue;
         }
         let prereleases = context.settings.prereleases;
-        let trust = || trust::for_installed(entry, &context.settings.trusted());
+        let trust = trust::for_installed(entry, &context.settings.trusted());
+        let signed = trust.signed();
         let (repository, component) = match updates {
             Updates::GitHub {
                 repository,
@@ -736,7 +734,7 @@ fn newer(
                 });
                 if let Some(pick) = document
                     .as_ref()
-                    .and_then(|d| document::newest(d, &entry.id, &installed, prereleases))
+                    .and_then(|d| document::newest(d, &entry.id, &installed, prereleases, signed))
                 {
                     offers.push(Offer {
                         id: entry.id.clone(),
@@ -745,7 +743,7 @@ fn newer(
                         file: entry.file.clone(),
                         pick,
                         source: source_of(updates),
-                        trust: trust(),
+                        trust,
                     });
                 }
                 continue;
@@ -753,7 +751,8 @@ fn newer(
         };
         if !lists.contains_key(repository.as_str()) {
             let components = components_of(mods, repository);
-            let releases = match releases_of(client, repository, &components) {
+            let seen = |releases: &[release::Release]| release::seen_all(releases, &components);
+            let releases = match releases_of(client, repository, seen) {
                 Ok(releases) => releases,
                 Err(failure @ Failure::RateLimited { .. }) => return Err(failure),
                 Err(failure) => {
@@ -767,9 +766,14 @@ fn newer(
         let releases = lists
             .get(repository.as_str())
             .map_or(&[][..], Vec::as_slice);
-        if let Some(pick) =
-            release::newest(releases, repository, component, &installed, prereleases)
-        {
+        if let Some(pick) = release::newest(
+            releases,
+            repository,
+            component,
+            &installed,
+            prereleases,
+            signed,
+        ) {
             offers.push(Offer {
                 id: entry.id.clone(),
                 name: entry.name.clone(),
@@ -777,7 +781,7 @@ fn newer(
                 file: entry.file.clone(),
                 pick,
                 source: source_of(updates),
-                trust: trust(),
+                trust,
             });
         }
     }
@@ -786,14 +790,16 @@ fn newer(
 
 /// The update `offer` as the Mods screen shows it.
 fn update(offer: &Offer, staged: bool) -> enshwick_loader_api::updates::Update {
-    let (note, ready) = match &offer.trust {
-        _ if staged => (say::text("pick.staged", &[]), false),
-        Err(refusal) => (say::text(refusal.key(), &[]), false),
-        Ok(_) => (String::new(), true),
+    let note = if staged {
+        say::text("pick.staged", &[])
+    } else if offer.trust.signed() {
+        String::new()
+    } else {
+        say::text("pick.unsigned", &[])
     };
     enshwick_loader_api::updates::Update::new(&offer.id, &offer.pick.version.to_string())
         .note(&note)
-        .ready(ready)
+        .ready(!staged)
 }
 
 /// Shows `offers` on the Mods screen, in place of the updates before.
@@ -870,27 +876,6 @@ fn unoffered(offers: Vec<Offer>) -> Vec<Offer> {
         .collect()
 }
 
-/// `offers` split into those that can be installed and the lines of those
-/// the player updates by hand, which are not downloaded.
-fn signed(offers: Vec<Offer>) -> (Vec<Offer>, String) {
-    let (signed, by_hand): (Vec<Offer>, Vec<Offer>) =
-        offers.into_iter().partition(|offer| offer.trust.is_ok());
-    let by_hand = by_hand
-        .iter()
-        .filter_map(|offer| {
-            let refusal = offer.trust.as_ref().err()?;
-            enshwick_loader_api::info!("not offered {}: {}", offer.line(), refusal.note());
-            Some(format!(
-                "{}: {}",
-                offer.said(),
-                say::text(refusal.key(), &[])
-            ))
-        })
-        .collect::<Vec<_>>()
-        .join("\n");
-    (signed, by_hand)
-}
-
 /// The offers' lines for the log.
 fn lines(offers: &[Offer]) -> String {
     offers
@@ -963,33 +948,38 @@ fn install_all(client: &Client, context: &Context, offers: &[Offer], next: &str)
 }
 
 fn install(client: &Client, context: &Context, offer: &Offer) -> Result<Vec<String>, String> {
-    let trust = offer
-        .trust
-        .as_ref()
-        .map_err(|refusal| say::text(refusal.key(), &[]))?;
-    let keys: Vec<_> = trust
-        .keys()
-        .iter()
-        .filter_map(|key| verify::key(key).ok())
-        .collect();
-    let pick = &offer.pick;
+    let (trust, pick) = (&offer.trust, &offer.pick);
     let archive = client.archive(&pick.archive_url).map_err(|e| said(&e))?;
-    let signature = client
-        .signature(&pick.signature_url)
-        .map_err(|e| said(&e))?;
-    verify::check(&keys, &archive, &signature, &pick.tag, &pick.archive).map_err(|why| {
-        let why = if why == verify::UNSIGNED {
-            say::text(trust.refusal_key(), &[])
-        } else {
-            why
-        };
-        say::text("why.refused", &[("why", &why)])
-    })?;
+    if trust.signed() {
+        let keys: Vec<_> = trust
+            .keys()
+            .iter()
+            .filter_map(|key| verify::key(key).ok())
+            .collect();
+        let url = pick
+            .signature_url
+            .as_deref()
+            .ok_or_else(|| say::text("why.no-signature", &[]))?;
+        let signature = client.signature(url).map_err(|e| said(&e))?;
+        verify::check(&keys, &archive, &signature, &pick.tag, &pick.archive).map_err(|why| {
+            let why = if why == verify::UNSIGNED {
+                say::text(trust.refusal_key(), &[])
+            } else {
+                why
+            };
+            say::text("why.refused", &[("why", &why)])
+        })?;
+    }
     let installed = Some(offer.file.as_str()).filter(|file| !file.is_empty());
     let taken = taken(&offer.id, &enshwick_loader_api::mods());
+    let download = stage::Download {
+        name: &pick.archive,
+        bytes: &archive,
+    };
     stage::stage(
-        &archive,
+        download,
         installed,
+        !trust.signed(),
         &taken,
         &context.game,
         &context.data.join(SCRATCH),
@@ -1104,11 +1094,15 @@ mod tests {
         }
         let cache = std::env::temp_dir().join(format!("enshwick-pages-{}", std::process::id()));
         let client = Client::new(Some(&cache));
-        let all = releases_of(&client, "themaiby/enshwick", &["no-such-component"]).unwrap();
+        let seen = |components: &'static [&'static str]| {
+            move |releases: &[release::Release]| release::seen_all(releases, components)
+        };
+        let all = releases_of(&client, "themaiby/enshwick", seen(&["no-such-component"])).unwrap();
         assert!(all.len() > 100, "{} releases", all.len());
-        let again = releases_of(&client, "themaiby/enshwick", &["no-such-component"]).unwrap();
+        let again =
+            releases_of(&client, "themaiby/enshwick", seen(&["no-such-component"])).unwrap();
         assert_eq!(again.len(), all.len(), "the kept pages read the same");
-        let first = releases_of(&client, "themaiby/enshwick", &["enshwick-updater"]).unwrap();
+        let first = releases_of(&client, "themaiby/enshwick", seen(&["enshwick-updater"])).unwrap();
         assert!(first.len() <= all.len());
         assert!(release::seen_all(&first, &["enshwick-updater"]));
         std::fs::remove_dir_all(&cache).unwrap();
@@ -1197,10 +1191,10 @@ mod tests {
                 version,
                 archive: format!("{id}.zip"),
                 archive_url: String::new(),
-                signature_url: String::new(),
+                signature_url: None,
             },
             source: String::new(),
-            trust: Err(Refusal::Unsigned),
+            trust: Trust::Installed(Vec::new()),
         }
     }
 
@@ -1220,5 +1214,23 @@ mod tests {
             offer("x", Version::new(1, 0, 0)).line(),
             "x: not installed \u{2192} 1.0.0"
         );
+    }
+
+    #[test]
+    fn an_unsigned_update_shows_ready_and_marked() {
+        let unsigned = Offer {
+            trust: Trust::Unsigned,
+            ..offer("marked", Version::new(1, 0, 0))
+        };
+        let shown = update(&unsigned, false);
+        assert!(shown.ready);
+        assert_eq!(shown.note, say::text("pick.unsigned", &[]));
+        assert!(
+            !update(&unsigned, true).ready,
+            "a staged update is not offered again"
+        );
+        let signed = update(&offer("signed", Version::new(1, 0, 0)), false);
+        assert!(signed.ready && signed.note.is_empty());
+        assert!(unsigned.line().ends_with("(unsigned)"));
     }
 }

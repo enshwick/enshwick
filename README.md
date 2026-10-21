@@ -46,9 +46,9 @@ they are never released.
 
 ### For players
 
-| Mod                              | What it does                                                     |
-| -------------------------------- | ---------------------------------------------------------------- |
-| [Updater](mods/enshwick-updater) | signed updates from GitHub releases, installed with your consent |
+| Mod                              | What it does                                                             |
+| -------------------------------- | ------------------------------------------------------------------------ |
+| [Updater](mods/enshwick-updater) | updates of the mods you have, from their releases, with your consent     |
 
 ## Install
 

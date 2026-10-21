@@ -9,6 +9,7 @@ mod tests {
         Event, Header, HookFlags, Level, ManifestFlags, ModHandle, ModInfo, Side, Status, Str,
         UpdateSource,
     };
+    use enshwick_loader_api::mods::Updates;
     use enshwick_loader_api::test::{FakeHost, address};
     use enshwick_loader_api::{Next, events, hook};
 
@@ -137,11 +138,8 @@ mod tests {
         assert_eq!(listed.len(), 1);
         assert_eq!(listed[0].file, "mods/enshwick/enshwick.dll");
         assert_eq!(
-            listed[0]
-                .updates
-                .as_ref()
-                .and_then(enshwick_loader_api::mods::Updates::tag_prefix),
-            Some("enshwick-loader-v".to_owned())
+            listed[0].updates.as_ref().map(Updates::to_line).as_deref(),
+            Some("github:themaiby/enshwick:enshwick-loader")
         );
         assert_eq!(listed[0].signed_by, [KEY]);
         let hooks = loader.hooks();
