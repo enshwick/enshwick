@@ -62,6 +62,7 @@
   - [Content packs](content/packs.md)
 - [Inventories](inventories.md)
 - [Item data](item-data.md)
+- [Entity data](entity-data.md)
 - [Stats](stats.md)
 - [Affixes](affixes.md)
 

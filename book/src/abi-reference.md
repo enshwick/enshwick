@@ -12,7 +12,7 @@ raw table. The exact types and signatures are in the
 | Constant                                                                                            | Value | Meaning                                         |
 | --------------------------------------------------------------------------------------------------- | ----- | ----------------------------------------------- |
 | [`ABI_MAJOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 1     | A loader refuses a mod built for another major. |
-| [`ABI_MINOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 51    | A newer minor only appends.                     |
+| [`ABI_MINOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 52    | A newer minor only appends.                     |
 
 The ABI version is apart from Enshwick Loader's version (such as 0.2.0, see
 [Releasing and updates](releasing.md#versions)): a platform release raises
@@ -287,6 +287,7 @@ marked "init only" are allowed during `enshwick_mod_init` only.
 | `affix_info`          | An affix's text key and rarity; any thread                                                      | 48          |
 | `migrate`             | Registers the mod's migrations and runs them on its settings file; init only                    | 49          |
 | `declare_content`     | Declares a content id in the mod's namespace and returns its GUID; init only                    | 50          |
+| `entity_data_open`    | Opens an entity data kind, sent to clients or not; init only                                    | 52          |
 
 ## Under an older loader
 
@@ -355,6 +356,7 @@ the mod off with a reason, which the mod's log shows as `off: <reason>`:
 | 49          | `Load::migrate`                 | Off: `migrations: needs a newer loader`                   |
 | 50          | content ids, the content calls  | Off: `content ids: needs a newer loader`                  |
 | 51          | `BuildInfo::table`              | `BuildTable::EXACT`                                       |
+| 52          | `Load::entity_data`             | Off: `entity data: needs a newer loader`                  |
 
 A mod that can do without a feature catches the `Off` and goes on without it
 instead of returning it from `init`.

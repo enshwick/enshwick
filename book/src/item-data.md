@@ -68,11 +68,14 @@ long, the call came from a client alone, or the world has not loaded.
 ## Saved and sent
 
 The server keeps the values in
-`mod-data/enshwick/worlds/<key>/item-data.bin`, written when the world
+`mod-data/enshwick/worlds/<key>/attachments.bin`, written when the world
 saves and when the server stops, never in the game's save: removing the
 mods leaves the world vanilla. Every change goes to the clients that run
 Enshwick, and a client that joins gets every value, so `get` on a client
 answers from what its server sent. A vanilla client gets nothing.
+
+Data on entities other than items is [entity data](entity-data.md), kept in
+the same file.
 
 What a player should see on the item itself belongs in its
 [meter](content/items.md#meters), which the game draws, or in its

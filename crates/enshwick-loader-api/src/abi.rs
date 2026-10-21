@@ -14,7 +14,7 @@ use core::sync::atomic::AtomicUsize;
 pub const ABI_MAJOR: u16 = 1;
 
 /// The minor version of this interface. A newer minor only appends fields.
-pub const ABI_MINOR: u16 = 51;
+pub const ABI_MINOR: u16 = 52;
 
 /// Whether `id` is a valid mod id: 1 to 64 characters of `[a-z0-9-]`.
 ///
@@ -4694,6 +4694,35 @@ pub struct HostApi {
     /// both mods named. Allowed during `enshwick_mod_init` only. Since
     /// minor 50.
     pub declare_content: extern "system" fn(me: ModHandle, id: Str, out: *mut [u8; 16]) -> Status,
+    /// Opens the entity data kind `id`, as [`HostApi::item_data_open`] opens
+    /// an item kind, and writes its index to `out`; with
+    /// [`EntityDataFlags::SENT`] the clients that run Enshwick get its
+    /// values. [`HostApi::item_data_get`] and [`HostApi::item_data_set`]
+    /// read and write it with `item` 0; a set runs on the server's game
+    /// thread. [`Status::REFUSED`] for an id opened as an item kind. Allowed
+    /// during `enshwick_mod_init` only. Since minor 52.
+    pub entity_data_open:
+        extern "system" fn(me: ModHandle, id: Str, flags: EntityDataFlags, out: *mut u32) -> Status,
+}
+
+/// Flags of [`HostApi::entity_data_open`].
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::abi::EntityDataFlags;
+///
+/// assert_ne!(EntityDataFlags::SENT, EntityDataFlags::NONE);
+/// ```
+#[repr(transparent)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct EntityDataFlags(pub u32);
+
+impl EntityDataFlags {
+    /// The server keeps the values to itself.
+    pub const NONE: Self = Self(0);
+    /// The clients that run Enshwick get every value.
+    pub const SENT: Self = Self(1);
 }
 
 /// One step of a mod migration, as [`HostApi::migrate`] takes it.
@@ -5022,7 +5051,8 @@ const _: () = {
     assert!(size_of::<StatSource>() == 20);
     assert!(size_of::<StatModify>() == 8 + 8 + 12 + 4 + 8);
     assert!(size_of::<StatChange>() == 8 + 24);
-    assert!(size_of::<HostApi>() == 24 + 124 * 8);
+    assert!(size_of::<HostApi>() == 24 + 125 * 8);
+    assert!(core::mem::offset_of!(HostApi, entity_data_open) == 24 + 124 * 8);
     assert!(core::mem::offset_of!(HostApi, migrate) == 24 + 122 * 8);
     assert!(core::mem::offset_of!(HostApi, declare_content) == 24 + 123 * 8);
     // Frozen: written as arrays.

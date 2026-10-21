@@ -44,6 +44,10 @@ name = "affixes"
 required-features = ["test"]
 
 [[test]]
+name = "entity_data"
+required-features = ["test"]
+
+[[test]]
 name = "item_data"
 required-features = ["test"]
 

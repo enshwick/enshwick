@@ -94,7 +94,7 @@ impl ItemInstance {
 /// ```
 /// use enshwick_loader_api::item_data::SetError;
 ///
-/// assert_eq!(SetError::NotServer.to_string(), "only the server sets item data");
+/// assert_eq!(SetError::NoEntity.to_string(), "no such entity");
 /// ```
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 #[non_exhaustive]
@@ -105,14 +105,18 @@ pub enum SetError {
     /// The encoded value is longer than [`MAX_VALUE`].
     #[error("the value takes {0} bytes, more than {MAX_VALUE}")]
     TooLarge(usize),
-    /// Called on a client that hosts no game.
-    #[error("only the server sets item data")]
+    /// Called on a client that hosts no game, or for entity data off the
+    /// server's game thread.
+    #[error("only the server sets mod data, entity data on its game thread")]
     NotServer,
     /// The world has not loaded yet.
     #[error("the world has not loaded")]
     NoWorld,
+    /// The entity does not exist.
+    #[error("no such entity")]
+    NoEntity,
     /// The item has no entity, or the loader refused for another reason.
-    #[error("item data refused (status {0})")]
+    #[error("mod data refused (status {0})")]
     Refused(u32),
 }
 

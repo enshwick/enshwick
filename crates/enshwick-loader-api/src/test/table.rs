@@ -1063,6 +1063,15 @@ extern "system" fn item_data_open(_me: ModHandle, id: Str, out: *mut u32) -> Sta
     found(kind, out)
 }
 
+extern "system" fn entity_data_open(
+    me: ModHandle,
+    id: Str,
+    _flags: crate::abi::EntityDataFlags,
+    out: *mut u32,
+) -> Status {
+    item_data_open(me, id, out)
+}
+
 extern "system" fn item_data_get(
     _me: ModHandle,
     kind: u32,
@@ -1102,7 +1111,7 @@ extern "system" fn item_data_set(
     data: *const u8,
     len: u32,
 ) -> Status {
-    if pide == 0 || item == 0 {
+    if pide == 0 {
         return Status::BAD_ARGS;
     }
     let value = if len == 0 || data.is_null() {
@@ -2247,4 +2256,5 @@ pub(crate) static TABLE: HostApi = HostApi {
     affix_info: super::stats::affix_info,
     migrate,
     declare_content,
+    entity_data_open,
 };

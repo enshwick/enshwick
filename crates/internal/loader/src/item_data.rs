@@ -1,17 +1,19 @@
-//! Data mods attach to single items: kinds named `<mod>:<name>`, a value per
-//! item and kind, kept per world and sent to the clients that run Enshwick.
+//! Data mods attach to items and other entities: kinds named `<mod>:<name>`,
+//! a value per entity and kind, kept per world and, for kinds that say so,
+//! sent to the clients that run Enshwick.
 //!
-//! An item is its own entity, the PIDE, and the item id it holds. The game
-//! saves a PIDE under its id and creates it with that id on load, so the id
-//! names the item across saves. A record keeps the item id too and reads as
-//! missing once its entity holds another item; the save drops records whose
-//! entity is gone.
+//! A record keeps, beside its value, what its entity was: for an item kind
+//! the item id its entity, the PIDE, held; for an entity kind the game id of
+//! the entity's template. The game saves entities under their ids and
+//! creates them with those ids on load, so the id names the entity across
+//! saves; a record reads as missing once its entity is something else, and
+//! the save drops records whose entity is gone.
 //!
 //! The server keeps the values and writes them, when the world saves, to
-//! `mod-data/enshwick/worlds/<key>/item-data.bin`, never into the game's
-//! save. Every change goes to the clients that said hello, and a client
-//! that says hello gets every value; a client keeps what it got and answers
-//! reads from it.
+//! `mod-data/enshwick/worlds/<key>/attachments.bin`, never into the game's
+//! save. Every change of a sent kind goes to the clients that said hello,
+//! and a client that says hello gets every value of those kinds; a client
+//! keeps what it got and answers reads from it.
 
 use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock, PoisonError};
@@ -26,18 +28,37 @@ const MAX_ID: usize = 129;
 /// The largest value, so a record fits one message frame.
 pub(crate) const MAX_VALUE: usize = 512;
 /// The file of a world's values.
-const FILE: &str = "item-data.bin";
+const FILE: &str = "attachments.bin";
 /// The file's magic and version.
 const MAGIC: &[u8; 4] = b"EWID";
 const VERSION: u8 = 1;
 /// Bytes of records in one message to a client.
 const MESSAGE_BYTES: usize = 680;
 
-/// One item's value of one kind.
+/// One entity's value of one kind, and what the entity was: the item id an
+/// item entity held, or an entity's template id.
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct Record {
     item: u32,
     value: Box<[u8]>,
+}
+
+/// What a kind's values belong to.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Scope {
+    /// Items with an entity of their own, checked by the item they hold.
+    Item,
+    /// Any entity, checked by its template.
+    Entity,
+}
+
+/// A kind: its full id, what its values belong to and whether clients get
+/// them.
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct Kind {
+    id: String,
+    scope: Scope,
+    sent: bool,
 }
 
 /// Values by kind index and item entity.
@@ -51,10 +72,10 @@ struct Server {
     changed: bool,
 }
 
-/// Kind ids while mods initialise.
-static PENDING: Mutex<Vec<String>> = Mutex::new(Vec::new());
-/// Kind ids once sealed; the index is the kind.
-static KINDS: OnceLock<Box<[String]>> = OnceLock::new();
+/// Kinds while mods initialise.
+static PENDING: Mutex<Vec<Kind>> = Mutex::new(Vec::new());
+/// Kinds once sealed; the index is the kind.
+static KINDS: OnceLock<Box<[Kind]>> = OnceLock::new();
 static SERVER: Mutex<Option<Server>> = Mutex::new(None);
 /// What a client got from its server.
 static CLIENT: Mutex<Option<Values>> = Mutex::new(None);
@@ -76,28 +97,69 @@ fn full_id(mod_id: &str, id: &str) -> Option<String> {
     (is_part(namespace) && is_part(name)).then(|| format!("{namespace}:{name}"))
 }
 
-/// Opens kind `id` for mod `owner` and returns its index; the same id gives
-/// the same index to every mod. During init only.
+/// Opens item kind `id` for mod `owner` and returns its index; the same id
+/// gives the same index to every mod. During init only.
 pub(crate) fn open(loader: &Loader, owner: usize, id: &str) -> Result<u32, Status> {
+    open_kind(loader, owner, id, Scope::Item, true)
+}
+
+/// Opens entity kind `id` for mod `owner`, sent to clients when `sent`
+/// (once any mod asks for it), and returns its index. During init only.
+pub(crate) fn open_entity(
+    loader: &Loader,
+    owner: usize,
+    id: &str,
+    sent: bool,
+) -> Result<u32, Status> {
+    open_kind(loader, owner, id, Scope::Entity, sent)
+}
+
+fn open_kind(
+    loader: &Loader,
+    owner: usize,
+    id: &str,
+    scope: Scope,
+    sent: bool,
+) -> Result<u32, Status> {
     if KINDS.get().is_some() {
         return Err(Status::TOO_LATE);
     }
     let record = loader.mods.get(owner).ok_or(Status::BAD_ARGS)?;
     let full = full_id(&record.id, id).ok_or(Status::BAD_ARGS)?;
     let mut pending = PENDING.lock().unwrap_or_else(PoisonError::into_inner);
-    let index = pending.iter().position(|k| *k == full).unwrap_or_else(|| {
-        pending.push(full);
+    let index = if let Some(index) = pending.iter().position(|k| k.id == full) {
+        let kind = &mut pending[index];
+        if kind.scope != scope {
+            crate::log::write(
+                enshwick_loader_api::abi::Level::ERROR,
+                &record.id,
+                &format!("data kind {full} is opened for items and for entities"),
+            );
+            return Err(Status::REFUSED);
+        }
+        kind.sent |= sent;
+        index
+    } else {
+        pending.push(Kind {
+            id: full,
+            scope,
+            sent,
+        });
         pending.len() - 1
-    });
+    };
     u32::try_from(index).map_err(|_| Status::REFUSED)
 }
 
-/// Opens the loader's own kind `id` for a platform feature, before the
+/// Opens the loader's own item kind `id` for a platform feature, before the
 /// kinds are sealed.
 pub(crate) fn open_platform(id: &str) {
     let mut pending = PENDING.lock().unwrap_or_else(PoisonError::into_inner);
-    if !pending.iter().any(|k| k == id) {
-        pending.push(id.to_owned());
+    if !pending.iter().any(|k| k.id == id) {
+        pending.push(Kind {
+            id: id.to_owned(),
+            scope: Scope::Item,
+            sent: true,
+        });
     }
 }
 
@@ -123,7 +185,15 @@ pub(crate) fn get_platform(pide: u32, item: u32) -> Option<Box<[u8]>> {
 pub(crate) fn seal() {
     let kinds = std::mem::take(&mut *PENDING.lock().unwrap_or_else(PoisonError::into_inner));
     if !kinds.is_empty() {
-        crate::log!(INFO, "item data: kinds {}", kinds.join(", "));
+        let names: Vec<String> = kinds
+            .iter()
+            .map(|k| match (k.scope, k.sent) {
+                (Scope::Item, _) => format!("{} (items)", k.id),
+                (Scope::Entity, true) => format!("{} (entities, sent)", k.id),
+                (Scope::Entity, false) => format!("{} (entities)", k.id),
+            })
+            .collect();
+        crate::log!(INFO, "mod data: kinds {}", names.join(", "));
     }
     let _first = KINDS.set(kinds.into_boxed_slice());
 }
@@ -134,16 +204,25 @@ pub(crate) fn wanted() -> bool {
     KINDS.get().is_some_and(|k| !k.is_empty())
 }
 
+fn kind(kind: u32) -> Option<&'static Kind> {
+    KINDS.get()?.get(usize::try_from(kind).ok()?)
+}
+
 fn kind_id(kind: u32) -> Option<&'static str> {
-    KINDS
-        .get()?
-        .get(usize::try_from(kind).ok()?)
-        .map(String::as_str)
+    self::kind(kind).map(|k| k.id.as_str())
 }
 
 fn kind_of(id: &str) -> Option<u32> {
-    let index = KINDS.get()?.iter().position(|k| k == id)?;
+    let index = KINDS.get()?.iter().position(|k| k.id == id)?;
     u32::try_from(index).ok()
+}
+
+/// The game id of `entity`'s template, on the server's game thread; `None`
+/// for an entity that is gone or off that thread.
+fn template_id(entity: u32) -> Option<u32> {
+    let loader = crate::host::loader()?;
+    let template = crate::world::template(loader, entity).ok()?;
+    Some(enshwick_loader_api::content::Guid(template).id())
 }
 
 /// Whether this process runs the world the values belong to: the dedicated
@@ -152,20 +231,37 @@ fn serves() -> bool {
     crate::world::server().is_ok()
 }
 
-/// The value of kind `kind` on the item `pide` holding `item`.
+/// The value of kind `kind` on the item `pide` holding `item`, or for an
+/// entity kind on the entity `pide` (`item` 0). On the server's game thread
+/// an entity whose template changed or that is gone loses its value.
 pub(crate) fn get(kind: u32, pide: u32, item: u32) -> Result<Box<[u8]>, Status> {
-    kind_id(kind).ok_or(Status::BAD_ARGS)?;
-    let found = if serves() {
-        let server = SERVER.lock().unwrap_or_else(PoisonError::into_inner);
-        server
-            .as_ref()
-            .and_then(|s| s.values.get(&(kind, pide)).cloned())
-    } else {
-        let client = CLIENT.lock().unwrap_or_else(PoisonError::into_inner);
-        client.as_ref().and_then(|v| v.get(&(kind, pide)).cloned())
-    };
-    found
-        .filter(|r| r.item == item)
+    let scope = self::kind(kind).ok_or(Status::BAD_ARGS)?.scope;
+    if serves() {
+        let mut server = SERVER.lock().unwrap_or_else(PoisonError::into_inner);
+        let server = server.as_mut().ok_or(Status::MISSING)?;
+        let record = server.values.get(&(kind, pide)).ok_or(Status::MISSING)?;
+        let wanted = match scope {
+            Scope::Item => item,
+            Scope::Entity => match template_id(pide) {
+                Some(now) => now,
+                None if crate::world::server().is_ok() => 0,
+                None => return Ok(record.value.clone()),
+            },
+        };
+        if record.item == wanted {
+            return Ok(record.value.clone());
+        }
+        if scope == Scope::Entity {
+            server.values.remove(&(kind, pide));
+            server.changed = true;
+        }
+        return Err(Status::MISSING);
+    }
+    let client = CLIENT.lock().unwrap_or_else(PoisonError::into_inner);
+    client
+        .as_ref()
+        .and_then(|v| v.get(&(kind, pide)).cloned())
+        .filter(|r| scope == Scope::Entity || r.item == item)
         .map(|r| r.value)
         .ok_or(Status::MISSING)
 }
@@ -174,13 +270,26 @@ pub(crate) fn get(kind: u32, pide: u32, item: u32) -> Result<Box<[u8]>, Status> 
 /// `pide` holding `item`, and sends the change to the clients. On the
 /// server only, once its world has loaded.
 pub(crate) fn set(kind: u32, pide: u32, item: u32, value: &[u8]) -> Result<(), Status> {
-    let id = kind_id(kind).ok_or(Status::BAD_ARGS)?;
-    if pide == 0 || item == 0 || value.len() > MAX_VALUE {
+    let spec = self::kind(kind).ok_or(Status::BAD_ARGS)?;
+    let id = spec.id.as_str();
+    if pide == 0 || value.len() > MAX_VALUE {
         return Err(Status::BAD_ARGS);
     }
     if !serves() {
         return Err(Status::REFUSED);
     }
+    let item = match spec.scope {
+        Scope::Item if item == 0 => return Err(Status::BAD_ARGS),
+        Scope::Item => item,
+        Scope::Entity => {
+            crate::world::server().map_err(|_| Status::WRONG_THREAD)?;
+            match template_id(pide) {
+                Some(template) => template,
+                None if value.is_empty() => 0,
+                None => return Err(Status::BAD_ARGS),
+            }
+        }
+    };
     {
         let mut server = SERVER.lock().unwrap_or_else(PoisonError::into_inner);
         let server = server.as_mut().ok_or(Status::MISSING)?;
@@ -197,6 +306,9 @@ pub(crate) fn set(kind: u32, pide: u32, item: u32, value: &[u8]) -> Result<(), S
     }
     if id == enshwick_loader_api::stats::ITEM_KIND {
         crate::stats::items_changed();
+    }
+    if !spec.sent {
+        return Ok(());
     }
     let mut message = Vec::new();
     encode(&mut message, id, pide, item, value);
@@ -247,7 +359,7 @@ fn snapshot() -> Vec<Vec<u8>> {
     let mut messages = Vec::new();
     let mut message = Vec::new();
     for (&(kind, pide), record) in server.iter().flat_map(|s| &s.values) {
-        let Some(id) = kind_id(kind) else {
+        let Some(id) = self::kind(kind).filter(|k| k.sent).map(|k| k.id.as_str()) else {
             continue;
         };
         let mut one = Vec::new();
@@ -389,7 +501,7 @@ pub(crate) fn world_event(loader: &Loader, event: Event) {
                 .unwrap_or_default();
             crate::log!(
                 INFO,
-                "item data: {} values for world {}",
+                "mod data: {} values for world {}",
                 values.len(),
                 key.as_deref().unwrap_or("?")
             );
@@ -414,9 +526,14 @@ fn save(loader: &Loader, prune: bool) {
         };
         if prune {
             let before = server.values.len();
-            server
-                .values
-                .retain(|&(_, pide), record| held(loader, pide) == Some(record.item));
+            server.values.retain(|&(kind, pide), record| {
+                let now = match self::kind(kind).map(|k| k.scope) {
+                    Some(Scope::Item) => held(loader, pide),
+                    Some(Scope::Entity) => template_id(pide),
+                    None => None,
+                };
+                now == Some(record.item)
+            });
             server.changed |= server.values.len() != before;
         }
         if !server.changed {
@@ -438,7 +555,7 @@ fn save(loader: &Loader, prune: bool) {
             std::fs::rename(&fresh, &path)
         });
     if let Err(error) = written {
-        crate::log!(WARN, "item data: {} not written: {error}", path.display());
+        crate::log!(WARN, "mod data: {} not written: {error}", path.display());
     }
 }
 
