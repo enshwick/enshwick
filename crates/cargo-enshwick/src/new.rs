@@ -11,6 +11,7 @@ use crate::Side;
 /// release profile is left to the workspace root, the only place Cargo reads
 /// one. A folder the workspace excludes gets a workspace of its own.
 pub(crate) fn create(dir: &Path, id: &str, side: Side) -> Result<String, String> {
+    check_id(id)?;
     let root = std::path::absolute(dir.join(id)).map_err(|e| format!("{}: {e}", dir.display()))?;
     if root.exists() {
         return Err(format!("{} already exists", root.display()));
@@ -21,10 +22,14 @@ pub(crate) fn create(dir: &Path, id: &str, side: Side) -> Result<String, String>
     };
     for (path, text) in files(id, side, &plan)? {
         let path = root.join(path);
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent).map_err(|e| format!("{}: {e}", parent.display()))?;
+        let written = path
+            .parent()
+            .map_or(Ok(()), std::fs::create_dir_all)
+            .and_then(|()| std::fs::write(&path, text));
+        if let Err(e) = written {
+            let _gone = std::fs::remove_dir_all(&root);
+            return Err(format!("{}: {e}", path.display()));
         }
-        std::fs::write(&path, text).map_err(|e| format!("{}: {e}", path.display()))?;
     }
     let joined = match &plan {
         Place::Join { manifest, text } => {
@@ -100,10 +105,10 @@ fn plan_join(manifest: &Path, root: &Path) -> Result<Place, String> {
             })
             .unwrap_or_default()
     };
-    if patterns("exclude")
-        .iter()
-        .any(|p| member.starts_with(&format!("{p}/")) || member == *p)
-    {
+    if patterns("exclude").iter().any(|p| {
+        let p = p.trim_start_matches("./").trim_end_matches('/');
+        member.starts_with(&format!("{p}/")) || member == p
+    }) {
         return Ok(Place::Excluded);
     }
     if patterns("members").iter().any(|p| matches(p, &member)) {
@@ -169,8 +174,8 @@ fn part(pattern: &[u8], text: &[u8]) -> bool {
     }
 }
 
-/// The crate's files for mod `id`, relative to its root.
-fn files(id: &str, side: Side, place: &Place) -> Result<Vec<(PathBuf, String)>, String> {
+/// Refuses an id no mod and no crate can take.
+fn check_id(id: &str) -> Result<(), String> {
     // The id names the crate too, and a crate's name starts with a letter.
     if !enshwick_loader_api::abi::is_valid_id(id)
         || !id.starts_with(|c: char| c.is_ascii_lowercase())
@@ -179,6 +184,12 @@ fn files(id: &str, side: Side, place: &Place) -> Result<Vec<(PathBuf, String)>, 
             "the id {id:?} is not 1 to 64 characters of [a-z0-9-] starting with a letter"
         ));
     }
+    Ok(())
+}
+
+/// The crate's files for mod `id`, relative to its root.
+fn files(id: &str, side: Side, place: &Place) -> Result<Vec<(PathBuf, String)>, String> {
+    check_id(id)?;
     let side = match side {
         Side::Server => "SERVER",
         Side::Client => "CLIENT",
@@ -445,6 +456,26 @@ mod tests {
         assert_eq!(std::fs::read_to_string(&manifest).unwrap(), text);
         let probe = std::fs::read_to_string(dir.join("scratch/probe/Cargo.toml")).unwrap();
         assert!(probe.contains("[profile.release]") && probe.ends_with("\n[workspace]\n"));
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn an_exclude_written_with_slashes_still_excludes() {
+        let dir = scratch("slashes");
+        let manifest = dir.join("Cargo.toml");
+        let text = "[workspace]\nmembers = []\nexclude = [\"./scratch/\"]\n";
+        std::fs::write(&manifest, text).unwrap();
+        create(&dir.join("scratch"), "probe", Side::Server).unwrap();
+        assert_eq!(std::fs::read_to_string(&manifest).unwrap(), text);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn a_bad_id_is_refused_before_the_folder_is_looked_at() {
+        let dir = scratch("bad-id");
+        std::fs::create_dir_all(dir.join("Area Loot")).unwrap();
+        let refused = create(&dir, "Area Loot", Side::Server).unwrap_err();
+        assert!(refused.contains("is not 1 to 64"), "{refused}");
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

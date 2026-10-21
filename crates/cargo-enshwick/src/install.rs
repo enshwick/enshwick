@@ -107,7 +107,8 @@ fn built_dll(messages: &str, library: &str) -> Option<PathBuf> {
 }
 
 /// The package to install and its library's file name: `wanted`, or else the
-/// package in `here`, or else the workspace's only mod.
+/// package in `here` or the nearest folder above it, or else the
+/// workspace's only mod.
 fn choose<'a>(
     packages: &'a [Package],
     wanted: Option<&str>,
@@ -128,11 +129,18 @@ fn choose<'a>(
             .find(|(p, _)| p.name == wanted)
             .ok_or_else(|| format!("no mod package named {wanted}"));
     }
-    if let Some(found) = mods
+    let canonical = |path: &Path| path.canonicalize().unwrap_or_else(|_| path.to_owned());
+    let here = canonical(here);
+    if let Some((_, found)) = mods
         .iter()
-        .find(|(p, _)| p.manifest_path.parent() == Some(here))
+        .filter_map(|found| {
+            let dir = canonical(found.0.manifest_path.parent()?);
+            here.starts_with(&dir)
+                .then(|| (dir.components().count(), *found))
+        })
+        .max_by_key(|(depth, _)| *depth)
     {
-        return Ok(*found);
+        return Ok(found);
     }
     match mods.as_slice() {
         [only] => Ok(*only),
@@ -183,6 +191,8 @@ mod tests {
         let named = choose(&packages, Some("safes"), Path::new("/w")).unwrap();
         assert_eq!((named.0.name.as_str(), named.1), ("safes", "safes"));
         let here = choose(&packages, None, Path::new("/w/area-loot")).unwrap();
+        let below = choose(&packages, None, Path::new("/w/area-loot/src")).unwrap();
+        assert_eq!(below.0.name, here.0.name);
         assert_eq!(here.1, "area_loot");
         assert!(choose(&packages, None, Path::new("/w")).is_err());
         assert!(choose(&packages, Some("geometry"), Path::new("/w")).is_err());

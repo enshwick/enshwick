@@ -45,7 +45,8 @@ enum Command {
         dir: PathBuf,
     },
     /// Shows what a built mod DLL says about itself: id, version, side and
-    /// dependencies.
+    /// dependencies. Loads the DLL, which runs its code: only for DLLs you
+    /// trust.
     Manifest {
         /// The mod DLL.
         dll: PathBuf,
@@ -104,10 +105,7 @@ fn ids(names: &[String]) -> Result<String, String> {
             Ok(format!("{name}  {guid}  {id} {id:#010x}", id = guid.id()))
         })
         .collect();
-    Ok(lines?.join(
-        "
-",
-    ))
+    Ok(lines?.join("\n"))
 }
 
 fn main() -> ExitCode {

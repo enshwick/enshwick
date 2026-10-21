@@ -1,6 +1,8 @@
 //! Macros for the Enshwick modding API; use them through `enshwick_loader_api`,
 //! which re-exports them.
 
+#![forbid(unsafe_code)]
+
 use proc_macro::TokenStream;
 use proc_macro2::Span;
 use quote::quote;

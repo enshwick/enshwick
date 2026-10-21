@@ -20,6 +20,8 @@
 //! # }
 //! ```
 
+#![forbid(unsafe_code)]
+
 mod pe;
 
 use std::ops::Range;

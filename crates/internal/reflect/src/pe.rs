@@ -186,6 +186,10 @@ const SECTION_HEADER: usize = 40;
 const OPTIONAL_MAGIC_PE32_PLUS: u16 = 0x20b;
 const OPTIONAL_IMAGE_BASE: usize = 24;
 const OPTIONAL_DEBUG_DIRECTORY: usize = 112 + 6 * 8;
+/// `NumberOfRvaAndSizes`: how many data directories the optional header has.
+const OPTIONAL_DIRECTORY_COUNT: usize = 108;
+/// The debug directory's index among the data directories.
+const DEBUG_DIRECTORY_INDEX: u32 = 6;
 const DEBUG_ENTRY: u64 = 28;
 const DEBUG_TYPE_CODEVIEW: u32 = 2;
 
@@ -207,13 +211,15 @@ impl<'a> Image<'a> {
             return Err(ImageError::NotPe);
         }
         let pe = u32_at(bytes, PE_OFFSET).ok_or(ImageError::Truncated)? as usize;
-        if bytes.get(pe..pe + 4) != Some(b"PE\0\0") {
-            return Err(ImageError::NotPe);
+        match bytes.get(pe..pe + 4) {
+            None => return Err(ImageError::Truncated),
+            Some(signature) if signature != b"PE\0\0" => return Err(ImageError::NotPe),
+            Some(_) => {}
         }
         let section_count = u16_at(bytes, pe + 6).ok_or(ImageError::Truncated)? as usize;
         let optional_size = u16_at(bytes, pe + 20).ok_or(ImageError::Truncated)? as usize;
         let optional = pe + 24;
-        if u16_at(bytes, optional) != Some(OPTIONAL_MAGIC_PE32_PLUS) {
+        if u16_at(bytes, optional).ok_or(ImageError::Truncated)? != OPTIONAL_MAGIC_PE32_PLUS {
             return Err(ImageError::NotX64);
         }
         let preferred =
@@ -236,8 +242,17 @@ impl<'a> Image<'a> {
             sections,
             fingerprint: None,
         };
-        let debug_rva = u32_at(bytes, optional + OPTIONAL_DEBUG_DIRECTORY).unwrap_or(0);
-        let debug_size = u32_at(bytes, optional + OPTIONAL_DEBUG_DIRECTORY + 4).unwrap_or(0);
+        let has_debug = optional_size >= OPTIONAL_DEBUG_DIRECTORY + 8
+            && u32_at(bytes, optional + OPTIONAL_DIRECTORY_COUNT)
+                .is_some_and(|count| count > DEBUG_DIRECTORY_INDEX);
+        let directory = |at: usize| {
+            has_debug
+                .then(|| u32_at(bytes, optional + at))
+                .flatten()
+                .unwrap_or(0)
+        };
+        let debug_rva = directory(OPTIONAL_DEBUG_DIRECTORY);
+        let debug_size = directory(OPTIONAL_DEBUG_DIRECTORY + 4);
         image.fingerprint = image.codeview(u64::from(debug_rva), u64::from(debug_size));
         Ok(image)
     }
@@ -418,4 +433,40 @@ fn u32_at(bytes: &[u8], at: usize) -> Option<u32> {
 
 fn u64_at(bytes: &[u8], at: usize) -> Option<u64> {
     Some(u64::from_le_bytes(bytes.get(at..at + 8)?.try_into().ok()?))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Image, ImageError, Layout, PE_OFFSET};
+
+    /// A DOS header pointing at a PE signature at 0x40, cut to `len` bytes.
+    fn header(len: usize) -> Vec<u8> {
+        let mut bytes = vec![0u8; 0x200];
+        bytes[..2].copy_from_slice(b"MZ");
+        bytes[PE_OFFSET] = 0x40;
+        bytes[0x40..0x44].copy_from_slice(b"PE\0\0");
+        bytes.truncate(len);
+        bytes
+    }
+
+    #[test]
+    fn a_cut_header_reads_as_truncated() {
+        for len in [0x42, 0x40 + 24] {
+            assert_eq!(
+                Image::parse(&header(len), Layout::File, None).err(),
+                Some(ImageError::Truncated),
+                "{len:#x} bytes"
+            );
+        }
+        let mut other = header(0x200);
+        other[0x40..0x44].copy_from_slice(b"NE\0\0");
+        assert_eq!(
+            Image::parse(&other, Layout::File, None).err(),
+            Some(ImageError::NotPe)
+        );
+        assert_eq!(
+            Image::parse(&header(0x200), Layout::File, None).err(),
+            Some(ImageError::NotX64)
+        );
+    }
 }
