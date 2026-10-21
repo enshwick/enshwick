@@ -69,6 +69,7 @@ settings menu names it:
 | Attribute        | Meaning                                                                                                                          |
 | ---------------- | -------------------------------------------------------------------------------------------------------------------------------- |
 | `startup`        | Read when a world loads; `on_config_change` gets the world's values, and a change waits for the next load                        |
+| `restart`        | Read once as the game starts, for every world; a change waits for the next start. For what only `init` can set up                |
 | `runtime`        | The default: applied while the game runs, through `on_config_change`                                                             |
 | `client`         | Each player's own: never sent to or taken from a server; `/config` on a dedicated server leaves it alone                         |
 | `sync`           | The server's value: a joined client runs with it ([Join values](#join-values))                                                   |
@@ -117,7 +118,7 @@ the schema states (`Field::scope`, `Scope`):
 
 | Scope   | Stages                       | Where                                                                     |
 | ------- | ---------------------------- | ------------------------------------------------------------------------- |
-| `user`  | `client`                     | the settings file `mod-configs/<id>.toml`, each player's own, every world |
+| `user`  | `client`, `restart`          | the settings file `mod-configs/<id>.toml`, every world                    |
 | `world` | `startup`, `runtime`, `sync` | `mod-data/<id>/worlds/<key>/settings.toml`, with the world                |
 
 The settings file is also the template: a world that loads for the first time
@@ -128,9 +129,13 @@ over them; with no world, as in the main menu, the template. A mod reads its
 settings as before: when a world loads or stops, the loader raises
 [`Event::WORLD_SETTINGS`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs),
 and `on_config_change` gets the world's settings, its `startup` values too:
-they apply when the world loads, with no restart of the game. A mod that reads
-a `startup` value only in `init`, for content it registers then, keeps the
-value it started with.
+they apply when the world loads, with no restart of the game, so a mod applies
+them in its handler: a recipe added with `add_recipe_with` and rebuilt, drops
+replaced with `loot::replace_drops`, a flag behind a hook linked whatever the
+value. A value only `init` can use, such as hooks it links or not, or content
+whose shape it fixes, is a `restart` value instead: the handler always gets
+the one the game started with, and the settings file holds it for every
+world.
 
 A newer version of a mod that adds a setting finds it at its template value
 in each world. Changes to world settings made before any world runs, as on
@@ -179,7 +184,8 @@ Rows speak the player's language through the mod's
 the field's text key (`config.<field>` or its `text`), the description under
 it `<key>.doc`, a choice `<key>.<choice>`; without a text, the label is the
 key in words and the description the doc comment. `startup` rows say "when the
-world loads": they apply when the world loads again. A change is
+world loads": they apply when the world loads again; `restart` rows say "when
+the game starts again". A change is
 written at once, as the game applies its own settings.
 
 The Mods screen, "Mods" in the title screen's main menu and in the pause menu
@@ -205,8 +211,9 @@ hands it over, and it parses what the mod would read and runs the type's
 A value is TOML (`5`, `true`, `"text"`, `[1, 2]`); text settings also take
 plain words. After a write the loader raises the mod's settings event at once:
 `runtime` and `sync` values apply through `on_config_change` (joined players
-get `sync` values at once), and `startup` values apply when the world loads
-again. `client` values are refused on a dedicated server.
+get `sync` values at once), `startup` values apply when the world loads
+again, and `restart` values, written to the settings file, when the game
+starts again. `client` values are refused on a dedicated server.
 
 When a new version renames or changes a setting, declare a
 [migration](migrations.md): the loader carries old files and every world's

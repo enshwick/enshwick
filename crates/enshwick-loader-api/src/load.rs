@@ -494,10 +494,8 @@ impl Load<'_> {
         self.host.config_schema(&T::schema().to_text());
         self.config_check::<T>();
         let settings: T = read_config(self.host)?;
-        *STARTED
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner) =
-            Some(settings.values(Stage::Startup).unwrap_or_default());
+        keep(&STARTED, &settings, Stage::Startup);
+        keep(&RESTART, &settings, Stage::Restart);
         Ok(settings)
     }
 
@@ -505,6 +503,8 @@ impl Load<'_> {
     /// changes, after `/config` or the Mods screen sets one of them, and as a
     /// world loads or stops; the thread is not fixed. A file that no longer
     /// parses or validates is logged and skipped, and the running values stay.
+    /// `startup` values change only as a world loads or stops, and `restart`
+    /// values never: `handler` gets the ones in force.
     ///
     /// On a client, it also runs when the join values change: on joining a
     /// server, `handler` gets the settings with the server's
@@ -552,11 +552,9 @@ impl Load<'_> {
                     return;
                 };
                 match read_config::<T>(host) {
-                    Ok(settings) => {
-                        *STARTED
-                            .lock()
-                            .unwrap_or_else(std::sync::PoisonError::into_inner) =
-                            Some(settings.values(Stage::Startup).unwrap_or_default());
+                    Ok(mut settings) => {
+                        hold(&RESTART, &mut settings, Stage::Restart);
+                        keep(&STARTED, &settings, Stage::Startup);
                         on_world(settings);
                         crate::info!("the world's settings apply");
                     }
@@ -570,7 +568,8 @@ impl Load<'_> {
             };
             match read_config::<T>(host) {
                 Ok(mut settings) => {
-                    hold_startup(&mut settings);
+                    hold(&RESTART, &mut settings, Stage::Restart);
+                    hold(&STARTED, &mut settings, Stage::Startup);
                     handler(settings);
                     crate::info!("settings reloaded");
                 }
@@ -1091,26 +1090,44 @@ unsafe extern "system" fn deliver_mod_event<E: ModEvent, F: Fn(&E)>(
     crate::host::guard("panic in a mod event handler", || (), || handler(event));
 }
 
-/// The startup values the mod read in [`Load::config`], as an inline table;
-/// later reads keep them until a restart.
+/// The `startup` values in force, as an inline table: read in
+/// [`Load::config`] and again as each world loads; a change between waits
+/// for the next load.
 static STARTED: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
 
-/// Puts the startup values the mod started with back over `settings`,
-/// noting the ones that wait for a restart.
-fn hold_startup<T: Config>(settings: &mut T) {
-    let started = STARTED
+/// The `restart` values the mod read in [`Load::config`], as an inline
+/// table; later reads keep them until the game starts again.
+static RESTART: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+
+/// Notes `settings`' values at `stage` as the ones in force.
+fn keep<T: Config>(kept: &std::sync::Mutex<Option<String>>, settings: &T, stage: Stage) {
+    *kept
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner) =
+        Some(settings.values(stage).unwrap_or_default());
+}
+
+/// Puts the values at `stage` in force back over `settings`, noting the
+/// changes that wait.
+fn hold<T: Config>(kept: &std::sync::Mutex<Option<String>>, settings: &mut T, stage: Stage) {
+    let kept = kept
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner)
         .clone();
-    let (Some(started), Some(now)) = (started, settings.values(Stage::Startup)) else {
+    let (Some(kept), Some(now)) = (kept, settings.values(stage)) else {
         return;
     };
-    if started == now {
+    if kept == now {
         return;
     }
-    match settings.merge_values(Stage::Startup, &started) {
-        Ok(()) => crate::info!("settings that take effect when the world loads changed: {now}"),
-        Err(why) => crate::warn!("startup settings not kept: {why}"),
+    let waits = if stage == Stage::Restart {
+        "the game starts again"
+    } else {
+        "the world loads"
+    };
+    match settings.merge_values(stage, &kept) {
+        Ok(()) => crate::info!("settings that take effect when {waits} changed: {now}"),
+        Err(why) => crate::warn!("{} settings not kept: {why}", stage.name()),
     }
 }
 

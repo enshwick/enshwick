@@ -681,6 +681,52 @@ impl Load<'_> {
         })
     }
 
+    /// Adds a recipe as [`add_recipe`](Self::add_recipe) does, asking
+    /// `recipe` for it each time the registry is built, so a cost read from
+    /// settings that change, such as a world's or a server's join values,
+    /// applies through [`rebuild_recipes`]. Every answer keeps the id of the
+    /// first.
+    ///
+    /// # Errors
+    ///
+    /// As for [`add_recipe`](Self::add_recipe).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::sync::atomic::{AtomicU32, Ordering};
+    ///
+    /// use enshwick_loader_api::content::{Guid, Id};
+    /// use enshwick_loader_api::content::recipes::NewRecipe;
+    ///
+    /// static COST: AtomicU32 = AtomicU32::new(2);
+    ///
+    /// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+    ///     load.add_recipe_with(|| NewRecipe {
+    ///         id: Id::new("my-mod:safe.recipe"),
+    ///         like: Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d"),
+    ///         output: Guid::named("my-mod:safe"),
+    ///         output_count: 1,
+    ///         cost: COST.load(Ordering::Relaxed),
+    ///         workshop: None,
+    ///     })
+    /// }
+    /// ```
+    pub fn add_recipe_with(
+        &mut self,
+        recipe: impl Fn() -> NewRecipe + Send + Sync + 'static,
+    ) -> Result<(), Off> {
+        let id = recipe().id;
+        self.declare(id)?;
+        let layout = RecipeLayout::resolve(self)?;
+        let registry = RECIPE_REGISTRY.key(types::RECIPE_REGISTRY);
+        self.serve(registry, registry, move |base| {
+            let recipe = NewRecipe { id, ..recipe() };
+            add_recipe_to(&layout, base, &recipe, workshop_limit())
+        })?;
+        self.allow_rebuild(registry)
+    }
+
     /// Adds a derived copy of each vanilla recipe `choose` picks: same
     /// workshop and unlock, its output and cost scaled as [`Derived`] says,
     /// beside the original. `salt` keeps the copies' GUIDs apart from other
@@ -759,16 +805,17 @@ impl Load<'_> {
 }
 
 /// Builds the recipe registry again with every mod's recipe changes, from
-/// any thread, for a mod whose [`Load::modify_recipes`] reads values that
-/// changed, such as a server's join values on a joined client: the counts
-/// the game holds change in place. Nothing is done while the game has not
+/// any thread, for a mod whose [`Load::modify_recipes`] or
+/// [`Load::add_recipe_with`] reads values that changed, such as a server's
+/// join values on a joined client: the counts the game holds change in place. Nothing is done while the game has not
 /// built the registry yet. See [`rebuild`](crate::content::rebuild) for
 /// what a rebuild can change.
 ///
 /// # Errors
 ///
-/// [`Off`] for a mod that does not modify recipes, and when another mod's
-/// patch changed the registry's length.
+/// [`Off`] for a mod that neither modifies recipes nor adds them with
+/// [`Load::add_recipe_with`], and when another mod's patch changed the
+/// registry's length.
 ///
 /// # Examples
 ///

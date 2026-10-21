@@ -78,7 +78,7 @@ pub struct Settings {
     /// starts, 1 to 64. 0 is automatic: under Wine in a container with a CPU
     /// limit, that limit rounded up and at least 2; elsewhere as many as the
     /// game picks.
-    #[config(startup, range = 0..=64)]
+    #[config(restart, range = 0..=64)]
     pub task_workers: u32,
     /// The longest the server's game loop waits between its passes while
     /// players are online, in milliseconds, 1 to 8, never past the next

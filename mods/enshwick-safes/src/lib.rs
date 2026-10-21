@@ -18,7 +18,7 @@ pub mod content;
 
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::time::Duration;
 
 use enshwick_loader_api::abi::BuildingData;
@@ -41,14 +41,15 @@ use crate::command::Phrases;
 #[serde(default, deny_unknown_fields)]
 #[config(validate = Settings::check)]
 struct Settings {
-    /// The Safe costs the wooden chest's ingredients times this.
-    #[config(startup, range = 1..=100)]
+    /// The Safe costs the wooden chest's ingredients times this. A joined
+    /// player's crafting menu shows the server's value.
+    #[config(sync, range = 1..=100)]
     cost_multiplier: u32,
     /// Whether the server's administrators may open, remove and rename every Safe.
     #[config(runtime)]
     admins_can_open: bool,
     /// The language of the owner's name on a Safe and of `/safe` replies: "en", "uk", "de", ...
-    #[config(startup)]
+    #[config(runtime)]
     label_language: String,
 }
 
@@ -74,6 +75,22 @@ impl Settings {
 
     fn language(&self) -> Option<Language> {
         Language::from_code(&self.label_language)
+    }
+}
+
+/// The Safe's cost, times the wooden chest's, from the settings in force.
+static COST: AtomicU32 = AtomicU32::new(2);
+
+/// Puts `cost` in force, building the recipes again when it changed.
+fn set_cost(cost: u32) {
+    if COST.swap(cost, Ordering::Relaxed) == cost {
+        return;
+    }
+    match enshwick_loader_api::content::recipes::rebuild_recipes() {
+        Ok(()) => enshwick_loader_api::info!("the Safe costs the wooden chest x{cost}"),
+        Err(off) => {
+            enshwick_loader_api::warn!("the Safe's cost x{cost} waits for a restart: {off}");
+        }
     }
 }
 
@@ -241,6 +258,7 @@ impl Mod for Safes {
         load.migrate(content::migrations())?;
         let settings: Settings = load.config()?;
         let cost = settings.cost_multiplier;
+        COST.store(cost, Ordering::Relaxed);
         let texts = load.texts(content::TEXTS)?;
         load.add_texts(
             &texts,
@@ -250,14 +268,14 @@ impl Mod for Safes {
             ],
         )?;
         load.add_item(content::item())?;
-        load.add_recipe(content::recipe(cost))?;
+        load.add_recipe_with(|| content::recipe(COST.load(Ordering::Relaxed)))?;
         ACCESS
             .admins_open
             .store(settings.admins_can_open, Ordering::Relaxed);
-        let phrases: &'static Phrases = Box::leak(Box::new(Phrases {
+        let phrases: &'static Phrases = Box::leak(Box::new(Phrases::new(
             texts,
-            language: settings.language().unwrap_or(Language::FALLBACK),
-        }));
+            settings.language().unwrap_or(Language::FALLBACK),
+        )));
         guard(load, phrases)?;
         enshwick_loader_api::info!(
             "the Safe costs the wooden chest x{cost}; administrators may open Safes: {}",
@@ -301,10 +319,12 @@ fn guard(load: &mut Load<'_>, phrases: &'static Phrases) -> Result<(), Off> {
         })?;
         enshwick_loader_api::info!("the Safe's checks act while this client hosts a game");
     }
-    load.on_config_change(|settings: Settings| {
+    load.on_config_change(move |settings: Settings| {
         ACCESS
             .admins_open
             .store(settings.admins_can_open, Ordering::Relaxed);
+        phrases.set_language(settings.language().unwrap_or(Language::FALLBACK));
+        set_cost(settings.cost_multiplier);
     })?;
     label_seen(load, world, phrases, store)?;
     load.on_rename(move |rename| may_rename(world, rename))?;
@@ -545,6 +565,94 @@ mod tests {
             ..Settings::default()
         };
         assert!(unknown.validate().is_err());
+    }
+
+    #[test]
+    fn a_world_s_cost_applies_when_it_loads() {
+        use enshwick_loader_api::abi::Status;
+        use enshwick_loader_api::events::WorldSettings;
+
+        let mut host = enshwick_loader_api::test::FakeHost::new()
+            .field_offset("keen::RecipeRegistryResource", "recipes", 8)
+            .type_size("keen::RecipeInfo", 0xa8)
+            .type_size("keen::RecipeInputResource", 48)
+            .type_size("keen::RecipeItemStackResource", 24)
+            .field_offset("keen::RecipeItemStackResource", "item", 0x10)
+            .field_offset("keen::RecipeItemStackResource", "count", 0x14);
+        for (field, at) in [
+            ("recipeGuid", 0),
+            ("recipeId", 0x10),
+            ("workshopGuid", 0x14),
+            ("workshopId", 0x24),
+            ("input", 0x28),
+            ("output", 0x30),
+            ("requiredProps", 0x40),
+            ("completionRequirementQuery", 0x5c),
+            ("debugName", 0x78),
+        ] {
+            host = host.field_offset("keen::RecipeInfo", field, at);
+        }
+        for (field, at) in [
+            ("itemId", 0),
+            ("objectId", 4),
+            ("name", 0x48),
+            ("iconImage", 0x58),
+            ("description", 0x68),
+            ("flags", 0x78),
+            ("pidEntity", 0x80),
+            ("uiValues", 0x90),
+        ] {
+            host = host.field_offset("keen::ItemInfo", field, at);
+        }
+        for (field, at) in [
+            ("locaId", 0),
+            ("valueFormat", 4),
+            ("value", 8),
+            ("isSigned", 0x24),
+        ] {
+            host = host.field_offset("keen::ImpactUiValue", field, at);
+        }
+        let loader = host
+            .type_size("keen::ImpactUiValue", 0x28)
+            .type_hash("keen::ecs::CurrentTransform", 1)
+            .type_hash("keen::ecs::UsedItem", 2)
+            .field_offset("keen::ItemRegistryResource", "itemRefs", 0)
+            .field_offset("keen::ItemRegistryResource", "dbgNames", 0x38)
+            .settings(
+                "cost_multiplier = 2
+label_language = \"en\"
+",
+            )
+            .install();
+        // SAFETY: the exports of `declare_mod!` above.
+        let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+        assert_eq!(status, Status::OK, "{:?}", loader.logs());
+        let allowed = loader.rebuilds().len();
+        assert_eq!(allowed, 1, "the registry may be rebuilt");
+        loader.set_settings(
+            "cost_multiplier = 2
+label_language = \"en\"
+",
+        );
+        assert!(loader.raise::<WorldSettings>(&()) >= 1);
+        assert_eq!(
+            loader.rebuilds().len(),
+            allowed,
+            "the same cost: no rebuild"
+        );
+        loader.set_settings(
+            "cost_multiplier = 5
+label_language = \"uk\"
+",
+        );
+        assert!(loader.raise::<WorldSettings>(&()) >= 1);
+        assert_eq!(COST.load(Ordering::Relaxed), 5);
+        assert_eq!(
+            loader.rebuilds().len(),
+            allowed + 1,
+            "the world's cost: rebuilt"
+        );
+        assert!(loader.faults().is_empty());
     }
 
     #[test]

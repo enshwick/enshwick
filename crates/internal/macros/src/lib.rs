@@ -20,7 +20,7 @@ use syn::{
 /// any `Display` such as a `String`, that checks parsed values, `#[config(text = "key")]` the text key of the
 /// set's translated title.
 ///
-/// Field attributes: one stage of `startup`, `runtime` (the default),
+/// Field attributes: one stage of `startup`, `runtime` (the default), `restart`,
 /// `client` and `sync`; `range = a..=b`, `a..` or `..=b`; `choices = [..]`;
 /// `text = "key"`, the text key of the field's translated label; `secret`,
 /// a value never sent to a client and changed in the file only, so never
@@ -45,11 +45,12 @@ struct FieldConfig {
 }
 
 /// The stages a field may name, as `enshwick_loader_api::config::Stage` variants.
-const STAGES: [(&str, &str); 4] = [
+const STAGES: [(&str, &str); 5] = [
     ("startup", "Startup"),
     ("runtime", "Runtime"),
     ("client", "Client"),
     ("sync", "Sync"),
+    ("restart", "Restart"),
 ];
 
 fn field_config(attrs: &[Attribute]) -> syn::Result<FieldConfig> {
@@ -85,7 +86,7 @@ fn field_config(attrs: &[Attribute]) -> syn::Result<FieldConfig> {
                 Ok(())
             } else {
                 Err(meta.error(
-                    "expected `startup`, `runtime`, `client`, `sync`, `range = a..=b`, `choices = [..]`, `text = \"key\"` or `secret`",
+                    "expected `startup`, `runtime`, `client`, `sync`, `restart`, `range = a..=b`, `choices = [..]`, `text = \"key\"` or `secret`",
                 ))
             }
         })?;
@@ -200,6 +201,8 @@ fn expand_config(input: &DeriveInput) -> syn::Result<TokenStream> {
         let doc = comment(&field.attrs);
         let note = if stage == "Startup" {
             "# Takes effect when the world loads.\n"
+        } else if stage == "Restart" {
+            "# Takes effect when the game starts again.\n"
         } else {
             ""
         };

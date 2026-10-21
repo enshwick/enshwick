@@ -25,7 +25,8 @@ static SEAMS: AtomicBool = AtomicBool::new(true);
 #[derive(Debug, serde::Deserialize, serde::Serialize, enshwick_loader_api::Config)]
 #[serde(deny_unknown_fields)]
 struct Settings {
-    /// Altars whose zones touch grow together and share their area.
+    /// Altars whose zones touch grow together and share their area. Each
+    /// world's own value applies when it loads.
     #[config(startup)]
     clusters: bool,
     /// Pieces may be placed across the seams between the zones of one cluster.
@@ -45,9 +46,7 @@ impl Default for Settings {
 
 /// The mod's state.
 #[derive(Debug)]
-pub struct FlameAltarZones {
-    clusters: bool,
-}
+pub struct FlameAltarZones;
 
 impl Mod for FlameAltarZones {
     fn manifest() -> &'static enshwick_loader_api::abi::Manifest {
@@ -67,30 +66,26 @@ impl Mod for FlameAltarZones {
         // Always linked: the server's value may turn seams on for a joined
         // client, and a change applies while the game runs.
         load.on_zone_check(|check| SEAMS.load(Ordering::Relaxed) && seam::accepts(check))?;
-        load.on_config_change(|settings: Settings| {
+        // Taken whatever the settings say: each world's own value turns
+        // clusters on or off as it loads.
+        let control = load.control_altar_zones()?;
+        solver::switch(control, settings.clusters);
+        load.on_config_change(move |settings: Settings| {
             let on = settings.building_across_seams;
             if SEAMS.swap(on, Ordering::Relaxed) != on {
                 enshwick_loader_api::info!("building across seams {on}");
             }
+            solver::switch(control, settings.clusters);
         })?;
-        if settings.clusters {
-            let control = load.control_altar_zones()?;
-            load.on::<AltarsChanged>(move |()| solver::request(control))?;
-            // The loader drops the sizes with a hosted game; the next game,
-            // the same world again included, is solved afresh.
-            load.on::<ShutdownStarted>(|()| solver::forget())?;
-        }
-        Ok(Self {
-            clusters: settings.clusters,
-        })
+        load.on::<AltarsChanged>(move |()| solver::request(control))?;
+        // The loader drops the sizes with a hosted game; the next game,
+        // the same world again included, is solved afresh.
+        load.on::<ShutdownStarted>(|()| solver::forget())?;
+        Ok(Self)
     }
 
     fn ready(&'static self, _host: enshwick_loader_api::Host) {
-        enshwick_loader_api::info!(
-            "clusters {}, building across seams {}",
-            self.clusters,
-            SEAMS.load(Ordering::Relaxed)
-        );
+        enshwick_loader_api::info!("building across seams {}", SEAMS.load(Ordering::Relaxed));
     }
 }
 
@@ -162,6 +157,61 @@ mod tests {
         SEAMS.store(false, Ordering::Relaxed);
         assert!(!loader.zone_check(&zones, across, 0), "seams off: vanilla");
         SEAMS.store(true, Ordering::Relaxed);
+        assert!(loader.faults().is_empty());
+    }
+
+    #[test]
+    fn a_world_s_own_clusters_value_applies_when_it_loads() {
+        use enshwick_loader_api::abi::{AltarInfo, Bounds, Status};
+        use enshwick_loader_api::events::WorldSettings;
+
+        let loader = enshwick_loader_api::test::FakeHost::new()
+            .settings(
+                "clusters = false
+building_across_seams = true
+",
+            )
+            .install();
+        // SAFETY: the exports of `declare_mod!` above.
+        let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+        assert_eq!(status, Status::OK);
+        let altar = |entity, x| {
+            let zone = Bounds {
+                min: [x, 0, 0],
+                max: [x + 80, 80, 80],
+            };
+            let mut info = AltarInfo::EMPTY;
+            info.entity = entity;
+            info.level = 1;
+            info.level_count = 1;
+            info.zone = zone;
+            info.levels[0] = zone;
+            info
+        };
+        loader.set_altars(&[altar(1, 0), altar(2, 80)]);
+        assert_eq!(loader.raise::<AltarsChanged>(&()), 1);
+        assert!(loader.zone_sizes().is_empty(), "clusters off: vanilla");
+        loader.set_settings(
+            "clusters = true
+building_across_seams = true
+",
+        );
+        assert!(loader.raise::<WorldSettings>(&()) >= 1);
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        while loader.zone_sizes().len() < 2 && std::time::Instant::now() < deadline {
+            std::thread::yield_now();
+        }
+        assert_eq!(loader.zone_sizes().len(), 2, "the world turned clusters on");
+        loader.set_settings(
+            "clusters = false
+building_across_seams = true
+",
+        );
+        assert!(loader.raise::<WorldSettings>(&()) >= 1);
+        assert!(
+            loader.zone_sizes().is_empty(),
+            "the next world turned them off"
+        );
         assert!(loader.faults().is_empty());
     }
 

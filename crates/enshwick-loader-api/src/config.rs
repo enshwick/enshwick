@@ -15,11 +15,12 @@ use serde::{Deserialize, Serialize};
 /// `Serialize` and `Default`; doc comments become the file's comments. Field
 /// attributes:
 ///
-/// - a stage, one of `#[config(startup)]` (read once at start; a change waits
-///   for a restart), `#[config(runtime)]` (the default: applied while the
-///   game runs), `#[config(client)]` (each player's own, never sent to or from
-///   a server) and `#[config(sync)]` (the server's value applies on its
-///   joined clients);
+/// - a stage, one of `#[config(startup)]` (applied when a world loads),
+///   `#[config(runtime)]` (the default: applied while the game runs),
+///   `#[config(client)]` (each player's own, never sent to or from a server),
+///   `#[config(sync)]` (the server's value applies on its joined clients) and
+///   `#[config(restart)]` (read once at start; a change waits for the next
+///   start of the game);
 /// - `range = a..=b` (also `a..` or `..=b`) for numbers and `choices = [..]`
 ///   for values from a list, both checked whenever the file is read and
 ///   before `/config` writes a value;
@@ -337,7 +338,8 @@ impl From<toml::de::Error> for ConfigError {
 /// use enshwick_loader_api::config::Stage;
 ///
 /// assert_eq!(Stage::default(), Stage::Runtime);
-/// assert!(Stage::Startup.needs_restart());
+/// assert!(Stage::Restart.needs_restart());
+/// assert!(!Stage::Startup.needs_restart());
 /// ```
 #[non_exhaustive]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -355,17 +357,21 @@ pub enum Stage {
     Client,
     /// The server's value: a joined client runs with it over its own file.
     Sync,
+    /// Read once as the game starts, for what only a start can set up, such
+    /// as hooks or content: kept in the settings file for every world, and a
+    /// change waits for the next start.
+    Restart,
 }
 
 impl Stage {
-    /// Whether a change waits for a restart.
+    /// Whether a change waits for the next start of the game.
     ///
     /// # Examples
     ///
     /// See [`Stage`].
     #[must_use]
     pub const fn needs_restart(self) -> bool {
-        matches!(self, Self::Startup)
+        matches!(self, Self::Restart)
     }
 
     /// Where a setting at this stage lives.
@@ -376,7 +382,7 @@ impl Stage {
     #[must_use]
     pub const fn scope(self) -> Scope {
         match self {
-            Self::Client => Scope::User,
+            Self::Client | Self::Restart => Scope::User,
             _ => Scope::World,
         }
     }
@@ -395,6 +401,7 @@ impl Stage {
             Self::Runtime => "runtime",
             Self::Client => "client",
             Self::Sync => "sync",
+            Self::Restart => "restart",
         }
     }
 }
@@ -407,17 +414,19 @@ impl Stage {
 /// use enshwick_loader_api::config::{Scope, Stage};
 ///
 /// assert_eq!(Stage::Client.scope(), Scope::User);
+/// assert_eq!(Stage::Restart.scope(), Scope::User);
 /// assert_eq!(Stage::Startup.scope(), Scope::World);
 /// ```
 #[non_exhaustive]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Scope {
-    /// Each player's own, in the settings file `mod-configs/<id>.toml`, for
-    /// every world: the `client` stage.
+    /// The game's own, in the settings file `mod-configs/<id>.toml`, for
+    /// every world: the `client` and `restart` stages.
     User,
     /// The world's, kept with it in `mod-data/<id>/worlds/<key>/`; a new
-    /// world starts from the settings file. Every stage but `client`.
+    /// world starts from the settings file. The `startup`, `runtime` and
+    /// `sync` stages.
     #[default]
     World,
 }
@@ -994,9 +1003,12 @@ mod tests {
     #[derive(Debug, PartialEq, serde::Deserialize, serde::Serialize, crate::Config)]
     #[config(text = "safes.config")]
     struct Staged {
-        /// How many, read at start.
+        /// How many, read when the world loads.
         #[config(startup, range = 1..=16)]
         limit: u32,
+        /// Workers, read as the game starts.
+        #[config(restart)]
+        workers: u8,
         /// The mode.
         #[config(choices = ["auto", "on"], text = "safes.mode")]
         mode: String,
@@ -1009,6 +1021,7 @@ mod tests {
         fn default() -> Self {
             Self {
                 limit: 4,
+                workers: 2,
                 mode: "auto".into(),
                 volume: 1.0,
             }
@@ -1029,7 +1042,7 @@ mod tests {
         );
         assert_eq!(
             (limit.default.as_str(), limit.doc.as_str()),
-            ("4", "How many, read at start.")
+            ("4", "How many, read when the world loads.")
         );
         assert_eq!(limit.text, "config.limit");
         let mode = schema.field("mode").unwrap();
@@ -1042,9 +1055,18 @@ mod tests {
             (Stage::Client, Some(0.0), None)
         );
         assert_eq!(super::Schema::parse(&schema.to_text()).unwrap(), schema);
+        let workers = schema.field("workers").unwrap();
+        assert_eq!(
+            (workers.stage, workers.scope),
+            (Stage::Restart, super::Scope::User)
+        );
         assert!(Staged::template().contains(
             "# Takes effect when the world loads.
 limit = 4"
+        ));
+        assert!(Staged::template().contains(
+            "# Takes effect when the game starts again.
+workers = 2"
         ));
     }
 
@@ -1060,6 +1082,10 @@ limit = 4"
         assert_eq!(
             staged.values(Stage::Client).as_deref(),
             Some("{ volume = 1.0 }")
+        );
+        assert_eq!(
+            staged.values(Stage::Restart).as_deref(),
+            Some("{ workers = 2 }")
         );
         assert_eq!(staged.values(Stage::Sync), None);
         assert_eq!(staged.synced(), None);

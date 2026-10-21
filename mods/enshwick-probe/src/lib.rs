@@ -54,21 +54,21 @@ const HELP: &str = "/probe census|check|vitals <id>|vitals me [shown values]|tel
 )]
 struct Settings {
     /// Exercise the platform API and log what it sees; development only.
-    #[config(startup)]
+    #[config(restart)]
     enabled: bool,
     /// Refuse every craft request, to see the craft filter in game.
-    #[config(startup)]
+    #[config(restart)]
     refuse_crafting: bool,
     /// Refuse every placement, to see the build filter in game.
-    #[config(startup)]
+    #[config(restart)]
     refuse_building: bool,
     /// Halve every damage, to see the damage filter in game.
-    #[config(startup)]
+    #[config(restart)]
     soften_damage: bool,
     /// Keep the bosses' health at 1.25 for the next start, to see a kept
     /// game setting come back with the world; the next run with this on
     /// forgets it. Off, a run keeps and forgets it at once.
-    #[config(startup)]
+    #[config(restart)]
     keep_across_restart: bool,
 }
 

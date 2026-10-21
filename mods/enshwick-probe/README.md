@@ -96,7 +96,8 @@ From the chat as an administrator, or through the admin tools' command file
 
 ## Settings
 
-`mod-configs/probe.toml`, read at start:
+`mod-configs/probe.toml`, read as the game starts, for every world; a change
+takes effect when the game starts again:
 
 ```toml
 enabled = false

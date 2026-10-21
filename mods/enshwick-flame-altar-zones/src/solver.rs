@@ -1,7 +1,8 @@
 //! A background thread solves the clusters whenever the altars' vanilla
 //! zones change; the game thread never waits for it. What was solved
 //! belongs to one game: the loader drops the sizes when a hosted game stops,
-//! so the next game, the same world again included, is solved afresh.
+//! so the next game, the same world again included, is solved afresh. A
+//! world whose settings turn clusters off gets the vanilla zones back.
 
 use std::collections::BTreeMap;
 use std::sync::Mutex;
@@ -17,25 +18,41 @@ type Input = BTreeMap<u32, Vec<Box3>>;
 
 #[derive(Debug)]
 struct State {
+    /// Whether the settings in force cluster the zones.
+    on: bool,
     solved: Option<Input>,
     solving: bool,
-    /// Counts the games run, so a solve of one never lands in the next.
+    /// Counts the games run, and the times clusters turned off, so a solve
+    /// of one never lands in the next.
     game: u64,
 }
 
 impl State {
     const fn new() -> Self {
         Self {
+            on: false,
             solved: None,
             solving: false,
             game: 0,
         }
     }
 
-    /// Whether `input` still needs solving: it differs from what this game
-    /// solved last.
+    /// Whether `input` still needs solving: clusters are on and it differs
+    /// from what this game solved last.
     fn wants(&self, input: &Input) -> bool {
-        self.solved.as_ref() != Some(input)
+        self.on && self.solved.as_ref() != Some(input)
+    }
+
+    /// Turns clusters on or off; whether that changed anything.
+    fn switch(&mut self, on: bool) -> bool {
+        if self.on == on {
+            return false;
+        }
+        self.on = on;
+        if !on {
+            self.forget();
+        }
+        true
     }
 
     /// Forgets what was solved, for the next game.
@@ -63,6 +80,23 @@ pub(crate) fn request(control: ZoneControl) {
         return;
     };
     maybe_solve(&mut state, control);
+}
+
+/// Turns clusters on, solving the altars there are, or off, giving every
+/// altar its vanilla zone back.
+pub(crate) fn switch(control: ZoneControl, on: bool) {
+    let Ok(mut state) = STATE.lock() else {
+        return;
+    };
+    if !state.switch(on) {
+        return;
+    }
+    enshwick_loader_api::info!("clusters {on}");
+    if on {
+        maybe_solve(&mut state, control);
+    } else if let Err(error) = control.set(&[]) {
+        enshwick_loader_api::warn!("{error}");
+    }
 }
 
 /// Forgets the game that stopped: the next one solves its zones again.
@@ -98,7 +132,7 @@ fn input(control: ZoneControl) -> Input {
 }
 
 fn maybe_solve(state: &mut State, control: ZoneControl) {
-    if state.solving {
+    if state.solving || !state.on {
         return;
     }
     let input = input(control);
@@ -191,6 +225,7 @@ mod tests {
         let mut input = Input::new();
         input.insert(1, vec![Box3::new([0, 0, 0], [80, 80, 80])]);
         let mut state = State::new();
+        assert!(state.switch(true));
         assert!(state.wants(&input));
         state.solving = true;
         assert!(state.finish(state.game, input.clone()));
@@ -205,6 +240,25 @@ mod tests {
         state.forget();
         assert!(!state.finish(started, input.clone()));
         assert!(!state.solving);
+        assert!(state.wants(&input));
+    }
+
+    #[test]
+    fn a_world_with_clusters_off_solves_nothing_and_drops_a_running_solve() {
+        let mut input = Input::new();
+        input.insert(1, vec![Box3::new([0, 0, 0], [80, 80, 80])]);
+        let mut state = State::new();
+        assert!(!state.wants(&input), "off until the settings turn it on");
+        assert!(state.switch(true));
+        assert!(!state.switch(true), "already on");
+        let started = state.game;
+        state.solving = true;
+        // The next world's settings turn clusters off mid-solve.
+        assert!(state.switch(false));
+        assert!(!state.finish(started, input.clone()));
+        assert!(!state.wants(&input));
+        // A world with clusters on again solves the same altars afresh.
+        assert!(state.switch(true));
         assert!(state.wants(&input));
     }
 

@@ -12,6 +12,7 @@ mod policy;
 mod renew;
 mod staffs;
 
+use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use enshwick_loader_api::abi::Side;
@@ -21,6 +22,18 @@ use enshwick_loader_api::{Load, Mod, Off};
 /// Whether copy staffs work and drop, from the settings in force: the
 /// server's on a joined client.
 pub(crate) static COPY_STAFFS: AtomicBool = AtomicBool::new(true);
+
+/// Whether the survivor's own staff places and moves copies, from the
+/// settings in force.
+pub(crate) static VANILLA_PLACES: AtomicBool = AtomicBool::new(false);
+
+/// Whether the world in force keeps a copy of each survivor per altar; off,
+/// every answer is vanilla.
+pub(crate) static PER_ALTAR: AtomicBool = AtomicBool::new(true);
+
+/// The copy staff drops in force: the ones the settings ask for while copy
+/// staffs are on, none while they are off.
+static DROPS: Mutex<Vec<Drop>> = Mutex::new(Vec::new());
 
 const fn yes() -> bool {
     true
@@ -44,6 +57,7 @@ const fn full_charges() -> u16 {
 #[config(validate = Settings::check)]
 struct Settings {
     /// A copy of each survivor at every altar, at most one per altar zone.
+    /// Off, survivors and staffs behave as in vanilla in that world.
     #[config(startup)]
     per_altar: bool,
     /// Copy staffs: one per workshop survivor. Each new copy it places
@@ -56,26 +70,26 @@ struct Settings {
     copy_staffs: bool,
     /// The chance a boss's corpse holds a copy staff, from 0 to 1.
     #[serde(default = "boss_chance")]
-    #[config(startup)]
+    #[config(runtime)]
     copy_staff_boss_chance: f64,
     /// The chance a chest that needs a key or a lockpick holds one.
     #[serde(default = "locked_chest_chance")]
-    #[config(startup)]
+    #[config(runtime)]
     copy_staff_locked_chest_chance: f64,
     /// The charges a copy staff holds when full.
     #[serde(default = "full_charges")]
-    #[config(startup, range = 1..=100)]
+    #[config(restart, range = 1..=100)]
     copy_staff_charges: u16,
     /// The fewest charges a dropped staff holds, at random up to
     /// the full count; 0 drops every staff full.
     #[serde(default)]
-    #[config(startup, range = 0..=100)]
+    #[config(runtime, range = 0..=100)]
     copy_staff_charges_min: u16,
     /// Whether the survivor's own staff places a copy at an altar without
     /// one and moves the copy an altar has, as before copy staffs; off, it
     /// moves the survivor itself, as in vanilla.
     #[serde(default)]
-    #[config(startup)]
+    #[config(runtime)]
     vanilla_staff_places_copies: bool,
 }
 
@@ -154,20 +168,14 @@ impl Mod for SurvivorsPerAltar {
     fn init(load: &mut Load<'_>) -> Result<Self, Off> {
         load.migrate(staffs::migrations())?;
         let settings: Settings = load.config()?;
-        if !settings.per_altar {
-            return Err(Off::new("per_altar is off in the settings"));
-        }
         // The staffs stay in the game when they are off, so a value that
         // changes while it runs, or the server's on a joined client, finds
         // them.
-        let drops = copy_staffs(load, &settings)?;
-        apply_copy_staffs(settings.copy_staffs, &drops);
-        load.on_config_change(move |settings: Settings| {
-            apply_copy_staffs(settings.copy_staffs, &drops);
-        })?;
+        let loot = copy_staffs(load, &settings)?;
+        apply(&settings, &loot);
+        load.on_config_change(move |settings: Settings| apply(&settings, &loot))?;
         let staffs = policy::Staffs {
             charges: settings.charges(),
-            vanilla_places: settings.vanilla_staff_places_copies,
         };
         // Renewals act in the dedicated server and in the games a client
         // hosts, solo play included: the scheduler and the world's events
@@ -189,58 +197,112 @@ impl Mod for SurvivorsPerAltar {
             // its status into in turn: show the bits every copy has, the
             // worst status, so a copy without a bed shows "no bed".
             load.on_survivor_status(|_, statuses| {
-                (statuses.len() >= 2).then(|| statuses.iter().fold(u8::MAX, |all, s| all & s))
+                (PER_ALTAR.load(Ordering::Relaxed) && statuses.len() >= 2)
+                    .then(|| statuses.iter().fold(u8::MAX, |all, s| all & s))
             })?;
         }
         Ok(Self)
     }
 }
 
-/// Turns the copy staffs on or off: whether they work, and their drops.
-fn apply_copy_staffs(on: bool, drops: &[Drop]) {
-    if COPY_STAFFS.swap(on, Ordering::Relaxed) == on {
-        return;
-    }
-    let kept = if on { drops.to_vec() } else { Vec::new() };
-    match enshwick_loader_api::loot::replace_drops(kept) {
-        Ok(()) => enshwick_loader_api::info!("copy staffs {}", if on { "on" } else { "off" }),
-        Err(off) => enshwick_loader_api::warn!("copy staffs {on}, their drops stay: {off}"),
+/// The copy staffs' items and full charges, set as the game starts.
+#[derive(Clone, Debug)]
+struct Loot {
+    items: Vec<u32>,
+    full: u16,
+}
+
+impl Loot {
+    /// The drops `settings` ask for: one per source with a chance above 0.
+    fn drops(&self, settings: &Settings) -> Vec<Drop> {
+        use enshwick_loader_api::loot::Source;
+
+        let min = settings.charges().min.min(self.full);
+        let boss = chance("copy_staff_boss_chance", settings.copy_staff_boss_chance);
+        let locked = chance(
+            "copy_staff_locked_chest_chance",
+            settings.copy_staff_locked_chest_chance,
+        );
+        [(boss, Source::bosses()), (locked, Source::locked_chests())]
+            .into_iter()
+            .filter(|(chance, _)| *chance > 0.0)
+            .map(|(chance, source)| {
+                Drop::one_of(&self.items, chance, source).meter(min, self.full, self.full)
+            })
+            .collect()
     }
 }
 
-/// Adds the copy staffs, files them with their survivors and puts them in
-/// loot; the drops it added.
-fn copy_staffs(load: &mut Load<'_>, settings: &Settings) -> Result<Vec<Drop>, Off> {
+/// Puts the copy staff settings in force: whether they work, their drops
+/// and whether the survivor's own staff places copies.
+fn apply(settings: &Settings, loot: &Loot) {
+    let per_altar = settings.per_altar;
+    if PER_ALTAR.swap(per_altar, Ordering::Relaxed) != per_altar {
+        enshwick_loader_api::info!("a copy of each survivor per altar: {per_altar}");
+    }
+    let on = settings.copy_staffs;
+    if COPY_STAFFS.swap(on, Ordering::Relaxed) != on {
+        enshwick_loader_api::info!("copy staffs {}", if on { "on" } else { "off" });
+    }
+    let vanilla = settings.vanilla_staff_places_copies;
+    if VANILLA_PLACES.swap(vanilla, Ordering::Relaxed) != vanilla {
+        enshwick_loader_api::info!("the survivor's own staff places copies: {vanilla}");
+    }
+    let drops = if on && per_altar {
+        loot.drops(settings)
+    } else {
+        Vec::new()
+    };
+    let mut kept = DROPS
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if *kept == drops {
+        return;
+    }
+    match enshwick_loader_api::loot::replace_drops(drops.clone()) {
+        Ok(()) => {
+            let chances: Vec<f64> = drops.iter().map(|d| d.chance).collect();
+            enshwick_loader_api::info!("copy staff drops at {chances:?}");
+            *kept = drops;
+        }
+        Err(off) => enshwick_loader_api::warn!("copy staff drops stay: {off}"),
+    }
+}
+
+/// Adds the copy staffs, files them with their survivors and links a drop
+/// for each source, so a world whose settings turn one on finds it linked;
+/// [`apply`] then puts the drops the settings ask for in force.
+fn copy_staffs(load: &mut Load<'_>, settings: &Settings) -> Result<Loot, Off> {
     use enshwick_loader_api::loot::Source;
 
     let texts = load.texts(staffs::TEXTS)?;
     let charges = settings.charges();
     staffs::add(load, &texts, charges.full)?;
     staffs::file(load)?;
-    let items = staffs::copy_ids();
-    let boss = chance("copy_staff_boss_chance", settings.copy_staff_boss_chance);
-    let locked = chance(
-        "copy_staff_locked_chest_chance",
-        settings.copy_staff_locked_chest_chance,
-    );
-    let mut drops = Vec::new();
-    for (chance, source) in [(boss, Source::bosses()), (locked, Source::locked_chests())] {
-        if chance > 0.0 {
-            let drop =
-                Drop::one_of(&items, chance, source).meter(charges.min, charges.full, charges.full);
-            load.add_loot(drop.clone())?;
-            drops.push(drop);
+    let loot = Loot {
+        items: staffs::copy_ids(),
+        full: charges.full,
+    };
+    let mut kept = DROPS
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    for source in [Source::bosses(), Source::locked_chests()] {
+        let drop =
+            Drop::one_of(&loot.items, 0.0, source).meter(charges.full, charges.full, charges.full);
+        if let Err(off) = load.add_loot(drop.clone()) {
+            enshwick_loader_api::warn!("copy staffs drop from no loot: {off}");
+            break;
         }
+        kept.push(drop);
     }
+    drop(kept);
     enshwick_loader_api::info!(
-        "{} copy staffs of {} to {} charges; in loot from bosses at {}, locked chests at {}",
-        items.len(),
+        "{} copy staffs of {} to {} charges",
+        loot.items.len(),
         charges.min,
         charges.full,
-        boss,
-        locked
     );
-    Ok(drops)
+    Ok(loot)
 }
 
 enshwick_loader_api::declare_mod!(SurvivorsPerAltar);
@@ -304,6 +366,26 @@ copy_staff_boss_chance = 0.0
         assert!((old.copy_staff_locked_chest_chance - 0.02).abs() < f64::EPSILON);
         assert_eq!(settings.charges(), Charges { full: 3, min: 3 });
         assert_eq!(old.charges(), Charges { full: 3, min: 3 });
+    }
+
+    #[test]
+    fn a_world_s_chances_and_fewest_charges_make_its_drops() {
+        let loot = Loot {
+            items: vec![7, 8],
+            full: 3,
+        };
+        let settings = Settings {
+            copy_staff_boss_chance: 0.0,
+            copy_staff_locked_chest_chance: 0.5,
+            copy_staff_charges_min: 1,
+            ..Settings::default()
+        };
+        let drops = loot.drops(&settings);
+        assert_eq!(drops.len(), 1, "a chance of 0 drops nothing");
+        assert!((drops[0].chance - 0.5).abs() < f64::EPSILON);
+        let full = loot.drops(&Settings::default());
+        assert_eq!(full.len(), 2);
+        assert_ne!(drops[0].meter, full[1].meter, "the fewest charges differ");
     }
 
     #[test]
@@ -414,6 +496,60 @@ copy_staff_boss_chance = 0.0
             !loader.survivor_bed_check(&check),
             "a bed at another altar is cleared"
         );
+        assert!(loader.faults().is_empty());
+    }
+
+    #[test]
+    fn a_world_with_per_altar_off_answers_as_vanilla() {
+        use enshwick_loader_api::abi::{
+            AltarInfo, BedCheck, Bounds, Header, Status, SurvivorLookup,
+        };
+        use enshwick_loader_api::events::WorldSettings;
+
+        let loader = host().install();
+        // SAFETY: the exports of `declare_mod!` above.
+        let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+        assert_eq!(status, Status::OK, "{:?}", loader.logs());
+        let altar = |entity, x| {
+            let mut info = AltarInfo::EMPTY;
+            info.entity = entity;
+            info.zone = Bounds {
+                min: [x, 0, 0],
+                max: [x + 80, 80, 80],
+            };
+            info
+        };
+        loader.set_altars(&[altar(1, 0), altar(2, 100)]);
+        policy::settle();
+        let unique = SurvivorLookup::UNIQUENESS;
+        assert_eq!(
+            loader.survivor_lookup(7, 10, unique, 11, [120, 0, 10], &[]),
+            Some(11),
+            "per altar: a copy at the other altar"
+        );
+        loader.set_settings(
+            "per_altar = false
+copy_staffs = false
+copy_staff_boss_chance = 0.0
+copy_staff_locked_chest_chance = 0.0
+",
+        );
+        assert!(loader.raise::<WorldSettings>(&()) >= 1);
+        assert!(!PER_ALTAR.load(Ordering::Relaxed));
+        assert_eq!(
+            loader.survivor_lookup(7, 10, unique, 11, [120, 0, 10], &[]),
+            None,
+            "the world's per_altar is off: the game's own answer"
+        );
+        let check = BedCheck {
+            header: Header::of::<BedCheck>(),
+            survivor: 7,
+            entity: 10,
+            bed: 50,
+            home: [10, 0, 10],
+            bed_at: [150, 0, 10],
+        };
+        assert!(loader.survivor_bed_check(&check), "vanilla keeps the bed");
         assert!(loader.faults().is_empty());
     }
 

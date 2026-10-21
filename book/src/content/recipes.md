@@ -54,6 +54,12 @@ is crafted where the wooden chest is, for twice the chest's ingredients.
 A `like` that no recipe makes is found out only when the game first reads
 the registry: the patch fails and the mod is turned off then, not at `init`.
 
+When the cost comes from a setting that changes, such as a world's or a
+server's join value, `load.add_recipe_with(|| NewRecipe { .. })` asks the
+closure each time the registry is built, and
+`content::recipes::rebuild_recipes()` from the settings handler builds it
+again with the new cost ([Rebuilding](resources.md#rebuilding)).
+
 ## Derived recipes
 
 `derive_recipes(salt, choose)` calls `choose` with a view of each recipe in

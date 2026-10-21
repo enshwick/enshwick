@@ -28,7 +28,8 @@ building_across_seams = true
 
 `building_across_seams` is the server's: a joined player runs with the
 server's value, and a change applies while the game runs. `clusters` applies
-after a restart.
+when the world loads: each world clusters its zones or keeps them vanilla by
+its own value, with no restart of the game.
 
 ## Install
 

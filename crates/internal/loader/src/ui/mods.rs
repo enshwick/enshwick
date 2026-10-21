@@ -31,6 +31,7 @@ use core::cell::RefCell;
 use std::sync::atomic::{AtomicU8, AtomicU64, Ordering};
 
 use enshwick_loader_api::abi::{Registers, UiWidget};
+use enshwick_loader_api::config::{Scope, Stage};
 
 use super::engine::{Engine, Window};
 use super::{ENGINE, Painter, copy};
@@ -617,11 +618,8 @@ fn list(loader: &Loader, paint: &Painter<'_>, first: &mut usize) -> Listed {
             }
         }
         let world = record.schema.lock().is_ok_and(|s| {
-            s.as_ref().is_some_and(|s| {
-                s.fields
-                    .iter()
-                    .any(|f| f.stage != enshwick_loader_api::config::Stage::Client)
-            })
+            s.as_ref()
+                .is_some_and(|s| s.fields.iter().any(|f| f.scope == Scope::World))
         });
         if client_schema(record).is_some() {
             if paint.button(texts::text("mods.settings.yours").as_bytes(), true) {
@@ -677,9 +675,7 @@ fn page_rows(loader: &Loader, index: usize) -> Vec<Row> {
 /// edits; `None` when it has none.
 fn client_schema(record: &crate::host::ModRecord) -> Option<enshwick_loader_api::config::Schema> {
     let mut schema = record.schema.lock().ok().and_then(|s| s.clone())?;
-    schema
-        .fields
-        .retain(|f| f.stage == enshwick_loader_api::config::Stage::Client);
+    schema.fields.retain(|f| f.scope == Scope::User);
     (!schema.fields.is_empty()).then_some(schema)
 }
 
@@ -738,8 +734,10 @@ fn draw_row(
     row: &Row,
 ) -> Option<String> {
     let mut label = row.label.clone();
-    if row.restart {
-        label = texts::fill("row.restart", &[("label", &label)]);
+    match row.stage {
+        Stage::Startup => label = texts::fill("row.startup", &[("label", &label)]),
+        Stage::Restart => label = texts::fill("row.restart", &[("label", &label)]),
+        _ => {}
     }
     if row.lock == Lock::Server {
         label = texts::fill("row.server", &[("label", &label)]);
@@ -811,9 +809,7 @@ fn world_rows(
         .enumerate()
         .filter_map(|(index, record)| {
             let mut schema = record.schema.lock().ok().and_then(|s| s.clone())?;
-            schema
-                .fields
-                .retain(|f| f.stage != enshwick_loader_api::config::Stage::Client);
+            schema.fields.retain(|f| f.scope == Scope::World);
             if schema.fields.is_empty() {
                 return None;
             }
@@ -826,9 +822,7 @@ fn world_rows(
                 .and_then(|s| s.clone())
                 .and_then(|values| server_table(&values));
             if joined {
-                schema
-                    .fields
-                    .retain(|f| f.stage == enshwick_loader_api::config::Stage::Sync);
+                schema.fields.retain(|f| f.stage == Stage::Sync);
                 if schema.fields.is_empty() {
                     return None;
                 }
