@@ -186,20 +186,44 @@ pub fn wanted(server: &str, ours: &str) -> Vec<(String, String)> {
 }
 
 /// The note on the server's mods, of `wanted`, that the player turned off in
-/// the mod list; `None` when there are none.
+/// the mod list (`disabled`) or that this game turned off since it started
+/// (`session_off`); `None` when there are none.
 #[must_use]
-pub fn off_note(wanted: &[(String, String)], disabled: &[String]) -> Option<String> {
-    let off: Vec<&str> = wanted
-        .iter()
-        .map(|(id, _)| id.as_str())
-        .filter(|id| disabled.iter().any(|d| d == id))
-        .collect();
-    (!off.is_empty()).then(|| {
-        format!(
+pub fn off_note(
+    wanted: &[(String, String)],
+    disabled: &[String],
+    session_off: &[String],
+) -> Option<String> {
+    let among = |list: &[String]| -> Vec<&str> {
+        wanted
+            .iter()
+            .map(|(id, _)| id.as_str())
+            .filter(|id| list.iter().any(|d| d == id))
+            .collect()
+    };
+    let them = |ids: &[&str]| if ids.len() == 1 { "it" } else { "them" };
+    let (player, session) = (among(disabled), among(session_off));
+    let mut lines = Vec::new();
+    if !player.is_empty() {
+        lines.push(format!(
             "You turned off {} in {}. Turn {} on there and restart the game to join.",
-            off.join(", "),
+            player.join(", "),
             crate::modlist::LIST_PATH,
-            if off.len() == 1 { "it" } else { "them" }
+            them(&player)
+        ));
+    }
+    if !session.is_empty() {
+        lines.push(format!(
+            "{} turned off while this game ran (see the log). Restart the game to join with {}.",
+            session.join(", "),
+            them(&session)
+        ));
+    }
+    (!lines.is_empty()).then(|| {
+        lines.join(
+            "
+
+",
         )
     })
 }
@@ -309,11 +333,63 @@ pub fn rule(reply: &[u8], key: &str) -> Option<String> {
     None
 }
 
+/// The most packets a split reply may take.
+const MAX_PACKETS: u8 = 16;
+/// The header of one packet of a split reply.
+const SPLIT: [u8; 4] = [0xfe, 0xff, 0xff, 0xff];
+/// The header of a whole reply.
+const WHOLE: [u8; 4] = [0xff, 0xff, 0xff, 0xff];
+
+/// The packets of a reply the server split, as the Steam query protocol
+/// splits a reply larger than one datagram: each packet carries the reply's
+/// id, the count of packets, its number and its size before its part.
+#[derive(Debug, Default)]
+struct Split {
+    id: u32,
+    parts: Vec<Option<Vec<u8>>>,
+}
+
+impl Split {
+    /// Takes one packet; the whole reply once every part is in, or an error
+    /// for a packet that breaks the protocol or a compressed reply.
+    fn add(&mut self, packet: &[u8]) -> Result<Option<Vec<u8>>, &'static str> {
+        let body = packet
+            .strip_prefix(&SPLIT)
+            .ok_or("a whole reply among parts")?;
+        let (&[a, b, c, d, total, number, _, _], part) = body
+            .split_first_chunk::<8>()
+            .ok_or("a packet shorter than its header")?;
+        let id = u32::from_le_bytes([a, b, c, d]);
+        if id & 0x8000_0000 != 0 {
+            return Err("a compressed reply");
+        }
+        if total == 0 || total > MAX_PACKETS || number >= total {
+            return Err("a packet count out of range");
+        }
+        if self.parts.is_empty() {
+            self.id = id;
+            self.parts = vec![None; usize::from(total)];
+        } else if id != self.id || self.parts.len() != usize::from(total) {
+            // A packet of an older reply: skip it.
+            return Ok(None);
+        }
+        if let Some(slot) = self.parts.get_mut(usize::from(number)) {
+            *slot = Some(part.to_vec());
+        }
+        if self.parts.iter().any(Option::is_none) {
+            return Ok(None);
+        }
+        Ok(Some(
+            self.parts.iter().flatten().flatten().copied().collect(),
+        ))
+    }
+}
+
 /// Asks `server` for its rules over the Steam query protocol.
 ///
 /// # Errors
 ///
-/// When the server does not answer in time.
+/// When the server does not answer in time, or not with rules.
 pub fn query_rules(server: SocketAddr) -> std::io::Result<Vec<u8>> {
     let socket = UdpSocket::bind(if server.is_ipv4() {
         "0.0.0.0:0"
@@ -335,8 +411,29 @@ pub fn query_rules(server: SocketAddr) -> std::io::Result<Vec<u8>> {
             request.extend_from_slice(&reply[5..9]);
             continue;
         }
-        reply.truncate(len);
-        return Ok(reply);
+        let mut whole = reply[..len].to_vec();
+        if whole.starts_with(&SPLIT) {
+            let mut split = Split::default();
+            let mut next = split.add(&whole);
+            for _ in 0..MAX_PACKETS * 2 {
+                match next {
+                    Ok(Some(_)) | Err(_) => break,
+                    Ok(None) => {
+                        let len = socket.recv(&mut reply)?;
+                        next = split.add(&reply[..len]);
+                    }
+                }
+            }
+            whole = match next {
+                Ok(Some(whole)) => whole,
+                Ok(None) => return Err(std::io::Error::other("a split reply never completed")),
+                Err(why) => return Err(std::io::Error::other(why)),
+            };
+        }
+        if !whole.starts_with(&WHOLE) || whole.get(4) != Some(&b'E') {
+            return Err(std::io::Error::other("a reply that holds no rules"));
+        }
+        return Ok(whole);
     }
     Err(std::io::Error::other("no rules after three challenges"))
 }
@@ -362,12 +459,11 @@ mod runtime {
     /// The request holds the address in its first 0x40 bytes.
     const ADDRESS_BYTES: usize = 0x40;
 
-    static OURS: OnceLock<(Vec<(String, String)>, super::Names)> = OnceLock::new();
+    static NAMES: OnceLock<super::Names> = OnceLock::new();
 
-    /// Sets the client's own join mods, `(id, version)`, and the names of
-    /// all its mods.
-    pub(crate) fn set_ours(mods: Vec<(String, String)>, names: super::Names) {
-        let _first = OURS.set((mods, names));
+    /// Sets the names of all the client's mods.
+    pub(crate) fn set_names(names: super::Names) {
+        let _first = NAMES.set(names);
     }
 
     /// The loader's link on `server_change`.
@@ -388,9 +484,12 @@ mod runtime {
     /// Compares mod sets, turns off what the server lacks, takes the server's
     /// join values and tells the player; false when the client must not join.
     fn check(request: &[u8]) -> bool {
-        let (Some(address), Some((mods, own_names))) = (super::address(request), OURS.get()) else {
+        let (Some(address), Some(own_names)) = (super::address(request), NAMES.get()) else {
             return true;
         };
+        // Read now: a mod an earlier server or a failed hook turned off no
+        // longer counts as the client's.
+        let mods = &crate::host::join_mods();
         let reply = super::query_rules(address).ok();
         let Some(reply) = reply else {
             // A server that does not answer the query: nothing to compare.
@@ -446,11 +545,12 @@ mod runtime {
             return true;
         }
         let disabled = crate::modlist::disabled();
+        let session_off = crate::host::join_mods_off();
         let wanted = server
             .as_ref()
             .map(|(_, server_mods)| super::wanted(server_mods, &ours_mods))
             .unwrap_or_default();
-        let text = match super::off_note(&wanted, disabled) {
+        let text = match super::off_note(&wanted, disabled, &session_off) {
             Some(note) => format!("{text}\n\n{note}"),
             None => text,
         };
@@ -458,7 +558,7 @@ mod runtime {
         let missing: Vec<crate::host::Wanted> = if server.is_some() {
             wanted
                 .into_iter()
-                .filter(|(id, _)| !disabled.contains(id))
+                .filter(|(id, _)| !disabled.contains(id) && !session_off.contains(id))
                 .map(|(id, version)| crate::host::Wanted {
                     name: super::name(&reply, &id),
                     source: super::source(&reply, &id),
@@ -482,7 +582,7 @@ mod runtime {
 }
 
 #[cfg(windows)]
-pub(crate) use runtime::set_ours;
+pub(crate) use runtime::set_names;
 
 #[cfg(test)]
 mod tests {
@@ -534,12 +634,64 @@ mod tests {
             ("safes".to_owned(), "0.3.0".to_owned()),
             ("count".to_owned(), "0.2.0".to_owned()),
         ];
-        assert_eq!(off_note(&wanted, &[]), None);
-        assert_eq!(off_note(&wanted, &["other".to_owned()]), None);
+        assert_eq!(off_note(&wanted, &[], &[]), None);
+        assert_eq!(off_note(&wanted, &["other".to_owned()], &[]), None);
         assert_eq!(
-            off_note(&wanted, &["safes".to_owned()]).unwrap(),
+            off_note(&wanted, &["safes".to_owned()], &[]).unwrap(),
             "You turned off safes in mods/enshwick/mods.toml. Turn it on there and restart the game to join."
         );
+    }
+
+    #[test]
+    fn mods_turned_off_since_the_game_started_are_named() {
+        // Server A lacked count, so it turned off; server B runs it.
+        let wanted = [("count".to_owned(), "0.2.0".to_owned())];
+        assert_eq!(
+            off_note(&wanted, &[], &["count".to_owned(), "other".to_owned()]).unwrap(),
+            "count turned off while this game ran (see the log). Restart the game to join with it."
+        );
+        let both = off_note(&wanted, &["count".to_owned()], &["count".to_owned()]).unwrap();
+        assert!(
+            both.contains("You turned off count")
+                && both.contains(
+                    "
+
+count turned off"
+                )
+        );
+        // The client's set without the mod that is off: the join is refused.
+        let names = Names::new();
+        let plan = plan("x", "", Some(("y", "count@0.2.0")), &names);
+        assert!(!plan.joins());
+    }
+
+    #[test]
+    fn a_split_reply_is_put_back_together() {
+        let whole: Vec<u8> = [0xff, 0xff, 0xff, 0xff, b'E', 1, 0]
+            .into_iter()
+            .chain(*b"enshwick abcd ")
+            .collect();
+        let packet = |id: u32, total: u8, number: u8, part: &[u8]| -> Vec<u8> {
+            let mut packet = SPLIT.to_vec();
+            packet.extend_from_slice(&id.to_le_bytes());
+            packet.extend_from_slice(&[total, number, 0xe0, 0x04]);
+            packet.extend_from_slice(part);
+            packet
+        };
+        let (first, second) = whole.split_at(9);
+        let mut split = Split::default();
+        assert_eq!(split.add(&packet(7, 2, 1, second)), Ok(None));
+        assert_eq!(split.add(&packet(6, 2, 0, b"old")), Ok(None));
+        let joined = split.add(&packet(7, 2, 0, first)).unwrap().unwrap();
+        assert_eq!(joined, whole);
+        assert_eq!(rule(&joined, "enshwick").as_deref(), Some("abcd"));
+        let mut split = Split::default();
+        assert!(split.add(&packet(0x8000_0001, 2, 0, first)).is_err());
+        assert!(Split::default().add(&packet(1, 0, 0, first)).is_err());
+        assert!(Split::default().add(&packet(1, 2, 2, first)).is_err());
+        assert!(Split::default().add(&packet(1, 17, 0, first)).is_err());
+        assert!(Split::default().add(&SPLIT).is_err());
+        assert!(Split::default().add(&whole).is_err());
     }
 
     #[test]
