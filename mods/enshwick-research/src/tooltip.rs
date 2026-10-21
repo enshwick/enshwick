@@ -543,7 +543,10 @@ pub(crate) mod tests {
         // SAFETY: the manifest macro points at static rows of these counts.
         let builds = unsafe { core::slice::from_raw_parts(manifest.builds, manifest.build_count) };
         let mut pinned = Vec::new();
-        for build in builds {
+        for build in builds
+            .iter()
+            .filter(|b| b.side == enshwick_loader_api::abi::Side::CLIENT)
+        {
             // SAFETY: as above.
             let symbols = unsafe { core::slice::from_raw_parts(build.symbols, build.symbol_count) };
             for symbol in symbols {
