@@ -96,6 +96,67 @@ mod tests {
     }
 
     #[test]
+    fn a_removed_safe_keeps_its_owner_on_disk_until_the_world_saves() {
+        use enshwick_loader_api::abi::{BuildingData, Header};
+        use enshwick_loader_api::events::{BuildingRemoved, WorldSaved};
+
+        let dir =
+            std::env::temp_dir().join(format!("enshwick-safes-removed-{}", std::process::id()));
+        let _gone = std::fs::remove_dir_all(&dir);
+        let world = dir.join("worlds/world0-cc");
+        std::fs::create_dir_all(&world).unwrap();
+        let file = world.join("owners.toml");
+        std::fs::write(
+            &file,
+            "[[safes]]\ncell = [4, 0, 4]\nowner = \"00000000000000ff\"\nname = \"Ann\"\n",
+        )
+        .unwrap();
+        let loader = host()
+            .settings("cost_multiplier = 2\nadmins_can_open = true\nlabel_language = \"en\"\n")
+            .data_dir(dir.to_str().unwrap())
+            .world_key("world0-cc")
+            .install();
+        // SAFETY: the exports of the mod's `declare_mod!`.
+        let status = unsafe {
+            loader.start(
+                enshwick_safes::enshwick_mod_init,
+                enshwick_safes::enshwick_mod_ready,
+            )
+        };
+        assert_eq!(status, Status::OK, "{:?}", loader.logs());
+        assert_eq!(loader.raise::<WorldLoaded>(&()), 2, "the store and the mod");
+        assert_eq!(ACCESS.seen(900, (4, 0, 4)), Some((0xff, (4, 0, 4))));
+        let removed = BuildingData {
+            header: Header::of::<BuildingData>(),
+            entity: 900,
+            player: 10,
+            item: 0,
+            kind: BuildingData::PICKED_UP,
+            replay: 0,
+            template: [0; 16],
+            position: [0.0; 3],
+        };
+        assert!(loader.raise::<BuildingRemoved>(&removed) >= 1);
+        assert!(ACCESS.owners.load().is_empty(), "gone from the checks");
+        assert!(
+            std::fs::read_to_string(&file)
+                .unwrap()
+                .contains("00000000000000ff"),
+            "kept on disk while the world has not saved"
+        );
+        assert!(loader.raise::<WorldSaved>(&()) >= 1);
+        assert!(loader.raise::<ShutdownStarted>(&()) >= 1);
+        assert!(
+            !std::fs::read_to_string(&file)
+                .unwrap()
+                .contains("00000000000000ff"),
+            "written with the world"
+        );
+        assert!(loader.faults().is_empty());
+        let _gone = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
     fn a_safe_nobody_looked_at_lends_its_stock_to_no_stranger() {
         use enshwick_loader_api::abi::TickData;
         use enshwick_loader_api::ecs::Entity;

@@ -155,13 +155,22 @@ impl Owners {
     }
 }
 
+/// Hands the owners to the running world's store, which writes them when
+/// the world saves; false while no world is open.
+fn hand_over(store: &WorldStore<Owners>) -> bool {
+    let owners = Owners::from_map(&ACCESS.owners.load());
+    if store.update(|kept| *kept = owners).is_none() {
+        enshwick_loader_api::warn!("owners not saved: no world is open");
+        return false;
+    }
+    true
+}
+
 /// Hands the owners to the running world's store and writes them on a
 /// thread of their own; a write that finds nothing changed since the last
 /// one skips, so the newest owners are always the ones on disk.
 fn save(store: &'static WorldStore<Owners>) {
-    let owners = Owners::from_map(&ACCESS.owners.load());
-    if store.update(|kept| *kept = owners).is_none() {
-        enshwick_loader_api::warn!("owners not saved: no world is open");
+    if !hand_over(store) {
         return;
     }
     let spawned = std::thread::Builder::new()
@@ -279,7 +288,9 @@ fn guard(load: &mut Load<'_>, phrases: &'static Phrases) -> Result<(), Off> {
     load.on::<BuildingRemoved>(move |removed| {
         if ACCESS.removed(removed.entity) {
             enshwick_loader_api::info!("Safe {} removed", removed.entity);
-            save(store);
+            // Written with the world: a game that stops before it saves
+            // brings the Safe back, and its owner must come back with it.
+            let _open = hand_over(store);
         }
     })?;
     if client {
