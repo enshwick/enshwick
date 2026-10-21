@@ -72,6 +72,9 @@ pub(crate) enum Verdict {
 pub(crate) struct Copies {
     /// The altars' zones, as the altar mod grows them.
     altars: Vec<(AltarKey, Zone)>,
+    /// Whether zones were ever known: right after a load none are, which
+    /// is not the same as no altar left.
+    known: bool,
     slots: BTreeMap<(Survivor, AltarKey), Entity>,
     /// Each kept entity's survivor and home.
     homes: BTreeMap<Entity, (Survivor, [i64; 3])>,
@@ -81,8 +84,16 @@ pub(crate) struct Copies {
 }
 
 impl Copies {
+    /// Takes the altars' zones. No zones before any were known are no news;
+    /// after, they mean the last altar is gone, and every copy stands
+    /// outside the zones.
     pub(crate) fn set_altars(&mut self, altars: impl IntoIterator<Item = (AltarKey, Zone)>) {
-        self.altars = altars.into_iter().collect();
+        let altars: Vec<(AltarKey, Zone)> = altars.into_iter().collect();
+        if altars.is_empty() && !self.known {
+            return;
+        }
+        self.known = true;
+        self.altars = altars;
         self.altars.sort_by_key(|(key, _)| *key);
         let known: Vec<AltarKey> = self.altars.iter().map(|(k, _)| *k).collect();
         self.slots
@@ -260,9 +271,9 @@ impl Copies {
         }
     }
 
-    /// Whether any altar zone is known yet.
+    /// Whether the altar zones are known yet, none at all included.
     pub(crate) fn knows_altars(&self) -> bool {
-        !self.altars.is_empty()
+        self.known
     }
 
     /// How many copies of `survivor` stand in the zones.
@@ -443,5 +454,25 @@ mod tests {
         assert_eq!(counted(&copies), (1, 1));
         copies.forget(10);
         assert_eq!(counted(&copies), (0, 0));
+    }
+
+    #[test]
+    fn no_zones_before_any_are_no_news_but_after_the_last_altar_goes() {
+        let mut copies = Copies::default();
+        copies.set_altars([]);
+        assert!(!copies.knows_altars());
+        copies.set_altars([(1, zone(0)), (2, zone(80))]);
+        copies.observe(SMITH, 10, [10, 10, 10], 10);
+        copies.observe(SMITH, 11, [90, 10, 10], 10);
+        copies.set_altars([(1, zone(0))]);
+        copies.set_altars([]);
+        assert!(copies.knows_altars(), "the last altar went");
+        assert_eq!(copies.count(SMITH), 0);
+        assert_eq!(copies.observe(SMITH, 11, [90, 10, 10], 10), Verdict::Remove);
+        assert_eq!(copies.observe(SMITH, 10, [10, 10, 10], 10), Verdict::Keep);
+        assert_eq!(
+            copies.copy_staff(SMITH, [10, 10, 10], 10),
+            CopyStaff::Refuse(Refusal::OutsideZones)
+        );
     }
 }

@@ -12,8 +12,15 @@ mod policy;
 mod renew;
 mod staffs;
 
+use std::sync::atomic::{AtomicBool, Ordering};
+
 use enshwick_loader_api::abi::Side;
+use enshwick_loader_api::loot::Drop;
 use enshwick_loader_api::{Load, Mod, Off};
+
+/// Whether copy staffs work and drop, from the settings in force: the
+/// server's on a joined client.
+pub(crate) static COPY_STAFFS: AtomicBool = AtomicBool::new(true);
 
 const fn yes() -> bool {
     true
@@ -41,9 +48,11 @@ struct Settings {
     per_altar: bool,
     /// Copy staffs: one per workshop survivor. Each new copy it places
     /// spends a charge and the last charge uses the staff up; moving the
-    /// copy an altar has is free.
+    /// copy an altar has is free. Off, they neither drop nor work, and
+    /// staffs already held stay. A joined player runs with the server's
+    /// value.
     #[serde(default = "yes")]
-    #[config(startup)]
+    #[config(sync)]
     copy_staffs: bool,
     /// The chance a boss's corpse holds a copy staff, from 0 to 1.
     #[serde(default = "boss_chance")]
@@ -148,17 +157,24 @@ impl Mod for SurvivorsPerAltar {
         if !settings.per_altar {
             return Err(Off::new("per_altar is off in the settings"));
         }
-        if settings.copy_staffs {
-            copy_staffs(load, &settings)?;
-        }
+        // The staffs stay in the game when they are off, so a value that
+        // changes while it runs, or the server's on a joined client, finds
+        // them.
+        let drops = copy_staffs(load, &settings)?;
+        apply_copy_staffs(settings.copy_staffs, &drops);
+        load.on_config_change(move |settings: Settings| {
+            apply_copy_staffs(settings.copy_staffs, &drops);
+        })?;
         let staffs = policy::Staffs {
-            copy: settings.copy_staffs.then(|| settings.charges()),
+            charges: settings.charges(),
             vanilla_places: settings.vanilla_staff_places_copies,
         };
         if load.host().build().side == Side::SERVER {
             policy::link(load, staffs)?;
-            if settings.copy_staffs {
-                renew::link(load)?;
+            if let Err(off) = renew::link(load) {
+                enshwick_loader_api::warn!(
+                    "copy staffs from before charges stay as they are: {off}"
+                );
             }
         } else {
             // The policy acts in the games this client hosts, and for its own
@@ -177,10 +193,22 @@ impl Mod for SurvivorsPerAltar {
     }
 }
 
+/// Turns the copy staffs on or off: whether they work, and their drops.
+fn apply_copy_staffs(on: bool, drops: &[Drop]) {
+    if COPY_STAFFS.swap(on, Ordering::Relaxed) == on {
+        return;
+    }
+    let kept = if on { drops.to_vec() } else { Vec::new() };
+    match enshwick_loader_api::loot::replace_drops(kept) {
+        Ok(()) => enshwick_loader_api::info!("copy staffs {}", if on { "on" } else { "off" }),
+        Err(off) => enshwick_loader_api::warn!("copy staffs {on}, their drops stay: {off}"),
+    }
+}
+
 /// Adds the copy staffs, files them with their survivors and puts them in
-/// loot.
-fn copy_staffs(load: &mut Load<'_>, settings: &Settings) -> Result<(), Off> {
-    use enshwick_loader_api::loot::{Drop, Source};
+/// loot; the drops it added.
+fn copy_staffs(load: &mut Load<'_>, settings: &Settings) -> Result<Vec<Drop>, Off> {
+    use enshwick_loader_api::loot::Source;
 
     let texts = load.texts(staffs::TEXTS)?;
     let charges = settings.charges();
@@ -192,13 +220,13 @@ fn copy_staffs(load: &mut Load<'_>, settings: &Settings) -> Result<(), Off> {
         "copy_staff_locked_chest_chance",
         settings.copy_staff_locked_chest_chance,
     );
+    let mut drops = Vec::new();
     for (chance, source) in [(boss, Source::bosses()), (locked, Source::locked_chests())] {
         if chance > 0.0 {
-            load.add_loot(Drop::one_of(&items, chance, source).meter(
-                charges.min,
-                charges.full,
-                charges.full,
-            ))?;
+            let drop =
+                Drop::one_of(&items, chance, source).meter(charges.min, charges.full, charges.full);
+            load.add_loot(drop.clone())?;
+            drops.push(drop);
         }
     }
     enshwick_loader_api::info!(
@@ -209,7 +237,7 @@ fn copy_staffs(load: &mut Load<'_>, settings: &Settings) -> Result<(), Off> {
         boss,
         locked
     );
-    Ok(())
+    Ok(drops)
 }
 
 enshwick_loader_api::declare_mod!(SurvivorsPerAltar);
@@ -217,6 +245,49 @@ enshwick_loader_api::declare_mod!(SurvivorsPerAltar);
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A loader that knows the item layout the copy staffs need, with
+    /// settings that turn copy staffs off and keep them out of loot.
+    fn host() -> enshwick_loader_api::test::FakeHost {
+        let mut host =
+            enshwick_loader_api::test::FakeHost::new().type_size("keen::ImpactUiValue", 0x28);
+        for (field, at) in [
+            ("itemId", 0),
+            ("objectId", 4),
+            ("name", 0x48),
+            ("iconImage", 0x58),
+            ("description", 0x68),
+            ("flags", 0x78),
+            ("pidEntity", 0x80),
+            ("uiValues", 0x90),
+        ] {
+            host = host.field_offset("keen::ItemInfo", field, at);
+        }
+        for (field, at) in [
+            ("locaId", 0),
+            ("valueFormat", 4),
+            ("value", 8),
+            ("isSigned", 0x24),
+        ] {
+            host = host.field_offset("keen::ImpactUiValue", field, at);
+        }
+        host.field_offset("keen::ItemRegistryResource", "itemRefs", 0)
+            .field_offset("keen::ItemRegistryResource", "dbgNames", 0x38)
+            .field_offset("keen::ecs::TemplateResource", "components", 0x10)
+            .type_size("keen::ecs::FuelSetup", 8)
+            .field_offset("keen::ecs::FuelSetup", "maxFuelCharges", 0)
+            .field_offset("keen::ecs::FuelSetup", "initialFuelPercentage", 4)
+            .field_offset("keen::ecs::TemplateCollectionResource", "templates", 0)
+            .type_hash("keen::ecs::CurrentTransform", 1)
+            .type_hash("keen::ecs::UsedItem", 2)
+            .settings(
+                "per_altar = true
+copy_staffs = false
+copy_staff_boss_chance = 0.0
+                 copy_staff_locked_chest_chance = 0.0
+",
+            )
+    }
 
     #[test]
     fn the_default_settings_parse() {
@@ -230,6 +301,21 @@ mod tests {
         assert!((old.copy_staff_locked_chest_chance - 0.02).abs() < f64::EPSILON);
         assert_eq!(settings.charges(), Charges { full: 3, min: 3 });
         assert_eq!(old.charges(), Charges { full: 3, min: 3 });
+    }
+
+    #[test]
+    fn a_joined_player_takes_the_server_s_copy_staffs() {
+        use enshwick_loader_api::config::Config as _;
+
+        let server = Settings {
+            copy_staffs: false,
+            ..Settings::default()
+        };
+        let synced = server.synced().unwrap();
+        assert_eq!(synced, "{ copy_staffs = false }");
+        let mut joined = Settings::default();
+        joined.merge_synced(&synced).unwrap();
+        assert!(!joined.copy_staffs);
     }
 
     #[test]
@@ -260,16 +346,10 @@ mod tests {
             AltarInfo, BedCheck, Bounds, Header, Status, SurvivorLookup,
         };
 
-        let loader = enshwick_loader_api::test::FakeHost::new()
-            .settings(
-                "per_altar = true
-copy_staffs = false
-",
-            )
-            .install();
+        let loader = host().install();
         // SAFETY: the exports of `declare_mod!` above.
         let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
-        assert_eq!(status, Status::OK);
+        assert_eq!(status, Status::OK, "{:?}", loader.logs());
         let altar = |entity, x| {
             let mut info = AltarInfo::EMPTY;
             info.entity = entity;
@@ -338,12 +418,10 @@ copy_staffs = false
         use enshwick_loader_api::abi::{AltarInfo, Bounds, Header, Status, Summon, SurvivorLookup};
         use enshwick_loader_api::survivors::WORKSHOP_SURVIVORS;
 
-        let loader = enshwick_loader_api::test::FakeHost::new()
-            .settings("per_altar = true\ncopy_staffs = false\n")
-            .install();
+        let loader = host().install();
         // SAFETY: the exports of `declare_mod!` above.
         let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
-        assert_eq!(status, Status::OK);
+        assert_eq!(status, Status::OK, "{:?}", loader.logs());
         let altar = |entity, x| {
             let mut info = AltarInfo::EMPTY;
             info.entity = entity;

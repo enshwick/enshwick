@@ -59,6 +59,11 @@ meter with `min` above `max`, `max` above `of` or an `of` of 0. It
 also does so when the running build lacks a piece the drops need, such as the
 pinned `loot.roll` symbol, or `loot.roll_one` for a `DESTROYED` drop.
 
+`loot::replace_drops(drops)` swaps the mod's drops while the game runs, from
+any thread, such as when a setting changes; an empty list stops them. A kind of
+roll that no drop linked at start waits for a restart, so a mod that may turn
+its drops on later adds them at init and replaces them with none at once.
+
 ## Where it drops
 
 `Source` filters the rolls a drop takes part in:
@@ -95,4 +100,5 @@ assert!(Source::kinds(Kinds::CORPSES).with_labels(&[9]).matches(&boss));
 [Survivors per altar](https://github.com/themaiby/enshwick/tree/main/mods/enshwick-survivors-per-altar)
 adds a copy staff per survivor with `add_item`, then puts them in loot with
 `Drop::one_of`: one chance for bosses and one for locked chests, both from
-its settings, and no drop when a chance is 0.
+its settings, and no drop when a chance is 0. When `copy_staffs` turns off
+while the game runs, it calls `replace_drops` with none.
