@@ -1,6 +1,6 @@
 [package]
 name = "enshwick-survivors-per-altar"
-version = "0.6.0"
+version = "0.6.1"
 description = "A copy of each survivor at every Flame Altar, each with the bed of its own altar"
 keywords = ["enshrouded", "mod", "survivors", "altar"]
 categories = ["game-development"]

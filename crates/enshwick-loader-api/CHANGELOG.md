@@ -1,5 +1,31 @@
 # Changelog
 
+## [0.8.0](https://github.com/themaiby/enshwick/compare/enshwick-loader-api-v0.7.0...enshwick-loader-api-v0.8.0) (2026-10-21)
+
+
+### ⚠ BREAKING CHANGES
+
+* **optimizer:** rename and tune per platform for Windows and Proton ([#165](https://github.com/themaiby/enshwick/issues/165))
+
+### Features
+
+* **api:** attach typed mod data to any entity, per world ([#161](https://github.com/themaiby/enshwick/issues/161)) ([b0fee70](https://github.com/themaiby/enshwick/commit/b0fee7049cf8c82f791a45716d3ff14d01267dd0))
+* **loader:** add content packs of TOML files, signed and reloadable ([#158](https://github.com/themaiby/enshwick/issues/158)) ([7598b97](https://github.com/themaiby/enshwick/commit/7598b977434dfb207cd5c0d30c6cdd936c0cb0cc))
+* **loader:** never start a mod that a renamed mod replaces ([#166](https://github.com/themaiby/enshwick/issues/166)) ([650993c](https://github.com/themaiby/enshwick/commit/650993c7b392be07fc16c4ca47925952c64f1487))
+* **loader:** reload mods while a development server runs ([#164](https://github.com/themaiby/enshwick/issues/164)) ([16494a1](https://github.com/themaiby/enshwick/commit/16494a1f52b8c473876b6af9ce014f93a71afbc0))
+
+
+### Performance
+
+* **optimizer:** rename and tune per platform for Windows and Proton ([#165](https://github.com/themaiby/enshwick/issues/165)) ([71cf9b5](https://github.com/themaiby/enshwick/commit/71cf9b51b0d35b09d12dd4974e2dc91d174e2c0b))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * enshwick-loader-macros bumped from 0.7.0 to 0.8.0
+
 ## [0.7.0](https://github.com/themaiby/enshwick/compare/enshwick-loader-api-v0.6.0...enshwick-loader-api-v0.7.0) (2026-10-21)
 
 
