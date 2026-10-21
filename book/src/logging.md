@@ -92,7 +92,7 @@ The keys of `mod-configs/enshwick.toml`:
 | `diagnostics_timing` | `false`   | with `diagnostics`, also time every 256th call; read at start                                      |
 | `migrations_dry_run` | `false`   | only log what mods' [migrations](migrations.md) would change                                       |
 | `build_patterns`     | `true`    | run a build without its table on patterns; read at start                                           |
-| `dev_reload`         | `false`   | reload changed mods that allow it, on the server; read at start                                    |
+| `dev_reload`         | `false`   | reload changed mods that allow it, on the server or the client; read at start                      |
 | `knowledge_guard`    | `"watch"` | watch, enforce or turn off the [knowledge guard](knowledge.md#what-clients-ask-for); read at start |
 
 The file rejects unknown keys. A file that does not parse at start is logged

@@ -399,6 +399,7 @@ mod runtime {
                 id,
                 "the server does not run it; restart the game to use it again",
             );
+            crate::reload::hold(id);
         }
         let Some((text, blocking)) = plan.message(&names) else {
             return true;

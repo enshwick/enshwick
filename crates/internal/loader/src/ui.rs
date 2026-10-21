@@ -19,6 +19,8 @@ use core::cell::{Cell, RefCell};
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock, PoisonError};
 
+use arc_swap::ArcSwapOption;
+
 use enshwick_loader_api::abi::{
     HookFlags, Side, Status, Str, UiAnswerFn, UiDialog, UiFrame, UiFrameFn, UiWidget,
 };
@@ -35,13 +37,60 @@ use crate::host::{Loader, Registered};
 static NEXT: Next<PopupFn> = unsafe { Next::new() };
 static ENGINE: OnceLock<Engine> = OnceLock::new();
 /// Frame callbacks while mods initialise.
-static PENDING: Mutex<Vec<Registered<UiFrameFn>>> = Mutex::new(Vec::new());
+static PENDING: Mutex<Vec<Frame>> = Mutex::new(Vec::new());
 /// The frame callbacks once sealed.
-static FRAMES: OnceLock<Box<[Registered<UiFrameFn>]>> = OnceLock::new();
+static FRAMES: OnceLock<Box<[Frame]>> = OnceLock::new();
 /// HUD callbacks while mods initialise.
-static PENDING_HUD: Mutex<Vec<Registered<UiFrameFn>>> = Mutex::new(Vec::new());
+static PENDING_HUD: Mutex<Vec<Frame>> = Mutex::new(Vec::new());
 /// The HUD callbacks once sealed.
-static HUDS: OnceLock<Box<[Registered<UiFrameFn>]>> = OnceLock::new();
+static HUDS: OnceLock<Box<[Frame]>> = OnceLock::new();
+/// Frame and HUD callbacks of mods reloaded after sealing, swapped whole.
+static LATE_FRAMES: ArcSwapOption<Vec<Frame>> = ArcSwapOption::const_empty();
+static LATE_HUDS: ArcSwapOption<Vec<Frame>> = ArcSwapOption::const_empty();
+
+/// A frame or HUD callback with the reload generation of the mod copy that
+/// registered it; a reloaded mod's older copies are skipped.
+#[derive(Debug, Clone, Copy)]
+struct Frame {
+    registered: Registered<UiFrameFn>,
+    generation: u32,
+}
+
+impl Frame {
+    fn new(owner: usize, callback: UiFrameFn, user: *mut core::ffi::c_void) -> Self {
+        Self {
+            registered: Registered::new(owner, callback, user),
+            generation: crate::reload::generation(owner),
+        }
+    }
+
+    /// Whether its mod runs, in the copy that registered it.
+    fn current(&self) -> bool {
+        self.registered.live()
+            && self.generation == crate::reload::generation(self.registered.owner)
+    }
+}
+
+/// Adds `frame` to `late`, for a mod a reload initialises again.
+fn add_late(late: &ArcSwapOption<Vec<Frame>>, frame: Frame) {
+    late.rcu(|current| {
+        let mut next = current.as_deref().cloned().unwrap_or_default();
+        next.push(frame);
+        Some(std::sync::Arc::new(next))
+    });
+}
+
+/// The current callbacks of `sealed` and `late`, in order.
+fn each<'a>(
+    sealed: &'a [Frame],
+    late: Option<&'a Vec<Frame>>,
+) -> impl Iterator<Item = &'a Registered<UiFrameFn>> {
+    sealed
+        .iter()
+        .chain(late.into_iter().flatten())
+        .filter(|frame| frame.current())
+        .map(|frame| &frame.registered)
+}
 // SAFETY: the slot joins the chain of the game's HUD, typed `HudFn`.
 static HUD_NEXT: Next<HudFn> = unsafe { Next::new() };
 type HudFn = unsafe extern "system" fn(arg: *mut u8);
@@ -147,12 +196,16 @@ pub(crate) fn register_frame(
         return Status::MISSING;
     }
     if FRAMES.get().is_some() {
-        return Status::TOO_LATE;
+        if !crate::reload::reinitialising(owner) {
+            return Status::TOO_LATE;
+        }
+        add_late(&LATE_FRAMES, Frame::new(owner, callback, user));
+        return Status::OK;
     }
     PENDING
         .lock()
         .unwrap_or_else(PoisonError::into_inner)
-        .push(Registered::new(owner, callback, user));
+        .push(Frame::new(owner, callback, user));
     Status::OK
 }
 
@@ -167,12 +220,16 @@ pub(crate) fn register_hud(
         return Status::MISSING;
     }
     if HUDS.get().is_some() {
-        return Status::TOO_LATE;
+        if !crate::reload::reinitialising(owner) {
+            return Status::TOO_LATE;
+        }
+        add_late(&LATE_HUDS, Frame::new(owner, callback, user));
+        return Status::OK;
     }
     PENDING_HUD
         .lock()
         .unwrap_or_else(PoisonError::into_inner)
-        .push(Registered::new(owner, callback, user));
+        .push(Frame::new(owner, callback, user));
     Status::OK
 }
 
@@ -357,7 +414,8 @@ fn hud(engine: &Engine, context: usize) {
         return;
     };
     HUD_ITEMS.with_borrow_mut(Vec::clear);
-    for registered in huds.iter().filter(|r| r.live()) {
+    let late = LATE_HUDS.load();
+    for registered in each(huds, late.as_deref()) {
         let token = NEXT_TOKEN.fetch_add(1, Ordering::Relaxed);
         DRAWING.set(Some(Drawing {
             token,
@@ -477,7 +535,8 @@ fn frames(engine: &Engine, context: usize) {
         return;
     };
     let screen = screen(Engine::app_state(context));
-    for registered in frames.iter().filter(|r| r.live()) {
+    let late = LATE_FRAMES.load();
+    for registered in each(frames, late.as_deref()) {
         let token = NEXT_TOKEN.fetch_add(1, Ordering::Relaxed);
         DRAWING.set(Some(Drawing {
             token,
@@ -797,5 +856,23 @@ mod tests {
         assert_eq!(screen(6), UiFrame::LOADING);
         assert_eq!(screen(1), UiFrame::MENU);
         assert_eq!(screen(0), UiFrame::MENU);
+    }
+
+    #[test]
+    fn only_the_copy_that_registered_a_frame_draws_it() {
+        unsafe extern "system" fn draw(_frame: *const UiFrame, _user: *mut core::ffi::c_void) {}
+        let owner = crate::chains::LOADER;
+        let current = Frame::new(owner, draw, core::ptr::null_mut());
+        let older = Frame {
+            generation: current.generation + 1,
+            ..current
+        };
+        let (sealed, late) = ([older, current], vec![current]);
+        assert_eq!(
+            each(&sealed, Some(&late)).count(),
+            2,
+            "the sealed and the late current copy"
+        );
+        assert!(each(&sealed[..1], None).next().is_none());
     }
 }

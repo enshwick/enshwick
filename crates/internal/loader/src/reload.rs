@@ -1,4 +1,5 @@
-//! Development hot reload, `dev_reload = true` on a dedicated server.
+//! Development hot reload, `dev_reload = true` on a dedicated server or a
+//! client.
 //!
 //! Every mod is loaded from a copy under `mods/enshwick/reload/`, so its DLL
 //! in `mods/` stays writable. A thread watches those DLLs; when one changes
@@ -9,9 +10,11 @@
 //! server stops, so a call still running in it never faults. A mod that used
 //! anything a reload cannot hand over (content, commands, services, patches
 //! and every other registration besides hooks, events, lookups, settings and
-//! logging) is refused with the calls it made; so is a new copy whose
+//! logging, and on a client the interface's frame and HUD callbacks and map
+//! markers) is refused with the calls it made; so is a new copy whose
 //! manifest changed beyond its version, or that hooks a function nothing
-//! hooked at start. Those take a restart.
+//! hooked at start, and on a client a mod the server's join turned off.
+//! Those take a restart.
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
@@ -51,6 +54,13 @@ const RELOADABLE: &[&str] = &[
     "hosting",
     "config_schema",
     "code_range",
+    "content_read",
+    "resource_read",
+    "game_text",
+    "ui_frame",
+    "ui_hud",
+    "ui_widget",
+    "ui_markers",
 ];
 
 /// How long calls already inside an unlinked mod may take to leave it.
@@ -69,15 +79,35 @@ pub(crate) fn configure(wanted: bool) {
     WANTED.store(wanted, Ordering::Release);
 }
 
-/// Whether mods load from copies for reloads: `dev_reload` on, on the
-/// dedicated server.
+/// Whether mods load from copies for reloads: `dev_reload` on, in the
+/// dedicated server or the client.
 pub(crate) fn copies() -> bool {
     WANTED.load(Ordering::Acquire)
-        && host::loader().is_none_or(|l| l.side == enshwick_loader_api::abi::Side::SERVER)
         && std::env::current_exe().is_ok_and(|exe| {
-            exe.file_name()
-                .is_some_and(|n| n.eq_ignore_ascii_case("enshrouded_server.exe"))
+            exe.file_name().is_some_and(|n| {
+                n.eq_ignore_ascii_case("enshrouded_server.exe")
+                    || n.eq_ignore_ascii_case("enshrouded.exe")
+            })
         })
+}
+
+/// The mods a server's join turned off on this client, which stay off
+/// until the game restarts.
+static HELD: Mutex<Vec<String>> = Mutex::new(Vec::new());
+
+/// Keeps mod `id` off across reloads: the server it joined does not run it.
+pub(crate) fn hold(id: &str) {
+    let mut held = HELD.lock().unwrap_or_else(PoisonError::into_inner);
+    if !held.iter().any(|h| h == id) {
+        held.push(id.to_owned());
+    }
+}
+
+fn held(id: &str) -> bool {
+    HELD.lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .iter()
+        .any(|h| h == id)
 }
 
 /// The mod whose `init` runs now, whose calls are recorded.
@@ -292,7 +322,10 @@ fn reload(loader: &'static Loader, mod_: &mut Watched) -> Result<String, String>
     let index = mod_.index;
     let record = loader.mods.get(index).ok_or("no such mod")?;
     if !record.manifest.flags.contains(ManifestFlags::RELOAD) {
-        return Err("its manifest does not allow it (`reload = true`); restart the server".into());
+        return Err("its manifest does not allow it (`reload = true`); restart the game".into());
+    }
+    if held(&record.id) {
+        return Err("the server's join turned it off; restart the game".into());
     }
     let calls = CALLS
         .lock()
@@ -307,7 +340,7 @@ fn reload(loader: &'static Loader, mod_: &mut Watched) -> Result<String, String>
         .collect();
     if !held.is_empty() {
         return Err(format!(
-            "it holds what a reload cannot hand over ({}); restart the server",
+            "it holds what a reload cannot hand over ({}); restart the game",
             held.join(", ")
         ));
     }
@@ -323,7 +356,7 @@ fn reload(loader: &'static Loader, mod_: &mut Watched) -> Result<String, String>
     let refused = if new_id != record.id {
         Some("the new DLL is another mod".to_owned())
     } else if shape(new.manifest) != shape(record.manifest) {
-        Some("its manifest changed beyond its version; restart the server".to_owned())
+        Some("its manifest changed beyond its version; restart the game".to_owned())
     } else {
         None
     };
@@ -396,6 +429,10 @@ fn unlink(loader: &Loader, index: usize) {
         .lock()
         .unwrap_or_else(PoisonError::into_inner)
         .rewire(host::is_off);
+    if loader.side == enshwick_loader_api::abi::Side::CLIENT {
+        // The new copy sets its own markers; the old copy's go.
+        let _cleared = crate::ui::set_markers(index, &[]);
+    }
     std::thread::sleep(GRACE);
 }
 
@@ -433,7 +470,15 @@ mod tests {
 
     #[test]
     fn only_unlinkable_calls_allow_a_reload() {
-        for call in ["hook", "subscribe", "log", "settings"] {
+        for call in [
+            "hook",
+            "subscribe",
+            "log",
+            "settings",
+            "ui_frame",
+            "ui_hud",
+            "game_text",
+        ] {
             assert!(RELOADABLE.contains(&call));
         }
         for call in [
@@ -445,5 +490,21 @@ mod tests {
         ] {
             assert!(!RELOADABLE.contains(&call));
         }
+    }
+
+    #[test]
+    fn a_mod_the_join_turned_off_stays_held() {
+        assert!(!held("held-mod"));
+        hold("held-mod");
+        hold("held-mod");
+        assert!(held("held-mod"));
+        assert_eq!(
+            HELD.lock()
+                .unwrap()
+                .iter()
+                .filter(|h| *h == "held-mod")
+                .count(),
+            1
+        );
     }
 }

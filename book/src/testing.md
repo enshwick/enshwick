@@ -299,11 +299,11 @@ one people play on, with a copy of a world:
 What needs a player, such as hits, levels or a character's stats, waits for
 a client that joins the server or hosts the game.
 
-## Reloading a mod on a development server
+## Reloading a mod while the game runs
 
 With `dev_reload = true` in `mod-configs/enshwick.toml`, a dedicated server
-loads every mod from a copy under `mods/enshwick/reload/`, so its DLL in
-`mods/` stays writable, and watches those DLLs. When one changes and stays
+or a client loads every mod from a copy under `mods/enshwick/reload/`, so
+its DLL in `mods/` stays writable, and watches those DLLs. When one changes and stays
 the same for a second, as after `cargo enshwick install`, the loader reloads
 its mod without a restart:
 
@@ -316,8 +316,11 @@ its mod without a restart:
 A mod opts in with `reload = true` in its `manifest!` and keeps a contract:
 
 - **Only what a reload can unlink.** Hooks on functions it hooked at start,
-  events, lookups (symbols, constants, systems, fields, types), settings and
-  logging. Everything else a mod can register (commands, content, served
+  events, lookups (symbols, constants, systems, fields, types), settings,
+  logging, reads of the game's archive and, on a client, the interface's
+  frame and HUD callbacks and map markers: the loader stops calling the old
+  copy's callbacks, clears its markers and calls the new copy's. Everything
+  else a mod can register (commands, content, served
   resources, services, mod events, code patches, mid-function hooks, filters,
   the interface, stats and the rest) stays with the old copy, so the loader
   refuses to reload a mod that used any of it, naming the calls, and the
@@ -334,5 +337,13 @@ A mod opts in with `reload = true` in its `manifest!` and keeps a contract:
 The log says `<id> reloaded` or why not. The
 [hot-reload example](https://github.com/themaiby/enshwick/tree/main/examples/hot-reload)
 shows the contract: an event, a ticker thread stopped in `shutdown`, and a
-greeting to change. Reloads are for development only: the client ignores
-`dev_reload`, and nothing is reloaded unless the setting is on.
+greeting to change. Reloads are for development only, and nothing is
+reloaded unless the setting is on.
+
+On a client, a mod with a window or a HUD reloads the same way: change what
+its frame callback draws, `cargo enshwick install`, and the next frame draws
+the new copy. A mod that a server's join turned off stays off until the game
+restarts, whatever its DLL does. A client that also hosts runs one loader for
+both, so a reload there reloads the mod for the hosted game too. Texts,
+dialogs, the Mods screen's settings rows and served content still need a
+restart: the loader refuses the reload and names those calls.
