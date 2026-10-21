@@ -693,11 +693,11 @@ pub struct KnowledgeInput {
     pub reserved: u16,
     /// Ignored for a bool, added for a counter, the bit to set for flags.
     pub value: u32,
-    /// Why the loader's knowledge guard refuses the request, whether the
-    /// guard is on or not: [`KnowledgeInput::ALLOWED`] when it does not.
+    /// Why the loader's knowledge guard would refuse the request, in any
+    /// mode: [`KnowledgeInput::ALLOWED`] when it would not.
     pub refusal: u32,
-    /// 1 when the request goes through so far: after the guard, when it is
-    /// on, and the filters that ran before.
+    /// 1 when the request goes through so far: after the guard, which
+    /// refuses only when enforcing, and the filters that ran before.
     pub allowed: u32,
 }
 

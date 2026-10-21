@@ -47,12 +47,28 @@ pub struct Settings {
     /// allows it (`reload = true` in its manifest). For developing mods, on
     /// the dedicated server only. Read at start.
     pub dev_reload: bool,
-    /// Refuse knowledge a client asks the server for in its input that a
-    /// vanilla client never asks for: ids of the world's, counters, flag
-    /// bits other than the seen bit, ids that give experience or skill
+    /// What the server does with knowledge a client asks for in its input
+    /// that a vanilla client never asks for: ids of the world's, counters,
+    /// flag bits other than the seen bit, ids that give experience or skill
     /// points, and quests. A vanilla server grants whatever a client asks,
-    /// so a modified client could grant itself any of it. Read at start.
-    pub knowledge_guard: bool,
+    /// so a modified client could grant itself any of it. "watch" lets it
+    /// through and logs it, "enforce" refuses it, "off" does neither. Read
+    /// at start.
+    #[config(choices = [KnowledgeGuard::Watch, KnowledgeGuard::Enforce, KnowledgeGuard::Off])]
+    pub knowledge_guard: KnowledgeGuard,
+}
+
+/// What the knowledge guard does with a request a vanilla client never makes.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum KnowledgeGuard {
+    /// Lets it through and logs it.
+    #[default]
+    Watch,
+    /// Refuses it.
+    Enforce,
+    /// Leaves it alone.
+    Off,
 }
 
 impl Default for Settings {
@@ -66,7 +82,7 @@ impl Default for Settings {
             migrations_dry_run: false,
             build_patterns: true,
             dev_reload: false,
-            knowledge_guard: true,
+            knowledge_guard: KnowledgeGuard::Watch,
         }
     }
 }
@@ -116,6 +132,24 @@ mod tests {
         assert_eq!(settings.level("any-mod"), Level::INFO);
         assert!(!settings.diagnostics);
         assert_eq!(settings.status_minutes, STATUS_MINUTES);
+    }
+
+    #[test]
+    fn the_knowledge_guard_watches_unless_told_otherwise() {
+        assert_eq!(Settings::default().knowledge_guard, KnowledgeGuard::Watch);
+        let settings: Settings = toml::from_str(
+            "knowledge_guard = \"enforce\"
+",
+        )
+        .unwrap();
+        assert_eq!(settings.knowledge_guard, KnowledgeGuard::Enforce);
+        assert!(
+            toml::from_str::<Settings>(
+                "knowledge_guard = true
+"
+            )
+            .is_err()
+        );
     }
 
     #[test]

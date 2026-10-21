@@ -19,11 +19,12 @@
 //!
 //! A vanilla server grants whatever knowledge a client asks for in its
 //! input, so a modified client could grant itself any of it. The loader's
-//! knowledge guard, on by default (`knowledge_guard` in the loader's
-//! settings), lets through only what a vanilla client asks for: a player's
-//! bools and the seen bit (0) of a player's flags, and never an id that
-//! gives experience or skill points or a quest. A mod widens or narrows it
-//! with [`Load::on_knowledge_input`].
+//! knowledge guard (`knowledge_guard` in the loader's settings) knows what
+//! a vanilla client asks for: a player's bools and the seen bit (0) of a
+//! player's flags, and never an id that gives experience or skill points or
+//! a quest. By default it watches, logging the rest and letting it
+//! through; enforcing, it refuses the rest. A mod widens or narrows it with
+//! [`Load::on_knowledge_input`].
 //!
 //! Every call belongs on the server's game thread, from a game event, a
 //! [`Scheduler`](crate::schedule::Scheduler) task or a command; on a client,
@@ -554,10 +555,10 @@ pub struct KnowledgeRequest {
     pub scope: Option<Scope>,
     /// Ignored for a bool, added for a counter, the bit to set for flags.
     pub value: u32,
-    /// Why the loader's guard refuses it, whether the guard is on or not.
+    /// Why the loader's guard would refuse it, in any mode.
     pub refusal: Option<Refusal>,
-    /// Whether it goes through so far: after the guard, when it is on, and
-    /// the filters that ran before.
+    /// Whether it goes through so far: after the guard, which refuses only
+    /// when enforcing, and the filters that ran before.
     pub allowed: bool,
 }
 
@@ -605,9 +606,12 @@ impl Load<'_> {
     /// Runs `filter` on the knowledge each client asks the server for in
     /// its input, after the loader's guard; its answer, `true` to let the
     /// request through, replaces the verdict so far, so a mod can refuse
-    /// more than the guard or allow what it refuses. A refused request
-    /// changes nothing and is not asked again. It runs on the server's
-    /// worker threads, rarely: only when a client asks.
+    /// more than the guard or allow what it refuses. A filter's refusal
+    /// stands whatever the guard's mode; a guard that only watches lets
+    /// through what it would refuse, so `filter` sees it allowed, with the
+    /// reason in [`KnowledgeRequest::refusal`]. A refused request changes
+    /// nothing and is not asked again. It runs on the server's worker
+    /// threads, rarely: only when a client asks.
     ///
     /// # Errors
     ///

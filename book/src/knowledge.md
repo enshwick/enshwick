@@ -99,18 +99,29 @@ fn reward(knowledge: &enshwick_loader_api::knowledge::Knowledge, account: u64, q
 A client asks the server for knowledge in its input, for what its interface
 marks, and a vanilla server grants whatever it asks: a modified client could
 grant itself any recipe, quest or skill point. The loader's knowledge guard
-lets through only what a vanilla client asks for, a player's bools and the
-seen bit (0) of a player's flags, and refuses ids of the world's, counters,
-other flag bits, ids that give experience or skill points, and quests. It is
-on by default; `knowledge_guard = false` in `mod-configs/enshwick.toml` turns
-it off. A refused request changes nothing and is logged, the first 64 of a
-run.
+knows what a vanilla client asks for, a player's bools and the seen bit (0)
+of a player's flags; the rest is ids of the world's, counters, other flag
+bits, ids that give experience or skill points, and quests. `knowledge_guard`
+in `mod-configs/enshwick.toml` says what it does with the rest:
+
+| Value       | The guard                                                            |
+| ----------- | -------------------------------------------------------------------- |
+| `"watch"`   | the default: logs each request it would refuse and lets it through   |
+| `"enforce"` | refuses it; a refused request changes nothing and is not asked again |
+| `"off"`     | does nothing; mods' filters still run                                |
+
+Requests the guard would refuse or refuses, and those a filter refuses, are
+logged as `knowledge guard: would refuse, let through ...` or
+`knowledge guard: refused ...`, the first 64 of a run; the status summary
+counts them all.
 
 `load.on_knowledge_input(filter)` (minor 55) runs `filter` on every request
-after the guard, with the guard's reason (`refusal`, given whether the guard
-is on or not) and the verdict so far (`allowed`); its answer replaces the
-verdict, so a mod can refuse more or allow what the guard refuses. Filters
-run in load order on the server's worker threads, only when a client asks.
+after the guard, with the guard's reason (`refusal`, given in every mode) and
+the verdict so far (`allowed`); its answer replaces the verdict, so a mod can
+refuse more or allow what the guard refuses. A filter's refusal stands in
+every mode; a watching guard refuses nothing itself, so filters see its
+requests allowed. Filters run in load order on the server's worker threads,
+only when a client asks.
 
 ```rust
 use enshwick_loader_api::knowledge::Refusal;
