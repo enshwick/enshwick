@@ -3,7 +3,7 @@
 
 #[cfg(test)]
 mod tests {
-    use std::sync::atomic::{AtomicU32, Ordering};
+    use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
     use enshwick_loader_api::abi::Status;
     use enshwick_loader_api::points::{Decision, Order, Verdict};
@@ -32,6 +32,7 @@ mod tests {
     }
 
     static SEEN: AtomicU32 = AtomicU32::new(0);
+    static SECOND_REFUSED: AtomicBool = AtomicBool::new(false);
 
     struct Extender;
 
@@ -45,17 +46,17 @@ mod tests {
         }
 
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
-            // Attached first, it runs last: its priority is higher.
-            load.extend_point(&Order::new().priority(5), |_: &Limit, limit: &u32| {
-                Verdict::Set(limit + 1)
-            })?;
-            load.extend_point(&Order::new(), |limit: &Limit, so_far: &u32| {
+            load.extend_point(&Order::new().priority(5), |limit: &Limit, so_far: &u32| {
                 assert!(limit.level != 13, "unlucky");
                 match limit.level {
                     0 => Verdict::Refuse,
-                    _ => Verdict::Set(so_far * 10),
+                    _ => Verdict::Set(so_far * 10 + 1),
                 }
             })?;
+            let second = load.extend_point(&Order::new(), |_: &Limit, so_far: &u32| {
+                Verdict::Set(*so_far)
+            });
+            SECOND_REFUSED.store(second.is_err(), Ordering::Relaxed);
             load.observe_point(&Order::new(), |_: &Seen, value: &u32| {
                 SEEN.store(*value, Ordering::Relaxed);
             })?;
@@ -74,17 +75,20 @@ mod tests {
     }
 
     #[test]
-    fn links_run_by_priority() {
+    fn a_link_changes_and_refuses_the_answer() {
         let loader = started();
-        assert_eq!(
-            loader.attached_points(),
-            ["probe:limit", "probe:limit", "probe:seen"]
-        );
+        assert_eq!(loader.attached_points(), ["probe:limit", "probe:seen"]);
         assert_eq!(
             loader.ask_point(&Limit { level: 2 }, 3),
             Decision::Changed(31)
         );
         assert_eq!(loader.ask_point(&Limit { level: 0 }, 3), Decision::Refused);
+    }
+
+    #[test]
+    fn a_mod_links_a_point_once() {
+        let _loader = started();
+        assert!(SECOND_REFUSED.load(Ordering::Relaxed));
     }
 
     #[test]
@@ -100,14 +104,8 @@ mod tests {
     #[test]
     fn a_panicking_link_is_turned_off() {
         let loader = started();
-        assert_eq!(
-            loader.ask_point(&Limit { level: 13 }, 3),
-            Decision::Changed(4)
-        );
-        assert_eq!(
-            loader.ask_point(&Limit { level: 2 }, 3),
-            Decision::Changed(4)
-        );
+        assert_eq!(loader.ask_point(&Limit { level: 13 }, 3), Decision::Kept(3));
+        assert_eq!(loader.ask_point(&Limit { level: 2 }, 3), Decision::Kept(3));
         assert!(loader.faults().is_empty(), "the mod stays on");
     }
 

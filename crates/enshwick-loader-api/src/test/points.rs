@@ -182,6 +182,14 @@ pub(crate) extern "system" fn attach_point(
         },
     };
     with(Status::MISSING, |s| {
+        let attached_already = s
+            .points
+            .attached
+            .iter()
+            .any(|a| a.declared.name == attached.declared.name);
+        if attached_already {
+            return Status::REFUSED;
+        }
         s.points.attached.push(attached);
         Status::OK
     })

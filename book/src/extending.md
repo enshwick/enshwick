@@ -111,7 +111,8 @@ the mod runs and `loader.log` says
 `point safes:access: the link stays inert: safes does not run`. Use
 `requires` when the mod is pointless without the owner: the loader then skips
 the mod with a reason. Links match once every mod is initialised, so load
-order does not matter.
+order does not matter. A mod links each point once: a second
+`extend_point` or `observe_point` on the same point returns `Off`.
 
 ## When the loader leaves a link inert
 

@@ -450,7 +450,7 @@ impl Load<'_> {
     ///
     /// # Errors
     ///
-    /// [`Off`] when called after `init`.
+    /// [`Off`] when called after `init`, or when this mod links `P` already.
     ///
     /// # Examples
     ///
@@ -483,7 +483,7 @@ impl Load<'_> {
     ///
     /// # Errors
     ///
-    /// [`Off`] when called after `init`.
+    /// [`Off`] when called after `init`, or when this mod links `P` already.
     ///
     /// # Examples
     ///
