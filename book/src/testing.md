@@ -63,7 +63,9 @@ impl Mod for Bonus {
         load.on_config_change(|settings: Settings| {
             BONUS.store(settings.bonus, Ordering::Relaxed);
         })?;
-        load.hook(&REWARD, load.symbol("quest.reward")?)?;
+        let reward = load.symbol("quest.reward")?;
+        // SAFETY: the game's reward function has the type `REWARD` declares.
+        unsafe { load.hook(&REWARD, reward) }?;
         Ok(Self)
     }
 }

@@ -176,8 +176,7 @@ static LOOKED_FOR_COUNT: AtomicU32 = AtomicU32::new(0);
 
 /// Hooks every site whose bytes match; returns how many it hooked.
 pub(crate) fn link(load: &mut Load<'_>, interval_ms: u64, max_dumps: u32) -> Result<usize, Off> {
-    let code = load.code()?;
-    let start = code.as_ptr().addr();
+    let start = load.code()?.as_ptr().addr();
     let _first = SHARED.set(Shared {
         start: Instant::now(),
         base: memory::image_base(),
@@ -202,7 +201,7 @@ pub(crate) fn link(load: &mut Load<'_>, interval_ms: u64, max_dumps: u32) -> Res
         };
         let found = at
             .checked_sub(start)
-            .and_then(|offset| code.get(offset..offset + site.expected.len()));
+            .and_then(|offset| load.code().ok()?.get(offset..offset + site.expected.len()));
         if found != Some(&site.expected[..]) {
             enshwick_loader_api::warn!(
                 "R1 {} off: its bytes at {at:#x} are {found:02x?}, not those of build 1269579",
@@ -211,7 +210,9 @@ pub(crate) fn link(load: &mut Load<'_>, interval_ms: u64, max_dumps: u32) -> Res
             continue;
         }
         let kind = site.kind;
-        match load.hook_at(address, move |registers| seen(index, kind, registers)) {
+        // SAFETY: the site's bytes match build 1269579, where it starts an
+        // instruction; the handler only reads the registers.
+        match unsafe { load.hook_at(address, move |registers| seen(index, kind, registers)) } {
             Ok(()) => hooked += 1,
             Err(off) => enshwick_loader_api::warn!("R1 {} off: {off}", site.name),
         }

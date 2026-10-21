@@ -133,7 +133,9 @@ impl Mod for AltarCount {
     fn init(load: &mut Load<'_>) -> Result<Self, Off> {
         let settings: Settings = load.config()?;
         apply(&settings);
-        load.hook(&MAX_ALTARS, load.symbol("building.max_altars")?)?;
+        let max_altars = load.symbol("building.max_altars")?;
+        // SAFETY: the game's altar limit has the type `MAX_ALTARS` declares.
+        unsafe { load.hook(&MAX_ALTARS, max_altars) }?;
         load.on_config_change(|settings: Settings| apply(&settings))?;
         enshwick_loader_api::info!("{} altars per Flame level", settings.altars);
         Ok(Self)

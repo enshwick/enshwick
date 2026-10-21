@@ -190,22 +190,32 @@ impl Load<'_> {
         F: Fn(LoopWait) + Clone + Send + Sync + 'static,
     {
         let code = self.code()?;
+        let wait_site = site(self, WAIT, WAIT_AT).filter(|&at| checks(code, at));
+        let message_site = site(self, MESSAGE_WAIT, WAIT_AT).filter(|&at| checks(code, at));
         let mut found = LoopWaits::default();
         let wait = |ms: u64, left: u64| LoopWait {
             ms: u32::try_from(ms & 0xffff_ffff).unwrap_or(u32::MAX),
             left_ns: i64::from_ne_bytes(left.to_ne_bytes()),
         };
-        if let Some(at) = site(self, WAIT, WAIT_AT).filter(|&at| checks(code, at)) {
+        if let Some(at) = wait_site {
             let handler = handler.clone();
-            self.hook_at(at, move |registers: &mut Registers| {
-                handler(wait(registers.r9, registers.rbx));
-            })?;
+            // SAFETY: the site follows the clamp of the wait helper, where
+            // `r9` holds the milliseconds and `rbx` the nanoseconds left;
+            // the handler only reads them.
+            unsafe {
+                self.hook_at(at, move |registers: &mut Registers| {
+                    handler(wait(registers.r9, registers.rbx));
+                })
+            }?;
             found.handles = true;
         }
-        if let Some(at) = site(self, MESSAGE_WAIT, WAIT_AT).filter(|&at| checks(code, at)) {
-            self.hook_at(at, move |registers: &mut Registers| {
-                handler(wait(registers.r8, registers.rbx));
-            })?;
+        if let Some(at) = message_site {
+            // SAFETY: as above, with the milliseconds in `r8`.
+            unsafe {
+                self.hook_at(at, move |registers: &mut Registers| {
+                    handler(wait(registers.r8, registers.rbx));
+                })
+            }?;
             found.messages = true;
         }
         Ok(found)
@@ -245,9 +255,13 @@ impl Load<'_> {
         let Some(at) = site(self, SERVER_WAIT, SERVER_WAIT_AT) else {
             return Ok(false);
         };
-        self.hook_at(at, move |registers: &mut Registers| {
-            handler(&mut registers.r9);
-        })?;
+        // SAFETY: `r9` holds the wait in nanoseconds at the site and the
+        // event loop takes any value there as its wait.
+        unsafe {
+            self.hook_at(at, move |registers: &mut Registers| {
+                handler(&mut registers.r9);
+            })
+        }?;
         Ok(true)
     }
 
@@ -288,9 +302,13 @@ impl Load<'_> {
             (BACKGROUND_WORKERS_AT, caps.background),
         ] {
             if cap > 0 {
-                self.hook_at(at + offset, move |registers: &mut Registers| {
-                    registers.rax = registers.rax.min(u64::from(cap));
-                })?;
+                // SAFETY: `eax` holds the group's cap at the site, and a
+                // lower cap is one the task system takes.
+                unsafe {
+                    self.hook_at(at + offset, move |registers: &mut Registers| {
+                        registers.rax = registers.rax.min(u64::from(cap));
+                    })
+                }?;
             }
         }
         Ok(true)

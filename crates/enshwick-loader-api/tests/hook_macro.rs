@@ -95,10 +95,14 @@ mod tests {
         fn init(
             load: &mut enshwick_loader_api::Load<'_>,
         ) -> Result<Self, enshwick_loader_api::Off> {
-            load.hook(&MOVE, load.symbol("upgrade")?)?;
-            load.hook(&COUNT, load.symbol("count")?)?;
-            load.hook(&PLAIN, load.symbol("plain")?)?;
-            load.hook(&TALLY, load.symbol("tallied")?)?;
+            // SAFETY: the fake's symbol is a function of the hook's type.
+            unsafe { load.hook(&MOVE, load.symbol("upgrade")?) }?;
+            // SAFETY: the fake's symbol is a function of the hook's type.
+            unsafe { load.hook(&COUNT, load.symbol("count")?) }?;
+            // SAFETY: the fake's symbol is a function of the hook's type.
+            unsafe { load.hook(&PLAIN, load.symbol("plain")?) }?;
+            // SAFETY: the fake's symbol is a function of the hook's type.
+            unsafe { load.hook(&TALLY, load.symbol("tallied")?) }?;
             Result::Ok(Self)
         }
     }

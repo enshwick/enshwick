@@ -9,14 +9,16 @@ Reach for a [hook](hooks.md) first; patch only what a hook cannot reach.
 fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
     // `cmp eax, 8; jb` becomes `cmp eax, 16; jb`.
     let site = load.find_code("83 F8 08 72 ??")?;
-    load.patch_code(site + 2, &[0x08], &[0x10])
+    // SAFETY: an 8-bit immediate becomes another; the code stays valid.
+    unsafe { load.patch_code(site + 2, &[0x08], &[0x10]) }
 }
 ```
 
 `load.patch_code(address, expected, replacement)` asks for the bytes at
 `address` to read `expected` and become `replacement`. Both have the same
 length. Find the address with a [code pattern](finding-the-game.md#code-patterns)
-or a pinned symbol, never a fixed number.
+or a pinned symbol, never a fixed number. The call is `unsafe`: the loader
+checks the bytes it replaces, never what the new ones do.
 
 ## Checks
 

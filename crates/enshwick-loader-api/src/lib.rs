@@ -49,7 +49,8 @@
 //!         let settings: Settings = load.settings("enabled = true\n")?;
 //!         if settings.enabled {
 //!             let target = load.system("upgrade_building_range")?;
-//!             load.hook(&UPGRADE, target)?;
+//!             // SAFETY: the system takes the building context, as `UPGRADE` does.
+//!             unsafe { load.hook(&UPGRADE, target) }?;
 //!         }
 //!         Ok(Self { settings })
 //!     }

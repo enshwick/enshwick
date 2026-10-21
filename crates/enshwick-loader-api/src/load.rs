@@ -250,10 +250,19 @@ impl Load<'_> {
 
     /// Links `hook` into the chain of the game function at `target`.
     ///
+    /// # Safety
+    ///
+    /// `target` is the start of a game function whose type is `F`: its
+    /// arguments, return type and calling convention. The loader cannot
+    /// check either, and the game calls the hook's body with what it passes.
+    /// When `F` is a safe `fn` type, the function must be safe to call with
+    /// any arguments, since the body calls it through `next` without
+    /// `unsafe`.
+    ///
     /// # Errors
     ///
     /// [`Off`] when the loader refuses the link, for instance because another
-    /// mod holds the target exclusively.
+    /// mod holds the target exclusively, or the hook is linked already.
     ///
     /// # Examples
     ///
@@ -269,17 +278,23 @@ impl Load<'_> {
     ///
     /// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
     ///     let target = load.system("upgrade_building_range")?;
-    ///     load.hook(&UPGRADE, target)
+    ///     // SAFETY: the system takes the building context, as `UPGRADE` does.
+    ///     unsafe { load.hook(&UPGRADE, target) }
     /// }
     /// ```
-    pub fn hook<F: FnPtr>(&mut self, hook: &'static Hook<F>, target: u64) -> Result<(), Off> {
+    pub unsafe fn hook<F: FnPtr>(
+        &mut self,
+        hook: &'static Hook<F>,
+        target: u64,
+    ) -> Result<(), Off> {
         let spec = hook.spec(target);
         let status = (self.api().hook)(self.host.handle(), &raw const spec);
         ok(status, (), || format!("hook {}", hook.name()))
     }
 
-    /// The game's code section (`.text`) as loaded; the slice starts at its
-    /// absolute address and lives for the process.
+    /// The game's code section (`.text`) as loaded, before any hook or patch
+    /// is written; the slice starts at its absolute address. It borrows the
+    /// `Load`, since arming writes into the code after `init`.
     ///
     /// # Errors
     ///
@@ -294,7 +309,7 @@ impl Load<'_> {
     ///     Ok(())
     /// }
     /// ```
-    pub fn code(&self) -> Result<&'static [u8], Off> {
+    pub fn code(&self) -> Result<&[u8], Off> {
         let api = self.api();
         let (mut start, mut len) = (0u64, 0u64);
         let status = (api.code_range)(&raw mut start, &raw mut len);
@@ -306,7 +321,8 @@ impl Load<'_> {
             return Err(Off::new("code section: missing"));
         }
         // SAFETY: the loader names the game's code section, mapped readable
-        // for the life of the process.
+        // for the life of the process; nothing writes into it before the
+        // loader arms, after every `init` and so after this borrow.
         Ok(unsafe { core::slice::from_raw_parts(core::ptr::with_exposed_provenance(start), len) })
     }
 
@@ -345,6 +361,12 @@ impl Load<'_> {
     /// and logs it. A patch stays for the process, even when the mod is
     /// turned off later.
     ///
+    /// # Safety
+    ///
+    /// `replacement` keeps the code at `address` valid machine code for every
+    /// path through it, with the meaning the mod intends: the loader checks
+    /// the bytes it replaces, never what the new ones do.
+    ///
     /// # Errors
     ///
     /// [`Off`] when the lengths differ, the bytes are
@@ -360,10 +382,11 @@ impl Load<'_> {
     /// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
     ///     // `cmp eax, 8; jb` becomes `cmp eax, 16; jb`.
     ///     let site = load.find_code("83 F8 08 72 ??")?;
-    ///     load.patch_code(site + 2, &[0x08], &[0x10])
+    ///     // SAFETY: an 8-bit immediate becomes another; the code stays valid.
+    ///     unsafe { load.patch_code(site + 2, &[0x08], &[0x10]) }
     /// }
     /// ```
-    pub fn patch_code(
+    pub unsafe fn patch_code(
         &mut self,
         address: u64,
         expected: &[u8],
@@ -400,6 +423,13 @@ impl Load<'_> {
     /// bytes from it must not be jumped into from elsewhere: the loader
     /// replaces them with a jump.
     ///
+    /// # Safety
+    ///
+    /// `address` starts an instruction whose 5 bytes are not jumped into, as
+    /// above, and every register `handler` writes holds a value the game
+    /// code there can take: a wrong pointer or count in a register is a
+    /// wrong pointer or count in the game.
+    ///
     /// # Errors
     ///
     /// [`Off`] when the loader refuses the hook: a second one of this mod on
@@ -411,10 +441,12 @@ impl Load<'_> {
     /// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
     ///     // An instruction inside a function, pinned per build in the mod's rows.
     ///     let site = load.symbol("building.range_check")?;
-    ///     load.hook_at(site, |registers| registers.rax = registers.rax.min(64))
+    ///     // SAFETY: the site starts an instruction and reads a count in `rax`;
+    ///     // a lower count is one the game takes.
+    ///     unsafe { load.hook_at(site, |registers| registers.rax = registers.rax.min(64)) }
     /// }
     /// ```
-    pub fn hook_at<F>(&mut self, address: u64, handler: F) -> Result<(), Off>
+    pub unsafe fn hook_at<F>(&mut self, address: u64, handler: F) -> Result<(), Off>
     where
         F: Fn(&mut Registers) + Send + Sync + 'static,
     {
@@ -1132,9 +1164,12 @@ fn hold<T: Config>(kept: &std::sync::Mutex<Option<String>>, settings: &mut T, st
     }
 }
 
-/// The reason a mod's check refused a settings text, kept until its next
-/// check.
-static CHECK_WHY: std::sync::Mutex<String> = std::sync::Mutex::new(String::new());
+std::thread_local! {
+    /// The reason a mod's check refused a settings text, kept on the thread
+    /// that asked until its next check there: the game thread and the UI
+    /// thread may check at once, and each reads its own after the call.
+    static CHECK_WHY: core::cell::RefCell<String> = const { core::cell::RefCell::new(String::new()) };
+}
 
 /// Parses and validates `text` as the mod's settings, for the loader's
 /// check before it writes a change.
@@ -1155,16 +1190,14 @@ unsafe extern "system" fn check_text<T: Config>(
             let Err(reason) = checked else {
                 return Status::OK;
             };
-            let reason = reason.to_string();
-            let mut kept = CHECK_WHY
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
-            *kept = reason;
-            if !why.is_null() {
-                // SAFETY: the loader's out pointer; the reason stays in
-                // `CHECK_WHY` until the next check.
-                unsafe { why.write(Str::new(&kept)) };
-            }
+            CHECK_WHY.with_borrow_mut(|kept| {
+                *kept = reason.to_string();
+                if !why.is_null() {
+                    // SAFETY: the loader's out pointer; the reason stays in
+                    // this thread's `CHECK_WHY` until its next check.
+                    unsafe { why.write(Str::new(kept)) };
+                }
+            });
             Status::REFUSED
         },
     )

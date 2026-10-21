@@ -109,8 +109,7 @@ static SEEN: OnceLock<Seen> = OnceLock::new();
 ///
 /// [`Off`] when the game's code cannot be read.
 pub(crate) fn link(load: &mut Load<'_>) -> Result<usize, Off> {
-    let code = load.code()?;
-    let start = code.as_ptr().addr();
+    let start = load.code()?.as_ptr().addr();
     let _first = SEEN.set(Seen {
         start: Instant::now(),
         base: memory::image_base(),
@@ -130,7 +129,7 @@ pub(crate) fn link(load: &mut Load<'_>) -> Result<usize, Off> {
         };
         let found = at
             .checked_sub(start)
-            .and_then(|offset| code.get(offset..offset + site.expected.len()));
+            .and_then(|offset| load.code().ok()?.get(offset..offset + site.expected.len()));
         if found != Some(&site.expected[..]) {
             enshwick_loader_api::warn!(
                 "{} off: its bytes at {at:#x} are {found:02x?}, not those of build 1269579",
@@ -139,7 +138,9 @@ pub(crate) fn link(load: &mut Load<'_>) -> Result<usize, Off> {
             continue;
         }
         let kind = site.kind;
-        match load.hook_at(address, move |registers| seen(kind, registers)) {
+        // SAFETY: the site's bytes match build 1269579, where it starts an
+        // instruction; the handler only reads the registers.
+        match unsafe { load.hook_at(address, move |registers| seen(kind, registers)) } {
             Ok(()) => hooked += 1,
             Err(off) => enshwick_loader_api::warn!("{} off: {off}", site.name),
         }

@@ -44,7 +44,9 @@
 //!
 //!     fn init(load: &mut Load<'_>) -> Result<Self, Off> {
 //!         let settings: Settings = load.settings("bonus = 1\n")?;
-//!         load.hook(&REWARD, load.symbol("quest.reward")?)?;
+//!         let reward = load.symbol("quest.reward")?;
+//!         // SAFETY: the game's reward function has the type `REWARD` declares.
+//!         unsafe { load.hook(&REWARD, reward) }?;
 //!         load.on::<events::WorldLoaded>(|()| enshwick_loader_api::info!("world loaded"))?;
 //!         Ok(Self { bonus: settings.bonus })
 //!     }

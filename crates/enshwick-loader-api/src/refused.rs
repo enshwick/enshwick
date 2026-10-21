@@ -94,5 +94,27 @@
 ///     next.get()(n)
 /// }
 /// ```
+///
+/// Linking a hook outside `unsafe`, since the loader cannot check the
+/// target's type:
+///
+/// ```compile_fail
+/// #[enshwick_loader_api::hook]
+/// fn count(next: enshwick_loader_api::Next<extern "system" fn(u32) -> u32>, n: u32) -> u32 {
+///     next.get()(n)
+/// }
+///
+/// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+///     load.hook(&COUNT, load.symbol("count")?)
+/// }
+/// ```
+///
+/// Keeping the game's code past `init`, when arming writes into it:
+///
+/// ```compile_fail
+/// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<&'static [u8], enshwick_loader_api::Off> {
+///     load.code()
+/// }
+/// ```
 #[expect(dead_code, reason = "the doc comment carries the cases")]
 struct Refused;

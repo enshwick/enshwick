@@ -34,7 +34,9 @@ enshwick_loader_api::detour! {
 
 /// Links the skill change.
 pub(crate) fn link(load: &mut Load<'_>) -> Result<(), Off> {
-    load.hook(&CHANGE, load.symbol("research.skill_change")?)
+    let change = load.symbol("research.skill_change")?;
+    // SAFETY: the mod's row names the skill change `CHANGE` declares.
+    unsafe { load.hook(&CHANGE, change) }
 }
 
 fn change(next: Next<Change>, node: u32, nodes: *mut u8, add: u8, view: *const u8) -> u8 {

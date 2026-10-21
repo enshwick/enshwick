@@ -9,16 +9,21 @@ has there:
 fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
     // An instruction inside a function, pinned per build in the mod's rows.
     let site = load.symbol("my-mod.range_clamp")?;
-    load.hook_at(site, |registers: &mut enshwick_loader_api::abi::Registers| {
-        registers.rax = registers.rax.min(64);
-    })
+    // SAFETY: the site starts an instruction that reads a range in `rax`, and
+    // a smaller range is one the game takes.
+    unsafe {
+        load.hook_at(site, |registers: &mut enshwick_loader_api::abi::Registers| {
+            registers.rax = registers.rax.min(64);
+        })
+    }
 }
 ```
 
 The address comes from the mod's [build rows](finding-the-game.md#build-rows-in-the-manifest)
 or from `load.find_code` plus an offset. The handler is a `Fn(&mut Registers)`
 closure that is `Send + Sync + 'static`; it runs on whichever game thread
-reaches the instruction.
+reaches the instruction. The call is `unsafe`: a register the handler writes
+is a value the game code goes on with, which the loader cannot check.
 
 ## Registers
 

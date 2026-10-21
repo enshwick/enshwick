@@ -68,11 +68,15 @@ impl Host {
     /// `api` must point at a valid [`HostApi`] that outlives the process, as
     /// the loader's does.
     pub(crate) unsafe fn new(api: *const HostApi, me: ModHandle) -> Option<Self> {
-        // SAFETY: the caller guarantees `api` is valid for the process.
+        // SAFETY: the caller guarantees a table, which starts with its
+        // header, valid for the process.
+        let header = unsafe { api.cast::<Header>().as_ref() }?;
+        if header.abi_major != crate::abi::ABI_MAJOR || !header.covers(size_of::<HostApi>()) {
+            return None;
+        }
+        // SAFETY: the header says the table is at least this build's long.
         let api = unsafe { api.as_ref() }?;
-        let current = api.header.abi_major == crate::abi::ABI_MAJOR
-            && api.header.covers(size_of::<HostApi>());
-        current.then_some(Self { api, me })
+        Some(Self { api, me })
     }
 
     /// Makes this the answer of [`host`]; the first call wins.

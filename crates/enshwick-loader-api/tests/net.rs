@@ -52,6 +52,12 @@ mod tests {
             channel.send(Peer::Player(8), &marker),
             Err(SendError::NotReady)
         );
+        assert!(!channel.is_ready(Peer::Player(0)));
+        assert_eq!(
+            channel.send(Peer::Player(0), &marker),
+            Err(SendError::NotReady),
+            "key 0 would reach every client"
+        );
         assert_eq!(
             channel.broadcast(&Sync::Text("x".repeat(5000))),
             Err(SendError::TooLarge)
