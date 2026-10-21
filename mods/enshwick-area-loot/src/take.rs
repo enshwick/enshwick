@@ -6,13 +6,12 @@
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::{Mutex, MutexGuard, OnceLock, PoisonError};
-use std::time::{Duration, Instant};
-
-use crate::clock::Clock;
+use std::time::Duration;
 
 use enshwick_loader_api::ecs::Entity;
 use enshwick_loader_api::inventory::{Batch, Inventories, Op, Outcome};
 use enshwick_loader_api::loot::{Container, LootPass, near};
+use enshwick_loader_api::time::StepClock;
 use enshwick_loader_api::{Load, Off};
 
 use crate::Settings;
@@ -30,7 +29,7 @@ static INVENTORIES: OnceLock<Inventories> = OnceLock::new();
 static TRACKER: Mutex<Option<Tracker>> = Mutex::new(None);
 static LAST_PRUNE: Mutex<Option<Duration>> = Mutex::new(None);
 /// The time the holds and the busy window count in: the server's steps.
-static CLOCK: Clock = Clock::new();
+static CLOCK: OnceLock<&'static StepClock> = OnceLock::new();
 static ENABLED: AtomicBool = AtomicBool::new(true);
 /// Radius and height in metres, as `f32` bits.
 static RADIUS: AtomicU32 = AtomicU32::new(0x4140_0000);
@@ -54,6 +53,11 @@ pub(crate) fn apply(settings: &Settings) {
     HEIGHT.store(settings.height.to_bits(), Ordering::Relaxed);
 }
 
+/// The step clock's time; zero before the mod linked it.
+fn now() -> Duration {
+    CLOCK.get().map_or(Duration::ZERO, |clock| clock.now())
+}
+
 fn tracker() -> MutexGuard<'static, Option<Tracker>> {
     TRACKER.lock().unwrap_or_else(PoisonError::into_inner)
 }
@@ -62,7 +66,7 @@ fn tracker() -> MutexGuard<'static, Option<Tracker>> {
 pub(crate) fn link(load: &mut Load<'_>) -> Result<(), Off> {
     let _first = INVENTORIES.set(load.inventories()?);
     *tracker() = Some(Tracker::default());
-    load.on::<enshwick_loader_api::events::Ticked>(|_| CLOCK.step(Instant::now()))?;
+    let _first = CLOCK.set(load.step_clock()?);
     load.on_loot_pass(check)?;
     // Entity ids belong to one game.
     load.on::<enshwick_loader_api::events::ShutdownStarted>(|()| {
@@ -86,7 +90,7 @@ fn check(loot: &LootPass<'_>) {
 
 /// Watches every container and starts a take for each one a player emptied.
 fn pass(loot: &LootPass<'_>) {
-    let now = CLOCK.now();
+    let now = now();
     let mut emptied: Vec<(Container, Entity)> = Vec::new();
     {
         let mut guard = tracker();
@@ -188,7 +192,7 @@ fn take_next(player: Entity, mut queue: VecDeque<Entity>, game: u64) {
         let Some(t) = guard.as_mut() else {
             return;
         };
-        if t.still_free(next, player, CLOCK.now()) {
+        if t.still_free(next, player, now()) {
             break next;
         }
         t.release(next);

@@ -1,7 +1,7 @@
 //! What the mod remembers of the loot containers it saw: whether each was
 //! empty, who last opened it and since when, where it stands, and which ones
-//! a take in flight holds. Times are the mod's step clock
-//! ([`crate::clock`]).
+//! a take in flight holds. Times are the API's step clock
+//! ([`enshwick_loader_api::time::StepClock`]).
 
 use std::collections::HashMap;
 use std::time::Duration;
