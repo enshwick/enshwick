@@ -23,9 +23,11 @@ The owner stands within 4 m of one of their Safes and types in the chat:
 - `/safe deny <player>`: takes that back;
 - `/safe list`: names the players allowed.
 
-Each acts on the owner's Safe nearest to them, and the reply says which.
-Nobody else ever removes a Safe, except administrators while
-`admins_can_open` is on.
+Each acts on the nearest Safe within 4 m the player may manage: their own,
+any for administrators while `admins_can_open` is on, or one another mod
+lets them manage (see For mod authors). The reply says
+which Safe and whose it is. Nobody else ever removes a Safe, except
+administrators while `admins_can_open` is on.
 
 All of it works on a dedicated server and in a game a player hosts. A player
 who has just joined touches no Safe, their own included, until the server has

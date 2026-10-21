@@ -1,6 +1,6 @@
 //! `/safe allow <player>`, `/safe deny <player>` and `/safe list`: the owner
-//! of a Safe lets other players use it, acting on their nearest own Safe
-//! within reach.
+//! of a Safe lets other players use it, acting on the nearest Safe within
+//! reach they may manage: their own, or one another mod lets them manage.
 
 use std::sync::atomic::{AtomicU32, Ordering};
 
@@ -8,7 +8,7 @@ use enshwick_loader_api::commands::{CommandContext, Reply};
 use enshwick_loader_api::i18n::{Language, Texts};
 use enshwick_loader_api::world::{Player, World};
 
-use crate::access::{ACCESS, AllowOutcome, Cell, Seen, centre, nearest_own};
+use crate::access::{ACCESS, AllowOutcome, Cell, Safe, Seen, centre, nearest_own};
 
 /// How far from the player their Safe may be, in metres; `texts.toml` says
 /// "4 m" in its replies.
@@ -109,48 +109,66 @@ pub fn run(
     let Some(position) = world.position(me.entity) else {
         return phrases.say("command.no_safe", &[]).into();
     };
-    let Some(at) = nearest_own(&ACCESS.owners.load(), me.key, position, REACH) else {
-        return phrases.say("command.no_safe", &[]).into();
-    };
-    let here = place(at);
-    let changes = matches!(request, Request::Allow(_) | Request::Deny(_));
     let seen = Seen {
         key: me.key,
         admin: me.is_admin(),
     };
-    if changes && !ACCESS.may_manage(at, seen, me.entity) {
-        return phrases.say("command.refused", &[("at", &here)]).into();
-    }
+    let Some((at, managed)) = ACCESS.nearest_managed(seen, me.entity, position, REACH) else {
+        // An own Safe in reach that another mod's link keeps them from.
+        return match nearest_own(&ACCESS.owners.load(), me.key, position, REACH) {
+            Some(own) => phrases.say("command.refused", &[("at", &place(own))]),
+            None => phrases.say("command.no_safe", &[]),
+        }
+        .into();
+    };
+    let here = place(at);
+    let whose = whose(phrases, &managed, me.key);
     let reply = match request {
-        Request::Allow(name) => allow(world, phrases, me, at, &name, &here, &save),
+        Request::Allow(name) => allow(world, phrases, me, at, &name, (&here, &whose), &save),
         Request::Deny(name) => {
             let denied = ACCESS.change(at, |safe| safe.deny(&name)).flatten();
             match denied {
                 Some(gone) => {
                     save();
-                    phrases.say("command.denied", &[("name", &gone.name), ("at", &here)])
+                    phrases.say(
+                        "command.denied",
+                        &[("name", &gone.name), ("safe", &whose), ("at", &here)],
+                    )
                 }
-                None => phrases.say("command.not_allowed", &[("name", &name), ("at", &here)]),
+                None => phrases.say(
+                    "command.not_allowed",
+                    &[("name", &name), ("safe", &whose), ("at", &here)],
+                ),
             }
         }
         Request::List | Request::Help => {
-            let names: Vec<String> = ACCESS
-                .owners
-                .load()
-                .get(&at)
-                .map(|safe| safe.allowed.iter().map(|a| a.name.clone()).collect())
-                .unwrap_or_default();
+            let names: Vec<&str> = managed.allowed.iter().map(|a| a.name.as_str()).collect();
             if names.is_empty() {
-                phrases.say("command.list_empty", &[("at", &here)])
+                phrases.say("command.list_empty", &[("safe", &whose), ("at", &here)])
             } else {
                 phrases.say(
                     "command.list",
-                    &[("at", &here), ("names", &names.join(", "))],
+                    &[
+                        ("safe", &whose),
+                        ("at", &here),
+                        ("names", &names.join(", ")),
+                    ],
                 )
             }
         }
     };
     reply.into()
+}
+
+/// Whose Safe `safe` is, as `key`'s reply names it.
+fn whose(phrases: &Phrases, safe: &Safe, key: u64) -> String {
+    if safe.owner == key {
+        phrases.say("command.yours", &[])
+    } else if safe.owner_name.is_empty() {
+        phrases.say("command.unknown", &[])
+    } else {
+        phrases.say("command.theirs", &[("owner", &safe.owner_name)])
+    }
 }
 
 fn allow(
@@ -159,7 +177,7 @@ fn allow(
     me: &Player,
     at: Cell,
     name: &str,
-    here: &str,
+    (here, whose): (&str, &str),
     save: &impl Fn(),
 ) -> String {
     let matching = world.players_named(name);
@@ -172,14 +190,18 @@ fn allow(
         return phrases.say("command.self", &[]);
     }
     let outcome = ACCESS.change(at, |safe| safe.allow(target.key, &target.name));
-    let values = [("name", target.name.as_str()), ("at", here)];
+    let values = [
+        ("name", target.name.as_str()),
+        ("safe", whose),
+        ("at", here),
+    ];
     match outcome {
         Some(AllowOutcome::Allowed) => {
             save();
             phrases.say("command.allowed", &values)
         }
         Some(AllowOutcome::Already) => phrases.say("command.already", &values),
-        Some(AllowOutcome::Owner) => phrases.say("command.self", &[]),
+        Some(AllowOutcome::Owner) => phrases.say("command.owner", &values),
         None => phrases.say("command.no_safe", &[]),
     }
 }
@@ -229,6 +251,10 @@ mod tests {
             "command.list",
             "command.list_empty",
             "command.refused",
+            "command.owner",
+            "command.yours",
+            "command.theirs",
+            "command.unknown",
         ] {
             assert!(texts.get(key, Language::FALLBACK).is_some(), "{key}");
         }

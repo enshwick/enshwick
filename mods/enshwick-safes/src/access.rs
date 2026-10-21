@@ -306,6 +306,33 @@ impl Access {
         )
     }
 
+    /// The cell of the Safe nearest to `position`, within `max` metres, that
+    /// `player`, with the character `character`, may manage, and its record.
+    #[must_use]
+    pub fn nearest_managed(
+        &self,
+        player: Seen,
+        character: Entity,
+        position: [f64; 3],
+        max: f64,
+    ) -> Option<(Cell, Safe)> {
+        let owners = self.owners.load();
+        let mut near: Vec<(f64, Cell)> = owners
+            .keys()
+            .map(|&at| {
+                let c = centre(at);
+                let d = (0..3).map(|i| (c[i] - position[i]).powi(2)).sum::<f64>();
+                (d.sqrt(), at)
+            })
+            .filter(|&(distance, _)| distance <= max)
+            .collect();
+        near.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
+        near.into_iter()
+            .map(|(_, at)| at)
+            .find(|&at| self.may_manage(at, player, character))
+            .and_then(|at| Some((at, owners.get(&at)?.clone())))
+    }
+
     /// The owner of `chest` and the cell it is kept at, when it is a Safe
     /// with a known owner, learning it on first sight from the item it was
     /// placed from and where it stands.
