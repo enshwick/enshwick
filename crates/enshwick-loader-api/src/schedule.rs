@@ -23,6 +23,9 @@ struct Queue {
     next_due: AtomicU64,
     epoch: Instant,
     tasks: Mutex<Vec<Task>>,
+    /// The buffer due tasks run from, kept between runs so a run does not
+    /// allocate.
+    spare: Mutex<Vec<Task>>,
 }
 
 const IDLE: u64 = u64::MAX;
@@ -34,6 +37,7 @@ impl Queue {
             next_due: AtomicU64::new(IDLE),
             epoch: Instant::now(),
             tasks: Mutex::new(Vec::new()),
+            spare: Mutex::new(Vec::new()),
         }
     }
 
@@ -174,40 +178,53 @@ impl Scheduler {
 
     #[cold]
     fn run_due_at(self, now: Instant) {
-        let due: Vec<Task> = {
+        let mut due = core::mem::take(
+            &mut *self
+                .queue
+                .spare
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner),
+        );
+        {
             let mut tasks = self
                 .queue
                 .tasks
                 .lock()
                 .unwrap_or_else(PoisonError::into_inner);
-            let due = tasks.extract_if(.., |task| task.due <= now).collect();
+            due.extend(tasks.extract_if(.., |task| task.due <= now));
             let next = tasks.iter().map(|task| task.due).min();
             self.queue.next_due.store(
                 next.map_or(IDLE, |at| self.queue.nanos(at)),
                 Ordering::Release,
             );
-            due
-        };
-        // Outside the lock: a task may schedule more.
-        let again: Vec<Task> = due
-            .into_iter()
-            .filter_map(|mut task| match ((task.run)(), task.period) {
-                (ControlFlow::Continue(()), Some(period)) => {
-                    task.due = now.checked_add(period)?;
-                    Some(task)
-                }
-                _ => None,
-            })
-            .collect();
-        let mut tasks = self
-            .queue
-            .tasks
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner);
-        for task in &again {
-            self.queue.due_by(task.due);
         }
-        tasks.extend(again);
+        // Outside the lock: a task may schedule more.
+        due.retain_mut(|task| match ((task.run)(), task.period) {
+            (ControlFlow::Continue(()), Some(period)) => match now.checked_add(period) {
+                Some(at) => {
+                    task.due = at;
+                    true
+                }
+                None => false,
+            },
+            _ => false,
+        });
+        {
+            let mut tasks = self
+                .queue
+                .tasks
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner);
+            for task in &due {
+                self.queue.due_by(task.due);
+            }
+            tasks.append(&mut due);
+        }
+        *self
+            .queue
+            .spare
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner) = due;
     }
 }
 
@@ -247,6 +264,21 @@ mod tests {
         assert_eq!(repeated.load(Ordering::Relaxed), 3);
         assert_eq!(later.load(Ordering::Relaxed), 0);
         assert_ne!(scheduler.queue.next_due.load(Ordering::Relaxed), IDLE);
+    }
+
+    #[test]
+    fn runs_keep_their_buffers_between_steps() {
+        let (scheduler, _) = Scheduler::get();
+        scheduler.every(Duration::ZERO, || ControlFlow::Continue(()));
+        scheduler.run_due();
+        let lock = |m: &'static Mutex<Vec<Task>>| m.lock().unwrap_or_else(PoisonError::into_inner);
+        let spare = lock(&scheduler.queue.spare).capacity();
+        let tasks = lock(&scheduler.queue.tasks).capacity();
+        assert!(spare >= 1);
+        scheduler.run_due();
+        assert_eq!(lock(&scheduler.queue.spare).capacity(), spare);
+        assert_eq!(lock(&scheduler.queue.tasks).capacity(), tasks);
+        assert_eq!(lock(&scheduler.queue.tasks).len(), 1);
     }
 
     #[test]
