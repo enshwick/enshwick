@@ -11,6 +11,10 @@ use crate::{Load, Off};
 
 /// The attribute set's flag bit that marks it initialised.
 const SET_INITIALISED: u8 = 1;
+/// The skill nodes a character keeps.
+const SKILL_SLOTS: usize = 256;
+/// A node's level is the top three bits of its byte; 1.0 build 1269579.
+const SKILL_LEVEL_SHIFT: u8 = 5;
 
 /// A value with its maximum, such as health.
 ///
@@ -75,6 +79,20 @@ pub(crate) enum Pool {
     Shroud,
 }
 
+/// A skill node a character unlocked, from [`World::skills`].
+///
+/// # Examples
+///
+/// See [`World::skills`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub struct Skill {
+    /// The node's id in the game's skill tree.
+    pub node: u32,
+    /// Its level, from 1, for nodes that level up; 0 for the others.
+    pub level: u8,
+}
+
 /// A character's level and experience, from [`World::progress`].
 ///
 /// # Examples
@@ -125,6 +143,10 @@ pub(crate) struct Stats {
     in_shroud: Option<(crate::world::Field<u64>, u64)>,
 }
 
+/// The unlocked skill nodes' component, and where it keeps their ids and
+/// their levels; kept apart, since [`World`] is copied by value.
+static SKILLS: std::sync::OnceLock<(ComponentType, usize, usize)> = std::sync::OnceLock::new();
+
 impl Stats {
     /// The stat reads for the running build.
     pub(crate) fn resolve(load: &Load<'_>, world: &World) -> Result<Self, Off> {
@@ -135,6 +157,23 @@ impl Stats {
         };
         let slot = |name: &str| value(name).map(|v| v as usize);
         let set = |ty: &str| world.component_type(load, ty);
+        let skills = (|| {
+            let ty = "keen::ecs::UnlockedSkillNodes";
+            let at = |field: &str| {
+                load.field_offset(ty, field).and_then(|v| {
+                    usize::try_from(v).map_err(|_| Off::new(format!("field {ty}.{field}")))
+                })
+            };
+            let size = usize::try_from(load.type_size(ty)?).unwrap_or(0);
+            let (ids, levels) = (at("knownSkillNodes")?, at("unlockLevel")?);
+            if ids + SKILL_SLOTS * 4 > size || levels + SKILL_SLOTS > size {
+                return Err(Off::new(format!("{ty}: smaller than this API reads")));
+            }
+            Ok::<_, Off>((set(ty)?, ids, levels))
+        })();
+        if let Ok(found) = skills {
+            let _first = SKILLS.set(found);
+        }
         Ok(Self {
             layout: SetLayout {
                 data_offset: slot("ecs.level_data_offset")?,
@@ -290,6 +329,27 @@ impl Stats {
             current: current.cast_signed(),
             max: max.cast_signed(),
         })
+    }
+
+    pub(crate) fn skills(world: &World, entity: Entity) -> Option<Vec<Skill>> {
+        let &(ty, ids, levels) = SKILLS.get()?;
+        let data = world.component(entity, ty)?.cast::<u8>();
+        Some(
+            (0..SKILL_SLOTS)
+                .filter_map(|slot| {
+                    // SAFETY: the character's live unlocked skill nodes, on
+                    // the game thread: `SKILL_SLOTS` node ids and as many
+                    // level bytes at their reflected offsets.
+                    let node: u32 = unsafe { read_at(data, ids + slot * 4) };
+                    // SAFETY: as above.
+                    let level: u8 = unsafe { read_at(data, levels + slot) };
+                    (node != 0).then_some(Skill {
+                        node,
+                        level: level >> SKILL_LEVEL_SHIFT,
+                    })
+                })
+                .collect(),
+        )
     }
 
     pub(crate) fn in_shroud(&self, world: &World, entity: Entity) -> Option<bool> {

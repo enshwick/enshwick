@@ -137,6 +137,11 @@ most; clients see it from the next step. The game refills it outside the
 shroud and saves none of it. `in_shroud(entity)` tells whether a character
 stands in the shroud where it drains them, outside the altars' reach.
 
+`skills(entity)` lists the skill nodes a character unlocked, each a `Skill`
+with the node's id in the game's skill tree and its level for nodes that
+level up. Unlocking and unlearning stay the player's: the game resets a
+whole tree it finds unconnected or over its points when the character loads.
+
 ## Writing components
 
 A write goes to the component the server owns, and the loader marks it
