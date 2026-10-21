@@ -47,6 +47,12 @@ pub struct Settings {
     /// allows it (`reload = true` in its manifest). For developing mods, on
     /// the dedicated server only. Read at start.
     pub dev_reload: bool,
+    /// Refuse knowledge a client asks the server for in its input that a
+    /// vanilla client never asks for: ids of the world's, counters, flag
+    /// bits other than the seen bit, ids that give experience or skill
+    /// points, and quests. A vanilla server grants whatever a client asks,
+    /// so a modified client could grant itself any of it. Read at start.
+    pub knowledge_guard: bool,
 }
 
 impl Default for Settings {
@@ -60,6 +66,7 @@ impl Default for Settings {
             migrations_dry_run: false,
             build_patterns: true,
             dev_reload: false,
+            knowledge_guard: true,
         }
     }
 }

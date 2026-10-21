@@ -9,11 +9,12 @@ use crate::abi::{
     BuildCheckFn, BuildInfo, CallerFrame, ComfortFn, CommandCallFn, ConfigCheckFn, CraftCheckFn,
     DamageFilterFn, DaytimeInfo, EntityPlace, Event, EventFn, EventSpec, ExperiencePassFn,
     GameEventFn, Header, HookSpec, HostApi, InteractionFn, InventoryRequest, InventoryResultFn,
-    ItemData, KnowledgeInfo, Level, MidHookFn, MidHookSpec, MigrationSet, ModEventFn, ModHandle,
-    ModInfo, NetMessageFn, PlayerInfo, RenameCallFn, ResourceKey, ResourcePatchFn, ServiceFound,
-    ServiceSpec, Side, SkillCheckFn, SpawnRequest, Status, StatusFn, Str, SummonFn,
-    SurvivorLookupFn, SurvivorStatusFn, TeleportRequest, TerrainEdit, TerrainMaterialInfo,
-    UiAnswerFn, UiDialog, UiFrameFn, UiMarker, UiWidget, WeatherFront, ZoneCheckFn,
+    ItemData, KnowledgeInfo, KnowledgeInputFn, Level, MidHookFn, MidHookSpec, MigrationSet,
+    ModEventFn, ModHandle, ModInfo, NetMessageFn, PlayerInfo, RenameCallFn, ResourceKey,
+    ResourcePatchFn, ServiceFound, ServiceSpec, Side, SkillCheckFn, SpawnRequest, Status, StatusFn,
+    Str, SummonFn, SurvivorLookupFn, SurvivorStatusFn, TeleportRequest, TerrainEdit,
+    TerrainMaterialInfo, UiAnswerFn, UiDialog, UiFrameFn, UiMarker, UiWidget, WeatherFront,
+    ZoneCheckFn,
 };
 
 use super::{FakeHost, LinkedHook, ServedResource, SubmittedRequest};
@@ -90,6 +91,7 @@ pub(crate) struct State {
     /// The game settings' bytes and preset, settable while installed.
     pub(crate) game_settings: Option<(Vec<u8>, u32)>,
     pub(crate) damage_filters: Vec<(DamageFilterFn, usize)>,
+    pub(crate) knowledge_input_filters: Vec<(KnowledgeInputFn, usize)>,
     /// The buff types the fake knows.
     pub(crate) buff_types: Vec<BuffTypeInfo>,
     /// The buffs of each entity that holds buffs.
@@ -218,6 +220,7 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         clock_speed: None,
         game_settings: None,
         damage_filters: Vec::new(),
+        knowledge_input_filters: Vec::new(),
         buff_types: Vec::new(),
         buffs: std::collections::HashMap::new(),
         knowledge: Vec::new(),
@@ -1646,6 +1649,18 @@ extern "system" fn damage_filter(
     })
 }
 
+extern "system" fn knowledge_input_filter(
+    _me: ModHandle,
+    callback: KnowledgeInputFn,
+    user: *mut c_void,
+) -> Status {
+    with(Status::MISSING, |s| {
+        s.knowledge_input_filters
+            .push((callback, user.expose_provenance()));
+        Status::OK
+    })
+}
+
 /// Writes up to `capacity` of `items` to `out` and their number to `count`.
 pub(crate) fn put_list<T: Copy>(
     items: &[T],
@@ -2269,4 +2284,5 @@ pub(crate) static TABLE: HostApi = HostApi {
     declare_content,
     entity_data_open,
     replaced,
+    knowledge_input_filter,
 };

@@ -12,6 +12,14 @@
 //! [`QuestCompleted`](crate::events::QuestCompleted) report what each step
 //! changed.
 //!
+//! A vanilla server grants whatever knowledge a client asks for in its
+//! input, so a modified client could grant itself any of it. The loader's
+//! knowledge guard, on by default (`knowledge_guard` in the loader's
+//! settings), lets through only what a vanilla client asks for: a player's
+//! bools and the seen bit (0) of a player's flags, and never an id that
+//! gives experience or skill points or a quest. A mod widens or narrows it
+//! with [`Load::on_knowledge_input`].
+//!
 //! Every call belongs on the server's game thread, from a game event, a
 //! [`Scheduler`](crate::schedule::Scheduler) task or a command; on a client,
 //! while it hosts a game.
@@ -32,7 +40,9 @@
 //! }
 //! ```
 
-use crate::abi::{Header, HostApi, KnowledgeInfo, Status};
+use core::ffi::c_void;
+
+use crate::abi::{Header, HostApi, KnowledgeInfo, KnowledgeInput, Status};
 use crate::ecs::Entity;
 use crate::world::WorldError;
 use crate::{Host, Load, Off};
@@ -122,12 +132,7 @@ impl Known {
     fn from_info(info: &KnowledgeInfo) -> Self {
         Self {
             id: info.id,
-            kind: match info.kind {
-                KnowledgeInfo::BOOL => KnowledgeKind::Bool,
-                KnowledgeInfo::COUNTER => KnowledgeKind::Counter,
-                KnowledgeInfo::FLAGS => KnowledgeKind::Flags,
-                other => KnowledgeKind::Other(other),
-            },
+            kind: kind_of(info.kind),
             scope: if info.scope == KnowledgeInfo::WORLD {
                 Scope::World
             } else {
@@ -318,7 +323,160 @@ impl Knowledge {
     }
 }
 
+/// Why the loader's knowledge guard refuses a client's request.
+///
+/// # Examples
+///
+/// See [`Load::on_knowledge_input`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum Refusal {
+    /// An id the game does not know.
+    Unknown,
+    /// A kind that is not the id's.
+    Kind,
+    /// An id of the world's, which every player shares.
+    World,
+    /// A counter.
+    Counter,
+    /// A flag bit other than the seen bit, 0.
+    FlagBit,
+    /// An id that gives experience.
+    Experience,
+    /// An id that gives skill points.
+    SkillPoints,
+    /// A quest's id.
+    Quest,
+    /// A reason this API does not name.
+    Other(u32),
+}
+
+impl Refusal {
+    const fn from_raw(raw: u32) -> Option<Self> {
+        Some(match raw {
+            KnowledgeInput::ALLOWED => return None,
+            KnowledgeInput::UNKNOWN => Self::Unknown,
+            KnowledgeInput::KIND => Self::Kind,
+            KnowledgeInput::WORLD => Self::World,
+            KnowledgeInput::COUNTER => Self::Counter,
+            KnowledgeInput::FLAG_BIT => Self::FlagBit,
+            KnowledgeInput::EXPERIENCE => Self::Experience,
+            KnowledgeInput::SKILL_POINTS => Self::SkillPoints,
+            KnowledgeInput::QUEST => Self::Quest,
+            other => Self::Other(other),
+        })
+    }
+}
+
+/// Knowledge a client asks the server for in its input, from
+/// [`Load::on_knowledge_input`].
+///
+/// # Examples
+///
+/// See [`Load::on_knowledge_input`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct KnowledgeRequest {
+    /// The asking player's character.
+    pub player: Entity,
+    /// The knowledge id.
+    pub id: u32,
+    /// The kind the client names.
+    pub kind: KnowledgeKind,
+    /// Whose the id is; `None` for an id the game does not know.
+    pub scope: Option<Scope>,
+    /// Ignored for a bool, added for a counter, the bit to set for flags.
+    pub value: u32,
+    /// Why the loader's guard refuses it, whether the guard is on or not.
+    pub refusal: Option<Refusal>,
+    /// Whether it goes through so far: after the guard, when it is on, and
+    /// the filters that ran before.
+    pub allowed: bool,
+}
+
+unsafe extern "system" fn run_input<F>(call: *const KnowledgeInput, user: *mut c_void) -> u8
+where
+    F: Fn(&KnowledgeRequest) -> bool,
+{
+    // SAFETY: the loader passes a valid call for the duration of this one.
+    let Some(call) = (unsafe { call.as_ref() }) else {
+        return 0;
+    };
+    let allowed = call.allowed != 0;
+    let request = KnowledgeRequest {
+        player: Entity(call.player),
+        id: call.id,
+        kind: kind_of(call.kind),
+        scope: match call.scope {
+            KnowledgeInfo::WORLD => Some(Scope::World),
+            KnowledgeInfo::PLAYER => Some(Scope::Player),
+            _ => None,
+        },
+        value: call.value,
+        refusal: Refusal::from_raw(call.refusal),
+        allowed,
+    };
+    // SAFETY: `user` is the leaked `F` this function was registered with.
+    let filter = unsafe { &*user.cast::<F>() };
+    u8::from(crate::host::guard(
+        "panic in a knowledge input filter",
+        || allowed,
+        || filter(&request),
+    ))
+}
+
+const fn kind_of(raw: u8) -> KnowledgeKind {
+    match raw {
+        KnowledgeInfo::BOOL => KnowledgeKind::Bool,
+        KnowledgeInfo::COUNTER => KnowledgeKind::Counter,
+        KnowledgeInfo::FLAGS => KnowledgeKind::Flags,
+        other => KnowledgeKind::Other(other),
+    }
+}
+
 impl Load<'_> {
+    /// Runs `filter` on the knowledge each client asks the server for in
+    /// its input, after the loader's guard; its answer, `true` to let the
+    /// request through, replaces the verdict so far, so a mod can refuse
+    /// more than the guard or allow what it refuses. A refused request
+    /// changes nothing and is not asked again. It runs on the server's
+    /// worker threads, rarely: only when a client asks.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] after init, on a build without the input site, or under a
+    /// loader older than ABI minor 55.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_loader_api::knowledge::Refusal;
+    ///
+    /// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+    ///     const TUTORIAL_COUNTER: u32 = 0x51;
+    ///     load.on_knowledge_input(|request| {
+    ///         request.allowed
+    ///             || (request.id == TUTORIAL_COUNTER && request.refusal == Some(Refusal::Counter))
+    ///     })
+    /// }
+    /// ```
+    pub fn on_knowledge_input<F>(&mut self, filter: F) -> Result<(), Off>
+    where
+        F: Fn(&KnowledgeRequest) -> bool + Send + Sync + 'static,
+    {
+        let host = self.host();
+        crate::load::offered(
+            host.api(),
+            core::mem::offset_of!(HostApi, knowledge_input_filter),
+            "knowledge input filters",
+        )?;
+        crate::load::hand_over(
+            filter,
+            |user| (host.api().knowledge_input_filter)(host.handle(), run_input::<F>, user),
+            "knowledge input filter",
+        )
+    }
+
     /// The [`Knowledge`] of the server's world; on a client, the built-in
     /// server's while it hosts a game.
     ///

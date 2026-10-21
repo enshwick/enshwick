@@ -26,6 +26,8 @@ use rustc_hash::FxHashSet;
 
 use crate::host::Loader;
 
+pub(crate) mod guard;
+
 type PlayerValueFn =
     unsafe extern "system" fn(state: *const u8, id: *const u32, entity: u32) -> u64;
 type WorldValueFn = unsafe extern "system" fn(state: *const u8, id: *const u32) -> u64;
@@ -171,7 +173,11 @@ unsafe fn blob_array(header: usize) -> (usize, usize) {
 
 /// The game object and its knowledge store, on the game thread.
 fn store(layout: &Layout) -> Result<(usize, usize), Status> {
-    let server = crate::world::server()?;
+    store_of(layout, crate::world::server()?)
+}
+
+/// The game object and its knowledge store of `server`.
+fn store_of(layout: &Layout, server: usize) -> Result<(usize, usize), Status> {
     // SAFETY: the server holds its game object.
     let game: usize = unsafe { read(server, layout.game) };
     if game == 0 {

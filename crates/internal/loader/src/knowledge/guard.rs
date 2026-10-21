@@ -1,0 +1,400 @@
+//! The knowledge guard: what clients ask for in their input, checked before
+//! the game queues it.
+//!
+//! A client asks for knowledge with a `TriggerKnowledgeAction` in its
+//! input; `handle_knowledge_trigger_input` queues it for the player when the
+//! action is new and well formed, and checks nothing else. A vanilla client
+//! asks only for what its interface marks: a player's bools (hints shown,
+//! screens opened) and the seen bit (0) of a player's flags. The guard lets
+//! those through, and refuses ids of the world's, counters, other flag bits,
+//! ids that give experience or skill points, and quests. Mods' filters run
+//! after it with the verdict so far.
+//!
+//! The site is the handler's test of the game's own check, at the server's
+//! worker threads: clearing `al` there takes the path of a malformed action,
+//! which consumes the request without queueing it.
+
+use core::ffi::c_void;
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::{Mutex, OnceLock, PoisonError};
+
+use enshwick_loader_api::abi::{
+    Header, HookFlags, KnowledgeInfo, KnowledgeInput, KnowledgeInputFn, Registers, Status,
+};
+
+use super::{Layout, definition, layout, quest_set, read};
+use crate::chains::LOADER;
+use crate::host::{Loader, Registered, take};
+use crate::mid::MidLink;
+
+/// Whether the guard refuses what it finds, from the loader's settings.
+static ON: AtomicBool = AtomicBool::new(true);
+static FILTERS: Mutex<Vec<Registered<KnowledgeInputFn>>> = Mutex::new(Vec::new());
+static SEALED: OnceLock<Box<[Registered<KnowledgeInputFn>]>> = OnceLock::new();
+static SITE: OnceLock<Site> = OnceLock::new();
+/// Refusals logged so far; the log stops at [`LOGGED`].
+static REFUSALS: AtomicU32 = AtomicU32::new(0);
+const LOGGED: u32 = 64;
+
+/// Where the site keeps the request and what the guard reads of a
+/// definition.
+#[derive(Debug, Clone, Copy)]
+struct Site {
+    /// The action in the input row `rbx`.
+    action: usize,
+    /// A player definition's experience id and skill points.
+    experience: usize,
+    skill_points: usize,
+}
+
+/// Sets whether the guard refuses, from `knowledge_guard`.
+pub(crate) fn configure(on: bool) {
+    ON.store(on, Ordering::Release);
+}
+
+/// Registers mod `owner`'s filter.
+pub(crate) fn register(
+    loader: &Loader,
+    owner: usize,
+    callback: KnowledgeInputFn,
+    user: *mut c_void,
+) -> Status {
+    if SEALED.get().is_some() {
+        return Status::TOO_LATE;
+    }
+    if site(loader).is_none() || loader.address("knowledge.input_check").is_none() {
+        return Status::MISSING;
+    }
+    FILTERS
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .push(Registered::new(owner, callback, user));
+    Status::OK
+}
+
+fn site(loader: &Loader) -> Option<Site> {
+    let field = |name: &str| {
+        loader
+            .reflection
+            .field_offset("keen::PlayerKnowledgeObjectResource", name)
+            .ok()
+            .and_then(|v| usize::try_from(v).ok())
+    };
+    Some(Site {
+        action: loader.offset("knowledge.input_action")?,
+        experience: field("experienceGainId")?,
+        skill_points: field("unlockedSkillPoints")?,
+    })
+}
+
+/// Seals the filters and adds the site when the guard is on or a mod asked.
+pub(crate) fn link(loader: &Loader) {
+    let filters = take(&FILTERS);
+    let wanted = ON.load(Ordering::Acquire) || !filters.is_empty();
+    let _first = SEALED.set(filters.into_boxed_slice());
+    if !wanted {
+        return;
+    }
+    let (Some(site), Some(_), Some(address)) = (
+        site(loader),
+        layout(loader),
+        loader.address("knowledge.input_check"),
+    ) else {
+        crate::log!(WARN, "knowledge guard off: not in this build");
+        return;
+    };
+    if crate::ecs::engine(loader).is_none() {
+        crate::log!(WARN, "knowledge guard off: no entity reads on this build");
+        return;
+    }
+    let _first = SITE.set(site);
+    let link = MidLink {
+        owner: LOADER,
+        handler: check,
+        user: 0,
+        priority: i32::MIN,
+        flags: HookFlags::NONE,
+    };
+    let status = loader
+        .mids
+        .lock()
+        .map_or(Status::REFUSED, |mut mids| mids.add(address, link));
+    if status.is_ok() {
+        crate::log!(
+            INFO,
+            "knowledge guard on: {}",
+            if ON.load(Ordering::Acquire) {
+                "refusing what a vanilla client never asks for"
+            } else {
+                "mods' filters only"
+            }
+        );
+    } else {
+        crate::log!(WARN, "knowledge guard off: refused ({})", status.0);
+    }
+}
+
+/// What the guard knows of an id's definition.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Definition {
+    scope: u8,
+    kind: u8,
+    experience: u32,
+    skill_points: u8,
+    quest: bool,
+}
+
+/// Why the guard refuses a request for `kind` and `value` of an id defined
+/// as `definition`, or [`KnowledgeInput::ALLOWED`].
+fn refusal(definition: Option<Definition>, kind: u8, value: u32) -> u32 {
+    let Some(def) = definition else {
+        return KnowledgeInput::UNKNOWN;
+    };
+    if def.kind != kind {
+        KnowledgeInput::KIND
+    } else if def.scope != KnowledgeInfo::PLAYER {
+        KnowledgeInput::WORLD
+    } else if kind == KnowledgeInfo::COUNTER {
+        KnowledgeInput::COUNTER
+    } else if kind == KnowledgeInfo::FLAGS && value != 0 {
+        KnowledgeInput::FLAG_BIT
+    } else if def.experience != 0 {
+        KnowledgeInput::EXPERIENCE
+    } else if def.skill_points != 0 {
+        KnowledgeInput::SKILL_POINTS
+    } else if def.quest {
+        KnowledgeInput::QUEST
+    } else if kind == KnowledgeInfo::BOOL || kind == KnowledgeInfo::FLAGS {
+        KnowledgeInput::ALLOWED
+    } else {
+        KnowledgeInput::KIND
+    }
+}
+
+/// The definition of `id` in the running world, read from any thread: the
+/// definitions and the journal stay put while a world runs.
+fn define(layout: &Layout, site: Site, id: u32) -> Option<Definition> {
+    let server = crate::world::SERVER.load(Ordering::Acquire);
+    if server == 0 {
+        return None;
+    }
+    let (game, state) = super::store_of(layout, server).ok()?;
+    let (scope, def) = definition(layout, state, id)?;
+    let player = scope == KnowledgeInfo::PLAYER;
+    let (experience, skill_points) = if player {
+        // SAFETY: a player's definition, its fields as reflected.
+        let experience = unsafe { read(def, site.experience) };
+        // SAFETY: as above.
+        let skill_points = unsafe { read(def, site.skill_points) };
+        (experience, skill_points)
+    } else {
+        (0, 0)
+    };
+    Some(Definition {
+        scope,
+        // SAFETY: the definition's fields, as reflected.
+        kind: unsafe { read(def, layout.def_kind) },
+        experience,
+        skill_points,
+        quest: player && quest_set(layout, game).is_some_and(|set| set.contains(&id)),
+    })
+}
+
+/// The verdict on `call` after the guard and every live filter.
+fn decide(call: &mut KnowledgeInput) -> bool {
+    if let Some(filters) = SEALED.get() {
+        for f in filters.iter().filter(|f| f.live()) {
+            // SAFETY: the callback lives in the mod's DLL, which stays loaded,
+            // and takes the pointer it registered; the call is valid for it.
+            let verdict =
+                crate::profile::call(f.owner, crate::profile::Feature::Vetoes, || unsafe {
+                    (f.callback)(&raw const *call, f.user())
+                });
+            call.allowed = u32::from(verdict != 0);
+        }
+    }
+    call.allowed != 0
+}
+
+#[cold]
+fn note(call: &KnowledgeInput) {
+    let count = REFUSALS.fetch_add(1, Ordering::Relaxed);
+    if count < LOGGED {
+        crate::log!(
+            INFO,
+            "knowledge guard: refused id {:#x} (kind {}, value {}) asked for by player {}, reason {}",
+            call.id,
+            call.kind,
+            call.value,
+            call.player,
+            call.refusal
+        );
+    } else if count == LOGGED {
+        crate::log!(INFO, "knowledge guard: further refusals are not logged");
+    }
+}
+
+/// A register as an address; registers are 64 bits, as addresses are here.
+fn address(register: u64) -> usize {
+    usize::try_from(register).unwrap_or(0)
+}
+
+unsafe extern "system" fn check(registers: *mut Registers, _user: *mut c_void) {
+    let _caught = std::panic::catch_unwind(|| {
+        // SAFETY: the stub's saved registers, valid for the call.
+        let Some(registers) = (unsafe { registers.as_mut() }) else {
+            return;
+        };
+        if registers.rax.trailing_zeros() >= 8 {
+            return;
+        }
+        let (Some(&site), Some(loader)) = (SITE.get(), crate::host::loader()) else {
+            return;
+        };
+        let Some(layout) = layout(loader) else {
+            return;
+        };
+        let action = address(registers.rbx).wrapping_add(site.action);
+        // SAFETY: at the site `rbx` is the player's input row, which holds
+        // the action `{id u32, kind u8, value u32 at 8}`; `rdi` is the
+        // system's query context; 1.0 build 1269579.
+        let id: u32 = unsafe { read(action, 0) };
+        // SAFETY: as above.
+        let kind: u8 = unsafe { read(action, 4) };
+        // SAFETY: as above.
+        let value: u32 = unsafe { read(action, 8) };
+        let player = crate::ecs::resolved().map_or(0, |engine| {
+            // SAFETY: as above.
+            unsafe {
+                engine.entity(core::ptr::with_exposed_provenance_mut(address(
+                    registers.rdi,
+                )))
+            }
+        });
+        let definition = define(layout, site, id);
+        let refusal = refusal(definition, kind, value);
+        let mut call = KnowledgeInput {
+            header: Header::of::<KnowledgeInput>(),
+            player,
+            id,
+            kind,
+            scope: definition.map_or(KnowledgeInput::NO_SCOPE, |d| d.scope),
+            reserved: 0,
+            value,
+            refusal,
+            allowed: u32::from(refusal == KnowledgeInput::ALLOWED || !ON.load(Ordering::Acquire)),
+        };
+        if !decide(&mut call) {
+            registers.rax &= !0xff;
+            note(&call);
+        }
+    });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn player(kind: u8) -> Definition {
+        Definition {
+            scope: KnowledgeInfo::PLAYER,
+            kind,
+            experience: 0,
+            skill_points: 0,
+            quest: false,
+        }
+    }
+
+    #[test]
+    fn a_vanilla_clients_requests_go_through() {
+        let bool_id = player(KnowledgeInfo::BOOL);
+        let flags = player(KnowledgeInfo::FLAGS);
+        assert_eq!(
+            refusal(Some(bool_id), KnowledgeInfo::BOOL, 0),
+            KnowledgeInput::ALLOWED
+        );
+        assert_eq!(
+            refusal(Some(flags), KnowledgeInfo::FLAGS, 0),
+            KnowledgeInput::ALLOWED
+        );
+    }
+
+    #[test]
+    fn what_a_vanilla_client_never_asks_for_is_refused() {
+        let world = Definition {
+            scope: KnowledgeInfo::WORLD,
+            ..player(KnowledgeInfo::BOOL)
+        };
+        let cases = [
+            (None, KnowledgeInfo::BOOL, 0, KnowledgeInput::UNKNOWN),
+            (
+                Some(player(KnowledgeInfo::BOOL)),
+                KnowledgeInfo::FLAGS,
+                0,
+                KnowledgeInput::KIND,
+            ),
+            (Some(world), KnowledgeInfo::BOOL, 0, KnowledgeInput::WORLD),
+            (
+                Some(player(KnowledgeInfo::COUNTER)),
+                KnowledgeInfo::COUNTER,
+                5,
+                KnowledgeInput::COUNTER,
+            ),
+            (
+                Some(player(KnowledgeInfo::FLAGS)),
+                KnowledgeInfo::FLAGS,
+                1,
+                KnowledgeInput::FLAG_BIT,
+            ),
+            (
+                Some(Definition {
+                    experience: 7,
+                    ..player(KnowledgeInfo::BOOL)
+                }),
+                KnowledgeInfo::BOOL,
+                0,
+                KnowledgeInput::EXPERIENCE,
+            ),
+            (
+                Some(Definition {
+                    skill_points: 1,
+                    ..player(KnowledgeInfo::BOOL)
+                }),
+                KnowledgeInfo::BOOL,
+                0,
+                KnowledgeInput::SKILL_POINTS,
+            ),
+            (
+                Some(Definition {
+                    quest: true,
+                    ..player(KnowledgeInfo::BOOL)
+                }),
+                KnowledgeInfo::BOOL,
+                0,
+                KnowledgeInput::QUEST,
+            ),
+            (Some(player(9)), 9, 0, KnowledgeInput::KIND),
+        ];
+        for (def, kind, value, want) in cases {
+            assert_eq!(refusal(def, kind, value), want, "{def:?} {kind} {value}");
+        }
+    }
+
+    #[test]
+    fn without_filters_the_guards_verdict_stands() {
+        let mut call = KnowledgeInput {
+            header: Header::of::<KnowledgeInput>(),
+            player: 1,
+            id: 2,
+            kind: KnowledgeInfo::BOOL,
+            scope: KnowledgeInfo::PLAYER,
+            reserved: 0,
+            value: 0,
+            refusal: KnowledgeInput::QUEST,
+            allowed: 0,
+        };
+        assert!(!decide(&mut call));
+        call.allowed = 1;
+        assert!(decide(&mut call));
+    }
+}

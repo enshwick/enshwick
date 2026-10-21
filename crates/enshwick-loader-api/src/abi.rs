@@ -14,7 +14,7 @@ use core::sync::atomic::AtomicUsize;
 pub const ABI_MAJOR: u16 = 1;
 
 /// The minor version of this interface. A newer minor only appends fields.
-pub const ABI_MINOR: u16 = 54;
+pub const ABI_MINOR: u16 = 55;
 
 /// Whether `id` is a valid mod id: 1 to 64 characters of `[a-z0-9-]`.
 ///
@@ -585,6 +585,84 @@ pub struct QuestData {
     /// The quest's id, a player knowledge id.
     pub quest: u32,
 }
+
+/// Knowledge a client asks the server for in its input, handed to the
+/// filters registered with [`HostApi::knowledge_input_filter`] with the
+/// verdict so far.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::abi::{Header, KnowledgeInfo, KnowledgeInput};
+///
+/// let seen = KnowledgeInput {
+///     header: Header::of::<KnowledgeInput>(),
+///     player: 2,
+///     id: 0x1d,
+///     kind: KnowledgeInfo::FLAGS,
+///     scope: KnowledgeInfo::PLAYER,
+///     reserved: 0,
+///     value: 0,
+///     refusal: KnowledgeInput::ALLOWED,
+///     allowed: 1,
+/// };
+/// assert_eq!(seen.allowed, 1);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct KnowledgeInput {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// The asking player's character.
+    pub player: u32,
+    /// The knowledge id.
+    pub id: u32,
+    /// The kind the client names: [`KnowledgeInfo::BOOL`],
+    /// [`KnowledgeInfo::COUNTER`] or [`KnowledgeInfo::FLAGS`].
+    pub kind: u8,
+    /// [`KnowledgeInfo::WORLD`] or [`KnowledgeInfo::PLAYER`], as the id's
+    /// definition says; [`KnowledgeInput::NO_SCOPE`] for an id the game
+    /// does not know.
+    pub scope: u8,
+    /// Zero.
+    pub reserved: u16,
+    /// Ignored for a bool, added for a counter, the bit to set for flags.
+    pub value: u32,
+    /// Why the loader's knowledge guard refuses the request, whether the
+    /// guard is on or not: [`KnowledgeInput::ALLOWED`] when it does not.
+    pub refusal: u32,
+    /// 1 when the request goes through so far: after the guard, when it is
+    /// on, and the filters that ran before.
+    pub allowed: u32,
+}
+
+impl KnowledgeInput {
+    /// The scope of an id the game does not know.
+    pub const NO_SCOPE: u8 = 0xff;
+    /// The guard lets it through.
+    pub const ALLOWED: u32 = 0;
+    /// An id the game does not know.
+    pub const UNKNOWN: u32 = 1;
+    /// A kind that is not the id's.
+    pub const KIND: u32 = 2;
+    /// An id of the world's, which every player shares.
+    pub const WORLD: u32 = 3;
+    /// A counter.
+    pub const COUNTER: u32 = 4;
+    /// A flag bit other than 0, the bit a client sets for what it has seen.
+    pub const FLAG_BIT: u32 = 5;
+    /// An id that gives experience.
+    pub const EXPERIENCE: u32 = 6;
+    /// An id that gives skill points.
+    pub const SKILL_POINTS: u32 = 7;
+    /// A quest's id, set when the game rewards the quest.
+    pub const QUEST: u32 = 8;
+}
+
+/// A mod's knowledge input filter: the request and the pointer given at
+/// registration; returns 1 to let it through, 0 to refuse it.
+pub type KnowledgeInputFn =
+    unsafe extern "system" fn(call: *const KnowledgeInput, user: *mut c_void) -> u8;
 
 /// The data of [`Event::CHUNK_LOADED`] and [`Event::CHUNK_UNLOADED`].
 ///
@@ -4729,6 +4807,15 @@ pub struct HostApi {
         capacity: u32,
         count: *mut u32,
     ) -> Status,
+    /// Registers a filter on the knowledge clients ask the server for in
+    /// their input, which a vanilla game grants unchecked. Filters run in
+    /// load order after the loader's guard, each with the verdict so far,
+    /// and the last answer decides. It runs on the server's worker threads,
+    /// in the dedicated server or a hosting client. [`Status::MISSING`] on
+    /// a build without the input site. Allowed during `enshwick_mod_init`
+    /// only. Since minor 55.
+    pub knowledge_input_filter:
+        extern "system" fn(me: ModHandle, callback: KnowledgeInputFn, user: *mut c_void) -> Status,
 }
 
 /// Flags of [`HostApi::entity_data_open`].
@@ -5080,9 +5167,11 @@ const _: () = {
     assert!(size_of::<StatSource>() == 20);
     assert!(size_of::<StatModify>() == 8 + 8 + 12 + 4 + 8);
     assert!(size_of::<StatChange>() == 8 + 24);
-    assert!(size_of::<HostApi>() == 24 + 126 * 8);
+    assert!(size_of::<HostApi>() == 24 + 127 * 8);
     assert!(core::mem::offset_of!(HostApi, replaced) == 24 + 125 * 8);
     assert!(core::mem::offset_of!(HostApi, entity_data_open) == 24 + 124 * 8);
+    assert!(core::mem::offset_of!(HostApi, knowledge_input_filter) == 24 + 126 * 8);
+    assert!(size_of::<KnowledgeInput>() == 8 + 24);
     assert!(core::mem::offset_of!(HostApi, migrate) == 24 + 122 * 8);
     assert!(core::mem::offset_of!(HostApi, declare_content) == 24 + 123 * 8);
     // Frozen: written as arrays.

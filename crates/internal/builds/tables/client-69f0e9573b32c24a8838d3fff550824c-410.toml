@@ -140,6 +140,7 @@ revision = 1
 "knowledge.player_value" = { rva = 0x11f_c410, pattern = "40 53 48 83 EC 20 80 B9 D2 00 00 00 00 48 8B 99 98 00 00 00" }
 "knowledge.world_value" = { rva = 0x11f_c540, pattern = "40 53 48 83 EC 20 48 8D 59 10 C7 44 24 30 00 00 00 00" }
 "knowledge.push" = { rva = 0x120_0600, pattern = "4C 8B C1 B8 01 00 00 00 F0 0F C1 41 08 FF C0 3D 00 08 00 00" }
+"knowledge.input_check" = { rva = 0x41_4a7e, pattern = "48 8D 8B 8C 01 00 00 E8 ?? ?? ?? ?? 84 C0 74 3D F2 0F 10 83 8C 01 00 00", at = 12 }
 "weather.sample" = { rva = 0xa9_b9e0, pattern = "48 8B C4 48 89 58 18 48 89 48 08 55 56 57 41 54 41 55 41 56 41 57 48 81 EC 20 01 00 00" }
 "weather.clock" = { rva = 0x49_9740, pattern = "40 53 48 83 EC 20 48 8B D9 48 8B 49 08 E8 ?? ?? ?? ?? 48 8B 8B D0 02 00 00" }
 "weather.resource_lock" = 0xa9_aac0
@@ -470,7 +471,9 @@ revision = 1
 # log (pointer, count u32); a record its change log the same
 # way; log entries are `{id, value}` at `log_entry_size`. The
 # game object holds the trigger queue and the journal registry,
-# which holds the journal's blob.
+# which holds the journal's blob. The input row
+# `handle_knowledge_trigger_input` checks holds the client's
+# action at `input_action`.
 "knowledge.object" = { value = 0x1b8, pattern = "C3 4B 8D 04 49 41 C6 84 82 B8 01 00 00 01 B0 01" }
 "knowledge.state" = 0x08
 "knowledge.defs" = 0x08
@@ -488,6 +491,7 @@ revision = 1
 "knowledge.queue" = { value = 0x1d0, pattern = "80 7F 48 00 74 1B 48 8B 8E D0 01 00 00 41 0F B6 D0" }
 "knowledge.journal" = 0x1e8
 "knowledge.journal_blob" = { value = 0x48, pattern = "48 89 51 10 48 89 51 18 48 89 51 20 48 89 51 28 48 89 51 30 48 89 51 38 48 89 51 40 48 89 51 48 48 89 51 50 48 89 51 58 48 89 51 60 48 89 51 68 48 89 51 70 48 89 51 78 48 89 81 80 00 00 00" }
+"knowledge.input_action" = { value = 0x18c, pattern = "8B 8B 98 01 00 00 39 48 5C 0F 84 ?? ?? ?? ?? 48 8D 8B 8C 01 00 00 E8 ?? ?? ?? ?? 84 C0" }
 # The server holds its weather system here; the system its
 # resource manager, handle and generation, its instance pool
 # (pages, page count, shift, mask) and its layer slots and their

@@ -1889,6 +1889,46 @@ impl Installed {
         check
     }
 
+    /// Runs the mod's knowledge input filters on `request`, as the loader
+    /// runs them on what a client asks for, and says whether it goes
+    /// through: each filter's answer replaces the verdict so far, which
+    /// starts at `request.allowed`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_loader_api::abi::{Header, KnowledgeInfo, KnowledgeInput};
+    ///
+    /// let loader = enshwick_loader_api::test::FakeHost::new().install();
+    /// let quest = KnowledgeInput {
+    ///     header: Header::of::<KnowledgeInput>(),
+    ///     player: 2,
+    ///     id: 0x51,
+    ///     kind: KnowledgeInfo::BOOL,
+    ///     scope: KnowledgeInfo::PLAYER,
+    ///     reserved: 0,
+    ///     value: 0,
+    ///     refusal: KnowledgeInput::QUEST,
+    ///     allowed: 0,
+    /// };
+    /// assert!(!loader.knowledge_input(quest), "no filters, the guard's verdict");
+    /// ```
+    #[must_use]
+    pub fn knowledge_input(&self, mut request: crate::abi::KnowledgeInput) -> bool {
+        let filters = table::with(Vec::new(), |s| s.knowledge_input_filters.clone());
+        for (callback, user) in filters {
+            // SAFETY: the filter the mod registered, with its pointer.
+            let verdict = unsafe {
+                callback(
+                    &raw const request,
+                    core::ptr::with_exposed_provenance_mut(user),
+                )
+            };
+            request.allowed = u32::from(verdict != 0);
+        }
+        request.allowed != 0
+    }
+
     /// The settings schema the mod handed the loader, which
     /// [`Load::config`](crate::Load::config) does; `None` before.
     ///

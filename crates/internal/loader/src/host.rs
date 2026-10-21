@@ -716,6 +716,7 @@ pub(crate) static API: HostApi = HostApi {
     declare_content,
     entity_data_open,
     replaced,
+    knowledge_input_filter,
 };
 
 /// A static slice from a pointer and a count, empty for a null pointer.
@@ -2928,6 +2929,22 @@ extern "system" fn damage_filter(
             index,
             crate::conflicts::Mode::Chained,
             crate::damage::register(loader, index, callback, user),
+        ),
+        Err(status) => status,
+    })
+}
+
+extern "system" fn knowledge_input_filter(
+    me: ModHandle,
+    callback: enshwick_loader_api::abi::KnowledgeInputFn,
+    user: *mut core::ffi::c_void,
+) -> Status {
+    entry("knowledge_input_filter", || match caller_index(me) {
+        Ok((loader, index)) => crate::conflicts::note(
+            "knowledge input filter",
+            index,
+            crate::conflicts::Mode::Chained,
+            crate::knowledge::guard::register(loader, index, callback, user),
         ),
         Err(status) => status,
     })
