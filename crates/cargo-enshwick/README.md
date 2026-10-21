@@ -30,6 +30,37 @@ cargo enshwick install --game "C:/Program Files (x86)/Steam/steamapps/common/Ens
 - `pin --old <exe> --new <exe>` writes the loader's build table for a new game
   build and ports the mods' build rows, in an Enshwick checkout, for
   maintainers. See [below](#porting-build-rows-pin).
+- `compat <exe> [--mods <dir>]` reports which loader features and mods work on
+  a game build. See [below](#compatibility-report-compat).
+
+## Compatibility report (`compat`)
+
+`cargo enshwick compat` tells what works on a game build, from its
+executable, before anyone starts the game:
+
+```bash
+cargo enshwick compat server/enshrouded_server.exe --mods server/mods
+```
+
+- **Build table.** It takes the table the loader would take: the one made
+  for the build, checked against the executable (its systems against
+  reflection, each pattern and the expected bytes where the table pins
+  them), or the newest table of the same side carried over by patterns, with
+  the entries they miss.
+- **Loader features.** Each part of the loader with the table entries it
+  names, and which the build lacks: works, partly or off.
+- **Mods.** With `--mods` (DLLs or folders of them) it runs the loader itself
+  on the executable, in a process of its own: the image mapped at its base,
+  the mods resolved and initialised as at a start, nothing hooked and no
+  mod's `ready` run. Each mod that turns off says why, as in its log.
+  Starting mods needs Windows.
+
+`--patterns` takes the table by patterns even when one is made for the build,
+to see what the patterns alone carry. `--tables <dir>` adds tables, such as a
+game's `mods/enshwick/builds/`, each used only with the project key's
+signature beside it. `--report <file>` writes the Markdown report there. The
+exit code is 0 when everything works, 2 when something does not, and 1 on an
+error.
 
 ## Porting build rows (`pin`)
 
@@ -151,9 +182,11 @@ patterns find every patterned entry on its own build.
 ### Game build watch
 
 [`game-build-watch.yml`](../../.github/workflows/game-build-watch.yml) runs
-weekly. It asks steamcmd for the public build id of the dedicated server and
-opens an issue when no server table names it in `build`. It downloads no game
-files. It stays off until the repository variable `GAME_BUILD_WATCH` is
+weekly, never on pull requests. It asks steamcmd for the public build id of
+the dedicated server. When no server table names it in `build`, a Windows job
+downloads that server, runs `compat` on it with the mods of the latest
+platform release and opens an issue with the report. Game files stay on the
+runner. It stays off until the repository variable `GAME_BUILD_WATCH` is
 `true`.
 
 ## More

@@ -182,6 +182,19 @@ pub fn select(
     })
 }
 
+/// The newest table of `running`'s side carried over by patterns in `code`
+/// even when the build has its own, to see what the patterns alone carry.
+#[must_use]
+pub fn by_patterns(tables: &[Table], running: Side, code: (&[u8], u64)) -> Option<KnownBuild> {
+    let base = tables::newest(tables, side(running)?)?;
+    let table = base.fall_back(code.0, code.1);
+    Some(KnownBuild {
+        name: table.name().to_owned(),
+        kind: Kind::Fallback,
+        table,
+    })
+}
+
 /// The embedded table of `side`'s newest build, for tests.
 ///
 /// # Panics
