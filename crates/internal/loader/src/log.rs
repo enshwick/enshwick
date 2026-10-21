@@ -1,13 +1,18 @@
 //! `logs/enshwick/` (`all.log`, `loader.log`, `mods/<id>.log`): one file for the loader and every mod.
 //!
-//! Callers only format a line and send it down a channel; a background thread
-//! owns the file, so a hook never waits on the disk.
+//! Callers only format a line and send it down a bounded channel; a
+//! background thread owns the files, so a hook never waits on the disk. A
+//! line the full channel cannot take is counted and the count logged once
+//! there is room. The writer also keeps the latest lines in memory for
+//! `/enshwick log`.
 
+use std::collections::VecDeque;
 use std::fmt::Write as _;
 use std::io::Write as _;
 use std::path::Path;
-use std::sync::OnceLock;
-use std::sync::mpsc::{Sender, channel};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::mpsc::{SyncSender, TrySendError, sync_channel};
+use std::sync::{Mutex, OnceLock, PoisonError};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use arc_swap::ArcSwapOption;
@@ -15,7 +20,19 @@ use enshwick_loader_api::abi::Level;
 
 use crate::settings::{LOADER_ID, Settings};
 
-static LINES: OnceLock<Sender<(String, String)>> = OnceLock::new();
+/// Lines waiting for the writer at most.
+const QUEUE: usize = 4096;
+/// The latest lines kept in memory.
+const RECENT: usize = 1024;
+
+/// One line: its level, its source and the line as written.
+type Line = (Level, String, String);
+
+static LINES: OnceLock<SyncSender<Line>> = OnceLock::new();
+/// Lines the full channel could not take since the writer last said so.
+static DROPPED: AtomicU64 = AtomicU64::new(0);
+/// The latest [`RECENT`] lines, oldest first.
+static RECENT_LINES: Mutex<VecDeque<Line>> = Mutex::new(VecDeque::new());
 static LEVELS: ArcSwapOption<Settings> = ArcSwapOption::const_empty();
 
 /// Keeps lines up to the levels in `settings`; before the first call every
@@ -52,13 +69,25 @@ pub fn open(dir: &Path) {
         return;
     };
     let dir = dir.to_path_buf();
-    let (send, receive) = channel::<(String, String)>();
+    let (send, receive) = sync_channel::<Line>(QUEUE);
     let started = std::thread::Builder::new()
         .name("enshwick-log".into())
         .spawn(move || {
             let mut files: std::collections::HashMap<String, Option<std::fs::File>> =
                 std::collections::HashMap::new();
-            for (source, line) in receive {
+            for (level, source, line) in receive {
+                let dropped = DROPPED.swap(0, Ordering::Relaxed);
+                if dropped > 0 {
+                    let note = format_line(
+                        now(),
+                        Level::WARN,
+                        LOADER_ID,
+                        &format!("{dropped} log lines were dropped: they came faster than the disk took them"),
+                    );
+                    let _all = all.write_all(note.as_bytes());
+                    keep((Level::WARN, LOADER_ID.to_owned(), note));
+                }
+                keep((level, source.clone(), line.clone()));
                 let _all = all.write_all(line.as_bytes()).and_then(|()| all.flush());
                 let file = files.entry(source).or_insert_with_key(|source| {
                     let path = if source == LOADER_ID {
@@ -82,15 +111,14 @@ pub fn open(dir: &Path) {
 /// Whether lines go to [`CAPTURED`] instead of the files.
 static CAPTURING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 /// Lines kept in memory instead of written, for a dry run.
-static CAPTURED: std::sync::Mutex<Option<Vec<(Level, String, String)>>> =
-    std::sync::Mutex::new(None);
+static CAPTURED: Mutex<Option<Vec<(Level, String, String)>>> = Mutex::new(None);
 
 /// Keeps every line from now on in memory, for [`captured`].
 pub fn capture() {
     if let Ok(mut lines) = CAPTURED.lock() {
         *lines = Some(Vec::new());
     }
-    CAPTURING.store(true, std::sync::atomic::Ordering::Release);
+    CAPTURING.store(true, Ordering::Release);
 }
 
 /// The lines kept since [`capture`]: level, source and message.
@@ -105,7 +133,7 @@ pub fn captured() -> Vec<(Level, String, String)> {
 
 /// Writes one line under `source`, the loader or a mod id.
 pub fn write(level: Level, source: &str, message: &str) {
-    if CAPTURING.load(std::sync::atomic::Ordering::Acquire) {
+    if CAPTURING.load(Ordering::Acquire) {
         if let Ok(mut lines) = CAPTURED.lock()
             && let Some(lines) = lines.as_mut()
         {
@@ -119,10 +147,39 @@ pub fn write(level: Level, source: &str, message: &str) {
     if !enabled(level, source) {
         return;
     }
-    let _sent = lines.send((
+    let line = (
+        level,
         source.to_owned(),
         format_line(now(), level, source, message),
-    ));
+    );
+    if let Err(TrySendError::Full(_)) = lines.try_send(line) {
+        DROPPED.fetch_add(1, Ordering::Relaxed);
+    }
+}
+
+/// Keeps `line` among the latest lines.
+fn keep(line: Line) {
+    let mut recent = RECENT_LINES.lock().unwrap_or_else(PoisonError::into_inner);
+    if recent.len() == RECENT {
+        recent.pop_front();
+    }
+    recent.push_back(line);
+}
+
+/// The latest `count` kept lines from `source` (every source for `None`) at
+/// `level` or more severe, oldest first, without their line ends.
+#[must_use]
+pub fn recent(source: Option<&str>, level: Level, count: usize) -> Vec<String> {
+    let recent = RECENT_LINES.lock().unwrap_or_else(PoisonError::into_inner);
+    let mut found: Vec<String> = recent
+        .iter()
+        .rev()
+        .filter(|(l, s, _)| *l <= level && source.is_none_or(|source| source == s))
+        .take(count)
+        .map(|(_, _, line)| line.trim_end().to_owned())
+        .collect();
+    found.reverse();
+    found
 }
 
 fn now() -> u64 {
@@ -159,6 +216,34 @@ macro_rules! log {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_latest_lines_are_kept_bounded_and_filtered() {
+        for i in 0..RECENT + 10 {
+            let level = if i % 2 == 0 { Level::INFO } else { Level::WARN };
+            let source = if i % 3 == 0 { "a" } else { "b" };
+            keep((level, source.to_owned(), format!("line {i}\n")));
+        }
+        assert_eq!(
+            RECENT_LINES
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .len(),
+            RECENT
+        );
+        let last = RECENT + 9;
+        assert_eq!(
+            recent(None, Level::DEBUG, 2),
+            [format!("line {}", last - 1), format!("line {last}")]
+        );
+        let warnings = recent(Some("b"), Level::WARN, 3);
+        assert_eq!(warnings.len(), 3);
+        assert!(warnings.iter().all(|line| {
+            let i: usize = line.trim_start_matches("line ").parse().unwrap();
+            i % 2 == 1 && !i.is_multiple_of(3)
+        }));
+        assert!(recent(Some("nobody"), Level::DEBUG, 5).is_empty());
+    }
 
     #[test]
     fn a_line_below_its_source_s_level_is_not_formatted() {

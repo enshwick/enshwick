@@ -22,7 +22,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock, PoisonError};
 
 use enshwick_loader_api::abi::{
-    CommandCall, CommandCallFn, Header, HookFlags, PlayerInfo, Status, Str,
+    CommandCall, CommandCallFn, Header, HookFlags, Level, PlayerInfo, Status, Str,
 };
 use enshwick_loader_api::commands::{is_valid_name, parse_line};
 
@@ -598,6 +598,12 @@ fn builtin(loader: &Loader, args: &str, player: &PlayerInfo) -> String {
     if args.eq_ignore_ascii_case("ui-demo") {
         return ui_demo(loader, player);
     }
+    if let Some(rest) = word(args, "log") {
+        if player.permissions & PlayerInfo::CAN_KICK_BAN == 0 {
+            return "Only administrators read the log.".to_owned();
+        }
+        return log_lines(loader, rest);
+    }
     let commands = COMMANDS.lock().unwrap_or_else(PoisonError::into_inner);
     if args.eq_ignore_ascii_case("help") {
         return help(loader, &commands);
@@ -727,6 +733,49 @@ fn word<'a>(args: &'a str, name: &str) -> Option<&'a str> {
     first.eq_ignore_ascii_case(name).then(|| rest.trim())
 }
 
+/// `/enshwick log [mod] [level] [n]`: the latest `n` lines (10 by default,
+/// at most a reply's) the loader kept, from one mod or the loader (`enshwick`)
+/// or all, at `level` or more severe.
+fn log_lines(loader: &Loader, args: &str) -> String {
+    match log_query(args, |id| loader.mods.iter().any(|m| m.id == id)) {
+        Ok((source, level, count)) => {
+            let lines = crate::log::recent(source.as_deref(), level, count);
+            if lines.is_empty() {
+                "No such lines in the log.".to_owned()
+            } else {
+                lines.join("\n")
+            }
+        }
+        Err(why) => why,
+    }
+}
+
+/// The source, level and count `/enshwick log` asks for, in any order; a
+/// word that is no number, level or known source (`known`, or the loader's
+/// own id) is an error naming it.
+fn log_query(
+    args: &str,
+    known: impl Fn(&str) -> bool,
+) -> Result<(Option<String>, Level, usize), String> {
+    let mut source = None;
+    let mut level = Level::DEBUG;
+    let mut count = 10;
+    for word in args.split_whitespace() {
+        if let Ok(n) = word.parse::<usize>() {
+            count = n.clamp(1, LINES_PER_REPLY);
+        } else if let Ok(named) = word.to_ascii_lowercase().parse::<Level>() {
+            level = named;
+        } else if word.eq_ignore_ascii_case(LOADER_ID) || known(word) {
+            source = Some(word.to_ascii_lowercase());
+        } else {
+            return Err(format!(
+                "{word} is no mod, level (error, warn, info, debug) or line count. Usage: /enshwick log [mod] [level] [n]"
+            ));
+        }
+    }
+    Ok((source, level, count))
+}
+
 /// `/enshwick ui-demo`: opens the interface demo on the administrator's
 /// own client.
 fn ui_demo(loader: &Loader, player: &PlayerInfo) -> String {
@@ -747,7 +796,7 @@ fn ui_demo(loader: &Loader, player: &PlayerInfo) -> String {
 
 fn help(loader: &Loader, commands: &[Command]) -> String {
     let mut lines = vec![
-        "/enshwick: the mods running; /enshwick <mod id>: what a mod is; /enshwick help: this list; /enshwick status: the status (administrators); /enshwick profile [reset]: what each mod costs (administrators); /enshwick conflicts: hooks, filters and resources mods share (administrators); /enshwick ui-demo: every interface widget on your screen (administrators)"
+        "/enshwick: the mods running; /enshwick <mod id>: what a mod is; /enshwick help: this list; /enshwick status: the status (administrators); /enshwick profile [reset]: what each mod costs (administrators); /enshwick conflicts: hooks, filters and resources mods share (administrators); /enshwick ui-demo: every interface widget on your screen (administrators); /enshwick log [mod] [level] [n]: the latest log lines (administrators)"
             .to_owned(),
         crate::configure::HELP.to_owned(),
     ];
@@ -879,6 +928,21 @@ unsafe fn post_line(post: PostFn, layout: &Layout, store: usize, to: To, text: &
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_log_query_takes_its_words_in_any_order() {
+        let known = |id: &str| id == "safes";
+        assert_eq!(log_query("", known), Ok((None, Level::DEBUG, 10)));
+        assert_eq!(
+            log_query("warn 5 safes", known),
+            Ok((Some("safes".to_owned()), Level::WARN, 5))
+        );
+        assert_eq!(
+            log_query("Enshwick 999", known),
+            Ok((Some("enshwick".to_owned()), Level::DEBUG, LINES_PER_REPLY))
+        );
+        assert!(log_query("nobody", known).unwrap_err().contains("nobody"));
+    }
 
     #[test]
     fn lines_are_cut_at_character_boundaries() {
