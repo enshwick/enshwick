@@ -306,8 +306,9 @@ next start, before the loader runs, the `powrprof.dll` stub applies the units
 oldest first, moving each file to `<path>` and keeping the file it replaces
 as `<path>.previous`, for one rollback.
 
-A file that cannot be moved stays staged for the next start; the game starts
-anyway. The stub writes what it moved to `logs/enshwick/stub.log`.
+A file that cannot be moved stays staged for the next start, and so do the
+units after its own, so an older file never lands over a newer one; the game
+starts anyway. The stub writes what it moved to `logs/enshwick/stub.log`.
 
 ## The updater mod
 
