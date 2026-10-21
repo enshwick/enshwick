@@ -18,7 +18,6 @@ use crate::host::{Loader, Registered, take};
 /// The offer result the game writes when it does not offer an interaction.
 /// Found on the 1.0 build 1269579, server and client.
 const NOT_OFFERED: u8 = 6;
-const RING: usize = 4;
 /// How many steps apart the players are read again.
 const PLAYERS_EVERY: u64 = 30;
 
@@ -461,8 +460,24 @@ unsafe extern "system" fn sort(ctx: *mut u64, state: *mut u8) {
 }
 
 thread_local! {
-    /// Filtered copies of the base stock lists, reused in turn.
-    static STOCK: RefCell<(usize, [[Vec<u32>; 2]; RING])> = RefCell::new((0, Default::default()));
+    /// Filtered copies of the base stock lists, kept for the process: the
+    /// game may read a list it was handed long after, and the same filtered
+    /// list comes back for every later ask.
+    static STOCK: RefCell<rustc_hash::FxHashSet<&'static [u32]>> =
+        RefCell::new(rustc_hash::FxHashSet::default());
+}
+
+/// `list`, kept for the process on this thread: the same address for the
+/// same ids.
+fn kept_list(list: &[u32]) -> &'static [u32] {
+    STOCK.with_borrow_mut(|kept| {
+        if let Some(&found) = kept.get(list) {
+            return found;
+        }
+        let leaked: &'static [u32] = Box::leak(list.into());
+        kept.insert(leaked);
+        leaked
+    })
 }
 
 unsafe extern "system" fn stock(
@@ -520,27 +535,25 @@ unsafe fn filter_stock(lists: *mut [u64; 4], player: u32) {
         return;
     };
     // Never filter in place: every player reads the same arrays.
-    STOCK.with_borrow_mut(|(turn, ring)| {
-        let copies = &mut ring[*turn % RING];
-        *turn = turn.wrapping_add(1);
-        let mut index = 0;
-        for (copy, (source, at)) in copies.iter_mut().zip([(stock, 0), (fuel, 2)]) {
-            copy.clear();
-            for &id in source {
-                let keep = match index.cmp(&first) {
-                    core::cmp::Ordering::Less => true,
-                    core::cmp::Ordering::Equal => false,
-                    core::cmp::Ordering::Greater => !refused(id),
-                };
-                index += 1;
-                if keep {
-                    copy.push(id);
-                }
+    let mut index = 0;
+    let mut copy = Vec::new();
+    for (source, at) in [(stock, 0), (fuel, 2)] {
+        copy.clear();
+        for &id in source {
+            let keep = match index.cmp(&first) {
+                core::cmp::Ordering::Less => true,
+                core::cmp::Ordering::Equal => false,
+                core::cmp::Ordering::Greater => !refused(id),
+            };
+            index += 1;
+            if keep {
+                copy.push(id);
             }
-            found[at] = copy.as_ptr().expose_provenance() as u64;
-            found[at + 1] = copy.len() as u64;
         }
-    });
+        let kept = kept_list(&copy);
+        found[at] = kept.as_ptr().expose_provenance() as u64;
+        found[at + 1] = kept.len() as u64;
+    }
     // SAFETY: the game's lists, rewritten to the filtered copies.
     unsafe { lists.write(found) };
 }
@@ -650,5 +663,19 @@ unsafe fn refuse_pending(ctx: *mut u64) {
                 unsafe { write(consumed, done_at, version) };
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_filtered_stock_list_keeps_its_address_for_every_later_ask() {
+        let first = kept_list(&[3, 5, 8]);
+        let other = kept_list(&[3, 5]);
+        let again = kept_list(&[3, 5, 8]);
+        assert_eq!(first.as_ptr(), again.as_ptr());
+        assert_eq!((first, other), (&[3, 5, 8][..], &[3, 5][..]));
     }
 }

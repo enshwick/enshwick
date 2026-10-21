@@ -86,6 +86,12 @@ impl Session {
     pub(crate) fn stop(&mut self) {
         self.ended = true;
     }
+
+    /// A hosted game starts: its first step is a new session even on the
+    /// server and thread of the one that stopped.
+    pub(crate) fn begin(&mut self) {
+        *self = Self::default();
+    }
 }
 
 static SESSION: Mutex<Session> = Mutex::new(Session {
@@ -355,6 +361,7 @@ fn end_session() {
     crate::daytime::forget();
     crate::knowledge::forget();
     crate::weather::forget();
+    crate::inventory::forget();
     forget_joined();
     BUILDING
         .lock()
@@ -378,6 +385,12 @@ unsafe extern "system" fn set_state(entry: *mut u8, state: u8) {
     };
     guarded("server state", || match state {
         STATE_RUN if old != STATE_RUN => {
+            if loader.side == Side::CLIENT {
+                SESSION
+                    .lock()
+                    .unwrap_or_else(PoisonError::into_inner)
+                    .begin();
+            }
             crate::worlds::load(loader);
             loader.emit(Event::WORLD_LOADED, None, core::ptr::null());
         }
@@ -536,6 +549,9 @@ mod tests {
         assert_eq!(session.step(0x1000, 7), Step::Same);
         session.stop();
         assert_eq!(session.step(0x1000, 7), Step::Ended);
+        session.begin();
+        assert_eq!(session.step(0x1000, 7), Step::New);
+        assert_eq!(session.step(0x1000, 7), Step::Same);
         // The next hosted game: a new server on a new thread.
         assert_eq!(session.step(0x2000, 9), Step::New);
         assert_eq!(session.step(0x2000, 9), Step::Same);

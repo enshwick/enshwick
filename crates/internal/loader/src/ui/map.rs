@@ -22,9 +22,11 @@ use crate::host::Loader;
 
 /// The most markers one mod shows.
 const MAX_MARKERS: usize = 256;
-/// Old marker sets kept alive, since the map may still read a label it
-/// was handed a frame before.
-const RETIRED: usize = 4;
+/// Frames an old marker set stays alive after it was replaced, since the map
+/// may still read a label it was handed the frame before.
+const RETIRED_FRAMES: u64 = 2;
+/// Old marker sets kept at most while no frame runs to retire them.
+const MAX_RETIRED: usize = 64;
 
 /// The play data's main marker list: entries, count, capacity.
 const LIST_DATA: usize = 0x36_ea00;
@@ -70,7 +72,10 @@ static SETS: Mutex<Vec<(usize, Arc<[Owned]>)>> = Mutex::new(Vec::new());
 static SNAPSHOT: OnceLock<ArcSwap<Sets>> = OnceLock::new();
 /// Every mod's markers, one shared set each.
 type Sets = Vec<Arc<[Owned]>>;
-static RETIRED_SETS: Mutex<VecDeque<Arc<Sets>>> = Mutex::new(VecDeque::new());
+/// Replaced marker sets, with the frame they were replaced in.
+static RETIRED_SETS: Mutex<VecDeque<(u64, Arc<Sets>)>> = Mutex::new(VecDeque::new());
+/// Frames the replicate system has run.
+static FRAME: AtomicU64 = AtomicU64::new(0);
 /// The interface's play data, as the last frame found it; 0 outside a world.
 static PLAY_DATA: AtomicUsize = AtomicUsize::new(0);
 /// When a frame last found it, in milliseconds since the system started.
@@ -111,11 +116,20 @@ pub(crate) fn set(owner: usize, given: &[UiMarker]) -> Status {
     drop(sets);
     let old = snapshot().swap(Arc::new(next));
     let mut retired = RETIRED_SETS.lock().unwrap_or_else(PoisonError::into_inner);
-    retired.push_back(old);
-    while retired.len() > RETIRED {
+    retired.push_back((FRAME.load(Ordering::Acquire), old));
+    retire(&mut retired, FRAME.load(Ordering::Acquire));
+    Status::OK
+}
+
+/// Frees the replaced sets no frame can still read at frame `now`, and the
+/// oldest beyond [`MAX_RETIRED`].
+fn retire(retired: &mut VecDeque<(u64, Arc<Sets>)>, now: u64) {
+    while retired
+        .front()
+        .is_some_and(|&(at, _)| at + RETIRED_FRAMES <= now || retired.len() > MAX_RETIRED)
+    {
         retired.pop_front();
     }
-    Status::OK
 }
 
 /// Notes the play data of the interface context `context`, for the
@@ -162,6 +176,10 @@ unsafe extern "system" fn detour(context: *mut u8) {
     let appended = std::panic::catch_unwind(append);
     if appended.is_err() {
         crate::log!(ERROR, "map markers: the loader panicked while adding them");
+    }
+    let now = FRAME.fetch_add(1, Ordering::AcqRel) + 1;
+    if let Ok(mut retired) = RETIRED_SETS.try_lock() {
+        retire(&mut retired, now);
     }
 }
 
@@ -305,5 +323,24 @@ mod tests {
         assert_eq!(pick(&types), Some(3));
         assert_eq!(pick(&types[..2]), Some(1));
         assert_eq!(pick(&[(4, true, false, false)]), None);
+    }
+
+    #[test]
+    fn a_replaced_set_lives_two_frames_however_often_mods_replace_theirs() {
+        let mut retired = VecDeque::new();
+        for _ in 0..10 {
+            retired.push_back((5, Arc::new(Vec::new())));
+            retire(&mut retired, 5);
+        }
+        assert_eq!(retired.len(), 10);
+        retire(&mut retired, 6);
+        assert_eq!(retired.len(), 10);
+        retire(&mut retired, 7);
+        assert!(retired.is_empty());
+        for _ in 0..MAX_RETIRED + 5 {
+            retired.push_back((9, Arc::new(Vec::new())));
+            retire(&mut retired, 9);
+        }
+        assert_eq!(retired.len(), MAX_RETIRED);
     }
 }
