@@ -48,7 +48,23 @@ The loader writes to `logs/enshwick/` beside the game:
 A line reads `hh:mm:ss.mmmZ level [source] message`, in UTC. The files of the
 previous session are truncated at start. A background thread writes them and
 flushes every line, so a hook never waits on the disk and the last lines
-before a crash are kept.
+before a crash are kept. Up to 4096 lines wait for it; a line that finds the
+queue full is dropped rather than making the game wait, and the next line
+written says how many were dropped.
+
+### Reading the log in game
+
+The writer keeps the latest 1024 lines in memory. An administrator reads them
+in chat with `/enshwick log [mod] [level] [n]`, the words in any order:
+
+- `mod`: one mod's lines, or the loader's with `enshwick`; every source when
+  left out;
+- `level`: `error`, `warn`, `info` or `debug`, the lines at that level or more
+  severe; every kept line when left out;
+- `n`: how many of the latest lines, 10 by default and at most 16.
+
+`/enshwick log safes warn 5` shows the last five warnings and errors of
+`safes`. Only lines the [levels](#levels) keep are there to read.
 
 ## Levels
 

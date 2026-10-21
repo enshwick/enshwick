@@ -68,16 +68,17 @@ mod that is off answers as unknown.
 
 The loader answers `/enshwick` itself:
 
-| Command                       | Answer                                                                                                                                             |
-| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `/enshwick`                   | the loader version and every mod with its name and version, `(off)` for mods turned off                                                            |
-| `/enshwick <mod id>`          | what the mod is: name, version, description, authors, licence, homepage, and notes such as a recommended mod that is missing                       |
-| `/enshwick help`              | every command of a running mod, with its mod id and help line                                                                                      |
-| `/enshwick status`            | administrators only: a short [status summary](logging.md#status-summary), and a fresh `status.log`                                                 |
-| `/enshwick profile`           | administrators only: the five [costliest mods](logging.md#per-mod-costs) since start, or since `/enshwick profile reset`                           |
-| `/enshwick conflicts`         | administrators only: the hooks, filters and resources several mods [share](logging.md#conflicts)                                                   |
-| `/enshwick ui-demo`           | administrators only, from a client that runs Enshwick: opens a window of every [interface](interface.md) widget on that client, for a visual check |
-| `/config <mod> [key] [value]` | administrators only: read and change a mod's settings; see [The schema and `/config`](settings.md#the-schema-and-config)                           |
+| Command                           | Answer                                                                                                                                             |
+| --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/enshwick`                       | the loader version and every mod with its name and version, `(off)` for mods turned off                                                            |
+| `/enshwick <mod id>`              | what the mod is: name, version, description, authors, licence, homepage, and notes such as a recommended mod that is missing                       |
+| `/enshwick help`                  | every command of a running mod, with its mod id and help line                                                                                      |
+| `/enshwick status`                | administrators only: a short [status summary](logging.md#status-summary), and a fresh `status.log`                                                 |
+| `/enshwick profile`               | administrators only: the five [costliest mods](logging.md#per-mod-costs) since start, or since `/enshwick profile reset`                           |
+| `/enshwick conflicts`             | administrators only: the hooks, filters and resources several mods [share](logging.md#conflicts)                                                   |
+| `/enshwick log [mod] [level] [n]` | administrators only: the latest [log lines](logging.md#reading-the-log-in-game), of one mod or all, at a level or more severe                      |
+| `/enshwick ui-demo`               | administrators only, from a client that runs Enshwick: opens a window of every [interface](interface.md) widget on that client, for a visual check |
+| `/config <mod> [key] [value]`     | administrators only: read and change a mod's settings; see [The schema and `/config`](settings.md#the-schema-and-config)                           |
 
 No mod may register `enshwick` or `config`. A `/` command no one has gets `Unknown command /name. /enshwick help lists
 the commands.`
