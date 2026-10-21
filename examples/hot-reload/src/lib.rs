@@ -1,9 +1,10 @@
 //! Example: a mod that a development server reloads while it runs.
 //!
 //! With `dev_reload = true` in `mod-configs/enshwick.toml`, the dedicated
-//! server watches `mods/` and reloads this mod when its DLL changes. The mod
-//! allows it with `reload = true`, uses only what a reload can unlink (an
-//! event and a log line), and stops the thread it starts in `shutdown`.
+//! server watches `mods/` and reloads this mod when its DLL changes; a
+//! client does the same for the mods it runs. The mod allows it with
+//! `reload = true`, uses only what a reload can unlink (an event and a log
+//! line), and stops the thread it starts in `shutdown`.
 //! Change [`GREETING`], run `cargo enshwick install`, and the server logs the
 //! new text without a restart.
 
