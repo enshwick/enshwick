@@ -8,6 +8,7 @@
 
 use std::cell::Cell;
 use std::collections::BTreeMap;
+use std::sync::atomic::Ordering;
 use std::sync::{PoisonError, RwLock};
 use std::time::{Duration, Instant};
 
@@ -28,11 +29,12 @@ use crate::copies::{Copies, CopyStaff, Verdict, Zone};
 const SWEEP: Duration = Duration::from_secs(2);
 const FORGET_AFTER: Duration = Duration::from_secs(3);
 
-/// How the staffs behave, from the settings.
+/// How the staffs behave, from the settings; whether copy staffs work at
+/// all is [`crate::COPY_STAFFS`], which may change while the game runs.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct Staffs {
-    /// The copy staffs' charges; `None` without copy staffs.
-    pub(crate) copy: Option<Charges>,
+    /// The copy staffs' charges.
+    pub(crate) charges: Charges,
     /// Whether the survivor's own staff places and moves copies, as before
     /// copy staffs.
     pub(crate) vanilla_places: bool,
@@ -61,6 +63,8 @@ struct Shared {
     /// When the uniqueness pass last saw each copy.
     seen: BTreeMap<u32, Instant>,
     swept: Instant,
+    /// When the uniqueness pass last ran.
+    last_pass: Instant,
 }
 
 impl Shared {
@@ -70,6 +74,7 @@ impl Shared {
             originals: BTreeMap::new(),
             seen: BTreeMap::new(),
             swept: Instant::now(),
+            last_pass: Instant::now(),
         }
     }
 }
@@ -92,23 +97,22 @@ pub(crate) fn link(load: &mut Load<'_>, staffs: Staffs) -> Result<(), Off> {
         PLAN.with(|plan| plan.set(None));
         read(|shared| judge(shared, summon, staffs)).unwrap_or(SummonVerdict::Allow)
     })?;
-    if let Some(charges) = staffs.copy {
-        let (world, scheduler) = (load.world()?, load.scheduler()?);
-        let inventories = load.inventories().ok();
-        load.on_summoned(move |summon| {
-            let placed = PLAN.with(Cell::take).is_some_and(|plan| plan.places);
-            if !placed || summon.consumed {
-                return;
-            }
-            let (staff, slot, item) = (summon.pide, summon.slot, summon.item);
-            if summon.meter.is_some() {
-                scheduler.next_tick(move || spend(&world, staff));
-            } else if let Some(inventories) = inventories {
-                // A staff from before charges: one spent of a full one.
-                scheduler.next_tick(move || renew_spent(&inventories, slot, item, charges));
-            }
-        })?;
-    }
+    let charges = staffs.charges;
+    let (world, scheduler) = (load.world()?, load.scheduler()?);
+    let inventories = load.inventories().ok();
+    load.on_summoned(move |summon| {
+        let placed = PLAN.with(Cell::take).is_some_and(|plan| plan.places);
+        if !placed || summon.consumed {
+            return;
+        }
+        let (staff, slot, item) = (summon.pide, summon.slot, summon.item);
+        if summon.meter.is_some() {
+            scheduler.next_tick(move || spend(&world, staff));
+        } else if let Some(inventories) = inventories {
+            // A staff from before charges: one spent of a full one.
+            scheduler.next_tick(move || renew_spent(&inventories, slot, item, charges));
+        }
+    })?;
     if load.host().build().side == Side::CLIENT {
         // Entities belong to one hosted game; the next starts clean.
         load.on::<ShutdownStarted>(|()| forget())?;
@@ -130,12 +134,10 @@ fn write<R>(f: impl FnOnce(&mut Shared) -> R) -> Option<R> {
     slot.as_mut().map(f)
 }
 
-/// Takes the altars' zones, which move only when someone builds.
+/// Takes the altars' zones, which move only when someone builds; an empty
+/// list once zones were known means the last altar is gone.
 fn read_altars(altars: Altars) {
     let list = altars.list();
-    if list.is_empty() {
-        return;
-    }
     write(|shared| {
         shared.copies.set_altars(
             list.iter()
@@ -157,6 +159,13 @@ fn answer(shared: &mut Shared, lookup: &Lookup) -> Answer {
     match lookup.purpose {
         Purpose::Uniqueness { entity, home } => {
             let now = Instant::now();
+            if now.duration_since(shared.last_pass) >= FORGET_AFTER {
+                // The server stalled: nobody could be seen meanwhile.
+                for seen in shared.seen.values_mut() {
+                    *seen = now;
+                }
+            }
+            shared.last_pass = now;
             if now.duration_since(shared.swept) >= SWEEP {
                 sweep(shared, now);
             }
@@ -316,7 +325,8 @@ fn judge(shared: &Shared, summon: &Summon, staffs: Staffs) -> SummonVerdict {
     }
     let survivor = summon.template.id();
     let original = shared.originals.get(&survivor).copied().unwrap_or(0);
-    if let (Some(charges), Some(staff)) = (staffs.copy, crate::staffs::copy_staff(summon.item)) {
+    if let Some(staff) = crate::staffs::copy_staff(summon.item) {
+        let charges = staffs.charges;
         // The staff's effect spawn carries the same item; only the survivor
         // itself is planned.
         if staff
@@ -324,6 +334,10 @@ fn judge(shared: &Shared, summon: &Summon, staffs: Staffs) -> SummonVerdict {
             .is_none_or(|s| summon.template != s.template())
         {
             return SummonVerdict::Allow;
+        }
+        if !crate::COPY_STAFFS.load(Ordering::Relaxed) {
+            enshwick_loader_api::info!("copy staff of {}: refused, copy staffs are off", staff.key);
+            return SummonVerdict::Refuse;
         }
         let (answer, places) = match shared.copies.copy_staff(survivor, summon.target, original) {
             CopyStaff::Refuse(why) => {

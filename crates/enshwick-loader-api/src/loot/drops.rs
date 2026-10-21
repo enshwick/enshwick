@@ -719,6 +719,37 @@ impl Load<'_> {
     }
 }
 
+/// Replaces the drops the mod added with [`Load::add_loot`] with `drops`,
+/// from any thread, such as when a setting turns a drop off or changes its
+/// chance; no drops stops them all. A kind of roll nothing linked at start
+/// stays off until a restart, so a mod that may turn its drops on later adds
+/// them at init and replaces them with none at once.
+///
+/// # Errors
+///
+/// [`Off`] when a drop is not valid or needs a roll no drop linked at start.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::content::Id;
+/// use enshwick_loader_api::loot::{Drop, Source, replace_drops};
+///
+/// const STAFF: Id = Id::new("my-mod:staff");
+///
+/// fn set(on: bool) -> Result<(), enshwick_loader_api::Off> {
+///     let drops = if on {
+///         vec![Drop::new(STAFF.id(), 0.10, Source::bosses())]
+///     } else {
+///         Vec::new()
+///     };
+///     replace_drops(drops)
+/// }
+/// ```
+pub fn replace_drops(drops: Vec<Drop>) -> Result<(), Off> {
+    replace_group(0, drops).map_err(Off::new)
+}
+
 /// Replaces every drop of group `group` with `drops`, as a content pack's
 /// reload does; no drops forgets the group.
 ///

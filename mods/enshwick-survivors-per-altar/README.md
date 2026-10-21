@@ -24,6 +24,8 @@ zone.
   cleared.
 - The survivor menu shows the worst status of the copies, so "no bed" means some
   copy still needs one.
+- When an altar is removed, the last one too, its copies go with its zone; the
+  original stays where it is.
 - Removing the mod lets the game remove the copies.
 - A copy staff holds 3 charges when full, shown as a bar on its slot, and its
   tooltip names how many it holds when full; the last charge uses the staff
@@ -53,6 +55,11 @@ copy_staff_locked_chest_chance = 0.02
 # moves the copy an altar has, as before copy staffs.
 vanilla_staff_places_copies = false
 ```
+
+`copy_staffs` is the server's: a joined player runs with the server's value,
+and a change applies while the game runs. Off, copy staffs neither drop nor
+work, and the staffs players hold stay for when they are on again. The other
+settings apply after a restart.
 
 ## Install
 
