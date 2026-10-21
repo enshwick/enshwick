@@ -274,12 +274,13 @@ impl Str {
         self.len == 0
     }
 
-    /// The text, or `None` when the bytes are not UTF-8.
+    /// The text, or `None` when the bytes are not UTF-8 or the pointer is
+    /// null or the length impossible.
     ///
     /// # Safety
     ///
-    /// The bytes must be alive and unchanged for the lifetime `'a` the caller
-    /// picks.
+    /// Unless the pointer is null, the bytes must be alive and unchanged for
+    /// the lifetime `'a` the caller picks.
     ///
     /// # Examples
     ///
@@ -288,6 +289,9 @@ impl Str {
     pub unsafe fn as_str<'a>(&self) -> Option<&'a str> {
         if self.len == 0 {
             return Some("");
+        }
+        if self.ptr.is_null() || isize::try_from(self.len).is_err() {
+            return None;
         }
         // SAFETY: the caller keeps `len` bytes at `ptr` alive for `'a`.
         let bytes = unsafe { core::slice::from_raw_parts(self.ptr, self.len) };
@@ -4174,7 +4178,8 @@ pub struct HostApi {
     /// Adds `callback` with `user` to the mod's status sources: the loader
     /// calls it, on a thread of its own or the game thread, whenever it
     /// writes its status summary (`logs/enshwick/status.log`, `/enshwick
-    /// status`) and shows its lines under the mod. Since minor 13.
+    /// status`) and shows its lines under the mod. Allowed during
+    /// `enshwick_mod_init` only. Since minor 13.
     pub status: extern "system" fn(me: ModHandle, callback: StatusFn, user: *mut c_void) -> Status,
     /// Runs the chat command line `line` (`/name args`) as the server's
     /// console, an administrator with no character, and writes its reply
@@ -5282,3 +5287,23 @@ const _: () = {
     assert!(size_of::<UpdateSource>() == 48);
     assert!(size_of::<ResourceKey>() == 24);
 };
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_null_or_impossible_text_reads_as_none() {
+        let null = Str {
+            ptr: core::ptr::null(),
+            len: 5,
+        };
+        let huge = Str {
+            ptr: c"x".as_ptr().cast(),
+            len: usize::MAX,
+        };
+        // SAFETY: neither is read: both are refused before.
+        let (null, huge) = (unsafe { null.as_str() }, unsafe { huge.as_str() });
+        assert_eq!((null, huge), (None, None));
+    }
+}
