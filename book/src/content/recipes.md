@@ -12,7 +12,8 @@ Two calls add recipes, and one changes them:
 
 All three patch the game's recipe registry, which every mod shares; patches
 from several mods run in turn, so their recipes end up side by side and
-their changes add up.
+their changes add up. To take recipes out of the game, see
+[Disabling recipes](disabled-recipes.md).
 
 ## A single recipe
 

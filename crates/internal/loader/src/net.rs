@@ -520,6 +520,7 @@ pub(crate) fn server_received(key: u64, args: &str) {
                 for records in crate::item_data::hello() {
                     item_data(key, &records);
                 }
+                crate::recipes::hello(key);
             }
             return;
         }
@@ -615,6 +616,7 @@ pub(crate) fn is_frame(text: &[u8]) -> bool {
 /// forgets the last server's state.
 pub(crate) fn joining(runs_enshwick: bool) {
     forget();
+    crate::recipes::joining();
     SERVER_RUNS_ENSHWICK.store(runs_enshwick, Ordering::Release);
 }
 

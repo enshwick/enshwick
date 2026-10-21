@@ -597,7 +597,7 @@ fn recipe_registry() -> ResourceKey {
 }
 
 /// Whether mods serve the recipe registry.
-fn served_recipes() -> bool {
+pub(crate) fn served_recipes() -> bool {
     SERVED_LIST
         .get()
         .is_some_and(|served| served.iter().any(|s| s.key == recipe_registry()))
@@ -739,6 +739,7 @@ fn build(entry: &Served, database: *mut u8) -> Option<(usize, usize)> {
     state.built = Some(result);
     if entry.key == recipe_registry() {
         crate::code::recipes_served(current, current_len);
+        crate::recipes::registry_built(current, current_len);
     }
     if let Some(loader) = LOADED.get() {
         let by: Vec<&str> = applied

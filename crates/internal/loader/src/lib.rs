@@ -85,6 +85,7 @@ mod patch;
 pub mod profile;
 #[cfg(windows)]
 mod progress;
+pub mod recipes;
 #[cfg(windows)]
 mod reload;
 pub mod remote;

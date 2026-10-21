@@ -279,6 +279,7 @@ mod live {
         }
         crate::log!(INFO, "world settings: world {key}");
         set_current(Some(key));
+        crate::recipes::world_changed(loader);
         loader.emit(Event::WORLD_SETTINGS, None, core::ptr::null());
     }
 
@@ -288,6 +289,7 @@ mod live {
             return;
         }
         set_current(None);
+        crate::recipes::world_changed(loader);
         loader.emit(Event::WORLD_SETTINGS, None, core::ptr::null());
     }
 }

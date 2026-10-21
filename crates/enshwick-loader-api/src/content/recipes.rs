@@ -118,17 +118,40 @@ impl RecipeLayout {
     /// }
     /// ```
     pub fn resolve(load: &Load<'_>) -> Result<Self, Off> {
-        let wide = |v: u64| usize::try_from(v).unwrap_or(usize::MAX);
-        let recipe = |name: &str| load.field_offset("keen::RecipeInfo", name).map(wide);
-        let stack = |name: &str| {
-            load.field_offset("keen::RecipeItemStackResource", name)
-                .map(wide)
-        };
-        let size = |ty: &str| load.type_size(ty).map(|s| s as usize);
+        Self::with_lookup(
+            |ty, name| {
+                load.field_offset(ty, name)
+                    .map(|o| usize::try_from(o).unwrap_or(usize::MAX))
+            },
+            |ty| load.type_size(ty).map(|s| s as usize),
+        )
+    }
+
+    /// The layout of a game whose reflection `field` (a type's field offset)
+    /// and `size` (a type's size) read, for the loader and for tools that
+    /// read a game image rather than run in the game.
+    ///
+    /// # Errors
+    ///
+    /// The first [`Off`] a lookup returns.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_loader_api::Off;
+    /// use enshwick_loader_api::content::recipes::RecipeLayout;
+    ///
+    /// let none = RecipeLayout::with_lookup(|ty, f| Err(Off::new(format!("{ty}.{f}"))), |_| Ok(0));
+    /// assert!(none.is_err());
+    /// ```
+    pub fn with_lookup(
+        field: impl Fn(&str, &str) -> Result<usize, Off>,
+        size: impl Fn(&str) -> Result<usize, Off>,
+    ) -> Result<Self, Off> {
+        let recipe = |name: &str| field("keen::RecipeInfo", name);
+        let stack = |name: &str| field("keen::RecipeItemStackResource", name);
         Ok(Self {
-            recipes: load
-                .field_offset("keen::RecipeRegistryResource", "recipes")
-                .map(wide)?,
+            recipes: field("keen::RecipeRegistryResource", "recipes")?,
             recipe: size("keen::RecipeInfo")?,
             guid: recipe("recipeGuid")?,
             id: recipe("recipeId")?,
@@ -758,6 +781,128 @@ impl Load<'_> {
 /// ```
 pub fn rebuild_recipes() -> Result<(), Off> {
     crate::content::rebuild(RECIPE_REGISTRY.key(types::RECIPE_REGISTRY))
+}
+
+/// What a recipe rule disables, named as the loader's recipe file names it:
+/// a debug name (`Tool_Torch01_T0_PK`), a content id (`safes:safe.recipe`) or
+/// a GUID.
+///
+/// # Examples
+///
+/// See [`disable`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum RecipeRule<'a> {
+    /// One recipe.
+    Recipe(&'a str),
+    /// Every recipe that makes this item.
+    Output(&'a str),
+    /// Every recipe made at this workshop: `hand` for crafting by hand, or
+    /// the debug name of the item the workshop belongs to, such as
+    /// `Craftingstation_Workbench` or a survivor's `NPC_Crafter_Blacksmith01`.
+    Workshop(&'a str),
+}
+
+impl<'a> RecipeRule<'a> {
+    /// The rule's kind, its kind in words and the name it carries.
+    const fn parts(self) -> (crate::abi::RecipeRuleKind, &'static str, &'a str) {
+        use crate::abi::RecipeRuleKind;
+        match self {
+            Self::Recipe(name) => (RecipeRuleKind::RECIPE, "recipe", name),
+            Self::Output(name) => (RecipeRuleKind::OUTPUT, "output", name),
+            Self::Workshop(name) => (RecipeRuleKind::WORKSHOP, "workshop", name),
+        }
+    }
+}
+
+fn rule(rule: RecipeRule<'_>, disable: bool) -> Result<(), Off> {
+    let host = crate::host().ok_or_else(|| Off::new("recipe rules: no loader"))?;
+    let api = host.api();
+    crate::load::offered(
+        api,
+        core::mem::offset_of!(crate::abi::HostApi, recipe_rule),
+        "recipe rules",
+    )?;
+    let (kind, what, name) = rule.parts();
+    if name.trim().is_empty() {
+        return Err(Off::new(format!("recipe rule {what}: no name")));
+    }
+    let status = (api.recipe_rule)(
+        host.handle(),
+        kind,
+        crate::abi::Str::new(name),
+        u32::from(disable),
+    );
+    crate::load::ok(status, (), || format!("recipe rule {what} {name:?}"))
+}
+
+/// Disables recipes in the whole game while the mod runs: they leave every
+/// crafting menu, and the server refuses to craft them. On the server and in
+/// single player, the server's rules sync to the players who join. The
+/// loader resolves the name against the recipe registry and logs one it
+/// cannot resolve in the mod's log; the server's recipe file
+/// (`mod-configs/enshwick.recipes.toml`) wins over every mod's rules. Call it
+/// at any time, from any thread; it applies within a second.
+///
+/// # Errors
+///
+/// [`Off`] under a loader older than ABI minor 64, or for an empty name.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::content::recipes::{RecipeRule, disable, enable};
+///
+/// fn init(_load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+///     disable(RecipeRule::Output("Tool_Torch01_T0"))?;
+///     disable(RecipeRule::Workshop("hand"))?;
+///     enable(RecipeRule::Workshop("hand"))
+/// }
+/// ```
+pub fn disable(rule: RecipeRule<'_>) -> Result<(), Off> {
+    self::rule(rule, true)
+}
+
+/// Takes back the mod's own [`disable`] of `rule`; another mod's rules and
+/// the server's recipe file stay as they are.
+///
+/// # Errors
+///
+/// As [`disable`].
+///
+/// # Examples
+///
+/// See [`disable`].
+pub fn enable(rule: RecipeRule<'_>) -> Result<(), Off> {
+    self::rule(rule, false)
+}
+
+/// Whether the recipe `recipe` is disabled in this process now, by the
+/// server's recipe file or a mod's rule; on a client joined to a server, by
+/// the server's. `false` outside the game and under a loader older than ABI
+/// minor 64.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::content::Guid;
+/// use enshwick_loader_api::content::recipes::is_disabled;
+///
+/// let torch = Guid::parse("f3bedfba-bea3-45d4-9ca1-a4019f93c4a7");
+/// assert!(!is_disabled(torch));
+/// ```
+#[must_use]
+pub fn is_disabled(recipe: Guid) -> bool {
+    let Some(host) = crate::host() else {
+        return false;
+    };
+    let api = host.api();
+    let end = core::mem::offset_of!(crate::abi::HostApi, recipe_disabled) + size_of::<usize>();
+    if !api.header.covers(end) {
+        return false;
+    }
+    let mut out = 0u32;
+    (api.recipe_disabled)(host.handle(), recipe.id(), &raw mut out).is_ok() && out != 0
 }
 
 #[cfg(test)]

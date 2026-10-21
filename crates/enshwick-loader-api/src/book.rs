@@ -53,6 +53,7 @@ chapters! {
     Content => "content.md",
     Items => "content/items.md",
     Recipes => "content/recipes.md",
+    DisabledRecipes => "content/disabled-recipes.md",
     Workshops => "content/workshops.md",
     Loot => "content/loot.md",
     RandomLoot => "content/random-loot.md",

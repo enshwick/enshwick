@@ -772,6 +772,8 @@ pub(crate) static API: HostApi = HostApi {
     resource_read,
     game_text,
     rebuild_resource,
+    recipe_rule,
+    recipe_disabled,
 };
 
 /// A static slice from a pointer and a count, empty for a null pointer.
@@ -1619,6 +1621,38 @@ extern "system" fn rebuild_resource(me: ModHandle, key: *const api_frame::Resour
             return Status::BAD_ARGS;
         };
         crate::content::rebuild(index, *key)
+    })
+}
+
+extern "system" fn recipe_rule(
+    me: ModHandle,
+    kind: enshwick_loader_api::abi::RecipeRuleKind,
+    name: Str,
+    disable: u32,
+) -> Status {
+    entry("recipe_rule", || {
+        let (_, index, _) = match calling(me) {
+            Ok(found) => found,
+            Err(status) => return status,
+        };
+        let Some(name) = text(name) else {
+            return Status::BAD_ARGS;
+        };
+        crate::recipes::rule(index, kind, name, disable != 0)
+    })
+}
+
+extern "system" fn recipe_disabled(me: ModHandle, recipe: u32, out: *mut u32) -> Status {
+    entry("recipe_disabled", || {
+        if let Err(status) = caller(me) {
+            return status;
+        }
+        if out.is_null() {
+            return Status::BAD_ARGS;
+        }
+        // SAFETY: the caller's out value, checked for null.
+        unsafe { out.write(u32::from(crate::recipes::is_disabled(recipe))) };
+        Status::OK
     })
 }
 
