@@ -1,5 +1,5 @@
-//! Copy staffs from before charges get their charges at once: on the
-//! server, every copy staff without an entity of its own, in a player's
+//! Copy staffs from before charges get their charges at once: in the
+//! dedicated server and in a game a client hosts, every copy staff without an entity of its own, in a player's
 //! inventory or a container, is renewed full, when the world loads, when a
 //! player joins and every minute for containers loaded since.
 
@@ -41,7 +41,8 @@ fn holders(
     roots
 }
 
-/// Links the renewals on the server.
+/// Links the renewals: they run in the dedicated server and in a game a
+/// client hosts, solo play included.
 pub(crate) fn link(load: &mut Load<'_>) -> Result<(), Off> {
     let inventories = load.inventories()?;
     let world = load.world()?;

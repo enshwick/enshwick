@@ -69,6 +69,9 @@ struct Shared {
     seen: BTreeMap<u32, Instant>,
     /// Since when each copy has stood outside every known zone.
     outside: BTreeMap<u32, Instant>,
+    /// When the first altars of this game were listed: for
+    /// [`OUTSIDE_GRACE`] after, the rest may still arrive.
+    altars_since: Option<Instant>,
     swept: Instant,
     /// When the uniqueness pass last ran.
     last_pass: Instant,
@@ -81,6 +84,7 @@ impl Shared {
             originals: BTreeMap::new(),
             seen: BTreeMap::new(),
             outside: BTreeMap::new(),
+            altars_since: None,
             swept: Instant::now(),
             last_pass: Instant::now(),
         }
@@ -128,6 +132,14 @@ pub(crate) fn link(load: &mut Load<'_>, staffs: Staffs) -> Result<(), Off> {
     Ok(())
 }
 
+/// Lets the altars of the running game count as all listed.
+#[cfg(test)]
+pub(crate) fn settle() {
+    write(|shared| {
+        shared.altars_since = Instant::now().checked_sub(OUTSIDE_GRACE);
+    });
+}
+
 fn forget() {
     *SHARED.write().unwrap_or_else(PoisonError::into_inner) = Some(Shared::new());
 }
@@ -146,8 +158,11 @@ fn write<R>(f: impl FnOnce(&mut Shared) -> R) -> Option<R> {
 /// list once zones were known means the last altar is gone.
 fn read_altars(altars: Altars) {
     let list = altars.list();
+    let now = Instant::now();
     write(|shared| {
-        shared.copies.set_altars(
+        set_altars(
+            shared,
+            now,
             list.iter()
                 .filter(|altar| !altar.zone.is_empty())
                 .map(|altar| {
@@ -160,6 +175,24 @@ fn read_altars(altars: Altars) {
     });
 }
 
+/// Takes `altars` and notes when the first of this game arrived.
+fn set_altars(shared: &mut Shared, now: Instant, altars: impl IntoIterator<Item = (u64, Zone)>) {
+    shared.copies.set_altars(altars);
+    if shared.copies.knows_altars() && shared.altars_since.is_none() {
+        shared.altars_since = Some(now);
+    }
+}
+
+/// Whether the altars may still be arriving: within [`OUTSIDE_GRACE`] of
+/// the first ones. A copy whose home lies in the grown zone of a listed
+/// altar, nearer its own altar not listed yet, then looks like a second
+/// copy in that altar's slot.
+fn settling(shared: &Shared, now: Instant) -> bool {
+    shared
+        .altars_since
+        .is_none_or(|since| now.duration_since(since) < OUTSIDE_GRACE)
+}
+
 /// The uniqueness pass, which files copies.
 fn answer(shared: &mut Shared, lookup: &Lookup) -> Answer {
     let npc = lookup.survivor.0;
@@ -167,13 +200,7 @@ fn answer(shared: &mut Shared, lookup: &Lookup) -> Answer {
     match lookup.purpose {
         Purpose::Uniqueness { entity, home } => {
             let now = Instant::now();
-            if now.duration_since(shared.last_pass) >= FORGET_AFTER {
-                // The server stalled: nobody could be seen meanwhile.
-                for seen in shared.seen.values_mut().chain(shared.outside.values_mut()) {
-                    *seen = now;
-                }
-            }
-            shared.last_pass = now;
+            note_pass(shared, now);
             if now.duration_since(shared.swept) >= SWEEP {
                 sweep(shared, now);
             }
@@ -181,6 +208,19 @@ fn answer(shared: &mut Shared, lookup: &Lookup) -> Answer {
         }
         _ => answer_reading(shared, lookup),
     }
+}
+
+/// Notes a uniqueness pass at `now`. After a stall nobody could be seen
+/// meanwhile, and no altar could arrive.
+fn note_pass(shared: &mut Shared, now: Instant) {
+    let stall = now.duration_since(shared.last_pass);
+    if stall >= FORGET_AFTER {
+        for seen in shared.seen.values_mut().chain(shared.outside.values_mut()) {
+            *seen = now;
+        }
+        shared.altars_since = shared.altars_since.map(|since| since + stall);
+    }
+    shared.last_pass = now;
 }
 
 /// Every other lookup, which only reads.
@@ -271,6 +311,8 @@ fn file_copy(
             Answer::Entity(Entity(original))
         }
         Verdict::Keep => keep(found, me),
+        // Kept unfiled: the next pass files it once its altar is listed.
+        Verdict::Remove if settling(shared, now) => keep(found, me),
         Verdict::Remove => {
             let holder = shared.copies.at(npc, home, original);
             enshwick_loader_api::info!(
@@ -505,6 +547,52 @@ mod tests {
         );
         assert_eq!(shared.copies.copy_count(7), 1);
         assert!(shared.outside.is_empty());
+    }
+
+    #[test]
+    fn a_copy_in_a_listed_grown_zone_waits_for_its_own_altar_after_a_load() {
+        let one = (1, Zone::new([0, 0, 0], [80, 80, 80]));
+        // Altar 2's zone grew over altar 1's edge: the copy at x = 75 is
+        // nearer altar 2.
+        let two = (2, Zone::new([60, 0, 0], [140, 80, 80]));
+        let mut shared = Shared::new();
+        let t0 = Instant::now();
+        set_altars(&mut shared, t0, [one]);
+        assert_eq!(
+            file_copy(&mut shared, 7, 10, 10, [10, 0, 10], t0),
+            Answer::Entity(Entity(10))
+        );
+        let soon = t0 + Duration::from_secs(1);
+        assert_eq!(
+            file_copy(&mut shared, 7, 10, 11, [75, 0, 10], soon),
+            Answer::Entity(Entity(11)),
+            "kept while the altars arrive"
+        );
+        set_altars(&mut shared, soon, [one, two]);
+        assert_eq!(
+            file_copy(&mut shared, 7, 10, 11, [75, 0, 10], soon),
+            Answer::Entity(Entity(11))
+        );
+        assert_eq!(shared.copies.slot(7, 2), Some(11), "filed at its own altar");
+        assert_eq!(shared.copies.slot(7, 1), Some(10));
+        // Once the altars are in, a second copy in a slot goes at once.
+        let later = t0 + OUTSIDE_GRACE;
+        assert_eq!(
+            file_copy(&mut shared, 7, 10, 12, [100, 0, 10], later),
+            Answer::Entity(Entity(11))
+        );
+    }
+
+    #[test]
+    fn a_stall_holds_the_wait_for_the_altars() {
+        let mut shared = Shared::new();
+        let t0 = Instant::now();
+        set_altars(&mut shared, t0, [(1, Zone::new([0, 0, 0], [80, 80, 80]))]);
+        shared.last_pass = t0;
+        let stalled = t0 + OUTSIDE_GRACE + Duration::from_secs(1);
+        note_pass(&mut shared, stalled);
+        assert!(settling(&shared, stalled));
+        assert!(!settling(&shared, stalled + OUTSIDE_GRACE));
     }
 
     #[test]

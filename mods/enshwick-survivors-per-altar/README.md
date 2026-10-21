@@ -28,7 +28,8 @@ zone.
   copy still needs one.
 - When an altar is removed, the last one too, its copies go with its zone ten
   seconds later; the original stays where it is. A copy whose altar the game
-  has not listed yet after a load stays.
+  has not listed yet after a load stays, also where its spot lies in the
+  grown zone of another altar already listed.
 - Removing the mod lets the game remove the copies.
 - A copy staff holds 3 charges when full, shown as a bar on its slot, and its
   tooltip names how many it holds when full; the last charge uses the staff
@@ -36,7 +37,8 @@ zone.
   a lockpick hold one at 2 %, a random survivor's each time; a dropped staff
   is full, or holds a random count when `copy_staff_charges_min` is above 0.
   A staff from before charges gets full charges when the world loads, when
-  its player joins and, in a chest, within a minute. Removing the mod removes
+  its player joins and, in a chest, within a minute, on a dedicated server,
+  in single player and in a hosted game alike. Removing the mod removes
   the staffs from inventories.
 
 ## Settings
