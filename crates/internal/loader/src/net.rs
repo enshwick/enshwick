@@ -443,6 +443,21 @@ fn remote_message(data: &[u8]) -> Option<crate::remote::Message> {
     crate::remote::Message::read(kind, body)
 }
 
+/// Records a hello from `key`: `Some(true)` for a new peer, `Some(false)`
+/// for a known one, whose hello takes from its rate and keeps its state, and
+/// `None` when that rate is spent.
+fn greet(peers: &mut HashMap<u64, Peer>, key: u64) -> Option<bool> {
+    match peers.entry(key) {
+        std::collections::hash_map::Entry::Vacant(entry) => {
+            entry.insert(Peer::new());
+            Some(true)
+        }
+        std::collections::hash_map::Entry::Occupied(mut entry) => {
+            entry.get_mut().admit().then_some(false)
+        }
+    }
+}
+
 /// Takes a frame line a client sent, on the server's game thread: `args` is
 /// the line after the command name, `key` the client's account key.
 pub(crate) fn server_received(key: u64, args: &str) {
@@ -455,7 +470,10 @@ pub(crate) fn server_received(key: u64, args: &str) {
     };
     if frame.channel == CONTROL {
         if frame.part == control(HELLO) {
-            let fresh = state(|s| s.peers.insert(key, Peer::new()).is_none());
+            let Some(fresh) = state(|s| greet(&mut s.peers, key)) else {
+                dropped();
+                return;
+            };
             if fresh {
                 crate::log!(INFO, "mod messages: the client of {key:016x} said hello");
             }
@@ -704,6 +722,26 @@ fn dropped() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_repeated_hello_keeps_the_peer_and_spends_its_rate() {
+        let mut peers = HashMap::new();
+        assert_eq!(greet(&mut peers, 7), Some(true));
+        peers.get_mut(&7).unwrap().partial.insert(
+            (1, 1),
+            Partial {
+                total: 2,
+                parts: Vec::new(),
+            },
+        );
+        let hellos = core::iter::repeat_with(|| greet(&mut peers, 7))
+            .take(100)
+            .take_while(Option::is_some)
+            .count();
+        assert!(hellos < 50, "{hellos}");
+        assert_eq!(greet(&mut peers, 7), None);
+        assert_eq!(peers[&7].partial.len(), 1);
+    }
 
     #[test]
     fn a_demo_frame_carries_a_position_or_none() {
