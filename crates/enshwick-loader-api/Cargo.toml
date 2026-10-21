@@ -193,6 +193,10 @@ name = "weather"
 required-features = ["test"]
 
 [[test]]
+name = "startup_sync"
+required-features = ["test"]
+
+[[test]]
 name = "world_settings"
 required-features = ["test"]
 
