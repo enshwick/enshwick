@@ -52,11 +52,10 @@ they are never released.
 
 ## Install
 
-1. Download `enshwick.zip` from the
-   [latest release](https://github.com/themaiby/enshwick/releases/latest),
-   titled `Enshwick Loader <version>`: the loader with every mod of this
-   repository.
-   The loader and the API share that one version; each mod has its own.
+1. Download
+   [`enshwick.zip`](https://github.com/themaiby/enshwick/releases/download/dev/enshwick.zip):
+   the loader with every mod of this repository. It is a development build
+   of the newest commit; until the first release, 1.0.0, there are no others.
 2. Extract it into the folder that holds `enshrouded.exe` (players) or
    `enshrouded_server.exe` (servers). You get `powrprof.dll` there and a `mods`
    folder beside it.
@@ -78,7 +77,7 @@ each DLL's SHA-256, in `mods/enshwick/enshwick.lock`.
 On Linux under Proton, add `WINEDLLOVERRIDES="powrprof=n,b" %command%` to the
 game's launch options.
 
-Every archive of a release has a [minisign](https://jedisct1.github.io/minisign/)
+Every archive has a [minisign](https://jedisct1.github.io/minisign/)
 signature (`.minisig`) beside it, by Enshwick's public key
 `RWTjqgtfpy3lSOLC4uaUXuvvKSLQKOFf6nUnEytoiFjSzxMEhLnoAdJF`.
 

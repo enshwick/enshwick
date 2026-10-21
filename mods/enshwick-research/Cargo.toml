@@ -1,6 +1,6 @@
 [package]
 name = "enshwick-research"
-version = "0.1.8"
+version = "0.0.0-dev"
 description = "Development only, never shipped: logs what a running client does where the platform still needs engine facts"
 keywords = ["enshrouded", "mod", "client", "research"]
 categories = ["game-development"]

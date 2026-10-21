@@ -45,6 +45,17 @@ cargo enshwick manifest target/release/my_mod.dll --expect-version 0.3.0
 
 ## Releases in this repository
 
+Until the first public release, 1.0.0, this repository has no releases.
+Every crate carries the version `0.0.0-dev`, and the
+[dev-build workflow](https://github.com/themaiby/enshwick/blob/main/.github/workflows/dev-build.yml),
+run by hand, builds the commit it runs on, packs the same archives as a
+release, signs each with the trusted comment `dev <short sha> <file>` and
+replaces the files of the one prerelease tagged `dev`, whose tag moves to that
+commit. Two development builds of one commit join each other; builds of
+different commits carry the same versions, so the join check does not tell
+them apart. The release workflow below runs by hand as well and makes 1.0.0
+the first version of every crate.
+
 Mods in this repository follow
 [CONTRIBUTING.md](https://github.com/themaiby/enshwick/blob/main/CONTRIBUTING.md):
 
@@ -87,11 +98,8 @@ and `enshwick.zip` (everything that goes next to the game), each with its
 reports the version of its tag.
 
 The loader's build tables (see [Finding the game](finding-the-game.md)) are
-released apart from any version: on every merge that changes one, the workflow
-signs each table with the trusted comment `build-table <file>` and uploads it
-with its `.minisig` to the `build-tables` release. A game update therefore
-needs a merged table, not a loader release; the updater fetches the table of
-the running build when the loader has none.
+compiled into the loader, so a table for a new game build ships with the next
+loader build.
 
 ## Where updates come from
 

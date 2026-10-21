@@ -1,6 +1,6 @@
 [package]
 name = "enshwick-build-camera"
-version = "0.4.7"
+version = "0.0.0-dev"
 description = "Airborne Architect's building fly mode for every player, within the vanilla limits"
 keywords = ["enshrouded", "mod", "building", "camera"]
 categories = ["game-development"]

@@ -5,6 +5,7 @@
   "tag-separator": "-",
   "separate-pull-requests": false,
   "always-update": true,
+  "release-as": "1.0.0",
   "plugins": [
     {
       "type": "cargo-workspace",
