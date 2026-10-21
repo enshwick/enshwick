@@ -64,6 +64,8 @@ they are never released.
    log is `logs/enshwick/` (`all.log`, `loader.log`, `mods/<id>.log`), and
    how much it keeps is set in `mod-configs/enshwick.toml`. In game, "Mods" in
    the main menu and in the pause menu lists the mods.
+   `mod-configs/enshwick.recipes.toml` takes recipes out of the game, vanilla
+   or a mod's ([Disabling recipes](book/src/content/disabled-recipes.md)).
 
 Players and their server need the same versions of the mods that count in the
 join check, which each mod's page names; the server advertises them. A

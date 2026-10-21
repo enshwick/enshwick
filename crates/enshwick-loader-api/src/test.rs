@@ -407,6 +407,7 @@ pub struct FakeHost {
     archive: std::collections::BTreeMap<[u32; 4], Vec<u8>>,
     resources: HashMap<([u8; 16], u32, u32), Vec<u8>>,
     game_texts: HashMap<(u32, u32), &'static str>,
+    disabled_recipes: HashSet<u32>,
 }
 
 impl Default for FakeHost {
@@ -467,6 +468,7 @@ impl FakeHost {
             archive: std::collections::BTreeMap::new(),
             resources: HashMap::new(),
             game_texts: HashMap::new(),
+            disabled_recipes: HashSet::new(),
         }
     }
 
@@ -1179,6 +1181,24 @@ impl FakeHost {
         self
     }
 
+    /// Plays a game whose recipe `recipe` is disabled, as
+    /// [`recipes::is_disabled`](crate::content::recipes::is_disabled) asks.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_loader_api::content::Guid;
+    ///
+    /// let torch = Guid::parse("7fa62007-a38e-4790-8591-873055fc3f34");
+    /// let loader = enshwick_loader_api::test::FakeHost::new().disabled_recipe(torch).install();
+    /// # let _ = loader;
+    /// ```
+    #[must_use]
+    pub fn disabled_recipe(mut self, recipe: crate::content::Guid) -> Self {
+        self.disabled_recipes.insert(recipe.id());
+        self
+    }
+
     /// Plays a game build without inventory transactions: `inventory_open`
     /// answers [`Status::MISSING`].
     ///
@@ -1650,6 +1670,22 @@ impl Installed {
             }
             keys
         })
+    }
+
+    /// The mod's recipe rules in force, from
+    /// [`recipes::disable`](crate::content::recipes::disable) less those
+    /// [`recipes::enable`](crate::content::recipes::enable) took back: kind
+    /// and name.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick_loader_api::test::FakeHost::new().install();
+    /// assert!(loader.recipe_rules().is_empty());
+    /// ```
+    #[must_use]
+    pub fn recipe_rules(&self) -> Vec<(crate::abi::RecipeRuleKind, String)> {
+        table::with(Vec::new(), |s| s.recipe_rules.clone())
     }
 
     /// The served resources the mod asked to rebuild, in order: each

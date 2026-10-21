@@ -335,7 +335,7 @@ pub(crate) fn lift_workshop_limit(loader: &'static Loader) {
         let (start, _) = text(loader.base).ok_or("the code section is not found")?;
         let code = text_bytes(loader.base).ok_or("the code section is not found")?;
         let patch = limit_patch(code, start)?;
-        let lookup = start + find(code, LOOKUP)?;
+        let lookup = lookup_address(loader).ok_or("the recipe list lookup is not linked")?;
         Ok::<_, String>((layout, patch, lookup))
     })();
     let (layout, patch, lookup) = match found {
@@ -349,7 +349,6 @@ pub(crate) fn lift_workshop_limit(loader: &'static Loader) {
     let Some(range) = text(loader.base) else {
         return;
     };
-    let lookup = lookup as u64;
     let patch = CodePatch {
         needs: Box::new([lookup]),
         ..patch
@@ -363,19 +362,47 @@ pub(crate) fn lift_workshop_limit(loader: &'static Loader) {
         );
         return;
     }
-    let status = loader.link(lookup, &LOOKUP_NEXT, lookup_detour, HookFlags::NONE);
-    if !status.is_ok() {
-        crate::log!(
-            WARN,
-            "workshop recipe list lookup at {lookup:#x} refused ({})",
-            status.0
-        );
-    }
     let _ = LIFT.set(Lift {
         patch: address,
         lookup,
         layout,
     });
+}
+
+/// The per-workshop list lookup, linked on first use: the lift of the
+/// workshop limit and the disabled recipes both answer there.
+static LOOKUP_LINK: OnceLock<Option<u64>> = OnceLock::new();
+
+/// The address of the linked per-workshop list lookup, linking it on the
+/// first call; `None` when its code is not found or the link is refused.
+fn lookup_address(loader: &'static Loader) -> Option<u64> {
+    *LOOKUP_LINK.get_or_init(|| {
+        let (start, _) = text(loader.base)?;
+        let code = text_bytes(loader.base)?;
+        let lookup = match find(code, LOOKUP) {
+            Ok(at) => (start + at) as u64,
+            Err(why) => {
+                crate::log!(WARN, "the recipe list lookup is not found: {why}");
+                return None;
+            }
+        };
+        let status = loader.link(lookup, &LOOKUP_NEXT, lookup_detour, HookFlags::NONE);
+        if status.is_ok() {
+            Some(lookup)
+        } else {
+            crate::log!(
+                WARN,
+                "workshop recipe list lookup at {lookup:#x} refused ({})",
+                status.0
+            );
+            None
+        }
+    })
+}
+
+/// Links the per-workshop list lookup for disabled recipes; whether it is.
+pub(crate) fn link_recipe_lookup(loader: &'static Loader) -> bool {
+    lookup_address(loader).is_some()
 }
 
 /// Settles whether the limit is lifted before arming writes anything:
@@ -489,8 +516,16 @@ unsafe extern "system" fn lookup_detour(
         // SAFETY: the game's span out pointer; the list is never freed.
         unsafe { out.write([list.as_ptr().addr() as u64, list.len() as u64]) };
     }
+    let _caught = LOOKUP_FUSE.run("the recipe list lookup", || {
+        // SAFETY: the span the game or the lift wrote for this call, of
+        // the game's recipes.
+        unsafe { crate::recipes::filter(id, out) };
+    });
     result
 }
+
+/// The switch of the recipe list lookup's filter.
+static LOOKUP_FUSE: crate::fuse::Fuse = crate::fuse::Fuse::new("disabled recipes");
 
 #[cfg(test)]
 mod tests {

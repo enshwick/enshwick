@@ -24,6 +24,8 @@ pub const SNAPSHOT: u8 = 8;
 pub const EDIT: u8 = 9;
 /// The server answers a change.
 pub const RESULT: u8 = 10;
+/// The server's disabled recipes.
+pub const RECIPES: u8 = 11;
 
 /// The least time between two changes one player sends.
 pub const EDIT_GAP: Duration = Duration::from_millis(250);
@@ -73,6 +75,15 @@ pub enum Message {
         /// What the server said.
         text: String,
     },
+    /// A part of the server's disabled recipes, by game id.
+    Recipes {
+        /// Whether it is the first part: the client forgets earlier parts.
+        first: bool,
+        /// Whether it is the last part: the list is complete.
+        last: bool,
+        /// The recipes of this part.
+        ids: Vec<u32>,
+    },
 }
 
 fn put(out: &mut Vec<u8>, text: &str) {
@@ -99,6 +110,7 @@ impl Message {
             Self::Snapshot { .. } => SNAPSHOT,
             Self::Edit { .. } => EDIT,
             Self::Result { .. } => RESULT,
+            Self::Recipes { .. } => RECIPES,
         }
     }
 
@@ -131,6 +143,12 @@ impl Message {
             Self::Result { ok, text } => {
                 out.push(u8::from(*ok));
                 put(&mut out, text);
+            }
+            Self::Recipes { first, last, ids } => {
+                out.push(u8::from(*first) | (u8::from(*last) << 1));
+                for id in ids {
+                    out.extend_from_slice(&id.to_le_bytes());
+                }
             }
         }
         out
@@ -170,6 +188,18 @@ impl Message {
                 Self::Result {
                     ok: ok != 0,
                     text: take(bytes)?.to_owned(),
+                }
+            }
+            RECIPES => {
+                let (&flags, rest) = bytes.split_first()?;
+                let (ids, tail) = rest.as_chunks::<4>();
+                if !tail.is_empty() {
+                    return None;
+                }
+                Self::Recipes {
+                    first: flags & 1 != 0,
+                    last: flags & 2 != 0,
+                    ids: ids.iter().map(|id| u32::from_le_bytes(*id)).collect(),
                 }
             }
             _ => return None,
@@ -321,6 +351,7 @@ mod live {
                 heard.result = Some((ok, text));
                 heard.news += 1;
             }
+            Message::Recipes { first, last, ids } => crate::recipes::received(first, last, &ids),
             Message::Query { .. } | Message::Edit { .. } => {}
         }
     }
@@ -377,7 +408,10 @@ mod live {
                 crate::net::to_player(key, &Message::Result { ok, text });
                 snapshot(loader, key, &id, admin);
             }
-            Message::Sync { .. } | Message::Snapshot { .. } | Message::Result { .. } => {}
+            Message::Sync { .. }
+            | Message::Snapshot { .. }
+            | Message::Result { .. }
+            | Message::Recipes { .. } => {}
         }
     }
 
@@ -507,6 +541,16 @@ mod tests {
                 ok: false,
                 text: "Сейф".into(),
             },
+            Message::Recipes {
+                first: true,
+                last: false,
+                ids: vec![1, u32::MAX],
+            },
+            Message::Recipes {
+                first: false,
+                last: true,
+                ids: Vec::new(),
+            },
         ] {
             assert_eq!(
                 Message::read(message.kind(), &message.body()),
@@ -515,6 +559,14 @@ mod tests {
         }
         assert_eq!(Message::read(QUERY, &[5, 0, b'a']), None);
         assert_eq!(Message::read(42, &[]), None);
+        assert_eq!(Message::read(RECIPES, &[3, 1, 2]), None);
+        let most = Message::Recipes {
+            first: true,
+            last: true,
+            ids: vec![7; 1400],
+        };
+        // The longest control message the frames carry.
+        assert!(most.body().len() + 2 <= 720 * 8 - 2);
     }
 
     #[test]

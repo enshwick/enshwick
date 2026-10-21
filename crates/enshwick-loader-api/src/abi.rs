@@ -14,7 +14,7 @@ use core::sync::atomic::AtomicUsize;
 pub const ABI_MAJOR: u16 = 1;
 
 /// The minor version of this interface. A newer minor only appends fields.
-pub const ABI_MINOR: u16 = 63;
+pub const ABI_MINOR: u16 = 64;
 
 /// Whether `id` is a valid mod id: 1 to 64 characters of `[a-z0-9-]`.
 ///
@@ -5010,6 +5010,43 @@ pub struct HostApi {
     /// not serve. Each rebuild keeps the patches' new bytes for the process.
     /// Since minor 63.
     pub rebuild_resource: extern "system" fn(me: ModHandle, key: *const ResourceKey) -> Status,
+    /// Adds the calling mod's rule that disables recipes (`disable` 1), or
+    /// takes its own rule of that kind and name back (`disable` 0). `name`
+    /// names a recipe, an item every recipe of which is disabled, or a
+    /// workshop, as `kind` says, in the forms the loader's recipe file
+    /// takes; the loader resolves it against the recipe registry and logs a
+    /// name it cannot resolve. The server's recipe file wins over every
+    /// mod's rules. Any thread; applied within a second. Since minor 64.
+    pub recipe_rule:
+        extern "system" fn(me: ModHandle, kind: RecipeRuleKind, name: Str, disable: u32) -> Status,
+    /// Writes 1 to `out` when the recipe with game id `recipe` is disabled
+    /// in this process now, else 0: on a client joined to a server, by the
+    /// server's rules. Any thread. Since minor 64.
+    pub recipe_disabled: extern "system" fn(me: ModHandle, recipe: u32, out: *mut u32) -> Status,
+}
+
+/// What a recipe rule of [`HostApi::recipe_rule`] names.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_api::abi::RecipeRuleKind;
+///
+/// assert_ne!(RecipeRuleKind::RECIPE, RecipeRuleKind::OUTPUT);
+/// ```
+#[repr(transparent)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct RecipeRuleKind(pub u32);
+
+impl RecipeRuleKind {
+    /// One recipe: its debug name, content id or GUID.
+    pub const RECIPE: Self = Self(0);
+    /// Every recipe that makes an item: the item's debug name, content id
+    /// or GUID.
+    pub const OUTPUT: Self = Self(1);
+    /// Every recipe made at a workshop: `hand`, the debug name of the item
+    /// the workshop belongs to, the workshop's content id or GUID.
+    pub const WORKSHOP: Self = Self(2);
 }
 
 /// Flags of [`HostApi::entity_data_open`].
@@ -5362,7 +5399,9 @@ const _: () = {
     assert!(size_of::<StatModify>() == 8 + 8 + 12 + 4 + 8);
     assert!(size_of::<StatChange>() == 8 + 24);
     assert!(core::mem::offset_of!(HostApi, language) == 24 + 127 * 8);
-    assert!(size_of::<HostApi>() == 24 + 137 * 8);
+    assert!(size_of::<HostApi>() == 24 + 139 * 8);
+    assert!(core::mem::offset_of!(HostApi, recipe_rule) == 24 + 137 * 8);
+    assert!(core::mem::offset_of!(HostApi, recipe_disabled) == 24 + 138 * 8);
     assert!(core::mem::offset_of!(HostApi, rebuild_resource) == 24 + 136 * 8);
     assert!(core::mem::offset_of!(HostApi, game_text) == 24 + 135 * 8);
     assert!(core::mem::offset_of!(HostApi, account_knowledge) == 24 + 133 * 8);

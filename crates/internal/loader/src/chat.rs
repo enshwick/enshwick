@@ -710,6 +710,9 @@ fn builtin(loader: &Loader, args: &str, player: &PlayerInfo) -> String {
     if args.eq_ignore_ascii_case("ui-demo") {
         return ui_demo(loader, player);
     }
+    if let Some(rest) = word(args, "recipes") {
+        return crate::recipes::command(loader, rest, player);
+    }
     if let Some(rest) = word(args, "log") {
         if player.permissions & PlayerInfo::CAN_KICK_BAN == 0 {
             return texts::fill("enshwick.log.admins", &[]);

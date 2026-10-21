@@ -165,6 +165,7 @@ pub(crate) fn start(loader: &'static Loader) {
                 for index in touched {
                     crate::packs::changed(loader, index);
                 }
+                crate::recipes::poll(loader);
             }
         });
     if let Err(e) = started {

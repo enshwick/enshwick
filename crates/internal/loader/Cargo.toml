@@ -29,6 +29,7 @@ rustc-hash.workspace = true
 semver.workspace = true
 serde.workspace = true
 sha2.workspace = true
+strsim.workspace = true
 toml.workspace = true
 toml_edit.workspace = true
 ruzstd.workspace = true

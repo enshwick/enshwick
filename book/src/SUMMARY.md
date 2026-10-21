@@ -55,6 +55,7 @@
 - [Content](content.md)
   - [Items](content/items.md)
   - [Recipes](content/recipes.md)
+  - [Disabling recipes](content/disabled-recipes.md)
   - [Workshops](content/workshops.md)
   - [Loot containers](content/loot.md)
   - [Random loot](content/random-loot.md)

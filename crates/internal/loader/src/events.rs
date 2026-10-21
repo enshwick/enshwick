@@ -383,6 +383,7 @@ fn end_session() {
     crate::knowledge::forget();
     crate::weather::forget();
     crate::inventory::forget();
+    crate::recipes::left();
     forget_joined();
     BUILDING
         .lock()

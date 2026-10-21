@@ -1,0 +1,669 @@
+//! Disabled recipes in the running game: the rules in force, the lookup's
+//! filter, the screen's question, the messages to clients and the command.
+
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, LazyLock, Mutex, OnceLock, PoisonError};
+use std::time::SystemTime;
+
+use arc_swap::ArcSwap;
+use enshwick_loader_api::Off;
+use enshwick_loader_api::abi::{Level, PlayerInfo, RecipeRuleKind, Side, Status};
+use enshwick_loader_api::content::items::{ITEM_REGISTRY, ItemLayout};
+use enshwick_loader_api::content::recipes::{RECIPE_REGISTRY, RecipeLayout};
+use enshwick_loader_api::content::workshops::{WORKSHOP_REGISTRY, WorkshopLayout};
+use enshwick_loader_api::content::{Blob, Guid, types};
+use rustc_hash::{FxHashMap, FxHashSet};
+
+use super::{
+    FILE, Index, Kind, Names, Rule, RuleFile, Source, TEMPLATE, WORLD_FILE, compose, describe,
+    edit_file, find, parts, resolve,
+};
+use crate::host::Loader;
+use crate::settings::LOADER_ID;
+use crate::texts;
+
+/// The most ids one message to a client carries.
+const PER_MESSAGE: usize = 1400;
+/// The most recipes a reply lists.
+const LISTED: usize = 14;
+
+/// The recipes disabled in this process, swapped whole on each change.
+#[derive(Debug, Default)]
+struct Disabled {
+    ids: FxHashSet<u32>,
+    generation: u64,
+}
+
+/// A workshop's list the game handed out, by workshop id, address and
+/// length.
+type ListKey = (u32, u64, u64);
+
+/// The lookup's filtered lists of one generation: `None` for a list with
+/// nothing disabled.
+#[derive(Debug, Default)]
+struct Lists {
+    generation: u64,
+    lists: FxHashMap<ListKey, Option<&'static [u64]>>,
+}
+
+/// What a recipe file looked like when last seen.
+type Stamp = Option<(SystemTime, u64)>;
+
+/// The rules and what they are resolved against.
+#[derive(Default)]
+struct Live {
+    /// Mods' rules: owner, kind, name.
+    mods: Vec<(usize, Kind, String)>,
+    /// On a client, the joined server's disabled recipes.
+    server: Option<Vec<u32>>,
+    /// Ids of the server's message being received.
+    incoming: Vec<u32>,
+    index: Option<Arc<Index>>,
+    names: Option<Arc<Names>>,
+    /// The server's file and the world's, as last seen.
+    stamps: (Stamp, Option<PathBuf>, Stamp),
+    /// Whether the archive's registry failed to read, logged once.
+    unreadable: bool,
+    /// The problems last logged, so the same ones are not logged again.
+    problems: Vec<String>,
+}
+
+static DISABLED: LazyLock<ArcSwap<Disabled>> = LazyLock::new(ArcSwap::default);
+static LISTS: LazyLock<ArcSwap<Lists>> = LazyLock::new(ArcSwap::default);
+static LIVE: Mutex<Option<Live>> = Mutex::new(None);
+static LAYOUT: OnceLock<Option<RecipeLayout>> = OnceLock::new();
+/// Set when the rules or what they resolve against changed.
+static DIRTY: AtomicBool = AtomicBool::new(true);
+
+fn live<R>(work: impl FnOnce(&mut Live) -> R) -> R {
+    let mut guard = LIVE.lock().unwrap_or_else(PoisonError::into_inner);
+    work(guard.get_or_insert_with(Live::default))
+}
+
+fn field(loader: &Loader) -> impl Fn(&str, &str) -> Result<usize, Off> + '_ {
+    |ty, name| {
+        loader
+            .reflection
+            .field_offset(ty, name)
+            .map_err(|e| Off::new(format!("{ty}.{name}: {e:?}")))
+            .and_then(|o| usize::try_from(o).map_err(|e| Off::new(e.to_string())))
+    }
+}
+
+fn size(loader: &Loader) -> impl Fn(&str) -> Result<usize, Off> + '_ {
+    |ty| {
+        loader
+            .reflection
+            .type_info(ty)
+            .map(|info| info.size() as usize)
+            .map_err(|e| Off::new(format!("{ty}: {e:?}")))
+    }
+}
+
+fn layout() -> Option<&'static RecipeLayout> {
+    LAYOUT.get().and_then(Option::as_ref)
+}
+
+/// Sets disabled recipes up: the layout, the server's recipe file when it
+/// is missing, and the lookup hook. Before arming.
+pub(crate) fn init(loader: &'static Loader) {
+    let resolved = RecipeLayout::with_lookup(field(loader), size(loader));
+    if let Err(off) = &resolved {
+        crate::log!(WARN, "disabled recipes off: {off}");
+    }
+    let _first = LAYOUT.set(resolved.ok());
+    if layout().is_none() {
+        return;
+    }
+    let path = loader.configs_dir.join(FILE);
+    if !path.exists()
+        && let Err(e) = std::fs::write(&path, TEMPLATE)
+    {
+        crate::log!(WARN, "{} not written: {e}", path.display());
+    }
+    if !crate::code::link_recipe_lookup(loader) {
+        crate::log!(
+            WARN,
+            "disabled recipes stay in the crafting menus: the recipe list lookup is not found"
+        );
+    }
+    DIRTY.store(true, Ordering::Release);
+}
+
+/// The world's own recipe file, while a world runs.
+fn world_path(loader: &Loader) -> Option<PathBuf> {
+    crate::worlds::current().map(|key| {
+        loader
+            .data_dir
+            .join(LOADER_ID)
+            .join("worlds")
+            .join(key)
+            .join(WORLD_FILE)
+    })
+}
+
+fn stamp(path: &Path) -> Stamp {
+    let meta = std::fs::metadata(path).ok()?;
+    Some((meta.modified().ok()?, meta.len()))
+}
+
+/// Looks at the recipe files and applies the rules when anything changed;
+/// on the settings thread, once a second.
+pub(crate) fn poll(loader: &Loader) {
+    if layout().is_none() {
+        return;
+    }
+    let global = stamp(&loader.configs_dir.join(FILE));
+    let world = world_path(loader);
+    let world_stamp = world.as_deref().and_then(stamp);
+    let seen = (global, world, world_stamp);
+    let moved = live(|l| {
+        let moved = l.stamps != seen;
+        l.stamps = seen;
+        moved
+    });
+    if (moved | DIRTY.swap(false, Ordering::AcqRel))
+        && let Some(index) = ensure_index(loader)
+    {
+        apply(loader, &index);
+    }
+}
+
+/// The index of the recipe registry: the served one once the game built
+/// it, else the archive's, read once.
+fn ensure_index(loader: &Loader) -> Option<Arc<Index>> {
+    if let Some(index) = live(|l| l.index.clone()) {
+        return Some(index);
+    }
+    if crate::content::served_recipes() {
+        // Mods change the registry: wait for the game's build of it.
+        return None;
+    }
+    let read = crate::archive::game()
+        .and_then(|archive| archive.resource(&RECIPE_REGISTRY.key(types::RECIPE_REGISTRY)))
+        .and_then(|registry| Index::read(layout()?, &registry));
+    let Some(index) = read.map(Arc::new) else {
+        live(|l| {
+            if !l.unreadable {
+                l.unreadable = true;
+                crate::log!(
+                    WARN,
+                    "disabled recipes off: the recipe registry does not read"
+                );
+            }
+        });
+        return None;
+    };
+    let _ = loader;
+    live(|l| l.index = Some(Arc::clone(&index)));
+    Some(index)
+}
+
+/// The names of the game's items and workshops, from its archive, read
+/// once; empty when they do not read.
+fn names(loader: &Loader) -> Arc<Names> {
+    if let Some(names) = live(|l| l.names.clone()) {
+        return names;
+    }
+    let names = Arc::new(read_names(loader).unwrap_or_else(|| {
+        crate::log!(
+            WARN,
+            "disabled recipes: item names do not read; name items and workshops by GUID"
+        );
+        Names::default()
+    }));
+    live(|l| l.names = Some(Arc::clone(&names)));
+    names
+}
+
+fn read_names(loader: &Loader) -> Option<Names> {
+    let items = ItemLayout::with_lookup(field(loader), size(loader)).ok()?;
+    let workshops = WorkshopLayout::with_lookup(field(loader), size(loader)).ok()?;
+    let archive = crate::archive::game()?;
+    let registry = archive.resource(&ITEM_REGISTRY.key(types::ITEM_REGISTRY))?;
+    let blob = Blob::new(&registry);
+    let (refs, count) = blob.array(items.refs)?;
+    let (texts, texts_count) = blob.array(items.names)?;
+    if texts_count != count {
+        return None;
+    }
+    let mut named = Vec::with_capacity(usize::try_from(count).ok()?);
+    for i in 0..usize::try_from(count).ok()? {
+        let guid: [u8; 16] = registry
+            .get(refs + i * 16..refs + i * 16 + 16)?
+            .try_into()
+            .ok()?;
+        let (text, len) = blob.array(texts + i * 8)?;
+        let name = registry.get(text..text + usize::try_from(len).ok()?)?;
+        named.push((String::from_utf8_lossy(name).into_owned(), Guid(guid)));
+    }
+    let registry = archive.resource(&WORKSHOP_REGISTRY.key(types::WORKSHOP_REGISTRY))?;
+    let blob = Blob::new(&registry);
+    let (start, count) = blob.array(workshops.workshops)?;
+    let stations = (0..usize::try_from(count).ok()?)
+        .map(|i| start + i * workshops.entry)
+        .filter_map(|at| {
+            Some((
+                blob.read_u32(at + workshops.entry_id)?,
+                blob.read_u32(at + workshops.entry_item)?,
+            ))
+        })
+        .collect::<Vec<_>>();
+    Some(Names::new(named, stations))
+}
+
+/// Reads a recipe file; a problem when it does not read.
+fn read_file(path: &Path, shown: &str) -> Result<Option<RuleFile>, String> {
+    match std::fs::read_to_string(path) {
+        Ok(text) => RuleFile::parse(shown, &text).map(Some),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(e) => Err(format!("{shown}: {e}")),
+    }
+}
+
+/// Resolves the rules in force and swaps the disabled recipes in.
+fn apply(loader: &Loader, index: &Index) {
+    let names = names(loader);
+    let server = live(|l| l.server.clone()).filter(|_| loader.side == Side::CLIENT);
+    let ours = server.is_none();
+    let (ids, problems) = if let Some(ids) = server {
+        (ids.into_iter().collect(), Vec::new())
+    } else {
+        let mods: Vec<Rule> = live(|l| l.mods.clone())
+            .into_iter()
+            .filter(|(owner, ..)| {
+                loader
+                    .mods
+                    .get(*owner)
+                    .is_some_and(|m| !m.off.load(Ordering::Acquire))
+            })
+            .filter_map(|(owner, kind, name)| {
+                Some(Rule {
+                    kind,
+                    name,
+                    source: Source::Mod(loader.mods.get(owner)?.id.clone()),
+                })
+            })
+            .collect();
+        let mut problems = Vec::new();
+        let mut files = Vec::new();
+        let global = format!("mod-configs/{FILE}");
+        let world = world_path(loader);
+        let world_shown = crate::worlds::current()
+            .map(|key| format!("mod-data/{LOADER_ID}/worlds/{key}/{WORLD_FILE}"));
+        for (path, shown) in [
+            (Some(loader.configs_dir.join(FILE)), Some(global)),
+            (world, world_shown),
+        ] {
+            let (Some(path), Some(shown)) = (path, shown) else {
+                continue;
+            };
+            match read_file(&path, &shown) {
+                Ok(Some(file)) => files.push(file),
+                Ok(None) => {}
+                Err(why) => problems.push(format!("{why}; its rules are skipped")),
+            }
+        }
+        let files: Vec<&RuleFile> = files.iter().collect();
+        let (ids, found) = compose(index, &names, &mods, &files);
+        problems.extend(found);
+        (ids, problems)
+    };
+    let fresh = live(|l| {
+        let fresh = l.problems != problems;
+        l.problems.clone_from(&problems);
+        fresh
+    });
+    for problem in problems.iter().filter(|_| fresh) {
+        crate::log!(WARN, "disabled recipes: {problem}");
+        if let Some(id) = problem
+            .strip_prefix("mod ")
+            .and_then(|rest| rest.split_once(':'))
+            .map(|(id, _)| id)
+        {
+            crate::log::write(Level::WARN, id, &format!("recipe rule: {problem}"));
+        }
+    }
+    let ids: FxHashSet<u32> = ids.into_iter().collect();
+    let old = DISABLED.load();
+    if old.ids == ids {
+        return;
+    }
+    let generation = old.generation + 1;
+    let count = ids.len();
+    let mut sorted: Vec<u32> = ids.iter().copied().collect();
+    sorted.sort_unstable();
+    DISABLED.store(Arc::new(Disabled { ids, generation }));
+    crate::log!(
+        INFO,
+        "disabled recipes: {count}{}",
+        if ours { "" } else { ", the server's" }
+    );
+    if ours {
+        for message in messages(&sorted) {
+            crate::net::broadcast_control(&message);
+        }
+    }
+}
+
+fn messages(ids: &[u32]) -> Vec<crate::remote::Message> {
+    parts(ids, PER_MESSAGE)
+        .into_iter()
+        .map(|(first, last, ids)| crate::remote::Message::Recipes { first, last, ids })
+        .collect()
+}
+
+/// Notes that the game built the recipe registry, `len` bytes at `data`,
+/// which lives for the process.
+pub(crate) fn registry_built(data: usize, len: usize) {
+    let Some(layout) = layout() else {
+        return;
+    };
+    // SAFETY: the served registry lives for the process.
+    let registry = unsafe { core::slice::from_raw_parts(data as *const u8, len) };
+    let Some(index) = Index::read(layout, registry) else {
+        crate::log!(
+            WARN,
+            "disabled recipes off: the served recipe registry does not read"
+        );
+        return;
+    };
+    live(|l| l.index = Some(Arc::new(index)));
+    DIRTY.store(true, Ordering::Release);
+}
+
+/// Mod `owner`'s rule: added, or taken back.
+pub(crate) fn rule(owner: usize, kind: RecipeRuleKind, name: &str, disable: bool) -> Status {
+    let Some(kind) = Kind::from_abi(kind) else {
+        return Status::BAD_ARGS;
+    };
+    let name = name.trim();
+    if name.is_empty() {
+        return Status::BAD_ARGS;
+    }
+    if layout().is_none() {
+        return Status::MISSING;
+    }
+    live(|l| {
+        l.mods
+            .retain(|(o, k, n)| !(*o == owner && *k == kind && n == name));
+        if disable {
+            l.mods.push((owner, kind, name.to_owned()));
+        }
+    });
+    DIRTY.store(true, Ordering::Release);
+    Status::OK
+}
+
+/// Whether recipe `id` is disabled in this process now.
+pub(crate) fn is_disabled(id: u32) -> bool {
+    DISABLED.load().ids.contains(&id)
+}
+
+/// Disables exactly `ids`, for tests.
+#[cfg(test)]
+pub(crate) fn disable_for_test(ids: &[u32]) {
+    DISABLED.store(Arc::new(Disabled {
+        ids: ids.iter().copied().collect(),
+        generation: DISABLED.load().generation + 1,
+    }));
+}
+
+/// A world loaded or stopped: its own file applies or stops applying, and
+/// a client that hosts it runs its own rules.
+pub(crate) fn world_changed(loader: &Loader) {
+    if loader.side == Side::CLIENT {
+        live(|l| l.server = None);
+    }
+    DIRTY.store(true, Ordering::Release);
+}
+
+/// The client joins a server: nothing is disabled until the server says.
+pub(crate) fn joining() {
+    live(|l| {
+        l.server = Some(Vec::new());
+        l.incoming.clear();
+    });
+    DIRTY.store(true, Ordering::Release);
+}
+
+/// The client's hosted game ended: its own rules apply again.
+pub(crate) fn left() {
+    live(|l| l.server = None);
+    DIRTY.store(true, Ordering::Release);
+}
+
+/// A part of the server's disabled recipes, on the client.
+pub(crate) fn received(first: bool, last: bool, ids: &[u32]) {
+    live(|l| {
+        if first {
+            l.incoming.clear();
+        }
+        l.incoming.extend_from_slice(ids);
+        if last {
+            l.server = Some(std::mem::take(&mut l.incoming));
+        }
+    });
+    if last {
+        DIRTY.store(true, Ordering::Release);
+    }
+}
+
+/// A client said hello: it gets the disabled recipes.
+pub(crate) fn hello(key: u64) {
+    if live(|l| l.server.is_some()) {
+        return;
+    }
+    let mut ids: Vec<u32> = DISABLED.load().ids.iter().copied().collect();
+    ids.sort_unstable();
+    for message in messages(&ids) {
+        crate::net::to_player(key, &message);
+    }
+}
+
+/// The workshop list at `out`, `[address, length]` of recipe addresses the
+/// game's lookup wrote for `workshop`, without the disabled recipes.
+///
+/// # Safety
+///
+/// `out` is the lookup's out span, written by the game for the call; the
+/// list's entries point at the game's recipes.
+pub(crate) unsafe fn filter(workshop: u32, out: *mut [u64; 2]) {
+    let disabled = DISABLED.load();
+    if disabled.ids.is_empty() {
+        return;
+    }
+    let Some(layout) = layout() else {
+        return;
+    };
+    // SAFETY: the game's span, as the caller says.
+    let [address, len] = unsafe { out.read() };
+    if address == 0 || len == 0 {
+        return;
+    }
+    let key = (workshop, address, len);
+    let lists = LISTS.load();
+    let known = if lists.generation == disabled.generation {
+        lists.lists.get(&key).copied()
+    } else {
+        None
+    };
+    let list = known.unwrap_or_else(|| {
+        let list = filtered(address, len, layout.id, &disabled.ids);
+        LISTS.rcu(|old| {
+            let mut lists = if old.generation == disabled.generation {
+                old.lists.clone()
+            } else {
+                FxHashMap::default()
+            };
+            lists.insert(key, list);
+            Lists {
+                generation: disabled.generation,
+                lists,
+            }
+        });
+        list
+    });
+    if let Some(list) = list {
+        // SAFETY: the game's out span; the list is never freed.
+        unsafe { out.write([list.as_ptr().addr() as u64, list.len() as u64]) };
+    }
+}
+
+/// The recipes of the `len` at `address` that are not disabled, kept for
+/// the process since the game reads what the lookup hands out; `None` when
+/// none is disabled.
+#[cold]
+fn filtered(
+    address: u64,
+    len: u64,
+    id: usize,
+    disabled: &FxHashSet<u32>,
+) -> Option<&'static [u64]> {
+    let len = usize::try_from(len).ok()?;
+    let address = usize::try_from(address).ok()?;
+    // SAFETY: the game's list of `len` recipe addresses, live while the
+    // registry is.
+    let list = unsafe {
+        core::slice::from_raw_parts(core::ptr::with_exposed_provenance::<u64>(address), len)
+    };
+    let recipe_id = |recipe: u64| -> Option<u32> {
+        let at = usize::try_from(recipe).ok()?.checked_add(id)?;
+        // SAFETY: each entry is a recipe of the registry, whose id sits at
+        // `id`.
+        Some(unsafe { core::ptr::with_exposed_provenance::<u32>(at).read_unaligned() })
+    };
+    let kept: Vec<u64> = list
+        .iter()
+        .copied()
+        .filter(|&recipe| recipe == 0 || recipe_id(recipe).is_none_or(|id| !disabled.contains(&id)))
+        .collect();
+    (kept.len() != list.len()).then(|| &*Box::leak(kept.into_boxed_slice()))
+}
+
+/// `/enshwick recipes ...`, for administrators.
+pub(crate) fn command(loader: &Loader, args: &str, player: &PlayerInfo) -> String {
+    if player.permissions & PlayerInfo::CAN_KICK_BAN == 0 {
+        return texts::fill("recipes.admins", &[]);
+    }
+    if layout().is_none() {
+        return texts::fill("recipes.off", &[]);
+    }
+    let Some(index) = ensure_index(loader) else {
+        return texts::fill("recipes.waiting", &[]);
+    };
+    let names = names(loader);
+    let (first, rest) = args.split_once(' ').unwrap_or((args, ""));
+    let rest = rest.trim();
+    match first.to_ascii_lowercase().as_str() {
+        "" => disabled_list(&index, &names),
+        "find" if !rest.is_empty() => found_list(&index, &names, rest),
+        word @ ("disable" | "enable") => {
+            let (kind, name) = rest.split_once(' ').unwrap_or((rest, ""));
+            match Kind::from_word(kind) {
+                Some(kind) if !name.trim().is_empty() => {
+                    change(loader, &index, &names, kind, name.trim(), word == "disable")
+                }
+                _ => texts::fill("recipes.usage", &[]),
+            }
+        }
+        _ => texts::fill("recipes.usage", &[]),
+    }
+}
+
+fn disabled_list(index: &Index, names: &Names) -> String {
+    let disabled = DISABLED.load();
+    if disabled.ids.is_empty() {
+        return texts::fill("recipes.none", &[]);
+    }
+    let count = disabled.ids.len().to_string();
+    let mut lines = vec![texts::fill("recipes.list", &[("count", &count)])];
+    let mut shown: Vec<String> = index
+        .recipes()
+        .iter()
+        .filter(|r| disabled.ids.contains(&r.id))
+        .map(|r| describe(r, names))
+        .collect();
+    shown.sort();
+    let more = shown.len().saturating_sub(LISTED);
+    lines.extend(shown.into_iter().take(LISTED));
+    if more > 0 {
+        lines.push(texts::fill("recipes.more", &[("count", &more.to_string())]));
+    }
+    lines.join("\n")
+}
+
+fn found_list(index: &Index, names: &Names, text: &str) -> String {
+    let found = find(index, names, text);
+    if found.is_empty() {
+        return texts::fill("recipes.found.none", &[("text", text)]);
+    }
+    let disabled = DISABLED.load();
+    let mut lines = vec![texts::fill(
+        "recipes.found",
+        &[("count", &found.len().to_string()), ("text", text)],
+    )];
+    let mark = texts::fill("recipes.mark", &[]);
+    lines.extend(found.iter().take(LISTED).map(|r| {
+        let line = describe(r, names);
+        if disabled.ids.contains(&r.id) {
+            format!("{line} {mark}")
+        } else {
+            line
+        }
+    }));
+    let more = found.len().saturating_sub(LISTED);
+    if more > 0 {
+        lines.push(texts::fill("recipes.more", &[("count", &more.to_string())]));
+    }
+    lines.join("\n")
+}
+
+/// Writes a rule into the running world's recipe file, or the server's
+/// when no world runs.
+fn change(
+    loader: &Loader,
+    index: &Index,
+    names: &Names,
+    kind: Kind,
+    name: &str,
+    disable: bool,
+) -> String {
+    let probe = Rule {
+        kind,
+        name: name.to_owned(),
+        source: Source::Mod(String::new()),
+    };
+    if let Err(why) = resolve(&probe, index, names) {
+        return texts::fill("recipes.unwritten", &[("why", &why)]);
+    }
+    let (path, shown) = match (world_path(loader), crate::worlds::current()) {
+        (Some(path), Some(key)) => (
+            path,
+            format!("mod-data/{LOADER_ID}/worlds/{key}/{WORLD_FILE}"),
+        ),
+        _ => (loader.configs_dir.join(FILE), format!("mod-configs/{FILE}")),
+    };
+    let text = std::fs::read_to_string(&path).unwrap_or_default();
+    let written = edit_file(&text, kind, name, disable).and_then(|text| {
+        if let Some(dir) = path.parent() {
+            std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+        }
+        std::fs::write(&path, text).map_err(|e| e.to_string())
+    });
+    match written {
+        Ok(()) => {
+            DIRTY.store(true, Ordering::Release);
+            texts::fill(
+                if disable {
+                    "recipes.disabled"
+                } else {
+                    "recipes.enabled"
+                },
+                &[("file", &shown), ("kind", kind.key()), ("name", name)],
+            )
+        }
+        Err(why) => texts::fill("recipes.unwritten", &[("why", &why)]),
+    }
+}

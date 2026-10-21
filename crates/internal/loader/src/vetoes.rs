@@ -140,21 +140,26 @@ fn build_layout(loader: &Loader) -> Option<BuildLayout> {
     })
 }
 
-/// Whether a mod asked to screen craft requests, for the event link.
+/// Whether craft requests are screened, for mods' filters and disabled
+/// recipes alike, for the event link.
 pub(crate) fn crafting() -> bool {
-    CRAFT_SEALED
-        .get()
-        .is_some_and(|filters| !filters.is_empty())
+    CRAFT.get().is_some()
 }
 
-/// Seals the filters and links what they need.
+/// Seals the filters and links what they need. Craft requests are screened
+/// whenever the build reads them, as any recipe may be disabled later.
 pub(crate) fn link(loader: &'static Loader) {
     let crafts = take(&CRAFT_FILTERS);
-    if !crafts.is_empty()
-        && let Some(layout) = craft_layout(loader)
-    {
+    if let Some(layout) = craft_layout(loader) {
         let _first = CRAFT.set(layout);
-        crate::log!(INFO, "craft filters on: {}", crafts.len());
+        if !crafts.is_empty() {
+            crate::log!(INFO, "craft filters on: {}", crafts.len());
+        }
+    } else {
+        crate::log!(
+            WARN,
+            "craft requests are not screened: this build's CraftRecipeEvent is not reflected"
+        );
     }
     let _first = CRAFT_SEALED.set(crafts.into_boxed_slice());
     let builds = take(&BUILD_FILTERS);
@@ -211,13 +216,15 @@ pub(crate) unsafe fn screen(type_hash: u32, payload: *mut u8, size: usize) {
     if call.player == 0 {
         return;
     }
-    let allowed = filters.iter().filter(|f| f.live()).all(|f| {
-        // SAFETY: the callback lives in the mod's DLL, which stays loaded,
-        // and takes the pointer it registered; the call is valid for it.
-        crate::profile::call(f.owner, crate::profile::Feature::Vetoes, || unsafe {
-            (f.callback)(&raw const call, f.user()) != 0
-        })
-    });
+    let disabled = crate::recipes::is_disabled(call.recipe);
+    let allowed = !disabled
+        && filters.iter().filter(|f| f.live()).all(|f| {
+            // SAFETY: the callback lives in the mod's DLL, which stays loaded,
+            // and takes the pointer it registered; the call is valid for it.
+            crate::profile::call(f.owner, crate::profile::Feature::Vetoes, || unsafe {
+                (f.callback)(&raw const call, f.user()) != 0
+            })
+        });
     if !allowed {
         // SAFETY: as for the reads; the streams are the loader's to change
         // until the engine moves them.
@@ -234,7 +241,17 @@ pub(crate) unsafe fn screen(type_hash: u32, payload: *mut u8, size: usize) {
                 .cast::<u16>()
                 .write_unaligned(0);
         };
-        crate::log!(DEBUG, "craft of recipe {:#x} refused", call.recipe);
+        crate::log!(
+            DEBUG,
+            "craft of recipe {:#x} by player {} refused{}",
+            call.recipe,
+            call.player,
+            if disabled {
+                ": the recipe is disabled"
+            } else {
+                ""
+            }
+        );
     }
 }
 
@@ -311,5 +328,42 @@ unsafe fn refuse(flags: *mut u32, cursor: *mut u8, placement: *mut u8, transform
     if !allowed {
         // SAFETY: the game's flags word, which its building systems read.
         unsafe { flags.write_unaligned(current | layout.no_permission) };
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const LAYOUT: CraftLayout = CraftLayout {
+        hash: 0x1234,
+        size: 16,
+        player: 0,
+        station: 4,
+        recipe: 8,
+        amount: 12,
+    };
+
+    fn request(player: u32, recipe: u32, amount: u16) -> [u8; 16] {
+        let mut bytes = [0u8; 16];
+        bytes[0..4].copy_from_slice(&player.to_le_bytes());
+        bytes[8..12].copy_from_slice(&recipe.to_le_bytes());
+        bytes[12..14].copy_from_slice(&amount.to_le_bytes());
+        bytes
+    }
+
+    #[test]
+    fn a_request_for_a_disabled_recipe_reaches_the_game_empty() {
+        let _first = CRAFT.set(LAYOUT);
+        let _sealed = CRAFT_SEALED.set(Box::default());
+        crate::recipes::disable_for_test(&[7]);
+        let mut refused = request(5, 7, 3);
+        let mut allowed = request(5, 8, 3);
+        for bytes in [&mut refused, &mut allowed] {
+            // SAFETY: a request of the layout's size, on this thread.
+            unsafe { screen(LAYOUT.hash, bytes.as_mut_ptr(), bytes.len()) };
+        }
+        assert_eq!(refused, request(0, 7, 0));
+        assert_eq!(allowed, request(5, 8, 3));
     }
 }

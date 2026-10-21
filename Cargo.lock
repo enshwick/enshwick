@@ -342,6 +342,7 @@ dependencies = [
  "semver",
  "serde",
  "sha2",
+ "strsim",
  "toml",
  "toml_edit",
  "windows-sys 0.61.2",

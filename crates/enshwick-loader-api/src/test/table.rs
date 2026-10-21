@@ -44,6 +44,8 @@ pub(crate) struct State {
     /// Every rebuild of a served resource the mod asked for, at init and
     /// after.
     pub(crate) rebuilds: Vec<ResourceKey>,
+    /// The mod's recipe rules in force: kind and name.
+    pub(crate) recipe_rules: Vec<(crate::abi::RecipeRuleKind, String)>,
     pub(crate) texts: Vec<(u32, u32, String)>,
     pub(crate) code_patches: Vec<(u64, Vec<u8>, Vec<u8>)>,
     pub(crate) published: Vec<super::FakeService>,
@@ -206,6 +208,7 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         game_events: Vec::new(),
         served: Vec::new(),
         rebuilds: Vec::new(),
+        recipe_rules: Vec::new(),
         texts: Vec::new(),
         code_patches: Vec::new(),
         published: Vec::new(),
@@ -739,6 +742,31 @@ extern "system" fn rebuild_resource(_me: ModHandle, key: *const ResourceKey) -> 
         s.rebuilds.push(key);
         Status::OK
     })
+}
+
+extern "system" fn recipe_rule(
+    _me: ModHandle,
+    kind: crate::abi::RecipeRuleKind,
+    name: Str,
+    disable: u32,
+) -> Status {
+    let name = text(name);
+    with(Status::MISSING, |s| {
+        s.recipe_rules.retain(|(k, n)| !(*k == kind && *n == name));
+        if disable != 0 {
+            s.recipe_rules.push((kind, name));
+        }
+        Status::OK
+    })
+}
+
+extern "system" fn recipe_disabled(_me: ModHandle, recipe: u32, out: *mut u32) -> Status {
+    let disabled = with(false, |s| s.host.disabled_recipes.contains(&recipe));
+    if !out.is_null() {
+        // SAFETY: the safe layer passes its out value for the call.
+        unsafe { out.write(u32::from(disabled)) };
+    }
+    Status::OK
 }
 
 extern "system" fn add_text(_me: ModHandle, id: u32, language: u32, value: Str) -> Status {
@@ -2495,4 +2523,6 @@ pub(crate) static TABLE: HostApi = HostApi {
     resource_read,
     game_text,
     rebuild_resource,
+    recipe_rule,
+    recipe_disabled,
 };
