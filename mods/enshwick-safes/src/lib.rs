@@ -30,7 +30,7 @@ use enshwick_loader_api::events::{
 };
 use enshwick_loader_api::i18n::Language;
 use enshwick_loader_api::state::{Store, WorldStore};
-use enshwick_loader_api::world::World;
+use enshwick_loader_api::world::{ComponentType, World};
 use enshwick_loader_api::{Load, Mod, Off};
 
 use crate::access::{ACCESS, Action, Allowed, Cell, Safe, Seen, permits};
@@ -367,9 +367,24 @@ fn may_rename(world: World, rename: &Rename) -> bool {
     allowed
 }
 
+/// Learns every Safe the world holds that this session has not seen yet:
+/// base stock asks without the chest's item or position, so a Safe nobody
+/// looked at would otherwise lend its stock to anyone crafting nearby.
+fn learn_safes(world: World, containers: ComponentType) {
+    let known = ACCESS.safes.load();
+    for placed in world.entities(containers) {
+        if known.contains_key(&placed.entity.0)
+            || !world.used_item(placed.entity).is_some_and(content::is_safe)
+        {
+            continue;
+        }
+        let _owner = ACCESS.seen(placed.entity.0, access::cell(placed.position));
+    }
+}
+
 /// Names the owner on every Safe seen this session that has no name yet,
 /// on the game thread; the owner's name comes from the record, or from the
-/// owner when they are online.
+/// owner when they are online. Learns the world's Safes first.
 fn label_seen(
     load: &mut Load<'_>,
     world: World,
@@ -377,7 +392,17 @@ fn label_seen(
     store: &'static WorldStore<Owners>,
 ) -> Result<(), Off> {
     let mut done: HashSet<u32> = HashSet::new();
+    let containers = world.component_type(load, "keen::ecs::InventorySetup");
+    if let Err(off) = &containers {
+        enshwick_loader_api::warn!(
+            "Safes nobody looked at this session lend their stock to crafting: {off}"
+        );
+    }
+    let containers = containers.ok();
     load.scheduler()?.every(Duration::from_secs(2), move || {
+        if let Some(containers) = containers {
+            learn_safes(world, containers);
+        }
         let safes = ACCESS.safes.load();
         let mut learned = false;
         for (&entity, &(owner, at)) in safes.iter() {
