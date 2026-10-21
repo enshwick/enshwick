@@ -386,7 +386,7 @@ pub(crate) use live::{register, renamed, world_loaded};
 
 #[cfg(windows)]
 mod live {
-    use std::sync::{Mutex, OnceLock, PoisonError};
+    use std::sync::{Arc, Mutex, OnceLock, PoisonError};
 
     use enshwick_loader_api::abi::{Level, MigrateFn, MigrationSet, MigrationStep, Status, Str};
     use rustc_hash::FxHashMap;
@@ -402,13 +402,16 @@ mod live {
         user: usize,
     }
 
-    static REGISTERED: Mutex<Vec<Registered>> = Mutex::new(Vec::new());
+    /// Taken only for a moment: the maps run without it, so a mod's map may
+    /// call the loader.
+    static REGISTERED: Mutex<Vec<Arc<Registered>>> = Mutex::new(Vec::new());
     /// The record, read once and written after every run.
     static RECORD: Mutex<Option<Record>> = Mutex::new(None);
     /// Content renames, old GUID to new, once content is sealed.
     static RENAMES: OnceLock<FxHashMap<[u8; 16], [u8; 16]>> = OnceLock::new();
 
-    /// The registered maps run under this lock, so a mod's text stays put.
+    /// Runs a mod's map; its text stays valid until the mod's next map
+    /// call, which only this thread's run makes.
     fn call(
         reg: &Registered,
         migration: usize,
@@ -496,31 +499,45 @@ mod live {
         Some(unsafe { core::slice::from_raw_parts(ptr, count as usize) })
     }
 
-    /// Runs `f` on the record, writing it back unless in a dry run; `None`,
-    /// logged once, while the record does not read, so no migration runs
-    /// twice.
-    fn with_record<R>(loader: &Loader, f: impl FnOnce(&mut Record) -> R) -> Option<R> {
+    /// Runs `f` on a record that holds only what mod `id` ran on `world`, or
+    /// on its settings file for `None`, without the record's lock, so the
+    /// mod's map may call the loader; then writes that entry back, unless in
+    /// a dry run. `None`, logged once, while the record does not read, so no
+    /// migration runs twice.
+    fn with_entry<R>(
+        loader: &Loader,
+        world: Option<&str>,
+        id: &str,
+        f: impl FnOnce(&mut Record) -> R,
+    ) -> Option<R> {
         static REPORTED: std::sync::Once = std::sync::Once::new();
-        let mut held = RECORD.lock().unwrap_or_else(PoisonError::into_inner);
-        if held.is_none() {
-            match Record::read(&loader.data_dir) {
-                Ok(read) => *held = Some(read),
-                Err(e) => {
-                    REPORTED.call_once(|| {
-                        crate::log!(
-                            ERROR,
-                            "migrations off: mod-data/{} does not read ({e}); fix or remove it",
-                            super::RECORD
-                        );
-                    });
-                    return None;
+        let mut part = Record::default();
+        {
+            let mut held = RECORD.lock().unwrap_or_else(PoisonError::into_inner);
+            if held.is_none() {
+                match Record::read(&loader.data_dir) {
+                    Ok(read) => *held = Some(read),
+                    Err(e) => {
+                        REPORTED.call_once(|| {
+                            crate::log!(
+                                ERROR,
+                                "migrations off: mod-data/{} does not read ({e}); fix or remove it",
+                                super::RECORD
+                            );
+                        });
+                        return None;
+                    }
                 }
             }
+            let full = held.as_mut()?;
+            part.ran(world, id).clone_from(full.ran(world, id));
         }
-        let record = held.as_mut()?;
-        let result = f(record);
+        let result = f(&mut part);
+        let mut held = RECORD.lock().unwrap_or_else(PoisonError::into_inner);
+        let full = held.as_mut()?;
+        *full.ran(world, id) = std::mem::take(part.ran(world, id));
         if !dry_run()
-            && let Err(e) = record.write(&loader.data_dir)
+            && let Err(e) = full.write(&loader.data_dir)
         {
             crate::log!(WARN, "migrations: the record was not written: {e}");
         }
@@ -549,8 +566,10 @@ mod live {
         let Some(record) = loader.mods.get(index) else {
             return Status::BAD_ARGS;
         };
-        let mut registered = REGISTERED.lock().unwrap_or_else(PoisonError::into_inner);
-        if registered.iter().any(|r| r.owner == index) || RENAMES.get().is_some() {
+        let taken = |registered: &[Arc<Registered>]| {
+            registered.iter().any(|r| r.owner == index) || RENAMES.get().is_some()
+        };
+        if taken(&REGISTERED.lock().unwrap_or_else(PoisonError::into_inner)) {
             return Status::REFUSED;
         }
         // SAFETY: the safe layer passes its valid set for the call.
@@ -564,7 +583,7 @@ mod live {
             user: set.user.expose_provenance(),
         };
         let path = loader.configs_dir.join(format!("{}.toml", record.id));
-        let outcome = with_record(loader, |rec| {
+        let outcome = with_entry(loader, None, &record.id, |rec| {
             run(
                 rec,
                 Target::Settings(&path),
@@ -582,7 +601,11 @@ mod live {
         if matches!(outcome, Ok(Some(_))) {
             crate::watch::wrote(&path);
         }
-        registered.push(reg);
+        let mut registered = REGISTERED.lock().unwrap_or_else(PoisonError::into_inner);
+        if taken(&registered) {
+            return Status::REFUSED;
+        }
+        registered.push(Arc::new(reg));
         Status::OK
     }
 
@@ -590,8 +613,11 @@ mod live {
     /// before the mods read its settings or open its stores. A mod whose
     /// migration fails is turned off.
     pub(crate) fn world_loaded(loader: &Loader, key: &str) {
-        let registered = REGISTERED.lock().unwrap_or_else(PoisonError::into_inner);
-        for reg in registered.iter() {
+        let registered = REGISTERED
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone();
+        for reg in &registered {
             let Some(record) = loader.mods.get(reg.owner) else {
                 continue;
             };
@@ -599,7 +625,7 @@ mod live {
                 continue;
             }
             let dir = loader.data_dir.join(&record.id).join("worlds").join(key);
-            let outcome = with_record(loader, |rec| {
+            let outcome = with_entry(loader, Some(key), &record.id, |rec| {
                 run(
                     rec,
                     Target::World { key, dir: &dir },
