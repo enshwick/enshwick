@@ -5,7 +5,8 @@
 //! record: the account, the cause, the place, the killer's template for a
 //! hit, whether the shroud was deadly and whether the player drowned. The
 //! loader detours that sink, which runs on the systems' worker threads,
-//! copies the record and raises [`Event::PLAYER_DIED`] after the step.
+//! copies the record and raises [`Event::PLAYER_DIED`] after the step, with
+//! the attacker of the last hit in the player's `HitHistory` for a hit.
 //! Deaths no system records, such as freezing or an administrator's kill,
 //! raise nothing here.
 
@@ -36,7 +37,71 @@ struct Record {
     drowned: usize,
 }
 
+/// Where a `HitHistory` keeps the attacker of its last hit, from reflection.
+#[derive(Debug, Clone, Copy)]
+struct History {
+    hash: u32,
+    last_index: usize,
+    entries: usize,
+    slots: usize,
+    entry_size: usize,
+    attacker: usize,
+}
+
+impl History {
+    fn resolve(loader: &Loader) -> Option<Self> {
+        let r = &loader.reflection;
+        let offset = |ty: &str, name: &str| {
+            r.field_offset(ty, name)
+                .ok()
+                .and_then(|v| usize::try_from(v).ok())
+        };
+        let size = |ty: &str| {
+            r.type_info(ty)
+                .ok()
+                .and_then(|info| usize::try_from(info.size()).ok())
+        };
+        let ty = "keen::ecs::HitHistory";
+        let entries = offset(ty, "history")?;
+        let entry_size = size("keen::ecs::HitEvent")?.max(1);
+        // The ring of hits ends where `targetTransform` starts.
+        let slots = offset(ty, "targetTransform")?.saturating_sub(entries) / entry_size;
+        let history = Self {
+            hash: crate::world::type_hash(loader, r.type_info(ty).ok()?.va())?,
+            last_index: offset(ty, "lastIndex")?,
+            entries,
+            slots,
+            entry_size,
+            attacker: offset("keen::ecs::BaseHitEvent", "rootSourceId")?,
+        };
+        let id = size_of::<u32>();
+        (history.last_index + id <= size(ty)?
+            && history.entries + history.slots * history.entry_size <= size(ty)?
+            && history.attacker + id <= history.entry_size)
+            .then_some(history)
+    }
+
+    /// The attacker of the last hit `entity` took; 0 for none.
+    fn killer(&self, loader: &Loader, entity: u32) -> u32 {
+        let Ok(history) = crate::world::component(loader, entity, self.hash) else {
+            return 0;
+        };
+        let history = history.addr();
+        // SAFETY: the entity's live HitHistory, on the game thread after the
+        // step; `resolve` checked that `lastIndex` lies inside it.
+        let last: u32 = unsafe { crate::world::read(history, self.last_index) };
+        let Some(last) = usize::try_from(last).ok().filter(|&i| i < self.slots) else {
+            return 0;
+        };
+        let at = self.entries + last * self.entry_size + self.attacker;
+        // SAFETY: as above; `resolve` checked that every slot, and the
+        // attacker inside it, lies inside the HitHistory.
+        unsafe { crate::world::read(history, at) }
+    }
+}
+
 static RECORD: OnceLock<Record> = OnceLock::new();
+static HISTORY: OnceLock<Option<History>> = OnceLock::new();
 /// Deaths seen since the last step, as the records' bytes.
 static SEEN: Mutex<Vec<[u8; 64]>> = Mutex::new(Vec::new());
 
@@ -76,6 +141,13 @@ pub(crate) fn link(loader: &'static Loader) {
         return;
     };
     let _first = RECORD.set(layout);
+    let history = HISTORY.get_or_init(|| History::resolve(loader));
+    if history.is_none() {
+        crate::log!(
+            WARN,
+            "player deaths: no hit history in this build, killers stay 0"
+        );
+    }
     loader.link_feature(
         "player deaths",
         loader.address("player.death_sink"),
@@ -134,6 +206,8 @@ fn data(layout: &Record, bytes: &[u8; 64], entity_of: impl Fn(u64) -> u32) -> Pl
         deadly_shroud: field::<1>(bytes, layout.deadly)[0],
         drowned: field::<1>(bytes, layout.drowned)[0],
         reserved: 0,
+        killer_entity: 0,
+        reserved_tail: 0,
     }
 }
 
@@ -147,13 +221,20 @@ pub(crate) fn after_step(loader: &Loader) {
         return;
     }
     let players = crate::world::players(loader).unwrap_or_default();
+    let history = HISTORY.get().copied().flatten();
     for bytes in &seen {
-        let death = data(layout, bytes, |key| {
+        let mut death = data(layout, bytes, |key| {
             players
                 .iter()
                 .find(|p| p.key == key)
                 .map_or(0, |p| p.entity)
         });
+        if death.cause == PlayerDeathData::HIT
+            && death.entity != 0
+            && let Some(history) = history
+        {
+            death.killer_entity = history.killer(loader, death.entity);
+        }
         loader.emit(Event::PLAYER_DIED, None, (&raw const death).cast());
     }
 }

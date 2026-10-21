@@ -14,7 +14,7 @@ use core::sync::atomic::AtomicUsize;
 pub const ABI_MAJOR: u16 = 1;
 
 /// The minor version of this interface. A newer minor only appends fields.
-pub const ABI_MINOR: u16 = 61;
+pub const ABI_MINOR: u16 = 62;
 
 /// Whether `id` is a valid mod id: 1 to 64 characters of `[a-z0-9-]`.
 ///
@@ -568,6 +568,8 @@ impl Event {
 ///     deadly_shroud: 0,
 ///     drowned: 0,
 ///     reserved: 0,
+///     killer_entity: 0,
+///     reserved_tail: 0,
 /// };
 /// assert_eq!(fell.cause, PlayerDeathData::FALL);
 /// ```
@@ -594,6 +596,12 @@ pub struct PlayerDeathData {
     pub drowned: u8,
     /// Zero.
     pub reserved: u16,
+    /// For a hit, the attacker of the last hit the player took, from its
+    /// `HitHistory`, as [`crate::game_events::Died`] reads it; 0 for other
+    /// causes, or when the history names none. Since minor 62.
+    pub killer_entity: u32,
+    /// Zero.
+    pub reserved_tail: u32,
 }
 
 impl PlayerDeathData {
@@ -5369,7 +5377,7 @@ const _: () = {
     assert!(core::mem::offset_of!(HostApi, quests) == 24 + 86 * 8);
     assert!(size_of::<KnowledgeInfo>() == 8 + 16);
     assert!(size_of::<KnowledgeData>() == 8 + 12);
-    assert!(size_of::<PlayerDeathData>() == 8 + 8 + 8 + 12 + 16 + 4);
+    assert!(size_of::<PlayerDeathData>() == 8 + 8 + 8 + 12 + 16 + 4 + 8);
     assert!(size_of::<QuestData>() == 8 + 8);
     assert!(core::mem::offset_of!(HostApi, weather_at) == 24 + 87 * 8);
     assert!(core::mem::offset_of!(HostApi, set_weather) == 24 + 89 * 8);
