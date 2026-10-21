@@ -358,6 +358,10 @@ pub(crate) fn link(loader: &'static Loader) {
     }
 }
 
+/// The raised base count's switch; the cap at the game's 16 bases holds
+/// either way.
+static BASES_FUSE: crate::fuse::Fuse = crate::fuse::Fuse::new("more bases");
+
 unsafe extern "system" fn max_altars(balancing: u64, flame_level: u32) -> u8 {
     if let Some(Some(limit)) = SEALED_LIMIT.get()
         && !crate::host::is_off(limit.owner)
@@ -378,7 +382,7 @@ unsafe extern "system" fn group(bases: *mut u8, world: *mut u8) {
     unsafe { GROUP_NEXT.get()(bases, world) };
     if raised() && !bases.is_null() {
         // SAFETY: the grouping just filled the bases object.
-        let _done = std::panic::catch_unwind(|| unsafe { keep(bases) });
+        let _done = BASES_FUSE.run("the base grouping", || unsafe { keep(bases) });
     }
 }
 
@@ -470,7 +474,9 @@ unsafe extern "system" fn check(
         return;
     }
     // SAFETY: the cursor's arguments, after the original ran.
-    let _done = std::panic::catch_unwind(|| unsafe { refuse_17th(flags, ctx, transform, item) });
+    let _done = BASES_FUSE.run("the placement check", || unsafe {
+        refuse_17th(flags, ctx, transform, item);
+    });
 }
 
 /// # Safety

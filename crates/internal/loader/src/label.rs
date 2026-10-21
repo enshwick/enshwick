@@ -221,17 +221,20 @@ pub(crate) fn set(loader: &Loader, entity: u32, text: &str) -> Status {
     Status::OK
 }
 
+/// The switch of the label renames.
+static LABELS_FUSE: crate::fuse::Fuse = crate::fuse::Fuse::new("label renames");
+
 unsafe extern "system" fn replace(
     out: *mut [u64; 2],
     strings: *mut u8,
     old: u64,
     text: *const [usize; 2],
 ) -> *mut u8 {
-    let refused = std::panic::catch_unwind(|| {
+    let refused = LABELS_FUSE.run("the replace", || {
         // SAFETY: the game's arguments at the swap's entry.
         unsafe { refused(text) }
     });
-    if matches!(refused, Ok(true)) && !out.is_null() {
+    if matches!(refused, Some(true)) && !out.is_null() {
         // SAFETY: the game's result record; its first byte is the error.
         unsafe { out.cast::<u8>().write(REFUSED) };
         return out.cast();

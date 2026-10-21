@@ -271,6 +271,9 @@ unsafe fn write<T: Copy>(base: *mut u8, offset: usize, value: T) {
     unsafe { base.wrapping_add(offset).cast::<T>().write_unaligned(value) };
 }
 
+/// The switch of the mod textures.
+static TEXTURES_FUSE: crate::fuse::Fuse = crate::fuse::Fuse::new("mod textures");
+
 unsafe extern "system" fn request(requester: *mut u8, requests: *mut Requests) {
     CONTENT_LINKED.store(true, Ordering::Release);
     let content = CONTENT.load();
@@ -299,7 +302,7 @@ unsafe extern "system" fn request(requester: *mut u8, requests: *mut Requests) {
         match served(content, &hash) {
             Some(data) => {
                 ours += 1;
-                let _done = std::panic::catch_unwind(|| {
+                let _done = TEXTURES_FUSE.run("the request", || {
                     // SAFETY: a live request and its requester, on the
                     // thread the game asks on.
                     unsafe { answer(&layout, requester, at, data) }
@@ -409,7 +412,7 @@ unsafe extern "system" fn keys(
     if type_hash != UI_IMAGE || out.is_null() {
         return result;
     }
-    let _done = std::panic::catch_unwind(|| {
+    let _done = TEXTURES_FUSE.run("the keys", || {
         // SAFETY: the game's result, written by the listing.
         unsafe { append(out) };
     });

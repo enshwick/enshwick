@@ -230,16 +230,27 @@ pub(crate) fn link(loader: &'static Loader) {
     }
 }
 
+/// The skill checks' switch.
+static SKILLS_FUSE: crate::fuse::Fuse = crate::fuse::Fuse::new("skill checks");
+/// The comfort filters' switch.
+static COMFORT_FUSE: crate::fuse::Fuse = crate::fuse::Fuse::new("comfort filters");
+/// The experience filters' switch.
+static EXPERIENCE_FUSE: crate::fuse::Fuse = crate::fuse::Fuse::new("experience filters");
+
 unsafe extern "system" fn node_unlocked(node: u32, bits: *const u64, tree: *const u8) -> u8 {
     let ours = SEALED
         .get()
         .is_some_and(|s| s.skills.iter().any(|(n, _)| *n == node));
-    if !ours {
-        // SAFETY: the rest of the chain takes the arguments the game passed.
-        return unsafe { SKILL_NEXT.get()(node, bits, tree) };
+    if ours
+        // SAFETY: the game's arguments, forwarded.
+        && let Some(answer) = SKILLS_FUSE.run("a skill check", || unsafe {
+            override_skill(node, bits, tree)
+        })
+    {
+        return answer;
     }
-    // SAFETY: as above.
-    unsafe { override_skill(node, bits, tree) }
+    // SAFETY: the rest of the chain takes the arguments the game passed.
+    unsafe { SKILL_NEXT.get()(node, bits, tree) }
 }
 
 /// # Safety
@@ -294,7 +305,7 @@ unsafe extern "system" fn register(
     comfort: i32,
     position: *const f32,
 ) -> u64 {
-    let comfort = SEALED.get().map_or(comfort, |sealed| {
+    let filtered = |sealed: &Sealed| {
         let at = if position.is_null() {
             [0.0; 3]
         } else {
@@ -319,7 +330,11 @@ unsafe extern "system" fn register(
                     (r.callback)(&raw const call, user)
                 })
             })
-    });
+    };
+    let comfort = SEALED
+        .get()
+        .and_then(|sealed| COMFORT_FUSE.run("a comfort provider", || filtered(sealed)))
+        .unwrap_or(comfort);
     // SAFETY: the rest of the chain takes the arguments the game passed.
     unsafe { COMFORT_NEXT.get()(system, category, comfort, position) }
 }
@@ -333,7 +348,9 @@ unsafe extern "system" fn player_level_link(ctx: *mut u64) {
         // SAFETY: the system's live context.
         let saved = unsafe { engine.row(ctx) };
         // SAFETY: as above, before vanilla runs.
-        let _done = std::panic::catch_unwind(|| unsafe { experience(loader, engine, ctx) });
+        let _done = EXPERIENCE_FUSE.run("the experience pass", || unsafe {
+            experience(loader, engine, ctx);
+        });
         // SAFETY: as above.
         unsafe { engine.set_row(ctx, saved) };
     }

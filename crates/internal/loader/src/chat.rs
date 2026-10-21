@@ -273,8 +273,11 @@ fn link_client(loader: &'static Loader, target: Option<u64>) {
     );
 }
 
+/// The switch of the chat commands and mod messages.
+static CHAT_FUSE: crate::fuse::Fuse = crate::fuse::Fuse::new("chat commands and mod messages");
+
 unsafe extern "system" fn client_send(client: *mut u8) -> u64 {
-    let _caught = std::panic::catch_unwind(|| {
+    let _caught = CHAT_FUSE.run("the client send", || {
         // SAFETY: the game client, on the thread that sends its chat.
         unsafe { queue_frames(client) };
     });
@@ -336,7 +339,7 @@ unsafe extern "system" fn post(
     hash: u64,
     extra: *const [u64; 2],
 ) -> *mut u8 {
-    let frame = std::panic::catch_unwind(|| {
+    let frame = CHAT_FUSE.run("the frame check", || {
         // SAFETY: the game's arguments, read before anything else is called.
         unsafe { server_frame(out, kind, text) }
     });
@@ -345,16 +348,17 @@ unsafe extern "system" fn post(
         unsafe { out.cast::<u64>().write_unaligned(0) };
         return out;
     }
-    let caught = std::panic::catch_unwind(|| {
+    let caught = CHAT_FUSE.run("the command check", || {
         // SAFETY: the game's arguments, read before anything else is called.
         unsafe { command_line(out, kind, text) }
     });
-    if let Ok(Some((loader, line))) = caught {
+    if let Some(Some((loader, line))) = caught {
         // SAFETY: the game's result record holds at least 8 bytes.
         unsafe { out.cast::<u64>().write_unaligned(0) };
-        let _outcome =
-            std::panic::catch_unwind(|| dispatch(loader, &line, To::Machine(handle, hash)));
-        let _outcome = std::panic::catch_unwind(drain);
+        let _outcome = CHAT_FUSE.run("a command", || {
+            dispatch(loader, &line, To::Machine(handle, hash));
+        });
+        let _outcome = CHAT_FUSE.run("the command queue", drain);
         return out;
     }
     match next() {

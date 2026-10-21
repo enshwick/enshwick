@@ -575,6 +575,9 @@ fn call(survivor: u32, vanilla: u32, purpose: u32, entity: u32, cell: [i64; 3]) 
     }
 }
 
+/// The survivors features' switch.
+static SURVIVORS_FUSE: crate::fuse::Fuse = crate::fuse::Fuse::new("survivor features");
+
 unsafe extern "system" fn lookup_link(bases: *mut u8, npc: *const u32) -> u32 {
     // SAFETY: the rest of the chain takes the arguments the game passed.
     unsafe { lookup(LOOKUP_NEXT.get(), bases, npc) }
@@ -607,11 +610,11 @@ unsafe fn lookup(next: LookupFn, bases: *mut u8, npc: *const u32) -> u32 {
     let caller = unsafe { frame.return_address() };
     // SAFETY: `npc` points at the survivor id the caller looks up.
     let survivor = unsafe { npc.read() };
-    let answered = std::panic::catch_unwind(|| {
+    let answered = SURVIVORS_FUSE.run("a survivor lookup", || {
         // SAFETY: the caller's frame, as the loader recorded it.
         unsafe { resolve(loader, layout, engine, found, survivor, caller, &frame) }
     });
-    answered.ok().flatten().unwrap_or(found)
+    answered.flatten().unwrap_or(found)
 }
 
 /// # Safety
@@ -827,11 +830,12 @@ unsafe extern "system" fn update_link(
 unsafe extern "system" fn move_link(ctx: *mut *mut u64, b: usize, c: usize, d: usize) -> usize {
     let skip = MOVE_ACTIVE.load(Ordering::Acquire)
         && !ctx.is_null()
-        && std::panic::catch_unwind(|| {
-            // SAFETY: the behaviour context of the moving survivor.
-            unsafe { skip_move(ctx) }
-        })
-        .unwrap_or(false);
+        && SURVIVORS_FUSE
+            .run("a survivor move", || {
+                // SAFETY: the behaviour context of the moving survivor.
+                unsafe { skip_move(ctx) }
+            })
+            .unwrap_or(false);
     if skip {
         return 0;
     }
@@ -886,7 +890,7 @@ unsafe extern "system" fn bed_check_link(ctx: *mut u8) -> u8 {
         return valid;
     }
     // SAFETY: the survivor's behaviour context.
-    let keep = std::panic::catch_unwind(|| unsafe { bed_kept(ctx.addr() as u64) });
+    let keep = SURVIVORS_FUSE.run("a bed check", || unsafe { bed_kept(ctx.addr() as u64) });
     if keep.unwrap_or(true) { valid } else { 0 }
 }
 
@@ -954,7 +958,7 @@ unsafe fn bed_kept(ctx: u64) -> bool {
 unsafe extern "system" fn spawn_link(ctx: *mut u64, request: *mut u8) -> u8 {
     // SAFETY: the game's spawn request, before the spawn reads it.
     let asked = (!request.is_null())
-        .then(|| std::panic::catch_unwind(|| unsafe { summon(request) }).ok())
+        .then(|| SURVIVORS_FUSE.run("a summon", || unsafe { summon(request) }))
         .flatten()
         .flatten();
     let call = match asked {
@@ -969,7 +973,7 @@ unsafe extern "system" fn spawn_link(ctx: *mut u64, request: *mut u8) -> u8 {
     if done != 0
         && let Some(call) = call
     {
-        let _done = std::panic::catch_unwind(|| summoned(call));
+        let _done = SURVIVORS_FUSE.run("a summon's answer", || summoned(call));
     }
     done
 }
@@ -1106,17 +1110,19 @@ unsafe extern "system" fn registry_link(registry: *mut u8) {
     let Some((map, sealed)) = ready.filter(|_| !built) else {
         return;
     };
-    let mut filed = 0;
-    for &(item, survivor) in &sealed.items {
-        // SAFETY: the registry is built; its item map lies at `map.at`.
-        if unsafe { file(map, registry.wrapping_add(map.at), item, survivor) } {
-            filed += 1;
+    let _filed = SURVIVORS_FUSE.run("the staff item filing", || {
+        let mut filed = 0;
+        for &(item, survivor) in &sealed.items {
+            // SAFETY: the registry is built; its item map lies at `map.at`.
+            if unsafe { file(map, registry.wrapping_add(map.at), item, survivor) } {
+                filed += 1;
+            }
         }
-    }
-    crate::log!(
-        INFO,
-        "survivors: filed {filed} staff items in the survivor registry"
-    );
+        crate::log!(
+            INFO,
+            "survivors: filed {filed} staff items in the survivor registry"
+        );
+    });
 }
 
 /// Maps `item` to `survivor` in the game's map at `table`, as its own build
@@ -1177,7 +1183,7 @@ unsafe extern "system" fn menu_link(ctx: *mut u64) {
         return;
     }
     // SAFETY: the system's live context, after vanilla's pass.
-    let _done = std::panic::catch_unwind(|| unsafe { merge_statuses(ctx) });
+    let _done = SURVIVORS_FUSE.run("the status merge", || unsafe { merge_statuses(ctx) });
 }
 
 /// Hands every survivor's statuses to the merging mod and writes its answer

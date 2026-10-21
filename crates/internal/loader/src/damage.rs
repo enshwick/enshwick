@@ -221,8 +221,11 @@ fn filtered(cause: u32, target: u32, damage: i32) -> i32 {
     kept(check.total).round().min(i32::MAX as f32) as i32
 }
 
+/// The damage filters' switch.
+static DAMAGE_FUSE: crate::fuse::Fuse = crate::fuse::Fuse::new("damage filters");
+
 unsafe extern "system" fn hit(registers: *mut Registers, _user: *mut c_void) {
-    let _caught = std::panic::catch_unwind(|| {
+    let _caught = DAMAGE_FUSE.run("the hit site", || {
         // SAFETY: the stub's saved registers, valid for the call.
         let Some(registers) = (unsafe { registers.as_ref() }) else {
             return;
@@ -270,7 +273,7 @@ unsafe extern "system" fn hit(registers: *mut Registers, _user: *mut c_void) {
 }
 
 unsafe extern "system" fn fall(registers: *mut Registers, _user: *mut c_void) {
-    let _caught = std::panic::catch_unwind(|| {
+    let _caught = DAMAGE_FUSE.run("the fall site", || {
         // SAFETY: the stub's saved registers, valid for the call.
         let Some(registers) = (unsafe { registers.as_mut() }) else {
             return;
@@ -291,7 +294,7 @@ unsafe extern "system" fn fall(registers: *mut Registers, _user: *mut c_void) {
 }
 
 unsafe extern "system" fn shroud(registers: *mut Registers, _user: *mut c_void) {
-    let _caught = std::panic::catch_unwind(|| {
+    let _caught = DAMAGE_FUSE.run("the shroud site", || {
         // SAFETY: the stub's saved registers, valid for the call.
         let Some(registers) = (unsafe { registers.as_mut() }) else {
             return;
@@ -308,7 +311,7 @@ unsafe extern "system" fn shroud(registers: *mut Registers, _user: *mut c_void) 
 }
 
 unsafe extern "system" fn shroud_death(registers: *mut Registers, _user: *mut c_void) {
-    let _caught = std::panic::catch_unwind(|| {
+    let _caught = DAMAGE_FUSE.run("the shroud death site", || {
         // SAFETY: the stub's saved registers, valid for the call.
         let Some(registers) = (unsafe { registers.as_mut() }) else {
             return;
@@ -329,7 +332,7 @@ unsafe extern "system" fn shroud_death(registers: *mut Registers, _user: *mut c_
 }
 
 unsafe extern "system" fn drowning(registers: *mut Registers, _user: *mut c_void) {
-    let _caught = std::panic::catch_unwind(|| {
+    let _caught = DAMAGE_FUSE.run("the drowning site", || {
         // SAFETY: the stub's saved registers, valid for the call.
         let Some(registers) = (unsafe { registers.as_mut() }) else {
             return;
@@ -348,7 +351,7 @@ unsafe extern "system" fn drowning(registers: *mut Registers, _user: *mut c_void
 }
 
 unsafe extern "system" fn drowning_death(registers: *mut Registers, _user: *mut c_void) {
-    let _caught = std::panic::catch_unwind(|| {
+    let _caught = DAMAGE_FUSE.run("the drowning death site", || {
         // SAFETY: the stub's saved registers, valid for the call.
         let Some(registers) = (unsafe { registers.as_mut() }) else {
             return;
@@ -371,7 +374,7 @@ unsafe extern "system" fn drowning_death(registers: *mut Registers, _user: *mut 
 }
 
 unsafe extern "system" fn freezing(registers: *mut Registers, _user: *mut c_void) {
-    let _caught = std::panic::catch_unwind(|| {
+    let _caught = DAMAGE_FUSE.run("the freezing site", || {
         // SAFETY: the stub's saved registers, valid for the call.
         let Some(registers) = (unsafe { registers.as_mut() }) else {
             return;
@@ -398,7 +401,7 @@ fn kill_allowed(target: u32) -> bool {
 }
 
 unsafe extern "system" fn admin_kill(registers: *mut Registers, _user: *mut c_void) {
-    let _caught = std::panic::catch_unwind(|| {
+    let _caught = DAMAGE_FUSE.run("the admin kill site", || {
         // SAFETY: the stub's saved registers, valid for the call.
         let Some(registers) = (unsafe { registers.as_mut() }) else {
             return;
@@ -421,7 +424,7 @@ unsafe extern "system" fn admin_kill(registers: *mut Registers, _user: *mut c_vo
 }
 
 unsafe extern "system" fn faction_kill(registers: *mut Registers, _user: *mut c_void) {
-    let _caught = std::panic::catch_unwind(|| {
+    let _caught = DAMAGE_FUSE.run("the faction kill site", || {
         // SAFETY: the stub's saved registers, valid for the call.
         let Some(registers) = (unsafe { registers.as_mut() }) else {
             return;

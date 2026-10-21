@@ -690,6 +690,9 @@ fn commits(results: &[InventoryOpResult], count: usize, allow_partial: bool) -> 
             .all(|r| r.error == 0 && (allow_partial || r.remaining == 0))
 }
 
+/// The switch of the inventory requests.
+static INVENTORY_FUSE: crate::fuse::Fuse = crate::fuse::Fuse::new("inventory requests");
+
 /// The row hook: runs the queued requests inside the inventory system.
 unsafe extern "system" fn row(registers: *mut Registers, _user: *mut c_void) {
     // SAFETY: the stub passes its saved registers, valid for the call.
@@ -716,7 +719,7 @@ unsafe extern "system" fn row(registers: *mut Registers, _user: *mut c_void) {
     let Some(_turn) = Turn::take(&BUSY) else {
         return;
     };
-    let _outcome = std::panic::catch_unwind(|| {
+    let _outcome = INVENTORY_FUSE.run("the row", || {
         while let Some(request) = QUEUE.claim() {
             if crate::host::is_off(request.owner) {
                 continue;

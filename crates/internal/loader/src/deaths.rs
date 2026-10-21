@@ -157,11 +157,14 @@ pub(crate) fn link(loader: &'static Loader) {
     );
 }
 
+/// The switch of the player deaths.
+static DEATHS_FUSE: crate::fuse::Fuse = crate::fuse::Fuse::new("player deaths");
+
 unsafe extern "system" fn sink(out: *mut u8, tracker: *mut u8, death: *const u8) -> *mut u8 {
     if let Some(layout) = RECORD.get()
         && !death.is_null()
     {
-        let _caught = std::panic::catch_unwind(|| {
+        let _caught = DEATHS_FUSE.run("the sink", || {
             let mut bytes = [0u8; 64];
             // SAFETY: the game hands the sink a whole record of the
             // reflected size, valid for the call.

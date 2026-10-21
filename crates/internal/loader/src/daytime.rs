@@ -279,9 +279,12 @@ pub(crate) fn link(loader: &'static Loader) {
     }
 }
 
+/// The switch of the day length.
+static DAYTIME_FUSE: crate::fuse::Fuse = crate::fuse::Fuse::new("day length");
+
 unsafe extern "system" fn speed(daytime: *mut u8, game: f32, now: i64) {
     GAME_SPEED.store(game.to_bits(), Ordering::Relaxed);
-    let factor = std::panic::catch_unwind(product).unwrap_or(1.0);
+    let factor = DAYTIME_FUSE.run("the speed", product).unwrap_or(1.0);
     if !same(factor, 1.0) && !daytime.is_null() {
         let wanted = game * factor;
         let at = LAYOUT
