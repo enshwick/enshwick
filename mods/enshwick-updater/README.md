@@ -19,7 +19,8 @@ A mod renamed since you installed it names its old id (`replaces:` in its
 manifest), and the loader no longer starts the old DLL beside it. When the
 updater installs or updates the renamed mod, it deletes that old DLL from
 `mods/`: only the file the loader lists for the old id, never another mod's
-or the loader's.
+or the loader's. A renamed mod installed fresh, such as from a server you
+were refused by, deletes its old DLL at the next start, once it runs.
 
 When a server runs mods you lack, or has them in another version, the join
 check keeps you out and says which. The updater then offers the server's

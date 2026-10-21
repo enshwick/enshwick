@@ -140,7 +140,9 @@ let manifest = enshwick_loader_api::manifest!(
   status summary repeat and the lock lists under `[[replaced]]`. When the
   updater installs or updates this mod, it deletes those DLLs, and only them:
   each a `.dll` directly in `mods/` that the loader listed for the replaced
-  id and that no running mod uses. Settings and data stay where they are, so
+  id and that no running mod uses; a fresh install, which no loader listed
+  replacements for yet, deletes them at the next start, once the new mod
+  runs. Settings and data stay where they are, so
   carry them over in the new mod if it needs them.
 - `updates` says where new releases come from, `github(...)` or
   `url("https://...")`; see [Releasing and updates](../releasing.md).

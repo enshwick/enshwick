@@ -410,6 +410,54 @@ pub fn delete_replaced(
     (deleted, kept)
 }
 
+/// The file under the updater's data folder that names the mods installed
+/// where no copy of them ran: the loader lists the mods they replace only
+/// once they run, at the next start.
+const FRESH: &str = "fresh-installs";
+
+/// Notes in the data folder `data` that `id` was installed where no copy of
+/// it ran.
+pub(crate) fn note_fresh(data: &Path, id: &str) -> std::io::Result<()> {
+    let path = data.join(FRESH);
+    let mut ids = std::fs::read_to_string(&path).unwrap_or_default();
+    if ids.lines().all(|line| line != id) {
+        ids.push_str(id);
+        ids.push('\n');
+        write(&path, ids.as_bytes()).map_err(std::io::Error::other)?;
+    }
+    Ok(())
+}
+
+/// After a start: for each mod noted by [`note_fresh`] that runs now, one
+/// of `installed`, deletes the DLLs of the mods it replaces as
+/// [`delete_replaced`] does; the note is gone afterwards, also for a mod
+/// that does not run. Returns each file deleted with the id that replaces
+/// it, and apart why others were not.
+pub(crate) fn delete_replaced_of_fresh(
+    game: &Path,
+    data: &Path,
+    installed: &[enshwick_loader_api::mods::ModEntry],
+    replaced: &[enshwick_loader_api::mods::ModEntry],
+    taken: &[String],
+) -> (Vec<(String, String)>, Vec<String>) {
+    let path = data.join(FRESH);
+    let Ok(ids) = std::fs::read_to_string(&path) else {
+        return (Vec::new(), Vec::new());
+    };
+    let _gone = std::fs::remove_file(&path);
+    let mut deleted = Vec::new();
+    let mut kept = Vec::new();
+    for id in ids
+        .lines()
+        .filter(|id| installed.iter().any(|m| m.id == *id))
+    {
+        let (files, why) = delete_replaced(game, id, replaced, taken);
+        deleted.extend(files.into_iter().map(|file| (file, id.to_owned())));
+        kept.extend(why);
+    }
+    (deleted, kept)
+}
+
 /// Whether an update of `file` already waits in `game`'s staging folder.
 #[must_use]
 pub fn waiting(game: &Path, file: &str) -> bool {
@@ -600,6 +648,48 @@ mod tests {
         ] {
             assert!(mods.join(file).exists(), "{file}");
         }
+        let _gone = std::fs::remove_dir_all(&game);
+    }
+
+    #[test]
+    fn a_fresh_install_deletes_what_it_replaces_at_the_next_start() {
+        let game = scratch("fresh");
+        let data = game.join("mods/enshwick/data/enshwick-updater");
+        let mods = game.join("mods");
+        for file in ["old.dll", "new.dll", "other.dll"] {
+            write(&mods.join(file), b"x").unwrap();
+        }
+        note_fresh(&data, "new").unwrap();
+        note_fresh(&data, "new").unwrap();
+        note_fresh(&data, "absent").unwrap();
+        assert_eq!(
+            std::fs::read_to_string(data.join(FRESH)).unwrap(),
+            "new\nabsent\n"
+        );
+        let running = |id: &str, file: &str| enshwick_loader_api::mods::ModEntry {
+            id: id.into(),
+            file: file.into(),
+            ..enshwick_loader_api::mods::ModEntry::default()
+        };
+        let installed = [
+            running("new", "mods/new.dll"),
+            running("other", "mods/other.dll"),
+        ];
+        let listed = [
+            replaced("old", "mods/old.dll", "new"),
+            replaced("by-other", "mods/other.dll", "new"),
+            replaced("loader", "mods/enshwick/enshwick.dll", "new"),
+            replaced("gone", "mods/gone.dll", "absent"),
+        ];
+        let taken = ["mods/new.dll".to_owned(), "mods/other.dll".to_owned()];
+        let (deleted, kept) = delete_replaced_of_fresh(&game, &data, &installed, &listed, &taken);
+        assert_eq!(deleted, [("mods/old.dll".to_owned(), "new".to_owned())]);
+        assert_eq!(kept.len(), 2, "{kept:?}");
+        assert!(!mods.join("old.dll").exists());
+        assert!(mods.join("new.dll").exists() && mods.join("other.dll").exists());
+        assert!(!data.join(FRESH).exists());
+        let again = delete_replaced_of_fresh(&game, &data, &installed, &listed, &taken);
+        assert_eq!(again, (Vec::new(), Vec::new()));
         let _gone = std::fs::remove_dir_all(&game);
     }
 
