@@ -69,19 +69,24 @@ typed event whose fields this game build lacks shows as `FAIL typed <type>`.
 From the chat as an administrator, or through the admin tools' command file
 (`mod-data/admin-tools/commands.txt`):
 
-| Command                         | What it does                                                                                                                                           |
-| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `/probe census`                 | the game events counted so far, by type                                                                                                                |
-| `/probe check`                  | runs the checks again                                                                                                                                  |
-| `/probe vitals <id>`            | an entity's vitals and progress, against its replicated health                                                                                         |
-| `/probe vitals me [shown]`      | your character's raw health, stamina and mana sets, every slot, the replicated copies and the API's reading, beside the values you read off the screen |
-| `/probe teleport me [dx dy dz]` | moves your character by the offset (10 m along x and 0.5 m up by default) and logs where it stands four times a second for five seconds                |
-| `/probe destroy <id>`           | asks the world to destroy an entity; on a copy of a world only                                                                                         |
-| `/probe spawn <id>`             | spawns a copy of an entity above it and follows it as above                                                                                            |
-| `/probe notice <text>`          | shows the text on your screen, or in chat without Enshwick                                                                                             |
-| `/probe stat <id> <value>`      | adds `value` to stat `id` on you (`off` removes it); no id lists them                                                                                  |
-| `/probe stats`                  | your stats that differ from the defaults, and their sources                                                                                            |
-| `/probe affix`                  | rolls one to three affixes anew on everything you wear                                                                                                 |
+| Command                               | What it does                                                                                                                                           |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `/probe census`                       | the game events counted so far, by type                                                                                                                |
+| `/probe check`                        | runs the checks again                                                                                                                                  |
+| `/probe vitals <id>`                  | an entity's vitals and progress, against its replicated health                                                                                         |
+| `/probe vitals me [shown]`            | your character's raw health, stamina and mana sets, every slot, the replicated copies and the API's reading, beside the values you read off the screen |
+| `/probe teleport me [dx dy dz]`       | moves your character by the offset (10 m along x and 0.5 m up by default) and logs where it stands four times a second for five seconds                |
+| `/probe destroy <id>`                 | asks the world to destroy an entity; on a copy of a world only                                                                                         |
+| `/probe spawn <id>`                   | spawns a copy of an entity above it and follows it as above                                                                                            |
+| `/probe notice <text>`                | shows the text on your screen, or in chat without Enshwick                                                                                             |
+| `/probe key`                          | your account key, as `learn-later` takes it                                                                                                            |
+| `/probe knowledge <id>`               | a knowledge value of yours, or of the world for its ids                                                                                                |
+| `/probe learn <id> [bit]`             | grants it to you: a bool set, a counter raised by `bit`, flag `bit` set (1 by default, a recipe's crafted bit)                                         |
+| `/probe unlearn <id> [bit]`           | takes it back the same way                                                                                                                             |
+| `/probe learn-later <key> <id> [bit]` | grants it to the account now, or once its character next loads in this world                                                                           |
+| `/probe stat <id> <value>`            | adds `value` to stat `id` on you (`off` removes it); no id lists them                                                                                  |
+| `/probe stats`                        | your stats that differ from the defaults, and their sources                                                                                            |
+| `/probe affix`                        | rolls one to three affixes anew on everything you wear                                                                                                 |
 
 ## Settings
 
