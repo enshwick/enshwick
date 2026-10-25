@@ -133,7 +133,7 @@ try a release against a copy of a server's data before it goes live.
 The [fake loader](testing.md) keeps the migrations the mod declared and runs
 them on text, the way the loader runs them on files:
 
-```rust
+```rust,standalone_crate
 use enshwick_loader_api::migrations::Migrations;
 
 struct Safes;

@@ -19,7 +19,7 @@
 //!
 //! # Examples
 //!
-//! ```
+//! ```rust,standalone_crate
 //! use enshwick_loader_api::abi::{Level, Status};
 //! use enshwick_loader_api::{Load, Mod, Next, Off, events, hook};
 //!

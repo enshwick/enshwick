@@ -21,7 +21,7 @@
 //!
 //! # Examples
 //!
-//! ```
+//! ```rust,standalone_crate
 //! #[derive(serde::Deserialize)]
 //! struct Settings {
 //!     enabled: bool,

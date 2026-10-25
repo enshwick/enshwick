@@ -183,7 +183,7 @@ exports the type: `enshwick_mod_abi`, `enshwick_mod_query`,
 catching panics. It also
 adds `instance()`, the mod's state once `init` has returned it.
 
-```rust
+```rust,standalone_crate
 struct Quiet;
 
 impl enshwick_loader_api::Mod for Quiet {

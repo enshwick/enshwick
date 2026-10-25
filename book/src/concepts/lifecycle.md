@@ -59,7 +59,7 @@ are checked at resolve, before any `init`.
 has returned it, `None` before and when `init` failed. A hook that runs
 before the state exists, or whose mod failed at init, forwards to `next`:
 
-```rust
+```rust,standalone_crate
 # struct MyMod { altars: u8 }
 # impl enshwick_loader_api::Mod for MyMod {
 #     fn manifest() -> &'static enshwick_loader_api::abi::Manifest {

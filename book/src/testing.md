@@ -30,7 +30,7 @@ enshwick-loader-api = { git = "https://github.com/themaiby/enshwick", tag = "ens
 
 A full test of a mod with a hook, settings and a settings change:
 
-```rust
+```rust,standalone_crate
 use std::sync::atomic::{AtomicU32, Ordering};
 
 use enshwick_loader_api::abi::{Level, Status};
@@ -111,7 +111,7 @@ side defaults to `Side::SERVER` and the log level to `Level::INFO`.
 
 A test of the path where the game build lacks what the mod needs:
 
-```rust
+```rust,standalone_crate
 use enshwick_loader_api::abi::{Level, Status};
 use enshwick_loader_api::{Load, Mod, Off};
 

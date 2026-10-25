@@ -86,7 +86,7 @@ This mod sets how many Flame Altars every Flame level allows. The API has a
 call for exactly that, so the mod only answers with a number from its
 settings.
 
-```rust
+```rust,standalone_crate
 use std::sync::atomic::{AtomicU8, Ordering};
 
 use enshwick_loader_api::{Load, Mod, Off};
@@ -165,7 +165,7 @@ itself: it finds a function by its symbolic id and links a hook into it.
 This is the low-level escape hatch, and it is `unsafe`, since the mod vouches
 for the function's type. The same limit as a hook on the game's own lookup:
 
-```rust
+```rust,standalone_crate
 use std::sync::atomic::{AtomicU8, Ordering};
 
 use enshwick_loader_api::{Load, Mod, Next, Off};
