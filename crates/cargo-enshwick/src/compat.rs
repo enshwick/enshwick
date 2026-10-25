@@ -228,6 +228,7 @@ fn features(table: &Resolved, known: &BTreeSet<&str>) -> Vec<Feature> {
                 missing: named
                     .into_iter()
                     .filter(|id| table.symbol(id).is_none() && table.constant(id).is_none())
+                    .filter(|id| !table.uncarried().iter().any(|u| u == id))
                     .collect(),
             })
         })
@@ -610,6 +611,23 @@ mod tests {
         let nothing = server.fall_back(&[0; 64], 0x1000);
         let fallback = features(&nothing, &known);
         assert!(fallback.iter().all(|f| f.missing.len() == f.named));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a_carried_table_does_not_miss_what_only_its_own_build_holds() {
+        let all = known_tables().unwrap();
+        let client = tables::newest(&all, tables::Side::Client).unwrap();
+        let known = known_ids(core::slice::from_ref(client));
+        assert!(known.contains("net.provider_join_slot"));
+        let carried = client.fall_back(&[0; 64], 0x1000);
+        for feature in features(&carried, &known) {
+            assert!(
+                !feature.missing.contains(&"net.provider_join_slot"),
+                "{}",
+                feature.name
+            );
+        }
     }
 
     #[test]

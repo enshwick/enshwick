@@ -223,9 +223,9 @@ revision = 1
 # as long as that code is found. `cargo enshwick pin --patterns` writes
 # them around the instructions a maintainer picks with `--from`.
 [constants]
-# The join's slot in the online provider's function table, and its
-# first eight bytes.
-"net.provider_join_slot" = 16
+# The join's slot in the online provider's function table, which only
+# this build holds (`carried = false`), and the join's first eight bytes.
+"net.provider_join_slot" = { value = 16, carried = false }
 "net.join_game.bytes" = "0xec83_4857_5655_5340"
 "text.pool_language" = { value = 0xd8, pattern = "75 38 48 8D 6E ?? 39 BE ?? ?? ?? ?? 75 11 48 8B D5 48 8D 4C 24 ??", at = 8, size = 4 }
 # The first eight code bytes at each mod textures symbol, and
