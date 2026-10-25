@@ -19,26 +19,26 @@ commit-msg:
     conventional:
       run: bun tools/check-commit-message.ts {1}
 
-# Only what the pushed change needs (tools/xtask): tests of the changed
-# packages and their dependents, clippy and doctests where something changed.
-# The full suite is `cargo xtask check --all`.
+# Nothing that compiles: the hook stays under ten seconds. The compiling
+# checks are `cargo xtask check` (what the branch touches) and
+# `cargo xtask check --all` (everything); they gate merges.
 pre-push:
   parallel: true
   commands:
-    checks:
+    rustfmt:
       glob:
         - '*.rs'
         - '**/*.rs'
-        - 'Cargo.toml'
-        - '**/Cargo.toml'
-        - 'Cargo.lock'
-        - 'rust-toolchain.toml'
-        - 'clippy.toml'
-        - '.cargo/*'
-        - '.config/*'
-        - 'book/src/*.md'
-        - 'book/src/**/*.md'
-      run: cargo xtask check
+      run: cargo fmt --all --check
+    markdown:
+      glob: '*.md'
+      exclude:
+        - '**/CHANGELOG.md'
+      run: bunx markdownlint-cli2 --no-globs {push_files}
+    typos:
+      run: typos --force-exclude {push_files}
+    commits:
+      run: bun tools/check-commit-message.ts --range origin/main..HEAD
     deny:
       glob:
         - 'Cargo.toml'

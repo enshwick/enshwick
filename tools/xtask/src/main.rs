@@ -1,6 +1,7 @@
 //! Repository tasks, run as `cargo xtask <task>`.
 //!
-//! `cargo xtask check` runs the checks a change needs before a push. Nothing
+//! `cargo xtask check` runs the compiling checks a change needs before it
+//! merges; the git hooks run only the checks that compile nothing. Nothing
 //! runs when no package changed since the branch left `origin/main`.
 //! Otherwise clippy and the doctests run over the workspace, where unchanged
 //! packages are already fresh, and nextest runs the tests of the changed
