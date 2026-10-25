@@ -53,8 +53,15 @@ enshwick_loader_api::detour! {
 /// Links the join and the menu entries, and logs refused joins.
 pub(crate) fn link(load: &mut Load<'_>) -> Result<(), Off> {
     let join_game = load.symbol("net.join_game")?;
+    let pinned = load.constant("net.join_game.bytes")?;
+    let found = usize::try_from(join_game).ok().and_then(memory::read_u64);
+    if found != Some(pinned) {
+        return Err(Off::new(format!(
+            "the code at the join {join_game:#x} is {found:x?}, not the pinned {pinned:#018x}"
+        )));
+    }
     // SAFETY: the table's `net.join_game` is the function `JOIN_GAME`
-    // declares.
+    // declares, its first bytes checked above.
     unsafe { load.hook(&JOIN_GAME, join_game) }?;
     let (main_entry, pause_entry) = (
         load.symbol("ui.main_entry")?,
