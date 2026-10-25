@@ -261,11 +261,15 @@ fn find_place(layout: &MenuLayout, blob: &Blob, entry: &MenuEntry) -> Option<Pla
     })
 }
 
-/// How many trees the menu has: one per workshop.
+/// How many trees the menu has, one per workshop; `None` unless the
+/// workshops and the trees are as many and more than none, as in every
+/// menu the game bakes.
 fn tree_count(layout: &MenuLayout, blob: &Blob) -> Option<usize> {
     let (_, workshops) = blob.array(layout.collection + layout.workshops)?;
     let (_, trees) = blob.array(layout.collection + layout.trees)?;
-    usize::try_from(workshops.min(trees)).ok()
+    (workshops == trees && trees > 0)
+        .then(|| usize::try_from(trees).ok())
+        .flatten()
 }
 
 /// The index of `workshop`'s tree; `None` for a workshop the menu lacks or
@@ -331,11 +335,7 @@ pub fn list_workshop(layout: &MenuLayout, bundle: &[u8], workshop: WorkshopId) -
     let mut blob = Blob::new(bundle);
     let workshops = layout.collection + layout.workshops;
     let trees = layout.collection + layout.trees;
-    let (_, count) = blob.array(workshops)?;
-    let (_, tree_count) = blob.array(trees)?;
-    if count != tree_count {
-        return None;
-    }
+    tree_count(layout, &blob)?;
     if tree_of(layout, &blob, workshop).is_some() {
         return Some(blob.into_bytes());
     }
@@ -642,5 +642,13 @@ mod tests {
         };
         assert!(list_recipes(&LAYOUT, &[0; 8], &[entry]).is_none());
         assert!(list_workshop(&LAYOUT, &[0; 8], bench()).is_none());
+
+        let mut uneven = Blob::new(&bundle(&[(9, &[&[&[CHEST.id()]]])]));
+        let (workshops, _) = uneven.array(0x40).unwrap();
+        assert!(uneven.set_array(0x40, workshops, 2));
+        assert!(list_recipes(&LAYOUT, uneven.bytes(), &[entry]).is_none());
+        assert!(list_workshop(&LAYOUT, uneven.bytes(), bench()).is_none());
+        let empty = bundle(&[]);
+        assert!(list_recipes(&LAYOUT, &empty, &[entry]).is_none());
     }
 }
