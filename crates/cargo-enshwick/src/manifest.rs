@@ -107,6 +107,7 @@ fn describe(manifest: &Manifest) -> String {
 ///
 /// `raw` is null or points at a manifest readable for the size its header
 /// says, with static strings and lists.
+#[cfg(any(windows, test))]
 unsafe fn copy(raw: *const Manifest) -> Result<Manifest, String> {
     // Every minor has the fields before `builds`.
     const REQUIRED: usize = core::mem::offset_of!(Manifest, builds);
