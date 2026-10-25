@@ -994,13 +994,6 @@ mod runtime {
             })
             .collect();
         let dialog = super::refusal::dialog(missing, &off, names, &sources);
-        crate::ui::show(
-            &dialog.title,
-            &dialog.message,
-            &dialog.detail,
-            1 << UiDialog::OK,
-            |_| {},
-        );
         // Mods that are off on the client are the player's to turn on.
         let wanted: Vec<crate::host::Wanted> = missing
             .iter()
@@ -1013,7 +1006,15 @@ mod runtime {
                 version: need.version.clone(),
             })
             .collect();
-        crate::host::report_join_missing(&wanted);
+        // The join is refused at once, so the game keeps drawing; the mods
+        // hear of it once the player closes the dialog.
+        crate::ui::show(
+            &dialog.title,
+            &dialog.message,
+            &dialog.detail,
+            1 << UiDialog::OK,
+            move |_| crate::host::report_join_missing(&wanted),
+        );
     }
 }
 
