@@ -68,7 +68,7 @@ impl MenuLayout {
     ///
     /// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
     ///     let layout = MenuLayout::resolve(load)?;
-    ///     assert_eq!(layout.set, 0x28);
+    ///     enshwick_loader_api::info!("crafting menu at {:#x}", layout.collection);
     ///     Ok(())
     /// }
     /// ```
@@ -389,7 +389,7 @@ pub(crate) fn serve(
     let layout = match MenuLayout::resolve(load) {
         Ok(layout) => layout,
         Err(off) => {
-            crate::warn!("new recipes stay out of the crafting menu: {off}");
+            crate::warn_once!("new recipes stay out of the crafting menu: {off}");
             return Ok(());
         }
     };
@@ -532,6 +532,22 @@ mod tests {
         assert_eq!(
             read(&second),
             [(9, vec![vec![vec![CHEST.id(), SAFE.id(), VAULT.id(), 5]]])]
+        );
+    }
+
+    #[test]
+    fn of_two_mods_copying_one_recipe_the_later_one_comes_first() {
+        let base = bundle(&[(9, &[&[&[CHEST.id(), 5]]])]);
+        let after_chest = |recipe| MenuEntry {
+            recipe,
+            after: Some(CHEST),
+            workshop: None,
+        };
+        let first = list_recipes(&LAYOUT, &base, &[after_chest(SAFE)]).unwrap();
+        let second = list_recipes(&LAYOUT, &first, &[after_chest(VAULT)]).unwrap();
+        assert_eq!(
+            read(&second),
+            [(9, vec![vec![vec![CHEST.id(), VAULT.id(), SAFE.id(), 5]]])]
         );
     }
 

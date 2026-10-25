@@ -304,6 +304,24 @@ fn vanilla_registry() -> Option<Vec<u8>> {
     super::game_resource(RECIPE_REGISTRY.key(types::RECIPE_REGISTRY))
 }
 
+/// The GUIDs of the recipes in `registry`.
+fn recipe_guids(layout: &RecipeLayout, registry: &[u8]) -> Option<std::collections::HashSet<Guid>> {
+    let blob = Blob::new(registry);
+    let (start, count) = blob.array(layout.recipes)?;
+    Some(
+        (0..usize::try_from(count).ok()?)
+            .map(|i| {
+                RecipeView {
+                    blob: &blob,
+                    at: start + i * layout.recipe,
+                    layout,
+                }
+                .guid()
+            })
+            .collect(),
+    )
+}
+
 /// The GUID of the first recipe in `registry` that makes `item`.
 fn recipe_making(layout: &RecipeLayout, registry: &[u8], item: Guid) -> Option<Guid> {
     let registry = Blob::new(registry);
@@ -804,7 +822,8 @@ impl Load<'_> {
     /// Adds a derived copy of each vanilla recipe `choose` picks: same
     /// workshop and unlock, its output and cost scaled as [`Derived`] says,
     /// beside the original, in the registry and in the client's crafting
-    /// menu. `salt` keeps the copies' GUIDs apart from other mods'; use the
+    /// menu. `choose` sees only the game's own recipes, never those mods
+    /// add. `salt` keeps the copies' GUIDs apart from other mods'; use the
     /// mod id.
     ///
     /// # Errors
@@ -836,7 +855,19 @@ impl Load<'_> {
         let choose = Arc::new(choose);
         let chosen = Arc::clone(&choose);
         self.serve(registry, registry, move |base| {
-            derive_recipes_in(&layout, base, salt, workshop_limit(), &*chosen)
+            let vanilla =
+                vanilla_registry().and_then(|registry| recipe_guids(&layout, &registry));
+            if vanilla.is_none() {
+                crate::warn!(
+                    "derived recipes may copy recipes of other mods: the game's recipe registry does not read"
+                );
+            }
+            derive_recipes_in(&layout, base, salt, workshop_limit(), &|view| {
+                let added = vanilla
+                    .as_ref()
+                    .is_some_and(|vanilla| !vanilla.contains(&view.guid()));
+                if added { None } else { chosen(view) }
+            })
         })?;
         menu::serve(self, move |menu, bundle| {
             let entries = vanilla_registry()

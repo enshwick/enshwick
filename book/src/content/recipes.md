@@ -92,10 +92,10 @@ shows what a recipe is:
 - `output()`, the item it makes and how many, `None` for a recipe without
   output.
 
-The view lists the registry as it reaches this patch, so it includes the
-recipes of mods that patched before yours, and the copies of your own
-earlier `derive_recipes` calls. A copy keeps the debug name of the recipe it
-copies; pick by name with that in mind.
+`choose` sees only the game's own recipes: recipes other mods add, and the
+copies of your own earlier calls, are never offered, since the crafting menu
+places each copy after a recipe it knows before any mod's registry patch
+runs.
 
 ### The salt
 
@@ -150,13 +150,15 @@ module does the edit:
 
 - a new recipe goes right after the vanilla recipe that makes `like`, in the
   same set;
-- a derived copy goes right after its original;
+- a derived copy goes right after its original; `derive_recipes` copies
+  only the game's own recipes, never those mods add;
 - a recipe whose `workshop` names another workshop goes last in that
   workshop's first set, unless the copied recipe is listed there.
 
 The menu is shared like the registry: each mod's patch runs on the bundle as
-the mods before it left it, so the Safe of one mod and the Vault of another,
-both copied from the wooden chest, show one after the other. One group of
+the mods before it left it. Each new recipe goes right after the one it
+copies, so of the Safe of one mod and the Vault of a mod loaded later, both
+copied from the wooden chest, the Vault shows first: chest, Vault, Safe. One group of
 the menu shows at most 512 recipes, all its sets together
 ([`GROUP_ENTRIES`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/content/menu.rs));
 the mod's log says when a recipe is left out because its group is full or

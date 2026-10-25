@@ -4,7 +4,7 @@
 
 #[cfg(test)]
 mod tests {
-    use enshwick_loader_api::abi::{Side, Status};
+    use enshwick_loader_api::abi::{Level, Side, Status};
     use enshwick_loader_api::content::menu::UI_BUNDLE;
     use enshwick_loader_api::content::recipes::{
         Derived, NewRecipe, RECIPE_REGISTRY, derived_guid,
@@ -57,14 +57,12 @@ mod tests {
                 workshop: Some(bench),
             })?;
             load.derive_recipes("menu", |recipe| {
-                recipe
-                    .debug_name()
-                    .starts_with("Block_")
-                    .then_some(Derived {
-                        output: 2,
-                        cost: 1,
-                        workshop: None,
-                    })
+                let name = recipe.debug_name();
+                (name.starts_with("Block_") || name == "Prop_Chest").then_some(Derived {
+                    output: 2,
+                    cost: 1,
+                    workshop: None,
+                })
             })?;
             Ok(Self)
         }
@@ -149,7 +147,7 @@ mod tests {
             .collect()
     }
 
-    fn host(side: Side) -> FakeHost {
+    fn host(side: Side, menu: bool) -> FakeHost {
         let mut host = FakeHost::new()
             .side(side)
             .resource(RECIPE_REGISTRY.key(types::RECIPE_REGISTRY), registry());
@@ -211,6 +209,13 @@ mod tests {
             ("keen::WorkshopResource", "item", 0x24),
             ("keen::WorkshopResource", "itemRef", 0x34),
             ("keen::WorkshopResource", "isNpc", 0x3c),
+        ] {
+            host = host.field_offset(ty, field, at);
+        }
+        if !menu {
+            return host;
+        }
+        for (ty, field, at) in [
             ("keen::FbUiBundle", "menu", 0x30),
             ("keen::FbUiMenu", "crafting", 0x8),
             ("keen::FbUiCrafting", "recipes", 0x8),
@@ -236,8 +241,8 @@ mod tests {
         host
     }
 
-    fn start(side: Side) -> Installed {
-        let loader = host(side).install();
+    fn start(side: Side, menu: bool) -> Installed {
+        let loader = host(side, menu).install();
         // SAFETY: the exports of `declare_mod!` above.
         let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(
@@ -252,11 +257,12 @@ mod tests {
 
     #[test]
     fn the_client_menu_lists_new_recipes_beside_the_ones_they_copy() {
-        let loader = start(Side::CLIENT);
+        let loader = start(Side::CLIENT, true);
         let key = UI_BUNDLE.key(types::UI_BUNDLE);
         let built = loader.build_resource(&key, &bundle()).unwrap();
         let bench = WorkshopId::new(BENCH.guid()).id();
-        let derived = derived_guid(PLANK_RECIPE, fnv1a(b"menu")).id();
+        let plank = derived_guid(PLANK_RECIPE, fnv1a(b"menu")).id();
+        let chest = derived_guid(CHEST_RECIPE, fnv1a(b"menu")).id();
         assert_eq!(
             menu(&built),
             [
@@ -264,8 +270,9 @@ mod tests {
                     CARPENTER,
                     vec![vec![vec![
                         PLANK_RECIPE.id(),
-                        derived,
+                        plank,
                         CHEST_RECIPE.id(),
+                        chest,
                         SAFE_RECIPE.guid().id(),
                         5
                     ]]]
@@ -276,8 +283,34 @@ mod tests {
     }
 
     #[test]
+    fn derived_recipes_copy_only_the_game_s_own_recipes() {
+        let loader = start(Side::CLIENT, true);
+        let key = RECIPE_REGISTRY.key(types::RECIPE_REGISTRY);
+        let built = Blob::new(&loader.build_resource(&key, &registry()).unwrap());
+        let (_, count) = built.array(0).unwrap();
+        assert_eq!(count, 6, "two vanilla, the Safe, the locker, two copies");
+    }
+
+    #[test]
+    fn a_client_without_the_menu_s_reflection_still_adds_the_recipes() {
+        let loader = start(Side::CLIENT, false);
+        let served: Vec<_> = loader.resources().iter().map(|r| r.key).collect();
+        assert!(served.contains(&RECIPE_REGISTRY.key(types::RECIPE_REGISTRY)));
+        assert!(!served.contains(&UI_BUNDLE.key(types::UI_BUNDLE)));
+        assert!(
+            loader
+                .logs()
+                .iter()
+                .any(|(level, line)| *level == Level::WARN
+                    && line.contains("stay out of the crafting menu")),
+            "{:?}",
+            loader.logs()
+        );
+    }
+
+    #[test]
     fn the_dedicated_server_serves_no_menu() {
-        let loader = start(Side::SERVER);
+        let loader = start(Side::SERVER, true);
         let key = UI_BUNDLE.key(types::UI_BUNDLE);
         assert!(loader.resources().iter().all(|r| r.key != key));
         assert_eq!(loader.build_resource(&key, &bundle()), Err(Status::MISSING));
