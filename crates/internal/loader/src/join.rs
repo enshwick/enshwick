@@ -28,6 +28,16 @@ const QUERY_TIMEOUT: Duration = Duration::from_secs(2);
 
 /// The names players read, by mod id: the client's own and those the server
 /// advertises.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::join::Names;
+///
+/// let mut names = Names::new();
+/// names.insert("safes".to_owned(), "Safes".to_owned());
+/// assert_eq!(names["safes"], "Safes");
+/// ```
 pub type Names = BTreeMap<String, String>;
 
 /// The longest mod name a server may advertise, in characters.
@@ -57,6 +67,16 @@ fn label(names: &Names, id: &str) -> String {
 }
 
 /// What the client does when it joins.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::join::{Names, plan};
+///
+/// let plan = plan("e5db5dca", "safes@1.0.0", Some(("989b6a71", "safes@2.0.0")), true, &Names::new());
+/// assert!(!plan.joins());
+/// assert_eq!(plan.missing, ["safes: server 2.0.0, yours 1.0.0"]);
+/// ```
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct Plan {
     /// The client's mods the server does not run: turned off, with a note.
@@ -70,6 +90,14 @@ pub struct Plan {
 
 impl Plan {
     /// Whether the client joins: the server runs no mod it lacks.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::join::Plan;
+    ///
+    /// assert!(Plan::default().joins());
+    /// ```
     #[must_use]
     pub fn joins(&self) -> bool {
         self.missing.is_empty()
@@ -77,6 +105,15 @@ impl Plan {
 
     /// The client's mods to turn off now: none when it stays out, since
     /// it never reaches the server that lacks them.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::join::Plan;
+    ///
+    /// let plan = Plan { turn_off: vec!["safes".to_owned()], ..Plan::default() };
+    /// assert_eq!(plan.turned_off(), ["safes"]);
+    /// ```
     #[must_use]
     pub fn turned_off(&self) -> &[String] {
         if self.joins() { &self.turn_off } else { &[] }
@@ -84,6 +121,18 @@ impl Plan {
 
     /// The note for the player, if any, naming mods by `names`; `blocking`
     /// when the client stays out.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::join::{Names, Plan};
+    ///
+    /// let plan = Plan { missing: vec!["safes: server 2.0.0, not installed".to_owned()], ..Plan::default() };
+    /// let (_, blocking) = plan.message(&Names::new()).ok_or("no note")?;
+    /// assert!(blocking);
+    /// assert_eq!(Plan::default().message(&Names::new()), None);
+    /// # Ok::<(), &str>(())
+    /// ```
     #[must_use]
     pub fn message(&self, names: &Names) -> Option<(String, bool)> {
         if !self.missing.is_empty() {
@@ -118,6 +167,16 @@ impl Plan {
 /// mod list), or no Enshwick at all; notes name mods by `names`. A list that
 /// is not `complete` holds only the first of the server's mods, so a mod of
 /// ours it does not name may still run there and stays on.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::join::{Names, plan};
+///
+/// let plan = plan("e5db5dca", "safes@1.0.0,camera@1.0.0", Some(("989b6a71", "safes@1.0.0")), true, &Names::new());
+/// assert!(plan.joins());
+/// assert_eq!(plan.turned_off(), ["camera"]);
+/// ```
 #[must_use]
 pub fn plan(
     ours: &str,
@@ -157,6 +216,15 @@ pub fn plan(
 /// One entry per mod whose version differs between two `id@version,...`
 /// lists: its id, whether the server runs it, and a line naming it by
 /// `names` and both versions.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::join::{Names, differences};
+///
+/// let found = differences("safes@2.0.0", "safes@1.0.0", &Names::new());
+/// assert_eq!(found, [("safes".to_owned(), true, "safes: server 2.0.0, yours 1.0.0".to_owned())]);
+/// ```
 #[must_use]
 pub fn differences(server: &str, ours: &str, names: &Names) -> Vec<(String, bool, String)> {
     let parse = |list: &str| -> BTreeMap<String, String> {
@@ -186,6 +254,15 @@ pub fn differences(server: &str, ours: &str, names: &Names) -> Vec<(String, bool
 
 /// The server's mods, `(id, version)`, that the client lacks or runs in
 /// another version, from two `id@version,...` lists.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::join::wanted;
+///
+/// let wanted = wanted("safes@2.0.0,camera@1.0.0", "camera@1.0.0");
+/// assert_eq!(wanted, [("safes".to_owned(), "2.0.0".to_owned())]);
+/// ```
 #[must_use]
 pub fn wanted(server: &str, ours: &str) -> Vec<(String, String)> {
     let ours: BTreeMap<&str, &str> = entries(ours).collect();
@@ -198,6 +275,17 @@ pub fn wanted(server: &str, ours: &str) -> Vec<(String, String)> {
 /// The note on the server's mods, of `wanted`, that the player turned off in
 /// the mod list (`disabled`) or that this game turned off since it started
 /// (`session_off`); `None` when there are none.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::join::off_note;
+///
+/// let wanted = [("safes".to_owned(), "2.0.0".to_owned())];
+/// let note = off_note(&wanted, &["safes".to_owned()], &[]);
+/// assert!(note.is_some_and(|note| note.starts_with("You turned off safes")));
+/// assert_eq!(off_note(&wanted, &[], &[]), None);
+/// ```
 #[must_use]
 pub fn off_note(
     wanted: &[(String, String)],
@@ -240,6 +328,26 @@ pub fn off_note(
 
 /// The update source a server advertises for mod `id`; `None` when it
 /// advertises none or one this loader cannot read.
+///
+/// # Examples
+///
+/// ```
+/// # fn reply(rules: &[(&str, &str)]) -> Vec<u8> {
+/// #     let mut reply = vec![0xff, 0xff, 0xff, 0xff, b'E', 0, 0];
+/// #     for (key, value) in rules {
+/// #         reply.extend_from_slice(key.as_bytes());
+/// #         reply.push(0);
+/// #         reply.extend_from_slice(value.as_bytes());
+/// #         reply.push(0);
+/// #     }
+/// #     reply
+/// # }
+/// use enshwick::join::source;
+///
+/// let reply = reply(&[("enshwick.src.safes", "github:themaiby/enshwick:enshwick-safes")]);
+/// assert!(source(&reply, "safes").is_some());
+/// assert!(source(&reply, "camera").is_none());
+/// ```
 #[must_use]
 pub fn source(reply: &[u8], id: &str) -> Option<Updates> {
     let line = rule(reply, &format!("{}.{id}", crate::advertise::RULE_SOURCE))?;
@@ -248,6 +356,26 @@ pub fn source(reply: &[u8], id: &str) -> Option<Updates> {
 
 /// The name a server advertises for mod `id`, on one line and at most
 /// [`MAX_NAME`] characters; empty when it advertises none.
+///
+/// # Examples
+///
+/// ```
+/// # fn reply(rules: &[(&str, &str)]) -> Vec<u8> {
+/// #     let mut reply = vec![0xff, 0xff, 0xff, 0xff, b'E', 0, 0];
+/// #     for (key, value) in rules {
+/// #         reply.extend_from_slice(key.as_bytes());
+/// #         reply.push(0);
+/// #         reply.extend_from_slice(value.as_bytes());
+/// #         reply.push(0);
+/// #     }
+/// #     reply
+/// # }
+/// use enshwick::join::name;
+///
+/// let reply = reply(&[("enshwick.name.safes", "Safes")]);
+/// assert_eq!(name(&reply, "safes"), "Safes");
+/// assert_eq!(name(&reply, "camera"), "");
+/// ```
 #[must_use]
 pub fn name(reply: &[u8], id: &str) -> String {
     rule(reply, &format!("{}.{id}", crate::advertise::RULE_NAME))
@@ -264,6 +392,25 @@ pub fn name(reply: &[u8], id: &str) -> String {
 
 /// The author keys a server advertises for mod `id`; empty when it
 /// advertises none or a line this loader cannot read.
+///
+/// # Examples
+///
+/// ```
+/// # fn reply(rules: &[(&str, &str)]) -> Vec<u8> {
+/// #     let mut reply = vec![0xff, 0xff, 0xff, 0xff, b'E', 0, 0];
+/// #     for (key, value) in rules {
+/// #         reply.extend_from_slice(key.as_bytes());
+/// #         reply.push(0);
+/// #         reply.extend_from_slice(value.as_bytes());
+/// #         reply.push(0);
+/// #     }
+/// #     reply
+/// # }
+/// use enshwick::join::keys;
+///
+/// let reply = reply(&[("enshwick.name.safes", "Safes")]);
+/// assert!(keys(&reply, "safes").is_empty());
+/// ```
 #[must_use]
 pub fn keys(reply: &[u8], id: &str) -> Vec<String> {
     rule(reply, &format!("{}.{id}", crate::advertise::RULE_KEY))
@@ -272,6 +419,25 @@ pub fn keys(reply: &[u8], id: &str) -> Vec<String> {
 }
 
 /// The whole mod list a server advertises across its mod rules.
+///
+/// # Examples
+///
+/// ```
+/// # fn reply(rules: &[(&str, &str)]) -> Vec<u8> {
+/// #     let mut reply = vec![0xff, 0xff, 0xff, 0xff, b'E', 0, 0];
+/// #     for (key, value) in rules {
+/// #         reply.extend_from_slice(key.as_bytes());
+/// #         reply.push(0);
+/// #         reply.extend_from_slice(value.as_bytes());
+/// #         reply.push(0);
+/// #     }
+/// #     reply
+/// # }
+/// use enshwick::join::mod_rules_value;
+///
+/// let reply = reply(&[("enshwick.mods", "safes@1.0.0"), ("enshwick.mods.1", "camera@1.0.0")]);
+/// assert_eq!(mod_rules_value(&reply), "safes@1.0.0,camera@1.0.0");
+/// ```
 #[must_use]
 pub fn mod_rules_value(reply: &[u8]) -> String {
     (0..crate::advertise::MOD_RULES)
@@ -284,6 +450,26 @@ pub fn mod_rules_value(reply: &[u8]) -> String {
 /// Whether the mod list across the mod rules is the server's whole list: a
 /// server whose list did not fit gives its number of mods in
 /// [`crate::advertise::RULE_MOD_COUNT`].
+///
+/// # Examples
+///
+/// ```
+/// # fn reply(rules: &[(&str, &str)]) -> Vec<u8> {
+/// #     let mut reply = vec![0xff, 0xff, 0xff, 0xff, b'E', 0, 0];
+/// #     for (key, value) in rules {
+/// #         reply.extend_from_slice(key.as_bytes());
+/// #         reply.push(0);
+/// #         reply.extend_from_slice(value.as_bytes());
+/// #         reply.push(0);
+/// #     }
+/// #     reply
+/// # }
+/// use enshwick::join::mods_complete;
+///
+/// let cut = reply(&[("enshwick.mods", "safes@1.0.0"), ("enshwick.mods.count", "2")]);
+/// assert!(!mods_complete(&cut));
+/// assert!(mods_complete(&reply(&[("enshwick.mods", "safes@1.0.0")])));
+/// ```
 #[must_use]
 pub fn mods_complete(reply: &[u8]) -> bool {
     rule(reply, crate::advertise::RULE_MOD_COUNT)
@@ -293,6 +479,25 @@ pub fn mods_complete(reply: &[u8]) -> bool {
 
 /// The join values a server advertises for mod `id` across its rules, `None`
 /// when it advertises none.
+///
+/// # Examples
+///
+/// ```
+/// # fn reply(rules: &[(&str, &str)]) -> Vec<u8> {
+/// #     let mut reply = vec![0xff, 0xff, 0xff, 0xff, b'E', 0, 0];
+/// #     for (key, value) in rules {
+/// #         reply.extend_from_slice(key.as_bytes());
+/// #         reply.push(0);
+/// #         reply.extend_from_slice(value.as_bytes());
+/// #         reply.push(0);
+/// #     }
+/// #     reply
+/// # }
+/// use enshwick::join::sync_value;
+///
+/// let reply = reply(&[("enshwick.sync.safes", "{ cost_multiplier = 2 }")]);
+/// assert_eq!(sync_value(&reply, "safes").as_deref(), Some("{ cost_multiplier = 2 }"));
+/// ```
 #[must_use]
 pub fn sync_value(reply: &[u8], id: &str) -> Option<String> {
     let base = format!("{}.{id}", crate::advertise::RULE_SYNC);
@@ -303,6 +508,26 @@ pub fn sync_value(reply: &[u8], id: &str) -> Option<String> {
 }
 
 /// The join values a server advertises for each of the mods `ids`.
+///
+/// # Examples
+///
+/// ```
+/// # fn reply(rules: &[(&str, &str)]) -> Vec<u8> {
+/// #     let mut reply = vec![0xff, 0xff, 0xff, 0xff, b'E', 0, 0];
+/// #     for (key, value) in rules {
+/// #         reply.extend_from_slice(key.as_bytes());
+/// #         reply.push(0);
+/// #         reply.extend_from_slice(value.as_bytes());
+/// #         reply.push(0);
+/// #     }
+/// #     reply
+/// # }
+/// use enshwick::join::server_values;
+///
+/// let reply = reply(&[("enshwick.sync.safes", "{ cost_multiplier = 2 }")]);
+/// let values = server_values(&reply, ["safes", "camera"]);
+/// assert_eq!(values.len(), 1);
+/// ```
 #[must_use]
 pub fn server_values<'a>(
     reply: &[u8],
@@ -317,6 +542,18 @@ pub fn server_values<'a>(
 /// from each mod's id (empty for a mod that does not join) and the server
 /// values it runs with now: the mod's index and the values it runs with
 /// next, `None` for its settings file's.
+///
+/// # Examples
+///
+/// ```
+/// use std::collections::BTreeMap;
+///
+/// use enshwick::join::changes;
+///
+/// let incoming = BTreeMap::from([("safes".to_owned(), "{ cost_multiplier = 2 }".to_owned())]);
+/// let changed = changes([("safes", None), ("", None)], &incoming);
+/// assert_eq!(changed, [(0, Some("{ cost_multiplier = 2 }".to_owned()))]);
+/// ```
 #[must_use]
 pub fn changes<'a>(
     current: impl IntoIterator<Item = (&'a str, Option<&'a str>)>,
@@ -334,40 +571,165 @@ pub fn changes<'a>(
 }
 
 /// The bytes of a join target the check reads, up to its address flag.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::join::{HAS_ADDRESS, TARGET_BYTES};
+///
+/// assert_eq!(TARGET_BYTES, HAS_ADDRESS + 1);
+/// ```
 pub const TARGET_BYTES: usize = HAS_ADDRESS + 1;
-/// The start of the join target the game hands its online provider: the
-/// host's Steam id at 0, the server's IPv4 at 8 with its game port at 0xc
-/// and query port at 0xe, and at 0x20 a flag that the address is set; the
-/// password follows at 0x24 (client builds 410 and 426). A join into a
-/// hosted game names the lobby and no address.
+/// The start of the join target the game hands its online provider, up to
+/// the flag that its address is set (client builds 410 and 426). A join into
+/// a hosted game names the lobby and no address.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::join::{Destination, TARGET_BYTES, Target, destination};
+///
+/// let lobby: Target = [0; TARGET_BYTES];
+/// assert_eq!(destination(&lobby), Destination::Lobby);
+/// ```
 pub type Target = [u8; TARGET_BYTES];
-const HOST: usize = 0;
-const IP: usize = 8;
-const QUERY_PORT: usize = 0xe;
-const HAS_ADDRESS: usize = 0x20;
+/// Where a join target holds the host's Steam id: the dedicated server's, or
+/// the hosted game's lobby.
+pub const HOST: usize = 0;
+/// Where a join target holds the server's IPv4, as a little-endian `u32`.
+pub const IP: usize = 8;
+/// Where a join target holds the server's game port.
+pub const GAME_PORT: usize = 0xc;
+/// Where a join target holds the server's Steam query port.
+pub const QUERY_PORT: usize = 0xe;
+/// Where a join target holds the flag, 1, that its address is set.
+pub const HAS_ADDRESS: usize = 0x20;
+/// Where a join target holds the password, a string object of the game's.
+pub const PASSWORD: usize = 0x24;
+const _: () = assert!(
+    TARGET_BYTES <= PASSWORD,
+    "the check reads no byte of the password"
+);
 
-/// The server's query address in a join target, `None` for a join without
-/// one.
+/// Where a join leads, read from its target as the game reads it.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::join::{Destination, GAME_PORT, HAS_ADDRESS, IP, TARGET_BYTES, destination};
+///
+/// let mut target = [0; TARGET_BYTES];
+/// target[IP..IP + 4].copy_from_slice(&0x7f00_0001_u32.to_le_bytes());
+/// target[GAME_PORT..GAME_PORT + 2].copy_from_slice(&15646_u16.to_le_bytes());
+/// target[HAS_ADDRESS] = 1;
+/// assert_eq!(
+///     destination(&target),
+///     Destination::NoQueryPort { game: "127.0.0.1:15646".parse()? }
+/// );
+/// # Ok::<(), std::net::AddrParseError>(())
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum Destination {
+    /// A hosted game's lobby: the target sets no address and game port.
+    Lobby,
+    /// A dedicated server, whose rules are asked at `query`.
+    Server {
+        /// The server's address with its query port.
+        query: SocketAddr,
+    },
+    /// A dedicated server whose target names no query port.
+    NoQueryPort {
+        /// The server's address with its game port.
+        game: SocketAddr,
+    },
+}
+
+/// Reads where a join target leads: a dedicated server when its address is
+/// set with an IPv4 and a game port, as the game decides, else a lobby.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::join::{
+///     Destination, GAME_PORT, HAS_ADDRESS, IP, QUERY_PORT, TARGET_BYTES, destination,
+/// };
+///
+/// let mut target = [0; TARGET_BYTES];
+/// target[IP..IP + 4].copy_from_slice(&0x7f00_0001_u32.to_le_bytes());
+/// target[GAME_PORT..GAME_PORT + 2].copy_from_slice(&15646_u16.to_le_bytes());
+/// target[QUERY_PORT..QUERY_PORT + 2].copy_from_slice(&15647_u16.to_le_bytes());
+/// target[HAS_ADDRESS] = 1;
+/// assert_eq!(
+///     destination(&target),
+///     Destination::Server { query: "127.0.0.1:15647".parse()? }
+/// );
+/// # Ok::<(), std::net::AddrParseError>(())
+/// ```
 #[must_use]
-pub fn address(target: &Target) -> Option<SocketAddr> {
-    if target[HAS_ADDRESS] != 1 {
-        return None;
+pub fn destination(target: &Target) -> Destination {
+    let ip = std::net::Ipv4Addr::from(u32::from_le_bytes(field(target, IP)));
+    let game = u16::from_le_bytes(field(target, GAME_PORT));
+    let query = u16::from_le_bytes(field(target, QUERY_PORT));
+    if target[HAS_ADDRESS] != 1 || ip.is_unspecified() || game == 0 {
+        Destination::Lobby
+    } else if query == 0 {
+        Destination::NoQueryPort {
+            game: (ip, game).into(),
+        }
+    } else {
+        Destination::Server {
+            query: (ip, query).into(),
+        }
     }
-    let ip = u32::from_le_bytes(*target[IP..].first_chunk()?);
-    let port = u16::from_le_bytes(*target[QUERY_PORT..].first_chunk()?);
-    (ip != 0 && port != 0).then(|| SocketAddr::from((std::net::Ipv4Addr::from(ip), port)))
+}
+
+/// The `N` bytes of a join target from `at`, inside the target.
+fn field<const N: usize>(target: &Target, at: usize) -> [u8; N] {
+    core::array::from_fn(|i| target[at + i])
 }
 
 /// Takes the host out of a join target, so the game's own join step fails
 /// on an invalid host and goes back to the menu, and returns the host to put
 /// back once the game has copied the target.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::join::{HOST, TARGET_BYTES, refuse};
+///
+/// let mut target = [0; TARGET_BYTES];
+/// target[HOST..HOST + 8].copy_from_slice(&7_u64.to_le_bytes());
+/// assert_eq!(refuse(&mut target), 7);
+/// assert_eq!(target, [0; TARGET_BYTES]);
+/// ```
+#[must_use]
 pub fn refuse(target: &mut Target) -> u64 {
-    target[HOST..]
-        .first_chunk_mut()
-        .map_or(0, |host| u64::from_le_bytes(core::mem::take(host)))
+    let host = u64::from_le_bytes(field(target, HOST));
+    target[HOST..HOST + 8].fill(0);
+    host
 }
 
 /// The value of `key` in an `A2S_RULES` reply.
+///
+/// # Examples
+///
+/// ```
+/// # fn reply(rules: &[(&str, &str)]) -> Vec<u8> {
+/// #     let mut reply = vec![0xff, 0xff, 0xff, 0xff, b'E', 0, 0];
+/// #     for (key, value) in rules {
+/// #         reply.extend_from_slice(key.as_bytes());
+/// #         reply.push(0);
+/// #         reply.extend_from_slice(value.as_bytes());
+/// #         reply.push(0);
+/// #     }
+/// #     reply
+/// # }
+/// use enshwick::join::rule;
+///
+/// let reply = reply(&[("enshwick", "e5db5dca")]);
+/// assert_eq!(rule(&reply, "enshwick").as_deref(), Some("e5db5dca"));
+/// ```
 #[must_use]
 pub fn rule(reply: &[u8], key: &str) -> Option<String> {
     let body = reply.strip_prefix(&[0xff, 0xff, 0xff, 0xff, b'E'])?;
@@ -437,6 +799,17 @@ impl Split {
 /// # Errors
 ///
 /// When the server does not answer in time, or not with rules.
+///
+/// # Examples
+///
+/// ```no_run
+/// use enshwick::join::{query_rules, rule};
+///
+/// let reply = query_rules("127.0.0.1:15647".parse()?)?;
+/// let fingerprint = rule(&reply, "enshwick");
+/// # drop(fingerprint);
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 pub fn query_rules(server: SocketAddr) -> std::io::Result<Vec<u8>> {
     let socket = UdpSocket::bind(if server.is_ipv4() {
         "0.0.0.0:0"
@@ -498,8 +871,9 @@ mod runtime {
 
     /// The online provider's join: every join from the game's menus, to a
     /// dedicated server or into a hosted game's lobby, passes a target
-    /// ([`super::Target`]) through it (client builds 410 and 426).
-    pub(crate) type JoinGame = unsafe extern "system" fn(provider: *mut u8, target: *mut u8);
+    /// ([`super::Target`]) through it, and it ends in the provider's state
+    /// change, whose `bool` it returns in `al` (client builds 410 and 426).
+    pub(crate) type JoinGame = unsafe extern "system" fn(provider: *mut u8, target: *mut u8) -> u8;
 
     // SAFETY: the slot joins the chain of the join, typed `JoinGame`.
     /// The rest of the chain after the loader's link.
@@ -518,28 +892,38 @@ mod runtime {
     }
 
     /// The loader's link on the online provider's join.
-    pub(crate) unsafe extern "system" fn detour(provider: *mut u8, target: *mut u8) {
+    pub(crate) unsafe extern "system" fn detour(provider: *mut u8, target: *mut u8) -> u8 {
         let allowed = target.is_null() || {
             // SAFETY: the game's join target holds at least `TARGET_BYTES`
-            // (client builds 410 and 426); its bytes are plain data.
+            // of plain data (client builds 410 and 426).
             let head = unsafe { target.cast::<super::Target>().read_unaligned() };
             std::panic::catch_unwind(|| check(&head)).unwrap_or(true)
         };
         if allowed {
             // SAFETY: forwarded unchanged.
-            unsafe { NEXT.get()(provider, target) };
-            return;
+            return unsafe { NEXT.get()(provider, target) };
         }
         crate::log!(WARN, "join refused: the server runs mods this client lacks");
-        // The game copies the target during the call, so the caller's own
-        // copy gets its host back afterwards.
-        // SAFETY: the target is the caller's writable join target, not
-        // null, and no other reference to it is live.
+        // The provider copies the target into its own state before it
+        // returns, and the caller keeps its target, so the caller's copy
+        // gets its host back (client builds 410 and 426).
+        // SAFETY: the target is the caller's join target, writable for the
+        // length of this call and not null; the reference ends here, before
+        // the game reads the target.
         let host = super::refuse(unsafe { &mut *target.cast::<super::Target>() });
         // SAFETY: forwarded with the host taken out.
-        unsafe { NEXT.get()(provider, target) };
-        // SAFETY: the same target, its host id an unaligned u64 at its start.
-        unsafe { target.cast::<u64>().write_unaligned(host) };
+        let state_changed = unsafe { NEXT.get()(provider, target) };
+        // SAFETY: the caller's target outlives this call, which its caller
+        // makes with the target in hand, and the game holds no reference to
+        // it once the provider returned (client builds 410 and 426); its
+        // host id is an unaligned u64 at `HOST`.
+        unsafe {
+            target
+                .wrapping_add(super::HOST)
+                .cast::<u64>()
+                .write_unaligned(host);
+        }
+        state_changed
     }
 
     /// Joins a game whose mods the check cannot read, on the client's own
@@ -550,19 +934,34 @@ mod runtime {
         true
     }
 
+    /// The address to ask a join's server at, `None` for a join the check
+    /// cannot ask about, with the reason logged.
+    fn query_address(target: &super::Target) -> Option<std::net::SocketAddr> {
+        match super::destination(target) {
+            super::Destination::Server { query } => Some(query),
+            super::Destination::Lobby => {
+                // A hosted game's lobby: the lobby module reads its host's
+                // mods once the client enters it.
+                crate::log!(INFO, "joining a hosted game's lobby");
+                None
+            }
+            super::Destination::NoQueryPort { game } => {
+                crate::log!(
+                    WARN,
+                    "joining {game}: the game names no query port, so the join check cannot ask the server"
+                );
+                None
+            }
+        }
+    }
+
     /// Compares mod sets, turns off what the server lacks, takes the server's
     /// join values and tells the player; false when the client must not join.
     fn check(target: &super::Target) -> bool {
         let Some(own_names) = NAMES.get() else {
             return true;
         };
-        let Some(address) = super::address(target) else {
-            // A hosted game's lobby: the lobby module reads its host's mods
-            // once the client enters it.
-            crate::log!(
-                INFO,
-                "joining a game without a server address, as a hosted game"
-            );
+        let Some(address) = query_address(target) else {
             return unchecked();
         };
         // Read now: a mod an earlier server or a failed hook turned off no
@@ -959,28 +1358,46 @@ count turned off"
         has_address: bool,
     ) -> Target {
         let mut target = [0u8; TARGET_BYTES];
-        target[..8].copy_from_slice(&host.to_le_bytes());
-        target[8..12].copy_from_slice(&u32::from_be_bytes(ip).to_le_bytes());
-        target[12..14].copy_from_slice(&game_port.to_le_bytes());
-        target[14..16].copy_from_slice(&query_port.to_le_bytes());
-        target[0x20] = u8::from(has_address);
+        target[HOST..HOST + 8].copy_from_slice(&host.to_le_bytes());
+        target[IP..IP + 4].copy_from_slice(&u32::from_be_bytes(ip).to_le_bytes());
+        target[GAME_PORT..GAME_PORT + 2].copy_from_slice(&game_port.to_le_bytes());
+        target[QUERY_PORT..QUERY_PORT + 2].copy_from_slice(&query_port.to_le_bytes());
+        target[HAS_ADDRESS] = u8::from(has_address);
         target
     }
 
     #[test]
     fn a_dedicated_server_is_asked_at_its_query_port() {
         let target = target(90_295_777_516_953_619, [127, 0, 0, 1], 15646, 15647, true);
-        assert_eq!(address(&target), Some("127.0.0.1:15647".parse().unwrap()));
+        assert_eq!(
+            destination(&target),
+            Destination::Server {
+                query: "127.0.0.1:15647".parse().unwrap()
+            }
+        );
     }
 
     #[test]
-    fn a_lobby_join_has_no_address_to_ask() {
+    fn a_lobby_join_is_one_without_an_address_and_game_port() {
         let lobby = target(109_775_242_277_948_854, [0; 4], 0, 0, false);
-        assert_eq!(address(&lobby), None);
+        assert_eq!(destination(&lobby), Destination::Lobby);
         let unset = target(1, [10, 0, 0, 2], 15646, 15647, false);
-        assert_eq!(address(&unset), None);
-        let no_port = target(1, [10, 0, 0, 2], 15646, 0, true);
-        assert_eq!(address(&no_port), None);
+        assert_eq!(destination(&unset), Destination::Lobby);
+        let no_ip = target(1, [0; 4], 15646, 15647, true);
+        assert_eq!(destination(&no_ip), Destination::Lobby);
+        let no_game_port = target(1, [10, 0, 0, 2], 0, 15647, true);
+        assert_eq!(destination(&no_game_port), Destination::Lobby);
+    }
+
+    #[test]
+    fn a_dedicated_server_without_a_query_port_is_no_lobby() {
+        let target = target(1, [10, 0, 0, 2], 15646, 0, true);
+        assert_eq!(
+            destination(&target),
+            Destination::NoQueryPort {
+                game: "10.0.0.2:15646".parse().unwrap()
+            }
+        );
     }
 
     #[test]
@@ -989,9 +1406,9 @@ count turned off"
         let kept = target;
         let host = refuse(&mut target);
         assert_eq!(host, 90_295_777_516_953_619);
-        assert_eq!(target[..8], [0; 8]);
-        assert_eq!(target[8..], kept[8..]);
-        assert_eq!(address(&target), address(&kept));
+        assert_eq!(target[HOST..HOST + 8], [0; 8]);
+        assert_eq!(target[IP..], kept[IP..]);
+        assert_eq!(destination(&target), destination(&kept));
     }
 
     #[test]
