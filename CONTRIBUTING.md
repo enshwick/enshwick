@@ -6,7 +6,7 @@ and on Windows the MSVC build tools.
 
 ```bash
 bun install                                 # repository tools and the git hooks
-cargo install --locked cargo-nextest@0.9.148
+cargo install --locked cargo-nextest@0.9.149
 cargo nextest run --workspace
 ```
 
