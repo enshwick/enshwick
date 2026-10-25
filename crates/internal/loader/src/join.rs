@@ -23,6 +23,8 @@ use std::time::Duration;
 
 use enshwick_loader_api::mods::Updates;
 
+pub mod provider;
+
 /// The check holds the join, so a server that does not answer is not waited on long.
 const QUERY_TIMEOUT: Duration = Duration::from_secs(2);
 

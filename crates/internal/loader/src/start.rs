@@ -22,7 +22,11 @@ use crate::{builds, log, modlist};
 
 /// The build table ids this part of the loader names.
 #[cfg(windows)]
-pub(crate) const TABLE_IDS: &[&str] = &["net.join_game"];
+pub(crate) const TABLE_IDS: &[&str] = &[
+    crate::join::provider::JOIN_ID,
+    crate::join::provider::TABLE_ID,
+    crate::join::provider::SLOT_ID,
+];
 
 /// The client starts under Steam's DRM wrapper, which may check the game's code
 /// before it runs. The game opens its window only once its own code runs, so
@@ -428,16 +432,57 @@ fn link_join(loader: &Loader) {
         .collect();
     crate::join::set_names(names);
     crate::lobby::register();
-    loader.link_feature(
-        "join check",
-        loader
-            .build
-            .symbol("net.join_game")
-            .map(|rva| loader.base + rva),
-        &crate::join::NEXT,
-        crate::join::detour,
-        enshwick_loader_api::abi::HookFlags::NONE,
-    );
+    match verified_join(loader) {
+        Ok(join) => {
+            loader.link_feature(
+                "join check",
+                Some(join),
+                &crate::join::NEXT,
+                crate::join::detour,
+                enshwick_loader_api::abi::HookFlags::NONE,
+            );
+        }
+        Err(error) => crate::log!(
+            WARN,
+            "join check off on {}: {error}; nothing patched",
+            loader.build.name
+        ),
+    }
+}
+
+/// The online provider's join, once the provider's function table holds it
+/// where the build table says and its code starts with the pinned bytes.
+fn verified_join(loader: &Loader) -> Result<u64, crate::join::provider::Error> {
+    use crate::join::provider::{Error, Pins, verify};
+    let pins = Pins::from_table(
+        |id| loader.build.symbol(id),
+        |id| loader.build.constant(id),
+        loader.base,
+    )?;
+    let unreadable = Error::Unreadable { table: pins.table };
+    let range = |start: usize, len: usize| {
+        let start = u64::try_from(start).ok()?;
+        Some(start..start.checked_add(u64::try_from(len).ok()?)?)
+    };
+    let (_, base, image_len) = identify().ok_or_else(|| unreadable.clone())?;
+    let image = usize::try_from(base)
+        .ok()
+        .and_then(|base| range(base, image_len))
+        .ok_or_else(|| unreadable.clone())?;
+    let code = crate::code::text(base)
+        .and_then(|(start, len)| range(start, len))
+        .ok_or(unreadable)?;
+    let read = |va: u64| {
+        let end = va.checked_add(8)?;
+        if va < image.start || end > image.end {
+            return None;
+        }
+        let address = usize::try_from(va).ok()?;
+        // SAFETY: eight bytes inside the game's image, which stays mapped
+        // for the life of the process.
+        Some(unsafe { core::ptr::with_exposed_provenance::<u64>(address).read_unaligned() })
+    };
+    verify(&pins, read, code)
 }
 
 /// The update sources of the running join mods, `(id, source line)`.
