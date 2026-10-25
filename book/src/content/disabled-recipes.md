@@ -4,7 +4,7 @@ A server owner takes recipes out of the game, vanilla ones or a mod's, with
 a file and no mod: `mod-configs/enshwick.recipes.toml`. A disabled recipe
 leaves every crafting menu, by hand, at stations and at survivors, and the
 server refuses to craft it. Items that exist stay as they are, and
-administrators still hand them out with admin-tools' `/admin give`, which
+administrators still hand them out with admin-tools' `give` action, which
 makes items without a recipe. Mods disable recipes too, through
 [`recipes::disable`](#from-a-mod).
 
@@ -64,19 +64,20 @@ The loader looks at both files once a second and applies a change at once,
 on the dedicated server and in a game a player hosts: menus lose or regain
 the recipes and the server's refusals follow. No restart is needed.
 
-## Finding names and changing rules in game
+## Finding names and changing rules from the console
 
-Administrators ask the server in the chat, or from a console line:
+The server's [console](../chat.md#the-console), such as admin-tools' command
+file, finds names and changes the rules:
 
-| Command | Answer |
+| Line | Answer |
 | --- | --- |
-| `/enshwick recipes` | the disabled recipes, each with its GUID, workshop and output |
-| `/enshwick recipes find <text>` | recipes whose debug name or whose output's name holds the text, the disabled ones marked |
-| `/enshwick recipes disable <recipe\|output\|workshop> <name>` | checks the name and adds it to the running world's file (the `mod-configs` file while no world runs) |
-| `/enshwick recipes enable <recipe\|output\|workshop> <name>` | the same for `[enable]` |
+| `enshwick recipes` | the disabled recipes, each with its GUID, workshop and output |
+| `enshwick recipes find <text>` | recipes whose debug name or whose output's name holds the text, the disabled ones marked |
+| `enshwick recipes disable <recipe\|output\|workshop> <name>` | checks the name and adds it to the running world's file (the `mod-configs` file while no world runs) |
+| `enshwick recipes enable <recipe\|output\|workshop> <name>` | the same for `[enable]` |
 
 ```text
-/enshwick recipes find torch01
+enshwick recipes find torch01
 Recipes that match "torch01": 1.
 Tool_Torch01_T0_PK (7fa62007-a38e-4790-8591-873055fc3f34) at hand, makes Tool_Torch01 (disabled)
 ```

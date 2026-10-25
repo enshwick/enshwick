@@ -71,7 +71,7 @@ settings menu names it:
 | `startup`        | Read when a world loads; `on_config_change` gets the world's values, and a change waits for the next load                        |
 | `restart`        | Read once as the game starts, for every world; a change waits for the next start. For what only `init` can set up                |
 | `runtime`        | The default: applied while the game runs, through `on_config_change`                                                             |
-| `client`         | Each player's own: never sent to or taken from a server; `/config` on a dedicated server leaves it alone                         |
+| `client`         | Each player's own: never sent to or taken from a server; the console of a dedicated server leaves it alone                       |
 | `sync`           | The server's value: a joined client runs with it ([Join values](#join-values))                                                   |
 | `startup, sync`  | Read when a world loads, as `startup`; a joined client runs with the server's value, the same while the world runs               |
 | `range = a..=b`  | Numbers from `a` to `b`; `a..` and `..=b` leave one end open. Constants work, as in `0.0..=MAX`                                  |
@@ -150,7 +150,7 @@ is saved. An edit of the settings file then changes only the `client`
 settings the mod reads, and the mod's log says where the world's settings
 are.
 
-## The schema and `/config`
+## The schema and the console
 
 [`Config::schema()`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/config.rs)
 describes every field: key, stage, scope, type, default, range, choices, doc
@@ -158,18 +158,19 @@ comment and text key. `load.config()` hands it to the loader, which keeps it
 for the process; it is the description the loader's screens build on, and
 what the loader checks values against before it writes them.
 
-Administrators change settings in the chat, or from a console line such as
-admin-tools' command file:
+Players and administrators change settings on the Mods screen. The server's
+[console](chat.md#the-console), such as admin-tools' command file, reads and
+changes them too:
 
-| Command                       | Answer                                                                           |
-| ----------------------------- | -------------------------------------------------------------------------------- |
-| `/config`                     | the mods that describe their settings                                            |
-| `/config <mod>`               | each setting with its value, what it takes and where and when a change applies   |
-| `/config <mod> <key>`         | one setting with its default and description                                     |
-| `/config <mod> <key> <value>` | checks the value and writes it to the running world's settings, comments kept    |
+| Line                                  | Answer                                                                           |
+| ------------------------------------- | -------------------------------------------------------------------------------- |
+| `enshwick config`                     | the mods that describe their settings                                            |
+| `enshwick config <mod>`               | each setting with its value, what it takes and where and when a change applies   |
+| `enshwick config <mod> <key>`         | one setting with its default and description                                     |
+| `enshwick config <mod> <key> <value>` | checks the value and writes it to the running world's settings, comments kept    |
 
-On a dedicated server, `/config` edits the world it runs; before its world
-loads, the change waits for it.
+On a dedicated server, `enshwick config` edits the world it runs; before its
+world loads, the change waits for it.
 
 The world settings, when a player creates or starts a world and in the pause
 menu's world settings, are where a world's settings are edited: under their
@@ -200,7 +201,7 @@ On a client joined to a dedicated server, the screen also offers "Server
 settings": the server's mods with settings, and each one's values as the
 server's world holds them, asked over the loader's own messages. An
 administrator changes them there; the server checks the permission on its
-own record of the player, runs the same checks as `/config`, writes its
+own record of the player, runs the same checks as the console, writes its
 world's settings, and answers with the outcome and the new values. Other
 players see the join values only, without changes. Fields marked `secret`
 never leave the server, and a player changes at most a few settings a
@@ -255,8 +256,8 @@ fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_
 }
 ```
 
-Untyped settings have no validation hook, no join values, no schema for
-`/config` and no `on_config_change`; subscribe to
+Untyped settings have no validation hook, no join values, no schema for the
+console and the screens, and no `on_config_change`; subscribe to
 [`events::SettingsChanged`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/events.rs)
 and read the file again yourself if you need changes at run time.
 
@@ -267,10 +268,10 @@ applies an edited file without a restart:
 
 - the loader looks at every settings file once a second, so the handler runs
   about a second after the file changes;
-- it also runs at once after `/config` or the Mods screen changes a setting,
+- it also runs at once after the console or the Mods screen changes a setting,
   and as a world loads or stops;
 - its thread is not fixed: the settings watcher for an edited file, the thread
-  that made the change for `/config` or the Mods screen, the game thread as a
+  that made the change for the console or the Mods screen, the game thread as a
   world loads or stops;
 - the file is parsed and validated first. A file that no longer parses or
   validates is logged as skipped, the handler is not called, and the running
@@ -364,7 +365,7 @@ under a running world, such as whether survivors keep a copy per altar, is
 advertises the value in force: a change to its file waits for the next load
 and reaches no player before then. A joined client runs with the server's
 value from the join on, whatever its own file says, and with its own again
-after it leaves. `/config` and the rows say "when the world loads, joined
+after it leaves. The console and the rows say "when the world loads, joined
 players get it", and on a joined client the row shows the server's value,
 locked.
 

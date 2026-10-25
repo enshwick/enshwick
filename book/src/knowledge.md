@@ -140,5 +140,5 @@ player completed a quest and got its rewards, with the character and the
 quest's id.
 
 Every call works on the server's game thread, from a game event, a
-[scheduler](events.md#the-scheduler) task or a [command](commands.md); on a
+[scheduler](events.md#the-scheduler) task or an [action](actions.md); on a
 client, while it hosts a game.

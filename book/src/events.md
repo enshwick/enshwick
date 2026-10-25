@@ -44,7 +44,7 @@ The types are in
 | `ShutdownStarted` | none | an orderly stop begins, with the world and players alive; the final save follows | game |
 | `BuildingPlaced` | `BuildingData` | a player placed a building piece or prop; raised after the step that placed it | game |
 | `BuildingRemoved` | `BuildingData` | a player picked up or tore down a placed piece; the entity no longer exists | game |
-| `SettingsChanged` | none | the mod's settings file changed, `/config` or the Mods screen changed a setting, or a client's join values changed | not fixed: loader or game |
+| `SettingsChanged` | none | the mod's settings file changed, the console or the Mods screen changed a setting, or a client's join values changed | not fixed: loader or game |
 | `LoaderSettingsChanged` | none | `mod-configs/enshwick.toml` changed | loader |
 | `JoinRefused` | none | the join check kept this client out of a server | game |
 | `AltarsChanged` | none | a Flame Altar of the server's world was placed, removed, moved, raised a level or had its zone built anew, for a mod that called `load.altars()` ([altars](altars.md)) | game |
@@ -133,7 +133,7 @@ fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_
 - Then copy it anywhere and schedule from any thread, a hook or a background
   thread included.
 - Tasks run where the game's server code runs, so they may call into the game,
-  [read the world](world.md) and [run commands](commands.md).
+  [read the world](world.md) and [run console lines](chat.md#the-console).
 - Tasks run only while steps run: on a dedicated server, or on a client while
   it hosts a game. Timing follows steps, so a task is late by up to one step.
 - An idle step costs one atomic load.

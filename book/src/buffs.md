@@ -5,36 +5,36 @@ returns the
 [`Buffs`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/buffs.rs)
 of the server's world: the buff and debuff types the game knows, the buffs an
 entity has, giving one and removing one. It is `Copy`; get it during `init`
-and move it into handlers, tasks and commands.
+and move it into handlers, tasks and actions.
 
 ```rust
 use core::time::Duration;
+use enshwick_loader_api::actions::{Action, Arg, Outcome, Value};
 use enshwick_loader_api::buffs::{Apply, BuffId};
 
 fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
     let buffs = load.buffs();
-    load.add_command("buffs", "lists your buffs", move |ctx, _args| {
-        let Some(me) = ctx.character() else {
-            return "the console has no character".into();
-        };
-        match buffs.of(me) {
-            Ok(on) => on
-                .iter()
-                .map(|b| format!("{:#x} {:?}, {}s left", b.id.0, b.kind, b.remaining.as_secs()))
-                .collect::<Vec<_>>()
-                .join("\n")
-                .into(),
-            Err(why) => format!("{why}").into(),
+    let actions = load.actions(enshwick_loader_api::i18n::Texts::default())?;
+    actions.add(Action::new("buffs", "Your buffs"), move |request| {
+        match buffs.of(request.player.entity) {
+            Ok(on) => Outcome::done(
+                on.iter()
+                    .map(|b| format!("{:#x} {:?}, {}s left", b.id.0, b.kind, b.remaining.as_secs()))
+                    .collect::<Vec<_>>()
+                    .join("\n"),
+            ),
+            Err(why) => Outcome::refused(format!("{why}")),
         }
     })?;
-    load.add_command("bless", "a buff for five minutes: /bless <buff id>", move |ctx, args| {
-        let Some(me) = ctx.character() else {
-            return "the console has no character".into();
+    let bless = Action::new("bless", "A buff for five minutes")
+        .admins()
+        .arg(Arg::number("Buff id", 0.0..=f64::from(u32::MAX), 1.0));
+    actions.add(bless, move |request| {
+        let [Value::Number(id)] = request.args else {
+            return Outcome::refused("Name a buff");
         };
-        let Some(id) = args.first().and_then(|a| a.parse().ok()).map(BuffId) else {
-            return "/bless <buff id>".into();
-        };
-        format!("{:?}", buffs.apply(me, id, Apply::new().lasting(Duration::from_mins(5)))).into()
+        let how = Apply::new().lasting(Duration::from_mins(5));
+        Outcome::done(format!("{:?}", buffs.apply(request.player.entity, BuffId(*id as u32), how)))
     })
 }
 ```
@@ -81,5 +81,5 @@ times. The game saves the types it saves with a character, buffs from mods
 among them; other types end when the player leaves.
 
 Every call works on the server's game thread, from a game event, a
-[scheduler](events.md#the-scheduler) task or a [command](commands.md); on a
+[scheduler](events.md#the-scheduler) task or an [action](actions.md); on a
 client, while it hosts a game.

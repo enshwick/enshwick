@@ -6,20 +6,22 @@ returns the server's
 the difficulty and gameplay values of its configuration (`gameSettings` in
 `enshrouded_server.json`) or of the host's world menu, read typed and changed
 while the world runs. It is `Copy`; get it during `init` and move it into
-handlers, tasks and commands.
+handlers, tasks and actions.
 
 ```rust
+use enshwick_loader_api::actions::{Action, Arg, Outcome, Value};
+
 fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
     let settings = load.game_settings()?;
-    load.add_command("durability", "turns item wear on or off: /durability on|off", move |_ctx, args| {
-        let on = match args.first() {
-            Some(&"on") => true,
-            Some(&"off") => false,
-            _ => return "/durability on|off".into(),
+    let actions = load.actions(enshwick_loader_api::i18n::Texts::default())?;
+    let durability = Action::new("durability", "Item wear").admins().arg(Arg::toggle("On"));
+    actions.add(durability, move |request| {
+        let [Value::Toggle(on)] = request.args else {
+            return Outcome::refused("On or off");
         };
-        match settings.change(|s| s.durability = on) {
-            Ok(_) => format!("durability {}", if on { "on" } else { "off" }).into(),
-            Err(why) => format!("unchanged: {why}").into(),
+        match settings.change(|s| s.durability = *on) {
+            Ok(_) => Outcome::done(format!("Durability {}", if *on { "on" } else { "off" })),
+            Err(why) => Outcome::refused(format!("Unchanged: {why}")),
         }
     })
 }
@@ -62,13 +64,15 @@ every kept field of the world, any mod's, and puts back the values the world
 loaded with.
 
 ```rust
+use enshwick_loader_api::actions::{Action, Outcome};
+
 fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
     let settings = load.game_settings()?;
-    load.add_command("lush", "plants grow twice as fast in this world", move |_ctx, _args| {
-        match settings.keep(|s| s.plant_growth = 2.0) {
-            Ok(_) => "kept for this world".into(),
-            Err(why) => format!("unchanged: {why}").into(),
-        }
+    let actions = load.actions(enshwick_loader_api::i18n::Texts::default())?;
+    let lush = Action::new("lush", "Plants grow twice as fast in this world").admins();
+    actions.add(lush, move |_request| match settings.keep(|s| s.plant_growth = 2.0) {
+        Ok(_) => Outcome::done("Kept for this world"),
+        Err(why) => Outcome::refused(format!("Unchanged: {why}")),
     })
 }
 ```
@@ -79,5 +83,5 @@ never meet, and the last change to one value wins; kept fields add up the
 same way.
 
 Every call works on the server's game thread, from a game event, a
-[scheduler](events.md#the-scheduler) task or a [command](commands.md); on a
+[scheduler](events.md#the-scheduler) task or an [action](actions.md); on a
 client, while it hosts a game.

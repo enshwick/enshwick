@@ -34,7 +34,7 @@
 - [Buffs](buffs.md)
 - [Knowledge and quests](knowledge.md)
 - [Player actions](actions.md)
-- [Commands and chat](commands.md)
+- [Chat, notices and the console](chat.md)
 - [Messages between server and client](messages.md)
 - [The interface](interface.md)
 - [State and data folders](state.md)

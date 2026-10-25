@@ -64,9 +64,10 @@ the smaller end. `progress` draws a fraction that is not finite as 0.
 Styles are the game's named ones: `Body`, `Secondary`, `H1` to `H3`,
 `Warning`, `Positive` and `Negative`.
 
-An administrator sees every widget at once with `/enshwick ui-demo`, which
-opens the loader's own demo window on their client; its last page shows
-samples on the HUD and a marker on the map where the command was typed.
+The console line `enshwick ui-demo <player>` shows every widget at once: it
+opens the loader's own demo window on that player's client, and its last
+page shows samples on the HUD and a marker on the map where the player
+stood.
 
 `frame.screen()` says where the player is: the menus, loading, or in game.
 

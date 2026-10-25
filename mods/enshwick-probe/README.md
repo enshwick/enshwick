@@ -7,7 +7,7 @@ line. Keep it off servers people play on.
 
 ## What it checks
 
-Ten seconds after the world has loaded, and again on `/probe check`:
+Ten seconds after the world has loaded, and again on the `check` action:
 
 - the world key, and that a per-world store opens under it; the store keeps
   a sample of placed entities, and the next check counts how many keep their
@@ -70,29 +70,32 @@ typed game event it receives, each fall and shroud damage, and the first 200
 hits a player takes or deals, with the amount before and after the filter; a
 typed event whose fields this game build lacks shows as `FAIL typed <type>`.
 
-## Commands
+## Actions
 
-From the chat as an administrator, or through the admin tools' command file
-(`mod-data/admin-tools/commands.txt`):
+On the mod's page of the Mods screen, for administrators, or through the
+admin tools' command file (`mod-data/admin-tools/commands.txt`) as
+`probe <action> <values>`, such as `probe vitals 4096`. The console has no
+character, so the actions on your own character work from the Mods screen
+only.
 
-| Command                               | What it does                                                                                                                                           |
-| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `/probe census`                       | the game events counted so far, by type                                                                                                                |
-| `/probe check`                        | runs the checks again                                                                                                                                  |
-| `/probe vitals <id>`                  | an entity's vitals and progress, against its replicated health                                                                                         |
-| `/probe vitals me [shown]`            | your character's raw health, stamina and mana sets, every slot, the replicated copies and the API's reading, beside the values you read off the screen |
-| `/probe teleport me [dx dy dz]`       | moves your character by the offset (10 m along x and 0.5 m up by default) and logs where it stands four times a second for five seconds                |
-| `/probe destroy <id>`                 | asks the world to destroy an entity; on a copy of a world only                                                                                         |
-| `/probe spawn <id>`                   | spawns a copy of an entity above it and follows it as above                                                                                            |
-| `/probe notice <text>`                | shows the text on your screen, or in chat without Enshwick                                                                                             |
-| `/probe key`                          | your account key, as `learn-later` takes it                                                                                                            |
-| `/probe knowledge <id>`               | a knowledge value of yours, or of the world for its ids                                                                                                |
-| `/probe learn <id> [bit]`             | grants it to you: a bool set, a counter raised by `bit`, flag `bit` set (1 by default, a recipe's crafted bit)                                         |
-| `/probe unlearn <id> [bit]`           | takes it back the same way                                                                                                                             |
-| `/probe learn-later <key> <id> [bit]` | grants it to the account now, or once its character next loads in this world                                                                           |
-| `/probe stat <id> <value>`            | adds `value` to stat `id` on you (`off` removes it); an unknown id lists the known ones                                                                |
-| `/probe stats`                        | your stats that differ from the defaults, and their sources                                                                                            |
-| `/probe affix`                        | rolls one to three affixes anew on everything you wear                                                                                                 |
+| Action      | What it does                                                                                                |
+| ----------- | ----------------------------------------------------------------------------------------------------------- |
+| `census`    | the game events counted so far, by type                                                                     |
+| `check`     | runs the checks again                                                                                       |
+| `key`       | your account key                                                                                            |
+| `vitals`    | an entity's vitals and progress, against its replicated health                                              |
+| `my-vitals` | your character's raw health, stamina and mana sets, every slot, the replicated copies and the API's reading |
+| `teleport`  | moves your character by the offset given and logs where it stands four times a second for five seconds      |
+| `destroy`   | asks the world to destroy an entity; on a copy of a world only                                              |
+| `spawn`     | spawns a copy of an entity above it and follows it as above                                                 |
+| `notice`    | shows a notice on your screen, or in chat without Enshwick                                                  |
+| `knowledge` | a knowledge value of yours, or of the world for its ids                                                     |
+| `learn`     | grants it to you: a bool set, a counter raised by the bit or amount, that flag set                          |
+| `unlearn`   | takes it back the same way                                                                                  |
+| `stat`      | adds a value to one of your stats                                                                           |
+| `stat-off`  | removes what the probe added to that stat                                                                   |
+| `stats`     | your stats that differ from the defaults, and their sources                                                 |
+| `affix`     | rolls one to three affixes anew on everything you wear                                                      |
 
 ## Settings
 
@@ -114,6 +117,6 @@ keep_across_restart = false
 ```
 
 `enabled` is off by default: until it is `true` the probe does nothing, no
-checks, counts or `/probe`, and the other settings have no effect.
+checks, counts or actions, and the other settings have no effect.
 
 Licensed under [MIT](../../LICENSE).

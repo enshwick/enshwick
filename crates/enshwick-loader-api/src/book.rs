@@ -39,7 +39,7 @@ chapters! {
     Vetoes => "vetoes.md",
     Progress => "progress.md",
     Actions => "actions.md",
-    Commands => "commands.md",
+    Chat => "chat.md",
     Messages => "messages.md",
     Interface => "interface.md",
     State => "state.md",

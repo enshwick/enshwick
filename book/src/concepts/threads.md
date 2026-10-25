@@ -8,7 +8,7 @@ code may call.
 - **The game thread**: the server's main loop. On the dedicated server it is
   the server's game thread; on a client that hosts a game it is the built-in
   server's `GameServer` thread, a new one for each hosted game. Game events,
-  scheduled tasks and chat command handlers run here, between simulation
+  scheduled tasks and action handlers run here, between simulation
   steps. The game thread also runs ECS systems while it steps, so a filter
   or a hook may run on it in the middle of a step.
 - **ECS worker threads**: the engine runs systems in parallel on them. A hook
@@ -17,7 +17,7 @@ code may call.
 - **Loader threads**: the loader's own. `on_config_change` handlers run on the
   settings watcher, about a second after a file changes; on a client joining a
   server, join values reach the handler on the thread that runs the join.
-  After `/config` or the Mods screen, the handler runs on the thread that made
+  After the console or the Mods screen, the handler runs on the thread that made
   the change, and as a world loads or stops, on the game thread, so it cannot
   count on one thread.
   Status lines from `load.add_status` are gathered on the status writer or on the
@@ -31,8 +31,8 @@ code may call.
 | Call | Where |
 | --- | --- |
 | world reads (`position`, `component`, `players`, ...) | the game thread; elsewhere they return `None` or nothing |
-| world changes (`write`, `set_label`, `spawn`, `teleport`, the clock, weather, buffs, knowledge, terrain, `commands::run`, ...) and the reads of those features | the game thread, between steps; inside a step, such as in a filter or a hook on a system, they return `WrongThread` |
-| `commands::run` | the game thread |
+| world changes (`write`, `set_label`, `spawn`, `teleport`, the clock, weather, buffs, knowledge, terrain, `console::run`, ...) and the reads of those features | the game thread, between steps; inside a step, such as in a filter or a hook on a system, they return `WrongThread` |
+| `console::run` | the game thread |
 | `inventories.read()` | the game thread, between steps |
 | `inventories.read_in(ctx)`, `ecs` reads | inside a hooked system, through its context |
 | `scheduler.next_tick`, `after`, `every` | any thread; the task runs on the game thread |

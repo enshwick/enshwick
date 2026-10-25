@@ -20,7 +20,7 @@ thread of its own, `GameServer`, beside its own world. Every mod must work
 there as on a dedicated server, so the server features act whenever the
 client hosts:
 
-- game events, the world reads, the scheduler, inventories and chat commands
+- game events, the world reads, the scheduler, inventories and actions
   serve the built-in server from its first step until the game stops;
 - each hosted game starts with `WorldLoaded` and ends with `ShutdownStarted`. The next
   game has a new server, a new thread and new entities, so reset state tied to

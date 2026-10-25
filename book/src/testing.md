@@ -170,7 +170,7 @@ Every method of `FakeHost` takes and returns the builder.
 | `loaded(info)`                        | A loaded mod that `enshwick_loader_api::mods()` lists.                                                |
 | `join_missing(info)`                  | A server mod that `enshwick_loader_api::mods::join_missing()` lists.                                  |
 | `replaced(info)`                      | A mod another mod replaces, which `enshwick_loader_api::mods::replaced()` lists.                      |
-| `foreign_command(name, reply)`        | The reply of a command another mod or the loader answers, for `commands::run`.                        |
+| `console_answer(word, answer)`        | The answer to console lines starting with `word`, which another mod or the loader gives.              |
 | `service(&TABLE)`                     | A service another mod publishes, typed by its `#[service]` declaration.                               |
 | `refuse_hook(target)`                 | Refuses hooks on a target, as when another mod holds it exclusively.                                  |
 | `code(bytes)`                         | The game's code section, for pattern searches.                                                        |
@@ -205,8 +205,7 @@ What the mod asked for, each in order:
 | `resources()`                        | The resources served, as `ServedResource { key, base }`.                |
 | `code_patches()`                     | `(address, expected, replacement)` of each code patch.                  |
 | `texts()`                            | `(tag, language, text)` of each text added.                             |
-| `commands()`                         | `(name, help)` of each chat command registered.                         |
-| `console()`                          | The command lines run as the console with `commands::run`.              |
+| `console()`                          | The lines the mod ran with `console::run`.                              |
 | `chat()`                             | `(account key, text)` of each chat line sent; key 0 for everyone.       |
 | `labels()`                           | `(entity, text)` of each label set.                                     |
 | `game_event_types()`                 | The game event types asked for, by hash; 0 for every type.              |
@@ -236,7 +235,6 @@ Playing the game:
 | `migrate_store(name, text)`       | Runs their store steps on a world store; the name and text it ends with.    |
 | `set_settings(text)`              | Replaces the settings file's text; raise `SettingsChanged` after it.        |
 | `set_server_synced(values)`       | Sets the joined server's join values; raise `SettingsChanged` after it.     |
-| `command(name, &player, args)`    | Runs the mod's chat command; its reply, or `None` without such a command.   |
 | `ask_actions(kind, &player, ..)`  | Asks the mod's [player actions](actions.md) as the loader does.             |
 | `rename(entity, player, text)`    | Asks the mod's rename filters; whether every filter lets it through.        |
 | `build_resource(&key, base)`      | Builds a served resource from base bytes with the mod's patch.              |
@@ -289,8 +287,8 @@ fact holds on the running build. Run a dedicated server of your own, never
 one people play on, with a copy of a world:
 
 - [`enshwick-admin-tools`](https://github.com/themaiby/enshwick/tree/main/mods/enshwick-admin-tools)
-  runs each line appended to its command file as the server console, so a
-  mod's commands run without anyone joining;
+  runs each line appended to its command file on the server's console, so a
+  mod's actions run without anyone joining;
 - [`enshwick-probe`](https://github.com/themaiby/enshwick/tree/main/mods/enshwick-probe),
   a development mod that is never released, exercises the platform's world
   API and game events and logs each check as `PASS`, `FAIL` or `SKIP` to
@@ -325,7 +323,7 @@ A mod opts in with `reload: true` in its `manifest!` and keeps a contract:
   logging, reads of the game's archive and, on a client, the interface's
   frame and HUD callbacks and map markers: the loader stops calling the old
   copy's callbacks, clears its markers and calls the new copy's. Everything
-  else a mod can register (commands, content, served
+  else a mod can register (actions, content, served
   resources, services, mod events, extension points it defines or links, code
   patches, mid-function hooks, filters, the interface, stats and the rest) stays with the old copy, so the loader
   refuses to reload a mod that used any of it, naming the calls, and the

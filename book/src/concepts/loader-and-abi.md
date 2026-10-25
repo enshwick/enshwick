@@ -46,7 +46,7 @@ runs; `loader.log` says `enshwick-safes.dll skipped: off in
 mods/enshwick/mods.toml`. `links_off = ["safes:access"]` in an entry keeps the
 mod on and only its link on that [extension point](../extending.md) off. Changes take effect at the next start. A list that
 is not valid TOML is left as it is and every mod loads, with a warning.
-`/enshwick` and the status summary name the mods that are off.
+`enshwick` on the [console](../chat.md#the-console) and the status summary name the mods that are off.
 
 `mods/enshwick/enshwick.lock` is written at every start: the loader's version
 and SHA-256, the game build, and each running mod's id, version, file and
@@ -122,7 +122,7 @@ let manifest = enshwick_loader_api::manifest!(
 - `version` is SemVer. Leave it out so the DLL reports the version you
   release; the loader names it in every message about the mod.
 - `name`, `description`, `authors`, `license` and `homepage` are what players
-  read: in `/enshwick <mod id>`, the status summary, the join check's notes and
+  read: on the Mods screen, in the status summary, the join check's notes and
   the updater's questions. Each but `name` comes from the crate's
   `Cargo.toml` when left out (`homepage` falls back to `repository`); a mod
   without a name is shown by its id.
@@ -144,7 +144,7 @@ let manifest = enshwick_loader_api::manifest!(
   the old DLL, so without it both would run. While this mod is present, the
   loader never starts a replaced mod: it unloads that DLL right after reading
   its manifest and logs once
-  `<old> is replaced by <new>; delete mods/<file>`, which `/enshwick` and the
+  `<old> is replaced by <new>; delete mods/<file>`, which `enshwick` on the console and the
   status summary repeat and the lock lists under `[[replaced]]`. When the
   updater installs or updates this mod, it deletes those DLLs, and only them:
   each a `.dll` directly in `mods/` that the loader listed for the replaced

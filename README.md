@@ -41,7 +41,7 @@ they are never released.
 
 | Mod                                      | What it does                                                              |
 | ---------------------------------------- | ------------------------------------------------------------------------- |
-| [Admin tools](mods/enshwick-admin-tools) | `/admin` commands and a command file run as the server console            |
+| [Admin tools](mods/enshwick-admin-tools) | administrator actions and a command file run on the server's console      |
 | [Optimizer](mods/enshwick-optimizer)     | less CPU on Windows and under Wine and Proton, with a report and measures |
 
 ### For players
@@ -98,9 +98,9 @@ copy is the one in force, so an edit of `mod-configs/<id>.toml` reaches only
 worlds made later, each player's own settings and the ones read at start. A world's settings are
 changed in the game, while hosting or on the screen that creates or starts a
 world: the world settings list every mod's settings under their last tab.
-On a dedicated server an administrator changes them with
-`/config <mod> <key> <value>` in the chat, or from "Server settings" on the
-Mods screen. Such a change applies at once, except where a mod's page says it
+On a dedicated server an administrator changes them from "Server settings"
+on the Mods screen, or with `enshwick config <mod> <key> <value>` in the
+[admin tools'](mods/enshwick-admin-tools) command file. Such a change applies at once, except where a mod's page says it
 waits for the world to load again or for the game to start again. A hand
 edit of the running world's copy applies about a second after it is saved, as
 such a change does.

@@ -29,7 +29,7 @@ The reads serve the server's world from its game thread:
 
 - in a game event handler (see [Events](events.md));
 - in a [scheduler](events.md#the-scheduler) task;
-- in a [command handler](commands.md) or a rename filter.
+- in an [action](actions.md) handler or a rename filter.
 
 Elsewhere, such as on a background thread or in a hook on a worker thread,
 they return `None` or nothing. On a client the server is the built-in one,
@@ -158,26 +158,26 @@ them from the server's own every step, so `writable_type` refuses them.
 | `set(entity, field, value)` | writes the field, marked changed |
 
 ```rust
+use enshwick_loader_api::actions::{Action, Outcome};
+
 fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
     let world = load.world()?;
     let flags = world.writable_type(load, "keen::ecs::CombatFlags")?;
     let immune = flags.field::<bool>(load, "immune")?;
-    load.add_command("immune", "toggles your character's immunity", move |ctx, _args| {
-        let Some(me) = ctx.character() else {
-            return "the console has no character".into();
-        };
-        let entity = me;
+    let actions = load.actions(enshwick_loader_api::i18n::Texts::default())?;
+    actions.add(Action::new("immune", "Toggle your immunity").admins(), move |request| {
+        let entity = request.player.entity;
         let now = !world.get(entity, immune).unwrap_or(false);
         match world.set(entity, immune, now) {
-            Ok(()) => format!("immune: {now}").into(),
-            Err(why) => format!("{why}").into(),
+            Ok(()) => Outcome::done(format!("Immune: {now}")),
+            Err(why) => Outcome::refused(format!("{why}")),
         }
     })
 }
 ```
 
 Writes work on the game thread between steps, in a game event, a scheduled
-task or a chat command. The game thread runs ECS
+task or an action. The game thread runs ECS
 systems itself while it steps, so a write from a filter or a hook on a system
 is refused even there. They fail with a `WorldError`: `Gone` for an entity not
 in the world, `Lacks` when it lacks the component, `Refused` for a type the
@@ -195,14 +195,17 @@ in the world, as `Placed { entity, position }`, position in metres;
 first. `transform_type()` is the component every placed entity has, so
 `near(point, radius, world.transform_type())` finds everything there. The
 engine walks every archetype with the component, so call them now and then,
-from a command or a timer, not on every step.
+from an action or a timer, not on every step.
 
 ```rust
+use enshwick_loader_api::actions::{Action, Outcome};
+
 fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
     let world = load.world()?;
     let beds = world.component_type(load, "keen::ecs::NpcBed")?;
-    load.add_command("beds", "counts the beds", move |_ctx, _args| {
-        format!("{} beds", world.entities(beds).len()).into()
+    let actions = load.actions(enshwick_loader_api::i18n::Texts::default())?;
+    actions.add(Action::new("beds", "Count the beds"), move |_request| {
+        Outcome::done(format!("{} beds", world.entities(beds).len()))
     })
 }
 ```
@@ -244,9 +247,9 @@ has:
   players may share it. Show it, but decide by `key` or `permissions`.
 
 `player_by_key(key)` finds the connected player with an account key, and
-`players_named(name)` the connected players with a name, ignoring case, as a
-command finds the player another typed. Since names repeat, a command that
-wants one player refuses when it gets several.
+`players_named(name)` the connected players with a name, ignoring case, as
+the console finds a player a line names. Since names repeat, code that wants
+one player refuses when it gets several.
 
 ## Labels
 
@@ -274,9 +277,9 @@ fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_
 ```
 
 The game checks no permission when a player renames something.
-[`load.on_rename(|rename| ...)`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/commands.rs)
+[`load.on_rename(|rename| ...)`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/world/rename.rs)
 runs before every rename on the server, on its game thread, with a
-[`Rename`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/commands.rs):
+[`Rename`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/world/rename.rs):
 the `entity`, the `player` (`None` when the server cannot tell) and the new
 `text`. Returning `false` refuses the rename, and the entity keeps its name.
 
@@ -296,4 +299,4 @@ uses labels and a rename filter for its Safes.
 `world.broadcast(text)` sends `text` to every player's chat, and
 `world.tell(&player, text)` to one player. Both work from any thread: the line
 waits in a queue and the server posts it after the next step. Each line of
-`text` becomes a message of its own. See [Commands and chat](commands.md).
+`text` becomes a message of its own. See [Chat, notices and the console](chat.md).
