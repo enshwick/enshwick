@@ -548,6 +548,7 @@ fn key_name(key: &ResourceKey) -> String {
         types::ITEM_REGISTRY => return "the item registry".to_owned(),
         types::RECIPE_REGISTRY => return "the recipe registry".to_owned(),
         types::WORKSHOP_REGISTRY => return "the workshop registry".to_owned(),
+        types::UI_BUNDLE => return "the UI bundle".to_owned(),
         types::TEMPLATE_COLLECTION => "template collection",
         types::ITEM_INFO => "item",
         types::TEMPLATE => "template",
