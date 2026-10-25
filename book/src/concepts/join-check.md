@@ -99,8 +99,9 @@ lets such players in. On a game build whose table lacks the kick, the player
 gets the chat line and stays, and the log says so.
 
 A server without join mods admits every player. A hosted game never checks or
-kicks its host, and checks no guest until the host's own game has said hello.
-Administrators are checked and kicked like every other player.
+kicks its host, and checks guests only after the host's own game has said hello
+and while the host is in the world. Administrators are checked and kicked like
+every other player.
 
 The check keeps games with different mods apart; it does not stop cheating. A
 game that lies about its mods passes it.
