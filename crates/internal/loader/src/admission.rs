@@ -1,10 +1,13 @@
-//! The server's side of the join check. A dedicated server that runs join
-//! mods waits for each joining player's game to say hello with the join mods
-//! it runs. A game that says nothing in time, such as one without Enshwick,
-//! or one that lacks a join mod or runs it in another version, gets a chat
-//! line naming what it needs and where to get it, then the game's own kick.
-//! A game whose hello matches stays, also when the hello comes after the
-//! line.
+//! The serving side of the join check, on a dedicated server and in a game a
+//! client hosts. A server that runs join mods waits for each player who
+//! enters the world to say hello with the join mods the player's game runs.
+//! A game that says nothing in time, such as one without Enshwick, or one
+//! that lacks a join mod or runs it in another version, gets a chat line
+//! naming what it needs and where to get it, then the game's own kick;
+//! administrators too. A game whose hello matches stays, also when the hello
+//! comes after the line. The check is about compatibility, not cheating: a
+//! game that lies about its mods passes. A hosted game never checks its
+//! host, and checks no one until the host's own hello names it.
 
 use std::collections::{BTreeMap, HashMap};
 use std::time::{Duration, Instant};
@@ -14,8 +17,12 @@ use enshwick_loader_api::mods::Updates;
 use crate::join::Names;
 use crate::texts;
 
+/// The table id of the server's session, an offset in the server object.
+pub const SESSION: &str = "server.session";
+/// The table id of the game's kick of one machine from its session.
+pub const KICK: &str = "session.kick";
 /// The build table ids this part of the loader names.
-pub const TABLE_IDS: &[&str] = &["server.session", "session.kick"];
+pub const TABLE_IDS: &[&str] = &[SESSION, KICK];
 
 /// Players the gate follows at most; the game has 16 slots.
 const MAX_PLAYERS: usize = 64;
@@ -23,16 +30,31 @@ const MAX_PLAYERS: usize = 64;
 /// the loader's line, the count and the kick, a note stays within the 16
 /// lines a reply may take.
 const MAX_NAMED: usize = 12;
+/// How long a kick that did not remove the player waits to be tried again.
+const KICK_AGAIN: Duration = Duration::from_secs(10);
 /// Where Enshwick itself comes from.
 const LOADER_PLACE: &str = concat!(env!("CARGO_PKG_REPOSITORY"), "/releases");
 
-/// How long the server waits on a joining player's game.
+/// How long the server waits on a player who entered the world.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Rules {
-    /// From the join to the note, for a game that says no hello.
+    /// From entering the world to the note, for a game that says no hello.
     pub wait: Duration,
     /// From the note to the kick, for the player to read it.
     pub grace: Duration,
+}
+
+/// What a player's game said in its hello.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Hello {
+    /// The game's join mods, `id@version,...`, sorted.
+    pub mods: String,
+    /// False when the list was cut to fit the hello: mods that sort after
+    /// its last entry are not known.
+    pub complete: bool,
+    /// In a game the client hosts, the host's own number for its hello; 0
+    /// elsewhere.
+    pub nonce: u64,
 }
 
 /// A server join mod the player's game lacks or runs in another version.
@@ -49,8 +71,7 @@ pub struct Need {
 /// What the server does next for one player, by account key.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Step {
-    /// Tells the player what the game lacks; `hello` when the game said
-    /// which mods it runs.
+    /// Tells the player what the game lacks.
     Note {
         /// The player's account key.
         key: u64,
@@ -72,70 +93,148 @@ pub enum Step {
     },
 }
 
-/// Where one player stands.
+/// The server's word on one player.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Standing {
-    /// Joined at this moment; no hello yet.
-    Waiting(Instant),
-    /// Said a hello that matched.
+enum Verdict {
+    /// Nothing said yet.
+    Open,
+    /// The hello matched.
     Admitted,
     /// Noted; kicked at this moment.
     Refused(Instant),
-    /// Kicked; gone once the game removes the player.
-    Kicked,
+    /// Kicked at this moment, and kicked again later while the slot stays.
+    Kicked(Instant),
 }
 
-/// The players the server follows from their join until their game said a
-/// matching hello or they were kicked.
+/// Where one player stands.
+#[derive(Clone, Debug)]
+struct Standing {
+    /// The game's last hello.
+    hello: Option<Hello>,
+    /// When the player entered the world; `None` while loading.
+    entered: Option<Instant>,
+    verdict: Verdict,
+}
+
+/// The players of the live slots the server follows.
 #[derive(Debug, Default)]
 pub struct Gate {
     players: HashMap<u64, Standing>,
+    /// A game a client hosts: no one is checked until the host is known.
+    hosted: bool,
+    /// The host's account key, once its own hello came.
+    host: Option<u64>,
 }
 
 impl Gate {
-    /// Starts the wait for the player `key`, who entered the world at `now`;
-    /// a player whose game said hello already keeps where it stands.
-    pub fn joined(&mut self, key: u64, now: Instant) {
-        if self.players.len() < MAX_PLAYERS || self.players.contains_key(&key) {
-            self.players.entry(key).or_insert(Standing::Waiting(now));
+    /// The gate of a game a client hosts.
+    #[must_use]
+    pub fn hosted() -> Self {
+        Self {
+            hosted: true,
+            ..Self::default()
         }
     }
 
-    /// Takes the hello of the player `key`, whose game runs `client`, on a
-    /// server that runs `server` (both `id@version,...`); whether the player
-    /// may stay, and what to tell the player.
+    /// Whether the gate acts: always on a dedicated server, in a hosted game
+    /// once the host is known.
+    fn acts(&self) -> bool {
+        !self.hosted || self.host.is_some()
+    }
+
+    /// The player `key` entered the world at `now` on a server that runs
+    /// `server`: the wait starts, or the hello that came while loading is
+    /// judged. A full gate refuses the player at once.
+    pub fn joined(&mut self, key: u64, server: &str, now: Instant, rules: Rules) -> Vec<Step> {
+        if key == 0 || self.host == Some(key) {
+            return Vec::new();
+        }
+        if !self.players.contains_key(&key) && self.players.len() >= MAX_PLAYERS {
+            let needs = needs(server, None);
+            if needs.is_empty() {
+                return Vec::new();
+            }
+            return vec![
+                Step::Note {
+                    key,
+                    hello: false,
+                    needs,
+                },
+                Step::Kick { key },
+            ];
+        }
+        let acts = self.acts();
+        let standing = self.players.entry(key).or_insert(Standing {
+            hello: None,
+            entered: None,
+            verdict: Verdict::Open,
+        });
+        // A hello from an earlier stay in the world, other than a matching
+        // one, says nothing of this one; a hello from the loading screen does.
+        if standing.entered.is_some() && standing.verdict != Verdict::Admitted {
+            standing.hello = None;
+        }
+        standing.entered = Some(now);
+        standing.verdict = Verdict::Open;
+        if acts && standing.hello.is_some() {
+            judge(key, standing, server, now, rules)
+                .into_iter()
+                .collect()
+        } else {
+            Vec::new()
+        }
+    }
+
+    /// Takes the `hello` of the player `key` on a server that runs `server`;
+    /// whether the server answers it, and what to tell the player.
     pub fn hello(
         &mut self,
         key: u64,
         server: &str,
-        client: &str,
+        hello: &Hello,
         now: Instant,
         rules: Rules,
     ) -> (bool, Option<Step>) {
-        let needs = needs(server, Some(client));
-        let before = self.players.get(&key).copied();
-        if needs.is_empty() {
-            if self.players.len() < MAX_PLAYERS || before.is_some() {
-                self.players.insert(key, Standing::Admitted);
-            }
-            let stay = matches!(before, Some(Standing::Refused(_)));
-            return (true, stay.then_some(Step::Stay { key }));
-        }
-        if matches!(before, Some(Standing::Refused(_) | Standing::Kicked)) {
+        if key == 0 {
             return (false, None);
         }
-        if self.players.len() < MAX_PLAYERS || before.is_some() {
-            self.players
-                .insert(key, Standing::Refused(now + rules.grace));
+        if self.host == Some(key) {
+            return (true, None);
         }
-        (
-            false,
-            Some(Step::Note {
-                key,
-                hello: true,
-                needs,
-            }),
-        )
+        if !self.players.contains_key(&key) && self.players.len() >= MAX_PLAYERS {
+            return (false, None);
+        }
+        let acts = self.acts();
+        let standing = self.players.entry(key).or_insert(Standing {
+            hello: None,
+            entered: None,
+            verdict: Verdict::Open,
+        });
+        standing.hello = Some(hello.clone());
+        let matches = needs(server, Some(hello)).is_empty();
+        if standing.entered.is_none() || !acts {
+            return (matches, None);
+        }
+        let before = standing.verdict;
+        if !matches && matches!(before, Verdict::Refused(_) | Verdict::Kicked(_)) {
+            return (false, None);
+        }
+        let step = judge(key, standing, server, now, rules);
+        let step = match (step, before) {
+            (None, Verdict::Refused(_)) if matches => Some(Step::Stay { key }),
+            (step, _) => step,
+        };
+        (matches, step)
+    }
+
+    /// Takes the host's own hello in a hosted game: the host is never checked.
+    pub fn host_hello(&mut self, key: u64, hello: &Hello) -> (bool, Option<Step>) {
+        if key == 0 || !self.hosted || hello.nonce == 0 {
+            return (false, None);
+        }
+        self.host = Some(key);
+        self.players.remove(&key);
+        (true, None)
     }
 
     /// Forgets the player `key`, who left.
@@ -143,51 +242,88 @@ impl Gate {
         self.players.remove(&key);
     }
 
+    /// Forgets every player whose key holds no live slot in `live`.
+    pub fn keep(&mut self, live: &[u64]) {
+        self.players.retain(|key, _| live.contains(key));
+    }
+
     /// The steps due at `now` on a server that runs `server`.
     pub fn due(&mut self, server: &str, now: Instant, rules: Rules) -> Vec<Step> {
+        if !self.acts() {
+            return Vec::new();
+        }
         let mut steps = Vec::new();
         for (&key, standing) in &mut self.players {
-            match *standing {
-                Standing::Waiting(since) if now.saturating_duration_since(since) >= rules.wait => {
-                    let needs = needs(server, None);
-                    if needs.is_empty() {
-                        *standing = Standing::Admitted;
-                        continue;
-                    }
-                    *standing = Standing::Refused(now + rules.grace);
-                    steps.push(Step::Note {
-                        key,
-                        hello: false,
-                        needs,
-                    });
+            let Some(entered) = standing.entered else {
+                continue;
+            };
+            let step = match standing.verdict {
+                Verdict::Open if standing.hello.is_some() => {
+                    judge(key, standing, server, now, rules)
                 }
-                Standing::Refused(at) if now >= at => {
-                    *standing = Standing::Kicked;
-                    steps.push(Step::Kick { key });
+                Verdict::Open if now.saturating_duration_since(entered) >= rules.wait => {
+                    judge(key, standing, server, now, rules)
                 }
-                _ => {}
-            }
+                Verdict::Refused(at) if now >= at => {
+                    standing.verdict = Verdict::Kicked(now);
+                    Some(Step::Kick { key })
+                }
+                Verdict::Kicked(at) if now.saturating_duration_since(at) >= KICK_AGAIN => {
+                    standing.verdict = Verdict::Kicked(now);
+                    Some(Step::Kick { key })
+                }
+                _ => None,
+            };
+            steps.extend(step);
         }
         steps
     }
 
-    /// Whether a player waits for a hello or a kick, so a step has work.
+    /// Whether the gate follows anyone, so a step has work.
     #[must_use]
-    pub fn watching(&self) -> bool {
-        self.players
-            .values()
-            .any(|s| matches!(s, Standing::Waiting(_) | Standing::Refused(_)))
+    pub fn busy(&self) -> bool {
+        !self.players.is_empty()
     }
 }
 
-/// The server's join mods, of `server`, that a game running `client` lacks
-/// or runs in another version; every one for a game that said no hello.
+/// Judges the player `key` in the world on its hello, or on none: admitted,
+/// or refused with a note and the kick after the grace.
+fn judge(
+    key: u64,
+    standing: &mut Standing,
+    server: &str,
+    now: Instant,
+    rules: Rules,
+) -> Option<Step> {
+    let needs = needs(server, standing.hello.as_ref());
+    if needs.is_empty() {
+        standing.verdict = Verdict::Admitted;
+        return None;
+    }
+    standing.verdict = Verdict::Refused(now + rules.grace);
+    Some(Step::Note {
+        key,
+        hello: standing.hello.is_some(),
+        needs,
+    })
+}
+
+/// The server's join mods, of `server`, that a game with the `client` hello
+/// lacks or runs in another version; every one for a game that said no hello.
+/// A cut hello lacks only the mods its list could have named.
 #[must_use]
-pub fn needs(server: &str, client: Option<&str>) -> Vec<Need> {
-    let client = client.unwrap_or_default();
-    let yours: BTreeMap<&str, &str> = crate::join::entries(client).collect();
-    crate::join::wanted(server, client)
+pub fn needs(server: &str, client: Option<&Hello>) -> Vec<Need> {
+    let mods = client.map_or("", |hello| hello.mods.as_str());
+    let yours: BTreeMap<&str, &str> = crate::join::entries(mods).collect();
+    let last = client
+        .filter(|hello| !hello.complete && !yours.is_empty())
+        .and_then(|hello| hello.mods.rsplit(',').next());
+    crate::join::wanted(server, mods)
         .into_iter()
+        .filter(|(id, _)| {
+            yours.contains_key(id.as_str())
+                || last.is_none_or(|last| format!("{id}@").as_str() < last)
+        })
         .map(|(id, version)| Need {
             yours: yours.get(id.as_str()).map(|&v| v.to_owned()),
             id,
@@ -264,34 +400,34 @@ pub fn note(
             &[("seconds", &seconds)],
         ));
     }
-    lines.join(
-        "
-",
-    )
+    lines.join("\n")
 }
 
 #[cfg(windows)]
-pub(crate) use runtime::{after_step, configure, hello, joined, left, start};
+pub(crate) use runtime::{after_step, configure, forget, hello, joined, left, nonce, start};
 
 #[cfg(windows)]
 mod runtime {
     use std::collections::BTreeMap;
-    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::hash::BuildHasher as _;
+    use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
     use std::sync::{Mutex, OnceLock, PoisonError};
     use std::time::{Duration, Instant};
 
     use enshwick_loader_api::abi::Side;
 
-    use super::{Gate, Rules, Step};
+    use super::{Gate, Hello, KICK, Rules, SESSION, Step};
+    use crate::fuse::Fuse;
     use crate::host::Loader;
     use crate::join::Names;
 
     /// The game's kick of one machine from its session: the session, the
     /// machine's handle, and whether to ban it too. The server's own
-    /// account actions call it on the game thread (server builds 387, 399).
+    /// account actions call it on the game thread, on dedicated servers
+    /// (builds 387, 399) and in the server clients host (builds 410, 426).
     type KickFn = unsafe extern "system" fn(session: *mut u8, machine: u32, ban: bool);
 
-    /// How often the step looks at the players who wait.
+    /// How often the step looks at the players.
     const LOOK_EVERY: Duration = Duration::from_secs(1);
 
     /// The game's kick and where the server keeps its session.
@@ -301,20 +437,14 @@ mod runtime {
         session: usize,
     }
 
-    /// What a dedicated server that admits players knows from its start.
+    /// What a serving game knows from its start.
     #[derive(Debug)]
     struct Serving {
         rules: Rules,
         names: Names,
         sources: BTreeMap<String, String>,
         kick: Option<Kick>,
-    }
-
-    /// The players who wait, and when the step looks at them next.
-    #[derive(Debug)]
-    struct Watch {
-        gate: Gate,
-        next: Instant,
+        side: Side,
     }
 
     /// The admission's state.
@@ -322,19 +452,28 @@ mod runtime {
     struct State {
         /// The rules, when the settings require Enshwick.
         rules: OnceLock<Rules>,
-        /// Set at start on a dedicated server whose settings require
-        /// Enshwick.
+        /// Set at start when the settings require Enshwick.
         serving: OnceLock<Serving>,
-        watch: Mutex<Option<Watch>>,
-        /// Set while a player waits, so an idle step takes no lock.
-        watching: AtomicBool,
+        gate: Mutex<Option<Gate>>,
+        /// Set while the gate follows anyone, so an idle step takes no lock.
+        busy: AtomicBool,
+        /// When the step looks next, in milliseconds since `epoch`.
+        next: AtomicU64,
+        epoch: OnceLock<Instant>,
+        /// This process's number in its hellos to the game it hosts.
+        nonce: OnceLock<u64>,
+        fuse: Fuse,
     }
 
     static STATE: State = State {
         rules: OnceLock::new(),
         serving: OnceLock::new(),
-        watch: Mutex::new(None),
-        watching: AtomicBool::new(false),
+        gate: Mutex::new(None),
+        busy: AtomicBool::new(false),
+        next: AtomicU64::new(0),
+        epoch: OnceLock::new(),
+        nonce: OnceLock::new(),
+        fuse: Fuse::new("join admission"),
     };
 
     /// Takes the loader settings' rules, before the loader starts.
@@ -347,38 +486,35 @@ mod runtime {
         }
     }
 
-    /// Starts admitting players on a dedicated server, naming mods by `names`
-    /// with the update sources `sources` by id.
+    /// Starts admitting players, naming mods by `names` with the update
+    /// sources `sources` by id.
     pub(crate) fn start(loader: &Loader, names: Names, sources: BTreeMap<String, String>) {
-        if loader.side != Side::SERVER {
-            return;
-        }
         let Some(&rules) = STATE.rules.get() else {
             crate::log!(
                 INFO,
-                "join check off: players without the server's join mods are let in (require_enshwick = false)"
+                "join check off: players without the join mods are let in (require_enshwick = false)"
             );
             return;
         };
         let kick = loader
-            .address("session.kick")
+            .address(KICK)
             .and_then(|address| usize::try_from(address).ok())
-            .zip(loader.offset("server.session"))
+            .zip(loader.offset(SESSION))
             .map(|(address, session)| Kick {
-                // SAFETY: the table's `session.kick` is the game's kick, with
-                // this signature, on this build.
+                // SAFETY: the table's kick is the game's kick, with this
+                // signature, on this build.
                 call: unsafe { core::mem::transmute::<usize, KickFn>(address) },
                 session,
             });
         if kick.is_none() {
             crate::log!(
                 WARN,
-                "join check kicks off: not in this build; players without the server's join mods get the note and stay"
+                "join check kicks off: not in this build; players without the join mods get the note and stay"
             );
         }
         crate::log!(
             INFO,
-            "join check: a joining player's game has {} s to say hello, then {} s to read the note",
+            "join check: a player in the world has {} s to say hello, then {} s to read the note",
             rules.wait.as_secs(),
             rules.grace.as_secs()
         );
@@ -387,7 +523,17 @@ mod runtime {
             names,
             sources,
             kick,
+            side: loader.side,
         });
+    }
+
+    /// This process's number for its hellos to the game it hosts.
+    pub(crate) fn nonce() -> u64 {
+        *STATE.nonce.get_or_init(|| {
+            std::collections::hash_map::RandomState::new()
+                .hash_one(0u8)
+                .max(1)
+        })
     }
 
     /// The server's join mods now, `id@version,...`.
@@ -395,72 +541,115 @@ mod runtime {
         crate::advertise::mod_list(&crate::host::join_mods())
     }
 
-    /// Runs `f` on the players who wait, and notes whether any still wait.
-    fn with_gate<R>(f: impl FnOnce(&mut Watch) -> R) -> R {
-        let mut guard = STATE.watch.lock().unwrap_or_else(PoisonError::into_inner);
-        let watch = guard.get_or_insert_with(|| Watch {
-            gate: Gate::default(),
-            next: Instant::now(),
+    /// Runs `f` on the gate, made for `serving`'s side, and notes whether it
+    /// follows anyone.
+    fn with_gate<R>(serving: &Serving, f: impl FnOnce(&mut Gate) -> R) -> R {
+        let mut guard = STATE.gate.lock().unwrap_or_else(PoisonError::into_inner);
+        let gate = guard.get_or_insert_with(|| {
+            if serving.side == Side::CLIENT {
+                Gate::hosted()
+            } else {
+                Gate::default()
+            }
         });
-        let result = f(watch);
-        STATE
-            .watching
-            .store(watch.gate.watching(), Ordering::Release);
+        let result = f(gate);
+        STATE.busy.store(gate.busy(), Ordering::Release);
         result
     }
 
-    /// Starts the wait for the player `key`, who entered the world.
+    /// Forgets every player, when a hosted game ends.
+    pub(crate) fn forget() {
+        *STATE.gate.lock().unwrap_or_else(PoisonError::into_inner) = None;
+        STATE.busy.store(false, Ordering::Release);
+    }
+
+    /// The player `key` entered the world; on the game thread.
     pub(crate) fn joined(key: u64) {
-        if STATE.serving.get().is_some() {
-            with_gate(|watch| watch.gate.joined(key, Instant::now()));
-        }
+        let Some(serving) = STATE.serving.get() else {
+            return;
+        };
+        let _ran = STATE.fuse.run("a player's join", || {
+            let server = server_mods();
+            let steps = with_gate(serving, |gate| {
+                gate.joined(key, &server, Instant::now(), serving.rules)
+            });
+            for step in steps {
+                run(crate::host::loader(), serving, step);
+            }
+        });
     }
 
     /// Forgets the player `key`, who left.
     pub(crate) fn left(key: u64) {
-        if STATE.serving.get().is_some() {
-            with_gate(|watch| watch.gate.left(key));
-        }
+        let Some(serving) = STATE.serving.get() else {
+            return;
+        };
+        let _ran = STATE.fuse.run("a player's leave", || {
+            with_gate(serving, |gate| gate.left(key));
+        });
     }
 
-    /// Takes the hello of the player `key`, whose game runs `mods`; whether
-    /// the server answers it. On the game thread.
-    pub(crate) fn hello(key: u64, mods: &str) -> bool {
+    /// Takes the `hello` of the player `key`; whether the server answers it.
+    /// On the game thread.
+    pub(crate) fn hello(key: u64, hello: &Hello) -> bool {
+        if key == 0 {
+            return false;
+        }
         let Some(serving) = STATE.serving.get() else {
             return true;
         };
-        let server = server_mods();
-        let (stays, step) = with_gate(|watch| {
-            watch
-                .gate
-                .hello(key, &server, mods, Instant::now(), serving.rules)
-        });
-        if let Some(step) = step {
-            run(None, serving, step);
-        }
-        stays
+        STATE
+            .fuse
+            .run("a hello", || {
+                let own = serving.side == Side::CLIENT && hello.nonce == nonce();
+                if own {
+                    crate::log!(INFO, "join check: the host is {key:016x}");
+                    return with_gate(serving, |gate| gate.host_hello(key, hello)).0;
+                }
+                let server = server_mods();
+                let (stays, step) = with_gate(serving, |gate| {
+                    gate.hello(key, &server, hello, Instant::now(), serving.rules)
+                });
+                if let Some(step) = step {
+                    run(crate::host::loader(), serving, step);
+                }
+                stays
+            })
+            .unwrap_or(true)
     }
 
-    /// Tells and kicks the players whose time ran out; on the game thread,
-    /// after the step.
+    /// Forgets the players whose slot is gone, tells and kicks those whose
+    /// time ran out; on the game thread, after the step.
     pub(crate) fn after_step(loader: &Loader) {
-        if !STATE.watching.load(Ordering::Acquire) {
+        if !STATE.busy.load(Ordering::Acquire) {
             return;
         }
         let Some(serving) = STATE.serving.get() else {
             return;
         };
+        let epoch = *STATE.epoch.get_or_init(Instant::now);
         let now = Instant::now();
-        let steps = with_gate(|watch| {
-            if now < watch.next {
-                return Vec::new();
-            }
-            watch.next = now + LOOK_EVERY;
-            watch.gate.due(&server_mods(), now, serving.rules)
-        });
-        for step in steps {
-            run(Some(loader), serving, step);
+        let ms = u64::try_from(now.duration_since(epoch).as_millis()).unwrap_or(u64::MAX);
+        if ms < STATE.next.load(Ordering::Relaxed) {
+            return;
         }
+        let next = u64::try_from(LOOK_EVERY.as_millis()).unwrap_or(u64::MAX);
+        STATE.next.store(ms.saturating_add(next), Ordering::Relaxed);
+        let _ran = STATE.fuse.run("the join admission step", || {
+            let Ok(machines) = crate::world::machines(loader) else {
+                return;
+            };
+            let live: Vec<u64> = machines.iter().map(|&(key, _)| key).collect();
+            crate::net::keep_greeting(&live);
+            let server = server_mods();
+            let steps = with_gate(serving, |gate| {
+                gate.keep(&live);
+                gate.due(&server, now, serving.rules)
+            });
+            for step in steps {
+                run(Some(loader), serving, step);
+            }
+        });
     }
 
     /// Does one step; a kick needs the `loader`.
@@ -490,30 +679,39 @@ mod runtime {
                 crate::chat::send(key, &crate::texts::fill("join.admitted", &[]));
             }
             Step::Kick { key } => {
-                if let (Some(loader), Some(kick)) = (loader, &serving.kick) {
-                    disconnect(loader, kick, key);
+                let (Some(loader), Some(kick)) = (loader, &serving.kick) else {
+                    return;
+                };
+                match disconnect(loader, kick, key) {
+                    Ok(machine) => crate::log!(
+                        INFO,
+                        "join check: kicked the game of {key:016x} (machine {machine})"
+                    ),
+                    Err(why) => crate::log!(
+                        WARN,
+                        "join check: could not kick the game of {key:016x}: {why}; trying again"
+                    ),
                 }
             }
         }
     }
 
-    /// Kicks the player `key` through the game; on the game thread.
-    fn disconnect(loader: &Loader, kick: &Kick, key: u64) {
-        let Ok(server) = crate::world::reader() else {
-            return;
-        };
-        let Some(machine) = crate::world::machines(loader)
-            .ok()
-            .and_then(|machines| machines.into_iter().find(|&(k, _)| k == key))
+    /// Kicks the player `key` through the game, on the game thread; the
+    /// player's machine handle, or why not.
+    fn disconnect(loader: &Loader, kick: &Kick, key: u64) -> Result<u32, &'static str> {
+        let server = crate::world::reader().map_err(|_| "not on the game thread")?;
+        let machine = crate::world::machines(loader)
+            .map_err(|_| "the player slots do not read")?
+            .into_iter()
+            .find(|&(k, _)| k == key)
             .map(|(_, machine)| machine)
-        else {
-            return;
-        };
-        // SAFETY: the server holds its session's pointer, read on its own
-        // thread.
+            .ok_or("the player holds no slot")?;
+        // SAFETY: the offset lies inside the server object, as the pattern
+        // that pins it reads it from the server in the game's own kick; the
+        // server is read on its own thread.
         let session: usize = unsafe { crate::world::read(server, kick.session) };
         if session == 0 {
-            return;
+            return Err("the server has no session");
         }
         // SAFETY: the game's kick with the server's session and the machine
         // of one of its player slots, on the game thread, as the server's
@@ -525,10 +723,7 @@ mod runtime {
                 false,
             );
         };
-        crate::log!(
-            INFO,
-            "join check: disconnected the game of {key:016x} (machine {machine})"
-        );
+        Ok(machine)
     }
 }
 
@@ -553,130 +748,309 @@ mod tests {
         }
     }
 
+    fn said(mods: &str) -> Hello {
+        Hello {
+            mods: mods.to_owned(),
+            complete: true,
+            nonce: 0,
+        }
+    }
+
+    fn note(key: u64, hello: bool, needs: Vec<Need>) -> Step {
+        Step::Note { key, hello, needs }
+    }
+
+    fn all_lacking() -> Vec<Need> {
+        vec![need("safes", "0.3.0", None), need("zones", "0.1.0", None)]
+    }
+
+    fn at(start: Instant, seconds: u64) -> Instant {
+        start + Duration::from_secs(seconds)
+    }
+
     #[test]
     fn a_game_that_never_says_hello_is_told_then_kicked() {
         let mut gate = Gate::default();
         let start = Instant::now();
-        gate.joined(7, start);
-        assert!(gate.watching());
-        let early = start + Duration::from_secs(29);
-        assert_eq!(gate.due(SERVER, early, rules()), []);
-        let late = start + Duration::from_secs(30);
+        assert_eq!(gate.joined(7, SERVER, start, rules()), []);
+        assert!(gate.busy());
+        assert_eq!(gate.due(SERVER, at(start, 29), rules()), []);
         assert_eq!(
-            gate.due(SERVER, late, rules()),
-            [Step::Note {
-                key: 7,
-                hello: false,
-                needs: vec![need("safes", "0.3.0", None), need("zones", "0.1.0", None)],
-            }]
+            gate.due(SERVER, at(start, 30), rules()),
+            [note(7, false, all_lacking())]
         );
-        assert_eq!(gate.due(SERVER, late, rules()), [], "one note");
-        let kick = late + Duration::from_secs(10);
-        assert_eq!(gate.due(SERVER, kick, rules()), [Step::Kick { key: 7 }]);
-        assert_eq!(gate.due(SERVER, kick, rules()), [], "one kick");
-        assert!(!gate.watching());
-        gate.left(7);
-        gate.joined(7, kick);
-        assert!(gate.watching(), "a player who comes back waits again");
+        assert_eq!(gate.due(SERVER, at(start, 30), rules()), [], "one note");
+        assert_eq!(
+            gate.due(SERVER, at(start, 40), rules()),
+            [Step::Kick { key: 7 }]
+        );
+        assert_eq!(
+            gate.due(SERVER, at(start, 41), rules()),
+            [],
+            "one kick at a time"
+        );
+    }
+
+    #[test]
+    fn a_kick_that_did_not_remove_the_player_is_tried_again() {
+        let mut gate = Gate::default();
+        let start = Instant::now();
+        gate.joined(7, SERVER, start, rules());
+        gate.due(SERVER, at(start, 30), rules());
+        assert_eq!(
+            gate.due(SERVER, at(start, 40), rules()),
+            [Step::Kick { key: 7 }]
+        );
+        assert_eq!(gate.due(SERVER, at(start, 49), rules()), []);
+        assert_eq!(
+            gate.due(SERVER, at(start, 50), rules()),
+            [Step::Kick { key: 7 }]
+        );
+    }
+
+    #[test]
+    fn kicked_never_left_joins_again() {
+        let mut gate = Gate::default();
+        let start = Instant::now();
+        let (stays, step) = gate.hello(7, SERVER, &said("safes@0.2.0"), start, rules());
+        assert_eq!(
+            (stays, step),
+            (false, None),
+            "no note on the loading screen"
+        );
+        assert_eq!(
+            gate.joined(7, SERVER, at(start, 5), rules()),
+            [note(
+                7,
+                true,
+                vec![
+                    need("safes", "0.3.0", Some("0.2.0")),
+                    need("zones", "0.1.0", None)
+                ]
+            )]
+        );
+        assert_eq!(
+            gate.due(SERVER, at(start, 15), rules()),
+            [Step::Kick { key: 7 }]
+        );
+        // The player's slot never reported a leave; the same key enters again.
+        assert_eq!(gate.joined(7, SERVER, at(start, 60), rules()), []);
+        assert_eq!(
+            gate.due(SERVER, at(start, 90), rules()),
+            [note(7, false, all_lacking())],
+            "the new join waits and is told again"
+        );
+        assert_eq!(
+            gate.due(SERVER, at(start, 100), rules()),
+            [Step::Kick { key: 7 }]
+        );
+    }
+
+    #[test]
+    fn players_whose_slot_is_gone_are_forgotten() {
+        let mut gate = Gate::default();
+        let start = Instant::now();
+        gate.joined(7, SERVER, start, rules());
+        gate.hello(8, SERVER, &said("safes@0.2.0"), start, rules());
+        gate.keep(&[9]);
+        assert!(!gate.busy());
+        assert_eq!(gate.due(SERVER, at(start, 60), rules()), []);
+    }
+
+    #[test]
+    fn grace_starts_when_the_player_enters_the_world() {
+        let mut gate = Gate::default();
+        let start = Instant::now();
+        gate.hello(7, SERVER, &said(""), start, rules());
+        assert_eq!(
+            gate.due(SERVER, at(start, 100), rules()),
+            [],
+            "still loading"
+        );
+        assert_eq!(gate.joined(7, SERVER, at(start, 100), rules()).len(), 1);
+        assert_eq!(gate.due(SERVER, at(start, 109), rules()), []);
+        assert_eq!(
+            gate.due(SERVER, at(start, 110), rules()),
+            [Step::Kick { key: 7 }]
+        );
     }
 
     #[test]
     fn a_matching_hello_lets_the_player_stay_and_extra_mods_do_not_count() {
         let mut gate = Gate::default();
         let start = Instant::now();
-        gate.joined(7, start);
-        let client = "camera@1.0.0,safes@0.3.0,zones@0.1.0";
-        assert_eq!(gate.hello(7, SERVER, client, start, rules()), (true, None));
-        assert!(!gate.watching());
-        let much_later = start + Duration::from_secs(3600);
-        assert_eq!(gate.due(SERVER, much_later, rules()), []);
+        gate.joined(7, SERVER, start, rules());
+        let client = said("camera@1.0.0,safes@0.3.0,zones@0.1.0");
+        assert_eq!(gate.hello(7, SERVER, &client, start, rules()), (true, None));
+        assert_eq!(gate.due(SERVER, at(start, 3600), rules()), []);
     }
 
     #[test]
-    fn a_hello_before_the_join_is_kept() {
+    fn a_matching_hello_before_the_join_is_answered_and_kept() {
         let mut gate = Gate::default();
         let start = Instant::now();
-        assert_eq!(gate.hello(7, SERVER, SERVER, start, rules()), (true, None));
-        gate.joined(7, start);
-        assert!(!gate.watching());
+        assert_eq!(
+            gate.hello(7, SERVER, &said(SERVER), start, rules()),
+            (true, None)
+        );
+        assert_eq!(gate.joined(7, SERVER, start, rules()), []);
+        assert_eq!(gate.due(SERVER, at(start, 3600), rules()), []);
     }
 
     #[test]
-    fn a_hello_that_lacks_a_mod_is_told_at_once_and_kicked_once() {
+    fn an_admitted_player_is_checked_again_when_the_server_s_mods_changed() {
         let mut gate = Gate::default();
         let start = Instant::now();
-        gate.joined(7, start);
-        let (stays, step) = gate.hello(7, SERVER, "safes@0.2.0", start, rules());
+        gate.hello(7, "safes@0.3.0", &said("safes@0.3.0"), start, rules());
+        assert_eq!(
+            gate.joined(7, SERVER, start, rules()),
+            [note(7, true, vec![need("zones", "0.1.0", None)])]
+        );
+    }
+
+    #[test]
+    fn a_hello_that_lacks_a_mod_in_the_world_is_told_at_once_and_kicked() {
+        let mut gate = Gate::default();
+        let start = Instant::now();
+        gate.joined(7, SERVER, start, rules());
+        let (stays, step) = gate.hello(7, SERVER, &said("safes@0.2.0"), start, rules());
         assert!(!stays);
         assert_eq!(
             step,
-            Some(Step::Note {
-                key: 7,
-                hello: true,
-                needs: vec![
+            Some(note(
+                7,
+                true,
+                vec![
                     need("safes", "0.3.0", Some("0.2.0")),
                     need("zones", "0.1.0", None)
-                ],
-            })
+                ]
+            ))
         );
         assert_eq!(
-            gate.hello(7, SERVER, "safes@0.2.0", start, rules()),
+            gate.hello(7, SERVER, &said("safes@0.2.0"), start, rules()),
             (false, None),
             "a repeated hello is not told again"
         );
-        let kick = start + Duration::from_secs(10);
-        assert_eq!(gate.due(SERVER, kick, rules()), [Step::Kick { key: 7 }]);
+        assert_eq!(
+            gate.due(SERVER, at(start, 10), rules()),
+            [Step::Kick { key: 7 }]
+        );
     }
 
     #[test]
     fn a_late_matching_hello_calls_the_kick_off() {
         let mut gate = Gate::default();
         let start = Instant::now();
-        gate.joined(7, start);
-        let late = start + Duration::from_secs(30);
-        assert_eq!(gate.due(SERVER, late, rules()).len(), 1);
+        gate.joined(7, SERVER, start, rules());
+        assert_eq!(gate.due(SERVER, at(start, 30), rules()).len(), 1);
         assert_eq!(
-            gate.hello(7, SERVER, SERVER, late, rules()),
+            gate.hello(7, SERVER, &said(SERVER), at(start, 31), rules()),
             (true, Some(Step::Stay { key: 7 }))
         );
-        let kick = late + Duration::from_secs(10);
-        assert_eq!(gate.due(SERVER, kick, rules()), []);
+        assert_eq!(gate.due(SERVER, at(start, 40), rules()), []);
     }
 
     #[test]
     fn a_server_without_join_mods_admits_everyone() {
         let mut gate = Gate::default();
         let start = Instant::now();
-        gate.joined(7, start);
-        let late = start + Duration::from_secs(60);
-        assert_eq!(gate.due("", late, rules()), []);
-        assert!(!gate.watching());
+        gate.joined(7, "", start, rules());
+        assert_eq!(gate.due("", at(start, 60), rules()), []);
     }
 
     #[test]
-    fn the_gate_follows_a_bounded_number_of_players() {
+    fn an_unknown_sender_is_never_answered_or_told() {
         let mut gate = Gate::default();
         let start = Instant::now();
-        for key in 1..=1000 {
-            gate.joined(key, start);
+        assert_eq!(
+            gate.hello(0, SERVER, &said(SERVER), start, rules()),
+            (false, None)
+        );
+        assert_eq!(gate.joined(0, SERVER, start, rules()), []);
+        assert_eq!(gate.due(SERVER, at(start, 60), rules()), []);
+    }
+
+    #[test]
+    fn a_full_gate_refuses_newcomers() {
+        let mut gate = Gate::default();
+        let start = Instant::now();
+        for key in 1..=MAX_PLAYERS as u64 {
+            gate.joined(key, SERVER, start, rules());
         }
         assert_eq!(gate.players.len(), MAX_PLAYERS);
+        let key = MAX_PLAYERS as u64 + 1;
+        assert_eq!(
+            gate.joined(key, SERVER, start, rules()),
+            [note(key, false, all_lacking()), Step::Kick { key }]
+        );
+        assert_eq!(
+            gate.hello(key + 1, SERVER, &said(SERVER), start, rules()),
+            (false, None)
+        );
+        assert_eq!(gate.players.len(), MAX_PLAYERS);
+    }
+
+    #[test]
+    fn a_hosted_game_acts_once_it_knows_its_host_and_never_on_the_host() {
+        let mut gate = Gate::hosted();
+        let start = Instant::now();
+        gate.joined(1, SERVER, start, rules());
+        gate.joined(2, SERVER, start, rules());
+        assert_eq!(gate.due(SERVER, at(start, 60), rules()), [], "no host yet");
+        let host = Hello {
+            nonce: 5,
+            ..said("")
+        };
+        assert_eq!(gate.host_hello(1, &host), (true, None));
+        assert_eq!(
+            gate.due(SERVER, at(start, 61), rules()),
+            [note(2, false, all_lacking())]
+        );
+        assert_eq!(gate.joined(1, SERVER, at(start, 62), rules()), []);
+        assert_eq!(
+            gate.due(SERVER, at(start, 200), rules()),
+            [Step::Kick { key: 2 }]
+        );
     }
 
     #[test]
     fn needs_name_the_server_s_mods_the_game_lacks_or_runs_otherwise() {
         assert_eq!(
-            needs(SERVER, Some("zones@0.1.0,other@1.0.0")),
+            needs(SERVER, Some(&said("zones@0.1.0,other@1.0.0"))),
             [need("safes", "0.3.0", None)]
         );
-        assert_eq!(needs(SERVER, Some(SERVER)), []);
+        assert_eq!(needs(SERVER, Some(&said(SERVER))), []);
         assert_eq!(needs(SERVER, None).len(), 2);
         assert_eq!(needs("", None), []);
         assert_eq!(
-            needs(SERVER, Some("not a list")).len(),
+            needs(SERVER, Some(&said("not a list"))).len(),
             2,
             "an unreadable hello lacks everything"
         );
+    }
+
+    #[test]
+    fn a_cut_hello_lacks_only_what_its_list_could_have_named() {
+        let cut = Hello {
+            mods: "area@1.0.0,safes@0.2.0".to_owned(),
+            complete: false,
+            nonce: 0,
+        };
+        let server = "area@1.0.0,camera@1.0.0,safes@0.3.0,zones@0.1.0";
+        assert_eq!(
+            needs(server, Some(&cut)),
+            [
+                need("camera", "1.0.0", None),
+                need("safes", "0.3.0", Some("0.2.0"))
+            ],
+            "zones sorts after the cut"
+        );
+        let empty = Hello {
+            mods: String::new(),
+            complete: false,
+            nonce: 0,
+        };
+        assert_eq!(needs(server, Some(&empty)).len(), 4);
     }
 
     #[test]
@@ -701,7 +1075,7 @@ mod tests {
             need("safes", "0.3.0", Some("0.2.0")),
             need("zones", "0.1.0", None),
         ];
-        let text = note(
+        let text = super::note(
             &needs,
             false,
             &names,
@@ -723,7 +1097,7 @@ mod tests {
             "{text}"
         );
         assert!(lines[4].contains("10"), "{text}");
-        let told = note(&needs, true, &names, &sources, None);
+        let told = super::note(&needs, true, &names, &sources, None);
         assert!(!told.contains(LOADER_PLACE), "{told}");
         assert_eq!(told.lines().count(), 3, "no kick line: {told}");
     }
@@ -733,7 +1107,7 @@ mod tests {
         let needs: Vec<Need> = (0..40)
             .map(|i| need(&format!("mod-{i:02}"), "1.0.0", None))
             .collect();
-        let text = note(
+        let text = super::note(
             &needs,
             false,
             &Names::new(),

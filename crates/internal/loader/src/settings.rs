@@ -63,10 +63,11 @@ pub struct Settings {
     /// The key that opens a mod's actions where the HUD hints at one: "F1"
     /// to "F12", a letter or a digit; "off" for none. Read at start.
     pub actions_key: String,
-    /// On a dedicated server that runs join mods, disconnect a player whose
-    /// game does not run them all, in the server's versions, or runs without
-    /// Enshwick, after a chat line naming what it needs; false lets such
-    /// players in. Read at start.
+    /// On a server that runs join mods, or in a game this client hosts,
+    /// disconnect a player whose game does not run them all, in the server's
+    /// versions, or runs without Enshwick, after a chat line naming what it
+    /// needs; administrators too, never the host. false lets such players
+    /// in. Read at start.
     pub require_enshwick: bool,
     /// Seconds a joining player's game has to say which join mods it runs
     /// before the server takes it for a game without Enshwick. Read at start.

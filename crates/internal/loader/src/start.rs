@@ -227,12 +227,12 @@ pub(crate) fn start(
             },
             host::join_values,
         );
-        crate::admission::start(
-            loader,
-            names(loader).into_iter().collect(),
-            sources(loader).into_iter().collect(),
-        );
     }
+    crate::admission::start(
+        loader,
+        names(loader).into_iter().collect(),
+        sources(loader).into_iter().collect(),
+    );
 }
 
 /// Lets the dedicated server's own code run once the hooks are armed, and
