@@ -453,36 +453,21 @@ fn link_join(loader: &Loader) {
 /// The online provider's join, once the provider's function table holds it
 /// where the build table says and its code starts with the pinned bytes.
 fn verified_join(loader: &Loader) -> Result<u64, crate::join::provider::Error> {
-    use crate::join::provider::{Error, Pins, verify};
+    use crate::join::provider::{Error, Pins, verify_mapped};
     let pins = Pins::from_table(
         |id| loader.build.symbol(id),
         |id| loader.build.constant(id),
         loader.base,
     )?;
-    let unreadable = Error::Unreadable { table: pins.table };
-    let range = |start: usize, len: usize| {
-        let start = u64::try_from(start).ok()?;
-        Some(start..start.checked_add(u64::try_from(len).ok()?)?)
-    };
-    let (_, base, image_len) = identify().ok_or_else(|| unreadable.clone())?;
-    let image = usize::try_from(base)
-        .ok()
-        .and_then(|base| range(base, image_len))
-        .ok_or_else(|| unreadable.clone())?;
+    let range = |start: u64, len: usize| Some(start..start.checked_add(u64::try_from(len).ok()?)?);
+    let (_, base, image_len) = identify().ok_or(Error::NoImage)?;
+    let image = range(base, image_len).ok_or(Error::NoImage)?;
     let code = crate::code::text(base)
-        .and_then(|(start, len)| range(start, len))
-        .ok_or(unreadable)?;
-    let read = |va: u64| {
-        let end = va.checked_add(8)?;
-        if va < image.start || end > image.end {
-            return None;
-        }
-        let address = usize::try_from(va).ok()?;
-        // SAFETY: eight bytes inside the game's image, which stays mapped
-        // for the life of the process.
-        Some(unsafe { core::ptr::with_exposed_provenance::<u64>(address).read_unaligned() })
-    };
-    verify(&pins, read, code)
+        .and_then(|(start, len)| range(u64::try_from(start).ok()?, len))
+        .ok_or(Error::NoCode)?;
+    // SAFETY: `image` is the game's executable image, mapped for the life of
+    // the process.
+    unsafe { verify_mapped(&pins, image, code) }
 }
 
 /// The update sources of the running join mods, `(id, source line)`.

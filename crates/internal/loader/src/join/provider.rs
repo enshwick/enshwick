@@ -51,12 +51,24 @@ pub enum Error {
         /// The bytes the build table pins.
         expected: u64,
     },
-    /// The provider's table or the join cannot be read.
+    /// The provider's table holds no function in the game's code.
     #[error("the provider's table at {table:#x} holds no function")]
     Unreadable {
         /// The table's address.
         table: u64,
     },
+    /// The join's first bytes cannot be read.
+    #[error("the join at {join:#x} cannot be read")]
+    JoinUnreadable {
+        /// The join's address.
+        join: u64,
+    },
+    /// The game's image is not found in the process.
+    #[error("the game's image is not found")]
+    NoImage,
+    /// The game's code section is not found in its image.
+    #[error("the game's code section is not found")]
+    NoCode,
     /// The provider's table ends before the pinned slot.
     #[error("the provider's table ends after {slots} slots, before the pinned slot {slot}")]
     Short {
@@ -193,7 +205,7 @@ pub fn verify(
 ) -> Result<u64, Error> {
     let expected = pins.bytes.ok_or(Error::NoBytes)?;
     let join = pins.join;
-    let found = read(join).ok_or(Error::Unreadable { table: pins.table })?;
+    let found = read(join).ok_or(Error::JoinUnreadable { join })?;
     if found != expected {
         return Err(Error::Bytes {
             join,
@@ -225,6 +237,35 @@ pub fn verify(
         (Some(first), Some(second)) => Err(Error::Twice { first, second }),
         (None, _) => Err(Error::NotFound { join }),
     }
+}
+
+/// Checks the pinned join in the running game as [`verify`] does, reading
+/// eight bytes at a time and only inside `image`, the game's image, whose
+/// code section spans `code`.
+///
+/// # Errors
+///
+/// An [`Error`] naming what did not match; an address outside `image` reads
+/// as unreadable.
+///
+/// # Safety
+///
+/// - Every byte of `image` is mapped readable and stays so for the call.
+pub unsafe fn verify_mapped(
+    pins: &Pins,
+    image: Range<u64>,
+    code: Range<u64>,
+) -> Result<u64, Error> {
+    let read = |va: u64| {
+        let end = va.checked_add(8)?;
+        if va < image.start || end > image.end {
+            return None;
+        }
+        let address = usize::try_from(va).ok()?;
+        // SAFETY: eight bytes inside `image`, which the caller keeps mapped.
+        Some(unsafe { core::ptr::with_exposed_provenance::<u64>(address).read_unaligned() })
+    };
+    verify(pins, read, code)
 }
 
 #[cfg(test)]
@@ -324,6 +365,38 @@ mod tests {
             verify(&pins(Some(0), None), memory(&[JOIN]), CODE),
             Err(Error::NoBytes)
         );
+    }
+
+    #[test]
+    fn an_unreadable_join_names_the_join() {
+        let read = |va| (va != JOIN).then_some(0x21);
+        assert_eq!(
+            verify(&pins(Some(0), Some(BYTES)), read, CODE),
+            Err(Error::JoinUnreadable { join: JOIN })
+        );
+    }
+
+    /// Memory laid out as a game image: the join's bytes, then the
+    /// provider's table holding the join in slot 0, ended by a non-code word.
+    #[test]
+    fn the_join_is_read_in_mapped_memory_only_inside_the_image() {
+        let memory: Box<[u64; 4]> = Box::new([BYTES, 0, 0, 0x21]);
+        let start = memory.as_ptr().expose_provenance() as u64;
+        let mut memory = memory;
+        memory[2] = start;
+        let image = start..start + 32;
+        let pins = Pins {
+            table: start + 16,
+            join: start,
+            slot: Some(0),
+            bytes: Some(BYTES),
+        };
+        // SAFETY: `image` spans `memory`, alive until the end of the test.
+        let inside = unsafe { verify_mapped(&pins, image.clone(), start..start + 8) };
+        assert_eq!(inside, Ok(start));
+        // SAFETY: the range lies inside `memory`.
+        let outside = unsafe { verify_mapped(&pins, start + 8..start + 32, start..start + 8) };
+        assert_eq!(outside, Err(Error::JoinUnreadable { join: start }));
     }
 
     #[test]
