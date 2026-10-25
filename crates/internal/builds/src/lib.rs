@@ -46,6 +46,99 @@ impl Side {
     }
 }
 
+/// Steam's id for one published build of the game, the `buildid` that
+/// steamcmd and `steamapps/appmanifest_*.acf` show; it grows with each build.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_builds::SteamBuild;
+///
+/// assert!(SteamBuild::new(26_083_076) > SteamBuild::new(26_082_781));
+/// assert_eq!(SteamBuild::new(26_083_076).to_string(), "26083076");
+/// ```
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Deserialize)]
+#[serde(transparent)]
+pub struct SteamBuild(u64);
+
+impl SteamBuild {
+    /// Wraps a build id read from Steam.
+    ///
+    /// # Examples
+    ///
+    /// See [`SteamBuild`].
+    #[must_use]
+    pub const fn new(id: u64) -> Self {
+        Self(id)
+    }
+
+    /// The id as Steam spells it.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_loader_builds::SteamBuild;
+    ///
+    /// assert_eq!(SteamBuild::new(7).get(), 7);
+    /// ```
+    #[must_use]
+    pub const fn get(self) -> u64 {
+        self.0
+    }
+}
+
+impl std::fmt::Display for SteamBuild {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+/// The game's own version number, which a dedicated server puts first after
+/// the protocol in its Steam keywords; several Steam builds can share one.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader_builds::GameVersion;
+///
+/// assert_eq!(GameVersion::new(1_269_579).to_string(), "1269579");
+/// ```
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Deserialize)]
+#[serde(transparent)]
+pub struct GameVersion(u32);
+
+impl GameVersion {
+    /// Wraps a version number read from the game.
+    ///
+    /// # Examples
+    ///
+    /// See [`GameVersion`].
+    #[must_use]
+    pub const fn new(number: u32) -> Self {
+        Self(number)
+    }
+
+    /// The number as the game spells it.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_loader_builds::GameVersion;
+    ///
+    /// assert_eq!(GameVersion::new(7).get(), 7);
+    /// ```
+    #[must_use]
+    pub const fn get(self) -> u32 {
+        self.0
+    }
+}
+
+impl std::fmt::Display for GameVersion {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
 /// Why a table does not read.
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum TableError {
@@ -395,7 +488,8 @@ pub struct Table {
     name: String,
     side: Side,
     fingerprint: Fingerprint,
-    build: Option<u64>,
+    steam_build: Option<SteamBuild>,
+    game_version: Option<GameVersion>,
     revision: u32,
     checks: Vec<(String, u64)>,
     symbols: Vec<Symbol>,
@@ -410,7 +504,9 @@ struct TableFile {
     guid: String,
     age: u32,
     #[serde(default)]
-    build: Option<u64>,
+    steam_build: Option<SteamBuild>,
+    #[serde(default)]
+    game_version: Option<GameVersion>,
     #[serde(default = "first_revision")]
     revision: u32,
     #[serde(default)]
@@ -643,7 +739,8 @@ impl Table {
             name: file.name,
             side: file.side,
             fingerprint: Fingerprint::new(guid, file.age),
-            build: file.build,
+            steam_build: file.steam_build,
+            game_version: file.game_version,
             revision: file.revision,
             checks: file.checks.into_iter().collect(),
             symbols,
@@ -651,7 +748,7 @@ impl Table {
         })
     }
 
-    /// The name the log shows, such as `1.0 server (1269579)`.
+    /// The name the log shows, such as `1.0 server (26083076)`.
     #[must_use]
     pub fn name(&self) -> &str {
         &self.name
@@ -669,10 +766,16 @@ impl Table {
         self.fingerprint
     }
 
-    /// Steam's build id, when the table names it.
+    /// Steam's id of the build, when the table names it.
     #[must_use]
-    pub const fn build(&self) -> Option<u64> {
-        self.build
+    pub const fn steam_build(&self) -> Option<SteamBuild> {
+        self.steam_build
+    }
+
+    /// The game's own version number on the build, when the table names it.
+    #[must_use]
+    pub const fn game_version(&self) -> Option<GameVersion> {
+        self.game_version
     }
 
     /// Raised when a table is republished for the same build; the highest
@@ -1070,13 +1173,15 @@ pub fn exact(tables: &[Table], side: Side, fingerprint: Fingerprint) -> Option<&
 }
 
 /// The table of the newest build of `side` among `tables`, by Steam build
-/// id, then revision: the base for a build without a table.
+/// id, then the game's version, then revision: the base for a build without
+/// a table. A table without a Steam build id ranks below every table with
+/// one.
 #[must_use]
 pub fn newest(tables: &[Table], side: Side) -> Option<&Table> {
     tables
         .iter()
         .filter(|t| t.side == side)
-        .max_by_key(|t| (t.build.unwrap_or(0), t.revision))
+        .max_by_key(|t| (t.steam_build, t.game_version, t.revision))
 }
 
 #[cfg(test)]
@@ -1142,7 +1247,8 @@ mod tests {
         side = "server"
         guid = "000102030405060708090a0b0c0d0e0f"
         age = 7
-        build = 2
+        steam_build = 2
+        game_version = 9
         [checks]
         "a_system" = 0x10
         [symbols]
@@ -1168,7 +1274,8 @@ mod tests {
         let table = Table::parse(TABLE).unwrap();
         assert_eq!(table.fingerprint().age(), 7);
         assert_eq!(table.fingerprint().guid()[15], 0x0f);
-        assert_eq!(table.build(), Some(2));
+        assert_eq!(table.steam_build(), Some(SteamBuild::new(2)));
+        assert_eq!(table.game_version(), Some(GameVersion::new(9)));
         assert_eq!(table.revision(), 1);
         let resolved = table.resolve();
         assert_eq!(resolved.kind(), Kind::Exact);
@@ -1439,10 +1546,37 @@ age = 1
     }
 
     #[test]
+    fn a_table_with_a_steam_build_is_newer_than_one_without() {
+        let mut known = Table::parse(TABLE).unwrap();
+        known.game_version = None;
+        let mut unknown = known.clone();
+        unknown.steam_build = None;
+        unknown.game_version = Some(GameVersion::new(u32::MAX));
+        unknown.fingerprint = Fingerprint::new([1; 16], 1);
+        let tables = [unknown.clone(), known.clone()];
+        assert_eq!(newest(&tables, Side::Server), Some(&known));
+    }
+
+    #[test]
+    fn the_single_build_key_of_old_tables_is_refused() {
+        let text = TABLE.replace("steam_build = 2", "build = 2");
+        assert!(Table::parse(&text).is_err());
+    }
+
+    #[test]
+    fn the_newest_embedded_tables_name_their_steam_builds() {
+        let tables = tables();
+        let steam = |side| newest(&tables, side).and_then(Table::steam_build);
+        assert_eq!(steam(Side::Client), Some(SteamBuild::new(26_082_781)));
+        assert_eq!(steam(Side::Server), Some(SteamBuild::new(26_083_076)));
+    }
+
+    #[test]
     fn the_newest_table_of_a_side_is_the_highest_build() {
         let old = Table::parse(TABLE).unwrap();
         let mut new = old.clone();
-        new.build = Some(3);
+        new.steam_build = Some(SteamBuild::new(3));
+        new.game_version = Some(GameVersion::new(8));
         new.fingerprint = Fingerprint::new([1; 16], 1);
         let tables = [old.clone(), new.clone()];
         assert_eq!(newest(&tables, Side::Server), Some(&new));

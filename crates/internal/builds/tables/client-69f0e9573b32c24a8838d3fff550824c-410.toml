@@ -5,7 +5,7 @@ name = "1.0 client (1269579)"
 side = "client"
 guid = "69f0e9573b32c24a8838d3fff550824c"
 age = 410
-build = 1269579
+game_version = 1269579
 revision = 1
 
 # Systems whose reflected entry must equal the pinned address: the
