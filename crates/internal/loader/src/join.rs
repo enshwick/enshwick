@@ -853,6 +853,7 @@ mod runtime {
             std::panic::catch_unwind(|| check(&head)).unwrap_or(true)
         };
         if allowed {
+            super::interaction::release();
             // SAFETY: forwarded unchanged.
             return unsafe { NEXT.get()(provider, target) };
         }

@@ -1,10 +1,8 @@
-//! The one dialog a client shows when it stays out of a server: each of the
-//! server's mods it lacks, with the server's version, grouped by where to get
-//! them.
-//!
-//! The game's popup centres every line and wraps it at a fixed width (client
-//! build 426), so lines stay short: a heading per place, then one mod per
-//! line, and no more lines than keep the button on a 1080p screen.
+//! The one dialog a client shows when it stays out of a server.
+//
+// The game's popup centres every line and wraps it at a fixed width (client
+// build 426), so lines stay short: a heading per place, then one mod per
+// line, and no more lines than keep the button on a 1080p screen.
 
 use std::collections::BTreeMap;
 
