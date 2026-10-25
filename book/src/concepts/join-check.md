@@ -75,6 +75,30 @@ drawing; a refused join is refused at once, and the note follows.
 
 Mods without `join: true` never count: the player may run any of them.
 
+## What does a server do with a player who lacks its mods?
+
+A dedicated server that runs join mods checks every player itself, since a
+client without the loader runs no check. When a player enters the world, the
+server waits for the player's game to say which join mods it runs:
+
+- **The game names every join mod in the server's version.** The player
+  stays. Extra mods do not count.
+- **The game says nothing within `join_hello_seconds`**, 30 by default. The
+  game runs without Enshwick, or its own check did not run. The server sends
+  the player a chat line naming Enshwick, each join mod with its version, and
+  where to get them.
+- **The game lacks a join mod or runs it in another version.** The chat line
+  comes at once and names the player's version beside the server's.
+
+After `join_note_seconds`, 10 by default, the server disconnects the player
+through the game's own kick. A matching hello in that time calls the kick off.
+With `require_enshwick = false` in `mod-configs/enshwick.toml`, the server
+lets such players in. On a game build whose table lacks the kick, the player
+gets the chat line and stays, and the log says so.
+
+A server without join mods admits every player. A game a client hosts does not
+check its players.
+
 ## Join values
 
 A field of a mod's settings marked `#[config(sync)]` is a join value: the
