@@ -11,14 +11,20 @@ use enshwick_loader_api::{Load, Next, Off};
 
 use crate::memory;
 
-type JoinGame = unsafe extern "system" fn(provider: *mut u8, target: *mut u8);
+type JoinGame = unsafe extern "system" fn(provider: *mut u8, target: *mut u8) -> u8;
 type MainEntry = unsafe extern "system" fn(menu: usize, entry: *const u8) -> u8;
 type PauseEntry = unsafe extern "system" fn(text: *const u8, enabled: u8, attention: u8) -> u8;
 
-/// The join target's bytes up to its address flag: host id at 0, IPv4 at 8,
-/// game port at 0xc, query port at 0xe, the flag at 0x20 (client builds 410
-/// and 426).
-const TARGET_BYTES: usize = 0x21;
+/// Where the join target holds the host's Steam id, the server's IPv4, its
+/// game and query ports and the flag that the address is set (client builds
+/// 410 and 426).
+const HOST: usize = 0;
+const IP: usize = 8;
+const GAME_PORT: usize = 0xc;
+const QUERY_PORT: usize = 0xe;
+const HAS_ADDRESS: usize = 0x20;
+/// The join target's bytes up to its address flag.
+const TARGET_BYTES: usize = HAS_ADDRESS + 1;
 /// How long after a join the menus are watched.
 const WATCH: Duration = Duration::from_secs(30);
 /// How often the watch logs.
@@ -31,7 +37,7 @@ static WATCHING: AtomicBool = AtomicBool::new(false);
 
 enshwick_loader_api::detour! {
     // Ahead of the loader's join check, so the link sees refused joins too.
-    static JOIN_GAME: unsafe extern "system" fn(provider: *mut u8, target: *mut u8) =
+    static JOIN_GAME: unsafe extern "system" fn(provider: *mut u8, target: *mut u8) -> u8 =
         join_game, priority = i32::MIN;
 }
 
@@ -83,17 +89,18 @@ pub(crate) fn link(load: &mut Load<'_>) -> Result<(), Off> {
     })
 }
 
-fn join_game(next: Next<JoinGame>, provider: *mut u8, target: *mut u8) {
+fn join_game(next: Next<JoinGame>, provider: *mut u8, target: *mut u8) -> u8 {
     let number = JOINS.fetch_add(1, Ordering::Relaxed) + 1;
     enshwick_loader_api::info!("R8 join {number} asked: {}; {}", described(target), menus());
     let start = Instant::now();
     // SAFETY: forwarded unchanged to the rest of the chain.
-    unsafe { next.get()(provider, target) };
+    let state_changed = unsafe { next.get()(provider, target) };
     enshwick_loader_api::info!(
-        "R8 join {number} returned after {} ms",
+        "R8 join {number} returned {state_changed} after {} ms",
         start.elapsed().as_millis()
     );
     watch();
+    state_changed
 }
 
 /// The host, address, ports and address flag of a join target.
@@ -102,32 +109,19 @@ fn described(target: *mut u8) -> String {
     if memory::read(target.addr(), &mut bytes) != TARGET_BYTES {
         return format!("unreadable target {target:p}");
     }
-    let [
-        h0,
-        h1,
-        h2,
-        h3,
-        h4,
-        h5,
-        h6,
-        h7,
-        a,
-        b,
-        c,
-        d,
-        g0,
-        g1,
-        q0,
-        q1,
-        ..,
-    ] = bytes;
-    let host = u64::from_le_bytes([h0, h1, h2, h3, h4, h5, h6, h7]);
-    let ip = std::net::Ipv4Addr::from(u32::from_le_bytes([a, b, c, d]));
-    let (game, query) = (u16::from_le_bytes([g0, g1]), u16::from_le_bytes([q0, q1]));
+    let host = u64::from_le_bytes(field(&bytes, HOST));
+    let ip = std::net::Ipv4Addr::from(u32::from_le_bytes(field(&bytes, IP)));
+    let game = u16::from_le_bytes(field(&bytes, GAME_PORT));
+    let query = u16::from_le_bytes(field(&bytes, QUERY_PORT));
     format!(
         "host {host}, address {ip} game port {game} query port {query}, address set {}",
-        bytes[TARGET_BYTES - 1]
+        bytes[HAS_ADDRESS]
     )
+}
+
+/// The `N` bytes of a join target from `at`, inside the target.
+fn field<const N: usize>(bytes: &[u8; TARGET_BYTES], at: usize) -> [u8; N] {
+    core::array::from_fn(|i| bytes[at + i])
 }
 
 fn main_entry(next: Next<MainEntry>, menu: usize, entry: *const u8) -> u8 {
