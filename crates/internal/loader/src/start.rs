@@ -417,11 +417,9 @@ fn attribute_crashes(loader: &Loader, order: &[&Library]) {
     }
 }
 
-/// Links the loader's join check on the client's join.
+/// Links the loader's join check on the client's join. The lobby module and
+/// the mod names serve hosted games too, so they go in on every build.
 fn link_join(loader: &Loader) {
-    let Some(rva) = loader.build.symbol("net.join_game") else {
-        return;
-    };
     let names = loader
         .mods
         .iter()
@@ -430,15 +428,16 @@ fn link_join(loader: &Loader) {
         .collect();
     crate::join::set_names(names);
     crate::lobby::register();
-    let status = loader.link(
-        loader.base + rva,
+    loader.link_feature(
+        "join check",
+        loader
+            .build
+            .symbol("net.join_game")
+            .map(|rva| loader.base + rva),
         &crate::join::NEXT,
         crate::join::detour,
         enshwick_loader_api::abi::HookFlags::NONE,
     );
-    if !status.is_ok() {
-        crate::log!(WARN, "join check off: its hook was refused ({})", status.0);
-    }
 }
 
 /// The update sources of the running join mods, `(id, source line)`.
