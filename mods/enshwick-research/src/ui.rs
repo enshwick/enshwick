@@ -280,9 +280,11 @@ mod tests {
         ) else {
             unreachable!("the client parses");
         };
+        let rows = crate::tooltip::tests::pinned_in(&image);
         for site in &SITES {
-            let Some((_, rva, _)) = pinned.iter().find(|(name, _, _)| name == site.symbol) else {
-                continue;
+            let rva = rows.iter().find(|(name, _)| name == site.symbol);
+            let Some((_, rva)) = rva else {
+                unreachable!("{} is pinned for this client build", site.name);
             };
             let found = image.read(image.base() + rva, 8);
             assert_eq!(found, Some(&site.expected[..]), "{}", site.name);
