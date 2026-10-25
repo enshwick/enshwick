@@ -252,7 +252,7 @@ pub struct Meta {
 }
 
 impl Meta {
-    /// `Name (id)`, or the id when the manifest names none.
+    /// The name players read, or the id when the manifest names none.
     #[must_use]
     pub fn label(&self, id: &str) -> String {
         enshwick_loader_api::mods::label(&self.name, id)
@@ -417,7 +417,7 @@ mod tests {
         m.homepage = Str::new("github.com/themaiby/enshwick");
         // SAFETY: static data.
         let meta = unsafe { meta(&m) };
-        assert_eq!(meta.label("safes"), "Safes (safes)");
+        assert_eq!(meta.label("safes"), "Safes");
         assert_eq!(meta.description, "A chest only its owner opens");
         assert_eq!(meta.authors, ["themaiby"]);
         assert!(meta.homepage.is_empty());

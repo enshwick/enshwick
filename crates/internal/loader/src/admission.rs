@@ -1260,7 +1260,7 @@ mod tests {
         assert_eq!(lines.len(), 5, "{text}");
         assert!(lines[1].contains(LOADER_PLACE), "{text}");
         assert!(
-            lines[2].contains("Safes (safes)")
+            lines[2].contains("Safes 0.3.0")
                 && lines[2].contains("0.3.0")
                 && lines[2].contains("0.2.0")
                 && lines[2].contains("https://github.com/someone/safes/releases"),

@@ -70,7 +70,7 @@ pub(crate) fn entries(list: &str) -> impl Iterator<Item = (&str, &str)> {
         })
 }
 
-/// `Name (id)` of mod `id`, or the id when `names` has none.
+/// The name players read for mod `id`, or the id when `names` has none.
 fn label(names: &Names, id: &str) -> String {
     enshwick_loader_api::mods::label(names.get(id).map_or("", String::as_str), id)
 }
@@ -1305,7 +1305,7 @@ mod tests {
             [
                 (true, "b: server 0.2.0, yours 0.1.0".to_owned()),
                 (true, "c: server 1.0.0, not installed".to_owned()),
-                (false, "Dogs (d): yours 3.0.0, not on the server".to_owned()),
+                (false, "Dogs: yours 3.0.0, not on the server".to_owned()),
             ]
         );
         assert!(differences("", "", &names).is_empty());

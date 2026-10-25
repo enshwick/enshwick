@@ -33,7 +33,7 @@ The loader names the version wherever the mod comes up:
 - `safes 0.2.0 initialised` in `loader.log`;
 - `requires flame-altar-zones ^0.2, found 0.1.3` when a requirement is out of
   range;
-- `Safes (safes) 0.2.0, yours 0.1.0` in the dialog of a refused join.
+- `Safes 0.2.0, yours 0.1.0` in the dialog of a refused join.
 
 `cargo enshwick manifest` shows what a built DLL says about itself (id,
 version, side, join check, dependencies). With `--expect-version` it fails
@@ -218,7 +218,7 @@ has:
 | `file`                                          | The DLL's path relative to the game's folder, such as `mods/enshwick_safes.dll` |
 | `updates`                                       | `Some(Updates::GitHub { .. })`, `Some(Updates::Url(..))` or `None`              |
 | `signed_by`                                     | The author keys the manifest names, checked; empty for none                     |
-| `name`                                          | What players read; `entry.label()` gives `Name (id)`, or the id without a name  |
+| `name`                                          | What players read; `entry.label()` gives the name, or the id without a name     |
 | `description`, `authors`, `license`, `homepage` | The manifest's credits; empty for none                                          |
 | `replaced_by`                                   | In `mods::replaced()`, the mod that replaces this one; empty elsewhere          |
 
