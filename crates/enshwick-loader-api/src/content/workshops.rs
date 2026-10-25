@@ -470,8 +470,9 @@ impl Load<'_> {
     /// Adds a crafting station with a workshop of its own, on the server and
     /// the client alike: the vanilla station's template and item cloned, the
     /// template crafting at the new workshop, the item placing the new
-    /// template, both listed beside what other mods add, and optionally a
-    /// copy of the vanilla station's recipe that makes the new one. Recipes
+    /// template, both listed beside what other mods add, a crafting menu
+    /// for the workshop on the client, and optionally a copy of the vanilla
+    /// station's recipe that makes the new one. Recipes
     /// target the workshop with [`NewRecipe::workshop`] or
     /// [`Derived::workshop`](super::recipes::Derived::workshop).
     ///
@@ -538,6 +539,9 @@ impl Load<'_> {
         let registry = WORKSHOP_REGISTRY.key(types::WORKSHOP_REGISTRY);
         self.serve(registry, registry, move |base| {
             list_workshop(&layout, base, &new)
+        })?;
+        super::menu::serve(self, move |menu, bundle| {
+            super::menu::list_workshop(menu, bundle, workshop)
         })?;
         if let Some(recipe) = recipe {
             self.add_recipe(NewRecipe {

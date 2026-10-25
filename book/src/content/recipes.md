@@ -139,6 +139,30 @@ patches, `modify` sees the registry as it reaches it, with what mods before
 it added or changed, and mods after it see its changes. The mod's log says
 `<n> recipes changed`.
 
+## The crafting menu
+
+The client's crafting menu does not list what the registry holds. It lists
+the recipe ids of a tree baked into the game's UI bundle: per workshop,
+groups of sets of recipes. So `add_recipe`, `add_recipe_with` and
+`derive_recipes` also patch the UI bundle on the client, and the
+[`content::menu`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/content/menu.rs)
+module does the edit:
+
+- a new recipe goes right after the vanilla recipe that makes `like`, in the
+  same set;
+- a derived copy goes right after its original;
+- a recipe whose `workshop` names another workshop goes last in that
+  workshop's first set, unless the copied recipe is listed there.
+
+The menu is shared like the registry: each mod's patch runs on the bundle as
+the mods before it left it, so the Safe of one mod and the Vault of another,
+both copied from the wooden chest, show one after the other. One group of
+the menu shows at most 512 recipes, all its sets together
+([`GROUP_ENTRIES`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/content/menu.rs));
+the mod's log says when a recipe is left out because its group is full or
+because nothing in the menu says where it goes. The dedicated server has no
+crafting menu and serves no UI bundle.
+
 ## The workshop limit
 
 The game takes at most 512 recipes at one workshop

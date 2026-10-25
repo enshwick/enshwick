@@ -161,6 +161,10 @@ name = "language"
 required-features = ["test"]
 
 [[test]]
+name = "recipe_menu"
+required-features = ["test"]
+
+[[test]]
 name = "recipe_rules"
 required-features = ["test"]
 

@@ -13,6 +13,7 @@ use crate::{Load, Off};
 
 pub mod icons;
 pub mod items;
+pub mod menu;
 pub mod recipes;
 pub mod vanilla;
 pub mod workshops;
@@ -528,6 +529,8 @@ pub mod types {
     pub const WORKSHOP_REGISTRY: u32 = 0xa8ea_5924;
     /// The client's UI image, such as an item icon.
     pub const UI_IMAGE: u32 = super::icons::UI_IMAGE;
+    /// `FbUiBundle`, the client's UI data, the crafting menu among it.
+    pub const UI_BUNDLE: u32 = 0xfef9_18b8;
 }
 
 /// A resource blob being edited.

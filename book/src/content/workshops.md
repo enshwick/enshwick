@@ -51,8 +51,8 @@ fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_
 
 ## What it adds
 
-`add_workshop` serves five resources, and with `station_recipe` adds a
-recipe:
+`add_workshop` serves five resources, a sixth on the client, and with
+`station_recipe` adds a recipe:
 
 1. the station's template, a copy of the vanilla one whose crafting
    components (`Crafting`, `CraftingInteraction`,
@@ -63,7 +63,10 @@ recipe:
 4. the item registry with the new item listed;
 5. the workshop registry with a copy of the vanilla station's entry, naming
    the new workshop, the new item and, with `name`, the new name;
-6. with `station_recipe`, a copy of the vanilla station's recipe that makes
+6. on the client, the UI bundle with a crafting menu for the new workshop:
+   one group with one empty set, where its recipes go
+   ([The crafting menu](recipes.md#the-crafting-menu));
+7. with `station_recipe`, a copy of the vanilla station's recipe that makes
    the new station, at the workshop where the vanilla station is crafted,
    its ingredient counts times `cost`.
 

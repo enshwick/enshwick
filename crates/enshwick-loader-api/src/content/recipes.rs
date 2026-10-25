@@ -1,6 +1,9 @@
 //! Recipes: a vanilla recipe copied for a new output, with its ingredients
 //! scaled, or the recipes in the registry changed in place.
 
+use std::sync::Arc;
+
+use super::menu::{self, MenuEntry};
 use super::workshops::WorkshopId;
 use super::{Blob, DebugName, Guid, Id, types};
 use crate::{Load, Off};
@@ -294,6 +297,66 @@ fn makes(layout: &RecipeLayout, registry: &Blob, at: usize, item: Guid) -> bool 
         let stack = outputs + i * layout.stack_size;
         registry.bytes().get(stack..stack + 16) == Some(&item.0[..])
     })
+}
+
+/// The vanilla recipe registry from the game's archive.
+fn vanilla_registry() -> Option<Vec<u8>> {
+    super::game_resource(RECIPE_REGISTRY.key(types::RECIPE_REGISTRY))
+}
+
+/// The GUID of the first recipe in `registry` that makes `item`.
+fn recipe_making(layout: &RecipeLayout, registry: &[u8], item: Guid) -> Option<Guid> {
+    let registry = Blob::new(registry);
+    let (start, count) = registry.array(layout.recipes)?;
+    let at = (0..usize::try_from(count).ok()?)
+        .map(|i| start + i * layout.recipe)
+        .find(|&at| makes(layout, &registry, at, item))?;
+    let view = RecipeView {
+        blob: &registry,
+        at,
+        layout,
+    };
+    Some(view.guid())
+}
+
+/// Where the crafting menu lists `recipe`: after the vanilla recipe it
+/// copies.
+fn menu_entry(layout: &RecipeLayout, recipe: &NewRecipe) -> MenuEntry {
+    MenuEntry {
+        recipe: recipe.id.guid(),
+        after: vanilla_registry()
+            .and_then(|registry| recipe_making(layout, &registry, recipe.like)),
+        workshop: recipe.workshop,
+    }
+}
+
+/// Where the crafting menu lists the copies [`derive_recipes_in`] makes of
+/// the recipes in `registry`: each after its original.
+fn derived_entries(
+    layout: &RecipeLayout,
+    registry: &[u8],
+    salt: u32,
+    choose: &dyn Fn(&RecipeView<'_>) -> Option<Derived>,
+) -> Option<Vec<MenuEntry>> {
+    let blob = Blob::new(registry);
+    let (start, count) = blob.array(layout.recipes)?;
+    Some(
+        (0..usize::try_from(count).ok()?)
+            .filter_map(|i| {
+                let view = RecipeView {
+                    blob: &blob,
+                    at: start + i * layout.recipe,
+                    layout,
+                };
+                let derived = choose(&view)?;
+                Some(MenuEntry {
+                    recipe: derived_guid(view.guid(), salt),
+                    after: Some(view.guid()),
+                    workshop: derived.workshop,
+                })
+            })
+            .collect(),
+    )
 }
 
 /// The recipe's inputs with every count times `cost`; an input's item stack
@@ -646,7 +709,9 @@ pub fn modify_recipes_in(
 impl Load<'_> {
     /// Adds a recipe to the game, on the server and the client alike: a copy
     /// of the recipe that makes `like`, at the same workshop and unlocked with
-    /// it, making `output` instead, beside recipes other mods add.
+    /// it, making `output` instead, beside recipes other mods add. The
+    /// client's crafting menu lists it right after the copied recipe (see
+    /// [`menu`](super::menu)).
     ///
     /// # Errors
     ///
@@ -678,6 +743,9 @@ impl Load<'_> {
         let registry = RECIPE_REGISTRY.key(types::RECIPE_REGISTRY);
         self.serve(registry, registry, move |base| {
             add_recipe_to(&layout, base, &recipe, workshop_limit())
+        })?;
+        menu::serve(self, move |menu, bundle| {
+            menu::list_recipes(menu, bundle, &[menu_entry(&layout, &recipe)])
         })
     }
 
@@ -720,17 +788,24 @@ impl Load<'_> {
         self.declare(id)?;
         let layout = RecipeLayout::resolve(self)?;
         let registry = RECIPE_REGISTRY.key(types::RECIPE_REGISTRY);
+        let recipe = Arc::new(recipe);
+        let built = Arc::clone(&recipe);
         self.serve(registry, registry, move |base| {
-            let recipe = NewRecipe { id, ..recipe() };
+            let recipe = NewRecipe { id, ..built() };
             add_recipe_to(&layout, base, &recipe, workshop_limit())
         })?;
-        self.allow_rebuild(registry)
+        self.allow_rebuild(registry)?;
+        menu::serve(self, move |menu, bundle| {
+            let recipe = NewRecipe { id, ..recipe() };
+            menu::list_recipes(menu, bundle, &[menu_entry(&layout, &recipe)])
+        })
     }
 
     /// Adds a derived copy of each vanilla recipe `choose` picks: same
     /// workshop and unlock, its output and cost scaled as [`Derived`] says,
-    /// beside the original. `salt` keeps the copies' GUIDs apart from other
-    /// mods'; use the mod id.
+    /// beside the original, in the registry and in the client's crafting
+    /// menu. `salt` keeps the copies' GUIDs apart from other mods'; use the
+    /// mod id.
     ///
     /// # Errors
     ///
@@ -758,8 +833,21 @@ impl Load<'_> {
         let layout = RecipeLayout::resolve(self)?;
         let salt = fnv1a(salt.as_bytes());
         let registry = RECIPE_REGISTRY.key(types::RECIPE_REGISTRY);
+        let choose = Arc::new(choose);
+        let chosen = Arc::clone(&choose);
         self.serve(registry, registry, move |base| {
-            derive_recipes_in(&layout, base, salt, workshop_limit(), &choose)
+            derive_recipes_in(&layout, base, salt, workshop_limit(), &*chosen)
+        })?;
+        menu::serve(self, move |menu, bundle| {
+            let entries = vanilla_registry()
+                .and_then(|registry| derived_entries(&layout, &registry, salt, &*choose));
+            let Some(entries) = entries else {
+                crate::warn!(
+                    "derived recipes stay out of the crafting menu: the recipe registry does not read"
+                );
+                return Some(bundle.to_vec());
+            };
+            menu::list_recipes(menu, bundle, &entries)
         })
     }
 
