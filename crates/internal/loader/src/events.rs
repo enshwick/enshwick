@@ -48,7 +48,9 @@ pub(crate) const TABLE_IDS: &[&str] = &[
     "world.entities",
 ];
 
-/// Server states, from the game's state machine.
+/// Server states, from the game's state machine. A hosted game enters
+/// Initialize before its Load state reads the save (client 410 and 426).
+const STATE_INITIALIZE: u8 = 2;
 const STATE_RUN: u8 = 5;
 const STATE_SHUTDOWN: u8 = 6;
 /// The slot state of a player in the world.
@@ -401,12 +403,6 @@ fn forget_joined() {
     }
 }
 
-/// The thread that steps the game this client hosts, once it has stepped.
-pub(crate) fn hosted_thread() -> Option<u32> {
-    let session = SESSION.lock().unwrap_or_else(PoisonError::into_inner);
-    (session.server != 0 && !session.ended).then_some(session.thread)
-}
-
 /// Ends a hosted game on the client: its server goes away with it.
 fn end_session() {
     if let Some(loader) = crate::host::loader() {
@@ -451,6 +447,9 @@ unsafe extern "system" fn set_state(entry: *mut u8, state: u8) {
         return;
     };
     guarded(&STATE_FUSE, "the server state link", || match state {
+        STATE_INITIALIZE if old != STATE_INITIALIZE && loader.side == Side::CLIENT => {
+            crate::saves::hosting_begins();
+        }
         STATE_RUN if old != STATE_RUN => {
             if loader.side == Side::CLIENT {
                 SESSION
