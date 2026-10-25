@@ -152,7 +152,7 @@ pub struct Offer {
 }
 
 impl Offer {
-    /// The offer's line in a question: `Name (id): from → to`.
+    /// The offer's line in a question: `Name: from → to`.
     ///
     /// # Examples
     ///
@@ -176,9 +176,9 @@ impl Offer {
     ///     source: "github.com/themaiby/enshwick".into(),
     ///     trust: Trust::Installed(vec!["RW...".into()]),
     /// };
-    /// assert_eq!(offer.line(), "Safes (safes): 0.1.0 \u{2192} 0.2.0");
+    /// assert_eq!(offer.line(), "Safes: 0.1.0 \u{2192} 0.2.0");
     /// let ukrainian = offer.line_in(enshwick_loader_api::i18n::Language::UK_UA);
-    /// assert_eq!(ukrainian, "Safes (safes): 0.1.0 \u{2192} 0.2.0");
+    /// assert_eq!(ukrainian, "Safes: 0.1.0 \u{2192} 0.2.0");
     /// ```
     ///
     /// A version older than the installed one says so, and so does an
@@ -251,7 +251,7 @@ impl Offer {
         self.line_in(enshwick_loader_api::i18n::language())
     }
 
-    /// `Name (id)`, or the id when the mod names none.
+    /// The mod's name, or the id when the mod names none.
     fn label(&self) -> String {
         enshwick_loader_api::mods::label(&self.name, &self.id)
     }

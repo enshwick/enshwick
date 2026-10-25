@@ -184,7 +184,7 @@ mod tests {
             lines(&dialog),
             [
                 "From github.com/someone/mods/releases:",
-                "Build camera (build-camera) 0.3.0",
+                "Build camera 0.3.0",
                 "safes 0.2.0, yours 0.1.0",
                 "Ask the server's admin for:",
                 "zones 0.1.0",

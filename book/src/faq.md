@@ -198,9 +198,9 @@ them by where to get them:
 
 ```text
 From github.com/themaiby/enshwick/releases:
-Safes (safes) 0.2.0, yours 0.1.0
+Safes 0.2.0, yours 0.1.0
 Ask the server's admin for:
-Survivors per altar (survivors-per-altar) 0.1.4
+Survivors per altar 0.1.4
 ```
 
 A mod's place is the releases page of the update source the server advertises

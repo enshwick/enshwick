@@ -285,8 +285,11 @@ impl Summary {
         let _w = writeln!(out, "\nmods: {running} of {} running", self.mods.len());
         for m in &self.mods {
             let off = if m.running { "" } else { " (off)" };
-            let name = enshwick_loader_api::mods::label(&m.name, &m.id);
-            let _w = writeln!(out, "  {name} {}{off}", m.version);
+            let _w = if m.name.is_empty() || m.name == m.id {
+                writeln!(out, "  {} {}{off}", m.id, m.version)
+            } else {
+                writeln!(out, "  {} ({}) {}{off}", m.name, m.id, m.version)
+            };
             if !m.credits.is_empty() {
                 let _w = writeln!(out, "    {}", m.credits);
             }
