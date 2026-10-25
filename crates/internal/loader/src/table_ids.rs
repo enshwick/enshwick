@@ -5,6 +5,7 @@
 
 /// Each part of the loader with the build table ids it names.
 pub static TABLE_IDS: &[(&str, &[&str])] = &[
+    ("admission", crate::admission::TABLE_IDS),
     ("altars", crate::altars::TABLE_IDS),
     ("bases", crate::bases::TABLE_IDS),
     ("buffs", crate::buffs::TABLE_IDS),

@@ -86,6 +86,7 @@ mod tests {
             include_str!("chat.rs"),
             include_str!("remote.rs"),
             include_str!("host.rs"),
+            include_str!("admission.rs"),
         ]
         .concat();
         let mut keys: Vec<String> = source

@@ -50,7 +50,7 @@ const MAX_VERSION: usize = 64;
 /// The `(id, version)` entries of an `id@version,...` list, without an id
 /// that is no mod id or a version that is no version: a server writes the
 /// list, and its ids and versions reach the player's notes and the updater.
-fn entries(list: &str) -> impl Iterator<Item = (&str, &str)> {
+pub(crate) fn entries(list: &str) -> impl Iterator<Item = (&str, &str)> {
     list.split(',')
         .filter_map(|entry| entry.split_once('@'))
         .filter(|&(id, version)| {

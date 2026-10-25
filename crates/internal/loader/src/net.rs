@@ -9,13 +9,13 @@
 //! the server sent, before the chat shows it.
 //!
 //! Only clients that announce themselves get frames: a client with the
-//! loader sends a hello with the protocol version when it joins a server
-//! whose rules name Enshwick, or a game whose host's lobby does (see the
-//! lobby module), the server answers, and from then on both sides send. A
-//! vanilla client never says hello, so it never receives a frame; the join
-//! check makes sure a client that said hello runs the server's join mods.
-//! A client never says hello to a game that names no Enshwick, whose chat
-//! would show the line.
+//! loader sends a hello with the protocol version and the join mods it runs
+//! when it joins a server whose rules name Enshwick, or a game whose host's
+//! lobby does (see the lobby module), the server answers unless it keeps
+//! the player out (see the admission module), and from then on both sides
+//! send. A vanilla client never says hello, so it never receives a frame,
+//! and a server that runs join mods disconnects it. A client never says
+//! hello to a game that names no Enshwick, whose chat would show the line.
 //!
 //! A frame is base64 of a small header and up to one line's worth of the
 //! message; a message of up to [`MAX_MESSAGE`] bytes takes up to
@@ -71,6 +71,8 @@ const SERVER_FRAME_RATE: f64 = 1024.0;
 const SERVER_FRAME_BURST: f64 = 512.0;
 /// Seconds between a client's hellos until the server answers.
 const HELLO_EVERY: f64 = 5.0;
+/// Clients whose hello is on its way in, at most, on the server.
+const MAX_GREETING: usize = 64;
 
 /// A frame's header: protocol, channel, message id, part and part count.
 const HEADER: usize = 1 + 4 + 2 + 1 + 1;
@@ -146,6 +148,9 @@ struct State {
     sending: HashMap<u64, Peer>,
     /// On a client: the rate of the frames its server sends.
     incoming: Option<Peer>,
+    /// On the server: the hellos on their way in from clients that are no
+    /// peers yet, by key.
+    greeting: HashMap<u64, Peer>,
 }
 
 static PENDING: Mutex<Vec<Channel>> = Mutex::new(Vec::new());
@@ -499,19 +504,118 @@ fn remote_message(data: &[u8]) -> Option<crate::remote::Message> {
     crate::remote::Message::read(kind, body)
 }
 
-/// Records a hello from `key`: `Some(true)` for a new peer, `Some(false)`
-/// for a known one, whose hello takes from its rate and keeps its state, and
-/// `None` when that rate is spent.
-fn greet(peers: &mut HashMap<u64, Peer>, key: u64) -> Option<bool> {
-    match peers.entry(key) {
+/// Bit of a hello's flags: the mod list is whole.
+const HELLO_COMPLETE: u8 = 1;
+/// A hello's flags and host number, after its kind and version.
+const HELLO_HEAD: usize = 1 + 8;
+
+/// A client's hello: the control kind and version, flags, the host number
+/// `nonce` (0 unless the client hosts the game), then the client's join
+/// mods, `id@version,...`, cut after the last whole entry that fits.
+fn hello(mods: &str, nonce: u64) -> Vec<u8> {
+    let mut data = control(HELLO);
+    let room = MAX_CONTROL - data.len() - HELLO_HEAD;
+    let kept = if mods.len() <= room {
+        mods
+    } else {
+        let cut = mods.as_bytes()[..=room]
+            .iter()
+            .rposition(|&b| b == b',')
+            .unwrap_or(0);
+        &mods[..cut]
+    };
+    data.push(if kept.len() == mods.len() {
+        HELLO_COMPLETE
+    } else {
+        0
+    });
+    data.extend_from_slice(&nonce.to_le_bytes());
+    data.extend_from_slice(kept.as_bytes());
+    data
+}
+
+/// What a hello says; `None` when `data` is no hello. A hello without its
+/// head reads as a whole empty list, an unreadable list as empty.
+fn read_hello(data: &[u8]) -> Option<crate::admission::Hello> {
+    let rest = data.strip_prefix(control(HELLO).as_slice())?;
+    let Some((&flags, rest)) = rest.split_first() else {
+        return Some(crate::admission::Hello {
+            complete: true,
+            ..crate::admission::Hello::default()
+        });
+    };
+    let (nonce, mods) = rest.split_first_chunk::<8>().unwrap_or((&[0; 8], &[]));
+    Some(crate::admission::Hello {
+        mods: core::str::from_utf8(mods).unwrap_or_default().to_owned(),
+        complete: flags & HELLO_COMPLETE != 0,
+        nonce: u64::from_le_bytes(*nonce),
+    })
+}
+
+/// Makes `key` a peer after its hello; true for a new one.
+fn greet(state: &mut State, key: u64) -> bool {
+    let pending = state.greeting.remove(&key);
+    match state.peers.entry(key) {
         std::collections::hash_map::Entry::Vacant(entry) => {
-            entry.insert(Peer::new());
-            Some(true)
+            entry.insert(pending.unwrap_or_else(Peer::new));
+            true
         }
-        std::collections::hash_map::Entry::Occupied(mut entry) => {
-            entry.get_mut().admit().then_some(false)
-        }
+        std::collections::hash_map::Entry::Occupied(_) => false,
     }
+}
+
+/// Adds a frame from the client `key` on the server; the whole message once
+/// its last part came, with its channel and whether `key` is a peer. A
+/// client that is no peer yet may only send control messages, its hello;
+/// each message takes from the client's rate.
+fn take_frame(state: &mut State, key: u64, frame: Frame) -> Option<(u32, Vec<u8>, bool)> {
+    if key == 0 {
+        return None;
+    }
+    let known = state.peers.contains_key(&key);
+    let peer = if known {
+        state.peers.get_mut(&key)?
+    } else {
+        if frame.channel != CONTROL {
+            return None;
+        }
+        let room = state.greeting.len() < MAX_GREETING;
+        match state.greeting.entry(key) {
+            std::collections::hash_map::Entry::Occupied(entry) => entry.into_mut(),
+            std::collections::hash_map::Entry::Vacant(entry) if room => entry.insert(Peer::new()),
+            std::collections::hash_map::Entry::Vacant(_) => return None,
+        }
+    };
+    // A peer's message takes one from its rate; a stranger's every frame.
+    if (frame.index == 0 || !known) && !peer.admit() {
+        dropped();
+        return None;
+    }
+    let (channel, data) = assemble(peer, frame)?;
+    Some((channel, data, known))
+}
+
+/// Makes room for the hello of the client `key` in a full store by
+/// forgetting the clients whose key holds no live slot in `live`, read only
+/// then; nothing is forgotten when the slots do not read.
+fn make_greeting_room(state: &mut State, key: u64, live: impl FnOnce() -> Option<Vec<u64>>) {
+    if !state.peers.contains_key(&key)
+        && !state.greeting.contains_key(&key)
+        && state.greeting.len() >= MAX_GREETING
+        && let Some(live) = live()
+    {
+        keep_greeting_in(state, &live);
+    }
+}
+
+/// Forgets the hellos on their way in from clients whose key holds no live
+/// player slot in `live`.
+pub(crate) fn keep_greeting(live: &[u64]) {
+    state(|s| keep_greeting_in(s, live));
+}
+
+fn keep_greeting_in(state: &mut State, live: &[u64]) {
+    state.greeting.retain(|key, _| live.contains(key));
 }
 
 /// Takes a frame line a client sent, on the server's game thread: `args` is
@@ -524,52 +628,47 @@ pub(crate) fn server_received(key: u64, args: &str) {
         dropped();
         return;
     };
-    if frame.channel == CONTROL {
-        if frame.part == control(HELLO) {
-            let Some(fresh) = state(|s| greet(&mut s.peers, key)) else {
-                dropped();
-                return;
-            };
-            if fresh {
-                crate::log!(INFO, "mod messages: the client of {key:016x} said hello");
-            }
-            for line in frames(CONTROL, 0, &control(WELCOME)).unwrap_or_default() {
-                crate::chat::send_frame(key, &line);
-            }
-            if fresh {
-                for records in crate::item_data::hello() {
-                    item_data(key, &records);
-                }
-                crate::recipes::hello(key);
-                crate::remote::sync_to(key);
-            }
-            return;
-        }
-        let whole = state(|s| {
-            let peer = s.peers.get_mut(&key)?;
-            if frame.index == 0 && !peer.admit() {
-                dropped();
-                return None;
-            }
-            assemble(peer, frame)
-        });
-        if let (Some((_, data)), Some(loader)) = (whole, crate::host::loader())
-            && let Some(message) = remote_message(&data)
-        {
-            crate::remote::server(loader, key, message);
-        }
+    let Some((channel, data, known)) = state(|s| {
+        make_greeting_room(s, key, crate::world::live_keys);
+        take_frame(s, key, frame)
+    }) else {
+        return;
+    };
+    if channel != CONTROL {
+        deliver(channel, key, &data);
         return;
     }
-    let message = state(|s| {
-        let peer = s.peers.get_mut(&key)?;
-        if frame.index == 0 && !peer.admit() {
-            dropped();
-            return None;
+    if let Some(hello) = read_hello(&data) {
+        said_hello(key, &hello);
+        return;
+    }
+    if known
+        && let Some(loader) = crate::host::loader()
+        && let Some(message) = remote_message(&data)
+    {
+        crate::remote::server(loader, key, message);
+    }
+}
+
+/// Answers the `hello` of the client `key` unless the server keeps the
+/// player out.
+fn said_hello(key: u64, hello: &crate::admission::Hello) {
+    if !crate::admission::hello(key, hello) {
+        return;
+    }
+    let fresh = state(|s| greet(s, key));
+    if fresh {
+        crate::log!(INFO, "mod messages: the client of {key:016x} said hello");
+    }
+    for line in frames(CONTROL, 0, &control(WELCOME)).unwrap_or_default() {
+        crate::chat::send_frame(key, &line);
+    }
+    if fresh {
+        for records in crate::item_data::hello() {
+            item_data(key, &records);
         }
-        assemble(peer, frame)
-    });
-    if let Some((channel, data)) = message {
-        deliver(channel, key, &data);
+        crate::recipes::hello(key);
+        crate::remote::sync_to(key);
     }
 }
 
@@ -668,6 +767,7 @@ pub(crate) fn forget_peer(key: u64) {
     state(|s| {
         s.peers.remove(&key);
         s.sending.remove(&key);
+        s.greeting.remove(&key);
     });
 }
 
@@ -787,7 +887,13 @@ pub(crate) fn client_lines() -> Vec<String> {
             || crate::world::hosting();
         if !answered && due && modded {
             s.hello_at = Some(Instant::now());
-            lines.extend(frames(CONTROL, 0, &control(HELLO)).unwrap_or_default());
+            let mods = crate::advertise::mod_list(&crate::host::join_mods());
+            let nonce = if crate::world::hosting() {
+                crate::admission::nonce()
+            } else {
+                0
+            };
+            lines.extend(control_frames(&hello(&mods, nonce)).unwrap_or_default());
         }
         if WAITING.swap(false, Ordering::AcqRel) {
             lines.extend(s.outbox.drain(..));
@@ -812,24 +918,135 @@ fn dropped() {
 mod tests {
     use super::*;
 
+    /// The frames of `lines`, as the server parses them.
+    fn parsed(lines: &[String]) -> Vec<Frame> {
+        lines
+            .iter()
+            .map(|l| parse(l.strip_prefix(PREFIX).unwrap()).unwrap())
+            .collect()
+    }
+
     #[test]
     fn a_repeated_hello_keeps_the_peer_and_spends_its_rate() {
-        let mut peers = HashMap::new();
-        assert_eq!(greet(&mut peers, 7), Some(true));
-        peers.get_mut(&7).unwrap().partial.insert(
+        let mut state = State::default();
+        assert!(greet(&mut state, 7));
+        state.peers.get_mut(&7).unwrap().partial.insert(
             (1, 1),
             Partial {
                 total: 2,
                 parts: Vec::new(),
             },
         );
-        let hellos = core::iter::repeat_with(|| greet(&mut peers, 7))
-            .take(100)
-            .take_while(Option::is_some)
-            .count();
+        let lines = control_frames(&hello("safes@0.3.0", 0)).unwrap();
+        let hellos =
+            core::iter::repeat_with(|| take_frame(&mut state, 7, parsed(&lines).remove(0)))
+                .take(100)
+                .take_while(Option::is_some)
+                .count();
         assert!(hellos < 50, "{hellos}");
-        assert_eq!(greet(&mut peers, 7), None);
-        assert_eq!(peers[&7].partial.len(), 1);
+        assert!(!greet(&mut state, 7));
+        assert_eq!(state.peers[&7].partial.len(), 1);
+    }
+
+    #[test]
+    fn a_hello_names_the_join_mods_within_its_frames() {
+        let said = read_hello(&hello("safes@0.3.0,zones@0.1.0", 9)).unwrap();
+        assert_eq!(said.mods, "safes@0.3.0,zones@0.1.0");
+        assert!(said.complete);
+        assert_eq!(said.nonce, 9);
+        let bare = read_hello(&control(HELLO)).unwrap();
+        assert_eq!((bare.mods.as_str(), bare.complete), ("", true));
+        assert_eq!(read_hello(&control(WELCOME)), None);
+        let many: Vec<String> = (0..1000).map(|i| format!("mod-{i:04}@1.0.0")).collect();
+        let long = hello(&many.join(","), 0);
+        assert!(control_frames(&long).is_some());
+        let cut = read_hello(&long).unwrap();
+        assert!(!cut.complete, "a cut list says so");
+        assert!(
+            cut.mods.split(',').all(|entry| entry.ends_with("@1.0.0")),
+            "cut at an entry"
+        );
+    }
+
+    #[test]
+    fn a_new_client_s_hello_in_several_frames_comes_back_whole() {
+        let many: Vec<String> = (0..100).map(|i| format!("mod-{i:04}@1.0.0")).collect();
+        let mods = many.join(",");
+        let lines = control_frames(&hello(&mods, 0)).unwrap();
+        assert!(lines.len() > 1);
+        let mut state = State::default();
+        let mut whole = None;
+        for frame in parsed(&lines) {
+            whole = take_frame(&mut state, 7, frame);
+        }
+        let (channel, data, known) = whole.unwrap();
+        assert_eq!((channel, known), (CONTROL, false));
+        assert_eq!(read_hello(&data).map(|h| h.mods), Some(mods));
+        assert!(state.peers.is_empty(), "a hello alone makes no peer");
+    }
+
+    #[test]
+    fn a_stranger_s_frames_on_a_mod_channel_are_not_taken() {
+        let mut state = State::default();
+        let frame = parsed(&frames(5, 1, b"data").unwrap()).remove(0);
+        assert_eq!(take_frame(&mut state, 7, frame), None);
+    }
+
+    #[test]
+    fn frames_from_an_unknown_sender_are_not_taken() {
+        let mut state = State::default();
+        let frame = parsed(&control_frames(&hello("", 0)).unwrap()).remove(0);
+        assert_eq!(take_frame(&mut state, 0, frame), None);
+        assert!(state.greeting.is_empty());
+    }
+
+    #[test]
+    fn every_frame_of_a_stranger_takes_from_its_rate() {
+        let mut state = State::default();
+        let many: Vec<String> = (0..100).map(|i| format!("mod-{i:04}@1.0.0")).collect();
+        let lines = control_frames(&hello(&many.join(","), 0)).unwrap();
+        for _ in 0..200 {
+            let _taken = take_frame(&mut state, 7, parsed(&lines).remove(1));
+        }
+        assert!(state.greeting[&7].tokens < 1.0, "the rate ran out");
+    }
+
+    #[test]
+    fn strangers_waiting_to_say_hello_are_bounded_and_follow_the_live_slots() {
+        let mut state = State::default();
+        let many: Vec<String> = (0..100).map(|i| format!("mod-{i:04}@1.0.0")).collect();
+        let lines = control_frames(&hello(&many.join(","), 0)).unwrap();
+        for key in 1..=1000 {
+            let _taken = take_frame(&mut state, key, parsed(&lines).remove(0));
+        }
+        assert!(state.greeting.len() <= MAX_GREETING);
+        keep_greeting_in(&mut state, &[3, 4]);
+        let mut kept: Vec<u64> = state.greeting.keys().copied().collect();
+        kept.sort_unstable();
+        assert_eq!(kept, [3, 4]);
+    }
+
+    #[test]
+    fn a_full_greeting_store_makes_room_from_keys_without_a_live_slot() {
+        let mut state = State::default();
+        let lines = control_frames(&hello("safes@0.3.0", 0)).unwrap();
+        for key in 1..=MAX_GREETING as u64 {
+            let _taken = take_frame(&mut state, key, parsed(&lines).remove(0));
+        }
+        assert_eq!(state.greeting.len(), MAX_GREETING);
+        let newcomer = MAX_GREETING as u64 + 1;
+        make_greeting_room(&mut state, 1, || unreachable!("a known key needs no room"));
+        make_greeting_room(&mut state, newcomer, || None);
+        assert_eq!(
+            state.greeting.len(),
+            MAX_GREETING,
+            "no slots read, none forgotten"
+        );
+        make_greeting_room(&mut state, newcomer, || Some(vec![2, newcomer]));
+        assert!(take_frame(&mut state, newcomer, parsed(&lines).remove(0)).is_some());
+        let mut kept: Vec<u64> = state.greeting.keys().copied().collect();
+        kept.sort_unstable();
+        assert_eq!(kept, [2, newcomer]);
     }
 
     #[test]

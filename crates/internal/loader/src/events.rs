@@ -368,6 +368,7 @@ unsafe fn after_step(loader: &'static Loader, offsets: &Offsets, server: *mut u8
         "tick events",
         loader.emit(Event::TICKED, None, (&raw const tick).cast::<c_void>())
     );
+    part!("join admission", crate::admission::after_step(loader));
     part!("chat sending", crate::chat::drain());
     if server.is_null() {
         return;
@@ -387,6 +388,7 @@ unsafe fn after_step(loader: &'static Loader, offsets: &Offsets, server: *mut u8
         } else if state == SLOT_IN_GAME && entity != 0 && joined.load(Ordering::Relaxed) != handle {
             joined.store(handle, Ordering::Relaxed);
             let data = player(index, slot, offsets);
+            crate::admission::joined(data.key);
             part!("player joined events", {
                 crate::stats::player_joined(loader, &data);
                 loader.emit(Event::PLAYER_JOINED, None, (&raw const data).cast());
@@ -422,6 +424,7 @@ fn end_session() {
     crate::weather::forget();
     crate::inventory::forget();
     crate::recipes::left();
+    crate::admission::forget();
     forget_joined();
     BUILDING
         .lock()
@@ -498,6 +501,7 @@ unsafe extern "system" fn remove(server: *mut u8, slot: *mut u8) {
             joined.store(0, Ordering::Relaxed);
             let data = player(index, slot, offsets);
             crate::net::forget_peer(data.key);
+            crate::admission::left(data.key);
             guarded(&REMOVE_FUSE, "the player removal link", || {
                 loader.emit(Event::PLAYER_LEFT, None, (&raw const data).cast());
             });

@@ -228,6 +228,11 @@ pub(crate) fn start(
             host::join_values,
         );
     }
+    crate::admission::start(
+        loader,
+        names(loader).into_iter().collect(),
+        sources(loader).into_iter().collect(),
+    );
 }
 
 /// Lets the dedicated server's own code run once the hooks are armed, and
@@ -524,6 +529,7 @@ fn begin(stub_abi: u32, missing_forwards: u32) -> Option<PathBuf> {
     crate::diag::configure(&settings);
     crate::reload::configure(settings.dev_reload);
     crate::knowledge::guard::configure(settings.knowledge_guard);
+    crate::admission::configure(&settings);
     crate::ui::configure_actions_key(&settings.actions_key);
     builds::configure(settings.build_patterns);
     log::set_levels(settings);

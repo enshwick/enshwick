@@ -443,6 +443,13 @@ pub(crate) fn machines(loader: &Loader) -> Result<Vec<(u64, u32)>, Status> {
         .collect())
 }
 
+/// The account keys of the live player slots, as [`machines`] reads them;
+/// `None` off the game thread or when the slots do not read.
+pub(crate) fn live_keys() -> Option<Vec<u64>> {
+    let machines = machines(crate::host::loader()?).ok()?;
+    Some(machines.iter().map(|&(key, _)| key).collect())
+}
+
 fn player_at(layout: &Layout, slot: usize, index: usize, entity: u32, infos: usize) -> PlayerInfo {
     let mut name = [0u8; 64];
     // SAFETY: the slot's name is a pointer and a byte length.
