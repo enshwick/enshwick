@@ -11,8 +11,12 @@ cargo nextest run --workspace
 ```
 
 The hooks check formatting, spelling, Markdown and commit messages before a
-commit, and clippy, tests and cargo-deny before a push. The rules they enforce,
-and the ones they cannot, are in this file:
+commit. Before a push, `cargo xtask check` runs clippy and the doctests, and
+the tests of the packages the change touches and of the packages that depend on
+them; cargo-deny runs when a manifest changed. `cargo xtask check --all` runs
+the whole suite. Off Windows, the workspace is also linted for Windows through
+[cargo-xwin](https://github.com/rust-cross/cargo-xwin). The rules the hooks
+enforce, and the ones they cannot, are in this file:
 
 - branch from `main` as `feature/<slug>`, `fix/<slug>` or `chore/<slug>` and
   open a pull request into `main`; its title is a conventional commit,

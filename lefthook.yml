@@ -19,30 +19,30 @@ commit-msg:
     conventional:
       run: bun tools/check-commit-message.ts {1}
 
+# Only what the pushed change needs (tools/xtask): tests of the changed
+# packages and their dependents, clippy and doctests where something changed.
+# The full suite is `cargo xtask check --all`.
 pre-push:
-  parallel: false
+  parallel: true
   commands:
-    clippy:
+    checks:
       glob:
         - '*.rs'
         - '**/*.rs'
         - 'Cargo.toml'
         - '**/Cargo.toml'
         - 'Cargo.lock'
-      run: cargo clippy --workspace --all-targets -- -D warnings
-    test:
-      glob:
-        - '*.rs'
-        - '**/*.rs'
-        - 'Cargo.toml'
-        - '**/Cargo.toml'
-        - 'Cargo.lock'
+        - 'rust-toolchain.toml'
+        - 'clippy.toml'
+        - '.cargo/*'
+        - '.config/*'
         - 'book/src/*.md'
         - 'book/src/**/*.md'
-      run: cargo nextest run --workspace --no-tests=pass && cargo test --doc --workspace
+      run: cargo xtask check
     deny:
       glob:
         - 'Cargo.toml'
         - '**/Cargo.toml'
         - 'Cargo.lock'
+        - 'deny.toml'
       run: cargo deny check

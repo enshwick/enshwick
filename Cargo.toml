@@ -12,6 +12,7 @@ members = [
     "examples/safe-viewers",
     "examples/trading-post",
     "examples/trading-post-api",
+    "tools/xtask",
 ]
 
 [workspace.package]
