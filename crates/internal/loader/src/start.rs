@@ -22,7 +22,7 @@ use crate::{builds, log, modlist};
 
 /// The build table ids this part of the loader names.
 #[cfg(windows)]
-pub(crate) const TABLE_IDS: &[&str] = &["net.server_change"];
+pub(crate) const TABLE_IDS: &[&str] = &["net.join_game"];
 
 /// The client starts under Steam's DRM wrapper, which may check the game's code
 /// before it runs. The game opens its window only once its own code runs, so
@@ -417,9 +417,9 @@ fn attribute_crashes(loader: &Loader, order: &[&Library]) {
     }
 }
 
-/// Links the loader's join check on the client's server change.
+/// Links the loader's join check on the client's join.
 fn link_join(loader: &Loader) {
-    let Some(rva) = loader.build.symbol("net.server_change") else {
+    let Some(rva) = loader.build.symbol("net.join_game") else {
         return;
     };
     let names = loader

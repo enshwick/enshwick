@@ -11,9 +11,11 @@
 //! ([`Event::JOIN_REFUSED`](enshwick_loader_api::abi::Event::JOIN_REFUSED)), so an
 //! updater can offer them.
 //!
-//! The game asks to change servers with a request that starts with the server's
-//! query `ip:port`. The hook lets the join go ahead and asks the server, over
-//! the Steam query protocol, for its `enshwick` rule.
+//! Every join from the game's menus hands its online provider a target with
+//! the server's address and query port. The hook asks the server, over the
+//! Steam query protocol, for its `enshwick` rule before the game connects;
+//! a refused join goes on without its host, so the game's own join step fails
+//! and the game stays in its menus.
 
 use std::collections::BTreeMap;
 use std::net::{SocketAddr, UdpSocket};
@@ -331,11 +333,38 @@ pub fn changes<'a>(
         .collect()
 }
 
-/// The `ip:port` at the start of a server change request.
+/// The bytes of a join target the check reads, up to its address flag.
+pub const TARGET_BYTES: usize = HAS_ADDRESS + 1;
+/// The start of the join target the game hands its online provider: the
+/// host's Steam id at 0, the server's IPv4 at 8 with its game port at 0xc
+/// and query port at 0xe, and at 0x20 a flag that the address is set; the
+/// password follows at 0x24 (client builds 410 and 426). A join into a
+/// hosted game names the lobby and no address.
+pub type Target = [u8; TARGET_BYTES];
+const HOST: usize = 0;
+const IP: usize = 8;
+const QUERY_PORT: usize = 0xe;
+const HAS_ADDRESS: usize = 0x20;
+
+/// The server's query address in a join target, `None` for a join without
+/// one.
 #[must_use]
-pub fn address(request: &[u8]) -> Option<SocketAddr> {
-    let end = request.iter().position(|&b| b == 0)?;
-    std::str::from_utf8(&request[..end]).ok()?.parse().ok()
+pub fn address(target: &Target) -> Option<SocketAddr> {
+    if target[HAS_ADDRESS] != 1 {
+        return None;
+    }
+    let ip = u32::from_le_bytes(*target[IP..].first_chunk()?);
+    let port = u16::from_le_bytes(*target[QUERY_PORT..].first_chunk()?);
+    (ip != 0 && port != 0).then(|| SocketAddr::from((std::net::Ipv4Addr::from(ip), port)))
+}
+
+/// Takes the host out of a join target, so the game's own join step fails
+/// on an invalid host and goes back to the menu, and returns the host to put
+/// back once the game has copied the target.
+pub fn refuse(target: &mut Target) -> u64 {
+    target[HOST..]
+        .first_chunk_mut()
+        .map_or(0, |host| u64::from_le_bytes(core::mem::take(host)))
 }
 
 /// The value of `key` in an `A2S_RULES` reply.
@@ -467,15 +496,14 @@ mod runtime {
 
     use enshwick_loader_api::abi::UiDialog;
 
-    pub(crate) type ServerChange =
-        unsafe extern "system" fn(provider: *mut u8, request: *const u8) -> u64;
+    /// The online provider's join: every join from the game's menus, to a
+    /// dedicated server or into a hosted game's lobby, passes a target
+    /// ([`super::Target`]) through it (client builds 410 and 426).
+    pub(crate) type JoinGame = unsafe extern "system" fn(provider: *mut u8, target: *mut u8);
 
-    // SAFETY: the slot joins the chain of the server change, typed
-    // `ServerChange`.
+    // SAFETY: the slot joins the chain of the join, typed `JoinGame`.
     /// The rest of the chain after the loader's link.
-    pub(crate) static NEXT: Next<ServerChange> = unsafe { Next::new() };
-    /// The request holds the address in its first 0x40 bytes.
-    const ADDRESS_BYTES: usize = 0x40;
+    pub(crate) static NEXT: Next<JoinGame> = unsafe { Next::new() };
 
     static NAMES: OnceLock<super::Names> = OnceLock::new();
 
@@ -489,26 +517,53 @@ mod runtime {
         NAMES.get().cloned().unwrap_or_default()
     }
 
-    /// The loader's link on `server_change`.
-    pub(crate) unsafe extern "system" fn detour(provider: *mut u8, request: *const u8) -> u64 {
-        if !request.is_null() {
-            // SAFETY: the request holds at least the address bytes.
-            let bytes = unsafe { std::slice::from_raw_parts(request, ADDRESS_BYTES) };
-            let allowed = std::panic::catch_unwind(|| check(bytes)).unwrap_or(true);
-            if !allowed {
-                crate::log!(WARN, "join refused: the server runs mods this client lacks");
-                return 0;
-            }
+    /// The loader's link on the online provider's join.
+    pub(crate) unsafe extern "system" fn detour(provider: *mut u8, target: *mut u8) {
+        let allowed = target.is_null() || {
+            // SAFETY: the game's join target holds at least `TARGET_BYTES`
+            // (client builds 410 and 426); its bytes are plain data.
+            let head = unsafe { target.cast::<super::Target>().read_unaligned() };
+            std::panic::catch_unwind(|| check(&head)).unwrap_or(true)
+        };
+        if allowed {
+            // SAFETY: forwarded unchanged.
+            unsafe { NEXT.get()(provider, target) };
+            return;
         }
-        // SAFETY: forwarded unchanged.
-        unsafe { NEXT.get()(provider, request) }
+        crate::log!(WARN, "join refused: the server runs mods this client lacks");
+        // The game copies the target during the call, so the caller's own
+        // copy gets its host back afterwards.
+        // SAFETY: the target is the caller's writable join target, not
+        // null, and no other reference to it is live.
+        let host = super::refuse(unsafe { &mut *target.cast::<super::Target>() });
+        // SAFETY: forwarded with the host taken out.
+        unsafe { NEXT.get()(provider, target) };
+        // SAFETY: the same target, its host id an unaligned u64 at its start.
+        unsafe { target.cast::<u64>().write_unaligned(host) };
+    }
+
+    /// Joins a game whose mods the check cannot read, on the client's own
+    /// join values.
+    fn unchecked() -> bool {
+        crate::net::joining(false);
+        crate::host::apply_join_values(&BTreeMap::new());
+        true
     }
 
     /// Compares mod sets, turns off what the server lacks, takes the server's
     /// join values and tells the player; false when the client must not join.
-    fn check(request: &[u8]) -> bool {
-        let (Some(address), Some(own_names)) = (super::address(request), NAMES.get()) else {
+    fn check(target: &super::Target) -> bool {
+        let Some(own_names) = NAMES.get() else {
             return true;
+        };
+        let Some(address) = super::address(target) else {
+            // A hosted game's lobby: the lobby module reads its host's mods
+            // once the client enters it.
+            crate::log!(
+                INFO,
+                "joining a game without a server address, as a hosted game"
+            );
+            return unchecked();
         };
         // Read now: a mod an earlier server or a failed hook turned off no
         // longer counts as the client's.
@@ -517,9 +572,7 @@ mod runtime {
         let Some(reply) = reply else {
             // A server that does not answer the query: nothing to compare.
             crate::log!(INFO, "joining {address}: no rules answer");
-            crate::net::joining(false);
-            crate::host::apply_join_values(&BTreeMap::new());
-            return true;
+            return unchecked();
         };
         let server = super::rule(&reply, crate::advertise::RULE)
             .map(|fingerprint| (fingerprint, super::mod_rules_value(&reply)));
@@ -896,11 +949,49 @@ count turned off"
         assert!(differences("", "", &names).is_empty());
     }
 
+    /// A join target as the game's server list hands it: host id, address,
+    /// game port, query port, and the flag that the address is set.
+    fn target(
+        host: u64,
+        ip: [u8; 4],
+        game_port: u16,
+        query_port: u16,
+        has_address: bool,
+    ) -> Target {
+        let mut target = [0u8; TARGET_BYTES];
+        target[..8].copy_from_slice(&host.to_le_bytes());
+        target[8..12].copy_from_slice(&u32::from_be_bytes(ip).to_le_bytes());
+        target[12..14].copy_from_slice(&game_port.to_le_bytes());
+        target[14..16].copy_from_slice(&query_port.to_le_bytes());
+        target[0x20] = u8::from(has_address);
+        target
+    }
+
     #[test]
-    fn the_address_is_read_up_to_the_first_nul() {
-        let mut request = [0u8; 0x40];
-        request[..15].copy_from_slice(b"127.0.0.1:15647");
-        assert_eq!(address(&request), Some("127.0.0.1:15647".parse().unwrap()));
+    fn a_dedicated_server_is_asked_at_its_query_port() {
+        let target = target(90_295_777_516_953_619, [127, 0, 0, 1], 15646, 15647, true);
+        assert_eq!(address(&target), Some("127.0.0.1:15647".parse().unwrap()));
+    }
+
+    #[test]
+    fn a_lobby_join_has_no_address_to_ask() {
+        let lobby = target(109_775_242_277_948_854, [0; 4], 0, 0, false);
+        assert_eq!(address(&lobby), None);
+        let unset = target(1, [10, 0, 0, 2], 15646, 15647, false);
+        assert_eq!(address(&unset), None);
+        let no_port = target(1, [10, 0, 0, 2], 15646, 0, true);
+        assert_eq!(address(&no_port), None);
+    }
+
+    #[test]
+    fn a_refused_join_keeps_the_address_and_drops_the_host() {
+        let mut target = target(90_295_777_516_953_619, [127, 0, 0, 1], 15646, 15647, true);
+        let kept = target;
+        let host = refuse(&mut target);
+        assert_eq!(host, 90_295_777_516_953_619);
+        assert_eq!(target[..8], [0; 8]);
+        assert_eq!(target[8..], kept[8..]);
+        assert_eq!(address(&target), address(&kept));
     }
 
     #[test]
