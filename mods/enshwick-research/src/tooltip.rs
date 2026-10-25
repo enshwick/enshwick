@@ -572,22 +572,22 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn every_site_is_pinned_for_the_client() {
+    fn every_client_build_pins_each_site_once() {
         let pinned = pinned();
-        for site in &SITES {
-            assert!(
-                pinned.iter().any(|(name, _, _)| name == site.symbol),
-                "{}",
-                site.name
-            );
+        let mut builds: Vec<([u8; 16], u32)> =
+            pinned.iter().map(|(_, _, f)| (f.guid, f.age)).collect();
+        builds.sort_unstable();
+        builds.dedup();
+        assert!(!builds.is_empty());
+        for (guid, age) in builds {
+            for site in &SITES {
+                let rows = pinned
+                    .iter()
+                    .filter(|(name, _, f)| name == site.symbol && f.guid == guid && f.age == age)
+                    .count();
+                assert_eq!(rows, 1, "{} on client build {age}", site.name);
+            }
         }
-        let ours = pinned
-            .iter()
-            .filter(|(name, _, _)| SITES.iter().any(|s| s.symbol == name))
-            .count();
-        // One row per site for every client build pinned.
-        assert_eq!(ours % SITES.len(), 0);
-        assert!(ours >= SITES.len());
     }
 
     /// The bytes each site expects are the client's that `ENSH_CLIENT_EXE`
