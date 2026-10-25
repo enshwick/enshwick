@@ -18,9 +18,9 @@ pub const BYTES_ID: &str = "user.start_interaction.bytes";
 pub const KIND_ID: &str = "user.interaction_kind";
 /// The build table's id of the kind that tells the player a join failed.
 pub const JOIN_FAILED_ID: &str = "user.join_failed_kind";
-/// How long after a refusal the game's dialog is held back: the provider
-/// fails the join within a few frames.
-const HOLD: Duration = Duration::from_secs(10);
+/// How long after a refusal the game's dialog is held back at most: the
+/// provider fails the join within a few frames.
+const HOLD: Duration = Duration::from_secs(5);
 
 /// Whether the next "could not join" interaction is held back, until when.
 ///
@@ -89,6 +89,29 @@ impl Hold {
     /// ```
     pub fn release(&self) {
         self.until.store(0, Ordering::Release);
+    }
+
+    /// Starts a join from the game's menus: `refused` arms the hold for its
+    /// dialog, any other join ends a hold left by an earlier refusal. Every
+    /// menu join passes the loader's join check, so no hold outlives the join
+    /// it was armed for.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::join::interaction::Hold;
+    ///
+    /// let hold = Hold::new();
+    /// hold.join(true, 0);
+    /// hold.join(false, 100);
+    /// assert!(!hold.armed());
+    /// ```
+    pub fn join(&self, refused: bool, now: u64) {
+        if refused {
+            self.arm(now);
+        } else {
+            self.release();
+        }
     }
 
     /// Whether a hold is armed, expired or not: the cheap test before the
@@ -210,7 +233,7 @@ pub fn verify(
 }
 
 #[cfg(windows)]
-pub(crate) use runtime::{NEXT, detour, hold, release, set_layout};
+pub(crate) use runtime::{NEXT, detour, joining, set_layout};
 
 #[cfg(windows)]
 mod runtime {
@@ -264,14 +287,9 @@ mod runtime {
         layout.is_some_and(|layout| STATE.layout.set(layout).is_ok())
     }
 
-    /// Holds back the game's dialog for the join being refused now.
-    pub(crate) fn hold() {
-        STATE.hold.arm(now());
-    }
-
-    /// Drops the hold: a new join starts.
-    pub(crate) fn release() {
-        STATE.hold.release();
+    /// A join from the game's menus starts, `refused` by the join check.
+    pub(crate) fn joining(refused: bool) {
+        STATE.hold.join(refused, now());
     }
 
     /// The loader's link on the start of user interactions.
@@ -327,11 +345,31 @@ mod tests {
     }
 
     #[test]
-    fn a_new_join_drops_a_hold_no_dialog_took() {
+    fn the_hold_ends_once_it_held_back_its_dialog() {
         let hold = Hold::new();
-        hold.arm(100);
-        hold.release();
-        assert!(!hold.takes(150));
+        hold.join(true, 100);
+        assert!(hold.takes(120));
+        assert!(!hold.armed());
+        assert!(!hold.takes(130), "a second failed join shows its dialog");
+    }
+
+    #[test]
+    fn a_hold_no_dialog_took_never_reaches_the_next_join() {
+        let hold = Hold::new();
+        // The game started no dialog for the refused join.
+        hold.join(true, 100);
+        // The next menu join, which the check lets through, fails at once.
+        hold.join(false, 200);
+        assert!(!hold.takes(210), "the unrelated join's dialog shows");
+    }
+
+    #[test]
+    fn a_second_refusal_holds_back_its_own_dialog() {
+        let hold = Hold::new();
+        hold.join(true, 100);
+        assert!(hold.takes(110));
+        hold.join(true, 300);
+        assert!(hold.takes(310));
     }
 
     #[test]

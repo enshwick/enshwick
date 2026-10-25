@@ -853,12 +853,12 @@ mod runtime {
             std::panic::catch_unwind(|| check(&head)).unwrap_or(true)
         };
         if allowed {
-            super::interaction::release();
+            super::interaction::joining(false);
             // SAFETY: forwarded unchanged.
             return unsafe { NEXT.get()(provider, target) };
         }
         crate::log!(WARN, "join refused: the server runs mods this client lacks");
-        super::interaction::hold();
+        super::interaction::joining(true);
         // The provider copies the target into its own state before it
         // returns, and the caller keeps its target, so the caller's copy
         // gets its host back (client builds 410 and 426).
