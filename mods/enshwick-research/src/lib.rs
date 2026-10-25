@@ -154,8 +154,7 @@ impl Mod for Research {
                     "research.impact_attribute" => 0x3e_2cc0,
                     "research.skill_change" => 0xe5_f220,
                 ],
-            },
-            {
+            }, {
                 side: CLIENT,
                 guid: "69f0e9573b32c24a8838d3fff550824c",
                 age: 426,
@@ -191,8 +190,7 @@ impl Mod for Research {
                     "research.impact_attribute" => 0x18_4b90,
                     "research.skill_change" => 0x91_3960,
                 ],
-            },
-            {
+            }, {
                 side: SERVER,
                 guid: "1c129660cd6efc4f9f0b21652d5ff2bf",
                 age: 399,
@@ -200,7 +198,7 @@ impl Mod for Research {
                     "research.impact_attribute" => 0x18_5a40,
                     "research.skill_change" => 0x91_5fb0,
                 ],
-            },],
+            }],
         )
     }
 
