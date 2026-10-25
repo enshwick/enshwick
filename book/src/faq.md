@@ -193,21 +193,20 @@ WINEDLLOVERRIDES="powrprof=n,b" %command%
 
 The client compares its join mods with the server's before it joins. When the
 server runs join mods the client lacks or has in another version, the client
-stays out and one dialog, "Mods missing", lists them:
+stays out and goes back to the menu, and one dialog, "Mods missing", lists
+them by where to get them:
 
 ```text
-This server runs Enshwick mods your game lacks or runs in another version:
-
-Safes (safes) 0.2.0, yours is 0.1.0: https://github.com/themaiby/enshwick/releases
-Survivors per altar (survivors-per-altar) 0.1.4: ask the server's admin
-
-Install them, restart the game and join again.
+From github.com/themaiby/enshwick/releases:
+Safes (safes) 0.2.0, yours 0.1.0
+Ask the server's admin for:
+Survivors per altar (survivors-per-altar) 0.1.4
 ```
 
-Each line names where to get the mod: the releases page of the source the
-server advertises for it, or the server's admin when it advertises none. A mod
-you turned off in `mods/enshwick/mods.toml` is named as such: turn it on and
-restart the game. `loader.log` then has
+A mod's place is the releases page of the update source the server advertises
+for it, or the server's admin when it advertises none. A mod you turned off in
+`mods/enshwick/mods.toml` is listed under "Turn on in": turn it on and restart
+the game. `loader.log` then has
 `join refused: the server runs mods this client lacks`. Other cases do not keep
 the player out:
 

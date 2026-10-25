@@ -33,8 +33,7 @@ The loader names the version wherever the mod comes up:
 - `safes 0.2.0 initialised` in `loader.log`;
 - `requires flame-altar-zones ^0.2, found 0.1.3` when a requirement is out of
   range;
-- `Safes (safes) 0.2.0, yours is 0.1.0: <where to get it>` in the dialog of a
-  refused join.
+- `Safes (safes) 0.2.0, yours 0.1.0` in the dialog of a refused join.
 
 `cargo enshwick manifest` shows what a built DLL says about itself (id,
 version, side, join check, dependencies). With `--expect-version` it fails

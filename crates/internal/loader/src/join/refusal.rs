@@ -1,5 +1,10 @@
 //! The one dialog a client shows when it stays out of a server: each of the
-//! server's mods it lacks, with the server's version and where to get it.
+//! server's mods it lacks, with the server's version, grouped by where to get
+//! them.
+//!
+//! The game's popup centres every line and wraps it at a fixed width (client
+//! build 426), so lines stay short: a heading per place, then one mod per
+//! line, and no more lines than keep the button on a 1080p screen.
 
 use std::collections::BTreeMap;
 
@@ -7,9 +12,9 @@ use super::Names;
 use crate::admission::Need;
 use crate::texts;
 
-/// Mods the dialog names one per line; the rest are counted, so the game's
-/// popup keeps its button on screen.
-const MAX_NAMED: usize = 8;
+/// The most lines the list takes, headings and the count of the rest among
+/// them.
+const MAX_LINES: usize = 12;
 
 /// The texts of the refusal dialog.
 ///
@@ -21,15 +26,15 @@ const MAX_NAMED: usize = 8;
 ///
 /// let need = Need { id: "safes".into(), version: "0.3.0".into(), yours: None };
 /// let dialog = refusal::dialog(&[need], &refusal::Off::default(), &Names::new(), &Default::default());
-/// assert!(dialog.detail.contains("safes 0.3.0"));
+/// assert!(dialog.detail.lines().any(|line| line == "safes 0.3.0"));
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Dialog {
-    /// The popup's title.
+    /// The popup's title, on one line.
     pub title: String,
-    /// The line over the list.
+    /// What happened and what to do, over the list.
     pub message: String,
-    /// One line per mod, then what to do next.
+    /// The mods, grouped by where to get them.
     pub detail: String,
 }
 
@@ -41,6 +46,19 @@ pub struct Off {
     pub by_player: Vec<String>,
     /// Turned off by the loader since the game started.
     pub this_game: Vec<String>,
+}
+
+/// Where the player gets a mod, in the order the dialog lists them.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+enum Get {
+    /// From the page the server's update source for it names.
+    From(String),
+    /// From the server's admin: the server names no source.
+    Ask,
+    /// By turning it on in the mod list.
+    TurnOn,
+    /// By restarting the game, which turned it off.
+    Restart,
 }
 
 /// The dialog for a client that lacks `needs`, the server's mods it does not
@@ -58,7 +76,7 @@ pub struct Off {
 /// let need = Need { id: "safes".into(), version: "0.3.0".into(), yours: Some("0.2.0".into()) };
 /// let sources = BTreeMap::from([("safes".to_owned(), "github:someone/safes:safes".to_owned())]);
 /// let dialog = refusal::dialog(&[need], &refusal::Off::default(), &Names::new(), &sources);
-/// assert!(dialog.detail.contains("https://github.com/someone/safes/releases"));
+/// assert!(dialog.detail.contains("github.com/someone/safes/releases"));
 /// ```
 #[must_use]
 pub fn dialog(
@@ -67,40 +85,60 @@ pub fn dialog(
     names: &Names,
     sources: &BTreeMap<String, String>,
 ) -> Dialog {
-    let nowhere = texts::fill("join.refused.nowhere", &[]);
-    let mut lines: Vec<String> = needs
-        .iter()
-        .take(MAX_NAMED)
-        .map(|need| {
-            let name = super::label(names, &need.id);
-            let place = sources
+    let mut groups: BTreeMap<Get, Vec<String>> = BTreeMap::new();
+    for need in needs {
+        let get = if off.by_player.contains(&need.id) {
+            Get::TurnOn
+        } else if off.this_game.contains(&need.id) {
+            Get::Restart
+        } else {
+            sources
                 .get(&need.id)
                 .and_then(|line| crate::admission::place(line))
-                .unwrap_or_else(|| nowhere.clone());
-            let mut args = vec![
-                ("mod", name.as_str()),
-                ("version", need.version.as_str()),
-                ("place", place.as_str()),
-                ("file", crate::modlist::LIST_PATH),
-            ];
-            if off.by_player.contains(&need.id) {
-                texts::fill("join.refused.mod.off", &args)
-            } else if off.this_game.contains(&need.id) {
-                texts::fill("join.refused.mod.session", &args)
-            } else if let Some(yours) = &need.yours {
+                .map_or(Get::Ask, |place| {
+                    Get::From(place.trim_start_matches("https://").to_owned())
+                })
+        };
+        let name = super::label(names, &need.id);
+        let mut args = vec![("mod", name.as_str()), ("version", need.version.as_str())];
+        let line = match &need.yours {
+            Some(yours) if matches!(get, Get::From(_) | Get::Ask) => {
                 args.push(("yours", yours.as_str()));
-                texts::fill("join.refused.mod.yours", &args)
-            } else {
-                texts::fill("join.refused.mod", &args)
+                texts::fill("join.dialog.mod.yours", &args)
             }
-        })
-        .collect();
-    if needs.len() > MAX_NAMED {
-        let count = (needs.len() - MAX_NAMED).to_string();
+            _ => texts::fill("join.dialog.mod", &args),
+        };
+        groups.entry(get).or_default().push(line);
+    }
+    let mut lines = Vec::with_capacity(MAX_LINES);
+    let mut listed = 0;
+    'groups: for (get, mods) in &groups {
+        // A heading needs one of its mods beside it, and the count a line.
+        if lines.len() + 2 > MAX_LINES - 1 {
+            break;
+        }
+        lines.push(match get {
+            Get::From(place) => texts::fill("join.dialog.from", &[("place", place)]),
+            Get::Ask => texts::fill("join.dialog.ask", &[]),
+            Get::TurnOn => texts::fill(
+                "join.dialog.turn-on",
+                &[("file", crate::modlist::LIST_PATH)],
+            ),
+            Get::Restart => texts::fill("join.dialog.restart", &[]),
+        });
+        for line in mods {
+            let last_room = lines.len() + 1 == MAX_LINES;
+            if last_room && listed + 1 < needs.len() {
+                break 'groups;
+            }
+            lines.push(line.clone());
+            listed += 1;
+        }
+    }
+    if listed < needs.len() {
+        let count = (needs.len() - listed).to_string();
         lines.push(texts::fill("join.refused.more", &[("count", &count)]));
     }
-    lines.push(String::new());
-    lines.push(texts::fill("join.dialog.next", &[]));
     Dialog {
         title: texts::fill("join.dialog.title", &[]),
         message: texts::fill("join.dialog.message", &[]),
@@ -120,30 +158,38 @@ mod tests {
         }
     }
 
+    fn lines(dialog: &Dialog) -> Vec<&str> {
+        dialog.detail.lines().collect()
+    }
+
     #[test]
-    fn each_missing_mod_gets_a_line_with_its_version_and_where_to_get_it() {
+    fn missing_mods_are_listed_under_where_to_get_them() {
         let names = Names::from([("build-camera".to_owned(), "Build camera".to_owned())]);
-        let sources = BTreeMap::from([(
-            "build-camera".to_owned(),
-            "github:someone/camera:build-camera".to_owned(),
-        )]);
+        let sources = BTreeMap::from([
+            (
+                "build-camera".to_owned(),
+                "github:someone/mods:build-camera".to_owned(),
+            ),
+            ("safes".to_owned(), "github:someone/mods:safes".to_owned()),
+        ]);
         let dialog = dialog(
             &[
                 need("build-camera", "0.3.0", None),
                 need("safes", "0.2.0", Some("0.1.0")),
+                need("zones", "0.1.0", None),
             ],
             &Off::default(),
             &names,
             &sources,
         );
-        let lines: Vec<&str> = dialog.detail.lines().collect();
         assert_eq!(
-            lines,
+            lines(&dialog),
             [
-                "Build camera (build-camera) 0.3.0: https://github.com/someone/camera/releases",
-                "safes 0.2.0, yours is 0.1.0: ask the server's admin",
-                "",
-                "Install them, restart the game and join again.",
+                "From github.com/someone/mods/releases:",
+                "Build camera (build-camera) 0.3.0",
+                "safes 0.2.0, yours 0.1.0",
+                "Ask the server's admin for:",
+                "zones 0.1.0",
             ]
         );
         assert!(!dialog.title.is_empty() && !dialog.message.is_empty());
@@ -167,30 +213,69 @@ mod tests {
             by_player: vec!["safes".to_owned()],
             this_game: vec!["count".to_owned()],
         };
+        let sources =
+            BTreeMap::from([("safes".to_owned(), "github:someone/mods:safes".to_owned())]);
         let dialog = dialog(
             &[need("count", "0.2.0", None), need("safes", "0.3.0", None)],
             &off,
             &Names::new(),
-            &BTreeMap::new(),
+            &sources,
         );
-        let lines: Vec<&str> = dialog.detail.lines().collect();
         assert_eq!(
-            lines[..2],
+            lines(&dialog),
             [
-                "count: turned off while the game ran (the log says why); restart the game",
-                "safes: you turned it off in mods/enshwick/mods.toml; turn it on and restart the game",
+                "Turn on in mods/enshwick/mods.toml:",
+                "safes 0.3.0",
+                "Turned off in this game; restart it:",
+                "count 0.2.0",
             ]
         );
     }
 
     #[test]
-    fn a_long_list_names_the_first_mods_and_counts_the_rest() {
+    fn every_line_is_short_enough_to_stay_on_one_line() {
+        let id = "survivors-per-altar";
+        let sources = BTreeMap::from([(id.to_owned(), format!("github:themaiby/enshwick:{id}"))]);
+        let off = Off {
+            by_player: vec!["safes".to_owned()],
+            this_game: vec!["count".to_owned()],
+        };
+        let dialog = dialog(
+            &[
+                need(id, "0.1.4", Some("0.1.3")),
+                need("safes", "0.1.0", None),
+                need("count", "0.1.0", None),
+                need("zones", "0.1.0", None),
+            ],
+            &off,
+            &Names::new(),
+            &sources,
+        );
+        for line in lines(&dialog) {
+            assert!(line.chars().count() <= 44, "{line}");
+        }
+    }
+
+    #[test]
+    fn a_long_list_keeps_to_its_lines_and_counts_the_rest() {
         let needs: Vec<Need> = (0..20)
             .map(|i| need(&format!("mod-{i:02}"), "1.0.0", None))
             .collect();
         let dialog = dialog(&needs, &Off::default(), &Names::new(), &BTreeMap::new());
-        let lines: Vec<&str> = dialog.detail.lines().collect();
-        assert_eq!(lines.len(), MAX_NAMED + 3, "{}", dialog.detail);
-        assert_eq!(lines[MAX_NAMED], "And 12 more.");
+        let lines = lines(&dialog);
+        assert_eq!(lines.len(), MAX_LINES, "{}", dialog.detail);
+        assert_eq!(lines[0], "Ask the server's admin for:");
+        assert_eq!(lines[MAX_LINES - 1], "And 10 more.");
+    }
+
+    #[test]
+    fn a_list_that_fits_is_never_cut() {
+        let needs: Vec<Need> = (0..11)
+            .map(|i| need(&format!("mod-{i:02}"), "1.0.0", None))
+            .collect();
+        let dialog = dialog(&needs, &Off::default(), &Names::new(), &BTreeMap::new());
+        let lines = lines(&dialog);
+        assert_eq!(lines.len(), MAX_LINES);
+        assert_eq!(lines[MAX_LINES - 1], "mod-10 1.0.0");
     }
 }

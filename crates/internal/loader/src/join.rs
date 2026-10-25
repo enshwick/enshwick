@@ -14,7 +14,10 @@
 //!
 //! Every join from the game's menus hands its online provider a target with
 //! the server's address and query port. The hook asks the server, over the
-//! Steam query protocol, for its `enshwick` rule before the game connects.
+//! Steam query protocol, for its `enshwick` rule before the game connects;
+//! a refused join goes on without its host, so the game's own join step fails
+//! and the game goes back to its menus, its own dialog held back
+//! ([`interaction`]).
 
 use std::collections::BTreeMap;
 use std::net::{SocketAddr, UdpSocket};
@@ -25,6 +28,7 @@ use enshwick_loader_api::mods::Updates;
 use crate::admission::Need;
 use crate::texts;
 
+pub mod interaction;
 pub mod provider;
 pub mod refusal;
 
@@ -853,6 +857,7 @@ mod runtime {
             return unsafe { NEXT.get()(provider, target) };
         }
         crate::log!(WARN, "join refused: the server runs mods this client lacks");
+        super::interaction::hold();
         // The provider copies the target into its own state before it
         // returns, and the caller keeps its target, so the caller's copy
         // gets its host back (client builds 410 and 426).

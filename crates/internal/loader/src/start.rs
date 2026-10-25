@@ -26,6 +26,7 @@ pub(crate) const TABLE_IDS: &[&str] = &[
     crate::join::provider::JOIN_ID,
     crate::join::provider::TABLE_ID,
     crate::join::provider::SLOT_ID,
+    crate::join::interaction::START_ID,
 ];
 
 /// The client starts under Steam's DRM wrapper, which may check the game's code
@@ -439,17 +440,50 @@ fn link_join(loader: &Loader) {
     crate::lobby::register();
     match verified_join(loader) {
         Ok(join) => {
-            loader.link_feature(
+            let linked = loader.link_feature(
                 "join check",
                 Some(join),
                 &crate::join::NEXT,
                 crate::join::detour,
                 enshwick_loader_api::abi::HookFlags::NONE,
             );
+            if linked {
+                link_join_hold(loader);
+            }
         }
         Err(error) => crate::log!(
             WARN,
             "join check off on {}: {error}; nothing patched",
+            loader.build.name
+        ),
+    }
+}
+
+/// Links the hold on the game's own dialog for a refused join, once the start
+/// of user interactions starts with the pinned bytes. Without it a refused
+/// join shows the game's dialog before the loader's.
+fn link_join_hold(loader: &Loader) {
+    use crate::join::interaction::{BYTES_ID, START_ID};
+    let start = loader.address(START_ID);
+    let expected = loader.build.constant(BYTES_ID);
+    let found = start.and_then(|start| {
+        let start = usize::try_from(start).ok()?;
+        // SAFETY: an address inside the game's image, which stays mapped.
+        Some(unsafe { core::ptr::with_exposed_provenance::<u64>(start).read_unaligned() })
+    });
+    match (found, expected) {
+        (Some(found), Some(expected)) if found == expected => {
+            loader.link_feature(
+                "join dialog hold",
+                start,
+                &crate::join::interaction::NEXT,
+                crate::join::interaction::detour,
+                enshwick_loader_api::abi::HookFlags::NONE,
+            );
+        }
+        _ => crate::log!(
+            WARN,
+            "join dialog hold off on {}: {START_ID} is {found:#x?}, not the pinned {expected:#x?}; nothing patched",
             loader.build.name
         ),
     }
