@@ -8,6 +8,7 @@
 
 #[cfg(windows)]
 mod actions;
+pub mod admission;
 pub mod advertise;
 #[cfg(windows)]
 mod altars;
