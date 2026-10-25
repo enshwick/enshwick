@@ -1,11 +1,11 @@
 # The engine addresses Enshwick pins on one game build. `cargo enshwick
 # pin` writes it; the release workflow signs it with the project key.
 
-name = "1.0 server (26082781)"
+name = "1.0 server (26083076)"
 side = "server"
 guid = "1c129660cd6efc4f9f0b21652d5ff2bf"
 age = 399
-build = 26082781
+build = 26083076
 revision = 1
 
 # Systems whose reflected entry must equal the pinned address: the
