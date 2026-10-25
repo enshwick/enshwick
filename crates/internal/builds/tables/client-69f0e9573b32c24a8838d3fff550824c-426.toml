@@ -232,6 +232,10 @@ revision = 1
 "net.provider_join_slot" = { value = 16, carried = false }
 "net.join_game.bytes" = "0xec83_4857_5655_5340"
 "user.start_interaction.bytes" = "0x88ec_8148_5641_5540"
+# An interaction request's kind byte, and the kind of the dialog that a
+# join failed, checked on this build only (`carried = false`).
+"user.interaction_kind" = { value = 0x8, carried = false }
+"user.join_failed_kind" = { value = 10, carried = false }
 "text.pool_language" = { value = 0xd8, pattern = "75 38 48 8D 6E ?? 39 BE ?? ?? ?? ?? 75 11 48 8B D5 48 8D 4C 24 ??", at = 8, size = 4 }
 # The first eight code bytes at each mod textures symbol, and
 # the layouts they rely on: a content request (0x48 bytes:

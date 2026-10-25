@@ -27,6 +27,8 @@ pub(crate) const TABLE_IDS: &[&str] = &[
     crate::join::provider::TABLE_ID,
     crate::join::provider::SLOT_ID,
     crate::join::interaction::START_ID,
+    crate::join::interaction::KIND_ID,
+    crate::join::interaction::JOIN_FAILED_ID,
 ];
 
 /// The client starts under Steam's DRM wrapper, which may check the game's code
@@ -439,7 +441,7 @@ fn link_join(loader: &Loader) {
     crate::join::set_names(names);
     crate::lobby::register();
     match verified_join(loader) {
-        Ok(join) => {
+        Ok((join, code)) => {
             let linked = loader.link_feature(
                 "join check",
                 Some(join),
@@ -448,7 +450,7 @@ fn link_join(loader: &Loader) {
                 enshwick_loader_api::abi::HookFlags::NONE,
             );
             if linked {
-                link_join_hold(loader);
+                link_join_hold(loader, code);
             }
         }
         Err(error) => crate::log!(
@@ -460,38 +462,60 @@ fn link_join(loader: &Loader) {
 }
 
 /// Links the hold on the game's own dialog for a refused join, once the start
-/// of user interactions starts with the pinned bytes. Without it a refused
-/// join shows the game's dialog before the loader's.
-fn link_join_hold(loader: &Loader) {
-    use crate::join::interaction::{BYTES_ID, START_ID};
-    let start = loader.address(START_ID);
-    let expected = loader.build.constant(BYTES_ID);
-    let found = start.and_then(|start| {
-        let start = usize::try_from(start).ok()?;
-        // SAFETY: an address inside the game's image, which stays mapped.
-        Some(unsafe { core::ptr::with_exposed_provenance::<u64>(start).read_unaligned() })
-    });
-    match (found, expected) {
-        (Some(found), Some(expected)) if found == expected => {
-            loader.link_feature(
-                "join dialog hold",
-                start,
-                &crate::join::interaction::NEXT,
-                crate::join::interaction::detour,
-                enshwick_loader_api::abi::HookFlags::NONE,
+/// of user interactions lies in `code`, the game's code section, and starts
+/// with the pinned bytes. Without it a refused join shows the game's dialog
+/// before the loader's.
+fn link_join_hold(loader: &Loader, code: core::ops::Range<u64>) {
+    use crate::join::interaction::{self, BYTES_ID, JOIN_FAILED_ID, KIND_ID, START_ID};
+    let read = |va: u64| {
+        let address = usize::try_from(va).ok()?;
+        // SAFETY: `verify` reads only eight bytes inside the game's code
+        // section, which stays mapped for the life of the process.
+        Some(unsafe { crate::world::read::<u64>(address, 0) })
+    };
+    let start = interaction::verify(
+        loader.address(START_ID),
+        loader.build.constant(BYTES_ID),
+        read,
+        code,
+    );
+    let start = match start {
+        Ok(start) => start,
+        Err(error) => {
+            crate::log!(
+                WARN,
+                "join dialog hold off on {}: {error}; nothing patched",
+                loader.build.name
             );
+            return;
         }
-        _ => crate::log!(
+    };
+    if !interaction::set_layout(
+        loader.build.constant(KIND_ID),
+        loader.build.constant(JOIN_FAILED_ID),
+    ) {
+        crate::log!(
             WARN,
-            "join dialog hold off on {}: {START_ID} is {found:#x?}, not the pinned {expected:#x?}; nothing patched",
+            "join dialog hold off on {}: the build table pins no {KIND_ID} or {JOIN_FAILED_ID}; nothing patched",
             loader.build.name
-        ),
+        );
+        return;
     }
+    loader.link_feature(
+        "join dialog hold",
+        Some(start),
+        &interaction::NEXT,
+        interaction::detour,
+        enshwick_loader_api::abi::HookFlags::NONE,
+    );
 }
 
 /// The online provider's join, once the provider's function table holds it
-/// where the build table says and its code starts with the pinned bytes.
-fn verified_join(loader: &Loader) -> Result<u64, crate::join::provider::Error> {
+/// where the build table says and its code starts with the pinned bytes, and
+/// the game's code section.
+fn verified_join(
+    loader: &Loader,
+) -> Result<(u64, core::ops::Range<u64>), crate::join::provider::Error> {
     use crate::join::provider::{Error, Pins, verify_mapped};
     let pins = Pins::from_table(
         |id| loader.build.symbol(id),
@@ -506,7 +530,8 @@ fn verified_join(loader: &Loader) -> Result<u64, crate::join::provider::Error> {
         .ok_or(Error::NoCode)?;
     // SAFETY: `image` is the game's executable image, mapped for the life of
     // the process.
-    unsafe { verify_mapped(&pins, image, code) }
+    let join = unsafe { verify_mapped(&pins, image, code.clone()) }?;
+    Ok((join, code))
 }
 
 /// The update sources of the running join mods, `(id, source line)`.

@@ -746,7 +746,7 @@ fn install(client: &Client, context: &Context, offer: &Offer) -> Result<Vec<Stri
         let signature = client.signature(url).map_err(|e| said(&e))?;
         verify::check(&keys, &archive, &signature, &pick.tag, &pick.archive).map_err(|why| {
             let why = if why == verify::UNSIGNED {
-                say::text(trust.refusal_key(), &[])
+                say::text(trust::REFUSAL_KEY, &[])
             } else {
                 why
             };

@@ -2,9 +2,7 @@
 //! installed version names the keys its author signs releases with
 //! (`signed_by:` in its manifest) gets only releases signed by one of them.
 //! A mod that names no key is updated unsigned, over `https://` from the
-//! source its own manifest names. A mod the game lacks comes from a server
-//! the player chose to join, so the key that server names for it, if any,
-//! is the one that must have signed the download.
+//! source its own manifest names.
 
 use enshwick_loader_api::mods::{ModEntry, Updates};
 
@@ -14,13 +12,17 @@ use crate::verify::ENSHWICK_KEY;
 /// declare none but were always signed with [`ENSHWICK_KEY`].
 const ENSHWICK_REPOSITORY: &str = "themaiby/enshwick";
 
+/// The key of [`REFUSAL`]'s text in the updater's texts.
+pub const REFUSAL_KEY: &str = "refusal.other-key";
+/// Why a signed mod's download none of [`Trust::keys`] signed is refused, as
+/// the log says it.
+pub const REFUSAL: &str = "it is signed by another key than the installed version names (possible tampering, or the author changed keys); update it by hand if you trust it";
+
 /// Where the keys of an update come from.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Trust {
     /// The installed version's keys and the player's `trusted_keys`.
     Installed(Vec<String>),
-    /// The keys the server advertises for a mod the game lacks.
-    Server(Vec<String>),
     /// No key: the mod's author does not sign releases.
     Unsigned,
 }
@@ -39,7 +41,7 @@ impl Trust {
     #[must_use]
     pub fn keys(&self) -> &[String] {
         match self {
-            Self::Installed(keys) | Self::Server(keys) => keys,
+            Self::Installed(keys) => keys,
             Self::Unsigned => &[],
         }
     }
@@ -52,32 +54,11 @@ impl Trust {
     /// use enshwick_updater::trust::Trust;
     ///
     /// assert!(!Trust::Unsigned.signed());
-    /// assert!(Trust::Server(vec!["RW...".into()]).signed());
+    /// assert!(Trust::Installed(vec!["RW...".into()]).signed());
     /// ```
     #[must_use]
     pub const fn signed(&self) -> bool {
         !matches!(self, Self::Unsigned)
-    }
-
-    /// The key of [`Trust::refusal`]'s text in the updater's texts.
-    #[must_use]
-    pub const fn refusal_key(&self) -> &'static str {
-        match self {
-            Self::Installed(_) | Self::Unsigned => "refusal.other-key",
-            Self::Server(_) => "refusal.not-server-key",
-        }
-    }
-
-    /// Why a download none of [`Trust::keys`] signed is refused, as the log
-    /// says it.
-    #[must_use]
-    pub const fn refusal(&self) -> &'static str {
-        match self {
-            Self::Installed(_) | Self::Unsigned => {
-                "it is signed by another key than the installed version names (possible tampering, or the author changed keys); update it by hand if you trust it"
-            }
-            Self::Server(_) => "it is not signed by the author key the server names",
-        }
     }
 }
 
@@ -136,22 +117,6 @@ pub fn for_installed(installed: &ModEntry, trusted: &[String]) -> Trust {
     }
     keys.extend(trusted.iter().cloned());
     Trust::Installed(keys)
-}
-
-/// Whose signature the server's version of `missing`, a mod the join check
-/// found missing, needs: the installed version's when the game has the mod
-/// in another version, else the key the server advertises, if any.
-#[must_use]
-pub fn for_missing(missing: &ModEntry, installed: Option<&ModEntry>, trusted: &[String]) -> Trust {
-    if let Some(installed) = installed {
-        return for_installed(installed, trusted);
-    }
-    let keys = declared(missing);
-    if keys.is_empty() {
-        Trust::Unsigned
-    } else {
-        Trust::Server(keys)
-    }
 }
 
 #[cfg(test)]
@@ -216,7 +181,7 @@ mod tests {
     fn an_update_signed_by_another_key_is_refused() {
         let trust = for_installed(&entry(&[OTHER_KEY], None), &[]);
         assert!(!accepted(&trust));
-        assert!(trust.refusal().contains("another key"));
+        assert!(REFUSAL.contains("another key"));
     }
 
     #[test]
@@ -235,36 +200,5 @@ mod tests {
         let trust = for_installed(&entry(&[], Some(github(ENSHWICK_REPOSITORY))), &[]);
         assert_eq!(trust.keys(), [OTHER_KEY]);
         assert!(!accepted(&trust));
-    }
-
-    #[test]
-    fn a_missing_mod_needs_the_key_the_server_names() {
-        let advertised = entry(&[TEST_KEY], Some(github("someone/their-mods")));
-        let trust = for_missing(&advertised, None, &[]);
-        assert!(matches!(trust, Trust::Server(_)));
-        assert!(accepted(&trust));
-        let other = entry(&[OTHER_KEY], Some(github("someone/their-mods")));
-        let trust = for_missing(&other, None, &[TEST_KEY.into()]);
-        assert!(
-            !accepted(&trust),
-            "trusted keys do not override the server's"
-        );
-        assert!(trust.refusal().contains("server"));
-        let none = entry(&[], Some(github("someone/their-mods")));
-        assert_eq!(for_missing(&none, None, &[]), Trust::Unsigned);
-    }
-
-    #[test]
-    fn a_mod_in_another_version_keeps_the_installed_key() {
-        let advertised = entry(&[TEST_KEY], None);
-        let installed = entry(&[OTHER_KEY], None);
-        let trust = for_missing(&advertised, Some(&installed), &[]);
-        assert!(!accepted(&trust), "the server cannot swap the author's key");
-        let unsigned = entry(&[], None);
-        assert_eq!(
-            for_missing(&advertised, Some(&unsigned), &[]),
-            Trust::Unsigned,
-            "a mod you have follows its own manifest, not the server's keys"
-        );
     }
 }
