@@ -45,8 +45,9 @@ already chosen to join when the client reads the lobby:
 - **The host does not run some of the player's join mods.** They are turned
   off on the client until the game restarts, and a note lists them.
 - **The host runs join mods the player lacks or has in another version.** A
-  note lists each, and the player joins all the same; nothing keeps the
-  player out and no `JoinRefused` is raised.
+  note lists each, and the player joins all the same; no `JoinRefused` is
+  raised. The host's own check then removes the player, as a dedicated server
+  does.
 - **The host runs no Enshwick**, or a lobby without the keys. Nothing is
   checked and the client keeps its own values, since the client cannot tell
   such a host from a dedicated server, whose check already ran.
@@ -78,8 +79,9 @@ Mods without `join: true` never count: the player may run any of them.
 ## What does a server do with a player who lacks its mods?
 
 A dedicated server that runs join mods checks every player itself, since a
-client without the loader runs no check. When a player enters the world, the
-server waits for the player's game to say which join mods it runs:
+client without the loader runs no check. A client that hosts a game checks its
+guests the same way. When a player enters the world, the server waits for the
+player's game to say which join mods it runs:
 
 - **The game names every join mod in the server's version.** The player
   stays. Extra mods do not count.
@@ -96,8 +98,12 @@ With `require_enshwick = false` in `mod-configs/enshwick.toml`, the server
 lets such players in. On a game build whose table lacks the kick, the player
 gets the chat line and stays, and the log says so.
 
-A server without join mods admits every player. A game a client hosts does not
-check its players.
+A server without join mods admits every player. A hosted game never checks or
+kicks its host, and checks no guest until the host's own game has said hello.
+Administrators are checked and kicked like every other player.
+
+The check keeps games with different mods apart; it does not stop cheating. A
+game that lies about its mods passes it.
 
 ## Join values
 
