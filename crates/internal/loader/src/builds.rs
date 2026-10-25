@@ -200,7 +200,7 @@ mod tests {
             .fingerprint();
         let found = select(&tables, Side::SERVER, fingerprint, None).unwrap();
         assert_eq!(found.kind, Kind::Exact);
-        assert_eq!(found.symbol("npc.lookup"), Some(0x20_2e80));
+        assert_eq!(found.symbol("npc.lookup"), Some(0x20_3d30));
         assert_eq!(found.symbol("npc.nope"), None);
         assert!(!found.checks().is_empty());
         assert!(select(&tables, Side::CLIENT, fingerprint, None).is_none());

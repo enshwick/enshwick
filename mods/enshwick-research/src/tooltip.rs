@@ -573,7 +573,9 @@ pub(crate) mod tests {
             .iter()
             .filter(|(name, _, _)| SITES.iter().any(|s| s.symbol == name))
             .count();
-        assert_eq!(ours, SITES.len());
+        // One row per site for every client build pinned.
+        assert_eq!(ours % SITES.len(), 0);
+        assert!(ours >= SITES.len());
     }
 
     /// The bytes each site expects are the client's that `ENSH_CLIENT_EXE`
