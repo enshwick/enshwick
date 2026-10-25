@@ -105,20 +105,23 @@ its `attribute` is kept as it is (see
    steamcmd +force_install_dir ./client +login <account> +app_update 1203620 validate +quit
    ```
 
-   The Steam build id is in `steamapps/appmanifest_2278520.acf` (`buildid`).
+   The Steam build id is in `steamapps/appmanifest_2278520.acf` (`buildid`),
+   and in `appmanifest_1203620.acf` for the client.
 3. **Run the tool** from the repository root, once per executable:
 
    ```bash
    cargo run --release -p cargo-enshwick -- enshwick pin \
      --old old/enshrouded_server.exe --new server/enshrouded_server.exe \
-     --build 1300000 --write --report pin-server.md
+     --steam-build 26100000 --write --report pin-server.md
    cargo run --release -p cargo-enshwick -- enshwick pin \
      --old old/enshrouded.exe --new client/enshrouded.exe \
-     --build 1300000 --write --report pin-client.md
+     --steam-build 26100001 --write --report pin-client.md
    ```
 
    `--write` writes the new table file beside the old one and puts each new
-   mod row right after its old one; it needs `--build`. Without it the report
+   mod row right after its old one; it needs `--steam-build`. The table
+   records it as `steam_build`, and the game's own version number as
+   `game_version` when `--game-version` gives it. Without `--write` the report
    carries the new table and rows instead. It writes every file or none:
    when one cannot be written, the others stay as they were. The exit code is 0 when nothing
    needs a human, 2 when something does, and 1 on an error.
@@ -217,8 +220,8 @@ many entries as they do today.
 
 [`game-build-watch.yml`](../../.github/workflows/game-build-watch.yml) runs
 weekly, never on pull requests. It asks steamcmd for the public build id of
-the dedicated server. When no server table names it in `build`, a Windows job
-downloads that server, runs `compat` on it with the mods of the latest
+the dedicated server. When no server table names it in `steam_build`, a
+Windows job downloads that server, runs `compat` on it with the mods of the latest
 platform release and opens an issue with the report. Game files stay on the
 runner. It stays off until the repository variable `GAME_BUILD_WATCH` is
 `true`.

@@ -114,10 +114,13 @@ pub(crate) struct Identity<'a> {
     pub(crate) age: u32,
     /// The table's name.
     pub(crate) name: &'a str,
-    /// Steam's build id; `None` keeps the one written.
-    pub(crate) build: Option<u64>,
+    /// Steam's build id.
+    pub(crate) steam_build: Option<u64>,
+    /// The game's own version number.
+    pub(crate) game_version: Option<u32>,
     /// Whether the table is for another build than `src` was: its revision
-    /// starts again at 1.
+    /// starts again at 1, and a number given as `None` is dropped rather
+    /// than kept as written.
     pub(crate) new_build: bool,
 }
 
@@ -136,10 +139,18 @@ pub(crate) fn render(
     doc["name"] = toml_edit::value(identity.name);
     doc["guid"] = toml_edit::value(identity.guid);
     doc["age"] = toml_edit::value(i64::from(identity.age));
-    if let Some(build) = identity.build {
-        doc["build"] = toml_edit::value(i64::try_from(build).map_err(|e| e.to_string())?);
+    let numbers = [
+        ("steam_build", identity.steam_build),
+        ("game_version", identity.game_version.map(u64::from)),
+    ];
+    for (key, number) in numbers {
+        match number {
+            Some(n) => doc[key] = toml_edit::value(i64::try_from(n).map_err(|e| e.to_string())?),
+            None if identity.new_build => drop(doc.remove(key)),
+            None => {}
+        }
     }
-    if identity.new_build && doc.contains_key("revision") {
+    if identity.new_build && doc.remove("revision").is_some() {
         doc["revision"] = toml_edit::value(1);
     }
     let lists = [&row.checks, &row.symbols, &row.constants];
@@ -531,7 +542,8 @@ name = "1.0 server (1)"
 side = "server"
 guid = "1c129660cd6efc4f9f0b21652d5ff2bf"
 age = 387
-build = 1
+steam_build = 1
+game_version = 5
 revision = 3
 
 [checks]
@@ -595,7 +607,8 @@ revision = 3
             guid: &"ab".repeat(16),
             age: 400,
             name: "1.0 server (2)",
-            build: Some(2),
+            steam_build: Some(2),
+            game_version: None,
             new_build: true,
         };
         let (text, _) = render(TABLE, &row, &identity, &edits, None, &HashMap::new()).unwrap();
@@ -610,7 +623,7 @@ revision = 3
         )));
         assert!(text.contains(
             "age = 400
-build = 2
+steam_build = 2
 revision = 1
 "
         ));
@@ -631,5 +644,33 @@ revision = 1
         let reread = parse(&text).unwrap();
         assert_eq!(reread.age, 400);
         assert_eq!(reread.symbols.len(), 1);
+    }
+
+    #[test]
+    fn a_new_build_takes_both_numbers_given_and_drops_the_old_ones() {
+        let row = parse(TABLE).unwrap();
+        let identity = |steam_build, game_version| Identity {
+            guid: &row.guid,
+            age: 400,
+            name: "1.0 server (2)",
+            steam_build,
+            game_version,
+            new_build: true,
+        };
+        let text = |src: &str, identity| {
+            render(src, &row, &identity, &[], None, &HashMap::new())
+                .unwrap()
+                .0
+        };
+        let both = text(TABLE, identity(Some(2), Some(6)));
+        assert!(both.contains("steam_build = 2\ngame_version = 6\nrevision = 1\n"));
+        let added = text(
+            &TABLE.replace("game_version = 5\n", ""),
+            identity(Some(2), Some(6)),
+        );
+        assert!(added.contains("steam_build = 2\ngame_version = 6\nrevision = 1\n"));
+        let neither = text(TABLE, identity(None, None));
+        assert!(!neither.contains("steam_build"));
+        assert!(!neither.contains("game_version"));
     }
 }
