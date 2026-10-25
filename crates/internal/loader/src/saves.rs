@@ -4,13 +4,14 @@
 //! server writes the world over the next loop iterations and
 //! `Event::WORLD_SAVED` follows. The world key comes from the path of the
 //! world's save file, which the engine builds whenever it reads or writes
-//! it: the loader links the path builder and keeps the world paths each
-//! thread built last.
+//! it: the loader links the path builder and keeps the world path built
+//! last.
 //!
 //! A dedicated server runs one world, so its key is the last one built. A
-//! client also builds the paths of its own worlds, for its menus, so there
-//! the key is the one built on the thread that runs the hosted game, and
-//! none once that game ends.
+//! client also builds the paths of all its worlds for its menus, and its
+//! save system builds them on a thread of its own, not on the hosted game's
+//! (client 410 and 426). There the key is the last one built since the
+//! hosted game started to initialise, and none once that game ends.
 
 use std::path::Path;
 use std::sync::{Mutex, OnceLock, PoisonError};
@@ -37,6 +38,10 @@ pub(crate) const TABLE_IDS: &[&str] = &[
 /// The file name extension of a world save.
 const WORLD_EXTENSION: &str = "ksd";
 
+/// The starts of the names of a client's other save files, which share the
+/// world saves' folder and extension: its characters and its global save.
+const OTHER_SAVES: &[&str] = &["character", "global"];
+
 type RequestFn = unsafe extern "system" fn(server: *mut u8);
 type PathFn = unsafe extern "system" fn(result: *mut u8, path: *mut u8, slot: *mut u8) -> *mut u8;
 
@@ -51,6 +56,7 @@ struct Layout {
     path_data: usize,
     path_lengths: usize,
     path_parts: usize,
+    side: Side,
 }
 
 /// `flags` bit: the world may be saved now, set once it has loaded.
@@ -59,12 +65,43 @@ const SAVE_ALLOWED: u8 = 1 << 2;
 static LAYOUT: OnceLock<Option<Layout>> = OnceLock::new();
 // SAFETY: each slot joins the chain of the function its type names.
 static PATH_NEXT: Next<PathFn> = unsafe { Next::new() };
-/// How many threads' keys are kept.
-const KEPT: usize = 8;
 
-/// The key of the world whose save path each thread built last, by thread
-/// id, the latest last.
-static KEYS: Mutex<Vec<(u32, &'static str)>> = Mutex::new(Vec::new());
+/// The world key built last, and on a client whether a hosted game names
+/// its world now.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Keys {
+    latest: Option<&'static str>,
+    open: bool,
+}
+
+impl Keys {
+    /// No key, and a client keeps none until a hosted game starts.
+    const CLOSED: Self = Self {
+        latest: None,
+        open: false,
+    };
+    /// No key yet, and a client keeps the next ones.
+    const OPEN: Self = Self {
+        latest: None,
+        open: true,
+    };
+
+    /// Keeps `key` when `side` names its world now.
+    fn note(&mut self, side: Side, key: &'static str) {
+        if side == Side::SERVER || self.open {
+            self.latest = Some(key);
+        }
+    }
+
+    /// The key of the world `side` runs.
+    fn pick(self, side: Side) -> Option<&'static str> {
+        (side == Side::SERVER || self.open)
+            .then_some(self.latest)
+            .flatten()
+    }
+}
+
+static KEYS: Mutex<Keys> = Mutex::new(Keys::CLOSED);
 
 fn layout(loader: &Loader) -> Option<&'static Layout> {
     LAYOUT
@@ -88,6 +125,7 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
                 path_data: constant("save.path_data")?,
                 path_lengths: constant("save.path_lengths")?,
                 path_parts: constant("save.path_parts")?,
+                side: loader.side,
             })
         })
         .as_ref()
@@ -116,13 +154,16 @@ unsafe extern "system" fn built(result: *mut u8, path: *mut u8, slot: *mut u8) -
         let _caught = SAVES_FUSE.run("the built", || {
             // SAFETY: the path the game has just built.
             let text = unsafe { read_path(&layout, path) };
-            crate::log!(DEBUG, "save path built ({code:?}): {text:?}");
+            // SAFETY: no preconditions.
+            let thread = unsafe { windows_sys::Win32::System::Threading::GetCurrentThreadId() };
+            crate::log!(
+                DEBUG,
+                "save path built ({code:?}) on thread {thread}: {text:?}"
+            );
             if code == Some(0)
                 && let Some(text) = text
             {
-                // SAFETY: no preconditions.
-                let thread = unsafe { windows_sys::Win32::System::Threading::GetCurrentThreadId() };
-                remember(&text, thread);
+                remember(&text, layout.side);
             }
         });
     }
@@ -157,14 +198,15 @@ unsafe fn read_path(layout: &Layout, path: *mut u8) -> Option<String> {
     core::str::from_utf8(bytes).ok().map(str::to_owned)
 }
 
-/// Keeps the key of `path`, built on `thread`, when it names a world save.
-fn remember(path: &str, thread: u32) {
+/// Keeps the key of `path` when it names a world save.
+fn remember(path: &str, side: Side) {
     let Some(key) = key_of(path) else {
         return;
     };
-    let mut keys = KEYS.lock().unwrap_or_else(PoisonError::into_inner);
     let key = intern(&key, path);
-    keep(&mut keys, thread, key);
+    KEYS.lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .note(side, key);
 }
 
 /// Every world key seen, kept once for the process: a menu that builds the
@@ -183,37 +225,15 @@ fn intern(key: &str, path: &str) -> &'static str {
     kept
 }
 
-/// Makes `key` the latest of `thread` in `keys`, keeping at most [`KEPT`].
-fn keep(keys: &mut Vec<(u32, &'static str)>, thread: u32, key: &'static str) {
-    keys.retain(|&(t, _)| t != thread);
-    if keys.len() == KEPT {
-        keys.remove(0);
-    }
-    keys.push((thread, key));
+/// A hosted game starts to initialise, before it reads its save: the world
+/// paths built from now on are its world's, the menu's before are not.
+pub(crate) fn hosting_begins() {
+    *KEYS.lock().unwrap_or_else(PoisonError::into_inner) = Keys::OPEN;
 }
 
-/// The key a side reads from `keys`: a server's latest, and a client's
-/// from the thread of the game it hosts, `hosted` once its first step ran
-/// and else the thread that asks.
-fn pick(
-    keys: &[(u32, &'static str)],
-    side: Side,
-    hosted: Option<u32>,
-    me: u32,
-) -> Option<&'static str> {
-    if side == Side::SERVER {
-        return keys.last().map(|&(_, key)| key);
-    }
-    let thread = hosted.unwrap_or(me);
-    keys.iter()
-        .rev()
-        .find(|&&(t, _)| t == thread)
-        .map(|&(_, key)| key)
-}
-
-/// Forgets every key, when a hosted game ends.
+/// Forgets the key, when a hosted game ends.
 pub(crate) fn forget() {
-    KEYS.lock().unwrap_or_else(PoisonError::into_inner).clear();
+    *KEYS.lock().unwrap_or_else(PoisonError::into_inner) = Keys::CLOSED;
 }
 
 /// The world key of a save file path: the file's stem and a hash of its
@@ -225,6 +245,7 @@ fn key_of(path: &str) -> Option<String> {
     }
     let stem = path.file_stem()?.to_str()?;
     if stem.is_empty()
+        || OTHER_SAVES.iter().any(|other| stem.starts_with(other))
         || !stem
             .chars()
             .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
@@ -240,10 +261,10 @@ fn key_of(path: &str) -> Option<String> {
 
 /// The key of the world the server runs, once the engine has built its path.
 pub(crate) fn world_key(loader: &Loader) -> Option<&'static str> {
-    // SAFETY: no preconditions.
-    let me = unsafe { windows_sys::Win32::System::Threading::GetCurrentThreadId() };
-    let keys = KEYS.lock().unwrap_or_else(PoisonError::into_inner);
-    let key = pick(&keys, loader.side, crate::events::hosted_thread(), me);
+    let key = KEYS
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .pick(loader.side);
     if let Some(key) = key {
         crate::log!(DEBUG, "world key {key}");
     }
@@ -305,20 +326,32 @@ mod tests {
     }
 
     #[test]
-    fn a_client_takes_the_key_of_the_hosted_game_s_thread_and_a_server_the_latest() {
-        let mut keys = Vec::new();
-        keep(&mut keys, 1, "hosted");
-        keep(&mut keys, 2, "menu");
-        assert_eq!(pick(&keys, Side::SERVER, None, 9), Some("menu"));
-        assert_eq!(pick(&keys, Side::CLIENT, Some(1), 2), Some("hosted"));
-        assert_eq!(pick(&keys, Side::CLIENT, None, 1), Some("hosted"));
-        assert_eq!(pick(&keys, Side::CLIENT, Some(3), 2), None);
-        keep(&mut keys, 1, "next");
-        assert_eq!(pick(&keys, Side::CLIENT, Some(1), 2), Some("next"));
-        for thread in 10..20 {
-            keep(&mut keys, thread, "other");
-        }
-        assert_eq!(keys.len(), KEPT);
-        assert_eq!(pick(&keys, Side::CLIENT, Some(1), 2), None);
+    fn a_server_names_the_world_whose_path_it_built_last() {
+        let mut keys = Keys::CLOSED;
+        keys.note(Side::SERVER, "world0-a");
+        keys.note(Side::SERVER, "world0-b");
+        assert_eq!(keys.pick(Side::SERVER), Some("world0-b"));
+    }
+
+    #[test]
+    fn a_client_names_the_world_its_hosted_game_loads_whatever_thread_built_the_path() {
+        let mut keys = Keys::CLOSED;
+        keys.note(Side::CLIENT, "world9-menu");
+        assert_eq!(keys.pick(Side::CLIENT), None);
+        keys = Keys::OPEN;
+        assert_eq!(keys.pick(Side::CLIENT), None);
+        keys.note(Side::CLIENT, "world1-hosted");
+        assert_eq!(keys.pick(Side::CLIENT), Some("world1-hosted"));
+        keys = Keys::CLOSED;
+        keys.note(Side::CLIENT, "world2-menu");
+        assert_eq!(keys.pick(Side::CLIENT), None);
+    }
+
+    #[test]
+    fn character_and_global_saves_name_no_world() {
+        assert_eq!(key_of("character0.ksd"), None);
+        assert_eq!(key_of(r"C:\Saves\default\character12.ksd"), None);
+        assert_eq!(key_of("global.ksd"), None);
+        assert!(key_of("world1.ksd").is_some_and(|k| k.starts_with("world1-")));
     }
 }
