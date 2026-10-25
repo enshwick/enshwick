@@ -386,8 +386,8 @@ unsafe fn after_step(loader: &'static Loader, offsets: &Offsets, server: *mut u8
         } else if state == SLOT_IN_GAME && entity != 0 && joined.load(Ordering::Relaxed) != handle {
             joined.store(handle, Ordering::Relaxed);
             let data = player(index, slot, offsets);
+            crate::admission::joined(data.key);
             part!("player joined events", {
-                crate::admission::joined(data.key);
                 crate::stats::player_joined(loader, &data);
                 loader.emit(Event::PLAYER_JOINED, None, (&raw const data).cast());
             });
@@ -428,6 +428,7 @@ fn end_session() {
     crate::weather::forget();
     crate::inventory::forget();
     crate::recipes::left();
+    crate::admission::forget();
     forget_joined();
     BUILDING
         .lock()
