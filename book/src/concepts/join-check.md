@@ -61,18 +61,21 @@ compares the fingerprint with its own:
 - **The server does not run some of the player's join mods**, or runs no
   Enshwick at all. Those mods are turned off on the client until the game
   restarts, a note lists them, and the player joins.
-- **The server runs join mods the player lacks or has in another version.** A
-  note lists each, with the server's version and the player's, and the client
-  does not join. Then the loader raises `JoinRefused` (below). A mod the
-  player turned off in `mods/enshwick/mods.toml` is named as such, left out of
-  `JoinRefused`'s list so no updater offers it, and is the player's to turn
-  back on.
+- **The server runs join mods the player lacks or has in another version.**
+  The client does not join, and one dialog lists each, with the server's
+  version, the player's, and where to get it: the releases page of the source
+  the server advertises, or the server's admin. Then the loader raises
+  `JoinRefused` (below). A mod the player turned off in
+  `mods/enshwick/mods.toml` is named as such, left out of `JoinRefused`'s list,
+  and is the player's to turn back on.
 - **The same mods, another loader version.** A note says so, and the player
   joins.
 - **The server does not answer the query.** The player joins without a check.
 
 Notes show as dialogs in the game's own style, over the game, which goes on
-drawing; a refused join is refused at once, and the note follows.
+drawing. A refused join is refused at once and the game goes back to its
+menu; the game's own dialog about a failed join is held back, so the loader's
+is the only one.
 
 Mods without `join: true` never count: the player may run any of them.
 
@@ -117,8 +120,7 @@ with the server's value over its own file, which stays as it is. See
 
 When the check keeps a player out, the loader raises
 [`events::JoinRefused`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/events.rs)
-on the client after the player closes the note, and
+on the client after the player closes the dialog, and
 [`mods::join_missing()`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/mods.rs)
-lists the missing mods with the server's versions and update sources. An
-updater mod offers them from there; see
+lists the missing mods with the server's versions and update sources; see
 [Releasing and updates](../releasing.md).

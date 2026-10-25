@@ -6,8 +6,8 @@ loaded mod that names where its releases come from (`updates:` in its
 manifest): GitHub, or a document at an `https://` address. It does the same
 for the loader itself. When there are any, a dialog in the game's own style
 lists them, such as `Safes (safes): 0.1.0 → 0.2.0`, and asks whether to
-download them. Nothing is downloaded without a Yes, and this check never
-offers mods you do not have; only a server's join check can (below).
+download them. Nothing is downloaded without a Yes, and the updater never
+offers mods you do not have.
 
 Until Enshwick's first release, 1.0.0, its loader and mods have no releases,
 only the development build: the updater checks and finds nothing to offer,
@@ -25,15 +25,8 @@ A mod renamed since you installed it names its old id (`replaces:` in its
 manifest), and the loader no longer starts the old DLL beside it. When the
 updater installs or updates the renamed mod, it deletes that old DLL from
 `mods/`: only the file the loader lists for the old id, never another mod's
-or the loader's. A renamed mod installed fresh, such as from a server you
-were refused by, deletes its old DLL at the next start, once it runs.
-
-When a server runs mods you lack, or has them in another version, the join
-check keeps you out and says which. The updater then offers the server's
-versions, checked the same way. A mod you have comes from its own source,
-never one the server names; a mod you lack comes from the source the server
-advertises. A version older than yours is marked `(older)` in the dialog.
-Restart the game once they are downloaded and join again.
+or the loader's. A renamed mod installed fresh deletes its old DLL at the
+next start, once it runs.
 
 ## What is installed
 
@@ -48,12 +41,7 @@ and is at most 64 MiB. You are never asked about keys:
   with, or the author changed keys; update it by hand if you trust it;
 - a mod that names no key gets its updates unsigned, marked `(unsigned)` in
   the dialog: you trust its updates as you trusted the mod when you
-  installed it. Only its own DLL is replaced;
-- a mod you do not have, offered after a refused join, comes from the source
-  the server names and, when the server names an author key for it, must be
-  signed by that key. The dialog shows the mod, its version, where it comes
-  from and the key, or that it is unsigned. You trust it because you trust
-  the server.
+  installed it. Only its own DLL is replaced.
 
 Mods of this repository released before author keys are checked against
 Enshwick's own key, which has signed all of them. A signature's trusted
@@ -91,7 +79,7 @@ prereleases = false
 - `enabled`: off, the updater never goes online.
 - `check_interval_hours`: 0 to 8760 hours between checks at start; `0` checks at
   every start. A check that could not reach every source runs again at the next
-  start. The offer of a server's versions does not wait for the interval.
+  start.
 - `trusted_keys`: public keys accepted for updates besides the ones each
   installed mod names, each the second line of a minisign `.pub` file
   (`RW...`). For an author who changed keys; add only keys you trust. An
@@ -195,8 +183,6 @@ the first release, 1.0.0, there are no others.
 ## Who needs it
 
 Players. It is a client mod, and a dedicated server skips it at start: a
-server gets its files the way its owner deploys them, while its loader
-advertises where each of its mods comes from and who signs it, so players'
-updaters can offer them. The archive extracts on a server without harm.
+server gets its files the way its owner deploys them. The archive extracts on a server without harm.
 
 Licensed under [MIT](../../LICENSE).
