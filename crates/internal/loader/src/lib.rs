@@ -28,6 +28,7 @@ mod clones;
 mod code;
 pub mod configure;
 pub mod conflicts;
+pub mod console;
 #[cfg(windows)]
 mod content;
 #[cfg(windows)]

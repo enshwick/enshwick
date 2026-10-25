@@ -42,7 +42,7 @@ pub const TEMPLATE: &str = r#"# Recipes nobody crafts in this game. They leave e
 # workshops disables every recipe made at a workshop: "hand", or the debug
 # name of the station's or the survivor's item (Craftingstation_Workbench,
 # NPC_Crafter_Blacksmith01). [enable] takes recipes back from [disable] and
-# from mods. /enshwick recipes find <text> finds the names.
+# from mods. The console line enshwick recipes find <text> finds the names.
 
 [disable]
 recipes = []

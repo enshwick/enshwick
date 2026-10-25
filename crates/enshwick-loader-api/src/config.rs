@@ -3,7 +3,7 @@
 //! `#[derive(Config)]` writes the file from the type and describes every
 //! field in a [`Schema`]: when it takes effect ([`Stage`]), the values it
 //! accepts, its documentation and the text key a translation of it uses. The
-//! loader reads the schema to answer `/config` and to check values before it
+//! loader reads the schema to answer `enshwick config` on the console and to check values before it
 //! writes them; a settings menu builds on the same description.
 
 use serde::{Deserialize, Serialize};
@@ -26,7 +26,7 @@ use serde::{Deserialize, Serialize};
 ///   value, which stays the same while the world runs;
 /// - `range = a..=b` (also `a..` or `..=b`) for numbers and `choices = [..]`
 ///   for values from a list, both checked whenever the file is read and
-///   before `/config` writes a value;
+///   before the console or the Mods screen writes a value;
 /// - `text = "key"`, the text key of the field's translated label in the
 ///   mod's texts, `config.<field>` by default; its description is the key
 ///   with `.doc` appended.
@@ -116,7 +116,7 @@ pub trait Config: serde::de::DeserializeOwned + Default {
     /// The commented file written when the mod's settings are missing.
     fn template() -> String;
 
-    /// What every field is, for the loader, `/config` and a settings menu.
+    /// What every field is, for the loader, the console and a settings menu.
     ///
     /// # Examples
     ///
@@ -783,7 +783,7 @@ const fn kind_name(kind: Kind) -> &'static str {
     }
 }
 
-/// A mod's settings described for the loader, `/config` and a settings menu:
+/// A mod's settings described for the loader, the console and a settings menu:
 /// what [`Config::schema`] returns, and what a mod hands the loader as text.
 ///
 /// # Examples

@@ -2,7 +2,7 @@
 //! mods' status sources give, what mods serve and patch, and the hook
 //! counters. Written to `logs/enshwick/status.log` a minute after start,
 //! then every `status_minutes`, and whenever an administrator asks with
-//! `/enshwick status`; each write replaces the last.
+//! `enshwick status` on the console; each write replaces the last.
 
 use core::ffi::c_void;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -29,7 +29,7 @@ struct Source {
 }
 
 static SOURCES: Mutex<Vec<Source>> = Mutex::new(Vec::new());
-/// Set by `/enshwick status`; the writer writes on its next look.
+/// Set by `enshwick status` on the console; the writer writes on its next look.
 static REQUESTED: AtomicBool = AtomicBool::new(false);
 static STARTED: OnceLock<Instant> = OnceLock::new();
 
@@ -331,7 +331,7 @@ pub(crate) fn cost_lines(loader: &Loader, mods: usize, items: usize) -> Vec<Stri
         return vec!["per-mod costs: measuring, ask again in a second".to_owned()];
     };
     let since = if reset {
-        "since /enshwick profile reset"
+        "since enshwick profile reset"
     } else {
         "since start"
     };

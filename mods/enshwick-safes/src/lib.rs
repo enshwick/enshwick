@@ -24,7 +24,6 @@ use std::time::Duration;
 
 use enshwick_loader_api::abi::BuildingData;
 use enshwick_loader_api::abi::Side;
-use enshwick_loader_api::commands::Rename;
 use enshwick_loader_api::ecs::Entity;
 use enshwick_loader_api::events::{
     BuildingPlaced, BuildingRemoved, PlayerJoined, PlayerLeft, ShutdownStarted, Ticked,
@@ -32,6 +31,7 @@ use enshwick_loader_api::events::{
 };
 use enshwick_loader_api::i18n::Language;
 use enshwick_loader_api::state::{Store, WorldStore};
+use enshwick_loader_api::world::Rename;
 use enshwick_loader_api::world::{ComponentType, World};
 use enshwick_loader_api::{Load, Mod, Off};
 
@@ -50,7 +50,7 @@ struct Settings {
     /// Whether the server's administrators may open, remove and rename every Safe.
     #[config(runtime)]
     admins_can_open: bool,
-    /// The language of the owner's name on a Safe and of `/safe` replies: "en", "uk", "de", ...
+    /// The language of the owner's name on a Safe: "en", "uk", "de", ...
     #[config(runtime)]
     label_language: String,
 }
@@ -314,7 +314,7 @@ impl Mod for Safes {
     }
 }
 
-/// The server half: owners, players, the refusals, labels and `/safe`.
+/// The server half: owners, players, the refusals, labels and the actions.
 fn guard(load: &mut Load<'_>, phrases: &'static Phrases) -> Result<(), Off> {
     let world = load.world()?;
     let client = load.host().build().side == Side::CLIENT;
@@ -366,13 +366,7 @@ fn guard(load: &mut Load<'_>, phrases: &'static Phrases) -> Result<(), Off> {
     })?;
     label_seen(load, world, phrases, store)?;
     load.on_rename(move |rename| may_rename(world, rename))?;
-    let language = phrases.language();
-    let actions = actions::declare(load, world, phrases.texts.clone(), language, move || {
-        save(store);
-    })?;
-    load.on_config_change(move |settings: Settings| {
-        actions.set_language(settings.language().unwrap_or(Language::FALLBACK));
-    })?;
+    actions::declare(load, world, phrases.texts.clone(), move || save(store))?;
     Ok(())
 }
 

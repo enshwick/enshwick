@@ -11,23 +11,23 @@
 //! once, and the entity is in the world after the next step.
 //!
 //! Every call belongs on the server's game thread, from a game event, a
-//! [`Scheduler`](crate::schedule::Scheduler) task or a command; on a client,
+//! [`Scheduler`](crate::schedule::Scheduler) task or an action; on a client,
 //! while it hosts a game.
 //!
 //! # Examples
 //!
 //! ```
+//! use enshwick_loader_api::actions::{Action, Outcome};
 //! use enshwick_loader_api::effects::Teleport;
 //!
 //! fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
 //!     let effects = load.effects();
-//!     load.add_command("home", "takes you to the world's centre", move |ctx, _args| {
-//!         let Some(me) = ctx.character() else {
-//!             return "the console has no character".into();
-//!         };
+//!     let actions = load.actions(enshwick_loader_api::i18n::Texts::default())?;
+//!     actions.add(Action::new("home", "Go to the world's centre"), move |request| {
+//!         let me = request.player.entity;
 //!         match effects.teleport(me, [0.0, 100.0, 0.0], Teleport::new().best_spawn()) {
-//!             Ok(()) => "on your way".into(),
-//!             Err(why) => format!("no teleport: {why}").into(),
+//!             Ok(()) => Outcome::done("On your way"),
+//!             Err(why) => Outcome::refused(format!("No teleport: {why}")),
 //!         }
 //!     })
 //! }
@@ -432,12 +432,14 @@ impl Effects {
     /// # Examples
     ///
     /// ```
+    /// use enshwick_loader_api::actions::{Action, Outcome};
     /// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
     ///     let effects = load.effects();
     ///     let ping = load.event_type("keen::ecs::UiPingEvent")?;
-    ///     load.add_command("ping-origin", "pings the world origin", move |_ctx, _args| {
+    ///     let actions = load.actions(enshwick_loader_api::i18n::Texts::default())?;
+    ///     actions.add(Action::new("ping-origin", "Ping the world origin").admins(), move |_request| {
     ///         let bytes = vec![0u8; ping.size() as usize];
-    ///         format!("{:?}", effects.emit_raw(ping, &bytes)).into()
+    ///         Outcome::done(format!("{:?}", effects.emit_raw(ping, &bytes)))
     ///     })
     /// }
     /// ```
@@ -505,20 +507,25 @@ impl Effects {
     /// # Examples
     ///
     /// ```
+    /// use enshwick_loader_api::actions::{Action, Arg, Outcome, Value};
     /// use enshwick_loader_api::effects::Spawn;
     ///
     /// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
     ///     let effects = load.effects();
     ///     let world = load.world()?;
-    ///     load.add_command("clone", "spawns a copy of an entity beside you: /clone <entity>", move |ctx, args| {
-    ///         let Some(me) = ctx.character() else {
-    ///             return "the console has no character".into();
+    ///     let actions = load.actions(enshwick_loader_api::i18n::Texts::default())?;
+    ///     let clone = Action::new("clone", "Spawn a copy of an entity beside you")
+    ///         .admins()
+    ///         .arg(Arg::number("Entity", 0.0..=f64::from(u32::MAX), 1.0));
+    ///     actions.add(clone, move |request| {
+    ///         let [Value::Number(id)] = request.args else {
+    ///             return Outcome::refused("Name an entity");
     ///         };
-    ///         let source = args.first().and_then(|a| a.parse().ok()).map(enshwick_loader_api::ecs::Entity);
-    ///         let (Some(template), Some([x, y, z])) = (source.and_then(|e| world.template(e)), world.position(me)) else {
-    ///             return "/clone <entity>".into();
+    ///         let source = enshwick_loader_api::ecs::Entity(*id as u32);
+    ///         let (Some(template), Some([x, y, z])) = (world.template(source), world.position(request.player.entity)) else {
+    ///             return Outcome::refused("Nothing to copy, or you are nowhere");
     ///         };
-    ///         format!("{:?}", effects.spawn(template, [x + 2.0, y, z], Spawn::new())).into()
+    ///         Outcome::done(format!("{:?}", effects.spawn(template, [x + 2.0, y, z], Spawn::new())))
     ///     })
     /// }
     /// ```

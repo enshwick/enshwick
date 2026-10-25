@@ -9,18 +9,20 @@
 //! [`NightStarted`](crate::events::NightStarted) mark the turns.
 //!
 //! Every call belongs on the server's game thread, from a game event, a
-//! [`Scheduler`](crate::schedule::Scheduler) task or a command; on a client,
+//! [`Scheduler`](crate::schedule::Scheduler) task or an action; on a client,
 //! while it hosts a game.
 //!
 //! # Examples
 //!
 //! ```
+//! use enshwick_loader_api::actions::{Action, Outcome};
 //! fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
 //!     let clock = load.clock();
-//!     load.add_command("noon", "sets the time to noon", move |_ctx, _args| {
+//!     let actions = load.actions(enshwick_loader_api::i18n::Texts::default())?;
+//!     actions.add(Action::new("noon", "Set the time to noon").admins(), move |_request| {
 //!         match clock.set_hours(12.0) {
-//!             Ok(()) => "it is noon".into(),
-//!             Err(why) => format!("no noon: {why}").into(),
+//!             Ok(()) => Outcome::done("It is noon"),
+//!             Err(why) => Outcome::refused(format!("No noon: {why}")),
 //!         }
 //!     })
 //! }
@@ -160,10 +162,12 @@ impl Clock {
 /// # Examples
 ///
 /// ```
+/// use enshwick_loader_api::actions::{Action, Outcome};
 /// fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
 ///     let speed = load.clock_speed()?;
-///     load.add_command("slow-time", "halves the clock's speed", move |_ctx, _args| {
-///         format!("{:?}", speed.set(0.5)).into()
+///     let actions = load.actions(enshwick_loader_api::i18n::Texts::default())?;
+///     actions.add(Action::new("slow-time", "Halve the clock's speed").admins(), move |_request| {
+///         Outcome::done(format!("{:?}", speed.set(0.5)))
 ///     })
 /// }
 /// ```

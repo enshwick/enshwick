@@ -320,7 +320,7 @@ label_language = \"en\"
         assert!(ACCESS.may(owner.key, (40, 2, 40), Entity(700), Entity(10), Action::Use));
         assert!(
             !ACCESS.may_manage((40, 2, 40), owner, Entity(10)),
-            "`/safe allow` and `deny` hear the refusal too"
+            "the access action hears the refusal too"
         );
         assert!(
             ACCESS.refused_seen(700, Entity(14)),
@@ -347,7 +347,8 @@ label_language = \"en\"
     }
 
     #[test]
-    fn safe_commands_act_on_the_nearest_safe_the_player_may_manage() {
+    fn the_access_actions_act_on_the_nearest_safe_the_player_may_manage() {
+        use enshwick_loader_api::abi::ActionCall;
         use enshwick_loader_api::points::Verdict;
         use enshwick_loader_api::points::safes::{Access, SafeAction};
 
@@ -393,14 +394,22 @@ label_language = \"en\"
         assert_eq!(loader.raise::<WorldLoaded>(&()), 2, "the store and the mod");
         ACCESS.placed(700, (2, 0, 0), 1, "Ann");
         ACCESS.placed(701, (42, 0, 0), 2, "Bob");
-        let safe = |who, args| loader.command("safe", who, args).unwrap();
+        let run = |who, id, args: &str| {
+            let reply = loader
+                .ask_actions(ActionCall::RUN, who, 0, id, args)
+                .unwrap();
+            reply[1..].to_owned()
+        };
+        let access = |who, key: u64, on: bool| {
+            run(who, "access", &format!("p{key:016x}\tb{}", u8::from(on)))
+        };
 
         assert_eq!(
-            safe(&ann, "allow Cat"),
+            access(&ann, 3, true),
             "Cat may now open your Safe at (1, 0, 0), the nearest you manage within 4 m."
         );
         assert_eq!(
-            safe(&cat, "list"),
+            run(&cat, "list", ""),
             "No Safe you manage within 4 m.",
             "Bob's Safe is not Cat's to manage"
         );
@@ -412,15 +421,15 @@ label_language = \"en\"
             }
         }));
         assert_eq!(
-            safe(&cat, "allow Ann"),
+            access(&cat, 1, true),
             "Ann may now open Bob's Safe at (21, 0, 0), the nearest you manage within 4 m."
         );
         assert_eq!(
-            safe(&cat, "list"),
+            run(&cat, "list", ""),
             "Allowed at Bob's Safe at (21, 0, 0): Ann."
         );
         assert_eq!(
-            safe(&ann, "deny Cat"),
+            access(&ann, 3, false),
             "You may not change who opens your Safe at (1, 0, 0)."
         );
         let owners = ACCESS.owners.load();

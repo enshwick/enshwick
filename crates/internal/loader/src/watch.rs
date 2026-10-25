@@ -219,7 +219,7 @@ fn note_shadowed(loader: &Loader, index: usize) {
         &record.id,
         &format!(
             "{}.toml changed while world {key} runs: its own player settings apply now; \
-             this world reads the rest from {}, changed there, with /config or in the world \
+             this world reads the rest from {}, changed there, with enshwick config or in the world \
              settings; the file is the template for new worlds",
             record.id,
             world.display()
@@ -301,7 +301,7 @@ mod tests {
         assert!(!file.changed(Some("a"), Some(&path), at(1)), "just loaded");
         assert!(!file.changed(Some("a"), Some(&path), at(1)), "untouched");
         assert!(file.changed(Some("a"), Some(&path), at(2)), "edited");
-        // `/config` writes it and raises the event itself.
+        // `enshwick config` writes it and raises the event itself.
         WRITTEN
             .lock()
             .unwrap_or_else(PoisonError::into_inner)

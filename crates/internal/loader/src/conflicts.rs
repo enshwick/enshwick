@@ -1,7 +1,7 @@
 //! Where mods meet: game functions several mods hook, features several mods
 //! filter or one mod holds, resources several mods patch. The report names
 //! who, in which order, and whether they chain or one holds it; the status
-//! summary and `/enshwick conflicts` show it.
+//! summary and `enshwick conflicts` show it.
 
 use std::borrow::Cow;
 use std::fmt::Write as _;
@@ -35,7 +35,7 @@ impl Mode {
 /// A mod's claim on a feature.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Claim {
-    /// The feature, such as `interaction filter` or `command /safe`.
+    /// The feature, such as `interaction filter` or `rename filter`.
     pub feature: Cow<'static, str>,
     /// The mod's index.
     pub owner: usize,

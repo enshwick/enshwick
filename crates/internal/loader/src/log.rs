@@ -4,7 +4,7 @@
 //! background thread owns the files, so a hook never waits on the disk. A
 //! line the full channel cannot take is counted and the count logged once
 //! there is room. The writer also keeps the latest lines in memory for
-//! `/enshwick log`. The writer keeps the two runs before as `<name>.1.log`
+//! `enshwick log` on the console. The writer keeps the two runs before as `<name>.1.log`
 //! and `<name>.2.log`, each at most [`KEPT_BYTES`].
 
 use std::collections::VecDeque;

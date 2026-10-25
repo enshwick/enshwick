@@ -9,7 +9,7 @@ use std::time::SystemTime;
 
 use arc_swap::ArcSwap;
 use enshwick_loader_api::Off;
-use enshwick_loader_api::abi::{Level, PlayerInfo, RecipeRuleKind, Side, Status};
+use enshwick_loader_api::abi::{Level, RecipeRuleKind, Side, Status};
 use enshwick_loader_api::content::items::{ITEM_REGISTRY, ItemLayout};
 use enshwick_loader_api::content::recipes::{RECIPE_REGISTRY, RecipeLayout};
 use enshwick_loader_api::content::workshops::{WORKSHOP_REGISTRY, WorkshopLayout};
@@ -558,11 +558,8 @@ fn filtered(
     (kept.len() != list.len()).then(|| &*Box::leak(kept.into_boxed_slice()))
 }
 
-/// `/enshwick recipes ...`, for administrators.
-pub(crate) fn command(loader: &Loader, args: &str, player: &PlayerInfo) -> String {
-    if player.permissions & PlayerInfo::CAN_KICK_BAN == 0 {
-        return texts::fill("recipes.admins", &[]);
-    }
+/// `enshwick recipes ...` on the server's console.
+pub(crate) fn command(loader: &Loader, args: &str) -> String {
     if layout().is_none() {
         return texts::fill("recipes.off", &[]);
     }

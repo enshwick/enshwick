@@ -10,8 +10,8 @@
 //! the game's impact programs set (heals, revives, scripted kills), how
 //! skills are unlocked and taken back, where a player's spawn target
 //! points, and whether any thread runs on a fiber.
-//! `/research mark` starts a new section of the log while the client hosts
-//! a game.
+//! Its `mark` action, for administrators on the Mods screen while the
+//! client hosts a game, starts a new section of the log.
 
 mod entities;
 mod fibers;
@@ -24,6 +24,8 @@ mod tooltip;
 mod ui;
 
 use enshwick_loader_api::abi::Side;
+use enshwick_loader_api::actions::{Action, Arg, Outcome, Request, Value};
+use enshwick_loader_api::i18n::Texts;
 use enshwick_loader_api::{Load, Mod, Off};
 
 const fn yes() -> bool {
@@ -255,37 +257,7 @@ impl Mod for Research {
                 }
             }
         }
-        load.add_command(
-            "research",
-            "development research; /research mark [text and values] | status",
-            |ctx, args| match args {
-                _ if !ctx.is_admin() => "/research is for administrators".into(),
-                ["mark", words @ ..] => {
-                    let values: Vec<u32> = words.iter().filter_map(|w| w.parse().ok()).collect();
-                    let mark = tooltip::mark(&values);
-                    enshwick_loader_api::info!(
-                        "===== mark {mark} by {}: {} (values looked for: {values:?}) =====",
-                        ctx.player.as_ref().map_or("console", |p| p.name.as_str()),
-                        words.join(" ")
-                    );
-                    format!("mark {mark}; hover the item now").into()
-                }
-                ["status"] => {
-                    let (health, other) = health::counts();
-                    let impact = format!("; impact writes: {health} health, {other} other");
-                    match tooltip::dumps() {
-                        Some((dumps, most)) => {
-                            format!("{dumps} of {most} tooltip dumps since the last mark{impact}")
-                                .into()
-                        }
-                        None => {
-                            format!("the tooltip is not looked at in this process{impact}").into()
-                        }
-                    }
-                }
-                _ => "/research mark [text and values] | status".into(),
-            },
-        )?;
+        actions(load)?;
         enshwick_loader_api::info!("research on");
         Ok(Self {
             fibers: settings.fibers,
@@ -318,6 +290,48 @@ fn entities_link(load: &mut Load<'_>, client: bool) {
             Err(off) => enshwick_loader_api::warn!("R11 client side off: {off}"),
         }
     }
+}
+
+/// Starts a new section of the log for `request`, looking for `values`.
+fn mark(request: &Request<'_>, values: &[u32]) -> Outcome {
+    let mark = tooltip::mark(values);
+    enshwick_loader_api::info!(
+        "===== mark {mark} by {} (values looked for: {values:?}) =====",
+        request.player.name
+    );
+    Outcome::done(format!("mark {mark}; hover the item now"))
+}
+
+/// Declares the research actions, for administrators.
+fn actions(load: &mut Load<'_>) -> Result<(), Off> {
+    let actions = load.actions(Texts::default())?;
+    actions.add(Action::new("mark", "Mark the log").admins(), |request| {
+        mark(request, &[])
+    })?;
+    actions.add(
+        Action::new("mark-value", "Mark the log and look for a value")
+            .admins()
+            .arg(Arg::number("Value", 0.0..=f64::from(u32::MAX), 1.0)),
+        |request| match request.args {
+            #[expect(
+                clippy::cast_possible_truncation,
+                clippy::cast_sign_loss,
+                reason = "the argument's range is within u32"
+            )]
+            [Value::Number(value)] => mark(request, &[*value as u32]),
+            _ => Outcome::refused(""),
+        },
+    )?;
+    actions.add(Action::new("status", "Research status").admins(), |_| {
+        let (health, other) = health::counts();
+        let impact = format!("; impact writes: {health} health, {other} other");
+        Outcome::done(match tooltip::dumps() {
+            Some((dumps, most)) => {
+                format!("{dumps} of {most} tooltip dumps since the last mark{impact}")
+            }
+            None => format!("the tooltip is not looked at in this process{impact}"),
+        })
+    })
 }
 
 enshwick_loader_api::declare_mod!(Research);

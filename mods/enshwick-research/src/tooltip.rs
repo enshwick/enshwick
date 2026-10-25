@@ -387,7 +387,7 @@ fn seen(index: usize, kind: Kind, registers: &mut Registers) {
     enshwick_loader_api::info!("{text}");
     if number == shared.max_dumps {
         enshwick_loader_api::info!(
-            "R1 {number} dumps since the last mark: no more until /research mark"
+            "R1 {number} dumps since the last mark: no more until the next mark"
         );
     }
 }

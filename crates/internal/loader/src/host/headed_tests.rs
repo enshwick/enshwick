@@ -26,7 +26,6 @@ macro_rules! headed {
             BuildingData,
             ChunkData,
             Comfort,
-            CommandCall,
             CraftCheck,
             DamageCheck,
             DaytimeInfo,

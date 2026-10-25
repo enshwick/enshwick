@@ -726,7 +726,7 @@ pub(crate) static API: HostApi = HostApi {
     workshop_recipes,
     hosting,
     server_world,
-    command,
+    retired_command,
     chat,
     set_label,
     rename_filter,
@@ -736,7 +736,7 @@ pub(crate) static API: HostApi = HostApi {
     item_info,
     inventory_submit,
     status,
-    run_command,
+    run_console,
     altars_open,
     altars,
     altar_zones_control,
@@ -2246,32 +2246,8 @@ extern "system" fn server_world() -> u64 {
     entry("server_world", crate::world::server_world)
 }
 
-extern "system" fn command(
-    me: ModHandle,
-    name: Str,
-    help: Str,
-    callback: api_frame::CommandCallFn,
-    user: *mut core::ffi::c_void,
-) -> Status {
-    entry("command", || {
-        let (Some(name), Some(help)) = (text(name), text(help)) else {
-            return Status::BAD_ARGS;
-        };
-        let (_, index, record) = match calling(me) {
-            Ok(found) => found,
-            Err(status) => return status,
-        };
-        let status = crate::conflicts::note(
-            format!("command /{name}"),
-            index,
-            crate::conflicts::Mode::Exclusive,
-            crate::chat::register(index, name, help, callback, user),
-        );
-        if status.is_ok() {
-            crate::log::write(Level::DEBUG, &record.id, &format!("command /{name}"));
-        }
-        status
-    })
+extern "system" fn retired_command(_me: ModHandle) -> Status {
+    Status::MISSING
 }
 
 extern "system" fn chat(me: ModHandle, to: u64, message: Str) -> Status {
@@ -2358,12 +2334,12 @@ extern "system" fn actions(
 }
 
 thread_local! {
-    /// The reply `run_command` last handed out on this thread.
+    /// The answer `run_console` last handed out on this thread.
     static CONSOLE_REPLY: core::cell::RefCell<String> = const { core::cell::RefCell::new(String::new()) };
 }
 
-extern "system" fn run_command(me: ModHandle, line: Str, out: *mut Str) -> Status {
-    entry("run_command", || {
+extern "system" fn run_console(me: ModHandle, line: Str, out: *mut Str) -> Status {
+    entry("run_console", || {
         let Some(line) = text(line) else {
             return Status::BAD_ARGS;
         };
@@ -2371,7 +2347,7 @@ extern "system" fn run_command(me: ModHandle, line: Str, out: *mut Str) -> Statu
             Ok(loader) => loader,
             Err(status) => return status,
         };
-        match crate::chat::run_console(loader, line) {
+        match crate::console::run(loader, line) {
             Ok(reply) => CONSOLE_REPLY.with_borrow_mut(|kept| {
                 *kept = reply;
                 // The text stays in this thread's buffer until its next call.

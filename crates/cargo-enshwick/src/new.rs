@@ -259,8 +259,8 @@ const CARGO_TOML: &str = r#"[package]
 name = "{id}"
 version = "0.1.0"
 edition = "2024"
-# The loader shows these to players: in `/enshwick {id}`, the status summary
-# and the updater's notes.
+# The loader shows these to players: on the Mods screen, in the status
+# summary and in the updater's notes.
 description = "What {name} does, in one sentence"
 authors = ["Your Name"]
 license = "MIT OR Apache-2.0"

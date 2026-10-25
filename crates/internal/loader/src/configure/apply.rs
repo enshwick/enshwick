@@ -2,7 +2,7 @@
 //! own check, written atomically with the file's comments kept, and the
 //! mod told at once. Each player's own settings go to the settings file,
 //! the others to the running world's settings, or with no world running to
-//! the changes waiting for the next world. `/config` and the Mods screen both change settings
+//! the changes waiting for the next world. The console's `enshwick config` and the Mods screen both change settings
 //! through here.
 
 use enshwick_loader_api::abi::Event;

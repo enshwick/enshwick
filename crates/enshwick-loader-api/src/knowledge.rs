@@ -27,24 +27,26 @@
 //! [`Load::on_knowledge_input`].
 //!
 //! Every call belongs on the server's game thread, from a game event, a
-//! [`Scheduler`](crate::schedule::Scheduler) task or a command; on a client,
+//! [`Scheduler`](crate::schedule::Scheduler) task or an action; on a client,
 //! while it hosts a game.
 //!
 //! # Examples
 //!
 //! ```
+//! use enshwick_loader_api::actions::{Action, Arg, Outcome, Value};
 //! use enshwick_loader_api::knowledge::Grant;
 //!
 //! fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
 //!     let knowledge = load.knowledge();
-//!     load.add_command("learn", "learns a recipe: /learn <recipe id>", move |ctx, args| {
-//!         let Some(me) = ctx.character() else {
-//!             return "the console has no character".into();
+//!     let actions = load.actions(enshwick_loader_api::i18n::Texts::default())?;
+//!     let learn = Action::new("learn", "Learn a recipe")
+//!         .admins()
+//!         .arg(Arg::number("Recipe id", 0.0..=f64::from(u32::MAX), 1.0));
+//!     actions.add(learn, move |request| {
+//!         let [Value::Number(recipe)] = request.args else {
+//!             return Outcome::refused("Name a recipe");
 //!         };
-//!         let Some(recipe) = args.first().and_then(|a| a.parse().ok()) else {
-//!             return "/learn <recipe id>".into();
-//!         };
-//!         format!("{:?}", knowledge.grant(me, recipe, Grant::Flag(0))).into()
+//!         Outcome::done(format!("{:?}", knowledge.grant(request.player.entity, *recipe as u32, Grant::Flag(0))))
 //!     })
 //! }
 //! ```
