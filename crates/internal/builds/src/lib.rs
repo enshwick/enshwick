@@ -1094,8 +1094,8 @@ mod tests {
         for (id, _) in server.symbols() {
             assert!(client.symbol(id).is_some(), "{id}");
         }
-        assert_eq!(server.symbol("npc.lookup"), Some(0x20_2e80));
-        assert_eq!(client.symbol("npc.lookup"), Some(0x46_98b0));
+        assert_eq!(server.symbol("npc.lookup"), Some(0x20_3d30));
+        assert_eq!(client.symbol("npc.lookup"), Some(0x46_9c30));
     }
 
     const TABLE: &str = r#"

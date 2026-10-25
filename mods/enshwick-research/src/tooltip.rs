@@ -559,21 +559,35 @@ pub(crate) mod tests {
         pinned
     }
 
+    /// The client rows the manifest pins for the build of `image`, by symbol.
+    pub(crate) fn pinned_in(image: &enshwick_loader_reflect::Image<'_>) -> Vec<(String, u64)> {
+        let build = image.fingerprint();
+        pinned()
+            .into_iter()
+            .filter(|(_, _, f)| {
+                build == Some(enshwick_loader_reflect::Fingerprint::new(f.guid, f.age))
+            })
+            .map(|(name, rva, _)| (name, rva))
+            .collect()
+    }
+
     #[test]
-    fn every_site_is_pinned_for_the_client() {
+    fn every_client_build_pins_each_site_once() {
         let pinned = pinned();
-        for site in &SITES {
-            assert!(
-                pinned.iter().any(|(name, _, _)| name == site.symbol),
-                "{}",
-                site.name
-            );
+        let mut builds: Vec<([u8; 16], u32)> =
+            pinned.iter().map(|(_, _, f)| (f.guid, f.age)).collect();
+        builds.sort_unstable();
+        builds.dedup();
+        assert!(!builds.is_empty());
+        for (guid, age) in builds {
+            for site in &SITES {
+                let rows = pinned
+                    .iter()
+                    .filter(|(name, _, f)| name == site.symbol && f.guid == guid && f.age == age)
+                    .count();
+                assert_eq!(rows, 1, "{} on client build {age}", site.name);
+            }
         }
-        let ours = pinned
-            .iter()
-            .filter(|(name, _, _)| SITES.iter().any(|s| s.symbol == name))
-            .count();
-        assert_eq!(ours, SITES.len());
     }
 
     /// The bytes each site expects are the client's that `ENSH_CLIENT_EXE`
@@ -594,15 +608,14 @@ pub(crate) mod tests {
         let Ok(image) = image else {
             unreachable!("the client parses");
         };
-        for (name, rva, fingerprint) in pinned() {
-            let expected =
-                enshwick_loader_reflect::Fingerprint::new(fingerprint.guid, fingerprint.age);
-            assert_eq!(image.fingerprint(), Some(expected));
-            let Some(site) = SITES.iter().find(|s| s.symbol == name) else {
-                continue;
+        let pinned = pinned_in(&image);
+        for site in &SITES {
+            let rva = pinned.iter().find(|(name, _)| name == site.symbol);
+            let Some((_, rva)) = rva else {
+                unreachable!("{} is pinned for this client build", site.name);
             };
             let found = image.read(image.base() + rva, 16);
-            assert_eq!(found, Some(&site.expected[..]), "{name}");
+            assert_eq!(found, Some(&site.expected[..]), "{}", site.name);
         }
     }
 }
