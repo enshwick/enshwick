@@ -377,9 +377,11 @@ impl ModEntry {
     /// # Examples
     ///
     /// ```
+    /// let shown: Vec<String> = enshwick_loader_api::mods().iter().map(|entry| entry.label()).collect();
     /// for entry in enshwick_loader_api::mods() {
-    ///     enshwick_loader_api::info!("{} {}", entry.label(), entry.version);
+    ///     enshwick_loader_api::info!("{} {}", entry.id, entry.version);
     /// }
+    /// # drop(shown);
     /// ```
     #[must_use]
     pub fn label(&self) -> String {
