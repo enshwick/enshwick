@@ -559,6 +559,18 @@ pub(crate) mod tests {
         pinned
     }
 
+    /// The client rows the manifest pins for the build of `image`, by symbol.
+    pub(crate) fn pinned_in(image: &enshwick_loader_reflect::Image<'_>) -> Vec<(String, u64)> {
+        let build = image.fingerprint();
+        pinned()
+            .into_iter()
+            .filter(|(_, _, f)| {
+                build == Some(enshwick_loader_reflect::Fingerprint::new(f.guid, f.age))
+            })
+            .map(|(name, rva, _)| (name, rva))
+            .collect()
+    }
+
     #[test]
     fn every_site_is_pinned_for_the_client() {
         let pinned = pinned();
@@ -596,15 +608,14 @@ pub(crate) mod tests {
         let Ok(image) = image else {
             unreachable!("the client parses");
         };
-        for (name, rva, fingerprint) in pinned() {
-            let expected =
-                enshwick_loader_reflect::Fingerprint::new(fingerprint.guid, fingerprint.age);
-            assert_eq!(image.fingerprint(), Some(expected));
-            let Some(site) = SITES.iter().find(|s| s.symbol == name) else {
-                continue;
+        let pinned = pinned_in(&image);
+        for site in &SITES {
+            let rva = pinned.iter().find(|(name, _)| name == site.symbol);
+            let Some((_, rva)) = rva else {
+                unreachable!("{} is pinned for this client build", site.name);
             };
             let found = image.read(image.base() + rva, 16);
-            assert_eq!(found, Some(&site.expected[..]), "{name}");
+            assert_eq!(found, Some(&site.expected[..]), "{}", site.name);
         }
     }
 }
