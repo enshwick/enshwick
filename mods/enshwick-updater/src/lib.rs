@@ -7,11 +7,8 @@
 //! ones exist, asks the player. What the player accepts is downloaded over
 //! `https://`, checked against its minisign signature when the installed
 //! version names author keys (see [`trust`]) and staged in `mods/.staged/`,
-//! which the `powrprof.dll` stub moves into place at the next start. When
-//! the join check keeps the player out of a server that runs mods this game
-//! lacks or has in another version, the updater offers the server's versions
-//! the same way, a mod the game lacks checked against the author key the
-//! server names for it, if any. Settings files are never touched.
+//! which the `powrprof.dll` stub moves into place at the next start.
+//! Settings files are never touched.
 //!
 //! It runs on the client only: a dedicated server gets its files the way its
 //! owner deploys them, and the loader skips the updater there.
@@ -31,7 +28,6 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, SystemTime};
 
-use enshwick_loader_api::events::JoinRefused;
 use enshwick_loader_api::i18n::Language;
 use enshwick_loader_api::mods::{LOADER_FILES, LOADER_ID, ModEntry, Updates};
 use enshwick_loader_api::{Load, Mod, Off};
@@ -263,26 +259,6 @@ impl Offer {
     fn key(&self) -> String {
         format!("{}@{}", self.id, self.pick.version)
     }
-
-    /// The offer's lines in the question after a refused join, for a mod the
-    /// game lacks: the version, where it comes from and the key the server
-    /// names, or that it is unsigned.
-    fn server_lines(&self) -> String {
-        let signed = if self.trust.signed() {
-            say::text("server.key", &[("keys", &self.trust.keys().join(", "))])
-        } else {
-            say::text("server.unsigned", &[])
-        };
-        say::text(
-            "server.line",
-            &[
-                ("name", &self.label()),
-                ("version", &self.pick.version.to_string()),
-                ("source", &self.source),
-                ("signed", &signed),
-            ],
-        )
-    }
 }
 
 /// Where `updates` comes from, as the player reads it.
@@ -455,162 +431,6 @@ fn delete_replaced_of_fresh(context: &Context) {
     for why in kept {
         enshwick_loader_api::warn!("not deleted: {why}");
     }
-}
-
-/// After a refused join: the server's versions of the mods this game lacks,
-/// offered to the player.
-fn after_refused_join() {
-    let Some(context) = context() else {
-        return;
-    };
-    if !context.settings.enabled {
-        return;
-    }
-    let missing = enshwick_loader_api::mods::join_missing();
-    if missing.is_empty() {
-        return;
-    }
-    let client = client(&context);
-    let installed = enshwick_loader_api::mods();
-    let trusted = context.settings.trusted();
-    let mut offers = Vec::new();
-    let mut unavailable = Vec::new();
-    for entry in &missing {
-        match server_version(&client, &context, entry, &installed, &trusted) {
-            Ok(offer) => offers.push(offer),
-            Err(why) => {
-                enshwick_loader_api::warn!("{} {}: {why}", entry.id, entry.version);
-                unavailable.push(format!("{} {}: {why}", entry.label(), entry.version));
-            }
-        }
-    }
-    let _busy = BUSY.lock().unwrap_or_else(PoisonError::into_inner);
-    let offers = unoffered(offers);
-    let runs = say::text("server.runs", &[]);
-    let unavailable = (!unavailable.is_empty()).then(|| {
-        format!(
-            "{}\n{}",
-            say::text("unavailable", &[]),
-            unavailable.join("\n")
-        )
-    });
-    if offers.is_empty() {
-        if let Some(unavailable) = unavailable {
-            ask::tell(&format!("{runs}\n\n{unavailable}"));
-        }
-        return;
-    }
-    let (updates, new): (Vec<&Offer>, Vec<&Offer>) =
-        offers.iter().partition(|offer| offer.from.is_some());
-    let mut question = vec![runs];
-    if !updates.is_empty() {
-        question.push(format!(
-            "{}\n\n{}",
-            say::text("server.updates", &[]),
-            updates
-                .iter()
-                .map(|offer| offer.said())
-                .collect::<Vec<_>>()
-                .join("\n")
-        ));
-    }
-    if !new.is_empty() {
-        question.push(format!(
-            "{}\n\n{}\n\n{}",
-            say::text("server.new", &[]),
-            new.iter()
-                .map(|offer| offer.server_lines())
-                .collect::<Vec<_>>()
-                .join("\n"),
-            say::text("server.trust", &[])
-        ));
-    }
-    question.extend(unavailable);
-    question.push(say::text("server.ask", &[]));
-    let question = question.join("\n\n");
-    if !ask::confirm(&question) {
-        enshwick_loader_api::info!(
-            "the player declined the server's {}",
-            lines(&offers).replace('\n', ", ")
-        );
-        return;
-    }
-    install_all(&client, &context, &offers, &say::text("server.next", &[]));
-}
-
-/// The offer of the server's version of `entry`, a mod the join check found
-/// missing; why not, as the player reads it.
-fn server_version(
-    client: &Client,
-    context: &Context,
-    entry: &ModEntry,
-    installed: &[ModEntry],
-    trusted: &[String],
-) -> Result<Offer, String> {
-    let ours = installed.iter().find(|m| m.id == entry.id);
-    let trust = trust::for_missing(entry, ours, trusted);
-    let mut version = Version::parse(&entry.version).map_err(|e| format!("bad version: {e}"))?;
-    // A content pack's version carries the hash of its files for the join
-    // check; its release is the version alone.
-    version.build = semver::BuildMetadata::EMPTY;
-    // A mod this game has comes from its own source, never one the server
-    // names: the server could otherwise pass another release signed by the
-    // same key for it.
-    let updates = match ours {
-        Some(ours) => ours.updates.as_ref(),
-        None => entry.updates.as_ref(),
-    };
-    let signed = trust.signed();
-    let pick = match updates {
-        Some(Updates::GitHub {
-            repository,
-            component,
-        }) => {
-            if let Some(until) = paused(&context.data) {
-                return Err(said(&Failure::RateLimited { until }));
-            }
-            let found = |releases: &[release::Release]| {
-                release::exact(releases, repository, component, &version, signed)
-            };
-            let releases = releases_of(client, repository, |releases| found(releases).is_some())
-                .map_err(|failure| match failure {
-                    Failure::RateLimited { until } => {
-                        pause(&context.data, until);
-                        said(&failure)
-                    }
-                    other => other.to_string(),
-                })?;
-            found(&releases).ok_or_else(|| {
-                say::text(
-                    "why.no-release",
-                    &[
-                        ("repository", repository),
-                        ("component", component),
-                        ("version", &version.to_string()),
-                    ],
-                )
-            })?
-        }
-        Some(Updates::Url(url)) => {
-            let document = fetch_document(client, url)?;
-            document::exact(&document, &entry.id, &version, signed).ok_or_else(|| {
-                say::text(
-                    "why.not-listed",
-                    &[("url", url), ("version", &version.to_string())],
-                )
-            })?
-        }
-        None => return Err(say::text("why.no-source", &[])),
-    };
-    Ok(Offer {
-        id: entry.id.clone(),
-        name: ours.map_or_else(|| entry.name.clone(), |m| m.name.clone()),
-        from: ours.map(|m| m.version.clone()),
-        file: ours.map(|m| m.file.clone()).unwrap_or_default(),
-        pick,
-        source: updates.map(source_of).unwrap_or_default(),
-        trust,
-    })
 }
 
 /// The document of the `url(...)` source `url`.
@@ -1016,14 +836,6 @@ impl Mod for Updater {
         load.on_config_change(move |settings: Settings| {
             set_context(settings, &game_dir, &data_dir);
         })?;
-        if load
-            .on::<JoinRefused>(|()| spawn("enshwick-updater-join", after_refused_join))
-            .is_err()
-        {
-            enshwick_loader_api::warn!(
-                "this loader does not report a server's missing mods; update the loader to get them here"
-            );
-        }
         let picks = load.on_update_pick(|id| {
             let id = id.to_owned();
             spawn("enshwick-updater-pick", move || picked(&id));

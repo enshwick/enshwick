@@ -6,16 +6,15 @@
 //! settings files, and with its files' values again on joining a server
 //! without them; the files stay as they are.
 //!
-//! A client kept out tells its mods which of the server's mods it lacks, with
-//! the versions, update sources and author keys the server advertises
-//! ([`Event::JOIN_REFUSED`](enshwick_loader_api::abi::Event::JOIN_REFUSED)), so an
-//! updater can offer them.
+//! A client kept out shows one dialog naming each of the server's mods it
+//! lacks, the server's version and where to get it ([`refusal`]), and tells
+//! its mods which they are, with the versions, update sources and author keys
+//! the server advertises
+//! ([`Event::JOIN_REFUSED`](enshwick_loader_api::abi::Event::JOIN_REFUSED)).
 //!
 //! Every join from the game's menus hands its online provider a target with
 //! the server's address and query port. The hook asks the server, over the
-//! Steam query protocol, for its `enshwick` rule before the game connects;
-//! a refused join goes on without its host, so the game's own join step fails
-//! and the game stays in its menus.
+//! Steam query protocol, for its `enshwick` rule before the game connects.
 
 use std::collections::BTreeMap;
 use std::net::{SocketAddr, UdpSocket};
@@ -23,7 +22,11 @@ use std::time::{Duration, Instant};
 
 use enshwick_loader_api::mods::Updates;
 
+use crate::admission::Need;
+use crate::texts;
+
 pub mod provider;
+pub mod refusal;
 
 /// The check holds the join, so a server that does not answer is not waited on long.
 const QUERY_TIMEOUT: Duration = Duration::from_secs(2);
@@ -73,19 +76,19 @@ fn label(names: &Names, id: &str) -> String {
 /// # Examples
 ///
 /// ```
-/// use enshwick::join::{Names, plan};
+/// use enshwick::join::plan;
 ///
-/// let plan = plan("e5db5dca", "safes@1.0.0", Some(("989b6a71", "safes@2.0.0")), true, &Names::new());
+/// let plan = plan("e5db5dca", "safes@1.0.0", Some(("989b6a71", "safes@2.0.0")), true);
 /// assert!(!plan.joins());
-/// assert_eq!(plan.missing, ["safes: server 2.0.0, yours 1.0.0"]);
+/// assert_eq!(plan.missing[0].yours.as_deref(), Some("1.0.0"));
 /// ```
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct Plan {
     /// The client's mods the server does not run: turned off, with a note.
     pub turn_off: Vec<String>,
-    /// The server's mods the client lacks or runs in another version, as
-    /// lines for the note: the client does not join.
-    pub missing: Vec<String>,
+    /// The server's mods the client lacks or runs in another version: the
+    /// client does not join.
+    pub missing: Vec<Need>,
     /// The mods match but the loader versions differ.
     pub other_loader: bool,
 }
@@ -121,72 +124,52 @@ impl Plan {
         if self.joins() { &self.turn_off } else { &[] }
     }
 
-    /// The note for the player, if any, naming mods by `names`; `blocking`
-    /// when the client stays out.
+    /// The note for a player who joins, if any, naming mods by `names`; a
+    /// client kept out gets the [`refusal`] dialog instead.
     ///
     /// # Examples
     ///
     /// ```
     /// use enshwick::join::{Names, Plan};
     ///
-    /// let plan = Plan { missing: vec!["safes: server 2.0.0, not installed".to_owned()], ..Plan::default() };
-    /// let (_, blocking) = plan.message(&Names::new()).ok_or("no note")?;
-    /// assert!(blocking);
-    /// assert_eq!(Plan::default().message(&Names::new()), None);
-    /// # Ok::<(), &str>(())
+    /// let plan = Plan { turn_off: vec!["safes".to_owned()], ..Plan::default() };
+    /// assert!(plan.note(&Names::new()).is_some_and(|note| note.ends_with("safes")));
+    /// assert_eq!(Plan::default().note(&Names::new()), None);
     /// ```
     #[must_use]
-    pub fn message(&self, names: &Names) -> Option<(String, bool)> {
-        if !self.missing.is_empty() {
-            return Some((
-                format!(
-                    "This server runs Enshwick mods you do not have in its version:\n\n{}\n\nInstall the server's versions to join.",
-                    self.missing.join("\n")
-                ),
-                true,
-            ));
+    pub fn note(&self, names: &Names) -> Option<String> {
+        if !self.joins() {
+            return None;
         }
         if !self.turn_off.is_empty() {
             let lines: Vec<String> = self.turn_off.iter().map(|id| label(names, id)).collect();
-            return Some((
-                format!(
-                    "This server does not run these Enshwick mods, so they are off until you restart the game:\n\n{}",
-                    lines.join("\n")
-                ),
-                false,
+            return Some(format!(
+                "{}\n\n{}",
+                texts::fill("join.note.off", &[]),
+                lines.join("\n")
             ));
         }
-        self.other_loader.then(|| {
-            (
-                "This server runs Enshwick with the same mods but another loader version. Install the server's release, or things may not work.".to_owned(),
-                false,
-            )
-        })
+        self.other_loader
+            .then(|| texts::fill("join.note.loader", &[]))
     }
 }
 
 /// The plan for joining a server that advertises `server` (fingerprint and
-/// mod list), or no Enshwick at all; notes name mods by `names`. A list that
-/// is not `complete` holds only the first of the server's mods, so a mod of
-/// ours it does not name may still run there and stays on.
+/// mod list), or no Enshwick at all. A list that is not `complete` holds only
+/// the first of the server's mods, so a mod of ours it does not name may
+/// still run there and stays on.
 ///
 /// # Examples
 ///
 /// ```
-/// use enshwick::join::{Names, plan};
+/// use enshwick::join::plan;
 ///
-/// let plan = plan("e5db5dca", "safes@1.0.0,camera@1.0.0", Some(("989b6a71", "safes@1.0.0")), true, &Names::new());
+/// let plan = plan("e5db5dca", "safes@1.0.0,camera@1.0.0", Some(("989b6a71", "safes@1.0.0")), true);
 /// assert!(plan.joins());
 /// assert_eq!(plan.turned_off(), ["camera"]);
 /// ```
 #[must_use]
-pub fn plan(
-    ours: &str,
-    ours_mods: &str,
-    server: Option<(&str, &str)>,
-    complete: bool,
-    names: &Names,
-) -> Plan {
+pub fn plan(ours: &str, ours_mods: &str, server: Option<(&str, &str)>, complete: bool) -> Plan {
     let ids = |list: &str| -> Vec<String> { entries(list).map(|(id, _)| id.to_owned()).collect() };
     match server {
         Some((fingerprint, _)) if fingerprint == ours => Plan::default(),
@@ -200,10 +183,14 @@ pub fn plan(
                 .into_iter()
                 .filter(|id| complete && !theirs.contains(id))
                 .collect();
-            let missing: Vec<String> = differences(mods, ours_mods, names)
+            let yours: BTreeMap<&str, &str> = entries(ours_mods).collect();
+            let missing: Vec<Need> = wanted(mods, ours_mods)
                 .into_iter()
-                .filter(|(_, on_server, _)| *on_server)
-                .map(|(_, _, line)| line)
+                .map(|(id, version)| Need {
+                    yours: yours.get(id.as_str()).map(|&v| v.to_owned()),
+                    id,
+                    version,
+                })
                 .collect();
             let other_loader = complete && missing.is_empty() && turn_off.is_empty();
             Plan {
@@ -272,60 +259,6 @@ pub fn wanted(server: &str, ours: &str) -> Vec<(String, String)> {
         .filter(|(id, version)| ours.get(id) != Some(version))
         .map(|(id, version)| (id.to_owned(), version.to_owned()))
         .collect()
-}
-
-/// The note on the server's mods, of `wanted`, that the player turned off in
-/// the mod list (`disabled`) or that this game turned off since it started
-/// (`session_off`); `None` when there are none.
-///
-/// # Examples
-///
-/// ```
-/// use enshwick::join::off_note;
-///
-/// let wanted = [("safes".to_owned(), "2.0.0".to_owned())];
-/// let note = off_note(&wanted, &["safes".to_owned()], &[]);
-/// assert!(note.is_some_and(|note| note.starts_with("You turned off safes")));
-/// assert_eq!(off_note(&wanted, &[], &[]), None);
-/// ```
-#[must_use]
-pub fn off_note(
-    wanted: &[(String, String)],
-    disabled: &[String],
-    session_off: &[String],
-) -> Option<String> {
-    let among = |list: &[String]| -> Vec<&str> {
-        wanted
-            .iter()
-            .map(|(id, _)| id.as_str())
-            .filter(|id| list.iter().any(|d| d == id))
-            .collect()
-    };
-    let them = |ids: &[&str]| if ids.len() == 1 { "it" } else { "them" };
-    let (player, session) = (among(disabled), among(session_off));
-    let mut lines = Vec::new();
-    if !player.is_empty() {
-        lines.push(format!(
-            "You turned off {} in {}. Turn {} on there and restart the game to join.",
-            player.join(", "),
-            crate::modlist::LIST_PATH,
-            them(&player)
-        ));
-    }
-    if !session.is_empty() {
-        lines.push(format!(
-            "{} turned off while this game ran (see the log). Restart the game to join with {}.",
-            session.join(", "),
-            them(&session)
-        ));
-    }
-    (!lines.is_empty()).then(|| {
-        lines.join(
-            "
-
-",
-        )
-    })
 }
 
 /// The update source a server advertises for mod `id`; `None` when it
@@ -1023,7 +956,6 @@ mod runtime {
             &ours_mods,
             server.as_ref().map(|(f, m)| (f.as_str(), m.as_str())),
             complete,
-            &names,
         );
         if plan.joins() {
             crate::host::apply_join_values(&values);
@@ -1035,48 +967,53 @@ mod runtime {
             );
             crate::reload::hold(id);
         }
-        let Some((text, blocking)) = plan.message(&names) else {
-            return true;
-        };
-        if !blocking {
-            // The join goes on, and the note shows over the game.
-            crate::ui::show("Enshwick", &text, "", 1 << UiDialog::OK, |_| {});
+        if plan.joins() {
+            if let Some(note) = plan.note(&names) {
+                // The join goes on, and the note shows over the game.
+                crate::ui::show("Enshwick", &note, "", 1 << UiDialog::OK, |_| {});
+            }
             return true;
         }
-        let disabled = crate::modlist::disabled();
-        let session_off = crate::host::join_mods_off();
-        let wanted = server
-            .as_ref()
-            .map(|(_, server_mods)| super::wanted(server_mods, &ours_mods))
-            .unwrap_or_default();
-        let text = match super::off_note(&wanted, disabled, &session_off) {
-            Some(note) => format!("{text}\n\n{note}"),
-            None => text,
-        };
-        // Mods the player turned off are theirs to turn on, not offered.
-        let missing: Vec<crate::host::Wanted> = if server.is_some() {
-            wanted
-                .into_iter()
-                .filter(|(id, _)| !disabled.contains(id) && !session_off.contains(id))
-                .map(|(id, version)| crate::host::Wanted {
-                    name: super::name(&reply, &id),
-                    source: super::source(&reply, &id),
-                    keys: super::keys(&reply, &id),
-                    id,
-                    version,
-                })
-                .collect()
-        } else {
-            Vec::new()
-        };
-        // The join is refused at once, so the game keeps drawing; the
-        // updater's offer follows once the player closes the note.
-        crate::ui::show("Enshwick", &text, "", 1 << UiDialog::OK, move |_| {
-            if !missing.is_empty() {
-                crate::host::report_join_missing(&missing);
-            }
-        });
+        refused(&plan.missing, &reply, &names);
         false
+    }
+
+    /// Tells the player, in one dialog, which of the server's mods keep the
+    /// client out, and tells the client's mods.
+    #[cold]
+    fn refused(missing: &[super::Need], reply: &[u8], names: &super::Names) {
+        let off = super::refusal::Off {
+            by_player: crate::modlist::disabled().to_vec(),
+            this_game: crate::host::join_mods_off(),
+        };
+        let sources: BTreeMap<String, String> = missing
+            .iter()
+            .filter_map(|need| {
+                let key = format!("{}.{}", crate::advertise::RULE_SOURCE, need.id);
+                Some((need.id.clone(), super::rule(reply, &key)?))
+            })
+            .collect();
+        let dialog = super::refusal::dialog(missing, &off, names, &sources);
+        crate::ui::show(
+            &dialog.title,
+            &dialog.message,
+            &dialog.detail,
+            1 << UiDialog::OK,
+            |_| {},
+        );
+        // Mods that are off on the client are the player's to turn on.
+        let wanted: Vec<crate::host::Wanted> = missing
+            .iter()
+            .filter(|need| !off.by_player.contains(&need.id) && !off.this_game.contains(&need.id))
+            .map(|need| crate::host::Wanted {
+                name: super::name(reply, &need.id),
+                source: super::source(reply, &need.id),
+                keys: super::keys(reply, &need.id),
+                id: need.id.clone(),
+                version: need.version.clone(),
+            })
+            .collect();
+        crate::host::report_join_missing(&wanted);
     }
 }
 
@@ -1091,77 +1028,53 @@ mod tests {
     fn mods_the_server_lacks_are_turned_off_and_only_the_rest_warn() {
         let names = Names::from([("c".to_owned(), "Cats".to_owned())]);
         assert_eq!(
-            plan("ab", "a@1,b@1", Some(("ab", "a@1,b@1")), true, &names),
+            plan("ab", "a@1,b@1", Some(("ab", "a@1,b@1")), true),
             Plan::default()
         );
-        let none = plan("ab", "a@1,b@1", None, true, &names);
+        let none = plan("ab", "a@1,b@1", None, true);
         assert_eq!(none.turn_off, ["a", "b"]);
-        assert_eq!(
-            none.message(&names).map(|(_, blocking)| blocking),
-            Some(false)
-        );
-        let extra = plan("ab", "a@1,b@1", Some(("cd", "a@1")), true, &names);
+        assert!(none.note(&names).is_some());
+        let extra = plan("ab", "a@1,b@1", Some(("cd", "a@1")), true);
         assert_eq!(extra.turn_off, ["b"]);
         assert!(extra.missing.is_empty());
-        let missing = plan("ab", "a@1", Some(("cd", "a@2,c@1")), true, &names);
+        let missing = plan("ab", "a@1", Some(("cd", "a@2,c@1")), true);
         assert!(missing.turn_off.is_empty());
-        let (text, blocking) = missing.message(&names).unwrap();
-        assert!(blocking);
-        assert!(
-            text.contains("a: server 2, yours 1")
-                && text.contains("Cats (c): server 1, not installed"),
-            "{text}"
+        assert_eq!(
+            missing.missing,
+            [
+                Need {
+                    id: "a".to_owned(),
+                    version: "2".to_owned(),
+                    yours: Some("1".to_owned()),
+                },
+                Need {
+                    id: "c".to_owned(),
+                    version: "1".to_owned(),
+                    yours: None,
+                },
+            ]
         );
-        assert!(plan("ab", "a@1", Some(("cd", "a@1")), true, &names).other_loader);
+        assert_eq!(missing.note(&names), None, "a refusal is no join note");
+        assert!(plan("ab", "a@1", Some(("cd", "a@1")), true).other_loader);
     }
 
     #[test]
     fn a_client_kept_out_turns_nothing_off() {
-        let names = Names::new();
-        let both = plan("ab", "a@1,b@1", Some(("cd", "a@2")), true, &names);
+        let both = plan("ab", "a@1,b@1", Some(("cd", "a@2")), true);
         assert_eq!(both.turn_off, ["b"]);
         assert!(!both.joins());
         assert!(both.turned_off().is_empty());
-        let extra = plan("ab", "a@1,b@1", Some(("cd", "a@1")), true, &names);
+        let extra = plan("ab", "a@1,b@1", Some(("cd", "a@1")), true);
         assert!(extra.joins());
         assert_eq!(extra.turned_off(), ["b"]);
     }
 
     #[test]
-    fn mods_turned_off_by_the_player_are_named() {
-        let wanted = [
-            ("safes".to_owned(), "0.3.0".to_owned()),
-            ("count".to_owned(), "0.2.0".to_owned()),
-        ];
-        assert_eq!(off_note(&wanted, &[], &[]), None);
-        assert_eq!(off_note(&wanted, &["other".to_owned()], &[]), None);
-        assert_eq!(
-            off_note(&wanted, &["safes".to_owned()], &[]).unwrap(),
-            "You turned off safes in mods/enshwick/mods.toml. Turn it on there and restart the game to join."
-        );
-    }
-
-    #[test]
-    fn mods_turned_off_since_the_game_started_are_named() {
+    fn a_mod_that_is_off_on_the_client_keeps_it_out() {
         // Server A lacked count, so it turned off; server B runs it.
-        let wanted = [("count".to_owned(), "0.2.0".to_owned())];
-        assert_eq!(
-            off_note(&wanted, &[], &["count".to_owned(), "other".to_owned()]).unwrap(),
-            "count turned off while this game ran (see the log). Restart the game to join with it."
-        );
-        let both = off_note(&wanted, &["count".to_owned()], &["count".to_owned()]).unwrap();
-        assert!(
-            both.contains("You turned off count")
-                && both.contains(
-                    "
-
-count turned off"
-                )
-        );
-        // The client's set without the mod that is off: the join is refused.
-        let names = Names::new();
-        let plan = plan("x", "", Some(("y", "count@0.2.0")), true, &names);
+        let plan = plan("x", "", Some(("y", "count@0.2.0")), true);
         assert!(!plan.joins());
+        assert_eq!(plan.missing[0].yours, None);
     }
 
     #[test]
@@ -1248,16 +1161,16 @@ count turned off"
             ("enshwick.mods.count", "3"),
         ]);
         assert!(!mods_complete(&cut));
-        let plan_cut = plan("ab", "a@1,z@1", Some(("cd", "a@1")), false, &names);
+        let plan_cut = plan("ab", "a@1,z@1", Some(("cd", "a@1")), false);
         assert!(plan_cut.turn_off.is_empty() && plan_cut.joins());
-        assert_eq!(plan_cut.message(&names), None);
+        assert_eq!(plan_cut.note(&names), None);
         let whole = reply(&[
             ("enshwick", "cd"),
             ("enshwick.mods", "a@1,b@1,c@1"),
             ("enshwick.mods.count", "3"),
         ]);
         assert!(mods_complete(&whole));
-        let plan_whole = plan("ab", "a@1,z@1", Some(("cd", "a@1")), true, &names);
+        let plan_whole = plan("ab", "a@1,z@1", Some(("cd", "a@1")), true);
         assert_eq!(plan_whole.turn_off, ["z"]);
         // A server without a cut list sends no count.
         assert!(mods_complete(&reply(&[("enshwick.mods", "a@1")])));
@@ -1363,7 +1276,7 @@ count turned off"
                 ("pack".to_owned(), "0.1.0+ab12".to_owned())
             ]
         );
-        let missing = plan("ab", "", Some(("cd", server)), true, &Names::new());
+        let missing = plan("ab", "", Some(("cd", server)), true);
         assert_eq!(missing.missing.len(), 2, "{:?}", missing.missing);
         let reply = reply(&[
             ("enshwick.name.ok", "Safes\n\nVerified by Enshwick"),
