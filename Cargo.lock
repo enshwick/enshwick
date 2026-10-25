@@ -352,6 +352,7 @@ dependencies = [
  "serde",
  "sha2",
  "strsim",
+ "thiserror",
  "toml",
  "toml_edit",
  "windows-sys 0.61.2",

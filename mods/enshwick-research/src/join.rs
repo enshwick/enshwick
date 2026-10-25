@@ -1,7 +1,7 @@
-//! What a join attempt leads to: the server change the game asks for, what
-//! the call answers (0 when the join check refused it), and for the half
-//! minute after it how often the main and pause menus draw their entries,
-//! which says whether the game is back in a menu, in the world or stuck.
+//! What a join attempt leads to: the join the game starts, with its host and
+//! address, and for the half minute after it how often the main and pause
+//! menus draw their entries, which says whether the game is back in a menu,
+//! in the world or stuck.
 
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::{Duration, Instant};
@@ -11,26 +11,34 @@ use enshwick_loader_api::{Load, Next, Off};
 
 use crate::memory;
 
-type ServerChange = unsafe extern "system" fn(provider: *mut u8, request: *const u8) -> u64;
+type JoinGame = unsafe extern "system" fn(provider: *mut u8, target: *mut u8) -> u8;
 type MainEntry = unsafe extern "system" fn(menu: usize, entry: *const u8) -> u8;
 type PauseEntry = unsafe extern "system" fn(text: *const u8, enabled: u8, attention: u8) -> u8;
 
-/// The request names the server's query address in its first bytes.
-const ADDRESS_BYTES: usize = 0x40;
-/// How long after a server change the menus are watched.
+/// Where the join target holds the host's Steam id, the server's IPv4, its
+/// game and query ports and the flag that the address is set (client builds
+/// 410 and 426).
+const HOST: usize = 0;
+const IP: usize = 8;
+const GAME_PORT: usize = 0xc;
+const QUERY_PORT: usize = 0xe;
+const HAS_ADDRESS: usize = 0x20;
+/// The join target's bytes up to its address flag.
+const TARGET_BYTES: usize = HAS_ADDRESS + 1;
+/// How long after a join the menus are watched.
 const WATCH: Duration = Duration::from_secs(30);
 /// How often the watch logs.
 const WATCH_STEP: Duration = Duration::from_secs(1);
 
 static MAIN_ENTRIES: AtomicU64 = AtomicU64::new(0);
 static PAUSE_ENTRIES: AtomicU64 = AtomicU64::new(0);
-static SERVER_CHANGES: AtomicU64 = AtomicU64::new(0);
+static JOINS: AtomicU64 = AtomicU64::new(0);
 static WATCHING: AtomicBool = AtomicBool::new(false);
 
 enshwick_loader_api::detour! {
     // Ahead of the loader's join check, so the link sees refused joins too.
-    static SERVER_CHANGE: unsafe extern "system" fn(provider: *mut u8, request: *const u8) -> u64 =
-        server_change, priority = i32::MIN;
+    static JOIN_GAME: unsafe extern "system" fn(provider: *mut u8, target: *mut u8) -> u8 =
+        join_game, priority = i32::MIN;
 }
 
 enshwick_loader_api::detour! {
@@ -42,12 +50,19 @@ enshwick_loader_api::detour! {
         pause_entry;
 }
 
-/// Links the server change and the menu entries, and logs refused joins.
+/// Links the join and the menu entries, and logs refused joins.
 pub(crate) fn link(load: &mut Load<'_>) -> Result<(), Off> {
-    let server_change = load.symbol("net.server_change")?;
-    // SAFETY: the table's `net.server_change` is the function
-    // `SERVER_CHANGE` declares.
-    unsafe { load.hook(&SERVER_CHANGE, server_change) }?;
+    let join_game = load.symbol("net.join_game")?;
+    let pinned = load.constant("net.join_game.bytes")?;
+    let found = usize::try_from(join_game).ok().and_then(memory::read_u64);
+    if found != Some(pinned) {
+        return Err(Off::new(format!(
+            "the code at the join {join_game:#x} is {found:x?}, not the pinned {pinned:#018x}"
+        )));
+    }
+    // SAFETY: the table's `net.join_game` is the function `JOIN_GAME`
+    // declares, its first bytes checked above.
+    unsafe { load.hook(&JOIN_GAME, join_game) }?;
     let (main_entry, pause_entry) = (
         load.symbol("ui.main_entry")?,
         load.symbol("ui.pause_entry")?,
@@ -81,27 +96,39 @@ pub(crate) fn link(load: &mut Load<'_>) -> Result<(), Off> {
     })
 }
 
-fn server_change(next: Next<ServerChange>, provider: *mut u8, request: *const u8) -> u64 {
-    let mut bytes = [0u8; ADDRESS_BYTES];
-    let read = memory::read(request.addr(), &mut bytes);
-    let end = bytes[..read].iter().position(|&b| b == 0).unwrap_or(read);
-    let address = String::from_utf8_lossy(&bytes[..end]).into_owned();
-    let number = SERVER_CHANGES.fetch_add(1, Ordering::Relaxed) + 1;
-    enshwick_loader_api::info!("R8 server change {number} asked: {address:?}; {}", menus());
+fn join_game(next: Next<JoinGame>, provider: *mut u8, target: *mut u8) -> u8 {
+    let number = JOINS.fetch_add(1, Ordering::Relaxed) + 1;
+    enshwick_loader_api::info!("R8 join {number} asked: {}; {}", described(target), menus());
     let start = Instant::now();
     // SAFETY: forwarded unchanged to the rest of the chain.
-    let answer = unsafe { next.get()(provider, request) };
+    let state_changed = unsafe { next.get()(provider, target) };
     enshwick_loader_api::info!(
-        "R8 server change {number} answered {answer:#x} after {} ms{}",
-        start.elapsed().as_millis(),
-        if answer == 0 {
-            " (0: refused, by the join check or the game)"
-        } else {
-            ""
-        }
+        "R8 join {number} returned {state_changed} after {} ms",
+        start.elapsed().as_millis()
     );
     watch();
-    answer
+    state_changed
+}
+
+/// The host, address, ports and address flag of a join target.
+fn described(target: *mut u8) -> String {
+    let mut bytes = [0u8; TARGET_BYTES];
+    if memory::read(target.addr(), &mut bytes) != TARGET_BYTES {
+        return format!("unreadable target {target:p}");
+    }
+    let host = u64::from_le_bytes(field(&bytes, HOST));
+    let ip = std::net::Ipv4Addr::from(u32::from_le_bytes(field(&bytes, IP)));
+    let game = u16::from_le_bytes(field(&bytes, GAME_PORT));
+    let query = u16::from_le_bytes(field(&bytes, QUERY_PORT));
+    format!(
+        "host {host}, address {ip} game port {game} query port {query}, address set {}",
+        bytes[HAS_ADDRESS]
+    )
+}
+
+/// The `N` bytes of a join target from `at`, inside the target.
+fn field<const N: usize>(bytes: &[u8; TARGET_BYTES], at: usize) -> [u8; N] {
+    core::array::from_fn(|i| bytes[at + i])
 }
 
 fn main_entry(next: Next<MainEntry>, menu: usize, entry: *const u8) -> u8 {
@@ -144,11 +171,11 @@ fn watch() {
                     PAUSE_ENTRIES.load(Ordering::Relaxed),
                 );
                 enshwick_loader_api::info!(
-                    "R8 +{} s: main-menu entries {}/s, pause-menu entries {}/s, server changes {}",
+                    "R8 +{} s: main-menu entries {}/s, pause-menu entries {}/s, joins {}",
                     start.elapsed().as_secs(),
                     main_now - main,
                     pause_now - pause,
-                    SERVER_CHANGES.load(Ordering::Relaxed)
+                    JOINS.load(Ordering::Relaxed)
                 );
                 (main, pause) = (main_now, pause_now);
             }

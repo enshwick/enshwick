@@ -20,10 +20,9 @@ play.
   each tab bar's labels and chosen tab, the world settings' among them
   (`R3 tabs`); the game's text input dialog when it opens (`R5 text dialog`)
   and each text field's text as it is typed (`R5 text field`).
-- Join attempts: each server change the game asks for, what the call
-  answers (0 when the join check refused it), and for 30 seconds after, once
-  a second, how many main- and pause-menu entries were drawn. Lines start
-  with `R8`.
+- Join attempts: each join the game starts, with its host id, address and
+  ports and how long the call took, and for 30 seconds after, once a second,
+  how many main- and pause-menu entries were drawn. Lines start with `R8`.
 - Entity ids, on the client and on the server: every five seconds, the entities
   within 20 m of each player, at most 40 a sweep, with their id, template GUID
   and position, and the entity ids that `DespawnLink`, `OwnerRelationship`,

@@ -284,6 +284,7 @@ pub struct Constant {
     via: Option<String>,
     within: Option<u32>,
     attribute: Option<String>,
+    carried: bool,
 }
 
 impl Constant {
@@ -335,6 +336,14 @@ impl Constant {
     #[must_use]
     pub fn attribute(&self) -> Option<&str> {
         self.attribute.as_deref()
+    }
+
+    /// Whether a build without its own table takes the value over; `false`
+    /// for a value only this build holds, such as a function table slot,
+    /// which such a build neither finds nor misses.
+    #[must_use]
+    pub const fn carried(&self) -> bool {
+        self.carried
     }
 
     /// The value as its pattern finds it in `code`: read from the operand,
@@ -457,6 +466,12 @@ struct ConstantFull {
     via: Option<String>,
     within: Option<u32>,
     attribute: Option<String>,
+    #[serde(default = "carried")]
+    carried: bool,
+}
+
+const fn carried() -> bool {
+    true
 }
 
 impl ConstantFull {
@@ -576,9 +591,9 @@ impl Table {
             .constants
             .into_iter()
             .map(|(id, value)| {
-                let (value, text, operand, via, within, attribute) = match value {
+                let (value, text, operand, via, within, attribute, carried) = match value {
                     ConstantValue::Plain(value) => {
-                        (value.value(&id)?, None, None, None, None, None)
+                        (value.value(&id)?, None, None, None, None, None, true)
                     }
                     ConstantValue::Full(full) => {
                         let operand = full.operand(&id)?;
@@ -594,6 +609,13 @@ impl Table {
                         {
                             return bad("`attribute` takes no pattern and no `via`");
                         }
+                        if !full.carried
+                            && (full.pattern.is_some()
+                                || full.via.is_some()
+                                || full.attribute.is_some())
+                        {
+                            return bad("`carried = false` takes no pattern, `via` or `attribute`");
+                        }
                         (
                             full.value.value(&id)?,
                             full.pattern,
@@ -601,6 +623,7 @@ impl Table {
                             full.via,
                             full.within,
                             full.attribute,
+                            full.carried,
                         )
                     }
                 };
@@ -612,6 +635,7 @@ impl Table {
                     via,
                     within,
                     attribute,
+                    carried,
                 })
             })
             .collect::<Result<_, TableError>>()?;
@@ -697,6 +721,7 @@ impl Table {
                 .map(|c| (c.id.clone(), c.value))
                 .collect(),
             missing: Vec::new(),
+            uncarried: Vec::new(),
             attributes: self.attributes(),
         }
     }
@@ -717,7 +742,9 @@ impl Table {
     /// say; a constant read [`Constant::via`] a symbol counts when that
     /// symbol counts and its code there matches. Everything else is
     /// [`Resolved::missing`], the slots of [`Constant::attribute`]s among
-    /// them until the loader supplies them. The checks do not apply.
+    /// them until the loader supplies them, except the constants that are
+    /// not [`Constant::carried`], which are [`Resolved::uncarried`]. The
+    /// checks do not apply.
     #[must_use]
     pub fn fall_back(&self, code: &[u8], code_rva: u64) -> Resolved {
         let found_symbols = search(&self.symbols, |s| {
@@ -735,7 +762,9 @@ impl Table {
                 None => missing.push(symbol.id.clone()),
             }
         }
-        let found_constants = search(&self.constants, |c| {
+        let (carried, uncarried): (Vec<&Constant>, Vec<&Constant>) =
+            self.constants.iter().partition(|c| c.carried);
+        let found_constants = search(&carried, |c| {
             if let Some(symbol) = c.id.strip_suffix(".bytes") {
                 let (_, rva) = symbols.iter().find(|(id, _)| id == symbol)?;
                 let value = read(code, rva.checked_sub(code_rva)?, 8)?;
@@ -748,7 +777,7 @@ impl Table {
             c.find(code)
         });
         let mut constants = Vec::new();
-        for (constant, found) in self.constants.iter().zip(found_constants) {
+        for (constant, found) in carried.iter().zip(found_constants) {
             match found {
                 Some(value) => constants.push((constant.id.clone(), value)),
                 None => missing.push(constant.id.clone()),
@@ -762,6 +791,7 @@ impl Table {
             symbols,
             constants,
             missing,
+            uncarried: uncarried.iter().map(|c| c.id.clone()).collect(),
             attributes: self.attributes(),
         }
     }
@@ -861,6 +891,7 @@ pub struct Resolved {
     symbols: Vec<(String, u64)>,
     constants: Vec<(String, u64)>,
     missing: Vec<String>,
+    uncarried: Vec<String>,
     attributes: Vec<(String, String)>,
 }
 
@@ -912,6 +943,14 @@ impl Resolved {
     #[must_use]
     pub fn missing(&self) -> &[String] {
         &self.missing
+    }
+
+    /// The constants of the source table only its own build holds, left
+    /// out on a build it is carried to and not [`Self::missing`] there
+    /// ([`Constant::carried`]).
+    #[must_use]
+    pub fn uncarried(&self) -> &[String] {
+        &self.uncarried
     }
 
     /// The constants that are slots of attributes, by id, with the name of
@@ -1279,6 +1318,60 @@ age = 1
         }
     }
 
+    /// A constant only its own build holds counts there, and a build the
+    /// table is carried to neither finds nor misses it.
+    #[test]
+    fn a_constant_kept_from_carrying_is_neither_found_nor_missing() {
+        let text = r#"
+            name = "1.0 client (1)"
+            side = "client"
+            guid = "00000000000000000000000000000001"
+            age = 2
+            [constants]
+            "g.slot" = { value = 16, carried = false }
+            "g.plain" = 8
+            "#;
+        let table = Table::parse(text).unwrap();
+        let carried = table.fall_back(&[0xcc; 16], 0x1000);
+        assert_eq!(carried.constant("g.slot"), None);
+        assert_eq!(carried.missing(), ["g.plain"]);
+        assert_eq!(carried.uncarried(), ["g.slot"]);
+        let exact = table.resolve();
+        assert_eq!(exact.constant("g.slot"), Some(16));
+        assert!(exact.uncarried().is_empty());
+        for bad in [
+            r#"{ value = 1, carried = false, pattern = "11" }"#,
+            r#"{ value = 1, carried = false, attribute = "A" }"#,
+        ] {
+            let text = text.replace("{ value = 16, carried = false }", bad);
+            assert!(Table::parse(&text).is_err(), "{bad}");
+        }
+    }
+
+    /// The join's slot in the online provider's table is per build: a
+    /// client table carried to any code leaves it out without missing it.
+    #[test]
+    fn a_carried_client_table_never_misses_the_join_slot() {
+        let tables = tables();
+        let clients: Vec<&Table> = tables.iter().filter(|t| t.side() == Side::Client).collect();
+        assert!(!clients.is_empty());
+        for table in clients {
+            let carried = table.fall_back(&[0xcc; 64], 0x1000);
+            let slot = "net.provider_join_slot";
+            assert!(
+                !carried.missing().iter().any(|id| id == slot),
+                "{}",
+                table.name()
+            );
+            assert!(
+                carried.uncarried().iter().any(|id| id == slot),
+                "{}",
+                table.name()
+            );
+            assert_eq!(table.resolve().constant(slot), Some(16), "{}", table.name());
+        }
+    }
+
     #[test]
     fn expected_bytes_count_only_where_the_pattern_fixes_them() {
         let mut symbol = Symbol {
@@ -1439,6 +1532,13 @@ age = 1
             }
             let resolved = table.fall_back(code, code_rva);
             assert!(wrong.is_empty(), "{var}:\n{}", wrong.join("\n"));
+            assert!(
+                !resolved
+                    .missing()
+                    .iter()
+                    .any(|id| id == "net.provider_join_slot"),
+                "{var}"
+            );
             let (symbols, constants) = (resolved.symbols().len(), resolved.constants().len());
             let floor = match side {
                 Side::Server => COVERED_SERVER,

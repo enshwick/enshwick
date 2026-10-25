@@ -239,7 +239,7 @@ fn patterns_into(
     let kept: HashMap<&str, &enshwick_loader_builds::Constant> = present
         .constants()
         .iter()
-        .filter(|c| c.via().is_some() || c.attribute().is_some())
+        .filter(|c| c.via().is_some() || c.attribute().is_some() || !c.carried())
         .map(|c| (c.id(), c))
         .collect();
     let failed = || Err("the search failed".to_owned());
@@ -336,8 +336,8 @@ fn constant_written(exe: &Exe<'_>, id: &str, value: u64, anchor: &Anchor) -> Wri
     }
 }
 
-/// A constant read from the game's data, or read via a symbol in its code
-/// at the symbol's address in `exe`.
+/// A constant only its own build holds, read from the game's data, or read
+/// via a symbol in its code at the symbol's address in `exe`.
 fn kept_written(
     exe: &Exe<'_>,
     constant: &enshwick_loader_builds::Constant,
@@ -345,6 +345,12 @@ fn kept_written(
     pattern: Option<&String>,
 ) -> Written {
     let id = constant.id();
+    if !constant.carried() {
+        return Ok(Some(format!(
+            "{{ value = {}, carried = false }}",
+            spelled(constant.value())
+        )));
+    }
     if let Some(name) = constant.attribute() {
         return Ok(Some(format!(
             "{{ value = {}, attribute = \"{name}\" }}",

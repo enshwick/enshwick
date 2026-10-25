@@ -22,7 +22,11 @@ use crate::{builds, log, modlist};
 
 /// The build table ids this part of the loader names.
 #[cfg(windows)]
-pub(crate) const TABLE_IDS: &[&str] = &["net.server_change"];
+pub(crate) const TABLE_IDS: &[&str] = &[
+    crate::join::provider::JOIN_ID,
+    crate::join::provider::TABLE_ID,
+    crate::join::provider::SLOT_ID,
+];
 
 /// The client starts under Steam's DRM wrapper, which may check the game's code
 /// before it runs. The game opens its window only once its own code runs, so
@@ -417,11 +421,9 @@ fn attribute_crashes(loader: &Loader, order: &[&Library]) {
     }
 }
 
-/// Links the loader's join check on the client's server change.
+/// Links the loader's join check on the client's join. The lobby module and
+/// the mod names serve hosted games too, so they go in on every build.
 fn link_join(loader: &Loader) {
-    let Some(rva) = loader.build.symbol("net.server_change") else {
-        return;
-    };
     let names = loader
         .mods
         .iter()
@@ -430,15 +432,42 @@ fn link_join(loader: &Loader) {
         .collect();
     crate::join::set_names(names);
     crate::lobby::register();
-    let status = loader.link(
-        loader.base + rva,
-        &crate::join::NEXT,
-        crate::join::detour,
-        enshwick_loader_api::abi::HookFlags::NONE,
-    );
-    if !status.is_ok() {
-        crate::log!(WARN, "join check off: its hook was refused ({})", status.0);
+    match verified_join(loader) {
+        Ok(join) => {
+            loader.link_feature(
+                "join check",
+                Some(join),
+                &crate::join::NEXT,
+                crate::join::detour,
+                enshwick_loader_api::abi::HookFlags::NONE,
+            );
+        }
+        Err(error) => crate::log!(
+            WARN,
+            "join check off on {}: {error}; nothing patched",
+            loader.build.name
+        ),
     }
+}
+
+/// The online provider's join, once the provider's function table holds it
+/// where the build table says and its code starts with the pinned bytes.
+fn verified_join(loader: &Loader) -> Result<u64, crate::join::provider::Error> {
+    use crate::join::provider::{Error, Pins, verify_mapped};
+    let pins = Pins::from_table(
+        |id| loader.build.symbol(id),
+        |id| loader.build.constant(id),
+        loader.base,
+    )?;
+    let range = |start: u64, len: usize| Some(start..start.checked_add(u64::try_from(len).ok()?)?);
+    let (_, base, image_len) = identify().ok_or(Error::NoImage)?;
+    let image = range(base, image_len).ok_or(Error::NoImage)?;
+    let code = crate::code::text(base)
+        .and_then(|(start, len)| range(u64::try_from(start).ok()?, len))
+        .ok_or(Error::NoCode)?;
+    // SAFETY: `image` is the game's executable image, mapped for the life of
+    // the process.
+    unsafe { verify_mapped(&pins, image, code) }
 }
 
 /// The update sources of the running join mods, `(id, source line)`.
