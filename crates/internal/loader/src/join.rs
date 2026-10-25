@@ -19,7 +19,7 @@
 
 use std::collections::BTreeMap;
 use std::net::{SocketAddr, UdpSocket};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use enshwick_loader_api::mods::Updates;
 
@@ -796,7 +796,8 @@ impl Split {
     }
 }
 
-/// Asks `server` for its rules over the Steam query protocol.
+/// Asks `server` for its rules over the Steam query protocol, giving up
+/// two seconds after it starts, however the server answers.
 ///
 /// # Errors
 ///
@@ -813,20 +814,33 @@ impl Split {
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
 pub fn query_rules(server: SocketAddr) -> std::io::Result<Vec<u8>> {
+    query_rules_within(server, QUERY_TIMEOUT)
+}
+
+/// [`query_rules`] with the whole query bound to `timeout`.
+fn query_rules_within(server: SocketAddr, timeout: Duration) -> std::io::Result<Vec<u8>> {
+    let deadline = Instant::now() + timeout;
     let socket = UdpSocket::bind(if server.is_ipv4() {
         "0.0.0.0:0"
     } else {
         "[::]:0"
     })?;
-    socket.set_read_timeout(Some(QUERY_TIMEOUT))?;
     socket.connect(server)?;
+    let recv = |reply: &mut [u8]| {
+        let left = deadline.saturating_duration_since(Instant::now());
+        if left.is_zero() {
+            return Err(std::io::Error::from(std::io::ErrorKind::TimedOut));
+        }
+        socket.set_read_timeout(Some(left))?;
+        socket.recv(reply)
+    };
     let mut request = vec![0xff, 0xff, 0xff, 0xff, b'V', 0xff, 0xff, 0xff, 0xff];
     // A reply larger than the buffer fails to read on Windows, which would
     // let the join through unchecked.
     let mut reply = vec![0u8; 65_536];
     for _ in 0..3 {
         socket.send(&request)?;
-        let len = socket.recv(&mut reply)?;
+        let len = recv(&mut reply)?;
         // A challenge comes back first; send it with the next request.
         if len >= 9 && reply[4] == b'A' {
             request.truncate(5);
@@ -841,7 +855,7 @@ pub fn query_rules(server: SocketAddr) -> std::io::Result<Vec<u8>> {
                 match next {
                     Ok(Some(_)) | Err(_) => break,
                     Ok(None) => {
-                        let len = socket.recv(&mut reply)?;
+                        let len = recv(&mut reply)?;
                         next = split.add(&reply[..len]);
                     }
                 }
@@ -1177,6 +1191,34 @@ count turned off"
         assert!(Split::default().add(&packet(1, 17, 0, first)).is_err());
         assert!(Split::default().add(&SPLIT).is_err());
         assert!(Split::default().add(&whole).is_err());
+    }
+
+    /// A server that sends a part of its reply just before every read times
+    /// out, and never the rest, is given up on by the query's one deadline.
+    #[test]
+    fn a_reply_trickled_in_parts_ends_at_the_query_s_deadline() {
+        let server = UdpSocket::bind("127.0.0.1:0").unwrap();
+        let address = server.local_addr().unwrap();
+        let trickle = std::thread::spawn(move || {
+            let mut request = [0u8; 64];
+            let Ok((_, client)) = server.recv_from(&mut request) else {
+                return;
+            };
+            let mut part = SPLIT.to_vec();
+            part.extend_from_slice(&[1, 0, 0, 0, 2, 0, 0xe0, 0x04, 0xff]);
+            for _ in 0..40 {
+                if server.send_to(&part, client).is_err() {
+                    return;
+                }
+                std::thread::sleep(Duration::from_millis(50));
+            }
+        });
+        let started = Instant::now();
+        let result = query_rules_within(address, Duration::from_millis(300));
+        let took = started.elapsed();
+        assert!(result.is_err());
+        assert!(took < Duration::from_millis(900), "took {took:?}");
+        drop(trickle);
     }
 
     #[test]
