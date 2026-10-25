@@ -7,7 +7,8 @@
 //! administrators too. A game whose hello matches stays, also when the hello
 //! comes after the line. The check is about compatibility, not cheating: a
 //! game that lies about its mods passes. A hosted game never checks its
-//! host, and checks no one until the host's own hello names it.
+//! host, and checks no one until the host's own hello names it and only
+//! while the host's key holds a player slot in the game.
 
 use std::collections::{BTreeMap, HashMap};
 use std::time::{Duration, Instant};
@@ -122,8 +123,11 @@ pub struct Gate {
     players: HashMap<u64, Standing>,
     /// A game a client hosts: no one is checked until the host is known.
     hosted: bool,
-    /// The host's account key, once its own hello came.
+    /// The host's account key, once its own hello came; the first host's
+    /// stays.
     host: Option<u64>,
+    /// Whether the host's key holds a player slot in the game.
+    host_in_game: bool,
 }
 
 impl Gate {
@@ -137,9 +141,28 @@ impl Gate {
     }
 
     /// Whether the gate acts: always on a dedicated server, in a hosted game
-    /// once the host is known.
+    /// while the known host's key holds a player slot in the game.
     fn acts(&self) -> bool {
-        !self.hosted || self.host.is_some()
+        !self.hosted || self.host_in_game
+    }
+
+    /// Takes the keys of the players in the game, `in_game`: a hosted game
+    /// acts only while its host is among them, so a host whose hello came
+    /// under another key than its slot's is never taken for a guest.
+    pub fn host_in_game(&mut self, in_game: &[u64]) {
+        self.host_in_game = self.host.is_some_and(|host| in_game.contains(&host));
+    }
+
+    /// Makes room for the player `key` in a full gate by forgetting the
+    /// players whose key holds no live slot in `live`, read only then;
+    /// nothing is forgotten when the slots do not read.
+    pub fn make_room(&mut self, key: u64, live: impl FnOnce() -> Option<Vec<u64>>) {
+        if !self.players.contains_key(&key)
+            && self.players.len() >= MAX_PLAYERS
+            && let Some(live) = live()
+        {
+            self.keep(&live);
+        }
     }
 
     /// The player `key` entered the world at `now` on a server that runs
@@ -227,9 +250,10 @@ impl Gate {
         (matches, step)
     }
 
-    /// Takes the host's own hello in a hosted game: the host is never checked.
+    /// Takes the host's own hello in a hosted game: the host is never checked,
+    /// and a hello under another key once the host is known is not answered.
     pub fn host_hello(&mut self, key: u64, hello: &Hello) -> (bool, Option<Step>) {
-        if key == 0 || !self.hosted || hello.nonce == 0 {
+        if key == 0 || !self.hosted || hello.nonce == 0 || self.host.is_some_and(|h| h != key) {
             return (false, None);
         }
         self.host = Some(key);
@@ -330,6 +354,30 @@ pub fn needs(server: &str, client: Option<&Hello>) -> Vec<Need> {
             version,
         })
         .collect()
+}
+
+/// The machine to kick for the player `key` among the live slots'
+/// `machines`, `(key, machine)`: never the host's, nor one the host's slot
+/// shares; or why not.
+fn machine_to_kick(
+    machines: &[(u64, u32)],
+    key: u64,
+    host: Option<u64>,
+) -> Result<u32, &'static str> {
+    if host == Some(key) {
+        return Err("the player is the host");
+    }
+    let machine_of = |key: u64| {
+        machines
+            .iter()
+            .find(|&&(k, _)| k == key)
+            .map(|&(_, machine)| machine)
+    };
+    let machine = machine_of(key).ok_or("the player holds no slot")?;
+    if host.and_then(machine_of) == Some(machine) {
+        return Err("the player's machine is the host's");
+    }
+    Ok(machine)
 }
 
 /// Where players get a mod with the update source `line`, as a link.
@@ -462,6 +510,10 @@ mod runtime {
         epoch: OnceLock<Instant>,
         /// This process's number in its hellos to the game it hosts.
         nonce: OnceLock<u64>,
+        /// Set once a player without an account key entered the world.
+        unkeyed: AtomicBool,
+        /// Set once the host's hello came under a second key.
+        rehosted: AtomicBool,
         fuse: Fuse,
     }
 
@@ -473,6 +525,8 @@ mod runtime {
         next: AtomicU64::new(0),
         epoch: OnceLock::new(),
         nonce: OnceLock::new(),
+        unkeyed: AtomicBool::new(false),
+        rehosted: AtomicBool::new(false),
         fuse: Fuse::new("join admission"),
     };
 
@@ -568,9 +622,19 @@ mod runtime {
         let Some(serving) = STATE.serving.get() else {
             return;
         };
+        if key == 0 {
+            if !STATE.unkeyed.swap(true, Ordering::Relaxed) {
+                crate::log!(
+                    WARN,
+                    "join check: a player entered the world without an account key and is not checked"
+                );
+            }
+            return;
+        }
         let _ran = STATE.fuse.run("a player's join", || {
             let server = server_mods();
             let steps = with_gate(serving, |gate| {
+                gate.make_room(key, crate::world::live_keys);
                 gate.joined(key, &server, Instant::now(), serving.rules)
             });
             for step in steps {
@@ -603,11 +667,20 @@ mod runtime {
             .run("a hello", || {
                 let own = serving.side == Side::CLIENT && hello.nonce == nonce();
                 if own {
-                    crate::log!(INFO, "join check: the host is {key:016x}");
-                    return with_gate(serving, |gate| gate.host_hello(key, hello)).0;
+                    let (answered, _) = with_gate(serving, |gate| gate.host_hello(key, hello));
+                    if answered {
+                        crate::log!(INFO, "join check: the host is {key:016x}");
+                    } else if !STATE.rehosted.swap(true, Ordering::Relaxed) {
+                        crate::log!(
+                            WARN,
+                            "join check: the host's hello came under {key:016x}, not the host's first key; not answered"
+                        );
+                    }
+                    return answered;
                 }
                 let server = server_mods();
                 let (stays, step) = with_gate(serving, |gate| {
+                    gate.make_room(key, crate::world::live_keys);
                     gate.hello(key, &server, hello, Instant::now(), serving.rules)
                 });
                 if let Some(step) = step {
@@ -641,9 +714,17 @@ mod runtime {
             };
             let live: Vec<u64> = machines.iter().map(|&(key, _)| key).collect();
             crate::net::keep_greeting(&live);
+            let in_game: Vec<u64> = if serving.side == Side::CLIENT {
+                crate::world::players(loader)
+                    .map(|players| players.iter().map(|p| p.key).collect())
+                    .unwrap_or_default()
+            } else {
+                Vec::new()
+            };
             let server = server_mods();
             let steps = with_gate(serving, |gate| {
                 gate.keep(&live);
+                gate.host_in_game(&in_game);
                 gate.due(&server, now, serving.rules)
             });
             for step in steps {
@@ -682,7 +763,8 @@ mod runtime {
                 let (Some(loader), Some(kick)) = (loader, &serving.kick) else {
                     return;
                 };
-                match disconnect(loader, kick, key) {
+                let host = with_gate(serving, |gate| gate.host);
+                match disconnect(loader, kick, key, host) {
                     Ok(machine) => crate::log!(
                         INFO,
                         "join check: kicked the game of {key:016x} (machine {machine})"
@@ -696,16 +778,19 @@ mod runtime {
         }
     }
 
-    /// Kicks the player `key` through the game, on the game thread; the
-    /// player's machine handle, or why not.
-    fn disconnect(loader: &Loader, kick: &Kick, key: u64) -> Result<u32, &'static str> {
+    /// Kicks the player `key` through the game, on the game thread, never
+    /// on the machine of `host`, a hosted game's host; the player's machine
+    /// handle, or why not.
+    fn disconnect(
+        loader: &Loader,
+        kick: &Kick,
+        key: u64,
+        host: Option<u64>,
+    ) -> Result<u32, &'static str> {
         let server = crate::world::reader().map_err(|_| "not on the game thread")?;
-        let machine = crate::world::machines(loader)
-            .map_err(|_| "the player slots do not read")?
-            .into_iter()
-            .find(|&(k, _)| k == key)
-            .map(|(_, machine)| machine)
-            .ok_or("the player holds no slot")?;
+        let machines =
+            crate::world::machines(loader).map_err(|_| "the player slots do not read")?;
+        let machine = super::machine_to_kick(&machines, key, host)?;
         // SAFETY: the offset lies inside the server object, as the pattern
         // that pins it reads it from the server in the game's own kick; the
         // server is read on its own thread.
@@ -991,6 +1076,94 @@ mod tests {
     }
 
     #[test]
+    fn a_full_gate_makes_room_from_players_whose_slot_is_gone() {
+        let mut gate = Gate::default();
+        let start = Instant::now();
+        for key in 1..=MAX_PLAYERS as u64 {
+            gate.joined(key, SERVER, start, rules());
+        }
+        let key = MAX_PLAYERS as u64 + 1;
+        gate.make_room(1, || unreachable!("a followed player needs no room"));
+        gate.make_room(key, || None);
+        assert_eq!(
+            gate.players.len(),
+            MAX_PLAYERS,
+            "no slots read, none forgotten"
+        );
+        gate.make_room(key, || Some(vec![2, key]));
+        assert_eq!(gate.joined(key, SERVER, start, rules()), []);
+        let mut followed: Vec<u64> = gate.players.keys().copied().collect();
+        followed.sort_unstable();
+        assert_eq!(followed, [2, key]);
+        let mut roomy = Gate::default();
+        roomy.joined(1, SERVER, start, rules());
+        roomy.make_room(2, || unreachable!("a gate with room reads no slots"));
+    }
+
+    #[test]
+    fn a_hosted_game_acts_only_while_its_host_holds_a_live_slot() {
+        let mut gate = Gate::hosted();
+        let start = Instant::now();
+        let host = Hello {
+            nonce: 5,
+            ..said("")
+        };
+        assert_eq!(gate.host_hello(1, &host), (true, None));
+        gate.joined(2, SERVER, start, rules());
+        assert_eq!(
+            gate.due(SERVER, at(start, 60), rules()),
+            [],
+            "the host's key holds no slot"
+        );
+        gate.host_in_game(&[2, 3]);
+        assert_eq!(gate.due(SERVER, at(start, 61), rules()), []);
+        gate.host_in_game(&[1, 2]);
+        assert_eq!(
+            gate.due(SERVER, at(start, 62), rules()),
+            [note(2, false, all_lacking())]
+        );
+        gate.host_in_game(&[2]);
+        assert_eq!(
+            gate.due(SERVER, at(start, 200), rules()),
+            [],
+            "the host left its slot"
+        );
+    }
+
+    #[test]
+    fn the_host_s_machine_is_never_kicked() {
+        let machines = [(1, 10), (2, 20), (3, 10)];
+        assert_eq!(machine_to_kick(&machines, 2, Some(1)), Ok(20));
+        assert_eq!(machine_to_kick(&machines, 2, None), Ok(20));
+        assert!(machine_to_kick(&machines, 1, Some(1)).is_err());
+        assert!(
+            machine_to_kick(&machines, 3, Some(1)).is_err(),
+            "a guest on the host's machine"
+        );
+        assert!(machine_to_kick(&machines, 4, Some(1)).is_err());
+    }
+
+    #[test]
+    fn the_first_host_of_a_hosted_game_stays_its_host() {
+        let mut gate = Gate::hosted();
+        let start = Instant::now();
+        let host = Hello {
+            nonce: 5,
+            ..said("")
+        };
+        assert_eq!(gate.host_hello(1, &host), (true, None));
+        assert_eq!(gate.host_hello(2, &host), (false, None));
+        assert_eq!(gate.host_hello(1, &host), (true, None));
+        gate.host_in_game(&[1, 2]);
+        gate.joined(2, SERVER, start, rules());
+        assert_eq!(gate.joined(1, SERVER, start, rules()), []);
+        assert_eq!(
+            gate.due(SERVER, at(start, 30), rules()),
+            [note(2, false, all_lacking())]
+        );
+    }
+
+    #[test]
     fn a_hosted_game_acts_once_it_knows_its_host_and_never_on_the_host() {
         let mut gate = Gate::hosted();
         let start = Instant::now();
@@ -1002,6 +1175,7 @@ mod tests {
             ..said("")
         };
         assert_eq!(gate.host_hello(1, &host), (true, None));
+        gate.host_in_game(&[1, 2]);
         assert_eq!(
             gate.due(SERVER, at(start, 61), rules()),
             [note(2, false, all_lacking())]

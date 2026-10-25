@@ -595,6 +595,19 @@ fn take_frame(state: &mut State, key: u64, frame: Frame) -> Option<(u32, Vec<u8>
     Some((channel, data, known))
 }
 
+/// Makes room for the hello of the client `key` in a full store by
+/// forgetting the clients whose key holds no live slot in `live`, read only
+/// then; nothing is forgotten when the slots do not read.
+fn make_greeting_room(state: &mut State, key: u64, live: impl FnOnce() -> Option<Vec<u64>>) {
+    if !state.peers.contains_key(&key)
+        && !state.greeting.contains_key(&key)
+        && state.greeting.len() >= MAX_GREETING
+        && let Some(live) = live()
+    {
+        keep_greeting_in(state, &live);
+    }
+}
+
 /// Forgets the hellos on their way in from clients whose key holds no live
 /// player slot in `live`.
 pub(crate) fn keep_greeting(live: &[u64]) {
@@ -615,7 +628,10 @@ pub(crate) fn server_received(key: u64, args: &str) {
         dropped();
         return;
     };
-    let Some((channel, data, known)) = state(|s| take_frame(s, key, frame)) else {
+    let Some((channel, data, known)) = state(|s| {
+        make_greeting_room(s, key, crate::world::live_keys);
+        take_frame(s, key, frame)
+    }) else {
         return;
     };
     if channel != CONTROL {
@@ -1008,6 +1024,29 @@ mod tests {
         let mut kept: Vec<u64> = state.greeting.keys().copied().collect();
         kept.sort_unstable();
         assert_eq!(kept, [3, 4]);
+    }
+
+    #[test]
+    fn a_full_greeting_store_makes_room_from_keys_without_a_live_slot() {
+        let mut state = State::default();
+        let lines = control_frames(&hello("safes@0.3.0", 0)).unwrap();
+        for key in 1..=MAX_GREETING as u64 {
+            let _taken = take_frame(&mut state, key, parsed(&lines).remove(0));
+        }
+        assert_eq!(state.greeting.len(), MAX_GREETING);
+        let newcomer = MAX_GREETING as u64 + 1;
+        make_greeting_room(&mut state, 1, || unreachable!("a known key needs no room"));
+        make_greeting_room(&mut state, newcomer, || None);
+        assert_eq!(
+            state.greeting.len(),
+            MAX_GREETING,
+            "no slots read, none forgotten"
+        );
+        make_greeting_room(&mut state, newcomer, || Some(vec![2, newcomer]));
+        assert!(take_frame(&mut state, newcomer, parsed(&lines).remove(0)).is_some());
+        let mut kept: Vec<u64> = state.greeting.keys().copied().collect();
+        kept.sort_unstable();
+        assert_eq!(kept, [2, newcomer]);
     }
 
     #[test]
