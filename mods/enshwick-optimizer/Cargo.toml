@@ -32,5 +32,10 @@ windows-sys = { workspace = true, features = [
 enshwick-loader-api = { workspace = true, features = ["test"] }
 toml.workspace = true
 
+[package.metadata.enshwick]
+# Builds only for Windows: off Windows, `cargo xtask check` lints it through
+# cargo xwin and skips its tests.
+windows-only = true
+
 [lints]
 workspace = true

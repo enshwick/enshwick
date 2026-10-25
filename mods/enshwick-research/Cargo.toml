@@ -35,6 +35,9 @@ enshwick-loader-reflect.workspace = true
 [lints]
 workspace = true
 
-# Development only: no release and no place in the release archives.
+# Development only: no release and no place in the release archives. Builds
+# only for Windows: off Windows, `cargo xtask check` lints it through cargo
+# xwin and skips its tests.
 [package.metadata.enshwick]
 release = false
+windows-only = true

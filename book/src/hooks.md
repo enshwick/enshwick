@@ -174,7 +174,7 @@ a hooked function.
 `declare_mod!` adds `instance()` to the mod's type: `Some(&'static Self)` once
 `init` has returned the state, `None` before. A hook can read settings there:
 
-```rust
+```rust,standalone_crate
 use enshwick_loader_api::{Load, Mod, Next, Off};
 
 struct MyMod {

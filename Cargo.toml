@@ -12,6 +12,7 @@ members = [
     "examples/safe-viewers",
     "examples/trading-post",
     "examples/trading-post-api",
+    "tools/xtask",
 ]
 
 [workspace.package]
@@ -111,6 +112,14 @@ mod_module_files = "deny"
 tests_outside_test_module = "deny"
 clone_on_ref_ptr = "deny"
 format_push_string = "deny"
+
+# Line tables keep file and line in panics and backtraces; full debug info
+# only grows the target directory and slows linking.
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+debug = false
 
 [profile.release]
 opt-level = 3

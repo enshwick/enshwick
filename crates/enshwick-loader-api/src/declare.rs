@@ -211,7 +211,7 @@ macro_rules! manifest {
 ///
 /// # Examples
 ///
-/// ```
+/// ```rust,standalone_crate
 /// struct Quiet;
 ///
 /// impl enshwick_loader_api::Mod for Quiet {

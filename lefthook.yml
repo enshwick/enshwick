@@ -19,30 +19,30 @@ commit-msg:
     conventional:
       run: bun tools/check-commit-message.ts {1}
 
+# Nothing that compiles: the hook stays under ten seconds. The compiling
+# checks are `cargo xtask check` (what the branch touches) and
+# `cargo xtask check --all` (everything); they gate merges.
 pre-push:
-  parallel: false
+  parallel: true
   commands:
-    clippy:
+    rustfmt:
       glob:
         - '*.rs'
         - '**/*.rs'
-        - 'Cargo.toml'
-        - '**/Cargo.toml'
-        - 'Cargo.lock'
-      run: cargo clippy --workspace --all-targets -- -D warnings
-    test:
-      glob:
-        - '*.rs'
-        - '**/*.rs'
-        - 'Cargo.toml'
-        - '**/Cargo.toml'
-        - 'Cargo.lock'
-        - 'book/src/*.md'
-        - 'book/src/**/*.md'
-      run: cargo nextest run --workspace --no-tests=pass && cargo test --doc --workspace
+      run: cargo fmt --all --check
+    markdown:
+      glob: '*.md'
+      exclude:
+        - '**/CHANGELOG.md'
+      run: bunx markdownlint-cli2 --no-globs {push_files}
+    typos:
+      run: typos --force-exclude {push_files}
+    commits:
+      run: bun tools/check-commit-message.ts --range origin/main..HEAD
     deny:
       glob:
         - 'Cargo.toml'
         - '**/Cargo.toml'
         - 'Cargo.lock'
+        - 'deny.toml'
       run: cargo deny check
