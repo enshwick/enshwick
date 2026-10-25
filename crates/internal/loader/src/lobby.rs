@@ -376,7 +376,7 @@ mod tests {
         let (off, note) = plan("a@1.0,c@3.0", "a@2.0,b@1.0", &names);
         assert_eq!(off, vec!["b".to_owned()]);
         let note = note.unwrap();
-        assert!(note.contains("Bee (b)"), "{note}");
+        assert!(note.contains("Bee") && !note.contains("(b)"), "{note}");
         assert!(note.contains("a: server 1.0, yours 2.0"), "{note}");
         assert!(note.contains("c: server 3.0, not installed"), "{note}");
     }

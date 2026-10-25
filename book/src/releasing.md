@@ -33,7 +33,7 @@ The loader names the version wherever the mod comes up:
 - `safes 0.2.0 initialised` in `loader.log`;
 - `requires flame-altar-zones ^0.2, found 0.1.3` when a requirement is out of
   range;
-- `Safes (safes): server 0.2.0, yours 0.1.0` in the note of a refused join.
+- `Safes 0.2.0, yours 0.1.0` in the dialog of a refused join.
 
 `cargo enshwick manifest` shows what a built DLL says about itself (id,
 version, side, join check, dependencies). With `--expect-version` it fails
@@ -218,7 +218,7 @@ has:
 | `file`                                          | The DLL's path relative to the game's folder, such as `mods/enshwick_safes.dll` |
 | `updates`                                       | `Some(Updates::GitHub { .. })`, `Some(Updates::Url(..))` or `None`              |
 | `signed_by`                                     | The author keys the manifest names, checked; empty for none                     |
-| `name`                                          | What players read; `entry.label()` gives `Name (id)`, or the id without a name  |
+| `name`                                          | What players read; `entry.label()` gives the name, or the id without a name     |
 | `description`, `authors`, `license`, `homepage` | The manifest's credits; empty for none                                          |
 | `replaced_by`                                   | In `mods::replaced()`, the mod that replaces this one; empty elsewhere          |
 
@@ -258,7 +258,7 @@ assert_eq!(safes.to_line(), "github:themaiby/enshwick:enshwick-safes");
 ```
 
 When the join check keeps a client out because the server runs join mods the
-client lacks or has in another version, the loader shows the player a note,
+client lacks or has in another version, the loader shows the player a dialog,
 then raises
 [`events::JoinRefused`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/events.rs)
 on the client.
@@ -268,7 +268,7 @@ DLL path when it has the mod (empty otherwise), the source the server
 advertises, else the client's own source for the mod, and in `signed_by` the
 author keys the server advertises (empty when it advertises none).
 
-The handler runs on the game thread once the player closed the note. Hand
+The handler runs on the game thread once the player closed the dialog. Hand
 downloads to a thread of your own:
 
 ```rust
@@ -318,8 +318,6 @@ is such a mod, for players; a dedicated server skips it:
 - a short while after start, on a thread of its own, it asks each loaded mod's
   source (its GitHub repository or its URL source's document) for newer
   releases, and asks the player before it downloads anything;
-- after a refused join it offers the server's versions of the missing mods,
-  from the sources the server advertises;
 - it downloads the release's file for the mod from the GitHub release, or the
   file a URL source's document names, over `https://` only, at most 64 MiB,
   checks the signature when the mod names keys, and stages the DLLs;
@@ -340,14 +338,10 @@ tag is `<id>-v<version>`. The right key is:
 | ------------------------------------------- | --------------------------------------------------------------------------- |
 | installed and names keys in `signed_by:`    | one of those keys, or a key in `trusted_keys` of `mod-configs/updater.toml` |
 | installed without `signed_by:`              | nothing: it comes unsigned, over `https://`, and the dialog says so         |
-| not installed, offered after a refused join | the key the server advertises in `enshwick.key.<id>`, if it names one       |
 
 A release signed by another key than the installed version names is refused
 with a note: it may have been tampered with, or the author changed keys, and
-the player updates it by hand. For a mod offered after a refused join, the
-dialog shows the version, the source and the author key the server names, or
-that it is unsigned, and says that the player trusts the mod because they
-trust the server. Mods of this repository released before author keys are
+the player updates it by hand. Mods of this repository released before author keys are
 checked against Enshwick's own key, which has signed all of them.
 
 ## Releasing your own mod

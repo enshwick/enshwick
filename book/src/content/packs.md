@@ -213,7 +213,7 @@ loader's.
 
 In the join check a pack's version carries the hash of its files,
 `lanterns@1.0.0+3f2a9c1e`: a server and a player with other files of one
-version differ, and the updater offers the server's release.
+version differ, and the player's game stays out of the server.
 
 ## Packs in a mod
 
