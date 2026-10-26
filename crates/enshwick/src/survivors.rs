@@ -2,9 +2,9 @@
 //! survivor", their beds, summoning staffs and the client's survivor menu.
 //!
 //! The game keeps one entity per survivor and asks for it from many systems.
-//! A mod that keeps several entities of a survivor, such as one per base,
-//! answers each asker with the one that suits it; the platform tells the
-//! askers apart and reads what they work on. Cells are whole 0.5 m cells, as
+//! A mod that keeps several entities of a survivor answers each asker with
+//! the one that suits it; the platform tells the askers apart and reads what
+//! they work on. Cells are whole 0.5 m cells, as
 //! in [`altars`](crate::altars).
 //!
 //! # Examples
@@ -140,12 +140,12 @@ impl Lookup {
     /// use enshwick::ecs::Entity;
     /// use enshwick::survivors::{Answer, Lookup, Purpose};
     ///
-    /// fn previous(lookup: &Lookup, copies: &[Entity]) -> Answer {
+    /// fn previous(lookup: &Lookup, entities: &[Entity]) -> Answer {
     ///     match lookup.purpose {
-    ///         Purpose::PreviousOccupant { bed, .. } => copies
+    ///         Purpose::PreviousOccupant { bed, .. } => entities
     ///             .iter()
-    ///             .find(|&&copy| lookup.bed_of(copy) == Some(bed))
-    ///             .map_or(Answer::Nobody, |&copy| Answer::Entity(copy)),
+    ///             .find(|&&entity| lookup.bed_of(entity) == Some(bed))
+    ///             .map_or(Answer::Nobody, |&entity| Answer::Entity(entity)),
     ///         _ => Answer::Vanilla,
     ///     }
     /// }
