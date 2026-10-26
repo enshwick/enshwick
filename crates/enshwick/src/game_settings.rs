@@ -27,8 +27,8 @@
 //!     let settings = load.game_settings()?;
 //!     let actions = load.actions(enshwick::i18n::Texts::default())?;
 //!     actions.add(Action::new("hard", "Double the enemies' damage").admins(), move |_request| {
-//!         match settings.change(|s| s.enemy_damage *= 2.0) {
-//!             Ok(now) => Outcome::done(format!("Enemy damage now {}", now.enemy_damage)),
+//!         match settings.change(|s| s.enemy_damage_factor *= 2.0) {
+//!             Ok(now) => Outcome::done(format!("Enemy damage now {}", now.enemy_damage_factor)),
 //!             Err(why) => Outcome::refused(format!("Unchanged: {why}")),
 //!         }
 //!     })
@@ -38,13 +38,16 @@
 use core::time::Duration;
 
 use crate::content::EngineFacts;
+use crate::engine_enum::Values;
 use crate::engine_ids as ids;
 use crate::world::WorldError;
 use crate::{Host, Load, Off};
 
 macro_rules! game_enum {
-    ($(#[$doc:meta])* $name:ident { $($(#[$vdoc:meta])* $variant:ident = $value:literal,)* }) => {
+    ($(#[$doc:meta])* $name:ident: $field:ident { $($(#[$vdoc:meta])* $variant:ident = $id:path,)* }) => {
         $(#[$doc])*
+        /// The loader reads the game's value of each variant by its
+        /// constant's name.
         ///
         /// # Examples
         ///
@@ -53,43 +56,29 @@ macro_rules! game_enum {
         #[non_exhaustive]
         pub enum $name {
             $($(#[$vdoc])* $variant,)*
-            /// A value this API does not name, kept as it is.
+            /// A value this API does not name, kept as the game gave it.
             Other(u8),
         }
 
         impl $name {
-            /// The variant for the game's byte `value`.
-            ///
-            /// # Examples
-            ///
-            /// ```
-            /// use enshwick::game_settings::WeatherFrequency;
-            ///
-            /// assert_eq!(WeatherFrequency::from_value(9), WeatherFrequency::Other(9));
-            /// ```
-            #[must_use]
-            pub const fn from_value(value: u8) -> Self {
-                match value {
-                    $($value => Self::$variant,)*
-                    other => Self::Other(other),
-                }
-            }
+            const COUNT: usize = [$(stringify!($variant)),*].len();
 
-            /// The game's byte for this variant.
-            ///
-            /// # Examples
-            ///
-            /// ```
-            /// use enshwick::game_settings::WeatherFrequency;
-            ///
-            /// assert_eq!(WeatherFrequency::Often.value(), 3);
-            /// ```
-            #[must_use]
-            pub const fn value(self) -> u8 {
-                match self {
-                    $(Self::$variant => $value,)*
-                    Self::Other(other) => other,
-                }
+            /// Each variant with the id of the game's constant for it.
+            const IDS: [(Self, &'static str); Self::COUNT] = [$((Self::$variant, $id)),*];
+        }
+
+        impl Value for $name {
+            const SIZE: usize = 1;
+            fn decode(bytes: &[u8], enums: &Enums) -> Self {
+                let raw = bytes.first().copied().unwrap_or_default();
+                enums.$field.variant(u64::from(raw)).unwrap_or(Self::Other(raw))
+            }
+            fn encode(&self, out: &mut [u8], enums: &Enums) -> bool {
+                let value = match *self {
+                    Self::Other(raw) => Some(raw),
+                    variant => enums.$field.value(variant).and_then(|v| u8::try_from(v).ok()),
+                };
+                value.map(|value| out[0] = value).is_some()
             }
         }
     };
@@ -97,108 +86,169 @@ macro_rules! game_enum {
 
 game_enum! {
     /// The preset the server's settings came from.
-    Preset {
+    GameSettingsPreset: preset {
         /// The game's defaults.
-        Default = 0,
+        Default = ids::GAME_SETTINGS_PRESET_DEFAULT,
         /// Easier.
-        Relaxed = 1,
+        Relaxed = ids::GAME_SETTINGS_PRESET_RELAXED,
         /// Harder.
-        Hard = 2,
+        Hard = ids::GAME_SETTINGS_PRESET_HARD,
         /// Hardest, with hunger.
-        Survival = 3,
+        Survival = ids::GAME_SETTINGS_PRESET_SURVIVAL,
         /// Values of their own; what every change makes the preset.
-        Custom = 4,
+        Custom = ids::GAME_SETTINGS_PRESET_CUSTOM,
     }
 }
 
 game_enum! {
     /// What a dead character leaves behind.
-    TombstoneMode {
+    TombstoneMode: tombstone_mode {
         /// The backpack's materials go into the tombstone.
-        AddBackpackMaterials = 0,
+        AddBackpackMaterials = ids::TOMBSTONE_MODE_ADD_BACKPACK_MATERIALS,
         /// Everything the character carried goes into it.
-        Everything = 1,
+        Everything = ids::TOMBSTONE_MODE_EVERYTHING,
         /// No tombstone: the character keeps everything.
-        NoTombstone = 2,
+        NoTombstone = ids::TOMBSTONE_MODE_NO_TOMBSTONE,
     }
 }
 
 game_enum! {
     /// How often rain and storms come.
-    WeatherFrequency {
+    WeatherFrequency: weather_frequency {
         /// Never.
-        Disabled = 0,
+        Disabled = ids::WEATHER_FREQUENCY_DISABLED,
         /// Half as often.
-        Rare = 1,
+        Rare = ids::WEATHER_FREQUENCY_RARE,
         /// As the game means it.
-        Normal = 2,
+        Normal = ids::WEATHER_FREQUENCY_NORMAL,
         /// Twice as often.
-        Often = 3,
+        Often = ids::WEATHER_FREQUENCY_OFTEN,
     }
 }
 
 game_enum! {
     /// A difficulty from very easy to very hard, such as fishing's.
-    Difficulty {
+    GenericDifficulty: generic_difficulty {
         /// Very easy.
-        VeryEasy = 0,
+        VeryEasy = ids::GENERIC_DIFFICULTY_VERY_EASY,
         /// Easy.
-        Easy = 1,
+        Easy = ids::GENERIC_DIFFICULTY_EASY,
         /// Normal.
-        Normal = 2,
+        Normal = ids::GENERIC_DIFFICULTY_NORMAL,
         /// Hard.
-        Hard = 3,
+        Hard = ids::GENERIC_DIFFICULTY_HARD,
         /// Very hard.
-        VeryHard = 4,
+        VeryHard = ids::GENERIC_DIFFICULTY_VERY_HARD,
     }
 }
 
 game_enum! {
-    /// How many enemies random spawners bring, or how many enemies attack at
-    /// once.
-    Amount {
+    /// How many enemies random spawners bring.
+    RandomSpawnerAmount: random_spawner_amount {
         /// Few.
-        Few = 0,
+        Few = ids::RANDOM_SPAWNER_AMOUNT_FEW,
         /// Normal.
-        Normal = 1,
+        Normal = ids::RANDOM_SPAWNER_AMOUNT_NORMAL,
         /// Many.
-        Many = 2,
+        Many = ids::RANDOM_SPAWNER_AMOUNT_MANY,
         /// Extreme.
-        Extreme = 3,
-        /// By the number of players; random spawners only.
-        Automatic = 4,
+        Extreme = ids::RANDOM_SPAWNER_AMOUNT_EXTREME,
+        /// By the number of players.
+        Automatic = ids::RANDOM_SPAWNER_AMOUNT_AUTOMATIC,
+    }
+}
+
+game_enum! {
+    /// How many enemies attack at once.
+    AggroPoolAmount: aggro_pool_amount {
+        /// Few.
+        Few = ids::AGGRO_POOL_AMOUNT_FEW,
+        /// Normal.
+        Normal = ids::AGGRO_POOL_AMOUNT_NORMAL,
+        /// Many.
+        Many = ids::AGGRO_POOL_AMOUNT_MANY,
+        /// Extreme.
+        Extreme = ids::AGGRO_POOL_AMOUNT_EXTREME,
     }
 }
 
 game_enum! {
     /// What startling a tamed animal costs its taming.
-    StartleRepercussion {
+    TamingStartleRepercussion: taming_startle_repercussion {
         /// Nothing.
-        KeepProgress = 0,
+        KeepProgress = ids::TAMING_STARTLE_REPERCUSSION_KEEP_PROGRESS,
         /// Some of the progress.
-        LoseSomeProgress = 1,
+        LoseSomeProgress = ids::TAMING_STARTLE_REPERCUSSION_LOSE_SOME_PROGRESS,
         /// All of it.
-        LoseAllProgress = 2,
+        LoseAllProgress = ids::TAMING_STARTLE_REPERCUSSION_LOSE_ALL_PROGRESS,
     }
 }
 
 game_enum! {
     /// How hard the shroud's curse hits.
-    CurseModifier {
+    CurseModifier: curse_modifier {
         /// Easy.
-        Easy = 0,
+        Easy = ids::CURSE_MODIFIER_EASY,
         /// Normal.
-        Normal = 1,
+        Normal = ids::CURSE_MODIFIER_NORMAL,
         /// Hard.
-        Hard = 2,
+        Hard = ids::CURSE_MODIFIER_HARD,
+    }
+}
+
+/// The game's value of each variant of the settings' enums, for the
+/// running build.
+#[derive(Clone, Copy, Debug)]
+struct Enums {
+    preset: Values<GameSettingsPreset, { GameSettingsPreset::COUNT }>,
+    tombstone_mode: Values<TombstoneMode, { TombstoneMode::COUNT }>,
+    weather_frequency: Values<WeatherFrequency, { WeatherFrequency::COUNT }>,
+    generic_difficulty: Values<GenericDifficulty, { GenericDifficulty::COUNT }>,
+    random_spawner_amount: Values<RandomSpawnerAmount, { RandomSpawnerAmount::COUNT }>,
+    aggro_pool_amount: Values<AggroPoolAmount, { AggroPoolAmount::COUNT }>,
+    taming_startle_repercussion:
+        Values<TamingStartleRepercussion, { TamingStartleRepercussion::COUNT }>,
+    curse_modifier: Values<CurseModifier, { CurseModifier::COUNT }>,
+}
+
+impl Enums {
+    /// Tables without a value for any variant.
+    #[cfg(test)]
+    fn none() -> Self {
+        Self {
+            preset: Values::new(GameSettingsPreset::IDS.map(|(v, _)| (v, None))),
+            tombstone_mode: Values::new(TombstoneMode::IDS.map(|(v, _)| (v, None))),
+            weather_frequency: Values::new(WeatherFrequency::IDS.map(|(v, _)| (v, None))),
+            generic_difficulty: Values::new(GenericDifficulty::IDS.map(|(v, _)| (v, None))),
+            random_spawner_amount: Values::new(RandomSpawnerAmount::IDS.map(|(v, _)| (v, None))),
+            aggro_pool_amount: Values::new(AggroPoolAmount::IDS.map(|(v, _)| (v, None))),
+            taming_startle_repercussion: Values::new(
+                TamingStartleRepercussion::IDS.map(|(v, _)| (v, None)),
+            ),
+            curse_modifier: Values::new(CurseModifier::IDS.map(|(v, _)| (v, None))),
+        }
+    }
+
+    fn resolve(load: &Load<'_>) -> Self {
+        Self {
+            preset: Values::resolve(load, GameSettingsPreset::IDS),
+            tombstone_mode: Values::resolve(load, TombstoneMode::IDS),
+            weather_frequency: Values::resolve(load, WeatherFrequency::IDS),
+            generic_difficulty: Values::resolve(load, GenericDifficulty::IDS),
+            random_spawner_amount: Values::resolve(load, RandomSpawnerAmount::IDS),
+            aggro_pool_amount: Values::resolve(load, AggroPoolAmount::IDS),
+            taming_startle_repercussion: Values::resolve(load, TamingStartleRepercussion::IDS),
+            curse_modifier: Values::resolve(load, CurseModifier::IDS),
+        }
     }
 }
 
 /// How a field is stored.
 trait Value: Sized {
     const SIZE: usize;
-    fn decode(bytes: &[u8]) -> Self;
-    fn encode(&self, out: &mut [u8]);
+    fn decode(bytes: &[u8], enums: &Enums) -> Self;
+    /// Writes the value; `false` when the build has no value for it.
+    fn encode(&self, out: &mut [u8], enums: &Enums) -> bool;
     /// The value, when it is a factor.
     fn factor(&self) -> Option<f32> {
         None
@@ -207,14 +257,15 @@ trait Value: Sized {
 
 impl Value for f32 {
     const SIZE: usize = 4;
-    fn decode(bytes: &[u8]) -> Self {
+    fn decode(bytes: &[u8], _: &Enums) -> Self {
         bytes
             .try_into()
             .map(Self::from_le_bytes)
             .unwrap_or_default()
     }
-    fn encode(&self, out: &mut [u8]) {
+    fn encode(&self, out: &mut [u8], _: &Enums) -> bool {
         out.copy_from_slice(&self.to_le_bytes());
+        true
     }
     fn factor(&self) -> Option<f32> {
         Some(*self)
@@ -223,58 +274,38 @@ impl Value for f32 {
 
 impl Value for bool {
     const SIZE: usize = 1;
-    fn decode(bytes: &[u8]) -> Self {
+    fn decode(bytes: &[u8], _: &Enums) -> Self {
         bytes.first().is_some_and(|&b| b != 0)
     }
-    fn encode(&self, out: &mut [u8]) {
+    fn encode(&self, out: &mut [u8], _: &Enums) -> bool {
         out[0] = u8::from(*self);
+        true
     }
 }
 
 impl Value for u8 {
     const SIZE: usize = 1;
-    fn decode(bytes: &[u8]) -> Self {
+    fn decode(bytes: &[u8], _: &Enums) -> Self {
         bytes.first().copied().unwrap_or_default()
     }
-    fn encode(&self, out: &mut [u8]) {
+    fn encode(&self, out: &mut [u8], _: &Enums) -> bool {
         out[0] = *self;
+        true
     }
 }
 
 impl Value for Duration {
     const SIZE: usize = 8;
-    fn decode(bytes: &[u8]) -> Self {
+    fn decode(bytes: &[u8], _: &Enums) -> Self {
         let ns = bytes.try_into().map(i64::from_le_bytes).unwrap_or_default();
         Self::from_nanos(u64::try_from(ns).unwrap_or(0))
     }
-    fn encode(&self, out: &mut [u8]) {
+    fn encode(&self, out: &mut [u8], _: &Enums) -> bool {
         let ns = i64::try_from(self.as_nanos()).unwrap_or(i64::MAX);
         out.copy_from_slice(&ns.to_le_bytes());
+        true
     }
 }
-
-macro_rules! enum_value {
-    ($($name:ident),*) => {$(
-        impl Value for $name {
-            const SIZE: usize = 1;
-            fn decode(bytes: &[u8]) -> Self {
-                Self::from_value(bytes.first().copied().unwrap_or_default())
-            }
-            fn encode(&self, out: &mut [u8]) {
-                out[0] = self.value();
-            }
-        }
-    )*};
-}
-
-enum_value!(
-    TombstoneMode,
-    WeatherFrequency,
-    Difficulty,
-    Amount,
-    StartleRepercussion,
-    CurseModifier
-);
 
 macro_rules! settings {
     ($($(#[$doc:meta])* $field:ident: $ty:ty = $id:path,)*) => {
@@ -309,16 +340,22 @@ macro_rules! settings {
                 })
             }
 
-            fn decode(&self, bytes: &[u8]) -> Settings {
+            fn decode(&self, bytes: &[u8], enums: &Enums) -> Settings {
                 Settings {
-                    $($field: <$ty as Value>::decode(&bytes[self.$field..self.$field + <$ty as Value>::SIZE]),)*
+                    $($field: <$ty as Value>::decode(&bytes[self.$field..self.$field + <$ty as Value>::SIZE], enums),)*
                 }
             }
 
-            fn encode(&self, settings: &Settings, bytes: &mut [u8]) {
-                $(settings.$field.encode(&mut bytes[self.$field..self.$field + <$ty as Value>::SIZE]);)*
+            /// Writes `settings` into `bytes`; `false` when a field holds a
+            /// variant the build has no value for.
+            fn encode(&self, settings: &Settings, bytes: &mut [u8], enums: &Enums) -> bool {
+                true $(&& settings.$field.encode(&mut bytes[self.$field..self.$field + <$ty as Value>::SIZE], enums))*
             }
         }
+
+        /// Each field's name with the id of the game's field it is.
+        #[cfg(test)]
+        const FIELD_IDS: &[(&str, &str)] = &[$((stringify!($field), $id)),*];
 
         impl Settings {
             fn factors(&self) -> impl Iterator<Item = f32> {
@@ -330,79 +367,79 @@ macro_rules! settings {
 
 settings! {
     /// The characters' health.
-    player_health: f32 = ids::GAME_SETTINGS_PLAYER_HEALTH_FACTOR,
+    player_health_factor: f32 = ids::GAME_SETTINGS_PLAYER_HEALTH_FACTOR,
     /// The characters' mana.
-    player_mana: f32 = ids::GAME_SETTINGS_PLAYER_MANA_FACTOR,
+    player_mana_factor: f32 = ids::GAME_SETTINGS_PLAYER_MANA_FACTOR,
     /// The characters' stamina.
-    player_stamina: f32 = ids::GAME_SETTINGS_PLAYER_STAMINA_FACTOR,
+    player_stamina_factor: f32 = ids::GAME_SETTINGS_PLAYER_STAMINA_FACTOR,
     /// The characters' body heat.
-    player_body_heat: f32 = ids::GAME_SETTINGS_PLAYER_BODY_HEAT_FACTOR,
+    player_body_heat_factor: f32 = ids::GAME_SETTINGS_PLAYER_BODY_HEAT_FACTOR,
     /// How long characters hold their breath.
-    player_diving_time: f32 = ids::GAME_SETTINGS_PLAYER_DIVING_TIME_FACTOR,
+    player_diving_time_factor: f32 = ids::GAME_SETTINGS_PLAYER_DIVING_TIME_FACTOR,
     /// Whether items wear out.
-    durability: bool = ids::GAME_SETTINGS_ENABLE_DURABILITY,
+    enable_durability: bool = ids::GAME_SETTINGS_ENABLE_DURABILITY,
     /// Whether hunger turns into starving.
-    starving: bool = ids::GAME_SETTINGS_ENABLE_STARVING_DEBUFF,
+    enable_starving_debuff: bool = ids::GAME_SETTINGS_ENABLE_STARVING_DEBUFF,
     /// How long food buffs last.
-    food_buff_duration: f32 = ids::GAME_SETTINGS_FOOD_BUFF_DURATION_FACTOR,
+    food_buff_duration_factor: f32 = ids::GAME_SETTINGS_FOOD_BUFF_DURATION_FACTOR,
     /// How long a character goes hungry before starving, in game time.
-    hunger_to_starving: Duration = ids::GAME_SETTINGS_FROM_HUNGER_TO_STARVING,
+    from_hunger_to_starving: Duration = ids::GAME_SETTINGS_FROM_HUNGER_TO_STARVING,
     /// How long characters last in the shroud.
-    shroud_time: f32 = ids::GAME_SETTINGS_SHROUD_TIME_FACTOR,
+    shroud_time_factor: f32 = ids::GAME_SETTINGS_SHROUD_TIME_FACTOR,
     /// What a dead character leaves behind.
-    tombstone: TombstoneMode = ids::GAME_SETTINGS_TOMBSTONE_MODE,
+    tombstone_mode: TombstoneMode = ids::GAME_SETTINGS_TOMBSTONE_MODE,
     /// Whether gliders meet turbulence.
-    glider_turbulence: bool = ids::GAME_SETTINGS_ENABLE_GLIDER_TURBULENCES,
+    enable_glider_turbulences: bool = ids::GAME_SETTINGS_ENABLE_GLIDER_TURBULENCES,
     /// How often rain and storms come.
-    weather: WeatherFrequency = ids::GAME_SETTINGS_WEATHER_FREQUENCY,
+    weather_frequency: WeatherFrequency = ids::GAME_SETTINGS_WEATHER_FREQUENCY,
     /// How hard fishing is.
-    fishing: Difficulty = ids::GAME_SETTINGS_FISHING_DIFFICULTY,
+    fishing_difficulty: GenericDifficulty = ids::GAME_SETTINGS_FISHING_DIFFICULTY,
     /// Damage to terrain and resources when mining.
-    mining_damage: f32 = ids::GAME_SETTINGS_MINING_DAMAGE_FACTOR,
+    mining_damage_factor: f32 = ids::GAME_SETTINGS_MINING_DAMAGE_FACTOR,
     /// How fast plants grow.
-    plant_growth: f32 = ids::GAME_SETTINGS_PLANT_GROWTH_SPEED_FACTOR,
+    plant_growth_speed_factor: f32 = ids::GAME_SETTINGS_PLANT_GROWTH_SPEED_FACTOR,
     /// How many resources a drop stacks.
-    resource_drops: f32 = ids::GAME_SETTINGS_RESOURCE_DROP_STACK_AMOUNT_FACTOR,
+    resource_drop_stack_amount_factor: f32 = ids::GAME_SETTINGS_RESOURCE_DROP_STACK_AMOUNT_FACTOR,
     /// How fast workshops produce.
-    factory_speed: f32 = ids::GAME_SETTINGS_FACTORY_PRODUCTION_SPEED_FACTOR,
+    factory_production_speed_factor: f32 = ids::GAME_SETTINGS_FACTORY_PRODUCTION_SPEED_FACTOR,
     /// What recycling a perk upgrade returns.
-    perk_recycling: f32 = ids::GAME_SETTINGS_PERK_UPGRADE_RECYCLING_FACTOR,
+    perk_upgrade_recycling_factor: f32 = ids::GAME_SETTINGS_PERK_UPGRADE_RECYCLING_FACTOR,
     /// What perks cost.
-    perk_cost: f32 = ids::GAME_SETTINGS_PERK_COST_FACTOR,
+    perk_cost_factor: f32 = ids::GAME_SETTINGS_PERK_COST_FACTOR,
     /// Experience from combat.
-    experience_combat: f32 = ids::GAME_SETTINGS_EXPERIENCE_COMBAT_FACTOR,
+    experience_combat_factor: f32 = ids::GAME_SETTINGS_EXPERIENCE_COMBAT_FACTOR,
     /// Experience from mining.
-    experience_mining: f32 = ids::GAME_SETTINGS_EXPERIENCE_MINING_FACTOR,
+    experience_mining_factor: f32 = ids::GAME_SETTINGS_EXPERIENCE_MINING_FACTOR,
     /// Experience from exploration and quests.
-    experience_exploration: f32 = ids::GAME_SETTINGS_EXPERIENCE_EXPLORATION_QUESTS_FACTOR,
+    experience_exploration_quests_factor: f32 = ids::GAME_SETTINGS_EXPERIENCE_EXPLORATION_QUESTS_FACTOR,
     /// How many enemies random spawners bring.
-    random_spawns: Amount = ids::GAME_SETTINGS_RANDOM_SPAWNER_AMOUNT,
+    random_spawner_amount: RandomSpawnerAmount = ids::GAME_SETTINGS_RANDOM_SPAWNER_AMOUNT,
     /// How many enemies attack at once.
-    aggro_pool: Amount = ids::GAME_SETTINGS_AGGRO_POOL_AMOUNT,
+    aggro_pool_amount: AggroPoolAmount = ids::GAME_SETTINGS_AGGRO_POOL_AMOUNT,
     /// The enemies' damage, for enemies spawned after a change.
-    enemy_damage: f32 = ids::GAME_SETTINGS_ENEMY_DAMAGE_FACTOR,
+    enemy_damage_factor: f32 = ids::GAME_SETTINGS_ENEMY_DAMAGE_FACTOR,
     /// The enemies' health, for enemies spawned after a change.
-    enemy_health: f32 = ids::GAME_SETTINGS_ENEMY_HEALTH_FACTOR,
+    enemy_health_factor: f32 = ids::GAME_SETTINGS_ENEMY_HEALTH_FACTOR,
     /// The enemies' stamina, for enemies spawned after a change.
-    enemy_stamina: f32 = ids::GAME_SETTINGS_ENEMY_STAMINA_FACTOR,
+    enemy_stamina_factor: f32 = ids::GAME_SETTINGS_ENEMY_STAMINA_FACTOR,
     /// How far enemies notice characters.
-    enemy_perception: f32 = ids::GAME_SETTINGS_ENEMY_PERCEPTION_RANGE_FACTOR,
+    enemy_perception_range_factor: f32 = ids::GAME_SETTINGS_ENEMY_PERCEPTION_RANGE_FACTOR,
     /// The bosses' damage.
-    boss_damage: f32 = ids::GAME_SETTINGS_BOSS_DAMAGE_FACTOR,
+    boss_damage_factor: f32 = ids::GAME_SETTINGS_BOSS_DAMAGE_FACTOR,
     /// The bosses' health.
-    boss_health: f32 = ids::GAME_SETTINGS_BOSS_HEALTH_FACTOR,
+    boss_health_factor: f32 = ids::GAME_SETTINGS_BOSS_HEALTH_FACTOR,
     /// The threat bonus.
     threat_bonus: f32 = ids::GAME_SETTINGS_THREAT_BONUS,
     /// Whether enemies leave characters alone until attacked.
-    pacify_enemies: bool = ids::GAME_SETTINGS_PACIFY_ALL_ENEMIES,
+    pacify_all_enemies: bool = ids::GAME_SETTINGS_PACIFY_ALL_ENEMIES,
     /// What startling a tamed animal costs.
-    startle: StartleRepercussion = ids::GAME_SETTINGS_TAMING_STARTLE_REPERCUSSION,
+    taming_startle_repercussion: TamingStartleRepercussion = ids::GAME_SETTINGS_TAMING_STARTLE_REPERCUSSION,
     /// How long the day lasts in real time; the clock keeps its hour.
-    day_length: Duration = ids::GAME_SETTINGS_DAY_TIME_DURATION,
+    day_time_duration: Duration = ids::GAME_SETTINGS_DAY_TIME_DURATION,
     /// How long the night lasts in real time.
-    night_length: Duration = ids::GAME_SETTINGS_NIGHT_TIME_DURATION,
+    night_time_duration: Duration = ids::GAME_SETTINGS_NIGHT_TIME_DURATION,
     /// How hard the shroud's curse hits.
-    curse: CurseModifier = ids::GAME_SETTINGS_CURSE_MODIFIER,
+    curse_modifier: CurseModifier = ids::GAME_SETTINGS_CURSE_MODIFIER,
     /// The Flame level from which the shroud lifts where it is cleared.
     flame_level_fog_removal: u8 = ids::GAME_SETTINGS_FLAME_LEVEL_FOG_REMOVAL,
 }
@@ -412,8 +449,8 @@ impl Settings {
     /// negative, day and night lengths above zero.
     fn valid(&self) -> bool {
         self.factors().all(|f| f.is_finite() && f >= 0.0)
-            && !self.day_length.is_zero()
-            && !self.night_length.is_zero()
+            && !self.day_time_duration.is_zero()
+            && !self.night_time_duration.is_zero()
     }
 }
 
@@ -426,6 +463,7 @@ impl Settings {
 pub struct GameSettings {
     host: Host,
     offsets: Offsets,
+    enums: Enums,
     size: usize,
 }
 
@@ -437,18 +475,18 @@ impl GameSettings {
     ///
     /// ```
     /// fn durability(settings: &enshwick::game_settings::GameSettings) -> Option<bool> {
-    ///     settings.read().map(|(now, _preset)| now.durability)
+    ///     settings.read().map(|(now, _preset)| now.enable_durability)
     /// }
     /// ```
     #[must_use]
-    pub fn read(&self) -> Option<(Settings, Preset)> {
+    pub fn read(&self) -> Option<(Settings, GameSettingsPreset)> {
         let (bytes, preset) = self.raw().ok()?;
-        Some((self.offsets.decode(&bytes), preset))
+        Some((self.offsets.decode(&bytes, &self.enums), preset))
     }
 
     /// Lets `change` edit the settings in force and applies them as the
     /// game's admin command does: systems see them from the next step and
-    /// every client gets them; the preset becomes [`Preset::Custom`].
+    /// every client gets them; the preset becomes [`GameSettingsPreset::Custom`].
     /// Returns the settings now in force.
     ///
     /// # Errors
@@ -489,7 +527,7 @@ impl GameSettings {
     ///     let keep = Action::new("no-tombstone", "Keep everything on death, in this world").admins();
     ///     actions.add(keep, move |_request| {
     ///         use enshwick::game_settings::TombstoneMode;
-    ///         match settings.keep(|s| s.tombstone = TombstoneMode::NoTombstone) {
+    ///         match settings.keep(|s| s.tombstone_mode = TombstoneMode::NoTombstone) {
     ///             Ok(_) => Outcome::done("Kept for this world"),
     ///             Err(why) => Outcome::refused(format!("Unchanged: {why}")),
     ///         }
@@ -539,16 +577,15 @@ impl GameSettings {
         change: impl FnOnce(&mut Settings),
     ) -> Result<(Vec<u8>, Settings), WorldError> {
         let (mut bytes, _preset) = self.raw()?;
-        let mut settings = self.offsets.decode(&bytes);
+        let mut settings = self.offsets.decode(&bytes, &self.enums);
         change(&mut settings);
-        if !settings.valid() {
+        if !settings.valid() || !self.offsets.encode(&settings, &mut bytes, &self.enums) {
             return Err(WorldError::Refused);
         }
-        self.offsets.encode(&settings, &mut bytes);
         Ok((bytes, settings))
     }
 
-    fn raw(&self) -> Result<(Vec<u8>, Preset), WorldError> {
+    fn raw(&self) -> Result<(Vec<u8>, GameSettingsPreset), WorldError> {
         let mut bytes = vec![0u8; self.size];
         let size = u32::try_from(self.size).map_err(|_| WorldError::Missing)?;
         let mut preset = 0u32;
@@ -559,10 +596,13 @@ impl GameSettings {
             &raw mut preset,
         );
         WorldError::from_status(status)?;
-        Ok((
-            bytes,
-            Preset::from_value(u8::try_from(preset).unwrap_or(u8::MAX)),
-        ))
+        let preset = u8::try_from(preset).map_or(GameSettingsPreset::Other(u8::MAX), |raw| {
+            self.enums
+                .preset
+                .variant(u64::from(raw))
+                .unwrap_or(GameSettingsPreset::Other(raw))
+        });
+        Ok((bytes, preset))
     }
 }
 
@@ -583,6 +623,7 @@ impl Load<'_> {
         Ok(GameSettings {
             host,
             offsets: Offsets::resolve(self, size)?,
+            enums: Enums::resolve(self),
             size,
         })
     }
@@ -593,18 +634,54 @@ mod tests {
     use super::*;
 
     #[test]
-    fn enums_keep_values_they_do_not_name() {
-        assert_eq!(WeatherFrequency::from_value(3), WeatherFrequency::Often);
-        assert_eq!(WeatherFrequency::from_value(9), WeatherFrequency::Other(9));
-        assert_eq!(WeatherFrequency::Other(9).value(), 9);
-        assert_eq!(Amount::Automatic.value(), 4);
+    fn every_field_and_variant_takes_the_game_s_name() {
+        for (field, id) in FIELD_IDS {
+            assert_eq!(Some(*field), id.strip_prefix("game_settings."), "{id}");
+        }
+        crate::engine_enum::assert_named_after_engine(&GameSettingsPreset::IDS);
+        crate::engine_enum::assert_named_after_engine(&TombstoneMode::IDS);
+        crate::engine_enum::assert_named_after_engine(&WeatherFrequency::IDS);
+        crate::engine_enum::assert_named_after_engine(&GenericDifficulty::IDS);
+        crate::engine_enum::assert_named_after_engine(&RandomSpawnerAmount::IDS);
+        crate::engine_enum::assert_named_after_engine(&AggroPoolAmount::IDS);
+        crate::engine_enum::assert_named_after_engine(&TamingStartleRepercussion::IDS);
+        crate::engine_enum::assert_named_after_engine(&CurseModifier::IDS);
+    }
+
+    #[test]
+    fn enums_read_the_game_s_values_and_keep_those_they_do_not_name() {
+        let mut enums = Enums::none();
+        enums.weather_frequency = Values::new([
+            (WeatherFrequency::Disabled, Some(7)),
+            (WeatherFrequency::Rare, Some(8)),
+            (WeatherFrequency::Normal, None),
+            (WeatherFrequency::Often, Some(5)),
+        ]);
+        assert_eq!(
+            WeatherFrequency::decode(&[5], &enums),
+            WeatherFrequency::Often
+        );
+        assert_eq!(
+            WeatherFrequency::decode(&[9], &enums),
+            WeatherFrequency::Other(9)
+        );
+        let mut out = [0u8];
+        assert!(WeatherFrequency::Disabled.encode(&mut out, &enums));
+        assert_eq!(out, [7]);
+        assert!(WeatherFrequency::Other(9).encode(&mut out, &enums));
+        assert_eq!(out, [9]);
+        assert!(
+            !WeatherFrequency::Normal.encode(&mut out, &enums),
+            "a variant the build has no value for"
+        );
     }
 
     #[test]
     fn durations_round_trip_through_nanoseconds() {
         let mut bytes = [0u8; 8];
-        Duration::from_mins(30).encode(&mut bytes);
+        let enums = Enums::none();
+        assert!(Duration::from_mins(30).encode(&mut bytes, &enums));
         assert_eq!(i64::from_le_bytes(bytes), 1_800_000_000_000);
-        assert_eq!(Duration::decode(&bytes), Duration::from_mins(30));
+        assert_eq!(Duration::decode(&bytes, &enums), Duration::from_mins(30));
     }
 }
