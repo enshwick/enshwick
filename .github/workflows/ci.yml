@@ -21,3 +21,5 @@ jobs:
     uses: enshwick/.github/.github/workflows/rust-ci.yml@main # zizmor: ignore[unpinned-uses]
     permissions:
       contents: read
+    with:
+      semver: enshwick
