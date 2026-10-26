@@ -43,9 +43,22 @@ static FRAME: OnceLock<Option<FrameSlot>> = OnceLock::new();
 static STARTED: AtomicBool = AtomicBool::new(false);
 
 /// Writes the player's report once the loader knows it cannot serve the game.
-fn no_game() -> Option<game::Game> {
-    crate::report::write(None);
+fn no_game(mods_dir: &std::path::Path, stub: u32) -> Option<game::Game> {
+    if let Some(game_dir) = mods_dir.parent() {
+        crate::report::write(game_dir, stub, None);
+    }
     None
+}
+
+/// Stops the game when a mod that holds a world is not running.
+fn enforce_holds(loader: &Loader) {
+    let running: Vec<&str> = loader
+        .mods
+        .iter()
+        .filter(|m| !m.off.load(Ordering::Acquire))
+        .map(|m| m.id.as_str())
+        .collect();
+    crate::holds::enforce(&loader.data_dir, &running, false);
 }
 
 /// Runs once, on the stub's thread.
@@ -91,7 +104,7 @@ pub(crate) fn start(
         return;
     };
     let data_dir = mods_dir.with_file_name("mod-data");
-    let Some(game) = game(&data_dir).or_else(no_game) else {
+    let Some(game) = game(&data_dir).or_else(|| no_game(&mods_dir, stub_abi)) else {
         return;
     };
     let (libraries, candidates) = libraries(&mods_dir);
@@ -114,6 +127,7 @@ pub(crate) fn start(
         configs_dir: mods_dir.with_file_name("mod-configs"),
         data_dir,
         mods_dir,
+        stub: stub_abi,
         mods: records(&libraries, &candidates, &plan),
         chains: Mutex::new(Chains::default()),
         mids: Mutex::default(),
@@ -154,13 +168,7 @@ pub(crate) fn start(
     arm(loader, frame);
     release_server(release, began);
     crate::ui::armed(loader);
-    let running: Vec<&str> = loader
-        .mods
-        .iter()
-        .filter(|m| !m.off.load(Ordering::Acquire))
-        .map(|m| m.id.as_str())
-        .collect();
-    crate::holds::enforce(&loader.data_dir, &running, false);
+    enforce_holds(loader);
     ready(loader, &order);
     watch_copies(loader, &order);
     write_lock(loader, lock_files);

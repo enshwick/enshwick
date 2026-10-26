@@ -1,8 +1,4 @@
-//! `logs/enshwick/report.md`: what a player attaches to an issue, in one
-//! file. It holds the loader and game versions, the system it runs on, the
-//! status summary with the last session's crash, the files of `mods/`, and
-//! the latest warnings and errors. The loader writes it once its log opens, again when it
-//! cannot serve the game, and with every status summary after.
+//! `logs/enshwick/report.md`, the one file a player attaches to an issue.
 
 use std::fmt::Write as _;
 use std::path::Path;
@@ -11,6 +7,9 @@ use std::path::Path;
 pub(crate) const FILE: &str = "report.md";
 /// The latest warning and error lines the report keeps.
 pub(crate) const WARNINGS: usize = 200;
+/// How long a report waits for the log to take the lines before it.
+#[cfg(windows)]
+const SETTLE: std::time::Duration = std::time::Duration::from_millis(500);
 
 /// What the report says.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -37,9 +36,8 @@ pub(crate) struct Report {
 }
 
 impl Report {
-    /// The report as Markdown, with `home`, the user's profile folder, as
-    /// `%USERPROFILE%` wherever it shows.
-    pub(crate) fn render(&self, home: Option<&str>) -> String {
+    /// The report as Markdown.
+    pub(crate) fn render(&self) -> String {
         let mut out = String::with_capacity(4096);
         let _w = writeln!(out, "# Enshwick report\n");
         let _w = writeln!(
@@ -80,11 +78,69 @@ impl Report {
         } else {
             fenced(&mut out, &self.warnings.join("\n"));
         }
-        match home.filter(|home| !home.is_empty()) {
-            Some(home) => out.replace(home, "%USERPROFILE%"),
-            None => out,
-        }
+        out
     }
+}
+
+/// `text` with the game's folder as `<game>`, the user's profile folder
+/// `home` as `%USERPROFILE%`, and the user name of a Linux home folder, as
+/// Wine shows it, as `<user>`; paths match in any ASCII case and with either
+/// slash.
+pub(crate) fn redact(text: &str, game_dir: &str, home: Option<&str>) -> String {
+    let mut text = replace_path(text, game_dir, "<game>");
+    if let Some(home) = home {
+        text = replace_path(&text, home, "%USERPROFILE%");
+    }
+    linux_users(&text)
+}
+
+/// `text` with every occurrence of `path`, compared folded, as `with`.
+fn replace_path(text: &str, path: &str, with: &str) -> String {
+    let needle = fold_text(path.trim_end_matches(['/', '\\']));
+    if needle.is_empty() {
+        return text.to_owned();
+    }
+    let haystack = fold_text(text);
+    let mut out = String::with_capacity(text.len());
+    let mut at = 0;
+    while let Some(found) = haystack[at..].find(&needle) {
+        let start = at + found;
+        out.push_str(&text[at..start]);
+        out.push_str(with);
+        at = start + needle.len();
+    }
+    out.push_str(&text[at..]);
+    out
+}
+
+/// `text` folded for comparing paths: ASCII lower case and `/` as `\\`, its
+/// other characters kept, so its byte offsets are `text`'s.
+fn fold_text(text: &str) -> String {
+    text.chars()
+        .map(|c| match c {
+            '/' => '\\',
+            c => c.to_ascii_lowercase(),
+        })
+        .collect()
+}
+
+/// `text` with the name after each `home` folder of a Linux path, as
+/// `/home/ann` or Wine's `Z:\home\ann`, as `<user>`.
+fn linux_users(text: &str) -> String {
+    let folded = fold_text(text);
+    let mut out = String::with_capacity(text.len());
+    let mut at = 0;
+    while let Some(found) = folded[at..].find("\\home\\") {
+        let name = at + found + "\\home\\".len();
+        let end = folded[name..]
+            .find(|c: char| c == '\\' || c.is_whitespace() || c == '`')
+            .map_or(text.len(), |len| name + len);
+        out.push_str(&text[at..name]);
+        out.push_str("<user>");
+        at = end;
+    }
+    out.push_str(&text[at..]);
+    out
 }
 
 /// `text` as a fenced block that no line of it can close.
@@ -98,39 +154,20 @@ fn fenced(out: &mut String, text: &str) {
     let _w = writeln!(out, "{fence}text\n{}\n{fence}", text.trim_end());
 }
 
-/// What the report says of the process, known from the loader's start.
+/// Writes the report for the game in `game_dir`, started by a stub of
+/// contract `stub`, with `status` once the loader serves the game. It first
+/// waits a moment for the log to take the lines before it. Not on a game
+/// thread.
 #[cfg(windows)]
-#[derive(Debug)]
-struct Facts {
-    game_dir: std::path::PathBuf,
-    stub: u32,
-}
-
-#[cfg(windows)]
-static FACTS: std::sync::OnceLock<Facts> = std::sync::OnceLock::new();
-
-/// Keeps what the report says of the process; the first call wins.
-#[cfg(windows)]
-pub(crate) fn begin(game_dir: &Path, stub: u32) {
-    let _first = FACTS.set(Facts {
-        game_dir: game_dir.to_path_buf(),
-        stub,
-    });
-}
-
-/// Writes the report, with `status` once the loader serves the game.
-#[cfg(windows)]
-pub(crate) fn write(status: Option<String>) {
-    let Some(facts) = FACTS.get() else {
-        return;
-    };
-    let mods_dir = facts.game_dir.join("mods");
+pub(crate) fn write(game_dir: &Path, stub: u32, status: Option<String>) {
+    let _settled = crate::log::settle(SETTLE);
+    let mods_dir = game_dir.join("mods");
     let mut files = files_in(&mods_dir, "mods/");
     files.extend(files_in(&mods_dir.join("chain"), "mods/chain/"));
     let report = Report {
         at: crate::diag::clock(crate::diag::now()),
         version: env!("CARGO_PKG_VERSION").to_owned(),
-        stub: facts.stub,
+        stub,
         system: system(),
         overrides: std::env::var("WINEDLLOVERRIDES").ok(),
         cpus: std::thread::available_parallelism().map_or(0, std::num::NonZero::get),
@@ -139,12 +176,16 @@ pub(crate) fn write(status: Option<String>) {
         warnings: crate::log::recent(None, enshwick::abi::Level::WARN, WARNINGS),
     };
     let home = std::env::var("USERPROFILE").ok();
-    let path = facts
-        .game_dir
-        .join("logs")
-        .join(crate::settings::LOADER_ID)
-        .join(FILE);
-    if let Err(e) = std::fs::write(&path, report.render(home.as_deref())) {
+    let text = redact(
+        &report.render(),
+        &game_dir.to_string_lossy(),
+        home.as_deref(),
+    );
+    let dir = game_dir.join("logs").join(crate::settings::LOADER_ID);
+    let fresh = dir.join(format!("{FILE}.tmp"));
+    let written =
+        std::fs::write(&fresh, text).and_then(|()| std::fs::rename(&fresh, dir.join(FILE)));
+    if let Err(e) = written {
         crate::log!(WARN, "{FILE} not written: {e}");
     }
 }
@@ -154,9 +195,8 @@ pub(crate) fn write(status: Option<String>) {
 fn system() -> String {
     use windows_sys::Win32::System::LibraryLoader::{GetModuleHandleW, GetProcAddress};
     type WineVersion = unsafe extern "C" fn() -> *const core::ffi::c_char;
-    let ntdll: Vec<u16> = "ntdll.dll".encode_utf16().chain([0]).collect();
     // SAFETY: a NUL-terminated name; ntdll is loaded in every process.
-    let module = unsafe { GetModuleHandleW(ntdll.as_ptr()) };
+    let module = unsafe { GetModuleHandleW(windows_sys::core::w!("ntdll.dll")) };
     if module.is_null() {
         return "Windows".to_owned();
     }
@@ -165,10 +205,13 @@ fn system() -> String {
     else {
         return "Windows".to_owned();
     };
-    // SAFETY: Wine's ntdll exports `wine_get_version` as a C function that
-    // takes nothing and returns a static NUL-terminated string.
-    let version: WineVersion = unsafe { core::mem::transmute(found) };
-    // SAFETY: as above, called on any thread.
+    // SAFETY: Wine's ntdll (dlls/ntdll) defines it as
+    // `const char * CDECL wine_get_version(void)`; CDECL is the C calling
+    // convention on x64, which `WineVersion` names.
+    let version =
+        unsafe { core::mem::transmute::<unsafe extern "system" fn() -> isize, WineVersion>(found) };
+    // SAFETY: the function takes no arguments, touches no thread state and
+    // only returns the address of a static string, on any thread.
     let text = unsafe { version() };
     if text.is_null() {
         return "Wine".to_owned();
@@ -180,7 +223,7 @@ fn system() -> String {
 
 /// The DLLs directly in `dir`, by name with their sizes, prefixed with
 /// `prefix`, sorted.
-pub(crate) fn files_in(dir: &Path, prefix: &str) -> Vec<(String, u64)> {
+fn files_in(dir: &Path, prefix: &str) -> Vec<(String, u64)> {
     let Ok(entries) = std::fs::read_dir(dir) else {
         return Vec::new();
     };
@@ -222,7 +265,7 @@ mod tests {
 
     #[test]
     fn the_report_holds_environment_status_files_and_warnings() {
-        let text = report().render(None);
+        let text = report().render();
         assert!(text.starts_with("# Enshwick report\n"));
         assert!(text.contains("- Enshwick 1.0.0-alpha.2, stub contract 2\n"));
         assert!(text.contains("- Wine 9.0 (Proton), 8 logical processors\n"));
@@ -233,10 +276,39 @@ mod tests {
     }
 
     #[test]
-    fn the_report_names_the_profile_folder_without_the_user_name() {
-        let text = report().render(Some(r"C:\Users\ann"));
-        assert!(!text.contains("ann"), "{text}");
-        assert!(text.contains(r"%USERPROFILE%\game\mods/x.dll"));
+    fn paths_show_the_game_folder_and_the_profile_without_the_user_name() {
+        let text = "D:\\Games\\Enshrouded\\mods/x.dll; d:/games/enshrouded/logs; \
+                    c:\\users\\ann\\AppData; C:/Users/Ann/x";
+        let shown = redact(text, "D:\\Games\\Enshrouded", Some("C:\\Users\\ann"));
+        assert_eq!(
+            shown,
+            "<game>\\mods/x.dll; <game>/logs; %USERPROFILE%\\AppData; %USERPROFILE%/x"
+        );
+    }
+
+    #[test]
+    fn a_linux_home_under_wine_shows_without_the_user_name() {
+        let text = "Z:\\home\\ann\\.local\\share\\Steam and /home/ann/x and `/home/bob`";
+        assert_eq!(
+            redact(text, "C:\\nowhere", None),
+            "Z:\\home\\<user>\\.local\\share\\Steam and /home/<user>/x and `/home/<user>`"
+        );
+    }
+
+    #[test]
+    fn the_files_are_the_dlls_of_a_folder_by_name() {
+        let dir = std::env::temp_dir().join(format!("enshwick-report-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("sub.dll")).unwrap();
+        for (file, size) in [("b.DLL", 3), ("a.dll", 1), ("notes.txt", 2)] {
+            std::fs::write(dir.join(file), vec![0u8; size]).unwrap();
+        }
+        let files = files_in(&dir, "mods/");
+        let _removed = std::fs::remove_dir_all(&dir);
+        assert_eq!(
+            files,
+            [("mods/a.dll".to_owned(), 1), ("mods/b.DLL".to_owned(), 3)]
+        );
+        assert!(files_in(&dir.join("gone"), "mods/").is_empty());
     }
 
     #[test]
@@ -247,7 +319,7 @@ mod tests {
             warnings: Vec::new(),
             ..report()
         }
-        .render(None);
+        .render();
         assert!(text.contains("The loader does not serve this game"));
         assert!(text.contains("No DLL in mods/."));
         assert!(text.contains("## Warnings and errors\n\nNone."));

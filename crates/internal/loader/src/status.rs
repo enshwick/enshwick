@@ -193,7 +193,7 @@ fn write(loader: &Loader) {
     if let Err(e) = std::fs::write(&path, &text) {
         crate::log!(WARN, "status summary not written: {e}");
     }
-    crate::report::write(Some(text));
+    crate::report::write(game_dir, loader.stub, Some(text));
 }
 
 /// Starts the writer on a thread of its own.

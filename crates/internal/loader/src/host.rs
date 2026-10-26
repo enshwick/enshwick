@@ -149,6 +149,8 @@ pub(crate) struct Loader {
     pub(crate) reflection: Reflection<'static>,
     /// The `mods` folder.
     pub(crate) mods_dir: PathBuf,
+    /// The contract of the stub that started the loader; 0 in a dry run.
+    pub(crate) stub: u32,
     /// The `mod-configs` folder.
     pub(crate) configs_dir: PathBuf,
     /// The `mod-data` folder.

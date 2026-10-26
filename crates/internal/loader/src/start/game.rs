@@ -110,7 +110,6 @@ pub(super) fn begin(stub_abi: u32, missing_forwards: u32) -> Option<PathBuf> {
             "stub contract {stub_abi}, the loader speaks {STUB_ABI}"
         );
     }
-    crate::report::begin(&game_dir, stub_abi);
     if missing_forwards == u32::MAX {
         crate::log!(WARN, "the system powrprof.dll could not be loaded");
     } else if missing_forwards > 0 {
@@ -119,7 +118,7 @@ pub(super) fn begin(stub_abi: u32, missing_forwards: u32) -> Option<PathBuf> {
             "{missing_forwards} powrprof.dll exports are missing on this system"
         );
     }
-    crate::report::write(None);
+    crate::report::write(&game_dir, stub_abi, None);
     Some(mods_dir)
 }
 

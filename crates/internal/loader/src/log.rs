@@ -14,7 +14,7 @@ use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{SyncSender, TrySendError, sync_channel};
 use std::sync::{Mutex, OnceLock, PoisonError};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use arc_swap::ArcSwapOption;
 use enshwick::abi::Level;
@@ -25,6 +25,8 @@ use crate::settings::{LOADER_ID, Settings};
 const QUEUE: usize = 4096;
 /// The latest lines kept in memory.
 const RECENT: usize = 1024;
+/// How often [`settle`] looks at the writer.
+const SETTLE_POLL: Duration = Duration::from_millis(2);
 /// The most bytes kept of one earlier run's file: its last ones.
 const KEPT_BYTES: u64 = 8 << 20;
 /// Earlier runs kept beside the current one.
@@ -36,6 +38,10 @@ type Line = (Level, String, String);
 static LINES: OnceLock<SyncSender<Line>> = OnceLock::new();
 /// Lines the full channel could not take since the writer last said so.
 static DROPPED: AtomicU64 = AtomicU64::new(0);
+/// Lines sent to the writer, and lines it has kept among the latest, for
+/// [`settle`].
+static SENT: AtomicU64 = AtomicU64::new(0);
+static TAKEN: AtomicU64 = AtomicU64::new(0);
 /// The latest [`RECENT`] lines, oldest first.
 static RECENT_LINES: Mutex<VecDeque<Line>> = Mutex::new(VecDeque::new());
 static LEVELS: ArcSwapOption<Settings> = ArcSwapOption::const_empty();
@@ -98,6 +104,7 @@ pub fn open(dir: &Path) {
                     keep((Level::WARN, LOADER_ID.to_owned(), note));
                 }
                 keep((level, source.clone(), line.clone()));
+                TAKEN.fetch_add(1, Ordering::Release);
                 let _all = all.write_all(line.as_bytes()).and_then(|()| all.flush());
                 let file = files.entry(source).or_insert_with_key(|source| {
                     let path = if source == LOADER_ID {
@@ -239,9 +246,30 @@ pub fn write(level: Level, source: &str, message: &str) {
         source.to_owned(),
         format_line(now(), level, source, message),
     );
-    if let Err(TrySendError::Full(_)) = lines.try_send(line) {
-        DROPPED.fetch_add(1, Ordering::Relaxed);
+    match lines.try_send(line) {
+        Ok(()) => {
+            SENT.fetch_add(1, Ordering::Relaxed);
+        }
+        Err(TrySendError::Full(_)) => {
+            DROPPED.fetch_add(1, Ordering::Relaxed);
+        }
+        Err(TrySendError::Disconnected(_)) => {}
     }
+}
+
+/// Waits until the writer keeps every line sent before this call among the
+/// latest, so [`recent`] holds them, or `longest` passes; whether it did.
+/// Never on a game thread: it sleeps.
+pub fn settle(longest: Duration) -> bool {
+    let sent = SENT.load(Ordering::Relaxed);
+    let started = Instant::now();
+    while TAKEN.load(Ordering::Acquire) < sent {
+        if started.elapsed() >= longest {
+            return false;
+        }
+        std::thread::sleep(SETTLE_POLL);
+    }
+    true
 }
 
 /// Keeps `line` among the latest lines.
@@ -330,6 +358,22 @@ mod tests {
             i % 2 == 1 && !i.is_multiple_of(3)
         }));
         assert!(recent(Some("nobody"), Level::DEBUG, 5).is_empty());
+    }
+
+    #[test]
+    fn a_line_written_before_settling_is_among_the_latest() {
+        let dir = std::env::temp_dir().join(format!("enshwick-log-{}", std::process::id()));
+        open(&dir);
+        write(Level::ERROR, LOADER_ID, "the line a report needs");
+        assert!(settle(Duration::from_secs(10)));
+        let latest = recent(Some(LOADER_ID), Level::ERROR, RECENT);
+        assert!(
+            latest
+                .iter()
+                .any(|line| line.ends_with("the line a report needs")),
+            "{latest:?}"
+        );
+        let _removed = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
