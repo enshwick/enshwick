@@ -55,7 +55,7 @@ use entries::services::{
 };
 use entries::ui::{ui_dialog, ui_frame, ui_hud, ui_markers, ui_widget};
 use entries::world::{
-    actions, chat, component, component_write, destroy, emit, entities, entity_template,
+    actions, chat, component, component_write, destroy, emit, entities, entity_template, feature,
     forget_game_settings, game_event, game_settings, hosting, keep_game_settings, notify, player,
     players, rename_filter, run_console, save_world, server_world, set_game_settings, set_label,
     set_time_of_day, set_time_speed, set_weather, spawn, status, teleport, terrain_edit,
@@ -102,6 +102,8 @@ pub(crate) struct ModRecord {
     pub(crate) texts: Mutex<Option<enshwick::i18n::Texts>>,
     /// Whether it is a content pack, a folder of data the loader runs.
     pub(crate) pack: bool,
+    /// The features it reported on or off, in the order it named them.
+    pub(crate) features: Mutex<Vec<crate::features::Feature>>,
 }
 
 impl ModRecord {
@@ -698,6 +700,7 @@ pub(crate) static API: HostApi = HostApi {
     actions,
     event_types,
     recipe_kind,
+    feature,
 };
 
 /// The loader and the calling mod, when the mod is on.

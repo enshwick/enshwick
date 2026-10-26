@@ -323,6 +323,21 @@ impl Installed {
         table::with(Vec::new(), |s| s.console.clone())
     }
 
+    /// The mod's features as it last reported them with
+    /// [`Load::feature`](crate::Load::feature), in the order it first named
+    /// them: the name and, for one that is off, the reason.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// assert!(loader.features().is_empty());
+    /// ```
+    #[must_use]
+    pub fn features(&self) -> Vec<(String, Option<String>)> {
+        table::with(Vec::new(), |s| s.features.clone())
+    }
+
     /// The lines the mod's status sources give now, each source's text in
     /// registration order.
     ///

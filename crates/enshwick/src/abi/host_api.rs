@@ -1041,4 +1041,11 @@ pub struct HostApi {
     /// recipe registry is first built, and while the loader serves no
     /// resource. Any thread. Since minor 73.
     pub recipe_kind: extern "system" fn(me: ModHandle, item: u32, out: *mut RecipeKind) -> Status,
+    /// Reports whether the mod's feature `name` runs on this game build:
+    /// off for the reason `off`, or on when `off` is empty. The loader
+    /// logs it and shows it in the status summary and on the Mods screen; a
+    /// later report of the same name replaces the earlier one.
+    /// [`Status::BAD_ARGS`] for an empty name. Both strings are borrowed for
+    /// the call. Any thread. Since minor 74.
+    pub feature: extern "system" fn(me: ModHandle, name: Str, off: Str) -> Status,
 }

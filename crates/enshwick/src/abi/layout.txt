@@ -1,4 +1,4 @@
-abi 2.73
+abi 2.74
 ActionCall size 144 align 8
     header at 0 size 8
     kind at 8 size 4
@@ -207,7 +207,7 @@ HookSpec size 32 align 8
     next at 16 size 8
     priority at 24 size 4
     flags at 28 size 4
-HostApi size 1168 align 8
+HostApi size 1176 align 8
     header at 0 size 8
     host_version at 8 size 16
     build at 24 size 8
@@ -353,6 +353,7 @@ HostApi size 1168 align 8
     actions at 1144 size 8
     event_types at 1152 size 8
     recipe_kind at 1160 size 8
+    feature at 1168 size 8
 Interaction size 56 align 8
     header at 0 size 8
     kind at 8 size 4
