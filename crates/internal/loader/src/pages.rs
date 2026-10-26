@@ -1,11 +1,13 @@
 //! The pages of the process: what Windows says about the region an address
 //! lies in, and changes of a range's protection.
 
+use windows_sys::Win32::System::Diagnostics::Debug::FlushInstructionCache;
 use windows_sys::Win32::System::Memory::{
     MEM_COMMIT, MEM_FREE, MEMORY_BASIC_INFORMATION, PAGE_EXECUTE_READ, PAGE_EXECUTE_READWRITE,
     PAGE_EXECUTE_WRITECOPY, PAGE_GUARD, PAGE_NOACCESS, PAGE_READONLY, PAGE_READWRITE,
     PAGE_WRITECOPY, VirtualProtect, VirtualQuery,
 };
+use windows_sys::Win32::System::Threading::GetCurrentProcess;
 
 /// Protections of code that runs and reads.
 const EXECUTABLE: u32 = PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY;
@@ -114,6 +116,32 @@ pub(crate) unsafe fn protect(address: usize, len: usize, protection: u32) -> Opt
         )
     };
     (changed != 0).then_some(old)
+}
+
+/// Makes code just written at `address` run and read but no longer change,
+/// and flushes the instruction cache over it; false when Windows refused.
+///
+/// # Safety
+///
+/// - The pages that hold the `len` bytes are the caller's own, fully
+///   written, and no thread runs them yet.
+pub(crate) unsafe fn seal(address: usize, len: usize) -> bool {
+    // SAFETY: the caller owns the pages and no thread runs them, so nothing
+    // relies on their protection while it changes.
+    let sealed = unsafe { protect(address, len, PAGE_EXECUTE_READ) }.is_some();
+    flush(address, len);
+    sealed
+}
+
+/// Flushes the instruction cache over `len` bytes of code at `address`, so
+/// a thread that runs them next sees what was just written.
+pub(crate) fn flush(address: usize, len: usize) {
+    // SAFETY: `GetCurrentProcess` takes no arguments and returns a
+    // pseudo-handle that needs no closing.
+    let process = unsafe { GetCurrentProcess() };
+    // SAFETY: `process` is this process; flushing reads and writes no memory
+    // in the range, which may be any address.
+    unsafe { FlushInstructionCache(process, core::ptr::with_exposed_provenance(address), len) };
 }
 
 #[cfg(test)]
