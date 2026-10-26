@@ -1,6 +1,7 @@
 //! `cargo enshwick`: start an Enshwick mod, build it and install it into the game,
 //! and port the build rows to a new game build.
 
+use anyhow::Context as _;
 use std::io::Write as _;
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -87,11 +88,11 @@ enum Side {
 
 /// A line per content id: the id, its GUID and its game id in decimal and
 /// hex; an error naming the first malformed id.
-fn ids(names: &[String]) -> Result<String, String> {
-    let lines: Result<Vec<String>, String> = names
+fn ids(names: &[String]) -> anyhow::Result<String> {
+    let lines: anyhow::Result<Vec<String>> = names
         .iter()
         .map(|name| {
-            let guid = Guid::try_named(name).ok_or_else(|| {
+            let guid = Guid::try_named(name).with_context(|| {
                 format!("{name:?} is no content id: <mod>:<name>, the mod side 1 to 64 of [a-z0-9_-], the name 1 to 128 of [a-z0-9_./-]")
             })?;
             Ok(format!("{name}  {guid}  {id} {id:#010x}", id = guid.id()))
@@ -108,7 +109,7 @@ fn main() -> ExitCode {
                 Ok(true) => ExitCode::SUCCESS,
                 Ok(false) => ExitCode::from(pin::NEEDS_HUMAN),
                 Err(error) => {
-                    let _shown = writeln!(std::io::stderr(), "error: {error}");
+                    let _shown = writeln!(std::io::stderr(), "error: {error:#}");
                     ExitCode::FAILURE
                 }
             };
@@ -118,7 +119,7 @@ fn main() -> ExitCode {
         Command::Manifest {
             dll,
             expect_version,
-        } => manifest::show(&dll, expect_version.as_deref()),
+        } => manifest::show(&dll, expect_version.as_deref()).map_err(anyhow::Error::msg),
         Command::Id { names } => ids(&names),
         Command::Pack(command) => pack::run(&command),
     };
@@ -128,7 +129,7 @@ fn main() -> ExitCode {
             ExitCode::SUCCESS
         }
         Err(error) => {
-            let _shown = writeln!(std::io::stderr(), "error: {error}");
+            let _shown = writeln!(std::io::stderr(), "error: {error:#}");
             ExitCode::FAILURE
         }
     }
