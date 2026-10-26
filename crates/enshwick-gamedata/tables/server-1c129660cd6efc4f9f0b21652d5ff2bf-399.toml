@@ -159,6 +159,11 @@ revision = 1
 # with `neg`, as `1 << n` with `shl`, plus `plus`), or, without `at`, kept
 # as long as that code is found. `cargo enshwick pin --patterns` writes
 # them around the instructions a maintainer picks with `--from`.
+"pacing.loop_wait" = { rva = 0x5c_34eb, pattern = "48 3B ?? 44 8B ?? 44 0F 4C CA 48 8B 55 D8 45 33 C0 8B 4D E0 C7 44 24 20 01 00 00 00 FF 15", at = 10 }
+"pacing.server_wait" = { rva = 0x7a_5293, pattern = "44 39 BB 3C 05 00 00 75 08 41 B9 00 5A 62 02 EB 12 48 81 7D ?? 80 9F D5 00 41 B9 40 42 0F 00 4C 0F 4F CF 4D 8B C4 48 8D 55 ?? 48 8D 4D ?? E8", at = 35 }
+"pacing.default_workers" = { rva = 0x5c_f3b3, pattern = "41 0F B6 47 09 8B CF 40 3A C7 0F 42 C8 84 DB 89 8D ?? ?? ?? ?? 8B CF 0F B6 C3 0F 45 C8 41 0F B6 47 0A 44 0F B6 E9", at = 5 }
+"pacing.background_workers" = { rva = 0x5c_f3d0, pattern = "41 0F B6 47 09 8B CF 40 3A C7 0F 42 C8 84 DB 89 8D ?? ?? ?? ?? 8B CF 0F B6 C3 0F 45 C8 41 0F B6 47 0A 44 0F B6 E9", at = 34 }
+
 [constants]
 "ecs.context_row" = { value = 0x8, pattern = "F2 0F 11 44 24 ?? E8 ?? ?? ?? ?? 48 8B 0F 8B 47 ?? 4C 8B 51 ?? 85 C0 74 10", at = 16, size = 1 }
 "ecs.descriptor_entity_records" = { value = 0x828, pattern = "74 10 8D 50 ?? 48 8B 81 ?? ?? ?? ?? 48 03 D2 8B 04 D0 49 8D 52 ??", at = 8, size = 4 }
@@ -500,3 +505,7 @@ revision = 1
 "knowledge.request_value" = { value = 0x8, pattern = "F2 0F 10 83 ?? ?? ?? ?? 48 8D 55 ?? 8B 83 ?? ?? ?? ?? 48 8B CF F2 0F 11 45 F7 89 45 FF E8 ?? ?? ?? ?? 8B 08 E8 ?? ?? ?? ?? 48 8B 4D ?? 48 8D 55 F7 89 45 03 E8 ?? ?? ?? ??" }
 "knowledge.request_target" = { value = 0xc, pattern = "F2 0F 10 83 ?? ?? ?? ?? 48 8D 55 ?? 8B 83 ?? ?? ?? ?? 48 8B CF F2 0F 11 45 F7 89 45 FF E8 ?? ?? ?? ?? 8B 08 E8 ?? ?? ?? ?? 48 8B 4D ?? 48 8D 55 F7 89 45 03 E8 ?? ?? ?? ??" }
 "skill.airborne_architect" = 0x4475_e8dd
+"pacing.loop_wait.bytes" = "0x8bc0_3345_d855_8b48"
+"pacing.server_wait.bytes" = 0x48c7_558d_48c4_8b4d
+"pacing.default_workers.bytes" = "0xc842_0fc7_3a40_cf8b"
+"pacing.background_workers.bytes" = 0xfc5_3a41_e9b6_0f44

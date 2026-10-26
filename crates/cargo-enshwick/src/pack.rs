@@ -82,7 +82,7 @@ fn vanilla(game: &Path) -> anyhow::Result<Vanilla> {
 
 /// Reads and checks the pack in `dir`, with the game's vanilla names when
 /// `vanilla` is given: a summary, its manifest and files.
-fn check(
+pub(crate) fn check(
     dir: &Path,
     vanilla: Option<&Vanilla>,
 ) -> anyhow::Result<(String, PackManifest, PackFiles)> {
