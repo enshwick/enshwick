@@ -3,9 +3,10 @@
 
 use std::sync::Arc;
 
+use crate::{Load, Off};
+
 use super::menu;
 use super::types;
-use crate::{Load, Off};
 
 mod add;
 mod change;
@@ -62,7 +63,7 @@ impl Load<'_> {
     pub fn add_recipe(&mut self, recipe: NewRecipe) -> Result<(), Off> {
         self.declare(recipe.id)?;
         let layout = RecipeLayout::resolve(self)?;
-        let registry = RECIPE_REGISTRY.key(types::RECIPE_REGISTRY)?;
+        let registry = RECIPE_REGISTRY.key(types::RECIPE_REGISTRY_RESOURCE)?;
         self.serve(registry, registry, move |base| {
             add_recipe_to(&layout, base, &recipe, workshop_limit())
         })?;
@@ -109,7 +110,7 @@ impl Load<'_> {
         let id = recipe().id;
         self.declare(id)?;
         let layout = RecipeLayout::resolve(self)?;
-        let registry = RECIPE_REGISTRY.key(types::RECIPE_REGISTRY)?;
+        let registry = RECIPE_REGISTRY.key(types::RECIPE_REGISTRY_RESOURCE)?;
         let recipe = Arc::new(recipe);
         let built = Arc::clone(&recipe);
         self.serve(registry, registry, move |base| {
@@ -155,7 +156,7 @@ impl Load<'_> {
     ) -> Result<(), Off> {
         let layout = RecipeLayout::resolve(self)?;
         let salt = fnv1a(salt.as_bytes());
-        let registry = RECIPE_REGISTRY.key(types::RECIPE_REGISTRY)?;
+        let registry = RECIPE_REGISTRY.key(types::RECIPE_REGISTRY_RESOURCE)?;
         let choose = Arc::new(choose);
         let chosen = Arc::clone(&choose);
         self.serve(registry, registry, move |base| {
@@ -217,7 +218,7 @@ impl Load<'_> {
         modify: impl Fn(&mut RecipeEdit<'_>) + Send + Sync + 'static,
     ) -> Result<(), Off> {
         let layout = RecipeLayout::resolve(self)?;
-        let registry = RECIPE_REGISTRY.key(types::RECIPE_REGISTRY)?;
+        let registry = RECIPE_REGISTRY.key(types::RECIPE_REGISTRY_RESOURCE)?;
         self.serve(registry, registry, move |base| {
             let (built, changed) = modify_recipes_in(&layout, base, &modify)?;
             crate::info!("{changed} recipes changed");
@@ -253,7 +254,7 @@ impl Load<'_> {
 /// }
 /// ```
 pub fn rebuild_recipes() -> Result<(), Off> {
-    crate::content::rebuild(RECIPE_REGISTRY.key(types::RECIPE_REGISTRY)?)
+    crate::content::rebuild(RECIPE_REGISTRY.key(types::RECIPE_REGISTRY_RESOURCE)?)
 }
 
 #[cfg(test)]

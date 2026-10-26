@@ -18,20 +18,20 @@
 //! and a client that says hello gets every value of those kinds; a client
 //! keeps what it got and answers reads from it.
 
-use crate::mod_index::ModIndex;
-use crate::pinned;
-use crate::registry::Registry;
-use enshwick::ecs::Entity;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
 
 use enshwick::abi::{Event, HookFlags, Status};
+use enshwick::ecs::Entity;
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::chains::Next;
 use crate::host::Loader;
 use crate::locks::Relock;
+use crate::mod_index::ModIndex;
+use crate::pinned;
+use crate::registry::Registry;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[pinned::ecs::DESTROY_REQUEST.id()];

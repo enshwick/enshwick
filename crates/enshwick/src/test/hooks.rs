@@ -1,14 +1,15 @@
 //! Game lookups and hooks: symbols, constants, layouts, detours and code patches.
 
-use super::FakeHost;
-use super::Installed;
-use super::address;
-use super::table;
 use crate::FnPtr;
 use crate::Hook;
 use crate::abi::CallerFrame;
 use crate::abi::Fingerprint;
 use crate::abi::HookFlags;
+
+use super::FakeHost;
+use super::Installed;
+use super::address;
+use super::table;
 
 impl FakeHost {
     /// The game's image base.

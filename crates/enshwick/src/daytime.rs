@@ -39,6 +39,9 @@ const HOUR: f64 = 3_600_000_000_000.0;
 
 /// The clock as it was when read, from [`Clock::now`].
 ///
+/// The name is enshwick's; its day and night lengths are the game settings'
+/// fields of the same names.
+///
 /// # Examples
 ///
 /// ```
@@ -62,9 +65,9 @@ pub struct TimeOfDay {
     /// The hour the night starts at.
     pub night_starts: f32,
     /// How long the day lasts in real time at speed 1.
-    pub day_length: Duration,
+    pub day_time_duration: Duration,
     /// How long the night lasts in real time at speed 1.
-    pub night_length: Duration,
+    pub night_time_duration: Duration,
     /// How fast the clock runs now: 1 normally, faster while players sleep,
     /// times every mod's factor.
     pub speed: f32,
@@ -78,8 +81,8 @@ impl TimeOfDay {
             is_day: info.flags & DaytimeInfo::DAY != 0,
             day_starts: hours(info.day_start),
             night_starts: hours(info.day_end),
-            day_length: length(info.day_length),
-            night_length: length(info.night_length),
+            day_time_duration: length(info.day_length),
+            night_time_duration: length(info.night_length),
             speed: info.speed,
         }
     }

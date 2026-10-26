@@ -13,8 +13,6 @@
 //! Building happens inside ECS systems on worker threads, so those links only
 //! queue what happened; the post-step link raises it on the game thread.
 
-use crate::pinned;
-use crate::pinned::{Constant, Symbol};
 use core::ffi::c_void;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
@@ -26,6 +24,8 @@ use crate::chains::Next;
 use crate::fuse::Fuse;
 use crate::host::Loader;
 use crate::locks::Relock;
+use crate::pinned;
+use crate::pinned::{Constant, Symbol};
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[

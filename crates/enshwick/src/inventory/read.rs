@@ -10,7 +10,7 @@ use crate::{Host, Load, Off};
 
 use super::ops::{Batch, Op};
 use super::results::{Done, OpError, OpErrors, Outcome, Pending, Ticket, deliver};
-use super::slots::{Bar, Category, Fill, ItemInfo, Slot, SlotRef};
+use super::slots::{Bar, Fill, InventoryCategory, ItemInfo, Slot, SlotRef};
 use super::{LINKS, MAX_DEPTH, MAX_OWNERS, SLOTS};
 
 /// Reflected layouts the reads use.
@@ -166,7 +166,7 @@ impl Inventories {
         let status = (self.host.api().item_info)(self.host.handle(), item, &raw mut out);
         status.is_ok().then_some(ItemInfo {
             id: out.id,
-            max_stack: out.max_stack,
+            max_stack_size: out.max_stack,
             flags: out.flags,
             category: out.category,
         })
@@ -472,8 +472,8 @@ impl Reader<'_> {
             // SAFETY: `setup` is the live InventorySetup, whose `LINKS`
             // `linksCategories` bytes start at the reflected offset
             // `categories`, and `i < LINKS`.
-            let category = Category(unsafe { read_at(setup, layout.categories + i) });
-            if category == Category::VIRTUAL {
+            let category = InventoryCategory(unsafe { read_at(setup, layout.categories + i) });
+            if category == InventoryCategory::VIRTUAL {
                 if depth < MAX_DEPTH {
                     self.walk(Entity(link), depth + 1, skip, out);
                 }
@@ -501,7 +501,7 @@ impl Reader<'_> {
         slots: *const u8,
         inventory: Entity,
         index: u8,
-        category: Category,
+        category: InventoryCategory,
     ) -> Slot {
         let layout = &self.inventories.layout;
         let at = usize::from(index) * layout.stack;
@@ -523,7 +523,7 @@ impl Reader<'_> {
         }
     }
 
-    /// What `slot` holds, with [`Category::UNKNOWN`].
+    /// What `slot` holds, with [`InventoryCategory::INVALID`].
     ///
     /// # Examples
     ///
@@ -540,7 +540,14 @@ impl Reader<'_> {
         let slots = self.component(slot.inventory(), self.inventories.layout.inventory)?;
         // SAFETY: `component` returned the inventory's live Inventory, and
         // `index < SLOTS` was checked above.
-        Some(unsafe { self.stack(slots, slot.inventory(), slot.index(), Category::UNKNOWN) })
+        Some(unsafe {
+            self.stack(
+                slots,
+                slot.inventory(),
+                slot.index(),
+                InventoryCategory::INVALID,
+            )
+        })
     }
 
     /// How many items `item` the inventory `root` holds.
@@ -605,7 +612,7 @@ impl Reader<'_> {
     }
 
     /// The meter of an item's own entity (see
-    /// [`Meter`](crate::content::items::Meter)), as clients see it; `None`
+    /// [`FuelSetup`](crate::content::items::FuelSetup)), as clients see it; `None`
     /// for an item without one.
     ///
     /// # Examples

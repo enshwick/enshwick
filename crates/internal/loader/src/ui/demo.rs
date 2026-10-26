@@ -4,7 +4,6 @@
 //! window has four pages, the last one showing samples on the HUD and a
 //! marker on the map, and closes with its Close button.
 
-use crate::mod_index::ModIndex;
 use core::cell::RefCell;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -12,6 +11,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use enshwick::abi::{UiDialog, UiWidget};
 
 use crate::locks::Relock;
+use crate::mod_index::ModIndex;
 
 use super::Painter;
 use super::engine::{Engine, Window};

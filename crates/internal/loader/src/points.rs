@@ -5,7 +5,6 @@
 //! Asking a point runs its live links in turn on the asking thread; a link
 //! that panics is turned off, and the point runs on without it.
 
-use crate::mod_index::ModIndex;
 use std::fmt::Write as _;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Mutex, OnceLock};
@@ -15,6 +14,7 @@ use enshwick::points::{LinkPlace, order};
 use enshwick::services::{LayoutError, compare};
 
 use crate::locks::Relock;
+use crate::mod_index::ModIndex;
 use crate::services::{Fields, Names};
 
 /// A point as one side declares it.

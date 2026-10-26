@@ -55,7 +55,7 @@ mod tests {
     fn host() -> FakeHost {
         let mut host = FakeHost::new()
             .type_hash(types::ITEM_INFO.id(), ITEM)
-            .type_hash(types::ITEM_REGISTRY.id(), 2)
+            .type_hash(types::ITEM_REGISTRY_RESOURCE.id(), 2)
             .type_size("item_stat", 0x28);
         for (id, at) in [
             ("item_info.id", 0),

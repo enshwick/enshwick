@@ -6,7 +6,7 @@ mod tests {
 
     use enshwick::abi::{Status, TeleportRequest};
     use enshwick::ecs::Entity;
-    use enshwick::effects::{Effects, NpcOrder, Spawn, Teleport};
+    use enshwick::effects::{Effects, NpcCommandType, Spawn, Teleport};
     use enshwick::world::WorldError;
     use enshwick::{Load, Mod, Off};
 
@@ -62,7 +62,7 @@ mod tests {
         let effects = EFFECTS.get().unwrap();
 
         effects
-            .npc_command(42, NpcOrder::GoTo([1.0, 2.0, -3.0]))
+            .npc_command(42, NpcCommandType::GoToPosition([1.0, 2.0, -3.0]))
             .unwrap();
         effects.add_threat(Entity(5), Entity(6), 2.5).unwrap();
         effects.ping(Entity(6), [0.5, 0.0, 0.0]).unwrap();

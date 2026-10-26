@@ -225,7 +225,7 @@ pub struct Drop {
     /// How many, at least and at most; each count in between is as likely.
     pub count: [u16; 2],
     /// How full each dropped item's meter starts (see
-    /// [`Meter`](crate::content::items::Meter)); `None` for its template's
+    /// [`FuelSetup`](crate::content::items::FuelSetup)); `None` for its template's
     /// start.
     pub meter: Option<MeterRoll>,
     /// Where it may drop.
@@ -249,7 +249,7 @@ pub struct MeterRoll {
     pub min: u16,
     /// The most.
     pub max: u16,
-    /// The meter's maximum, as its [`Meter`](crate::content::items::Meter)
+    /// The meter's maximum, as its [`FuelSetup`](crate::content::items::FuelSetup)
     /// says.
     pub of: u16,
 }

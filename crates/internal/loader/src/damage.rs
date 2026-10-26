@@ -16,9 +16,6 @@
 //! the game's worker threads, in parallel, so the filters run there too: no
 //! allocation, no lock.
 
-use crate::mod_index::ModIndex;
-use crate::pinned::{self, Symbol};
-use crate::registry::Registry;
 use core::ffi::c_void;
 use std::sync::OnceLock;
 
@@ -27,6 +24,9 @@ use enshwick::abi::{DamageCheck, DamageFilterFn, Header, HookFlags, Registers, S
 use crate::host::{Loader, Registered};
 use crate::locks::Relock;
 use crate::mid::MidLink;
+use crate::mod_index::ModIndex;
+use crate::pinned::{self, Symbol};
+use crate::registry::Registry;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[

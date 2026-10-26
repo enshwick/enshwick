@@ -4,7 +4,6 @@
 //! runs, each mod's settings of that world are watched too, since they are
 //! what the mod reads.
 
-use crate::mod_index::ModIndex;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::{Duration, SystemTime};
@@ -14,6 +13,7 @@ use enshwick::config::Stage;
 
 use crate::host::Loader;
 use crate::locks::Relock;
+use crate::mod_index::ModIndex;
 use crate::settings::{LOADER_ID, Settings};
 
 /// How often the files are looked at; a few stat calls each time.

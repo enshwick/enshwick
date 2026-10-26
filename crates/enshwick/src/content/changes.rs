@@ -13,7 +13,7 @@
 //! const WOOD: Guid = Guid::parse("3f4093ae-75ed-4e5d-bd0b-784ba83b88f5");
 //!
 //! fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-//!     load.change(&Change::new(WOOD, Field::MaxStack, Value::Set(999.0)), "my-mod")
+//!     load.change(&Change::new(WOOD, Field::MaxStackSize, Value::Set(999.0)), "my-mod")
 //! }
 //! ```
 
@@ -31,8 +31,8 @@ pub const MAX_FACTOR: f64 = 100.0;
 /// ```
 /// use enshwick::content::changes::{Field, Value};
 ///
-/// assert!(Field::MaxStack.check(Value::Set(999.0)).is_ok());
-/// assert!(Field::MaxStack.check(Value::Set(0.0)).is_err());
+/// assert!(Field::MaxStackSize.check(Value::Set(999.0)).is_ok());
+/// assert!(Field::MaxStackSize.check(Value::Set(0.0)).is_err());
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[non_exhaustive]
@@ -40,7 +40,7 @@ pub enum Field {
     /// How many of an item one inventory slot holds, 1 to 65535; the entry
     /// is an item. The game cuts a saved stack above it, so a world saved
     /// while it was raised depends on the change.
-    MaxStack,
+    MaxStackSize,
     /// How many of each item a recipe makes, 1 to 65535; the entry is a
     /// recipe.
     Output,
@@ -53,7 +53,7 @@ pub enum Field {
     Ingredient,
     /// How long a recipe takes, in seconds from 0 to 86400; the entry is a
     /// recipe.
-    Time,
+    CraftingDuration,
     /// How many slots a container holds, 8 to 128 in steps of 8 and never
     /// fewer than it has; the entry is the item that places it, and the
     /// change reaches every item that places the same container. Containers
@@ -97,11 +97,11 @@ pub enum Field {
 impl Field {
     /// Every field, for tools that list them.
     pub const ALL: &[Self] = &[
-        Self::MaxStack,
+        Self::MaxStackSize,
         Self::Output,
         Self::Cost,
         Self::Ingredient,
-        Self::Time,
+        Self::CraftingDuration,
         Self::Slots,
         Self::DamageMod,
         Self::SpeedMod,
@@ -122,16 +122,16 @@ impl Field {
     /// ```
     /// use enshwick::content::changes::Field;
     ///
-    /// assert_eq!(Field::MaxStack.name(), "max_stack");
+    /// assert_eq!(Field::MaxStackSize.name(), "max_stack");
     /// ```
     #[must_use]
     pub const fn name(self) -> &'static str {
         match self {
-            Self::MaxStack => "max_stack",
+            Self::MaxStackSize => "max_stack",
             Self::Output => "output_count",
             Self::Cost => "cost",
             Self::Ingredient => "ingredient",
-            Self::Time => "time",
+            Self::CraftingDuration => "time",
             Self::Slots => "slots",
             Self::DamageMod => "damage_mod",
             Self::SpeedMod => "speed_mod",
@@ -153,13 +153,13 @@ impl Field {
     /// ```
     /// use enshwick::content::changes::{Entry, Field};
     ///
-    /// assert_eq!(Field::MaxStack.entry(), Entry::Item);
-    /// assert_eq!(Field::Time.entry(), Entry::Recipe);
+    /// assert_eq!(Field::MaxStackSize.entry(), Entry::Item);
+    /// assert_eq!(Field::CraftingDuration.entry(), Entry::Recipe);
     /// ```
     #[must_use]
     pub const fn entry(self) -> Entry {
         match self {
-            Self::MaxStack
+            Self::MaxStackSize
             | Self::Slots
             | Self::DamageMod
             | Self::SpeedMod
@@ -168,16 +168,16 @@ impl Field {
             | Self::EnergyOutput
             | Self::ComfortAmount => Entry::Item,
             Self::StackSize | Self::Count | Self::SpawnProbability | Self::Weight => Entry::Loot,
-            Self::Output | Self::Cost | Self::Ingredient | Self::Time => Entry::Recipe,
+            Self::Output | Self::Cost | Self::Ingredient | Self::CraftingDuration => Entry::Recipe,
         }
     }
 
     /// The smallest and the largest value the field holds.
     const fn range(self) -> (f64, f64) {
         match self {
-            Self::MaxStack | Self::Output | Self::Cost | Self::StackSize => (1.0, 65535.0),
+            Self::MaxStackSize | Self::Output | Self::Cost | Self::StackSize => (1.0, 65535.0),
             Self::Ingredient | Self::Count => (0.0, 65535.0),
-            Self::Time | Self::BurnTime => (0.0, 86400.0),
+            Self::CraftingDuration | Self::BurnTime => (0.0, 86400.0),
             Self::Slots => (8.0, 128.0),
             Self::DamageMod => (0.0, 100.0),
             Self::SpeedMod => (0.0, 10.0),
@@ -199,7 +199,7 @@ impl Field {
     /// Whether the field holds whole numbers only.
     const fn whole(self) -> bool {
         match self {
-            Self::MaxStack
+            Self::MaxStackSize
             | Self::Output
             | Self::Cost
             | Self::Ingredient
@@ -208,7 +208,7 @@ impl Field {
             | Self::ComfortAmount
             | Self::StackSize
             | Self::Count => true,
-            Self::Time
+            Self::CraftingDuration
             | Self::DamageMod
             | Self::SpeedMod
             | Self::Armor
@@ -272,8 +272,8 @@ impl Field {
     /// use enshwick::content::changes::{Field, Value};
     ///
     /// let values = [Value::Times(2.0), Value::Set(100.0), Value::Times(1.5)];
-    /// assert_eq!(Field::MaxStack.resolve(20.0, values), 300.0);
-    /// assert_eq!(Field::MaxStack.resolve(20.0, [Value::Times(0.0)]), 1.0);
+    /// assert_eq!(Field::MaxStackSize.resolve(20.0, values), 300.0);
+    /// assert_eq!(Field::MaxStackSize.resolve(20.0, [Value::Times(0.0)]), 1.0);
     /// ```
     #[must_use]
     pub fn resolve(self, base: f64, values: impl IntoIterator<Item = Value>) -> f64 {
@@ -304,11 +304,11 @@ impl Field {
     #[must_use]
     pub const fn to_abi(self) -> DataField {
         match self {
-            Self::MaxStack => DataField::MAX_STACK,
+            Self::MaxStackSize => DataField::MAX_STACK,
             Self::Output => DataField::RECIPE_OUTPUT,
             Self::Cost => DataField::RECIPE_COST,
             Self::Ingredient => DataField::RECIPE_INGREDIENT,
-            Self::Time => DataField::RECIPE_TIME,
+            Self::CraftingDuration => DataField::RECIPE_TIME,
             Self::Slots => DataField::CONTAINER_SLOTS,
             Self::DamageMod => DataField::DAMAGE_MOD,
             Self::SpeedMod => DataField::SPEED_MOD,
@@ -332,7 +332,7 @@ impl Field {
     /// use enshwick::abi::DataField;
     /// use enshwick::content::changes::Field;
     ///
-    /// assert_eq!(Field::from_abi(DataField::MAX_STACK), Some(Field::MaxStack));
+    /// assert_eq!(Field::from_abi(DataField::MAX_STACK), Some(Field::MaxStackSize));
     /// assert_eq!(Field::from_abi(DataField(0)), None);
     /// ```
     #[must_use]
@@ -398,7 +398,7 @@ impl core::fmt::Display for Value {
 /// ```
 /// use enshwick::content::changes::{Field, Value};
 ///
-/// let error = Field::MaxStack.check(Value::Set(70000.0)).unwrap_err();
+/// let error = Field::MaxStackSize.check(Value::Set(70000.0)).unwrap_err();
 /// assert_eq!(error.to_string(), "max_stack 70000 is not from 1 to 65535");
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, thiserror::Error)]
@@ -658,31 +658,31 @@ mod tests {
             Value::Set(30.0),
             Value::Times(2.0),
         ];
-        assert_eq!(Field::MaxStack.resolve(5.0, a), 180.0);
-        assert_eq!(Field::MaxStack.resolve(5.0, b), 180.0);
+        assert_eq!(Field::MaxStackSize.resolve(5.0, a), 180.0);
+        assert_eq!(Field::MaxStackSize.resolve(5.0, b), 180.0);
     }
 
     #[test]
     fn a_whole_field_rounds_half_away_from_zero_and_stays_in_range() {
-        assert_eq!(Field::MaxStack.resolve(5.0, [Value::Times(0.5)]), 3.0);
+        assert_eq!(Field::MaxStackSize.resolve(5.0, [Value::Times(0.5)]), 3.0);
         assert_eq!(
-            Field::MaxStack.resolve(60000.0, [Value::Times(2.0)]),
+            Field::MaxStackSize.resolve(60000.0, [Value::Times(2.0)]),
             65535.0
         );
-        assert_eq!(Field::MaxStack.resolve(1.0, [Value::Times(0.1)]), 1.0);
+        assert_eq!(Field::MaxStackSize.resolve(1.0, [Value::Times(0.1)]), 1.0);
     }
 
     #[test]
     fn no_value_keeps_the_base() {
-        assert_eq!(Field::MaxStack.resolve(20.0, []), 20.0);
+        assert_eq!(Field::MaxStackSize.resolve(20.0, []), 20.0);
     }
 
     #[test]
     fn fractions_and_bad_factors_are_refused() {
-        assert!(Field::MaxStack.check(Value::Set(2.5)).is_err());
-        assert!(Field::MaxStack.check(Value::Times(f64::NAN)).is_err());
-        assert!(Field::MaxStack.check(Value::Times(101.0)).is_err());
-        assert!(Field::MaxStack.check(Value::Times(0.0)).is_ok());
+        assert!(Field::MaxStackSize.check(Value::Set(2.5)).is_err());
+        assert!(Field::MaxStackSize.check(Value::Times(f64::NAN)).is_err());
+        assert!(Field::MaxStackSize.check(Value::Times(101.0)).is_err());
+        assert!(Field::MaxStackSize.check(Value::Times(0.0)).is_ok());
     }
 
     #[test]
@@ -714,7 +714,10 @@ mod tests {
         assert_eq!(Field::Ingredient.resolve(1.0, [Value::Times(0.1)]), 1.0);
         assert_eq!(Field::Ingredient.resolve(3.0, [Value::Set(0.0)]), 0.0);
         assert_eq!(Field::Ingredient.resolve(3.0, [Value::Times(0.0)]), 0.0);
-        assert_eq!(Field::Time.resolve(60.0, [Value::Times(0.25)]), 15.0);
+        assert_eq!(
+            Field::CraftingDuration.resolve(60.0, [Value::Times(0.25)]),
+            15.0
+        );
     }
 
     #[test]
@@ -748,7 +751,7 @@ mod tests {
 
     #[test]
     fn a_change_goes_through_the_abi_and_back() {
-        let change = Change::new(Guid([7; 16]), Field::MaxStack, Value::Set(50.0));
+        let change = Change::new(Guid([7; 16]), Field::MaxStackSize, Value::Set(50.0));
         let raw = change.to_abi("items.toml:3");
         assert_eq!(Change::from_abi(&raw), Ok(Some(change)));
     }

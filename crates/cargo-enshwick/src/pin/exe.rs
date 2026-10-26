@@ -1,9 +1,9 @@
 //! A game executable as the pin tool reads it: its code, its function table
 //! and its reflected systems.
 
-use anyhow::Context as _;
 use std::ops::Range;
 
+use anyhow::Context as _;
 use enshwick_gamedata::reflect::{Fingerprint, Image, Layout, Reflection};
 
 /// How far code is decoded past an address that no function entry covers.

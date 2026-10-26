@@ -1,7 +1,5 @@
 //! The loader's side of the API: its state and the `HostApi` table.
 
-use crate::mod_index::ModIndex;
-use crate::pinned::{Constant, Symbol};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
@@ -17,6 +15,8 @@ use crate::builds::KnownBuild;
 use crate::chains::{Chains, Link, Next};
 use crate::locks::Relock;
 use crate::mid::Mids;
+use crate::mod_index::ModIndex;
+use crate::pinned::{Constant, Symbol};
 
 mod entries;
 mod join;

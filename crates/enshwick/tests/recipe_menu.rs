@@ -153,13 +153,13 @@ mod tests {
             .side(side)
             .resource(RECIPE_REGISTRY.key_by_hash(RECIPES), registry());
         for (ty, hash) in [
-            (types::RECIPE_REGISTRY, RECIPES),
-            (types::UI_BUNDLE, BUNDLE),
+            (types::RECIPE_REGISTRY_RESOURCE, RECIPES),
+            (types::FB_UI_BUNDLE, BUNDLE),
             (types::ITEM_INFO, 3),
-            (types::ITEM_REGISTRY, 4),
-            (types::TEMPLATE, 5),
-            (types::TEMPLATE_COLLECTION, 6),
-            (types::WORKSHOP_REGISTRY, 7),
+            (types::ITEM_REGISTRY_RESOURCE, 4),
+            (types::TEMPLATE_RESOURCE, 5),
+            (types::TEMPLATE_COLLECTION_RESOURCE, 6),
+            (types::WORKSHOP_REGISTRY_RESOURCE, 7),
         ] {
             host = host.type_hash(ty.id(), hash);
         }

@@ -19,6 +19,8 @@ const SKILL_LEVEL_SHIFT: u8 = 5;
 
 /// A value with its maximum, such as health.
 ///
+/// The name is enshwick's: one attribute's current and maximum value.
+///
 /// # Examples
 ///
 /// ```
@@ -54,6 +56,8 @@ impl Meter {
 
 /// An entity's health, stamina and mana, from [`World::vitals`].
 ///
+/// The name is enshwick's: read from the game's attribute sets.
+///
 /// # Examples
 ///
 /// See [`World::vitals`].
@@ -82,6 +86,9 @@ pub(crate) enum Pool {
 
 /// A skill node a character unlocked, from [`World::skills`].
 ///
+/// The name is enshwick's: one entry of the game's unlocked skill nodes and
+/// their levels.
+///
 /// # Examples
 ///
 /// See [`World::skills`].
@@ -95,6 +102,8 @@ pub struct Skill {
 }
 
 /// A character's level and experience, from [`World::progress`].
+///
+/// The name is enshwick's: read from the game's attribute sets.
 ///
 /// # Examples
 ///

@@ -18,17 +18,17 @@
 //! reads them after the step for the change events. A quest's id is a
 //! player's bool the game sets when it rewards the quest.
 
-use crate::pinned;
-use crate::pinned::{Constant, Symbol};
-use enshwick::ecs::Entity;
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
 use enshwick::abi::{Event, Header, KnowledgeData, KnowledgeInfo, QuestData, Status};
+use enshwick::ecs::Entity;
 use rustc_hash::FxHashSet;
 
 use crate::host::Loader;
 use crate::memory::read;
+use crate::pinned;
+use crate::pinned::{Constant, Symbol};
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[

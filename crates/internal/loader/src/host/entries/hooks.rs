@@ -1,6 +1,5 @@
 //! Host functions for hooks and code patches.
 
-use crate::mod_index::ModIndex;
 use enshwick::abi as api_frame;
 use enshwick::abi::{HookSpec, MidHookSpec, ModHandle, Status};
 
@@ -9,6 +8,7 @@ use crate::host::memory::{put, slice};
 use crate::host::{caller_index, calling, entry, loader};
 use crate::locks::Relock;
 use crate::mid::MidLink;
+use crate::mod_index::ModIndex;
 
 pub(crate) extern "system" fn hook(me: ModHandle, spec: *const HookSpec) -> Status {
     entry("hook", || {

@@ -21,21 +21,20 @@
 //! a rate per peer and drops what is over it, counting the drops for the
 //! status summary.
 
-use crate::mod_index::ModIndex;
-use crate::registry::Registry;
 use core::ffi::c_void;
-use enshwick::ecs::Entity;
 use std::collections::VecDeque;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::Instant;
 
 use enshwick::abi::{Header, NetMessage, NetMessageFn, Status};
+use enshwick::ecs::Entity;
 use rustc_hash::FxHashMap;
 
 use crate::host::{Loader, Registered};
 use crate::locks::Relock;
-
+use crate::mod_index::ModIndex;
+use crate::registry::Registry;
 use crate::wire::{
     CONTROL, Frame, ITEM_DATA, NOTICE, PART_BYTES, PREFIX, Peer, UI_DEMO, WELCOME, assemble,
     control, demo_position, frames, hello, parse, read_hello, remote_message,

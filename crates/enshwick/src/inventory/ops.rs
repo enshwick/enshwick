@@ -53,7 +53,7 @@ pub enum Op {
     /// Replaces the stack in a slot with new items, each with its own entity
     /// and its meter at `fill`, asked for the same slot: gives an item that
     /// lost its entity, such as one from before its mod gave it a
-    /// [`Meter`](crate::content::items::Meter), a fresh one.
+    /// [`FuelSetup`](crate::content::items::FuelSetup), a fresh one.
     Renew {
         /// The stack.
         slot: SlotRef,

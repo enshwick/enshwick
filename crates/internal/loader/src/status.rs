@@ -4,7 +4,6 @@
 //! then every `status_minutes`, and whenever an administrator asks with
 //! `enshwick status` on the console; each write replaces the last.
 
-use crate::mod_index::ModIndex;
 use core::ffi::c_void;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
@@ -15,6 +14,7 @@ use enshwick::abi::{Side, Status, StatusFn, Str};
 use crate::diag::{HookStat, ModStatus, Summary};
 use crate::host::Loader;
 use crate::locks::Relock;
+use crate::mod_index::ModIndex;
 use crate::settings::LOADER_ID;
 
 /// How often the writer looks at the clock and for requests.

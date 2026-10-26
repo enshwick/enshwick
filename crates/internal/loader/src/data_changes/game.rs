@@ -6,7 +6,6 @@ use core::ffi::c_void;
 use std::sync::{Arc, Mutex, OnceLock};
 
 use arc_swap::ArcSwap;
-
 use enshwick::abi::{Event, Level, Relation, ResourceKey, Status};
 use enshwick::content::Guid;
 use enshwick::content::changes::{Change, Entry, Field};
@@ -19,13 +18,14 @@ use enshwick::state::Hold;
 use enshwick_gamedata::catalogue;
 use rustc_hash::FxHashMap;
 
+use crate::host::Loader;
+use crate::locks::Relock;
+use crate::mod_index::ModIndex;
+
 use super::{
     Conflict, Declared, HoldStep, ItemOffsets, Key, Merged, Raised, credited, edit_item,
     grown_slots, hold_step, merge, template_slots,
 };
-use crate::host::Loader;
-use crate::locks::Relock;
-use crate::mod_index::ModIndex;
 
 /// The domain's state: changes as mods declare them, what the end of init
 /// sealed, and the stack sizes raised so far.
@@ -819,7 +819,7 @@ fn changed_item(patch: &ItemPatch, bytes: &mut [u8]) {
     let Some((old, new)) = edit.stack.filter(|(old, new)| new > old) else {
         return;
     };
-    let key = Key::new(patch.item, Field::MaxStack);
+    let key = Key::new(patch.item, Field::MaxStackSize);
     let without = |m: ModIndex| {
         merged
             .value(key, f64::from(old), |o| live(o) && o != m)
@@ -875,9 +875,9 @@ pub(crate) fn reachable(loader: &Loader, field: Field) -> bool {
     let constant = |id: &str| catalogue::constant(id, &loader.reflection).is_some();
     let recipes = || RecipeLayout::resolve(&catalogue::Reflected(&loader.reflection)).is_ok();
     match field {
-        Field::MaxStack => constant(catalogue::ITEM_MAX_STACK),
+        Field::MaxStackSize => constant(catalogue::ITEM_MAX_STACK),
         Field::Output | Field::Cost | Field::Ingredient => recipes(),
-        Field::Time => recipes() && constant(catalogue::RECIPE_DURATION),
+        Field::CraftingDuration => recipes() && constant(catalogue::RECIPE_DURATION),
         Field::StackSize | Field::Count | Field::SpawnProbability | Field::Weight => {
             LootLayout::resolve(&catalogue::Reflected(&loader.reflection)).is_ok()
         }

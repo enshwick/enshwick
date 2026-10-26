@@ -16,18 +16,18 @@
 //! `mod-data/enshwick/worlds/<key>/knowledge.toml`, and apply once the
 //! account's next character has loaded in that world.
 
-use crate::pinned;
-use crate::pinned::{Constant, Symbol};
-use enshwick::ecs::Entity;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 
 use enshwick::abi::{Event, Header, KnowledgeData, KnowledgeInfo, Status};
+use enshwick::ecs::Entity;
 
 use crate::host::Loader;
 use crate::locks::Relock;
 use crate::memory::write;
+use crate::pinned;
+use crate::pinned::{Constant, Symbol};
 
 use super::{definition, layout, read, store};
 

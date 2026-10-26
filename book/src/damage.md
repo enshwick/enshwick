@@ -7,12 +7,12 @@ world, before the game applies it. The filter gets a
 to read and change; what it leaves is what the game applies.
 
 ```rust
-use enshwick::damage::{DamageCause, DamageType};
+use enshwick::damage::{DamageCause, DamageTypeNew};
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     load.on_damage(|damage| match damage.cause() {
         DamageCause::Fall => damage.cancel(),
-        DamageCause::Hit => damage.scale_type(DamageType::Poison, 0.5),
+        DamageCause::Hit => damage.scale_type(DamageTypeNew::Poison, 0.5),
         _ => {}
     })
 }

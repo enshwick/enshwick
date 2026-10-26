@@ -1,9 +1,6 @@
 //! Skill checks, comfort registrations and experience, each handed to the
 //! mods that asked for it.
 
-use crate::mod_index::ModIndex;
-use crate::pinned;
-use crate::pinned::{Constant, Symbol};
 use core::ffi::c_void;
 use std::cell::RefCell;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -19,6 +16,9 @@ use crate::ecs::Engine;
 use crate::host::Loader;
 use crate::host::{Registered, take};
 use crate::locks::Relock;
+use crate::mod_index::ModIndex;
+use crate::pinned;
+use crate::pinned::{Constant, Symbol};
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[

@@ -37,8 +37,8 @@ call:
 
 | Call | Event | What the game does with it |
 | --- | --- | --- |
-| `npc_command(npc, NpcOrder::GoTo(at))` | `NpcCommandEvent` | the survivor with that survivor id walks to `at` |
-| `npc_command(npc, NpcOrder::Reset)` | `NpcCommandEvent` | the survivor drops the order and goes back to its routine |
+| `npc_command(npc, NpcCommandType::GoToPosition(at))` | `NpcCommandEvent` | the survivor with that survivor id walks to `at` |
+| `npc_command(npc, NpcCommandType::Reset)` | `NpcCommandEvent` | the survivor drops the order and goes back to its routine |
 | `set_toggle(sender, signal, on)` | `SetToggleStateEvent` | the logic signal switches, as a lever drives a door |
 | `add_threat(attacker, target, threat)` | `AddThreatTargetEvent` | the enemy takes notice of the target |
 | `ping(sender, at)` | `UiPingEvent` | a ping on the map and in the world, from the sender |
@@ -52,7 +52,7 @@ no room for more events, `Missing` on a build without the event.
 
 ```rust
 use enshwick::actions::{Action, Arg, Outcome, Value};
-use enshwick::effects::NpcOrder;
+use enshwick::effects::NpcCommandType;
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let effects = load.effects();
@@ -64,7 +64,7 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
         let (Some(at), [Value::Number(id)]) = (world.position(request.player.entity), request.args) else {
             return Outcome::refused("You are nowhere");
         };
-        Outcome::done(format!("{:?}", effects.npc_command(*id as u32, NpcOrder::GoTo(at))))
+        Outcome::done(format!("{:?}", effects.npc_command(*id as u32, NpcCommandType::GoToPosition(at))))
     })
 }
 ```

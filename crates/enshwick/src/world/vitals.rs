@@ -121,7 +121,7 @@ impl World {
     }
 
     /// The meter of an item's own entity, its PIDE (see
-    /// [`Meter`](crate::content::items::Meter)): the count it holds and
+    /// [`FuelSetup`](crate::content::items::FuelSetup)): the count it holds and
     /// its maximum. `None` for an entity without one, off the game thread,
     /// or on a build without the reads.
     ///

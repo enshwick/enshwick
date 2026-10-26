@@ -2,9 +2,9 @@
 //! equipment category, read through its `InventorySetup` as the game links
 //! them.
 
-use enshwick::ecs::Entity;
 use std::sync::OnceLock;
 
+use enshwick::ecs::Entity;
 use enshwick::raw::read_at;
 
 use crate::host::Loader;

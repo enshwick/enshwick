@@ -2,9 +2,10 @@ use std::sync::atomic::{AtomicU32, Ordering};
 
 use enshwick::abi::{Level, PointMode, PointVerdict};
 
-use super::{Declared, Mods, Pending, Registry, Sealed};
 use crate::mod_index::ModIndex;
 use crate::services::Names;
+
+use super::{Declared, Mods, Pending, Registry, Sealed};
 
 struct Loaded(Vec<(&'static str, &'static str, bool)>);
 

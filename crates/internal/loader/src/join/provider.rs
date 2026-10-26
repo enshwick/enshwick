@@ -8,8 +8,9 @@
 //! on a build without a pinned slot, in exactly one slot, and where its
 //! first bytes are the pinned ones; anything else leaves the check off.
 
-use crate::pinned;
 use core::ops::Range;
+
+use crate::pinned;
 
 /// The build table's id of the join's first eight bytes.
 pub const BYTES_ID: &str = "net.join_game.bytes";

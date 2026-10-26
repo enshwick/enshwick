@@ -2,10 +2,11 @@
 //! sizes per item, and the counts, chances and weights of the fill tables
 //! containers roll.
 
-use super::changes::Field;
-use super::{Blob, EngineFacts};
 use crate::Off;
 use crate::engine_ids as ids;
+
+use super::changes::Field;
+use super::{Blob, EngineFacts};
 
 /// Where the fields a loot table edit touches sit on the running build,
 /// resolved by the loader.

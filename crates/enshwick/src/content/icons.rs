@@ -11,9 +11,10 @@
 //! item keeps its vanilla icon anywhere else, the dedicated server
 //! included, where no icon shows anyway.
 
-use super::{Blob, Guid, Id, types};
 use crate::abi::HostApi;
 use crate::{Load, Off};
+
+use super::{Blob, Guid, Id, types};
 
 /// An item's own icon, for [`NewItem::icon`](super::items::NewItem::icon).
 ///
@@ -413,8 +414,8 @@ impl Load<'_> {
         // no icons: the item keeps its vanilla one.
         let (Ok(layout), Ok(key), Ok(like)) = (
             ImageLayout::resolve(self),
-            icon.id.key(types::UI_IMAGE),
-            icon.like.key(types::UI_IMAGE),
+            icon.id.key(types::UI_TEXTURE_RESOURCE),
+            icon.like.key(types::UI_TEXTURE_RESOURCE),
         ) else {
             return Ok(());
         };

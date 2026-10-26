@@ -2,12 +2,13 @@
 
 use std::collections::HashMap;
 
+use crate::content::Guid;
+use crate::content::changes::{Change, Entry, Field, Value};
+
 use super::entries::{ItemsFile, LootFile, RecipesFile, ValueEntry};
 use super::files::PackError;
 use super::pack::Reader;
 use super::{ITEMS_FILE, LOOT_FILE, RECIPES_FILE};
-use crate::content::Guid;
-use crate::content::changes::{Change, Entry, Field, Value};
 
 /// A field a recipe change sets, with its ingredient and the name the pack
 /// gave it, and the value.
@@ -68,7 +69,7 @@ pub(super) fn item_changes(
         .map(|entry| {
             let e = entry.get_ref();
             let fields = vec![
-                (Field::MaxStack, e.max_stack),
+                (Field::MaxStackSize, e.max_stack),
                 (Field::Slots, e.slots),
                 (Field::DamageMod, e.damage_mod),
                 (Field::SpeedMod, e.speed_mod),
@@ -259,7 +260,7 @@ pub(super) fn recipe_changes(
         let mut fields: Vec<RecipeField> = [
             (Field::Output, e.output_count),
             (Field::Cost, e.cost),
-            (Field::Time, e.time),
+            (Field::CraftingDuration, e.time),
         ]
         .into_iter()
         .filter_map(|(field, v)| v.map(|v| (field, None, value(v))))

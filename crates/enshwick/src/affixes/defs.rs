@@ -6,14 +6,14 @@ use crate::stats::{Op, Stat};
 /// # Examples
 ///
 /// ```
-/// use enshwick::affixes::Rarity;
+/// use enshwick::affixes::ItemRarity;
 ///
-/// assert!(Rarity::Common < Rarity::Legendary);
-/// assert_eq!(Rarity::from_raw(2), Some(Rarity::Rare));
+/// assert!(ItemRarity::Common < ItemRarity::Legendary);
+/// assert_eq!(ItemRarity::from_raw(2), Some(ItemRarity::Rare));
 /// ```
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[non_exhaustive]
-pub enum Rarity {
+pub enum ItemRarity {
     /// Common.
     #[default]
     Common,
@@ -27,12 +27,12 @@ pub enum Rarity {
     Legendary,
 }
 
-impl Rarity {
+impl ItemRarity {
     /// The rarity's number, 0 to 4.
     ///
     /// # Examples
     ///
-    /// See [`Rarity`].
+    /// See [`ItemRarity`].
     #[must_use]
     pub const fn to_raw(self) -> u8 {
         self as u8
@@ -42,7 +42,7 @@ impl Rarity {
     ///
     /// # Examples
     ///
-    /// See [`Rarity`].
+    /// See [`ItemRarity`].
     #[must_use]
     pub const fn from_raw(raw: u8) -> Option<Self> {
         match raw {
@@ -61,17 +61,17 @@ impl Rarity {
 /// # Examples
 ///
 /// ```
-/// use enshwick::affixes::Categories;
+/// use enshwick::affixes::ItemCategoryMask;
 ///
-/// let gear = Categories::EQUIPMENT | Categories::WEAPONS;
-/// assert!(gear.contains(Categories::WEAPONS));
+/// let gear = ItemCategoryMask::EQUIPMENT | ItemCategoryMask::WEAPONS;
+/// assert!(gear.contains(ItemCategoryMask::WEAPONS));
 /// assert!(gear.holds(2));
 /// assert!(!gear.holds(3));
 /// ```
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
-pub struct Categories(pub u32);
+pub struct ItemCategoryMask(pub u32);
 
-impl Categories {
+impl ItemCategoryMask {
     /// Armour and rings, the game's `Equipment`.
     pub const EQUIPMENT: Self = Self(1 << 1);
     /// Weapons.
@@ -79,15 +79,15 @@ impl Categories {
     /// Tools.
     pub const TOOLS: Self = Self(1 << 3);
     /// Instruments.
-    pub const INSTRUMENTS: Self = Self(1 << 4);
+    pub const INSTRUMENT: Self = Self(1 << 4);
     /// Fishing rods.
-    pub const FISHING_RODS: Self = Self(1 << 5);
+    pub const FISHING_ROD: Self = Self(1 << 5);
 
     /// Whether every category of `other` is here.
     ///
     /// # Examples
     ///
-    /// See [`Categories`].
+    /// See [`ItemCategoryMask`].
     #[must_use]
     pub const fn contains(self, other: Self) -> bool {
         self.0 & other.0 == other.0
@@ -97,14 +97,14 @@ impl Categories {
     ///
     /// # Examples
     ///
-    /// See [`Categories`].
+    /// See [`ItemCategoryMask`].
     #[must_use]
     pub const fn holds(self, category: u8) -> bool {
         category < 32 && self.0 & (1 << category) != 0
     }
 }
 
-impl core::ops::BitOr for Categories {
+impl core::ops::BitOr for ItemCategoryMask {
     type Output = Self;
 
     fn bitor(self, other: Self) -> Self {
@@ -193,9 +193,9 @@ pub struct AffixDef {
     /// How likely it rolls against the others, 100 by default.
     pub weight: u32,
     /// How rare it is.
-    pub rarity: Rarity,
+    pub rarity: ItemRarity,
     /// The item categories it rolls on.
-    pub categories: Categories,
+    pub categories: ItemCategoryMask,
     /// Affixes of one group never roll together on an item.
     pub group: Option<String>,
 }
@@ -208,12 +208,12 @@ impl AffixDef {
     ///
     /// See the [module](crate::affixes).
     #[must_use]
-    pub fn new(text: &str, categories: Categories) -> Self {
+    pub fn new(text: &str, categories: ItemCategoryMask) -> Self {
         Self {
             text: text.to_owned(),
             ranges: Vec::new(),
             weight: 100,
-            rarity: Rarity::Common,
+            rarity: ItemRarity::Common,
             categories,
             group: None,
         }
@@ -235,9 +235,9 @@ impl AffixDef {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::affixes::{AffixDef, Categories};
+    /// use enshwick::affixes::{AffixDef, ItemCategoryMask};
     ///
-    /// assert_eq!(AffixDef::new("a", Categories::WEAPONS).weight(5).weight, 5);
+    /// assert_eq!(AffixDef::new("a", ItemCategoryMask::WEAPONS).weight(5).weight, 5);
     /// ```
     #[must_use]
     pub const fn weight(mut self, weight: u32) -> Self {
@@ -251,7 +251,7 @@ impl AffixDef {
     ///
     /// See the [module](crate::affixes).
     #[must_use]
-    pub const fn rarity(mut self, rarity: Rarity) -> Self {
+    pub const fn rarity(mut self, rarity: ItemRarity) -> Self {
         self.rarity = rarity;
         self
     }
@@ -261,9 +261,9 @@ impl AffixDef {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::affixes::{AffixDef, Categories};
+    /// use enshwick::affixes::{AffixDef, ItemCategoryMask};
     ///
-    /// let def = AffixDef::new("a", Categories::WEAPONS).group("element");
+    /// let def = AffixDef::new("a", ItemCategoryMask::WEAPONS).group("element");
     /// assert_eq!(def.group.as_deref(), Some("element"));
     /// ```
     #[must_use]
@@ -294,9 +294,9 @@ impl AffixDef {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::affixes::{AffixDef, Categories};
+    /// use enshwick::affixes::{AffixDef, ItemCategoryMask};
     ///
-    /// let def = AffixDef::new("a", Categories::WEAPONS);
+    /// let def = AffixDef::new("a", ItemCategoryMask::WEAPONS);
     /// let ranges = def.to_ranges();
     /// assert_eq!(def.to_data(&ranges).modifier_count, 0);
     /// ```
@@ -329,11 +329,11 @@ impl AffixDef {
     ///
     /// ```
     /// use enshwick::abi::StatRef;
-    /// use enshwick::affixes::{AffixDef, Categories, Range};
+    /// use enshwick::affixes::{AffixDef, ItemCategoryMask, Range};
     /// use enshwick::stats::{Op, Stat};
     ///
     /// let health = Stat::from_ref(StatRef { index: 0, key: 9 });
-    /// let def = AffixDef::new("bear", Categories::EQUIPMENT).with(Range::new(health, Op::Add, 1.0, 2.0));
+    /// let def = AffixDef::new("bear", ItemCategoryMask::EQUIPMENT).with(Range::new(health, Op::Add, 1.0, 2.0));
     /// let ranges = def.to_ranges();
     /// let data = def.to_data(&ranges);
     /// // SAFETY: `data` points into `def` and `ranges`, both alive and unchanged here.
@@ -376,8 +376,8 @@ impl AffixDef {
                 })
                 .collect::<Option<_>>()?,
             weight: data.weight,
-            rarity: Rarity::from_raw(data.rarity)?,
-            categories: Categories(data.categories),
+            rarity: ItemRarity::from_raw(data.rarity)?,
+            categories: ItemCategoryMask(data.categories),
             group: (!group.is_empty()).then(|| group.to_owned()),
         };
         def.check().is_ok().then_some(def)

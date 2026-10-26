@@ -1,10 +1,11 @@
 //! The join hook on the client.
 
-use super::super::chains::Next;
 use std::collections::BTreeMap;
 use std::sync::OnceLock;
 
 use enshwick::abi::UiDialog;
+
+use super::super::chains::Next;
 
 /// The online provider's join: every join from the game's menus, to a
 /// dedicated server or into a hosted game's lobby, passes a target

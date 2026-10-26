@@ -3,9 +3,6 @@
 //! action, so nothing moves and nothing is lost; the filters see the server's
 //! world only.
 
-use crate::mod_index::ModIndex;
-use crate::pinned;
-use crate::registry::Registry;
 use core::ffi::c_void;
 use std::cell::RefCell;
 use std::sync::OnceLock;
@@ -17,6 +14,9 @@ use enshwick::raw::{read_at, read_ptr_at, write_at};
 use crate::chains::Next;
 use crate::ecs::{Components, Engine};
 use crate::host::{Loader, Registered};
+use crate::mod_index::ModIndex;
+use crate::pinned;
+use crate::registry::Registry;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[

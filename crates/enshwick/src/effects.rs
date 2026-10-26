@@ -224,16 +224,16 @@ struct Ping {
 /// # Examples
 ///
 /// ```
-/// use enshwick::effects::NpcOrder;
+/// use enshwick::effects::NpcCommandType;
 ///
-/// let order = NpcOrder::GoTo([10.0, 50.0, -3.0]);
-/// assert_ne!(order, NpcOrder::Reset);
+/// let order = NpcCommandType::GoToPosition([10.0, 50.0, -3.0]);
+/// assert_ne!(order, NpcCommandType::Reset);
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[non_exhaustive]
-pub enum NpcOrder {
+pub enum NpcCommandType {
     /// Walk to a point, in metres.
-    GoTo([f64; 3]),
+    GoToPosition([f64; 3]),
     /// Drop what it was told and go back to its routine.
     Reset,
 }
@@ -320,20 +320,20 @@ impl Effects {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::effects::{Effects, NpcOrder};
+    /// use enshwick::effects::{Effects, NpcCommandType};
     ///
     /// fn gather(effects: &Effects, survivor: u32, at: [f64; 3]) {
-    ///     if let Err(why) = effects.npc_command(survivor, NpcOrder::GoTo(at)) {
+    ///     if let Err(why) = effects.npc_command(survivor, NpcCommandType::GoToPosition(at)) {
     ///         enshwick::debug!("survivor {survivor} stays: {why}");
     ///     }
     /// }
     /// ```
-    pub fn npc_command(&self, npc: u32, order: NpcOrder) -> Result<(), WorldError> {
+    pub fn npc_command(&self, npc: u32, order: NpcCommandType) -> Result<(), WorldError> {
         let event = self.npc.ok_or(WorldError::Missing)?;
         let mut bytes = blank(event.ty)?;
         let (kind, at) = match order {
-            NpcOrder::Reset => (0, None),
-            NpcOrder::GoTo(at) => (1, Some(at)),
+            NpcCommandType::Reset => (0, None),
+            NpcCommandType::GoToPosition(at) => (1, Some(at)),
         };
         put(&mut bytes, event.kind, kind)?;
         put(&mut bytes, event.npc, npc)?;

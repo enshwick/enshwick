@@ -3,13 +3,13 @@
 //! field; once every mod is initialised it seals the events, and a sent
 //! event goes straight to its subscribers on the sending thread.
 
-use crate::mod_index::ModIndex;
 use std::sync::{Mutex, OnceLock};
 
 use enshwick::abi::{ModEventFn, Status};
 use enshwick::services::{LayoutError, compare};
 
 use crate::locks::Relock;
+use crate::mod_index::ModIndex;
 
 /// A layout as `(field name, hash)` per field.
 pub(crate) type Fields = Vec<(String, u64)>;
