@@ -126,14 +126,6 @@ pub(super) fn libraries(
         // while `discover` keeps it loaded.
         match unsafe { crate::manifest::parse(library.manifest) } {
             Ok(candidate) => {
-                if !enshwick::abi::is_valid_id(&candidate.id) {
-                    crate::log!(
-                        WARN,
-                        "{}: the id {} has no author; the next Enshwick refuses it, so update the mod",
-                        library.file,
-                        candidate.id
-                    );
-                }
                 changed |= list.note(&candidate.id, &library.file);
                 let off = std::iter::once(candidate.id.as_str())
                     .chain(candidate.former_ids())
