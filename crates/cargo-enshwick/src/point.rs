@@ -24,7 +24,8 @@ const FORMAT: u32 = 1;
 #[serde(deny_unknown_fields)]
 pub(crate) struct Schema {
     /// The format, 1.
-    schema: u32,
+    #[serde(rename = "schema")]
+    format: u32,
     /// The owner's id.
     #[serde(rename = "mod")]
     owner: String,
@@ -111,10 +112,10 @@ impl Schema {
     /// When the text is no schema this tool reads.
     pub(crate) fn parse(text: &str) -> Result<Self, String> {
         let schema: Self = toml::from_str(text).map_err(|e| format!("the schema: {e}"))?;
-        if schema.schema != FORMAT {
+        if schema.format != FORMAT {
             return Err(format!(
                 "the schema is format {}; this cargo-enshwick reads {FORMAT}: update it",
-                schema.schema
+                schema.format
             ));
         }
         Ok(schema)
@@ -211,7 +212,7 @@ pub(crate) fn run(name: &str, from: &Path, out: Option<&Path>) -> Result<String,
                         path.display()
                     ))
                 }
-                None => Ok(code),
+                None => Ok(code.trim_end().to_owned()),
             };
         }
         owners_seen.push(schema.owner);
@@ -463,6 +464,17 @@ mod tests {
         let schema = Schema::parse(SCHEMA).unwrap();
         let code = rust(&schema, "you.stalls:price").unwrap();
         assert_eq!(code, include_str!("../tests/fixtures/stalls_price.rs"));
+    }
+
+    #[test]
+    fn the_examples_definition_is_what_the_trading_post_publishes() {
+        let schema =
+            Schema::parse(include_str!("../../../examples/trading-post/points.toml")).unwrap();
+        assert_eq!(
+            rust(&schema, "you.trading-post:price").unwrap(),
+            include_str!("../../../examples/haggling/src/price.rs"),
+            "run cargo enshwick point you.trading-post:price again"
+        );
     }
 
     #[test]

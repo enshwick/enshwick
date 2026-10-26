@@ -304,6 +304,7 @@ mod tests {
             author_count: 0,
             license: Str::EMPTY,
             homepage: Str::EMPTY,
+            points: Str::EMPTY,
         }
     }
 

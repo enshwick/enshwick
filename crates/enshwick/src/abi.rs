@@ -1434,6 +1434,7 @@ impl ManifestFlags {
 ///     author_count: 0,
 ///     license: Str::new("MIT"),
 ///     homepage: Str::EMPTY,
+///     points: Str::EMPTY,
 /// };
 /// assert!(manifest.flags.contains(ManifestFlags::JOIN));
 /// ```
@@ -5204,7 +5205,7 @@ pub struct Layout {
 ///
 /// let spec = ServiceSpec {
 ///     header: Header::of::<ServiceSpec>(),
-///     name: Str::new("trading-post:prices"),
+///     name: Str::new("you.trading-post:prices"),
 ///     major: 1,
 ///     layout: Layout { fields: core::ptr::null(), count: 0, size: 0 },
 ///     table: core::ptr::null(),
@@ -5274,7 +5275,7 @@ impl ServiceFound {
 ///
 /// let spec = EventSpec {
 ///     header: Header::of::<EventSpec>(),
-///     name: Str::new("trading-post:sold"),
+///     name: Str::new("you.trading-post:sold"),
 ///     layout: Layout { fields: core::ptr::null(), count: 0, size: 0 },
 /// };
 /// assert_eq!(spec.layout.size, 0);

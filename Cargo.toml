@@ -9,7 +9,7 @@ members = [
     "crates/internal/*",
     "examples/hot-reload",
     "examples/market-stalls",
-    "examples/safe-viewers",
+    "examples/haggling",
     "examples/trading-post",
     "examples/trading-post-api",
     "tools/compat",

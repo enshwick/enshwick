@@ -10,28 +10,30 @@ can switch one link off without the mod, and the Mods screen and the
 [conflict report](logging.md#conflicts) show who extends what.
 
 The [examples](https://github.com/enshwick/enshwick/tree/main/examples)
-folder holds the mod this chapter follows: `safe-viewers` extends the
-[Safes](https://github.com/enshwick/mod-safes)
-mod's access rule. Players listed as viewers may open every Safe, and with
-`owner_removes_only` nobody but a Safe's owner removes it, administrators
-included.
+folder holds the mods this chapter follows: `trading-post` defines the point
+`you.trading-post:price`, what it pays for an item, and `haggling` extends it.
+Regular customers get more for what they sell, and the trading post buys no
+item on the refused list.
 
-## The points of Enshwick's mods
+## Getting a point's definition
 
-The points of Enshwick's own mods are declared in
-[`enshwick::points`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/points.rs),
-so extending them needs no crate but the API:
+A mod that extends a point compiles a definition of it: the input struct, the
+answer's type and every type they reach. The owner's build writes a schema of
+each point it lists in its manifest, and `cargo enshwick point` writes the
+definition from it:
 
-| Point                             | Declaration                               | Answer | Refusal                    |
-| --------------------------------- | ----------------------------------------- | ------ | -------------------------- |
-| `safes:access`                    | `points::safes::Access`                   | `bool` | final: the player may not  |
-| `survivors-per-altar:copy-limit`  | `points::survivors_per_altar::CopyLimit`  | `u32`  | none                       |
-| `survivors-per-altar:charge-cost` | `points::survivors_per_altar::ChargeCost` | `u16`  | the staff's use is refused |
-| `flame-altar-count:limit`         | `points::flame_altar_count::AltarLimit`   | `u8`   | none                       |
-| `area-loot:eligible`              | `points::area_loot::Eligible`             | `bool` | none                       |
+```bash
+cargo enshwick point you.trading-post:price --from <game folder> --out src/price.rs
+```
 
-Each declaration's rustdoc says what the owner answers, on which thread the
-point is asked, and what the answer means.
+`--from` is the owner's DLL, a folder with it in it or in its `mods/`, such as
+the game's, or a schema file the owner published. The tool reads the schema
+from the DLL without running it. Declare the written module `pub` (`pub mod
+price;`), so its types count as the mod's own API. The file ends with checks
+that hold it to the owner's layout; write it again when the owner adds fields
+or points, rather than editing it. A definition older than the owner keeps
+working, since points grow by appending fields, and one that no longer matches
+the owner leaves the link inert with the reason in the log.
 
 ## Extending a point
 
@@ -40,31 +42,55 @@ attaches `link` during `init`. The link gets the point's input and the answer
 so far, the owner's own or what the links before it left, and returns a
 [`Verdict`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/points.rs):
 `Pass` keeps the answer, `Set(value)` changes it, and `Refuse` stops the
-chain where the point allows refusals. The heart of `safe-viewers`:
+chain where the point allows refusals. The heart of `haggling`, with the
+definition from [the schema](#getting-a-points-definition) in `price`:
 
 ```rust
-use enshwick::points::safes::{Access, SafeAction};
+# pub mod price {
+#     #[repr(transparent)]
+#     #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, enshwick::Shape)]
+#     #[shape(values(BUY, SELL))]
+#     pub struct Deal(pub u32);
+#     impl Deal {
+#         pub const BUY: Self = Self(0);
+#         pub const SELL: Self = Self(1);
+#     }
+#     #[enshwick::point(name = "you.trading-post:price", mode = Override, output = u32, refusable)]
+#     #[derive(Clone, Copy, Debug)]
+#     pub struct Price {
+#         pub item: u32,
+#         pub player: u64,
+#         pub character: enshwick::ecs::Entity,
+#         pub deal: Deal,
+#     }
+# }
 use enshwick::points::{Order, Verdict};
+use price::{Deal, Price};
 
-const VIEWERS: [u64; 1] = [0x00ab_cdef_0123_4567];
+const REGULARS: [u64; 1] = [0x00ab_cdef_0123_4567];
+const REFUSED: [u32; 1] = [5];
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    load.extend_point(&Order::new(), |access: &Access, may: &bool| {
-        if access.action == SafeAction::REMOVE && access.player != access.owner {
+    load.extend_point(&Order::new(), |price: &Price, paid: &u32| {
+        if price.deal != Deal::SELL {
+            return Verdict::Pass;
+        }
+        if REFUSED.contains(&price.item) {
             return Verdict::Refuse;
         }
-        if access.action == SafeAction::USE && !*may && VIEWERS.contains(&access.player) {
-            return Verdict::Set(true);
+        if REGULARS.contains(&price.player) {
+            return Verdict::Set(paid + paid / 5);
         }
         Verdict::Pass
     })
 }
 ```
 
-The example keeps its viewers in settings and swaps them whole when the
-settings change, since `safes:access` is asked on the server's worker threads
-inside the game's systems: a link reads lock-free state, never waits and
-never allocates on its common path. Each declaration names its thread.
+The example keeps its regulars in settings and swaps them whole when the
+settings change: a link may be asked on any thread the owner asks from, such
+as the server's worker threads inside the game's systems, so it reads
+lock-free state, never waits and never allocates on its common path. Each
+point's documentation names its thread.
 
 `load.observe_point(order, link)` attaches a link that only sees each answer,
 for logging or statistics.
@@ -79,7 +105,7 @@ places a link:
 ```rust
 use enshwick::points::Order;
 
-let order = Order::new().after("safe-viewers").before("safe-locks").priority(10);
+let order = Order::new().after("you.haggling").before("you.bargains").priority(10);
 assert_eq!(order.priority_value(), 10);
 ```
 
@@ -99,16 +125,16 @@ Declare the owner in the manifest, with a version range:
 
 ```rust
 let manifest = enshwick::manifest!(
-    id: "you.safe-viewers",
-    side: BOTH,
-    recommends: ["safes" => ">=0.0.0-dev, <1.0"],
+    id: "you.haggling",
+    side: SERVER,
+    recommends: ["you.trading-post" => ""],
 );
 assert_eq!(manifest.dependency_count, 1);
 ```
 
 With `recommends`, a missing owner leaves the link inert, which is no error:
 the mod runs and `loader.log` says
-`point safes:access: the link stays inert: safes does not run`. Use
+`point you.trading-post:price: the link stays inert: you.trading-post does not run`. Use
 `requires` when the mod is pointless without the owner: the loader then skips
 the mod with a reason. Links match once every mod is initialised, so load
 order does not matter. A mod links each point once: a second
@@ -134,7 +160,7 @@ A reason that ends in `both mods must compile one declaration` means the two
 mods were built against different versions of the point's declaration.
 
 A link that panics is turned off with one warning,
-`its link on safes:access panicked and is off; safes:access runs without it`.
+`its link on you.trading-post:price panicked and is off; you.trading-post:price runs without it`.
 The point is answered without it from then on, and the mod keeps running.
 
 ## Switching a link off
@@ -143,10 +169,10 @@ A player keeps a mod but turns off one of its links in
 `mods/enshwick/mods.toml`, under the linking mod's entry:
 
 ```toml
-[you.safe-viewers]
+[you.haggling]
 enabled = true
-file = "enshwick-example-safe-viewers.dll"
-links_off = ["safes:access"]
+file = "enshwick_example_haggling.dll"
+links_off = ["you.trading-post:price"]
 ```
 
 The change takes effect at the next start.
@@ -156,9 +182,13 @@ The change takes effect at the next start.
 The mod that owns a rule declares its point once with
 [`#[point]`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/lib.rs):
 the input struct, the name `<owner id>:<point>`, the mode, the answer's type
-and, when links may refuse, `refusable`. Publish the declaration in a crate
-other mods can depend on, as for a service; Enshwick's own mods keep theirs in
-the API.
+and, when links may refuse, `refusable`. List it under `points` in the
+[manifest](concepts/loader-and-abi.md#the-manifest), so its schema ships with
+the mod and other mods can write their definitions from it. Every field's
+type and the answer's are numbers, `bool`, `enshwick::ecs::Entity`,
+`enshwick::content::Guid`, or types of the mod's own with
+[`#[derive(Shape)]`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/lib.rs);
+the doc comments of the point and its fields go into the schema too.
 
 ```rust
 use std::sync::OnceLock;
@@ -166,13 +196,16 @@ use std::sync::OnceLock;
 use enshwick::points::OwnedPoint;
 
 /// The price of an item at the trading post, in coins.
-#[enshwick::point(name = "trading-post:price", mode = Override, output = u32, refusable)]
+#[enshwick::point(name = "you.trading-post:price", mode = Override, output = u32, refusable)]
 #[derive(Clone, Copy, Debug)]
 pub struct Price {
     pub item: u32,
 }
 
 static PRICE: OnceLock<OwnedPoint<Price>> = OnceLock::new();
+
+let manifest = enshwick::manifest!(id: "you.trading-post", side: SERVER, points: [Price]);
+# let _ = manifest;
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let _first = PRICE.set(load.define_point::<Price>()?);
@@ -219,20 +252,35 @@ would and `defined_points` lists the points; for a mod that extends one,
 loader. The example's test:
 
 ```rust
+# pub mod price {
+#     #[repr(transparent)]
+#     #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, enshwick::Shape)]
+#     #[shape(values(BUY, SELL))]
+#     pub struct Deal(pub u32);
+#     impl Deal {
+#         pub const BUY: Self = Self(0);
+#         pub const SELL: Self = Self(1);
+#     }
+#     #[enshwick::point(name = "you.trading-post:price", mode = Override, output = u32, refusable)]
+#     #[derive(Clone, Copy, Debug)]
+#     pub struct Price {
+#         pub item: u32,
+#         pub player: u64,
+#         pub character: enshwick::ecs::Entity,
+#         pub deal: Deal,
+#     }
+# }
 use enshwick::ecs::Entity;
 use enshwick::points::Decision;
-use enshwick::points::safes::{Access, SafeAction};
+use price::{Deal, Price};
 
-fn viewer_opens(loader: &enshwick::test::Installed) {
-    let access = Access {
+fn a_regular_gets_more(loader: &enshwick::test::Installed) {
+    let price = Price {
+        item: 1,
         player: 0x00ab_cdef_0123_4567,
-        owner: 1,
         character: Entity(10),
-        safe: Entity(500),
-        action: SafeAction::USE,
-        admin: false,
-        allowed: false,
+        deal: Deal::SELL,
     };
-    assert_eq!(loader.ask_point(&access, false), Decision::Changed(true));
+    assert_eq!(loader.ask_point(&price, 10), Decision::Changed(12));
 }
 ```

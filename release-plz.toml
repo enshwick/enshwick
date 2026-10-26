@@ -34,7 +34,7 @@ name = "enshwick-example-market-stalls"
 release = false
 
 [[package]]
-name = "enshwick-example-safe-viewers"
+name = "enshwick-example-haggling"
 release = false
 
 [[package]]

@@ -130,8 +130,8 @@ pub use enshwick_macros::Config;
 /// A struct is `#[repr(C)]` or `#[repr(transparent)]`; an enum has an
 /// integer `repr` and unit variants, each hashed with its discriminant.
 /// `#[shape(values(A, B))]` on a newtype over an integer hashes its named
-/// constants with their values, as
-/// [`SafeAction`](points::safes::SafeAction) does.
+/// constants with their values. `#[shape(api = "<name>")]` marks a type
+/// of this crate, which a point schema names `enshwick.<name>`.
 ///
 /// # Examples
 ///
@@ -152,7 +152,7 @@ pub use enshwick_macros::Config;
 ///     pub const SELL: Self = Self(1);
 /// }
 ///
-/// #[enshwick::event(name = "trading-post:sold")]
+/// #[enshwick::event(name = "you.trading-post:sold")]
 /// #[derive(Clone, Copy, Debug)]
 /// pub struct Sold {
 ///     pub price: Coins,
@@ -171,7 +171,7 @@ pub use enshwick_macros::Shape;
 /// # Examples
 ///
 /// ```
-/// #[enshwick::event(name = "trading-post:sold")]
+/// #[enshwick::event(name = "you.trading-post:sold")]
 /// #[derive(Clone, Copy, Debug)]
 /// pub struct Sold {
 ///     pub item: u32,
@@ -224,7 +224,7 @@ pub use enshwick_macros::hook;
 /// ```
 /// use enshwick::points::{Order, Verdict};
 ///
-/// #[enshwick::point(name = "trading-post:price", mode = Override, output = u32, refusable)]
+/// #[enshwick::point(name = "you.trading-post:price", mode = Override, output = u32, refusable)]
 /// #[derive(Clone, Copy, Debug)]
 /// pub struct Price {
 ///     pub item: u32,
@@ -251,7 +251,7 @@ pub use enshwick_macros::point;
 /// # Examples
 ///
 /// ```
-/// #[enshwick::service(name = "trading-post:prices", version = 1)]
+/// #[enshwick::service(name = "you.trading-post:prices", version = 1)]
 /// pub struct Prices {
 ///     pub price: extern "system" fn(item: u32) -> u32,
 /// }

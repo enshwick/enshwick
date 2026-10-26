@@ -13,9 +13,9 @@
 //! `mods/enshwick/mods.toml` switch one off. With no live link, asking a
 //! point is one atomic load.
 //!
-//! The points of Enshwick's own mods are declared here, so a mod can extend
-//! them with this crate alone: [`safes`], [`survivors_per_altar`],
-//! [`flame_altar_count`] and [`area_loot`].
+//! The owner lists its points in [`manifest!`](crate::manifest), which puts
+//! their schemas into the manifest; another mod writes its definition of a
+//! point from there with `cargo enshwick point <owner id>:<point>`.
 
 use core::ffi::c_void;
 use core::marker::PhantomData;
@@ -93,13 +93,13 @@ impl Mode {
 /// ```
 /// use enshwick::points::{Mode, Point};
 ///
-/// #[enshwick::point(name = "trading-post:price", mode = Override, output = u32)]
+/// #[enshwick::point(name = "you.trading-post:price", mode = Override, output = u32)]
 /// #[derive(Clone, Copy, Debug)]
 /// pub struct Price {
 ///     pub item: u32,
 /// }
 ///
-/// assert_eq!(Price::NAME, "trading-post:price");
+/// assert_eq!(Price::NAME, "you.trading-post:price");
 /// assert_eq!(Price::MODE, Mode::Override);
 /// assert!(!Price::REFUSE);
 /// ```
@@ -204,7 +204,7 @@ impl<O: Copy> Decision<O> {
 /// ```
 /// use enshwick::points::Order;
 ///
-/// let order = Order::new().after("safe-viewers").priority(10);
+/// let order = Order::new().after("you.haggling").priority(10);
 /// assert_eq!(order.priority_value(), 10);
 /// ```
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -234,7 +234,7 @@ impl Order {
     /// # Examples
     ///
     /// ```
-    /// let order = enshwick::points::Order::new().before("safe-viewers");
+    /// let order = enshwick::points::Order::new().before("you.haggling");
     /// # let _ = order;
     /// ```
     #[must_use]
@@ -248,7 +248,7 @@ impl Order {
     /// # Examples
     ///
     /// ```
-    /// let order = enshwick::points::Order::new().after("safe-viewers");
+    /// let order = enshwick::points::Order::new().after("you.haggling");
     /// # let _ = order;
     /// ```
     #[must_use]
@@ -285,7 +285,7 @@ impl Order {
 /// # Examples
 ///
 /// ```
-/// #[enshwick::point(name = "trading-post:price", mode = Override, output = u32)]
+/// #[enshwick::point(name = "you.trading-post:price", mode = Override, output = u32)]
 /// #[derive(Clone, Copy, Debug)]
 /// pub struct Price {
 ///     pub item: u32,
@@ -342,7 +342,7 @@ impl<P: Point> OwnedPoint<P> {
     /// # Examples
     ///
     /// ```
-    /// #[enshwick::point(name = "trading-post:price", mode = Override, output = u32)]
+    /// #[enshwick::point(name = "you.trading-post:price", mode = Override, output = u32)]
     /// #[derive(Clone, Copy, Debug)]
     /// pub struct Price {
     ///     pub item: u32,
@@ -465,7 +465,7 @@ impl Load<'_> {
     /// ```
     /// use enshwick::points::{Order, Verdict};
     ///
-    /// #[enshwick::point(name = "trading-post:price", mode = Override, output = u32)]
+    /// #[enshwick::point(name = "you.trading-post:price", mode = Override, output = u32)]
     /// #[derive(Clone, Copy, Debug)]
     /// pub struct Price {
     ///     pub item: u32,
@@ -498,7 +498,7 @@ impl Load<'_> {
     /// ```
     /// use enshwick::points::Order;
     ///
-    /// #[enshwick::point(name = "trading-post:price", mode = Observe, output = u32)]
+    /// #[enshwick::point(name = "you.trading-post:price", mode = Observe, output = u32)]
     /// #[derive(Clone, Copy, Debug)]
     /// pub struct Price {
     ///     pub item: u32,
@@ -710,11 +710,6 @@ pub struct LinkPlace<'a> {
     /// Ids of mods whose links run before this one.
     pub after: &'a [&'a str],
 }
-
-pub mod area_loot;
-pub mod flame_altar_count;
-pub mod safes;
-pub mod survivors_per_altar;
 
 #[cfg(test)]
 mod tests {
