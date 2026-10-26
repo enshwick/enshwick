@@ -14,6 +14,5 @@
   "mods/enshwick-area-loot": "0.0.0-dev",
   "mods/enshwick-build-camera": "0.0.0-dev",
   "mods/enshwick-shared-experience": "0.0.0-dev",
-  "mods/enshwick-admin-tools": "0.0.0-dev",
-  "mods/enshwick-optimizer": "0.0.0-dev"
+  "mods/enshwick-admin-tools": "0.0.0-dev"
 }

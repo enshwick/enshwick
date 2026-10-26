@@ -74,6 +74,6 @@ override so that the game loads Enshwick's `powrprof.dll`:
 ENV WINEDLLOVERRIDES="powrprof=n,b"
 ```
 
-[The optimizer](https://github.com/enshwick/enshwick/tree/main/mods/enshwick-optimizer)
+[The optimizer](https://github.com/enshwick/mod-optimizer)
 lowers the server's CPU under Wine and Proton, and with a container CPU limit
 starts no more task workers than the limit allows.

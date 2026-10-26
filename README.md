@@ -42,10 +42,10 @@ they are never released.
 
 ### Server
 
-| Mod                                      | What it does                                                              |
-| ---------------------------------------- | ------------------------------------------------------------------------- |
-| [Admin tools](mods/enshwick-admin-tools) | administrator actions and a command file run on the server's console      |
-| [Optimizer](mods/enshwick-optimizer)     | less CPU on Windows and under Wine and Proton, with a report and measures |
+| Mod                                                    | What it does                                                              |
+| ------------------------------------------------------ | ------------------------------------------------------------------------- |
+| [Admin tools](mods/enshwick-admin-tools)               | administrator actions and a command file run on the server's console      |
+| [Optimizer](https://github.com/enshwick/mod-optimizer) | less CPU on Windows and under Wine and Proton, with a report and measures |
 
 ## Install
 
