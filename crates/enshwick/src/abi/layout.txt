@@ -1,4 +1,4 @@
-abi 2.82
+abi 2.83
 ActionCall size 144 align 8
     header at 0 size 8
     kind at 8 size 4
@@ -238,7 +238,7 @@ HookSpec size 32 align 8
     next at 16 size 8
     priority at 24 size 4
     flags at 28 size 4
-HostApi size 1256 align 8
+HostApi size 1264 align 8
     header at 0 size 8
     host_version at 8 size 16
     build at 24 size 8
@@ -395,6 +395,7 @@ HostApi size 1256 align 8
     altar_zones_changed at 1232 size 8
     altar_limit_filter at 1240 size 8
     base_limit at 1248 size 8
+    voxel_read at 1256 size 8
 Interaction size 56 align 8
     header at 0 size 8
     kind at 8 size 4
@@ -789,6 +790,11 @@ UiWidget size 96 align 8
     result at 84 size 4
     anchor at 88 size 4
     reserved at 92 size 4
+Voxel size 4 align 1
+    kind at 0 size 1
+    material at 1 size 1
+    fill at 2 size 1
+    reserved at 3 size 1
 WeatherFront size 56 align 8
     header at 0 size 8
     layer at 8 size 4

@@ -43,6 +43,7 @@ pub(crate) mod text;
 pub(crate) mod textures;
 pub(crate) mod ui;
 pub(crate) mod user;
+pub(crate) mod voxel;
 pub(crate) mod weather;
 pub(crate) mod world;
 

@@ -16,7 +16,7 @@ use crate::abi::{
     ServiceSpec, SkillCheckFn, SpawnRequest, StatChangeFn, StatDefData, StatModifierData,
     StatModify, StatRef, StatSource, Status, StatusFn, Str, SummonFn, SurvivorLookupFn,
     SurvivorStatusFn, TeleportRequest, TerrainEdit, TerrainMaterialInfo, UiAnswerFn, UiDialog,
-    UiFrameFn, UiMarker, UiWidget, WeatherFront, ZoneCheckFn,
+    UiFrameFn, UiMarker, UiWidget, Voxel, WeatherFront, ZoneCheckFn,
 };
 
 /// The table of services the loader offers a mod.
@@ -1145,4 +1145,22 @@ pub struct HostApi {
     /// grouping takes. [`Status::BAD_ARGS`] for a null `out`. Any thread.
     /// Since minor 82.
     pub base_limit: extern "system" fn(me: ModHandle, out: *mut BaseLimitInfo) -> Status,
+    /// Reads the voxels of the server's world in the box of `size` voxels
+    /// from `min`, in voxels of half a metre from the world's corner, into
+    /// `out`: x fastest, then y, then z, `size[0] * size[1] * size[2]`
+    /// entries. `min` and `size` are borrowed for the call; `out` points at
+    /// `capacity` writable entries, untouched unless the call returns
+    /// [`Status::OK`]. Voxels past the world's edge read as air.
+    /// [`Status::BAD_ARGS`] for a null pointer, an empty box, one past
+    /// [`Voxel::END`], more than [`Voxel::READ_MAX`] voxels or a `capacity`
+    /// below them; [`Status::MISSING`] while part of the box is not loaded,
+    /// far from every player, or on a build without the read. On the
+    /// server's game thread only, also inside a step. Since minor 83.
+    pub voxel_read: extern "system" fn(
+        me: ModHandle,
+        min: *const [u32; 3],
+        size: *const [u32; 3],
+        out: *mut Voxel,
+        capacity: u64,
+    ) -> Status,
 }

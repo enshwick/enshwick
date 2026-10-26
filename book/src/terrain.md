@@ -63,6 +63,54 @@ the cost, give the loot and experience and keep an undo; these edits do
 none of that, so a mod adds what it needs, for example with
 [altar zones](altars.md) and [inventory transactions](inventories.md).
 
+## Reading voxels
+
+[`load.voxels()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/voxels.rs)
+returns the `Voxels` of the server's world, which read the ground and the
+building blocks voxel by voxel without changing them. A `VoxelPos` is a
+voxel's index on each axis from the world's corner, half a metre a step
+with y up; `VoxelPos::from_metres` finds the voxel holding a world
+position.
+
+```rust
+use std::ops::ControlFlow;
+use std::time::Duration;
+
+use enshwick::voxels::{VoxelMaterial, VoxelPos};
+
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    let voxels = load.voxels();
+    let corner = VoxelPos::from_metres([2048.0, 60.0, 2048.0])
+        .ok_or_else(|| enshwick::Off::new("the landmark lies outside the world"))?;
+    load.scheduler()?.every(Duration::from_secs(60), move || {
+        if let Ok(block) = voxels.read(corner, [8, 8, 8]) {
+            let built = block
+                .iter()
+                .filter(|(_, voxel)| matches!(voxel.material(), VoxelMaterial::Building(_)))
+                .count();
+            enshwick::info!("{built} voxels built at the landmark");
+        }
+        ControlFlow::Continue(())
+    });
+    Ok(())
+}
+```
+
+`read(min, size)` returns a `VoxelBox` of up to `READ_MAX` voxels, a box
+of 64 a side; `sample(at)` reads one voxel. Each voxel has a material,
+`Air`, `Terrain(id)` with the id `materials()` lists or `Building(id)`,
+and a fill from 0 to 255, the game's density, which shapes the surface
+between voxels. A box is read in the order x, then y, then z;
+`VoxelBox::get` finds a voxel by its place and `iter` walks them all with
+their places.
+
+The server keeps only the parts of the world near players. A read of a box
+that is not wholly loaded fails with `Missing`; the mod tries again when a
+player is near. Voxels past the world's edge read as air. An empty box, one
+larger than `READ_MAX` or one past 2³⁰ voxels on an axis is `Refused`.
+Reads cost one lock and one copy per 4-metre brick they touch: a read
+inside a step is allowed, and a few small reads per step cost little.
+
 Every call works on the server's game thread, from a game event, a
 [scheduler](events.md#the-scheduler) task or an [action](actions.md); on a
 client, while it hosts a game.

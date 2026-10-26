@@ -1,4 +1,4 @@
-//! The world: components, entities, daytime, game settings, weather and terrain.
+//! The world: components, entities, daytime, game settings, weather, terrain and voxels.
 
 use crate::abi::EntityPlace;
 
@@ -344,5 +344,92 @@ impl Installed {
     #[must_use]
     pub fn saves(&self) -> usize {
         table::with(0, |s| s.saves)
+    }
+}
+
+impl FakeHost {
+    /// Loaded voxels of the world: the box of `size` from `min`, its
+    /// `voxels` x fastest, then y, then z. A read answers from the boxes,
+    /// the last given first where they overlap, and finds a box it does not
+    /// cover wholly not loaded, as the loader does far from every player.
+    ///
+    /// # Panics
+    ///
+    /// When `voxels` does not hold one voxel for each place in the box.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::voxels::{Voxel, VoxelMaterial, VoxelPos};
+    ///
+    /// let rock = Voxel::new(VoxelMaterial::Terrain(9), 255);
+    /// let loader = enshwick::test::FakeHost::new()
+    ///     .voxels(VoxelPos::new(0, 0, 0), [2, 1, 1], &[rock, Voxel::default()])
+    ///     .install();
+    /// # let _ = loader;
+    /// ```
+    #[must_use]
+    pub fn voxels(
+        mut self,
+        min: crate::voxels::VoxelPos,
+        size: [u32; 3],
+        voxels: &[crate::voxels::Voxel],
+    ) -> Self {
+        let count = size.iter().map(|&axis| axis as usize).product::<usize>();
+        assert_eq!(
+            voxels.len(),
+            count,
+            "a fake voxel box of {size:?} takes {count} voxels"
+        );
+        self.voxels.push(VoxelGrid {
+            min: min.to_array(),
+            size,
+            voxels: voxels.iter().map(|voxel| voxel.to_abi()).collect(),
+        });
+        self
+    }
+}
+
+/// A box of loaded voxels the fake answers reads from.
+#[derive(Clone, Debug)]
+pub(crate) struct VoxelGrid {
+    min: [u32; 3],
+    size: [u32; 3],
+    voxels: Vec<crate::abi::Voxel>,
+}
+
+impl VoxelGrid {
+    /// The voxel at `at`, when the grid holds it.
+    fn get(&self, at: [u32; 3]) -> Option<crate::abi::Voxel> {
+        let mut index = 0usize;
+        for axis in (0..3).rev() {
+            let offset = at[axis].checked_sub(self.min[axis])?;
+            if offset >= self.size[axis] {
+                return None;
+            }
+            index = index * self.size[axis] as usize + offset as usize;
+        }
+        self.voxels.get(index).copied()
+    }
+
+    /// The voxels of the box of `size` from `min`, x fastest, then y, then
+    /// z, from the last of `grids` that holds each; `None` when one is in
+    /// none of them.
+    pub(crate) fn read(
+        grids: &[Self],
+        min: [u32; 3],
+        size: [u32; 3],
+    ) -> Option<Vec<crate::abi::Voxel>> {
+        let [width, height, depth] = size;
+        let mut voxels = Vec::new();
+        for z in 0..depth {
+            for y in 0..height {
+                for x in 0..width {
+                    let at = [min[0] + x, min[1] + y, min[2] + z];
+                    voxels.push(grids.iter().rev().find_map(|grid| grid.get(at))?);
+                }
+            }
+        }
+        Some(voxels)
     }
 }

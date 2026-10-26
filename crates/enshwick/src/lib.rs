@@ -123,6 +123,7 @@ pub mod test;
 pub mod time;
 pub mod ui;
 pub mod vetoes;
+pub mod voxels;
 pub mod weather;
 pub mod world;
 

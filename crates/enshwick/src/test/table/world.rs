@@ -1,11 +1,11 @@
-//! The fake world: players, entities, chat, time, settings, weather and terrain.
+//! The fake world: players, entities, chat, time, settings, weather, terrain and voxels.
 
 use core::ffi::c_void;
 
 use crate::abi::{
     DaytimeInfo, EntityPlace, EventTypeInfo, GameEventFn, Header, ModHandle, PlayerInfo,
     RenameCallFn, Side, SpawnRequest, Status, StatusFn, Str, TeleportRequest, TerrainEdit,
-    TerrainMaterialInfo, WeatherFront,
+    TerrainMaterialInfo, Voxel, WeatherFront,
 };
 use crate::test::table::{found, put, put_list, text, with};
 
@@ -585,4 +585,44 @@ pub(crate) extern "system" fn terrain_edit(
         unsafe { amount.write(1.0) };
         Status::OK
     })
+}
+
+pub(crate) extern "system" fn voxel_read(
+    _me: ModHandle,
+    min: *const [u32; 3],
+    size: *const [u32; 3],
+    out: *mut Voxel,
+    capacity: u64,
+) -> Status {
+    if min.is_null() || size.is_null() || out.is_null() {
+        return Status::BAD_ARGS;
+    }
+    // SAFETY: `min` is non-null, checked above; the safe layer passes three
+    // `u32`s for the call, and an unaligned read needs no alignment.
+    let min = unsafe { min.read_unaligned() };
+    // SAFETY: `size` is non-null, checked above; the safe layer passes three
+    // `u32`s for the call, and an unaligned read needs no alignment.
+    let size = unsafe { size.read_unaligned() };
+    if Voxel::read_count(min, size).is_none_or(|count| count > capacity) {
+        return Status::BAD_ARGS;
+    }
+    if !crate::test::table::on_game_thread() {
+        return Status::WRONG_THREAD;
+    }
+    let voxels = with(None, |s| {
+        crate::test::world::VoxelGrid::read(&s.host.voxels, min, size)
+    });
+    let Some(voxels) = voxels else {
+        return Status::MISSING;
+    };
+    for (i, voxel) in voxels.into_iter().enumerate() {
+        // SAFETY: `out` is non-null, checked above, and `i` is below the
+        // box's count, which is at most `capacity`; the safe layer passes
+        // `capacity` entries at `out`, so the offset stays inside them.
+        let slot = unsafe { out.add(i) };
+        // SAFETY: `slot` is inside the `capacity` writable entries the safe
+        // layer passes at `out`; `Voxel` has alignment 1.
+        unsafe { slot.write(voxel) };
+    }
+    Status::OK
 }
