@@ -8,8 +8,8 @@
 //!
 //! A client kept out shows one dialog naming each of the server's mods it
 //! lacks, the server's version and where to get it ([`refusal`]), and tells
-//! its mods which they are, with the versions, update sources and author keys
-//! the server advertises
+//! its mods which they are, with the versions and homepages the server
+//! advertises
 //! ([`Event::JOIN_REFUSED`](enshwick_loader_api::abi::Event::JOIN_REFUSED)).
 //!
 //! Every join from the game's menus hands its online provider a target with
@@ -22,8 +22,6 @@
 use std::collections::BTreeMap;
 use std::net::{SocketAddr, UdpSocket};
 use std::time::{Duration, Instant};
-
-use enshwick_loader_api::mods::Updates;
 
 use crate::admission::Need;
 use crate::texts;
@@ -56,7 +54,7 @@ const MAX_VERSION: usize = 64;
 
 /// The `(id, version)` entries of an `id@version,...` list, without an id
 /// that is no mod id or a version that is no version: a server writes the
-/// list, and its ids and versions reach the player's notes and the updater.
+/// list, and its ids and versions reach the player's notes and the mods.
 pub(crate) fn entries(list: &str) -> impl Iterator<Item = (&str, &str)> {
     list.split(',')
         .filter_map(|entry| entry.split_once('@'))
@@ -265,8 +263,8 @@ pub fn wanted(server: &str, ours: &str) -> Vec<(String, String)> {
         .collect()
 }
 
-/// The update source a server advertises for mod `id`; `None` when it
-/// advertises none or one this loader cannot read.
+/// The homepage a server advertises for mod `id`, as a link players can
+/// open; `None` when it advertises none or something else.
 ///
 /// # Examples
 ///
@@ -281,16 +279,16 @@ pub fn wanted(server: &str, ours: &str) -> Vec<(String, String)> {
 /// #     }
 /// #     reply
 /// # }
-/// use enshwick::join::source;
+/// use enshwick::join::page;
 ///
-/// let reply = reply(&[("enshwick.src.safes", "github:themaiby/enshwick:enshwick-safes")]);
-/// assert!(source(&reply, "safes").is_some());
-/// assert!(source(&reply, "camera").is_none());
+/// let reply = reply(&[("enshwick.page.safes", "https://github.com/themaiby/enshwick")]);
+/// assert!(page(&reply, "safes").is_some());
+/// assert!(page(&reply, "camera").is_none());
 /// ```
 #[must_use]
-pub fn source(reply: &[u8], id: &str) -> Option<Updates> {
-    let line = rule(reply, &format!("{}.{id}", crate::advertise::RULE_SOURCE))?;
-    Updates::parse(&line)
+pub fn page(reply: &[u8], id: &str) -> Option<String> {
+    let page = rule(reply, &format!("{}.{id}", crate::advertise::RULE_PAGE))?;
+    crate::admission::place(&page)
 }
 
 /// The name a server advertises for mod `id`, on one line and at most
@@ -326,34 +324,6 @@ pub fn name(reply: &[u8], id: &str) -> String {
                 .trim()
                 .to_owned()
         })
-        .unwrap_or_default()
-}
-
-/// The author keys a server advertises for mod `id`; empty when it
-/// advertises none or a line this loader cannot read.
-///
-/// # Examples
-///
-/// ```
-/// # fn reply(rules: &[(&str, &str)]) -> Vec<u8> {
-/// #     let mut reply = vec![0xff, 0xff, 0xff, 0xff, b'E', 0, 0];
-/// #     for (key, value) in rules {
-/// #         reply.extend_from_slice(key.as_bytes());
-/// #         reply.push(0);
-/// #         reply.extend_from_slice(value.as_bytes());
-/// #         reply.push(0);
-/// #     }
-/// #     reply
-/// # }
-/// use enshwick::join::keys;
-///
-/// let reply = reply(&[("enshwick.name.safes", "Safes")]);
-/// assert!(keys(&reply, "safes").is_empty());
-/// ```
-#[must_use]
-pub fn keys(reply: &[u8], id: &str) -> Vec<String> {
-    rule(reply, &format!("{}.{id}", crate::advertise::RULE_KEY))
-        .map(|line| enshwick_loader_api::mods::parse_keys(&line))
         .unwrap_or_default()
 }
 
@@ -992,22 +962,18 @@ mod runtime {
             by_player: crate::modlist::disabled().to_vec(),
             this_game: crate::host::join_mods_off(),
         };
-        let sources: BTreeMap<String, String> = missing
+        let pages: BTreeMap<String, String> = missing
             .iter()
-            .filter_map(|need| {
-                let key = format!("{}.{}", crate::advertise::RULE_SOURCE, need.id);
-                Some((need.id.clone(), super::rule(reply, &key)?))
-            })
+            .filter_map(|need| Some((need.id.clone(), super::page(reply, &need.id)?)))
             .collect();
-        let dialog = super::refusal::dialog(missing, &off, names, &sources);
+        let dialog = super::refusal::dialog(missing, &off, names, &pages);
         // Mods that are off on the client are the player's to turn on.
         let wanted: Vec<crate::host::Wanted> = missing
             .iter()
             .filter(|need| !off.by_player.contains(&need.id) && !off.this_game.contains(&need.id))
             .map(|need| crate::host::Wanted {
                 name: super::name(reply, &need.id),
-                source: super::source(reply, &need.id),
-                keys: super::keys(reply, &need.id),
+                page: pages.get(&need.id).cloned().unwrap_or_default(),
                 id: need.id.clone(),
                 version: need.version.clone(),
             })
@@ -1247,29 +1213,17 @@ mod tests {
     }
 
     #[test]
-    fn sources_are_read_from_the_rules() {
+    fn pages_are_read_from_the_rules() {
         let reply = reply(&[
-            ("enshwick.src.a", "github:themaiby/enshwick:enshwick-a"),
-            ("enshwick.src.b", "nonsense"),
+            ("enshwick.page.a", "https://github.com/themaiby/enshwick"),
+            ("enshwick.page.b", "github:themaiby/enshwick:enshwick-b"),
         ]);
         assert_eq!(
-            source(&reply, "a"),
-            Some(Updates::GitHub {
-                repository: "themaiby/enshwick".into(),
-                component: "enshwick-a".into(),
-            })
+            page(&reply, "a").as_deref(),
+            Some("https://github.com/themaiby/enshwick")
         );
-        assert_eq!(source(&reply, "b"), None);
-        assert_eq!(source(&reply, "c"), None);
-    }
-
-    #[test]
-    fn keys_are_read_from_the_rules() {
-        let key = "RWTjqgtfpy3lSOLC4uaUXuvvKSLQKOFf6nUnEytoiFjSzxMEhLnoAdJF";
-        let reply = reply(&[("enshwick.key.a", key), ("enshwick.key.b", "RWnot-a-key")]);
-        assert_eq!(keys(&reply, "a"), [key]);
-        assert!(keys(&reply, "b").is_empty());
-        assert!(keys(&reply, "c").is_empty());
+        assert_eq!(page(&reply, "b"), None);
+        assert_eq!(page(&reply, "c"), None);
     }
 
     #[test]

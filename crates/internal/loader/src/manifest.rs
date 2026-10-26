@@ -1,15 +1,14 @@
 //! Reading a mod's manifest into a resolver candidate.
 
 use enshwick_loader_api::abi::{
-    ABI_MAJOR, ABI_MINOR, Dependency, Manifest, Relation, Side, Str, UpdateKind, UpdateSource,
-    read_headed,
+    ABI_MAJOR, ABI_MINOR, Dependency, Manifest, Relation, Side, Str, read_headed,
 };
 use semver::{Version, VersionReq};
 
 use crate::resolve::{self, Candidate};
 
-/// Where the fields every manifest has end: an older minor lacks `builds`
-/// and `updates`, which default to none.
+/// Where the fields every manifest has end: an older minor lacks `builds`,
+/// which defaults to none.
 const REQUIRED: usize = core::mem::offset_of!(Manifest, builds);
 
 /// Copies the manifest a mod's `enshwick_mod_query` returned, for the
@@ -78,19 +77,6 @@ unsafe fn own(mut manifest: Manifest) -> Manifest {
             ..row
         }
     });
-    let updates_end = core::mem::offset_of!(Manifest, updates) + size_of::<usize>();
-    if manifest.header.covers(updates_end) && !manifest.updates.is_null() {
-        // SAFETY: as the caller says; an all-zero source is valid.
-        let source = unsafe { read_headed(manifest.updates, size_of::<UpdateSource>()) };
-        if let Some(source) = source {
-            manifest.updates = Box::leak(Box::new(UpdateSource {
-                location: text(source.location),
-                component: text(source.component),
-                ..source
-            }));
-        }
-    }
-    manifest.signed_by = manifest.signed_by.map(text);
     manifest.name = text(manifest.name);
     manifest.description = text(manifest.description);
     manifest.authors = list(manifest.authors, manifest.author_count, text);
@@ -160,80 +146,6 @@ pub unsafe fn parse(manifest: &Manifest) -> Result<Candidate, String> {
         side: manifest.side,
         dependencies,
     })
-}
-
-/// The update source `manifest` declares, checked; [`UpdateSource::NONE`]
-/// for a manifest without one or older than ABI minor 5.
-///
-/// # Safety
-///
-/// `manifest` and every pointer and string in it are valid for the call.
-///
-/// # Errors
-///
-/// A reason for the log when the source is malformed; the mod still loads.
-pub unsafe fn updates(manifest: &Manifest) -> Result<UpdateSource, String> {
-    let end = core::mem::offset_of!(Manifest, updates) + size_of::<usize>();
-    if !manifest.header.covers(end) || manifest.updates.is_null() {
-        return Ok(UpdateSource::NONE);
-    }
-    // SAFETY: the caller keeps the manifest's pointers valid for the call; an
-    // all-zero source is valid. Every field of a source is there since minor 5.
-    let source = unsafe { read_headed(manifest.updates, size_of::<UpdateSource>()) }
-        .filter(|source| source.header.abi_major == ABI_MAJOR)
-        .ok_or("the update source is from another ABI")?;
-    // SAFETY: as above, for the source's strings.
-    let location = unsafe { source.location.as_str() }.ok_or("the update location is not UTF-8")?;
-    // SAFETY: as above.
-    let component =
-        unsafe { source.component.as_str() }.ok_or("the update component is not UTF-8")?;
-    match source.kind {
-        UpdateKind::NONE => Ok(UpdateSource::NONE),
-        UpdateKind::GITHUB if !is_repository(location) => Err(format!(
-            "the update repository {location:?} is not owner/name"
-        )),
-        UpdateKind::GITHUB if !is_component(component) => Err(format!(
-            "the update component {component:?} is not [a-z0-9_-]+"
-        )),
-        UpdateKind::URL if !location.starts_with("https://") || location.len() <= 8 => {
-            Err(format!("the update URL {location:?} is not https://"))
-        }
-        UpdateKind::GITHUB | UpdateKind::URL => Ok(source),
-        kind => Err(format!("unknown update source kind {}", kind.0)),
-    }
-}
-
-/// The author keys `manifest` declares with `signed_by:`, checked, and a
-/// reason for the log for each key left out because it is not a minisign
-/// public key; none for a manifest older than ABI minor 14.
-///
-/// # Safety
-///
-/// `manifest` and every string in it are valid for the call.
-#[must_use]
-pub unsafe fn signed_by(manifest: &Manifest) -> ([Str; 2], Vec<String>) {
-    let mut keys = [Str::EMPTY; 2];
-    let mut refused = Vec::new();
-    let end = core::mem::offset_of!(Manifest, signed_by) + size_of::<[Str; 2]>();
-    if !manifest.header.covers(end) {
-        return (keys, refused);
-    }
-    let mut kept = 0;
-    for key in &manifest.signed_by {
-        // SAFETY: forwarded from the caller.
-        match unsafe { key.as_str() } {
-            Some("") => {}
-            Some(text) if enshwick_loader_api::mods::is_author_key(text) => {
-                keys[kept] = *key;
-                kept += 1;
-            }
-            Some(text) => refused.push(format!(
-                "the signed_by key {text:?} is not a minisign public key (RW..., 56 characters)"
-            )),
-            None => refused.push("a signed_by key is not UTF-8".to_owned()),
-        }
-    }
-    (keys, refused)
 }
 
 /// What a manifest tells players about its mod.
@@ -315,27 +227,6 @@ pub unsafe fn meta(manifest: &Manifest) -> Meta {
     }
 }
 
-/// Whether `text` is a GitHub `owner/name`.
-fn is_repository(text: &str) -> bool {
-    let part = |p: &str| {
-        !p.is_empty()
-            && p.len() <= 100
-            && p.bytes()
-                .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.'))
-    };
-    text.split_once('/')
-        .is_some_and(|(owner, name)| part(owner) && part(name))
-}
-
-/// Whether `text` is a release-please component: a Cargo package name.
-fn is_component(text: &str) -> bool {
-    !text.is_empty()
-        && text.len() <= 64
-        && text
-            .bytes()
-            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || matches!(b, b'-' | b'_'))
-}
-
 /// # Safety
 ///
 /// The dependency's strings are valid for the call.
@@ -393,8 +284,6 @@ mod tests {
             dependency_count: DEPENDENCIES.len(),
             builds: core::ptr::null(),
             build_count: 0,
-            updates: core::ptr::null(),
-            signed_by: [Str::EMPTY; 2],
             name: Str::EMPTY,
             description: Str::EMPTY,
             authors: core::ptr::null(),
@@ -427,70 +316,7 @@ mod tests {
         assert_eq!(unsafe { super::meta(&m) }, Meta::default());
     }
 
-    const KEY: &str = "RWTjqgtfpy3lSOLC4uaUXuvvKSLQKOFf6nUnEytoiFjSzxMEhLnoAdJF";
-
-    #[test]
-    fn author_keys_are_checked_and_bad_ones_left_out() {
-        let mut m = manifest("safes", "0.1.0");
-        // SAFETY: static data.
-        let (keys, refused) = unsafe { signed_by(&m) };
-        assert!(keys.iter().all(Str::is_empty) && refused.is_empty());
-        m.signed_by = [Str::new("RWnot-a-key"), Str::new(KEY)];
-        // SAFETY: static data.
-        let (keys, refused) = unsafe { signed_by(&m) };
-        // SAFETY: static strings.
-        assert_eq!(unsafe { keys[0].as_str() }, Some(KEY));
-        assert!(keys[1].is_empty());
-        assert_eq!(refused.len(), 1);
-        assert!(refused[0].contains("RWnot-a-key"), "{}", refused[0]);
-    }
-
-    #[test]
-    fn a_manifest_older_than_author_keys_has_none() {
-        let mut old = manifest("safes", "0.1.0");
-        old.signed_by = [Str::new(KEY), Str::EMPTY];
-        old.header.size = u32::try_from(core::mem::offset_of!(Manifest, signed_by)).unwrap();
-        // SAFETY: static data.
-        let (keys, refused) = unsafe { signed_by(&old) };
-        assert!(keys.iter().all(Str::is_empty) && refused.is_empty());
-    }
-
-    static GITHUB: UpdateSource = UpdateSource::github("themaiby/enshwick", "enshwick-safes");
-    static NO_OWNER: UpdateSource = UpdateSource::github("enshwick", "enshwick-safes");
-    static NO_COMPONENT: UpdateSource = UpdateSource::github("themaiby/enshwick", "");
-    static HTTP: UpdateSource = UpdateSource::url("http://example.com/latest.json");
-    static HTTPS: UpdateSource = UpdateSource::url("https://example.com/latest.json");
-
-    fn with(source: &'static UpdateSource) -> Result<UpdateSource, String> {
-        let mut m = manifest("safes", "0.1.0");
-        m.updates = source;
-        // SAFETY: static data.
-        unsafe { updates(&m) }
-    }
-
-    #[test]
-    fn update_sources_are_checked() {
-        // SAFETY: static data.
-        let none = unsafe { updates(&manifest("safes", "0.1.0")) }.unwrap();
-        assert_eq!(none.kind, UpdateKind::NONE);
-        assert_eq!(with(&GITHUB).unwrap().kind, UpdateKind::GITHUB);
-        assert_eq!(with(&HTTPS).unwrap().kind, UpdateKind::URL);
-        assert!(with(&NO_OWNER).unwrap_err().contains("owner/name"));
-        assert!(with(&NO_COMPONENT).unwrap_err().contains("component"));
-        assert!(with(&HTTP).unwrap_err().contains("https"));
-    }
-
-    #[test]
-    fn an_older_manifest_has_no_update_source() {
-        let mut old = manifest("safes", "0.1.0");
-        old.updates = &raw const GITHUB;
-        old.header.size = u32::try_from(core::mem::offset_of!(Manifest, updates)).unwrap();
-        // SAFETY: static data.
-        let source = unsafe { updates(&old) }.unwrap();
-        assert_eq!(source.kind, UpdateKind::NONE);
-    }
-
-    /// A manifest of minor 4: no update source yet.
+    /// A manifest of minor 4: no names yet.
     #[repr(C)]
     struct Minor4 {
         header: Header,
@@ -539,13 +365,11 @@ mod tests {
         };
         // SAFETY: a valid manifest as long as its header says.
         let manifest = unsafe { read((&raw const old).cast()) }.unwrap();
-        assert!(manifest.updates.is_null());
+        assert!(manifest.name.is_empty());
         // SAFETY: static data.
         let candidate = unsafe { parse(manifest) }.unwrap();
         assert_eq!(candidate.id, "safes");
         assert_eq!(candidate.dependencies.len(), 1);
-        // SAFETY: static data.
-        assert_eq!(unsafe { updates(manifest) }.unwrap().kind, UpdateKind::NONE);
     }
 
     #[test]
@@ -624,9 +448,10 @@ mod tests {
         let loader = unsafe { parse(&manifest("enshwick", "0.1.0")) }.unwrap_err();
         assert!(loader.contains("loader's own"), "{loader}");
         let mut other = manifest("ok", "0.1.0");
-        other.header.abi_major = 2;
+        other.header.abi_major = ABI_MAJOR + 1;
         // SAFETY: static data.
-        assert!(unsafe { parse(&other) }.unwrap_err().contains("ABI 2"));
+        let major = unsafe { parse(&other) }.unwrap_err();
+        assert!(major.contains(&format!("ABI {}", ABI_MAJOR + 1)), "{major}");
     }
 
     #[test]

@@ -87,16 +87,6 @@ fn describe(manifest: &Manifest) -> String {
                 .to_owned(),
         );
     }
-    let keys_end = core::mem::offset_of!(Manifest, signed_by) + size_of::<[Str; 2]>();
-    if manifest.header.covers(keys_end) {
-        lines.extend(
-            manifest
-                .signed_by
-                .iter()
-                .filter(|key| !key.is_empty())
-                .map(|key| format!("signed by: {}", text(key))),
-        );
-    }
     lines.join("\n")
 }
 
@@ -161,8 +151,7 @@ mod tests {
         old.header.size = u32::try_from(core::mem::offset_of!(Manifest, builds)).unwrap();
         // SAFETY: a valid manifest, as long as its header says.
         let copied = unsafe { copy(&raw const old) }.unwrap();
-        assert!(copied.updates.is_null());
-        assert!(copied.signed_by.iter().all(Str::is_empty));
+        assert!(copied.name.is_empty());
         assert_eq!(
             describe(&copied),
             "id: old-mod
@@ -194,7 +183,6 @@ join check: no"
             recommends: ["flame-altar-count" => ""],
             breaks: ["old-survivors" => "<0.3"],
             replaces: ["survivors"],
-            signed_by: ["RWTjqgtfpy3lSOLC4uaUXuvvKSLQKOFf6nUnEytoiFjSzxMEhLnoAdJF"],
         );
         assert_eq!(
             describe(manifest),
@@ -204,8 +192,7 @@ join check: no"
              side: both\njoin check: yes\n\
              requires: flame-altar-zones >=0.1, <1.0\nafter: flame-altar-count\n\
              recommends: flame-altar-count\nbreaks: old-survivors <0.3\n\
-             replaces: survivors\n\
-             signed by: RWTjqgtfpy3lSOLC4uaUXuvvKSLQKOFf6nUnEytoiFjSzxMEhLnoAdJF"
+             replaces: survivors"
         );
     }
 }

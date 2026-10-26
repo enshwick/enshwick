@@ -201,10 +201,10 @@ impl Response {
 /// ```
 /// use enshwick_loader_api::ui::{Dialog, Response};
 ///
-/// let dialog = Dialog::new("Updates", "Download them now?")
-///     .detail("safes 0.1.0 \u{2192} 0.2.0")
+/// let dialog = Dialog::new("Safes", "Open every safe in the world?")
+///     .detail("12 safes")
 ///     .buttons(&[Response::Ok, Response::Cancel]);
-/// assert_eq!(dialog.title(), "Updates");
+/// assert_eq!(dialog.title(), "Safes");
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Dialog<'a> {
@@ -332,7 +332,7 @@ impl Ui {
     /// use enshwick_loader_api::ui::{Dialog, Response, Ui};
     ///
     /// fn confirm(ui: Ui) -> bool {
-    ///     let dialog = Dialog::new("Updates", "Download them now?")
+    ///     let dialog = Dialog::new("Safes", "Open every safe in the world?")
     ///         .buttons(&[Response::Ok, Response::Cancel]);
     ///     ui.ask(&dialog) == Ok(Some(Response::Ok))
     /// }

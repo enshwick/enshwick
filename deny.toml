@@ -6,23 +6,25 @@ yanked = "deny"
 unmaintained = "workspace"
 
 [licenses]
-allow = ["MIT", "Apache-2.0", "BSD-2-Clause", "BSD-3-Clause", "ISC", "Zlib", "Unicode-3.0"]
+allow = ["MIT", "Apache-2.0", "BSD-2-Clause", "Zlib", "Unicode-3.0"]
 confidence-threshold = 0.9
-# Each exception with its reason.
-exceptions = [
-    # Mozilla's root certificates, which the updater's TLS checks GitHub
-    # against; CDLA-Permissive-2.0 only asks to keep the license text.
-    { allow = ["CDLA-Permissive-2.0"], crate = "webpki-roots" },
-]
 
 [bans]
 multiple-versions = "deny"
 # Duplicates allowed on purpose, each with its reason.
-skip = [
-    { crate = "getrandom@0.2", reason = "ring under the updater's rustls; leaves with the updater" },
-]
+skip = []
 allow-wildcard-paths = true
 wildcards = "deny"
+# The game process makes no HTTP or TLS calls and checks no signatures:
+# players install and update through a mod manager.
+deny = [
+    { crate = "ureq", reason = "no HTTP client in the game process" },
+    { crate = "rustls", reason = "no TLS in the game process" },
+    { crate = "ring", reason = "no TLS in the game process" },
+    { crate = "webpki-roots", reason = "no TLS in the game process" },
+    { crate = "minisign-verify", reason = "releases are not signature-checked in game" },
+    { crate = "percent-encoding", reason = "no HTTP client in the game process" },
+]
 
 [sources]
 unknown-registry = "deny"
