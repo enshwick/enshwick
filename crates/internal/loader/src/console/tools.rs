@@ -4,6 +4,7 @@
 use std::sync::atomic::Ordering;
 
 use enshwick::abi::{PlayerInfo, Status};
+use enshwick::ecs::Entity;
 
 use crate::host::Loader;
 use crate::texts;
@@ -22,7 +23,7 @@ fn is_admin(player: &PlayerInfo) -> bool {
 }
 
 fn position(loader: &Loader, entity: u32) -> Option<[f64; 3]> {
-    crate::world::fixed_position(loader, entity).map(answers::metres)
+    crate::world::fixed_position(loader, Entity(entity)).map(answers::metres)
 }
 
 /// `enshwick world`: the players online.
@@ -55,8 +56,8 @@ pub(crate) fn entity(loader: &Loader, args: &str) -> String {
         .and_then(|players| players.iter().find(|p| p.entity == entity).map(name));
     answers::entity(&Seen {
         entity,
-        template: crate::world::template(loader, entity).ok(),
-        item: crate::world::used_item(loader, entity),
+        template: crate::world::template(loader, Entity(entity)).ok(),
+        item: crate::world::used_item(loader, Entity(entity)),
         position: position(loader, entity),
         player,
     })

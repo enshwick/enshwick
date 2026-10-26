@@ -427,7 +427,7 @@ const USED_ITEM: &str = "keen::ecs::UsedItem";
 
 /// The item `entity` was placed from, from its `UsedItem`; on the server's
 /// game thread.
-pub(crate) fn used_item(loader: &Loader, entity: u32) -> Option<u32> {
+pub(crate) fn used_item(loader: &Loader, entity: Entity) -> Option<u32> {
     let info = loader.reflection.type_info(USED_ITEM).ok()?;
     if info.size() != 4 {
         return None;
