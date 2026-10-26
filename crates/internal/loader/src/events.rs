@@ -339,6 +339,7 @@ unsafe fn after_step(loader: &'static Loader, offsets: &Offsets, server: *mut u8
     let built = std::mem::take(&mut *BUILDING.relock());
     if !BUILDING_FUSE.is_off() {
         guarded(&BUILDING_FUSE, "the post-step link", || {
+            crate::console::remember(&built);
             for data in &built {
                 let event = if data.kind == BuildingData::PLACED {
                     Event::BUILDING_PLACED

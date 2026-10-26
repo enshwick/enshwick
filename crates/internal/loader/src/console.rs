@@ -8,19 +8,28 @@
 //! ([`input`]). Reading a line is pure logic here; the run module answers it
 //! on the game thread, after the step.
 
+use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use enshwick::abi::Level;
+use enshwick::abi::{BuildingData, Level};
 
 use crate::locks::Relock;
 use crate::settings::LOADER_ID;
 
+pub mod accounts;
+#[cfg(windows)]
+mod admin;
+pub mod answers;
 pub mod file;
 pub mod input;
 #[cfg(windows)]
 mod run;
+#[cfg(windows)]
+pub(crate) use admin::TABLE_IDS;
+#[cfg(windows)]
+mod tools;
 #[cfg(windows)]
 pub(crate) use run::{after_step, run, start, the_console};
 
@@ -65,26 +74,80 @@ pub struct Pending {
     pub source: Source,
 }
 
-/// Lines waiting for the game thread.
-static PENDING: Mutex<Vec<Pending>> = Mutex::new(Vec::new());
-/// Set while [`PENDING`] holds a line, so a step with none takes no lock.
-static WAITING: AtomicBool = AtomicBool::new(false);
+/// What the console keeps while the game runs.
+struct State {
+    /// Lines waiting for the game thread.
+    pending: Mutex<Vec<Pending>>,
+    /// Set while `pending` holds a line, so a step with none takes no lock.
+    waiting: AtomicBool,
+    /// The pieces placed lately, newest last.
+    placed: Mutex<VecDeque<answers::Placed>>,
+    /// The game's account action handler and its action's layout, or why
+    /// this build lacks them.
+    #[cfg(windows)]
+    handler: std::sync::OnceLock<Result<admin::Handler, String>>,
+}
+
+static STATE: State = State {
+    pending: Mutex::new(Vec::new()),
+    waiting: AtomicBool::new(false),
+    placed: Mutex::new(VecDeque::new()),
+    #[cfg(windows)]
+    handler: std::sync::OnceLock::new(),
+};
 
 /// Queues `line` from `source` for the game thread.
 pub fn submit(line: String, source: Source) {
-    let mut pending = PENDING.relock();
+    let mut pending = STATE.pending.relock();
     pending.push(Pending { line, source });
-    WAITING.store(true, Ordering::Release);
+    STATE.waiting.store(true, Ordering::Release);
+}
+
+/// Keeps the pieces placed among `built`, one step's building events, among
+/// the [`answers::REMEMBERED`] placed lately.
+pub fn remember(built: &[BuildingData]) {
+    if built.is_empty() {
+        return;
+    }
+    let pieces = built
+        .iter()
+        .filter(|data| data.kind == BuildingData::PLACED)
+        .map(|data| answers::Placed {
+            entity: data.entity,
+            item: data.item,
+            template: data.template,
+            position: data.position,
+        });
+    let mut placed = STATE.placed.relock();
+    for piece in pieces {
+        if placed.len() == answers::REMEMBERED {
+            placed.pop_front();
+        }
+        placed.push_back(piece);
+    }
+}
+
+/// The `count` pieces placed last, newest first.
+#[must_use]
+pub fn newest(count: usize) -> Vec<answers::Placed> {
+    STATE
+        .placed
+        .relock()
+        .iter()
+        .rev()
+        .take(count)
+        .copied()
+        .collect()
 }
 
 /// The lines queued since the last call, oldest first.
 #[must_use]
 pub fn take() -> Vec<Pending> {
-    if !WAITING.load(Ordering::Acquire) {
+    if !STATE.waiting.load(Ordering::Acquire) {
         return Vec::new();
     }
-    let mut pending = PENDING.relock();
-    WAITING.store(false, Ordering::Release);
+    let mut pending = STATE.pending.relock();
+    STATE.waiting.store(false, Ordering::Release);
     std::mem::take(&mut *pending)
 }
 
@@ -110,8 +173,21 @@ pub enum Line<'a> {
 /// One of the loader's own tools, after `enshwick`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Tool<'a> {
-    /// `enshwick`: the mods running.
+    /// `enshwick`: the loader's version and the mods running.
+    Overview,
+    /// `enshwick mods`: each mod with its side, join need and state.
     Mods,
+    /// `enshwick world`: the players online.
+    World,
+    /// `enshwick entity <id>`: what the server knows of an entity.
+    Entity(&'a str),
+    /// `enshwick placed [n]`: the pieces placed lately.
+    Placed(&'a str),
+    /// `enshwick reload <mod id>`: a mod reads its settings again.
+    Reload(&'a str),
+    /// `enshwick kick|ban|unban <player or account>`: the game's account
+    /// actions.
+    Account(accounts::Act, &'a str),
     /// `enshwick help`: the tools and the mods with actions.
     Help,
     /// `enshwick <mod id>`: what a mod is.
@@ -154,8 +230,16 @@ pub fn parse(line: &str) -> Line<'_> {
     }
     let (word, args) = split(rest);
     Line::Loader(match word.to_ascii_lowercase().as_str() {
-        "" => Tool::Mods,
+        "" => Tool::Overview,
         "help" => Tool::Help,
+        "mods" => Tool::Mods,
+        "world" => Tool::World,
+        "entity" => Tool::Entity(args),
+        "placed" => Tool::Placed(args),
+        "reload" => Tool::Reload(args),
+        "kick" => Tool::Account(accounts::Act::Kick, args),
+        "ban" => Tool::Account(accounts::Act::Ban, args),
+        "unban" => Tool::Account(accounts::Act::Unban, args),
         "status" => Tool::Status,
         "profile" => Tool::Profile {
             reset: args.eq_ignore_ascii_case("reset"),
@@ -204,7 +288,22 @@ mod tests {
     #[test]
     fn the_loader_s_word_reaches_its_tools_and_any_other_names_a_mod() {
         assert_eq!(parse("   "), Line::Empty);
-        assert_eq!(parse("enshwick"), Line::Loader(Tool::Mods));
+        assert_eq!(parse("enshwick"), Line::Loader(Tool::Overview));
+        assert_eq!(parse("enshwick mods"), Line::Loader(Tool::Mods));
+        assert_eq!(parse("enshwick World"), Line::Loader(Tool::World));
+        assert_eq!(
+            parse("enshwick entity 12"),
+            Line::Loader(Tool::Entity("12"))
+        );
+        assert_eq!(parse("enshwick placed"), Line::Loader(Tool::Placed("")));
+        assert_eq!(
+            parse("enshwick reload you.safes"),
+            Line::Loader(Tool::Reload("you.safes"))
+        );
+        assert_eq!(
+            parse("enshwick ban Ann Lee"),
+            Line::Loader(Tool::Account(accounts::Act::Ban, "Ann Lee"))
+        );
         assert_eq!(parse("Enshwick  HELP"), Line::Loader(Tool::Help));
         assert_eq!(
             parse("enshwick you.trading-post"),
@@ -249,6 +348,28 @@ mod tests {
         for home in FORMER_HOMES {
             assert!(all.contains(&data.join(home).join(file::FILE)));
         }
+    }
+
+    #[test]
+    fn only_the_latest_placed_pieces_are_kept_newest_first() {
+        let piece = |entity, kind| BuildingData {
+            header: enshwick::abi::Header::of::<BuildingData>(),
+            entity,
+            player: 7,
+            item: 1,
+            kind,
+            replay: 0,
+            template: [0; 16],
+            position: [0.0; 3],
+        };
+        let built: Vec<BuildingData> = (0..40)
+            .map(|entity| piece(entity, BuildingData::PLACED))
+            .chain([piece(99, BuildingData::TORN_DOWN)])
+            .collect();
+        remember(&built);
+        let newest: Vec<u32> = newest(usize::MAX).iter().map(|p| p.entity).collect();
+        assert_eq!(newest.len(), answers::REMEMBERED);
+        assert_eq!(newest[..2], [39, 38]);
     }
 
     #[test]
