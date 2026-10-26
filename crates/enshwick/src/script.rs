@@ -850,7 +850,8 @@ impl Opened {
     ///
     /// # Errors
     ///
-    /// As [`Function::call`], and for a function of another namespace.
+    /// As [`Function::call`], and for a function past the end of this
+    /// namespace; a function of another namespace is not detected.
     ///
     /// # Examples
     ///

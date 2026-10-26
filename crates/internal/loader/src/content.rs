@@ -252,7 +252,11 @@ pub(crate) fn seal_and_link(loader: &'static Loader) {
     let standing = stand_ins.map_or(0, |(items, registry)| {
         serve_stand_ins(&mut served, items, registry)
     });
-    let changed = serve_changes(&mut served, crate::data_changes::serve(loader));
+    let changed = serve_changes(
+        &mut served,
+        crate::data_changes::serve(loader),
+        crate::data_changes::keeps_bases(crate::reload::copies(), crate::data_changes::has_live()),
+    );
     let rated = serve_rates(&mut served, crate::rate_links::recipe_patch(loader));
     let orphans = aliases
         .keys()
@@ -388,6 +392,7 @@ fn serve_rates(served: &mut Vec<Served>, patch: Option<ResourcePatchFn>) -> usiz
 fn serve_changes(
     served: &mut Vec<Served>,
     patches: Vec<(ResourceKey, ResourcePatchFn, *mut c_void)>,
+    keep: bool,
 ) -> usize {
     let count = patches.len();
     for (key, apply, user) in patches {
@@ -396,8 +401,6 @@ fn serve_changes(
             apply,
             user: user.expose_provenance(),
         };
-        // A development reload builds the changed resources again.
-        let keep = crate::reload::copies();
         match served.iter_mut().find(|s| s.key == key) {
             Some(entry) if crate::data_changes::goes_first(&key, &entry.base) => {
                 entry.patches.insert(0, patch);

@@ -90,7 +90,7 @@ mod table;
 mod ui;
 mod world;
 
-pub use content::ServedResource;
+pub use content::{LiveChange, ServedResource};
 pub use hooks::LinkedHook;
 pub use inventory::SubmittedRequest;
 pub use settings::SettingsRefused;
@@ -225,6 +225,7 @@ pub struct FakeHost {
     disabled_recipes: HashSet<u32>,
     recipe_kinds: HashMap<u32, crate::abi::RecipeKind>,
     missing_rates: HashSet<crate::abi::RateId>,
+    voxels: Vec<world::VoxelGrid>,
 }
 
 impl Default for FakeHost {
@@ -290,6 +291,7 @@ impl FakeHost {
             disabled_recipes: HashSet::new(),
             recipe_kinds: HashMap::new(),
             missing_rates: HashSet::new(),
+            voxels: Vec::new(),
         }
     }
 
