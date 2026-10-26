@@ -180,6 +180,7 @@ pub(crate) fn summary(loader: &Loader) -> Summary {
         costs: cost_lines(loader, 10, 4),
         conflicts: conflicts(loader),
         knowledge_guard: crate::knowledge::guard::status(),
+        parts: loader.build.parts(crate::TABLE_IDS),
     }
 }
 

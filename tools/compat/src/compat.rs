@@ -8,12 +8,11 @@
 //! mapped at its base, the mods resolved and initialised as at a start, and
 //! nothing hooked. Each mod that turns off says why, as it would in game.
 
-use std::collections::BTreeSet;
 use std::fmt::Write as _;
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
 
-use enshwick_gamedata::{self as tables, Kind, Resolved, Table};
+use enshwick_gamedata::{self as tables, Kind, PartState, Resolved, Table};
 use enshwick_reflect::{Fingerprint, Image, Layout, Reflection};
 
 /// Each part of the loader with the build table ids it names; only a
@@ -205,48 +204,6 @@ fn spell(fingerprint: Fingerprint) -> String {
     format!("{guid}/{}", fingerprint.age())
 }
 
-/// A loader feature and the table ids it names that this build lacks.
-struct Feature {
-    name: &'static str,
-    named: usize,
-    missing: Vec<&'static str>,
-}
-
-/// Every loader part that names table ids, with what this build lacks.
-fn features(table: &Resolved, known: &BTreeSet<&str>) -> Vec<Feature> {
-    MODULE_IDS
-        .iter()
-        .filter_map(|&(name, ids)| {
-            let named: Vec<&'static str> = ids
-                .iter()
-                .copied()
-                .filter(|id| known.contains(id))
-                .collect();
-            (!named.is_empty()).then(|| Feature {
-                name,
-                named: named.len(),
-                missing: named
-                    .into_iter()
-                    .filter(|id| table.symbol(id).is_none() && table.constant(id).is_none())
-                    .filter(|id| !table.uncarried().iter().any(|u| u == id))
-                    .collect(),
-            })
-        })
-        .collect()
-}
-
-/// Every id the tables pin.
-fn known_ids(all: &[Table]) -> BTreeSet<&str> {
-    all.iter()
-        .flat_map(|t| {
-            t.symbols()
-                .iter()
-                .map(tables::Symbol::id)
-                .chain(t.constants().iter().map(tables::Constant::id))
-        })
-        .collect()
-}
-
 /// How one mod fared when the loader started it.
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 struct ModOutcome {
@@ -277,7 +234,6 @@ pub(crate) fn run(args: &Args) -> Result<bool, String> {
         emit(args, &out)?;
         return Ok(false);
     };
-    let known = known_ids(core::slice::from_ref(source));
     let mut works = true;
     match table.kind() {
         Kind::Exact => {
@@ -347,15 +303,14 @@ pub(crate) fn run(args: &Args) -> Result<bool, String> {
             let _w = writeln!(out, "Attribute slots: {why}.\n");
         }
     }
-    write_features(&mut out, table, &known);
+    write_features(&mut out, table);
     works &= write_mods(&mut out, args)?;
     emit(args, &out)?;
     Ok(works)
 }
 
 /// The loader features table.
-fn write_features(out: &mut String, table: &Resolved, known: &BTreeSet<&str>) {
-    let features = features(table, known);
+fn write_features(out: &mut String, table: &Resolved) {
     let _w = writeln!(*out, "## Loader features\n");
     if MODULE_IDS.is_empty() {
         let _w = writeln!(
@@ -365,23 +320,21 @@ fn write_features(out: &mut String, table: &Resolved, known: &BTreeSet<&str>) {
         return;
     }
     let _w = writeln!(*out, "| Feature | Status | Missing |\n| --- | --- | --- |");
-    for feature in &features {
-        let status = if feature.missing.is_empty() {
-            "works".to_owned()
-        } else if feature.missing.len() == feature.named {
-            "off".to_owned()
-        } else {
-            format!(
+    for part in table.parts(MODULE_IDS) {
+        let status = match part.state() {
+            PartState::Works => "works".to_owned(),
+            PartState::Off => "off".to_owned(),
+            _ => format!(
                 "partly ({} of {})",
-                feature.named - feature.missing.len(),
-                feature.named
-            )
+                part.named - part.missing.len(),
+                part.named
+            ),
         };
         let _w = writeln!(
             out,
             "| {} | {status} | {} |",
-            feature.name,
-            code_list(&feature.missing)
+            part.name,
+            code_list(&part.missing)
         );
     }
     out.push('\n');
@@ -601,15 +554,14 @@ mod tests {
     fn features_name_what_the_build_lacks() {
         let all = known_tables().unwrap();
         let server = tables::newest(&all, tables::Side::Server).unwrap();
-        let known = known_ids(core::slice::from_ref(server));
-        let exact = features(&server.resolve(), &known);
+        let exact = server.resolve().parts(MODULE_IDS);
         assert!(!exact.is_empty());
         assert!(
             exact.iter().all(|f| f.missing.is_empty()),
             "an exact table lacks nothing"
         );
         let nothing = server.fall_back(&[0; 64], 0x1000);
-        let fallback = features(&nothing, &known);
+        let fallback = nothing.parts(MODULE_IDS);
         assert!(fallback.iter().all(|f| f.missing.len() == f.named));
     }
 
@@ -618,10 +570,14 @@ mod tests {
     fn a_carried_table_does_not_miss_what_only_its_own_build_holds() {
         let all = known_tables().unwrap();
         let client = tables::newest(&all, tables::Side::Client).unwrap();
-        let known = known_ids(core::slice::from_ref(client));
-        assert!(known.contains("net.provider_join_slot"));
+        assert!(
+            client
+                .resolve()
+                .constant("net.provider_join_slot")
+                .is_some()
+        );
         let carried = client.fall_back(&[0; 64], 0x1000);
-        for feature in features(&carried, &known) {
+        for feature in carried.parts(MODULE_IDS) {
             assert!(
                 !feature.missing.contains(&"net.provider_join_slot"),
                 "{}",

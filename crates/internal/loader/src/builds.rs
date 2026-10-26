@@ -12,7 +12,7 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use enshwick::abi::Side;
-use enshwick_gamedata::{self as tables, Resolved, Table};
+use enshwick_gamedata::{self as tables, Part, Resolved, Table};
 use enshwick_reflect::Fingerprint;
 
 pub use enshwick_gamedata::Kind;
@@ -90,6 +90,12 @@ impl KnownBuild {
     /// takes it off the missing entries; the value it had, if any.
     pub fn supply(&mut self, id: &str, value: u64) -> Option<u64> {
         self.table.supply(id, value)
+    }
+
+    /// Each of `parts` with the entries it names that this build lacks.
+    #[must_use]
+    pub fn parts(&self, parts: &[(&'static str, &[&'static str])]) -> Vec<Part<'static>> {
+        self.table.parts(parts)
     }
 
     /// How many symbols and constants this build has.
