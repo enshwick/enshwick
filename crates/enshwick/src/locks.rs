@@ -5,7 +5,7 @@ use std::panic::Location;
 use std::sync::{Mutex, MutexGuard, PoisonError, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 /// Takes a lock under the poison policy.
-pub(crate) trait Relock<T: ?Sized> {
+pub trait Relock<T: ?Sized> {
     /// The guard, also after a thread panicked holding the lock.
     fn relock(&self) -> MutexGuard<'_, T>;
 }

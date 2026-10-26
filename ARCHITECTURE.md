@@ -11,6 +11,7 @@ safe API.
 | ---------------------- | -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- |
 | `enshwick-loader-stub` | `crates/internal/stub`     | the `powrprof.dll` proxy: forwards the system exports, holds the dedicated server's entry point and starts the loader                                                               | no, ships in the bundle |
 | `enshwick-loader`      | `crates/internal/loader`   | the loader DLL: finds the game build, loads and resolves mods, links their hooks, answers the ABI                                                                                   | no, ships in the bundle |
+| `enshwick-luau`        | `crates/internal/luau`     | Luau mods: one sandboxed VM per mod with memory and time budgets, the API bound from the `enshwick` crate's script descriptions                                                     | no                      |
 | `enshwick`             | `crates/enshwick`          | the ABI types (`enshwick::abi`), the safe API mods use, and the fake loader for tests (`test` feature)                                                                              | yes                     |
 | `enshwick-macros`      | `crates/enshwick-macros`   | `#[hook]`, `#[derive(Config)]` and the other macros of the API                                                                                                                      | yes                     |
 | `enshwick-gamedata`    | `crates/enshwick-gamedata` | the build tables of every game build, the engine's reflection reader (`reflect`) and the game archive reader (`archive`)                                                            | yes                     |
@@ -25,6 +26,7 @@ safe API.
 stub ──starts──▶ loader ──C ABI──▶ mods (enshwick ▸ enshwick-macros)
                    │
                    └──▶ enshwick-gamedata (tables, reflect, archive)
+enshwick-luau ──▶ enshwick (script descriptions)
 cargo-enshwick ──▶ enshwick, enshwick-gamedata
 ```
 
@@ -35,6 +37,11 @@ cargo-enshwick ──▶ enshwick, enshwick-gamedata
   the API alone.
 - `cargo-enshwick` shares code with the loader only through `enshwick-gamedata`
   and the ABI types.
+- What a script language reaches is described once, beside the Rust items, in
+  `enshwick::script`: `#[derive(Script)]` on types, `#[script]` on methods and
+  the event tables. `enshwick-luau` binds those descriptions to Luau and
+  `cargo-enshwick` writes the Luau definitions from them; neither keeps a
+  list of its own. Only `enshwick-luau` links Luau.
 
 ## The ABI contract
 

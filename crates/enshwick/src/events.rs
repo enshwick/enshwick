@@ -49,8 +49,20 @@ pub trait Kind: sealed::Sealed + 'static {
 }
 
 macro_rules! without_data {
-    ($($(#[$doc:meta])* $name:ident = $event:ident;)*) => {$(
-        $(#[$doc])*
+    ($($(#[doc = $doc:literal])* $name:ident = $event:ident;)*) => {
+        /// The script entries of the events without data.
+        const SCRIPT_PLAIN: &[crate::script::EventKind] = &[$(
+            crate::script::EventKind::new(
+                stringify!($name),
+                concat!($($doc, "\n"),*),
+                Event::$event,
+                &crate::script::Ty::Nil,
+                |_raw: *const c_void| -> Option<crate::script::Value> { Some(crate::script::Value::Nil) },
+            ),
+        )*];
+
+        $(
+        $(#[doc = $doc])*
         ///
         /// # Examples
         ///
@@ -68,12 +80,30 @@ macro_rules! without_data {
                 Some(())
             }
         }
-    )*};
+        )*
+    };
 }
 
 macro_rules! with_data {
-    ($($(#[$doc:meta])* $name:ident = $event:ident: $data:ty, $born:expr;)*) => {$(
-        $(#[$doc])*
+    ($($(#[doc = $doc:literal])* $name:ident = $event:ident: $data:ty, $born:expr;)*) => {
+        /// The script entries of the events with data.
+        const SCRIPT_WITH_DATA: &[crate::script::EventKind] = &[$(
+            crate::script::EventKind::new(
+                stringify!($name),
+                concat!($($doc, "\n"),*),
+                Event::$event,
+                <$data as crate::script::Typed>::TY,
+                |raw: *const c_void| -> Option<crate::script::Value> {
+                    // SAFETY: `EventKind::read` passes on the loader's pointer
+                    // for this event with no other thread writing its data, by
+                    // its `# Safety`, which is what `Kind::data` asks for.
+                    unsafe { <$name as Kind>::data(raw) }.map(crate::script::IntoScript::into_value)
+                },
+            ),
+        )*];
+
+        $(
+        $(#[doc = $doc])*
         ///
         /// # Examples
         ///
@@ -94,7 +124,8 @@ macro_rules! with_data {
                 unsafe { crate::abi::read_headed(raw.cast::<$data>(), $born) }
             }
         }
-    )*};
+        )*
+    };
 }
 
 without_data! {
@@ -147,6 +178,9 @@ with_data! {
     /// [`Event::PLAYER_DIED`].
     PlayerDied = PLAYER_DIED: PlayerDeathData, core::mem::offset_of!(PlayerDeathData, killer_entity);
 }
+
+/// Every event's script entry, for [`crate::script::events`].
+pub(crate) const SCRIPT_EVENTS: [&[crate::script::EventKind]; 2] = [SCRIPT_PLAIN, SCRIPT_WITH_DATA];
 
 #[cfg(test)]
 mod tests {

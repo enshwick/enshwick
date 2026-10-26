@@ -3,6 +3,7 @@ use crate::ecs::Entity;
 
 use super::{Notice, Player, World, blank_info, online};
 
+#[crate::script(players)]
 impl World {
     /// The connected player whose character is `entity`.
     ///
@@ -10,6 +11,7 @@ impl World {
     ///
     /// See [`World`].
     #[must_use]
+    #[script]
     pub fn player(&self, entity: Entity) -> Option<Player> {
         let mut info = blank_info();
         let status = (self.0.host.api().player)(self.0.host.handle(), entity.0, &raw mut info);
@@ -27,6 +29,7 @@ impl World {
     /// }
     /// ```
     #[must_use]
+    #[script]
     pub fn player_by_key(self, key: u64) -> Option<Player> {
         self.players().into_iter().find(|player| player.key == key)
     }
@@ -47,6 +50,7 @@ impl World {
     /// }
     /// ```
     #[must_use]
+    #[script]
     pub fn players_named(self, name: &str) -> Vec<Player> {
         let mut players = self.players();
         players.retain(|player| player.is_named(name));
@@ -88,6 +92,7 @@ impl World {
     ///     world.broadcast("The server restarts in five minutes");
     /// }
     /// ```
+    #[script]
     pub fn broadcast(self, text: &str) {
         self.chat(0, text);
     }
@@ -102,6 +107,7 @@ impl World {
     ///     world.tell(player, "Welcome back");
     /// }
     /// ```
+    #[script]
     pub fn tell(self, player: &Player, text: &str) {
         if player.key != 0 {
             self.chat(player.key, text);
@@ -128,6 +134,7 @@ impl World {
         clippy::must_use_candidate,
         reason = "shown is the point; how is for the curious"
     )]
+    #[script]
     pub fn notify(self, player: &Player, text: &str) -> Notice {
         if (self.0.host.api().notify)(self.0.host.handle(), player.key, Str::new(text)).is_ok() {
             return Notice::OnScreen;
@@ -145,6 +152,7 @@ impl World {
     ///     world.notify_all("A storm is coming");
     /// }
     /// ```
+    #[script]
     pub fn notify_all(self, text: &str) {
         for player in self.players() {
             self.notify(&player, text);
@@ -165,6 +173,7 @@ impl World {
     /// }
     /// ```
     #[must_use]
+    #[script]
     pub fn players(self) -> Vec<Player> {
         online(self.0.host)
     }

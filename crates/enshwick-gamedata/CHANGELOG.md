@@ -6,6 +6,15 @@ Each entry names the pull request that made the change.
 
 ## [Unreleased]
 
+## [1.0.0-alpha.7] - 2026-10-26
+
+### Added
+
+- The catalogue names an item's flags and `ItemCategory`, which selections
+  of items read, and every member of `keen::ItemCategory` (#540).
+- The tables of server 399 and client 426 pin `voxel.read_box` and
+  `voxel.store` (#541).
+
 ## [1.0.0-alpha.6] - 2026-10-26
 
 ### Added

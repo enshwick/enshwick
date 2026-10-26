@@ -6,13 +6,19 @@ Each entry names the pull request that made the change.
 
 ## [Unreleased]
 
+## [1.0.0-alpha.7] - 2026-10-26
+
 ### Added
 
+- `load.voxels()` reads up to 64³ voxels of the server's world with
+  `Voxels::read` and `Voxels::sample`, on the game thread at a quiet
+  moment, as `VoxelBox` of `Voxel`s; `Status::NOT_LOADED` and
+  `WorldError::NotLoaded` name a part of the world that is not loaded
+  (#541).
 - `Load::change_items` changes a stack size or container slots of every
   vanilla item a selection picks (`Items::Category`, `Items::Stackable`,
   `Items::Containers`), read from the game's data by the loader;
-  `ItemCategoryMask` moved to `content::categories` and names every item
-  category (#540).
+  `ItemCategoryMask` names every item category (#540).
 - `Load::declare_change` declares a change of a vanilla value at init whose
   value the mod sets any time later through its `ChangeHandle`
   (`set`, `reset`); the loader merges it with every mod's and pack's
@@ -27,6 +33,11 @@ Each entry names the pull request that made the change.
   the game's own rule: `CanEditWorld`, `CanEditBase` inside a building zone,
   the world's building area and strict no-build zones; a refusal is a
   `BuildRefusal` with the game's names.
+
+### Changed
+
+- `ItemCategoryMask` lives in `content::categories`, beside the selections
+  that use it, instead of `affixes` (#540).
 
 ## [1.0.0-alpha.6] - 2026-10-26
 
