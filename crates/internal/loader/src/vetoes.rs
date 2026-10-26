@@ -15,6 +15,7 @@
 //! placement, which the building systems refuse to place and the client's
 //! cursor shows as not allowed.
 
+use crate::mod_index::ModIndex;
 use core::ffi::c_void;
 use std::sync::{Mutex, OnceLock};
 
@@ -76,7 +77,7 @@ struct BuildLayout {
 /// Registers mod `owner`'s craft filter.
 pub(crate) fn register_craft(
     loader: &Loader,
-    owner: usize,
+    owner: ModIndex,
     callback: CraftCheckFn,
     user: *mut c_void,
 ) -> Status {
@@ -95,7 +96,7 @@ pub(crate) fn register_craft(
 /// Registers mod `owner`'s build filter.
 pub(crate) fn register_build(
     loader: &Loader,
-    owner: usize,
+    owner: ModIndex,
     callback: BuildCheckFn,
     user: *mut c_void,
 ) -> Status {

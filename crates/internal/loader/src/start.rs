@@ -1,5 +1,6 @@
 //! The loader's start: identify the game, load the mods, arm their hooks.
 
+use crate::mod_index::ModIndex;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
@@ -349,7 +350,7 @@ fn attribute_crashes(loader: &Loader, order: &[&Library]) {
         && let Some((start, end)) = crate::crash::range_of(own)
     {
         modules.push((
-            crate::crash::LOADER,
+            (ModIndex::LOADER).get(),
             crate::settings::LOADER_ID.to_owned(),
             start,
             end,
@@ -372,12 +373,12 @@ fn initialise(loader: &Loader, order: &[&Library]) {
         // as `enshwick::abi::exports` documents, called with the static host
         // table and the mod's own handle.
         let status = crate::reload::initialising(index, || unsafe {
-            (library.init)(&raw const host::API, host::handle(index))
+            (library.init)(&raw const host::API, host::handle(ModIndex::new(index)))
         });
         if status.is_ok() {
             crate::log!(INFO, "{} {} initialised", record.id, record.version);
         } else {
-            loader.turn_off(index, &format!("init returned {}", status.0));
+            loader.turn_off(ModIndex::new(index), &format!("init returned {}", status.0));
         }
     }
 }
@@ -389,7 +390,7 @@ fn ready(loader: &Loader, order: &[&Library]) {
             // SAFETY: `library.ready` is the mod's `READY` export, typed
             // `ReadyFn` as `enshwick::abi::exports` documents, called with the
             // static host table after the mod's init succeeded.
-            unsafe { (library.ready)(&raw const host::API, host::handle(index)) };
+            unsafe { (library.ready)(&raw const host::API, host::handle(ModIndex::new(index))) };
         }
     }
     let running = loader

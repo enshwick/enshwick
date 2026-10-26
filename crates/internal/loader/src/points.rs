@@ -5,6 +5,7 @@
 //! Asking a point runs its live links in turn on the asking thread; a link
 //! that panics is turned off, and the point runs on without it.
 
+use crate::mod_index::ModIndex;
 use std::fmt::Write as _;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Mutex, OnceLock};
@@ -34,7 +35,7 @@ pub(crate) struct Declared {
 /// A defined point.
 #[derive(Debug)]
 struct Definition {
-    owner: usize,
+    owner: ModIndex,
     declared: Declared,
     live: &'static AtomicU32,
 }
@@ -43,7 +44,7 @@ struct Definition {
 #[derive(Debug)]
 pub(crate) struct Pending {
     /// The linking mod's index.
-    pub(crate) owner: usize,
+    pub(crate) owner: ModIndex,
     /// The point as the linking mod declares it.
     pub(crate) declared: Declared,
     /// Lower runs earlier among free links.
@@ -69,7 +70,7 @@ pub(crate) struct Registry {
 #[derive(Debug)]
 pub(crate) struct Link {
     /// The linking mod's index.
-    pub(crate) owner: usize,
+    pub(crate) owner: ModIndex,
     callback: PointFn,
     user: usize,
     /// Its priority, for the report.
@@ -99,7 +100,7 @@ impl Link {
 #[derive(Debug)]
 pub(crate) struct Sealed {
     /// The defining mod's index, the one mod that asks it.
-    pub(crate) owner: usize,
+    pub(crate) owner: ModIndex,
     /// The point as its owner declares it.
     pub(crate) declared: Declared,
     live: &'static AtomicU32,
@@ -111,7 +112,7 @@ pub(crate) struct Sealed {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Inert {
     /// The linking mod's index.
-    pub(crate) owner: usize,
+    pub(crate) owner: ModIndex,
     /// The point it named.
     pub(crate) point: String,
     /// Why it stays inert.
@@ -138,7 +139,7 @@ impl Registry {
     /// twice.
     pub(crate) fn define(
         &mut self,
-        owner: usize,
+        owner: ModIndex,
         names: &[&str],
         declared: Declared,
     ) -> Result<(u32, &'static AtomicU32), String> {
@@ -195,7 +196,7 @@ impl Registry {
         let mut inert = Vec::new();
         let mut cycles = Vec::new();
         for link in std::mem::take(&mut self.pending) {
-            if mods.off(link.owner) {
+            if mods.off(link.owner.get()) {
                 continue;
             }
             let point = link.declared.name.clone();
@@ -219,7 +220,7 @@ impl Registry {
                 });
                 continue;
             }
-            let (linker, _) = mods.name(link.owner);
+            let (linker, _) = mods.name(link.owner.get());
             if link_off(linker, &point) || link_off(linker, &definition.declared.name) {
                 inert.push(Inert {
                     owner: link.owner,
@@ -269,7 +270,7 @@ fn chain(
             .iter()
             .zip(before.iter().zip(&after))
             .map(|(l, (before, after))| LinkPlace {
-                id: mods.name(l.owner).0,
+                id: mods.name(l.owner.get()).0,
                 priority: l.priority,
                 before,
                 after,
@@ -347,8 +348,8 @@ fn missing(link: &Pending, mods: &impl Mods) -> Inert {
 
 /// Why `link` does not serve `definition`, if it does not.
 fn refusal(link: &Pending, definition: &Definition, mods: &impl Mods) -> Option<(String, Level)> {
-    let (id, version) = mods.name(definition.owner);
-    if mods.off(definition.owner) {
+    let (id, version) = mods.name(definition.owner.get());
+    if mods.off(definition.owner.get()) {
         return Some((format!("{id} {version} is off"), Level::INFO));
     }
     let (want, have) = (&link.declared, &definition.declared);
@@ -412,7 +413,7 @@ impl Sealed {
         &self,
         input: *const core::ffi::c_void,
         value: *mut core::ffi::c_void,
-        off: impl Fn(usize) -> bool,
+        off: impl Fn(ModIndex) -> bool,
         call: impl Fn(usize, &dyn Fn() -> PointVerdict) -> PointVerdict,
         panicked: impl Fn(&Self, &Link),
     ) -> PointVerdict {
@@ -426,7 +427,7 @@ impl Sealed {
             // SAFETY: the link lives in the mod's DLL, which stays loaded;
             // the seal checked the owner's input starts with the link's and
             // the answers are one type; input and value live for the call.
-            let answer = call(link.owner, &|| unsafe {
+            let answer = call(link.owner.get(), &|| unsafe {
                 (link.callback)(
                     input,
                     value,
@@ -436,11 +437,11 @@ impl Sealed {
             match answer {
                 PointVerdict::SET if changing => {
                     link.changes.fetch_add(1, Ordering::Relaxed);
-                    if last_changer != usize::MAX && last_changer != link.owner {
+                    if last_changer != usize::MAX && last_changer != link.owner.get() {
                         link.undid.fetch_add(1, Ordering::Relaxed);
                         link.undid_whom.store(last_changer, Ordering::Relaxed);
                     }
-                    last_changer = link.owner;
+                    last_changer = link.owner.get();
                     verdict = PointVerdict::SET;
                 }
                 PointVerdict::REFUSE if changing && self.declared.refuse => {
@@ -459,7 +460,7 @@ impl Sealed {
 
     /// Sets the count the owner reads to the links that run: on, of a mod
     /// that is not `off`.
-    fn arm(&self, off: impl Fn(usize) -> bool) {
+    fn arm(&self, off: impl Fn(ModIndex) -> bool) {
         let count = self
             .links
             .iter()
@@ -494,7 +495,7 @@ pub(crate) fn sealed() -> bool {
 pub(crate) fn seal(mods: &impl Mods) {
     let (points, inert, cycles) = registry().seal(mods, crate::modlist::is_link_off);
     for note in &inert {
-        let (id, _) = mods.name(note.owner);
+        let (id, _) = mods.name(note.owner.get());
         crate::log::write(
             note.level,
             id,
@@ -512,7 +513,7 @@ pub(crate) fn seal(mods: &impl Mods) {
         );
     }
     for note in &cycles {
-        let (id, _) = mods.name(note.owner);
+        let (id, _) = mods.name(note.owner.get());
         crate::log::write(
             note.level,
             id,
@@ -528,7 +529,7 @@ pub(crate) fn seal(mods: &impl Mods) {
         );
     }
     for point in &*points {
-        point.arm(|owner| mods.off(owner));
+        point.arm(|owner| mods.off(owner.get()));
     }
     let _first = SEALED.set(points);
     let _first = INERT.set(inert);
@@ -547,14 +548,14 @@ fn unmatched_links_off<'a>(
             mods.find(id).is_some_and(|index| !mods.off(index))
                 && !inert
                     .iter()
-                    .any(|n| n.point == *point && mods.name(n.owner).0 == id)
+                    .any(|n| n.point == *point && mods.name(n.owner.get()).0 == id)
         })
         .map(|(id, point)| (id.as_str(), point.as_str()))
 }
 
 /// Counts each point's live links again, once a mod turned off: its links
 /// no longer run, and an owner reads 0 when none does.
-pub(crate) fn rearm(off: impl Fn(usize) -> bool) {
+pub(crate) fn rearm(off: impl Fn(ModIndex) -> bool) {
     for point in SEALED.get().map_or(&[][..], |points| &**points) {
         point.arm(&off);
     }
@@ -571,17 +572,19 @@ pub(crate) fn run(
         return Ok(PointVerdict::PASS);
     };
     let point = points.get(id as usize).ok_or(Status::BAD_ARGS)?;
-    if point.owner != asker {
+    if point.owner != ModIndex::new(asker) {
         return Err(Status::REFUSED);
     }
     Ok(point.run(
         input,
         value,
         crate::host::is_off,
-        |owner, link| crate::profile::call(owner, crate::profile::Feature::Points, link),
+        |owner, link| {
+            crate::profile::call(ModIndex::new(owner), crate::profile::Feature::Points, link)
+        },
         |point, link| {
             if let Some(loader) = crate::host::loader() {
-                let (id, _) = Names::name(loader, link.owner);
+                let (id, _) = Names::name(loader, link.owner.get());
                 crate::log::write(
                     Level::WARN,
                     id,
@@ -609,14 +612,14 @@ fn inert() -> &'static [Inert] {
 pub(crate) fn lines(mods: &impl Names) -> Vec<String> {
     let mut lines = Vec::new();
     for point in points() {
-        let (id, version) = mods.name(point.owner);
+        let (id, version) = mods.name(point.owner.get());
         let chain: Vec<String> = point
             .links
             .iter()
             .map(|l| {
-                let (linker, _) = mods.name(l.owner);
+                let (linker, _) = mods.name(l.owner.get());
                 let mut text = format!("{linker} (priority {}", l.priority);
-                if mods.off(l.owner) {
+                if mods.off(l.owner.get()) {
                     text.push_str(", off: the mod is off");
                 } else if !l.is_on() {
                     text.push_str(", off: it panicked");
@@ -645,7 +648,7 @@ pub(crate) fn lines(mods: &impl Names) -> Vec<String> {
         ));
     }
     for note in inert() {
-        let (id, version) = mods.name(note.owner);
+        let (id, version) = mods.name(note.owner.get());
         lines.push(format!(
             "link of {id} {version} on {}: inert, {}",
             note.point, note.reason
@@ -667,14 +670,14 @@ fn conflict_lines(points: &[Sealed], mods: &impl Names) -> Vec<String> {
         if point.declared.mode == PointMode::OBSERVE {
             continue;
         }
-        let running = || point.links.iter().filter(|l| !mods.off(l.owner));
-        let mut owners: Vec<usize> = running().map(|l| l.owner).collect();
+        let running = || point.links.iter().filter(|l| !mods.off(l.owner.get()));
+        let mut owners: Vec<ModIndex> = running().map(|l| l.owner).collect();
         owners.sort_unstable();
         owners.dedup();
         if owners.len() < 2 {
             continue;
         }
-        let order: Vec<&str> = running().map(|l| mods.name(l.owner).0).collect();
+        let order: Vec<&str> = running().map(|l| mods.name(l.owner.get()).0).collect();
         let mut line = format!(
             "point {}: {}, each may change the answer",
             point.declared.name,
@@ -692,7 +695,7 @@ fn conflict_lines(points: &[Sealed], mods: &impl Names) -> Vec<String> {
                 let _w = write!(
                     line,
                     "; {} changed the answer {} had set, {times}",
-                    mods.name(link.owner).0,
+                    mods.name(link.owner.get()).0,
                     mods.name(whom).0
                 );
             }
@@ -717,13 +720,13 @@ fn screen_lines(
 ) -> (Vec<String>, Vec<String>) {
     let defines = points
         .iter()
-        .filter(|p| p.owner == index)
+        .filter(|p| p.owner == ModIndex::new(index))
         .map(|p| {
             let running: Vec<&str> = p
                 .links
                 .iter()
-                .filter(|l| l.is_on() && !mods.off(l.owner))
-                .map(|l| mods.name(l.owner).0)
+                .filter(|l| l.is_on() && !mods.off(l.owner.get()))
+                .map(|l| mods.name(l.owner.get()).0)
                 .collect();
             if running.is_empty() {
                 p.declared.name.clone()
@@ -735,7 +738,7 @@ fn screen_lines(
     let mut extends: Vec<String> = points
         .iter()
         .flat_map(|p| p.links.iter().map(move |l| (p, l)))
-        .filter(|(_, l)| l.owner == index)
+        .filter(|(_, l)| l.owner == ModIndex::new(index))
         .map(|(p, l)| {
             if l.is_on() && !mods.off(index) {
                 p.declared.name.clone()
@@ -747,7 +750,7 @@ fn screen_lines(
     extends.extend(
         inert
             .iter()
-            .filter(|n| n.owner == index)
+            .filter(|n| n.owner == ModIndex::new(index))
             .map(|n| format!("{} (off)", n.point)),
     );
     (defines, extends)
@@ -760,6 +763,7 @@ mod tests {
     use enshwick::abi::{Level, PointMode, PointVerdict};
 
     use super::{Declared, Mods, Pending, Registry, Sealed};
+    use crate::mod_index::ModIndex;
     use crate::services::Names;
 
     struct Loaded(Vec<(&'static str, &'static str, bool)>);
@@ -822,7 +826,7 @@ mod tests {
         verdict
     }
 
-    fn link(owner: usize, script: usize) -> Pending {
+    fn link(owner: ModIndex, script: usize) -> Pending {
         Pending {
             owner,
             declared: access(),
@@ -858,7 +862,7 @@ mod tests {
 
     fn defined(registry: &mut Registry) -> &'static AtomicU32 {
         registry
-            .define(0, &["you.trading-post"], access())
+            .define(ModIndex::new(0), &["you.trading-post"], access())
             .unwrap()
             .1
     }
@@ -895,8 +899,10 @@ mod tests {
             name: "me.trading-post:price".to_owned(),
             ..access()
         };
-        registry.define(0, &["me.trading-post"], declared).unwrap();
-        registry.attach(link(1, set(7))).unwrap();
+        registry
+            .define(ModIndex::new(0), &["me.trading-post"], declared)
+            .unwrap();
+        registry.attach(link(ModIndex::new(1), set(7))).unwrap();
         let (points, inert, _) = registry.seal(&Renamed, |_, _| false);
         assert!(inert.is_empty(), "{inert:?}");
         assert_eq!(points[0].links.len(), 1);
@@ -905,40 +911,57 @@ mod tests {
     #[test]
     fn points_are_named_after_their_owner_once() {
         let mut registry = Registry::default();
-        assert!(registry.define(0, &["you.trading-post"], access()).is_ok());
         assert!(
-            registry.define(0, &["you.trading-post"], access()).is_err(),
+            registry
+                .define(ModIndex::new(0), &["you.trading-post"], access())
+                .is_ok()
+        );
+        assert!(
+            registry
+                .define(ModIndex::new(0), &["you.trading-post"], access())
+                .is_err(),
             "twice"
         );
         let foreign = Declared {
             name: "you.lanterns:lit".to_owned(),
             ..access()
         };
-        assert!(registry.define(0, &["you.trading-post"], foreign).is_err());
+        assert!(
+            registry
+                .define(ModIndex::new(0), &["you.trading-post"], foreign)
+                .is_err()
+        );
         let empty = Declared {
             name: "you.trading-post:".to_owned(),
             ..access()
         };
-        assert!(registry.define(0, &["you.trading-post"], empty).is_err());
-        assert!(registry.attach(link(1, 0)).is_ok());
-        assert!(registry.attach(link(1, 0)).is_err(), "a mod links once");
+        assert!(
+            registry
+                .define(ModIndex::new(0), &["you.trading-post"], empty)
+                .is_err()
+        );
+        assert!(registry.attach(link(ModIndex::new(1), 0)).is_ok());
+        assert!(
+            registry.attach(link(ModIndex::new(1), 0)).is_err(),
+            "a mod links once"
+        );
     }
 
     #[test]
     fn links_run_in_their_asked_order_and_the_last_change_wins() {
         let mut registry = Registry::default();
         let live = defined(&mut registry);
-        let mut first = link(3, set(30));
+        let mut first = link(ModIndex::new(3), set(30));
         first.before = vec!["you.haggling".to_owned()];
-        let mut last = link(2, set(20));
+        let mut last = link(ModIndex::new(2), set(20));
         last.after = vec!["you.haggling".to_owned()];
         last.priority = -5;
         assert!(registry.attach(last).is_ok());
-        assert!(registry.attach(link(1, set(10))).is_ok());
+        assert!(registry.attach(link(ModIndex::new(1), set(10))).is_ok());
         assert!(registry.attach(first).is_ok());
         let (points, inert) = seal(&mut registry);
         assert!(inert.is_empty(), "{inert:?}");
-        let order: Vec<usize> = points[0].links.iter().map(|l| l.owner).collect();
+        let order: Vec<usize> = points[0].links.iter().map(|l| l.owner.get()).collect();
         assert_eq!(order, [3, 1, 2]);
         points[0].arm(|_| false);
         assert_eq!(live.load(Ordering::Relaxed), 3);
@@ -951,13 +974,13 @@ mod tests {
     fn priority_then_id_order_free_links() {
         let mut registry = Registry::default();
         defined(&mut registry);
-        let mut early = link(3, 0);
+        let mut early = link(ModIndex::new(3), 0);
         early.priority = -1;
-        assert!(registry.attach(link(2, 0)).is_ok());
-        assert!(registry.attach(link(1, 0)).is_ok());
+        assert!(registry.attach(link(ModIndex::new(2), 0)).is_ok());
+        assert!(registry.attach(link(ModIndex::new(1), 0)).is_ok());
         assert!(registry.attach(early).is_ok());
         let (points, _) = seal(&mut registry);
-        let order: Vec<usize> = points[0].links.iter().map(|l| l.owner).collect();
+        let order: Vec<usize> = points[0].links.iter().map(|l| l.owner.get()).collect();
         // you.lockers first by priority, then you.discounts < you.haggling by id.
         assert_eq!(order, [3, 2, 1]);
     }
@@ -966,10 +989,10 @@ mod tests {
     fn a_refusal_stops_the_chain() {
         let mut registry = Registry::default();
         defined(&mut registry);
-        let mut refuses = link(1, PointVerdict::REFUSE.0 as usize);
+        let mut refuses = link(ModIndex::new(1), PointVerdict::REFUSE.0 as usize);
         refuses.priority = -1;
         assert!(registry.attach(refuses).is_ok());
-        assert!(registry.attach(link(2, set(9))).is_ok());
+        assert!(registry.attach(link(ModIndex::new(2), set(9))).is_ok());
         let (points, _) = seal(&mut registry);
         assert_eq!(ask(&points[0], 1), (PointVerdict::REFUSE, 1));
         assert_eq!(points[0].links[1].changes.load(Ordering::Relaxed), 0);
@@ -984,12 +1007,12 @@ mod tests {
         };
         assert!(
             registry
-                .define(0, &["you.trading-post"], plain.clone())
+                .define(ModIndex::new(0), &["you.trading-post"], plain.clone())
                 .is_ok()
         );
-        let mut refuses = link(1, PointVerdict::REFUSE.0 as usize);
+        let mut refuses = link(ModIndex::new(1), PointVerdict::REFUSE.0 as usize);
         refuses.declared = plain.clone();
-        let mut sets = link(2, set(4));
+        let mut sets = link(ModIndex::new(2), set(4));
         sets.declared = plain;
         assert!(registry.attach(refuses).is_ok());
         assert!(registry.attach(sets).is_ok());
@@ -1007,10 +1030,10 @@ mod tests {
         };
         assert!(
             registry
-                .define(0, &["you.trading-post"], observed.clone())
+                .define(ModIndex::new(0), &["you.trading-post"], observed.clone())
                 .is_ok()
         );
-        let mut watcher = link(1, PointVerdict::REFUSE.0 as usize);
+        let mut watcher = link(ModIndex::new(1), PointVerdict::REFUSE.0 as usize);
         watcher.declared = observed;
         assert!(registry.attach(watcher).is_ok());
         let (points, _) = seal(&mut registry);
@@ -1021,10 +1044,10 @@ mod tests {
     fn a_panicking_link_turns_off_and_the_point_runs_without_it() {
         let mut registry = Registry::default();
         let live = defined(&mut registry);
-        let mut panics = link(1, PointVerdict::PANICKED.0 as usize);
+        let mut panics = link(ModIndex::new(1), PointVerdict::PANICKED.0 as usize);
         panics.priority = -1;
         assert!(registry.attach(panics).is_ok());
-        assert!(registry.attach(link(2, set(5))).is_ok());
+        assert!(registry.attach(link(ModIndex::new(2), set(5))).is_ok());
         let (points, _) = seal(&mut registry);
         points[0].arm(|_| false);
         let told = std::cell::Cell::new(0);
@@ -1034,7 +1057,7 @@ mod tests {
             (&raw mut value).cast(),
             |_| false,
             |_, link| link(),
-            |_, link| told.set(told.get() + link.owner),
+            |_, link| told.set(told.get() + link.owner.get()),
         );
         assert_eq!((verdict, value), (PointVerdict::SET, 5));
         assert_eq!(told.get(), 1, "told once, of you.haggling");
@@ -1048,14 +1071,14 @@ mod tests {
     fn a_linking_mod_that_turns_off_leaves_the_count() {
         let mut registry = Registry::default();
         let live = defined(&mut registry);
-        assert!(registry.attach(link(1, set(5))).is_ok());
-        assert!(registry.attach(link(2, set(6))).is_ok());
+        assert!(registry.attach(link(ModIndex::new(1), set(5))).is_ok());
+        assert!(registry.attach(link(ModIndex::new(2), set(6))).is_ok());
         let (points, _) = seal(&mut registry);
         points[0].arm(|_| false);
         assert_eq!(live.load(Ordering::Relaxed), 2);
-        points[0].arm(|owner| owner == 2);
+        points[0].arm(|owner| owner == ModIndex::new(2));
         assert_eq!(live.load(Ordering::Relaxed), 1);
-        points[0].arm(|owner| owner != 0);
+        points[0].arm(|owner| owner != ModIndex::new(0));
         assert_eq!(
             live.load(Ordering::Relaxed),
             0,
@@ -1067,8 +1090,8 @@ mod tests {
     fn a_link_the_list_turns_off_stays_inert() {
         let mut registry = Registry::default();
         let live = defined(&mut registry);
-        assert!(registry.attach(link(1, set(5))).is_ok());
-        assert!(registry.attach(link(2, set(6))).is_ok());
+        assert!(registry.attach(link(ModIndex::new(1), set(5))).is_ok());
+        assert!(registry.attach(link(ModIndex::new(2), set(6))).is_ok());
         let (points, inert, _) = registry.seal(&loaded(), |id, point| {
             id == "you.haggling" && point == "you.trading-post:price"
         });
@@ -1076,7 +1099,7 @@ mod tests {
         assert_eq!(live.load(Ordering::Relaxed), 1);
         assert_eq!(points[0].links.len(), 1);
         assert_eq!(inert.len(), 1);
-        assert_eq!(inert[0].owner, 1);
+        assert_eq!(inert[0].owner, ModIndex::new(1));
         assert!(inert[0].reason.contains("mods.toml"), "{}", inert[0].reason);
         assert_eq!(ask(&points[0], 1), (PointVerdict::SET, 6));
     }
@@ -1085,11 +1108,11 @@ mod tests {
     fn a_layout_mismatch_leaves_the_link_inert_with_the_field() {
         let mut registry = Registry::default();
         defined(&mut registry);
-        let mut newer = link(1, 0);
+        let mut newer = link(ModIndex::new(1), 0);
         newer.declared.input = fields(&["player", "owner", "stall"]);
-        let mut changed = link(2, 0);
+        let mut changed = link(ModIndex::new(2), 0);
         changed.declared.input = vec![("player".to_owned(), 1), ("owner".to_owned(), 99)];
-        let mut other_answer = link(3, 0);
+        let mut other_answer = link(ModIndex::new(3), 0);
         other_answer.declared.output = vec![("output".to_owned(), 7)];
         assert!(registry.attach(newer).is_ok());
         assert!(registry.attach(changed).is_ok());
@@ -1111,7 +1134,7 @@ mod tests {
     fn another_mode_leaves_the_link_inert() {
         let mut registry = Registry::default();
         defined(&mut registry);
-        let mut advises = link(1, 0);
+        let mut advises = link(ModIndex::new(1), 0);
         advises.declared.mode = PointMode::ADVISE;
         assert!(registry.attach(advises).is_ok());
         let (points, inert) = seal(&mut registry);
@@ -1126,9 +1149,9 @@ mod tests {
     #[test]
     fn a_missing_owner_leaves_the_link_inert_without_a_warning() {
         let mut registry = Registry::default();
-        let mut gone = link(1, 0);
+        let mut gone = link(ModIndex::new(1), 0);
         gone.declared.name = "you.lanterns:lit".to_owned();
-        let mut old = link(2, 0);
+        let mut old = link(ModIndex::new(2), 0);
         old.declared.name = "you.trading-post:open".to_owned();
         assert!(registry.attach(gone).is_ok());
         assert!(registry.attach(old).is_ok());
@@ -1141,8 +1164,12 @@ mod tests {
         let mut off = loaded();
         off.0[0].2 = true;
         let mut registry = Registry::default();
-        assert!(registry.define(0, &["you.trading-post"], access()).is_ok());
-        assert!(registry.attach(link(1, 0)).is_ok());
+        assert!(
+            registry
+                .define(ModIndex::new(0), &["you.trading-post"], access())
+                .is_ok()
+        );
+        assert!(registry.attach(link(ModIndex::new(1), 0)).is_ok());
         let (points, inert, _) = registry.seal(&off, |_, _| false);
         assert!(points[0].links.is_empty());
         assert_eq!(inert[0].reason, "you.trading-post 0.3.0 is off");
@@ -1152,9 +1179,9 @@ mod tests {
     fn the_report_names_mods_changing_one_point_and_who_undid_whom() {
         let mut registry = Registry::default();
         defined(&mut registry);
-        assert!(registry.attach(link(2, set(1))).is_ok());
-        assert!(registry.attach(link(1, set(0))).is_ok());
-        let mut gone = link(3, 0);
+        assert!(registry.attach(link(ModIndex::new(2), set(1))).is_ok());
+        assert!(registry.attach(link(ModIndex::new(1), set(0))).is_ok());
+        let mut gone = link(ModIndex::new(3), 0);
         gone.declared.name = "you.lanterns:lit".to_owned();
         assert!(registry.attach(gone).is_ok());
         let (points, inert) = seal(&mut registry);
@@ -1186,7 +1213,7 @@ mod tests {
     fn a_links_off_entry_that_matches_no_link_is_named() {
         let mut registry = Registry::default();
         defined(&mut registry);
-        assert!(registry.attach(link(1, 0)).is_ok());
+        assert!(registry.attach(link(ModIndex::new(1), 0)).is_ok());
         let (_, inert, _) = registry.seal(&loaded(), |id, point| {
             id == "you.haggling" && point == "you.trading-post:price"
         });
@@ -1211,9 +1238,9 @@ mod tests {
     fn a_cycle_is_broken_by_priority_and_named() {
         let mut registry = Registry::default();
         defined(&mut registry);
-        let mut a = link(1, 0);
+        let mut a = link(ModIndex::new(1), 0);
         a.after = vec!["you.discounts".to_owned()];
-        let mut b = link(2, 0);
+        let mut b = link(ModIndex::new(2), 0);
         b.after = vec!["you.haggling".to_owned()];
         assert!(registry.attach(a).is_ok());
         assert!(registry.attach(b).is_ok());

@@ -103,6 +103,7 @@ mod memory;
 #[cfg(windows)]
 mod mid;
 pub mod migrations;
+pub mod mod_index;
 pub mod modlist;
 #[cfg(windows)]
 mod module;
