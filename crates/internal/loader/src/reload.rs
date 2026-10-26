@@ -454,9 +454,8 @@ fn shutdown(module: HMODULE) {
     };
     // SAFETY: `enshwick::abi::exports::SHUTDOWN` documents the export as an
     // `extern "system" fn()`, which aborts rather than unwinds.
-    let shutdown = unsafe {
-        core::mem::transmute::<unsafe extern "system" fn() -> isize, extern "system" fn()>(found)
-    };
+    let shutdown =
+        unsafe { core::mem::transmute::<crate::module::Export, extern "system" fn()>(found) };
     shutdown();
 }
 

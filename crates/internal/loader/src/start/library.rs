@@ -297,8 +297,9 @@ fn load_from(path: &Path, named: Option<&str>) -> Option<Library> {
 /// The mod in the loaded `module`, named `file` in messages; `None`, logged,
 /// when it exports no Enshwick interface of this ABI.
 fn exports_of(module: HMODULE, file: &str) -> Option<Library> {
-    // SAFETY: `module` was loaded by `load_from` and stays loaded while the
-    // library is kept; it is freed only after its exports are dropped.
+    // SAFETY: `module` was loaded by `load_from`, which frees it only after
+    // this returns; the `Module` does not leave this function, and the
+    // exports it finds are called only while the library stays loaded.
     let found = unsafe { crate::module::Module::from_handle(module) };
     let find = |name: &str| found.export(name);
     let (Some(abi), Some(query), Some(init), Some(ready)) = (

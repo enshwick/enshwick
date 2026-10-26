@@ -1,7 +1,9 @@
 //! Modules of the process and their exports, found by name.
 
 use windows_sys::Win32::Foundation::HMODULE;
-use windows_sys::Win32::System::LibraryLoader::{GetModuleHandleW, GetProcAddress, LoadLibraryW};
+use windows_sys::Win32::System::LibraryLoader::{
+    GET_MODULE_HANDLE_EX_FLAG_PIN, GetModuleHandleExW, GetProcAddress, LoadLibraryW,
+};
 
 /// An export as `GetProcAddress` returns it, to be transmuted to the
 /// signature its module documents.
@@ -12,14 +14,22 @@ pub(crate) type Export = unsafe extern "system" fn() -> isize;
 pub(crate) struct Module(HMODULE);
 
 impl Module {
-    /// The module `name` when the process has loaded it, without loading it
-    /// or taking a reference on it.
+    /// The module `name` when the process has loaded it, without loading it,
+    /// pinned so it stays loaded for the process.
     pub(crate) fn loaded(name: &str) -> Option<Self> {
         let wide = wide(name);
-        // SAFETY: `wide` is a live NUL-terminated UTF-16 string, and the call
-        // only looks the name up.
-        let module = unsafe { GetModuleHandleW(wide.as_ptr()) };
-        (!module.is_null()).then_some(Self(module))
+        let mut module = core::ptr::null_mut();
+        // SAFETY: `wide` is a live NUL-terminated UTF-16 string and `module` a
+        // local the call writes; the pin keeps a found module mapped until the
+        // process ends.
+        let found = unsafe {
+            GetModuleHandleExW(
+                GET_MODULE_HANDLE_EX_FLAG_PIN,
+                wide.as_ptr(),
+                &raw mut module,
+            )
+        };
+        (found != 0 && !module.is_null()).then_some(Self(module))
     }
 
     /// The module `name`, loaded now if the process has not yet, kept for
@@ -36,6 +46,8 @@ impl Module {
     ///
     /// # Safety
     ///
+    /// - `handle` is non-null: a null handle would make lookups search the
+    ///   executable instead.
     /// - `handle` is a module loaded in this process that stays loaded while
     ///   the result or an export found through it is used.
     pub(crate) const unsafe fn from_handle(handle: HMODULE) -> Self {
@@ -49,8 +61,10 @@ impl Module {
             return None;
         }
         name.push(0);
-        // SAFETY: `self.0` is a loaded module by the type's construction, and
-        // `name` is a live NUL-terminated string.
+        // SAFETY: `self.0` is a loaded module that stays loaded while used:
+        // `loaded` pins it, `load` never releases its reference, and
+        // `from_handle`'s caller vouches for it; `name` is a live
+        // NUL-terminated string.
         unsafe { GetProcAddress(self.0, name.as_ptr()) }
     }
 }
@@ -69,7 +83,18 @@ mod tests {
         let kernel = Module::loaded("kernel32.dll").expect("every process has kernel32");
         assert!(kernel.export("GetCurrentProcessId").is_some());
         assert!(kernel.export("NoSuchExportOfKernel32").is_none());
+    }
+
+    #[test]
+    fn an_export_name_with_a_nul_inside_is_refused() {
+        let kernel = Module::loaded("kernel32.dll").expect("every process has kernel32");
         assert!(kernel.export("Get\0CurrentProcessId").is_none());
+    }
+
+    #[test]
+    fn a_loaded_library_finds_its_export() {
+        let kernel = Module::load("kernel32.dll").expect("kernel32 loads");
+        assert!(kernel.export("GetCurrentProcessId").is_some());
     }
 
     #[test]
