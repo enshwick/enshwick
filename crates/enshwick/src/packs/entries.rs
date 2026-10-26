@@ -184,6 +184,23 @@ pub(super) struct RecipeChangeEntry {
     pub(super) ingredients: std::collections::BTreeMap<String, ValueEntry>,
 }
 
+/// A change of the game's loot for some items.
+#[derive(Clone, Debug, PartialEq, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(deny_unknown_fields)]
+pub(super) struct LootChangeEntry {
+    /// The items whose loot changes: debug names, GUIDs or content ids.
+    pub(super) items: Vec<String>,
+    /// The stack size random loot rolls, at least and at most alike.
+    pub(super) stack_size: Option<ValueEntry>,
+    /// The count container fill tables give, at least and at most alike.
+    pub(super) count: Option<ValueEntry>,
+    /// The chance container fill tables give the item, from 0 to 1.
+    pub(super) spawn_probability: Option<ValueEntry>,
+    /// The item's weight among the ones a fill table picks from.
+    pub(super) weight: Option<ValueEntry>,
+}
+
 /// Where a drop comes from: one name or several.
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
@@ -240,6 +257,8 @@ pub(super) struct WorkshopsFile {
 pub(super) struct LootFile {
     #[serde(default)]
     pub(super) drop: Vec<Spanned<DropEntry>>,
+    #[serde(default)]
+    pub(super) change: Vec<Spanned<LootChangeEntry>>,
 }
 
 /// The JSON Schemas of a pack's files, for editors: `(file, schema)`.
@@ -274,6 +293,7 @@ pub fn schemas() -> Vec<(&'static str, String)> {
     #[expect(dead_code, reason = "only its schema is read")]
     struct Loot {
         drop: Option<Vec<DropEntry>>,
+        change: Option<Vec<LootChangeEntry>>,
     }
     let json = |schema: schemars::Schema| serde_json::to_string_pretty(&schema).unwrap_or_default();
     vec![

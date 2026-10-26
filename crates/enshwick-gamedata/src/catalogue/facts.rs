@@ -757,6 +757,72 @@ pub const FACTS: &[(&str, Fact)] = &[
     ("loot_slot", Fact::Type("keen::LootSlotInfo")),
     ("loot_slot.item", offset("keen::LootSlotInfo", "itemId")),
     ("loot_slot.count", offset("keen::LootSlotInfo", "stackSize")),
+    ("lootable_items", Fact::Type("keen::LootableItemsResource")),
+    (
+        "lootable_items.items",
+        offset("keen::LootableItemsResource", "items"),
+    ),
+    ("lootable_item", Fact::Type("keen::LootableItemInfo")),
+    (
+        "lootable_item.item",
+        offset("keen::LootableItemInfo", "itemId"),
+    ),
+    (
+        "lootable_item.stack_min",
+        offset("keen::LootableItemInfo", "stackSizeMin"),
+    ),
+    (
+        "lootable_item.stack_max",
+        offset("keen::LootableItemInfo", "stackSizeMax"),
+    ),
+    (
+        "lootable_item.stack_max_scaled",
+        offset("keen::LootableItemInfo", "stackSizeMaxScaled"),
+    ),
+    (
+        "loot_fill_table",
+        Fact::Type("keen::ecs::DefaultInventoryResource"),
+    ),
+    (
+        "loot_fill_table.root",
+        offset("keen::ecs::DefaultInventoryResource", "rootGroup"),
+    ),
+    (
+        "loot_fill_group",
+        Fact::Type("keen::ecs::DefaultInventoryGroupResource"),
+    ),
+    (
+        "loot_fill_group.stacks",
+        offset("keen::ecs::DefaultInventoryGroupResource", "stacks"),
+    ),
+    (
+        "loot_fill_group.groups",
+        offset("keen::ecs::DefaultInventoryGroupResource", "groups"),
+    ),
+    (
+        "loot_fill_stack",
+        Fact::Type("keen::ecs::ItemStackInfoResource"),
+    ),
+    (
+        "loot_fill_stack.item",
+        offset("keen::ecs::ItemStackInfoResource", "item"),
+    ),
+    (
+        "loot_fill_stack.count_min",
+        offset("keen::ecs::ItemStackInfoResource", "countMin"),
+    ),
+    (
+        "loot_fill_stack.count_max",
+        offset("keen::ecs::ItemStackInfoResource", "countMax"),
+    ),
+    (
+        "loot_fill_stack.probability",
+        offset("keen::ecs::ItemStackInfoResource", "spawnProbability"),
+    ),
+    (
+        "loot_fill_stack.weight",
+        offset("keen::ecs::ItemStackInfoResource", "weight"),
+    ),
     ("attribute_set.health", Fact::Type("keen::ecs::Health")),
     ("attribute_set.stamina", Fact::Type("keen::ecs::Stamina")),
     ("attribute_set.mana", Fact::Type("keen::ecs::Mana")),

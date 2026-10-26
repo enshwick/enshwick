@@ -790,6 +790,57 @@ mod tests {
         );
     }
 
+    /// The game's stack roll for a scalable random loot item, as traced on
+    /// server 399 (research/reports/2026-10-26-data-pack-engine.md, "the
+    /// stack roll and stackSizeMaxScaled"): least and largest each scaled by
+    /// the drop factor and held to 1 and the scaled ceiling. The game rounds
+    /// partly at random; the nearest whole number bounds it here.
+    fn game_roll(min: u16, max: u16, ceiling: u16, factor: f32) -> (u16, u16) {
+        let scale = |v: u16| {
+            let scaled = (f32::from(v) * factor)
+                .round()
+                .clamp(1.0, f32::from(ceiling));
+            (1..=ceiling)
+                .find(|n| f32::from(*n) >= scaled)
+                .unwrap_or(ceiling)
+        };
+        (scale(min), scale(max))
+    }
+
+    #[test]
+    fn a_pack_the_game_s_drop_factor_and_both_rates_each_apply_once_in_order() {
+        use enshwick::content::loot_tables::scaled_ceiling;
+
+        // A vanilla scalable item rolling 1 to 2, scaled up to 20.
+        let (min, max, ceiling) = (1u16, 2u16, 20u16);
+        // A pack doubles its stack size: the table, before any roll.
+        let pack = |v: u16| {
+            let doubled = Field::StackSize.resolve(f64::from(v), [Value::Times(2.0)]);
+            (1..=u16::MAX)
+                .find(|n| f64::from(*n) >= doubled)
+                .unwrap_or(u16::MAX)
+        };
+        let (min, max, ceiling) = (
+            pack(min),
+            pack(max),
+            scaled_ceiling(ceiling, max, pack(max)),
+        );
+        assert_eq!((min, max, ceiling), (2, 4, 40));
+        // The world's drop factor 1.5 times the resource drop rate 2: the
+        // getter the roll reads, so one factor of 3.
+        let (low, high) = game_roll(min, max, ceiling, 1.5 * 2.0);
+        assert_eq!((low, high), (6, 12));
+        // The loot rate 2 on the rolled stack, held to the item's stack size,
+        // which the pack may have raised.
+        let looted = |count: u16, max_stack: u16| crate::rates::scale_stack(count, 2.0, max_stack);
+        assert_eq!((looted(low, 999), looted(high, 999)), (12, 24));
+        assert_eq!(looted(high, 20), 20);
+        // Without the pack the same rates give half as much: the pack's
+        // factor applies once, to the table only.
+        let (low, high) = game_roll(1, 2, 20, 3.0);
+        assert_eq!((looted(low, 999), looted(high, 999)), (6, 12));
+    }
+
     #[test]
     fn one_mod_setting_twice_is_no_conflict() {
         let all = [
