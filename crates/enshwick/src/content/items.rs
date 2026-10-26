@@ -640,7 +640,7 @@ impl Load<'_> {
     /// `ItemInfo` cloned from a vanilla item, listed in the item registry
     /// beside items other mods add, and with a [`Meter`] its entity
     /// template, listed in the template collection. Players see it once a
-    /// recipe, loot or a command gives it to them.
+    /// recipe, loot or an action gives it to them.
     ///
     /// # Errors
     ///

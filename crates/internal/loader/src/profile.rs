@@ -3,8 +3,8 @@
 //! the loader times every callback into a mod, the mods it calls in turn
 //! left out; with `diagnostics_timing` also, the timed thunk in front of
 //! each link gives the link's own time as its time less the rest of the
-//! chain's. `/enshwick profile` and the status summary show the busiest
-//! mods since start or since `/enshwick profile reset`.
+//! chain's. `enshwick profile` on the console and the status summary show
+//! the busiest mods since start or since `enshwick profile reset`.
 
 use std::cell::Cell;
 use std::fmt::Write as _;
@@ -24,8 +24,8 @@ pub enum Feature {
     GameEvents,
     /// Other mods' events.
     ModEvents,
-    /// Chat commands.
-    Commands,
+    /// Player actions.
+    Actions,
     /// Messages between server and client.
     Messages,
     /// Interface frames, the HUD and dialog answers.
@@ -69,7 +69,7 @@ impl Feature {
             Self::Events => "events",
             Self::GameEvents => "game events",
             Self::ModEvents => "mod events",
-            Self::Commands => "commands",
+            Self::Actions => "actions",
             Self::Messages => "messages",
             Self::Interface => "interface",
             Self::Interactions => "interaction filter",
@@ -92,7 +92,7 @@ impl Feature {
         Self::Events,
         Self::GameEvents,
         Self::ModEvents,
-        Self::Commands,
+        Self::Actions,
         Self::Messages,
         Self::Interface,
         Self::Interactions,
@@ -530,12 +530,12 @@ mod tests {
     #[test]
     fn a_running_callback_is_marked_for_crash_blame() {
         assert_eq!(current_callback(), None);
-        call(3, Feature::Commands, || {
-            assert_eq!(current_callback(), Some((3, Feature::Commands)));
+        call(3, Feature::Actions, || {
+            assert_eq!(current_callback(), Some((3, Feature::Actions)));
             call(5, Feature::ModEvents, || {
                 assert_eq!(current_callback(), Some((5, Feature::ModEvents)));
             });
-            assert_eq!(current_callback(), Some((3, Feature::Commands)));
+            assert_eq!(current_callback(), Some((3, Feature::Actions)));
         });
         assert_eq!(current_callback(), None);
         call(usize::MAX, Feature::Events, || {

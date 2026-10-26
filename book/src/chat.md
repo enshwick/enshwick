@@ -1,0 +1,110 @@
+# Chat, notices and the console
+
+Players never type commands: the game client keeps every chat line that
+starts with `/` to itself, and single player has no chat. Anything a player
+or an administrator does is a [player action](actions.md), shown in the
+game's interface. This chapter covers what a mod sends players, and the
+server's console, which runs lines from tools such as a dedicated server's
+command file.
+
+Chat lines, labels and rename filters work on the dedicated server and on a
+client while it hosts a game.
+
+## Chat lines
+
+[`world.broadcast(text)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/world.rs)
+sends a line to every player and
+[`world.tell(&player, text)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/world.rs)
+to one player. Call them from any thread: the line waits in a queue, and the
+server posts it after the next step. Each line of `text` becomes a message of
+its own, and a message keeps at most 16 lines. The queue holds at most 256
+lines; more are dropped.
+
+## Notices on screen
+
+[`world.notify(&player, text)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/world.rs)
+shows a line on the player's screen, as the game shows its own "can't do
+that" messages, and `world.notify_all(text)` on every player's. It returns
+how the line went: `Notice::OnScreen`, or `Notice::Chat` when the player's
+client lacks Enshwick and gets the line in chat instead. Call it on the game
+thread. The game shows up to 255 bytes; keep it to a short line.
+
+```rust
+use enshwick::actions::{Action, Outcome};
+use enshwick::world::Notice;
+
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    let world = load.world()?;
+    let actions = load.actions(enshwick::i18n::Texts::default())?;
+    actions.add(Action::new("ping-me", "Show me a notice"), move |request| {
+        match world.notify(request.player, "Pong") {
+            Notice::OnScreen => Outcome::done("On screen"),
+            _ => Outcome::done("In chat"),
+        }
+    })
+}
+```
+
+The game raises these messages on the client, in the client's own world, so
+the server cannot raise one for a client. A notice travels as a
+[message](messages.md) to the client's loader, which shows the text through a
+text tag of its own and raises the game's message event in the client's world
+at its next step.
+
+## The console
+
+The console runs a line on the server as an administrator with no character.
+A line is one of:
+
+- `enshwick ...`, the loader's own tools, listed below;
+- a mod's id and the text form of one of its [actions](actions.md#from-the-console):
+  `safes help`, `admin-tools give-to 3073 10 Ann`.
+
+[`console::run(line)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/console.rs)
+runs a line and returns its answer. Call it on the server's game thread, from
+a scheduled task or a game event; elsewhere it returns
+`RunError::NotOnGameThread`. A first word that neither the loader nor a
+running mod with actions answers returns `RunError::Unknown`.
+
+```rust
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    let scheduler = load.scheduler()?;
+    scheduler.next_tick(|| match enshwick::console::run("enshwick status") {
+        Ok(answer) => enshwick::info!("{answer}"),
+        Err(why) => enshwick::warn!("not run: {why}"),
+    });
+    Ok(())
+}
+```
+
+The answer goes back to the caller, not to any chat.
+[`enshwick-admin-tools`](https://github.com/enshwick/enshwick/tree/main/mods/enshwick-admin-tools)
+runs each line appended to `mod-data/admin-tools/commands.txt` this way: it
+is how a dedicated server's administrators and their scripts reach the
+console.
+
+### The loader's tools
+
+| Line                                    | Answer                                                                                                                                                                               |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `enshwick`                              | the loader version and every mod with its name and version, `(off)` for mods turned off                                                                                              |
+| `enshwick <mod id>`                     | what the mod is: name, version, description, authors, licence, homepage, and notes such as a recommended mod that is missing                                                         |
+| `enshwick help`                         | the tools, and the mods whose actions the console runs                                                                                                                               |
+| `enshwick status`                       | a short [status summary](logging.md#status-summary), and a fresh `status.log`                                                                                                        |
+| `enshwick profile [reset]`              | the five [costliest mods](logging.md#per-mod-costs) since start, or since `enshwick profile reset`                                                                                   |
+| `enshwick conflicts`                    | the hooks, filters and resources several mods [share](logging.md#conflicts)                                                                                                          |
+| `enshwick log [mod] [level] [n]`        | the latest [log lines](logging.md#reading-the-log-from-the-console), of one mod or all, at a level or more severe                                                                    |
+| `enshwick recipes [find <text>]`        | the [disabled recipes](content/disabled-recipes.md#finding-names-and-changing-rules-from-the-console), or recipes found by name; `disable` and `enable` change the rules             |
+| `enshwick config [mod] [key] [value]`   | read and change a mod's settings; see [The schema and the console](settings.md#the-schema-and-the-console)                                                                           |
+| `enshwick ui-demo <player>`             | opens a window of every [interface](interface.md) widget on that player's client, when it runs Enshwick, for a visual check                                                          |
+
+No mod may take the id `enshwick`.
+
+## Worked examples
+
+- [`enshwick-admin-tools`](https://github.com/enshwick/enshwick/tree/main/mods/enshwick-admin-tools)
+  declares administrator actions, answers with `tell`, and runs each line of
+  its command file with `console::run` from a scheduled task.
+- [`enshwick-safes`](https://github.com/enshwick/enshwick/tree/main/mods/enshwick-safes)
+  declares who may open a Safe as [player actions](actions.md) and guards its
+  labels with a rename filter.

@@ -6,8 +6,9 @@
 //! While on, it counts every game event by type and logs the counts every
 //! minute, logs each typed game event it receives, and runs its checks
 //! once the world has loaded: world key, entity queries, stats, component
-//! writes, actions, spawns, a per-world store and a save on demand. `/probe` commands run them again, from the
-//! admin tools' command file as well.
+//! writes, actions, spawns, a per-world store and a save on demand. Its
+//! actions, for administrators on the Mods screen or from the admin tools'
+//! command file, run them again and try single calls.
 
 mod affixes;
 mod buffs;
@@ -27,11 +28,14 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
+use enshwick::actions::{Action, Actions, Arg, Outcome, Value};
+use enshwick::ecs::Entity;
 use enshwick::events::{WorldLoaded, WorldSaved};
 use enshwick::game_events::{
     AltarUsed, Built, CraftRequested, Crafted, Died, EquipmentChanged, ExperienceGained, Hit,
     Interacted, Kind, LevelGained, LootOpened, PickedUp, Revived, TornDown,
 };
+use enshwick::i18n::Texts;
 use enshwick::schedule::Scheduler;
 use enshwick::{Load, Mod, Off};
 
@@ -42,8 +46,8 @@ use crate::checks::Checks;
 const CENSUS_PERIOD: Duration = Duration::from_secs(60);
 /// How long after the world loads the checks run.
 const CHECK_DELAY: Duration = Duration::from_secs(10);
-/// The commands, for `/enshwick help` and a malformed `/probe`.
-const HELP: &str = "/probe census|check|vitals <id>|vitals me [shown values]|teleport me [dx dy dz]|destroy <id>|spawn <id>|notice <text>|stat <id> <value|off>|stats|affix|key|knowledge <id>|learn <id> [bit]|unlearn <id> [bit]|learn-later <key> <id> [bit]";
+/// The text `notice` shows.
+const NOTICE: &str = "Probe notice";
 
 /// Probe settings, read at start.
 #[derive(Debug, Default, serde::Deserialize, serde::Serialize, enshwick::Config)]
@@ -147,11 +151,21 @@ fn vetoes(load: &mut Load<'_>, settings: &Settings) {
     }
 }
 
-/// Registers `/probe`.
-fn commands(
+/// An id from a number argument, which the platform kept within its range.
+#[expect(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "the argument's range is within u32"
+)]
+const fn id(value: f64) -> u32 {
+    value as u32
+}
+
+/// Declares the probe's actions, for administrators.
+fn actions(
     load: &mut Load<'_>,
     census: Arc<Census>,
-    checks: Arc<Checks>,
+    checks: &Arc<Checks>,
     run_all: Arc<dyn Fn() + Send + Sync>,
     affix_checks: Option<Arc<affixes::AffixChecks>>,
 ) -> Result<(), Off> {
@@ -159,41 +173,129 @@ fn commands(
     let raw_stats = raw_stats::RawStats::new(load)
         .inspect_err(|off| enshwick::warn!("FAIL raw stats: {off}"))
         .ok();
-    load.add_command("probe", HELP, move |ctx, args| {
-        if !ctx.is_admin() {
-            return "/probe is for administrators".into();
-        }
-        let Some(player) = &ctx.player else {
-            return "/probe runs for a player, not the console".into();
-        };
-        let me = player.entity;
-        match args {
-            ["census"] => census.lines().join("\n").into(),
-            ["check"] => {
-                run_all();
-                "checks run; see probe.log".into()
+    let actions = load.actions(Texts::default())?;
+    let admin = |id: &str, label: &str| Action::new(id, label).admins();
+    let entity = || Arg::number("Entity", 0.0..=f64::from(u32::MAX), 1.0);
+    let knowledge_id = || Arg::number("Id", 0.0..=f64::from(u32::MAX), 1.0);
+    let bit = || Arg::number("Bit or amount", 0.0..=1_000_000.0, 1.0);
+    let metres = |axis: &str| Arg::number(axis, -1000.0..=1000.0, 0.0);
+
+    actions.add(admin("census", "Game events counted"), move |_| {
+        Outcome::done(census.lines().join("\n"))
+    })?;
+    actions.add(admin("check", "Run the checks again"), move |_| {
+        run_all();
+        Outcome::done("checks run; see probe.log")
+    })?;
+    actions.add(admin("key", "Your account key"), |request| {
+        Outcome::done(format!("your account key: {:016x}", request.player.key))
+    })?;
+    let mine = Arc::clone(checks);
+    actions.add(admin("my-vitals", "Your raw stats"), move |request| {
+        let me = request.player.entity;
+        Outcome::done(match &raw_stats {
+            Some(raw) => raw.dump(me, &[]),
+            None => mine.vitals_of(me),
+        })
+    })?;
+    let vitals = Arc::clone(checks);
+    actions.add(
+        admin("vitals", "An entity's vitals").arg(entity()),
+        move |request| match request.args {
+            [Value::Number(n)] => Outcome::done(vitals.vitals_of(Entity(id(*n)))),
+            _ => Outcome::refused(""),
+        },
+    )?;
+    let moving = Arc::clone(checks);
+    actions.add(
+        admin("teleport", "Move yourself by")
+            .arg(metres("x"))
+            .arg(metres("y"))
+            .arg(metres("z")),
+        move |request| match request.args {
+            [Value::Number(x), Value::Number(y), Value::Number(z)] => {
+                Outcome::done(moving.teleport_self(request.player.entity, [*x, *y, *z]))
             }
-            ["vitals", "me", shown @ ..] => match &raw_stats {
-                Some(raw) => raw.dump(me, shown).into(),
-                None => checks.vitals_of(&me.0.to_string()).into(),
-            },
-            ["vitals", id] => checks.vitals_of(id).into(),
-            ["teleport", "me", offset @ ..] if offset.len() <= 3 => {
-                checks.teleport_self(me, offset).into()
+            _ => Outcome::refused(""),
+        },
+    )?;
+    let destroying = Arc::clone(checks);
+    actions.add(
+        admin("destroy", "Destroy an entity").arg(entity()),
+        move |request| match request.args {
+            [Value::Number(n)] => Outcome::done(destroying.destroy(Entity(id(*n)))),
+            _ => Outcome::refused(""),
+        },
+    )?;
+    let spawning = Arc::clone(checks);
+    actions.add(
+        admin("spawn", "Spawn a copy of an entity").arg(entity()),
+        move |request| match request.args {
+            [Value::Number(n)] => Outcome::done(spawning.spawn_copy(Entity(id(*n)))),
+            _ => Outcome::refused(""),
+        },
+    )?;
+    let noticing = Arc::clone(checks);
+    actions.add(admin("notice", "Show yourself a notice"), move |request| {
+        Outcome::done(noticing.notice(request.player, NOTICE))
+    })?;
+    for (kind, label, with_bit) in [
+        ("knowledge", "Read a knowledge value", false),
+        ("learn", "Learn a knowledge value", true),
+        ("unlearn", "Unlearn a knowledge value", true),
+    ] {
+        let action = admin(kind, label).arg(knowledge_id());
+        let action = if with_bit { action.arg(bit()) } else { action };
+        actions.add(action, move |request| {
+            let (known, bit) = match request.args {
+                [Value::Number(known)] => (id(*known), None),
+                [Value::Number(known), Value::Number(bit)] => (id(*known), Some(id(*bit))),
+                _ => return Outcome::refused(""),
+            };
+            let me = request.player.entity;
+            Outcome::done(knowledge::command(knowledge, me, kind, known, bit))
+        })?;
+    }
+    match affix_checks {
+        Some(affix_checks) => stat_actions(&actions, &affix_checks),
+        None => Ok(()),
+    }
+}
+
+/// Declares the probe's actions on stats and affixes.
+fn stat_actions(actions: &Actions, affix_checks: &Arc<affixes::AffixChecks>) -> Result<(), Off> {
+    let admin = |id: &str, label: &str| Action::new(id, label).admins();
+    let ids: Vec<String> = affix_checks.kind_ids();
+    let kinds: Vec<(&str, &str)> = ids.iter().map(|id| (id.as_str(), id.as_str())).collect();
+    let (setting, ids_set) = (Arc::clone(affix_checks), ids.clone());
+    actions.add(
+        admin("stat", "Add to one of your stats")
+            .arg(Arg::choice("Stat", &kinds))
+            .arg(Arg::number("Value", -1000.0..=1000.0, 0.0)),
+        move |request| match request.args {
+            [Value::Choice(kind), Value::Number(value)] => {
+                Outcome::done(setting.stat(request.player, &ids_set[*kind], &value.to_string()))
             }
-            ["destroy", id] => checks.destroy(id).into(),
-            ["spawn", id] => checks.spawn_copy(id).into(),
-            ["notice", words @ ..] => checks.notice(player, &words.join(" ")).into(),
-            ["key"] => format!("your account key: {:016x}", player.key).into(),
-            [
-                word @ ("knowledge" | "learn" | "unlearn" | "learn-later"),
-                rest @ ..,
-            ] => knowledge::command(knowledge, me, word, rest).into(),
-            [word @ ("stat" | "stats" | "affix"), rest @ ..] => {
-                affixes::command(affix_checks.as_deref(), player, word, rest).into()
+            _ => Outcome::refused(""),
+        },
+    )?;
+    let (removing, ids_off) = (Arc::clone(affix_checks), ids.clone());
+    actions.add(
+        admin("stat-off", "Remove the probe's change to a stat").arg(Arg::choice("Stat", &kinds)),
+        move |request| match request.args {
+            [Value::Choice(kind)] => {
+                Outcome::done(removing.stat(request.player, &ids_off[*kind], "off"))
             }
-            _ => HELP.into(),
-        }
+            _ => Outcome::refused(""),
+        },
+    )?;
+    let reading = Arc::clone(affix_checks);
+    let rolling = Arc::clone(affix_checks);
+    actions.add(admin("stats", "Your changed stats"), move |request| {
+        Outcome::done(reading.stats_of(request.player))
+    })?;
+    actions.add(admin("affix", "Roll affixes again"), move |request| {
+        Outcome::done(rolling.reroll(request.player))
     })
 }
 
@@ -280,7 +382,7 @@ impl Mod for Probe {
         })?;
         let saved = Arc::clone(&checks);
         load.on::<WorldSaved>(move |()| saved.saved())?;
-        commands(load, census, checks, run_all, affix_checks)?;
+        actions(load, census, &checks, run_all, affix_checks)?;
         enshwick::info!("probe on");
         Ok(Self)
     }

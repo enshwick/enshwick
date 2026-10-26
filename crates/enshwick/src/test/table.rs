@@ -6,15 +6,14 @@ use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use crate::abi::{
     ActiveBuff, AltarInfo, AltarLimitFn, AltarZoneSize, BedCheckFn, BuffRequest, BuffTypeInfo,
-    BuildCheckFn, BuildInfo, CallerFrame, ComfortFn, CommandCallFn, ConfigCheckFn, CraftCheckFn,
-    DamageFilterFn, DaytimeInfo, EntityPlace, Event, EventFn, EventSpec, ExperiencePassFn,
-    GameEventFn, Header, HookSpec, HostApi, InteractionFn, InventoryRequest, InventoryResultFn,
-    ItemData, KnowledgeInfo, KnowledgeInputFn, Level, MidHookFn, MidHookSpec, MigrationSet,
-    ModEventFn, ModHandle, ModInfo, NetMessageFn, PlayerInfo, RenameCallFn, ResourceKey,
-    ResourcePatchFn, ServiceFound, ServiceSpec, Side, SkillCheckFn, SpawnRequest, Status, StatusFn,
-    Str, SummonFn, SurvivorLookupFn, SurvivorStatusFn, TeleportRequest, TerrainEdit,
-    TerrainMaterialInfo, UiAnswerFn, UiDialog, UiFrameFn, UiMarker, UiWidget, WeatherFront,
-    ZoneCheckFn,
+    BuildCheckFn, BuildInfo, CallerFrame, ComfortFn, ConfigCheckFn, CraftCheckFn, DamageFilterFn,
+    DaytimeInfo, EntityPlace, Event, EventFn, EventSpec, ExperiencePassFn, GameEventFn, Header,
+    HookSpec, HostApi, InteractionFn, InventoryRequest, InventoryResultFn, ItemData, KnowledgeInfo,
+    KnowledgeInputFn, Level, MidHookFn, MidHookSpec, MigrationSet, ModEventFn, ModHandle, ModInfo,
+    NetMessageFn, PlayerInfo, RenameCallFn, ResourceKey, ResourcePatchFn, ServiceFound,
+    ServiceSpec, Side, SkillCheckFn, SpawnRequest, Status, StatusFn, Str, SummonFn,
+    SurvivorLookupFn, SurvivorStatusFn, TeleportRequest, TerrainEdit, TerrainMaterialInfo,
+    UiAnswerFn, UiDialog, UiFrameFn, UiMarker, UiWidget, WeatherFront, ZoneCheckFn,
 };
 
 use super::{FakeHost, LinkedHook, ServedResource, SubmittedRequest};
@@ -61,7 +60,6 @@ pub(crate) struct State {
     pub(crate) content_ids: Vec<String>,
     pub(crate) defaults: Vec<String>,
     pub(crate) synced: Vec<String>,
-    pub(crate) commands: Vec<(String, String, CommandCallFn, usize)>,
     /// The mod's player actions callback, once registered.
     pub(crate) actions: Option<(crate::abi::ActionFn, usize)>,
     pub(crate) chat: Vec<(u64, String)>,
@@ -69,7 +67,7 @@ pub(crate) struct State {
     pub(crate) rename_filters: Vec<(RenameCallFn, usize)>,
     pub(crate) inventory_requests: Vec<OpenRequest>,
     pub(crate) status_sources: Vec<(StatusFn, usize)>,
-    /// The command lines the mod ran as the console, in order.
+    /// The lines the mod ran on the console, in order.
     pub(crate) console: Vec<String>,
     /// The entities the mod asked to destroy, in order.
     pub(crate) destroyed: Vec<u32>,
@@ -180,7 +178,7 @@ pub(crate) struct State {
     pub(crate) altar_limit: Option<(AltarLimitFn, usize)>,
     pub(crate) base_limit_raised: bool,
     pub(crate) grouping: Option<(u32, u32)>,
-    /// The reply `run_command` last handed out, alive until the next call.
+    /// The answer `run_console` last handed out, alive until the next call.
     run_out: Option<Box<str>>,
     /// The settings texts handed out, alive while the fake is installed.
     settings: Vec<Box<str>>,
@@ -222,7 +220,6 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         synced: Vec::new(),
         inventory_requests: Vec::new(),
         sync_out: Vec::new(),
-        commands: Vec::new(),
         actions: None,
         chat: Vec::new(),
         labels: Vec::new(),
@@ -895,22 +892,8 @@ extern "system" fn server_world() -> u64 {
     with(0, |s| s.host.server_world)
 }
 
-extern "system" fn command(
-    _me: ModHandle,
-    name: Str,
-    help: Str,
-    callback: CommandCallFn,
-    user: *mut c_void,
-) -> Status {
-    let (name, help) = (text(name), text(help));
-    with(Status::MISSING, |s| {
-        if s.commands.iter().any(|c| c.0 == name) || name == "enshwick" {
-            return Status::REFUSED;
-        }
-        s.commands
-            .push((name, help, callback, user.expose_provenance()));
-        Status::OK
-    })
+extern "system" fn retired_command(_me: ModHandle) -> Status {
+    Status::MISSING
 }
 
 extern "system" fn actions(
@@ -961,28 +944,33 @@ extern "system" fn status(_me: ModHandle, callback: StatusFn, user: *mut c_void)
     })
 }
 
-extern "system" fn run_command(_me: ModHandle, line: Str, out: *mut Str) -> Status {
+extern "system" fn run_console(_me: ModHandle, line: Str, out: *mut Str) -> Status {
     let line = text(line);
-    let Some((name, args)) = crate::commands::parse_line(&line) else {
-        return Status::BAD_ARGS;
-    };
-    let args = args.to_owned();
+    let (word, rest) = line.split_once(' ').unwrap_or((&line, ""));
+    let (word, rest) = (word.to_owned(), rest.trim().to_owned());
     with((), |s| s.console.push(line.clone()));
-    let own = with(None, |s| {
-        s.commands.iter().find(|c| c.0 == name).map(|c| (c.2, c.3))
-    });
-    let reply = match own {
-        // The mod's own command, run with the table unlocked: it may call back.
-        Some((callback, user)) => {
-            super::run_handler(callback, user, &name, &super::console(), &args)
-        }
-        None => match with(None, |s| s.host.foreign_commands.get(&name).cloned()) {
-            Some(reply) => reply,
+    let answer = match with(None, |s| s.host.console_answers.get(&word).cloned()) {
+        Some(answer) => answer,
+        // The mod's own actions, asked with the table unlocked: they may call
+        // back.
+        None => match with(None, |s| s.actions) {
+            Some((callback, user)) => {
+                let reply = super::ask(
+                    callback,
+                    user,
+                    crate::abi::ActionCall::CONSOLE,
+                    &super::console(),
+                    0,
+                    &rest,
+                    "",
+                );
+                reply.get(1..).unwrap_or_default().to_owned()
+            }
             None => return Status::MISSING,
         },
     };
     with(Status::MISSING, |s| {
-        let kept = s.run_out.insert(reply.into_boxed_str());
+        let kept = s.run_out.insert(answer.into_boxed_str());
         put(out, Str::new(kept))
     })
 }
@@ -2406,7 +2394,7 @@ pub(crate) static TABLE: HostApi = HostApi {
     workshop_recipes,
     hosting,
     server_world,
-    command,
+    retired_command,
     chat,
     set_label,
     rename_filter,
@@ -2416,7 +2404,7 @@ pub(crate) static TABLE: HostApi = HostApi {
     item_info,
     inventory_submit,
     status,
-    run_command,
+    run_console,
     altars_open,
     altars,
     altar_zones_control,

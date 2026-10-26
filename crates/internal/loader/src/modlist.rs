@@ -227,7 +227,7 @@ pub struct Replaced {
 }
 
 impl Replaced {
-    /// The line the log, the status and `/enshwick` show.
+    /// The line the log, the status and `enshwick` on the console show.
     #[must_use]
     pub fn line(&self) -> String {
         format!(

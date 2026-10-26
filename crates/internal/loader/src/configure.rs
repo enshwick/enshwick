@@ -1,8 +1,9 @@
-//! `/config <mod> [key] [value]`: administrators read and change the
-//! settings of mods, checked against the schema each mod hands the loader.
+//! `enshwick config <mod> [key] [value]` on the server's console reads and
+//! changes the settings of mods, checked against the schema each mod hands
+//! the loader.
 //!
-//! The answer and the file edit are pure logic here; the chat module runs
-//! the command, writes the file and raises the mod's settings event.
+//! The answer and the file edit are pure logic here; the console runs the
+//! line, writes the file and raises the mod's settings event.
 
 use enshwick::config::{Field, Kind, Schema, Stage};
 use toml_edit::DocumentMut;
@@ -15,23 +16,20 @@ pub mod rows;
 #[cfg(windows)]
 pub(crate) use apply::apply;
 
-/// The command's name.
-pub const COMMAND: &str = "config";
-
-/// What `/config` was asked.
+/// What `enshwick config` was asked.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Request<'a> {
-    /// `/config`: the mods with settings.
+    /// No mod: the mods with settings.
     Mods,
-    /// `/config <mod>`: every setting of a mod.
+    /// A mod: every setting of it.
     List(&'a str),
-    /// `/config <mod> <key>`: one setting.
+    /// A mod and a key: one setting.
     Get(&'a str, &'a str),
-    /// `/config <mod> <key> <value>`: change one setting.
+    /// A mod, a key and a value: change one setting.
     Set(&'a str, &'a str, &'a str),
 }
 
-/// Reads the arguments of `/config`.
+/// Reads the words after `enshwick config`.
 #[must_use]
 pub fn parse(args: &str) -> Request<'_> {
     let args = args.trim();
@@ -42,12 +40,6 @@ pub fn parse(args: &str) -> Request<'_> {
         (Some(id), Some(key), None) => Request::Get(id, key),
         (Some(id), Some(key), Some(value)) => Request::Set(id, key, value.trim()),
     }
-}
-
-/// The help line of `/config`.
-#[must_use]
-pub fn help() -> String {
-    texts::fill("config.help", &[])
 }
 
 /// The value of `key` in the settings file `text`, as TOML; the field's
@@ -121,7 +113,7 @@ pub fn refused(why: &str) -> String {
     texts::fill("refused", &[("why", why)])
 }
 
-/// `/config <mod>`: one line per setting.
+/// A mod's settings: one line per setting.
 #[must_use]
 pub fn list(id: &str, schema: &Schema, text: &str) -> String {
     let mut lines = vec![texts::fill("config.list", &[("id", id)])];
@@ -137,7 +129,7 @@ pub fn list(id: &str, schema: &Schema, text: &str) -> String {
     lines.join("\n")
 }
 
-/// `/config <mod> <key>`: the setting with its documentation.
+/// One setting with its documentation.
 ///
 /// # Errors
 ///

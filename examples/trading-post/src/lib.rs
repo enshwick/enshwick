@@ -1,10 +1,11 @@
 //! Example: publishes item prices as a typed service and sends
-//! `trading-post:sold` when a player sells with `/sell <item>`.
+//! `trading-post:sold` when a player sells an item with the `sell` action.
 
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicU32, Ordering};
 
-use enshwick::commands::Reply;
+use enshwick::actions::{Action, Arg, Outcome, Value};
+use enshwick::i18n::Texts;
 use enshwick::services::Emitter;
 use enshwick::{Load, Mod, Off};
 use enshwick_example_trading_post_api::{Prices, Sold};
@@ -32,12 +33,12 @@ extern "system" fn set_price(item: u32, price: u32) -> u32 {
 static PRICES: Prices = Prices { price, set_price };
 
 /// Sells `item`: sends the event to every subscriber.
-fn sell(item: u32) -> Reply {
+fn sell(item: u32) -> Outcome {
     let price = price(item);
     if let Some(sold) = SOLD.get() {
         sold.send(&Sold { item, price });
     }
-    format!("sold item {item} for {price} coins").into()
+    Outcome::done(format!("sold item {item} for {price} coins"))
 }
 
 /// The example trading post.
@@ -52,11 +53,20 @@ impl Mod for TradingPost {
     fn init(load: &mut Load<'_>) -> Result<Self, Off> {
         load.publish(&PRICES)?;
         let _first = SOLD.set(load.define_event::<Sold>()?);
-        load.add_command("sell", "sells an item: /sell <item>", |_, args| {
-            args.first()
-                .and_then(|a| a.parse().ok())
-                .map_or_else(|| "usage: /sell <item>".into(), sell)
-        })?;
+        #[expect(clippy::cast_precision_loss, reason = "a small count")]
+        let last = (ITEMS - 1) as f64;
+        load.actions(Texts::default())?.add(
+            Action::new("sell", "Sell an item").arg(Arg::number("Item", 0.0..=last, 1.0)),
+            |request| match request.args {
+                #[expect(
+                    clippy::cast_possible_truncation,
+                    clippy::cast_sign_loss,
+                    reason = "the argument's range is within the items"
+                )]
+                [Value::Number(item)] => sell(*item as u32),
+                _ => Outcome::refused("pick an item"),
+            },
+        )?;
         Ok(Self)
     }
 }

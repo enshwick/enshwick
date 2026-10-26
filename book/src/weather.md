@@ -5,29 +5,30 @@ returns the
 [`Weather`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/weather.rs)
 of the server's world: how it is at a place, the fronts that make it, and
 starting new weather. It is `Copy`; get it during `init` and move it into
-handlers, tasks and commands.
+handlers, tasks and actions.
 
 ```rust
 use core::time::Duration;
+use enshwick::actions::{Action, Arg, Outcome, Value};
 use enshwick::weather::Forecast;
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let weather = load.weather();
     let world = load.world()?;
-    load.add_command("weather", "the weather here, or new: /weather [clear|rain|storm]", move |ctx, args| {
-        let Some(me) = ctx.character() else {
-            return "the console has no character".into();
+    let actions = load.actions(enshwick::i18n::Texts::default())?;
+    actions.add(Action::new("weather", "The weather here"), move |request| {
+        let here = world.position(request.player.entity).unwrap_or_default();
+        Outcome::done(format!("{:?}", weather.at(here).map(|now| now.state())))
+    })?;
+    let kinds = [("clear", "Clear"), ("rain", "Rain"), ("storm", "Storm")];
+    let new = Action::new("new-weather", "New weather").admins().arg(Arg::choice("Weather", &kinds));
+    actions.add(new, move |request| {
+        let forecast = match request.args {
+            [Value::Choice(0)] => Forecast::Clear,
+            [Value::Choice(1)] => Forecast::Rain,
+            _ => Forecast::Blizzard,
         };
-        let forecast = match args.first() {
-            Some(&"clear") => Forecast::Clear,
-            Some(&"rain") => Forecast::Rain,
-            Some(&"storm") => Forecast::Blizzard,
-            _ => {
-                let here = world.position(me).unwrap_or_default();
-                return format!("{:?}", weather.at(here).map(|now| now.state())).into();
-            }
-        };
-        format!("{:?}", weather.set(forecast, Some(Duration::from_mins(15)))).into()
+        Outcome::done(format!("{:?}", weather.set(forecast, Some(Duration::from_mins(15)))))
     })
 }
 ```
@@ -69,5 +70,5 @@ and `z * size` to `(z + 1) * size` on the other, at any height. A mod that
 works on what lies in an area reads it once its chunk loaded.
 
 Every call works on the server's game thread, from a game event, a
-[scheduler](events.md#the-scheduler) task or a [command](commands.md); on a
+[scheduler](events.md#the-scheduler) task or an [action](actions.md); on a
 client, while it hosts a game.

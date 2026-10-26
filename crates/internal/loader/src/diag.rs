@@ -523,7 +523,7 @@ mod tests {
             ],
             turned_off: vec![TurnedOff {
                 id: "safes".into(),
-                reason: "panic in a command handler".into(),
+                reason: "panic in an action".into(),
                 at: 44_000,
             }],
             links: vec!["event trading-post:sold from trading-post 0.3.0 to market-stalls".into()],
@@ -583,7 +583,7 @@ mod tests {
         assert!(text.contains(
             "  not started: proton-optimizer is replaced by optimizer; delete mods/enshwick_proton_optimizer.dll\n"
         ));
-        assert!(text.contains("12:13:20Z safes: panic in a command handler"));
+        assert!(text.contains("12:13:20Z safes: panic in an action"));
         assert!(text.contains(
             "services and events:
   event trading-post:sold from trading-post 0.3.0 to market-stalls
@@ -627,7 +627,7 @@ conflicts:
         assert_eq!(short.lines().count(), 5);
         assert!(short.contains("proton-optimizer is replaced by optimizer; delete"));
         assert!(short.starts_with("Enshwick 0.1.5, up 2h 03m, server running: 1 of 2 mods"));
-        assert!(short.contains("safes off: panic in a command handler"));
+        assert!(short.contains("safes off: panic in an action"));
         assert!(short.contains("busiest building.max_altars with 1.2M calls"));
     }
 

@@ -117,9 +117,11 @@ assert!(line.contains('3'));
 ```
 
 The server does not know a player's language, and `language()` there is
-`Language::FALLBACK`. [`enshwick-safes`](https://github.com/enshwick/enshwick/tree/main/mods/enshwick-safes)
-answers its `/safe` command in one language from its settings, falling back
-to `Language::FALLBACK`.
+`Language::FALLBACK`; an [action](../actions.md)'s request carries the
+language the player's client reads.
+[`enshwick-safes`](https://github.com/enshwick/enshwick/tree/main/mods/enshwick-safes)
+names a Safe's owner on its label in one language from its settings, falling
+back to `Language::FALLBACK`.
 
 ## The game's own texts
 
@@ -168,8 +170,8 @@ overrides or adds texts: `load.texts` merges it over the embedded file. It
 lets a server owner reword a mod or translate it into another language
 without rebuilding it.
 
-The loader's own texts, the words of the Mods screen, the replies of
-`/enshwick` and `/config`, the reasons a settings change is refused and the
+The loader's own texts, the words of the Mods screen, the answers of the
+[console](../chat.md#the-console)'s tools, the reasons a settings change is refused and the
 name of an item whose mod is gone, ship in English and Ukrainian in
 [`texts.toml`](https://github.com/enshwick/enshwick/blob/main/crates/internal/loader/src/texts.toml),
 and `mod-configs/enshwick.texts.toml` overrides them or adds a language the

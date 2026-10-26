@@ -14,18 +14,20 @@
 //! [`forget_kept`](GameSettings::forget_kept).
 //!
 //! Every call belongs on the server's game thread, from a game event, a
-//! [`Scheduler`](crate::schedule::Scheduler) task or a command; on a client,
+//! [`Scheduler`](crate::schedule::Scheduler) task or an action; on a client,
 //! while it hosts a game.
 //!
 //! # Examples
 //!
 //! ```
+//! use enshwick::actions::{Action, Outcome};
 //! fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 //!     let settings = load.game_settings()?;
-//!     load.add_command("hard", "doubles the enemies' damage", move |_ctx, _args| {
+//!     let actions = load.actions(enshwick::i18n::Texts::default())?;
+//!     actions.add(Action::new("hard", "Double the enemies' damage").admins(), move |_request| {
 //!         match settings.change(|s| s.enemy_damage *= 2.0) {
-//!             Ok(now) => format!("enemy damage now {}", now.enemy_damage).into(),
-//!             Err(why) => format!("unchanged: {why}").into(),
+//!             Ok(now) => Outcome::done(format!("Enemy damage now {}", now.enemy_damage)),
+//!             Err(why) => Outcome::refused(format!("Unchanged: {why}")),
 //!         }
 //!     })
 //! }
@@ -480,13 +482,16 @@ impl GameSettings {
     /// # Examples
     ///
     /// ```
+    /// use enshwick::actions::{Action, Outcome};
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     let settings = load.game_settings()?;
-    ///     load.add_command("no-tombstone", "keeps everything on death, in this world", move |_ctx, _args| {
+    ///     let actions = load.actions(enshwick::i18n::Texts::default())?;
+    ///     let keep = Action::new("no-tombstone", "Keep everything on death, in this world").admins();
+    ///     actions.add(keep, move |_request| {
     ///         use enshwick::game_settings::TombstoneMode;
     ///         match settings.keep(|s| s.tombstone = TombstoneMode::NoTombstone) {
-    ///             Ok(_) => "kept for this world".into(),
-    ///             Err(why) => format!("unchanged: {why}").into(),
+    ///             Ok(_) => Outcome::done("Kept for this world"),
+    ///             Err(why) => Outcome::refused(format!("Unchanged: {why}")),
     ///         }
     ///     })
     /// }

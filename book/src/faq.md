@@ -50,7 +50,7 @@ is blamed on:
 | Blame                                        | Means                                                                     |
 | -------------------------------------------- | ------------------------------------------------------------------------- |
 | `blamed on <mod>: in its code`               | the fault is in the mod's DLL                                             |
-| `blamed on <mod>: in its <feature> callback` | the loader was running one of the mod's callbacks, such as a command      |
+| `blamed on <mod>: in its <feature> callback` | the loader was running one of the mod's callbacks, such as an action      |
 | `blamed on <mod>: its code is on the stack`  | the fault is in game code a mod's hook or call led to, found by unwinding |
 | `in the loader`                              | the fault is in the loader with no mod's callback running or code near it |
 | `in the game: no mod's code on the stack`    | Enshwick and its mods are not involved                                    |
@@ -67,7 +67,7 @@ then.
 
 A summary the loader writes a minute after start, then every
 `status_minutes` (10 by default, 0 for on demand only), and when an
-administrator types `/enshwick status`. Each write replaces the last. It lists
+console runs `enshwick status`. Each write replaces the last. It lists
 the game build, every mod with its version and whether it runs, the lines each
 running mod adds with `load.add_status`, the mods turned off and why, what mods
 serve and patch, and the hooked functions. With `diagnostics = true` in
@@ -156,7 +156,7 @@ not turn the mod off: the mod logs
 | `panic in hook REWARD after next`                              | Work in `REWARD.after_next` panicked; the call kept what `next` gave              |
 | `panic in the hook at 0x...`                                   | A mid-function hook's handler panicked                                            |
 | `panic in an event handler`                                    | An event handler panicked                                                         |
-| `panic in a command handler`, `panic in a rename filter`       | A chat command handler or rename filter panicked                                  |
+| `panic in an action`, `panic in a rename filter`               | An action's handler or a rename filter panicked                                   |
 | `panic in an inventory callback`, `panic in ready`             | An inventory callback or `Mod::ready` panicked                                    |
 | `the server does not run it; restart the game to use it again` | On a client: the joined server does not run this join mod                         |
 | any other text                                                 | The mod reported a fault with `Host::fault`                                       |

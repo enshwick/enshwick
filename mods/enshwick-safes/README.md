@@ -34,11 +34,6 @@ first: your own, or, for administrators while `admins_can_open` is on, any
 Safe, or one another mod lets you manage (see For mod authors). Nobody else
 ever removes a Safe, except administrators while `admins_can_open` is on.
 
-Chat commands do the same, for a player whose game lacks Enshwick or who
-prefers typing: `/safe allow <player>`, `/safe deny <player>` and
-`/safe list`; `/safe help` lists them. The reply names the Safe and whose
-it is.
-
 All of it works on a dedicated server, in a game a player hosts and in
 single player. A player who has just joined touches no Safe, their own
 included, until the server has registered them, a moment after they arrive.
@@ -63,7 +58,7 @@ joined player's crafting menu shows the server's cost, and a change, or a
 world with another value, applies at once, with no restart of the game.
 `admins_can_open` lets administrators open, remove and rename every Safe, and
 applies while the game runs. `label_language` is the language of the owner's
-name on a Safe and of the `/safe` replies in chat, a language code such as
+name on a Safe, a language code such as
 `en`, `uk` or `de`; anything else is refused. A change applies while the
 game runs, to Safes named from then on. The window and the hint speak each
 player's own language.

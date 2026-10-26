@@ -1,8 +1,8 @@
 [package]
 name = "enshwick-admin-tools"
 version = "0.0.0-dev"
-description = "Tools for test servers: /admin commands and a command file run as the server console"
-keywords = ["enshrouded", "mod", "server", "testing", "commands"]
+description = "Tools for test servers: administrator actions and a command file run on the server console"
+keywords = ["enshrouded", "mod", "server", "testing", "admin"]
 categories = ["game-development"]
 readme = "README.md"
 authors.workspace = true

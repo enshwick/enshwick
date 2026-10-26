@@ -149,37 +149,18 @@ impl KnowledgeChecks {
     }
 }
 
-/// `/probe knowledge|learn|unlearn|learn-later`: reads, grants and takes
-/// back knowledge of the caller, or grants it to an account for later; the
-/// kind comes from the id, a bit from the arguments (1 by default, the
-/// crafted bit of a recipe).
-pub(crate) fn command(knowledge: Knowledge, me: Entity, word: &str, args: &[&str]) -> String {
-    let number = |text: &str| {
-        text.strip_prefix("0x").map_or_else(
-            || text.parse().ok(),
-            |hex| u32::from_str_radix(hex, 16).ok(),
-        )
-    };
-    let (account, args) = match (word, args) {
-        ("learn-later", [key, rest @ ..]) => (u64::from_str_radix(key, 16).ok(), rest),
-        ("learn-later", []) => return "/probe learn-later <account key, hex> <id> [bit]".into(),
-        _ => (None, args),
-    };
-    let Some(id) = args.first().and_then(|a| number(a)) else {
-        return format!("/probe {word} <id> [bit]");
-    };
-    let bit = args.get(1).and_then(|a| number(a)).unwrap_or(1);
+/// The `knowledge`, `learn` and `unlearn` actions: read, grant and take back
+/// knowledge `id` of the caller; the kind comes from the id, `bit` is the
+/// flag or the amount (1, the crafted bit of a recipe, when `None`).
+pub(crate) fn command(
+    knowledge: Knowledge,
+    me: Entity,
+    word: &str,
+    id: u32,
+    bit: Option<u32>,
+) -> String {
+    let bit = bit.unwrap_or(1);
     let Some(known) = knowledge.get(me, id) else {
-        if let Some(key) = account {
-            // A player's id does not read without a player: try each kind.
-            let done = [Grant::Set, Grant::Flag(bit), Grant::Add(bit)]
-                .into_iter()
-                .map(|grant| (grant, knowledge.grant_account(key, id, grant)))
-                .find(|(_, done)| done.is_ok());
-            let line = format!("learn-later {id} for {key:016x}: {done:?}");
-            enshwick::info!("{line}");
-            return line;
-        }
         return format!("knowledge {id} does not read: unknown id, or no world");
     };
     let grant = match known.kind {
@@ -195,10 +176,6 @@ pub(crate) fn command(knowledge: Knowledge, me: Entity, word: &str, args: &[&str
     let done = match word {
         "learn" => knowledge.grant(me, id, grant),
         "unlearn" => knowledge.revoke(me, id, revoke),
-        "learn-later" => match account {
-            Some(key) => knowledge.grant_account(key, id, grant),
-            None => return "the account key is hex, as /probe key shows it".into(),
-        },
         _ => return format!("knowledge {id}: {known:?}"),
     };
     let line = format!("{word} {id} ({:?}): {done:?}; before {known:?}", known.kind);

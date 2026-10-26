@@ -11,19 +11,21 @@
 //! setting.
 //!
 //! Every call belongs on the server's game thread, from a game event, a
-//! [`Scheduler`](crate::schedule::Scheduler) task or a command; on a client,
+//! [`Scheduler`](crate::schedule::Scheduler) task or an action; on a client,
 //! while it hosts a game.
 //!
 //! # Examples
 //!
 //! ```
+//! use enshwick::actions::{Action, Outcome};
 //! use core::time::Duration;
 //! use enshwick::weather::Forecast;
 //!
 //! fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 //!     let weather = load.weather();
-//!     load.add_command("sun", "clear skies for ten minutes", move |_ctx, _args| {
-//!         format!("{:?}", weather.set(Forecast::Clear, Some(Duration::from_mins(10)))).into()
+//!     let actions = load.actions(enshwick::i18n::Texts::default())?;
+//!     actions.add(Action::new("sun", "Clear skies for ten minutes").admins(), move |_request| {
+//!         Outcome::done(format!("{:?}", weather.set(Forecast::Clear, Some(Duration::from_mins(10)))))
 //!     })
 //! }
 //! ```

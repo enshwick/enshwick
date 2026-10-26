@@ -22,6 +22,7 @@
 //! # Examples
 //!
 //! ```
+//! use enshwick::actions::{Action, Outcome};
 //! use core::time::Duration;
 //! use enshwick::stats::{Lasting, Modifier, Op, StatDef, builtin};
 //!
@@ -29,15 +30,13 @@
 //!     let luck = load.define_stat("luck", &StatDef::additive("stat.luck").range(0.0, 1.0))?;
 //!     let health = load.open_stat(builtin::HEALTH_MAX)?;
 //!     let stats = load.stats()?;
-//!     load.add_command("bless", "more health and luck for a minute", move |ctx, _args| {
-//!         let Some(me) = ctx.character() else {
-//!             return "the console has no character".into();
-//!         };
-//!         let player = me;
+//!     let actions = load.actions(enshwick::i18n::Texts::default())?;
+//!     actions.add(Action::new("bless", "More health and luck for a minute"), move |request| {
+//!         let player = request.player.entity;
 //!         let minute = Lasting::For(Duration::from_secs(60));
 //!         let _health = stats.set(player, "bless", Modifier::new(health, Op::Add, 50.0), minute);
 //!         let _luck = stats.set(player, "bless", Modifier::new(luck, Op::Add, 0.1), minute);
-//!         format!("luck now {}", stats.value(player, luck)).into()
+//!         Outcome::done(format!("Luck now {}", stats.value(player, luck)))
 //!     })
 //! }
 //! ```

@@ -46,7 +46,7 @@ runs; `loader.log` says `enshwick-safes.dll skipped: off in
 mods/enshwick/mods.toml`. `links_off = ["safes:access"]` in an entry keeps the
 mod on and only its link on that [extension point](../extending.md) off. Changes take effect at the next start. A list that
 is not valid TOML is left as it is and every mod loads, with a warning.
-`/enshwick` and the status summary name the mods that are off.
+`enshwick` on the [console](../chat.md#the-console) and the status summary name the mods that are off.
 
 `mods/enshwick/enshwick.lock` is written at every start: the loader's version
 and SHA-256, the game build, and each running mod's id, version, file and
@@ -143,7 +143,7 @@ let manifest = enshwick::manifest!(
   the old DLL, so without it both would run. While this mod is present, the
   loader never starts a replaced mod: it unloads that DLL right after reading
   its manifest and logs once
-  `<old> is replaced by <new>; delete mods/<file>`, which `/enshwick` and the
+  `<old> is replaced by <new>; delete mods/<file>`, which `enshwick` on the console and the
   status summary repeat and the lock lists under `[[replaced]]`. Settings and
   data stay where they are, so carry them over in the new mod if it needs
   them.

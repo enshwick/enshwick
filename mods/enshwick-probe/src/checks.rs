@@ -24,9 +24,6 @@ const PING_AT: [f64; 3] = [-12345.0, -500.0, 777.0];
 /// When the probe looks at a teleported entity's components.
 const TELEPORT_PEEK: Duration = Duration::from_millis(500);
 
-/// How far `/probe teleport me` moves the player by default: 10 m along x and
-/// half a metre up, clear of the ground.
-const SELF_TELEPORT: [f64; 3] = [10.0, 0.5, 0.0];
 /// How often the position is logged after it.
 const SELF_TELEPORT_STEP: Duration = Duration::from_millis(250);
 /// How many times: five seconds.
@@ -474,11 +471,8 @@ impl Checks {
         }
     }
 
-    /// `/probe vitals <id>`.
-    pub(crate) fn vitals_of(&self, id: &str) -> String {
-        let Some(entity) = parse(id) else {
-            return format!("not an entity id: {id}");
-        };
+    /// The `vitals` action: an entity's vitals and progress.
+    pub(crate) fn vitals_of(&self, entity: Entity) -> String {
         self.compare(entity);
         format!(
             "vitals {:?}, progress {:?}",
@@ -487,35 +481,25 @@ impl Checks {
         )
     }
 
-    /// `/probe spawn <id>`: a copy of an entity three metres above it.
-    pub(crate) fn spawn_copy(&self, id: &str) -> String {
-        let Some(entity) = parse(id) else {
-            return format!("not an entity id: {id}");
-        };
+    /// The `spawn` action: a copy of an entity three metres above it.
+    pub(crate) fn spawn_copy(&self, entity: Entity) -> String {
         match (self.world.template(entity), self.world.position(entity)) {
             (Some(template), Some([x, y, z])) => self.spawn(template, [x, y + 3.0, z]),
             _ => format!("entity {} has no template or place", entity.0),
         }
     }
 
-    /// `/probe notice <text>`: shows the text to the player who typed it.
+    /// The `notice` action: shows the text to the player who asked.
     pub(crate) fn notice(&self, player: &enshwick::world::Player, text: &str) -> String {
         let how = self.world.notify(player, text);
         enshwick::info!("notice to {}: {how:?}", player.name);
         format!("{how:?}")
     }
 
-    /// `/probe teleport me [dx dy dz]`: moves the typing player's character
-    /// by the offset, 10 m along x by default, and logs where it stands four
-    /// times a second for five seconds: whether it stays or snaps back.
-    pub(crate) fn teleport_self(&self, entity: Entity, offset: &[&str]) -> String {
-        let mut by = SELF_TELEPORT;
-        for (axis, word) in by.iter_mut().zip(offset) {
-            match word.parse::<f64>() {
-                Ok(value) if value.is_finite() => *axis = value,
-                _ => return format!("not a distance: {word}"),
-            }
-        }
+    /// The `teleport` action: moves the asking player's character by `by`,
+    /// in metres, and logs where it stands four times a second for five
+    /// seconds: whether it stays or snaps back.
+    pub(crate) fn teleport_self(&self, entity: Entity, by: [f64; 3]) -> String {
         let Some(from) = self.world.position(entity) else {
             return format!("entity {} has no place", entity.0);
         };
@@ -571,11 +555,8 @@ impl Checks {
         format!("teleport asked to {to:?}; see probe.log for the next 5 s")
     }
 
-    /// `/probe destroy <id>`.
-    pub(crate) fn destroy(&self, id: &str) -> String {
-        let Some(entity) = parse(id) else {
-            return format!("not an entity id: {id}");
-        };
+    /// The `destroy` action.
+    pub(crate) fn destroy(&self, entity: Entity) -> String {
         let template = self.world.template(entity);
         let outcome = self.world.destroy(entity);
         enshwick::info!(
@@ -654,15 +635,6 @@ fn ids_across_loads(before: &[(u32, u64)], now: &[(u32, u64)]) {
         "ids across loads: {same} of {} sampled entities keep their id and template ({moved} templates gone)",
         before.len()
     );
-}
-
-fn parse(id: &str) -> Option<Entity> {
-    let id = id.trim();
-    let value = match id.strip_prefix("0x") {
-        Some(hex) => u32::from_str_radix(hex, 16).ok()?,
-        None => id.parse().ok()?,
-    };
-    Some(Entity(value))
 }
 
 /// Marks a spawned entity with entity data, destroys it and checks the

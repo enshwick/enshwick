@@ -13,7 +13,7 @@ The crates under
 [`crates/internal`](https://github.com/enshwick/enshwick/tree/main/crates/internal)
 are parts of the loader; a mod never depends on them. A mod names itself in
 a manifest, reads its settings, reacts to events, adds items and recipes,
-answers chat commands, and where the API has no call, links hooks into game
+offers players actions in the game's interface, and where the API has no call, links hooks into game
 functions. The loader keeps the
 game running when a mod fails: it turns that mod off, and the game runs
 vanilla where the mod acted.

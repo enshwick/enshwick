@@ -2,7 +2,7 @@
 //! chat lines no player sees.
 //!
 //! A client sends a line `/enshwick-net <frame>` into its chat queue; the
-//! server's chat link takes every `/` line before the game posts it, so the
+//! server's chat link takes every such line before the game posts it, so the
 //! frame never reaches another player. The server sends a frame as a line of
 //! the kind its own replies use, posted to one connection alone; the
 //! client's link on its chat post takes the line where the client posts what
@@ -34,8 +34,6 @@ use enshwick::abi::{Header, NetMessage, NetMessageFn, Status};
 
 use crate::host::{Loader, Registered, take};
 
-/// The chat command that carries frames from clients.
-pub(crate) const COMMAND: &str = "enshwick-net";
 /// The prefix of a frame line, both ways.
 const PREFIX: &str = "/enshwick-net ";
 /// The version of the frame protocol.
@@ -619,7 +617,7 @@ fn keep_greeting_in(state: &mut State, live: &[u64]) {
 }
 
 /// Takes a frame line a client sent, on the server's game thread: `args` is
-/// the line after the command name, `key` the client's account key.
+/// the frame after the line's prefix, `key` the client's account key.
 pub(crate) fn server_received(key: u64, args: &str) {
     if key == 0 {
         return;
@@ -743,6 +741,11 @@ fn admit_from_server(state: &mut State, now: Instant) -> bool {
 /// Whether `text` is a frame line, which no chat shows.
 pub(crate) fn is_frame(text: &[u8]) -> bool {
     text.starts_with(PREFIX.as_bytes())
+}
+
+/// The frame a frame line carries, after its prefix.
+pub(crate) fn frame_body(line: &str) -> Option<&str> {
+    line.strip_prefix(PREFIX).map(str::trim)
 }
 
 /// Notes whether the server the client joins advertises Enshwick, and

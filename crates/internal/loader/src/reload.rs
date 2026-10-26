@@ -8,7 +8,7 @@
 //! runs its `shutdown`, loads the new copy and initialises it again with the
 //! same handle, then runs its `ready`. The old copy stays loaded until the
 //! server stops, so a call still running in it never faults. A mod that used
-//! anything a reload cannot hand over (content, commands, services, patches
+//! anything a reload cannot hand over (content, actions, services, patches
 //! and every other registration besides hooks, events, lookups, settings and
 //! logging, and on a client the interface's frame and HUD callbacks and map
 //! markers) is refused with the calls it made; so is a new copy whose
@@ -482,7 +482,7 @@ mod tests {
             assert!(RELOADABLE.contains(&call));
         }
         for call in [
-            "command",
+            "actions",
             "serve_resource",
             "patch_code",
             "publish",

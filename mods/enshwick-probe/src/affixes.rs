@@ -1,7 +1,7 @@
 //! Affixes and stats by hand: two affixes of the probe's own, an item with
 //! an entity found in a container and rolled from a seed, its lines read
-//! and its old stats put back; and the `/probe stat`, `/probe stats` and
-//! `/probe affix` commands an administrator tries them with in game.
+//! and its old stats put back; and the `stat`, `stat-off`, `stats` and
+//! `affix` actions an administrator tries them with in game.
 
 use enshwick::affixes::{AffixDef, Affixes, Categories, Range, Rarity, RollRules};
 use enshwick::inventory::{Category, Inventories};
@@ -24,11 +24,16 @@ pub(crate) struct AffixChecks {
     inventories: Inventories,
     world: World,
     setup: ComponentType,
-    /// Every stat the commands may set, by id.
+    /// Every stat the actions may set, by id.
     kinds: Vec<(String, Stat)>,
 }
 
 impl AffixChecks {
+    /// The ids of the stats the actions may set.
+    pub(crate) fn kind_ids(&self) -> Vec<String> {
+        self.kinds.iter().map(|(id, _)| id.clone()).collect()
+    }
+
     pub(crate) fn new(load: &mut Load<'_>) -> Result<Self, Off> {
         let world = load.world()?;
         let mut kinds = Vec::new();
@@ -143,7 +148,8 @@ impl AffixChecks {
         }
     }
 
-    /// `/probe stat <id> <value|off>`: an `Add` modifier on the caller.
+    /// The `stat` and `stat-off` actions: an `Add` modifier on the caller,
+    /// or none for `off`.
     pub(crate) fn stat(&self, player: &Player, id: &str, value: &str) -> String {
         let Some(&(_, stat)) = self.kinds.iter().find(|(known, _)| known == id) else {
             let ids: Vec<&str> = self.kinds.iter().map(|(id, _)| id.as_str()).collect();
@@ -153,7 +159,7 @@ impl AffixChecks {
             self.stats.remove(player.entity, KEY, stat)
         } else {
             let Ok(value) = value.parse::<f32>() else {
-                return "/probe stat <id> <value|off>".to_owned();
+                return format!("not a value: {value}");
             };
             let modifier = Modifier::new(stat, Op::Add, value);
             self.stats
@@ -165,7 +171,7 @@ impl AffixChecks {
         }
     }
 
-    /// `/probe stats`: the caller's values that differ from the defaults and
+    /// The `stats` action: the caller's values that differ from the defaults and
     /// where they come from.
     pub(crate) fn stats_of(&self, player: &Player) -> String {
         let mut lines: Vec<String> = self
@@ -190,7 +196,7 @@ impl AffixChecks {
         }
     }
 
-    /// `/probe affix`: rolls every item the caller wears anew, one to three
+    /// The `affix` action: rolls every item the caller wears anew, one to three
     /// affixes each.
     pub(crate) fn reroll(&self, player: &Player) -> String {
         let reader = self.inventories.read();
@@ -214,23 +220,5 @@ impl AffixChecks {
         } else {
             rolled.join("\n")
         }
-    }
-}
-
-/// Answers `/probe stat`, `/probe stats` and `/probe affix`.
-pub(crate) fn command(
-    checks: Option<&AffixChecks>,
-    player: &Player,
-    word: &str,
-    rest: &[&str],
-) -> String {
-    let Some(checks) = checks else {
-        return "stats and affixes are off".to_owned();
-    };
-    match (word, rest) {
-        ("stat", [id, value]) => checks.stat(player, id, value),
-        ("stats", []) => checks.stats_of(player),
-        ("affix", []) => checks.reroll(player),
-        _ => "/probe stat <id> <value|off>|stats|affix".to_owned(),
     }
 }

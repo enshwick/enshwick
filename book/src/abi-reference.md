@@ -196,7 +196,7 @@ marked "init only" are allowed during `enshwick_mod_init` only.
 | `workshop_recipes`       | The most recipes one workshop takes: 512, or `u32::MAX` once the loader lifted the limit             | 7           |
 | `hosting`                | 1 while this process runs a game server                                                              | 8           |
 | `server_world`           | The entity world of the game server this process runs; 0 for none                                    | 8           |
-| `command`                | Registers a chat command with a line of help; init only                                              | 9           |
+| `retired_command`        | Retired with chat commands; always `MISSING`                                                         | 9           |
 | `chat`                   | Sends a chat line to one player or everyone, from any thread                                         | 9           |
 | `set_label`              | Gives an entity a name, as a player's rename does; server game thread only                           | 9           |
 | `rename_filter`          | Calls a filter before the server applies a player's rename; init only                                | 9           |
@@ -206,7 +206,7 @@ marked "init only" are allowed during `enshwick_mod_init` only.
 | `item_info`              | Writes an item's static data; any thread                                                             | 12          |
 | `inventory_submit`       | Queues an inventory transaction, from any thread; the result comes on the game thread                | 12          |
 | `status`                 | Adds a source of lines for the loader's status summary                                               | 13          |
-| `run_command`            | Runs a chat command line as the server's console; server game thread only                            | 13          |
+| `run_console`            | Runs a console line as the server's console, an action's text form included; server game thread only | 13          |
 | `altars_open`            | Asks the loader to follow the Flame Altars of the server's world; init only                          | 15          |
 | `altars`                 | The altars with their levels and zones; any thread; `REFUSED` for a mod that did not open them       | 15          |
 | `altar_zones_control`    | Makes the mod the one that sizes altar zones, one mod at a time; init only                           | 15          |

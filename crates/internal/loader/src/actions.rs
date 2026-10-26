@@ -1,8 +1,8 @@
 //! Player actions across the wire: the server asks each mod that declared
 //! actions what a player may use, runs what the player picked in the
-//! interface and pushes the hints the player has at hand; the client keeps
-//! what its server offered, for the Mods screen, the HUD and the actions
-//! window.
+//! interface or the console named and pushes the hints the player has at
+//! hand; the client keeps what its server offered, for the Mods screen, the
+//! HUD and the actions window.
 //!
 //! The server decides everything. A client only shows the sheet the server
 //! sent and sends back an action's id and arguments; the server runs the
@@ -121,7 +121,7 @@ fn ask(
     // safe layer catches its panics.
     crate::profile::call(
         registered.owner,
-        crate::profile::Feature::Commands,
+        crate::profile::Feature::Actions,
         || unsafe {
             (registered.callback)(
                 &raw const call,
@@ -132,6 +132,20 @@ fn ask(
     );
     // SAFETY: the reply stays valid until the callback runs again.
     unsafe { reply.as_str() }.unwrap_or("").to_owned()
+}
+
+/// Runs the console line `rest` on the actions of mod `index`; the answer,
+/// or `None` when the mod is off or declared no actions.
+pub(crate) fn console(loader: &Loader, index: usize, rest: &str) -> Option<String> {
+    let registered = running(loader).into_iter().find(|r| r.owner == index)?;
+    let console = crate::console::the_console();
+    let reply = ask(registered, ActionCall::CONSOLE, &console, 0, rest, "");
+    Some(reply.get(1..).unwrap_or_default().to_owned())
+}
+
+/// The running mods that declared actions, by index.
+pub(crate) fn declaring(loader: &Loader) -> Vec<usize> {
+    running(loader).into_iter().map(|r| r.owner).collect()
 }
 
 /// The connected player with account key `key`.

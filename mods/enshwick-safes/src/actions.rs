@@ -1,7 +1,7 @@
 //! Who may open a Safe, as the owner manages it: a list of the server's
 //! players with a switch each, for the Safe at hand, on the Mods screen and
-//! in a window a HUD hint opens beside the Safe; `/safe allow <player>`,
-//! `/safe deny <player>` and `/safe list` in chat for the same.
+//! in a window a HUD hint opens beside the Safe, and a list action that
+//! names them.
 //!
 //! The Safe at hand is the one within reach the player may manage: their
 //! own nearest one first, else the nearest other they may manage, as an
@@ -10,7 +10,7 @@
 
 use std::sync::atomic::{AtomicU32, Ordering};
 
-use enshwick::actions::{Action, Actions, Ask, Outcome, Request, Subject, Value};
+use enshwick::actions::{Action, Ask, Outcome, Request, Subject, Value};
 use enshwick::i18n::{Language, Texts};
 use enshwick::world::World;
 use enshwick::{Load, Off};
@@ -39,12 +39,6 @@ impl Phrases {
             texts,
             language: AtomicU32::new(language.0),
         }
-    }
-
-    /// The language they speak now.
-    #[must_use]
-    pub fn language(&self) -> Language {
-        Language(self.language.load(Ordering::Relaxed))
     }
 
     /// Speaks `language` from now on.
@@ -201,16 +195,14 @@ fn list(request: &Request<'_>) -> Outcome {
 ///
 /// # Errors
 ///
-/// [`Off`] when the loader refuses the actions or the command.
+/// [`Off`] when the loader refuses the actions.
 pub fn declare(
     load: &mut Load<'_>,
     world: World,
     texts: Texts,
-    language: Language,
     save: impl Fn() + Send + Sync + 'static,
-) -> Result<Actions, Off> {
-    let actions = load.actions("safe", texts)?;
-    actions.set_language(language);
+) -> Result<(), Off> {
+    let actions = load.actions(texts)?;
     actions.add(
         Action::per_player("access", "action.access", |_ask, subject| {
             let Some(at) = subject.map(|s| unpack(s.id)) else {
@@ -224,7 +216,6 @@ pub fn declare(
             })
         })
         .help("action.access.help")
-        .verbs("allow", "deny")
         .at(move |ask| at_hand(world, ask))
         .hint(),
         move |request| access(request, &save),
@@ -232,8 +223,7 @@ pub fn declare(
     actions.add(
         Action::new("list", "action.list").at(move |ask| at_hand(world, ask)),
         list,
-    )?;
-    Ok(actions)
+    )
 }
 
 #[cfg(test)]

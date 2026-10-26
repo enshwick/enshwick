@@ -9,26 +9,28 @@
 //! game saves the buffs it saves with a character.
 //!
 //! Every call belongs on the server's game thread, from a game event, a
-//! [`Scheduler`](crate::schedule::Scheduler) task or a command; on a client,
+//! [`Scheduler`](crate::schedule::Scheduler) task or an action; on a client,
 //! while it hosts a game.
 //!
 //! # Examples
 //!
 //! ```
+//! use enshwick::actions::{Action, Arg, Outcome, Value};
 //! use core::time::Duration;
 //! use enshwick::buffs::{Apply, BuffId};
 //!
 //! fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 //!     let buffs = load.buffs();
-//!     load.add_command("bless", "gives you a buff for a minute: /bless <buff id>", move |ctx, args| {
-//!         let Some(me) = ctx.character() else {
-//!             return "the console has no character".into();
-//!         };
-//!         let Some(id) = args.first().and_then(|a| a.parse().ok()).map(BuffId) else {
-//!             return "/bless <buff id>".into();
+//!     let actions = load.actions(enshwick::i18n::Texts::default())?;
+//!     let bless = Action::new("bless", "A buff for a minute")
+//!         .admins()
+//!         .arg(Arg::number("Buff id", 0.0..=f64::from(u32::MAX), 1.0));
+//!     actions.add(bless, move |request| {
+//!         let [Value::Number(id)] = request.args else {
+//!             return Outcome::refused("Name a buff");
 //!         };
 //!         let how = Apply::new().lasting(Duration::from_mins(1));
-//!         format!("{:?}", buffs.apply(me, id, how)).into()
+//!         Outcome::done(format!("{:?}", buffs.apply(request.player.entity, BuffId(*id as u32), how)))
 //!     })
 //! }
 //! ```

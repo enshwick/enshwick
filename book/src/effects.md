@@ -5,20 +5,20 @@ returns the mod's
 [`Effects`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/effects.rs):
 game events it raises in the server's world, teleports and spawns. Like
 [`World`](world.md), it is `Copy`; get it during `init` and move it into
-handlers, tasks and commands.
+handlers, tasks and actions.
 
 ```rust
+use enshwick::actions::{Action, Outcome};
 use enshwick::effects::Teleport;
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let effects = load.effects();
-    load.add_command("home", "takes you to the world's centre", move |ctx, _args| {
-        let Some(me) = ctx.character() else {
-            return "the console has no character".into();
-        };
+    let actions = load.actions(enshwick::i18n::Texts::default())?;
+    actions.add(Action::new("home", "Go to the world's centre"), move |request| {
+        let me = request.player.entity;
         match effects.teleport(me, [0.0, 100.0, 0.0], Teleport::new().best_spawn()) {
-            Ok(()) => "on your way".into(),
-            Err(why) => format!("no teleport: {why}").into(),
+            Ok(()) => Outcome::done("On your way"),
+            Err(why) => Outcome::refused(format!("No teleport: {why}")),
         }
     })
 }
@@ -51,19 +51,20 @@ thread, `Refused` for a type the loader does not allow or when the step has
 no room for more events, `Missing` on a build without the event.
 
 ```rust
+use enshwick::actions::{Action, Arg, Outcome, Value};
 use enshwick::effects::NpcOrder;
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let effects = load.effects();
     let world = load.world()?;
-    load.add_command("come", "calls a survivor to you: /come <survivor id>", move |ctx, args| {
-        let Some(me) = ctx.character() else {
-            return "the console has no character".into();
+    let actions = load.actions(enshwick::i18n::Texts::default())?;
+    let come = Action::new("come", "Call a survivor to you")
+        .arg(Arg::number("Survivor id", 0.0..=f64::from(u32::MAX), 1.0));
+    actions.add(come, move |request| {
+        let (Some(at), [Value::Number(id)]) = (world.position(request.player.entity), request.args) else {
+            return Outcome::refused("You are nowhere");
         };
-        let (Some(at), Some(id)) = (world.position(me), args.first().and_then(|a| a.parse().ok())) else {
-            return "/come <survivor id>".into();
-        };
-        format!("{:?}", effects.npc_command(id, NpcOrder::GoTo(at))).into()
+        Outcome::done(format!("{:?}", effects.npc_command(*id as u32, NpcOrder::GoTo(at))))
     })
 }
 ```
@@ -93,21 +94,26 @@ and `.facing_yaw(radians)` turns it.
 
 ```rust
 use core::time::Duration;
+use enshwick::actions::{Action, Arg, Outcome, Value};
 use enshwick::effects::Spawn;
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let effects = load.effects();
     let world = load.world()?;
-    load.add_command("decoy", "spawns a copy of an entity beside you for a minute: /decoy <entity>", move |ctx, args| {
-        let Some(me) = ctx.character() else {
-            return "the console has no character".into();
+    let actions = load.actions(enshwick::i18n::Texts::default())?;
+    let decoy = Action::new("decoy", "A copy of an entity beside you for a minute")
+        .admins()
+        .arg(Arg::number("Entity", 0.0..=f64::from(u32::MAX), 1.0));
+    actions.add(decoy, move |request| {
+        let [Value::Number(id)] = request.args else {
+            return Outcome::refused("Name an entity");
         };
-        let source = args.first().and_then(|a| a.parse().ok()).map(enshwick::ecs::Entity);
-        let (Some(template), Some([x, y, z])) = (source.and_then(|e| world.template(e)), world.position(me)) else {
-            return "/decoy <entity>".into();
+        let source = enshwick::ecs::Entity(*id as u32);
+        let (Some(template), Some([x, y, z])) = (world.template(source), world.position(request.player.entity)) else {
+            return Outcome::refused("Nothing to copy, or you are nowhere");
         };
         let how = Spawn::new().despawn_after(Duration::from_secs(60));
-        format!("{:?}", effects.spawn(template, [x + 2.0, y, z], how)).into()
+        Outcome::done(format!("{:?}", effects.spawn(template, [x + 2.0, y, z], how)))
     })
 }
 ```
@@ -117,5 +123,5 @@ item and its count in components the spawn does not fill; to hand a player
 items, use [inventory transactions](inventories.md).
 
 Every call works on the server's game thread, from a game event, a
-[scheduler](events.md#the-scheduler) task or a [command](commands.md); on a
+[scheduler](events.md#the-scheduler) task or an [action](actions.md); on a
 client, while it hosts a game.

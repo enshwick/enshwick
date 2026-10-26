@@ -1,5 +1,5 @@
 //! Player actions: what a player asks a mod to do, declared once and offered
-//! in the game's interface and as a chat command.
+//! in the game's interface.
 //!
 //! A mod declares each action with its id, its label, who may use it, what
 //! it acts on and its arguments as typed choices, and handles it on the
@@ -12,9 +12,9 @@
 //! - it sends the player's pick to the server over the loader's own
 //!   messages, checks there who may use the action, runs the handler and
 //!   shows the reply as one of the game's notices;
-//! - it answers the same action as a chat command, `/<command> <id> ...`,
-//!   with help made from the declarations, for players whose client lacks
-//!   Enshwick and for those who prefer typing.
+//! - it runs the same action from the server's [console](crate::console),
+//!   as the mod's id, the action's id and its values as words, such as
+//!   `weather set storm 10` in a dedicated server's command file.
 //!
 //! The server decides everything: the client only shows what the server
 //! offered and sends what the player picked, and the server checks again on
@@ -29,7 +29,7 @@
 //! use enshwick::i18n::Texts;
 //!
 //! fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-//!     let actions = load.actions("weather", Texts::default())?;
+//!     let actions = load.actions(Texts::default())?;
 //!     let kinds = [("clear", "Clear"), ("rain", "Rain"), ("storm", "Storm")];
 //!     actions.add(
 //!         Action::new("set", "Change the weather")
@@ -51,45 +51,44 @@ pub mod sheet;
 
 use core::ffi::c_void;
 use core::ops::RangeInclusive;
-use core::sync::atomic::{AtomicU32, Ordering};
 use std::cell::RefCell;
 use std::sync::{Arc, PoisonError, RwLock};
 
 use crate::abi::{ActionCall, Str, read_headed};
-use crate::commands::{CommandContext, Reply, is_valid_name};
 use crate::i18n::{Language, Texts};
 use crate::world::Player;
 use crate::{Host, Load, Off};
 
 use sheet::{ArgView, Entry};
 
-/// The platform's own texts for replies to the chat form; a mod's texts
+/// The platform's own texts for the console's answers; a mod's texts
 /// override them by key.
 const PLATFORM_TEXTS: &str = r#"
 [en]
-"actions.usage" = "/{command}: what you can do"
-"actions.unknown" = "No action {word}. /{command} help lists them."
+"actions.usage" = "Actions, each after the mod's id:"
+"actions.unknown" = "No action {word}; help lists them."
 "actions.denied" = "You may not do that."
 "actions.no_player" = "No player named {name}."
 "actions.several" = "Several players are named {name}."
-"actions.bad" = "Use it so: {usage}"
-"actions.console" = "The console has no character."
+"actions.bad" = "Write it so: {usage}"
 "actions.player" = "player"
 "actions.on" = "on"
 "actions.off" = "off"
 
 [uk]
-"actions.usage" = "/{command}: що можна зробити"
-"actions.unknown" = "Немає дії {word}. /{command} help перелічує їх."
+"actions.usage" = "Дії, кожна після id мода:"
+"actions.unknown" = "Немає дії {word}; help перелічує їх."
 "actions.denied" = "Тобі цього не можна."
 "actions.no_player" = "Немає гравця на ім'я {name}."
 "actions.several" = "Кілька гравців мають ім'я {name}."
 "actions.bad" = "Пиши так: {usage}"
-"actions.console" = "У консолі немає персонажа."
 "actions.player" = "гравець"
 "actions.on" = "on"
 "actions.off" = "off"
 "#;
+
+/// The longest action id.
+pub const MAX_ID: usize = 32;
 
 /// Players an action's list or a player argument shows at most.
 pub const MAX_PLAYERS: usize = 32;
@@ -152,8 +151,8 @@ impl Arg {
         }
     }
 
-    /// One of the server's players online now, picked from a list; typed
-    /// by name in chat.
+    /// One of the server's players online now, picked from a list; named in
+    /// a console line.
     ///
     /// # Examples
     ///
@@ -168,7 +167,7 @@ impl Arg {
         Self::new(ArgView::PLAYER, label)
     }
 
-    /// One of `choices`, each a word typed in chat and a label key.
+    /// One of `choices`, each a word for console lines and a label key.
     ///
     /// # Examples
     ///
@@ -256,8 +255,8 @@ impl Subject {
 pub struct Ask<'a> {
     /// The player.
     pub player: &'a Player,
-    /// The language they read: the game's on their client for the
-    /// interface, the one [`Actions::set_language`] set for chat.
+    /// The language they read: the game's on their client; the fallback
+    /// for the console.
     pub language: Language,
     texts: &'a Texts,
 }
@@ -285,8 +284,10 @@ impl Ask<'_> {
 pub enum Via {
     /// The game's interface: the reply shows as a notice.
     Interface,
-    /// A chat command: the reply goes to the player's chat.
-    Chat,
+    /// The server's [console](crate::console), such as a dedicated server's
+    /// command file: the reply is the console's answer, and the player an
+    /// administrator with no character.
+    Console,
 }
 
 /// A player's request to run an action, handed to its handler on the
@@ -330,7 +331,8 @@ impl Request<'_> {
     }
 }
 
-/// How a request went: the text the player reads, as a notice or in chat.
+/// How a request went: the text the player reads as a notice, or the
+/// console's answer.
 ///
 /// # Examples
 ///
@@ -431,7 +433,6 @@ pub struct Action {
     help: String,
     args: Vec<Arg>,
     hint: bool,
-    verbs: Option<(String, String)>,
     allow: Option<Allow>,
     at: Option<At>,
     on: Option<On>,
@@ -450,8 +451,8 @@ impl core::fmt::Debug for Action {
 }
 
 impl Action {
-    /// A button labelled `label`, run in chat as `/<command> <id>`; `id` is
-    /// 1 to 32 of `[a-z0-9-]`.
+    /// A button labelled `label`; `id`, 1 to 32 of `[a-z0-9-]`, names it in
+    /// console lines.
     ///
     /// # Examples
     ///
@@ -464,7 +465,6 @@ impl Action {
             help: String::new(),
             args: Vec::new(),
             hint: false,
-            verbs: None,
             allow: None,
             at: None,
             on: None,
@@ -473,8 +473,8 @@ impl Action {
 
     /// A list of players with a switch each: the players online and those
     /// `on` names, each switched on when `on` names them. A flip runs the
-    /// handler with [`Value::Player`] and [`Value::Toggle`]; in chat it is
-    /// `/<command> <id> <player> on|off`, or the two [verbs](Action::verbs).
+    /// handler with [`Value::Player`] and [`Value::Toggle`]; on the console
+    /// it is `<id> <player> on|off`.
     ///
     /// # Examples
     ///
@@ -505,7 +505,7 @@ impl Action {
     }
 
     /// A line on what the action does, a text key, shown under its label and
-    /// in the chat help.
+    /// in the console's help.
     ///
     /// # Examples
     ///
@@ -606,23 +606,6 @@ impl Action {
         self.hint = true;
         self
     }
-
-    /// The two chat words that switch a list's player on and off, such as
-    /// `allow` and `deny`: `/<command> allow <player>`.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use enshwick::actions::Action;
-    ///
-    /// let access = Action::per_player("access", "Who may use it", |_, _| Vec::new()).verbs("allow", "deny");
-    /// assert_eq!(access.id(), "access");
-    /// ```
-    #[must_use]
-    pub fn verbs(mut self, on: &str, off: &str) -> Self {
-        self.verbs = Some((on.to_owned(), off.to_owned()));
-        self
-    }
 }
 
 struct Declared {
@@ -631,9 +614,7 @@ struct Declared {
 }
 
 struct Registry {
-    command: String,
     texts: Texts,
-    language: AtomicU32,
     host: Host,
     declared: RwLock<Vec<Declared>>,
 }
@@ -651,15 +632,14 @@ pub struct Actions {
 
 impl core::fmt::Debug for Actions {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_struct("Actions")
-            .field("command", &self.registry.command)
-            .finish_non_exhaustive()
+        f.debug_struct("Actions").finish_non_exhaustive()
     }
 }
 
 impl Actions {
     /// Declares `action` with its handler, which runs on the server's game
-    /// thread when a player runs it from the interface or the chat.
+    /// thread when a player runs it from the interface or the console names
+    /// it.
     ///
     /// # Errors
     ///
@@ -674,7 +654,7 @@ impl Actions {
         F: Fn(&Request<'_>) -> Outcome + Send + Sync + 'static,
     {
         let id = action.id.clone();
-        if !is_valid_name(&id) || id == "help" {
+        if !is_valid_id(&id) || id == "help" {
             return Err(Off::new(format!(
                 "action {id}: ids are 1 to 32 of [a-z0-9-], not help"
             )));
@@ -690,25 +670,8 @@ impl Actions {
             .declared
             .write()
             .unwrap_or_else(PoisonError::into_inner);
-        let taken = |word: &str| {
-            declared.iter().any(|d| {
-                d.action.id == word
-                    || d.action
-                        .verbs
-                        .as_ref()
-                        .is_some_and(|(on, off)| on == word || off == word)
-            })
-        };
-        let words = core::iter::once(id.as_str()).chain(
-            action
-                .verbs
-                .iter()
-                .flat_map(|(on, off)| [on.as_str(), off.as_str()]),
-        );
-        for word in words {
-            if taken(word) {
-                return Err(Off::new(format!("action {id}: {word} is taken")));
-            }
+        if declared.iter().any(|d| d.action.id == id) {
+            return Err(Off::new(format!("action {id}: the id is taken")));
         }
         declared.push(Declared {
             action,
@@ -716,49 +679,9 @@ impl Actions {
         });
         Ok(())
     }
-
-    /// The language of the chat form's labels and of [`Request::language`]
-    /// for chat; the interface uses each player's own.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use enshwick::i18n::{Language, Texts};
-    ///
-    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    ///     let actions = load.actions("hello", Texts::default())?;
-    ///     actions.set_language(Language::UK_UA);
-    ///     Ok(())
-    /// }
-    /// ```
-    pub fn set_language(&self, language: Language) {
-        self.registry.language.store(language.0, Ordering::Relaxed);
-    }
-
-    /// Runs the chat form `args` for `ctx`'s player, as the command does.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use enshwick::actions::{Action, Actions};
-    /// use enshwick::commands::CommandContext;
-    ///
-    /// fn console_help(actions: &Actions) -> String {
-    ///     let ctx = CommandContext { player: None, name: "hello".into() };
-    ///     actions.chat(&ctx, &["help"]).text().to_owned()
-    /// }
-    /// ```
-    #[must_use]
-    pub fn chat(&self, ctx: &CommandContext, args: &[&str]) -> Reply {
-        self.registry.chat(ctx, args)
-    }
 }
 
 impl Registry {
-    fn chat_language(&self) -> Language {
-        Language(self.language.load(Ordering::Relaxed))
-    }
-
     fn say(&self, key: &str, language: Language, values: &[(&str, &str)]) -> String {
         self.texts.fill(key, language, values)
     }
@@ -775,9 +698,8 @@ impl Registry {
         }
     }
 
-    /// The usage line of `action` in chat.
-    fn usage(&self, action: &Action, language: Language) -> Vec<String> {
-        let command = &self.command;
+    /// The usage line of `action` on the console.
+    fn usage(&self, action: &Action, language: Language) -> String {
         let player = format!("<{}>", self.say("actions.player", language, &[]));
         let on_off = format!(
             "<{}|{}>",
@@ -786,18 +708,9 @@ impl Registry {
         );
         let label = self.say(&action.label, language, &[]);
         if action.on.is_some() {
-            let mut lines = vec![format!(
-                "/{command} {} {player} {on_off}: {label}",
-                action.id
-            )];
-            if let Some((on, off)) = &action.verbs {
-                lines.push(format!(
-                    "/{command} {on} {player}, /{command} {off} {player}"
-                ));
-            }
-            return lines;
+            return format!("{} {player} {on_off}: {label}", action.id);
         }
-        let mut line = format!("/{command} {}", action.id);
+        let mut line = action.id.clone();
         for arg in &action.args {
             let shown = match arg.kind {
                 ArgView::PLAYER => player.clone(),
@@ -815,17 +728,14 @@ impl Registry {
             line.push(' ');
             line.push_str(&shown);
         }
-        vec![format!("{line}: {label}")]
+        format!("{line}: {label}")
     }
 
-    fn help(&self, player: Option<&Player>, language: Language) -> String {
+    fn help(&self, player: &Player, language: Language) -> String {
         let declared = self.declared.read().unwrap_or_else(PoisonError::into_inner);
-        let mut lines = vec![self.say("actions.usage", language, &[("command", &self.command)])];
-        for d in declared.iter() {
-            if player.is_some_and(|p| d.action.allow.as_ref().is_some_and(|allow| !allow(p))) {
-                continue;
-            }
-            lines.extend(self.usage(&d.action, language));
+        let mut lines = vec![self.say("actions.usage", language, &[])];
+        for d in declared.iter().filter(|d| Self::allowed(d, player)) {
+            lines.push(self.usage(&d.action, language));
             if !d.action.help.is_empty() {
                 lines.push(format!("  {}", self.say(&d.action.help, language, &[])));
             }
@@ -833,70 +743,47 @@ impl Registry {
         lines.join("\n")
     }
 
-    /// The chat form: `/<command> help`, `/<command> <id> ...` or a list's
-    /// verb.
-    fn chat(&self, ctx: &CommandContext, args: &[&str]) -> Reply {
-        let language = self.chat_language();
-        let Some((&word, rest)) = args.split_first() else {
-            return self.help(ctx.player.as_ref(), language).into();
+    /// Runs the console line `line`, the part after the mod's id: `help`,
+    /// or an action's id and its values as words.
+    fn run_from_console(&self, player: &Player, line: &str) -> Outcome {
+        let language = Language::FALLBACK;
+        let words: Vec<&str> = line.split_whitespace().collect();
+        let Some((&word, rest)) = words.split_first() else {
+            return Outcome::done(self.help(player, language));
         };
         let word = word.to_lowercase();
         if word == "help" {
-            return self.help(ctx.player.as_ref(), language).into();
+            return Outcome::done(self.help(player, language));
         }
         let declared = self.declared.read().unwrap_or_else(PoisonError::into_inner);
-        let found = declared.iter().find_map(|d| {
-            if d.action.id == word {
-                return Some((d, None));
-            }
-            let (on, off) = d.action.verbs.as_ref()?;
-            (*on == word)
-                .then_some((d, Some(true)))
-                .or_else(|| (*off == word).then_some((d, Some(false))))
-        });
-        let Some((d, verb)) = found else {
-            return self
-                .say(
-                    "actions.unknown",
-                    language,
-                    &[("word", &word), ("command", &self.command)],
-                )
-                .into();
+        let Some(d) = declared.iter().find(|d| d.action.id == word) else {
+            return Outcome::refused(self.say("actions.unknown", language, &[("word", &word)]));
         };
-        let Some(player) = &ctx.player else {
-            return self.say("actions.console", language, &[]).into();
-        };
-        let outcome = match self.chat_args(d, player, rest, verb, language) {
-            Ok(values) => self.run(d, player, &values, language, Via::Chat),
+        match self.console_args(d, player, rest, language) {
+            Ok(values) => self.run(d, player, &values, language, Via::Console),
             Err(why) => Outcome::refused(why),
-        };
-        outcome.text.into()
+        }
     }
 
-    /// The values of the words after an action's id in chat.
-    fn chat_args(
+    /// The values of the words after an action's id on the console.
+    fn console_args(
         &self,
         d: &Declared,
         player: &Player,
         words: &[&str],
-        verb: Option<bool>,
         language: Language,
     ) -> Result<Vec<Value>, String> {
         let bad = || {
             self.say(
                 "actions.bad",
                 language,
-                &[("usage", &self.usage(&d.action, language).join(", "))],
+                &[("usage", &self.usage(&d.action, language))],
             )
         };
         if d.action.on.is_some() {
-            let (name, on) = if let Some(on) = verb {
-                (words.join(" "), on)
-            } else {
-                let (last, name) = words.split_last().ok_or_else(bad)?;
-                let on = toggle_word(last, &self.texts, language).ok_or_else(bad)?;
-                (name.join(" "), on)
-            };
+            let (last, name) = words.split_last().ok_or_else(bad)?;
+            let on = toggle_word(last, &self.texts, language).ok_or_else(bad)?;
+            let name = name.join(" ");
             if name.is_empty() {
                 return Err(bad());
             }
@@ -1027,7 +914,7 @@ impl Registry {
             return Outcome::refused(self.say(
                 "actions.bad",
                 language,
-                &[("usage", &self.usage(&d.action, language).join(", "))],
+                &[("usage", &self.usage(&d.action, language))],
             ));
         }
         (d.handler)(&Request {
@@ -1128,11 +1015,7 @@ impl Registry {
     ) -> String {
         let declared = self.declared.read().unwrap_or_else(PoisonError::into_inner);
         let outcome = match declared.iter().find(|d| d.action.id == id) {
-            None => Outcome::refused(self.say(
-                "actions.unknown",
-                language,
-                &[("word", id), ("command", &self.command)],
-            )),
+            None => Outcome::refused(self.say("actions.unknown", language, &[("word", id)])),
             Some(d) => match sheet::decode_args(args) {
                 None => Outcome::refused(self.say("actions.denied", language, &[])),
                 Some(mut values) => match self.name_players(d, player, &mut values, language) {
@@ -1220,7 +1103,7 @@ fn fits(value: &Value, arg: &Arg) -> bool {
     }
 }
 
-/// On or off, from a word typed in chat.
+/// On or off, from a console word.
 fn toggle_word(word: &str, texts: &Texts, language: Language) -> Option<bool> {
     let word = word.to_lowercase();
     let on = texts.fill("actions.on", language, &[]).to_lowercase();
@@ -1258,6 +1141,10 @@ unsafe extern "system" fn answer(call: *const ActionCall, user: *mut c_void, out
         ActionCall::SHEET => registry.sheet(&player, language),
         ActionCall::RUN => registry.run_from_interface(&player, action, args, language),
         ActionCall::HINTS => registry.hints(&player, language),
+        ActionCall::CONSOLE => {
+            let outcome = registry.run_from_console(&player, action);
+            format!("{}{}", u8::from(outcome.done), outcome.text)
+        }
         _ => String::new(),
     });
     if out.is_null() {
@@ -1272,42 +1159,43 @@ unsafe extern "system" fn answer(call: *const ActionCall, user: *mut c_void, out
 }
 
 impl Load<'_> {
-    /// The mod's player actions, answered in chat as `/<command>`: declare
-    /// each with [`Actions::add`]. `texts` holds the labels' texts, as
-    /// [`Load::texts`] reads them; the platform's own replies are in it
-    /// under `actions.*` too, so a mod may change them.
+    /// The mod's player actions: declare each with [`Actions::add`]. `texts`
+    /// holds the labels' texts, as [`Load::texts`] reads them; the
+    /// platform's own replies are in it under `actions.*` too, so a mod may
+    /// change them.
     ///
     /// # Errors
     ///
-    /// [`Off`] for a malformed or taken command name, or a second call.
+    /// [`Off`] for a second call, or when the loader refuses the actions.
     ///
     /// # Examples
     ///
     /// See the [module](self).
-    pub fn actions(&mut self, command: &str, texts: Texts) -> Result<Actions, Off> {
+    pub fn actions(&mut self, texts: Texts) -> Result<Actions, Off> {
         let mut all = Texts::parse(PLATFORM_TEXTS)?;
         all.merge(texts);
         let host = self.host();
         let registry = Arc::new(Registry {
-            command: command.to_owned(),
             texts: all,
-            language: AtomicU32::new(Language::FALLBACK.0),
             host,
             declared: RwLock::new(Vec::new()),
         });
-        let actions = Actions {
-            registry: Arc::clone(&registry),
-        };
         crate::load::hand_over(
             Arc::clone(&registry),
             |user| (host.api().actions)(host.handle(), answer, user),
             "actions",
         )?;
-        let chat = actions.clone();
-        let help = format!("actions; /{command} help lists them");
-        self.add_command(command, &help, move |ctx, args| chat.chat(ctx, args))?;
-        Ok(actions)
+        Ok(Actions { registry })
     }
+}
+
+/// Whether `id` can name an action: 1 to 32 characters of `[a-z0-9-]`.
+fn is_valid_id(id: &str) -> bool {
+    !id.is_empty()
+        && id.len() <= MAX_ID
+        && id
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
 }
 
 #[cfg(test)]

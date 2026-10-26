@@ -5,22 +5,22 @@ returns the
 [`Terrain`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/terrain.rs)
 of the server's world: the terrain materials, and adding, digging and
 flattening ground as the game's terraforming does. It is `Copy`; get it
-during `init` and move it into handlers, tasks and commands.
+during `init` and move it into handlers, tasks and actions.
 
 ```rust
+use enshwick::actions::{Action, Outcome};
 use enshwick::terrain::Shape;
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let terrain = load.terrain();
     let world = load.world()?;
-    load.add_command("level", "flattens the ground around you", move |ctx, _args| {
-        let Some(me) = ctx.character() else {
-            return "the console has no character".into();
+    let actions = load.actions(enshwick::i18n::Texts::default())?;
+    actions.add(Action::new("level", "Flatten the ground around you").admins(), move |request| {
+        let here = world.position(request.player.entity);
+        let (Some(here), Some(fill)) = (here, terrain.materials().first().map(|m| m.id)) else {
+            return Outcome::refused("You are nowhere");
         };
-        let (Some(here), Some(fill)) = (world.position(me), terrain.materials().first().map(|m| m.id)) else {
-            return "nowhere".into();
-        };
-        format!("{:?}", terrain.flatten(here, 6.0, fill, Shape::Round)).into()
+        Outcome::done(format!("{:?}", terrain.flatten(here, 6.0, fill, Shape::Round)))
     })
 }
 ```
@@ -64,5 +64,5 @@ none of that, so a mod adds what it needs, for example with
 [altar zones](altars.md) and [inventory transactions](inventories.md).
 
 Every call works on the server's game thread, from a game event, a
-[scheduler](events.md#the-scheduler) task or a [command](commands.md); on a
+[scheduler](events.md#the-scheduler) task or an [action](actions.md); on a
 client, while it hosts a game.

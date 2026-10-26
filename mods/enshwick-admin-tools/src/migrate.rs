@@ -57,7 +57,7 @@ mod tests {
         std::fs::create_dir_all(game.join("mod-data/dev-tools")).unwrap();
         std::fs::write(
             game.join("mod-data/dev-tools/commands.txt"),
-            "/admin world\n",
+            "admin-tools world\n",
         )
         .unwrap();
         std::fs::create_dir_all(game.join("mod-data/admin-tools")).unwrap();

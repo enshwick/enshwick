@@ -386,7 +386,7 @@ fn seen(index: usize, kind: Kind, registers: &mut Registers) {
     let text = dump(&call, site, kind, shared.base, mark, number, &looked_for);
     enshwick::info!("{text}");
     if number == shared.max_dumps {
-        enshwick::info!("R1 {number} dumps since the last mark: no more until /research mark");
+        enshwick::info!("R1 {number} dumps since the last mark: no more until the next mark");
     }
 }
 

@@ -7,7 +7,7 @@ of the server's world: the time of day, and setting it.
 [`load.clock_speed()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/daytime.rs)
 returns the mod's `ClockSpeed`, its say in how fast the clock runs. Both are
 `Copy`; get them during `init` and move them into handlers, tasks and
-commands.
+actions.
 
 The game's clock runs in game hours. On the 1.0 game the day lasts from 06:00 to
 22:00 and takes 30 real minutes, the night 12 by default; the server's settings change
@@ -15,17 +15,22 @@ both lengths. While players sleep at night, the game runs the clock up to 60
 times faster.
 
 ```rust
+use enshwick::actions::{Action, Arg, Outcome, Value};
+
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let clock = load.clock();
-    load.add_command("time", "shows the time, or sets it: /time [hours]", move |_ctx, args| {
-        if let Some(hours) = args.first().and_then(|a| a.parse::<f32>().ok()) {
-            return format!("{:?}", clock.set_hours(hours)).into();
-        }
-        match clock.now() {
-            Some(now) => format!("{:05.2} h, {}", now.hours, if now.is_day { "day" } else { "night" }).into(),
-            None => "no world runs".into(),
-        }
-    })
+    let actions = load.actions(enshwick::i18n::Texts::default())?;
+    actions.add(Action::new("time", "The time of day"), move |_request| match clock.now() {
+        Some(now) => Outcome::done(format!("{:05.2} h, {}", now.hours, if now.is_day { "day" } else { "night" })),
+        None => Outcome::refused("No world runs"),
+    })?;
+    actions.add(
+        Action::new("set-time", "Set the time").admins().arg(Arg::number("Hours", 0.0..=23.5, 0.5)),
+        move |request| match request.args {
+            [Value::Number(hours)] => Outcome::done(format!("{:?}", clock.set_hours(*hours as f32))),
+            _ => Outcome::refused("Pick an hour"),
+        },
+    )
 }
 ```
 
@@ -81,5 +86,5 @@ there or a mod set the time across the turn. They carry no data; `now()`
 reads the clock.
 
 Every call works on the server's game thread, from a game event, a
-[scheduler](events.md#the-scheduler) task or a [command](commands.md); on a
+[scheduler](events.md#the-scheduler) task or an [action](actions.md); on a
 client, while it hosts a game.

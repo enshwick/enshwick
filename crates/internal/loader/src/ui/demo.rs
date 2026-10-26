@@ -1,4 +1,4 @@
-//! `/enshwick ui-demo`: a window of every widget the loader draws, for a
+//! `enshwick ui-demo <player>` on the console: a window of every widget the loader draws, for a
 //! visual check in game. An administrator's command on the server tells the
 //! client's loader to open it, with where the administrator stood; the
 //! window has four pages, the last one showing samples on the HUD and a

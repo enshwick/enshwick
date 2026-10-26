@@ -1,11 +1,12 @@
 //! The server's world: components, templates, positions and players,
-//! component writes, entity queries, labels, chat lines, notices, destroy
-//! requests and saves. Most calls
+//! component writes, entity queries, labels and rename filters, chat lines,
+//! notices, destroy requests and saves. Most calls
 //! belong on the server's game thread, from a game event or a
 //! [`Scheduler`](crate::schedule::Scheduler) task, and each says what it does
 //! elsewhere. On a client the server is the built-in one, while it hosts a
 //! game.
 
+mod rename;
 mod stats;
 
 use core::ffi::c_void;
@@ -15,6 +16,7 @@ use crate::ecs::Entity;
 use crate::game_events::{Field, Scalar};
 use crate::{Host, Load, Off};
 
+pub use rename::Rename;
 pub use stats::{Meter, Progress, Skill, Vitals};
 
 /// A reflected ECS component type, resolved once at init.
@@ -434,17 +436,16 @@ impl World {
     /// # Examples
     ///
     /// ```
+    /// use enshwick::actions::{Action, Outcome};
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     let world = load.world()?;
     ///     let flags = world.writable_type(load, "keen::ecs::CombatFlags")?;
-    ///     load.add_command("immune", "makes your character immune", move |ctx, _args| {
-    ///         let Some(me) = ctx.character() else {
-    ///             return "the console has no character".into();
-    ///         };
+    ///     let actions = load.actions(enshwick::i18n::Texts::default())?;
+    ///     actions.add(Action::new("immune", "Make your character immune").admins(), move |request| {
     ///         // `immune` is the first byte of `CombatFlags`.
-    ///         match world.update(me, flags, |bytes| bytes[0] = 1) {
-    ///             Ok(()) => "immune".into(),
-    ///             Err(why) => format!("not immune: {why}").into(),
+    ///         match world.update(request.player.entity, flags, |bytes| bytes[0] = 1) {
+    ///             Ok(()) => Outcome::done("Immune"),
+    ///             Err(why) => Outcome::refused(format!("Not immune: {why}")),
     ///         }
     ///     })
     /// }
@@ -513,19 +514,24 @@ impl World {
     /// # Examples
     ///
     /// ```
+    /// use enshwick::actions::{Action, Arg, Outcome, Value};
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     let world = load.world()?;
     ///     let faction = world.writable_type(load, "keen::ecs::Faction")?;
     ///     let value = faction.field::<u8>(load, "faction")?;
-    ///     load.add_command("befriend", "makes an entity a player ally", move |_ctx, args| {
-    ///         let Some(id) = args.first().and_then(|id| id.parse().ok()) else {
-    ///             return "/befriend <entity>".into();
+    ///     let actions = load.actions(enshwick::i18n::Texts::default())?;
+    ///     let befriend = Action::new("befriend", "Make an entity a player ally")
+    ///         .admins()
+    ///         .arg(Arg::number("Entity", 0.0..=f64::from(u32::MAX), 1.0));
+    ///     actions.add(befriend, move |request| {
+    ///         let [Value::Number(id)] = request.args else {
+    ///             return Outcome::refused("Name an entity");
     ///         };
-    ///         let entity = enshwick::ecs::Entity(id);
+    ///         let entity = enshwick::ecs::Entity(*id as u32);
     ///         let before = world.get(entity, value);
     ///         match world.set(entity, value, 11) {
-    ///             Ok(()) => format!("faction {before:?} -> 11").into(),
-    ///             Err(why) => format!("{why}").into(),
+    ///             Ok(()) => Outcome::done(format!("Faction {before:?} -> 11")),
+    ///             Err(why) => Outcome::refused(format!("{why}")),
     ///         }
     ///     })
     /// }
@@ -813,16 +819,16 @@ impl World {
     /// # Examples
     ///
     /// ```
+    /// use enshwick::actions::{Action, Outcome};
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     let world = load.world()?;
-    ///     load.add_command("full", "restores your health", move |ctx, _args| {
-    ///         let Some(me) = ctx.character() else {
-    ///             return "the console has no character".into();
-    ///         };
+    ///     let actions = load.actions(enshwick::i18n::Texts::default())?;
+    ///     actions.add(Action::new("full", "Restore your health"), move |request| {
+    ///         let me = request.player.entity;
     ///         let max = world.vitals(me).map_or(0, |v| v.health.max);
     ///         match world.set_health(me, max) {
-    ///             Ok(health) => format!("{} of {} health", health.current, health.max).into(),
-    ///             Err(why) => format!("{why}").into(),
+    ///             Ok(health) => Outcome::done(format!("{} of {} health", health.current, health.max)),
+    ///             Err(why) => Outcome::refused(format!("{why}")),
     ///         }
     ///     })
     /// }

@@ -1,4 +1,4 @@
-//! Player actions: the sheet, runs from the interface and the chat form, as
+//! Player actions: the sheet, runs from the interface and the console, as
 //! the loader asks them.
 
 #[cfg(test)]
@@ -8,6 +8,7 @@ mod tests {
     use enshwick::abi::{ActionCall, Header, PlayerInfo, Status};
     use enshwick::actions::sheet::{ArgView, decode};
     use enshwick::actions::{Action, Arg, Outcome, Subject, Value, Via};
+    use enshwick::console;
     use enshwick::i18n::{Language, Texts};
     use enshwick::{Load, Mod, Off};
 
@@ -34,14 +35,13 @@ mod tests {
         }
 
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
-            let actions = load.actions("safe", Texts::parse(TEXTS)?)?;
+            let actions = load.actions(Texts::parse(TEXTS)?)?;
             actions.add(
                 Action::per_player("access", "access", |_ask, subject| {
                     assert_eq!(subject.map(|s| s.id), Some(42));
                     ALLOWED.lock().unwrap().clone()
                 })
                 .help("access.help")
-                .verbs("allow", "deny")
                 .at(|ask| {
                     if ask.player.entity.0 == 0 {
                         Err(ask.say("none", &[]))
@@ -73,6 +73,7 @@ mod tests {
                     .arg(Arg::number("Minutes", 1.0..=10.0, 1.0)),
                 |request| match request.args {
                     [Value::Choice(what), Value::Number(minutes)] => {
+                        RUNS.lock().unwrap().push(("wipe".into(), request.via));
                         Outcome::done(format!("wipe {what} in {minutes}"))
                     }
                     _ => Outcome::refused("bad"),
@@ -80,7 +81,7 @@ mod tests {
             )?;
             assert!(
                 actions
-                    .add(Action::new("allow", "Taken"), |_| Outcome::done(""))
+                    .add(Action::new("access", "Taken"), |_| Outcome::done(""))
                     .is_err()
             );
             assert!(
@@ -113,7 +114,7 @@ mod tests {
         clippy::too_many_lines,
         reason = "one walk through the three faces of the same declarations"
     )]
-    fn one_declaration_gives_a_sheet_runs_and_a_chat_command() {
+    fn one_declaration_gives_a_sheet_runs_and_a_console_form() {
         let owner = player(2, 1, "Owl", false);
         let ann = player(3, 7, "Ann", false);
         let admin = player(4, 9, "Root", true);
@@ -125,7 +126,6 @@ mod tests {
         // SAFETY: the exports of `declare_mod!` above.
         let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
-        assert_eq!(loader.commands()[0].0, "safe");
 
         // The owner's sheet in Ukrainian: the list with the others, no
         // administrators' action.
@@ -160,31 +160,26 @@ mod tests {
         );
         assert!(sheet[0].players.iter().any(|p| p.0 == 7 && p.2));
 
-        // The chat form: verbs, the id with on and off, help.
+        // The console form: the console has no character, so no Safe is at
+        // hand; help lists every action; an unknown id is named.
         assert_eq!(
-            loader.command("safe", &owner, "deny ann").as_deref(),
-            Some("Ann false")
+            console::run("safes access Ann on").as_deref(),
+            Ok("No Safe of yours here")
         );
-        assert_eq!(
-            loader.command("safe", &owner, "access Ann on").as_deref(),
-            Some("Ann true")
-        );
-        assert_eq!(
-            loader.command("safe", &owner, "allow Nobody").as_deref(),
-            Some("No player named Nobody.")
-        );
-        let help = loader.command("safe", &owner, "help").unwrap();
-        assert!(help.contains("/safe allow <player>"), "{help}");
-        assert!(!help.contains("wipe"), "{help}");
+        let help = console::run("safes help").unwrap();
         assert!(
-            loader
-                .command("safe", &owner, "fly")
+            help.contains("access <player> <on|off>: Who may use it"),
+            "{help}"
+        );
+        assert!(help.contains("wipe <all|half> <1-10>: Wipe"), "{help}");
+        assert!(
+            console::run("safes fly")
                 .unwrap()
                 .starts_with("No action fly")
         );
         assert_eq!(
-            *RUNS.lock().unwrap().last().unwrap(),
-            ("access".to_owned(), Via::Chat)
+            loader.console(),
+            ["safes access Ann on", "safes help", "safes fly"]
         );
 
         // An administrator's action with typed arguments, refused to others.
@@ -197,12 +192,22 @@ mod tests {
         assert_eq!(args[0].kind, ArgView::CHOICE);
         assert_eq!(args[0].choices, ["Everything", "Half"]);
         assert_eq!(
-            loader.command("safe", &admin, "wipe half 3").as_deref(),
-            Some("wipe 1 in 3")
+            console::run("safes wipe half 3").as_deref(),
+            Ok("wipe 1 in 3")
         );
         assert_eq!(
-            loader.command("safe", &admin, "wipe half 30").as_deref(),
-            Some("Use it so: /safe wipe <all|half> <1-10>: Wipe")
+            *RUNS.lock().unwrap().last().unwrap(),
+            ("wipe".to_owned(), Via::Console)
+        );
+        assert_eq!(
+            console::run("safes wipe half 30").as_deref(),
+            Ok("Write it so: wipe <all|half> <1-10>: Wipe")
+        );
+        assert_eq!(
+            loader
+                .ask_actions(ActionCall::CONSOLE, &owner, 0, "access Ann off", "")
+                .as_deref(),
+            Some("1Ann false")
         );
         assert_eq!(
             loader

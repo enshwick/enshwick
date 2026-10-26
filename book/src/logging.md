@@ -53,10 +53,11 @@ before a crash are kept. Up to 4096 lines wait for it; a line that finds the
 queue full is dropped rather than making the game wait, and the next line
 written says how many were dropped.
 
-### Reading the log in game
+### Reading the log from the console
 
-The writer keeps the latest 1024 lines in memory. An administrator reads them
-in chat with `/enshwick log [mod] [level] [n]`, the words in any order:
+The writer keeps the latest 1024 lines in memory. The
+[console](chat.md#the-console) reads them with
+`enshwick log [mod] [level] [n]`, the words in any order:
 
 - `mod`: one mod's lines, or the loader's with `enshwick`; every source when
   left out;
@@ -64,7 +65,7 @@ in chat with `/enshwick log [mod] [level] [n]`, the words in any order:
   severe; every kept line when left out;
 - `n`: how many of the latest lines, 10 by default and at most 16.
 
-`/enshwick log safes warn 5` shows the last five warnings and errors of
+`enshwick log safes warn 5` shows the last five warnings and errors of
 `safes`. Only lines the [levels](#levels) keep are there to read.
 
 ## Levels
@@ -106,8 +107,8 @@ and skipped.
 ## Status summary
 
 The loader writes a status summary to `logs/enshwick/status.log`: a minute
-after start, then every `status_minutes`, and whenever an administrator types
-`/enshwick status`. Each write replaces the last. It lists:
+after start, then every `status_minutes`, and whenever the console runs
+`enshwick status`. Each write replaces the last. It lists:
 
 - the loader and game versions, and whether this process hosts a game;
 - every mod with its name, version and whether it runs, its authors, licence
@@ -120,8 +121,7 @@ after start, then every `status_minutes`, and whenever an administrator types
 - with `diagnostics`, what each mod costs ([Per-mod costs](#per-mod-costs));
 - where mods meet ([Conflicts](#conflicts)).
 
-`/enshwick status` also answers the administrator in the chat with a short
-form of it.
+`enshwick status` also answers the console with a short form of it.
 
 A mod adds its own lines with
 [`load.add_status(|| ...)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/status.rs).
@@ -154,7 +154,7 @@ thunks count nothing and a hooked call runs as before.
 ## Per-mod costs
 
 With `diagnostics = true` the loader also times every call it makes into a
-mod: event, game event and mod event handlers, commands, messages, interface
+mod: event, game event and mod event handlers, actions, messages, interface
 frames, filters and vetoes, survivor and altar callbacks, stat changes,
 inventory results, status lines, resource patches, migrations and links on
 extension points, each link apart. A
@@ -175,13 +175,13 @@ per-mod costs over 1m 00s (since start), work per second of time:
   furniture-comfort 52.9 µs/s: progress filters 51.8 µs/s in 366110 calls; events 1.1 µs/s in 1 calls
 ```
 
-An administrator asks for the five costliest with `/enshwick profile`, and
-starts counting anew with `/enshwick profile reset`, such as before trying
-something in game.
+The console asks for the five costliest with `enshwick profile`, and starts
+counting anew with `enshwick profile reset`, such as before trying something
+in game.
 
 ## Conflicts
 
-The summary and `/enshwick conflicts` (administrators) list where mods meet:
+The summary and `enshwick conflicts` on the console list where mods meet:
 
 | Line                                                      | Means                                                           |
 | --------------------------------------------------------- | --------------------------------------------------------------- |
@@ -189,7 +189,7 @@ The summary and `/enshwick conflicts` (administrators) list where mods meet:
 | `hook <function>: ...; b refused, a holds it exclusively` | `a` linked it with `EXCLUSIVE`, and `b`'s link was refused      |
 | `<filter>: a, b, chained in load order`                   | both filter it, such as interactions or damage; each may refuse |
 | `skill override: a, b, asked in load order`               | the first answer decides                                        |
-| `<feature>: a holds it; refused: b`                       | one mod at a time, such as the altar limit or a command name    |
+| `<feature>: a holds it; refused: b`                       | one mod at a time, such as the altar limit                      |
 | `the item registry: patched by a then b`                  | both change one resource, each patch on the one before          |
 | `point <name>: a then b, each may change the answer`      | both extend one [extension point](extending.md), in that order  |
 | `...; b changed the answer a had set, 3 times`            | `b` overturned `a`'s answer that often since start              |
@@ -202,13 +202,13 @@ A mod is turned off when:
 
 - `init` returns `Err(Off)`: the mod's log has a warning `off: <reason>`;
 - `init` panics: an error `off: init panicked`;
-- a hook, event handler, command handler, status closure or `ready` panics
+- a hook, event handler, action, status closure or `ready` panics
   later: an error `off: <what panicked>`.
 
 The panic is caught at the boundary, the loader unlinks every hook of the mod,
-and the game goes on vanilla where the mod acted. Its event handlers, commands
+and the game goes on vanilla where the mod acted. Its event handlers, actions
 and status lines stop with it. The summary's list of mods turned off keeps the
-reason, and `/enshwick` marks the mod `(off)`.
+reason, and `enshwick` on the console marks the mod `(off)`.
 
 A hardware fault, such as an access violation in a mod's code, is not a panic
 and cannot be caught. When it ends the game, the loader writes `crash.log`,

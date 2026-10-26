@@ -1,145 +1,14 @@
-//! `/admin`: the administrator commands.
+//! What the administrator actions answer.
 
 use std::fmt::Write as _;
 use std::path::Path;
 
 use enshwick::content::Guid;
 
-/// What `/admin` was asked to do.
-///
-/// # Examples
-///
-/// ```
-/// use enshwick_admin_tools::command::{Admin, parse};
-///
-/// assert_eq!(parse(&["entity", "4096"]), Ok(Admin::Entity(4096)));
-/// assert_eq!(parse(&["say", "restart", "soon"]), Ok(Admin::Say("restart soon".into())));
-/// assert!(parse(&["entity", "x"]).is_err());
-/// ```
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Admin {
-    /// The commands and what they do.
-    Help,
-    /// The players online and where they stand.
-    World,
-    /// What the server knows of one entity.
-    Entity(u32),
-    /// The last pieces and props players placed, newest first.
-    Placed(usize),
-    /// Every loaded mod.
-    Mods,
-    /// Makes a mod read its settings file again.
-    Reload(String),
-    /// A chat line to every player.
-    Say(String),
-    /// New items into a player's inventory.
-    Give {
-        /// The item's game id.
-        item: u32,
-        /// How many.
-        count: u32,
-        /// The player by name; the typing player when `None`.
-        to: Option<String>,
-    },
-}
-
-/// The most items one `/admin give` hands out.
+/// The most items one `give` hands out.
 pub const MOST: u32 = 10_000;
 
-/// Pieces `/admin placed` lists when no count is given.
-pub const PLACED: usize = 5;
-
-/// The help text.
-pub const HELP: &str = "\
-/admin world: players online and where they stand
-/admin entity <id>: an entity's template, item and position
-/admin placed [count]: the last pieces placed, newest first
-/admin mods: every loaded mod
-/admin reload <mod id>: the mod reads its settings file again
-/admin say <text>: a chat line to everyone
-/admin give <item id or GUID> [count] [player]: new items into an inventory
-/enshwick status: the loader's status summary";
-
-/// Reads `/admin`'s words; why not, for the reply.
-///
-/// # Errors
-///
-/// A line for the player when the words name no command or its arguments
-/// are wrong.
-///
-/// # Examples
-///
-/// See [`Admin`].
-pub fn parse(args: &[&str]) -> Result<Admin, String> {
-    let number = |word: &str, what: &str| {
-        let parsed = word
-            .strip_prefix("0x")
-            .map_or_else(|| word.parse(), |hex| u32::from_str_radix(hex, 16));
-        parsed.map_err(|_| format!("{what} is a number, not {word}"))
-    };
-    match args {
-        [] | ["help"] => Ok(Admin::Help),
-        ["world"] => Ok(Admin::World),
-        ["entity", id] => number(id, "the entity").map(Admin::Entity),
-        ["placed"] => Ok(Admin::Placed(PLACED)),
-        ["placed", count] => number(count, "the count").map(|n| Admin::Placed(n as usize)),
-        ["mods"] => Ok(Admin::Mods),
-        ["reload", id] if enshwick::abi::is_valid_id(id) => Ok(Admin::Reload((*id).to_owned())),
-        ["reload", id] => Err(format!("{id} is no mod id")),
-        ["say", words @ ..] if !words.is_empty() => Ok(Admin::Say(words.join(" "))),
-        ["give", item, rest @ ..] => {
-            let item = item_id(item).ok_or_else(|| format!("{item} is no item id or GUID"))?;
-            let (count, to) = match rest {
-                [] => (1, None),
-                [count, to @ ..] if count.bytes().all(|b| b.is_ascii_digit()) => (
-                    number(count, "the count")?,
-                    (!to.is_empty()).then(|| to.join(" ")),
-                ),
-                to => (1, Some(to.join(" "))),
-            };
-            if !(1..=MOST).contains(&count) {
-                return Err(format!("give 1 to {MOST} at a time"));
-            }
-            Ok(Admin::Give { item, count, to })
-        }
-        [word, ..] => Err(format!(
-            "/admin {word}: unknown or missing words; /admin help"
-        )),
-    }
-}
-
-/// An item's game id from its number (decimal or `0x` hex) or its GUID.
-///
-/// # Examples
-///
-/// ```
-/// use enshwick_admin_tools::command::item_id;
-///
-/// assert_eq!(item_id("0x0c01"), Some(0x0c01));
-/// assert_eq!(item_id("6943053a-32c1-4718-ae22-e61427ddf54d"), Some(1_302_084_846));
-/// assert_eq!(item_id("chest"), None);
-/// ```
-#[must_use]
-pub fn item_id(word: &str) -> Option<u32> {
-    let guid = word.len() == 36
-        && word.char_indices().all(|(i, c)| {
-            if matches!(i, 8 | 13 | 18 | 23) {
-                c == '-'
-            } else {
-                c.is_ascii_hexdigit()
-            }
-        });
-    if guid {
-        return Some(Guid::parse(word).id());
-    }
-    match word.strip_prefix("0x") {
-        Some(hex) => u32::from_str_radix(hex, 16).ok(),
-        None => word.parse().ok(),
-    }
-    .filter(|&id| id != 0)
-}
-
-/// A player online, for `/admin world`.
+/// A player online, for `world`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Online {
     /// The name the client sent.
@@ -154,12 +23,12 @@ pub struct Online {
     pub position: Option<[f64; 3]>,
 }
 
-/// `/admin world`'s reply.
+/// What `world` answers.
 ///
 /// # Examples
 ///
 /// ```
-/// use enshwick_admin_tools::command::{Online, world};
+/// use enshwick_admin_tools::answers::{Online, world};
 ///
 /// let ann = Online { name: "Ann".into(), slot: 0, entity: 9, admin: true, position: Some([1.0, 2.5, -3.0]) };
 /// assert_eq!(world(&[ann]), "1 player online\nAnn (slot 0, entity 9, admin) at 1.0, 2.5, -3.0");
@@ -185,7 +54,7 @@ pub fn world(players: &[Online]) -> String {
     out
 }
 
-/// What the server knows of an entity, for `/admin entity`.
+/// What the server knows of an entity, for `entity`.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Seen {
     /// The entity.
@@ -200,12 +69,12 @@ pub struct Seen {
     pub player: Option<String>,
 }
 
-/// `/admin entity`'s reply.
+/// What `entity` answers.
 ///
 /// # Examples
 ///
 /// ```
-/// use enshwick_admin_tools::command::{Seen, entity};
+/// use enshwick_admin_tools::answers::{Seen, entity};
 ///
 /// assert_eq!(entity(&Seen { entity: 7, ..Seen::default() }), "entity 7: the server knows nothing of it");
 /// ```
@@ -228,7 +97,7 @@ pub fn entity(seen: &Seen) -> String {
     out
 }
 
-/// A piece a player placed, for `/admin placed`.
+/// A piece a player placed, for `placed`.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Placed {
     /// The placed entity.
@@ -241,12 +110,12 @@ pub struct Placed {
     pub position: [f32; 3],
 }
 
-/// `/admin placed`'s reply for `placed`, newest first.
+/// What `placed` answers for `placed`, newest first.
 ///
 /// # Examples
 ///
 /// ```
-/// use enshwick_admin_tools::command::placed;
+/// use enshwick_admin_tools::answers::placed;
 ///
 /// assert_eq!(placed(&[]), "nothing placed since the world started");
 /// ```
@@ -270,12 +139,12 @@ pub fn placed(placed: &[Placed]) -> String {
         .join("\n")
 }
 
-/// `/admin mods`' reply.
+/// What `mods` answers.
 ///
 /// # Examples
 ///
 /// ```
-/// use enshwick_admin_tools::command::mods;
+/// use enshwick_admin_tools::answers::mods;
 ///
 /// assert_eq!(mods(&[]), "no mods listed");
 /// ```
@@ -332,49 +201,6 @@ fn place(position: Option<[f64; 3]>) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn words_become_commands() {
-        assert_eq!(parse(&[]), Ok(Admin::Help));
-        assert_eq!(parse(&["world"]), Ok(Admin::World));
-        assert_eq!(parse(&["entity", "0x1000"]), Ok(Admin::Entity(4096)));
-        assert_eq!(parse(&["placed"]), Ok(Admin::Placed(PLACED)));
-        assert_eq!(parse(&["placed", "12"]), Ok(Admin::Placed(12)));
-        assert_eq!(parse(&["mods"]), Ok(Admin::Mods));
-        assert_eq!(
-            parse(&["reload", "safes"]),
-            Ok(Admin::Reload("safes".into()))
-        );
-        assert!(parse(&["reload", "../x"]).is_err());
-        assert!(parse(&["say"]).is_err());
-        assert!(parse(&["fly"]).unwrap_err().contains("/admin help"));
-        assert_eq!(
-            parse(&["give", "12"]),
-            Ok(Admin::Give {
-                item: 12,
-                count: 1,
-                to: None
-            })
-        );
-        assert_eq!(
-            parse(&["give", "0x0c01", "5", "Ann", "Lee"]),
-            Ok(Admin::Give {
-                item: 0x0c01,
-                count: 5,
-                to: Some("Ann Lee".into())
-            })
-        );
-        assert_eq!(
-            parse(&["give", "12", "Ann"]),
-            Ok(Admin::Give {
-                item: 12,
-                count: 1,
-                to: Some("Ann".into())
-            })
-        );
-        assert!(parse(&["give", "12", "0"]).is_err());
-        assert!(parse(&["give", "box"]).is_err());
-    }
 
     #[test]
     fn replies_name_what_the_server_knows() {

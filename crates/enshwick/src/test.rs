@@ -94,8 +94,8 @@ use std::collections::{HashMap, HashSet};
 use std::sync::MutexGuard;
 
 use crate::abi::{
-    AltarInfo, AltarZoneSize, BedCheck, Bounds, CallerFrame, Comfort, CommandCall, EntityPlace,
-    Event, ExperiencePass, ExperienceRow, Fingerprint, Header, HookFlags, HostApi, Interaction,
+    AltarInfo, AltarZoneSize, BedCheck, Bounds, CallerFrame, Comfort, EntityPlace, Event,
+    ExperiencePass, ExperienceRow, Fingerprint, Header, HookFlags, HostApi, Interaction,
     InventoryOp, InventoryOpResult, InventoryResult, ItemData, Level, ModHandle, ModInfo,
     PlayerInfo, RenameCall, ResourceKey, Side, SkillCheck, Status, Str, Summon, SurvivorLookup,
     ZoneCheck,
@@ -277,18 +277,22 @@ pub(crate) fn console() -> PlayerInfo {
     }
 }
 
-/// Calls a command handler the mod registered; its reply.
-pub(crate) fn run_handler(
-    callback: crate::abi::CommandCallFn,
+/// Asks a mod's actions callback as the loader does; its reply.
+pub(crate) fn ask(
+    callback: crate::abi::ActionFn,
     user: usize,
-    name: &str,
+    kind: u32,
     player: &PlayerInfo,
+    language: u32,
+    action: &str,
     args: &str,
 ) -> String {
-    let call = CommandCall {
-        header: Header::of::<CommandCall>(),
+    let call = crate::abi::ActionCall {
+        header: Header::of::<crate::abi::ActionCall>(),
+        kind,
+        language,
         player: *player,
-        name: Str::new(name),
+        action: Str::new(action),
         args: Str::new(args),
     };
     let mut reply = Str::EMPTY;
@@ -299,8 +303,8 @@ pub(crate) fn run_handler(
             core::ptr::with_exposed_provenance_mut(user),
             &raw mut reply,
         );
-    };
-    // SAFETY: the reply stays valid until the handler runs again.
+    }
+    // SAFETY: the reply stays valid until the callback runs again.
     unsafe { reply.as_str() }.unwrap_or("").to_owned()
 }
 
@@ -401,7 +405,7 @@ pub struct FakeHost {
     workshop_recipes: u32,
     items: HashMap<u32, ItemData>,
     no_inventories: bool,
-    foreign_commands: HashMap<String, String>,
+    console_answers: HashMap<String, String>,
     placed: Vec<(u32, EntityPlace)>,
     world_key: Option<String>,
     refused_writes: HashSet<u32>,
@@ -462,7 +466,7 @@ impl FakeHost {
             workshop_recipes: 512,
             items: HashMap::new(),
             no_inventories: false,
-            foreign_commands: HashMap::new(),
+            console_answers: HashMap::new(),
             placed: Vec::new(),
             world_key: None,
             refused_writes: HashSet::new(),
@@ -969,22 +973,23 @@ impl FakeHost {
         self
     }
 
-    /// The reply of the command `/name`, which another mod or the loader
-    /// answers, when the mod runs it as the console with
-    /// `enshwick::commands::run`.
+    /// The answer to console lines whose first word is `word`, which
+    /// another mod or the loader gives, when the mod runs such a line with
+    /// [`console::run`](crate::console::run). A line whose first word has no
+    /// answer here goes to the mod's own actions, as if the word were its id.
     ///
     /// # Examples
     ///
     /// ```
     /// let loader = enshwick::test::FakeHost::new()
-    ///     .foreign_command("enshwick", "Enshwick 0.0.0-test: no mods")
+    ///     .console_answer("enshwick", "Enshwick 0.0.0-test: no mods")
     ///     .install();
     /// # let _ = loader;
     /// ```
     #[must_use]
-    pub fn foreign_command(mut self, name: &str, reply: &str) -> Self {
-        self.foreign_commands
-            .insert(name.to_owned(), reply.to_owned());
+    pub fn console_answer(mut self, word: &str, answer: &str) -> Self {
+        self.console_answers
+            .insert(word.to_owned(), answer.to_owned());
         self
     }
 
@@ -1789,39 +1794,12 @@ impl Installed {
         table::with(Vec::new(), |s| s.texts.clone())
     }
 
-    /// Runs the mod's chat command `/name` as `player` typed it with `args`;
-    /// the reply, or `None` when the mod has no such command.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use enshwick::abi::{Header, PlayerInfo};
-    ///
-    /// let loader = enshwick::test::FakeHost::new().install();
-    /// let player = PlayerInfo {
-    ///     header: Header::of::<PlayerInfo>(),
-    ///     slot: 0,
-    ///     entity: 2,
-    ///     key: 7,
-    ///     permissions: 0,
-    ///     name_len: 0,
-    ///     name: [0; 64],
-    /// };
-    /// assert_eq!(loader.command("safe", &player, "list"), None);
-    /// ```
-    #[must_use]
-    pub fn command(&self, name: &str, player: &PlayerInfo, args: &str) -> Option<String> {
-        let (callback, user) = table::with(None, |s| {
-            s.commands.iter().find(|c| c.0 == name).map(|c| (c.2, c.3))
-        })?;
-        Some(run_handler(callback, user, name, player, args))
-    }
-
     /// Asks the mod's player actions as the loader does: `kind` is one of
     /// [`ActionCall::SHEET`](crate::abi::ActionCall::SHEET),
-    /// [`ActionCall::RUN`](crate::abi::ActionCall::RUN) or
-    /// [`ActionCall::HINTS`](crate::abi::ActionCall::HINTS), for `player`
-    /// reading `language`; `action` and `args` for a run. `None` when the
+    /// [`ActionCall::RUN`](crate::abi::ActionCall::RUN),
+    /// [`ActionCall::HINTS`](crate::abi::ActionCall::HINTS) or
+    /// [`ActionCall::CONSOLE`](crate::abi::ActionCall::CONSOLE), for
+    /// `player` reading `language`; `action` and `args` for a run. `None` when the
     /// mod has no actions.
     ///
     /// # Examples
@@ -1851,30 +1829,11 @@ impl Installed {
         args: &str,
     ) -> Option<String> {
         let (callback, user) = table::with(None, |s| s.actions)?;
-        let call = crate::abi::ActionCall {
-            header: Header::of::<crate::abi::ActionCall>(),
-            kind,
-            language,
-            player: *player,
-            action: Str::new(action),
-            args: Str::new(args),
-        };
-        let mut reply = Str::EMPTY;
-        // SAFETY: a valid call; `user` is the pointer the mod registered
-        // with.
-        unsafe {
-            callback(
-                &raw const call,
-                core::ptr::with_exposed_provenance_mut(user),
-                &raw mut reply,
-            );
-        }
-        // SAFETY: the reply stays valid until the callback runs again.
-        Some(unsafe { reply.as_str() }.unwrap_or("").to_owned())
+        Some(ask(callback, user, kind, player, language, action, args))
     }
 
-    /// The command lines the mod ran as the console with
-    /// `enshwick::commands::run`, in order.
+    /// The lines the mod ran with [`console::run`](crate::console::run), in
+    /// order.
     ///
     /// # Examples
     ///
@@ -1910,24 +1869,6 @@ impl Installed {
                 unsafe { out.as_str() }.unwrap_or("").to_owned()
             })
             .collect()
-    }
-
-    /// The commands the mod registered, as `(name, help)`, in order.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// let loader = enshwick::test::FakeHost::new().install();
-    /// assert!(loader.commands().is_empty());
-    /// ```
-    #[must_use]
-    pub fn commands(&self) -> Vec<(String, String)> {
-        table::with(Vec::new(), |s| {
-            s.commands
-                .iter()
-                .map(|c| (c.0.clone(), c.1.clone()))
-                .collect()
-        })
     }
 
     /// The chat lines the mod sent, as `(account key, text)`; key 0 for

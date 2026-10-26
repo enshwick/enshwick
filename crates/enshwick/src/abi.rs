@@ -14,7 +14,7 @@ use core::sync::atomic::{AtomicU32, AtomicUsize};
 pub const ABI_MAJOR: u16 = 2;
 
 /// The minor version of this interface. A newer minor only appends fields.
-pub const ABI_MINOR: u16 = 67;
+pub const ABI_MINOR: u16 = 68;
 
 /// Whether `id` is a valid mod id: 1 to 64 characters of `[a-z0-9-]`.
 ///
@@ -470,7 +470,7 @@ pub struct Event(pub u32);
 
 impl Event {
     /// The mod's settings changed: its file on disk, a setting set by
-    /// `/config` or the Mods screen, or a client's join values; no data. The
+    /// the console or the Mods screen, or a client's join values; no data. The
     /// thread is not fixed: a loader thread about a second after a file
     /// edit, the thread that made any other change.
     pub const SETTINGS_CHANGED: Self = Self(1);
@@ -819,7 +819,7 @@ impl BuildingData {
 /// A connected player, from [`HostApi::player`] or [`HostApi::players`].
 ///
 /// Unlike other structs with a [`Header`], its layout is frozen and it never
-/// grows: [`CommandCall`] and [`RenameCall`] carry it before fields of their
+/// grows: [`ActionCall`] and [`RenameCall`] carry it before fields of their
 /// own, and [`HostApi::players`] writes an array of it with no entry size.
 /// Player data a later minor adds goes into a new struct. The caller still
 /// starts each one it passes with [`Header::of`].
@@ -923,50 +923,6 @@ pub struct PlayerData {
 /// without data, valid for the call) and the pointer given at subscription.
 pub type EventFn = unsafe extern "system" fn(event: Event, data: *const c_void, user: *mut c_void);
 
-/// A chat command a player typed, handed to the mod that registered its name
-/// with [`HostApi::command`].
-///
-/// # Examples
-///
-/// ```
-/// use enshwick::abi::{CommandCall, Header, PlayerInfo, Str};
-///
-/// let call = CommandCall {
-///     header: Header::of::<CommandCall>(),
-///     player: PlayerInfo {
-///         header: Header::of::<PlayerInfo>(),
-///         slot: 0,
-///         entity: 2,
-///         key: 7,
-///         permissions: 0,
-///         name_len: 0,
-///         name: [0; 64],
-///     },
-///     name: Str::new("safe"),
-///     args: Str::new("allow Ann"),
-/// };
-/// // SAFETY: `args` borrows a `'static` string.
-/// assert_eq!(unsafe { call.args.as_str() }, Some("allow Ann"));
-/// ```
-#[repr(C)]
-#[derive(Clone, Copy, Debug)]
-pub struct CommandCall {
-    /// Size and version of this struct.
-    pub header: Header,
-    /// The player who typed it.
-    pub player: PlayerInfo,
-    /// The command's name, without the `/`.
-    pub name: Str,
-    /// The rest of the line after the name, trimmed; valid for the call.
-    pub args: Str,
-}
-
-/// A mod's handler for a chat command: the call, the pointer given at
-/// registration, and where to write the reply for the typing player. The
-/// reply stays valid until the handler runs again; empty for none.
-pub type CommandCallFn =
-    unsafe extern "system" fn(call: *const CommandCall, user: *mut c_void, reply: *mut Str);
-
 /// A question the loader asks a mod about its player actions, registered
 /// with [`HostApi::actions`].
 ///
@@ -998,15 +954,16 @@ pub type CommandCallFn =
 pub struct ActionCall {
     /// Size and version of this struct.
     pub header: Header,
-    /// What the loader asks: [`ActionCall::SHEET`], [`ActionCall::RUN`] or
-    /// [`ActionCall::HINTS`].
+    /// What the loader asks: [`ActionCall::SHEET`], [`ActionCall::RUN`],
+    /// [`ActionCall::HINTS`] or [`ActionCall::CONSOLE`].
     pub kind: u32,
     /// The language the player reads the game in, a
     /// [`Language`](crate::i18n::Language) value.
     pub language: u32,
     /// The player the question is about.
     pub player: PlayerInfo,
-    /// The action's id, for [`ActionCall::RUN`]; valid for the call.
+    /// The action's id, for [`ActionCall::RUN`]; the console line after the
+    /// mod's id, for [`ActionCall::CONSOLE`]; valid for the call.
     pub action: Str,
     /// The action's arguments in the sheet's encoding, for
     /// [`ActionCall::RUN`]; valid for the call.
@@ -1023,6 +980,12 @@ impl ActionCall {
     /// The actions with a hint that the player has at hand now: a line
     /// `<id><TAB><label><TAB><subject>` each.
     pub const HINTS: u32 = 2;
+    /// The server's console runs an action from its text form, such as
+    /// `access Ann on`, in `action`: the action's id and its values as
+    /// words; `help` or nothing lists the actions. `player` is the console,
+    /// an administrator with no character. The reply is as for
+    /// [`ActionCall::RUN`]. Since minor 68.
+    pub const CONSOLE: u32 = 3;
 }
 
 /// A mod's answer to the loader's questions about its player actions: the
@@ -4131,18 +4094,9 @@ pub struct HostApi {
     /// system context of that world holds at `ecs.context_entity_world`; 0
     /// while none runs or before its first step. Since minor 8.
     pub server_world: extern "system" fn() -> u64,
-    /// Registers the chat command `/name`, `[a-z0-9-]`, 1 to 32 characters,
-    /// with a line of help for `/enshwick help`; the server calls `callback`
-    /// with `user` on its game thread when a player types it. A name another
-    /// mod or the loader holds is refused. Allowed during
-    /// `enshwick_mod_init` only. Since minor 9.
-    pub command: extern "system" fn(
-        me: ModHandle,
-        name: Str,
-        help: Str,
-        callback: CommandCallFn,
-        user: *mut c_void,
-    ) -> Status,
+    /// Retired in minor 68, when chat commands left the platform: always
+    /// [`Status::MISSING`]. The slot keeps the table's layout.
+    pub retired_command: extern "system" fn(me: ModHandle) -> Status,
     /// Sends `text` to the chat of the player whose account key is `to`, or of
     /// everyone for 0, from any thread; the server posts it after the next
     /// step. Lines past 1024 bytes are cut. Since minor 9.
@@ -4203,12 +4157,14 @@ pub struct HostApi {
     /// status`) and shows its lines under the mod. Allowed during
     /// `enshwick_mod_init` only. Since minor 13.
     pub status: extern "system" fn(me: ModHandle, callback: StatusFn, user: *mut c_void) -> Status,
-    /// Runs the chat command line `line` (`/name args`) as the server's
-    /// console, an administrator with no character, and writes its reply
-    /// to `out`, valid until the next call on this thread. On the server's
-    /// game thread only; [`Status::MISSING`] when no command has the name.
-    /// Since minor 13.
-    pub run_command: extern "system" fn(me: ModHandle, line: Str, out: *mut Str) -> Status,
+    /// Runs the console line `line` as the server's console, an
+    /// administrator with no character, and writes its reply to `out`, valid
+    /// until the next call on this thread: `enshwick ...` for the loader's
+    /// own tools, or a mod's id and the text form of one of its
+    /// [actions](HostApi::actions). On the server's game thread only;
+    /// [`Status::MISSING`] when nothing answers the line's first word. Since
+    /// minor 13, with actions since minor 68.
+    pub run_console: extern "system" fn(me: ModHandle, line: Str, out: *mut Str) -> Status,
     /// Asks the loader to follow the Flame Altars of the server's world, for
     /// [`HostApi::altars`] and [`Event::ALTARS_CHANGED`]. Allowed during
     /// `enshwick_mod_init` only. Since minor 15.
@@ -4574,7 +4530,7 @@ pub struct HostApi {
         extern "system" fn(me: ModHandle, edit: *const TerrainEdit, amount: *mut f32) -> Status,
     /// Hands the loader the mod's settings schema, `schema`, the TOML text
     /// of a [`config::Schema`](crate::config::Schema); a later call replaces
-    /// it. The loader answers `/config` from it and checks values against it
+    /// it. The loader answers `enshwick config` on the console from it and checks values against it
     /// before it writes them. [`Status::BAD_ARGS`] for text that is not a
     /// schema. Any time. Since minor 35.
     pub config_schema: extern "system" fn(me: ModHandle, schema: Str) -> Status,
@@ -4660,7 +4616,7 @@ pub struct HostApi {
     pub ui_markers:
         extern "system" fn(me: ModHandle, markers: *const UiMarker, count: u32) -> Status,
     /// Makes `callback` with `user` the mod's check of a new settings text,
-    /// which the loader runs before it writes a change from `/config` or the
+    /// which the loader runs before it writes a change from the console or the
     /// Mods screen; a refusal keeps the file. Allowed during
     /// `enshwick_mod_init` only. Since minor 41.
     pub config_check:
@@ -4974,8 +4930,9 @@ pub struct HostApi {
     ) -> Status,
     /// Registers the mod's player actions: the loader asks `callback` with
     /// `user`, on the server's game thread, for the actions a player may
-    /// use, to run one a player picked in the interface, and for the hints
-    /// a player has at hand. One registration per mod. Allowed during
+    /// use, to run one a player picked in the interface or the console
+    /// named, and for the hints a player has at hand. One registration per
+    /// mod. Allowed during
     /// `enshwick_mod_init` only. Since minor 66.
     pub actions: extern "system" fn(me: ModHandle, callback: ActionFn, user: *mut c_void) -> Status,
 }
@@ -5524,7 +5481,7 @@ const _: () = {
     assert!(core::mem::offset_of!(HostApi, workshop_recipes) == 24 + 27 * 8);
     assert!(core::mem::offset_of!(HostApi, hosting) == 24 + 28 * 8);
     assert!(core::mem::offset_of!(HostApi, server_world) == 24 + 29 * 8);
-    assert!(core::mem::offset_of!(HostApi, command) == 24 + 30 * 8);
+    assert!(core::mem::offset_of!(HostApi, retired_command) == 24 + 30 * 8);
     assert!(core::mem::offset_of!(HostApi, rename_filter) == 24 + 33 * 8);
     assert!(core::mem::offset_of!(HostApi, join_missing) == 24 + 34 * 8);
     assert!(core::mem::offset_of!(HostApi, hook_at) == 24 + 35 * 8);
@@ -5614,7 +5571,7 @@ const _: () = {
     assert!(core::mem::offset_of!(Registers, rflags) == 16 * 8);
     assert!(size_of::<MidHookSpec>() == 32);
     assert!(core::mem::offset_of!(HostApi, status) == 24 + 39 * 8);
-    assert!(core::mem::offset_of!(HostApi, run_command) == 24 + 40 * 8);
+    assert!(core::mem::offset_of!(HostApi, run_console) == 24 + 40 * 8);
     assert!(core::mem::offset_of!(HostApi, actions) == 24 + 140 * 8);
     assert!(size_of::<ActionCall>() == 8 + 8 + 96 + 16 + 16);
     assert!(core::mem::offset_of!(HostApi, altars_open) == 24 + 41 * 8);

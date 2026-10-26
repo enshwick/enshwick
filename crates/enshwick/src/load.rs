@@ -76,7 +76,7 @@ off_from!(
     crate::altars::SetSizesError,
     crate::code::FindError,
     crate::code::PatternError,
-    crate::commands::RunError,
+    crate::console::RunError,
     ConfigError,
     crate::content::vanilla::VanillaError,
     crate::inventory::BatchError,
@@ -571,7 +571,7 @@ impl Load<'_> {
     }
 
     /// Calls `handler` with the mod's settings each time `mod-configs/<id>.toml`
-    /// changes, after `/config` or the Mods screen sets one of them, and as a
+    /// changes, after the console or the Mods screen sets one of them, and as a
     /// world loads or stops; the thread is not fixed. A file that no longer
     /// parses or validates is logged and skipped, and the running values stay.
     /// `startup` values change only as a world loads or stops, and `restart`

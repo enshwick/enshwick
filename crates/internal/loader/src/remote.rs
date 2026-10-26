@@ -5,7 +5,7 @@
 //! The messages ride the loader's control frames. The server decides
 //! everything: it checks the sender's permissions on its own player record,
 //! never sends a field marked `secret`, and changes a setting only through
-//! the same checks as `/config`.
+//! the same checks as `enshwick config` on the console.
 
 use std::time::{Duration, Instant};
 

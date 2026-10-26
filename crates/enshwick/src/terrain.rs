@@ -10,27 +10,26 @@
 //! of that, so a mod decides what it needs.
 //!
 //! Every call belongs on the server's game thread, from a game event, a
-//! [`Scheduler`](crate::schedule::Scheduler) task or a command; on a client,
+//! [`Scheduler`](crate::schedule::Scheduler) task or an action; on a client,
 //! while it hosts a game.
 //!
 //! # Examples
 //!
 //! ```
+//! use enshwick::actions::{Action, Outcome};
 //! use enshwick::terrain::Shape;
 //!
 //! fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 //!     let terrain = load.terrain();
 //!     let world = load.world()?;
-//!     load.add_command("crater", "digs a crater where you stand", move |ctx, _args| {
-//!         let Some(me) = ctx.character() else {
-//!             return "the console has no character".into();
-//!         };
-//!         let Some(here) = world.position(me) else {
-//!             return "nowhere".into();
+//!     let actions = load.actions(enshwick::i18n::Texts::default())?;
+//!     actions.add(Action::new("crater", "Dig a crater where you stand").admins(), move |request| {
+//!         let Some(here) = world.position(request.player.entity) else {
+//!             return Outcome::refused("You are nowhere");
 //!         };
 //!         match terrain.dig(here, 4.0, Shape::Round, &[]) {
-//!             Ok(volume) => format!("dug {volume:.1} m³").into(),
-//!             Err(why) => format!("{why}").into(),
+//!             Ok(volume) => Outcome::done(format!("Dug {volume:.1} m³")),
+//!             Err(why) => Outcome::refused(format!("{why}")),
 //!         }
 //!     })
 //! }

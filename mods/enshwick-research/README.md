@@ -46,15 +46,16 @@ play.
   target (slot 9 of `SelectedTargets`: an entity and a place) when it
   changes, with where the player stands. Lines start with `R20`.
 
-## Commands
+## Actions
 
-From the chat as an administrator, on a dedicated server or while the client
-hosts a game:
+On the mod's page of the Mods screen, for administrators, on a dedicated
+server or while the client hosts a game:
 
-| Command                  | What it does                                                                                                                       |
-| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `/research mark [words]` | a marked line in the log; every tooltip function dumps its next call, and numbers among the words are looked for in what is dumped |
-| `/research status`       | how many tooltip dumps were written since the last mark, and how many impact writes were seen                                      |
+| Action       | What it does                                                                                  |
+| ------------ | --------------------------------------------------------------------------------------------- |
+| `mark`       | a marked line in the log; every tooltip function dumps its next call                          |
+| `mark-value` | the same, and the value given is looked for in what is dumped                                 |
+| `status`     | how many tooltip dumps were written since the last mark, and how many impact writes were seen |
 
 ## Settings
 

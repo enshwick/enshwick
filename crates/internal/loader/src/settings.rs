@@ -36,7 +36,7 @@ pub struct Settings {
     /// Read at start.
     pub diagnostics_timing: bool,
     /// Minutes between status summaries in `logs/enshwick/status.log`;
-    /// 0 writes one only for `/enshwick status`.
+    /// 0 writes one only when the console asks with enshwick status.
     pub status_minutes: u32,
     /// Only log what mods' migrations would change, without changing their
     /// files or recording them in mod-data/enshwick/migrations.toml.

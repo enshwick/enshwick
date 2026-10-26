@@ -14,6 +14,7 @@ who sent it, a `Peer`:
   server's chat, so keep it short and hand work to the mod's own state.
 
 ```rust
+use enshwick::actions::{Action, Outcome};
 use enshwick::net::Peer;
 
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -29,16 +30,15 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
         }
     })?;
     let world = load.world()?;
-    load.add_command("mark", "sends your position to your client", move |ctx, _args| {
-        let Some(me) = &ctx.player else {
-            return "the console has no client".into();
-        };
+    let actions = load.actions(enshwick::i18n::Texts::default())?;
+    actions.add(Action::new("mark", "Send my position to my client"), move |request| {
+        let me = request.player;
         let Some(at) = world.position(me.entity) else {
-            return "no position".into();
+            return Outcome::refused("No position");
         };
         match waypoints.send(Peer::Player(me.key), &Waypoint::Set(at)) {
-            Ok(()) => "sent".into(),
-            Err(why) => format!("not sent: {why}").into(),
+            Ok(()) => Outcome::done("Sent"),
+            Err(why) => Outcome::refused(format!("Not sent: {why}")),
         }
     })
 }

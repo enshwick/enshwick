@@ -1,6 +1,6 @@
 //! Status lines: what a mod reports about itself in the loader's status
 //! summary, `logs/enshwick/status.log`, written every few minutes and on
-//! `/enshwick status`.
+//! `enshwick status` on the [console](crate::console).
 //!
 //! The loader fills the summary with what it knows of every mod: version,
 //! whether it runs, why it was turned off, its hooks and their calls. A mod

@@ -1,35 +1,26 @@
-//! Chat on the server, the dedicated one or the one a client hosts: commands
-//! players type and lines mods send.
+//! Chat on the server, the dedicated one or the one a client hosts: lines
+//! mods send, and the links that carry mod messages.
 //!
-//! The loader links the game's chat post, which every line a player types
-//! passes through on the game thread. A line from a player's client that
-//! starts with `/` is never posted: it goes to the mod that registered its
-//! name, or to the loader's own `/enshwick`, and the answer is posted for
-//! that player alone, marked as delivered for every other connection. Lines
-//! mods send from any thread wait in a queue that the post-step drains.
-//!
-//! Mods may also run a command line as the server's console, an
-//! administrator with no character, on the game thread.
+//! The loader links the game's chat post, which every line a player's
+//! client sends passes through on the game thread. Lines mods send from any
+//! thread wait in a queue that the post-step drains; a line for one player
+//! is posted for that player alone, marked as delivered for every other
+//! connection. What players type, `/` lines included, the game posts as it
+//! would without the loader.
 //!
 //! The same links carry mod messages (see the net module): the server takes
-//! a client's frame lines as it takes commands, and a client takes the
-//! server's frame lines where it posts what the server sent, before its chat
-//! shows them, and puts its own frames into its chat queue before the game
-//! sends it.
+//! a client's frame lines out of the chat, and a client takes the server's
+//! frame lines where it posts what the server sent, before its chat shows
+//! them, and puts its own frames into its chat queue before the game sends
+//! it.
 
-use core::ffi::c_void;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock, PoisonError};
 
-use enshwick::abi::{
-    CommandCall, CommandCallFn, Header, HookFlags, Level, PlayerInfo, Status, Str,
-};
-use enshwick::commands::{is_valid_name, parse_line};
+use enshwick::abi::{HookFlags, Status};
 
 use crate::chains::Next;
 use crate::host::Loader;
-use crate::settings::LOADER_ID;
-use crate::texts;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
@@ -58,23 +49,8 @@ const LINES_PER_DRAIN: usize = 16;
 const LINES_PER_REPLY: usize = 16;
 /// Lines waiting at most; more are dropped.
 const MAX_WAITING: usize = 256;
-/// Commands one player may type per second, and in one burst; more are
-/// dropped unanswered, so no player fills the lines every other player
-/// waits for.
-const COMMAND_RATE: f64 = 4.0;
-const COMMAND_BURST: f64 = 12.0;
 /// The result the game's chat post writes on success.
 const POSTED: u8 = 0;
-
-/// A registered command.
-#[derive(Clone, Debug)]
-struct Command {
-    owner: usize,
-    name: String,
-    help: String,
-    callback: CommandCallFn,
-    user: usize,
-}
 
 /// Where a line goes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -147,43 +123,9 @@ static POST_NEXT: Next<PostFn> = unsafe { Next::new() };
 // `ClientSendFn`.
 static CLIENT_SEND_NEXT: Next<ClientSendFn> = unsafe { Next::new() };
 static CLIENT: OnceLock<ClientLayout> = OnceLock::new();
-static COMMANDS: Mutex<Vec<Command>> = Mutex::new(Vec::new());
-static SEALED: AtomicBool = AtomicBool::new(false);
 static OUTBOX: Mutex<Vec<Line>> = Mutex::new(Vec::new());
 /// Set while the outbox holds anything, so an idle step takes no lock.
 static WAITING: AtomicBool = AtomicBool::new(false);
-
-/// Registers mod `owner`'s command; refused for a malformed or taken name.
-pub(crate) fn register(
-    owner: usize,
-    name: &str,
-    help: &str,
-    callback: CommandCallFn,
-    user: *mut c_void,
-) -> Status {
-    if SEALED.load(Ordering::Acquire) {
-        return Status::TOO_LATE;
-    }
-    if !is_valid_name(name)
-        || name == LOADER_ID
-        || name == crate::configure::COMMAND
-        || name == crate::net::COMMAND
-    {
-        return Status::BAD_ARGS;
-    }
-    let mut commands = COMMANDS.lock().unwrap_or_else(PoisonError::into_inner);
-    if commands.iter().any(|c| c.name == name) {
-        return Status::REFUSED;
-    }
-    commands.push(Command {
-        owner,
-        name: name.to_owned(),
-        help: help.to_owned(),
-        callback,
-        user: user.expose_provenance(),
-    });
-    Status::OK
-}
 
 /// Queues `text` for the player with account key `to`, or for everyone.
 pub(crate) fn send(to: u64, text: &str) -> Status {
@@ -220,7 +162,7 @@ fn cut(text: &str, max: usize) -> &str {
     &text[..end]
 }
 
-/// Queues the lines of `text`, a reply or a mod's message, leaving out any
+/// Queues the lines of `text`, a mod's message, leaving out any
 /// a client would take for a frame of the server's: such a line may carry
 /// what a player typed.
 fn queue(to: To, text: &str) {
@@ -245,66 +187,9 @@ fn replied(text: &str) -> impl Iterator<Item = &str> {
         .take(LINES_PER_REPLY)
 }
 
-/// A player's command rate: tokens left and when it last typed.
-#[derive(Clone, Copy, Debug)]
-struct Rate {
-    tokens: f64,
-    seen: std::time::Instant,
-}
-
-impl Rate {
-    /// Takes one command at `now`; false when the rate is spent.
-    fn admit(&mut self, now: std::time::Instant) -> bool {
-        let gained = now.duration_since(self.seen).as_secs_f64() * COMMAND_RATE;
-        self.seen = now;
-        self.tokens = (self.tokens + gained).min(COMMAND_BURST);
-        if self.tokens < 1.0 {
-            return false;
-        }
-        self.tokens -= 1.0;
-        true
-    }
-}
-
-/// The command rates of the players who typed, by account key.
-static RATES: Mutex<Option<std::collections::HashMap<u64, Rate>>> = Mutex::new(None);
-/// Commands dropped over a player's rate.
-static OVER_RATE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-
-/// Takes one command from the rate of the player with account key `key`;
-/// false, counted and now and then logged, when it is spent.
-fn admit(key: u64) -> bool {
-    let now = std::time::Instant::now();
-    let admitted = {
-        let mut rates = RATES.lock().unwrap_or_else(PoisonError::into_inner);
-        let rates = rates.get_or_insert_with(Default::default);
-        if rates.len() > 256 {
-            // Players idle long enough to have a full rate again lose
-            // nothing by being forgotten.
-            let full = COMMAND_BURST / COMMAND_RATE;
-            rates.retain(|_, rate| now.duration_since(rate.seen).as_secs_f64() < full);
-        }
-        rates
-            .entry(key)
-            .or_insert(Rate {
-                tokens: COMMAND_BURST,
-                seen: now,
-            })
-            .admit(now)
-    };
-    if !admitted {
-        let count = OVER_RATE.fetch_add(1, Ordering::Relaxed) + 1;
-        if count == 1 || count.is_multiple_of(100) {
-            crate::log!(WARN, "chat commands: {count} dropped over a player's rate");
-        }
-    }
-    admitted
-}
-
-/// Links the chat post on the server; without it commands and chat lines
-/// stay off and the log says so.
+/// Links the chat post on the server; without it mods' chat lines and the
+/// messages clients send stay off and the log says so.
 pub(crate) fn link(loader: &'static Loader) {
-    SEALED.store(true, Ordering::Release);
     let symbol = |name: &str| loader.build.symbol(name).map(|rva| loader.base + rva);
     let constant = |name: &str| {
         loader
@@ -334,7 +219,7 @@ pub(crate) fn link(loader: &'static Loader) {
         })
     })();
     let (Some(layout), Some(target)) = (layout, symbol("chat.post")) else {
-        crate::log!(WARN, "chat commands off: this build has no chat layout");
+        crate::log!(WARN, "chat lines off: this build has no chat layout");
         return;
     };
     if LOADED.set((loader, layout)).is_err() {
@@ -342,11 +227,10 @@ pub(crate) fn link(loader: &'static Loader) {
     }
     let status = loader.link(target, &POST_NEXT, post, HookFlags::CALLER_FRAME);
     if !status.is_ok() {
-        crate::log!(WARN, "chat commands off: refused ({})", status.0);
+        crate::log!(WARN, "chat lines off: refused ({})", status.0);
         return;
     }
-    let count = COMMANDS.lock().map(|c| c.len()).unwrap_or_default();
-    crate::log!(INFO, "chat commands on: {count} from mods, and /enshwick");
+    crate::log!(INFO, "chat lines and mod messages on");
     link_client(loader, symbol("chat.client_send"));
 }
 
@@ -377,8 +261,8 @@ fn link_client(loader: &'static Loader, target: Option<u64>) {
     );
 }
 
-/// The switch of the chat commands and mod messages.
-static CHAT_FUSE: crate::fuse::Fuse = crate::fuse::Fuse::new("chat commands and mod messages");
+/// The switch of the chat lines and mod messages.
+static CHAT_FUSE: crate::fuse::Fuse = crate::fuse::Fuse::new("chat lines and mod messages");
 
 unsafe extern "system" fn client_send(client: *mut u8) -> u64 {
     let _caught = CHAT_FUSE.run("the client send", || {
@@ -452,17 +336,17 @@ unsafe extern "system" fn post(
         unsafe { out.cast::<u64>().write_unaligned(0) };
         return out;
     }
-    let caught = CHAT_FUSE.run("the command check", || {
+    let caught = CHAT_FUSE.run("the client frame check", || {
         // SAFETY: the game's arguments, read before anything else is called.
-        unsafe { command_line(out, kind, text) }
+        unsafe { posted_frame(out, kind, text) }
     });
-    if let Some(Some((loader, line))) = caught {
+    if let Some(Some(frame)) = caught {
         // SAFETY: the game's result record holds at least 8 bytes.
         unsafe { out.cast::<u64>().write_unaligned(0) };
-        let _outcome = CHAT_FUSE.run("a command", || {
-            dispatch(loader, &line, To::Machine(handle, hash));
+        let _outcome = CHAT_FUSE.run("a client frame", || {
+            crate::net::server_received(hash, &frame);
         });
-        let _outcome = CHAT_FUSE.run("the command queue", drain);
+        let _outcome = CHAT_FUSE.run("the chat queue", drain);
         return out;
     }
     match next() {
@@ -512,16 +396,12 @@ unsafe fn server_frame(out: *mut u8, kind: u8, text: *const [usize; 2]) -> bool 
     core::str::from_utf8(bytes).is_ok_and(crate::net::client_received)
 }
 
-/// The line when the game posts a player's `/` line from their client.
+/// The frame when the game posts a frame line from a player's client.
 ///
 /// # Safety
 ///
 /// The game's chat post arguments, at its entry.
-unsafe fn command_line(
-    out: *mut u8,
-    kind: u8,
-    text: *const [usize; 2],
-) -> Option<(&'static Loader, String)> {
+unsafe fn posted_frame(out: *mut u8, kind: u8, text: *const [usize; 2]) -> Option<String> {
     let (loader, layout) = LOADED.get()?;
     if kind != 0 || out.is_null() || text.is_null() {
         return None;
@@ -539,382 +419,19 @@ unsafe fn command_line(
     // SAFETY: the span holds `len` bytes for the call.
     let bytes =
         unsafe { core::slice::from_raw_parts(core::ptr::with_exposed_provenance::<u8>(ptr), len) };
-    if bytes.first() != Some(&b'/') {
-        return None;
-    }
-    Some((loader, String::from_utf8_lossy(bytes).into_owned()))
+    client_frame(bytes).map(str::to_owned)
 }
 
-/// The player who typed a line: the connected player with the account key,
-/// or one known by key alone.
-fn sender(loader: &Loader, key: u64) -> PlayerInfo {
-    crate::world::players(loader)
+/// The frame a line from a player's client carries, which the server takes
+/// out of the chat; `None` for every other line, `/` lines included.
+fn client_frame(line: &[u8]) -> Option<&str> {
+    core::str::from_utf8(line)
         .ok()
-        .and_then(|players| players.into_iter().find(|p| p.key == key))
-        .unwrap_or(PlayerInfo {
-            header: Header::of::<PlayerInfo>(),
-            slot: u32::MAX,
-            entity: 0,
-            key,
-            permissions: 0,
-            name_len: 0,
-            name: [0; 64],
-        })
-}
-
-/// Runs a command line and queues the reply for `to`.
-fn dispatch(loader: &Loader, line: &str, to: To) {
-    let Some((name, args)) = parse_line(line) else {
-        return;
-    };
-    let key = match to {
-        To::Machine(_, key) | To::Key(key) => key,
-        To::All => 0,
-    };
-    if name == crate::net::COMMAND {
-        crate::net::server_received(key, args);
-        return;
-    }
-    if !admit(key) {
-        return;
-    }
-    let player = sender(loader, key);
-    let who =
-        String::from_utf8_lossy(&player.name[..usize::from(player.name_len).min(64)]).into_owned();
-    crate::log!(DEBUG, "{who} ({key:016x}) typed /{name}");
-    let reply = if name == LOADER_ID {
-        builtin(loader, args, &player)
-    } else if name == crate::configure::COMMAND {
-        config(loader, args, &player)
-    } else {
-        match find(loader, &name) {
-            Some(command) => run(&command, args, &player),
-            None => format!("Unknown command /{name}. /enshwick help lists the commands."),
-        }
-    };
-    queue(to, &reply);
-}
-
-/// The server's console as a player: an administrator with no character.
-fn console() -> PlayerInfo {
-    let mut name = [0u8; 64];
-    name[..7].copy_from_slice(b"console");
-    PlayerInfo {
-        header: Header::of::<PlayerInfo>(),
-        slot: u32::MAX,
-        entity: 0,
-        key: 0,
-        permissions: PlayerInfo::CAN_KICK_BAN,
-        name_len: 7,
-        name,
-    }
-}
-
-/// Runs `line` as the server's console, on the game thread; the reply.
-pub(crate) fn run_console(loader: &Loader, line: &str) -> Result<String, Status> {
-    crate::world::server().map_err(|_| Status::WRONG_THREAD)?;
-    let (name, args) = parse_line(line).ok_or(Status::BAD_ARGS)?;
-    crate::log!(DEBUG, "the console runs /{name}");
-    let player = console();
-    if name == LOADER_ID {
-        return Ok(builtin(loader, args, &player));
-    }
-    if name == crate::configure::COMMAND {
-        return Ok(config(loader, args, &player));
-    }
-    let command = find(loader, &name).ok_or(Status::MISSING)?;
-    Ok(run(&command, args, &player))
-}
-
-/// The running mod's command `name`.
-fn find(loader: &Loader, name: &str) -> Option<Command> {
-    let command = COMMANDS
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .iter()
-        .find(|c| c.name == name)
-        .cloned();
-    command.filter(|c| {
-        loader
-            .mods
-            .get(c.owner)
-            .is_some_and(|m| !m.off.load(Ordering::Acquire))
-    })
-}
-
-/// Runs a mod's command for `player`; its reply.
-fn run(command: &Command, args: &str, player: &PlayerInfo) -> String {
-    let call = CommandCall {
-        header: Header::of::<CommandCall>(),
-        player: *player,
-        name: Str::new(&command.name),
-        args: Str::new(args),
-    };
-    let mut reply = Str::EMPTY;
-    // SAFETY: the handler lives in the mod's DLL, which stays loaded; the
-    // safe layer catches its panics.
-    crate::profile::call(
-        command.owner,
-        crate::profile::Feature::Commands,
-        || unsafe {
-            (command.callback)(
-                &raw const call,
-                core::ptr::with_exposed_provenance_mut(command.user),
-                &raw mut reply,
-            );
-        },
-    );
-    // SAFETY: the reply stays valid until the handler runs again.
-    unsafe { reply.as_str() }.unwrap_or("").to_owned()
-}
-
-/// `/enshwick`: the mods running; `/enshwick help`: every command;
-/// `/enshwick <mod id>`: what the mod is; `/enshwick status`: the status
-/// summary, for administrators.
-fn builtin(loader: &Loader, args: &str, player: &PlayerInfo) -> String {
-    if args.eq_ignore_ascii_case("status") {
-        if player.permissions & PlayerInfo::CAN_KICK_BAN == 0 {
-            return texts::fill("enshwick.status.admins", &[]);
-        }
-        crate::status::request();
-        return crate::status::summary(loader).short();
-    }
-    if let Some(rest) = word(args, "profile") {
-        if player.permissions & PlayerInfo::CAN_KICK_BAN == 0 {
-            return texts::fill("enshwick.profile.admins", &[]);
-        }
-        if rest.eq_ignore_ascii_case("reset") {
-            crate::status::reset_profile(loader);
-            return texts::fill("enshwick.profile.reset", &[]);
-        }
-        let mut lines = crate::status::cost_lines(loader, 5, 2);
-        lines.push(texts::fill("enshwick.profile.full", &[]));
-        return lines.join(
-            "
-",
-        );
-    }
-    if args.eq_ignore_ascii_case("conflicts") {
-        if player.permissions & PlayerInfo::CAN_KICK_BAN == 0 {
-            return texts::fill("enshwick.conflicts.admins", &[]);
-        }
-        let lines = crate::status::conflicts(loader);
-        if lines.is_empty() {
-            return texts::fill("enshwick.conflicts.none", &[]);
-        }
-        return lines.join(
-            "
-",
-        );
-    }
-    if args.eq_ignore_ascii_case("ui-demo") {
-        return ui_demo(loader, player);
-    }
-    if let Some(rest) = word(args, "recipes") {
-        return crate::recipes::command(loader, rest, player);
-    }
-    if let Some(rest) = word(args, "log") {
-        if player.permissions & PlayerInfo::CAN_KICK_BAN == 0 {
-            return texts::fill("enshwick.log.admins", &[]);
-        }
-        return log_lines(loader, rest);
-    }
-    let commands = COMMANDS.lock().unwrap_or_else(PoisonError::into_inner);
-    if args.eq_ignore_ascii_case("help") {
-        return help(loader, &commands);
-    }
-    if !args.is_empty() {
-        return loader
-            .mods
-            .iter()
-            .find(|m| m.id.eq_ignore_ascii_case(args))
-            .map_or_else(|| texts::fill("enshwick.unknown", &[("id", args)]), about);
-    }
-    let mods: Vec<String> = loader.mods.iter().map(name).collect();
-    let version = env!("CARGO_PKG_VERSION");
-    let mut sentences = vec![if mods.is_empty() {
-        texts::fill("enshwick.mods.none", &[("version", version)])
-    } else {
-        texts::fill(
-            "enshwick.mods",
-            &[("version", version), ("mods", &mods.join(", "))],
-        )
-    }];
-    let disabled = crate::modlist::disabled();
-    if !disabled.is_empty() {
-        sentences.push(texts::fill(
-            "enshwick.off-in",
-            &[
-                ("file", crate::modlist::LIST_PATH),
-                ("mods", &disabled.join(", ")),
-            ],
-        ));
-    }
-    sentences.extend(crate::modlist::replaced().iter().map(|old| {
-        texts::fill(
-            "enshwick.replaced",
-            &[("id", &old.id), ("by", &old.by), ("file", &old.file)],
-        )
-    }));
-    sentences.push(texts::fill("enshwick.more", &[]));
-    sentences.join(" ")
-}
-
-/// A mod's name and version, marked when it is off.
-fn name(record: &crate::host::ModRecord) -> String {
-    let label = record.label();
-    if record.off.load(Ordering::Acquire) {
-        texts::fill(
-            "mods.off",
-            &[("name", &label), ("version", &record.version)],
-        )
-    } else {
-        format!("{label} {}", record.version)
-    }
-}
-
-/// `/config`, for administrators: read and change mods' settings.
-fn config(loader: &Loader, args: &str, player: &PlayerInfo) -> String {
-    use crate::configure::{self, Request};
-
-    if player.permissions & PlayerInfo::CAN_KICK_BAN == 0 {
-        return texts::fill("config.admins", &[]);
-    }
-    let request = configure::parse(args);
-    let id = match request {
-        Request::Mods => {
-            let with: Vec<&str> = loader
-                .mods
-                .iter()
-                .filter(|m| m.schema.lock().is_ok_and(|s| s.is_some()))
-                .map(|m| m.id.as_str())
-                .collect();
-            return if with.is_empty() {
-                texts::fill("config.none", &[])
-            } else {
-                texts::fill("config.mods", &[("mods", &with.join(", "))])
-            };
-        }
-        Request::List(id) | Request::Get(id, _) | Request::Set(id, _, _) => id,
-    };
-    let Some((index, record)) = loader.mods.iter().enumerate().find(|(_, m)| m.id == id) else {
-        return texts::fill("config.unknown", &[("id", id)]);
-    };
-    let Some(schema) = record.schema.lock().ok().and_then(|s| s.clone()) else {
-        return texts::fill("config.no-schema", &[("id", id)]);
-    };
-    let path = loader.configs_dir.join(format!("{id}.toml"));
-    if !path.is_file() {
-        return texts::fill("config.missing", &[("id", id)]);
-    }
-    let text = crate::worlds::show_text(loader, record);
-    match request {
-        Request::Set(_, key, value) => {
-            let who = String::from_utf8_lossy(&player.name[..usize::from(player.name_len).min(64)])
-                .into_owned();
-            match configure::apply(loader, index, key, value, &who) {
-                Ok(change) => configure::changed(id, key, &change),
-                Err(reply) => reply,
-            }
-        }
-        Request::Get(_, key) => configure::get(id, &schema, &text, key).unwrap_or_else(|e| e),
-        _ => configure::list(id, &schema, &text),
-    }
-}
-
-/// What `record` is, for `/enshwick <mod id>`.
-fn about(record: &crate::host::ModRecord) -> String {
-    let mut lines = vec![name(record)];
-    if !record.meta.description.is_empty() {
-        lines.push(record.meta.description.clone());
-    }
-    let credits = record.meta.credits();
-    if !credits.is_empty() {
-        lines.push(credits);
-    }
-    lines.extend(record.notes.iter().cloned());
-    lines.join("\n")
-}
-
-/// The rest of `args` after the word `name`, or `None` when it starts with
-/// another.
-fn word<'a>(args: &'a str, name: &str) -> Option<&'a str> {
-    let (first, rest) = args.split_once(' ').unwrap_or((args, ""));
-    first.eq_ignore_ascii_case(name).then(|| rest.trim())
-}
-
-/// `/enshwick log [mod] [level] [n]`: the latest `n` lines (10 by default,
-/// at most a reply's) the loader kept, from one mod or the loader (`enshwick`)
-/// or all, at `level` or more severe.
-fn log_lines(loader: &Loader, args: &str) -> String {
-    match log_query(args, |id| loader.mods.iter().any(|m| m.id == id)) {
-        Ok((source, level, count)) => {
-            let lines = crate::log::recent(source.as_deref(), level, count);
-            if lines.is_empty() {
-                texts::fill("enshwick.log.none", &[])
-            } else {
-                lines.join("\n")
-            }
-        }
-        Err(why) => why,
-    }
-}
-
-/// The source, level and count `/enshwick log` asks for, in any order; a
-/// word that is no number, level or known source (`known`, or the loader's
-/// own id) is an error naming it.
-fn log_query(
-    args: &str,
-    known: impl Fn(&str) -> bool,
-) -> Result<(Option<String>, Level, usize), String> {
-    let mut source = None;
-    let mut level = Level::DEBUG;
-    let mut count = 10;
-    for word in args.split_whitespace() {
-        if let Ok(n) = word.parse::<usize>() {
-            count = n.clamp(1, LINES_PER_REPLY);
-        } else if let Ok(named) = word.to_ascii_lowercase().parse::<Level>() {
-            level = named;
-        } else if word.eq_ignore_ascii_case(LOADER_ID) || known(word) {
-            source = Some(word.to_ascii_lowercase());
-        } else {
-            return Err(texts::fill("enshwick.log.usage", &[("word", word)]));
-        }
-    }
-    Ok((source, level, count))
-}
-
-/// `/enshwick ui-demo`: opens the interface demo on the administrator's
-/// own client.
-fn ui_demo(loader: &Loader, player: &PlayerInfo) -> String {
-    if player.permissions & PlayerInfo::CAN_KICK_BAN == 0 {
-        return texts::fill("ui-demo.admins", &[]);
-    }
-    if player.key == 0 {
-        return texts::fill("ui-demo.player", &[]);
-    }
-    match crate::net::ui_demo(
-        player.key,
-        crate::world::fixed_position(loader, player.entity),
-    ) {
-        Ok(()) => texts::fill("ui-demo.opening", &[]),
-        Err(_) => texts::fill("ui-demo.no-client", &[]),
-    }
-}
-
-fn help(loader: &Loader, commands: &[Command]) -> String {
-    let mut lines = vec![texts::fill("enshwick.help", &[]), crate::configure::help()];
-    lines.extend(commands.iter().filter_map(|c| {
-        let record = loader.mods.get(c.owner)?;
-        (!record.off.load(Ordering::Acquire))
-            .then(|| format!("/{} ({}): {}", c.name, record.id, c.help))
-    }));
-    lines.join("\n")
+        .and_then(crate::net::frame_body)
 }
 
 /// Drops the lines waiting for a hosted game that stops.
 pub(crate) fn forget() {
-    *RATES.lock().unwrap_or_else(PoisonError::into_inner) = None;
     OUTBOX
         .lock()
         .unwrap_or_else(PoisonError::into_inner)
@@ -1035,18 +552,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_log_query_takes_its_words_in_any_order() {
-        let known = |id: &str| id == "safes";
-        assert_eq!(log_query("", known), Ok((None, Level::DEBUG, 10)));
-        assert_eq!(
-            log_query("warn 5 safes", known),
-            Ok((Some("safes".to_owned()), Level::WARN, 5))
-        );
-        assert_eq!(
-            log_query("Enshwick 999", known),
-            Ok((Some("enshwick".to_owned()), Level::DEBUG, LINES_PER_REPLY))
-        );
-        assert!(log_query("nobody", known).unwrap_err().contains("nobody"));
+    fn a_typed_slash_line_stays_in_the_chat_and_only_frames_are_taken() {
+        assert_eq!(client_frame(b"/safe list"), None);
+        assert_eq!(client_frame(b"/enshwick status"), None);
+        assert_eq!(client_frame(b"hello"), None);
+        assert_eq!(client_frame(b"/enshwick-net AQAB"), Some("AQAB"));
     }
 
     #[test]
@@ -1057,20 +567,6 @@ mod tests {
             ["said: hi", "/enshwick ok"]
         );
         assert_eq!(replied(&"x\n".repeat(40)).count(), LINES_PER_REPLY);
-    }
-
-    #[test]
-    fn a_player_s_commands_run_out_after_a_burst_and_come_back() {
-        let start = std::time::Instant::now();
-        let mut rate = Rate {
-            tokens: COMMAND_BURST,
-            seen: start,
-        };
-        let burst = (0..100).filter(|_| rate.admit(start)).count();
-        assert_eq!(burst, 12);
-        assert!(!rate.admit(start));
-        assert!(rate.admit(start + std::time::Duration::from_millis(300)));
-        assert!(!rate.admit(start + std::time::Duration::from_millis(300)));
     }
 
     #[test]
