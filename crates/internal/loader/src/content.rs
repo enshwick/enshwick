@@ -110,8 +110,13 @@ pub(crate) fn add_text(id: u32, language: u32, text: &str) -> Status {
 }
 
 /// UTF-8 text the loader hands the game as a text lookup's answer: its
-/// address and length. The bytes stay readable at that address for as long
-/// as the game may keep the view; their maker says how.
+/// address and length.
+///
+/// The bytes stay readable at that address for as long as the game may keep
+/// the view; their maker says how. A view may outlive its text: a notice
+/// slot is written over in place while the game may still hold an older
+/// view of it, which then reads the slot's newer text (or a mix of the two
+/// cut short at the older length) but never freed memory.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct Handed {
     at: *const u8,

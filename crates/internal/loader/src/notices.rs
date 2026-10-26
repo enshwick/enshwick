@@ -61,7 +61,8 @@ const TAGS: [[u8; 16]; SLOTS] = {
 struct SlotText {
     /// The text, at most [`MAX_TEXT`] bytes, and a zero after it.
     bytes: [AtomicU8; MAX_TEXT + 1],
-    /// How many bytes of `bytes` the text takes; 0 while the slot is unset.
+    /// One more than the bytes of `bytes` the text takes; 0 while the slot
+    /// is unset, so an empty text is still a text.
     len: AtomicUsize,
 }
 
@@ -80,13 +81,16 @@ impl SlotText {
             byte.store(new, Ordering::Relaxed);
         }
         self.bytes[text.len()].store(0, Ordering::Relaxed);
-        self.len.store(text.len(), Ordering::Release);
+        self.len.store(text.len() + 1, Ordering::Release);
     }
 
     /// The slot's text as a view the game may keep; `None` while unset.
     fn view(&self) -> Option<crate::content::Handed> {
-        let len = self.len.load(Ordering::Acquire);
-        (len != 0).then(|| crate::content::Handed::new(self.bytes.as_ptr().cast::<u8>(), len))
+        let len = self.len.load(Ordering::Acquire).checked_sub(1)?;
+        Some(crate::content::Handed::new(
+            self.bytes.as_ptr().cast::<u8>(),
+            len,
+        ))
     }
 }
 
@@ -287,12 +291,12 @@ mod tests {
             .iter()
             .position(|tag| enshwick_gamedata::reflect::fnv1a32(tag) == id)?;
         let slot = &SLOT_TEXTS[slot];
-        let len = slot.len.load(Ordering::Acquire);
+        let len = slot.len.load(Ordering::Acquire).checked_sub(1)?;
         let bytes: Vec<u8> = slot.bytes[..len]
             .iter()
             .map(|b| b.load(Ordering::Relaxed))
             .collect();
-        (len != 0).then(|| String::from_utf8(bytes).unwrap())
+        Some(String::from_utf8(bytes).unwrap())
     }
 
     #[test]
@@ -308,6 +312,12 @@ mod tests {
             Some("Low fuel")
         );
         assert_eq!(super::text(1), None);
+        let tag = take_slot("");
+        assert_eq!(
+            read(enshwick_gamedata::reflect::fnv1a32(&tag)).as_deref(),
+            Some(""),
+            "an empty text is still the slot's text"
+        );
         let ids: std::collections::HashSet<u32> = TAGS
             .iter()
             .map(|t| enshwick_gamedata::reflect::fnv1a32(t))

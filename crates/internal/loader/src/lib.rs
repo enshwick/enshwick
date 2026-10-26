@@ -152,7 +152,7 @@ pub mod remote;
 mod report;
 pub mod resolve;
 #[cfg_attr(
-    all(not(windows), not(test)),
+    not(windows),
     expect(dead_code, reason = "only the Windows build hands the game memory")
 )]
 mod retire;

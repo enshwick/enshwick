@@ -134,6 +134,8 @@ static MERGE_NEXT: Next<MergeFn> = unsafe { Next::new() };
 static EVENTS_FUSE: Fuse = Fuse::new("game events");
 /// The client's notices from its server, off once raising one panicked.
 static NOTICES_FUSE: Fuse = Fuse::new("server notices");
+/// The switch for freeing what the loader handed the game.
+static RETIRE_FUSE: Fuse = Fuse::new("freeing handed lists");
 
 thread_local! {
     static BATCH: RefCell<Batch> = RefCell::new(Batch::default());
@@ -252,7 +254,7 @@ unsafe extern "system" fn merge(entity_world: *mut u8) {
     // since the chain is wired before the target jumps here.
     unsafe { MERGE_NEXT.get()(entity_world) };
     if own_world {
-        crate::retire::step();
+        let _stepped = RETIRE_FUSE.run("freeing what the game was handed", crate::retire::step);
     }
     if let Some((loader, _)) = ours {
         let _quiet = crate::world::Quiet::enter();
