@@ -419,7 +419,7 @@ pub(crate) fn seal_and_link(loader: &'static Loader) {
     {
         return;
     }
-    if served_recipes() {
+    if mods_serve_recipes() {
         crate::code::lift_workshop_limit(loader);
     }
     let none = HookFlags::NONE;
@@ -678,6 +678,16 @@ pub(crate) fn served_recipes() -> bool {
     SERVED_LIST
         .get()
         .is_some_and(|served| serves(served, &recipe_registry(), mod_on))
+}
+
+/// Whether mods, not the loader's own changes of values alone, serve the
+/// recipe registry: only they add recipes past a workshop's vanilla count.
+fn mods_serve_recipes() -> bool {
+    SERVED_LIST.get().is_some_and(|served| {
+        serves(served, &recipe_registry(), |owner| {
+            !owner.is_loader() && mod_on(owner)
+        })
+    })
 }
 
 /// Whether `served` holds `key` with a patch of a mod `on` names and a build

@@ -126,6 +126,46 @@ A change that names no item, changes nothing, gives a value out of range or
 changes one field of one item a second time is a problem at its line, like
 every other.
 
+### Recipes
+
+`recipes.toml` changes vanilla recipes the same way:
+
+```toml
+[[change]]
+recipes = ["Torch_Recipe"]
+output_count = 3
+
+[[change]]
+output = ["Wood_Planks"]
+cost = { times = 0.5 }
+time = { times = 0.5 }
+
+[[change]]
+output = ["Torch"]
+ingredients = { Wood_Log = 1, Resin = 0, Stone_Raw = 2 }
+```
+
+`recipes` names recipes by GUID, by content id, by a name of the pack's own
+recipes, or by a vanilla recipe's debug name. `output` names items and picks
+every vanilla recipe that makes one of them. A change gives at least one of
+the two.
+
+| Field | Meaning | Values |
+| --- | --- | --- |
+| `output_count` | how many of each item the recipe makes | 1 to 65535 |
+| `cost` | how many of each ingredient it takes | 1 to 65535 |
+| `time` | how long it takes, in seconds; 0 is at once | 0 to 86400 |
+| `ingredients` | how many of each named ingredient it takes: 0 takes it out, and one the recipe lacks is added | 0 to 65535 each |
+
+`cost` applies first, then `ingredients`, so a named ingredient wins over the
+cost. A scaled count of 1 or more stays at least 1. Most workbench recipes
+take no time; production stations such as the kiln do. A changed time
+reaches a production that runs already from its next step on.
+
+The server crafts by its own recipes and each player's crafting menu shows
+the player's own, so every side runs the same pack, which the join check
+proves. [Game rates](../rates.md) multiply what a pack sets.
+
 ### Several packs on one value
 
 The loader takes every pack's and mod's changes of one value in load order.

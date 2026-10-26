@@ -160,6 +160,8 @@ ids! {
     RECIPE_INPUT = "recipe.input";
     RECIPE_OUTPUT = "recipe.output";
     RECIPE_COMPLETION = "recipe.completion";
+    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    RECIPE_DURATION = "recipe.duration";
     RECIPE_REQUIRED_PROPS = "recipe.required_props";
     RECIPE_DEBUG_NAME = "recipe.debug_name";
     RECIPE_INGREDIENT = "recipe_ingredient";

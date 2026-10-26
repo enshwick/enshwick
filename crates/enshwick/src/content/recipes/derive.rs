@@ -121,6 +121,31 @@ pub(super) fn scaled_inputs(
     Some(bytes)
 }
 
+/// Every recipe of `registry`: its GUID, debug name and the item it makes.
+pub(crate) fn list(
+    layout: &RecipeLayout,
+    registry: &[u8],
+) -> Option<Vec<(Guid, String, Option<Guid>)>> {
+    let blob = Blob::new(registry);
+    let (start, count) = blob.array(layout.recipes)?;
+    Some(
+        (0..usize::try_from(count).ok()?)
+            .map(|i| {
+                let view = RecipeView {
+                    blob: &blob,
+                    at: start + i * layout.recipe,
+                    layout,
+                };
+                (
+                    view.guid(),
+                    view.debug_name(),
+                    view.output().map(|(item, _)| item),
+                )
+            })
+            .collect(),
+    )
+}
+
 /// A vanilla recipe as [`Load::derive_recipes`](crate::Load::derive_recipes) shows it.
 ///
 /// # Examples

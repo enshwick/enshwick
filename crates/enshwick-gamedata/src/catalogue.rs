@@ -538,6 +538,10 @@ pub const FACTS: &[(&str, Fact)] = &[
         offset("keen::RecipeInfo", "completionRequirementQuery"),
     ),
     (
+        "recipe.duration",
+        offset("keen::RecipeInfo", "craftingDuration"),
+    ),
+    (
         "recipe.required_props",
         offset("keen::RecipeInfo", "requiredProps"),
     ),
@@ -735,6 +739,10 @@ pub const ITEM_SLOT: &str = "item_info.equipment_slot";
 /// The id of the offset of how many of an item one slot holds, a `u16`,
 /// in an item's static data.
 pub const ITEM_MAX_STACK: &str = "item_info.max_stack";
+
+/// The id of the offset of how long a recipe takes, a `keen::Time` in
+/// nanoseconds, in a recipe.
+pub const RECIPE_DURATION: &str = "recipe.duration";
 
 /// The kind of the recipes that make an item, by the name of the constant
 /// of [`SLOT_TYPE`] the item's equipment slot holds; every other slot is

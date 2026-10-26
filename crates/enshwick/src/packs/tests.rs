@@ -288,3 +288,112 @@ fn a_pack_without_changes_reaches_players_only_through_its_content() {
     assert!(pack.changes().is_empty());
     assert!(!pack.reaches_players());
 }
+
+fn vanilla_torch() -> (Vanilla, Guid, Guid, Guid) {
+    let (torch, wood, recipe) = (Guid([1; 16]), Guid([2; 16]), Guid([3; 16]));
+    let vanilla = crate::content::vanilla::tests::game_with_recipes(
+        &[(torch, "Torch"), (wood, "Wood_Log")],
+        &[(recipe, "Torch_Recipe", torch)],
+    );
+    (vanilla, torch, wood, recipe)
+}
+
+fn recipes(text: &str) -> PackFiles {
+    PackFiles::new().with(RECIPES_FILE, text)
+}
+
+#[test]
+fn a_recipe_change_picks_recipes_by_name_and_by_what_they_make() {
+    let (vanilla, _, wood, recipe) = vanilla_torch();
+    let text = "[[change]]\nrecipes = [\"Torch_Recipe\"]\noutput_count = 3\n\n\
+                [[change]]\noutput = [\"Torch\"]\ntime = { times = 0.5 }\n\
+                ingredients = { Wood_Log = 0 }\n";
+    let pack = Pack::parse_with("you.torches", &recipes(text), Some(&vanilla)).unwrap();
+    let changes: Vec<(Change, &str)> = pack
+        .changes()
+        .iter()
+        .map(|(c, s)| (*c, s.as_str()))
+        .collect();
+    assert_eq!(
+        changes,
+        [
+            (
+                Change::new(recipe, Field::Output, Value::Set(3.0)),
+                "recipes.toml:1 (Torch_Recipe)"
+            ),
+            (
+                Change::new(recipe, Field::Time, Value::Times(0.5)),
+                "recipes.toml:5 (Torch)"
+            ),
+            (
+                Change::ingredient(recipe, wood, Value::Set(0.0)),
+                "recipes.toml:5 (Torch)"
+            ),
+        ]
+    );
+}
+
+#[test]
+fn a_recipe_change_without_the_game_s_data_takes_guids_only() {
+    let text = format!("[[change]]\nrecipes = [\"{CHEST}\"]\ncost = 2\n");
+    let pack = Pack::parse("you.torches", &recipes(&text)).unwrap();
+    assert_eq!(pack.changes()[0].0.field, Field::Cost);
+    let errors = Pack::parse(
+        "you.torches",
+        &recipes("[[change]]\noutput = [\"Torch\"]\ncost = 2\n"),
+    )
+    .unwrap_err();
+    assert!(
+        errors.to_string().contains("the game's data is at hand"),
+        "{errors}"
+    );
+}
+
+#[test]
+fn a_recipe_change_naming_no_recipe_or_a_misspelt_one_is_a_problem() {
+    let (vanilla, ..) = vanilla_torch();
+    let errors = Pack::parse_with(
+        "you.torches",
+        &recipes("[[change]]\ncost = 2\n"),
+        Some(&vanilla),
+    )
+    .unwrap_err();
+    assert_eq!(
+        errors.to_string(),
+        "recipes.toml:1:1: change 1: names no recipe; give recipes or output"
+    );
+    let errors = Pack::parse_with(
+        "you.torches",
+        &recipes("[[change]]\nrecipes = [\"Torch_Recipee\"]\ncost = 2\n"),
+        Some(&vanilla),
+    )
+    .unwrap_err();
+    assert!(
+        errors.to_string().contains("near: Torch_Recipe"),
+        "{errors}"
+    );
+    let errors = Pack::parse_with(
+        "you.torches",
+        &recipes("[[change]]\noutput = [\"Wood_Log\"]\ncost = 2\n"),
+        Some(&vanilla),
+    )
+    .unwrap_err();
+    assert!(
+        errors
+            .to_string()
+            .contains("no vanilla recipe makes Wood_Log"),
+        "{errors}"
+    );
+}
+
+#[test]
+fn one_value_of_one_recipe_changed_twice_names_both_lines() {
+    let (vanilla, ..) = vanilla_torch();
+    let text = "[[change]]\nrecipes = [\"Torch_Recipe\"]\ncost = 2\n\n\
+                [[change]]\noutput = [\"Torch\"]\ncost = 3\n";
+    let errors = Pack::parse_with("you.torches", &recipes(text), Some(&vanilla)).unwrap_err();
+    assert_eq!(
+        errors.to_string(),
+        "recipes.toml:5:1: change 2: cost of Torch is changed at line 1 already"
+    );
+}

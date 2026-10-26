@@ -8,6 +8,7 @@ use super::types;
 use crate::{Load, Off};
 
 mod add;
+mod change;
 mod derive;
 mod kind;
 mod rules;
@@ -16,6 +17,7 @@ pub use add::{
     NewRecipe, RECIPE_REGISTRY, RESERVED_FOR_SINGLE, RecipeLayout, WORKSHOP_RECIPES, add_recipe_to,
     workshop_limit,
 };
+pub use change::{RecipeChanges, change_recipes_in};
 pub use derive::{
     Derived, RecipeEdit, RecipeView, derive_recipes_in, derived_guid, modify_recipes_in,
 };
@@ -23,6 +25,7 @@ pub use kind::RecipeKind;
 pub use rules::{Name, RecipeRule, disable, enable, is_disabled};
 
 use add::fnv1a;
+pub(crate) use derive::list;
 use derive::{derived_entries, menu_entry, recipe_guids, vanilla_registry};
 
 impl Load<'_> {

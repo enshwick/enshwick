@@ -119,7 +119,7 @@ impl Reader<'_> {
     }
 
     /// The full id of the pack's own `name`: `<namespace>:<name>`.
-    fn own(&self, name: &str) -> String {
+    pub(super) fn own(&self, name: &str) -> String {
         format!("{}:{name}", self.namespace)
     }
 
@@ -405,6 +405,11 @@ impl Pack {
         pack.recipes = recipes(&mut reader, &recipes_file, &recipes_text);
         pack.drops = drops(&mut reader, &loot_file, &loot_text, &pack.items);
         pack.changes = super::changes::item_changes(&mut reader, &items_file, &items_text);
+        pack.changes.extend(super::changes::recipe_changes(
+            &mut reader,
+            &recipes_file,
+            &recipes_text,
+        ));
         if reader.errors.is_empty() {
             Ok(pack)
         } else {
