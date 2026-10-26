@@ -12,6 +12,7 @@ repository.workspace = true
 publish.workspace = true
 
 [dependencies]
+arc-swap.workspace = true
 enshwick.workspace = true
 mlua.workspace = true
 

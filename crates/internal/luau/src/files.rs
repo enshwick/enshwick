@@ -165,6 +165,7 @@ impl Require for Requirer {
             .ok_or_else(|| mlua::Error::runtime(format!("{path} is gone")))?;
         lua.load(&source[..])
             .set_name(format!("@{path}"))
+            .set_mode(mlua::chunk::ChunkMode::Text)
             .into_function()
     }
 }

@@ -383,9 +383,9 @@ pub fn derive_shape(input: TokenStream) -> TokenStream {
 
 /// Describes a type for script languages; examples are on `enshwick::Script`.
 ///
-/// A struct with named fields is a record of its public fields (`header`
-/// and `_` fields left out), a newtype its inner type, an enum of unit
-/// variants a choice of names.
+/// A struct with named fields is a record of its public fields (fields of
+/// type `Header` and fields named `_*` or `reserved*` left out), a newtype
+/// its inner type, an enum of unit variants a choice of names.
 #[proc_macro_derive(Script)]
 pub fn derive_script(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);

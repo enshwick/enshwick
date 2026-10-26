@@ -95,7 +95,8 @@ macro_rules! with_data {
                 <$data as crate::script::Typed>::TY,
                 |raw: *const c_void| -> Option<crate::script::Value> {
                     // SAFETY: `EventKind::read` passes on the loader's pointer
-                    // for this event, which is what `Kind::data` asks for.
+                    // for this event with no other thread writing its data, by
+                    // its `# Safety`, which is what `Kind::data` asks for.
                     unsafe { <$name as Kind>::data(raw) }.map(crate::script::IntoScript::into_value)
                 },
             ),
