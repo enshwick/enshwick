@@ -5,6 +5,8 @@ use std::path::{Path, PathBuf};
 
 use crate::Side;
 
+pub(crate) mod data;
+
 /// Creates the crate for mod `id`, `<author>.<name>`, in `<dir>/<name>`;
 /// what was made, for the user.
 ///

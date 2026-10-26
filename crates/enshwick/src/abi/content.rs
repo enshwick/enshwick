@@ -111,6 +111,15 @@ impl DataField {
     /// How many of an item one inventory slot holds, 1 to 65535; the entry
     /// is an item.
     pub const MAX_STACK: Self = Self(1);
+    /// How many of each item a recipe makes; the entry is a recipe.
+    pub const RECIPE_OUTPUT: Self = Self(2);
+    /// How many of each ingredient a recipe takes; the entry is a recipe.
+    pub const RECIPE_COST: Self = Self(3);
+    /// How many of the ingredient `item` a recipe takes, 0 taking it out; the
+    /// entry is a recipe.
+    pub const RECIPE_INGREDIENT: Self = Self(4);
+    /// How long a recipe takes, in seconds; the entry is a recipe.
+    pub const RECIPE_TIME: Self = Self(5);
 }
 
 /// How a [`DataChange`] changes its value.
@@ -149,6 +158,7 @@ impl ChangeOp {
 ///     op: ChangeOp::SET,
 ///     value: 999.0,
 ///     source: Str::new("items.toml:3"),
+///     item: [0; 16],
 /// };
 /// assert_eq!(change.value, 999.0);
 /// ```
@@ -168,6 +178,9 @@ pub struct DataChange {
     /// Where the change comes from, such as `items.toml:12`, for the reports
     /// of conflicts; may be empty.
     pub source: Str,
+    /// The item the field names inside its entry, such as a recipe's
+    /// ingredient; all zero for none. Since minor 79.
+    pub item: [u8; 16],
 }
 
 impl_headed!(DataChange);

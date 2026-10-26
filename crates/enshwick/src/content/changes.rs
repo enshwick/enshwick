@@ -10,7 +10,7 @@
 //! use enshwick::content::Guid;
 //! use enshwick::content::changes::{Change, Field, Value};
 //!
-//! const WOOD: Guid = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");
+//! const WOOD: Guid = Guid::parse("3f4093ae-75ed-4e5d-bd0b-784ba83b88f5");
 //!
 //! fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 //!     load.change(&Change::new(WOOD, Field::MaxStack, Value::Set(999.0)), "my-mod")
@@ -41,11 +41,30 @@ pub enum Field {
     /// is an item. The game cuts a saved stack above it, so a world saved
     /// while it was raised depends on the change.
     MaxStack,
+    /// How many of each item a recipe makes, 1 to 65535; the entry is a
+    /// recipe.
+    Output,
+    /// How many of each ingredient a recipe takes, 1 to 65535; the entry is
+    /// a recipe.
+    Cost,
+    /// How many of one ingredient a recipe takes, 0 to 65535: 0 takes the
+    /// ingredient out, and an item the recipe lacks is added. The entry is a
+    /// recipe and [`Change::item`] the ingredient.
+    Ingredient,
+    /// How long a recipe takes, in seconds from 0 to 86400; the entry is a
+    /// recipe.
+    Time,
 }
 
 impl Field {
     /// Every field, for tools that list them.
-    pub const ALL: &[Self] = &[Self::MaxStack];
+    pub const ALL: &[Self] = &[
+        Self::MaxStack,
+        Self::Output,
+        Self::Cost,
+        Self::Ingredient,
+        Self::Time,
+    ];
 
     /// The name a data pack writes, such as `max_stack`.
     ///
@@ -60,20 +79,45 @@ impl Field {
     pub const fn name(self) -> &'static str {
         match self {
             Self::MaxStack => "max_stack",
+            Self::Output => "output_count",
+            Self::Cost => "cost",
+            Self::Ingredient => "ingredient",
+            Self::Time => "time",
+        }
+    }
+
+    /// What kind of entry the field belongs to.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::content::changes::{Entry, Field};
+    ///
+    /// assert_eq!(Field::MaxStack.entry(), Entry::Item);
+    /// assert_eq!(Field::Time.entry(), Entry::Recipe);
+    /// ```
+    #[must_use]
+    pub const fn entry(self) -> Entry {
+        match self {
+            Self::MaxStack => Entry::Item,
+            Self::Output | Self::Cost | Self::Ingredient | Self::Time => Entry::Recipe,
         }
     }
 
     /// The smallest and the largest value the field holds.
     const fn range(self) -> (f64, f64) {
         match self {
-            Self::MaxStack => (1.0, 65535.0),
+            Self::MaxStack | Self::Output | Self::Cost => (1.0, 65535.0),
+            Self::Ingredient => (0.0, 65535.0),
+            Self::Time => (0.0, 86400.0),
         }
     }
 
     /// Whether the field holds whole numbers only.
     const fn whole(self) -> bool {
         match self {
-            Self::MaxStack => true,
+            Self::MaxStack | Self::Output | Self::Cost | Self::Ingredient => true,
+            Self::Time => false,
         }
     }
 
@@ -109,8 +153,8 @@ impl Field {
 
     /// The value in force: the last set of `values`, or `base` without one,
     /// times every factor; whole fields round half away from zero; the result
-    /// stays in the field's range, and a factor never takes it below its
-    /// smallest value.
+    /// stays in the field's range, and a factor other than 0 never takes a
+    /// whole count of 1 or more below 1.
     ///
     /// # Examples
     ///
@@ -130,9 +174,15 @@ impl Field {
                 Value::Times(f) => factor *= f,
             }
         }
-        let value = set.unwrap_or(base) * factor;
+        let start = set.unwrap_or(base);
+        let value = start * factor;
         let value = if self.whole() { value.round() } else { value };
         let (low, high) = self.range();
+        let low = if self.whole() && start >= 1.0 && factor > 0.0 {
+            low.max(1.0)
+        } else {
+            low
+        };
         value.clamp(low, high)
     }
 
@@ -141,6 +191,10 @@ impl Field {
     pub const fn to_abi(self) -> DataField {
         match self {
             Self::MaxStack => DataField::MAX_STACK,
+            Self::Output => DataField::RECIPE_OUTPUT,
+            Self::Cost => DataField::RECIPE_COST,
+            Self::Ingredient => DataField::RECIPE_INGREDIENT,
+            Self::Time => DataField::RECIPE_TIME,
         }
     }
 
@@ -166,6 +220,20 @@ impl core::fmt::Display for Field {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.write_str(self.name())
     }
+}
+
+/// The kind of entry a [`Field`] belongs to.
+///
+/// # Examples
+///
+/// See [`Field::entry`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum Entry {
+    /// An item.
+    Item,
+    /// A recipe.
+    Recipe,
 }
 
 /// How a [`Change`] changes its value.
@@ -235,9 +303,18 @@ pub enum ValueError {
         /// The factor asked for.
         factor: f64,
     },
+    /// An item for a field that names none, or none for one that does.
+    #[error("{field} {}", if *named { "names no item" } else { "needs an item" })]
+    Item {
+        /// The field.
+        field: Field,
+        /// Whether the change named an item.
+        named: bool,
+    },
 }
 
-/// One change of a vanilla value: the entry, the field and the value.
+/// One change of a vanilla value: the entry, the field, the item inside the
+/// entry where the field names one, and the value.
 ///
 /// # Examples
 ///
@@ -248,6 +325,8 @@ pub struct Change {
     pub entry: Guid,
     /// What changes.
     pub field: Field,
+    /// The item inside the entry, for [`Field::Ingredient`].
+    pub item: Option<Guid>,
     /// How.
     pub value: Value,
 }
@@ -263,11 +342,62 @@ impl Change {
         Self {
             entry,
             field,
+            item: None,
             value,
         }
     }
 
-    /// The change an ABI record describes, checked as [`Field::check`]
+    /// The change of how many of `item` the recipe `recipe` takes.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::content::Guid;
+    /// use enshwick::content::changes::{Change, Field, Value};
+    ///
+    /// let change = Change::ingredient(Guid([1; 16]), Guid([2; 16]), Value::Set(0.0));
+    /// assert_eq!((change.field, change.item), (Field::Ingredient, Some(Guid([2; 16]))));
+    /// assert!(change.check().is_ok());
+    /// ```
+    #[must_use]
+    pub const fn ingredient(recipe: Guid, item: Guid, value: Value) -> Self {
+        Self {
+            entry: recipe,
+            field: Field::Ingredient,
+            item: Some(item),
+            value,
+        }
+    }
+
+    /// Whether the change is one the loader takes: its value as
+    /// [`Field::check`] checks it, and an item exactly where the field names
+    /// one.
+    ///
+    /// # Errors
+    ///
+    /// [`ValueError`] saying why not.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::content::Guid;
+    /// use enshwick::content::changes::{Change, Field, Value};
+    ///
+    /// let change = Change::new(Guid([1; 16]), Field::Ingredient, Value::Set(2.0));
+    /// assert_eq!(change.check().unwrap_err().to_string(), "ingredient needs an item");
+    /// ```
+    pub fn check(&self) -> Result<(), ValueError> {
+        let wants_item = self.field == Field::Ingredient;
+        if wants_item != self.item.is_some() {
+            return Err(ValueError::Item {
+                field: self.field,
+                named: self.item.is_some(),
+            });
+        }
+        self.field.check(self.value)
+    }
+
+    /// The change an ABI record describes, checked as [`Change::check`]
     /// checks it; `None` for a field or operation this crate does not know.
     ///
     /// # Errors
@@ -287,6 +417,7 @@ impl Change {
     ///     op: ChangeOp::TIMES,
     ///     value: 4.0,
     ///     source: Str::EMPTY,
+    ///     item: [0; 16],
     /// };
     /// let change = Change::from_abi(&raw)?.ok_or("unknown")?;
     /// assert_eq!(change.value, Value::Times(4.0));
@@ -301,8 +432,14 @@ impl Change {
         let Some(field) = Field::from_abi(raw.field) else {
             return Ok(None);
         };
-        field.check(value)?;
-        Ok(Some(Self::new(Guid(raw.entry), field, value)))
+        let change = Self {
+            entry: Guid(raw.entry),
+            field,
+            item: (raw.item != [0; 16]).then_some(Guid(raw.item)),
+            value,
+        };
+        change.check()?;
+        Ok(Some(change))
     }
 
     /// The ABI record of the change, with `source` borrowed into it.
@@ -319,6 +456,7 @@ impl Change {
             op,
             value,
             source: Str::new(source),
+            item: self.item.map_or([0; 16], |item| item.0),
         }
     }
 }
@@ -342,8 +480,7 @@ impl Load<'_> {
     /// See the [module](self).
     pub fn change(&mut self, change: &Change, source: &str) -> Result<(), Off> {
         change
-            .field
-            .check(change.value)
+            .check()
             .map_err(|why| Off::new(format!("change of {}: {why}", change.entry)))?;
         let raw = change.to_abi(source);
         let api = self.host().api();
@@ -404,6 +541,31 @@ mod tests {
         for &field in Field::ALL {
             assert_eq!(Field::from_abi(field.to_abi()), Some(field));
         }
+    }
+
+    #[test]
+    fn an_ingredient_goes_through_the_abi_and_back() {
+        let change = Change::ingredient(Guid([7; 16]), Guid([8; 16]), Value::Times(2.0));
+        let raw = change.to_abi("recipes.toml:3");
+        assert_eq!(Change::from_abi(&raw), Ok(Some(change)));
+    }
+
+    #[test]
+    fn a_field_without_an_item_refuses_one() {
+        let mut change = Change::new(Guid([7; 16]), Field::Output, Value::Set(2.0));
+        change.item = Some(Guid([8; 16]));
+        assert_eq!(
+            change.check().unwrap_err().to_string(),
+            "output_count names no item"
+        );
+    }
+
+    #[test]
+    fn a_count_of_one_or_more_stays_one_or_more_when_scaled_down() {
+        assert_eq!(Field::Ingredient.resolve(1.0, [Value::Times(0.1)]), 1.0);
+        assert_eq!(Field::Ingredient.resolve(3.0, [Value::Set(0.0)]), 0.0);
+        assert_eq!(Field::Ingredient.resolve(3.0, [Value::Times(0.0)]), 0.0);
+        assert_eq!(Field::Time.resolve(60.0, [Value::Times(0.25)]), 15.0);
     }
 
     #[test]
