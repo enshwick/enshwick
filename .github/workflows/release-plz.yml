@@ -30,3 +30,7 @@ jobs:
     uses: enshwick/.github/.github/workflows/release-plz.yml@main # zizmor: ignore[unpinned-uses]
     with:
       command: ${{ inputs.command }}
+    # After a release, the enshwick-ci app starts Renovate for the mods.
+    secrets:
+      ENSHWICK_CI_CLIENT_ID: ${{ secrets.ENSHWICK_CI_CLIENT_ID }}
+      ENSHWICK_CI_PRIVATE_KEY: ${{ secrets.ENSHWICK_CI_PRIVATE_KEY }}

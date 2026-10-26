@@ -25,10 +25,10 @@ one you need. The API's rustdoc is the reference for every type and function
 book says how they fit together, and its links to the API point at the source the rustdoc is built
 from.
 
-The mods in
-[`mods/`](https://github.com/enshwick/enshwick/tree/main/mods) are worked
-examples, and the chapters point at them where a mod does what the chapter
-describes.
+The examples in
+[`examples/`](https://github.com/enshwick/enshwick/tree/main/examples) and
+our mods, each in its own `mod-<name>` repository of the
+[enshwick organization](https://github.com/enshwick), are worked examples.
 
 ## Building the book
 
