@@ -28,6 +28,7 @@ thiserror.workspace = true
 toml.workspace = true
 
 [dev-dependencies]
+criterion.workspace = true
 insta.workspace = true
 serde = { workspace = true, features = ["derive"] }
 
@@ -246,3 +247,12 @@ workspace = true
 
 [package.metadata.docs.rs]
 targets = ["x86_64-pc-windows-msvc"]
+
+[[bench]]
+name = "hook_dispatch"
+harness = false
+required-features = ["test"]
+
+[[bench]]
+name = "pattern_scan"
+harness = false
