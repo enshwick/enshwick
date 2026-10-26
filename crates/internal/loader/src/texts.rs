@@ -11,6 +11,10 @@ use enshwick::i18n::{Language, Texts};
 /// The texts the loader ships.
 const EMBEDDED: &str = include_str!("texts.toml");
 /// The file in `mod-configs/` that overrides or adds to them.
+#[cfg_attr(
+    all(not(windows), not(test)),
+    expect(dead_code, reason = "overrides are read only in the game")
+)]
 const OVERRIDES: &str = "enshwick.texts.toml";
 
 static TEXTS: OnceLock<Texts> = OnceLock::new();

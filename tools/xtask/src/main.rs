@@ -7,8 +7,8 @@
 //! packages are already fresh, and nextest runs the tests of the changed
 //! packages and of every package that depends on them. Off Windows the
 //! workspace is also linted for Windows through `cargo xwin`, beside the host
-//! checks. `cargo xtask check --windows` also runs the tests of the crates
-//! that build only for Windows, under Wine off Windows. `cargo xtask check
+//! checks. `cargo xtask check --windows` also runs the Windows tests of the
+//! crates marked `windows-tests`, under Wine off Windows. `cargo xtask check
 //! --all` runs the full suite, the Windows tests included when Docker runs.
 //!
 //! `cargo xtask bundle` writes the dev bundle testers unpack into the game
@@ -73,24 +73,24 @@ fn run(args: &[String]) -> Result<bool, String> {
         say(&format!("no merge base with {base}; checking everything"));
         Scope::All
     };
-    let checked = check(&scope, &packages, all);
+    let checked = check(&scope, all);
     if !(checked && (all || windows)) {
         return Ok(checked);
     }
-    let windows_only: Vec<&str> = packages
+    let windows_tests: Vec<&str> = packages
         .iter()
-        .filter(|p| p.windows_only)
+        .filter(|p| p.windows_tests)
         .filter(|p| match &scope {
             Scope::All => true,
             Scope::Some { code, docs } => code.contains(&p.name) || docs.contains(&p.name),
         })
         .map(|p| p.name.as_str())
         .collect();
-    if windows_only.is_empty() {
-        say("no Windows-only package changed; no tests under Wine");
+    if windows_tests.is_empty() {
+        say("no package with Windows tests changed; no tests under Wine");
         return Ok(true);
     }
-    Ok(wine::run(&windows_only, windows))
+    Ok(wine::run(&windows_tests, windows))
 }
 
 /// The workspace packages, from `cargo metadata`.
@@ -136,7 +136,7 @@ fn packages() -> Result<Vec<Package>, String> {
                 name: package["name"].as_str().unwrap_or_default().to_owned(),
                 dir,
                 deps,
-                windows_only: package["metadata"]["enshwick"]["windows-only"].as_bool()
+                windows_tests: package["metadata"]["enshwick"]["windows-tests"].as_bool()
                     == Some(true),
             }
         })
@@ -246,28 +246,25 @@ fn say(text: &str) {
 /// the tests run are narrowed to the changed packages. Host steps run one
 /// after another (they share the build lock); the Windows lint runs beside
 /// them.
-fn check(scope: &Scope, packages: &[Package], full: bool) -> bool {
+fn check(scope: &Scope, full: bool) -> bool {
     let on_windows = cfg!(windows);
-    let host_ok =
-        |name: &String| on_windows || packages.iter().any(|p| &p.name == name && !p.windows_only);
     let (code, docs, tests) = match scope {
         Scope::All => (true, true, None),
         Scope::Some { code, docs } => {
-            let host: Vec<&String> = code.iter().filter(|name| host_ok(name)).collect();
             if code.is_empty() && docs.is_empty() {
                 say("no package changed; nothing to check");
                 return true;
             }
             let names: Vec<&str> = code.iter().chain(docs).map(String::as_str).collect();
             say(&format!("checking {}", names.join(", ")));
-            let filter = host
+            let filter = code
                 .iter()
                 .map(|name| format!("package({name})"))
                 .collect::<Vec<_>>()
                 .join(" | ");
             (
                 !code.is_empty(),
-                !host.is_empty() || !docs.is_empty(),
+                !code.is_empty() || !docs.is_empty(),
                 Some(filter),
             )
         }
@@ -275,17 +272,11 @@ fn check(scope: &Scope, packages: &[Package], full: bool) -> bool {
     if matches!(scope, Scope::All) {
         say("checking the whole workspace");
     }
-    // Off Windows the crates that build only for Windows stay out of host builds.
-    let mut workspace = vec![
+    let workspace = vec![
         "--workspace".to_owned(),
         "--features".to_owned(),
         TEST_FEATURE.to_owned(),
     ];
-    if !on_windows {
-        for package in packages.iter().filter(|p| p.windows_only) {
-            workspace.extend(["--exclude".to_owned(), package.name.clone()]);
-        }
-    }
     let host = |words: &[&str]| Step::new(words).then_owned(&workspace);
 
     let mut host_steps = Vec::new();

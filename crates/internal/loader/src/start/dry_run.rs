@@ -13,8 +13,8 @@ use crate::{builds, log};
 
 use super::game::GAME_DIRS;
 use super::library::{Library, libraries};
-use super::pe;
 use super::{initialise, read_frame, records};
+use crate::pe;
 
 /// Why a dry run could not start the loader.
 #[derive(Debug, thiserror::Error)]

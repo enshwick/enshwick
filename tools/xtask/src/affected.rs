@@ -11,8 +11,9 @@ pub(crate) struct Package {
     pub(crate) dir: String,
     /// Workspace packages it depends on, in any dependency kind.
     pub(crate) deps: Vec<String>,
-    /// Builds only for Windows (`package.metadata.enshwick.windows-only`).
-    pub(crate) windows_only: bool,
+    /// Has tests of its Windows code, run under Wine off Windows
+    /// (`package.metadata.enshwick.windows-tests`).
+    pub(crate) windows_tests: bool,
 }
 
 /// What a change needs checked.
@@ -96,7 +97,7 @@ mod tests {
             name: name.to_owned(),
             dir: dir.to_owned(),
             deps: deps.iter().map(|d| (*d).to_owned()).collect(),
-            windows_only: false,
+            windows_tests: false,
         }
     }
 

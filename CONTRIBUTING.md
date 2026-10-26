@@ -16,8 +16,9 @@ of them compiles, so they take seconds. Before asking for review, run
 `cargo xtask check`: clippy and the doctests, and the tests of the packages the
 change touches and of the packages that depend on them. Off Windows it also
 lints the workspace for Windows through
-[cargo-xwin](https://github.com/rust-cross/cargo-xwin). The loader builds only
-for Windows: off Windows, `cargo xtask check --windows` runs its tests under Wine in Docker, in an image built from
+[cargo-xwin](https://github.com/rust-cross/cargo-xwin). Most of the loader runs
+only on Windows: off Windows its portable modules are tested on the host, and
+`cargo xtask check --windows` runs the rest of its tests under Wine in Docker, in an image built from
 [tools/wine/Dockerfile](tools/wine/Dockerfile) on first use, or under Wine
 directly on an amd64 Linux host that has it. On Apple silicon
 the container runs through Rosetta, which cannot run the tests of crashes,

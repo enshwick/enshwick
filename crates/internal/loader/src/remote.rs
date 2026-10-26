@@ -362,6 +362,10 @@ pub fn admit(
 }
 
 /// One [`Message::Sync`] per mod of `values`, its join values by mod id.
+#[cfg_attr(
+    all(not(windows), not(test)),
+    expect(dead_code, reason = "messages go out only in the game")
+)]
 fn sync_messages(values: std::collections::BTreeMap<String, String>) -> Vec<Message> {
     values
         .into_iter()

@@ -51,11 +51,19 @@ mod emits;
 mod entities;
 #[cfg(windows)]
 mod events;
+#[cfg_attr(
+    all(not(windows), not(test)),
+    expect(dead_code, reason = "only the game's features run behind fuses")
+)]
 mod fuse;
 #[cfg(windows)]
 mod game_events;
 #[cfg(windows)]
 mod game_settings;
+#[cfg_attr(
+    all(not(windows), not(test)),
+    expect(dead_code, reason = "only the running game's texts are read")
+)]
 mod game_texts;
 pub mod holds;
 #[cfg(windows)]
@@ -73,6 +81,10 @@ pub mod join;
 mod knowledge;
 #[cfg(windows)]
 mod label;
+#[cfg_attr(
+    not(windows),
+    expect(dead_code, reason = "only the client's join reads lobbies")
+)]
 mod lobby;
 pub mod log;
 pub mod manifest;
@@ -88,6 +100,11 @@ mod notices;
 mod packs;
 #[cfg(windows)]
 mod patch;
+#[cfg_attr(
+    not(windows),
+    expect(dead_code, reason = "only the loader's start reads executables")
+)]
+mod pe;
 #[cfg(windows)]
 mod points;
 #[cfg(target_arch = "x86_64")]
@@ -108,6 +125,7 @@ pub mod settings;
 mod spawns;
 #[cfg(windows)]
 mod standins;
+#[cfg(windows)]
 mod start;
 #[cfg(windows)]
 pub use start::{DryMod, DryRun, DryRunError, dry_run};

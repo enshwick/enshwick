@@ -9,7 +9,7 @@ use windows_sys::Win32::System::LibraryLoader::{GetModuleFileNameW, GetModuleHan
 
 use crate::{builds, log};
 
-use super::pe;
+use crate::pe;
 
 /// How often the client looks for its window.
 const WINDOW_POLL: Duration = Duration::from_millis(100);
