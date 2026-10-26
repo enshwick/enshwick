@@ -31,6 +31,7 @@ use enshwick::abi::{
 
 use crate::chains::LOADER;
 use crate::host::Loader;
+use crate::memory::{read, write};
 use crate::mid::MidLink;
 
 /// The build table ids this part of the loader names.
@@ -496,28 +497,8 @@ fn code_matches(loader: &Loader, symbol: &str) -> bool {
         return false;
     };
     // SAFETY: an address inside the game's image, which stays mapped.
-    let found = unsafe { read::<u64>(address) };
+    let found = unsafe { read::<u64>(address, 0) };
     found == expected
-}
-
-/// Reads a `T` at `address`.
-///
-/// # Safety
-///
-/// The address holds a readable `T`.
-unsafe fn read<T: Copy>(address: usize) -> T {
-    // SAFETY: forwarded from the caller.
-    unsafe { core::ptr::with_exposed_provenance::<T>(address).read_unaligned() }
-}
-
-/// Writes `value` at `address`.
-///
-/// # Safety
-///
-/// The address holds a writable `T`.
-unsafe fn write<T: Copy>(address: usize, value: T) {
-    // SAFETY: forwarded from the caller.
-    unsafe { core::ptr::with_exposed_provenance_mut::<T>(address).write_unaligned(value) };
 }
 
 /// A mod asks for inventories: allowed during init, on a build that has them.
@@ -708,13 +689,13 @@ pub(crate) fn item_info(loader: &Loader, item: u32) -> Result<ItemData, Status> 
         header: Header::of::<ItemData>(),
         id: item,
         // SAFETY: a live ItemInfo holds these fields.
-        max_stack: unsafe { read(info + executor.item_max_stack) },
+        max_stack: unsafe { read(info + executor.item_max_stack, 0) },
         // SAFETY: as above.
-        category: unsafe { read(info + executor.item_category) },
+        category: unsafe { read(info + executor.item_category, 0) },
         // SAFETY: as above.
-        rarity: unsafe { read(info + executor.item_rarity) },
+        rarity: unsafe { read(info + executor.item_rarity, 0) },
         // SAFETY: as above.
-        flags: unsafe { read(info + executor.item_flags) },
+        flags: unsafe { read(info + executor.item_flags, 0) },
     })
 }
 
@@ -790,7 +771,7 @@ unsafe extern "system" fn row(registers: *mut Registers, _user: *mut c_void) {
         .unwrap_or(0)
         .wrapping_sub(executor.view_frame);
     // SAFETY: the view is filled before the loop and lives on the frame.
-    let registry: usize = unsafe { read(view + executor.view_item_registry) };
+    let registry: usize = unsafe { read(view + executor.view_item_registry, 0) };
     REGISTRY.store(registry, Ordering::Release);
     if !QUEUE.pending.load(Ordering::Acquire) {
         return;
@@ -821,12 +802,12 @@ unsafe fn in_server_world(executor: &Executor, ctx: usize) -> bool {
         return false;
     }
     // SAFETY: a context starts with its query descriptor.
-    let descriptor: usize = unsafe { read(ctx) };
+    let descriptor: usize = unsafe { read(ctx, 0) };
     if descriptor == 0 {
         return false;
     }
     // SAFETY: the descriptor holds its entity world.
-    let world: usize = unsafe { read(descriptor + executor.entity_world) };
+    let world: usize = unsafe { read(descriptor + executor.entity_world, 0) };
     world as u64 == server
 }
 
@@ -838,7 +819,7 @@ unsafe fn in_server_world(executor: &Executor, ctx: usize) -> bool {
 /// context and `view` its filled view.
 unsafe fn run(executor: &Executor, ctx: usize, view: usize, request: &Request) -> Finished {
     // SAFETY: the view's handles, filled before the loop.
-    let replication: usize = unsafe { read(view + executor.view_replication) };
+    let replication: usize = unsafe { read(view + executor.view_replication, 0) };
     // SAFETY: forwarded from the caller.
     let (mut touched, source) = unsafe { touched(executor, ctx, view, &request.ops) };
     let actor = if request.actor == 0 {
@@ -926,7 +907,7 @@ unsafe fn touched(
     ops: &[InventoryOp],
 ) -> (Vec<u32>, u32) {
     // SAFETY: the view's handles, filled before the loop.
-    let owners: u64 = unsafe { read(view + executor.view_owners) };
+    let owners: u64 = unsafe { read(view + executor.view_owners, 0) };
     let root = |slot: u64| {
         let mut out: Res = [0; 2];
         // SAFETY: the game's walk up `OwnerRelationship`, inside the system.
@@ -980,7 +961,7 @@ unsafe fn describe(
     unsafe { (executor.desc_zero)(core::ptr::with_exposed_provenance_mut(desc)) };
     let mut flags = if notify { NOTIFY_FLAGS } else { 0 };
     // SAFETY: the view's handles, filled before the loop.
-    let actors: u64 = unsafe { read(view + executor.view_actors) };
+    let actors: u64 = unsafe { read(view + executor.view_actors, 0) };
     // SAFETY: the game's actor check, as its transfer handler calls it.
     if unsafe { (executor.actor_flag)(ctx, actors, actor) } != 0 {
         flags |= ACTOR_FLAG;
@@ -988,19 +969,19 @@ unsafe fn describe(
     for &(at, from) in &executor.copies {
         if at + 8 <= executor.desc_size {
             // SAFETY: a handle of the view.
-            let value: u64 = unsafe { read(view + from) };
+            let value: u64 = unsafe { read(view + from, 0) };
             // SAFETY: inside the descriptor.
-            unsafe { write(desc + at, value) };
+            unsafe { write(desc + at, 0, value) };
         }
     }
     // SAFETY: the descriptor's fields, inside it.
-    unsafe { write(desc, flags) };
+    unsafe { write(desc, 0, flags) };
     // SAFETY: as above.
-    unsafe { write(desc + executor.desc_context, ctx) };
+    unsafe { write(desc + executor.desc_context, 0, ctx) };
     // SAFETY: as above.
-    unsafe { write(desc + executor.desc_actor, actor) };
+    unsafe { write(desc + executor.desc_actor, 0, actor) };
     // SAFETY: as above.
-    unsafe { write(desc + executor.desc_other, source) };
+    unsafe { write(desc + executor.desc_other, 0, source) };
 }
 
 /// Runs one operation in the transaction.

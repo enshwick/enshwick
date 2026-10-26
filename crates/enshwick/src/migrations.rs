@@ -526,7 +526,7 @@ impl Load<'_> {
             header: abi::Header::of::<abi::MigrationSet>(),
             migrations: list.as_ptr(),
             count: u32::try_from(list.len()).unwrap_or(u32::MAX),
-            map: run_map,
+            map: Some(run_map),
             user: core::ptr::null_mut(),
         };
         let host = self.host();

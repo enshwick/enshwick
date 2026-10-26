@@ -464,7 +464,7 @@ fn link_join_hold(loader: &Loader, code: core::ops::Range<u64>) {
         let address = usize::try_from(va).ok()?;
         // SAFETY: `verify` reads only eight bytes inside the game's code
         // section, which stays mapped for the life of the process.
-        Some(unsafe { crate::world::read::<u64>(address, 0) })
+        Some(unsafe { crate::memory::read::<u64>(address, 0) })
     };
     let start = interaction::verify(
         loader.address(START_ID),

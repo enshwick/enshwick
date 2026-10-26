@@ -185,7 +185,7 @@ pub(crate) unsafe fn raise(loader: &Loader, entity_world: usize) {
     };
     // SAFETY: the entity world holds its stream array; the first stream is
     // the one the game's own game-thread code pushes into.
-    let stream: usize = unsafe { crate::world::read(entity_world, layout.streams) };
+    let stream: usize = unsafe { crate::memory::read(entity_world, layout.streams) };
     if stream == 0 {
         return;
     }

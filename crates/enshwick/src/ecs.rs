@@ -6,7 +6,7 @@
 //! address and offset comes from the loader for the running build.
 
 use crate::abi::Side;
-use crate::raw::read_at;
+use crate::raw::{read_at, read_ptr_at};
 use crate::{Host, Load, Off};
 
 type IteratorInit = unsafe extern "system" fn(ctx: *mut u64, iterator: *mut u64, size: u64);
@@ -223,9 +223,9 @@ impl Ecs {
             return None;
         }
         // SAFETY: the first word of a context is its query descriptor.
-        let descriptor: *const u8 = unsafe { read_at(ctx.cast(), 0) };
+        let descriptor = unsafe { read_ptr_at::<u8>(ctx.cast(), 0) }.cast_const();
         // SAFETY: the descriptor holds a pointer to the per-row entity records.
-        let records: *const u8 = unsafe { read_at(descriptor, self.entity_records) };
+        let records = unsafe { read_ptr_at::<u8>(descriptor, self.entity_records) }.cast_const();
         let offset = (row as usize - 1) * self.entity_record_size;
         // SAFETY: `row` is a valid 1-based row of this query.
         Entity::from_raw(unsafe { read_at(records, offset) })
@@ -406,14 +406,14 @@ impl Components {
         }
         // SAFETY: the first word of a context is its query descriptor, which
         // points at the entity world.
-        let descriptor: *const u8 = unsafe { read_at(ctx.cast(), 0) };
+        let descriptor = unsafe { read_ptr_at::<u8>(ctx.cast(), 0) }.cast_const();
         // SAFETY: as above.
-        let world: *const u8 = unsafe { read_at(descriptor, self.entity_world) };
+        let world = unsafe { read_ptr_at::<u8>(descriptor, self.entity_world) }.cast_const();
         if world.is_null() {
             return None;
         }
         // SAFETY: the entity world starts with its component registry.
-        let registry: *const u8 = unsafe { read_at(world, 0) };
+        let registry = unsafe { read_ptr_at::<u8>(world, 0) }.cast_const();
         let index = self.registry_maps.iter().find_map(|&map| {
             // SAFETY: the registry's type maps; lookups do not change them.
             let index = unsafe { (self.type_index)(registry.wrapping_add(map), &raw const hash) };
@@ -562,7 +562,7 @@ impl Worlds {
             return false;
         }
         // SAFETY: the first word of a context is its query descriptor.
-        let descriptor: *const u8 = unsafe { read_at(ctx.cast(), 0) };
+        let descriptor = unsafe { read_ptr_at::<u8>(ctx.cast(), 0) }.cast_const();
         if descriptor.is_null() {
             return false;
         }

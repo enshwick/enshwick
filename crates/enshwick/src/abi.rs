@@ -57,7 +57,7 @@ pub const fn is_valid_id(id: &str) -> bool {
 /// assert_eq!(header.abi_major, enshwick::abi::ABI_MAJOR);
 /// ```
 #[repr(C)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, bytemuck::Zeroable, bytemuck::Pod)]
 pub struct Header {
     /// The size of the whole struct as its writer knew it.
     pub size: u32,
@@ -110,6 +110,44 @@ impl Header {
     }
 }
 
+/// A struct that starts with a [`Header`] and crosses the boundary only as
+/// far as both sides know it, through [`read_headed`] and [`write_headed`].
+///
+/// [`Zeroable`](bytemuck::Zeroable) makes the fields the writer does not know
+/// read as zero.
+///
+/// # Safety
+///
+/// - The type is `repr(C)` and its first field is a [`Header`] at offset 0.
+/// - Any bytes the other side writes for the fields it knows form a valid
+///   value of those fields, which holds for the integer, pointer and
+///   function pointer fields the ABI uses.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::abi::{Headed, Header, TickData};
+///
+/// fn size_of_headed<T: Headed>() -> usize {
+///     size_of::<T>()
+/// }
+/// assert_eq!(size_of_headed::<TickData>(), Header::of::<TickData>().size as usize);
+/// ```
+pub unsafe trait Headed: bytemuck::Zeroable + Copy {}
+
+/// Implements [`Headed`] for an ABI struct beside its definition and checks at
+/// compile time that its [`Header`] sits at offset 0.
+macro_rules! impl_headed {
+    ($ty:ty) => {
+        // SAFETY: the struct is `repr(C)`, its first field is the `Header`
+        // checked at offset 0 below, and its other fields are integers,
+        // pointers and `Option`s of function pointers, valid for any bytes
+        // the other side writes.
+        unsafe impl Headed for $ty {}
+        const _: () = assert!(core::mem::offset_of!($ty, header) == 0);
+    };
+}
+
 /// Copies a struct that starts with a [`Header`] from the other side, which
 /// may know an older or a newer version of it.
 ///
@@ -121,9 +159,9 @@ impl Header {
 ///
 /// # Safety
 ///
-/// `raw` is null or points at a struct that starts with a [`Header`] and is
-/// readable for the header's size; `T` is `repr(C)`, starts with a
-/// [`Header`], and an all-zero `T` is a valid value.
+/// - `raw` is null, or points at a `T` the other side wrote, readable for the
+///   size its header states; no alignment is needed.
+/// - No other thread writes that struct during the copy.
 ///
 /// # Examples
 ///
@@ -132,28 +170,31 @@ impl Header {
 ///
 /// let mut old = TickData { header: Header::of::<TickData>(), step: 7 };
 /// old.header.size = 8;
-/// // SAFETY: a valid tick; an all-zero tick is valid.
+/// // SAFETY: `old` is a tick readable for the eight bytes its header states.
 /// let tick = unsafe { read_headed(&raw const old, 8) }.ok_or("too short")?;
 /// assert_eq!(tick.step, 0);
 /// # Ok::<(), &str>(())
 /// ```
 #[must_use]
-pub unsafe fn read_headed<T: Copy>(raw: *const T, required: usize) -> Option<T> {
+pub unsafe fn read_headed<T: Headed>(raw: *const T, required: usize) -> Option<T> {
     if raw.is_null() {
         return None;
     }
-    // SAFETY: the caller's struct starts with a header.
+    // SAFETY: `raw` is non-null and the caller guarantees it is readable for
+    // its header, the first eight bytes of every `Headed` type.
     let header = unsafe { raw.cast::<Header>().read_unaligned() };
     if !header.covers(required.max(size_of::<Header>())) {
         return None;
     }
     let known = (header.size as usize).min(size_of::<T>());
-    let mut out = core::mem::MaybeUninit::<T>::zeroed();
-    // SAFETY: the writer's struct is readable for its header's size and `out`
-    // for `size_of::<T>()`; `known` is at most both.
-    unsafe { core::ptr::copy_nonoverlapping(raw.cast::<u8>(), out.as_mut_ptr().cast(), known) };
-    // SAFETY: an all-zero `T` is valid and the copied bytes are a `T`'s.
-    Some(unsafe { out.assume_init() })
+    let mut out = T::zeroed();
+    // SAFETY: the caller guarantees `raw` readable for `header.size` bytes and
+    // `out` is a local `T`; `known` is at most both sizes, and the two do not
+    // overlap.
+    unsafe {
+        core::ptr::copy_nonoverlapping(raw.cast::<u8>(), (&raw mut out).cast::<u8>(), known);
+    };
+    Some(out)
 }
 
 /// Writes `value`, a struct that starts with a [`Header`], to the other side,
@@ -165,9 +206,9 @@ pub unsafe fn read_headed<T: Copy>(raw: *const T, required: usize) -> Option<T> 
 ///
 /// # Safety
 ///
-/// `out` is null or points at a struct that starts with a [`Header`] whose
-/// size is that of the struct, writable for that many bytes; `T` is
-/// `repr(C)` and starts with a [`Header`].
+/// - `out` is null, or points at a `T` whose header states its size, writable
+///   for that many bytes; no alignment is needed.
+/// - Nothing else reads or writes that struct during the write.
 ///
 /// # Examples
 ///
@@ -177,29 +218,32 @@ pub unsafe fn read_headed<T: Copy>(raw: *const T, required: usize) -> Option<T> 
 /// let mut old = TickData { header: Header::of::<TickData>(), step: 0 };
 /// old.header.size = 8;
 /// let new = TickData { header: Header::of::<TickData>(), step: 7 };
-/// // SAFETY: a valid tick of the size its header says.
+/// // SAFETY: `old` is a tick writable for the eight bytes its header states.
 /// assert!(unsafe { write_headed(&raw mut old, new) });
 /// assert_eq!((old.header.size, old.step), (8, 0));
 /// ```
 #[must_use]
-pub unsafe fn write_headed<T: Copy>(out: *mut T, value: T) -> bool {
+pub unsafe fn write_headed<T: Headed>(out: *mut T, value: T) -> bool {
     if out.is_null() {
         return false;
     }
-    // SAFETY: the caller's struct starts with a header.
+    // SAFETY: `out` is non-null and the caller guarantees it is readable for
+    // its header, the first eight bytes of every `Headed` type.
     let room = unsafe { out.cast::<Header>().read_unaligned() }.size as usize;
     if room < size_of::<Header>() {
         return false;
     }
     let known = room.min(size_of::<T>());
-    // SAFETY: the caller's struct is writable for `room` bytes and `value`
-    // readable for `size_of::<T>()`; `known` is at most both.
+    // SAFETY: the caller guarantees `out` writable for `room` bytes and
+    // `value` is a local `T`; `known` is at most both sizes, and the two do
+    // not overlap.
     unsafe {
         core::ptr::copy_nonoverlapping((&raw const value).cast::<u8>(), out.cast(), known);
     };
     // `known` is at most `room`, a `u32`.
     let size = u32::try_from(known).unwrap_or(u32::MAX);
-    // SAFETY: the header's size is the struct's first field.
+    // SAFETY: `size` is the header's first field, inside the `room` bytes the
+    // caller guarantees writable.
     unsafe { out.cast::<u32>().write_unaligned(size) };
     true
 }
@@ -217,7 +261,7 @@ pub unsafe fn write_headed<T: Copy>(out: *mut T, value: T) -> bool {
 /// assert_eq!(unsafe { id.as_str() }, Some("flame-altar-zones"));
 /// ```
 #[repr(C)]
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
 pub struct Str {
     ptr: *const u8,
     len: usize,
@@ -355,7 +399,7 @@ impl Status {
 /// assert!(!Side::SERVER.includes(Side::CLIENT));
 /// ```
 #[repr(transparent)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, bytemuck::Zeroable)]
 pub struct Side(pub u8);
 
 impl Side {
@@ -575,7 +619,7 @@ impl Event {
 /// assert_eq!(fell.cause, PlayerDeathData::FALL);
 /// ```
 #[repr(C)]
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, bytemuck::Zeroable)]
 pub struct PlayerDeathData {
     /// Size and version of this struct.
     pub header: Header,
@@ -605,6 +649,8 @@ pub struct PlayerDeathData {
     pub reserved_tail: u32,
 }
 
+impl_headed!(PlayerDeathData);
+
 impl PlayerDeathData {
     /// A hit.
     pub const HIT: u32 = 0;
@@ -627,7 +673,7 @@ impl PlayerDeathData {
 /// assert_eq!(learnt.value, 3);
 /// ```
 #[repr(C)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, bytemuck::Zeroable)]
 pub struct KnowledgeData {
     /// Size and version of this struct.
     pub header: Header,
@@ -638,6 +684,8 @@ pub struct KnowledgeData {
     /// The value now.
     pub value: u32,
 }
+
+impl_headed!(KnowledgeData);
 
 /// The data of [`Event::QUEST_COMPLETED`].
 ///
@@ -650,7 +698,7 @@ pub struct KnowledgeData {
 /// assert_eq!(done.entity, 2);
 /// ```
 #[repr(C)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, bytemuck::Zeroable)]
 pub struct QuestData {
     /// Size and version of this struct.
     pub header: Header,
@@ -659,6 +707,8 @@ pub struct QuestData {
     /// The quest's id, a player knowledge id.
     pub quest: u32,
 }
+
+impl_headed!(QuestData);
 
 /// Knowledge a client asks the server for in its input, handed to the
 /// filters registered with [`HostApi::knowledge_input_filter`] with the
@@ -683,7 +733,7 @@ pub struct QuestData {
 /// assert_eq!(seen.allowed, 1);
 /// ```
 #[repr(C)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, bytemuck::Zeroable)]
 pub struct KnowledgeInput {
     /// Size and version of this struct.
     pub header: Header,
@@ -709,6 +759,8 @@ pub struct KnowledgeInput {
     /// refuses only when enforcing, and the filters that ran before.
     pub allowed: u32,
 }
+
+impl_headed!(KnowledgeInput);
 
 impl KnowledgeInput {
     /// The scope of an id the game does not know.
@@ -749,7 +801,7 @@ pub type KnowledgeInputFn =
 /// assert_eq!(chunk.x * chunk.size, 256, "it starts 256 m east of the origin");
 /// ```
 #[repr(C)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, bytemuck::Zeroable)]
 pub struct ChunkData {
     /// Size and version of this struct.
     pub header: Header,
@@ -763,6 +815,8 @@ pub struct ChunkData {
     /// axis and `z * size` to `(z + 1) * size` on the other, at any height.
     pub size: u32,
 }
+
+impl_headed!(ChunkData);
 
 /// The data of [`Event::BUILDING_PLACED`] and [`Event::BUILDING_REMOVED`].
 ///
@@ -784,7 +838,7 @@ pub struct ChunkData {
 /// assert_eq!(placed.kind, BuildingData::PLACED);
 /// ```
 #[repr(C)]
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
 pub struct BuildingData {
     /// Size and version of this struct.
     pub header: Header,
@@ -806,6 +860,8 @@ pub struct BuildingData {
     /// Where it was placed, in metres; zero for a removal.
     pub position: [f32; 3],
 }
+
+impl_headed!(BuildingData);
 
 impl BuildingData {
     /// Placed by a player.
@@ -843,7 +899,7 @@ impl BuildingData {
 /// assert_eq!(&player.name[..usize::from(player.name_len)], b"Ann");
 /// ```
 #[repr(C)]
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
 pub struct PlayerInfo {
     /// Size and version of this struct.
     pub header: Header,
@@ -860,6 +916,8 @@ pub struct PlayerInfo {
     /// The name the client sent, UTF-8 as sent, cut at 64 bytes.
     pub name: [u8; 64],
 }
+
+impl_headed!(PlayerInfo);
 
 impl PlayerInfo {
     /// May kick and ban; the server's administrators.
@@ -887,13 +945,15 @@ impl PlayerInfo {
 /// assert_eq!(tick.step, 1);
 /// ```
 #[repr(C)]
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
 pub struct TickData {
     /// Size and version of this struct.
     pub header: Header,
     /// Steps since the loader started counting, from 1.
     pub step: u64,
 }
+
+impl_headed!(TickData);
 
 /// The data of [`Event::PLAYER_JOINED`] and [`Event::PLAYER_LEFT`].
 ///
@@ -906,7 +966,7 @@ pub struct TickData {
 /// assert_eq!(player.entity, 7);
 /// ```
 #[repr(C)]
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
 pub struct PlayerData {
     /// Size and version of this struct.
     pub header: Header,
@@ -918,6 +978,8 @@ pub struct PlayerData {
     /// the game makes of the online id.
     pub key: u64,
 }
+
+impl_headed!(PlayerData);
 
 /// A mod's handler for an [`Event`]: the event, its data (null for events
 /// without data, valid for the call) and the pointer given at subscription.
@@ -950,7 +1012,7 @@ pub type EventFn = unsafe extern "system" fn(event: Event, data: *const c_void, 
 /// assert_eq!(call.kind, ActionCall::RUN);
 /// ```
 #[repr(C)]
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
 pub struct ActionCall {
     /// Size and version of this struct.
     pub header: Header,
@@ -969,6 +1031,8 @@ pub struct ActionCall {
     /// [`ActionCall::RUN`]; valid for the call.
     pub args: Str,
 }
+
+impl_headed!(ActionCall);
 
 impl ActionCall {
     /// The actions the player may use now, as a sheet: the reply is the
@@ -1025,7 +1089,7 @@ pub type StatusFn = unsafe extern "system" fn(user: *mut c_void, out: *mut Str);
 /// assert_eq!(call.known, 0);
 /// ```
 #[repr(C)]
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
 pub struct RenameCall {
     /// Size and version of this struct.
     pub header: Header,
@@ -1039,6 +1103,8 @@ pub struct RenameCall {
     /// The new name as the client sent it; valid for the call.
     pub text: Str,
 }
+
+impl_headed!(RenameCall);
 
 /// A mod's rename filter: the call and the pointer given at registration;
 /// returns 1 to let the rename through, 0 to refuse it.
@@ -1102,7 +1168,7 @@ pub struct ParseLevelError;
 /// assert_eq!(build.age, 387);
 /// ```
 #[repr(C)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, bytemuck::Zeroable)]
 pub struct Fingerprint {
     /// The GUID in file order.
     pub guid: [u8; 16],
@@ -1127,7 +1193,7 @@ pub struct Fingerprint {
 /// assert_eq!(build.side, Side::SERVER);
 /// ```
 #[repr(C)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, bytemuck::Zeroable)]
 pub struct BuildInfo {
     /// Size and version of this struct.
     pub header: Header,
@@ -1142,6 +1208,8 @@ pub struct BuildInfo {
     pub table: BuildTable,
 }
 
+impl_headed!(BuildInfo);
+
 /// Where the loader's build table for the running build comes from.
 ///
 /// # Examples
@@ -1152,7 +1220,7 @@ pub struct BuildInfo {
 /// assert_ne!(BuildTable::EXACT, BuildTable::PATTERNS);
 /// ```
 #[repr(transparent)]
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, bytemuck::Zeroable)]
 pub struct BuildTable(pub u8);
 
 impl BuildTable {
@@ -1332,7 +1400,7 @@ pub struct Dependency {
 /// assert!(ManifestFlags::JOIN.contains(ManifestFlags::JOIN));
 /// ```
 #[repr(transparent)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, bytemuck::Zeroable)]
 pub struct ManifestFlags(pub u32);
 
 impl ManifestFlags {
@@ -1387,7 +1455,7 @@ impl ManifestFlags {
 /// assert!(manifest.flags.contains(ManifestFlags::JOIN));
 /// ```
 #[repr(C)]
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
 pub struct Manifest {
     /// Size and version of this struct.
     pub header: Header,
@@ -1423,6 +1491,8 @@ pub struct Manifest {
     /// 36.
     pub homepage: Str,
 }
+
+impl_headed!(Manifest);
 
 // SAFETY: a manifest is immutable static data; its pointers refer to statics.
 unsafe impl Sync for Manifest {}
@@ -1598,7 +1668,7 @@ impl CallerFrame {
 /// assert_eq!(safes.off, 0);
 /// ```
 #[repr(C)]
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
 pub struct ModInfo {
     /// Size and version of this struct.
     pub header: Header,
@@ -1634,6 +1704,8 @@ pub struct ModInfo {
     /// empty elsewhere. Since minor 54.
     pub replaced_by: Str,
 }
+
+impl_headed!(ModInfo);
 
 impl ModInfo {
     /// A listing with every field empty, to fill with `..ModInfo::EMPTY`.
@@ -1875,7 +1947,7 @@ impl InventoryOp {
 /// assert_eq!(request.op_count, 1);
 /// ```
 #[repr(C)]
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
 pub struct InventoryRequest {
     /// Size and version of this struct.
     pub header: Header,
@@ -1891,6 +1963,8 @@ pub struct InventoryRequest {
     /// Zero.
     pub reserved: u32,
 }
+
+impl_headed!(InventoryRequest);
 
 impl InventoryRequest {
     /// Commit even when a give or take leaves some of its count undone.
@@ -1934,7 +2008,7 @@ impl InventoryOpResult {
 /// assert_ne!(InventoryResult::COMMITTED, InventoryResult::ROLLED_BACK);
 /// ```
 #[repr(C)]
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
 pub struct InventoryResult {
     /// Size and version of this struct.
     pub header: Header,
@@ -1946,6 +2020,8 @@ pub struct InventoryResult {
     /// The operations' results, valid for the call.
     pub ops: *const InventoryOpResult,
 }
+
+impl_headed!(InventoryResult);
 
 impl InventoryResult {
     /// Every operation succeeded and the transaction was committed.
@@ -1984,7 +2060,7 @@ pub type InventoryResultFn =
 /// assert_ne!(sword.flags & ItemData::HAS_PIDE, 0);
 /// ```
 #[repr(C)]
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
 pub struct ItemData {
     /// Size and version of this struct.
     pub header: Header,
@@ -2000,6 +2076,8 @@ pub struct ItemData {
     /// `ItemInfo` flags: [`ItemData::HAS_PIDE`] and the others on this type.
     pub flags: u32,
 }
+
+impl_headed!(ItemData);
 
 impl ItemData {
     /// Each item has an entity of its own, with durability or a level.
@@ -2025,7 +2103,7 @@ impl ItemData {
 /// assert_eq!(zone.max[0] - zone.min[0], 80);
 /// ```
 #[repr(C)]
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, bytemuck::Zeroable)]
 pub struct Bounds {
     /// The inclusive lower corner.
     pub min: [i64; 3],
@@ -2052,7 +2130,7 @@ pub struct Bounds {
 /// assert_eq!(altar.header, Header::of::<AltarInfo>());
 /// ```
 #[repr(C)]
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, bytemuck::Zeroable)]
 pub struct AltarInfo {
     /// Size and version of this struct.
     pub header: Header,
@@ -2074,6 +2152,8 @@ pub struct AltarInfo {
     /// Where the altar stands, in metres.
     pub position: [f64; 3],
 }
+
+impl_headed!(AltarInfo);
 
 impl AltarInfo {
     /// An altar with nothing known, its header set.
@@ -2143,7 +2223,7 @@ pub struct AltarZoneSize {
 /// assert_eq!(check.zone_count, 0);
 /// ```
 #[repr(C)]
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
 pub struct ZoneCheck {
     /// Size and version of this struct.
     pub header: Header,
@@ -2156,6 +2236,8 @@ pub struct ZoneCheck {
     /// How far the game lets an object reach past a zone, on every side.
     pub margin: i64,
 }
+
+impl_headed!(ZoneCheck);
 
 /// A mod's zone check filter: the check and the pointer given at
 /// registration; returns 1 to accept the placement after all.
@@ -2186,7 +2268,7 @@ pub type ZoneCheckFn = unsafe extern "system" fn(check: *const ZoneCheck, user: 
 /// assert_eq!(lookup.purpose, SurvivorLookup::SPAWN);
 /// ```
 #[repr(C)]
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
 pub struct SurvivorLookup {
     /// Size and version of this struct.
     pub header: Header,
@@ -2206,6 +2288,8 @@ pub struct SurvivorLookup {
     /// The argument of `bed_of`.
     pub token: *mut c_void,
 }
+
+impl_headed!(SurvivorLookup);
 
 impl SurvivorLookup {
     /// The pass that keeps one entity per survivor: `entity` is the one it
@@ -2253,7 +2337,7 @@ pub type SurvivorLookupFn =
 /// assert_eq!(check.bed, 4100);
 /// ```
 #[repr(C)]
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
 pub struct BedCheck {
     /// Size and version of this struct.
     pub header: Header,
@@ -2268,6 +2352,8 @@ pub struct BedCheck {
     /// Where the bed stands.
     pub bed_at: [i64; 3],
 }
+
+impl_headed!(BedCheck);
 
 /// A filter of survivors' beds: returns 0 to make the game clear the bed.
 pub type BedCheckFn = unsafe extern "system" fn(check: *const BedCheck, user: *mut c_void) -> u8;
@@ -2296,7 +2382,7 @@ pub type BedCheckFn = unsafe extern "system" fn(check: *const BedCheck, user: *m
 /// assert_eq!(summon.meter, [2, 3]);
 /// ```
 #[repr(C)]
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
 pub struct Summon {
     /// Size and version of this struct.
     pub header: Header,
@@ -2322,6 +2408,8 @@ pub struct Summon {
     /// Zero.
     pub reserved: [u8; 3],
 }
+
+impl_headed!(Summon);
 
 impl Summon {
     /// A filter's answer: the use takes the item.
@@ -2375,7 +2463,7 @@ pub const SURVIVOR_STATUS_SET: u32 = 0x100;
 /// assert_eq!(call.kind, Interaction::OPEN);
 /// ```
 #[repr(C)]
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
 pub struct Interaction {
     /// Size and version of this struct.
     pub header: Header,
@@ -2395,6 +2483,8 @@ pub struct Interaction {
     /// Where the target stands, in metres, when `known`.
     pub position: [f64; 3],
 }
+
+impl_headed!(Interaction);
 
 impl Interaction {
     /// The game offers to open the target.
@@ -2432,7 +2522,7 @@ pub type InteractionFn =
 /// assert_eq!(check.gate, SkillCheck::FLY_MODE);
 /// ```
 #[repr(C)]
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
 pub struct SkillCheck {
     /// Size and version of this struct.
     pub header: Header,
@@ -2445,6 +2535,8 @@ pub struct SkillCheck {
     /// Zero.
     pub reserved: [u8; 3],
 }
+
+impl_headed!(SkillCheck);
 
 impl SkillCheck {
     /// A caller the platform does not name.
@@ -2477,7 +2569,7 @@ pub type SkillCheckFn =
 /// assert_eq!(comfort.value, 5);
 /// ```
 #[repr(C)]
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
 pub struct Comfort {
     /// Size and version of this struct.
     pub header: Header,
@@ -2488,6 +2580,8 @@ pub struct Comfort {
     /// Where the provider stands, in metres.
     pub position: [f32; 3],
 }
+
+impl_headed!(Comfort);
 
 /// A comfort filter: the registration and the pointer given at
 /// registration; returns the comfort to register.
@@ -2532,7 +2626,7 @@ pub struct ExperienceRow {
 /// assert_eq!(pass.level_cap, 25);
 /// ```
 #[repr(C)]
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
 pub struct ExperiencePass {
     /// Size and version of this struct.
     pub header: Header,
@@ -2548,6 +2642,8 @@ pub struct ExperiencePass {
     /// The argument of `need_for`.
     pub token: *mut c_void,
 }
+
+impl_headed!(ExperiencePass);
 
 /// An experience filter: the pass and the pointer given at registration.
 pub type ExperiencePassFn = unsafe extern "system" fn(pass: *mut ExperiencePass, user: *mut c_void);
@@ -2574,7 +2670,7 @@ pub type AltarLimitFn = unsafe extern "system" fn(flame_level: u32, user: *mut c
 /// assert_eq!(died.size, 16);
 /// ```
 #[repr(C)]
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
 pub struct GameEventData {
     /// Size and version of this struct.
     pub header: Header,
@@ -2585,6 +2681,8 @@ pub struct GameEventData {
     /// The event as the engine wrote it, valid for the call.
     pub data: *const u8,
 }
+
+impl_headed!(GameEventData);
 
 /// A mod's handler for game events: the event and the pointer given at
 /// subscription. It must not unwind.
@@ -2631,7 +2729,7 @@ pub struct EntityPlace {
 /// assert_eq!(to_spawn.flags, TeleportRequest::BEST_SPAWN);
 /// ```
 #[repr(C)]
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, bytemuck::Zeroable)]
 pub struct TeleportRequest {
     /// Size and version of this struct.
     pub header: Header,
@@ -2646,6 +2744,8 @@ pub struct TeleportRequest {
     /// [`TeleportRequest::ORIENTED`]; otherwise the entity keeps its own.
     pub orientation: [f32; 4],
 }
+
+impl_headed!(TeleportRequest);
 
 impl TeleportRequest {
     /// The game looks for a free spot near `position` to stand on, as it
@@ -2674,7 +2774,7 @@ impl TeleportRequest {
 /// assert_eq!(wolf.level, 12);
 /// ```
 #[repr(C)]
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, bytemuck::Zeroable)]
 pub struct SpawnRequest {
     /// Size and version of this struct.
     pub header: Header,
@@ -2694,6 +2794,8 @@ pub struct SpawnRequest {
     pub lifetime_ns: u64,
 }
 
+impl_headed!(SpawnRequest);
+
 /// A player's craft request, handed to the filters registered with
 /// [`HostApi::craft_filter`] before the server crafts.
 ///
@@ -2706,7 +2808,7 @@ pub struct SpawnRequest {
 /// assert_eq!(craft.station, 0);
 /// ```
 #[repr(C)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, bytemuck::Zeroable)]
 pub struct CraftCheck {
     /// Size and version of this struct.
     pub header: Header,
@@ -2719,6 +2821,8 @@ pub struct CraftCheck {
     /// How many.
     pub amount: u32,
 }
+
+impl_headed!(CraftCheck);
 
 /// A mod's craft filter: the request and the pointer given at registration;
 /// returns 1 to let it through, 0 to refuse it.
@@ -2736,7 +2840,7 @@ pub type CraftCheckFn = unsafe extern "system" fn(call: *const CraftCheck, user:
 /// assert_eq!(wall.item, 0x1d);
 /// ```
 #[repr(C)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, bytemuck::Zeroable)]
 pub struct BuildCheck {
     /// Size and version of this struct.
     pub header: Header,
@@ -2747,6 +2851,8 @@ pub struct BuildCheck {
     /// Where, in 32.32 fixed-point metres.
     pub position: [i64; 3],
 }
+
+impl_headed!(BuildCheck);
 
 /// A mod's build filter: the placement and the pointer given at
 /// registration; returns 1 to let it through, 0 to refuse it.
@@ -2773,7 +2879,7 @@ pub type BuildCheckFn = unsafe extern "system" fn(call: *const BuildCheck, user:
 /// assert_eq!(message.peer, NetMessage::SERVER);
 /// ```
 #[repr(C)]
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
 pub struct NetMessage {
     /// Size and version of this struct.
     pub header: Header,
@@ -2791,6 +2897,8 @@ pub struct NetMessage {
     /// Zero.
     pub reserved_tail: u32,
 }
+
+impl_headed!(NetMessage);
 
 impl NetMessage {
     /// The server, as a peer: what a client hears from and sends to.
@@ -2824,7 +2932,7 @@ pub type NetMessageFn = unsafe extern "system" fn(message: *const NetMessage, us
 /// assert_eq!(noon.flags & DaytimeInfo::DAY, DaytimeInfo::DAY);
 /// ```
 #[repr(C)]
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, bytemuck::Zeroable)]
 pub struct DaytimeInfo {
     /// Size and version of this struct.
     pub header: Header,
@@ -2844,6 +2952,8 @@ pub struct DaytimeInfo {
     /// [`DaytimeInfo::DAY`] or none.
     pub flags: u32,
 }
+
+impl_headed!(DaytimeInfo);
 
 impl DaytimeInfo {
     /// It is day.
@@ -2871,7 +2981,7 @@ impl DaytimeInfo {
 /// assert_eq!(fall.total, 20.0);
 /// ```
 #[repr(C)]
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, bytemuck::Zeroable)]
 pub struct DamageCheck {
     /// Size and version of this struct.
     pub header: Header,
@@ -2899,6 +3009,8 @@ pub struct DamageCheck {
     /// read back.
     pub total: f32,
 }
+
+impl_headed!(DamageCheck);
 
 impl DamageCheck {
     /// A hit from a weapon, a spell, a creature or an explosion.
@@ -2946,7 +3058,7 @@ pub type DamageFilterFn = unsafe extern "system" fn(check: *mut DamageCheck, use
 /// assert!(crit.min <= crit.default && crit.default <= crit.max);
 /// ```
 #[repr(C)]
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
 pub struct StatDefData {
     /// Size and version of this struct.
     pub header: Header,
@@ -2967,6 +3079,8 @@ pub struct StatDefData {
     /// The text key that names the stat, in its mod's texts.
     pub text: Str,
 }
+
+impl_headed!(StatDefData);
 
 impl StatDefData {
     /// A sum of points, such as extra health.
@@ -2995,7 +3109,7 @@ impl StatDefData {
 /// assert_eq!(health.index, 0);
 /// ```
 #[repr(C)]
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, bytemuck::Zeroable)]
 pub struct StatRef {
     /// The index in this process.
     pub index: u32,
@@ -3014,7 +3128,7 @@ pub struct StatRef {
 /// assert_eq!(more.op, StatModifierData::ADD);
 /// ```
 #[repr(C)]
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, bytemuck::Zeroable)]
 pub struct StatModifierData {
     /// The stat's index.
     pub stat: u32,
@@ -3057,7 +3171,7 @@ impl StatModifierData {
 /// assert_eq!(blessing.flags & StatModify::REMOVE, 0);
 /// ```
 #[repr(C)]
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, bytemuck::Zeroable)]
 pub struct StatModify {
     /// Size and version of this struct.
     pub header: Header,
@@ -3073,6 +3187,8 @@ pub struct StatModify {
     /// How long it lasts in milliseconds; 0 until removed.
     pub duration_ms: u64,
 }
+
+impl_headed!(StatModify);
 
 impl StatModify {
     /// Removes the modifier instead.
@@ -3094,7 +3210,7 @@ impl StatModify {
 /// assert!(change.new > change.old);
 /// ```
 #[repr(C)]
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, bytemuck::Zeroable)]
 pub struct StatChange {
     /// Size and version of this struct.
     pub header: Header,
@@ -3109,6 +3225,8 @@ pub struct StatChange {
     /// Zero.
     pub reserved: u32,
 }
+
+impl_headed!(StatChange);
 
 /// A handler of stat changes: the change and the pointer given at
 /// registration. It runs on the game thread, after a step.
@@ -3167,7 +3285,7 @@ pub struct StatSource {
 /// assert_eq!(sturdy.modifier_count, 1);
 /// ```
 #[repr(C)]
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
 pub struct AffixDefData {
     /// Size and version of this struct.
     pub header: Header,
@@ -3188,6 +3306,8 @@ pub struct AffixDefData {
     /// Zero.
     pub reserved: [u8; 3],
 }
+
+impl_headed!(AffixDefData);
 
 /// One modifier of an affix with the range its value rolls in; read as
 /// arrays.
@@ -3223,7 +3343,7 @@ pub struct AffixModifierData {
 /// assert!(roll.min <= roll.max);
 /// ```
 #[repr(C)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, bytemuck::Zeroable)]
 pub struct AffixRoll {
     /// Size and version of this struct.
     pub header: Header,
@@ -3243,6 +3363,8 @@ pub struct AffixRoll {
     /// result.
     pub seed: u64,
 }
+
+impl_headed!(AffixRoll);
 
 impl AffixRoll {
     /// Rolls only an item that never rolled; others answer
@@ -3298,7 +3420,7 @@ impl StatSource {
 /// assert_eq!(rested.slot, BuffTypeInfo::RESTED);
 /// ```
 #[repr(C)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, bytemuck::Zeroable)]
 pub struct BuffTypeInfo {
     /// Size and version of this struct.
     pub header: Header,
@@ -3315,6 +3437,8 @@ pub struct BuffTypeInfo {
     /// How long it lasts by default, in game nanoseconds.
     pub duration: i64,
 }
+
+impl_headed!(BuffTypeInfo);
 
 impl BuffTypeInfo {
     /// A food buff.
@@ -3352,7 +3476,7 @@ impl BuffTypeInfo {
 /// assert!(fed.remaining < fed.duration);
 /// ```
 #[repr(C)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, bytemuck::Zeroable)]
 pub struct ActiveBuff {
     /// Size and version of this struct.
     pub header: Header,
@@ -3369,6 +3493,8 @@ pub struct ActiveBuff {
     /// How long it has left, in game nanoseconds.
     pub remaining: i64,
 }
+
+impl_headed!(ActiveBuff);
 
 /// A buff to give an entity, for [`HostApi::apply_buff`].
 ///
@@ -3388,7 +3514,7 @@ pub struct ActiveBuff {
 /// assert_eq!(request.duration, 0, "the type's own duration");
 /// ```
 #[repr(C)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, bytemuck::Zeroable)]
 pub struct BuffRequest {
     /// Size and version of this struct.
     pub header: Header,
@@ -3403,6 +3529,8 @@ pub struct BuffRequest {
     /// How long it lasts, in game nanoseconds; 0 for the type's own.
     pub duration: i64,
 }
+
+impl_headed!(BuffRequest);
 
 /// A knowledge value, written by [`HostApi::knowledge`].
 ///
@@ -3423,7 +3551,7 @@ pub struct BuffRequest {
 /// assert_eq!(recipe.value & 1, 1);
 /// ```
 #[repr(C)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, bytemuck::Zeroable)]
 pub struct KnowledgeInfo {
     /// Size and version of this struct.
     pub header: Header,
@@ -3441,6 +3569,8 @@ pub struct KnowledgeInfo {
     /// The flag bits the game expects of a flags value; 0 for any.
     pub flags: u32,
 }
+
+impl_headed!(KnowledgeInfo);
 
 impl KnowledgeInfo {
     /// Set or not.
@@ -3475,7 +3605,7 @@ impl KnowledgeInfo {
 /// assert_eq!(storm.effect, WeatherFront::RAIN);
 /// ```
 #[repr(C)]
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, bytemuck::Zeroable)]
 pub struct WeatherFront {
     /// Size and version of this struct.
     pub header: Header,
@@ -3493,6 +3623,8 @@ pub struct WeatherFront {
     /// How long it has left, in game nanoseconds.
     pub remaining: i64,
 }
+
+impl_headed!(WeatherFront);
 
 impl WeatherFront {
     /// Clouds without rain, or nothing.
@@ -3523,7 +3655,7 @@ impl WeatherFront {
 /// assert_eq!(dirt.flags & TerrainMaterialInfo::FLATTENS, TerrainMaterialInfo::FLATTENS);
 /// ```
 #[repr(C)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, bytemuck::Zeroable)]
 pub struct TerrainMaterialInfo {
     /// Size and version of this struct.
     pub header: Header,
@@ -3540,6 +3672,8 @@ pub struct TerrainMaterialInfo {
     /// The health a voxel of it has against tools.
     pub health: i32,
 }
+
+impl_headed!(TerrainMaterialInfo);
 
 impl TerrainMaterialInfo {
     /// A player's tool can flatten it.
@@ -3567,7 +3701,7 @@ impl TerrainMaterialInfo {
 /// assert_eq!(hole.kind, TerrainEdit::DIG);
 /// ```
 #[repr(C)]
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, bytemuck::Zeroable)]
 pub struct TerrainEdit {
     /// Size and version of this struct.
     pub header: Header,
@@ -3593,6 +3727,8 @@ pub struct TerrainEdit {
     /// byte `id / 8`): the dig stops at the first shell that meets one.
     pub protect: [u8; 16],
 }
+
+impl_headed!(TerrainEdit);
 
 impl TerrainEdit {
     /// Adds a mound of a material, as a player's shovel does.
@@ -3628,7 +3764,7 @@ impl TerrainEdit {
 /// assert_eq!(frame.screen, UiFrame::IN_GAME);
 /// ```
 #[repr(C)]
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
 pub struct UiFrame {
     /// Size and version of this struct.
     pub header: Header,
@@ -3641,6 +3777,8 @@ pub struct UiFrame {
     /// Zero.
     pub reserved: u32,
 }
+
+impl_headed!(UiFrame);
 
 impl UiFrame {
     /// The title screen and the menus before a game.
@@ -3672,7 +3810,7 @@ pub type UiFrameFn = unsafe extern "system" fn(frame: *const UiFrame, user: *mut
 /// assert_eq!(button.header, Header::of::<UiWidget>());
 /// ```
 #[repr(C)]
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
 pub struct UiWidget {
     /// Size and version of this struct.
     pub header: Header,
@@ -3711,6 +3849,8 @@ pub struct UiWidget {
     /// Zero.
     pub reserved: u32,
 }
+
+impl_headed!(UiWidget);
 
 impl UiWidget {
     /// A window in the game's style, a panel over the screen that takes the
@@ -3822,7 +3962,7 @@ impl UiWidget {
 /// assert_eq!(marker.color, 2);
 /// ```
 #[repr(C)]
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
 pub struct UiMarker {
     /// Size and version of this struct.
     pub header: Header,
@@ -3836,6 +3976,8 @@ pub struct UiMarker {
     /// Zero.
     pub reserved: u32,
 }
+
+impl_headed!(UiMarker);
 
 impl UiMarker {
     /// White.
@@ -3874,7 +4016,7 @@ impl UiMarker {
 /// assert_eq!(dialog.buttons, 0xc0);
 /// ```
 #[repr(C)]
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
 pub struct UiDialog {
     /// Size and version of this struct.
     pub header: Header,
@@ -3891,6 +4033,8 @@ pub struct UiDialog {
     /// [`UiDialog::WAITING`] when the caller blocks until the answer.
     pub flags: u32,
 }
+
+impl_headed!(UiDialog);
 
 impl UiDialog {
     /// "Retry".
@@ -5078,7 +5222,7 @@ pub type MigrateFn = unsafe extern "system" fn(
 /// assert_eq!(Header::of::<MigrationSet>().size as usize, size_of::<MigrationSet>());
 /// ```
 #[repr(C)]
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
 pub struct MigrationSet {
     /// Size and version of this struct.
     pub header: Header,
@@ -5086,11 +5230,14 @@ pub struct MigrationSet {
     pub migrations: *const Migration,
     /// How many `migrations` points at.
     pub count: u32,
-    /// Changes values for the steps that map them.
-    pub map: MigrateFn,
+    /// Changes values for the steps that map them; the loader refuses a set
+    /// without it.
+    pub map: Option<MigrateFn>,
     /// The pointer `map` takes.
     pub user: *mut c_void,
 }
+
+impl_headed!(MigrationSet);
 
 /// One field of a service table or mod event, as its layout hash sees it.
 ///
@@ -5125,7 +5272,7 @@ pub struct LayoutField {
 /// assert_eq!(layout.count, 0);
 /// ```
 #[repr(C)]
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
 pub struct Layout {
     /// The fields, in declaration order.
     pub fields: *const LayoutField,
@@ -5152,7 +5299,7 @@ pub struct Layout {
 /// assert_eq!(spec.major, 1);
 /// ```
 #[repr(C)]
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
 pub struct ServiceSpec {
     /// Size and version of this struct.
     pub header: Header,
@@ -5166,6 +5313,8 @@ pub struct ServiceSpec {
     pub table: *const c_void,
 }
 
+impl_headed!(ServiceSpec);
+
 /// What [`HostApi::service`] found.
 ///
 /// # Examples
@@ -5177,7 +5326,7 @@ pub struct ServiceSpec {
 /// assert!(found.table.is_null());
 /// ```
 #[repr(C)]
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
 pub struct ServiceFound {
     /// Size and version of this struct.
     pub header: Header,
@@ -5192,6 +5341,8 @@ pub struct ServiceFound {
     /// Why nothing was found, valid for the process; empty on success.
     pub reason: Str,
 }
+
+impl_headed!(ServiceFound);
 
 impl ServiceFound {
     /// Nothing found yet, for the loader to fill.
@@ -5220,7 +5371,7 @@ impl ServiceFound {
 /// assert_eq!(spec.layout.size, 0);
 /// ```
 #[repr(C)]
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
 pub struct EventSpec {
     /// Size and version of this struct.
     pub header: Header,
@@ -5229,6 +5380,8 @@ pub struct EventSpec {
     /// The event data's fields; events grow by appending.
     pub layout: Layout,
 }
+
+impl_headed!(EventSpec);
 
 /// A mod's handler for a mod event: the event's data, valid for the call,
 /// and the pointer given at subscription.
@@ -5245,7 +5398,7 @@ pub type ModEventFn = unsafe extern "system" fn(data: *const c_void, user: *mut 
 /// assert_ne!(PointMode::OBSERVE, PointMode::OVERRIDE);
 /// ```
 #[repr(transparent)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, bytemuck::Zeroable)]
 pub struct PointMode(pub u32);
 
 impl PointMode {
@@ -5268,7 +5421,7 @@ impl PointMode {
 /// assert!(!PointFlags::NONE.contains(PointFlags::REFUSE));
 /// ```
 #[repr(transparent)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, bytemuck::Zeroable)]
 pub struct PointFlags(pub u32);
 
 impl PointFlags {
@@ -5307,7 +5460,7 @@ impl PointFlags {
 /// assert_eq!(spec.mode, PointMode::OVERRIDE);
 /// ```
 #[repr(C)]
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
 pub struct PointSpec {
     /// Size and version of this struct.
     pub header: Header,
@@ -5322,6 +5475,8 @@ pub struct PointSpec {
     /// The answer, one field: its type, size and alignment.
     pub output: Layout,
 }
+
+impl_headed!(PointSpec);
 
 /// A link a mod attaches to another mod's extension point, with its place
 /// in the chain.
@@ -5343,7 +5498,7 @@ pub struct PointSpec {
 /// assert_eq!(link.priority, 0);
 /// ```
 #[repr(C)]
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
 pub struct PointLink {
     /// Size and version of this struct.
     pub header: Header,
@@ -5361,6 +5516,8 @@ pub struct PointLink {
     pub priority: i32,
 }
 
+impl_headed!(PointLink);
+
 /// What [`HostApi::define_point`] hands back.
 ///
 /// # Examples
@@ -5371,7 +5528,7 @@ pub struct PointLink {
 /// assert!(PointHandle::EMPTY.live.is_null());
 /// ```
 #[repr(C)]
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
 pub struct PointHandle {
     /// Size and version of this struct.
     pub header: Header,
@@ -5382,6 +5539,8 @@ pub struct PointHandle {
     /// [`HostApi::run_point`].
     pub live: *const AtomicU32,
 }
+
+impl_headed!(PointHandle);
 
 impl PointHandle {
     /// Nothing defined yet, for the loader to fill.

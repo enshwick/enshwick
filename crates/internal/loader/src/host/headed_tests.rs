@@ -1,6 +1,8 @@
 //! Every struct that starts with a [`Header`] crosses the boundary only as far
 //! as both sides know it, so a mod built against an older minor stays safe.
 
+use enshwick::abi::Headed;
+
 use super::*;
 
 /// The fill of a value's own bytes.
@@ -8,8 +10,8 @@ const VALUE: u8 = 0xAB;
 /// The fill of the bytes a mod owns past its struct.
 const GUARD: u8 = 0x11;
 
-/// Every struct of the ABI that starts with a [`Header`]; the test below
-/// holds this list to `abi.rs`.
+/// Every struct of the ABI that implements [`Headed`]; the tests below hold
+/// this list to `abi.rs`.
 macro_rules! headed {
     ($check:ident) => {
         $check!(
@@ -32,7 +34,6 @@ macro_rules! headed {
             EventSpec,
             ExperiencePass,
             GameEventData,
-            HostApi,
             Interaction,
             InventoryRequest,
             InventoryResult,
@@ -83,21 +84,32 @@ macro_rules! names {
 
 macro_rules! each {
     ($($ty:ident),*) => {
-        $(round_trip::<api_frame::$ty>(stringify!($ty), !NO_ZERO.contains(&stringify!($ty)));)*
+        $(round_trip::<api_frame::$ty>(stringify!($ty));)*
     };
 }
 
-/// The headed structs with a function pointer that may not be null, which a
-/// copy never fills with zero: the loader requires all of them.
-const NO_ZERO: [&str; 2] = ["HostApi", "MigrationSet"];
+/// The one struct that starts with a [`Header`] without being [`Headed`]:
+/// the loader hands out its own static table and never copies a mod's.
+const NOT_HEADED: &str = "HostApi";
 
 /// The source of the ABI module.
 const ABI: &str = include_str!("../../../../enshwick/src/abi.rs");
 /// The source of the loader's entry points.
 const HOST: &str = include_str!("../host.rs");
 
-/// The structs of `abi.rs` whose first field is a [`Header`].
+/// The structs of `abi.rs` that implement [`Headed`].
 fn headed_in_abi() -> Vec<&'static str> {
+    let mut found: Vec<&str> = ABI
+        .split("\nimpl_headed!(")
+        .skip(1)
+        .filter_map(|rest| rest.split_once(')').map(|(name, _)| name))
+        .collect();
+    found.sort_unstable();
+    found
+}
+
+/// The structs of `abi.rs` whose first field is a [`Header`].
+fn header_first_in_abi() -> Vec<&'static str> {
     let mut found: Vec<&str> = ABI
         .split("\npub struct ")
         .skip(1)
@@ -120,13 +132,15 @@ fn guarded(bytes: usize) -> Vec<u64> {
 }
 
 fn bytes_of(buffer: &[u64]) -> &[u8] {
-    // SAFETY: a `u64` slice is readable as bytes.
+    // SAFETY: the slice is live, initialised and readable for its size in
+    // bytes, and `u8` has no alignment or validity requirement.
     unsafe { core::slice::from_raw_parts(buffer.as_ptr().cast(), size_of_val(buffer)) }
 }
 
 fn set_size(buffer: &mut [u64], at: usize, size: usize) {
     let size = u32::try_from(size).unwrap();
-    // SAFETY: a `u64` slice is writable as bytes.
+    // SAFETY: the slice is borrowed mutably, initialised and writable for its
+    // size in bytes, and `u8` has no alignment or validity requirement.
     let bytes = unsafe {
         core::slice::from_raw_parts_mut(buffer.as_mut_ptr().cast::<u8>(), size_of_val(buffer))
     };
@@ -138,24 +152,17 @@ fn size_at(buffer: &[u64], at: usize) -> usize {
 }
 
 /// A value of `T` whose bytes are all [`VALUE`] past its header.
-fn value<T: Copy>() -> T {
+fn value<T: Headed>() -> T {
     let mut raw = vec![VALUE; size_of::<T>()];
-    raw[..8].copy_from_slice(&[0; 8]);
-    // SAFETY: the ABI structs hold integers, floats, raw pointers and
-    // function pointers, for which a non-zero pattern is a valid value.
-    let mut value = unsafe { raw.as_ptr().cast::<T>().read_unaligned() };
-    // SAFETY: `T` starts with a header.
-    unsafe {
-        (&raw mut value)
-            .cast::<Header>()
-            .write_unaligned(Header::of::<T>());
-    }
-    value
+    raw[..size_of::<Header>()].copy_from_slice(bytemuck::bytes_of(&Header::of::<T>()));
+    // SAFETY: `raw` holds `size_of::<T>()` initialised bytes; past the header
+    // they are all 0xAB, a valid value for the integer, float, raw pointer
+    // and optional function pointer fields of every `Headed` struct.
+    unsafe { raw.as_ptr().cast::<T>().read_unaligned() }
 }
 
-/// Exchanges `T` with a mod that knows only its header and half of the rest;
-/// `zero` when an all-zero `T` is valid, so a short copy may be read.
-fn round_trip<T: Copy>(name: &str, zero: bool) {
+/// Exchanges `T` with a mod that knows only its header and half of the rest.
+fn round_trip<T: Headed>(name: &str) {
     let full = size_of::<T>();
     let room = size_of::<Header>() + (full - size_of::<Header>()) / 2;
 
@@ -179,20 +186,11 @@ fn round_trip<T: Copy>(name: &str, zero: bool) {
 
     let mut from = guarded(full + 16);
     set_size(&mut from, 0, room);
-    if !zero {
-        set_size(&mut from, 0, full);
-        // SAFETY: a whole `T` in a larger buffer, a non-zero pattern each.
-        let whole = unsafe { get_headed(from.as_ptr().cast::<T>(), full) };
-        assert!(whole.is_some(), "{name}");
-        set_size(&mut from, 0, room);
-        // SAFETY: as above, shorter.
-        let short = unsafe { get_headed(from.as_ptr().cast::<T>(), full) };
-        assert!(short.is_none(), "{name}");
-        return;
-    }
-    // SAFETY: a header of `room` bytes in a larger buffer.
+    // SAFETY: `from` is readable for `full + 16` bytes and its header states
+    // `room`, fewer.
     let copy = unsafe { get_headed(from.as_ptr().cast::<T>(), room) }.expect(name);
-    // SAFETY: a `T` is readable as bytes.
+    // SAFETY: `copy` is a live local `T`, readable for its `full` bytes; the
+    // read-back bytes are those `get_headed` copied or zeroed, all initialised.
     let copied = unsafe { core::slice::from_raw_parts((&raw const copy).cast::<u8>(), full) };
     assert!(
         copied[8..room].iter().all(|&b| b == GUARD),
@@ -203,7 +201,8 @@ fn round_trip<T: Copy>(name: &str, zero: bool) {
         "{name}: read past the mod's struct"
     );
     if room < full {
-        // SAFETY: as above.
+        // SAFETY: `from` is readable for `full + 16` bytes and its header
+        // states `room`, fewer.
         let short = unsafe { get_headed(from.as_ptr().cast::<T>(), full) };
         assert!(
             short.is_none(),
@@ -228,11 +227,13 @@ fn round_trip<T: Copy>(name: &str, zero: bool) {
         "{name}: a list written past its capacity"
     );
 
-    // SAFETY: `capacity` entries of `room` bytes, each with its header.
+    // SAFETY: `list` is readable for `room * capacity + 16` bytes: `capacity`
+    // entries of `room` bytes, each with its header.
     let read = unsafe { get_headed_list(list.as_ptr().cast::<T>(), 3, room) }.expect(name);
     assert_eq!(read.len(), capacity, "{name}");
     set_size(&mut list, room, room + 8);
-    // SAFETY: as above.
+    // SAFETY: `list` is readable for `room * capacity + 16` bytes, which
+    // covers every entry at the stride its first header states.
     let mixed = unsafe { get_headed_list(list.as_ptr().cast::<T>(), 3, room) };
     assert!(mixed.is_none(), "{name}: entries of different sizes");
 }
@@ -242,6 +243,14 @@ fn the_list_of_headed_structs_is_the_one_in_the_abi() {
     let mut listed = headed!(names).to_vec();
     listed.sort_unstable();
     assert_eq!(listed, headed_in_abi());
+}
+
+#[test]
+fn every_struct_that_starts_with_a_header_is_headed_but_the_host_table() {
+    let mut expected = headed_in_abi();
+    expected.push(NOT_HEADED);
+    expected.sort_unstable();
+    assert_eq!(header_first_in_abi(), expected);
 }
 
 #[test]

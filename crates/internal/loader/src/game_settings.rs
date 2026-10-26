@@ -131,7 +131,7 @@ fn live(loader: &Loader) -> Result<(&'static Layout, usize, usize), Status> {
     let layout = layout(loader).ok_or(Status::MISSING)?;
     let server = crate::world::server()?;
     // SAFETY: the server holds the pointer to its settings from its start.
-    let settings: usize = unsafe { crate::world::read(server, layout.settings) };
+    let settings: usize = unsafe { crate::memory::read(server, layout.settings) };
     if settings == 0 {
         return Err(Status::MISSING);
     }
@@ -155,7 +155,7 @@ pub(crate) fn read(loader: &Loader, out: &mut [u8]) -> Result<u8, Status> {
         );
     };
     // SAFETY: the server holds its preset byte.
-    Ok(unsafe { crate::world::read(server, layout.preset) })
+    Ok(unsafe { crate::memory::read(server, layout.preset) })
 }
 
 /// Replaces the live settings with `bytes`, their whole reflected layout,

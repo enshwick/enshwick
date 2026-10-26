@@ -858,13 +858,13 @@ unsafe extern "system" fn world_settings(registers: *mut Registers, _user: *mut 
         return;
     }
     // SAFETY: at the hook `r15` holds the view's tab state, read here.
-    let tab = unsafe { crate::world::read::<u8>(tab_state, layout.tab) };
+    let tab = unsafe { crate::memory::read::<u8>(tab_state, layout.tab) };
     if tab != LAST_TAB {
         return;
     }
     // SAFETY: at the hook `rsi` holds the view's config, whose byte at
     // `read_only` makes every row read-only, as for a player who is no host.
-    let read_only = unsafe { crate::world::read::<u8>(view, layout.read_only) } != 0;
+    let read_only = unsafe { crate::memory::read::<u8>(view, layout.read_only) } != 0;
     let drawn = std::panic::catch_unwind(|| world(read_only));
     if drawn.is_err() {
         crate::log!(

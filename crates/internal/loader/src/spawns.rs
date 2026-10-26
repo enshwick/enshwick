@@ -223,7 +223,7 @@ pub(crate) fn spawn(loader: &Loader, request: &SpawnRequest) -> Result<u32, Stat
         reserved_tail: [0; 8],
     };
     // SAFETY: the entity world holds a pointer to its command buffers.
-    let buffer: usize = unsafe { crate::world::read(world, layout.command_buffers) };
+    let buffer: usize = unsafe { crate::memory::read(world, layout.command_buffers) };
     if buffer == 0 {
         return Err(Status::MISSING);
     }

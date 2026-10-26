@@ -260,9 +260,9 @@ unsafe fn copy(layout: &Layout, entity_world: *mut u8) {
     };
     let world = entity_world.addr();
     // SAFETY: the entity world holds its stream array and count.
-    let streams: usize = unsafe { crate::world::read(world, layout.streams) };
+    let streams: usize = unsafe { crate::memory::read(world, layout.streams) };
     // SAFETY: as above.
-    let count: usize = unsafe { crate::world::read(world, layout.stream_count) };
+    let count: usize = unsafe { crate::memory::read(world, layout.stream_count) };
     if streams == 0 {
         return;
     }
@@ -270,9 +270,9 @@ unsafe fn copy(layout: &Layout, entity_world: *mut u8) {
     for index in 0..count {
         let stream = streams + index * layout.stream_size;
         // SAFETY: each stream starts with its buffer.
-        let base: usize = unsafe { crate::world::read(stream, 0) };
+        let base: usize = unsafe { crate::memory::read(stream, 0) };
         // SAFETY: and holds the bytes used at `stream_used`.
-        let used = unsafe { crate::world::read::<u32>(stream, layout.stream_used) } as usize;
+        let used = unsafe { crate::memory::read::<u32>(stream, layout.stream_used) } as usize;
         if base == 0 {
             continue;
         }
@@ -281,9 +281,10 @@ unsafe fn copy(layout: &Layout, entity_world: *mut u8) {
             let record = base + at;
             // SAFETY: a record starts with its type hash, inside the
             // bytes used.
-            let type_hash: u32 = unsafe { crate::world::read(record, 0) };
+            let type_hash: u32 = unsafe { crate::memory::read(record, 0) };
             // SAFETY: and holds its payload size at `record_size`.
-            let size = usize::from(unsafe { crate::world::read::<u8>(record, layout.record_size) });
+            let size =
+                usize::from(unsafe { crate::memory::read::<u8>(record, layout.record_size) });
             if at + layout.record_header + size > used {
                 break;
             }

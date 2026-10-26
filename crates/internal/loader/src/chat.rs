@@ -290,7 +290,7 @@ unsafe fn queue_frames(client: *mut u8) {
         return;
     }
     // SAFETY: the game client holds its chat store here.
-    let store: usize = unsafe { crate::world::read(client.addr(), layout.store) };
+    let store: usize = unsafe { crate::memory::read(client.addr(), layout.store) };
     if store == 0 {
         return;
     }
@@ -452,7 +452,7 @@ pub(crate) fn drain() {
     };
     // SAFETY: the server holds its chat store's pointer; null while it loads
     // or closes.
-    let store: usize = unsafe { crate::world::read(server, layout.store) };
+    let store: usize = unsafe { crate::memory::read(server, layout.store) };
     if store == 0 {
         return;
     }
@@ -520,7 +520,7 @@ unsafe fn post_line(post: PostFn, layout: &Layout, store: usize, to: To, text: &
         return;
     };
     // SAFETY: the store's list tail is the node just posted.
-    let node: usize = unsafe { crate::world::read(store, layout.tail) };
+    let node: usize = unsafe { crate::memory::read(store, layout.tail) };
     if node == 0 {
         return;
     }
@@ -528,9 +528,9 @@ unsafe fn post_line(post: PostFn, layout: &Layout, store: usize, to: To, text: &
     for slot in (0..layout.slot_count).filter(|&s| s != target) {
         // SAFETY: the store holds `slot_count` connection slots.
         let active: u8 =
-            unsafe { crate::world::read(store, layout.slots + slot * layout.slot_size) };
+            unsafe { crate::memory::read(store, layout.slots + slot * layout.slot_size) };
         // SAFETY: the node's delivered mask, a bit per slot.
-        let mask: u32 = unsafe { crate::world::read(node, layout.delivered) };
+        let mask: u32 = unsafe { crate::memory::read(node, layout.delivered) };
         if active != 0 && mask & (1 << slot) == 0 {
             #[expect(clippy::cast_possible_truncation, reason = "slots are under 32")]
             let slot = slot as u32;

@@ -128,14 +128,14 @@ fn daytime(loader: &Loader) -> Result<(&'static Layout, usize, usize), Status> {
     let layout = layout(loader).ok_or(Status::MISSING)?;
     let server = crate::world::server()?;
     // SAFETY: the server holds its world pointer and its game object.
-    let world: usize = unsafe { crate::world::read(server, layout.world) };
+    let world: usize = unsafe { crate::memory::read(server, layout.world) };
     // SAFETY: as above.
-    let game: usize = unsafe { crate::world::read(server, layout.game) };
+    let game: usize = unsafe { crate::memory::read(server, layout.game) };
     if world == 0 || game == 0 {
         return Err(Status::MISSING);
     }
     // SAFETY: the game object holds the `Daytime` pointer from its creation.
-    let daytime: usize = unsafe { crate::world::read(game, layout.daytime) };
+    let daytime: usize = unsafe { crate::memory::read(game, layout.daytime) };
     if daytime == 0 {
         return Err(Status::MISSING);
     }
@@ -148,12 +148,12 @@ pub(crate) fn info(loader: &Loader) -> Result<DaytimeInfo, Status> {
     let read = |at: usize| -> i64 {
         // SAFETY: each field lies inside the live `Daytime`, on the game
         // thread that writes it.
-        unsafe { crate::world::read(daytime, at) }
+        unsafe { crate::memory::read(daytime, at) }
     };
     // SAFETY: as above.
-    let speed: f32 = unsafe { crate::world::read(daytime, layout.speed) };
+    let speed: f32 = unsafe { crate::memory::read(daytime, layout.speed) };
     // SAFETY: as above.
-    let is_day: u8 = unsafe { crate::world::read(daytime, layout.is_day) };
+    let is_day: u8 = unsafe { crate::memory::read(daytime, layout.is_day) };
     Ok(DaytimeInfo {
         header: Header::of::<DaytimeInfo>(),
         time: read(layout.clock),
@@ -177,12 +177,12 @@ pub(crate) fn set_time(loader: &Loader, time: i64) -> Result<(), Status> {
     // between steps, as its admin command calls it.
     unsafe { (layout.set_time)(core::ptr::with_exposed_provenance_mut(daytime), time, now) };
     // SAFETY: the lengths of a day and a night inside the live `Daytime`.
-    let day: i64 = unsafe { crate::world::read(daytime, layout.day_length) };
+    let day: i64 = unsafe { crate::memory::read(daytime, layout.day_length) };
     // SAFETY: as above.
-    let night: i64 = unsafe { crate::world::read(daytime, layout.night_length) };
+    let night: i64 = unsafe { crate::memory::read(daytime, layout.night_length) };
     let cycle = day.saturating_add(night);
     // SAFETY: the anchor's game time the setter just wrote.
-    let within: i64 = unsafe { crate::world::read(daytime, layout.game_time) };
+    let within: i64 = unsafe { crate::memory::read(daytime, layout.game_time) };
     let after = forward(before, within, cycle);
     if after != within {
         // SAFETY: the anchor's game time inside the live `Daytime`, which
@@ -198,11 +198,11 @@ pub(crate) fn set_time(loader: &Loader, time: i64) -> Result<(), Status> {
 /// The game time at ECS time `now`, as the game works it out.
 fn game_time(layout: &Layout, daytime: usize, now: i64) -> i64 {
     // SAFETY: the anchor and the speed inside the live `Daytime`.
-    let anchor: i64 = unsafe { crate::world::read(daytime, layout.anchor) };
+    let anchor: i64 = unsafe { crate::memory::read(daytime, layout.anchor) };
     // SAFETY: as above.
-    let game: i64 = unsafe { crate::world::read(daytime, layout.game_time) };
+    let game: i64 = unsafe { crate::memory::read(daytime, layout.game_time) };
     // SAFETY: as above.
-    let speed: f32 = unsafe { crate::world::read(daytime, layout.speed) };
+    let speed: f32 = unsafe { crate::memory::read(daytime, layout.speed) };
     #[expect(
         clippy::cast_possible_truncation,
         clippy::cast_precision_loss,
@@ -251,7 +251,7 @@ pub(crate) fn set_speed(loader: &Loader, owner: usize, factor: f32) -> Result<()
     slot.1.store(factor.to_bits(), Ordering::Relaxed);
     let wanted = f32::from_bits(GAME_SPEED.load(Ordering::Relaxed)) * product();
     // SAFETY: the speed lies inside the live `Daytime`, on the game thread.
-    let current: f32 = unsafe { crate::world::read(daytime, layout.speed) };
+    let current: f32 = unsafe { crate::memory::read(daytime, layout.speed) };
     if !same(current, wanted) {
         // SAFETY: the game's ECS time of its live world, on the game thread.
         let now = unsafe { (layout.now)(core::ptr::with_exposed_provenance(world)) };

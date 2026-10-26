@@ -25,6 +25,7 @@ use enshwick::abi::{Event, Header, KnowledgeData, KnowledgeInfo, QuestData, Stat
 use rustc_hash::FxHashSet;
 
 use crate::host::Loader;
+use crate::memory::read;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
@@ -199,16 +200,6 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
             })
         })
         .as_ref()
-}
-
-/// Reads a `T` at `base + at`.
-///
-/// # Safety
-///
-/// The address holds a readable `T`.
-unsafe fn read<T: Copy>(base: usize, at: usize) -> T {
-    // SAFETY: forwarded from the caller.
-    unsafe { crate::world::read(base, at) }
 }
 
 /// A blob array at `header`: where its elements start and how many.

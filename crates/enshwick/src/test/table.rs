@@ -593,17 +593,22 @@ extern "system" fn migrate(_me: ModHandle, set: *const MigrationSet) -> Status {
     let Some(set) = (unsafe { set.as_ref() }) else {
         return Status::BAD_ARGS;
     };
+    let Some(map) = set.map else {
+        return Status::BAD_ARGS;
+    };
     let mut migrations = Vec::new();
     for index in 0..set.count as usize {
         // SAFETY: the set holds `count` migrations.
         let migration = unsafe { set.migrations.add(index) };
-        // SAFETY: as above.
+        // SAFETY: `index` is below the set's `count`, so `migration` points at
+        // one of its live, aligned entries.
         let migration = unsafe { &*migration };
         let steps = (0..migration.count as usize)
             .map(|i| {
                 // SAFETY: the migration holds `count` steps.
                 let step = unsafe { migration.steps.add(i) };
-                // SAFETY: as above.
+                // SAFETY: `i` is below the migration's `count`, so `step`
+                // points at one of its live, aligned steps.
                 let step = unsafe { &*step };
                 (step.kind, text(step.from), text(step.to))
             })
@@ -616,7 +621,7 @@ extern "system" fn migrate(_me: ModHandle, set: *const MigrationSet) -> Status {
         }
         s.migrations = Some(super::FakeMigrations {
             list: migrations,
-            map: set.map,
+            map,
             user: set.user.expose_provenance(),
         });
         Status::OK

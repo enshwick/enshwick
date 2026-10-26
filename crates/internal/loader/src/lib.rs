@@ -75,6 +75,11 @@ mod label;
 mod lobby;
 pub mod log;
 pub mod manifest;
+#[cfg_attr(
+    not(windows),
+    expect(dead_code, reason = "only the Windows build reads game memory")
+)]
+mod memory;
 #[cfg(windows)]
 mod mid;
 pub mod migrations;

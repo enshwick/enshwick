@@ -815,7 +815,7 @@ mod runtime {
         // SAFETY: the offset lies inside the server object, as the pattern
         // that pins it reads it from the server in the game's own kick; the
         // server is read on its own thread.
-        let session: usize = unsafe { crate::world::read(server, kick.session) };
+        let session: usize = unsafe { crate::memory::read(server, kick.session) };
         if session == 0 {
             return Err("the server has no session");
         }
@@ -823,7 +823,7 @@ mod runtime {
             // SAFETY: a `u32` machine handle inside the live session, as the
             // pattern that pins the offset finds the game's own kick compare
             // it with the machine to kick; read on the game thread.
-            unsafe { crate::world::read::<u32>(session, offset) }
+            unsafe { crate::memory::read::<u32>(session, offset) }
         });
         let host_machine = host_machine.and_then(super::own_machine);
         let machine = super::machine_to_kick(&machines, key, host, host_machine)?;

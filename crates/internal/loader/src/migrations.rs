@@ -645,6 +645,9 @@ mod live {
         if taken(&REGISTERED.lock().unwrap_or_else(PoisonError::into_inner)) {
             return Status::REFUSED;
         }
+        let Some(map) = set.map else {
+            return Status::BAD_ARGS;
+        };
         // SAFETY: the safe layer passes its valid set for the call.
         let Some(list) = (unsafe { copy(set) }) else {
             return Status::BAD_ARGS;
@@ -652,7 +655,7 @@ mod live {
         let reg = Registered {
             owner: index,
             list,
-            map: set.map,
+            map,
             user: set.user.expose_provenance(),
         };
         let path = loader.configs_dir.join(format!("{}.toml", record.id));

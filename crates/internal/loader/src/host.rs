@@ -827,7 +827,7 @@ fn find(symbols: &[enshwick::abi::Symbol], name: &str) -> Option<u64> {
 
 /// Writes `value`, a struct that starts with a [`Header`], through `out`, as
 /// far as the mod's header says its struct reaches.
-fn put_headed<T: Copy>(out: *mut T, value: T) -> Status {
+fn put_headed<T: enshwick::abi::Headed>(out: *mut T, value: T) -> Status {
     // SAFETY: a non-null out pointer from a mod points at its own version of
     // the struct, its header saying how far it reaches.
     if unsafe { enshwick::abi::write_headed(out, value) } {
@@ -846,7 +846,7 @@ fn put_headed<T: Copy>(out: *mut T, value: T) -> Status {
 /// `raw` is null or points at the mod's version of the struct, readable for
 /// the size its header gives; every bit pattern of the bytes past `required`
 /// is valid for `T`, zero included.
-unsafe fn get_headed<T: Copy>(raw: *const T, required: usize) -> Option<T> {
+unsafe fn get_headed<T: enshwick::abi::Headed>(raw: *const T, required: usize) -> Option<T> {
     // SAFETY: forwarded from the caller.
     unsafe { enshwick::abi::read_headed(raw, required) }
 }
@@ -866,7 +866,12 @@ unsafe fn stride_of<T>(out: *const T) -> Option<usize> {
 /// Writes `items` into a mod's list of `capacity` entries, each as large as
 /// the header of its first entry says, as far as both sides know an entry,
 /// and their total through `count`.
-fn put_headed_list<T: Copy>(items: &[T], out: *mut T, capacity: u32, count: *mut u32) -> Status {
+fn put_headed_list<T: enshwick::abi::Headed>(
+    items: &[T],
+    out: *mut T,
+    capacity: u32,
+    count: *mut u32,
+) -> Status {
     let Ok(total) = u32::try_from(items.len()) else {
         return Status::BAD_ARGS;
     };
@@ -901,7 +906,11 @@ fn put_headed_list<T: Copy>(items: &[T], out: *mut T, capacity: u32, count: *mut
 /// `raw` is null with `count` zero, or points at `count` entries of the
 /// mod's version of the struct, each starting with its header; every bit
 /// pattern of the bytes past `required` is valid for `T`, zero included.
-unsafe fn get_headed_list<T: Copy>(raw: *const T, count: u32, required: usize) -> Option<Vec<T>> {
+unsafe fn get_headed_list<T: enshwick::abi::Headed>(
+    raw: *const T,
+    count: u32,
+    required: usize,
+) -> Option<Vec<T>> {
     if count == 0 {
         return Some(Vec::new());
     }

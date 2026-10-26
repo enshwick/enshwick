@@ -207,7 +207,7 @@ pub(crate) fn push(loader: &Loader, hash: u32, bytes: &[u8]) -> Result<(), Statu
     let world = entity_world()?;
     // SAFETY: the entity world holds its stream array; the first stream is
     // the one the game's game-thread code pushes into.
-    let stream: usize = unsafe { crate::world::read(world, layout.streams) };
+    let stream: usize = unsafe { crate::memory::read(world, layout.streams) };
     if stream == 0 {
         return Err(Status::MISSING);
     }
@@ -255,7 +255,7 @@ pub(crate) fn teleport(loader: &Loader, request: &TeleportRequest) -> Result<(),
     }
     let orientation: [f32; 4] = if request.flags & TeleportRequest::ORIENTED == 0 {
         // SAFETY: a live CurrentTransform is a WorldTransform.
-        unsafe { crate::world::read(current.addr(), teleport.current_orientation) }
+        unsafe { crate::memory::read(current.addr(), teleport.current_orientation) }
     } else {
         request.orientation
     };
@@ -279,7 +279,7 @@ pub(crate) fn teleport(loader: &Loader, request: &TeleportRequest) -> Result<(),
         &[u8::from(request.flags & TeleportRequest::BEST_SPAWN != 0)],
     );
     // SAFETY: the entity world holds a pointer to its command buffers.
-    let buffer: usize = unsafe { crate::world::read(world, layout.command_buffers) };
+    let buffer: usize = unsafe { crate::memory::read(world, layout.command_buffers) };
     if buffer == 0 {
         return Err(Status::MISSING);
     }

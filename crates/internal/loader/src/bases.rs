@@ -30,11 +30,11 @@ use std::sync::{Arc, Mutex, OnceLock, PoisonError};
 
 use arc_swap::ArcSwap;
 use enshwick::abi::{AltarLimitFn, HookFlags, Status};
+use enshwick::raw::{read_at, read_ptr_at};
 
 use self::limit::{Aabb, MAX_BASES, MAX_ZONES, Zone, Zones};
 use crate::chains::Next;
 use crate::code::{CodePatch, Verdict};
-use crate::ecs::read_at;
 use crate::host::Loader;
 
 /// The build table ids this part of the loader names.
@@ -436,7 +436,7 @@ unsafe fn keep(bases: *const u8) {
     // SAFETY: forwarded from the caller.
     let count = unsafe { read_at::<u32>(bases, fields.count) };
     // SAFETY: as above.
-    let list = unsafe { read_at::<*const u8>(bases, fields.zone_list) };
+    let list = unsafe { read_ptr_at::<u8>(bases, fields.zone_list) }.cast_const();
     // SAFETY: as above.
     let len = unsafe { read_at::<usize>(bases, fields.zone_list_len) };
     if (list.is_null() && len != 0) || len > MAX_LISTED {

@@ -25,10 +25,11 @@ use enshwick::abi::{
     ZoneCheckFn,
 };
 use enshwick::altars::MAX_ZONES;
+use enshwick::raw::{read_at, read_ptr_at};
 
 use self::geometry::Placed;
 use crate::chains::Next;
-use crate::ecs::{Engine, Query, read_at};
+use crate::ecs::{Engine, Query};
 use crate::host::{Loader, Registered};
 
 /// The build table ids this part of the loader names.
@@ -858,7 +859,7 @@ unsafe fn check(
     margin: f32,
 ) -> bool {
     // SAFETY: the list holds its entries pointer and count at these offsets.
-    let entries: *const u8 = unsafe { read_at(list, layout.entries) };
+    let entries = unsafe { read_ptr_at::<u8>(list, layout.entries) }.cast_const();
     // SAFETY: as above.
     let count: usize = unsafe { read_at(list, layout.count) };
     if entries.is_null() || count > MAX_ZONES {

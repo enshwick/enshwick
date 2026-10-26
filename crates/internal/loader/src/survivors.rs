@@ -613,9 +613,18 @@ pub(crate) fn forget() {
     MOVE_ACTIVE.store(false, Ordering::Release);
 }
 
-unsafe fn read_at<T: Copy>(base: u64, offset: u64) -> T {
+// TEMPORARY: survivors moves to usize addresses before this lands.
+unsafe fn read_at<T: enshwick::raw::AnyBitPattern>(base: u64, offset: u64) -> T {
+    let address = usize::try_from(base.wrapping_add(offset)).unwrap_or(0);
     // SAFETY: forwarded from the caller.
-    unsafe { (base.wrapping_add(offset) as *const T).read_unaligned() }
+    unsafe { crate::memory::read(address, 0) }
+}
+
+// TEMPORARY: survivors moves to usize addresses before this lands.
+unsafe fn read_ptr_at<T>(base: u64, offset: u64) -> *mut T {
+    let address = usize::try_from(base.wrapping_add(offset)).unwrap_or(0);
+    // SAFETY: forwarded from the caller.
+    unsafe { crate::memory::read_ptr(address, 0) }
 }
 
 /// Asks the registered lookup; `None` for the game's own answer.
@@ -721,7 +730,7 @@ unsafe fn resolve(
     let stack = frame.stack();
     if c.unique.contains(&caller) {
         // SAFETY: the uniqueness pass keeps its context here.
-        let ctx: *mut u64 = unsafe { read_at(stack, o.unique_context) };
+        let ctx = unsafe { read_ptr_at::<u64>(stack, o.unique_context) };
         // SAFETY: a live query context.
         let me = unsafe { engine.entity(ctx) };
         if me == 0 {
@@ -788,12 +797,12 @@ unsafe fn resolve(
     }
     let (ctx, entity) = if roaming {
         // SAFETY: the idle behaviour keeps its context here.
-        let ctx: *mut u64 = unsafe { read_at(stack, o.roaming_context) };
+        let ctx = unsafe { read_ptr_at::<u64>(stack, o.roaming_context) };
         // SAFETY: a live query context.
         (ctx, unsafe { engine.entity(ctx) })
     } else {
         // SAFETY: the assignment keeps its context and targets here.
-        let ctx: *mut u64 = unsafe { read_at(stack, o.assign_context) };
+        let ctx = unsafe { read_ptr_at::<u64>(stack, o.assign_context) };
         // SAFETY: as above.
         let targets: u64 = unsafe { read_at(stack, o.assign_targets) };
         if targets == 0 {
@@ -999,7 +1008,7 @@ unsafe fn bed_kept(ctx: u64) -> bool {
     // SAFETY: the state starts with the survivor id.
     let survivor: u32 = unsafe { read_at(state, 0) };
     // SAFETY: the first word of the behaviour context is the ECS context.
-    let ecs: *mut u64 = unsafe { read_at(ctx, 0) };
+    let ecs = unsafe { read_ptr_at::<u64>(ctx, 0) };
     // SAFETY: a live context.
     let Some(bed_at) = (unsafe { position_of(engine, ecs, bed) }) else {
         return true;
@@ -1219,11 +1228,11 @@ unsafe fn file(map: &ItemMap, table: *mut u8, item: u32, survivor: u32) -> bool 
         return false;
     };
     // SAFETY: as above.
-    let bits: *mut u64 = unsafe { read_at(base, map.bits as u64) };
+    let bits = unsafe { read_ptr_at::<u64>(base, map.bits as u64) };
     // SAFETY: as above.
-    let keys: *mut u32 = unsafe { read_at(base, map.keys as u64) };
+    let keys = unsafe { read_ptr_at::<u32>(base, map.keys as u64) };
     // SAFETY: as above.
-    let values: *mut u32 = unsafe { read_at(base, map.values as u64) };
+    let values = unsafe { read_ptr_at::<u32>(base, map.values as u64) };
     let word = bits.wrapping_add(slot >> 6);
     let bit = 1u64 << (slot & 63);
     // SAFETY: the slot is below the capacity, so its bit word exists.

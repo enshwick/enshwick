@@ -697,7 +697,7 @@ impl Engine {
             let address = usize::try_from(address).map_err(|_| Missing::Entry(name))?;
             // SAFETY: the address lies in the game's code, mapped for the
             // process; eight bytes read from a function's entry.
-            let found = unsafe { crate::world::read::<u64>(address, 0) };
+            let found = unsafe { crate::memory::read::<u64>(address, 0) };
             if found != expected {
                 return Err(Missing::Bytes(name));
             }
@@ -779,41 +779,41 @@ impl Engine {
     /// The interface context of the frame being drawn; 0 outside one.
     pub(super) fn context(&self) -> usize {
         // SAFETY: the global holds the context pointer, or 0 outside a frame.
-        unsafe { crate::world::read::<usize>(self.context, 0) }
+        unsafe { crate::memory::read::<usize>(self.context, 0) }
     }
 
     fn bundle(&self, context: usize) -> usize {
         // SAFETY: a live context holds its look bundle.
-        unsafe { crate::world::read::<usize>(context, self.layout.context_bundle) }
+        unsafe { crate::memory::read::<usize>(context, self.layout.context_bundle) }
     }
 
     /// The interface host of `context`.
     pub(super) fn host(&self, context: usize) -> usize {
         // SAFETY: a live context holds its host.
-        unsafe { crate::world::read::<usize>(context, self.layout.context_host) }
+        unsafe { crate::memory::read::<usize>(context, self.layout.context_host) }
     }
 
     /// The screen byte of the context's play state: 1 to 3 menus, 4 and 5
     /// slideshows, 6 loading, 7 in game; 0 when it cannot be read.
     pub(super) fn app_state(&self, context: usize) -> u8 {
         // SAFETY: a live context holds its play state pointer.
-        let state = unsafe { crate::world::read::<usize>(context, self.layout.context_state) };
+        let state = unsafe { crate::memory::read::<usize>(context, self.layout.context_state) };
         if state == 0 {
             return 0;
         }
         // SAFETY: the pointer names the play state's record.
-        let record = unsafe { crate::world::read::<usize>(state, 0) };
+        let record = unsafe { crate::memory::read::<usize>(state, 0) };
         if record == 0 {
             return 0;
         }
         // SAFETY: the record holds its screen byte.
-        unsafe { crate::world::read::<u8>(record, self.layout.state_screen) }
+        unsafe { crate::memory::read::<u8>(record, self.layout.state_screen) }
     }
 
     /// The navigation group the context points at.
     pub(super) fn nav(&self, context: usize) -> usize {
         // SAFETY: a live context holds its navigation group pointer.
-        unsafe { crate::world::read::<usize>(context, self.layout.context_nav) }
+        unsafe { crate::memory::read::<usize>(context, self.layout.context_nav) }
     }
 
     /// Points the context back at `nav`, after a draw that left it at an
@@ -837,7 +837,7 @@ impl Engine {
             return 0;
         }
         // SAFETY: a node the game made for the panel in the last frame.
-        unsafe { crate::world::read::<u64>(node, self.layout.node_id) }
+        unsafe { crate::memory::read::<u64>(node, self.layout.node_id) }
     }
 
     /// Starts a window: the game's popup panel over a dimmed screen, `width`
@@ -953,7 +953,7 @@ impl Engine {
         unsafe { (self.node_align)(node, &raw const centre) };
         label.u16(layout.label_align, centre);
         // SAFETY: the bundle holds the font size, a float.
-        let size = unsafe { crate::world::read::<f32>(bundle, self.looks.title_size) };
+        let size = unsafe { crate::memory::read::<f32>(bundle, self.looks.title_size) };
         label.f32(layout.label_font_size, size);
         label.u16(layout.label_flags, label.read_u16(layout.label_flags) | 8);
         // SAFETY: the label just made.

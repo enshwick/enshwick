@@ -299,7 +299,7 @@ mod runtime {
             && let Some(layout) = STATE.layout.get()
             // SAFETY: the game's interaction request holds its kind byte at
             // the table's `user.interaction_kind` (client builds 410 and 426).
-            && unsafe { crate::world::read::<u8>(request.addr(), layout.kind) } == layout.join_failed
+            && unsafe { crate::memory::read::<u8>(request.addr(), layout.kind) } == layout.join_failed
             && held()
         {
             return 0;

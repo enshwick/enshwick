@@ -13,7 +13,7 @@ use std::sync::{Arc, Mutex, OnceLock, PoisonError};
 
 use crate::ecs::{Components, Entity};
 use crate::inventory::Fill;
-use crate::raw::read_at;
+use crate::raw::{read_at, read_ptr_at};
 use crate::{Load, Next, Off};
 
 /// What a container is, for [`Source::kinds`].
@@ -500,7 +500,7 @@ impl Engine {
     unsafe fn roll(&self, txn: *mut u8, request: *const u8) -> (Roll, *mut u64) {
         // SAFETY: the transaction keeps its system context and the
         // container it fills at these offsets.
-        let ctx: *mut u64 = unsafe { read_at(txn, self.txn_context) };
+        let ctx = unsafe { read_ptr_at::<u64>(txn, self.txn_context) };
         // SAFETY: as above.
         let entity = Entity(unsafe { read_at(txn, self.txn_entity) });
         // SAFETY: the request holds the node and label ids here.

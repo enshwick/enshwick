@@ -254,9 +254,9 @@ unsafe extern "system" fn hit(registers: *mut Registers, _user: *mut c_void) {
             core::ptr::with_exposed_provenance_mut::<[f32; TYPES]>(rbp.wrapping_sub(layout.vector));
         // SAFETY: at the site the node's frame holds its damage vector below
         // `rbp` and the target and source above it, on 1.0 build 1269579.
-        let target: u32 = unsafe { crate::world::read(rbp, layout.target) };
+        let target: u32 = unsafe { crate::memory::read(rbp, layout.target) };
         // SAFETY: as above.
-        let source: u32 = unsafe { crate::world::read(rbp, layout.source) };
+        let source: u32 = unsafe { crate::memory::read(rbp, layout.source) };
         // SAFETY: as above.
         let amounts = unsafe { vector.read_unaligned() };
         let mut check = blank(DamageCheck::HIT, target);
@@ -429,7 +429,7 @@ unsafe extern "system" fn admin_kill(registers: *mut Registers, _user: *mut c_vo
         // SAFETY: at the site `rax` points at the target's health component
         // pointer, which `admin_player` tests next: null skips the kill;
         // `ebx` is the target; 1.0 build 1269579.
-        let health: u64 = unsafe { crate::world::read(at, 0) };
+        let health: u64 = unsafe { crate::memory::read(at, 0) };
         if health == 0 {
             return;
         }

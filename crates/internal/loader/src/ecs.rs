@@ -4,6 +4,8 @@
 
 use std::sync::OnceLock;
 
+use enshwick::raw::{read_at, read_ptr_at};
+
 use crate::host::Loader;
 
 /// The build table ids this part of the loader names.
@@ -105,16 +107,6 @@ pub(crate) struct Engine {
     level_data: usize,
     attribute_slot: usize,
     level_attribute: u32,
-}
-
-/// Reads a `T` at `offset` bytes past `base`.
-///
-/// # Safety
-///
-/// A readable `T` lies there.
-pub(crate) unsafe fn read_at<T: Copy>(base: *const u8, offset: usize) -> T {
-    // SAFETY: forwarded from the caller.
-    unsafe { base.wrapping_add(offset).cast::<T>().read_unaligned() }
 }
 
 impl Engine {
@@ -223,12 +215,12 @@ impl Engine {
             return 0;
         }
         // SAFETY: the first word of a context is its query descriptor.
-        let descriptor: *const u8 = unsafe { read_at(ctx.cast(), 0) };
+        let descriptor = unsafe { read_ptr_at::<u8>(ctx.cast(), 0) }.cast_const();
         if descriptor.is_null() {
             return 0;
         }
         // SAFETY: the descriptor holds a pointer to the per-row entity records.
-        let records: *const u8 = unsafe { read_at(descriptor, self.entity_records) };
+        let records = unsafe { read_ptr_at::<u8>(descriptor, self.entity_records) }.cast_const();
         if records.is_null() {
             return 0;
         }
@@ -247,7 +239,7 @@ impl Engine {
             return false;
         }
         // SAFETY: the first word of a context is its query descriptor.
-        let descriptor: *const u8 = unsafe { read_at(ctx.cast(), 0) };
+        let descriptor = unsafe { read_ptr_at::<u8>(ctx.cast(), 0) }.cast_const();
         if descriptor.is_null() {
             return false;
         }
@@ -494,17 +486,17 @@ impl Components {
         }
         // SAFETY: the first word of a context is its query descriptor, which
         // points at the entity world.
-        let descriptor: *const u8 = unsafe { read_at(ctx.cast(), 0) };
+        let descriptor = unsafe { read_ptr_at::<u8>(ctx.cast(), 0) }.cast_const();
         if descriptor.is_null() {
             return None;
         }
         // SAFETY: as above.
-        let world: *const u8 = unsafe { read_at(descriptor, self.entity_world) };
+        let world = unsafe { read_ptr_at::<u8>(descriptor, self.entity_world) }.cast_const();
         if world.is_null() {
             return None;
         }
         // SAFETY: the entity world starts with its component registry.
-        let registry: *const u8 = unsafe { read_at(world, 0) };
+        let registry = unsafe { read_ptr_at::<u8>(world, 0) }.cast_const();
         let index = self.registry_maps.iter().find_map(|&map| {
             // SAFETY: the registry's type maps; lookups do not change them.
             let index = unsafe { (self.type_index)(registry.wrapping_add(map), &raw const hash) };

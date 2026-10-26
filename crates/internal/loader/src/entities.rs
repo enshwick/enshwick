@@ -164,7 +164,7 @@ pub(crate) fn destroy(loader: &Loader, entity: u32) -> Result<(), Status> {
         return Err(Status::REFUSED);
     }
     // SAFETY: the entity world holds a pointer to its command buffers.
-    let buffer: usize = unsafe { crate::world::read(world, layout.command_buffers) };
+    let buffer: usize = unsafe { crate::memory::read(world, layout.command_buffers) };
     if buffer == 0 {
         return Err(Status::MISSING);
     }

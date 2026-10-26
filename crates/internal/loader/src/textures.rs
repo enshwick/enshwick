@@ -20,8 +20,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock, PoisonError};
 
 use arc_swap::ArcSwapOption;
-
 use enshwick::abi::{HookFlags, Side, Status};
+use enshwick::raw::{read_at, read_ptr_at, write_at};
 use rustc_hash::FxHashMap;
 
 use crate::chains::Next;
@@ -272,26 +272,6 @@ pub(crate) fn link(loader: &'static Loader) {
     }
 }
 
-/// Reads a `T` at `base + offset`.
-///
-/// # Safety
-///
-/// The address holds a readable `T`.
-unsafe fn read<T: Copy>(base: *const u8, offset: usize) -> T {
-    // SAFETY: forwarded from the caller.
-    unsafe { base.wrapping_add(offset).cast::<T>().read_unaligned() }
-}
-
-/// Writes `value` at `base + offset`.
-///
-/// # Safety
-///
-/// The address holds a writable `T`.
-unsafe fn write<T: Copy>(base: *mut u8, offset: usize, value: T) {
-    // SAFETY: forwarded from the caller.
-    unsafe { base.wrapping_add(offset).cast::<T>().write_unaligned(value) };
-}
-
 /// The switch of the mod textures.
 static TEXTURES_FUSE: crate::fuse::Fuse = crate::fuse::Fuse::new("mod textures");
 
@@ -322,7 +302,7 @@ unsafe extern "system" fn request(requester: *mut u8, requests: *mut Requests) {
     for index in 0..slice.count {
         let at = slice.data.wrapping_add(index * size);
         // SAFETY: one request of the slice.
-        let hash: ContentHash = unsafe { read(at, layout.request_hash) };
+        let hash: ContentHash = unsafe { read_at(at, layout.request_hash) };
         let answered = served(content, &hash).and_then(|data| {
             TEXTURES_FUSE.run("the request", || {
                 // SAFETY: a live request and its requester, on the thread
@@ -361,13 +341,13 @@ unsafe extern "system" fn request(requester: *mut u8, requests: *mut Requests) {
 /// `request` is a live request of `requester`'s, on the requesting thread.
 unsafe fn answer(layout: &Layout, requester: *mut u8, request: *const u8, data: &[u8]) {
     // SAFETY: the request starts with its buffer and the bytes it asks for.
-    let buffer: *mut u8 = unsafe { read(request, 0) };
+    let buffer = unsafe { read_ptr_at::<u8>(request, 0) };
     // SAFETY: as above.
-    let wanted: u64 = unsafe { read(request, 8) };
+    let wanted: u64 = unsafe { read_at(request, 8) };
     // SAFETY: the request's offset into the content.
-    let offset: u32 = unsafe { read(request, layout.request_offset) };
+    let offset: u32 = unsafe { read_at(request, layout.request_offset) };
     // SAFETY: the request's completion context.
-    let context: [u8; 16] = unsafe { read(request, layout.request_context) };
+    let context: [u8; 16] = unsafe { read_at(request, layout.request_context) };
     let range = usize::try_from(offset)
         .ok()
         .zip(usize::try_from(wanted).ok())
@@ -392,32 +372,32 @@ unsafe fn answer(layout: &Layout, requester: *mut u8, request: *const u8, data: 
 /// `requester` is the live requester, on the requesting thread.
 unsafe fn post(layout: &Layout, requester: *mut u8, code: u8, context: [u8; 16]) {
     // SAFETY: the requester's ring fields at the build's offsets.
-    let head: u32 = unsafe { read(requester, layout.ring_head) };
+    let head: u32 = unsafe { read_at(requester, layout.ring_head) };
     // SAFETY: as above.
-    let last: u32 = unsafe { read(requester, layout.ring_last) };
+    let last: u32 = unsafe { read_at(requester, layout.ring_last) };
     let next = if head == last { 0 } else { head + 1 };
     // SAFETY: as above.
-    let tail: u32 = unsafe { read(requester, layout.ring_tail) };
+    let tail: u32 = unsafe { read_at(requester, layout.ring_tail) };
     let room = next != tail || {
         // SAFETY: as above.
-        let fresh: u32 = unsafe { read(requester, layout.ring_tail_next) };
+        let fresh: u32 = unsafe { read_at(requester, layout.ring_tail_next) };
         // SAFETY: as above.
-        unsafe { write(requester, layout.ring_tail, fresh) };
+        unsafe { write_at(requester, layout.ring_tail, fresh) };
         next != fresh
     };
     if room {
         // SAFETY: as above.
-        let records: *mut u8 = unsafe { read(requester, layout.ring_records) };
+        let records = unsafe { read_ptr_at::<u8>(requester, layout.ring_records) };
         let mut record = [0u8; 24];
         record[0] = code;
         record[8..].copy_from_slice(&context);
         // SAFETY: the ring's record at `head`, 24 bytes.
-        unsafe { write(records, head as usize * 24, record) };
+        unsafe { write_at(records, head as usize * 24, record) };
         // SAFETY: as above.
-        unsafe { write(requester, layout.ring_head, next) };
+        unsafe { write_at(requester, layout.ring_head, next) };
     }
     // SAFETY: as above.
-    let event: *mut u8 = unsafe { read(requester, layout.ring_event) };
+    let event = unsafe { read_ptr_at::<u8>(requester, layout.ring_event) };
     if !event.is_null() {
         // SAFETY: the game's signal of the requester's event.
         unsafe { (layout.signal)(event) };
@@ -496,11 +476,11 @@ unsafe extern "system" fn fill(registry: *mut u8) {
         // the served UI images join; the game skips keys it has.
         // SAFETY: the registry's "listed" byte, which only this function
         // reads, on the UI thread.
-        unsafe { write(registry, layout.registry_listed, 0u8) };
+        unsafe { write_at(registry, layout.registry_listed, 0u8) };
         // SAFETY: the rest of the chain takes the registry the game passed.
         unsafe { FILL_NEXT.get()(registry) };
         // SAFETY: as above.
-        let listed: u8 = unsafe { read(registry, layout.registry_listed) };
+        let listed: u8 = unsafe { read_at(registry, layout.registry_listed) };
         if listed == 1 {
             RELISTED.store(true, Ordering::Release);
             crate::log!(

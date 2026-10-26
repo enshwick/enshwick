@@ -236,7 +236,7 @@ pub(super) unsafe fn draw(engine: &Engine, next: PopupFn, context: usize) {
             return;
         };
         // SAFETY: the host's answer flag, on the thread that draws it.
-        let pending = unsafe { crate::world::read::<u8>(host, layout.answered) };
+        let pending = unsafe { crate::memory::read::<u8>(host, layout.answered) };
         if pending != 0 {
             // An answer of the game's own waits for its flow.
             return;
@@ -246,12 +246,12 @@ pub(super) unsafe fn draw(engine: &Engine, next: PopupFn, context: usize) {
         unsafe { next(shown.state.ptr()) };
         engine.restore_nav(context, nav);
         // SAFETY: as above.
-        let answered = unsafe { crate::world::read::<u8>(host, layout.answered) };
+        let answered = unsafe { crate::memory::read::<u8>(host, layout.answered) };
         if answered == 0 {
             return;
         }
         // SAFETY: as above.
-        let index = unsafe { crate::world::read::<u8>(host, layout.answer) };
+        let index = unsafe { crate::memory::read::<u8>(host, layout.answer) };
         let flag = core::ptr::with_exposed_provenance_mut::<u8>(host + layout.answered);
         // SAFETY: the flag the click set, cleared on the thread that draws.
         unsafe { flag.write(0) };

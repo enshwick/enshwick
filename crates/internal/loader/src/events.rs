@@ -18,6 +18,7 @@ use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock, PoisonError};
 
 use enshwick::abi::{BuildingData, Event, Header, HookFlags, PlayerData, Side, TickData};
+use enshwick::raw::read_at;
 
 use crate::chains::Next;
 use crate::fuse::Fuse;
@@ -260,24 +261,14 @@ pub(crate) fn link(loader: &'static Loader) {
     }
 }
 
-/// Reads a `T` at `base + offset` in the game's memory.
-///
-/// # Safety
-///
-/// The address holds a readable `T`.
-unsafe fn read<T: Copy>(base: *const u8, offset: usize) -> T {
-    // SAFETY: forwarded from the caller.
-    unsafe { base.wrapping_add(offset).cast::<T>().read_unaligned() }
-}
-
 fn player(slot_index: usize, slot: *const u8, offsets: &Offsets) -> PlayerData {
     PlayerData {
         header: Header::of::<PlayerData>(),
         slot: u32::try_from(slot_index).unwrap_or(u32::MAX),
         // SAFETY: the slot is one of the server's player slots.
-        entity: unsafe { read(slot, offsets.slot_entity) },
+        entity: unsafe { read_at(slot, offsets.slot_entity) },
         // SAFETY: as above.
-        key: unsafe { read(slot, offsets.slot_key) },
+        key: unsafe { read_at(slot, offsets.slot_key) },
     }
 }
 
@@ -376,11 +367,11 @@ unsafe fn after_step(loader: &'static Loader, offsets: &Offsets, server: *mut u8
             .cast_const()
             .wrapping_add(offsets.slots + index * offsets.slot_size);
         // SAFETY: the server holds `slot_count` slots from `slots`.
-        let handle: u32 = unsafe { read(slot, 0) };
+        let handle: u32 = unsafe { read_at(slot, 0) };
         // SAFETY: as above.
-        let state: u8 = unsafe { read(slot, offsets.slot_state) };
+        let state: u8 = unsafe { read_at(slot, offsets.slot_state) };
         // SAFETY: as above.
-        let entity: u32 = unsafe { read(slot, offsets.slot_entity) };
+        let entity: u32 = unsafe { read_at(slot, offsets.slot_entity) };
         if handle == 0 {
             joined.store(0, Ordering::Relaxed);
         } else if state == SLOT_IN_GAME && entity != 0 && joined.load(Ordering::Relaxed) != handle {
@@ -438,7 +429,7 @@ unsafe extern "system" fn set_state(entry: *mut u8, state: u8) {
     let old = loaded()
         .filter(|_| !entry.is_null())
         // SAFETY: the entry is the game's server instance entry.
-        .map(|(_, offsets)| unsafe { read::<u8>(entry, offsets.entry_state) });
+        .map(|(_, offsets)| unsafe { read_at::<u8>(entry, offsets.entry_state) });
     // SAFETY: forwarded unchanged.
     unsafe { STATE_NEXT.get()(entry, state) };
     let (Some((loader, _)), Some(old)) = (loaded().filter(|_| !STATE_FUSE.is_off()), old) else {
@@ -491,7 +482,7 @@ unsafe extern "system" fn remove(server: *mut u8, slot: *mut u8) {
         let first = server.addr() + offsets.slots;
         let index = slot.addr().wrapping_sub(first) / offsets.slot_size.max(1);
         // SAFETY: the game passes one of its player slots, intact on entry.
-        let handle: u32 = unsafe { read(slot, 0) };
+        let handle: u32 = unsafe { read_at(slot, 0) };
         if handle != 0
             && let Some(joined) = JOINED.get(index).filter(|_| index < offsets.slot_count)
             && joined.load(Ordering::Relaxed) == handle
@@ -544,11 +535,11 @@ unsafe extern "system" fn place(
             header: Header::of::<BuildingData>(),
             entity,
             // SAFETY: the build context holds the acting player and the replay flag.
-            player: unsafe { read(context, offsets.ctx_player) },
+            player: unsafe { read_at(context, offsets.ctx_player) },
             item,
             kind: BuildingData::PLACED,
             // SAFETY: as above.
-            replay: unsafe { read(context, offsets.ctx_replay) },
+            replay: unsafe { read_at(context, offsets.ctx_replay) },
             // SAFETY: the game passes its template GUID and position.
             template: unsafe { template.as_ref() }.copied().unwrap_or_default(),
             // SAFETY: as above.
@@ -564,13 +555,13 @@ unsafe extern "system" fn pickup(context: *mut u8, target: *const u8, tool: u32)
         .filter(|_| !context.is_null() && !target.is_null())
         .map(|(_, offsets)| {
             // SAFETY: the target holds the entity id and the mode byte.
-            let entity: u32 = unsafe { read(target, offsets.pickup_entity) };
+            let entity: u32 = unsafe { read_at(target, offsets.pickup_entity) };
             // SAFETY: as above.
-            let mode: u8 = unsafe { read(target, offsets.pickup_mode) };
+            let mode: u8 = unsafe { read_at(target, offsets.pickup_mode) };
             // SAFETY: the build context holds the acting player and the replay flag.
-            let player: u32 = unsafe { read(context, offsets.ctx_player) };
+            let player: u32 = unsafe { read_at(context, offsets.ctx_player) };
             // SAFETY: as above.
-            let replay: u8 = unsafe { read(context, offsets.ctx_replay) };
+            let replay: u8 = unsafe { read_at(context, offsets.ctx_replay) };
             (entity, mode, player, replay)
         });
     // SAFETY: forwarded unchanged.

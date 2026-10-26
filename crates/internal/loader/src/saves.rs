@@ -181,10 +181,10 @@ unsafe fn read_path(layout: &Layout, path: *mut u8) -> Option<String> {
     }
     let path = path.addr();
     // SAFETY: an engine path points at its buffer.
-    let data: usize = unsafe { crate::world::read(path, layout.path_data) };
+    let data: usize = unsafe { crate::memory::read(path, layout.path_data) };
     let len = (0..layout.path_parts)
         // SAFETY: the path holds the lengths of its parts one after another.
-        .map(|part| unsafe { crate::world::read::<u64>(path, layout.path_lengths + part * 8) })
+        .map(|part| unsafe { crate::memory::read::<u64>(path, layout.path_lengths + part * 8) })
         .try_fold(0u64, u64::checked_add)?;
     let len = usize::try_from(len)
         .ok()
@@ -277,16 +277,16 @@ pub(crate) fn request(loader: &Loader) -> Result<(), Status> {
     let layout = layout(loader).ok_or(Status::MISSING)?;
     let server = crate::world::server()?;
     // SAFETY: the server's flag that refuses saves, on its game thread.
-    let blocked: u8 = unsafe { crate::world::read(server, layout.blocked) };
+    let blocked: u8 = unsafe { crate::memory::read(server, layout.blocked) };
     // SAFETY: the server holds its save system.
-    let system: usize = unsafe { crate::world::read(server, layout.save_system) };
+    let system: usize = unsafe { crate::memory::read(server, layout.save_system) };
     if blocked != 0 || system == 0 {
         return Err(Status::REFUSED);
     }
     // SAFETY: the save system's phase.
-    let phase: u8 = unsafe { crate::world::read(system, layout.phase) };
+    let phase: u8 = unsafe { crate::memory::read(system, layout.phase) };
     // SAFETY: and its flags.
-    let flags: u8 = unsafe { crate::world::read(system, layout.flags) };
+    let flags: u8 = unsafe { crate::memory::read(system, layout.flags) };
     if phase != 0 {
         return Ok(());
     }

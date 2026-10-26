@@ -25,6 +25,7 @@ use enshwick::abi::{ChunkData, Event, Header, HookFlags, Status, WeatherFront};
 
 use crate::chains::Next;
 use crate::host::Loader;
+use crate::memory::{read, write};
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
@@ -228,28 +229,6 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
             })
         })
         .as_ref()
-}
-
-/// Reads a `T` at `base + at`.
-///
-/// # Safety
-///
-/// The address holds a readable `T`.
-unsafe fn read<T: Copy>(base: usize, at: usize) -> T {
-    // SAFETY: forwarded from the caller.
-    unsafe { crate::world::read(base, at) }
-}
-
-/// Writes a `T` at `base + at`.
-///
-/// # Safety
-///
-/// The address holds a writable `T`.
-unsafe fn write<T: Copy>(base: usize, at: usize, value: T) {
-    // SAFETY: forwarded from the caller.
-    unsafe {
-        core::ptr::with_exposed_provenance_mut::<T>(base.wrapping_add(at)).write_unaligned(value);
-    };
 }
 
 /// A blob array at `header`: where its elements start and how many.

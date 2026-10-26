@@ -17,6 +17,7 @@ use std::sync::OnceLock;
 use enshwick::abi::{Header, Status, TerrainEdit, TerrainMaterialInfo};
 
 use crate::host::Loader;
+use crate::memory::read;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
@@ -171,16 +172,6 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
             })
         })
         .as_ref()
-}
-
-/// Reads a `T` at `base + at`.
-///
-/// # Safety
-///
-/// The address holds a readable `T`.
-unsafe fn read<T: Copy>(base: usize, at: usize) -> T {
-    // SAFETY: forwarded from the caller.
-    unsafe { crate::world::read(base, at) }
 }
 
 /// The voxel editor, the voxel world's allocator and the game object, on

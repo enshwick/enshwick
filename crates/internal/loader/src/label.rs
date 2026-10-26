@@ -184,9 +184,9 @@ pub(crate) fn set(loader: &Loader, entity: u32, text: &str) -> Status {
         return Status::MISSING;
     }
     // SAFETY: the server holds its world and its string table.
-    let world: usize = unsafe { crate::world::read(server, layout.world) };
+    let world: usize = unsafe { crate::memory::read(server, layout.world) };
     // SAFETY: as above.
-    let strings: usize = unsafe { crate::world::read(server, layout.strings) };
+    let strings: usize = unsafe { crate::memory::read(server, layout.strings) };
     if world == 0 || strings == 0 {
         return Status::MISSING;
     }
@@ -278,9 +278,9 @@ unsafe fn refused(text: *const [usize; 2]) -> bool {
     }
     // SAFETY: the rename message lies in the caller's frame; its first field
     // is the entity.
-    let entity: u32 = unsafe { crate::world::read(rbp, layout.rename_entity) };
+    let entity: u32 = unsafe { crate::memory::read(rbp, layout.rename_entity) };
     // SAFETY: the caller walks its connections' handles with `rdi`.
-    let machine: u32 = unsafe { crate::world::read(rdi, 0) };
+    let machine: u32 = unsafe { crate::memory::read(rdi, 0) };
     // SAFETY: the game's text span for the call.
     let [ptr, len] = unsafe { text.read() };
     let name = if ptr == 0 || len > 0x1000 {

@@ -18,6 +18,7 @@ use enshwick::abi::{Header, HookFlags, PlayerInfo, Status};
 
 use crate::chains::Next;
 use crate::host::Loader;
+use crate::memory::read;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
@@ -245,16 +246,6 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
             })
         })
         .as_ref()
-}
-
-/// Reads a `T` at `base + offset`.
-///
-/// # Safety
-///
-/// The address holds a readable `T`.
-pub(crate) unsafe fn read<T: Copy>(base: usize, offset: usize) -> T {
-    // SAFETY: forwarded from the caller.
-    unsafe { core::ptr::with_exposed_provenance::<T>(base.wrapping_add(offset)).read_unaligned() }
 }
 
 /// The server, when the caller is on the game thread.

@@ -480,7 +480,7 @@ unsafe extern "system" fn detour(state: *mut u8) {
     engine.restore_nav(context, nav);
     // SAFETY: the game's popup state, its active flag.
     let vanilla =
-        unsafe { crate::world::read::<u8>(state.addr(), engine.layout.popup_active) } != 0;
+        unsafe { crate::memory::read::<u8>(state.addr(), engine.layout.popup_active) } != 0;
     if vanilla {
         return;
     }

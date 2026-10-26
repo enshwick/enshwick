@@ -143,18 +143,18 @@ pub(super) fn note(context: usize) {
         return;
     }
     // SAFETY: a live context holds its G38 state pointer.
-    let state = unsafe { crate::world::read::<usize>(context, CONTEXT_STATE) };
+    let state = unsafe { crate::memory::read::<usize>(context, CONTEXT_STATE) };
     let play = if state == 0 {
         0
     } else {
         // SAFETY: the state's first word points at the play state, or is 0.
-        unsafe { crate::world::read::<usize>(state, 0) }
+        unsafe { crate::memory::read::<usize>(state, 0) }
     };
     let data = if play == 0 {
         0
     } else {
         // SAFETY: the play state holds its play data pointer.
-        unsafe { crate::world::read::<usize>(play, STATE_PLAY_DATA) }
+        unsafe { crate::memory::read::<usize>(play, STATE_PLAY_DATA) }
     };
     PLAY_DATA.store(data, Ordering::Release);
     // SAFETY: no preconditions.
@@ -204,10 +204,10 @@ unsafe extern "system" fn detour(context: *mut u8) {
 }
 
 /// Reads a value of the game's at `base + offset`.
-fn read<T: Copy>(base: usize, offset: usize) -> T {
+fn read<T: enshwick::raw::AnyBitPattern>(base: usize, offset: usize) -> T {
     // SAFETY: every caller reads a field of the play data, its marker list
     // or its marker type registry, live while the replicate system runs.
-    unsafe { crate::world::read::<T>(base, offset) }
+    unsafe { crate::memory::read::<T>(base, offset) }
 }
 
 fn append() {

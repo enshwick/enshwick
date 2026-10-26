@@ -7,9 +7,9 @@ use core::ffi::c_void;
 use std::cell::RefCell;
 use std::sync::{Mutex, OnceLock, PoisonError};
 
-use enshwick::abi::{Header, HookFlags, Interaction, InteractionFn, Side, Status};
-
 use arc_swap::ArcSwapOption;
+use enshwick::abi::{Header, HookFlags, Interaction, InteractionFn, Side, Status};
+use enshwick::raw::{read_at, read_ptr_at, write_at};
 
 use crate::chains::Next;
 use crate::ecs::{Components, Engine};
@@ -239,16 +239,6 @@ pub(crate) fn forget() {
     PLAYERS.store(None);
 }
 
-unsafe fn read<T: Copy>(base: *const u8, offset: usize) -> T {
-    // SAFETY: forwarded from the caller.
-    unsafe { base.wrapping_add(offset).cast::<T>().read_unaligned() }
-}
-
-unsafe fn write<T: Copy>(base: *mut u8, offset: usize, value: T) {
-    // SAFETY: forwarded from the caller.
-    unsafe { base.wrapping_add(offset).cast::<T>().write_unaligned(value) };
-}
-
 fn allowed(call: &Interaction) -> bool {
     let Some(filters) = SEALED.get() else {
         return true;
@@ -289,9 +279,9 @@ unsafe fn interaction(kind: u32, player: u32, target: u32, ctx: *mut u64) -> Int
         let transform = unsafe { components.component(ctx, target, layout.transform) };
         if let (Some(item), Some(transform)) = (item, transform) {
             // SAFETY: UsedItem is the item id alone.
-            call.item = unsafe { read(item, 0) };
+            call.item = unsafe { read_at(item, 0) };
             // SAFETY: a transform starts with its 32.32 position.
-            let fixed: [i64; 3] = unsafe { read(transform, 0) };
+            let fixed: [i64; 3] = unsafe { read_at(transform, 0) };
             call.position = enshwick::ecs::metres(fixed);
             call.known = 1;
         }
@@ -347,7 +337,7 @@ unsafe extern "system" fn offer(
         && INTERACTIONS_FUSE
             .run("the offer", || {
                 // SAFETY: the query state starts with the system context.
-                let ctx: *mut u64 = unsafe { read(query, 0) };
+                let ctx = unsafe { read_ptr_at::<u64>(query, 0) };
                 // SAFETY: the offer test runs inside its system, on its thread.
                 let Some(player) = (unsafe { server_player(ctx) }) else {
                     return false;
@@ -358,13 +348,13 @@ unsafe extern "system" fn offer(
             .unwrap_or(false);
     if refused {
         // SAFETY: the offer's 0x14-byte out record.
-        unsafe { write(out, 0, NOT_OFFERED) };
+        unsafe { write_at(out, 0, NOT_OFFERED) };
         // SAFETY: as above.
-        unsafe { write(out, 4, 0u32) };
+        unsafe { write_at(out, 4, 0u32) };
         // SAFETY: as above.
-        unsafe { write(out, 8, 0u64) };
+        unsafe { write_at(out, 8, 0u64) };
         // SAFETY: as above.
-        unsafe { write(out, 0x10, 0u32) };
+        unsafe { write_at(out, 0x10, 0u32) };
         return out;
     }
     // SAFETY: forwarded unchanged.
@@ -403,7 +393,7 @@ unsafe fn may_touch(
         return true;
     };
     // SAFETY: the action state holds the system's OwnerRelationship index.
-    let owner_index: u64 = unsafe { read(state, layout.state_owner_index) };
+    let owner_index: u64 = unsafe { read_at(state, layout.state_owner_index) };
     let roots = slots.iter().filter(|&&slot| slot != 0).filter_map(|&slot| {
         // SAFETY: as above.
         unsafe { components.slot_root(ctx, slot, owner_index) }
@@ -423,18 +413,19 @@ unsafe extern "system" fn transfer(ctx: *mut u64, state: *mut u8) {
             && INTERACTIONS_FUSE
                 .run("the transfer", || {
                     // SAFETY: the action state points at the player's input.
-                    let input: *const u8 = unsafe { read(state, layout.state_input) };
+                    let input =
+                        unsafe { read_ptr_at::<u8>(state, layout.state_input) }.cast_const();
                     if input.is_null() {
                         return false;
                     }
                     // SAFETY: the input holds the transfer at these offsets.
-                    let source: u32 = unsafe { read(input, layout.transfer_source) };
+                    let source: u32 = unsafe { read_at(input, layout.transfer_source) };
                     // SAFETY: as above.
-                    let target: u32 = unsafe { read(input, layout.transfer_target) };
+                    let target: u32 = unsafe { read_at(input, layout.transfer_target) };
                     // SAFETY: as above.
-                    let source_slot: u64 = unsafe { read(input, layout.transfer_source_slot) };
+                    let source_slot: u64 = unsafe { read_at(input, layout.transfer_source_slot) };
                     // SAFETY: as above.
-                    let target_slot: u64 = unsafe { read(input, layout.transfer_target_slot) };
+                    let target_slot: u64 = unsafe { read_at(input, layout.transfer_target_slot) };
                     // SAFETY: the running action's context and state.
                     !unsafe {
                         may_touch(
@@ -463,12 +454,13 @@ unsafe extern "system" fn sort(ctx: *mut u64, state: *mut u8) {
             && INTERACTIONS_FUSE
                 .run("the sort", || {
                     // SAFETY: as for the transfer.
-                    let input: *const u8 = unsafe { read(state, layout.state_input) };
+                    let input =
+                        unsafe { read_ptr_at::<u8>(state, layout.state_input) }.cast_const();
                     if input.is_null() {
                         return false;
                     }
                     // SAFETY: the input holds the sort's target there.
-                    let target: u32 = unsafe { read(input, layout.sort_target) };
+                    let target: u32 = unsafe { read_at(input, layout.sort_target) };
                     // SAFETY: the running action's context and state.
                     !unsafe { may_touch(Interaction::SORT, ctx, state, &[target], &[]) }
                 })
@@ -597,14 +589,14 @@ unsafe extern "system" fn dismantle(
     let refused = INTERACTIONS_FUSE
         .run("the dismantle", || {
             // SAFETY: the object describes an entity when its kind word is 0.
-            let id: u64 = unsafe { read(object, layout.object_id) };
+            let id: u64 = unsafe { read_at(object, layout.object_id) };
             // SAFETY: as above.
-            let kind: u64 = unsafe { read(object, layout.object_kind) };
+            let kind: u64 = unsafe { read_at(object, layout.object_kind) };
             if kind != 0 {
                 return false;
             }
             // SAFETY: the cursor context starts with the system context.
-            let system: *mut u64 = unsafe { read(ctx, 0) };
+            let system = unsafe { read_ptr_at::<u64>(ctx, 0) };
             // SAFETY: the cursor runs inside its system, on its thread.
             let Some(player) = (unsafe { server_player(system) }) else {
                 return false;
@@ -673,16 +665,16 @@ unsafe fn refuse_pending(ctx: *mut u64) {
             ),
         ] {
             // SAFETY: the player's input and its server-side consumed record.
-            let version: u32 = unsafe { read(input, version_at) };
+            let version: u32 = unsafe { read_at(input, version_at) };
             // SAFETY: as above.
-            let done: u32 = unsafe { read(consumed, done_at) };
+            let done: u32 = unsafe { read_at(consumed, done_at) };
             // SAFETY: as above.
-            let target: u32 = unsafe { read(input, target_at) };
+            let target: u32 = unsafe { read_at(input, target_at) };
             // SAFETY: inside the system, on its thread.
             if version != done && !allowed(&unsafe { interaction(kind, player, target, ctx) }) {
                 // SAFETY: the consumed record is server-only; no client sees
                 // it change.
-                unsafe { write(consumed, done_at, version) };
+                unsafe { write_at(consumed, done_at, version) };
             }
         }
     }

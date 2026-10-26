@@ -31,6 +31,7 @@ arc-swap = { version = "1.9.3", default-features = false }
 const-sha1 = { version = "0.3.0", default-features = false }
 clap = { version = "4.6.7", default-features = false, features = ["std", "derive", "help", "usage", "error-context", "env"] }
 arrayvec = { version = "0.7.8", default-features = false, features = ["std"] }
+bytemuck = { version = "1.25.2", default-features = false, features = ["derive", "min_const_generics", "zeroable_atomics"] }
 base64 = { version = "0.23.1", default-features = false, features = ["alloc"] }
 enshwick = { path = "crates/enshwick", version = "1.0.0-alpha.2" } # x-release-please-version
 enshwick-gamedata = { path = "crates/enshwick-gamedata", version = "1.0.0-alpha.2" } # x-release-please-version

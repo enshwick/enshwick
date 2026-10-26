@@ -92,14 +92,14 @@ impl History {
         let history = history.addr();
         // SAFETY: the entity's live HitHistory, on the game thread after the
         // step; `resolve` checked that `lastIndex` lies inside it.
-        let last: u32 = unsafe { crate::world::read(history, self.last_index) };
+        let last: u32 = unsafe { crate::memory::read(history, self.last_index) };
         let Some(last) = usize::try_from(last).ok().filter(|&i| i < self.slots) else {
             return 0;
         };
         let at = self.entries + last * self.entry_size + self.attacker;
         // SAFETY: as above; `resolve` checked that every slot, and the
         // attacker inside it, lies inside the HitHistory.
-        unsafe { crate::world::read(history, at) }
+        unsafe { crate::memory::read(history, at) }
     }
 }
 
