@@ -23,16 +23,22 @@
 //! over it, counting the drops for the status summary.
 
 use core::ffi::c_void;
-use std::collections::{HashMap, VecDeque};
+use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock, PoisonError};
 use std::time::Instant;
 
-use base64::Engine as _;
-use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use enshwick::abi::{Header, NetMessage, NetMessageFn, Status};
 
+use rustc_hash::FxHashMap;
+
 use crate::host::{Loader, Registered, take};
+
+mod frame;
+mod peer;
+
+use frame::{Frame, assemble, frames, parse};
+use peer::Peer;
 
 /// The prefix of a frame line, both ways.
 const PREFIX: &str = "/enshwick-net ";
@@ -72,9 +78,6 @@ const HELLO_EVERY: f64 = 5.0;
 /// Clients whose hello is on its way in, at most, on the server.
 const MAX_GREETING: usize = 64;
 
-/// A frame's header: protocol, channel, message id, part and part count.
-const HEADER: usize = 1 + 4 + 2 + 1 + 1;
-
 /// One channel a mod opened.
 #[derive(Debug)]
 struct Channel {
@@ -83,59 +86,12 @@ struct Channel {
     handler: Registered<NetMessageFn>,
 }
 
-/// Parts of a message on their way in.
-#[derive(Debug, Default)]
-struct Partial {
-    total: u8,
-    parts: Vec<Option<Vec<u8>>>,
-}
-
-/// A peer's messages on their way in, and its rate.
-#[derive(Debug)]
-struct Peer {
-    partial: HashMap<(u32, u16), Partial>,
-    tokens: f64,
-    seen: Instant,
-}
-
-impl Peer {
-    fn new() -> Self {
-        Self::with_tokens(BURST)
-    }
-
-    fn with_tokens(tokens: f64) -> Self {
-        Self {
-            partial: HashMap::new(),
-            tokens,
-            seen: Instant::now(),
-        }
-    }
-
-    /// Takes one message from the peer's rate; false when it is spent.
-    fn admit(&mut self) -> bool {
-        self.admit_at(Instant::now(), RATE, BURST)
-    }
-
-    /// Takes one from a rate of `rate` a second up to `burst` at `now`;
-    /// false when it is spent.
-    fn admit_at(&mut self, now: Instant, rate: f64, burst: f64) -> bool {
-        let gained = now.saturating_duration_since(self.seen).as_secs_f64() * rate;
-        self.seen = now;
-        self.tokens = (self.tokens + gained).min(burst);
-        if self.tokens < 1.0 {
-            return false;
-        }
-        self.tokens -= 1.0;
-        true
-    }
-}
-
 /// What the net keeps.
 #[derive(Debug, Default)]
 struct State {
     /// On the server: peers by account key that said hello. On a client:
     /// the server, [`NetMessage::SERVER`], once it answered.
-    peers: HashMap<u64, Peer>,
+    peers: FxHashMap<u64, Peer>,
     /// Lines waiting for the client's chat queue.
     outbox: VecDeque<String>,
     /// The id of the next message sent.
@@ -143,12 +99,12 @@ struct State {
     /// When the client last said hello.
     hello_at: Option<Instant>,
     /// Rates of the peers sending, by key, on the server.
-    sending: HashMap<u64, Peer>,
+    sending: FxHashMap<u64, Peer>,
     /// On a client: the rate of the frames its server sends.
     incoming: Option<Peer>,
     /// On the server: the hellos on their way in from clients that are no
     /// peers yet, by key.
-    greeting: HashMap<u64, Peer>,
+    greeting: FxHashMap<u64, Peer>,
 }
 
 static PENDING: Mutex<Vec<Channel>> = Mutex::new(Vec::new());
@@ -231,35 +187,6 @@ pub(crate) fn link() {
     let _first = CHANNELS.set(channels.into_boxed_slice());
 }
 
-/// The frames of one message: base64 lines with the prefix; `None` for a
-/// message longer than [`MAX_PARTS`] frames, which no peer takes.
-fn frames(channel: u32, message: u16, data: &[u8]) -> Option<Vec<String>> {
-    let parts: Vec<&[u8]> = if data.is_empty() {
-        vec![&[]]
-    } else {
-        data.chunks(PART_BYTES).collect()
-    };
-    if parts.len() > MAX_PARTS {
-        return None;
-    }
-    let total = u8::try_from(parts.len()).ok()?;
-    let lines = parts
-        .iter()
-        .enumerate()
-        .map(|(index, part)| {
-            let mut bytes = Vec::with_capacity(HEADER + part.len());
-            bytes.push(PROTOCOL);
-            bytes.extend_from_slice(&channel.to_le_bytes());
-            bytes.extend_from_slice(&message.to_le_bytes());
-            bytes.push(u8::try_from(index).unwrap_or(u8::MAX));
-            bytes.push(total);
-            bytes.extend_from_slice(part);
-            format!("{PREFIX}{}", URL_SAFE_NO_PAD.encode(bytes))
-        })
-        .collect();
-    Some(lines)
-}
-
 /// The frames of a control message, numbered when it takes more than one.
 pub(crate) fn control_frames(data: &[u8]) -> Option<Vec<String>> {
     let id = if data.len() > PART_BYTES {
@@ -268,64 +195,6 @@ pub(crate) fn control_frames(data: &[u8]) -> Option<Vec<String>> {
         0
     };
     frames(CONTROL, id, data)
-}
-
-/// A frame's header and part.
-#[derive(Debug, PartialEq, Eq)]
-struct Frame {
-    channel: u32,
-    message: u16,
-    index: u8,
-    total: u8,
-    part: Vec<u8>,
-}
-
-/// The frame a line carries, after the prefix.
-fn parse(text: &str) -> Option<Frame> {
-    let bytes = URL_SAFE_NO_PAD.decode(text.trim()).ok()?;
-    if bytes.len() < HEADER || bytes[0] != PROTOCOL {
-        return None;
-    }
-    let frame = Frame {
-        channel: u32::from_le_bytes(bytes[1..5].try_into().ok()?),
-        message: u16::from_le_bytes(bytes[5..7].try_into().ok()?),
-        index: bytes[7],
-        total: bytes[8],
-        part: bytes[HEADER..].to_vec(),
-    };
-    let fits = frame.total >= 1
-        && usize::from(frame.total) <= MAX_PARTS
-        && frame.index < frame.total
-        && frame.part.len() <= PART_BYTES;
-    fits.then_some(frame)
-}
-
-/// Adds `frame` from `peer`; the whole message once its last part came.
-fn assemble(peer: &mut Peer, frame: Frame) -> Option<(u32, Vec<u8>)> {
-    let key = (frame.channel, frame.message);
-    if frame.total == 1 {
-        peer.partial.remove(&key);
-        return Some((frame.channel, frame.part));
-    }
-    let partial = peer.partial.entry(key).or_default();
-    if partial.total != frame.total {
-        *partial = Partial {
-            total: frame.total,
-            parts: vec![None; usize::from(frame.total)],
-        };
-    }
-    partial.parts[usize::from(frame.index)] = Some(frame.part);
-    if partial.parts.iter().any(Option::is_none) {
-        if peer.partial.len() > MAX_PARTS * 4 {
-            peer.partial.clear();
-        }
-        return None;
-    }
-    let message = peer.partial.remove(&key)?;
-    Some((
-        frame.channel,
-        message.parts.into_iter().flatten().flatten().collect(),
-    ))
 }
 
 /// Hands a message to the mod that opened its channel.
@@ -919,10 +788,10 @@ fn dropped() {
 
 #[cfg(test)]
 mod tests {
+    use super::frame::Partial;
     use super::*;
 
-    /// The frames of `lines`, as the server parses them.
-    fn parsed(lines: &[String]) -> Vec<Frame> {
+    pub(super) fn parsed(lines: &[String]) -> Vec<Frame> {
         lines
             .iter()
             .map(|l| parse(l.strip_prefix(PREFIX).unwrap()).unwrap())
@@ -1084,51 +953,6 @@ mod tests {
         assert_eq!(demo_position(&data), Some([1 << 32, -5, 7]));
         assert_eq!(demo_position(&data[..16]), None);
         assert_eq!(demo_position(&[]), None);
-    }
-
-    #[test]
-    fn a_message_goes_out_in_frames_and_comes_back_whole() {
-        let data: Vec<u8> = (0..2000u32).map(|i| (i % 251) as u8).collect();
-        let lines = frames(7, 3, &data).unwrap();
-        assert_eq!(lines.len(), 3);
-        assert!(
-            lines
-                .iter()
-                .all(|l| l.len() <= 1024 && is_frame(l.as_bytes()))
-        );
-        let mut peer = Peer::new();
-        let mut whole = None;
-        for line in lines.iter().rev() {
-            let frame = parse(line.strip_prefix(PREFIX).unwrap()).unwrap();
-            whole = assemble(&mut peer, frame);
-        }
-        assert_eq!(whole, Some((7, data)));
-        assert!(peer.partial.is_empty());
-    }
-
-    #[test]
-    fn the_largest_message_fits_its_frames_and_malformed_frames_are_dropped() {
-        assert!(frames(1, 0, &[0; MAX_MESSAGE]).unwrap().len() <= MAX_PARTS);
-        assert_eq!(
-            frames(1, 0, &[0; PART_BYTES * MAX_PARTS]).unwrap().len(),
-            MAX_PARTS
-        );
-        assert!(frames(1, 0, &[0; PART_BYTES * MAX_PARTS + 1]).is_none());
-        let mut long = control(NOTICE);
-        long.extend_from_slice(&[b'a'; MAX_CONTROL + 1]);
-        assert!(control_frames(&long).is_none());
-        assert!(parse("not base64 !").is_none());
-        assert!(parse(&URL_SAFE_NO_PAD.encode([9u8; HEADER])).is_none());
-        let mut bad = vec![PROTOCOL, 1, 0, 0, 0, 0, 0, 3, 2];
-        bad.push(0);
-        assert!(parse(&URL_SAFE_NO_PAD.encode(&bad)).is_none());
-    }
-
-    #[test]
-    fn a_peer_s_rate_runs_out_after_its_burst() {
-        let mut peer = Peer::new();
-        let admitted = (0..100).filter(|_| peer.admit()).count();
-        assert!((40..=42).contains(&admitted), "{admitted}");
     }
 
     #[test]

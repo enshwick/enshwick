@@ -44,7 +44,7 @@ fn manifest() -> &'static enshwick::abi::Manifest {
 without it is warned before joining; see [The join check](concepts/join-check.md).
 [`enshwick-safes`](https://github.com/enshwick/mod-safes)
 and
-[`enshwick-building-materials`](https://github.com/enshwick/mod-building-materials)
+[`enshwick-game-rates`](https://github.com/enshwick/mod-game-rates)
 are content mods of this kind.
 
 Every content call is made during `init`. The loader seals what mods
