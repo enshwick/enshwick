@@ -6,6 +6,10 @@
 //! A game build it does not know leaves the game vanilla, unless a mod holds
 //! the game for a world vanilla cannot open.
 
+// Address sanitizer runs of the tests set `enshwick_asan` on a nightly
+// compiler, to leave the walks over other threads' stacks unchecked.
+#![cfg_attr(enshwick_asan, feature(sanitize))]
+
 #[cfg(windows)]
 mod actions;
 pub mod admission;
