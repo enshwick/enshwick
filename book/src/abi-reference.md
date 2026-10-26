@@ -342,3 +342,4 @@ marked "init only" are allowed during `enshwick_mod_init` only.
 | `run_point`              | Runs the live links of the mod's own extension point over its answer; any thread                     | 65          |
 | `actions`                | Registers the mod's player actions, asked for sheets, runs and hints; init only                      | 66          |
 | `event_types`            | Every game event type the running build reflects, with hash and size; any thread                     | 72          |
+| `recipe_kind`            | The kind of the recipes that make an item, from its loaded static data; any thread                   | 73          |

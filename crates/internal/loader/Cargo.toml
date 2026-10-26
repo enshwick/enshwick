@@ -58,8 +58,8 @@ windows-sys = { workspace = true, features = [
 loom = { version = "0.7.2", default-features = false }
 
 [dev-dependencies]
-criterion.workspace = true
 bytemuck.workspace = true
+criterion.workspace = true
 insta.workspace = true
 
 [package.metadata.enshwick]
@@ -72,4 +72,8 @@ workspace = true
 
 [[bench]]
 name = "registry_read"
+harness = false
+
+[[bench]]
+name = "item_kinds"
 harness = false

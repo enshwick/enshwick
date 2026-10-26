@@ -3,6 +3,7 @@
 use super::super::menu::MenuEntry;
 use super::super::workshops::WorkshopId;
 use super::super::{Blob, Guid, types};
+use super::RecipeKind;
 use super::add::{
     NewRecipe, RECIPE_REGISTRY, RESERVED_FOR_SINGLE, RecipeLayout, retarget, workshop_counts,
 };
@@ -180,6 +181,34 @@ impl RecipeView<'_> {
         guid.copy_from_slice(self.blob.bytes().get(outputs..outputs + 16)?);
         let made = self.blob.read_u32(outputs + self.layout.stack_count)?;
         Some((Guid(guid), made))
+    }
+
+    /// What the item the recipe makes is, as the game classes it; `None`
+    /// until the game has loaded that item, and outside the game.
+    ///
+    /// A dedicated server builds its recipe registry before it loads the
+    /// items, so the first build of a recipe patch sees no kinds there: a
+    /// mod that changes recipes by kind calls [`rebuild_recipes`](super::rebuild_recipes) on
+    /// [`WorldLoaded`](crate::events::WorldLoaded), and the rebuild applies
+    /// them.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::content::recipes::RecipeKind;
+    ///
+    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    ///     load.modify_recipes(|recipe| {
+    ///         if recipe.view().kind() == Some(RecipeKind::BuildingBlock) {
+    ///             recipe.scale_output(2);
+    ///         }
+    ///     })
+    /// }
+    /// ```
+    #[must_use]
+    pub fn kind(&self) -> Option<RecipeKind> {
+        let (item, _) = self.output()?;
+        RecipeKind::of(item)
     }
 }
 

@@ -30,8 +30,8 @@ use entries::build::{
 };
 use entries::content::{
     add_text, content_read, content_serve, entity_data_open, game_text, icons_ready, item_data_get,
-    item_data_open, item_data_set, rebuild_resource, recipe_disabled, recipe_rule, resource_read,
-    serve_resource,
+    item_data_open, item_data_set, rebuild_resource, recipe_disabled, recipe_kind, recipe_rule,
+    resource_read, serve_resource,
 };
 use entries::gameplay::{
     account_knowledge, affix_info, affix_open, affix_roll, altar_limit, altar_zones_control,
@@ -675,6 +675,7 @@ pub(crate) static API: HostApi = HostApi {
     run_point,
     actions,
     event_types,
+    recipe_kind,
 };
 
 /// The loader and the calling mod, when the mod is on.
