@@ -14,7 +14,7 @@ ABI in a safe API.
 | `enshwick` | `crates/enshwick` | the ABI types (`enshwick::abi`), the safe API mods use, and the fake loader for tests (`test` feature) | yes |
 | `enshwick-macros` | `crates/enshwick-macros` | `#[hook]`, `#[derive(Config)]` and the other macros of the API | yes |
 | `enshwick-gamedata` | `crates/enshwick-gamedata` | the build tables of every game build, the engine's reflection reader (`reflect`) and the game archive reader (`archive`) | yes |
-| `cargo-enshwick` | `crates/cargo-enshwick` | the one tool for mod authors: new mods, install, manifests, content packs, point definitions, porting a table to a new build | yes |
+| `cargo-enshwick` | `crates/cargo-enshwick` | the one tool for mod authors: new mods, install, manifests, content packs, point definitions, porting a table to a new build; its library reads point schemas for tests and fuzzing | yes |
 | `xtask` | `tools/xtask` | repository checks, the dev bundle and `cargo xtask compat`, the maintainers' report of what works on a game build | no |
 | `enshwick-fuzz` | `fuzz` | the fuzz targets for untrusted input, a workspace of their own | no |
 | examples | `examples/*` | small mods, one part of the API each | no |
