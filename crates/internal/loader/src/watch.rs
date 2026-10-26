@@ -254,7 +254,7 @@ mod tests {
     fn a_noted_write_is_the_loader_s_own_once() {
         let dir = std::env::temp_dir().join(format!("enshwick-watch-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
-        let path = dir.join("safes.toml");
+        let path = dir.join("you.trading-post.toml");
         write_noted(&path, || {
             std::fs::write(
                 &path,

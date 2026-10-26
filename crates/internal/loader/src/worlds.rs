@@ -382,8 +382,11 @@ workers = 6
         );
         assert_eq!(destination(Stage::Sync, None), Destination::Next);
         assert_eq!(client_keys(&schema()), ["labels"]);
-        let file = world_file(Path::new("d"), "safes", "w-1");
-        assert!(file.ends_with("safes/worlds/w-1/settings.toml"));
-        assert!(next_file(Path::new("d"), "safes").ends_with("safes/worlds/next.toml"));
+        let file = world_file(Path::new("d"), "you.trading-post", "w-1");
+        assert!(file.ends_with("you.trading-post/worlds/w-1/settings.toml"));
+        assert!(
+            next_file(Path::new("d"), "you.trading-post")
+                .ends_with("you.trading-post/worlds/next.toml")
+        );
     }
 }

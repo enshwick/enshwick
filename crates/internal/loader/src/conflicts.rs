@@ -222,22 +222,22 @@ mod tests {
     }
 
     fn names(index: usize) -> String {
-        ["safes", "survivors", "market"][index].to_owned()
+        ["you.trading-post", "you.market-stalls", "market"][index].to_owned()
     }
 
     #[test]
     fn shared_hooks_are_listed_in_running_order() {
-        let mut framed = link("survivors", 5);
+        let mut framed = link("you.market-stalls", 5);
         framed.caller_frame = true;
         let hooks = [
             Hooked {
                 name: "building.place".into(),
-                links: vec![link("safes", 0), framed],
+                links: vec![link("you.trading-post", 0), framed],
                 refused: Vec::new(),
             },
             Hooked {
                 name: "alone".into(),
-                links: vec![link("safes", 0)],
+                links: vec![link("you.trading-post", 0)],
                 refused: Vec::new(),
             },
             Hooked {
@@ -246,15 +246,15 @@ mod tests {
                     exclusive: true,
                     ..link("market", 0)
                 }],
-                refused: vec![("safes".into(), Some("market".into()))],
+                refused: vec![("you.trading-post".into(), Some("market".into()))],
             },
         ];
         let lines = report(&hooks, &[], &[], names);
         assert_eq!(
             lines,
             [
-                "hook building.place: safes (priority 0) then survivors (priority 5, reads the caller frame), chained: each link calls on or replaces the rest",
-                "hook held: market (priority 0, exclusive); safes refused, market holds it exclusively",
+                "hook building.place: you.trading-post (priority 0) then you.market-stalls (priority 5, reads the caller frame), chained: each link calls on or replaces the rest",
+                "hook held: market (priority 0, exclusive); you.trading-post refused, market holds it exclusively",
             ]
         );
     }
@@ -272,8 +272,8 @@ mod tests {
         assert_eq!(
             lines,
             [
-                "interaction filter: safes, survivors, chained in load order, each may refuse or change",
-                "altar limit: market holds it; refused: safes",
+                "interaction filter: you.trading-post, you.market-stalls, chained in load order, each may refuse or change",
+                "altar limit: market holds it; refused: you.trading-post",
             ]
         );
     }
@@ -283,14 +283,19 @@ mod tests {
         let resources = [
             (
                 "the item registry".to_owned(),
-                vec!["safes".to_owned(), "survivors".to_owned()],
+                vec![
+                    "you.trading-post".to_owned(),
+                    "you.market-stalls".to_owned(),
+                ],
             ),
-            ("one".to_owned(), vec!["safes".to_owned()]),
+            ("one".to_owned(), vec!["you.trading-post".to_owned()]),
         ];
         let lines = report(&[], &[], &resources, names);
         assert_eq!(
             lines,
-            ["the item registry: patched by safes then survivors, each on the one before"]
+            [
+                "the item registry: patched by you.trading-post then you.market-stalls, each on the one before"
+            ]
         );
     }
 }

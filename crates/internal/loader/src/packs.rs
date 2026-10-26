@@ -343,7 +343,7 @@ mod tests {
     #[test]
     fn a_pack_manifest_reads_as_a_mod_s() {
         let manifest = PackManifest::parse(
-            "id = \"you.lanterns\"\nversion = \"1.2.0\"\nname = \"Lanterns\"\nhomepage = \"https://example.com/lanterns\"\n[requires]\nsafes = \">=0.5\"\n",
+            "id = \"you.lanterns\"\nversion = \"1.2.0\"\nname = \"Lanterns\"\nhomepage = \"https://example.com/lanterns\"\n[requires]\n\"you.trading-post\" = \">=0.5\"\n",
         )
         .unwrap();
         let manifest = manifest_of(&manifest);

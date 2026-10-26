@@ -22,9 +22,9 @@ const MAX_LINES: usize = 12;
 /// use enshwick_loader::admission::Need;
 /// use enshwick_loader::join::{Names, refusal};
 ///
-/// let need = Need { id: "safes".into(), version: "0.3.0".into(), yours: None };
+/// let need = Need { id: "you.trading-post".into(), version: "0.3.0".into(), yours: None };
 /// let dialog = refusal::dialog(&[need], &refusal::Off::default(), &Names::new(), &Default::default());
-/// assert!(dialog.detail.lines().any(|line| line == "safes 0.3.0"));
+/// assert!(dialog.detail.lines().any(|line| line == "you.trading-post 0.3.0"));
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Dialog {
@@ -71,10 +71,10 @@ enum Get {
 /// use enshwick_loader::admission::Need;
 /// use enshwick_loader::join::{Names, refusal};
 ///
-/// let need = Need { id: "safes".into(), version: "0.3.0".into(), yours: Some("0.2.0".into()) };
-/// let pages = BTreeMap::from([("safes".to_owned(), "https://github.com/someone/safes".to_owned())]);
+/// let need = Need { id: "you.trading-post".into(), version: "0.3.0".into(), yours: Some("0.2.0".into()) };
+/// let pages = BTreeMap::from([("you.trading-post".to_owned(), "https://github.com/someone/trading-post".to_owned())]);
 /// let dialog = refusal::dialog(&[need], &refusal::Off::default(), &Names::new(), &pages);
-/// assert!(dialog.detail.contains("github.com/someone/safes"));
+/// assert!(dialog.detail.contains("github.com/someone/trading-post"));
 /// ```
 #[must_use]
 pub fn dialog(
@@ -165,21 +165,21 @@ mod tests {
 
     #[test]
     fn missing_mods_are_listed_under_where_to_get_them() {
-        let names = Names::from([("build-camera".to_owned(), "Build camera".to_owned())]);
+        let names = Names::from([("you.lanterns".to_owned(), "Lanterns".to_owned())]);
         let pages = BTreeMap::from([
             (
-                "build-camera".to_owned(),
+                "you.lanterns".to_owned(),
                 "https://github.com/someone/mods".to_owned(),
             ),
             (
-                "safes".to_owned(),
+                "you.trading-post".to_owned(),
                 "https://github.com/someone/mods".to_owned(),
             ),
         ]);
         let dialog = dialog(
             &[
-                need("build-camera", "0.3.0", None),
-                need("safes", "0.2.0", Some("0.1.0")),
+                need("you.lanterns", "0.3.0", None),
+                need("you.trading-post", "0.2.0", Some("0.1.0")),
                 need("zones", "0.1.0", None),
             ],
             &Off::default(),
@@ -190,8 +190,8 @@ mod tests {
             lines(&dialog),
             [
                 "From github.com/someone/mods:",
-                "Build camera 0.3.0",
-                "safes 0.2.0, yours 0.1.0",
+                "Lanterns 0.3.0",
+                "you.trading-post 0.2.0, yours 0.1.0",
                 "Ask the server's admin for:",
                 "zones 0.1.0",
             ]
@@ -202,7 +202,7 @@ mod tests {
     #[test]
     fn the_dialog_never_offers_a_download() {
         let dialog = dialog(
-            &[need("safes", "0.2.0", None)],
+            &[need("you.trading-post", "0.2.0", None)],
             &Off::default(),
             &Names::new(),
             &BTreeMap::new(),
@@ -214,15 +214,18 @@ mod tests {
     #[test]
     fn mods_the_player_or_the_game_turned_off_are_to_turn_on_not_to_install() {
         let off = Off {
-            by_player: vec!["safes".to_owned()],
+            by_player: vec!["you.trading-post".to_owned()],
             this_game: vec!["count".to_owned()],
         };
         let pages = BTreeMap::from([(
-            "safes".to_owned(),
+            "you.trading-post".to_owned(),
             "https://github.com/someone/mods".to_owned(),
         )]);
         let dialog = dialog(
-            &[need("count", "0.2.0", None), need("safes", "0.3.0", None)],
+            &[
+                need("count", "0.2.0", None),
+                need("you.trading-post", "0.3.0", None),
+            ],
             &off,
             &Names::new(),
             &pages,
@@ -231,7 +234,7 @@ mod tests {
             lines(&dialog),
             [
                 "Turn on in mods/enshwick/mods.toml:",
-                "safes 0.3.0",
+                "you.trading-post 0.3.0",
                 "Turned off in this game; restart it:",
                 "count 0.2.0",
             ]
@@ -240,19 +243,19 @@ mod tests {
 
     #[test]
     fn every_line_is_short_enough_to_stay_on_one_line() {
-        let id = "survivors-per-altar";
+        let id = "you.market-stalls";
         let pages = BTreeMap::from([(
             id.to_owned(),
             "https://github.com/enshwick/enshwick".to_owned(),
         )]);
         let off = Off {
-            by_player: vec!["safes".to_owned()],
+            by_player: vec!["you.trading-post".to_owned()],
             this_game: vec!["count".to_owned()],
         };
         let dialog = dialog(
             &[
                 need(id, "0.1.4", Some("0.1.3")),
-                need("safes", "0.1.0", None),
+                need("you.trading-post", "0.1.0", None),
                 need("count", "0.1.0", None),
                 need("zones", "0.1.0", None),
             ],

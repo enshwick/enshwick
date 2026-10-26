@@ -490,14 +490,14 @@ mod tests {
 
     #[test]
     fn hints_are_read_from_their_lines() {
-        let hints = parse_hints("safes\taccess\tWho may use it\tYour Safe\nbad line\n");
+        let hints = parse_hints("you.trading-post\taccess\tWho may use it\tYour stall\nbad line\n");
         assert_eq!(
             hints,
             [Hint {
-                id: "safes".into(),
+                id: "you.trading-post".into(),
                 action: "access".into(),
                 label: "Who may use it".into(),
-                subject: "Your Safe".into(),
+                subject: "Your stall".into(),
             }]
         );
     }
@@ -514,7 +514,7 @@ mod tests {
                 .collect(),
             ..Entry::default()
         };
-        let text = fitted("safes", "Safes", sheet::encode(&[entry]));
+        let text = fitted("you.trading-post", "Trading Post", sheet::encode(&[entry]));
         let entries = sheet::decode(&text);
         assert_eq!(entries.len(), 1);
         assert!(!entries[0].players.is_empty() && entries[0].players.len() < 2000);

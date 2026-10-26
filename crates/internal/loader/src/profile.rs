@@ -77,7 +77,7 @@ impl Feature {
             Self::Damage => "damage filter",
             Self::Progress => "progress filters",
             Self::Renames => "rename filter",
-            Self::Survivors => "survivors",
+            Self::Survivors => "you.market-stalls",
             Self::Altars => "altars",
             Self::Stats => "stats",
             Self::Inventory => "inventory",
@@ -506,10 +506,10 @@ mod tests {
         now[Feature::Events as usize] = (5, 50);
         now[FEATURES + Feature::Interactions as usize] = (3, 30);
         let base = vec![(1, 10); 2 * FEATURES];
-        let names = |i: usize| ["safes", "survivors"][i].to_owned();
+        let names = |i: usize| ["you.trading-post", "you.market-stalls"][i].to_owned();
         let costs = costs(&[chain], &now, &base, names);
         assert_eq!(costs.len(), 2);
-        assert_eq!(costs[0].id, "survivors");
+        assert_eq!(costs[0].id, "you.market-stalls");
         assert_eq!(costs[0].items[0].what, "hook f");
         assert!((costs[0].ticks() - 220.0).abs() < 1e-9);
         assert_eq!(
@@ -523,7 +523,7 @@ mod tests {
         let lines = render(&costs, 1e9, Duration::from_secs(1), 5, 3);
         assert_eq!(
             lines[0],
-            "survivors 0.2 µs/s: hook f 0.2 µs/s in 10 calls; interaction filter 0.0 µs/s in 2 calls"
+            "you.market-stalls 0.2 µs/s: hook f 0.2 µs/s in 10 calls; interaction filter 0.0 µs/s in 2 calls"
         );
     }
 
