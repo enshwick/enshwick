@@ -6,7 +6,8 @@
 
 use std::sync::OnceLock;
 
-use enshwick::abi::{HookFlags, RateId};
+use enshwick::abi::{Event, HookFlags, RateId, Status};
+use enshwick::content::recipes::RecipeLayout;
 
 use crate::chains::Next;
 use crate::fuse::Fuse;
@@ -288,6 +289,118 @@ unsafe fn scale_slot(slot: *mut u8, rate: f32) {
     };
     // SAFETY: the caller's slot is writable at `SLOT_COUNT`, a `u16`.
     unsafe { crate::memory::write(slot, SLOT_COUNT, scale_stack(count, rate, max)) };
+}
+
+/// Whether some mod declared a recipe output rate.
+pub(crate) fn recipes_rated() -> bool {
+    RATES.any(crate::rates::is_recipe_output)
+}
+
+/// The recipe output rates' state: where a recipe sits in the registry on
+/// the running build, and their own switch, so a fault in the recipe patch
+/// leaves the other rates running.
+#[derive(Debug)]
+struct RecipeRates {
+    layout: OnceLock<Option<RecipeLayout>>,
+    fuse: Fuse,
+}
+
+static RECIPE_RATES: RecipeRates = RecipeRates {
+    layout: OnceLock::new(),
+    fuse: Fuse::new("recipe output rates"),
+};
+
+/// The loader's patch of the recipe registry for the recipe output rates,
+/// when a mod declared one and the build reflects the recipe layout.
+pub(crate) fn recipe_patch(loader: &Loader) -> Option<enshwick::abi::ResourcePatchFn> {
+    if !recipes_rated() {
+        return None;
+    }
+    let layout = RECIPE_RATES.layout.get_or_init(|| {
+        RecipeLayout::resolve(&crate::catalogue::Reflected(&loader.reflection))
+            .map_err(|off| crate::log!(WARN, "recipe output rates off: {off}"))
+            .ok()
+    });
+    layout
+        .is_some()
+        .then_some(scale_recipes as enshwick::abi::ResourcePatchFn)
+}
+
+/// Builds the recipe registry again with the factors in force, once every
+/// mod is initialised: on a world load, when a dedicated server knows the
+/// kinds of the items, and when a recipe output factor in force changes.
+pub(crate) fn rebuild_recipes() {
+    if !RATES.is_sealed() || !recipes_rated() {
+        return;
+    }
+    let status = crate::content::rebuild(
+        crate::mod_index::ModIndex::LOADER,
+        crate::content::recipe_registry(),
+    );
+    if status != Status::OK {
+        crate::log!(
+            WARN,
+            "recipe output rates: the recipes were not rebuilt ({})",
+            status.0
+        );
+    }
+}
+
+/// Follows the world: a loaded world's items tell the recipes' kinds.
+pub(crate) fn world_event(event: Event) {
+    if event == Event::WORLD_LOADED {
+        rebuild_recipes();
+    }
+}
+
+/// Scales what each recipe of the registry at `base` makes by the recipe
+/// output rate of its kind; a recipe whose item the game has not loaded
+/// yet keeps its count until a rebuild. Hands back the registry unchanged
+/// when the recipe rates' switch is off or a fault turns it off, so the
+/// game never loses its recipes and a rebuild keeps this patch in its run.
+///
+/// # Safety
+///
+/// - `base` is valid for `len` bytes for the call, and `out` and `out_len`
+///   are writable, as [`enshwick::abi::ResourcePatchFn`] says.
+unsafe extern "system" fn scale_recipes(
+    base: *const u8,
+    len: usize,
+    _user: *mut core::ffi::c_void,
+    out: *mut *const u8,
+    out_len: *mut usize,
+) -> Status {
+    if base.is_null() || out.is_null() || out_len.is_null() {
+        return Status::BAD_ARGS;
+    }
+    // SAFETY: the loader's resource chain passes `len` readable bytes at
+    // the non-null `base` (checked above) for the call.
+    let registry = unsafe { core::slice::from_raw_parts(base, len) };
+    let built = RECIPE_RATES
+        .layout
+        .get()
+        .and_then(Option::as_ref)
+        .and_then(|layout| {
+            RECIPE_RATES.fuse.run("the recipe output patch", || {
+                crate::rates::scale_recipes_in(layout, registry, &|view| view.kind(), &|kind| {
+                    factor(RateId::recipe_output(kind.code()))
+                })
+            })
+        })
+        .unwrap_or_else(|| registry.to_vec());
+    let built: &'static mut [u8] = Box::leak(built.into_boxed_slice());
+    // SAFETY: `out` is non-null (checked above) and writable for the call;
+    // the bytes are leaked, so they stay valid and writable for the
+    // process, as the chain needs for a rebuild.
+    unsafe {
+        out.write(built.as_ptr());
+    }
+    // SAFETY: `out_len` is non-null (checked above) and writable for the
+    // call, as `ResourcePatchFn` says.
+    unsafe {
+        out_len.write(built.len());
+    }
+    Status::OK
 }
 
 #[cfg(test)]
