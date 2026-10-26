@@ -84,6 +84,7 @@ pub mod ecs;
 pub mod effects;
 pub mod entity_data;
 pub mod events;
+pub(crate) mod fresh;
 pub mod game_events;
 pub mod game_settings;
 mod hook;
@@ -275,7 +276,7 @@ pub use shape::Shape;
 #[doc(hidden)]
 pub mod __private {
     use std::sync::OnceLock;
-    use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU64, Ordering};
+    use std::sync::atomic::{AtomicU8, AtomicU64, Ordering};
     use std::time::{Duration, Instant};
 
     use crate::abi::{HostApi, Level, ManifestFlags, ModHandle, Status};
@@ -402,18 +403,20 @@ pub mod __private {
 
     /// A call site that logs its first time only.
     #[derive(Debug)]
-    pub struct Once(AtomicBool);
+    /// A line logged once per mod life: holds the life it was logged in.
+    pub struct Once(AtomicU64);
 
     impl Once {
         #[must_use]
         pub const fn new() -> Self {
-            Self(AtomicBool::new(false))
+            Self(AtomicU64::new(0))
         }
 
         #[inline]
         #[must_use]
         pub fn first(&self) -> bool {
-            !self.0.load(Ordering::Relaxed) && !self.0.swap(true, Ordering::Relaxed)
+            let life = crate::fresh::life();
+            self.0.load(Ordering::Relaxed) != life && self.0.swap(life, Ordering::Relaxed) != life
         }
     }
 
@@ -426,6 +429,8 @@ pub mod __private {
     /// A call site that logs at most once per period, counting what it skips.
     #[derive(Debug)]
     pub struct Every {
+        /// The mod life the counts belong to.
+        life: AtomicU64,
         next: AtomicU64,
         skipped: AtomicU64,
     }
@@ -434,6 +439,7 @@ pub mod __private {
         #[must_use]
         pub const fn new() -> Self {
             Self {
+                life: AtomicU64::new(0),
                 next: AtomicU64::new(0),
                 skipped: AtomicU64::new(0),
             }
@@ -445,6 +451,11 @@ pub mod __private {
             static EPOCH: OnceLock<Instant> = OnceLock::new();
             let now = u64::try_from(EPOCH.get_or_init(Instant::now).elapsed().as_millis())
                 .unwrap_or(u64::MAX);
+            let life = crate::fresh::life();
+            if self.life.swap(life, Ordering::Relaxed) != life {
+                self.next.store(0, Ordering::Relaxed);
+                self.skipped.store(0, Ordering::Relaxed);
+            }
             let next = self.next.load(Ordering::Relaxed);
             let period = u64::try_from(period.as_millis()).unwrap_or(u64::MAX);
             if now < next
@@ -483,10 +494,33 @@ pub mod __private {
         }
     }
 
+    /// Where `declare_mod!` keeps the mod's state once `init` made it, for
+    /// the process in the game and for one install under the fake host.
+    #[derive(Debug)]
+    pub struct Slot<M>(crate::fresh::Fresh<M>);
+
+    impl<M> Slot<M> {
+        #[must_use]
+        pub const fn new() -> Self {
+            Self(crate::fresh::Fresh::new())
+        }
+
+        #[must_use]
+        pub fn get(&'static self) -> Option<&'static M> {
+            self.0.get()
+        }
+    }
+
+    impl<M> Default for Slot<M> {
+        fn default() -> Self {
+            Self::new()
+        }
+    }
+
     /// # Safety
     ///
     /// `api` is the loader's process-wide table.
-    pub unsafe fn init<M: Mod>(api: *const HostApi, me: ModHandle, slot: &OnceLock<M>) -> Status {
+    pub unsafe fn init<M: Mod>(api: *const HostApi, me: ModHandle, slot: &Slot<M>) -> Status {
         // SAFETY: forwarded from the caller.
         let Some(host) = (unsafe { Host::new(api, me) }) else {
             return Status::BAD_ARGS;
@@ -502,7 +536,7 @@ pub mod __private {
             M::init(&mut Load::new(host))
         }));
         match outcome {
-            Ok(Ok(state)) => match slot.set(state) {
+            Ok(Ok(state)) => match slot.0.set(state) {
                 Ok(()) => Status::OK,
                 Err(state) => {
                     let _dropped =
@@ -571,7 +605,7 @@ pub mod __private {
         }
     }
 
-    pub fn shutdown<M: Mod>(slot: &'static OnceLock<M>) {
+    pub fn shutdown<M: Mod>(slot: &'static Slot<M>) {
         let Some(state) = slot.get() else {
             return;
         };
@@ -582,7 +616,7 @@ pub mod __private {
         }
     }
 
-    pub fn ready<M: Mod>(slot: &'static OnceLock<M>) {
+    pub fn ready<M: Mod>(slot: &'static Slot<M>) {
         let (Some(state), Some(host)) = (slot.get(), crate::host()) else {
             return;
         };

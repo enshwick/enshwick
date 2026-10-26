@@ -1,9 +1,0 @@
-{
-  "crates/cargo-enshwick": "0.0.0-dev",
-  "crates/enshwick": "0.0.0-dev",
-  "crates/internal/loader": "0.0.0-dev",
-  "crates/internal/stub": "0.0.0-dev",
-  "crates/enshwick-macros": "0.0.0-dev",
-  "crates/enshwick-reflect": "0.0.0-dev",
-  "crates/enshwick-gamedata": "0.0.0-dev"
-}

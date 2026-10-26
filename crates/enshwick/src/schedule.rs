@@ -9,7 +9,7 @@
 
 use std::ops::ControlFlow;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Mutex, OnceLock, PoisonError};
+use std::sync::{Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
 /// A task: when it is due, its period when it repeats, and what it runs.
@@ -56,7 +56,7 @@ impl Queue {
     }
 }
 
-static QUEUE: OnceLock<Queue> = OnceLock::new();
+static QUEUE: crate::fresh::Fresh<Queue> = crate::fresh::Fresh::new();
 
 /// Puts work on the server's game thread; get it from
 /// [`Load::scheduler`](crate::Load::scheduler). Copy it anywhere, including

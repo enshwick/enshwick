@@ -21,8 +21,12 @@
 ///   and that the loader notes as missing otherwise;
 /// - `breaks: ["id" => "range", ...]`: mods this one does not work beside in
 ///   that range; the loader skips this mod when one of them loads;
-/// - `replaces: ["id", ...]`: old ids of this mod, from before a rename;
-///   while this mod is present the loader never starts theirs;
+/// - `replaces: ["id", ...]`: mods this one takes the place of, such as
+///   mods it folds in; while this mod is present the loader never starts
+///   them;
+/// - `was: ["id", ...]`: ids this mod had before a rename; it replaces them,
+///   answers requirements and points named by them, and on its first start
+///   takes over their settings and data;
 /// - `builds: [{ side, guid, age, symbols: ["id" => rva], constants: ["id" => value] }]`,
 ///   symbols and constants the mod pins itself for those game builds.
 ///
@@ -41,6 +45,7 @@
 ///     requires: ["flame-altar-zones" => ">=0.1, <1.0"],
 ///     breaks: ["old-survivors" => "<0.3"],
 ///     replaces: ["survivors"],
+///     was: ["survivor-copies"],
 ///     builds: [{
 ///         side: SERVER,
 ///         guid: "1c129660cd6efc4f9f0b21652d5ff2bf",
@@ -49,7 +54,7 @@
 ///         constants: ["survivors.bed_id" => 0x48],
 ///     }],
 /// );
-/// assert_eq!(manifest.dependency_count, 3);
+/// assert_eq!(manifest.dependency_count, 4);
 /// assert_eq!(manifest.build_count, 1);
 /// assert_eq!(manifest.author_count, 1);
 /// // SAFETY: static strings.
@@ -79,6 +84,7 @@ macro_rules! manifest {
         $(, recommends: [$($rec:literal => $rec_range:literal),* $(,)?])?
         $(, breaks: [$($breaks:literal => $breaks_range:literal),* $(,)?])?
         $(, replaces: [$($replaces:literal),* $(,)?])?
+        $(, was: [$($was:literal),* $(,)?])?
         $(, builds: [$({
             side: $bside:ident,
             guid: $guid:literal,
@@ -90,6 +96,7 @@ macro_rules! manifest {
     ) => {{
         const _: () = ::core::assert!($crate::abi::is_valid_id($id), "a mod id is [a-z0-9-]+");
         $($(const _: () = ::core::assert!($crate::abi::is_valid_id($replaces), "a replaced mod id is [a-z0-9-]+");)*)?
+        $($(const _: () = ::core::assert!($crate::abi::is_valid_id($was), "a former mod id is [a-z0-9-]+");)*)?
         static DEPENDENCIES: &[$crate::abi::Dependency] = &[
             $($($crate::abi::Dependency {
                 id: $crate::abi::Str::new($req),
@@ -115,6 +122,11 @@ macro_rules! manifest {
                 id: $crate::abi::Str::new($replaces),
                 range: $crate::abi::Str::EMPTY,
                 relation: $crate::abi::Relation::REPLACES,
+            },)*)?
+            $($($crate::abi::Dependency {
+                id: $crate::abi::Str::new($was),
+                range: $crate::abi::Str::EMPTY,
+                relation: $crate::abi::Relation::WAS,
             },)*)?
         ];
         const AUTHOR_COUNT: usize = $crate::__private::author_count(
@@ -196,7 +208,7 @@ macro_rules! manifest {
 #[macro_export]
 macro_rules! declare_mod {
     ($ty:ty) => {
-        static __ENSHWICK_INSTANCE: ::std::sync::OnceLock<$ty> = ::std::sync::OnceLock::new();
+        static __ENSHWICK_INSTANCE: $crate::__private::Slot<$ty> = $crate::__private::Slot::new();
 
         impl $ty {
             /// The mod's state, once the loader has initialised it.
