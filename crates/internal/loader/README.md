@@ -22,8 +22,9 @@ applies at once.
 
 `logs/enshwick/report.md` is the one file a player attaches to an issue:
 versions, system, status, mod files, the latest warnings and errors.
-`logs/enshwick/status.log` holds the latest status summary: the mods and
-whether they run, the mods turned off and why, what mods serve and patch, and
+`logs/enshwick/status.log` holds the latest status summary: the loader
+features this game build lacks table entries for, the mods and whether they
+run, the mods turned off and why, what mods serve and patch, and
 with `diagnostics = true` the calls of every hooked function
 (`diagnostics_timing = true` times one call in 256 too). It is written every
 `status_minutes` (10 by default) and for `enshwick status` in the

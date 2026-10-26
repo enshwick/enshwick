@@ -130,8 +130,10 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
 fn live(loader: &Loader) -> Result<(&'static Layout, usize, usize), Status> {
     let layout = layout(loader).ok_or(Status::MISSING)?;
     let server = crate::world::server()?;
-    // SAFETY: the server holds the pointer to its settings from its start.
-    let settings: usize = unsafe { crate::world::read(server, layout.settings) };
+    // SAFETY: `server` comes from `crate::world::server`, so this runs on the
+    // game thread that alone writes it; the table's `server.game_settings`
+    // offset holds the pointer to its settings, set from its start.
+    let settings: usize = unsafe { crate::memory::read(server, layout.settings) };
     if settings == 0 {
         return Err(Status::MISSING);
     }
@@ -145,17 +147,17 @@ pub(crate) fn read(loader: &Loader, out: &mut [u8]) -> Result<u8, Status> {
     if out.len() != layout.size {
         return Err(Status::BAD_ARGS);
     }
-    // SAFETY: the live settings span their reflected size, on the game
-    // thread that alone writes them.
-    unsafe {
-        core::ptr::copy_nonoverlapping(
-            core::ptr::with_exposed_provenance::<u8>(settings),
-            out.as_mut_ptr(),
-            out.len(),
-        );
-    };
-    // SAFETY: the server holds its preset byte.
-    Ok(unsafe { crate::world::read(server, layout.preset) })
+    for (at, byte) in out.iter_mut().enumerate() {
+        // SAFETY: `settings` is non-zero (checked by `live`) and the live
+        // settings span their reflected size, `out.len()` (`out.len() !=
+        // layout.size` returns first), so `at` is inside them; on the game
+        // thread (checked by `live`) that alone writes them.
+        *byte = unsafe { crate::memory::read(settings, at) };
+    }
+    // SAFETY: `server` comes from `live` on the game thread that alone writes
+    // it; the table's `server.game_settings_preset` offset holds its preset
+    // byte.
+    Ok(unsafe { crate::memory::read(server, layout.preset) })
 }
 
 /// Replaces the live settings with `bytes`, their whole reflected layout,
@@ -174,20 +176,24 @@ pub(crate) fn write(loader: &Loader, bytes: &[u8]) -> Result<(), Status> {
     if length(layout.day_length) <= 0 || length(layout.night_length) <= 0 {
         return Err(Status::BAD_ARGS);
     }
-    // SAFETY: as for `read`; the game's admin command writes them the same
-    // way, between the systems that read them.
-    unsafe {
-        core::ptr::copy_nonoverlapping(
-            bytes.as_ptr(),
-            core::ptr::with_exposed_provenance_mut::<u8>(settings),
-            bytes.len(),
-        );
-    };
-    // SAFETY: the server's preset byte, on its game thread.
-    unsafe { core::ptr::with_exposed_provenance_mut::<u8>(server + layout.preset).write(CUSTOM) };
-    // SAFETY: the server's flag for the settings in its next info message,
-    // on its game thread.
-    unsafe { core::ptr::with_exposed_provenance_mut::<u8>(server + layout.resend).write(1) };
+    for (at, &byte) in bytes.iter().enumerate() {
+        // SAFETY: `settings` is non-zero (checked by `live`) and the live
+        // settings span their reflected size, `bytes.len()` (`bytes.len() !=
+        // layout.size` returns first), so `at` is inside them; `live` returns
+        // only on the game thread at a quiet moment, where no system reads
+        // them, as the game's admin command writes them; the day and night
+        // lengths the clock divides by are positive (the length checks return
+        // first).
+        unsafe { crate::memory::write(settings, at, byte) };
+    }
+    // SAFETY: `server` comes from `live`, on the game thread at a quiet
+    // moment; the table's `server.game_settings_preset` offset holds its
+    // preset byte, and `CUSTOM` is the game's preset for custom settings.
+    unsafe { crate::memory::write(server, layout.preset, CUSTOM) };
+    // SAFETY: `server` comes from `live`, on the game thread at a quiet
+    // moment; the table's `server.game_settings_resend` offset holds its
+    // byte flag for the settings in its next info message.
+    unsafe { crate::memory::write(server, layout.resend, 1u8) };
     let mut event = vec![0u8; layout.event_size];
     if let Some(out) = event.get_mut(layout.event_settings..layout.event_settings + bytes.len()) {
         out.copy_from_slice(bytes);

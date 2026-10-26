@@ -41,8 +41,10 @@ pub trait Kind: sealed::Sealed + 'static {
     ///
     /// # Safety
     ///
-    /// `raw` is the pointer the loader passed with [`Kind::EVENT`], valid for
-    /// the handler's call.
+    /// - `raw` is null or the pointer the loader passed with [`Kind::EVENT`]:
+    ///   a [`Kind::Data`] the loader wrote, readable for the size its header
+    ///   states; no alignment is needed.
+    /// - No other thread writes that struct during the call.
     unsafe fn data(raw: *const c_void) -> Option<Self::Data>;
 }
 
@@ -86,8 +88,9 @@ macro_rules! with_data {
             type Data = $data;
 
             unsafe fn data(raw: *const c_void) -> Option<$data> {
-                // SAFETY: the caller passes the loader's pointer for this event,
-                // which starts with a header; an all-zero struct is valid.
+                // SAFETY: the caller guarantees `raw` is null or this event's
+                // data, readable for the size its header states with no
+                // concurrent writer, which is the contract of `read_headed`.
                 unsafe { crate::abi::read_headed(raw.cast::<$data>(), $born) }
             }
         }
@@ -159,16 +162,18 @@ mod tests {
             key: 1,
         };
         let raw = (&raw const player).cast::<c_void>();
-        // SAFETY: a valid player for the call.
+        // SAFETY: `player` is a whole `PlayerData` on this stack frame,
+        // readable for the size its header states.
         let joined = unsafe { PlayerJoined::data(raw) };
         assert_eq!(joined.map(|p| p.entity), Some(9));
-        // SAFETY: null is refused.
+        // SAFETY: `data` accepts a null pointer and reads nothing.
         assert!(unsafe { PlayerLeft::data(core::ptr::null()) }.is_none());
         let mut short = player;
         short.header.size = 8;
-        // SAFETY: as above.
+        // SAFETY: `short` is a whole `PlayerData` on this stack frame, its
+        // header stating fewer bytes than it holds.
         assert!(unsafe { PlayerJoined::data((&raw const short).cast()) }.is_none());
-        // SAFETY: no data is read.
+        // SAFETY: `data` of an event without data reads nothing.
         assert!(unsafe { WorldSaved::data(core::ptr::null()) }.is_some());
     }
 
@@ -188,7 +193,8 @@ mod tests {
             reserved_tail: 0,
         };
         death.header.size = 56;
-        // SAFETY: a valid death, as long as its header says.
+        // SAFETY: `death` is a whole `PlayerDeathData` on this stack frame,
+        // its header stating fewer bytes than it holds.
         let read = unsafe { PlayerDied::data((&raw const death).cast()) }.unwrap();
         assert_eq!((read.entity, read.killer_entity), (3, 0));
     }
@@ -210,7 +216,9 @@ mod tests {
             appended: 5,
         };
         newer.player.header.size = u32::try_from(size_of::<Newer>()).unwrap();
-        // SAFETY: a valid player, as long as its header says.
+        // SAFETY: `newer` is on this stack frame and starts with a whole
+        // `PlayerData` whose header states the size of `Newer`, all of it
+        // readable.
         let joined = unsafe { PlayerJoined::data((&raw const newer).cast()) }.unwrap();
         assert_eq!((joined.entity, joined.key), (9, 1));
         assert_eq!(newer.appended, 5);

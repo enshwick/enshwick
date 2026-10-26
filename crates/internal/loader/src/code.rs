@@ -111,7 +111,9 @@ pub(crate) fn text_section(headers: &[u8]) -> Option<(usize, usize)> {
 pub(crate) fn text(base: u64) -> Option<(usize, usize)> {
     *TEXT.get_or_init(|| {
         let base = usize::try_from(base).ok().filter(|&b| b != 0)?;
-        // SAFETY: the executable's headers are mapped at its base, one page.
+        // SAFETY: every caller passes the loader's `base`, the game
+        // executable's non-zero image base (checked earlier), where Windows
+        // maps its PE headers as one readable page for the process.
         let headers = unsafe { core::slice::from_raw_parts(base as *const u8, 0x1000) };
         let (offset, len) = text_section(headers)?;
         Some((base.checked_add(offset)?, len))
@@ -121,7 +123,8 @@ pub(crate) fn text(base: u64) -> Option<(usize, usize)> {
 /// The game's code section as bytes.
 pub(crate) fn text_bytes(base: u64) -> Option<&'static [u8]> {
     let (start, len) = text(base)?;
-    // SAFETY: the code section is mapped readable for the life of the process.
+    // SAFETY: `text` found the `.text` section of the game executable's own
+    // headers: `len` bytes from `start`, mapped readable for the process.
     Some(unsafe { core::slice::from_raw_parts(start as *const u8, len) })
 }
 
@@ -229,8 +232,10 @@ pub(crate) fn read(address: usize, len: usize) -> Option<Vec<u8>> {
     if from.checked_add(len)? > size {
         return None;
     }
-    // SAFETY: inside the code section, mapped readable for the process.
-    let bytes = unsafe { core::slice::from_raw_parts((address) as *const u8, len) };
+    // SAFETY: the earlier checks keep `len` bytes from `address` inside the
+    // game's `.text` section that `text` found, mapped readable for the
+    // process.
+    let bytes = unsafe { core::slice::from_raw_parts(address as *const u8, len) };
     Some(bytes.to_vec())
 }
 
@@ -265,7 +270,9 @@ struct Lift {
 
 static LIFT: OnceLock<Lift> = OnceLock::new();
 static LIFTED: AtomicBool = AtomicBool::new(false);
-// SAFETY: the slot joins the chain of the list lookup, typed `LookupFn`.
+// SAFETY: `LookupFn` is the exact signature of the game's per-workshop list
+// lookup that `lookup_address` finds by the `LOOKUP` pattern, and the slot is
+// used only as the `next` of the `lookup_detour` link on that function.
 static LOOKUP_NEXT: Next<LookupFn> = unsafe { Next::new() };
 /// Full recipe lists of the workshops past the game's limit, as addresses.
 static WORKSHOPS: OnceLock<FxHashMap<u32, Box<[usize]>>> = OnceLock::new();
@@ -467,7 +474,9 @@ pub(crate) fn recipes_served(data: usize, len: usize) {
     let Some(lift) = LIFT.get().filter(|_| lifted()) else {
         return;
     };
-    // SAFETY: the served registry lives for the process.
+    // SAFETY: the one caller, the content build of the recipe registry,
+    // passes the registry it served the game: `len` readable bytes at `data`
+    // that live for the process and are not written again.
     let registry = unsafe { core::slice::from_raw_parts(data as *const u8, len) };
     let Some(lists) = full_lists(registry, lift.layout, WORKSHOP_RECIPES) else {
         crate::log!(WARN, "the served recipe registry does not parse");
@@ -505,20 +514,31 @@ unsafe extern "system" fn lookup_detour(
     registry: *mut u8,
     workshop: *const u32,
 ) -> *mut [u64; 2] {
-    // SAFETY: forwarded unchanged.
+    // SAFETY: the game's own arguments, passed on unchanged to the rest of
+    // the chain, which has the list lookup's signature.
     let result = unsafe { LOOKUP_NEXT.get()(out, registry, workshop) };
     if out.is_null() || workshop.is_null() {
         return result;
     }
-    // SAFETY: the game passes its workshop id.
-    let id = unsafe { workshop.read_unaligned() };
+    // SAFETY: the game passes the lookup a pointer to the `u32` workshop id,
+    // non-null by the earlier check and readable for the call.
+    let id: u32 = unsafe { enshwick::raw::read_at(workshop.cast(), 0) };
     if let Some(list) = WORKSHOPS.get().and_then(|lists| lists.get(&id)) {
-        // SAFETY: the game's span out pointer; the list is never freed.
-        unsafe { out.write([list.as_ptr().addr() as u64, list.len() as u64]) };
+        // SAFETY: `out` is the lookup's non-null out span (checked earlier),
+        // writable for a `[u64; 2]` for the call; the list it now names lives
+        // in `WORKSHOPS` for the process.
+        unsafe {
+            enshwick::raw::write_at(
+                out.cast(),
+                0,
+                [list.as_ptr().expose_provenance() as u64, list.len() as u64],
+            );
+        };
     }
     let _caught = LOOKUP_FUSE.run("the recipe list lookup", || {
-        // SAFETY: the span the game or the lift wrote for this call, of
-        // the game's recipes.
+        // SAFETY: `out` is the lookup's non-null out span (checked earlier)
+        // for the call, which the game or the lift just filled with the
+        // address and length of a list of live registry recipes.
         unsafe { crate::recipes::filter(id, out) };
     });
     result

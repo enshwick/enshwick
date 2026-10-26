@@ -15,7 +15,7 @@ mod sealed {
 ///
 /// # Safety
 ///
-/// Implementors are function pointers of the size of `usize`.
+/// - Implementors are function pointers of the size of `usize`.
 ///
 /// # Examples
 ///
@@ -28,12 +28,13 @@ pub unsafe trait FnPtr: Copy + Send + Sync + 'static + sealed::Sealed {}
 macro_rules! fn_ptr {
     ($($arg:ident),*) => {
         impl<R: 'static, $($arg: 'static),*> sealed::Sealed for extern "system" fn($($arg),*) -> R {}
-        // SAFETY: a function pointer has the size of `usize` on every target the
-        // game runs on.
+        // SAFETY: a function pointer has the size of `usize` on every target
+        // the game runs on.
         unsafe impl<R: 'static, $($arg: 'static),*> FnPtr for extern "system" fn($($arg),*) -> R {}
         impl<R: 'static, $($arg: 'static),*> sealed::Sealed
             for unsafe extern "system" fn($($arg),*) -> R {}
-        // SAFETY: as above.
+        // SAFETY: an unsafe function pointer has the size of `usize` on every
+        // target the game runs on.
         unsafe impl<R: 'static, $($arg: 'static),*> FnPtr
             for unsafe extern "system" fn($($arg),*) -> R {}
     };
@@ -275,7 +276,9 @@ impl<F: FnPtr> Next<F> {
 ///     bases: *mut u8,
 ///     npc: *const u32,
 /// ) -> u32 {
-///     // SAFETY: forwarded unchanged to the original.
+///     // SAFETY: `bases` and `npc` are the arguments the game called the
+///     // lookup with on this thread, passed on unchanged, so the rest of the
+///     // chain gets what the game's own call gave it.
 ///     unsafe { next.get()(bases, npc) }
 /// }
 /// # let _ = &LOOKUP;

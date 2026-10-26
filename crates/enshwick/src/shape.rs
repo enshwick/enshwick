@@ -19,10 +19,10 @@ use core::ptr::NonNull;
 ///
 /// # Safety
 ///
-/// [`SHAPE`](Shape::SHAPE) changes whenever the type's layout or the
-/// meaning of its values changes: every field with its offset, every
-/// variant with its discriminant, every named value. Implement it with
-/// [`#[derive(Shape)]`](macro@crate::Shape).
+/// - Implemented with [`#[derive(Shape)]`](macro@crate::Shape).
+/// - [`SHAPE`](Shape::SHAPE) changes whenever the type's layout or the
+///   meaning of its values changes: every field with its offset, every
+///   variant with its discriminant, every named value.
 ///
 /// # Examples
 ///

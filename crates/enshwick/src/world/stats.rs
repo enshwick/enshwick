@@ -5,7 +5,7 @@
 //! values in the order of the game's attribute container.
 
 use crate::ecs::Entity;
-use crate::raw::read_at;
+use crate::raw::{read_at, write_at};
 use crate::world::{ComponentType, World, WorldError};
 use crate::{Load, Off};
 
@@ -240,15 +240,18 @@ impl Stats {
         set: &Set<N>,
     ) -> Option<[u32; N]> {
         let data = world.component(entity, set.ty)?.cast::<u8>();
-        // SAFETY: the entity's live attribute set, on the game thread, starts
-        // with the id it keeps.
+        // SAFETY: `component` returned the entity's live attribute set, valid
+        // until the game thread moves on; the set starts with the u32 id of
+        // its first attribute.
         let root: u32 = unsafe { read_at(data, 0) };
-        // SAFETY: as above; the set's header holds the values' offset, its
-        // flags and its count at the build's offsets.
+        // SAFETY: `data` is the live attribute set; its header keeps the u16
+        // values' offset at the table constant `ecs.level_data_offset`.
         let offset = usize::from(unsafe { read_at::<u16>(data, self.layout.data_offset) });
-        // SAFETY: as above.
+        // SAFETY: `data` is the live attribute set; its header keeps the flag
+        // byte at the table constant `ecs.level_flags`.
         let flags: u8 = unsafe { read_at(data, self.layout.flags) };
-        // SAFETY: as above.
+        // SAFETY: `data` is the live attribute set; its header keeps the count
+        // byte at the table constant `ecs.attribute_count`.
         let count = usize::from(unsafe { read_at::<u8>(data, self.layout.count) });
         if root != set.root || flags & SET_INITIALISED == 0 {
             return None;
@@ -258,7 +261,9 @@ impl Stats {
             if slot >= count {
                 return None;
             }
-            // SAFETY: as above; the engine keeps `count` values from `offset`.
+            // SAFETY: `data` is the live, initialised attribute set (flag
+            // checked above), which keeps `count` u32 values from `offset`,
+            // and `slot < count` was checked above.
             *value = unsafe { read_at(data, offset + slot * size_of::<u32>()) };
         }
         Some(values)
@@ -283,31 +288,41 @@ impl Stats {
             Pool::Shroud => (self.shroud.as_ref().ok_or(WorldError::Missing)?, 0),
         };
         let data = world.component_mut(entity, set.ty)?.cast::<u8>();
-        // SAFETY: the entity's live attribute set, handed out for writing on
-        // the game thread, starts with the id it keeps and holds its header
-        // at the build's offsets.
+        // SAFETY: `component_mut` returned the entity's live attribute set,
+        // handed out for writing on the game thread; the set starts with the
+        // u32 id of its first attribute.
         let root: u32 = unsafe { read_at(data, 0) };
-        // SAFETY: as above.
+        // SAFETY: `data` is the live attribute set; its header keeps the u16
+        // values' offset at the table constant `ecs.level_data_offset`.
         let offset = usize::from(unsafe { read_at::<u16>(data, self.layout.data_offset) });
-        // SAFETY: as above.
+        // SAFETY: `data` is the live attribute set; its header keeps the flag
+        // byte at the table constant `ecs.level_flags`.
         let flags: u8 = unsafe { read_at(data, self.layout.flags) };
-        // SAFETY: as above.
+        // SAFETY: `data` is the live attribute set; its header keeps the count
+        // byte at the table constant `ecs.attribute_count`.
         let count = usize::from(unsafe { read_at::<u8>(data, self.layout.count) });
         let [current_slot, max_slot] = set.slots;
         if root != set.root || flags & SET_INITIALISED == 0 || max_slot >= count {
             return Err(WorldError::Lacks);
         }
-        let value = |slot: usize| data.wrapping_add(offset + slot * size_of::<u32>());
-        // SAFETY: the engine keeps `count` values from `offset`.
-        let current = unsafe { value(current_slot).cast::<i32>().read_unaligned() };
-        // SAFETY: as above.
-        let max = unsafe { value(max_slot).cast::<i32>().read_unaligned() };
+        let value = |slot: usize| offset + slot * size_of::<u32>();
+        // SAFETY: `data` is the live, initialised attribute set (flag checked
+        // above), which keeps `count` 32-bit values from `offset`;
+        // `Stats::resolve` puts every current value in slot 0, and
+        // `max_slot < count` checked above makes `count` at least 1.
+        let current: i32 = unsafe { read_at(data, value(current_slot)) };
+        // SAFETY: `data` is the live, initialised attribute set, which keeps
+        // `count` 32-bit values from `offset`, and `max_slot < count` was
+        // checked above.
+        let max: i32 = unsafe { read_at(data, value(max_slot)) };
         if matches!(pool, Pool::Health) && current <= 0 {
             return Err(WorldError::Refused);
         }
         let new = change(current).clamp(floor, max.max(floor));
-        // SAFETY: as above; the set was handed out for writing.
-        unsafe { value(current_slot).cast::<i32>().write_unaligned(new) };
+        // SAFETY: `component_mut` handed the attribute set out for writing on
+        // the game thread; slot 0 lies inside its `count` 32-bit values, as
+        // checked for the read above, and the engine keeps an i32 there.
+        unsafe { write_at(data, value(current_slot), new) };
         Ok(Meter { current: new, max })
     }
 
@@ -337,11 +352,14 @@ impl Stats {
         Some(
             (0..SKILL_SLOTS)
                 .filter_map(|slot| {
-                    // SAFETY: the character's live unlocked skill nodes, on
-                    // the game thread: `SKILL_SLOTS` node ids and as many
-                    // level bytes at their reflected offsets.
+                    // SAFETY: `component` returned the character's live
+                    // UnlockedSkillNodes, valid until the game thread moves
+                    // on; `Stats::resolve` checked that `SKILL_SLOTS` u32 ids
+                    // from the reflected `ids` lie inside the type's size.
                     let node: u32 = unsafe { read_at(data, ids + slot * 4) };
-                    // SAFETY: as above.
+                    // SAFETY: `data` is the live UnlockedSkillNodes;
+                    // `Stats::resolve` checked that `SKILL_SLOTS` level bytes
+                    // from the reflected `levels` lie inside the type's size.
                     let level: u8 = unsafe { read_at(data, levels + slot) };
                     (node != 0).then_some(Skill {
                         node,

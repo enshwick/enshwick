@@ -24,6 +24,7 @@ use enshwick::abi::{Event, Header, KnowledgeData, KnowledgeInfo, Status};
 
 use super::{definition, layout, read, store};
 use crate::host::Loader;
+use crate::memory::write;
 
 /// The queue's file in a world's folder.
 const FILE: &str = "knowledge.toml";
@@ -77,10 +78,11 @@ fn parts(loader: &Loader) -> Option<&'static Parts> {
                 function("knowledge.set_world")?,
             );
             Some(Parts {
-                // SAFETY: each symbol is the game function with this
-                // signature on this build.
+                // SAFETY: the build table's `knowledge.set_values` is the game function
+                // with the `SetValuesFn` signature on this build.
                 set_values: unsafe { core::mem::transmute::<usize, SetValuesFn>(set_values) },
-                // SAFETY: as above.
+                // SAFETY: the build table's `knowledge.set_world` is the game function
+                // with the `SetWorldFn` signature on this build.
                 set_world: unsafe { core::mem::transmute::<usize, SetWorldFn>(set_world) },
                 record_changes: offset("knowledge.record_changes")?,
                 world_touched: offset("knowledge.world_touched")?,
@@ -106,9 +108,12 @@ fn lowered(kind: u8, current: u32, value: u32) -> Option<u32> {
     }
 }
 
-/// The game's knowledge replication's connection of `slot`.
+/// The game's knowledge replication's connection of `slot`, for the live
+/// game object `game` from `store`.
 fn connection(parts: &Parts, game: usize, slot: usize) -> Option<usize> {
-    // SAFETY: the game object holds its knowledge replication.
+    // SAFETY: `game` is the live game object `store` found; its knowledge
+    // replication pointer sits at the build table's `knowledge.replication`
+    // offset.
     let replication: usize = unsafe { read(game, parts.replication) };
     (replication != 0).then(|| replication + slot * parts.connection_size)
 }
@@ -117,7 +122,9 @@ fn connection(parts: &Parts, game: usize, slot: usize) -> Option<usize> {
 /// record holds the character's knowledge and changes to it stick.
 fn loaded(parts: &Parts, game: usize, slot: usize) -> bool {
     connection(parts, game, slot).is_some_and(|conn| {
-        // SAFETY: a connection of the replication, by the player's slot.
+        // SAFETY: `conn` is the replication's connection of the player's
+        // slot, of the build table's `knowledge.connection_size`; its u8
+        // loaded mark sits at `knowledge.connection_loaded`.
         unsafe { read::<u8>(conn, parts.connection_loaded) != 0 }
     })
 }
@@ -152,7 +159,8 @@ pub(crate) fn revoke(
     let parts = parts(loader).ok_or(Status::MISSING)?;
     let (game, state) = store(layout)?;
     let (scope, def) = definition(layout, state, id).ok_or(Status::BAD_ARGS)?;
-    // SAFETY: the definition's fields, as reflected.
+    // SAFETY: `def` is the definition `definition` found in the live blob;
+    // its u8 kind sits at the reflected `type` field.
     let def_kind: u8 = unsafe { read(def, layout.def_kind) };
     if u32::from(def_kind) != kind {
         return Err(Status::BAD_ARGS);
@@ -179,8 +187,11 @@ pub(crate) fn revoke(
         if !loaded(parts, game, slot) {
             return Err(Status::REFUSED);
         }
-        // SAFETY: the game's set function on an active, loaded record and
-        // its log, on the game thread between steps.
+        // SAFETY: `record` is the character's active record (`record`
+        // checked it) whose save has loaded (`loaded` checked it), with its
+        // log at the build table's `knowledge.record_log` offset; `store`
+        // put this call on the game thread at a quiet moment; `list` and
+        // what it points at live on this stack for the call.
         unsafe {
             (parts.set_values)(
                 core::ptr::with_exposed_provenance_mut(record),
@@ -188,41 +199,50 @@ pub(crate) fn revoke(
                 &raw const list,
             );
         };
-        // SAFETY: the record's change counter, which never reads 0.
-        let counter = unsafe {
-            &mut *core::ptr::with_exposed_provenance_mut::<u16>(record + parts.record_changes)
-        };
-        *counter = counter.wrapping_add(1).max(1);
+        // SAFETY: `record` is the character's active record, read on the game
+        // thread at a quiet moment; its u16 change counter sits at the build
+        // table's `knowledge.record_changes` offset.
+        let counter: u16 = unsafe { read(record, parts.record_changes) };
+        // SAFETY: `record` is the character's active record, written on the
+        // game thread at a quiet moment, where the game writes it too; its
+        // u16 change counter, which never reads 0, sits at the build table's
+        // `knowledge.record_changes` offset.
+        unsafe { write(record, parts.record_changes, counter.wrapping_add(1).max(1)) };
         if let Some(conn) = connection(parts, game, slot) {
-            // SAFETY: the player's connection asks for a full resend.
-            unsafe {
-                core::ptr::with_exposed_provenance_mut::<u8>(conn + parts.resend_player).write(1);
-            };
+            // SAFETY: `conn` is the replication's connection of the player's
+            // slot, written on the game thread at a quiet moment; its u8
+            // resend request sits at the build table's
+            // `knowledge.resend_player` offset.
+            unsafe { write(conn, parts.resend_player, 1u8) };
         }
     } else {
-        // SAFETY: the game's set function for the world, on the game thread
-        // between steps.
+        // SAFETY: `state` is the live store `store` found, and `store` put
+        // this call on the game thread at a quiet moment; `list` and what it
+        // points at live on this stack for the call.
         unsafe {
             (parts.set_world)(
                 core::ptr::with_exposed_provenance_mut(state),
                 &raw const list,
             );
         };
-        // SAFETY: the store's mark that the world's knowledge changed.
-        unsafe {
-            core::ptr::with_exposed_provenance_mut::<u8>(state + parts.world_touched).write(2);
-        };
+        // SAFETY: `state` is the live store, written on the game thread at a
+        // quiet moment; its u8 world-changed mark sits at the build table's
+        // `knowledge.world_touched` offset.
+        unsafe { write(state, parts.world_touched, 2u8) };
         for slot in 0..records {
             let Some(conn) = connection(parts, game, slot) else {
                 break;
             };
-            // SAFETY: a connection of the replication.
+            // SAFETY: `slot` is below the store's record count, so `conn` is
+            // a connection of the live replication, of the build table's
+            // `knowledge.connection_size`; its u8 created mark sits at
+            // `knowledge.connection_created`.
             if unsafe { read::<u8>(conn, parts.connection_created) } != 0 {
-                // SAFETY: as above; it asks for a full resend of the world.
-                unsafe {
-                    core::ptr::with_exposed_provenance_mut::<u8>(conn + parts.resend_world)
-                        .write(1);
-                };
+                // SAFETY: `conn` is a created connection of the live
+                // replication, written on the game thread at a quiet moment;
+                // its u8 resend request sits at the build table's
+                // `knowledge.resend_world` offset.
+                unsafe { write(conn, parts.resend_world, 1u8) };
             }
         }
     }
@@ -367,7 +387,8 @@ pub(crate) fn for_account(
     parts(loader).ok_or(Status::MISSING)?;
     let (_, state) = store(layout)?;
     let (scope, def) = definition(layout, state, id).ok_or(Status::BAD_ARGS)?;
-    // SAFETY: the definition's fields, as reflected.
+    // SAFETY: `def` is the definition `definition` found in the live blob;
+    // its u8 kind sits at the reflected `type` field.
     let def_kind: u8 = unsafe { read(def, layout.def_kind) };
     if scope != KnowledgeInfo::PLAYER || u32::from(def_kind) != kind {
         return Err(Status::BAD_ARGS);

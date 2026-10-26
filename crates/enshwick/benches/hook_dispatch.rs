@@ -44,7 +44,7 @@ fn dispatch(c: &mut Criterion) {
     let loader = FakeHost::new()
         .symbol("bench.reward", address(vanilla as Reward))
         .install();
-    // SAFETY: the exports of `declare_mod!` above.
+    // SAFETY: both functions are the exports of this file's `declare_mod!(Bench)`.
     let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
     assert_eq!(status, Status::OK, "{:?}", loader.logs());
     let Some(hooked) = loader.detour(&PASS) else {
