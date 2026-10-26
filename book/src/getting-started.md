@@ -8,7 +8,7 @@ raw hooks come last, as the way down when the API has no call.
 
 A mod is a Windows DLL. You need:
 
-- Rust 1.98 or newer through [rustup](https://rustup.rs), with the target
+- Rust 1.99 or newer through [rustup](https://rustup.rs), with the target
   `x86_64-pc-windows-msvc`;
 - on Windows, the MSVC build tools;
 - the Enshwick loader in the game's folder: extract
