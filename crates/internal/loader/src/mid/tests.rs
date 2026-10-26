@@ -894,14 +894,14 @@ fn clear_probe_records_the_state_in_use() {
     let handler = (probe_handler as *const ()).addr();
     for zeroed in [false, true] {
         for (name, vectors) in avx_kinds() {
-            let hooked = hook_mark(
-                // SAFETY: probe only; the copy is called with its own type.
-                unsafe { core::mem::transmute::<Probe, Unary>(probe_upper) },
-                handler,
-                vectors,
-            );
+            let start = (probe_upper as *const ()).addr();
+            // SAFETY: probe only; 512 bytes of mapped code from the text.
+            let code = unsafe { core::slice::from_raw_parts(start as *const u8, 512) };
+            let target = function(code);
+            let at = code.windows(MARK.len()).position(|w| w == MARK).unwrap();
+            install_with(target + at, handler, 0, vectors).unwrap();
             // SAFETY: the copy of `probe_upper` takes a buffer pointer.
-            let hooked = unsafe { core::mem::transmute::<Unary, Probe>(hooked) };
+            let hooked = unsafe { core::mem::transmute::<usize, Probe>(target) };
             for hit in 0..3 {
                 let mut b = [0u64; 8];
                 b[7] = u64::from(zeroed);
