@@ -152,11 +152,12 @@ unsafe extern "system" fn on_workers(registers: *mut Registers, user: *mut c_voi
     registers.rax = registers.rax.min(user.addr() as u64);
 }
 
-/// The address of `id` on this build when its bytes are the table's;
+/// The address of `id` on this build when its code is the table's
+/// ([`Loader::code_holds`]);
 /// `None`, logged when the build has the place, otherwise.
 fn verified(loader: &Loader, id: Symbol) -> Option<u64> {
     let at = loader.address(id)?;
-    if crate::code::matches(loader, id) {
+    if loader.code_holds(id) {
         return Some(at);
     }
     crate::log!(

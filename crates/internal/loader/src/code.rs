@@ -122,24 +122,6 @@ pub(crate) fn text(base: u64) -> Option<(usize, usize)> {
     })
 }
 
-/// Whether the eight bytes at `symbol` are the build table's
-/// `<symbol>.bytes`, the check a hook on an internal game address makes
-/// before it patches.
-pub(crate) fn matches(loader: &Loader, symbol: crate::pinned::Symbol) -> bool {
-    let bytes = loader.build.constant(&format!("{symbol}.bytes"));
-    let (Some(address), Some(expected)) = (loader.address(symbol), bytes) else {
-        return false;
-    };
-    let Ok(address) = usize::try_from(address) else {
-        return false;
-    };
-    // SAFETY: `address` is the build table's `symbol`, code inside the
-    // game's image, which stays mapped and readable for the life of the
-    // process; its eight bytes are read before any hook patches them.
-    let found: u64 = unsafe { crate::memory::read(address, 0) };
-    found == expected
-}
-
 /// The game's code section as bytes.
 pub(crate) fn text_bytes(base: u64) -> Option<&'static [u8]> {
     let (start, len) = text(base)?;

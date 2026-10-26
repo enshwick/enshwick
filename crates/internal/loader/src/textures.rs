@@ -136,20 +136,22 @@ struct Layout {
     registry_listed: usize,
 }
 
+/// The symbols whose code the texture hooks rely on.
+const CHECKED: [pinned::Symbol; 8] = [
+    pinned::textures::REQUEST,
+    pinned::textures::REQUEST_RING,
+    pinned::textures::REQUEST_POST,
+    pinned::textures::REQUEST_SIGNAL,
+    pinned::textures::KEYS,
+    pinned::textures::REGISTRY_FILL,
+    pinned::textures::REGISTRY_LISTED_AT,
+    pinned::textures::SIGNAL,
+];
+
 fn layout(loader: &Loader) -> Option<&'static Layout> {
     LAYOUT
         .get_or_init(|| {
-            let checks = [
-                pinned::textures::REQUEST,
-                pinned::textures::REQUEST_RING,
-                pinned::textures::REQUEST_POST,
-                pinned::textures::REQUEST_SIGNAL,
-                pinned::textures::KEYS,
-                pinned::textures::REGISTRY_FILL,
-                pinned::textures::REGISTRY_LISTED_AT,
-                pinned::textures::SIGNAL,
-            ];
-            if let Some(symbol) = checks.iter().find(|s| !crate::code::matches(loader, **s)) {
+            if let Some(symbol) = CHECKED.iter().find(|s| !loader.code_holds(**s)) {
                 crate::log!(
                     WARN,
                     "mod textures off: {symbol} is not the code the loader knows"
@@ -161,7 +163,7 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
             Some(Layout {
                 // SAFETY: the build table's `textures.signal` is the game's
                 // event signal with the `SignalFn` signature on this build,
-                // and its code matched the table's bytes in `code::matches`.
+                // and its code held in `Loader::code_holds`.
                 signal: unsafe { core::mem::transmute::<usize, SignalFn>(signal) },
                 request_size: o("request_size")?,
                 request_hash: o("request_hash")?,
@@ -600,6 +602,24 @@ pub(crate) fn content_of(hash: &ContentHash) -> Result<Vec<u8>, Status> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn every_client_table_offers_a_check_for_the_code_the_hooks_rely_on() {
+        let clients = crate::builds::load()
+            .into_iter()
+            .filter(|table| table.side() == enshwick_gamedata::Side::Client);
+        for table in clients {
+            let resolved = table.resolve();
+            for symbol in CHECKED {
+                let bytes = format!("{symbol}.bytes");
+                assert!(
+                    resolved.head(symbol.id()).is_some() || resolved.constant(&bytes).is_some(),
+                    "{}: {symbol}",
+                    table.name()
+                );
+            }
+        }
+    }
 
     #[test]
     fn a_served_hash_carries_its_size_and_the_mark() {
