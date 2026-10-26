@@ -5,7 +5,8 @@ name = "1.0 client (26082781)"
 side = "client"
 guid = "69f0e9573b32c24a8838d3fff550824c"
 age = 426
-build = 26082781
+steam_build = 26082781
+game_version = 1273043
 revision = 1
 
 # Systems whose reflected entry must equal the pinned address: the

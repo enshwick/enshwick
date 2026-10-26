@@ -5,7 +5,7 @@ while after the game starts, the updater asks for new releases of every
 loaded mod that names where its releases come from (`updates:` in its
 manifest): GitHub, or a document at an `https://` address. It does the same
 for the loader itself. When there are any, a dialog in the game's own style
-lists them, such as `Safes (safes): 0.1.0 → 0.2.0`, and asks whether to
+lists them, such as `Safes: 0.1.0 → 0.2.0`, and asks whether to
 download them. Nothing is downloaded without a Yes, and the updater never
 offers mods you do not have.
 

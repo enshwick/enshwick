@@ -43,15 +43,19 @@ pub(crate) struct Args {
     new: Option<PathBuf>,
     /// Writes the code patterns of the table for this executable's build,
     /// taken from the executable itself, instead of porting.
-    #[arg(long, conflicts_with_all = ["old", "new", "build"])]
+    #[arg(long, conflicts_with_all = ["old", "new", "steam_build", "game_version"])]
     patterns: Option<PathBuf>,
     /// The repository whose rows to port.
     #[arg(long, default_value = ".")]
     repo: PathBuf,
     /// The new build's Steam build id, for the loader table's name and
-    /// `build`; needed with `--write`.
+    /// `steam_build`; needed with `--write`.
     #[arg(long)]
-    build: Option<u64>,
+    steam_build: Option<u64>,
+    /// The game's own version number on the new build, for the loader
+    /// table's `game_version`; left out when not given.
+    #[arg(long)]
+    game_version: Option<u32>,
     /// Writes the new table file and inserts each new mod row after its old
     /// one in the sources.
     #[arg(long)]
@@ -145,8 +149,8 @@ fn port_tables(
             if target.exists() {
                 return Err(format!("{} already exists", target.display()));
             }
-            if args.build.is_none() {
-                return Err("--write needs --build for the loader table".to_owned());
+            if args.steam_build.is_none() {
+                return Err("--write needs --steam-build for the loader table".to_owned());
             }
         }
         let mut ported = row::port_row(&row, old, new);
@@ -154,13 +158,18 @@ fn port_tables(
             .map_err(|e| format!("{}: {e}", path.display()))?;
         let anchors = row::port_anchors(&row, &mut ported, &source, old, new);
         row::confirm_by_patterns(&mut ported, &source, new);
-        let name = new_name(row.name.as_deref().unwrap_or_default(), args.build, new_fp);
+        let name = new_name(
+            row.name.as_deref().unwrap_or_default(),
+            args.steam_build,
+            new_fp,
+        );
         let guid = guid_hex(new_fp.guid());
         let identity = table::Identity {
             guid: &guid,
             age: new_fp.age(),
             name: &name,
-            build: args.build,
+            steam_build: args.steam_build,
+            game_version: args.game_version,
             new_build: true,
         };
         let (text, patterned) =
@@ -256,7 +265,8 @@ fn patterns_only(args: &Args, exe_path: &Path) -> Result<bool, String> {
             guid: &row.guid,
             age: row.age,
             name: row.name.as_deref().unwrap_or_default(),
-            build: None,
+            steam_build: None,
+            game_version: None,
             new_build: false,
         };
         let anchors = picks(args, &row, &exe)?;
@@ -390,9 +400,9 @@ fn spell(fingerprint: Fingerprint) -> String {
 }
 
 /// The loader table's name for the new build: the build id in parentheses
-/// replaced by `build`, or by the fingerprint when it is unknown.
-fn new_name(old: &str, build: Option<u64>, fingerprint: Fingerprint) -> String {
-    let id = build.map_or_else(|| spell(fingerprint), |b| b.to_string());
+/// replaced by `steam_build`, or by the fingerprint when it is unknown.
+fn new_name(old: &str, steam_build: Option<u64>, fingerprint: Fingerprint) -> String {
+    let id = steam_build.map_or_else(|| spell(fingerprint), |b| b.to_string());
     match old.rfind(" (") {
         Some(at) if old.ends_with(')') => format!("{} ({id})", &old[..at]),
         _ => format!("{old} ({id})"),
@@ -408,8 +418,8 @@ mod tests {
     fn the_new_name_carries_the_new_build() {
         let fp = Fingerprint::new([0xab; 16], 9);
         assert_eq!(
-            new_name("1.0 server (1269579)", Some(1_300_000), fp),
-            "1.0 server (1300000)"
+            new_name("1.0 server (26083076)", Some(26_100_000), fp),
+            "1.0 server (26100000)"
         );
         assert_eq!(
             new_name("1.0 server", None, fp),
@@ -629,7 +639,8 @@ mod tests {
                     guid: &row.guid,
                     age: row.age,
                     name: row.name.as_deref().unwrap_or_default(),
-                    build: None,
+                    steam_build: None,
+                    game_version: None,
                     new_build: false,
                 };
                 let (text, _) =

@@ -70,7 +70,7 @@ pub(crate) fn entries(list: &str) -> impl Iterator<Item = (&str, &str)> {
         })
 }
 
-/// `Name (id)` of mod `id`, or the id when `names` has none.
+/// The name players read for mod `id`, or the id when `names` has none.
 fn label(names: &Names, id: &str) -> String {
     enshwick_loader_api::mods::label(names.get(id).map_or("", String::as_str), id)
 }
@@ -853,12 +853,12 @@ mod runtime {
             std::panic::catch_unwind(|| check(&head)).unwrap_or(true)
         };
         if allowed {
-            super::interaction::release();
+            super::interaction::joining(false);
             // SAFETY: forwarded unchanged.
             return unsafe { NEXT.get()(provider, target) };
         }
         crate::log!(WARN, "join refused: the server runs mods this client lacks");
-        super::interaction::hold();
+        super::interaction::joining(true);
         // The provider copies the target into its own state before it
         // returns, and the caller keeps its target, so the caller's copy
         // gets its host back (client builds 410 and 426).
@@ -1306,7 +1306,7 @@ mod tests {
             [
                 (true, "b: server 0.2.0, yours 0.1.0".to_owned()),
                 (true, "c: server 1.0.0, not installed".to_owned()),
-                (false, "Dogs (d): yours 3.0.0, not on the server".to_owned()),
+                (false, "Dogs: yours 3.0.0, not on the server".to_owned()),
             ]
         );
         assert!(differences("", "", &names).is_empty());

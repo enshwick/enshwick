@@ -371,15 +371,17 @@ impl Default for ModEntry {
 }
 
 impl ModEntry {
-    /// How messages to players name the mod: `Name (id)`, or the id alone
-    /// when the manifest names none.
+    /// How messages to players name the mod: its name, or the id when the
+    /// manifest names none.
     ///
     /// # Examples
     ///
     /// ```
+    /// let shown: Vec<String> = enshwick_loader_api::mods().iter().map(|entry| entry.label()).collect();
     /// for entry in enshwick_loader_api::mods() {
-    ///     enshwick_loader_api::info!("{} {}", entry.label(), entry.version);
+    ///     enshwick_loader_api::info!("{} {}", entry.id, entry.version);
     /// }
+    /// # drop(shown);
     /// ```
     #[must_use]
     pub fn label(&self) -> String {
@@ -387,25 +389,20 @@ impl ModEntry {
     }
 }
 
-/// How messages to players name mod `id` called `name`: `Name (id)`, or the
-/// id alone when the name is empty or the id itself.
+/// How messages to players name mod `id` called `name`: by its name alone,
+/// or by the id when the name is empty. Logs name mods by id.
 ///
 /// # Examples
 ///
 /// ```
 /// use enshwick_loader_api::mods::label;
 ///
-/// assert_eq!(label("Safes", "safes"), "Safes (safes)");
+/// assert_eq!(label("Safes", "safes"), "Safes");
 /// assert_eq!(label("", "safes"), "safes");
-/// assert_eq!(label("safes", "safes"), "safes");
 /// ```
 #[must_use]
 pub fn label(name: &str, id: &str) -> String {
-    if name.is_empty() || name == id {
-        id.to_owned()
-    } else {
-        format!("{name} ({id})")
-    }
+    if name.is_empty() { id } else { name }.to_owned()
 }
 
 /// Every loaded mod, the loader first, in load order.
@@ -688,7 +685,7 @@ mod tests {
         assert_eq!(entry.updates, None);
         assert_eq!(entry.file, "mods/enshwick_safes.dll");
         assert_eq!(entry.signed_by, [KEY]);
-        assert_eq!(entry.label(), "Safes (safes)");
+        assert_eq!(entry.label(), "Safes");
         assert_eq!(entry.authors, ["themaiby", "someone"]);
         assert_eq!(entry.license, "MIT");
     }

@@ -64,7 +64,7 @@ pub(crate) struct ModRecord {
 }
 
 impl ModRecord {
-    /// `Name (id)`, or the id when the manifest names none.
+    /// The name players read, or the id when the manifest names none.
     pub(crate) fn label(&self) -> String {
         self.meta.label(&self.id)
     }

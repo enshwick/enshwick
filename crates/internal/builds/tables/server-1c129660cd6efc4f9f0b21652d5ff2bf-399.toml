@@ -5,7 +5,8 @@ name = "1.0 server (26083076)"
 side = "server"
 guid = "1c129660cd6efc4f9f0b21652d5ff2bf"
 age = 399
-build = 26083076
+steam_build = 26083076
+game_version = 1273043
 revision = 1
 
 # Systems whose reflected entry must equal the pinned address: the
