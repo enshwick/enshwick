@@ -16,7 +16,6 @@
 //! [`Load::migrate`]: crate::Load::migrate
 
 use std::cell::RefCell;
-use std::sync::OnceLock;
 
 use crate::abi::{self, MigrationStep, Status, Str};
 use crate::content::Guid;
@@ -345,7 +344,7 @@ struct Kept {
     list: Vec<Migration>,
 }
 
-static KEPT: OnceLock<Kept> = OnceLock::new();
+static KEPT: crate::fresh::Fresh<Kept> = crate::fresh::Fresh::new();
 
 thread_local! {
     /// The text a map handed the loader last on this thread; it stays until

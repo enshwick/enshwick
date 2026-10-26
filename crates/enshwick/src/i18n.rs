@@ -382,8 +382,8 @@ impl Texts {
 
 /// The texts each mod, or each content pack in the loader's copy of the
 /// API, handed the loader so far.
-static HANDED: std::sync::Mutex<Vec<(crate::abi::ModHandle, Texts)>> =
-    std::sync::Mutex::new(Vec::new());
+static HANDED: crate::fresh::Fresh<std::sync::Mutex<Vec<(crate::abi::ModHandle, Texts)>>> =
+    crate::fresh::Fresh::new();
 
 impl Load<'_> {
     /// The mod's texts: `embedded`, usually `include_str!("texts.toml")`,
@@ -432,6 +432,7 @@ impl Load<'_> {
         // of this mod's, a pack's added to the mod's own.
         let me = self.host().handle();
         let mut handed = HANDED
+            .get_or_init(std::sync::Mutex::default)
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         let all = if let Some((_, kept)) = handed.iter_mut().find(|(owner, _)| *owner == me) {
