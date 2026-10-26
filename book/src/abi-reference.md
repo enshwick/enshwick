@@ -341,3 +341,4 @@ marked "init only" are allowed during `enshwick_mod_init` only.
 | `attach_point`           | Attaches a link to another mod's extension point, with its order; init only                          | 65          |
 | `run_point`              | Runs the live links of the mod's own extension point over its answer; any thread                     | 65          |
 | `actions`                | Registers the mod's player actions, asked for sheets, runs and hints; init only                      | 66          |
+| `event_types`            | Every game event type the running build reflects, with hash and size; any thread                     | 72          |

@@ -25,8 +25,8 @@ mod memory;
 pub(crate) use entries::mods::check_settings;
 
 use entries::build::{
-    build, caller_frame, constant, data_dir, field_offset, log_level, symbol, system, type_hash,
-    type_size,
+    build, caller_frame, constant, data_dir, event_types, field_offset, log_level, symbol, system,
+    type_hash, type_size,
 };
 use entries::content::{
     add_text, content_read, content_serve, entity_data_open, game_text, icons_ready, item_data_get,
@@ -674,6 +674,7 @@ pub(crate) static API: HostApi = HostApi {
     attach_point,
     run_point,
     actions,
+    event_types,
 };
 
 /// The loader and the calling mod, when the mod is on.

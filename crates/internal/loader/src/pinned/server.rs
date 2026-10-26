@@ -2,6 +2,7 @@
 
 use super::{Constant, Symbol};
 
+pub(crate) const ACCOUNT_ACTION: Symbol = Symbol::new("server.account_action");
 pub(crate) const CHAT_STORE: Constant = Constant::new("server.chat_store");
 pub(crate) const CUSTOM_STRINGS: Constant = Constant::new("server.custom_strings");
 pub(crate) const ENTRY_STATE: Constant = Constant::new("server.entry_state");

@@ -3,7 +3,7 @@
 //! loader reads and serves itself.
 
 use enshwick::content::ResourceType;
-pub(crate) use enshwick_gamedata::catalogue::{Reflected, constant, type_name};
+pub(crate) use enshwick_gamedata::catalogue::{Reflected, constant, event_types, type_name};
 
 /// The hashes of the resource types the loader handles itself, from the
 /// catalogue's reflected names.

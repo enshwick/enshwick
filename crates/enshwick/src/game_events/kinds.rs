@@ -2,6 +2,7 @@
 //! running build, for [`Load::on_game`](crate::Load::on_game).
 
 use crate::ecs::Entity;
+use crate::engine_ids as ids;
 use crate::game_events::{EventType, Field, RawGameEvent};
 use crate::raw::read_at;
 use crate::world::{ComponentType, World};
@@ -28,9 +29,6 @@ mod sealed {
 /// }
 /// ```
 pub trait Kind: sealed::Sealed + Sized + 'static {
-    /// The reflected engine type the event comes from.
-    const TYPE_NAME: &'static str;
-
     /// Resolves the event's fields and subscribes `handler`.
     #[doc(hidden)]
     fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
@@ -149,8 +147,8 @@ impl AttackCategories {
     }
 }
 
-/// A hit the server resolved, damage or healing: `HitEvent`, written where
-/// health changes. Fall and shroud damage change health without a hit.
+/// A hit the server resolved, damage or healing, written where health
+/// changes. Fall and shroud damage change health without a hit.
 ///
 /// # Examples
 ///
@@ -193,24 +191,21 @@ pub struct Hit {
 impl sealed::Sealed for Hit {}
 
 impl Kind for Hit {
-    const TYPE_NAME: &'static str = "keen::ecs::HitEvent";
-
     fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
     where
         F: Fn(&Self) + Send + Sync + 'static,
     {
-        const BASE: &str = "keen::ecs::BaseHitEvent";
-        let ty = load.event_type(Self::TYPE_NAME)?;
-        let attacker: Field<Entity> = ty.inherited_field(load, BASE, "rootSourceId")?;
-        let target: Field<Entity> = ty.inherited_field(load, BASE, "targetId")?;
-        let source: Field<Entity> = ty.field(load, "sourceId")?;
-        let root_target: Field<Entity> = ty.field(load, "rootTargetId")?;
-        let weapon: Field<Entity> = ty.field(load, "weaponPideId")?;
-        let health: Field<i32> = ty.field(load, "healthChange")?;
-        let stamina: Field<i32> = ty.field(load, "staminaChange")?;
-        let damage: Field<u16> = ty.field(load, "damageTypes")?;
-        let attack: Field<u8> = ty.field(load, "attackCategory")?;
-        let faction: Field<u8> = ty.field(load, "targetFaction")?;
+        let ty = load.event_type(ids::HIT_EVENT)?;
+        let attacker: Field<Entity> = ty.field_by_id(load, ids::HIT_ATTACKER)?;
+        let target: Field<Entity> = ty.field_by_id(load, ids::HIT_TARGET)?;
+        let source: Field<Entity> = ty.field_by_id(load, ids::HIT_SOURCE)?;
+        let root_target: Field<Entity> = ty.field_by_id(load, ids::HIT_ROOT_TARGET)?;
+        let weapon: Field<Entity> = ty.field_by_id(load, ids::HIT_WEAPON)?;
+        let health: Field<i32> = ty.field_by_id(load, ids::HIT_HEALTH_CHANGE)?;
+        let stamina: Field<i32> = ty.field_by_id(load, ids::HIT_STAMINA_CHANGE)?;
+        let damage: Field<u16> = ty.field_by_id(load, ids::HIT_DAMAGE_TYPES)?;
+        let attack: Field<u8> = ty.field_by_id(load, ids::HIT_ATTACK)?;
+        let faction: Field<u8> = ty.field_by_id(load, ids::HIT_TARGET_FACTION)?;
         on(
             load,
             ty,
@@ -233,8 +228,8 @@ impl Kind for Hit {
     }
 }
 
-/// An entity died: `EntityDiedEvent`, with who killed it as far as the
-/// engine kept track, read while the dead entity is still in the world.
+/// An entity died, with who killed it as far as the engine kept track,
+/// read while the dead entity is still in the world.
 ///
 /// # Examples
 ///
@@ -255,9 +250,9 @@ impl Kind for Hit {
 pub struct Died {
     /// The entity that died.
     pub entity: Entity,
-    /// The attacker of the last hit it took, from its `HitHistory`.
+    /// The attacker of the last hit it took, from the hits it keeps.
     pub killer: Option<Entity>,
-    /// The last player character that hit it, from its `ExperienceSource`:
+    /// The last player character that hit it, from its kill credit:
     /// the one the game credits with the experience.
     pub killer_player: Option<Entity>,
 }
@@ -281,30 +276,27 @@ struct Credit {
 impl Credit {
     fn resolve(load: &mut Load<'_>) -> Result<Self, Off> {
         let world = load.world()?;
-        let offset = |ty: &str, field: &str| {
-            load.field_offset(ty, field).and_then(|o| {
-                usize::try_from(o).map_err(|_| Off::new(format!("{ty}.{field}: out of range")))
+        let offset = |id: &str| {
+            load.constant(id).and_then(|o| {
+                usize::try_from(o).map_err(|_| Off::new(format!("{id}: out of range")))
             })
         };
-        let history = "keen::ecs::HitHistory";
-        let source = "keen::ecs::ExperienceSource";
-        let size = usize::try_from(load.type_size(history)?).unwrap_or(0);
-        let source_size = usize::try_from(load.type_size(source)?).unwrap_or(0);
-        let entries = offset(history, "history")?;
-        let entry_size = usize::try_from(load.type_size(Hit::TYPE_NAME)?)
+        let size = usize::try_from(load.type_size(ids::HIT_HISTORY)?).unwrap_or(0);
+        let source_size = usize::try_from(load.type_size(ids::EXPERIENCE_CREDIT)?).unwrap_or(0);
+        let entries = offset(ids::HIT_HISTORY_ENTRIES)?;
+        let entry_size = usize::try_from(load.type_size(ids::HIT_EVENT)?)
             .unwrap_or(0)
             .max(1);
-        // The ring of hits ends where `targetTransform` starts.
-        let slots = offset(history, "targetTransform")?.saturating_sub(entries) / entry_size;
+        let slots = offset(ids::HIT_HISTORY_END)?.saturating_sub(entries) / entry_size;
         Ok(Self {
-            history: world.component_type(load, history)?,
-            last_index: offset(history, "lastIndex")?,
+            history: world.component_type(load, ids::HIT_HISTORY)?,
+            last_index: offset(ids::HIT_HISTORY_LAST_INDEX)?,
             entries,
             slots,
             entry_size,
-            entry_attacker: offset("keen::ecs::BaseHitEvent", "rootSourceId")?,
-            experience: world.component_type(load, source)?,
-            last_player: offset(source, "lastHitPlayerId")?,
+            entry_attacker: offset(ids::HIT_ATTACKER)?,
+            experience: world.component_type(load, ids::EXPERIENCE_CREDIT)?,
+            last_player: offset(ids::EXPERIENCE_CREDIT_LAST_PLAYER)?,
             world,
         })
         .and_then(|credit: Self| {
@@ -344,14 +336,12 @@ impl Credit {
 }
 
 impl Kind for Died {
-    const TYPE_NAME: &'static str = "keen::ecs::EntityDiedEvent";
-
     fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
     where
         F: Fn(&Self) + Send + Sync + 'static,
     {
-        let ty = load.event_type(Self::TYPE_NAME)?;
-        let dead: Field<Entity> = ty.field(load, "deadEntityId")?;
+        let ty = load.event_type(ids::DIED_EVENT)?;
+        let dead: Field<Entity> = ty.field_by_id(load, ids::DIED_ENTITY)?;
         let credit = Credit::resolve(load)
             .inspect_err(|off| crate::debug!("kill credit off: {off}"))
             .ok();
@@ -371,7 +361,7 @@ impl Kind for Died {
     }
 }
 
-/// A character reached a new level: `LevelUpEvent`.
+/// A character reached a new level.
 ///
 /// # Examples
 ///
@@ -394,15 +384,13 @@ pub struct LevelGained {
 impl sealed::Sealed for LevelGained {}
 
 impl Kind for LevelGained {
-    const TYPE_NAME: &'static str = "keen::ecs::LevelUpEvent";
-
     fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
     where
         F: Fn(&Self) + Send + Sync + 'static,
     {
-        let ty = load.event_type(Self::TYPE_NAME)?;
-        let player: Field<Entity> = ty.field(load, "playerEntityId")?;
-        let level: Field<i32> = ty.field(load, "level")?;
+        let ty = load.event_type(ids::LEVEL_GAINED_EVENT)?;
+        let player: Field<Entity> = ty.field_by_id(load, ids::LEVEL_GAINED_PLAYER)?;
+        let level: Field<i32> = ty.field_by_id(load, ids::LEVEL_GAINED_LEVEL)?;
         on(
             load,
             ty,
@@ -469,7 +457,7 @@ impl ExperienceSource {
     }
 }
 
-/// A character gained experience: `XPGainedEvent`.
+/// A character gained experience.
 ///
 /// # Examples
 ///
@@ -498,16 +486,14 @@ pub struct ExperienceGained {
 impl sealed::Sealed for ExperienceGained {}
 
 impl Kind for ExperienceGained {
-    const TYPE_NAME: &'static str = "keen::ecs::XPGainedEvent";
-
     fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
     where
         F: Fn(&Self) + Send + Sync + 'static,
     {
-        let ty = load.event_type(Self::TYPE_NAME)?;
-        let player: Field<Entity> = ty.field(load, "playerEntityId")?;
-        let amount: Field<u32> = ty.field(load, "amount")?;
-        let source: Field<u8> = ty.field(load, "source")?;
+        let ty = load.event_type(ids::EXPERIENCE_GAINED_EVENT)?;
+        let player: Field<Entity> = ty.field_by_id(load, ids::EXPERIENCE_GAINED_PLAYER)?;
+        let amount: Field<u32> = ty.field_by_id(load, ids::EXPERIENCE_GAINED_AMOUNT)?;
+        let source: Field<u8> = ty.field_by_id(load, ids::EXPERIENCE_GAINED_SOURCE)?;
         on(
             load,
             ty,
@@ -523,8 +509,8 @@ impl Kind for ExperienceGained {
     }
 }
 
-/// A player asked a station to craft: `CraftRecipeEvent`, before the
-/// server checks ingredients.
+/// A player asked a station to craft, before the server checks
+/// ingredients.
 ///
 /// # Examples
 ///
@@ -551,17 +537,15 @@ pub struct CraftRequested {
 impl sealed::Sealed for CraftRequested {}
 
 impl Kind for CraftRequested {
-    const TYPE_NAME: &'static str = "keen::ecs::CraftRecipeEvent";
-
     fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
     where
         F: Fn(&Self) + Send + Sync + 'static,
     {
-        let ty = load.event_type(Self::TYPE_NAME)?;
-        let player: Field<Entity> = ty.field(load, "craftingOperatorId")?;
-        let station: Field<Entity> = ty.field(load, "craftingStationId")?;
-        let recipe: Field<u32> = ty.field(load, "recipeId")?;
-        let amount: Field<u16> = ty.field(load, "recipeAmount")?;
+        let ty = load.event_type(ids::CRAFT_REQUESTED_EVENT)?;
+        let player: Field<Entity> = ty.field_by_id(load, ids::CRAFT_REQUESTED_PLAYER)?;
+        let station: Field<Entity> = ty.field_by_id(load, ids::CRAFT_REQUESTED_STATION)?;
+        let recipe: Field<u32> = ty.field_by_id(load, ids::CRAFT_REQUESTED_RECIPE)?;
+        let amount: Field<u16> = ty.field_by_id(load, ids::CRAFT_REQUESTED_AMOUNT)?;
         on(
             load,
             ty,
@@ -578,7 +562,7 @@ impl Kind for CraftRequested {
     }
 }
 
-/// A workshop finished a recipe: `CraftRecipeSuccessEvent`.
+/// A workshop finished a recipe.
 ///
 /// # Examples
 ///
@@ -601,15 +585,13 @@ pub struct Crafted {
 impl sealed::Sealed for Crafted {}
 
 impl Kind for Crafted {
-    const TYPE_NAME: &'static str = "keen::ecs::CraftRecipeSuccessEvent";
-
     fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
     where
         F: Fn(&Self) + Send + Sync + 'static,
     {
-        let ty = load.event_type(Self::TYPE_NAME)?;
-        let workshop: Field<u32> = ty.field(load, "workshopId")?;
-        let recipe: Field<u32> = ty.field(load, "recipeId")?;
+        let ty = load.event_type(ids::CRAFTED_EVENT)?;
+        let workshop: Field<u32> = ty.field_by_id(load, ids::CRAFTED_WORKSHOP)?;
+        let recipe: Field<u32> = ty.field_by_id(load, ids::CRAFTED_RECIPE)?;
         on(
             load,
             ty,
@@ -625,7 +607,7 @@ impl Kind for Crafted {
 }
 
 /// A player accepted an interaction an entity offered, such as opening a
-/// door or talking to a survivor: `AcceptOfferedInteractionEvent`.
+/// door or talking to a survivor.
 ///
 /// # Examples
 ///
@@ -650,16 +632,14 @@ pub struct Interacted {
 impl sealed::Sealed for Interacted {}
 
 impl Kind for Interacted {
-    const TYPE_NAME: &'static str = "keen::ecs::AcceptOfferedInteractionEvent";
-
     fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
     where
         F: Fn(&Self) + Send + Sync + 'static,
     {
-        let ty = load.event_type(Self::TYPE_NAME)?;
-        let player: Field<Entity> = ty.field(load, "guestEntityId")?;
-        let target: Field<Entity> = ty.field(load, "hostEntityId")?;
-        let offer: Field<u32> = ty.field(load, "offerId")?;
+        let ty = load.event_type(ids::INTERACTED_EVENT)?;
+        let player: Field<Entity> = ty.field_by_id(load, ids::INTERACTED_PLAYER)?;
+        let target: Field<Entity> = ty.field_by_id(load, ids::INTERACTED_TARGET)?;
+        let offer: Field<u32> = ty.field_by_id(load, ids::INTERACTED_OFFER)?;
         on(
             load,
             ty,
@@ -696,6 +676,16 @@ pub struct Block {
     pub material: u32,
 }
 
+/// The ids of the fields every building event shares, one set per event.
+#[derive(Clone, Copy, Debug)]
+struct BlockIds {
+    player: &'static str,
+    position: &'static str,
+    min: &'static str,
+    max: &'static str,
+    material: &'static str,
+}
+
 /// The fields every building event shares.
 #[derive(Clone, Copy, Debug)]
 struct BlockFields {
@@ -707,22 +697,22 @@ struct BlockFields {
 }
 
 impl BlockFields {
-    fn resolve(load: &Load<'_>, ty: EventType) -> Result<Self, Off> {
-        let vector = |name: &str| -> Result<[Field<f32>; 3], Off> {
-            let at: Field<f32> = ty.field(load, name)?;
+    fn resolve(load: &Load<'_>, ty: EventType, ids: BlockIds) -> Result<Self, Off> {
+        let vector = |id: &str| -> Result<[Field<f32>; 3], Off> {
+            let at: Field<f32> = ty.field_by_id(load, id)?;
             let next = |step: u64| {
                 let offset = u64::from(at.offset()) + step;
                 ty.field_at::<f32>(offset)
-                    .ok_or_else(|| Off::new(format!("{}.{name}: past the end", ty.name())))
+                    .ok_or_else(|| Off::new(format!("{id}: past the end of {}", ty.name())))
             };
             Ok([at, next(4)?, next(8)?])
         };
         Ok(Self {
-            player: ty.field(load, "ownerId")?,
-            position: vector("position")?,
-            min: vector("volumeMin")?,
-            max: vector("volumeMax")?,
-            material: ty.field(load, "material")?,
+            player: ty.field_by_id(load, ids.player)?,
+            position: vector(ids.position)?,
+            min: vector(ids.min)?,
+            max: vector(ids.max)?,
+            material: ty.field_by_id(load, ids.material)?,
         })
     }
 
@@ -740,7 +730,7 @@ impl BlockFields {
     }
 }
 
-/// A player placed a building block: `BuildingPlaceEvent`. Props and
+/// A player placed a building block. Props and
 /// furniture come as [`BuildingPlaced`](crate::events::BuildingPlaced) too.
 ///
 /// # Examples
@@ -764,15 +754,23 @@ pub struct Built {
 impl sealed::Sealed for Built {}
 
 impl Kind for Built {
-    const TYPE_NAME: &'static str = "keen::ecs::BuildingPlaceEvent";
-
     fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
     where
         F: Fn(&Self) + Send + Sync + 'static,
     {
-        let ty = load.event_type(Self::TYPE_NAME)?;
-        let block = BlockFields::resolve(load, ty)?;
-        let item: Field<u32> = ty.field(load, "trackingItemId")?;
+        let ty = load.event_type(ids::BUILT_EVENT)?;
+        let block = BlockFields::resolve(
+            load,
+            ty,
+            BlockIds {
+                player: ids::BUILT_PLAYER,
+                position: ids::BUILT_POSITION,
+                min: ids::BUILT_VOLUME_MIN,
+                max: ids::BUILT_VOLUME_MAX,
+                material: ids::BUILT_MATERIAL,
+            },
+        )?;
+        let item: Field<u32> = ty.field_by_id(load, ids::BUILT_ITEM)?;
         on(
             load,
             ty,
@@ -787,7 +785,7 @@ impl Kind for Built {
     }
 }
 
-/// A player tore down building blocks: `BuildingTearDownEvent`.
+/// A player tore down building blocks.
 ///
 /// # Examples
 ///
@@ -808,14 +806,22 @@ pub struct TornDown {
 impl sealed::Sealed for TornDown {}
 
 impl Kind for TornDown {
-    const TYPE_NAME: &'static str = "keen::ecs::BuildingTearDownEvent";
-
     fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
     where
         F: Fn(&Self) + Send + Sync + 'static,
     {
-        let ty = load.event_type(Self::TYPE_NAME)?;
-        let block = BlockFields::resolve(load, ty)?;
+        let ty = load.event_type(ids::TORN_DOWN_EVENT)?;
+        let block = BlockFields::resolve(
+            load,
+            ty,
+            BlockIds {
+                player: ids::TORN_DOWN_PLAYER,
+                position: ids::TORN_DOWN_POSITION,
+                min: ids::TORN_DOWN_VOLUME_MIN,
+                max: ids::TORN_DOWN_VOLUME_MAX,
+                material: ids::TORN_DOWN_MATERIAL,
+            },
+        )?;
         on(
             load,
             ty,
@@ -829,7 +835,7 @@ impl Kind for TornDown {
     }
 }
 
-/// A player picked up a placed piece: `BuildingPickUpEvent`.
+/// A player picked up a placed piece.
 ///
 /// # Examples
 ///
@@ -852,15 +858,23 @@ pub struct PickedUp {
 impl sealed::Sealed for PickedUp {}
 
 impl Kind for PickedUp {
-    const TYPE_NAME: &'static str = "keen::ecs::BuildingPickUpEvent";
-
     fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
     where
         F: Fn(&Self) + Send + Sync + 'static,
     {
-        let ty = load.event_type(Self::TYPE_NAME)?;
-        let block = BlockFields::resolve(load, ty)?;
-        let picked: Field<Entity> = ty.field(load, "pickedEntityId")?;
+        let ty = load.event_type(ids::PICKED_UP_EVENT)?;
+        let block = BlockFields::resolve(
+            load,
+            ty,
+            BlockIds {
+                player: ids::PICKED_UP_PLAYER,
+                position: ids::PICKED_UP_POSITION,
+                min: ids::PICKED_UP_VOLUME_MIN,
+                max: ids::PICKED_UP_VOLUME_MAX,
+                material: ids::PICKED_UP_MATERIAL,
+            },
+        )?;
+        let picked: Field<Entity> = ty.field_by_id(load, ids::PICKED_UP_ENTITY)?;
         on(
             load,
             ty,
@@ -917,7 +931,7 @@ impl AltarAction {
     }
 }
 
-/// A player acted at a Flame Altar: `FlameAltarEvent`.
+/// A player acted at a Flame Altar.
 ///
 /// # Examples
 ///
@@ -942,16 +956,14 @@ pub struct AltarUsed {
 impl sealed::Sealed for AltarUsed {}
 
 impl Kind for AltarUsed {
-    const TYPE_NAME: &'static str = "keen::ecs::FlameAltarEvent";
-
     fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
     where
         F: Fn(&Self) + Send + Sync + 'static,
     {
-        let ty = load.event_type(Self::TYPE_NAME)?;
-        let player: Field<Entity> = ty.field(load, "playerEntityId")?;
-        let altar: Field<Entity> = ty.field(load, "baseEntityId")?;
-        let kind: Field<u8> = ty.field(load, "type")?;
+        let ty = load.event_type(ids::ALTAR_USED_EVENT)?;
+        let player: Field<Entity> = ty.field_by_id(load, ids::ALTAR_USED_PLAYER)?;
+        let altar: Field<Entity> = ty.field_by_id(load, ids::ALTAR_USED_ALTAR)?;
+        let kind: Field<u8> = ty.field_by_id(load, ids::ALTAR_USED_ACTION)?;
         on(
             load,
             ty,
@@ -967,7 +979,7 @@ impl Kind for AltarUsed {
     }
 }
 
-/// A player opened loot, a chest or a container: `LootInteractionEvent`.
+/// A player opened loot, a chest or a container.
 ///
 /// # Examples
 ///
@@ -992,16 +1004,14 @@ pub struct LootOpened {
 impl sealed::Sealed for LootOpened {}
 
 impl Kind for LootOpened {
-    const TYPE_NAME: &'static str = "keen::ecs::LootInteractionEvent";
-
     fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
     where
         F: Fn(&Self) + Send + Sync + 'static,
     {
-        let ty = load.event_type(Self::TYPE_NAME)?;
-        let player: Field<Entity> = ty.field(load, "guestId")?;
-        let container: Field<Entity> = ty.field(load, "hostId")?;
-        let all: Field<bool> = ty.field(load, "lootAll")?;
+        let ty = load.event_type(ids::LOOT_OPENED_EVENT)?;
+        let player: Field<Entity> = ty.field_by_id(load, ids::LOOT_OPENED_PLAYER)?;
+        let container: Field<Entity> = ty.field_by_id(load, ids::LOOT_OPENED_CONTAINER)?;
+        let all: Field<bool> = ty.field_by_id(load, ids::LOOT_OPENED_TAKE_ALL)?;
         on(
             load,
             ty,
@@ -1017,7 +1027,7 @@ impl Kind for LootOpened {
     }
 }
 
-/// A player's equipment slot changed: `HandleEquipmentSlotChangedEvent`.
+/// A player's equipment slot changed.
 ///
 /// # Examples
 ///
@@ -1041,15 +1051,13 @@ pub struct EquipmentChanged {
 impl sealed::Sealed for EquipmentChanged {}
 
 impl Kind for EquipmentChanged {
-    const TYPE_NAME: &'static str = "keen::ecs::HandleEquipmentSlotChangedEvent";
-
     fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
     where
         F: Fn(&Self) + Send + Sync + 'static,
     {
-        let ty = load.event_type(Self::TYPE_NAME)?;
-        let player: Field<Entity> = ty.field(load, "playerEntityId")?;
-        let slot: Field<u8> = ty.field(load, "equipmentSlot")?;
+        let ty = load.event_type(ids::EQUIPMENT_CHANGED_EVENT)?;
+        let player: Field<Entity> = ty.field_by_id(load, ids::EQUIPMENT_CHANGED_PLAYER)?;
+        let slot: Field<u8> = ty.field_by_id(load, ids::EQUIPMENT_CHANGED_SLOT)?;
         on(
             load,
             ty,
@@ -1064,7 +1072,7 @@ impl Kind for EquipmentChanged {
     }
 }
 
-/// A downed player was revived: `RevivedPlayerEvent`.
+/// A downed player was revived.
 ///
 /// # Examples
 ///
@@ -1087,15 +1095,13 @@ pub struct Revived {
 impl sealed::Sealed for Revived {}
 
 impl Kind for Revived {
-    const TYPE_NAME: &'static str = "keen::ecs::RevivedPlayerEvent";
-
     fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
     where
         F: Fn(&Self) + Send + Sync + 'static,
     {
-        let ty = load.event_type(Self::TYPE_NAME)?;
-        let player: Field<Entity> = ty.field(load, "targetEntityId")?;
-        let by: Field<Entity> = ty.field(load, "sourceEntityId")?;
+        let ty = load.event_type(ids::REVIVED_EVENT)?;
+        let player: Field<Entity> = ty.field_by_id(load, ids::REVIVED_PLAYER)?;
+        let by: Field<Entity> = ty.field_by_id(load, ids::REVIVED_BY)?;
         on(
             load,
             ty,
