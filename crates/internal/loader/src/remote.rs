@@ -374,7 +374,6 @@ pub(crate) use live::{client, forget, heard, push_sync, server, sync_to};
 
 #[cfg(windows)]
 mod live {
-    use std::collections::HashMap;
     use std::sync::{Mutex, PoisonError};
     use std::time::Instant;
 
@@ -385,7 +384,7 @@ mod live {
     use crate::host::Loader;
 
     /// When each player last changed a setting.
-    static LAST_EDIT: Mutex<Option<HashMap<u64, Instant>>> = Mutex::new(None);
+    static LAST_EDIT: Mutex<Option<rustc_hash::FxHashMap<u64, Instant>>> = Mutex::new(None);
     /// What the client last heard from its server, for the Mods screen.
     static HEARD: Mutex<Heard> = Mutex::new(Heard::new());
 
@@ -629,7 +628,7 @@ mod live {
         let now = Instant::now();
         {
             let mut last = LAST_EDIT.lock().unwrap_or_else(PoisonError::into_inner);
-            let last = last.get_or_insert_with(HashMap::new);
+            let last = last.get_or_insert_with(rustc_hash::FxHashMap::default);
             admit(&schema, setting, admin, last.get(&key).copied(), now)?;
             last.insert(key, now);
         }

@@ -232,9 +232,16 @@ pub fn rows(
                     .iter()
                     .enumerate()
                     .map(|(i, item)| {
+                        let n = u64::try_from(i).unwrap_or(u64::MAX) + u64::from(field.first);
+                        let named = words
+                            .and_then(|w| w.get(&format!("{}.element", field.text)))
+                            .map_or_else(
+                                || format!("{label} {n}"),
+                                |each| each.replace("{n}", &n.to_string()),
+                            );
                         row(
                             format!("{}[{i}]", field.key),
-                            format!("{label} {}", i + 1),
+                            named,
                             widget(&element, item, words),
                         )
                     })
@@ -501,5 +508,35 @@ mod tests {
         assert_eq!(shown[3].lock, Lock::File);
         let long = format!("per_level = {:?}\n", vec![1; MAX_LIST_ROWS + 1]);
         assert_eq!(rows(&schema, &long, None, None)[0].lock, Lock::File);
+    }
+
+    #[test]
+    fn list_elements_are_numbered_from_the_field_s_first_and_named_by_its_text() {
+        let schema = Schema::new(
+            "",
+            "config",
+            vec![
+                Field::new("per_level", Stage::Startup, &[2, 4])
+                    .with_range(Some(1.0), Some(32.0))
+                    .with_first(0),
+            ],
+        );
+        let plain = rows(&schema, "per_level = [2, 4]\n", None, None);
+        assert_eq!(plain[0].label, "Per level 0");
+        let texts = Texts::parse(
+            "[en]\n\"config.per_level.element\" = \"Flame level {n}\"\n[uk]\n\"config.per_level.element\" = \"Рівень Полум'я {n}\"\n",
+        )
+        .unwrap();
+        let named = rows_in_schema(&schema, &texts, Language::UK_UA);
+        assert_eq!(named[1].label, "Рівень Полум'я 1");
+    }
+
+    fn rows_in_schema(schema: &Schema, texts: &Texts, language: Language) -> Vec<Row> {
+        rows(
+            schema,
+            "per_level = [2, 4]\n",
+            None,
+            Some(Words { texts, language }),
+        )
     }
 }

@@ -50,6 +50,7 @@ mod ecs;
 mod emits;
 #[cfg(windows)]
 mod entities;
+pub mod errors;
 #[cfg(windows)]
 mod events;
 mod fuse;
@@ -92,6 +93,8 @@ mod net;
 mod notices;
 #[cfg(windows)]
 mod packs;
+#[cfg(windows)]
+mod pages;
 #[cfg(windows)]
 mod patch;
 #[cfg(windows)]

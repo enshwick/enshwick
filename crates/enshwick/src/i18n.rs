@@ -13,7 +13,9 @@
 //! `en` is the fallback for every language without a text of its own. A file
 //! `mod-configs/<id>.texts.toml` in the same form overrides or adds texts.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
+
+use rustc_hash::FxHashMap;
 
 use crate::content::Id;
 use crate::{Host, Load, Off};
@@ -225,7 +227,7 @@ languages! {
 /// ```
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Texts {
-    by_language: HashMap<Language, BTreeMap<String, String>>,
+    by_language: FxHashMap<Language, BTreeMap<String, String>>,
 }
 
 impl Texts {

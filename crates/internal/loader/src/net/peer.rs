@@ -9,6 +9,8 @@ use super::{BURST, RATE};
 /// A peer's messages on their way in, and its rate.
 #[derive(Debug)]
 pub(super) struct Peer {
+    /// Keyed by channel and message id as the peer sends them, so the map
+    /// keeps std's keyed hasher.
     pub(super) partial: HashMap<(u32, u16), Partial>,
     pub(super) tokens: f64,
     seen: Instant,

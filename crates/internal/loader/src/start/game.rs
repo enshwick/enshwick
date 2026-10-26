@@ -7,7 +7,7 @@ use enshwick::abi::Side;
 use enshwick_reflect::{Image, Layout, Reflection};
 use windows_sys::Win32::System::LibraryLoader::{GetModuleFileNameW, GetModuleHandleW};
 
-use crate::{builds, log};
+use crate::{builds, errors, log};
 
 use super::pe;
 
@@ -110,7 +110,11 @@ pub(super) fn begin(stub_abi: u32, missing_forwards: u32) -> Option<PathBuf> {
     log::open(&game_dir.join("logs").join(crate::settings::LOADER_ID));
     crate::log!(INFO, "Enshwick {} starting", env!("CARGO_PKG_VERSION"));
     if let Some(problem) = problem {
-        crate::log!(WARN, "loader settings left at their defaults: {problem}");
+        crate::log!(
+            WARN,
+            "loader settings left at their defaults: {problem} ({})",
+            errors::BAD_SETTINGS
+        );
     }
     if stub_abi != STUB_ABI {
         crate::log!(
@@ -119,7 +123,11 @@ pub(super) fn begin(stub_abi: u32, missing_forwards: u32) -> Option<PathBuf> {
         );
     }
     if missing_forwards == u32::MAX {
-        crate::log!(WARN, "the system powrprof.dll could not be loaded");
+        crate::log!(
+            WARN,
+            "the system powrprof.dll could not be loaded ({})",
+            errors::NO_SYSTEM_POWRPROF
+        );
     } else if missing_forwards > 0 {
         crate::log!(
             INFO,
@@ -136,7 +144,8 @@ pub(super) fn game(data_dir: &Path) -> Option<Game> {
     let Some((side, base, image_len)) = identify() else {
         crate::log!(
             ERROR,
-            "this is not Enshrouded or its dedicated server; nothing loads"
+            "this is not Enshrouded or its dedicated server; nothing loads ({})",
+            errors::NOT_THE_GAME
         );
         return None;
     };
@@ -144,12 +153,20 @@ pub(super) fn game(data_dir: &Path) -> Option<Game> {
     // `base`, whose provenance it exposed, mapped for the life of the process.
     let bytes: &'static [u8] = unsafe { core::slice::from_raw_parts(base as *const u8, image_len) };
     let Ok(image) = Image::parse(bytes, Layout::Mapped, Some(base)) else {
-        crate::log!(ERROR, "the game's image could not be read; nothing loads");
+        crate::log!(
+            ERROR,
+            "the game's image could not be read; nothing loads ({})",
+            errors::UNREADABLE_GAME
+        );
         return None;
     };
     let image: &'static Image<'static> = Box::leak(Box::new(image));
     let Some(fingerprint) = image.fingerprint() else {
-        crate::log!(ERROR, "the game build has no fingerprint; nothing loads");
+        crate::log!(
+            ERROR,
+            "the game build has no fingerprint; nothing loads ({})",
+            errors::UNREADABLE_GAME
+        );
         return None;
     };
     let reflection = Reflection::scan(image);
@@ -169,9 +186,10 @@ pub(super) fn game(data_dir: &Path) -> Option<Game> {
     let Some(mut build) = builds::select(&tables, side, fingerprint, code) else {
         crate::log!(
             ERROR,
-            "unknown game build {}/{}; the game runs vanilla until Enshwick has its build table",
+            "unknown game build {}/{}; the game runs vanilla until Enshwick has its build table ({})",
             hex(&fingerprint.guid()),
-            fingerprint.age()
+            fingerprint.age(),
+            errors::UNKNOWN_BUILD
         );
         crate::holds::enforce(data_dir, &[], true);
         return None;
@@ -183,7 +201,8 @@ pub(super) fn game(data_dir: &Path) -> Option<Game> {
         if entry != base + rva {
             crate::log!(
                 ERROR,
-                "{name} is not where the build table says; nothing loads"
+                "{name} is not where the build table says; nothing loads ({})",
+                errors::TABLE_MISMATCH
             );
             crate::holds::enforce(data_dir, &[], true);
             return None;
@@ -197,11 +216,12 @@ pub(super) fn game(data_dir: &Path) -> Option<Game> {
         builds::Kind::Exact => crate::log!(INFO, "game: {}", build.name),
         builds::Kind::Fallback => crate::log!(
             WARN,
-            "game build {}/{} has no build table yet: {} entries found by their code patterns, {} missing; features and mods that need a missing one stay off until a loader build carries its table",
+            "game build {}/{} has no build table yet: {} entries found by their code patterns, {} missing; features and mods that need a missing one stay off until a loader build carries its table ({})",
             hex(&fingerprint.guid()),
             fingerprint.age(),
             build.entries(),
-            build.missing().len()
+            build.missing().len(),
+            errors::FEATURES_OFF
         ),
     }
     if build.kind == builds::Kind::Fallback {
