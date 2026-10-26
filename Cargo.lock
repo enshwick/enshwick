@@ -93,7 +93,6 @@ dependencies = [
  "clap",
  "enshwick",
  "enshwick-gamedata",
- "enshwick-reflect",
  "iced-x86",
  "memchr",
  "semver",
@@ -341,7 +340,6 @@ dependencies = [
  "enshwick",
  "enshwick-gamedata",
  "enshwick-loader",
- "enshwick-reflect",
  "memchr",
  "serde",
  "serde_json",
@@ -392,7 +390,6 @@ version = "1.0.0-alpha.2"
 dependencies = [
  "criterion",
  "enshwick",
- "enshwick-reflect",
  "rustc-hash",
  "ruzstd",
  "serde",
@@ -409,7 +406,6 @@ dependencies = [
  "base64",
  "enshwick",
  "enshwick-gamedata",
- "enshwick-reflect",
  "iced-x86",
  "postcard",
  "rustc-hash",
@@ -437,15 +433,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 3.0.9",
-]
-
-[[package]]
-name = "enshwick-reflect"
-version = "1.0.0-alpha.2"
-dependencies = [
- "criterion",
- "rustc-hash",
- "thiserror",
 ]
 
 [[package]]

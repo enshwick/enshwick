@@ -1,10 +1,10 @@
 //! Prints a binary's build fingerprint and the entry RVAs of named systems:
-//! `cargo run -p enshwick-reflect --example fingerprint -- <exe> [system...]`.
+//! `cargo run -p enshwick-gamedata --example fingerprint -- <exe> [system...]`.
 
 use std::fmt::Write as _;
 use std::io::Write as _;
 
-use enshwick_reflect::{Image, Layout, Reflection};
+use enshwick_gamedata::reflect::{Image, Layout, Reflection};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut args = std::env::args().skip(1);

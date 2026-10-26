@@ -11,7 +11,7 @@ use enshwick::abi::{
     ManifestFlags, MidHookSpec, ModHandle, ModInfo, Side, Status, Str,
 };
 use enshwick::mods::LOADER_FILE;
-use enshwick_reflect::{Fingerprint, Reflection};
+use enshwick_gamedata::reflect::{Fingerprint, Reflection};
 
 use crate::builds::KnownBuild;
 use crate::chains::{Chains, Link, Next};
@@ -998,9 +998,9 @@ extern "system" fn symbol(me: ModHandle, name: Str, out: *mut u64) -> Status {
     })
 }
 
-fn lookup(error: &enshwick_reflect::LookupError) -> Status {
+fn lookup(error: &enshwick_gamedata::reflect::LookupError) -> Status {
     match error {
-        enshwick_reflect::LookupError::Ambiguous(_) => Status::AMBIGUOUS,
+        enshwick_gamedata::reflect::LookupError::Ambiguous(_) => Status::AMBIGUOUS,
         _ => Status::MISSING,
     }
 }

@@ -418,8 +418,12 @@ mod tests {
             return;
         };
         let bytes = std::fs::read(path).unwrap();
-        let image =
-            enshwick_reflect::Image::parse(&bytes, enshwick_reflect::Layout::File, None).unwrap();
+        let image = enshwick_gamedata::reflect::Image::parse(
+            &bytes,
+            enshwick_gamedata::reflect::Layout::File,
+            None,
+        )
+        .unwrap();
         let tables = crate::builds::load();
         let fingerprint = image.fingerprint().unwrap();
         let table = enshwick_gamedata::exact(&tables, enshwick_gamedata::Side::Client, fingerprint)

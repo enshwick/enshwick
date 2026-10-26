@@ -142,7 +142,7 @@ const TAGS: [[u8; 16]; 2 * KEPT] = {
 };
 
 fn tag_id(index: usize) -> u32 {
-    enshwick_reflect::fnv1a32(&TAGS[index])
+    enshwick_gamedata::reflect::fnv1a32(&TAGS[index])
 }
 
 /// The text of a dialog text tag, by its id, while its dialog is kept.

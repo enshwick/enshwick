@@ -308,7 +308,7 @@ fn type_info(layout: &Layout, ty: usize) -> BuffTypeInfo {
         // SAFETY: as above.
         slot: u16::from(unsafe { read::<u8>(ty, layout.type_slot) }),
         flags,
-        name: enshwick_reflect::fnv1a32(&name),
+        name: enshwick_gamedata::reflect::fnv1a32(&name),
         // SAFETY: as above.
         duration: unsafe { read(ty, layout.type_duration) },
     }

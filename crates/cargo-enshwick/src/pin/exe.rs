@@ -3,7 +3,7 @@
 
 use std::ops::Range;
 
-use enshwick_reflect::{Fingerprint, Image, Layout, Reflection};
+use enshwick_gamedata::reflect::{Fingerprint, Image, Layout, Reflection};
 
 /// How far code is decoded past an address that no function entry covers.
 const LOOSE_CODE: u64 = 0x200;

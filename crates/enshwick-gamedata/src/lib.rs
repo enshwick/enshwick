@@ -7,15 +7,17 @@
 //! made for it ([`exact`], [`Table::resolve`]); on a build without one, the
 //! newest table of the same side ([`newest`]) finds each entry by its pattern
 //! ([`Table::fall_back`]), and what no pattern finds stays missing. The
-//! game's own archive reads with [`archive::Archive`].
+//! game's own archive reads with [`archive::Archive`], and the engine's
+//! reflection data with [`reflect::Reflection`].
 
 use std::collections::BTreeMap;
 
 use enshwick::code::Pattern;
 
 pub mod archive;
+pub mod reflect;
 
-pub use enshwick_reflect::Fingerprint;
+pub use reflect::Fingerprint;
 
 /// The binary a table is for.
 ///
@@ -1216,6 +1218,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore = "parsing every embedded table takes minutes under Miri")]
     fn every_embedded_table_reads_and_is_named_after_its_build() {
         let tables = tables();
         assert!(tables.iter().any(|t| t.side() == Side::Server));
@@ -1227,6 +1230,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore = "parsing every embedded table takes minutes under Miri")]
     fn the_client_table_carries_every_server_constant_and_symbol() {
         let tables = tables();
         let server = newest(&tables, Side::Server).unwrap().resolve();
@@ -1464,6 +1468,7 @@ age = 1
     /// The join's slot in the online provider's table is per build: a
     /// client table carried to any code leaves it out without missing it.
     #[test]
+    #[cfg_attr(miri, ignore = "parsing every embedded table takes minutes under Miri")]
     fn a_carried_client_table_never_misses_the_join_slot() {
         let tables = tables();
         let clients: Vec<&Table> = tables.iter().filter(|t| t.side() == Side::Client).collect();
@@ -1570,6 +1575,7 @@ age = 1
     }
 
     #[test]
+    #[cfg_attr(miri, ignore = "parsing every embedded table takes minutes under Miri")]
     fn the_newest_embedded_tables_name_their_steam_builds() {
         let tables = tables();
         let steam = |side| newest(&tables, side).and_then(Table::steam_build);
@@ -1615,15 +1621,14 @@ age = 1
     /// skipped without it), the patterns of their own table find every
     /// patterned entry where the table pins it.
     #[test]
+    #[cfg_attr(miri, ignore = "parsing every embedded table takes minutes under Miri")]
     fn patterns_find_their_entries_on_their_own_build() {
         for var in ["ENSH_SERVER_EXE", "ENSH_CLIENT_EXE"] {
             let Ok(path) = std::env::var(var) else {
                 continue;
             };
             let bytes = std::fs::read(path).unwrap();
-            let image =
-                enshwick_reflect::Image::parse(&bytes, enshwick_reflect::Layout::File, None)
-                    .unwrap();
+            let image = reflect::Image::parse(&bytes, reflect::Layout::File, None).unwrap();
             let fingerprint = image.fingerprint().unwrap();
             let tables = tables();
             let side = if var == "ENSH_SERVER_EXE" {

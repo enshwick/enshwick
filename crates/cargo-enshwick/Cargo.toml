@@ -15,7 +15,6 @@ publish = true
 clap = { workspace = true }
 enshwick = { workspace = true, features = ["schema"] }
 enshwick-gamedata.workspace = true
-enshwick-reflect.workspace = true
 iced-x86.workspace = true
 memchr.workspace = true
 serde.workspace = true

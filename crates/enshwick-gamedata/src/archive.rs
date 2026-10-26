@@ -378,6 +378,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore = "unpacking archive chunks takes minutes under Miri")]
     fn contents_and_resources_read_across_chunks() {
         let (dir, archive) = archive();
         assert_eq!(archive.content(&[4, 1, 2, 3]), Some(vec![9, 8, 7, 6]));
@@ -397,6 +398,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore = "unpacking archive chunks takes minutes under Miri")]
     fn counts_and_sizes_past_the_file_fail_the_read() {
         let (dir, archive) = archive();
         let mut h = std::fs::read(dir.join("game.kfc")).unwrap();
@@ -420,6 +422,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore = "unpacking archive chunks takes minutes under Miri")]
     fn another_format_does_not_open() {
         let mut header = vec![0u8; 0x100];
         header[..4].copy_from_slice(b"KFC2");
@@ -431,6 +434,7 @@ mod tests {
     /// folder (build 1269579): the Blacksmith's staff icon reads whole and
     /// decodes, and the item registry lists the Workbench.
     #[test]
+    #[cfg_attr(miri, ignore = "unpacking archive chunks takes minutes under Miri")]
     fn the_client_archive_reads() {
         let Ok(dir) = std::env::var("ENSHWICK_CLIENT_DIR") else {
             return;

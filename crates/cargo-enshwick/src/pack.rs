@@ -59,7 +59,7 @@ fn vanilla(game: &Path) -> Result<Vanilla, String> {
     use enshwick::Off;
     use enshwick::content::items::ItemLayout;
     use enshwick::content::workshops::WorkshopLayout;
-    use enshwick_reflect::{Image, Layout, Reflection};
+    use enshwick_gamedata::reflect::{Image, Layout, Reflection};
 
     let (exe, name) = ["enshrouded", "enshrouded_server"]
         .into_iter()

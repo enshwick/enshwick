@@ -4,7 +4,7 @@
 
 #[cfg(test)]
 mod tests {
-    use enshwick_reflect::{Image, Layout, Reflection};
+    use enshwick_gamedata::reflect::{Image, Layout, Reflection};
 
     fn check_common(reflection: &Reflection<'_>) {
         let shape = "keen::ecs::TriggerShape";
