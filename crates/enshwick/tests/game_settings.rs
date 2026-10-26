@@ -6,7 +6,7 @@ mod tests {
     use std::time::Duration;
 
     use enshwick::abi::Status;
-    use enshwick::game_settings::{GameSettings, Preset, WeatherFrequency};
+    use enshwick::game_settings::{GameSettings, GameSettingsPreset, WeatherFrequency};
     use enshwick::world::WorldError;
     use enshwick::{Load, Mod, Off};
 
@@ -79,6 +79,15 @@ mod tests {
         "game_settings.boss_health_factor",
     ];
 
+    /// The game's values of the enum constants the test reads and writes.
+    const ENUM_VALUES: [(&str, u64); 5] = [
+        ("game_settings_preset.default", 0),
+        ("game_settings_preset.custom", 4),
+        ("weather_frequency.disabled", 0),
+        ("weather_frequency.normal", 2),
+        ("weather_frequency.often", 3),
+    ];
+
     static SETTINGS: OnceLock<GameSettings> = OnceLock::new();
 
     struct Tuning;
@@ -115,7 +124,7 @@ mod tests {
     #[test]
     fn settings_read_typed_and_change_in_place() {
         let mut host = enshwick::test::FakeHost::new().type_size(TYPE, 144);
-        for (name, at) in FIELDS {
+        for (name, at) in FIELDS.into_iter().chain(ENUM_VALUES) {
             host = host.constant(name, at);
         }
         let loader = host.install();
@@ -127,19 +136,19 @@ mod tests {
         assert_eq!(settings.read(), None, "no world runs yet");
         loader.set_game_settings(defaults(), 0);
         let (now, preset) = settings.read().unwrap();
-        assert_eq!(preset, Preset::Default);
-        assert!(now.durability);
-        assert_eq!(now.weather, WeatherFrequency::Normal);
-        assert_eq!(now.day_length, Duration::from_mins(30));
+        assert_eq!(preset, GameSettingsPreset::Default);
+        assert!(now.enable_durability);
+        assert_eq!(now.weather_frequency, WeatherFrequency::Normal);
+        assert_eq!(now.day_time_duration, Duration::from_mins(30));
         assert_eq!(now.flame_level_fog_removal, 11);
 
         let changed = settings
             .change(|s| {
-                s.enemy_damage = 2.5;
-                s.weather = WeatherFrequency::Disabled;
+                s.enemy_damage_factor = 2.5;
+                s.weather_frequency = WeatherFrequency::Disabled;
             })
             .unwrap();
-        assert!((changed.enemy_damage - 2.5).abs() < f32::EPSILON);
+        assert!((changed.enemy_damage_factor - 2.5).abs() < f32::EPSILON);
         let (bytes, preset) = loader.game_settings().unwrap();
         assert_eq!(preset, 4, "a change makes the preset custom");
         assert_eq!(&bytes[0x58..0x5c], &2.5f32.to_le_bytes());
@@ -147,11 +156,11 @@ mod tests {
         assert_eq!(&bytes[0x78..0x80], &defaults()[0x78..0x80], "untouched");
 
         assert_eq!(
-            settings.change(|s| s.night_length = Duration::ZERO),
+            settings.change(|s| s.night_time_duration = Duration::ZERO),
             Err(WorldError::Refused)
         );
         assert_eq!(
-            settings.change(|s| s.player_health = f32::NAN),
+            settings.change(|s| s.player_health_factor = f32::NAN),
             Err(WorldError::Refused)
         );
 
@@ -159,7 +168,7 @@ mod tests {
             loader.kept_game_settings().is_empty(),
             "a change keeps nothing"
         );
-        settings.keep(|s| s.boss_health = 3.0).unwrap();
+        settings.keep(|s| s.boss_health_factor = 3.0).unwrap();
         let kept = loader.kept_game_settings();
         let held: Vec<usize> = (0..kept.len()).filter(|&i| kept[i].is_some()).collect();
         assert_eq!(held, vec![0x6e, 0x6f], "only the bytes the change moved");

@@ -9,7 +9,7 @@ mod tests {
     use enshwick::abi::Status;
     use enshwick::ecs::Entity;
     use enshwick::game_events::{
-        AltarUsed, AttackCategories, Built, CraftRequested, Crafted, DamageTypes, Died,
+        AltarUsed, AttackCategoryMask, Built, CraftRequested, Crafted, DamageTypeMask, Died,
         EquipmentChanged, EquipmentSlot, ExperienceGained, Hit, Interacted, Kind, LevelGained,
         LootOpened, PickedUp, Revived, TornDown,
     };
@@ -154,10 +154,10 @@ mod tests {
         assert_eq!((hit.health_change, hit.stamina_change), (-40, 0));
         assert_eq!(
             hit.damage_types,
-            DamageTypes::FIRE | DamageTypes::CUT,
+            DamageTypeMask::MAGICAL_FIRE | DamageTypeMask::PHYSICAL_CUT,
             "engine bits the API does not name drop"
         );
-        assert_eq!(hit.attack, AttackCategories::MELEE);
+        assert_eq!(hit.attack, AttackCategoryMask::MELEE);
         assert_eq!(hit.target_faction, 2);
 
         let mut died = [0u8; 16];

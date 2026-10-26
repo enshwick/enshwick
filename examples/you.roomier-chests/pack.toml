@@ -1,0 +1,5 @@
+id = "you.roomier-chests"
+version = "0.1.0"
+name = "Roomier chests"
+description = "Every storage box holds more, the bigger ones more again."
+license = "MIT"

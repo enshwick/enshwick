@@ -9,6 +9,7 @@
 use std::collections::BTreeMap;
 use std::sync::OnceLock;
 
+use super::containers::{ContainerLayout, container_slots};
 use super::items::{ITEM_REGISTRY, ItemLayout};
 use super::recipes::{RECIPE_REGISTRY, RecipeLayout};
 use super::workshops::{
@@ -123,6 +124,8 @@ pub struct Vanilla {
     /// build reflects them.
     recipes: Option<(RecipeLayout, u32)>,
     recipe_list: OnceLock<Option<Recipes>>,
+    /// The container layout, when the build reflects it.
+    containers: Option<ContainerLayout>,
 }
 
 /// The vanilla recipes: by debug name, and each with the item it makes.
@@ -189,7 +192,8 @@ impl Vanilla {
             Hashes::resolve(facts)?,
             read,
         )
-        .with_recipe_facts(facts))
+        .with_recipe_facts(facts)
+        .with_containers(ContainerLayout::resolve(facts).ok()))
     }
 
     fn with_parts(
@@ -206,6 +210,7 @@ impl Vanilla {
             names: OnceLock::new(),
             recipes: None,
             recipe_list: OnceLock::new(),
+            containers: None,
         }
     }
 
@@ -214,6 +219,53 @@ impl Vanilla {
     fn with_recipes(mut self, layout: RecipeLayout, hash: u32) -> Self {
         self.recipes = Some((layout, hash));
         self
+    }
+
+    /// The same, reading containers through `layout`.
+    fn with_containers(mut self, layout: Option<ContainerLayout>) -> Self {
+        self.containers = layout;
+        self
+    }
+
+    /// How many slots the container the vanilla item `item` places holds;
+    /// `None` when it places none.
+    ///
+    /// # Errors
+    ///
+    /// [`VanillaError::Unreadable`] when the item's data, the container
+    /// layout or the template does not read.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::content::vanilla::Vanilla;
+    ///
+    /// if let Some(vanilla) = Vanilla::game() {
+    ///     let chest = vanilla.item("Prop_Storage_24_T1_Box")?;
+    ///     assert_eq!(vanilla.container_slots(chest)?, Some(24));
+    /// }
+    /// # Ok::<(), enshwick::content::vanilla::VanillaError>(())
+    /// ```
+    pub fn container_slots(&self, item: Guid) -> Result<Option<u8>, VanillaError> {
+        let layout = self
+            .containers
+            .as_ref()
+            .ok_or(VanillaError::Unreadable("container layout"))?;
+        let info = (self.read)(item.key_by_hash(self.hashes.item))
+            .ok_or(VanillaError::Unreadable("item data"))?;
+        let at = self.workshops.placed_entity;
+        let Some(template) = info
+            .get(at..at + 16)
+            .and_then(|bytes| <[u8; 16]>::try_from(bytes).ok())
+            .map(Guid)
+            .filter(|template| template.0 != [0; 16])
+        else {
+            return Ok(None);
+        };
+        let Some(data) = (self.read)(template.key_by_hash(self.hashes.template)) else {
+            return Ok(None);
+        };
+        Ok(container_slots(layout, &data))
     }
 
     /// The same, with the recipe layout `facts` give, when they give it.
@@ -621,6 +673,26 @@ pub(crate) mod tests {
         .with_recipes(RECIPES, RECIPE_REGISTRY_HASH)
     }
 
+    /// [`game`] with the item `chest`, named `name`, which places a
+    /// container of `slots` slots.
+    pub(crate) fn game_with_chest(chest: Guid, name: &str, slots: u8) -> Vanilla {
+        use super::super::containers::tests::{LAYOUT as CONTAINERS, chest as template};
+
+        let placed = Guid([0x77; 16]);
+        let mut data = game_data(&[(chest, name)]);
+        let mut info = vec![0u8; 0x400];
+        info[0x3c0..0x3d0].copy_from_slice(&placed.0);
+        data.insert(chest.key_by_hash(HASHES.item), info);
+        data.insert(placed.key_by_hash(HASHES.template), template(slots));
+        Vanilla::with_parts(
+            ITEMS,
+            super::super::workshops::tests::LAYOUT,
+            HASHES,
+            move |key| data.get(&key).cloned(),
+        )
+        .with_containers(Some(CONTAINERS))
+    }
+
     /// The archive of [`game`], by key.
     fn game_data(named: &[(Guid, &str)]) -> std::collections::HashMap<ResourceKey, Vec<u8>> {
         use super::super::workshops::tests::{CLIENT, CRAFTING, INTERACTION, station};
@@ -660,6 +732,18 @@ pub(crate) mod tests {
         data.insert(template.key_by_hash(HASHES.template), crafting.into_bytes());
         data.insert(plain.key_by_hash(HASHES.template), other.into_bytes());
         data
+    }
+
+    #[test]
+    fn a_chest_s_slots_are_read_from_the_template_it_places() {
+        let chest = Guid([1; 16]);
+        let vanilla = game_with_chest(chest, "Prop_Storage_24_T1_Box", 24);
+        assert_eq!(vanilla.container_slots(chest), Ok(Some(24)));
+        assert_eq!(vanilla.container_slots(Guid([7; 16])), Ok(None));
+        assert_eq!(
+            game(&[]).container_slots(chest),
+            Err(VanillaError::Unreadable("container layout"))
+        );
     }
 
     #[test]

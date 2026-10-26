@@ -120,6 +120,9 @@ impl DataField {
     pub const RECIPE_INGREDIENT: Self = Self(4);
     /// How long a recipe takes, in seconds; the entry is a recipe.
     pub const RECIPE_TIME: Self = Self(5);
+    /// How many slots the container an item places holds; the entry is the
+    /// item. Since minor 80.
+    pub const CONTAINER_SLOTS: Self = Self(6);
 }
 
 /// How a [`DataChange`] changes its value.

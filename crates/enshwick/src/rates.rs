@@ -47,15 +47,15 @@ impl ExperienceGroup {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::game_events::ExperienceSource;
+    /// use enshwick::game_events::ExperienceSourceType;
     /// use enshwick::rates::ExperienceGroup;
     ///
-    /// assert_eq!(ExperienceGroup::of(ExperienceSource::Quest), Some(ExperienceGroup::Exploration));
-    /// assert_eq!(ExperienceGroup::of(ExperienceSource::None), None);
+    /// assert_eq!(ExperienceGroup::of(ExperienceSourceType::Quest), Some(ExperienceGroup::Exploration));
+    /// assert_eq!(ExperienceGroup::of(ExperienceSourceType::None), None);
     /// ```
     #[must_use]
-    pub const fn of(source: crate::game_events::ExperienceSource) -> Option<Self> {
-        use crate::game_events::ExperienceSource as Source;
+    pub const fn of(source: crate::game_events::ExperienceSourceType) -> Option<Self> {
+        use crate::game_events::ExperienceSourceType as Source;
         match source {
             Source::Combat => Some(Self::Combat),
             Source::Mining => Some(Self::Mining),
