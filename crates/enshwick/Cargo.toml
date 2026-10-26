@@ -233,6 +233,10 @@ name = "world_queries"
 required-features = ["test"]
 
 [[test]]
+name = "capture"
+required-features = ["test"]
+
+[[test]]
 name = "terrain"
 required-features = ["test"]
 

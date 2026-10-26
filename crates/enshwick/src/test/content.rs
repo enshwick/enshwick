@@ -31,6 +31,7 @@ impl FakeHost {
                 category: 0,
                 rarity: 0,
                 flags,
+                placed_entity: [0; 16],
             },
         );
         self
@@ -49,6 +50,23 @@ impl FakeHost {
     pub fn item_category(mut self, item: u32, category: u8) -> Self {
         if let Some(data) = self.items.get_mut(&item) {
             data.category = category;
+        }
+        self
+    }
+
+    /// Makes item `item`, set with [`FakeHost::item`], one a player places
+    /// as the template `template`, by its GUID in file order.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let host = enshwick::test::FakeHost::new().item(0x5e01, 1, 0).item_places(0x5e01, [0x3a; 16]);
+    /// let _loader = host.install();
+    /// ```
+    #[must_use]
+    pub fn item_places(mut self, item: u32, template: [u8; 16]) -> Self {
+        if let Some(data) = self.items.get_mut(&item) {
+            data.placed_entity = template;
         }
         self
     }

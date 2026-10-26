@@ -176,6 +176,7 @@ Every method of `FakeHost` takes and returns the builder.
 | `code(bytes)`                         | The game's code section, for pattern searches.                                                        |
 | `workshop_recipes(limit)`             | The most recipes one workshop takes; 512 by default, `u32::MAX` for lifted.                           |
 | `item(item, max_stack, flags)`        | The static data of an item, for `item_info`.                                                          |
+| `item_places(item, template)`         | The template GUID a player places from an item set with `item`.                                       |
 | `without_inventories()`               | A build without inventory transactions: `inventory_open` answers `Status::MISSING`.                   |
 
 `install()` ends the builder.

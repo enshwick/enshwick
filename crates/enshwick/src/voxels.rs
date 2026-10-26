@@ -69,7 +69,19 @@ const PER_METRE: f64 = 2.0;
 /// assert_eq!(at.to_metres(), [10.0, 4.0, 7.5]);
 /// # Ok::<(), &str>(())
 /// ```
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Default,
+    PartialEq,
+    Eq,
+    Hash,
+    PartialOrd,
+    Ord,
+    serde::Serialize,
+    serde::Deserialize,
+)]
 pub struct VoxelPos {
     x: u32,
     y: u32,
@@ -195,7 +207,9 @@ fn index(metres: f64) -> Option<u32> {
 /// }
 /// assert!(!is_ground(VoxelMaterial::Air));
 /// ```
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(
+    Clone, Copy, Debug, Default, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize,
+)]
 #[non_exhaustive]
 pub enum VoxelMaterial {
     /// Empty: no ground and no building.
@@ -223,7 +237,9 @@ pub enum VoxelMaterial {
 /// assert!(!rock.is_air());
 /// assert_eq!(rock.fill(), 255);
 /// ```
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(
+    Clone, Copy, Debug, Default, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize,
+)]
 pub struct Voxel {
     material: VoxelMaterial,
     fill: u8,
@@ -312,14 +328,49 @@ impl Voxel {
 ///     Ok(block.iter().filter(|(_, voxel)| !voxel.is_air()).count())
 /// }
 /// ```
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[serde(try_from = "Parts")]
 pub struct VoxelBox {
     min: VoxelPos,
     size: [u32; 3],
     voxels: Vec<Voxel>,
 }
 
+/// A [`VoxelBox`] as serde reads it, before its voxels are counted.
+#[derive(serde::Deserialize)]
+struct Parts {
+    min: VoxelPos,
+    size: [u32; 3],
+    voxels: Vec<Voxel>,
+}
+
+/// Why a [`VoxelBox`] read with serde was refused.
+#[derive(Debug, thiserror::Error)]
+#[error("a voxel box of {size:?} holds {held} voxels")]
+struct VoxelCountError {
+    size: [u32; 3],
+    held: usize,
+}
+
+impl TryFrom<Parts> for VoxelBox {
+    type Error = VoxelCountError;
+
+    fn try_from(parts: Parts) -> Result<Self, VoxelCountError> {
+        let (size, held) = (parts.size, parts.voxels.len());
+        Self::from_parts(parts.min, size, parts.voxels).ok_or(VoxelCountError { size, held })
+    }
+}
+
 impl VoxelBox {
+    /// The box of `size` from `min` holding `voxels`, x fastest, then y,
+    /// then z; `None` unless there is one voxel for each place.
+    pub(crate) fn from_parts(min: VoxelPos, size: [u32; 3], voxels: Vec<Voxel>) -> Option<Self> {
+        let count = size
+            .iter()
+            .try_fold(1usize, |count, &axis| count.checked_mul(axis as usize))?;
+        (count == voxels.len()).then_some(Self { min, size, voxels })
+    }
+
     /// Its lowest corner.
     ///
     /// # Examples
@@ -450,6 +501,11 @@ pub struct Voxels {
 }
 
 impl Voxels {
+    /// The reads through `host`.
+    pub(crate) const fn new(host: Host) -> Self {
+        Self { host }
+    }
+
     /// The voxels of the box of `size` voxels from `min`, its lowest corner.
     ///
     /// # Errors

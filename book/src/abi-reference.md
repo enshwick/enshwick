@@ -239,7 +239,7 @@ marked "init only" are allowed during `enshwick_mod_init` only.
 | `join_missing`           | The server's join mods the last refused join found missing on this client                            | 10          |
 | `hook_at`                | Runs a handler before an instruction inside a game function; init only                               | 11          |
 | `inventory_open`         | Asks for inventory transactions and item data; init only; `MISSING` on a build that lacks them       | 12          |
-| `item_info`              | Writes an item's static data; any thread                                                             | 12          |
+| `item_info`              | Writes an item's static data, since minor 88 with the template it places; any thread                 | 12          |
 | `inventory_submit`       | Queues an inventory transaction, from any thread; the result comes on the game thread                | 12          |
 | `status`                 | Adds a source of lines for the loader's status summary                                               | 13          |
 | `run_console`            | Runs a console line as the server's console, an action's text form included; server game thread only | 13          |

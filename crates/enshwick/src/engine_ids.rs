@@ -207,6 +207,7 @@ ids! {
     CRAFTING_MENU_SET = "crafting_menu_set";
     CRAFTING_MENU_SET_ENTRIES = "crafting_menu_set.entries";
     CURRENT_TRANSFORM = "current_transform";
+    CURRENT_TRANSFORM_TRANSFORM = "current_transform.transform";
     USED_ITEM = "used_item";
     LABEL = "label";
     INVENTORY_SETUP = "inventory_setup";
