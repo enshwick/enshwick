@@ -54,6 +54,7 @@ pub struct Lines {
 
 /// The fingerprint of a mod set: FNV-1a over the loader version, every
 /// `id@version` and every mod's join values, sorted, as eight hex digits.
+///
 /// Without join values it is the fingerprint older loaders compute.
 #[must_use]
 pub fn fingerprint(

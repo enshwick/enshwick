@@ -82,12 +82,14 @@ pub struct DryMod {
     pub reason: String,
 }
 
-/// Starts the loader on the game executable `exe` without running the game:
-/// the executable's image is mapped at its preferred base, the build table
-/// taken as the loader takes it (only by patterns with `patterns`), and
-/// every mod in `game_dir/mods/` resolved and initialised as at a start.
-/// Nothing is hooked or patched, and no mod's `ready` runs. Once per
-/// process: the loader keeps its state for the process.
+/// Starts the loader on the game executable `exe` without running the game.
+///
+/// The executable's image is mapped at its preferred base, the build table
+/// taken as the loader takes it (only by patterns with `patterns`), and every
+/// mod in `game_dir/mods/` resolved and initialised as at a start.
+///
+/// Nothing is hooked or patched, and no mod's `ready` runs. Once per process:
+/// the loader keeps its state for the process.
 ///
 /// # Errors
 ///

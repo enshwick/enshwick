@@ -61,8 +61,9 @@ pub struct Plan {
 /// servers too.
 pub const OTHER_SIDE: &str = "not for this side of the game";
 
-/// Whether a mod for `mod_side` loads in the game binary `process`. The
-/// dedicated server loads server mods; the client loads every mod, since it
+/// Whether a mod for `mod_side` loads in the game binary `process`.
+///
+/// The dedicated server loads server mods; the client loads every mod, since it
 /// runs the server's code while it hosts a game, solo play included.
 #[must_use]
 pub fn loads(mod_side: Side, process: Side) -> bool {
