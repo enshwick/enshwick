@@ -121,6 +121,7 @@ pub(crate) fn declare_change(
     target: LiveTarget,
     field: Field,
 ) -> Result<ChangeId, Status> {
+    let mut declared = CHANGES.declared.relock();
     if CHANGES.sealed.get().is_some() {
         return Err(Status::TOO_LATE);
     }
@@ -140,7 +141,7 @@ pub(crate) fn declare_change(
             live: Some(id),
         },
     };
-    CHANGES.declared.relock().push(pending);
+    declared.push(pending);
     live.push((owner, id, field));
     Ok(id)
 }
@@ -168,37 +169,37 @@ pub(crate) fn set_change(owner: ModIndex, id: ChangeId, value: Option<Value>) ->
     if value.is_some_and(|value| field.check(value).is_err()) {
         return Status::BAD_ARGS;
     }
-    let Some(sealed) = CHANGES.sealed.get() else {
+    let sealed = {
         let mut pending = CHANGES.declared.relock();
-        for p in pending.iter_mut() {
-            match p {
-                Pending::One(d) if d.owner == owner && d.live == Some(id) => {
-                    d.change.value = value.unwrap_or(UNSET);
-                }
-                Pending::Each {
-                    owner: o,
-                    change,
-                    live,
-                    ..
-                } if *o == owner && *live == Some(id) => change.value = value.unwrap_or(UNSET),
-                _ => {}
-            }
-        }
-        return Status::OK;
+        let Some(sealed) = CHANGES.sealed.get() else {
+            super::set_pending(&mut pending, owner, id, value);
+            return Status::OK;
+        };
+        sealed
     };
-    let mut declared = sealed.declared.relock();
-    let next = super::set_live(&declared, owner, id, value);
-    match apply(sealed, &mut declared, next) {
+    let rebuilt = {
+        let mut declared = sealed.declared.relock();
+        let next = super::set_live(&declared, owner, id, value);
+        apply(sealed, &mut declared, next)
+    }
+    .and_then(|patched| rebuild(&patched));
+    match rebuilt {
         Ok(_) => Status::OK,
         Err(why) => {
             crate::log::write(
                 Level::WARN,
                 &self::id(sealed.loader, owner),
-                &format!("{field}: the new value takes a restart: {why}"),
+                &format!("{field}: the new value is not in force and takes a restart: {why}"),
             );
-            Status::OK
+            Status::TOO_LATE
         }
     }
+}
+
+/// Whether some mod declared a change it sets later, so the resources the
+/// changes patch keep their base for a rebuild.
+pub(crate) fn has_live() -> bool {
+    !CHANGES.live.relock().is_empty()
 }
 
 /// Every vanilla item with what a selection reads of it, from the game's
@@ -395,7 +396,8 @@ fn item_offsets(loader: &Loader) -> ItemOffsets {
 pub(crate) fn serve(
     loader: &'static Loader,
 ) -> Vec<(ResourceKey, enshwick::abi::ResourcePatchFn, *mut c_void)> {
-    let pending = std::mem::take(&mut *CHANGES.declared.relock());
+    let mut open = CHANGES.declared.relock();
+    let pending = std::mem::take(&mut *open);
     let selects = pending.iter().any(|p| matches!(p, Pending::Each { .. }));
     let items = if selects {
         vanilla_items(loader)
@@ -442,6 +444,7 @@ pub(crate) fn serve(
         templates: OnceLock::new(),
         loot_items: OnceLock::new(),
     });
+    drop(open);
     let mut patches = Vec::new();
     if !items.is_empty() {
         crate::log!(INFO, "{} items get changed values", items.len());
@@ -479,36 +482,39 @@ pub(crate) fn reload(owner: ModIndex, changes: Vec<(Change, String)>) -> Result<
         .sealed
         .get()
         .ok_or_else(|| "no changes were in force at start".to_owned())?;
-    let mut declared = sealed.declared.relock();
-    let next = super::replace_owner(
-        &declared,
-        owner,
-        changes
-            .into_iter()
-            .map(|(change, source)| Declared {
-                owner,
-                change,
-                source,
-                live: None,
-            })
-            .collect(),
-    );
-    apply(sealed, &mut declared, next)
+    let patched = {
+        let mut declared = sealed.declared.relock();
+        let next = super::replace_owner(
+            &declared,
+            owner,
+            changes
+                .into_iter()
+                .map(|(change, source)| Declared {
+                    owner,
+                    change,
+                    source,
+                    live: None,
+                })
+                .collect(),
+        );
+        apply(sealed, &mut declared, next)?
+    };
+    rebuild(&patched)
 }
 
-/// Puts `next` in force as every change: merges it, reports the overridden
-/// sets, and builds each resource the loader patches again in place; how
-/// many it rebuilt.
+/// Puts `next` in force as every change: merges it and reports the
+/// overridden sets; the resources the loader patches, for [`rebuild`]
+/// once `declared` is unlocked.
 ///
 /// # Errors
 ///
-/// As [`reload`]; `declared` stays as it was when a change reaches an
-/// entry the loader did not patch at start.
+/// A change that reaches an entry the loader did not patch at start, which
+/// takes a restart; `declared` then stays as it was.
 fn apply(
     sealed: &Sealed,
     declared: &mut Vec<Declared>,
     next: Vec<Declared>,
-) -> Result<usize, String> {
+) -> Result<Vec<ResourceKey>, String> {
     let loader = sealed.loader;
     let patched = sealed.patched.get().cloned().unwrap_or_default();
     let (merged, conflicts) = merge(&next, |a, b| requires(loader, a, b));
@@ -547,8 +553,18 @@ fn apply(
     report(loader, &conflicts);
     sealed.merged.store(Arc::new(merged));
     *declared = next;
+    Ok(patched)
+}
+
+/// Builds each of `patched` again in place from its base; how many.
+///
+/// # Errors
+///
+/// The resources that did not build again: their base was not kept, or
+/// their length changed, such as an ingredient taken out or added.
+fn rebuild(patched: &[ResourceKey]) -> Result<usize, String> {
     let mut failed = Vec::new();
-    for key in &patched {
+    for key in patched {
         let status = crate::content::rebuild(ModIndex::LOADER, *key);
         if !status.is_ok() {
             failed.push(format!("{}:{:08x}", Guid(key.guid), key.type_hash));
@@ -558,7 +574,7 @@ fn apply(
         Ok(patched.len())
     } else {
         Err(format!(
-            "{} resources take a restart, as their length changed: {}",
+            "{} resources do not build again in place: {}",
             failed.len(),
             failed.join(", ")
         ))

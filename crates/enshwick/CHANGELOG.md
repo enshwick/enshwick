@@ -17,7 +17,7 @@ Each entry names the pull request that made the change.
   value the mod sets any time later through its `ChangeHandle`
   (`set`, `reset`); the loader merges it with every mod's and pack's
   changes and builds what it reaches again in place, so a stack size or
-  chest size can follow a per-world setting.
+  chest size can follow a per-world setting (#542).
 
 ## [1.0.0-alpha.6] - 2026-10-26
 

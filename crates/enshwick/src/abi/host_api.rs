@@ -1155,7 +1155,8 @@ pub struct HostApi {
     /// or selection, and an ingredient, whose change alters a recipe's
     /// length; [`Status::MISSING`] when the build does not reflect the
     /// field; [`Status::REFUSED`] for a field clients read in a mod without
-    /// [`ManifestFlags::JOIN`](super::ManifestFlags::JOIN). Init only. Since minor 84.
+    /// [`ManifestFlags::JOIN`](super::ManifestFlags::JOIN); [`Status::TOO_LATE`] after
+    /// `enshwick_mod_init`. Since minor 84.
     pub declare_change:
         extern "system" fn(me: ModHandle, change: *const DataChange, out: *mut ChangeId) -> Status,
     /// Puts `value` in force for the calling mod's change `id` by `op`:
@@ -1165,7 +1166,10 @@ pub struct HostApi {
     /// reads the new value from then on. During `enshwick_mod_init` the
     /// value counts from the first read. [`Status::BAD_ARGS`] for an id
     /// the mod did not declare, an unknown operation, or a value the field
-    /// does not take; [`Status::FAULTED`] for a mod that is off. Any
+    /// does not take; [`Status::FAULTED`] for a mod that is off;
+    /// [`Status::TOO_LATE`] when the value reaches something the loader did
+    /// not patch at start or cannot build again in place: the value is then
+    /// dropped, the old one stays in force, and the log says so. Any
     /// thread; it allocates and builds resources, so it is no per-frame
     /// call. Since minor 84.
     pub set_change:

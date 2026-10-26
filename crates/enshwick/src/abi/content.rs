@@ -179,7 +179,7 @@ impl ChangeOp {
 
 /// A change a mod declared with
 /// [`HostApi::declare_change`](super::HostApi::declare_change), whose value it
-/// sets later; numbered by the loader, per mod.
+/// sets later; numbered by the loader, unique in the process.
 ///
 /// # Examples
 ///

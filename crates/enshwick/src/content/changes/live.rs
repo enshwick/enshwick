@@ -74,6 +74,10 @@ pub enum SetChangeError {
     /// The loader refused it: the mod is off.
     #[error("the loader refused the value")]
     Refused,
+    /// The value takes a restart: what it reaches does not build again in
+    /// place. The value is dropped and the old one stays in force.
+    #[error("the value takes a restart")]
+    Restart,
 }
 
 /// A change of a vanilla value whose value the mod sets after init, any
@@ -125,6 +129,7 @@ impl ChangeHandle {
     /// # Errors
     ///
     /// [`SetChangeError::Value`] for a value the field does not take,
+    /// [`SetChangeError::Restart`] when it takes a restart,
     /// [`SetChangeError::Refused`] when the loader refuses it.
     ///
     /// # Examples
@@ -143,6 +148,7 @@ impl ChangeHandle {
     ///
     /// # Errors
     ///
+    /// [`SetChangeError::Restart`] when it takes a restart,
     /// [`SetChangeError::Refused`] when the loader refuses it.
     ///
     /// # Examples
@@ -161,6 +167,7 @@ impl ChangeHandle {
     fn send(&self, op: ChangeOp, value: f64) -> Result<(), SetChangeError> {
         match (self.host.api().set_change)(self.host.handle(), self.id, op, value) {
             Status::OK => Ok(()),
+            Status::TOO_LATE => Err(SetChangeError::Restart),
             _ => Err(SetChangeError::Refused),
         }
     }
