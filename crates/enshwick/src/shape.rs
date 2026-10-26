@@ -41,6 +41,15 @@ use core::ptr::NonNull;
 pub unsafe trait Shape {
     /// The type's structural hash.
     const SHAPE: u64;
+
+    /// What a point schema calls the type: a primitive's name such as
+    /// `u32` or `bool`, `enshwick.<name>` for a type of this crate, or the
+    /// type's own name; empty for a type a schema cannot describe.
+    const SCHEMA_NAME: &'static str = "";
+
+    /// The `[[type]]` tables of a point schema for the type and every named
+    /// type inside it; empty for a primitive or a type of this crate.
+    const SCHEMA_TYPES: &'static str = "";
 }
 
 /// Builds a [`Shape`] hash, FNV-1a over the parts in order.
@@ -182,22 +191,25 @@ macro_rules! leaf {
     )*};
 }
 
+macro_rules! number {
+    ($($ty:ty),* $(,)?) => {$(
+        // SAFETY: a number's shape is its name, which fixes its layout and
+        // values.
+        unsafe impl Shape for $ty {
+            const SHAPE: u64 = ShapeHasher::new(stringify!($ty)).finish();
+            const SCHEMA_NAME: &'static str = stringify!($ty);
+        }
+    )*};
+}
+
+number!(u8, u16, u32, u64, i8, i16, i32, i64, f32, f64);
+
 leaf!(
     (),
-    u8,
-    u16,
-    u32,
-    u64,
     u128,
     usize,
-    i8,
-    i16,
-    i32,
-    i64,
     i128,
     isize,
-    f32,
-    f64,
     char,
     str,
     c_void,
@@ -215,6 +227,7 @@ unsafe impl Shape for bool {
         .text("true")
         .number(1)
         .finish();
+    const SCHEMA_NAME: &'static str = "bool";
 }
 
 // SAFETY: an array is its element's shape repeated `N` times.

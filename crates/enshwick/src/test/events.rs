@@ -166,7 +166,7 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// #[enshwick::event(name = "trading-post:sold")]
+    /// #[enshwick::event(name = "you.trading-post:sold")]
     /// #[derive(Clone, Copy, Debug)]
     /// pub struct Sold {
     ///     pub item: u32,

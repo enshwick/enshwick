@@ -28,6 +28,10 @@
 /// - `was: ["id", ...]`: ids this mod had before a rename; it replaces them,
 ///   answers requirements and points named by them, and on its first start
 ///   takes over their settings and data;
+/// - `points: [Type, ...]`: the [extension points](crate::points) the mod
+///   defines, each a [`#[point]`](macro@crate::point) input; their schemas
+///   go into the manifest, where `cargo enshwick point` reads them to write
+///   other mods' definitions;
 /// - `builds: [{ side, guid, age, symbols: ["id" => rva], constants: ["id" => value] }]`,
 ///   symbols and constants the mod pins itself for those game builds.
 ///
@@ -86,6 +90,7 @@ macro_rules! manifest {
         $(, breaks: [$($breaks:literal => $breaks_range:literal),* $(,)?])?
         $(, replaces: [$($replaces:literal),* $(,)?])?
         $(, was: [$($was:literal),* $(,)?])?
+        $(, points: [$($point:ty),* $(,)?])?
         $(, builds: [$({
             side: $bside:ident,
             guid: $guid:literal,
@@ -152,13 +157,23 @@ macro_rules! manifest {
                     as &[$crate::abi::Symbol]).len(),
             },)*)?
         ];
+        const VERSION: &str = $crate::__private::or_default(
+            &[$($version)?],
+            ::core::env!("CARGO_PKG_VERSION"),
+        );
+        const POINTS: &str = $crate::__private::point_schemas(
+            $crate::__private::concatcp!(
+                "schema = 1\nmod = \"", $id, "\"\nversion = \"", VERSION, "\"\n",
+                $($(<$point as $crate::points::Point>::SCHEMA,)*)?
+            ),
+        );
+        #[cfg_attr(windows, unsafe(link_section = ".enshpt"))]
+        #[used]
+        static POINT_SECTION: [u8; POINTS.len()] = $crate::__private::bytes(POINTS);
         static MANIFEST: $crate::abi::Manifest = $crate::abi::Manifest {
             header: $crate::abi::Header::of::<$crate::abi::Manifest>(),
             id: $crate::abi::Str::new($id),
-            version: $crate::abi::Str::new($crate::__private::or_default(
-                &[$($version)?],
-                ::core::env!("CARGO_PKG_VERSION"),
-            )),
+            version: $crate::abi::Str::new(VERSION),
             side: $crate::abi::Side::$side,
             flags: $crate::__private::flags(&[$($join)?], &[$($reload)?]),
             dependencies: DEPENDENCIES.as_ptr(),
@@ -177,6 +192,7 @@ macro_rules! manifest {
             homepage: $crate::abi::Str::new($crate::__private::first_text(
                 &[$($homepage,)? ::core::env!("CARGO_PKG_HOMEPAGE"), ::core::env!("CARGO_PKG_REPOSITORY")],
             )),
+            points: $crate::abi::Str::new(POINTS),
         };
         &MANIFEST
     }};
