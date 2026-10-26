@@ -1,5 +1,6 @@
 //! Game memory at an address the loader holds as an integer, read and written
-//! through [`enshwick::raw`], the one reader of game memory.
+//! through [`enshwick::raw`], the one reader of game memory; only the hook
+//! engine's walks over other threads' stacks read words of their own.
 
 use enshwick::raw::{AnyBitPattern, NoUninit};
 
@@ -60,15 +61,17 @@ pub(crate) unsafe fn write<T: NoUninit>(base: usize, offset: usize, value: T) {
     unsafe { enshwick::raw::write_at(at(base, offset), 0, value) };
 }
 
-/// Reads the word at `address` on a suspended thread's stack.
+/// Reads the word at `address` on a suspended thread's stack, for the hook
+/// engine's walks over other threads' stacks.
 ///
-/// The address sanitizer marks the gaps between another thread's locals as
-/// poisoned, so a walk over that stack is left unchecked under it; the
-/// word is still read whole and unaligned reads are fine.
+/// It reads past [`enshwick::raw`] because the address sanitizer marks the
+/// gaps between another thread's locals as poisoned: the check is turned off
+/// on the function that reads, which a test build under the sanitizer sets
+/// with `enshwick_asan`, and the one reader of game memory stays checked.
 ///
 /// # Safety
 ///
-/// - `address` is readable for a word.
+/// - `address` is readable for a word; no alignment is needed.
 /// - No other thread writes those bytes during the read.
 #[cfg_attr(enshwick_asan, sanitize(address = "off"))]
 pub(crate) unsafe fn read_stack_word(address: usize) -> usize {
@@ -78,12 +81,15 @@ pub(crate) unsafe fn read_stack_word(address: usize) -> usize {
     unsafe { at(address, 0).cast::<usize>().read_unaligned() }
 }
 
-/// Writes the word at `address` on a suspended thread's stack, unchecked by
-/// the address sanitizer, as [`read_stack_word`] reads.
+/// Writes the word at `address` on a suspended thread's stack, for the hook
+/// engine's fix-up of return addresses.
+///
+/// It writes past [`enshwick::raw`] for the reason [`read_stack_word`] reads
+/// past it.
 ///
 /// # Safety
 ///
-/// - `address` is writable for a word.
+/// - `address` is writable for a word; no alignment is needed.
 /// - Nothing else reads or writes those bytes during the write.
 /// - The thread may find `value` there.
 #[cfg_attr(enshwick_asan, sanitize(address = "off"))]
@@ -122,7 +128,8 @@ mod tests {
         let base = words.as_mut_ptr().expose_provenance();
         // SAFETY: `words` holds a word at its second slot.
         unsafe { write_stack_word(base + size_of::<usize>(), 7) };
-        // SAFETY: the same word.
+        // SAFETY: `words` holds a word at its second slot, and nothing
+        // borrows `words` during the read.
         assert_eq!(unsafe { read_stack_word(base + size_of::<usize>()) }, 7);
         assert_eq!(words, [1, 7, 3]);
     }
