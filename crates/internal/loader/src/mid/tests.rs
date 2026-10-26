@@ -554,14 +554,18 @@ fn the_stub_writes_instructions_as_the_assembler_does() {
     code.test_masks(Masks::Word, 6, 7);
     let zero = code.bytes.len();
     let mut zeroing = Code::default();
-    zeroing.zero_avx512(Masks::Quad);
-    // vpxord of xmm16 and xmm27, kxorq of k5.
+    zeroing.zero_hi16();
+    // vpxord of xmm16 and xmm27.
     code.emit(&zeroing.bytes[..6]);
     code.emit(&zeroing.bytes[11 * 6..12 * 6]);
-    code.emit(&zeroing.bytes[16 * 6 + 5 * 5..16 * 6 + 6 * 5]);
+    let mut quads = Code::default();
+    quads.zero_masks(Masks::Quad);
+    // kxorq of k5.
+    code.emit(&quads.bytes[5 * 5..6 * 5]);
     let mut words = Code::default();
-    words.zero_avx512(Masks::Word);
-    code.emit(&words.bytes[16 * 6..16 * 6 + 4]);
+    words.zero_masks(Masks::Word);
+    // kxorw of k0.
+    code.emit(&words.bytes[..4]);
     code.emit(&[0xcc]);
     let start = (encodings as *const ()).addr();
     // SAFETY: `encodings` is a naked function of this module whose code
