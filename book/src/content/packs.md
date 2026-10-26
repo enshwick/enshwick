@@ -37,7 +37,7 @@ license = "MIT"
 homepage = "https://example.com/lanterns"
 
 [requires]
-safes = ">=0.5, <1.0"
+"you.trading-post" = ">=0.5, <1.0"
 ```
 
 | Field | Meaning |
@@ -53,11 +53,11 @@ safes = ">=0.5, <1.0"
 
 Every name a pack defines lives in its namespace: the item `lantern` of the
 pack `you.lanterns` is the [content id](../content.md#content-ids)
-`you.lanterns:lantern`, with the GUID `Guid::named` derives. Names are 1 to 128
+`you.lockers:locker`, with the GUID `Guid::named` derives. Names are 1 to 128
 of `[a-z0-9_./-]` and unique across the pack's files. A reference is one of:
 
 - a name of the pack: `lantern`;
-- another mod's content id: `safes:safe`;
+- another mod's content id: `you.lockers:locker`;
 - a vanilla GUID: `6943053a-32c1-4718-ae22-e61427ddf54d`;
 - a vanilla item's debug name, as the game's item registry lists it:
   `Craftingstation_Workbench`. Where a recipe names a workshop, a crafting
@@ -74,7 +74,7 @@ the names that look like it:
 error [you.lanterns] items.toml:7:1: no item "Torchh" in this pack, and no vanilla item "Torchh"; near: Torch
 ```
 
-`cargo enshwick id you.lanterns:lantern` prints a name's GUID and game id.
+`cargo enshwick id you.lockers:locker` prints a name's GUID and game id.
 
 ## `items.toml`
 
@@ -82,8 +82,8 @@ error [you.lanterns] items.toml:7:1: no item "Torchh" in this pack, and no vanil
 [[item]]
 id = "lantern"
 like = "6943053a-32c1-4718-ae22-e61427ddf54d"
-name = "lantern.name"
-description = "lantern.description"
+name = "locker.name"
+description = "locker.description"
 meter = { max = 3, start = 3 }
 stats = [{ label = "lantern.light", value = 5, format = "percent" }]
 icon = { tint = [255, 170, 60], amount = 60 }
@@ -221,9 +221,9 @@ const ITEMS: &str = r#"
 [[item]]
 id = "lantern"
 like = "6943053a-32c1-4718-ae22-e61427ddf54d"
-name = "lantern.name"
+name = "locker.name"
 "#;
-const TEXTS: &str = "[en]\n\"lantern.name\" = \"Lantern\"\n";
+const TEXTS: &str = "[en]\n\"locker.name\" = \"Locker\"\n";
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let files = PackFiles::new().with("items.toml", ITEMS).with("texts.toml", TEXTS);

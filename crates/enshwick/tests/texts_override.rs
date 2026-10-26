@@ -14,7 +14,7 @@ mod tests {
         }
 
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
-            load.texts("[en]\n\"safe.name\" = \"Safe\"\n")?;
+            load.texts("[en]\n\"locker.name\" = \"Locker\"\n")?;
             Ok(Self)
         }
     }
@@ -26,7 +26,7 @@ mod tests {
         let game = std::env::temp_dir().join(format!("enshwick-texts-{}", std::process::id()));
         let configs = game.join("mod-configs");
         std::fs::create_dir_all(&configs).unwrap();
-        let utf16: Vec<u8> = "[en]\n\"safe.name\" = \"Сейф\"\n"
+        let utf16: Vec<u8> = "[en]\n\"locker.name\" = \"Шафка\"\n"
             .encode_utf16()
             .flat_map(u16::to_le_bytes)
             .collect();

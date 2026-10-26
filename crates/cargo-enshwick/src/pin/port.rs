@@ -7,6 +7,7 @@
 //! one, inside a function, and at its start when the address is an entry.
 //! Anything else is reported, never guessed.
 
+use anyhow::anyhow;
 use std::cell::OnceCell;
 use std::fmt;
 use std::ops::Range;
@@ -154,7 +155,7 @@ impl<'p, 'a> Porter<'p, 'a> {
         target: u64,
         offset: u64,
         candidates: &[u64],
-    ) -> Option<Result<Outcome, String>> {
+    ) -> Option<anyhow::Result<Outcome>> {
         let references = self.references.get_or_init(|| references(self.old));
         let from = references.partition_point(|&(t, _)| t < target);
         let sites: Vec<u64> = references
@@ -187,7 +188,7 @@ impl<'p, 'a> Porter<'p, 'a> {
             [only] => {
                 let rva = only + offset;
                 if !candidates.is_empty() && !candidates.contains(&rva) {
-                    return Some(Err(format!(
+                    return Some(Err(anyhow!(
                         "its references point at {rva:#x}, which is none of the copies"
                     )));
                 }
@@ -197,7 +198,7 @@ impl<'p, 'a> Porter<'p, 'a> {
                     how: format!("through its references ({} followed)", sites.len()),
                 }))
             }
-            many => Some(Err(format!(
+            many => Some(Err(anyhow!(
                 "its references point at {} different places",
                 many.len()
             ))),
@@ -209,7 +210,7 @@ impl<'p, 'a> Porter<'p, 'a> {
 /// inside a function that no whole copy proves is never taken on the
 /// references alone: they find the function's start, not that the function
 /// kept its layout up to the place.
-fn settle(why: &str, found: Result<Outcome, String>, candidates: &[u64], offset: u64) -> Outcome {
+fn settle(why: &str, found: anyhow::Result<Outcome>, candidates: &[u64], offset: u64) -> Outcome {
     match found {
         Ok(Outcome::Found { rva, .. }) if candidates.is_empty() && offset != 0 => {
             Outcome::Ambiguous(format!(

@@ -16,7 +16,7 @@ runs a handler after each run of it in the server's world, with a `LootPass`
 that walks that run's containers and reads any entity as one:
 
 ```rust
-use enshwick::loot::near;
+use enshwick::world::near;
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     load.on_loot_pass(|pass| {
@@ -75,12 +75,12 @@ From inside any hooked system, with its context:
 - `is_player(ctx, entity)` tells whether an entity is a player character,
   such as an offer's `guest`.
 
-[`near(center, at, radius, height)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/loot.rs)
+[`near(center, at, radius, height)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/world/geometry.rs)
 tells whether `at` lies within `radius` metres of `center` across the
 ground and within `height` metres above or below it:
 
 ```rust
-use enshwick::loot::near;
+use enshwick::world::near;
 
 assert!(near([0.0, 0.0, 0.0], [6.0, 3.0, 8.0], 10.0, 4.0));
 assert!(!near([0.0, 0.0, 0.0], [6.0, 5.0, 8.0], 10.0, 4.0));
@@ -98,13 +98,12 @@ unrelated. See [Sides and hosting](../concepts/sides-and-hosting.md).
 A server-side loot mod declares `side: SERVER`; the client loads `SERVER`
 mods too, for the games it hosts.
 
-## A worked example: area loot
+## A worked example
 
-[`enshwick-area-loot`](https://github.com/enshwick/mod-area-loot)
-empties the loot around a container a player just emptied into the same
-player. Its
-[`take.rs`](https://github.com/enshwick/mod-area-loot/blob/main/src/take.rs)
-puts the pieces of this chapter together:
+A mod that empties the loot around a container a player just emptied into
+the same player puts the pieces of this chapter together. The steps follow
+one such mod's
+[`take.rs`](https://github.com/enshwick/mod-area-loot/blob/main/src/take.rs):
 
 1. At `init` it resolves `Containers`, `Inventories` and `Worlds`, and hooks
    `loot::SYSTEM`.
