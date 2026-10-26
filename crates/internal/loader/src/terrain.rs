@@ -12,6 +12,8 @@
 //! steps, without the game's undo, so what a player's tool adds around them
 //! (permission, cost, loot, experience, feedback) is the mod's to decide.
 
+use crate::pinned;
+use crate::pinned::Symbol;
 use std::sync::OnceLock;
 
 use enshwick::abi::{Header, Status, TerrainEdit, TerrainMaterialInfo};
@@ -21,14 +23,14 @@ use crate::memory::read;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
-    "server.player_infos",
-    "terrain.add",
-    "terrain.dig",
-    "terrain.editor",
-    "terrain.flatten",
-    "terrain.registry",
-    "terrain.registry_resource",
-    "terrain.voxel_world",
+    pinned::server::PLAYER_INFOS.id(),
+    pinned::terrain::ADD.id(),
+    pinned::terrain::DIG.id(),
+    pinned::terrain::EDITOR.id(),
+    pinned::terrain::FLATTEN.id(),
+    pinned::terrain::REGISTRY.id(),
+    pinned::terrain::REGISTRY_RESOURCE.id(),
+    pinned::terrain::VOXEL_WORLD.id(),
 ];
 
 /// The materials the edits work on: terrain, not air nor buildings.
@@ -132,16 +134,16 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
                     .ok()
                     .and_then(|v| usize::try_from(v).ok())
             };
-            let function = |name: &str| {
+            let function = |name: Symbol| {
                 loader
                     .address(name)
                     .and_then(|address| usize::try_from(address).ok())
             };
             let config = "keen::TerrainTerraformingConfig";
             let (add, dig, flatten) = (
-                function("terrain.add")?,
-                function("terrain.dig")?,
-                function("terrain.flatten")?,
+                function(pinned::terrain::ADD)?,
+                function(pinned::terrain::DIG)?,
+                function(pinned::terrain::FLATTEN)?,
             );
             Some(Layout {
                 // SAFETY: the table's `terrain.add` is the address of the game
@@ -156,11 +158,11 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
                 // game function with the `FlattenFn` signature on this build,
                 // in the image, which stays mapped.
                 flatten: unsafe { core::mem::transmute::<usize, FlattenFn>(flatten) },
-                editor: loader.offset("terrain.editor")?,
-                world: loader.offset("terrain.voxel_world")?,
-                game: loader.offset("server.player_infos")?,
-                registry: loader.offset("terrain.registry")?,
-                registry_resource: loader.offset("terrain.registry_resource")?,
+                editor: loader.offset(pinned::terrain::EDITOR)?,
+                world: loader.offset(pinned::terrain::VOXEL_WORLD)?,
+                game: loader.offset(pinned::server::PLAYER_INFOS)?,
+                registry: loader.offset(pinned::terrain::REGISTRY)?,
+                registry_resource: loader.offset(pinned::terrain::REGISTRY_RESOURCE)?,
                 configs: field(
                     "keen::TerraformingEfficiencyRegistryResource",
                     "terrainConfigs",

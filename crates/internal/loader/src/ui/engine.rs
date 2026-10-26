@@ -12,6 +12,7 @@
 //! how far it reaches, checked against the loader's buffer for it.
 
 use crate::host::Loader;
+use crate::pinned::{self, Symbol};
 
 /// A buffer the game fills or reads, aligned as the game keeps its own on
 /// the stack.
@@ -251,13 +252,13 @@ pub(super) struct Layout {
 /// The navigation group's fields the loader's config sets, as offsets in
 /// the group; its config sits at `ui.nav_config` in it.
 const NAV_IDS: [&str; 7] = [
-    "ui.nav_kind",
-    "ui.nav_wrap",
-    "ui.nav_axis",
-    "ui.nav_flags",
-    "ui.nav_input_kind",
-    "ui.nav_layer",
-    "ui.nav_sound",
+    pinned::ui::NAV_KIND.id(),
+    pinned::ui::NAV_WRAP.id(),
+    pinned::ui::NAV_AXIS.id(),
+    pinned::ui::NAV_FLAGS.id(),
+    pinned::ui::NAV_INPUT_KIND.id(),
+    pinned::ui::NAV_LAYER.id(),
+    pinned::ui::NAV_SOUND.id(),
 ];
 
 /// The popup state's fields and the host's answer, which the loader's
@@ -304,76 +305,79 @@ impl Layout {
     fn read(lookup: Lookup<'_>) -> Result<Self, Missing> {
         let f = |id| field(lookup, id);
         for (id, room) in [
-            ("ui.window_extent", WINDOW_OBJECT),
-            ("ui.frame_extent", FRAME_SIZE),
-            ("ui.nav_extent", NAV_SIZE),
-            ("ui.nav_config_size", NAV_CONFIG),
-            ("ui.panel_extent", PANEL_CONFIG),
-            ("ui.label_extent", LABEL_SIZE),
-            ("ui.button_extent", BUTTON_CONFIG),
-            ("ui.toggle_extent", TOGGLE_CONFIG),
-            ("ui.dropdown_extent", DROPDOWN_CONFIG),
-            ("ui.menu_entry_extent", MENU_ENTRY),
-            ("ui.action_extent", ACTION_SPEC),
+            (pinned::ui::WINDOW_EXTENT, WINDOW_OBJECT),
+            (pinned::ui::FRAME_EXTENT, FRAME_SIZE),
+            (pinned::ui::NAV_EXTENT, NAV_SIZE),
+            (pinned::ui::NAV_CONFIG_SIZE, NAV_CONFIG),
+            (pinned::ui::PANEL_EXTENT, PANEL_CONFIG),
+            (pinned::ui::LABEL_EXTENT, LABEL_SIZE),
+            (pinned::ui::BUTTON_EXTENT, BUTTON_CONFIG),
+            (pinned::ui::TOGGLE_EXTENT, TOGGLE_CONFIG),
+            (pinned::ui::DROPDOWN_EXTENT, DROPDOWN_CONFIG),
+            (pinned::ui::MENU_ENTRY_EXTENT, MENU_ENTRY),
+            (pinned::ui::ACTION_EXTENT, ACTION_SPEC),
         ] {
-            fits(lookup, id, room)?;
+            fits(lookup, id.id(), room)?;
         }
-        let config = f("ui.nav_config")?;
+        let config = f(pinned::ui::NAV_CONFIG.id())?;
         let mut nav = [0; 7];
         for (slot, id) in nav.iter_mut().zip(NAV_IDS) {
             *slot = f(id)?.checked_sub(config).ok_or(Missing::Room(id))?;
         }
         Self {
-            context_nav: f("ui.context_nav")?,
-            context_host: f("ui.context_host")?,
-            context_bundle: f("ui.context_bundle")?,
-            context_state: f("ui.context_state")?,
-            state_screen: f("ui.state_screen")?,
-            popup_active: f("ui.popup_active")?,
-            frame_node: f("ui.frame_node")?,
-            window_node: f("ui.window_node")?,
-            node_id: f("ui.node_id")?,
-            panel_kind: f("ui.panel_kind")?,
-            panel_alpha: f("ui.panel_alpha")?,
+            context_nav: f(pinned::ui::CONTEXT_NAV.id())?,
+            context_host: f(pinned::ui::CONTEXT_HOST.id())?,
+            context_bundle: f(pinned::ui::CONTEXT_BUNDLE.id())?,
+            context_state: f(pinned::ui::CONTEXT_STATE.id())?,
+            state_screen: f(pinned::ui::STATE_SCREEN.id())?,
+            popup_active: f(pinned::ui::POPUP_ACTIVE.id())?,
+            frame_node: f(pinned::ui::FRAME_NODE.id())?,
+            window_node: f(pinned::ui::WINDOW_NODE.id())?,
+            node_id: f(pinned::ui::NODE_ID.id())?,
+            panel_kind: f(pinned::ui::PANEL_KIND.id())?,
+            panel_alpha: f(pinned::ui::PANEL_ALPHA.id())?,
             nav,
-            label_align: f("ui.label_align")?,
-            label_shown: f("ui.label_shown")?,
-            label_font_size: f("ui.label_font_size")?,
-            label_flags: f("ui.label_flags")?,
-            button_align: f("ui.button_align")?,
-            button_centered: f("ui.button_centered")?,
-            button_enabled: f("ui.button_enabled")?,
-            button_size_mode: f("ui.button_size_mode")?,
-            button_padding: [f("ui.button_padding_x")?, f("ui.button_padding_y")?],
-            button_scale: f("ui.button_scale")?,
-            button_sound: f("ui.button_sound")?,
-            entry_size: f("ui.entry_size")?,
-            entry_value: f("ui.entry_value")?,
-            entry_text: f("ui.entry_text")?,
-            toggle_count: f("ui.toggle_count")?,
-            toggle_label: f("ui.toggle_label")?,
-            toggle_explainer: f("ui.toggle_explainer")?,
-            toggle_explain: f("ui.toggle_explain")?,
-            toggle_enabled: f("ui.toggle_enabled")?,
-            slider_min: f("ui.slider_min")?,
-            slider_max: f("ui.slider_max")?,
-            slider_bounded: f("ui.slider_bounded")?,
-            slider_read_only: f("ui.slider_read_only")?,
-            slider_on_release: f("ui.slider_on_release")?,
-            slider_steps: f("ui.slider_steps")?,
-            slider_format: f("ui.slider_format")?,
-            slider_discrete: f("ui.slider_discrete")?,
-            slider_stop_count: f("ui.slider_stop_count")?,
-            slider_stops: f("ui.slider_stops")?,
-            slider_stop_capacity: f("ui.slider_stop_capacity")?,
-            dropdown_count: f("ui.dropdown_count")?,
-            dropdown_enabled: f("ui.dropdown_enabled")?,
-            dropdown_capacity: f("ui.dropdown_capacity")?,
-            dropdown_entry_text: f("ui.dropdown_entry_text")?,
-            menu_entry_text: f("ui.menu_entry_text")?,
-            menu_entry_font: f("ui.menu_entry_font")?,
-            action_node: f("ui.action_node")?,
-            action_bound: f("ui.action_bound")?,
+            label_align: f(pinned::ui::LABEL_ALIGN.id())?,
+            label_shown: f(pinned::ui::LABEL_SHOWN.id())?,
+            label_font_size: f(pinned::ui::LABEL_FONT_SIZE.id())?,
+            label_flags: f(pinned::ui::LABEL_FLAGS.id())?,
+            button_align: f(pinned::ui::BUTTON_ALIGN.id())?,
+            button_centered: f(pinned::ui::BUTTON_CENTERED.id())?,
+            button_enabled: f(pinned::ui::BUTTON_ENABLED.id())?,
+            button_size_mode: f(pinned::ui::BUTTON_SIZE_MODE.id())?,
+            button_padding: [
+                f(pinned::ui::BUTTON_PADDING_X.id())?,
+                f(pinned::ui::BUTTON_PADDING_Y.id())?,
+            ],
+            button_scale: f(pinned::ui::BUTTON_SCALE.id())?,
+            button_sound: f(pinned::ui::BUTTON_SOUND.id())?,
+            entry_size: f(pinned::ui::ENTRY_SIZE.id())?,
+            entry_value: f(pinned::ui::ENTRY_VALUE.id())?,
+            entry_text: f(pinned::ui::ENTRY_TEXT.id())?,
+            toggle_count: f(pinned::ui::TOGGLE_COUNT.id())?,
+            toggle_label: f(pinned::ui::TOGGLE_LABEL.id())?,
+            toggle_explainer: f(pinned::ui::TOGGLE_EXPLAINER.id())?,
+            toggle_explain: f(pinned::ui::TOGGLE_EXPLAIN.id())?,
+            toggle_enabled: f(pinned::ui::TOGGLE_ENABLED.id())?,
+            slider_min: f(pinned::ui::SLIDER_MIN.id())?,
+            slider_max: f(pinned::ui::SLIDER_MAX.id())?,
+            slider_bounded: f(pinned::ui::SLIDER_BOUNDED.id())?,
+            slider_read_only: f(pinned::ui::SLIDER_READ_ONLY.id())?,
+            slider_on_release: f(pinned::ui::SLIDER_ON_RELEASE.id())?,
+            slider_steps: f(pinned::ui::SLIDER_STEPS.id())?,
+            slider_format: f(pinned::ui::SLIDER_FORMAT.id())?,
+            slider_discrete: f(pinned::ui::SLIDER_DISCRETE.id())?,
+            slider_stop_count: f(pinned::ui::SLIDER_STOP_COUNT.id())?,
+            slider_stops: f(pinned::ui::SLIDER_STOPS.id())?,
+            slider_stop_capacity: f(pinned::ui::SLIDER_STOP_CAPACITY.id())?,
+            dropdown_count: f(pinned::ui::DROPDOWN_COUNT.id())?,
+            dropdown_enabled: f(pinned::ui::DROPDOWN_ENABLED.id())?,
+            dropdown_capacity: f(pinned::ui::DROPDOWN_CAPACITY.id())?,
+            dropdown_entry_text: f(pinned::ui::DROPDOWN_ENTRY_TEXT.id())?,
+            menu_entry_text: f(pinned::ui::MENU_ENTRY_TEXT.id())?,
+            menu_entry_font: f(pinned::ui::MENU_ENTRY_FONT.id())?,
+            action_node: f(pinned::ui::ACTION_NODE.id())?,
+            action_bound: f(pinned::ui::ACTION_BOUND.id())?,
         }
         .checked()
     }
@@ -385,14 +389,14 @@ impl Layout {
             .checked_mul(4)
             .and_then(|size| size.checked_add(self.slider_stops));
         if stops.is_none_or(|end| end > SLIDER_CONFIG) {
-            return Err(Missing::Room("ui.slider_stop_capacity"));
+            return Err(Missing::Room(pinned::ui::SLIDER_STOP_CAPACITY.id()));
         }
         let entries = |count: usize| count.checked_mul(self.entry_size);
         if entries(TOGGLE_ENTRIES).is_none_or(|end| end > self.toggle_count) {
-            return Err(Missing::Room("ui.toggle_count"));
+            return Err(Missing::Room(pinned::ui::TOGGLE_COUNT.id()));
         }
         if entries(self.dropdown_capacity).is_none_or(|end| end > self.dropdown_count) {
-            return Err(Missing::Room("ui.dropdown_capacity"));
+            return Err(Missing::Room(pinned::ui::DROPDOWN_CAPACITY.id()));
         }
         Ok(self)
     }
@@ -401,15 +405,15 @@ impl Layout {
 impl DialogLayout {
     fn read(lookup: Lookup<'_>) -> Result<Self, Missing> {
         let f = |id| field(lookup, id);
-        fits(lookup, "ui.popup_extent", POPUP_SIZE)?;
+        fits(lookup, pinned::ui::POPUP_EXTENT.id(), POPUP_SIZE)?;
         Ok(Self {
-            title: f("ui.popup_title")?,
-            message: f("ui.popup_message")?,
-            buttons: f("ui.popup_buttons")?,
-            detail: f("ui.popup_detail")?,
-            detail_len: f("ui.popup_detail_len")?,
-            answer: f("ui.host_answer")?,
-            answered: f("ui.host_answered")?,
+            title: f(pinned::ui::POPUP_TITLE.id())?,
+            message: f(pinned::ui::POPUP_MESSAGE.id())?,
+            buttons: f(pinned::ui::POPUP_BUTTONS.id())?,
+            detail: f(pinned::ui::POPUP_DETAIL.id())?,
+            detail_len: f(pinned::ui::POPUP_DETAIL_LEN.id())?,
+            answer: f(pinned::ui::HOST_ANSWER.id())?,
+            answered: f(pinned::ui::HOST_ANSWERED.id())?,
         })
     }
 }
@@ -417,8 +421,8 @@ impl DialogLayout {
 impl ViewLayout {
     fn read(lookup: Lookup<'_>) -> Result<Self, Missing> {
         Ok(Self {
-            read_only: field(lookup, "ui.view_read_only")?,
-            tab: field(lookup, "ui.view_tab")?,
+            read_only: field(lookup, pinned::ui::VIEW_READ_ONLY.id())?,
+            tab: field(lookup, pinned::ui::VIEW_TAB.id())?,
         })
     }
 }
@@ -543,50 +547,50 @@ pub(crate) struct Engine {
 
 /// Every function the loader calls or hooks, by symbol; each must read its
 /// `<symbol>.bytes` constant.
-const FUNCTIONS: [&str; 43] = [
-    "ui.world_settings_site",
-    "ui.main_entry",
-    "ui.pause_entry",
-    "ui.action_new",
-    "ui.action_query",
-    "ui.main_menu_site",
-    "ui.pause_menu_site",
-    "ui.hud",
-    "ui.hud_visible",
-    "ui.popup",
-    "ui.window_begin",
-    "ui.window_end",
-    "ui.frame_from_node",
-    "ui.frame_open",
-    "ui.frame_close",
-    "ui.frame_stretch",
-    "ui.frame_color",
-    "ui.node_padding",
-    "ui.node_spacing",
-    "ui.node_align",
-    "ui.node_width",
-    "ui.node_height",
-    "ui.node_stretch",
-    "ui.panel",
-    "ui.nav_init",
-    "ui.nav_input",
-    "ui.nav_set",
-    "ui.nav_push",
-    "ui.nav_end",
-    "ui.nav_drop",
-    "ui.label_new",
-    "ui.label_draw",
-    "ui.button",
-    "ui.toggle",
-    "ui.slider_init",
-    "ui.slider",
-    "ui.dropdown_init",
-    "ui.dropdown",
-    "ui.progress",
-    "ui.sound",
-    "ui.loca_id",
-    "ui.loca_text",
-    "ui.context",
+const FUNCTIONS: [Symbol; 43] = [
+    pinned::ui::WORLD_SETTINGS_SITE,
+    pinned::ui::MAIN_ENTRY,
+    pinned::ui::PAUSE_ENTRY,
+    pinned::ui::ACTION_NEW,
+    pinned::ui::ACTION_QUERY,
+    pinned::ui::MAIN_MENU_SITE,
+    pinned::ui::PAUSE_MENU_SITE,
+    pinned::ui::HUD,
+    pinned::ui::HUD_VISIBLE,
+    pinned::ui::POPUP,
+    pinned::ui::WINDOW_BEGIN,
+    pinned::ui::WINDOW_END,
+    pinned::ui::FRAME_FROM_NODE,
+    pinned::ui::FRAME_OPEN,
+    pinned::ui::FRAME_CLOSE,
+    pinned::ui::FRAME_STRETCH,
+    pinned::ui::FRAME_COLOR,
+    pinned::ui::NODE_PADDING,
+    pinned::ui::NODE_SPACING,
+    pinned::ui::NODE_ALIGN,
+    pinned::ui::NODE_WIDTH,
+    pinned::ui::NODE_HEIGHT,
+    pinned::ui::NODE_STRETCH,
+    pinned::ui::PANEL,
+    pinned::ui::NAV_INIT,
+    pinned::ui::NAV_INPUT,
+    pinned::ui::NAV_SET,
+    pinned::ui::NAV_PUSH,
+    pinned::ui::NAV_END,
+    pinned::ui::NAV_DROP,
+    pinned::ui::LABEL_NEW,
+    pinned::ui::LABEL_DRAW,
+    pinned::ui::BUTTON,
+    pinned::ui::TOGGLE,
+    pinned::ui::SLIDER_INIT,
+    pinned::ui::SLIDER,
+    pinned::ui::DROPDOWN_INIT,
+    pinned::ui::DROPDOWN,
+    pinned::ui::PROGRESS,
+    pinned::ui::SOUND,
+    pinned::ui::LOCA_ID,
+    pinned::ui::LOCA_TEXT,
+    pinned::ui::CONTEXT,
 ];
 
 /// The bundle offset of a reflected path, `(type, field)` pairs summed.
@@ -686,21 +690,21 @@ impl Engine {
     /// not read as expected keeps the interface off.
     pub(crate) fn resolve(loader: &Loader) -> Result<Self, Missing> {
         for name in FUNCTIONS {
-            let address = loader.address(name).ok_or(Missing::Entry(name))?;
-            if name == "ui.context" {
+            let address = loader.address(name).ok_or(Missing::Entry(name.id()))?;
+            if name == pinned::ui::CONTEXT {
                 continue;
             }
             let expected = loader
                 .build
                 .constant(&format!("{name}.bytes"))
-                .ok_or(Missing::Bytes(name))?;
-            let address = usize::try_from(address).map_err(|_| Missing::Entry(name))?;
+                .ok_or(Missing::Bytes(name.id()))?;
+            let address = usize::try_from(address).map_err(|_| Missing::Entry(name.id()))?;
             // SAFETY: `loader.address` resolves `name` to a function in the
             // game's executable, mapped for the process, so eight bytes at
             // its entry are readable; code is not written while it runs.
             let found = unsafe { crate::memory::read::<u64>(address, 0) };
             if found != expected {
-                return Err(Missing::Bytes(name));
+                return Err(Missing::Bytes(name.id()));
             }
         }
         let looks = looks(loader).ok_or(Missing::Looks)?;
@@ -712,14 +716,14 @@ impl Engine {
         let view = ViewLayout::read(&lookup)
             .inspect_err(|why| crate::log!(WARN, "the world settings' Mods rows off: {why}"))
             .ok();
-        let at = |name: &str| {
+        let at = |name: Symbol| {
             loader
                 .address(name)
                 .and_then(|a| usize::try_from(a).ok())
                 .unwrap_or(0)
         };
         macro_rules! function {
-            ($name:literal, $ty:ty) => {{
+            ($name:expr, $ty:ty) => {{
                 let address = at($name);
                 // SAFETY: the loop over `FUNCTIONS` returned unless every
                 // function's first eight bytes match its `<name>.bytes`
@@ -729,53 +733,53 @@ impl Engine {
             }};
         }
         Ok(Self {
-            context: at("ui.context"),
-            popup: loader.address("ui.popup").unwrap_or(0),
+            context: at(pinned::ui::CONTEXT),
+            popup: loader.address(pinned::ui::POPUP).unwrap_or(0),
             looks,
             layout,
             dialog,
             view,
-            window_begin: function!("ui.window_begin", WindowBeginFn),
-            window_end: function!("ui.window_end", OneFn),
-            frame_from_node: function!("ui.frame_from_node", FrameFromNodeFn),
-            frame_open: function!("ui.frame_open", FrameOpenFn),
-            frame_close: function!("ui.frame_close", OneFn),
-            frame_stretch: function!("ui.frame_stretch", OneFn),
-            frame_color: function!("ui.frame_color", ColorFn),
-            node_padding: function!("ui.node_padding", NodeRectFn),
-            node_spacing: function!("ui.node_spacing", NodeSpacingFn),
-            node_align: function!("ui.node_align", NodeAlignFn),
-            node_width: function!("ui.node_width", NodeFloatFn),
-            node_height: function!("ui.node_height", NodeFloatFn),
-            node_stretch: function!("ui.node_stretch", NodeStretchFn),
-            panel: function!("ui.panel", PanelFn),
-            nav_init: function!("ui.nav_init", NavInitFn),
-            nav_input: function!("ui.nav_input", NavInputFn),
-            nav_set: function!("ui.nav_set", NavSetFn),
-            nav_push: function!("ui.nav_push", NavPushFn),
-            nav_end: function!("ui.nav_end", NavEndFn),
-            nav_drop: function!("ui.nav_drop", OneFn),
-            label_new: function!("ui.label_new", LabelNewFn),
-            label_draw: function!("ui.label_draw", OneFn),
-            button: function!("ui.button", ButtonFn),
-            toggle: function!("ui.toggle", ToggleFn),
-            slider_init: function!("ui.slider_init", RowInitFn),
-            slider: function!("ui.slider", SliderFn),
-            dropdown_init: function!("ui.dropdown_init", RowInitFn),
-            dropdown: function!("ui.dropdown", DropdownFn),
-            progress: function!("ui.progress", ProgressFn),
-            sound: function!("ui.sound", SoundFn),
-            loca_id: function!("ui.loca_id", LocaIdFn),
-            loca_text: function!("ui.loca_text", LocaTextFn),
-            hud_visible: function!("ui.hud_visible", VisibleFn),
-            hud: loader.address("ui.hud").unwrap_or(0),
-            main_entry: function!("ui.main_entry", MainEntryFn),
-            pause_entry: function!("ui.pause_entry", PauseEntryFn),
-            action_new: function!("ui.action_new", ActionNewFn),
-            action_query: function!("ui.action_query", ActionQueryFn),
-            main_menu_site: loader.address("ui.main_menu_site").unwrap_or(0),
-            pause_menu_site: loader.address("ui.pause_menu_site").unwrap_or(0),
-            world_settings_site: loader.address("ui.world_settings_site").unwrap_or(0),
+            window_begin: function!(pinned::ui::WINDOW_BEGIN, WindowBeginFn),
+            window_end: function!(pinned::ui::WINDOW_END, OneFn),
+            frame_from_node: function!(pinned::ui::FRAME_FROM_NODE, FrameFromNodeFn),
+            frame_open: function!(pinned::ui::FRAME_OPEN, FrameOpenFn),
+            frame_close: function!(pinned::ui::FRAME_CLOSE, OneFn),
+            frame_stretch: function!(pinned::ui::FRAME_STRETCH, OneFn),
+            frame_color: function!(pinned::ui::FRAME_COLOR, ColorFn),
+            node_padding: function!(pinned::ui::NODE_PADDING, NodeRectFn),
+            node_spacing: function!(pinned::ui::NODE_SPACING, NodeSpacingFn),
+            node_align: function!(pinned::ui::NODE_ALIGN, NodeAlignFn),
+            node_width: function!(pinned::ui::NODE_WIDTH, NodeFloatFn),
+            node_height: function!(pinned::ui::NODE_HEIGHT, NodeFloatFn),
+            node_stretch: function!(pinned::ui::NODE_STRETCH, NodeStretchFn),
+            panel: function!(pinned::ui::PANEL, PanelFn),
+            nav_init: function!(pinned::ui::NAV_INIT, NavInitFn),
+            nav_input: function!(pinned::ui::NAV_INPUT, NavInputFn),
+            nav_set: function!(pinned::ui::NAV_SET, NavSetFn),
+            nav_push: function!(pinned::ui::NAV_PUSH, NavPushFn),
+            nav_end: function!(pinned::ui::NAV_END, NavEndFn),
+            nav_drop: function!(pinned::ui::NAV_DROP, OneFn),
+            label_new: function!(pinned::ui::LABEL_NEW, LabelNewFn),
+            label_draw: function!(pinned::ui::LABEL_DRAW, OneFn),
+            button: function!(pinned::ui::BUTTON, ButtonFn),
+            toggle: function!(pinned::ui::TOGGLE, ToggleFn),
+            slider_init: function!(pinned::ui::SLIDER_INIT, RowInitFn),
+            slider: function!(pinned::ui::SLIDER, SliderFn),
+            dropdown_init: function!(pinned::ui::DROPDOWN_INIT, RowInitFn),
+            dropdown: function!(pinned::ui::DROPDOWN, DropdownFn),
+            progress: function!(pinned::ui::PROGRESS, ProgressFn),
+            sound: function!(pinned::ui::SOUND, SoundFn),
+            loca_id: function!(pinned::ui::LOCA_ID, LocaIdFn),
+            loca_text: function!(pinned::ui::LOCA_TEXT, LocaTextFn),
+            hud_visible: function!(pinned::ui::HUD_VISIBLE, VisibleFn),
+            hud: loader.address(pinned::ui::HUD).unwrap_or(0),
+            main_entry: function!(pinned::ui::MAIN_ENTRY, MainEntryFn),
+            pause_entry: function!(pinned::ui::PAUSE_ENTRY, PauseEntryFn),
+            action_new: function!(pinned::ui::ACTION_NEW, ActionNewFn),
+            action_query: function!(pinned::ui::ACTION_QUERY, ActionQueryFn),
+            main_menu_site: loader.address(pinned::ui::MAIN_MENU_SITE).unwrap_or(0),
+            pause_menu_site: loader.address(pinned::ui::PAUSE_MENU_SITE).unwrap_or(0),
+            world_settings_site: loader.address(pinned::ui::WORLD_SETTINGS_SITE).unwrap_or(0),
         })
     }
 
@@ -1604,13 +1608,16 @@ mod tests {
             assert_eq!(layout.nav, [0, 0x20, 0x24, 0x28, 0x30, 0x34, 0x48]);
             DialogLayout::read(&lookup).unwrap();
             ViewLayout::read(&lookup).unwrap();
-            let grown = |id: &str| match id {
-                "ui.label_extent" => Some(0x200),
-                _ => lookup(id),
+            let grown = |id: &str| {
+                if id == pinned::ui::LABEL_EXTENT.id() {
+                    Some(0x200)
+                } else {
+                    lookup(id)
+                }
             };
             assert!(matches!(
                 Layout::read(&grown),
-                Err(Missing::Room("ui.label_extent"))
+                Err(Missing::Room(id)) if id == pinned::ui::LABEL_EXTENT.id()
             ));
         }
     }

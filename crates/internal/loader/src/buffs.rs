@@ -17,6 +17,7 @@
 //! the game's cleanse: the slot is marked, and `update_buffcontainer`
 //! destroys the buff in the next step.
 
+use crate::pinned::{self, Symbol};
 use std::sync::OnceLock;
 
 use enshwick::abi::{ActiveBuff, BuffRequest, BuffTypeInfo, Header, Status};
@@ -26,23 +27,23 @@ use crate::memory::{read, write};
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
-    "buffs.cleanse",
-    "buffs.record_has_level",
-    "buffs.record_has_strength",
-    "buffs.record_level",
-    "buffs.record_lifetime",
-    "buffs.record_remaining",
-    "buffs.record_size",
-    "buffs.record_strength",
-    "buffs.record_type",
-    "buffs.registry",
-    "buffs.registry_blob",
-    "buffs.restore",
-    "buffs.type_by_id",
-    "game.balancing",
-    "server.player_infos",
-    "server.world",
-    "world.time",
+    pinned::buffs::CLEANSE.id(),
+    pinned::buffs::RECORD_HAS_LEVEL.id(),
+    pinned::buffs::RECORD_HAS_STRENGTH.id(),
+    pinned::buffs::RECORD_LEVEL.id(),
+    pinned::buffs::RECORD_LIFETIME.id(),
+    pinned::buffs::RECORD_REMAINING.id(),
+    pinned::buffs::RECORD_SIZE.id(),
+    pinned::buffs::RECORD_STRENGTH.id(),
+    pinned::buffs::RECORD_TYPE.id(),
+    pinned::buffs::REGISTRY.id(),
+    pinned::buffs::REGISTRY_BLOB.id(),
+    pinned::buffs::RESTORE.id(),
+    pinned::buffs::TYPE_BY_ID.id(),
+    pinned::game::BALANCING.id(),
+    pinned::server::PLAYER_INFOS.id(),
+    pinned::server::WORLD.id(),
+    pinned::world::TIME.id(),
 ];
 
 /// The room the loader keeps for the saved-buff record the restore reads;
@@ -145,7 +146,7 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
                 let info = reflection.type_info(ty).ok()?;
                 crate::world::type_hash(info.va())
             };
-            let function = |name: &str| {
+            let function = |name: Symbol| {
                 loader
                     .address(name)
                     .and_then(|address| usize::try_from(address).ok())
@@ -174,13 +175,13 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
             let lifetime = "keen::ecs::LifeTime";
             let ty = "keen::BuffType";
             let (type_by_id, restore, cleanse, now) = (
-                function("buffs.type_by_id")?,
-                function("buffs.restore")?,
-                function("buffs.cleanse")?,
-                function("world.time")?,
+                function(pinned::buffs::TYPE_BY_ID)?,
+                function(pinned::buffs::RESTORE)?,
+                function(pinned::buffs::CLEANSE)?,
+                function(pinned::world::TIME)?,
             );
             if loader
-                .offset("buffs.record_size")
+                .offset(pinned::buffs::RECORD_SIZE)
                 .is_none_or(|size| size > RECORD)
             {
                 return None;
@@ -202,11 +203,11 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
                 // function with the `NowFn` signature on this build, in the
                 // image, which stays mapped.
                 now: unsafe { core::mem::transmute::<usize, NowFn>(now) },
-                world: loader.offset("server.world")?,
-                game: loader.offset("server.player_infos")?,
-                registry: loader.offset("buffs.registry")?,
-                registry_blob: loader.offset("buffs.registry_blob")?,
-                balancing: loader.offset("game.balancing")?,
+                world: loader.offset(pinned::server::WORLD)?,
+                game: loader.offset(pinned::server::PLAYER_INFOS)?,
+                registry: loader.offset(pinned::buffs::REGISTRY)?,
+                registry_blob: loader.offset(pinned::buffs::REGISTRY_BLOB)?,
+                balancing: loader.offset(pinned::game::BALANCING)?,
                 container: hash(container)?,
                 groups,
                 instance_size,
@@ -228,13 +229,13 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
                 type_name: field(ty, "name")?,
                 type_hidden: field(ty, "hideInUi")?,
                 type_saved: field(ty, "isSaved")?,
-                record_type: loader.offset("buffs.record_type")?,
-                record_lifetime: loader.offset("buffs.record_lifetime")?,
-                record_remaining: loader.offset("buffs.record_remaining")?,
-                record_level: loader.offset("buffs.record_level")?,
-                record_has_level: loader.offset("buffs.record_has_level")?,
-                record_strength: loader.offset("buffs.record_strength")?,
-                record_has_strength: loader.offset("buffs.record_has_strength")?,
+                record_type: loader.offset(pinned::buffs::RECORD_TYPE)?,
+                record_lifetime: loader.offset(pinned::buffs::RECORD_LIFETIME)?,
+                record_remaining: loader.offset(pinned::buffs::RECORD_REMAINING)?,
+                record_level: loader.offset(pinned::buffs::RECORD_LEVEL)?,
+                record_has_level: loader.offset(pinned::buffs::RECORD_HAS_LEVEL)?,
+                record_strength: loader.offset(pinned::buffs::RECORD_STRENGTH)?,
+                record_has_strength: loader.offset(pinned::buffs::RECORD_HAS_STRENGTH)?,
             })
         })
         .as_ref()

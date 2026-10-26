@@ -122,6 +122,14 @@ mod patch;
     expect(dead_code, reason = "only the loader's start reads executables")
 )]
 mod pe;
+#[cfg_attr(
+    not(windows),
+    expect(
+        dead_code,
+        reason = "most ids name engine code only the Windows build reaches"
+    )
+)]
+mod pinned;
 #[cfg(windows)]
 mod points;
 #[cfg(target_arch = "x86_64")]

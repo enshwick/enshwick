@@ -19,6 +19,7 @@
 //! keeps what it got and answers reads from it.
 
 use crate::mod_index::ModIndex;
+use crate::pinned;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
@@ -31,7 +32,7 @@ use crate::host::Loader;
 use crate::locks::Relock;
 
 /// The build table ids this part of the loader names.
-pub(crate) const TABLE_IDS: &[&str] = &["ecs.destroy_request"];
+pub(crate) const TABLE_IDS: &[&str] = &[pinned::ecs::DESTROY_REQUEST.id()];
 
 /// The longest kind id: a mod id, a colon and a name of up to 64 each.
 const MAX_ID: usize = 129;
@@ -246,7 +247,7 @@ pub(crate) fn link(loader: &Loader) {
     }
     loader.link_feature(
         "mod data of destroyed entities",
-        loader.address("ecs.destroy_request"),
+        loader.address(pinned::ecs::DESTROY_REQUEST),
         &DESTROY_NEXT,
         destroy,
         HookFlags::NONE,

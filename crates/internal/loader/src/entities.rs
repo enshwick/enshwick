@@ -6,6 +6,8 @@
 //! buffer, which the engine plays back after the systems of the next step,
 //! as it does for its own game-thread code.
 
+use crate::pinned;
+use crate::pinned::{Constant, Symbol};
 use std::sync::OnceLock;
 
 use enshwick::abi::{EntityPlace, Status};
@@ -14,11 +16,11 @@ use crate::host::Loader;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
-    "ecs.command_buffers",
-    "ecs.destroy_request",
-    "ecs.entities_entry_size",
-    "ecs.entities_entry_transform",
-    "ecs.entities_with",
+    pinned::ecs::COMMAND_BUFFERS.id(),
+    pinned::ecs::DESTROY_REQUEST.id(),
+    pinned::ecs::ENTITIES_ENTRY_SIZE.id(),
+    pinned::ecs::ENTITIES_ENTRY_TRANSFORM.id(),
+    pinned::ecs::ENTITIES_WITH.id(),
 ];
 
 /// The engine's growable array the query fills; the loader gives it no grow
@@ -54,21 +56,21 @@ static LAYOUT: OnceLock<Option<Layout>> = OnceLock::new();
 fn layout(loader: &Loader) -> Option<&'static Layout> {
     LAYOUT
         .get_or_init(|| {
-            let function = |name: &str| {
+            let function = |name: Symbol| {
                 loader
                     .build
-                    .symbol(name)
+                    .symbol(name.id())
                     .and_then(|rva| usize::try_from(loader.base + rva).ok())
             };
-            let constant = |name: &str| {
+            let constant = |name: Constant| {
                 loader
                     .build
-                    .constant(name)
+                    .constant(name.id())
                     .and_then(|v| usize::try_from(v).ok())
             };
             let (query, destroy) = (
-                function("ecs.entities_with")?,
-                function("ecs.destroy_request")?,
+                function(pinned::ecs::ENTITIES_WITH)?,
+                function(pinned::ecs::DESTROY_REQUEST)?,
             );
             Some(Layout {
                 // SAFETY: the build table's `ecs.entities_with` is the
@@ -79,9 +81,9 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
                 // address of the game function with the `DestroyFn` signature
                 // on this build.
                 destroy: unsafe { core::mem::transmute::<usize, DestroyFn>(destroy) },
-                entry_size: constant("ecs.entities_entry_size")?,
-                entry_transform: constant("ecs.entities_entry_transform")?,
-                command_buffers: constant("ecs.command_buffers")?,
+                entry_size: constant(pinned::ecs::ENTITIES_ENTRY_SIZE)?,
+                entry_transform: constant(pinned::ecs::ENTITIES_ENTRY_TRANSFORM)?,
+                command_buffers: constant(pinned::ecs::COMMAND_BUFFERS)?,
             })
         })
         .as_ref()

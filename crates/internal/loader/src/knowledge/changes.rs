@@ -16,6 +16,8 @@
 //! `mod-data/enshwick/worlds/<key>/knowledge.toml`, and apply once the
 //! account's next character has loaded in that world.
 
+use crate::pinned;
+use crate::pinned::{Constant, Symbol};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
@@ -69,15 +71,15 @@ static PARTS: OnceLock<Option<Parts>> = OnceLock::new();
 fn parts(loader: &Loader) -> Option<&'static Parts> {
     PARTS
         .get_or_init(|| {
-            let function = |name: &str| {
+            let function = |name: Symbol| {
                 loader
                     .address(name)
                     .and_then(|address| usize::try_from(address).ok())
             };
-            let offset = |name: &str| loader.offset(name);
+            let offset = |name: Constant| loader.offset(name);
             let (set_values, set_world) = (
-                function("knowledge.set_values")?,
-                function("knowledge.set_world")?,
+                function(pinned::knowledge::SET_VALUES)?,
+                function(pinned::knowledge::SET_WORLD)?,
             );
             Some(Parts {
                 // SAFETY: the build table's `knowledge.set_values` is the game function
@@ -86,14 +88,14 @@ fn parts(loader: &Loader) -> Option<&'static Parts> {
                 // SAFETY: the build table's `knowledge.set_world` is the game function
                 // with the `SetWorldFn` signature on this build.
                 set_world: unsafe { core::mem::transmute::<usize, SetWorldFn>(set_world) },
-                record_changes: offset("knowledge.record_changes")?,
-                world_touched: offset("knowledge.world_touched")?,
-                replication: offset("knowledge.replication")?,
-                connection_size: offset("knowledge.connection_size")?,
-                connection_created: offset("knowledge.connection_created")?,
-                connection_loaded: offset("knowledge.connection_loaded")?,
-                resend_world: offset("knowledge.resend_world")?,
-                resend_player: offset("knowledge.resend_player")?,
+                record_changes: offset(pinned::knowledge::RECORD_CHANGES)?,
+                world_touched: offset(pinned::knowledge::WORLD_TOUCHED)?,
+                replication: offset(pinned::knowledge::REPLICATION)?,
+                connection_size: offset(pinned::knowledge::CONNECTION_SIZE)?,
+                connection_created: offset(pinned::knowledge::CONNECTION_CREATED)?,
+                connection_loaded: offset(pinned::knowledge::CONNECTION_LOADED)?,
+                resend_world: offset(pinned::knowledge::RESEND_WORLD)?,
+                resend_player: offset(pinned::knowledge::RESEND_PLAYER)?,
             })
         })
         .as_ref()
