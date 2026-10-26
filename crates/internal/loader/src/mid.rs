@@ -251,10 +251,14 @@ impl Mids {
 ///
 /// - `registers` points at the registers the calling stub saved, valid and
 ///   unaliased for the call.
-/// - `site` is null or a `&'static Site` from [`Mids::sites`].
+/// - `site` is null or a `&'static Site` from [`Mids::sites`] whose
+///   provenance was exposed, as [`Stubs::dispatching`] does.
 pub(crate) unsafe extern "system" fn dispatch(registers: *mut Registers, site: *const Site) {
-    // SAFETY: `site` is null or a `&'static Site` by this function's
-    // `# Safety`; `as_ref` maps null to `None`.
+    // The stub's machine code passes the address `Stubs::dispatching`
+    // exposed; the pointer takes back that provenance.
+    let site = core::ptr::with_exposed_provenance::<Site>(site.addr());
+    // SAFETY: `site` is null or a `&'static Site` with its exposed provenance
+    // by this function's `# Safety`; `as_ref` maps null to `None`.
     let Some(site) = (unsafe { site.as_ref() }) else {
         return;
     };
@@ -316,10 +320,10 @@ impl Stubs {
         if sites.is_empty() {
             return None;
         }
-        let callback = (dispatch as *const ()).addr();
+        let callback = (dispatch as *const ()).expose_provenance();
         let pairs: Vec<(usize, usize)> = sites
             .iter()
-            .map(|&site| (callback, core::ptr::from_ref(site).addr()))
+            .map(|&site| (callback, core::ptr::from_ref(site).expose_provenance()))
             .collect();
         Self::write(&pairs, Vectors::current())
     }
@@ -1479,8 +1483,8 @@ mod tests {
         let target = function(&SUM);
         install(
             target + 2,
-            (dispatch as *const ()).addr(),
-            core::ptr::from_ref(site).addr(),
+            (dispatch as *const ()).expose_provenance(),
+            core::ptr::from_ref(site).expose_provenance(),
         )
         .unwrap();
         assert_eq!(callable(target)(1), 107);

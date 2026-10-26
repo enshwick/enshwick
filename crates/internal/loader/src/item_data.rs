@@ -119,7 +119,7 @@ static DESTROY_NEXT: Next<DestroyFn> = unsafe { Next::new() };
 /// `ecs::ItemState`'s type hash and the offset of its `itemId`.
 static ITEM_STATE: OnceLock<Option<(u32, usize)>> = OnceLock::new();
 
-/// Whether `part` may be one side of a kind id: 1 to 64 of `[a-z0-9_-]`.
+/// Whether `part` may be the name side of a kind id: 1 to 64 of `[a-z0-9_-]`.
 fn is_part(part: &str) -> bool {
     (1..=64).contains(&part.len())
         && part
@@ -131,7 +131,8 @@ fn is_part(part: &str) -> bool {
 /// own kind, `mod:name` any mod's.
 fn full_id(mod_id: &str, id: &str) -> Option<String> {
     let (namespace, name) = id.split_once(':').unwrap_or((mod_id, id));
-    (is_part(namespace) && is_part(name)).then(|| format!("{namespace}:{name}"))
+    (enshwick::abi::is_valid_former_id(namespace) && is_part(name))
+        .then(|| format!("{namespace}:{name}"))
 }
 
 /// Opens item kind `id` for mod `owner` and returns its index; the same id

@@ -23,7 +23,7 @@ mod tests {
 
     impl Mod for Chests {
         fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "chests", side: BOTH)
+            enshwick::manifest!(id: "you.chests", side: BOTH)
         }
 
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
@@ -55,7 +55,7 @@ mod tests {
         nicknames.set(Entity(77), &"Old Tom".to_owned()).unwrap();
         assert_eq!(nicknames.get(Entity(77)).as_deref(), Some("Old Tom"));
         let kinds: Vec<String> = loader.item_data().into_iter().map(|v| v.0).collect();
-        assert_eq!(kinds, ["fake:owner", "survivors-per-altar:nickname"]);
+        assert_eq!(kinds, ["test.fake:owner", "survivors-per-altar:nickname"]);
         let long = "x".repeat(600);
         assert_eq!(
             nicknames.set(Entity(77), &long),

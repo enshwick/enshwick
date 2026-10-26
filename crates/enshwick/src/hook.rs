@@ -276,7 +276,9 @@ impl<F: FnPtr> Next<F> {
 ///     bases: *mut u8,
 ///     npc: *const u32,
 /// ) -> u32 {
-///     // SAFETY: forwarded unchanged to the original.
+///     // SAFETY: `bases` and `npc` are the arguments the game called the
+///     // lookup with on this thread, passed on unchanged, so the rest of the
+///     // chain gets what the game's own call gave it.
 ///     unsafe { next.get()(bases, npc) }
 /// }
 /// # let _ = &LOOKUP;

@@ -313,13 +313,14 @@ unsafe fn refused(text: *const [usize; 2]) -> bool {
     let name = if ptr == 0 || len > 0x1000 {
         String::new()
     } else {
+        let mut bytes = vec![0; len];
         // SAFETY: the caller's contract makes the span's non-null first word
         // (checked earlier) the address of `len` readable bytes, unchanged
-        // during the call; the slice is dropped before the function returns.
-        let bytes = unsafe {
-            core::slice::from_raw_parts(core::ptr::with_exposed_provenance::<u8>(ptr), len)
-        };
-        String::from_utf8_lossy(bytes).into_owned()
+        // during the call.
+        unsafe {
+            enshwick::raw::read_bytes_at(core::ptr::with_exposed_provenance(ptr), 0, &mut bytes);
+        }
+        String::from_utf8_lossy(&bytes).into_owned()
     };
     let player = renamer(loader, machine);
     let call = RenameCall {

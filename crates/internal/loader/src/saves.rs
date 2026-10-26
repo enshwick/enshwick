@@ -215,14 +215,10 @@ unsafe fn read_path(layout: &Layout, path: *mut u8) -> Option<String> {
     let mut bytes = vec![0u8; len];
     // SAFETY: `data` is non-null, checked by the guard before it, and the
     // engine path's buffer holds the sum of its part lengths, `len`, by this
-    // function's `# Safety`; `bytes` is a fresh buffer of `len` bytes.
+    // function's `# Safety`.
     unsafe {
-        core::ptr::copy_nonoverlapping(
-            core::ptr::with_exposed_provenance::<u8>(data),
-            bytes.as_mut_ptr(),
-            len,
-        );
-    };
+        enshwick::raw::read_bytes_at(core::ptr::with_exposed_provenance(data), 0, &mut bytes);
+    }
     String::from_utf8(bytes).ok()
 }
 

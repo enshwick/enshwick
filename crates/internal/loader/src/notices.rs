@@ -213,13 +213,13 @@ pub(crate) unsafe fn raise(loader: &Loader, entity_world: usize) {
             return;
         }
         let size = usize::try_from(layout.size).unwrap_or(0);
-        // SAFETY: the push returned a non-null payload (checked earlier) of
-        // `size` zeroed bytes reserved for this event, which nothing else
-        // touches until the engine moves the stream after this call.
-        let out = unsafe { core::slice::from_raw_parts_mut(payload, size) };
-        let mut put = |at: usize, bytes: &[u8]| {
-            if let Some(slot) = out.get_mut(at..at + bytes.len()) {
-                slot.copy_from_slice(bytes);
+        let put = |at: usize, bytes: &[u8]| {
+            if at + bytes.len() <= size {
+                // SAFETY: the push returned a non-null payload (checked
+                // earlier) of `size` bytes reserved for this event, which
+                // nothing else touches until the engine moves the stream after
+                // this call; the span ends inside it, checked before.
+                unsafe { enshwick::raw::write_bytes_at(payload, at, bytes) };
             }
         };
         put(layout.time_offset, &now.to_le_bytes());

@@ -782,7 +782,7 @@ unsafe fn write_thunk(
     frame: Option<[u32; 9]>,
     counter: Option<(&Counter, bool)>,
 ) -> Written {
-    let slot = core::ptr::from_ref(slot).addr();
+    let slot = core::ptr::from_ref(slot).expose_provenance();
     let mut asm = Asm {
         at: code.addr(),
         bytes: Vec::with_capacity(len),
@@ -798,7 +798,7 @@ unsafe fn write_thunk(
     match counter {
         None => asm.rip(&[0xff, 0x25], slot, &[]), // jmp [rip + slot]
         Some((counter, timed)) => {
-            let calls = core::ptr::from_ref(&counter.calls).addr();
+            let calls = core::ptr::from_ref(&counter.calls).expose_provenance();
             asm.rip(&[0xf0, 0x48, 0xff, 0x05], calls, &[]); // lock inc qword [calls]
             if timed {
                 asm.rip(&[0xf6, 0x05], calls, &[0xff]); // test byte [calls], 0xff
@@ -840,8 +840,8 @@ fn timed_call(asm: &mut Asm, slot: usize, counter: &Counter) {
     asm.stack(&[0x48, 0x89, 0x84], SAVED_RESULT); // mov [rsp + SAVED_RESULT], rax
     asm.ticks();
     asm.stack(&[0x48, 0x2b, 0x84], START); // sub rax, [rsp + START]
-    let ticks = core::ptr::from_ref(&counter.ticks).addr();
-    let samples = core::ptr::from_ref(&counter.samples).addr();
+    let ticks = core::ptr::from_ref(&counter.ticks).expose_provenance();
+    let samples = core::ptr::from_ref(&counter.samples).expose_provenance();
     asm.rip(&[0xf0, 0x48, 0x01, 0x05], ticks, &[]); // lock add [ticks], rax
     asm.rip(&[0xf0, 0x48, 0xff, 0x05], samples, &[]); // lock inc qword [samples]
     asm.stack(&[0x48, 0x8b, 0x84], SAVED_RESULT); // mov rax, [rsp + SAVED_RESULT]

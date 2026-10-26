@@ -465,15 +465,22 @@ impl<'a> RawGameEvent<'a> {
     ///
     /// # Safety
     ///
-    /// `raw` is null or the loader's event, valid for the call.
+    /// - `raw` is null, or points at an aligned [`GameEventData`] the loader
+    ///   wrote, readable and unchanged for the call.
+    /// - Unless the event's `data` is null or its `size` zero, `data` is
+    ///   readable for `size` bytes, alive and unchanged for `'a`.
     pub(crate) unsafe fn from_raw(raw: *const GameEventData) -> Option<Self> {
-        // SAFETY: forwarded from the caller.
+        // SAFETY: `raw` is null or an aligned event readable for the call by
+        // the first bullet of this function's `# Safety`; `as_ref` maps null
+        // to `None`.
         let data = unsafe { raw.as_ref() }?;
         let size = usize::try_from(data.size).ok()?;
         let bytes = if size == 0 || data.data.is_null() {
             &[][..]
         } else {
-            // SAFETY: the loader's event holds `size` bytes, valid for the call.
+            // SAFETY: `data` is non-null and `size` non-zero, checked just
+            // above, so the second bullet of this function's `# Safety` makes
+            // `data` readable for `size` bytes, alive and unchanged for `'a`.
             unsafe { core::slice::from_raw_parts(data.data, size) }
         };
         Some(Self {

@@ -14,22 +14,68 @@ use core::sync::atomic::{AtomicU32, AtomicUsize};
 pub const ABI_MAJOR: u16 = 2;
 
 /// The minor version of this interface. A newer minor only appends fields.
-pub const ABI_MINOR: u16 = 69;
+pub const ABI_MINOR: u16 = 70;
 
-/// Whether `id` is a valid mod id: 1 to 64 characters of `[a-z0-9-]`.
+/// Whether `id` is a valid mod id: `<author>.<name>`, each part of
+/// `[a-z0-9-]`, at most 64 characters in all.
 ///
-/// The id names the mod's DLL and settings file, so it stays portable.
+/// The author part keeps two authors' mods of one name apart; the id names
+/// the mod's settings file and data folder, so it stays portable.
 ///
 /// # Examples
 ///
 /// ```
 /// use enshwick::abi::is_valid_id;
 ///
-/// assert!(is_valid_id("flame-altar-zones"));
-/// assert!(!is_valid_id("Flame Altar Zones"));
+/// assert!(is_valid_id("you.trading-post"));
+/// assert!(!is_valid_id("trading-post"));
+/// assert!(!is_valid_id("you.trading.post"));
+/// assert!(!is_valid_id("You.Trading Post"));
 /// ```
 #[must_use]
 pub const fn is_valid_id(id: &str) -> bool {
+    let bytes = id.as_bytes();
+    if bytes.len() > 64 {
+        return false;
+    }
+    let mut dot = None;
+    let mut i = 0;
+    while i < bytes.len() {
+        let b = bytes[i];
+        if b == b'.' {
+            if dot.is_some() {
+                return false;
+            }
+            dot = Some(i);
+        } else if !(b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-') {
+            return false;
+        }
+        i += 1;
+    }
+    match dot {
+        Some(at) => at > 0 && at + 1 < bytes.len(),
+        None => false,
+    }
+}
+
+/// Whether `id` is an id a mod may have had: a valid id, or 1 to 64
+/// characters of `[a-z0-9-]`, the form ids had before they carried an
+/// author.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::abi::is_valid_former_id;
+///
+/// assert!(is_valid_former_id("trading-post"));
+/// assert!(is_valid_former_id("you.trading-post"));
+/// assert!(!is_valid_former_id("Trading Post"));
+/// ```
+#[must_use]
+pub const fn is_valid_former_id(id: &str) -> bool {
+    if is_valid_id(id) {
+        return true;
+    }
     let bytes = id.as_bytes();
     if bytes.is_empty() || bytes.len() > 64 {
         return false;
@@ -1469,7 +1515,7 @@ impl ManifestFlags {
 pub struct Manifest {
     /// Size and version of this struct.
     pub header: Header,
-    /// `[a-z0-9-]+`; names the DLL and the settings file.
+    /// `<author>.<name>`, see [`is_valid_id`]; names the settings file.
     pub id: Str,
     /// The mod's SemVer version.
     pub version: Str,

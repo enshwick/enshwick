@@ -478,8 +478,9 @@ crate::detour! {
 }
 
 fn after_check(next: crate::Next<unsafe extern "system" fn(*mut u64)>, ctx: *mut u64) {
-    // SAFETY: `ctx` is the context the game passed to `SYSTEM`, forwarded
-    // unchanged to the rest of the chain.
+    // SAFETY: `ctx` is the context the game called `SYSTEM` with on this
+    // thread, passed on unchanged, so the rest of the chain gets what the
+    // game's own call gave it.
     unsafe { next.get()(ctx) };
     if let Some((containers, worlds, handler)) = PASS.get()
         // SAFETY: `ctx` is the live context the game passed to `SYSTEM`, on

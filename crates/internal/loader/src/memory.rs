@@ -34,6 +34,18 @@ pub(crate) unsafe fn read_ptr<T>(base: usize, offset: usize) -> *mut T {
     unsafe { enshwick::raw::read_ptr_at(at(base, offset), 0) }
 }
 
+/// Copies `out.len()` bytes at `base + offset` into `out`.
+///
+/// # Safety
+///
+/// - `base + offset` is readable for `out.len()` bytes.
+/// - No other thread writes those bytes during the copy.
+pub(crate) unsafe fn read_bytes(base: usize, offset: usize, out: &mut [u8]) {
+    // SAFETY: the caller's guarantee for `base + offset` is the one
+    // `read_bytes_at` asks for at offset 0.
+    unsafe { enshwick::raw::read_bytes_at(at(base, offset), 0, out) };
+}
+
 /// Writes `value` at `base + offset`.
 ///
 /// # Safety
@@ -60,6 +72,15 @@ mod tests {
         unsafe { write(base, 5, 0xdead_beef_u32) };
         // SAFETY: the same four bytes, now holding a u32.
         assert_eq!(unsafe { read::<u32>(base, 5) }, 0xdead_beef);
+    }
+
+    #[test]
+    fn a_byte_span_reads_from_an_address() {
+        let bytes = *b"xxname";
+        let mut out = [0u8; 4];
+        // SAFETY: four readable bytes of `bytes` start at offset 2.
+        unsafe { read_bytes(bytes.as_ptr().expose_provenance(), 2, &mut out) };
+        assert_eq!(&out, b"name");
     }
 
     #[test]

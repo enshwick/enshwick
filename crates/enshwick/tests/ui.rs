@@ -19,7 +19,7 @@ mod tests {
 
     impl Mod for Panel {
         fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "panel", side: CLIENT)
+            enshwick::manifest!(id: "you.panel", side: CLIENT)
         }
 
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {

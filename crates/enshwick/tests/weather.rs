@@ -17,7 +17,7 @@ mod tests {
 
     impl Mod for Rainmaker {
         fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "rainmaker", side: SERVER)
+            enshwick::manifest!(id: "you.rainmaker", side: SERVER)
         }
 
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {

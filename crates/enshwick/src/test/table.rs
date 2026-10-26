@@ -503,7 +503,7 @@ extern "system" fn service(
         Ok((table, count)) => {
             found.table = core::ptr::with_exposed_provenance(table);
             found.fields = u32::try_from(count).unwrap_or(u32::MAX);
-            found.owner = Str::new("fake");
+            found.owner = Str::new(super::MOD_ID);
             Status::OK
         }
         Err(reason) => {
@@ -1134,7 +1134,7 @@ extern "system" fn item_data_open(_me: ModHandle, id: Str, out: *mut u32) -> Sta
     let full = if id.contains(':') {
         id
     } else {
-        format!("fake:{id}")
+        format!("{}:{id}", super::MOD_ID)
     };
     let kind = with(None, |s| {
         let index = s

@@ -215,7 +215,7 @@ const NAMESPACE_BYTES: [u8; 16] = [
 ];
 
 /// Whether `id` is a content id: `<mod>:<name>`, the mod side 1 to 64 of
-/// `[a-z0-9_-]`, the name 1 to 128 of `[a-z0-9_./-]`.
+/// `[a-z0-9_.-]`, the name 1 to 128 of `[a-z0-9_./-]`.
 ///
 /// # Examples
 ///
@@ -242,8 +242,8 @@ pub const fn is_id(id: &str) -> bool {
             colon = Some(i);
         } else {
             let common = b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_' || b == b'-';
-            let in_name = colon.is_some() && (b == b'.' || b == b'/');
-            if !common && !in_name {
+            let in_name = colon.is_some() && b == b'/';
+            if !common && !in_name && b != b'.' {
                 return false;
             }
         }

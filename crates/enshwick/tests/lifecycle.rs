@@ -61,7 +61,7 @@ mod tests {
 
     impl enshwick::Mod for Test {
         fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "test-mod", side: BOTH, join: true, requires: ["other" => "^1"])
+            enshwick::manifest!(id: "you.test-mod", side: BOTH, join: true, requires: ["other" => "^1"])
         }
 
         fn init(load: &mut enshwick::Load<'_>) -> Result<Self, enshwick::Off> {
@@ -93,7 +93,7 @@ mod tests {
         // SAFETY: `enshwick_mod_query` returns the `'static` manifest of `manifest!`.
         let manifest = unsafe { &*manifest };
         // SAFETY: the id points at a `'static` string literal of `manifest!`.
-        assert_eq!(unsafe { manifest.id.as_str() }, Some("test-mod"));
+        assert_eq!(unsafe { manifest.id.as_str() }, Some("you.test-mod"));
         assert_eq!(manifest.dependency_count, 1);
         assert_eq!(enshwick_mod_abi(), u32::from(enshwick::abi::ABI_MAJOR));
 

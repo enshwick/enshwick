@@ -42,7 +42,7 @@
 //!
 //! impl enshwick::Mod for Hello {
 //!     fn manifest() -> &'static enshwick::abi::Manifest {
-//!         enshwick::manifest!(id: "hello", side: SERVER)
+//!         enshwick::manifest!(id: "you.hello", side: SERVER)
 //!     }
 //!
 //!     fn init(load: &mut enshwick::Load<'_>) -> Result<Self, enshwick::Off> {
@@ -519,9 +519,14 @@ pub mod __private {
 
     /// # Safety
     ///
-    /// `api` is the loader's process-wide table.
+    /// - `api` is null, or points at an aligned [`HostApi`] readable for the size its
+    ///   header states.
+    /// - That table stays valid and unchanged for the rest of the process,
+    ///   as the loader's process-wide table does.
     pub unsafe fn init<M: Mod>(api: *const HostApi, me: ModHandle, slot: &Slot<M>) -> Status {
-        // SAFETY: forwarded from the caller.
+        // SAFETY: `Host::new` needs `api` null or a table readable for its
+        // header's size that outlives the process; this function's `# Safety`
+        // bullets guarantee both.
         let Some(host) = (unsafe { Host::new(api, me) }) else {
             return Status::BAD_ARGS;
         };
@@ -567,13 +572,18 @@ pub mod __private {
     ///
     /// # Safety
     ///
-    /// `api` is the loader's process-wide table.
+    /// - `api` is null, or points at an aligned [`HostApi`] readable for the size its
+    ///   header states.
+    /// - That table stays valid and unchanged for the rest of the process,
+    ///   as the loader's process-wide table does.
     pub unsafe fn init_pack(
         api: *const HostApi,
         me: ModHandle,
         init: impl FnOnce(&mut Load<'_>) -> Result<(), crate::Off>,
     ) -> Status {
-        // SAFETY: forwarded from the caller.
+        // SAFETY: `Host::new` needs `api` null or a table readable for its
+        // header's size that outlives the process; this function's `# Safety`
+        // bullets guarantee both.
         let Some(host) = (unsafe { Host::new(api, me) }) else {
             return Status::BAD_ARGS;
         };
@@ -597,9 +607,14 @@ pub mod __private {
     ///
     /// # Safety
     ///
-    /// `api` is the loader's process-wide table.
+    /// - `api` is null, or points at an aligned [`HostApi`] readable for the size its
+    ///   header states.
+    /// - That table stays valid and unchanged for the rest of the process,
+    ///   as the loader's process-wide table does.
     pub unsafe fn install_host(api: *const HostApi, me: ModHandle) {
-        // SAFETY: forwarded from the caller.
+        // SAFETY: `Host::new` needs `api` null or a table readable for its
+        // header's size that outlives the process; this function's `# Safety`
+        // bullets guarantee both.
         if let Some(host) = unsafe { Host::new(api, me) } {
             MAX_LEVEL.store(host.install().log_level().0, Ordering::Relaxed);
         }

@@ -15,7 +15,7 @@ mod tests {
 
     impl Mod for Digger {
         fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "digger", side: SERVER)
+            enshwick::manifest!(id: "you.digger", side: SERVER)
         }
 
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {

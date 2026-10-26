@@ -12,7 +12,7 @@ mod tests {
 
     impl Mod for Labelled {
         fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "labelled", side: SERVER)
+            enshwick::manifest!(id: "you.labelled", side: SERVER)
         }
 
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {

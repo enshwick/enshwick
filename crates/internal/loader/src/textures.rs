@@ -21,7 +21,7 @@ use std::sync::{Arc, Mutex, OnceLock, PoisonError};
 
 use arc_swap::ArcSwapOption;
 use enshwick::abi::{HookFlags, Side, Status};
-use enshwick::raw::{read_at, read_ptr_at, write_at, write_ptr_at};
+use enshwick::raw::{read_at, read_bytes_at, read_ptr_at, write_at, write_ptr_at};
 use rustc_hash::FxHashMap;
 
 use crate::chains::Next;
@@ -344,12 +344,11 @@ unsafe extern "system" fn request(requester: *mut u8, requests: *mut Requests) {
         if answered.is_some() {
             ours += 1;
         } else {
-            kept.extend((0..size).map(|byte| {
-                // SAFETY: `at` is request `index` of the game's requests,
-                // `textures.request_size` readable bytes live for the call,
-                // and `byte` is below that size.
-                unsafe { read_at::<u8>(at, byte) }
-            }));
+            let start = kept.len();
+            kept.resize(start + size, 0);
+            // SAFETY: `at` is request `index` of the game's requests, with
+            // `textures.request_size` readable bytes live for the call.
+            unsafe { read_bytes_at(at, 0, &mut kept[start..]) };
         }
     }
     if ours == 0 {

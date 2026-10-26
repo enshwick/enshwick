@@ -13,7 +13,7 @@ mod tests {
 
     impl enshwick::Mod for Doubler {
         fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "doubler", side: SERVER)
+            enshwick::manifest!(id: "you.doubler", side: SERVER)
         }
 
         fn init(load: &mut enshwick::Load<'_>) -> Result<Self, enshwick::Off> {

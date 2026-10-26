@@ -553,8 +553,9 @@ fn after_roll(
     labels: *mut u8,
     request: *const u8,
 ) -> *mut u8 {
-    // SAFETY: the arguments the game passed to the roll, forwarded unchanged
-    // to the rest of the chain.
+    // SAFETY: these are the arguments the game called the roll with on this
+    // thread, passed on unchanged, so the rest of the chain gets what the
+    // game's own call gave it.
     let out = unsafe { next.get()(res, txn, generation, labels, request) };
     // Guarded here: the detour's own guard would roll again.
     crate::host::guard(
@@ -662,8 +663,9 @@ fn after_roll_one(
     labels: *mut u8,
     request: *const u8,
 ) -> *mut u8 {
-    // SAFETY: the arguments the game passed to the single roll, forwarded
-    // unchanged to the rest of the chain.
+    // SAFETY: these are the arguments the game called the single roll with
+    // on this thread, passed on unchanged, so the rest of the chain gets what
+    // the game's own call gave it.
     let ret = unsafe { next.get()(res, out, generation, labels, request) };
     // Guarded here: the detour's own guard would roll again.
     crate::host::guard(

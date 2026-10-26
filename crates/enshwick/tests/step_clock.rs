@@ -17,7 +17,7 @@ mod tests {
 
     impl Mod for Timed {
         fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "timed", side: SERVER)
+            enshwick::manifest!(id: "you.timed", side: SERVER)
         }
 
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {

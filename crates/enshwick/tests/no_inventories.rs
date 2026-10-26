@@ -9,7 +9,7 @@ mod tests {
 
     impl enshwick::Mod for Looter {
         fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "looter", side: SERVER)
+            enshwick::manifest!(id: "you.looter", side: SERVER)
         }
 
         fn init(load: &mut enshwick::Load<'_>) -> Result<Self, enshwick::Off> {
