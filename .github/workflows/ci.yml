@@ -38,6 +38,7 @@ jobs:
     with:
       semver: enshwick
       split: true
+      clippy-features: enshwick/test,xtask/compat
     secrets:
       ENSHWICK_CI_CLIENT_ID: ${{ secrets.ENSHWICK_CI_CLIENT_ID }}
       ENSHWICK_CI_PRIVATE_KEY: ${{ secrets.ENSHWICK_CI_PRIVATE_KEY }}
