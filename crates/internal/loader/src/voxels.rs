@@ -95,9 +95,11 @@ struct Words {
     count: u64,
 }
 
-/// The full level of detail, half a metre a voxel.
+/// The full level of detail, half a metre a voxel. The store numbers its
+/// levels coarse to fine: level `l` has voxels of `0.5 * 2^(6 - l)` metres,
+/// so level 0 is 32 metres a voxel (server 399, client 426).
 #[cfg(windows)]
-const FULL_DETAIL: u32 = 0;
+const FULL_DETAIL: u32 = 6;
 
 /// The voxel words of `request` at full detail, x fastest, then y, then z;
 /// on the game thread at a quiet moment only. [`Status::NOT_LOADED`] while
