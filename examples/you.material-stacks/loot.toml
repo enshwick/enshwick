@@ -1,0 +1,7 @@
+#:schema ./loot.schema.json
+# Drops this pack adds to the game's loot.
+
+# [[drop]]
+# items = ["Tool_Torch01"]
+# chance = 0.05
+# from = "chests"

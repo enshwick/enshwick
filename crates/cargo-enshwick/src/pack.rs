@@ -152,7 +152,7 @@ fn zip(dir: &Path, out: Option<&Path>) -> anyhow::Result<String> {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
 
     fn pack(name: &str, items: &str) -> PathBuf {
@@ -216,7 +216,7 @@ mod tests {
     }
 
     /// Every data pack among the examples, by folder.
-    fn example_packs() -> Vec<PathBuf> {
+    pub(crate) fn example_packs() -> Vec<PathBuf> {
         let examples = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples");
         let mut packs: Vec<PathBuf> = std::fs::read_dir(examples)
             .unwrap()

@@ -1,0 +1,7 @@
+id = "you.material-stacks"
+version = "0.1.0"
+name = "Material stacks"
+description = "Wood logs, wood planks, stone, resin and charcoal stack to 999."
+authors = ["You"]
+license = "MIT"
+side = "both"

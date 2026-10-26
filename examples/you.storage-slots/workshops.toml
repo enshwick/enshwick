@@ -1,0 +1,6 @@
+#:schema ./workshops.schema.json
+# Crafting stations of this pack, each a copy of a vanilla one.
+
+# [[workshop]]
+# id = "my-bench"
+# like = "workbench"
