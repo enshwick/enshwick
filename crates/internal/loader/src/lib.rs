@@ -117,6 +117,8 @@ mod notices;
 )]
 mod others;
 #[cfg(windows)]
+mod pacing;
+#[cfg(windows)]
 mod packs;
 #[cfg(windows)]
 mod pages;
@@ -159,6 +161,11 @@ pub mod remote;
 )]
 mod report;
 pub mod resolve;
+#[cfg_attr(
+    not(windows),
+    expect(dead_code, reason = "only the Windows build hands the game memory")
+)]
+mod retire;
 #[cfg(windows)]
 mod saves;
 #[cfg(windows)]

@@ -42,7 +42,9 @@ use entries::gameplay::{
     stat_open, stat_sources, stat_value, stat_watch, stats_changed, summon_filter, summon_item,
     summoned, survivor_bed_check, survivor_lookup, survivor_status, zone_check_filter,
 };
-use entries::hooks::{code_range, hook, hook_at, patch_code, workshop_recipes};
+use entries::hooks::{
+    code_range, hook, hook_at, loop_wait, patch_code, server_wait, task_workers, workshop_recipes,
+};
 use entries::inventory::{inventory_open, inventory_submit, item_info};
 use entries::mods::{
     config_check, config_schema, fault, join_missing, language, log, migrate, mods, replaced,
@@ -367,34 +369,51 @@ impl Loader {
         self.chains.relock().add(target, link)
     }
 
-    /// Whether the code at symbol `id` is what the table expects: its
-    /// pattern matches where the symbol's code starts, on the build the
-    /// table was made for; a table carried over found it by that pattern,
-    /// which holds only where it matches once with its bytes. False for a
-    /// symbol the build lacks or whose pattern finds it through a
-    /// displacement.
+    /// Whether the code at symbol `id` is what the table expects, checked
+    /// before a hook patches it or a detour relies on it, by
+    /// [`crate::builds::code_holds`]: on the build the table was made for,
+    /// the symbol's pattern matches where its code starts, when its pattern
+    /// finds it directly, and its first eight bytes are the table's
+    /// `<id>.bytes`, when the table pins them. A table carried over already
+    /// checked both while it found the symbol, so there only the presence of
+    /// a check counts. False for a symbol the build lacks.
     pub(crate) fn code_holds(&self, id: Symbol) -> bool {
-        let (Some(address), Some((pattern, at))) = (self.address(id), self.build.head(id.id()))
-        else {
+        let Some(address) = self.address(id) else {
             return false;
         };
-        if self.build.kind == crate::builds::Kind::Fallback {
-            return true;
-        }
-        let Some(start) = address
-            .checked_sub(at)
-            .and_then(|a| usize::try_from(a).ok())
-        else {
-            return false;
-        };
-        let mut code = vec![0u8; pattern.len()];
-        // SAFETY: `start` is the table's `id` less the distance its pattern
-        // starts before it, code inside the game's image, which stays mapped
-        // and readable for the life of the process; a pattern spans code of
-        // the function it was made from, which the table checks against
-        // its build.
-        unsafe { crate::memory::read_bytes(start, 0, &mut code) };
-        pattern.matches(&code)
+        let exact = self.build.kind == crate::builds::Kind::Exact;
+        let head = self.build.head(id.id()).map(|(pattern, at)| {
+            !exact || {
+                let Some(start) = address
+                    .checked_sub(at)
+                    .and_then(|a| usize::try_from(a).ok())
+                else {
+                    return false;
+                };
+                let mut code = vec![0u8; pattern.len()];
+                // SAFETY: `start` is the table's `id` less the distance its
+                // pattern starts before it, code inside the game's image,
+                // which stays mapped and readable for the life of the
+                // process; a pattern spans code of the function it was made
+                // from, which the table checks against its build.
+                unsafe { crate::memory::read_bytes(start, 0, &mut code) };
+                pattern.matches(&code)
+            }
+        });
+        let bytes = self.build.constant(&format!("{id}.bytes")).map(|expected| {
+            !exact || {
+                let Ok(code) = usize::try_from(address) else {
+                    return false;
+                };
+                // SAFETY: `code` is the table's `id`, eight bytes of code
+                // inside the game's image, which stays mapped and
+                // readable for the life of the process and is not
+                // patched before this check.
+                let found: u64 = unsafe { crate::memory::read(code, 0) };
+                found == expected
+            }
+        });
+        crate::builds::code_holds(head, bytes)
     }
 
     /// [`Loader::link`] for a feature, logging why it stays off: a target
@@ -737,6 +756,9 @@ pub(crate) static API: HostApi = HostApi {
     rate,
     set_rate,
     change_data,
+    loop_wait,
+    server_wait,
+    task_workers,
 };
 
 /// The loader and the calling mod, when the mod is on.
