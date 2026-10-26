@@ -2,6 +2,7 @@
 //! [`DIR`], read into rows and written for a new build with the code
 //! patterns that find each entry on a build without a table.
 
+use anyhow::{Context as _, anyhow, bail};
 use std::collections::HashMap;
 
 use enshwick_gamedata::Locate;
@@ -19,24 +20,24 @@ pub(crate) const DIR: &str = "crates/enshwick-gamedata/tables";
 const SECTIONS: [&str; 3] = ["checks", "symbols", "constants"];
 
 /// Reads a table file into a row.
-pub(crate) fn parse(src: &str) -> Result<Row, String> {
-    let doc: DocumentMut = src.parse().map_err(|e| format!("{e}"))?;
+pub(crate) fn parse(src: &str) -> anyhow::Result<Row> {
+    let doc: DocumentMut = src.parse()?;
     let text = |key: &str| {
         doc.get(key)
             .and_then(Item::as_str)
             .map(str::to_owned)
-            .ok_or_else(|| format!("no `{key}`"))
+            .with_context(|| format!("no `{key}`"))
     };
     let side = match text("side")?.as_str() {
         "server" => Side::Server,
         "client" => Side::Client,
-        other => return Err(format!("an unknown side {other:?}")),
+        other => bail!("an unknown side {other:?}"),
     };
     let age = doc
         .get("age")
         .and_then(Item::as_integer)
         .and_then(|a| u32::try_from(a).ok())
-        .ok_or("no `age`")?;
+        .context("no `age`")?;
     Ok(Row::loader(
         side,
         text("guid")?,
@@ -48,14 +49,14 @@ pub(crate) fn parse(src: &str) -> Result<Row, String> {
     ))
 }
 
-fn entries(doc: &DocumentMut, section: &str) -> Result<Vec<Entry>, String> {
+fn entries(doc: &DocumentMut, section: &str) -> anyhow::Result<Vec<Entry>> {
     let Some(table) = doc.get(section).and_then(Item::as_table) else {
         return Ok(Vec::new());
     };
     table
         .iter()
         .map(|(id, item)| {
-            let value = number(item).ok_or_else(|| format!("{section}.{id}: no value"))?;
+            let value = number(item).with_context(|| format!("{section}.{id}: no value"))?;
             Ok(Entry {
                 id: id.to_owned(),
                 value,
@@ -134,8 +135,8 @@ pub(crate) fn render(
     edits: &[(&Entry, Edit)],
     exe: Option<&Exe<'_>>,
     anchors: &HashMap<String, Anchor>,
-) -> Result<(String, Patterned), String> {
-    let mut doc: DocumentMut = src.parse().map_err(|e| format!("{e}"))?;
+) -> anyhow::Result<(String, Patterned)> {
+    let mut doc: DocumentMut = src.parse()?;
     doc["name"] = toml_edit::value(identity.name);
     doc["guid"] = toml_edit::value(identity.guid);
     doc["age"] = toml_edit::value(i64::from(identity.age));
@@ -145,7 +146,7 @@ pub(crate) fn render(
     ];
     for (key, number) in numbers {
         match number {
-            Some(n) => doc[key] = toml_edit::value(i64::try_from(n).map_err(|e| e.to_string())?),
+            Some(n) => doc[key] = toml_edit::value(i64::try_from(n)?),
             None if identity.new_build => drop(doc.remove(key)),
             None => {}
         }
@@ -195,8 +196,8 @@ pub(crate) fn render(
 }
 
 /// Sets entry `id` of `table` to `value`, keeping its pattern fields.
-fn set(table: &mut TomlTable, id: &str, value: u64) -> Result<(), String> {
-    let written: Value = spelled(value).parse().map_err(|e| format!("{id}: {e}"))?;
+fn set(table: &mut TomlTable, id: &str, value: u64) -> anyhow::Result<()> {
+    let written: Value = spelled(value).parse().with_context(|| id.to_string())?;
     let Some(item) = table.get_mut(id) else {
         return Ok(());
     };
@@ -219,7 +220,7 @@ fn set(table: &mut TomlTable, id: &str, value: u64) -> Result<(), String> {
 
 /// What a pattern search gives an entry: its new text, `None` to keep it
 /// plain, or why its anchor gave none.
-type Written = Result<Option<String>, String>;
+type Written = anyhow::Result<Option<String>>;
 
 /// Writes every symbol's and constant's pattern from `exe` into `doc`: around
 /// the entry's anchor where `anchors` names one or its present pattern keeps
@@ -229,8 +230,8 @@ fn patterns_into(
     doc: &mut DocumentMut,
     exe: &Exe<'_>,
     anchors: &HashMap<String, Anchor>,
-) -> Result<Patterned, String> {
-    let present = enshwick_gamedata::Table::parse(&doc.to_string()).map_err(|e| e.to_string())?;
+) -> anyhow::Result<Patterned> {
+    let present = enshwick_gamedata::Table::parse(&doc.to_string())?;
     let pinned = |id: &str| {
         present
             .symbols()
@@ -259,7 +260,7 @@ fn patterns_into(
         .filter(|c| c.via().is_some() || c.attribute().is_some() || !c.carried())
         .map(|c| (c.id(), c))
         .collect();
-    let failed = || Err("the search failed".to_owned());
+    let failed = || Err(anyhow!("the search failed"));
     let symbol_texts = parallel(
         &symbols,
         |(id, rva)| symbol_written(exe, id, *rva, anchors_here.get(id)),
@@ -319,11 +320,11 @@ fn symbol_written(exe: &Exe<'_>, id: &str, rva: u64, anchor: Option<&Anchor>) ->
     match anchor {
         Some(Anchor::Through(site)) => match patterns::symbol_through(exe, *site) {
             Ok((pattern, target)) if target == rva => Ok(Some(symbol_text(rva, &pattern))),
-            Ok((_, target)) => Err(format!(
+            Ok((_, target)) => Err(anyhow!(
                 "{id}: {site:#x} reaches {target:#x}, not {}",
                 hex(rva)
             )),
-            Err(why) => Err(format!("{id}: {why}")),
+            Err(why) => Err(anyhow!("{id}: {why}")),
         },
         _ => Ok(patterns::symbol(exe, rva).map(|p| symbol_text(rva, &p))),
     }
@@ -335,21 +336,21 @@ fn constant_written(exe: &Exe<'_>, id: &str, value: u64, anchor: &Anchor) -> Wri
         Anchor::Read(site, carrier, plus) => {
             let read = anchor::read(exe, anchor);
             if read != Some(value) {
-                return Err(format!(
+                bail!(
                     "{id}: its anchor reads {read:x?}, the table pins {}",
                     hex(value)
-                ));
+                );
             }
-            let pattern = patterns::constant_from(exe, *site, *carrier)
-                .map_err(|why| format!("{id}: {why}"))?;
+            let pattern =
+                patterns::constant_from(exe, *site, *carrier).with_context(|| id.to_string())?;
             Ok(Some(constant_text(value, &pattern, *plus)))
         }
         Anchor::Confirm(site) => {
             let pattern =
-                patterns::constant_confirmed(exe, *site).map_err(|why| format!("{id}: {why}"))?;
+                patterns::constant_confirmed(exe, *site).with_context(|| id.to_string())?;
             Ok(Some(constant_text(value, &pattern, 0)))
         }
-        other => Err(format!("{id}: a constant cannot take {other:?}")),
+        other => Err(anyhow!("{id}: a constant cannot take {other:?}")),
     }
 }
 
@@ -375,16 +376,16 @@ fn kept_written(
         )));
     }
     let (Some(via), Some(text)) = (constant.via(), pattern) else {
-        return Err(format!("{id}: no symbol or pattern to read it via"));
+        bail!("{id}: no symbol or pattern to read it via");
     };
     let Some((_, rva)) = symbols.iter().find(|(symbol, _)| symbol == via) else {
-        return Err(format!("{id}: the table has no {via}"));
+        bail!("{id}: the table has no {via}");
     };
     let (code, code_rva) = exe.text();
     let value = rva
         .checked_sub(code_rva)
         .and_then(|at| constant.find_at(code, at))
-        .ok_or_else(|| format!("{id}: the code at {via} does not match its pattern"))?;
+        .with_context(|| format!("{id}: the code at {via} does not match its pattern"))?;
     let pattern = ConstantPattern {
         text: text.clone(),
         operand: constant.operand().map(|o| (o.at(), o.size())),
@@ -419,7 +420,7 @@ fn write_section(
     texts: Vec<Written>,
     plain: fn(u64) -> String,
     problems: &mut Vec<String>,
-) -> Result<(usize, usize), String> {
+) -> anyhow::Result<(usize, usize)> {
     let found: HashMap<&str, _> = entries
         .iter()
         .zip(texts)
@@ -441,11 +442,11 @@ fn write_section(
             }
             Ok(None) => plain(*value),
             Err(why) => {
-                problems.push(why.clone());
+                problems.push(format!("{why:#}"));
                 plain(*value)
             }
         };
-        let value: Value = text.parse().map_err(|e| format!("{}: {e}", id.get()))?;
+        let value: Value = text.parse().with_context(|| id.get().to_string())?;
         *item = Item::Value(value.decorated(" ", ""));
     }
     Ok(counts)

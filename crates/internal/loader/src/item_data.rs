@@ -744,16 +744,16 @@ mod tests {
     #[test]
     fn ids_take_the_mod_s_namespace_unless_they_name_one() {
         assert_eq!(
-            full_id("survivors", "charges").as_deref(),
-            Some("survivors:charges")
+            full_id("you.lanterns", "oil").as_deref(),
+            Some("you.lanterns:oil")
         );
         assert_eq!(
-            full_id("probe", "other:fire_damage").as_deref(),
+            full_id("you.lanterns", "other:fire_damage").as_deref(),
             Some("other:fire_damage")
         );
-        assert_eq!(full_id("probe", "Charges"), None);
-        assert_eq!(full_id("probe", "a:b:c"), None);
-        assert_eq!(full_id("probe", ":x"), None);
+        assert_eq!(full_id("you.lanterns", "Charges"), None);
+        assert_eq!(full_id("you.lanterns", "a:b:c"), None);
+        assert_eq!(full_id("you.lanterns", ":x"), None);
     }
 
     #[test]

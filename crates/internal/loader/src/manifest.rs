@@ -310,7 +310,7 @@ mod tests {
     use super::*;
 
     static DEPENDENCIES: [Dependency; 1] = [Dependency {
-        id: Str::new("flame-altar-zones"),
+        id: Str::new("you.lockers"),
         range: Str::new("^0.1"),
         relation: Relation::REQUIRES,
     }];
@@ -340,8 +340,8 @@ mod tests {
 
     #[test]
     fn metadata_is_read_and_cleaned() {
-        let mut m = manifest("you.safes", "0.1.0");
-        m.name = Str::new("Safes");
+        let mut m = manifest("you.trading-post", "0.1.0");
+        m.name = Str::new("Trading Post");
         m.description = Str::new(" A chest only its owner opens ");
         m.authors = AUTHORS.as_ptr();
         m.author_count = AUTHORS.len();
@@ -350,7 +350,7 @@ mod tests {
         // SAFETY: every string and list in `m` points at `'static` literals
         // and statics, readable and never written.
         let meta = unsafe { meta(&m) };
-        assert_eq!(meta.label("safes"), "Safes");
+        assert_eq!(meta.label("you.trading-post"), "Trading Post");
         assert_eq!(meta.description, "A chest only its owner opens");
         assert_eq!(meta.authors, ["themaiby"]);
         assert!(meta.homepage.is_empty());
@@ -399,7 +399,7 @@ mod tests {
     fn a_manifest_of_an_older_minor_loads_with_defaults() {
         let old = Minor4 {
             header: header_of::<Minor4>(),
-            id: Str::new("safes"),
+            id: Str::new("you.trading-post"),
             version: Str::new("0.1.0"),
             side: Side::BOTH,
             flags: ManifestFlags::JOIN,
@@ -415,7 +415,7 @@ mod tests {
         // SAFETY: every string and list in the manifest points at `'static`
         // literals and statics, readable and never written.
         let candidate = unsafe { parse(manifest) }.unwrap();
-        assert_eq!(candidate.id, "safes");
+        assert_eq!(candidate.id, "you.trading-post");
         assert_eq!(candidate.dependencies.len(), 1);
     }
 
@@ -423,7 +423,7 @@ mod tests {
     fn a_manifest_without_builds_loads_with_none() {
         let old = Oldest {
             header: header_of::<Oldest>(),
-            id: Str::new("safes"),
+            id: Str::new("you.trading-post"),
             version: Str::new("0.1.0"),
             side: Side::SERVER,
             flags: ManifestFlags::NONE,
@@ -444,7 +444,7 @@ mod tests {
 
     #[test]
     fn a_manifest_shorter_than_every_minor_is_refused() {
-        let mut short = manifest("you.safes", "0.1.0");
+        let mut short = manifest("you.trading-post", "0.1.0");
         short.header.size =
             u32::try_from(core::mem::offset_of!(Manifest, dependency_count)).unwrap();
         // SAFETY: `short` is a whole local manifest, its strings and lists
@@ -463,7 +463,7 @@ mod tests {
             appended: u64,
         }
         let mut newer = Newer {
-            manifest: manifest("you.safes", "0.1.0"),
+            manifest: manifest("you.trading-post", "0.1.0"),
             appended: 1,
         };
         newer.manifest.header.size = u32::try_from(size_of::<Newer>()).unwrap();
@@ -472,7 +472,7 @@ mod tests {
         let manifest = unsafe { read((&raw const newer).cast()) }.unwrap();
         // SAFETY: every string and list in the manifest points at `'static`
         // literals and statics, readable and never written.
-        assert_eq!(unsafe { parse(manifest) }.unwrap().id, "you.safes");
+        assert_eq!(unsafe { parse(manifest) }.unwrap().id, "you.trading-post");
         assert_eq!(newer.appended, 1);
     }
 
@@ -480,8 +480,8 @@ mod tests {
     fn a_good_manifest_parses() {
         // SAFETY: every string and list in the manifest points at `'static`
         // literals and statics, readable and never written.
-        let candidate = unsafe { parse(&manifest("you.survivors-per-altar", "0.1.2")) }.unwrap();
-        assert_eq!(candidate.id, "you.survivors-per-altar");
+        let candidate = unsafe { parse(&manifest("you.market-stalls", "0.1.2")) }.unwrap();
+        assert_eq!(candidate.id, "you.market-stalls");
         assert_eq!(candidate.version, Version::new(0, 1, 2));
         assert_eq!(
             candidate.dependencies[0].range,
@@ -514,7 +514,7 @@ mod tests {
     #[test]
     fn a_former_id_parses_and_the_loader_s_own_id_is_never_taken_over() {
         static FORMER: [Dependency; 1] = [Dependency {
-            id: Str::new("survivors"),
+            id: Str::new("market-stalls"),
             range: Str::EMPTY,
             relation: Relation::WAS,
         }];
@@ -523,7 +523,7 @@ mod tests {
             range: Str::EMPTY,
             relation: Relation::REPLACES,
         }];
-        let mut renamed = manifest("you.survivors-per-altar", "0.2.0");
+        let mut renamed = manifest("you.market-stalls", "0.2.0");
         renamed.dependencies = FORMER.as_ptr();
         // SAFETY: every string and list in the manifest points at `'static`
         // literals and statics, readable and never written.

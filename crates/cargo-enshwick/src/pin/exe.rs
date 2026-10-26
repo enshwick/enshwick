@@ -1,6 +1,7 @@
 //! A game executable as the pin tool reads it: its code, its function table
 //! and its reflected systems.
 
+use anyhow::Context as _;
 use std::ops::Range;
 
 use enshwick_reflect::{Fingerprint, Image, Layout, Reflection};
@@ -21,14 +22,14 @@ pub(crate) struct Exe<'a> {
 
 impl<'a> Exe<'a> {
     /// Reads the executable in `bytes`.
-    pub(crate) fn parse(bytes: &'a [u8]) -> Result<Self, String> {
-        let image = Image::parse(bytes, Layout::File, None).map_err(|e| e.to_string())?;
+    pub(crate) fn parse(bytes: &'a [u8]) -> anyhow::Result<Self> {
+        let image = Image::parse(bytes, Layout::File, None)?;
         let base = image.base();
-        let text_section = image.section(".text").ok_or("no .text section")?;
+        let text_section = image.section(".text").context("no .text section")?;
         let range = image.range(text_section);
         let text = image
             .read(range.start, range.end - range.start)
-            .ok_or(".text is unreadable")?;
+            .context(".text is unreadable")?;
         let text_rva = range.start - base;
         let functions = image
             .section(".pdata")

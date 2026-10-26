@@ -673,6 +673,7 @@ impl Loader {
             find(constants, name)
         });
         own.or_else(|| self.build.constant(name))
+            .or_else(|| crate::catalogue::constant(name, &self.reflection))
     }
 }
 
@@ -1099,7 +1100,10 @@ extern "system" fn field_offset(type_name: Str, field: Str, out: *mut u64) -> St
         else {
             return Status::BAD_ARGS;
         };
-        match loader.reflection.field_offset(type_name, field) {
+        match loader
+            .reflection
+            .field_offset(crate::catalogue::type_name(type_name), field)
+        {
             // SAFETY: `HostApi::field_offset` has the mod pass `out` null or
             // pointing at a writable, aligned `u64` that no other thread
             // touches during the call.
@@ -1114,7 +1118,10 @@ extern "system" fn type_size(type_name: Str, out: *mut u32) -> Status {
         let (Some(loader), Some(type_name)) = (loader(), text(type_name)) else {
             return Status::BAD_ARGS;
         };
-        match loader.reflection.type_info(type_name) {
+        match loader
+            .reflection
+            .type_info(crate::catalogue::type_name(type_name))
+        {
             // SAFETY: `HostApi::type_size` has the mod pass `out` null or
             // pointing at a writable, aligned `u32` that no other thread
             // touches during the call.
@@ -1795,7 +1802,10 @@ extern "system" fn type_hash(type_name: Str, out: *mut u32) -> Status {
         let (Some(loader), Some(type_name)) = (loader(), text(type_name)) else {
             return Status::BAD_ARGS;
         };
-        match loader.reflection.type_info(type_name) {
+        match loader
+            .reflection
+            .type_info(crate::catalogue::type_name(type_name))
+        {
             // SAFETY: `HostApi::type_hash` has the mod pass `out` null or
             // pointing at a writable, aligned `u32` that no other thread
             // touches during the call.

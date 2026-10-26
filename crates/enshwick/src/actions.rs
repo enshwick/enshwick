@@ -220,8 +220,8 @@ impl Arg {
 /// ```
 /// use enshwick::actions::Subject;
 ///
-/// let safe = Subject::new(42, "Your Safe at (2, 10, -4)");
-/// assert_eq!(safe.id, 42);
+/// let locker = Subject::new(42, "Your locker at (2, 10, -4)");
+/// assert_eq!(locker.id, 42);
 /// ```
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Subject {

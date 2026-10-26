@@ -5,6 +5,7 @@
 //! is the old row's text with values replaced: comments and layout carry
 //! over.
 
+use anyhow::{Context as _, anyhow, bail};
 use std::fmt::Write as _;
 use std::ops::Range;
 
@@ -82,15 +83,15 @@ pub(crate) enum Edit {
 }
 
 /// Every `builds:` row in a mod source.
-pub(crate) fn parse(src: &str) -> Result<Vec<Row>, String> {
+pub(crate) fn parse(src: &str) -> anyhow::Result<Vec<Row>> {
     match find_code(src, 0, src.len(), "builds: [") {
         Some(builds) => mod_rows(src, builds + "builds: ".len()),
         None => Ok(Vec::new()),
     }
 }
 
-fn mod_rows(src: &str, open: usize) -> Result<Vec<Row>, String> {
-    let close = matching(src, open).ok_or("an unclosed builds list")?;
+fn mod_rows(src: &str, open: usize) -> anyhow::Result<Vec<Row>> {
+    let close = matching(src, open).context("an unclosed builds list")?;
     let mut rows = Vec::new();
     let mut at = skip_trivia(src, open + 1);
     while at < close {
@@ -99,9 +100,9 @@ fn mod_rows(src: &str, open: usize) -> Result<Vec<Row>, String> {
             continue;
         }
         if src.as_bytes().get(at) != Some(&b'{') {
-            return Err(format!("a build row expected at byte {at}"));
+            bail!("a build row expected at byte {at}");
         }
-        let end = matching(src, at).ok_or("an unclosed build row")?;
+        let end = matching(src, at).context("an unclosed build row")?;
         let side_at = field(src, at, end, "side: ")?;
         let guid_at = field(src, at, end, "guid: \"")?;
         let guid_span = guid_at..string_end(src, guid_at)?;
@@ -247,7 +248,7 @@ pub(crate) fn guid_hex(guid: [u8; 16]) -> String {
     })
 }
 
-fn optional_list(src: &str, from: usize, to: usize, name: &str) -> Result<Vec<Entry>, String> {
+fn optional_list(src: &str, from: usize, to: usize, name: &str) -> anyhow::Result<Vec<Entry>> {
     if find_code(src, from, to, name).is_some() {
         list(src, from, to, name)
     } else {
@@ -255,23 +256,23 @@ fn optional_list(src: &str, from: usize, to: usize, name: &str) -> Result<Vec<En
     }
 }
 
-fn list(src: &str, from: usize, to: usize, name: &str) -> Result<Vec<Entry>, String> {
+fn list(src: &str, from: usize, to: usize, name: &str) -> anyhow::Result<Vec<Entry>> {
     let open = field(src, from, to, name)? - 1;
-    let close = matching(src, open).ok_or_else(|| format!("an unclosed {name}"))?;
+    let close = matching(src, open).with_context(|| format!("an unclosed {name}"))?;
     let mut entries = Vec::new();
     let mut at = skip_trivia(src, open + 1);
     while at < close {
         let bytes = src.as_bytes();
         let entry_start = at;
         if bytes.get(at) != Some(&b'"') {
-            return Err(format!("{name}: an id expected at byte {at}"));
+            bail!("{name}: an id expected at byte {at}");
         }
         let id_end = string_end(src, at + 1)?;
         let id = src[at + 1..id_end].to_owned();
         at = skip_trivia(src, id_end + 1);
         let separator = "=>";
         if !src[at..].starts_with(separator) {
-            return Err(format!("{name}: {id} has no value"));
+            bail!("{name}: {id} has no value");
         }
         let value_start = skip_trivia(src, at + separator.len());
         let mut end = value_start;
@@ -287,7 +288,7 @@ fn list(src: &str, from: usize, to: usize, name: &str) -> Result<Vec<Entry>, Str
             end += 1;
         }
         let value_span = value_start..value_start + src[value_start..end].trim_end().len();
-        let value = evaluate(&src[value_span.clone()]).map_err(|e| format!("{id}: {e}"))?;
+        let value = evaluate(&src[value_span.clone()]).with_context(|| id.clone())?;
         let line_start = src[..entry_start].rfind('\n').map_or(0, |i| i + 1);
         let line_end = src[end..].find('\n').map_or(src.len(), |i| end + i);
         entries.push(Entry {
@@ -307,7 +308,7 @@ fn list(src: &str, from: usize, to: usize, name: &str) -> Result<Vec<Entry>, Str
 }
 
 /// Evaluates the constant expressions the rows use: literals, `<<` and `|`.
-fn evaluate(expr: &str) -> Result<u64, String> {
+fn evaluate(expr: &str) -> anyhow::Result<u64> {
     let expr = expr.trim();
     let expr = expr
         .strip_prefix('(')
@@ -320,45 +321,45 @@ fn evaluate(expr: &str) -> Result<u64, String> {
             let by: u32 = number(shift)?;
             value
                 .checked_shl(by)
-                .ok_or_else(|| format!("a shift by {by} overflows"))
+                .with_context(|| format!("a shift by {by} overflows"))
         })?;
         Ok(acc | shifted)
     })
 }
 
-fn number<T: TryFrom<u64>>(text: &str) -> Result<T, String> {
+fn number<T: TryFrom<u64>>(text: &str) -> anyhow::Result<T> {
     let clean: String = text.trim().chars().filter(|&c| c != '_').collect();
     let value = match clean.strip_prefix("0x") {
         Some(hex) => u64::from_str_radix(hex, 16),
         None => clean.parse(),
     }
-    .map_err(|e| format!("`{}`: {e}", text.trim()))?;
-    T::try_from(value).map_err(|_| format!("`{}` is out of range", text.trim()))
+    .with_context(|| format!("`{}`", text.trim()))?;
+    T::try_from(value).map_err(|_| anyhow!("`{}` is out of range", text.trim()))
 }
 
-fn side(src: &str, at: usize, prefix: &str) -> Result<Side, String> {
+fn side(src: &str, at: usize, prefix: &str) -> anyhow::Result<Side> {
     let rest = &src[at..];
     if rest.starts_with("SERVER") {
         Ok(Side::Server)
     } else if rest.starts_with("CLIENT") {
         Ok(Side::Client)
     } else {
-        Err(format!("an unknown side after `{prefix}` at byte {at}"))
+        Err(anyhow!("an unknown side after `{prefix}` at byte {at}"))
     }
 }
 
 /// Where the text after `name` starts, inside `from..to`.
-fn field(src: &str, from: usize, to: usize, name: &str) -> Result<usize, String> {
+fn field(src: &str, from: usize, to: usize, name: &str) -> anyhow::Result<usize> {
     find_code(src, from, to, name)
         .map(|at| at + name.len())
-        .ok_or_else(|| format!("no `{name}` in the row at byte {from}"))
+        .with_context(|| format!("no `{name}` in the row at byte {from}"))
 }
 
 fn digits(src: &str, at: usize) -> usize {
     src[at..].bytes().take_while(u8::is_ascii_digit).count()
 }
 
-fn string_end(src: &str, from: usize) -> Result<usize, String> {
+fn string_end(src: &str, from: usize) -> anyhow::Result<usize> {
     let bytes = src.as_bytes();
     let mut at = from;
     while let Some(&c) = bytes.get(at) {
@@ -368,7 +369,7 @@ fn string_end(src: &str, from: usize) -> Result<usize, String> {
             _ => at += 1,
         }
     }
-    Err(format!("an unclosed string at byte {from}"))
+    Err(anyhow!("an unclosed string at byte {from}"))
 }
 
 /// Skips whitespace and comments, `//` and `/* */`.
@@ -557,14 +558,17 @@ mod tests {
 
     #[test]
     fn expressions_evaluate_and_bad_ones_are_errors() {
-        assert_eq!(evaluate("0x10 << 32 | 0xd8"), Ok(0x10_0000_00d8));
-        assert_eq!(evaluate("0x7095_8d48_b065_8b4c"), Ok(0x7095_8d48_b065_8b4c));
-        assert_eq!(evaluate("32"), Ok(32));
+        assert_eq!(evaluate("0x10 << 32 | 0xd8").ok(), Some(0x10_0000_00d8));
+        assert_eq!(
+            evaluate("0x7095_8d48_b065_8b4c").ok(),
+            Some(0x7095_8d48_b065_8b4c)
+        );
+        assert_eq!(evaluate("32").ok(), Some(32));
         assert!(evaluate("SIZE * 2").is_err());
     }
 
     #[test]
     fn sources_without_rows_have_none() {
-        assert_eq!(parse("fn main() {}"), Ok(Vec::new()));
+        assert_eq!(parse("fn main() {}").ok(), Some(Vec::new()));
     }
 }

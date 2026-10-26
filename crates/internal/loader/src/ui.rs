@@ -1063,12 +1063,12 @@ mod tests {
     fn the_arena_keeps_texts_until_its_buffer_comes_round() {
         let mut arena = Arena::new();
         arena.next_frame();
-        let first = arena.text(&[b"enshwick/", b"probe"]);
+        let first = arena.text(&[b"enshwick/", b"lamps"]);
         assert_eq!(first.len, 14);
         // SAFETY: `first` points at 14 bytes the arena just copied into its
         // current buffer, which nothing clears before `next_frame`.
         let bytes = unsafe { core::slice::from_raw_parts(first.ptr, 14) };
-        assert_eq!(bytes, b"enshwick/probe");
+        assert_eq!(bytes, b"enshwick/lamps");
         let big = vec![b'x'; ARENA_BYTES];
         assert_eq!(arena.text(&[&big]).len, 0);
         arena.next_frame();
@@ -1076,7 +1076,7 @@ mod tests {
         // SAFETY: one frame on, the arena cleared only the next of its
         // `ARENA_FRAMES` buffers, so the 14 bytes of `first` are untouched.
         let again = unsafe { core::slice::from_raw_parts(first.ptr, 14) };
-        assert_eq!(again, b"enshwick/probe");
+        assert_eq!(again, b"enshwick/lamps");
     }
 
     #[test]

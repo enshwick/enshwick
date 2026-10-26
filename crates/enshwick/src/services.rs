@@ -320,7 +320,7 @@ impl<E: ModEvent> Emitter<E> {
 mod tests {
     use super::{LayoutError, compare, layout_hash};
 
-    #[crate::event(name = "probe:direct")]
+    #[crate::event(name = "you.my-mod:direct")]
     #[derive(Clone, Copy, Debug)]
     struct Direct {
         best: Option<u32>,
@@ -329,7 +329,7 @@ mod tests {
 
     macro_rules! through {
         ($best:ty, $pair:ty) => {
-            #[crate::event(name = "probe:through")]
+            #[crate::event(name = "you.my-mod:through")]
             #[derive(Clone, Copy, Debug)]
             struct Through {
                 best: $best,

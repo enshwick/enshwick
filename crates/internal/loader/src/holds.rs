@@ -57,24 +57,21 @@ mod tests {
 
     fn holds() -> Vec<(String, String)> {
         vec![
-            ("flame-altar-count".to_owned(), "20 zones".to_owned()),
+            ("you.lanterns".to_owned(), "20 zones".to_owned()),
             ("other".to_owned(), "why".to_owned()),
         ]
     }
 
     #[test]
     fn a_running_mod_meets_its_hold() {
-        let left = unmet(holds(), &["flame-altar-count"], false);
+        let left = unmet(holds(), &["you.lanterns"], false);
         assert_eq!(left, vec![("other".to_owned(), "why".to_owned())]);
-        assert!(unmet(holds(), &["flame-altar-count", "other"], false).is_empty());
+        assert!(unmet(holds(), &["you.lanterns", "other"], false).is_empty());
     }
 
     #[test]
     fn an_unknown_build_meets_no_hold() {
-        assert_eq!(
-            unmet(holds(), &["flame-altar-count", "other"], true).len(),
-            2
-        );
+        assert_eq!(unmet(holds(), &["you.lanterns", "other"], true).len(), 2);
         assert!(unmet(Vec::new(), &[], true).is_empty());
     }
 }

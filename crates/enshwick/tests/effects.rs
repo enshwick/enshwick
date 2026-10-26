@@ -33,27 +33,27 @@ mod tests {
 
     #[test]
     fn typed_effects_lay_out_their_events_and_teleports_their_requests() {
-        let npc = "keen::ecs::NpcCommandEvent";
-        let threat = "keen::ecs::AddThreatTargetEvent";
-        let ping = "keen::ecs::UiPingEvent";
+        let npc = "npc_command_event";
+        let threat = "add_threat_target_event";
+        let ping = "ui_ping_event";
         let loader = enshwick::test::FakeHost::new()
-            .field_offset("keen::WorldTransform", "position", 0)
-            .field_offset("keen::WorldTransform", "orientation", 24)
-            .field_offset("keen::WorldTransform", "scale", 40)
+            .constant("world_transform.position", 0)
+            .constant("world_transform.orientation", 24)
+            .constant("world_transform.scale", 40)
             .type_hash(npc, 1)
             .type_size(npc, 72)
-            .field_offset(npc, "type", 8)
-            .field_offset(npc, "npcId", 12)
-            .field_offset(npc, "targetTransform", 16)
+            .constant("npc_command_event.kind", 8)
+            .constant("npc_command_event.npc", 12)
+            .constant("npc_command_event.target", 16)
             .type_hash(threat, 2)
             .type_size(threat, 24)
-            .field_offset(threat, "attackerId", 8)
-            .field_offset(threat, "targetId", 12)
-            .field_offset(threat, "threatValue", 16)
+            .constant("add_threat_target_event.attacker", 8)
+            .constant("add_threat_target_event.target", 12)
+            .constant("add_threat_target_event.threat", 16)
             .type_hash(ping, 3)
             .type_size(ping, 40)
-            .field_offset(ping, "senderEntityId", 8)
-            .field_offset(ping, "position", 16)
+            .constant("ui_ping_event.sender", 8)
+            .constant("ui_ping_event.position", 16)
             .template(5, [5; 16])
             .install();
         // SAFETY: both functions are the exports of this file's `declare_mod!(Acting)`.

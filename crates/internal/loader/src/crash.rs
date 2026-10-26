@@ -1135,8 +1135,8 @@ mod tests {
 
     fn ranges() -> [Range; 3] {
         [
-            Range::new(0x1000, 0x2000, 0, "safes"),
-            Range::new(0x5000, 0x6000, 1, "survivors"),
+            Range::new(0x1000, 0x2000, 0, "you.trading-post"),
+            Range::new(0x5000, 0x6000, 1, "you.market-stalls"),
             Range::new(0x9000, 0xa000, LOADER, "enshwick"),
         ]
     }
@@ -1164,7 +1164,7 @@ mod tests {
         );
         assert_eq!(
             text(Blame::Code(1), 0x5800, Some((0, 0x10))),
-            "2026-10-21 09:05:07Z fault 0xc0000005 at 0x5800, blamed on survivors: in its code (+0x800 in survivors); reading 0x10\r\n"
+            "2026-10-21 09:05:07Z fault 0xc0000005 at 0x5800, blamed on you.market-stalls: in its code (+0x800 in you.market-stalls); reading 0x10\r\n"
         );
     }
 
@@ -1175,7 +1175,7 @@ mod tests {
         assert_eq!(blamed, Blame::Callback(Some(0), 0, "interaction filter"));
         assert_eq!(
             text(blamed, 0x9100, None),
-            "2026-10-21 09:05:07Z fault 0xc0000005 at 0x9100, blamed on safes: in its interaction filter callback (+0x100 in enshwick)\r\n"
+            "2026-10-21 09:05:07Z fault 0xc0000005 at 0x9100, blamed on you.trading-post: in its interaction filter callback (+0x100 in enshwick)\r\n"
         );
     }
 
@@ -1186,7 +1186,7 @@ mod tests {
         assert_eq!(blamed, Blame::Stack(0, 2));
         assert_eq!(
             text(blamed, 0x77_0000, Some((1, 0))),
-            "2026-10-21 09:05:07Z fault 0xc0000005 at 0x770000, blamed on safes: its code is on the stack, frame 2; writing 0x0\r\n"
+            "2026-10-21 09:05:07Z fault 0xc0000005 at 0x770000, blamed on you.trading-post: its code is on the stack, frame 2; writing 0x0\r\n"
         );
     }
 

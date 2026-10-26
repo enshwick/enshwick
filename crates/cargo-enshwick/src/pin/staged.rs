@@ -3,6 +3,7 @@
 //! when all of them are there do they move into place. A move that fails
 //! puts back what the earlier ones replaced.
 
+use anyhow::{anyhow, bail};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -38,14 +39,14 @@ impl Staged {
     }
 
     /// Writes every file, or none of them.
-    pub(crate) fn commit(self) -> Result<(), String> {
+    pub(crate) fn commit(self) -> anyhow::Result<()> {
         let mut temps = Vec::with_capacity(self.0.len());
         for file in &self.0 {
             let temp = temp_of(&file.path);
             if let Err(e) = fs::write(&temp, &file.text) {
                 remove_all(&temps);
                 let _gone = fs::remove_file(&temp);
-                return Err(format!("{}: {e}", temp.display()));
+                bail!("{}: {e}", temp.display());
             }
             temps.push(temp);
         }
@@ -66,7 +67,7 @@ impl Staged {
 
     /// Puts back the first `done` files, removes the temporary files left,
     /// and returns `why` with what could not be put back.
-    fn undo(&self, done: usize, temps: &[PathBuf], why: &str) -> String {
+    fn undo(&self, done: usize, temps: &[PathBuf], why: &str) -> anyhow::Error {
         remove_all(&temps[done..]);
         let mut stuck = Vec::new();
         for file in &self.0[..done] {
@@ -79,9 +80,9 @@ impl Staged {
             }
         }
         if stuck.is_empty() {
-            format!("{why}; nothing was written")
+            anyhow!("{why}; nothing was written")
         } else {
-            format!("{why}; could not put back {}", stuck.join(", "))
+            anyhow!("{why}; could not put back {}", stuck.join(", "))
         }
     }
 }
@@ -138,7 +139,7 @@ mod tests {
         // A folder of that name cannot be replaced by a file.
         fs::create_dir(dir.join("b.rs")).unwrap();
         staged.replace(dir.join("b.rs"), "ported b".into(), String::new());
-        let error = staged.commit().unwrap_err();
+        let error = staged.commit().unwrap_err().to_string();
         assert!(error.ends_with("nothing was written"), "{error}");
         assert_eq!(fs::read_to_string(dir.join("a.rs")).unwrap(), "a");
         assert!(!dir.join("new.toml").exists());

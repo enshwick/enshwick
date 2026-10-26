@@ -25,6 +25,7 @@ repository = "https://github.com/enshwick/enshwick"
 publish = false
 
 [workspace.dependencies]
+anyhow = { version = "1.0.104", default-features = false, features = ["std"] }
 arc-swap = { version = "1.9.3", default-features = false }
 criterion = { version = "0.8.2", default-features = false, features = ["cargo_bench_support"] }
 const-sha1 = { version = "0.3.0", default-features = false }

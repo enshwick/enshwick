@@ -130,7 +130,7 @@ mod tests {
 
         let ui = UI.get().unwrap();
         let ask = Dialog::new("Updates", "Download them now?")
-            .detail("safes 0.1.0 \u{2192} 0.2.0")
+            .detail("you.trading-post 0.1.0 \u{2192} 0.2.0")
             .buttons(&[Response::Ok, Response::Cancel]);
         ui.dialog(&ask, |answer| ANSWERS.lock().unwrap().push(answer))
             .unwrap();
@@ -140,7 +140,7 @@ mod tests {
         .unwrap();
         let waiting = loader.dialogs();
         assert_eq!(waiting.len(), 2);
-        assert_eq!(waiting[0].detail, "safes 0.1.0 \u{2192} 0.2.0");
+        assert_eq!(waiting[0].detail, "you.trading-post 0.1.0 \u{2192} 0.2.0");
         assert_eq!(
             waiting[0].buttons,
             1 << UiDialog::OK | 1 << UiDialog::CANCEL

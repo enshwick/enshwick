@@ -248,6 +248,14 @@ impl EventType {
     pub(crate) fn field_at<T: Scalar>(self, offset: u64) -> Option<Field<T>> {
         Field::within(self.hash, self.size, offset)
     }
+
+    /// The `T` at the offset the loader resolves for the engine id `id`,
+    /// inside this type's size.
+    pub(crate) fn field_by_id<T: Scalar>(self, load: &Load<'_>, id: &str) -> Result<Field<T>, Off> {
+        let offset = load.constant(id)?;
+        self.field_at(offset)
+            .ok_or_else(|| Off::new(format!("field {id}: past the end of {}", self.name)))
+    }
 }
 
 /// A plain value a [`Field`] reads from an event: an integer, a float, a
