@@ -16,7 +16,7 @@
 //! before any item names it. Until both have happened [`ready`] stays false
 //! and items keep their vanilla icons.
 
-use crate::pinned::{self, Symbol};
+use crate::pinned;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 
@@ -136,23 +136,6 @@ struct Layout {
     registry_listed: usize,
 }
 
-/// Whether the eight bytes at `symbol` are the build table's
-/// `<symbol>.bytes`.
-fn code_matches(loader: &Loader, symbol: Symbol) -> bool {
-    let bytes = loader.build.constant(&format!("{symbol}.bytes"));
-    let (Some(address), Some(expected)) = (loader.address(symbol), bytes) else {
-        return false;
-    };
-    let Ok(address) = usize::try_from(address) else {
-        return false;
-    };
-    // SAFETY: `address` is the build table's `symbol`, the start of a
-    // function in the game's image, which stays mapped and readable for the
-    // life of the process.
-    let found: u64 = unsafe { crate::memory::read(address, 0) };
-    found == expected
-}
-
 fn layout(loader: &Loader) -> Option<&'static Layout> {
     LAYOUT
         .get_or_init(|| {
@@ -166,7 +149,7 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
                 pinned::textures::REGISTRY_LISTED_AT,
                 pinned::textures::SIGNAL,
             ];
-            if let Some(symbol) = checks.iter().find(|s| !code_matches(loader, **s)) {
+            if let Some(symbol) = checks.iter().find(|s| !loader.code_holds(**s)) {
                 crate::log!(
                     WARN,
                     "mod textures off: {symbol} is not the code the loader knows"
@@ -178,7 +161,7 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
             Some(Layout {
                 // SAFETY: the build table's `textures.signal` is the game's
                 // event signal with the `SignalFn` signature on this build,
-                // and its code matched the table's bytes in `code_matches`.
+                // and its code held in `Loader::code_holds`.
                 signal: unsafe { core::mem::transmute::<usize, SignalFn>(signal) },
                 request_size: o("request_size")?,
                 request_hash: o("request_hash")?,

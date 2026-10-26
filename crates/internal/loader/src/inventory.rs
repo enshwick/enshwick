@@ -472,8 +472,8 @@ fn build(loader: &Loader) -> Option<Executor> {
 /// `executor` with its scratch block, when the game code at the hook reads
 /// as the build table says.
 fn checked(loader: &Loader, executor: Executor, txn_size: usize) -> Option<Executor> {
-    if !code_matches(loader, pinned::inventory::ACTIONS_ROW)
-        || !code_matches(loader, pinned::inventory::VIEW_FILL)
+    if !loader.code_holds(pinned::inventory::ACTIONS_ROW)
+        || !loader.code_holds(pinned::inventory::VIEW_FILL)
     {
         crate::log!(
             WARN,
@@ -492,23 +492,6 @@ fn checked(loader: &Loader, executor: Executor, txn_size: usize) -> Option<Execu
         scratch: scratch.expose_provenance(),
         ..executor
     })
-}
-
-/// Whether the eight bytes at `symbol` are the build table's
-/// `<symbol>.bytes`.
-fn code_matches(loader: &Loader, symbol: Symbol) -> bool {
-    let bytes = loader.build.constant(&format!("{symbol}.bytes"));
-    let (Some(rva), Some(expected)) = (loader.build.symbol(symbol.id()), bytes) else {
-        return false;
-    };
-    let Ok(address) = usize::try_from(loader.base + rva) else {
-        return false;
-    };
-    // SAFETY: `address` is the game's image base plus the table's offset of
-    // `symbol`, eight bytes of code inside the image, which stays mapped and
-    // is not patched before the hook this check guards.
-    let found = unsafe { read::<u64>(address, 0) };
-    found == expected
 }
 
 /// A mod asks for inventories: allowed during init, on a build that has them.
@@ -775,8 +758,8 @@ unsafe extern "system" fn row(registers: *mut Registers, _user: *mut c_void) {
         return;
     };
     let ctx = usize::try_from(registers.r13).unwrap_or(0);
-    // SAFETY: at the table's `inventory.actions_row` (its bytes checked by
-    // `code_matches`), `r13` holds the inventory system's live context, used
+    // SAFETY: at the table's `inventory.actions_row` (its code checked by
+    // `Loader::code_holds`), `r13` holds the inventory system's live context, used
     // here on the system's thread while it runs.
     if executor.check_world && !unsafe { in_server_world(executor, ctx) } {
         return;
@@ -786,7 +769,7 @@ unsafe extern "system" fn row(registers: *mut Registers, _user: *mut c_void) {
         .wrapping_sub(executor.view_frame);
     // SAFETY: at the table's `inventory.actions_row`, the system's view lies
     // `inventory.view_frame` below `rbp` in its live frame, filled before the
-    // row loop (`inventory.view_fill` checked by `code_matches`); it holds the
+    // row loop (`inventory.view_fill` checked by `Loader::code_holds`); it holds the
     // item registry pointer at the table's `inventory.view_item_registry`.
     let registry = unsafe { read_ptr::<u8>(view, executor.view_item_registry) }.expose_provenance();
     REGISTRY.store(registry, Ordering::Release);

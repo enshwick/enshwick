@@ -367,34 +367,53 @@ impl Loader {
         self.chains.relock().add(target, link)
     }
 
-    /// Whether the code at symbol `id` is what the table expects: its
-    /// pattern matches where the symbol's code starts, on the build the
-    /// table was made for; a table carried over found it by that pattern,
-    /// which holds only where it matches once with its bytes. False for a
-    /// symbol the build lacks or whose pattern finds it through a
-    /// displacement.
+    /// Whether the code at symbol `id` is what the table expects, checked
+    /// before a hook patches it or a detour relies on it. On the build the
+    /// table was made for, the symbol's pattern matches where its code
+    /// starts, when its pattern finds it directly, and its first eight bytes
+    /// are the table's `<id>.bytes`, when the table pins them; at least one
+    /// of the two must exist. A table carried over found the symbol by its
+    /// pattern, which holds only where it matches once with its bytes.
+    /// False for a symbol the build lacks.
     pub(crate) fn code_holds(&self, id: Symbol) -> bool {
-        let (Some(address), Some((pattern, at))) = (self.address(id), self.build.head(id.id()))
-        else {
+        let Some(address) = self.address(id) else {
             return false;
         };
         if self.build.kind == crate::builds::Kind::Fallback {
             return true;
         }
-        let Some(start) = address
-            .checked_sub(at)
-            .and_then(|a| usize::try_from(a).ok())
-        else {
+        let head = self.build.head(id.id());
+        let bytes = self.build.constant(&format!("{id}.bytes"));
+        if head.is_none() && bytes.is_none() {
             return false;
-        };
-        let mut code = vec![0u8; pattern.len()];
-        // SAFETY: `start` is the table's `id` less the distance its pattern
-        // starts before it, code inside the game's image, which stays mapped
-        // and readable for the life of the process; a pattern spans code of
-        // the function it was made from, which the table checks against
-        // its build.
-        unsafe { crate::memory::read_bytes(start, 0, &mut code) };
-        pattern.matches(&code)
+        }
+        let head_holds = head.is_none_or(|(pattern, at)| {
+            let Some(start) = address
+                .checked_sub(at)
+                .and_then(|a| usize::try_from(a).ok())
+            else {
+                return false;
+            };
+            let mut code = vec![0u8; pattern.len()];
+            // SAFETY: `start` is the table's `id` less the distance its
+            // pattern starts before it, code inside the game's image, which
+            // stays mapped and readable for the life of the process; a
+            // pattern spans code of the function it was made from, which the
+            // table checks against its build.
+            unsafe { crate::memory::read_bytes(start, 0, &mut code) };
+            pattern.matches(&code)
+        });
+        let bytes_hold = bytes.is_none_or(|expected| {
+            let Ok(at) = usize::try_from(address) else {
+                return false;
+            };
+            // SAFETY: `at` is the table's `id`, eight bytes of code inside
+            // the game's image, which stays mapped and readable for the life
+            // of the process and is not patched before this check.
+            let found: u64 = unsafe { crate::memory::read(at, 0) };
+            found == expected
+        });
+        head_holds && bytes_hold
     }
 
     /// [`Loader::link`] for a feature, logging why it stays off: a target
