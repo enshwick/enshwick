@@ -74,7 +74,7 @@ settings menu names it:
 | `client`         | Each player's own: never sent to or taken from a server; the console of a dedicated server leaves it alone                       |
 | `sync`           | The server's value: a joined client runs with it ([Join values](#join-values))                                                   |
 | `startup, sync`  | Read when a world loads, as `startup`; a joined client runs with the server's value, the same while the world runs               |
-| `range = a..=b`  | Numbers from `a` to `b`; `a..` and `..=b` leave one end open. Constants work, as in `0.0..=MAX`                                  |
+| `range = a..=b`  | Numbers from `a` to `b`, each element of a list of numbers too; `a..` and `..=b` leave one end open. Constants work              |
 | `choices = [..]` | One of these values; any type serde writes, such as an enum's variants                                                           |
 | `text = "key"`   | The key of the field's label in the mod's [texts](content/texts.md), `config.<field>` by default; its description is `<key>.doc` |
 | `secret`         | A value such as a password: never sent to a client, and changed in the file only; never with `sync`                              |
@@ -212,15 +212,18 @@ changes them too:
 | `enshwick config <mod> <key> <value>` | checks the value and writes it to the running world's settings, comments kept    |
 
 On a dedicated server, `enshwick config` edits the world it runs; before its
-world loads, the change waits for it.
+world loads, the change waits for it. A key names one element of a list with
+its index, `per_level[2]`, and a grouped setting with its dotted key,
+`comfort.multiplier`.
 
 The world settings, when a player creates or starts a world and in the pause
 menu's world settings, are where a world's settings are edited: under their
 last tab, every mod's world settings show as the game's own rows, built from
 the schema: a toggle for `bool`, a slider for a number with a range (in stops
-for whole numbers up to 32 values), a dropdown for `choices`, and the value
-with the file's name for the rest (text, lists, tables, numbers without a
-range). They are read-only where the game makes its own rows read-only, for a
+for whole numbers up to 32 values), a slider per element for a list of up to
+16 numbers with a range, a dropdown for `choices`, and the value with the
+file's name for the rest (text, longer lists, tables, numbers without a
+range). A list's length changes in the file. They are read-only where the game makes its own rows read-only, for a
 player who is no host; joined to another's game, the rows show the server's
 `sync` values only.
 

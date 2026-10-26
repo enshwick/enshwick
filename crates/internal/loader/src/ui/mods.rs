@@ -164,7 +164,9 @@ fn entry(from: u8, draw: impl FnOnce(&Engine, &super::engine::UiText) -> bool) {
     };
     seen.store(frame, Ordering::Relaxed);
     let showing = SCREEN.with_borrow(|s| s.as_ref().map(|s| s.from)) == Some(from);
-    // SAFETY: inside the menu's drawing, a frame on its thread.
+    // SAFETY: `entry` runs only from the main and pause menu hooks, which
+    // the game reaches while drawing its menu inside a frame on the
+    // interface thread.
     if showing && unsafe { engine.back_pressed(NODE.load(Ordering::Relaxed)) } {
         BACK.store(1, Ordering::Relaxed);
     }
@@ -174,15 +176,24 @@ fn entry(from: u8, draw: impl FnOnce(&Engine, &super::engine::UiText) -> bool) {
     }
 }
 
+/// The hook before the main menu's Credits entry: draws the Mods entry.
+///
+/// # Safety
+///
+/// - Called only by the mid-hook stub, on the hooked thread, with null or
+///   the registers it saved, valid and unaliased for the call.
 unsafe extern "system" fn main_menu(registers: *mut Registers, _user: *mut core::ffi::c_void) {
-    // SAFETY: the stub passes the registers at the hook.
+    // SAFETY: the mid-hook stub passes either null or the registers it saved
+    // on its stack, valid and unaliased for this call.
     let Some(registers) = (unsafe { registers.as_ref() }) else {
         return;
     };
     let menu = usize::try_from(registers.rdi).unwrap_or(0) + 8;
     let drawn = std::panic::catch_unwind(|| {
-        // SAFETY: the hook sits before the main menu's Credits entry, where
-        // `rdi` holds the menu page and +8 its entries' state.
+        // SAFETY: the hook at the table's `ui.main_menu_site` sits before the
+        // main menu's Credits entry, on the frame's thread, where `rdi` holds
+        // the menu page and +8 its entries' state; the text lives in the
+        // frame's arena.
         entry(FROM_MAIN, |engine, text| unsafe {
             engine.main_menu_entry(menu, text)
         });
@@ -192,21 +203,32 @@ unsafe extern "system" fn main_menu(registers: *mut Registers, _user: *mut core:
     }
 }
 
+/// The hook after the pause menu's Settings entry: draws the Mods entry and
+/// opens the world settings when the Mods screen asked to.
+///
+/// # Safety
+///
+/// - Called only by the mid-hook stub, on the hooked thread, with null or
+///   the registers it saved, valid and unaliased for the call.
 unsafe extern "system" fn pause_menu(registers: *mut Registers, _user: *mut core::ffi::c_void) {
-    // SAFETY: the stub passes the registers at the hook.
+    // SAFETY: the mid-hook stub passes either null or the registers it saved
+    // on its stack, valid and unaliased for this call.
     let submenu = unsafe { registers.as_ref() }.map_or(0, |r| r.r12);
     if JUMP.swap(0, Ordering::Relaxed) != 0
         && let Ok(submenu) = usize::try_from(submenu)
         && submenu != 0
     {
-        let state = core::ptr::with_exposed_provenance_mut::<u32>(submenu);
-        // SAFETY: at the hook `r12` points at the pause menu's submenu
-        // state; 4 opens its world settings, as its own entry does.
-        unsafe { state.write_unaligned(WORLD_SETTINGS_SUBMENU) };
+        // SAFETY: `submenu` is non-zero by the `if` condition; at the hook at
+        // the table's `ui.pause_menu_site`, `r12` points at the pause menu's
+        // four-byte submenu state, which the menu reads and writes only on
+        // this thread; 4 opens its world settings, as its own entry does.
+        unsafe { crate::memory::write(submenu, 0, WORLD_SETTINGS_SUBMENU) };
         BACK.store(2, Ordering::Relaxed);
     }
     let drawn = std::panic::catch_unwind(|| {
-        // SAFETY: the hook sits right after the pause menu's Settings entry.
+        // SAFETY: the hook at the table's `ui.pause_menu_site` sits right
+        // after the pause menu's Settings entry, on the frame's thread; the
+        // text lives in the frame's arena.
         entry(FROM_PAUSE, |engine, text| unsafe {
             engine.pause_menu_entry(text)
         });
@@ -220,8 +242,10 @@ unsafe extern "system" fn pause_menu(registers: *mut Registers, _user: *mut core
 ///
 /// # Safety
 ///
-/// Inside a frame, on its thread, with no other window open; `frame` is the
-/// frame [`next_frame`] counted.
+/// - Called inside a frame of the game's interface update, on its thread.
+/// - `context` is the non-zero context `Engine::context` read in this frame.
+/// - No other window is open.
+/// - `frame` is the count [`next_frame`] gave this frame.
 pub(super) unsafe fn draw(loader: &Loader, engine: &Engine, context: usize, frame: u64) {
     let opened = OPEN.swap(0, Ordering::Relaxed);
     SCREEN.with_borrow_mut(|slot| {
@@ -269,7 +293,8 @@ pub(super) unsafe fn draw(loader: &Loader, engine: &Engine, context: usize, fram
             }
             _ => {}
         }
-        // SAFETY: forwarded from the caller.
+        // SAFETY: this function's `# Safety` gives the frame, its thread, its
+        // `context` and no other open window, which `show` asks for.
         let close = unsafe { show(loader, engine, context, screen) };
         NODE.store(engine.node_id(&screen.window), Ordering::Relaxed);
         if close {
@@ -331,13 +356,23 @@ fn title(loader: &Loader, page: &Page) -> super::engine::UiText {
 }
 
 /// Draws the screen's window; true when the player closed it.
+///
+/// # Safety
+///
+/// - Called inside a frame of the game's interface update, on its thread.
+/// - `context` is the non-zero context `Engine::context` read in this frame.
+/// - No other window is open.
 unsafe fn show(loader: &Loader, engine: &Engine, context: usize, screen: &mut Screen) -> bool {
     let name = copy(&[b"enshwick/loader/mods"]);
     let title = title(loader, &screen.page);
-    // SAFETY: forwarded from the caller; the window lives in the screen's
-    // state until it ends below.
+    // SAFETY: this function's `# Safety` gives the frame, its thread and its
+    // `context`; `screen.window` stays in the thread-local `SCREEN`, borrowed
+    // and unmoved until `window_end` below, and `name` and `title` live in
+    // the frame's text arena.
     unsafe { engine.window_begin(context, &mut screen.window, &name, &title) };
-    // SAFETY: inside the window just started, until it ends below.
+    // SAFETY: the window started one call earlier in this frame, on its
+    // thread, with the frame's `context`, and `paint` is not used after
+    // either `window_end` below.
     let paint = unsafe { Painter::new(engine, context) };
     if let Some((text, ok)) = &screen.message {
         let style = if *ok {
@@ -351,7 +386,10 @@ unsafe fn show(loader: &Loader, engine: &Engine, context: usize, screen: &mut Sc
         Page::List { first } => {
             if joined_elsewhere() && paint.button(texts::text("mods.server").as_bytes(), true) {
                 open_server_list(screen);
-                // SAFETY: the window started above, in this frame.
+                // SAFETY: `window_begin` started `screen.window` in this
+                // frame, on this thread, with this `context`; it did not
+                // move, and the painter's widgets close every frame they
+                // open.
                 unsafe { engine.window_end(context, &mut screen.window) };
                 return false;
             }
@@ -427,7 +465,9 @@ unsafe fn show(loader: &Loader, engine: &Engine, context: usize, screen: &mut Sc
             false
         }
     };
-    // SAFETY: the window started above, in this frame.
+    // SAFETY: `window_begin` started `screen.window` in this frame, on this
+    // thread, with this `context`; it did not move, and the painter's
+    // widgets close every frame they open.
     unsafe { engine.window_end(context, &mut screen.window) };
     close
 }
@@ -849,8 +889,16 @@ fn world_rows(loader: &Loader) -> Vec<(usize, String, enshwick::config::Schema, 
         .collect()
 }
 
+/// The hook in the world settings' scroll area: draws the mods' rows under
+/// its last tab.
+///
+/// # Safety
+///
+/// - Called only by the mid-hook stub, on the hooked thread, with null or
+///   the registers it saved, valid and unaliased for the call.
 unsafe extern "system" fn world_settings(registers: *mut Registers, _user: *mut core::ffi::c_void) {
-    // SAFETY: the stub passes the registers at the hook.
+    // SAFETY: the mid-hook stub passes either null or the registers it saved
+    // on its stack, valid and unaliased for this call.
     let Some(registers) = (unsafe { registers.as_ref() }) else {
         return;
     };
@@ -866,14 +914,18 @@ unsafe extern "system" fn world_settings(registers: *mut Registers, _user: *mut 
     if view == 0 || tab_state == 0 {
         return;
     }
-    // SAFETY: at the hook `r15` holds the view's tab state, read here.
-    let tab = unsafe { crate::world::read::<u8>(tab_state, layout.tab) };
+    // SAFETY: `tab_state` is non-zero, checked by the guard before it; at the
+    // hook at the table's `ui.world_settings_site`, `r15` holds the view's tab
+    // state, whose shown tab sits at the table's `ui.view_tab`.
+    let tab = unsafe { crate::memory::read::<u8>(tab_state, layout.tab) };
     if tab != LAST_TAB {
         return;
     }
-    // SAFETY: at the hook `rsi` holds the view's config, whose byte at
-    // `read_only` makes every row read-only, as for a player who is no host.
-    let read_only = unsafe { crate::world::read::<u8>(view, layout.read_only) } != 0;
+    // SAFETY: `view` is non-zero, checked by the guard before it; at the hook
+    // at the table's `ui.world_settings_site`, `rsi` holds the view's config,
+    // whose byte at the table's `ui.view_read_only` makes every row read-only,
+    // as for a player who is no host.
+    let read_only = unsafe { crate::memory::read::<u8>(view, layout.read_only) } != 0;
     let drawn = std::panic::catch_unwind(|| world(read_only));
     if drawn.is_err() {
         crate::log!(
@@ -894,8 +946,10 @@ fn world(read_only: bool) {
         return;
     }
     let frame = FRAME.load(Ordering::Relaxed);
-    // SAFETY: inside the world settings' scroll area, a frame on its thread,
-    // drawing rows as the view's own sections do.
+    // SAFETY: `world` runs only from `world_settings`, the hook inside the
+    // world settings' scroll area, where the game's own window is open in the
+    // frame on its thread; `context` is non-zero, checked by the guard before
+    // it, and `paint` stays inside this call.
     let paint = unsafe { Painter::new(engine, context) };
     WORLD.with_borrow_mut(|slot| {
         let fresh = slot.as_ref().is_none_or(|w| w.frame + 1 < frame);

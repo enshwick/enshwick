@@ -135,7 +135,7 @@ mod tests {
                 "regulars = [\"00abcdef01234567\", \"nope\"]\nbonus_percent = 20\nrefused_items = [5]\n",
             )
             .install();
-        // SAFETY: the exports of `declare_mod!` above.
+        // SAFETY: both functions are the exports of this file's `declare_mod!(Haggling)`.
         let status = unsafe { loader.start(super::enshwick_mod_init, super::enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
         assert_eq!(loader.attached_points(), ["you.trading-post:price"]);

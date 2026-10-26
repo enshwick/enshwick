@@ -126,9 +126,13 @@ mod tests {
     ///
     /// # Safety
     ///
-    /// `user` points at `source`; `out` is writable.
+    /// - `user` points at `source`, alive for the call.
+    /// - `out` is null or points at a writable, aligned [`Str`] that no other
+    ///   thread touches during the call.
     unsafe fn run_source_of<F: Fn() -> String>(_source: &F, user: *mut c_void, out: *mut Str) {
-        // SAFETY: forwarded from the caller.
+        // SAFETY: `run_source::<F>` needs `user` to be an `F` and `out` null
+        // or a writable `Str`; this function's `# Safety` bullets give
+        // `user` pointing at `source`, an `F`, and such an `out`.
         unsafe { run_source::<F>(user, out) };
     }
 }

@@ -2,6 +2,8 @@
 
 Enshwick is a Rust workspace. You need Rust (`rust-toolchain.toml` installs the
 pinned version through rustup), [Bun](https://bun.sh) for the repository tools,
+[committed](https://github.com/crate-ci/committed),
+[typos](https://github.com/crate-ci/typos) and cargo-deny for the git hooks,
 and on Windows the MSVC build tools.
 
 ```bash

@@ -81,9 +81,11 @@ impl Mode {
 ///
 /// # Safety
 ///
-/// Implemented by [`#[point]`](macro@crate::point) only: [`LAYOUT`] must
-/// list every field of the `repr(C)` input in order, and [`OUTPUT`] the
-/// answer type, each with its size and alignment in the hash.
+/// - Implemented by [`#[point]`](macro@crate::point) only.
+/// - The input type is `repr(C)`.
+/// - [`LAYOUT`] lists every field of the input in order, with its size and
+///   alignment in the hash.
+/// - [`OUTPUT`] is the answer type, with its size and alignment in the hash.
 ///
 /// [`LAYOUT`]: Point::LAYOUT
 /// [`OUTPUT`]: Point::OUTPUT
