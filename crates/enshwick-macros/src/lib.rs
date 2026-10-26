@@ -28,7 +28,8 @@ use syn::{
 /// `..=b`; `choices = [..]`;
 /// `text = "key"`, the text key of the field's translated label; `secret`,
 /// a value never sent to a client and changed in the file only, so never
-/// with `sync`. The derive implements `schema`, `values`, `merge_values` and
+/// with `sync`; `group`, on a field that is a `Config` of its own, makes it
+/// a table of the file. The derive implements `schema`, `values`, `merge_values` and
 /// a `validate` that checks ranges and choices before the struct's own
 /// check.
 #[proc_macro_derive(Config, attributes(config))]
@@ -48,6 +49,8 @@ struct FieldConfig {
     secret: bool,
     /// `startup, sync`: a startup field a joined client takes from the server.
     synced: bool,
+    /// `group`: the field is a `Config` of its own, a table of the file.
+    group: bool,
 }
 
 /// The stages a field may name, as `enshwick::config::Stage` variants.
@@ -120,6 +123,9 @@ fn field_config(attrs: &[Attribute]) -> syn::Result<FieldConfig> {
                 }
                 config.text = Some(text_key(&meta)?);
                 Ok(())
+            } else if meta.path.is_ident("group") {
+                config.group = true;
+                Ok(())
             } else if meta.path.is_ident("secret") {
                 if config.secret {
                     return Err(meta.error("`secret` is given twice"));
@@ -128,10 +134,23 @@ fn field_config(attrs: &[Attribute]) -> syn::Result<FieldConfig> {
                 Ok(())
             } else {
                 Err(meta.error(
-                    "expected `startup`, `runtime`, `client`, `sync`, `restart`, `range = a..=b`, `choices = [..]`, `text = \"key\"` or `secret`",
+                    "expected `startup`, `runtime`, `client`, `sync`, `restart`, `range = a..=b`, `choices = [..]`, `text = \"key\"`, `secret` or `group`",
                 ))
             }
         })?;
+    }
+    let grouped_with_more = config.group
+        && (config.stage.is_some()
+            || config.min.is_some()
+            || config.max.is_some()
+            || config.choices.is_some()
+            || config.text.is_some()
+            || config.secret);
+    if grouped_with_more {
+        return Err(syn::Error::new(
+            Span::call_site(),
+            "a `group` field takes its stages, ranges and texts from its own fields",
+        ));
     }
     if let Some(stage) = config
         .stage
@@ -271,26 +290,24 @@ fn expand_config(input: &DeriveInput) -> syn::Result<TokenStream> {
     let mut described = Vec::new();
     let mut checks = Vec::new();
     let mut staged: Vec<(Ident, bool, &syn::Field)> = Vec::new();
+    let mut groups: Vec<(&Ident, String, &syn::Field)> = Vec::new();
     for field in &fields.named {
         let Some(ident) = field.ident.as_ref() else {
             continue;
         };
         same_keys_as_serde(&field.attrs)?;
         let config = field_config(&field.attrs)?;
+        if config.group {
+            groups.push((ident, ident.unraw().to_string(), field));
+            continue;
+        }
         let stage = config
             .stage
+            .clone()
             .unwrap_or_else(|| Ident::new("Runtime", Span::call_site()));
         let key = ident.unraw().to_string();
         let doc = comment(&field.attrs);
-        let note = if config.synced {
-            SYNCED_NOTE
-        } else if stage == "Startup" {
-            "# Takes effect when the world loads.\n"
-        } else if stage == "Restart" {
-            "# Takes effect when the game starts again.\n"
-        } else {
-            ""
-        };
+        let note = template_note(&stage, config.synced);
         entries.push(quote! {
             #text.push_str(#doc);
             #text.push_str(#note);
@@ -299,54 +316,52 @@ fn expand_config(input: &DeriveInput) -> syn::Result<TokenStream> {
         checks.push(quote! {
             ::enshwick::config::__check_field(&#schema, #key, &self.#ident)?;
         });
-        let bound = |e: &Option<Expr>| {
-            e.as_ref().map_or_else(
-                || quote!(::core::option::Option::None),
-                |e| quote!(::core::option::Option::Some((#e) as f64)),
-            )
-        };
-        let (min, max) = (bound(&config.min), bound(&config.max));
-        let choices = config.choices.map(|c| quote!(.with_choices(&#c)));
-        let plain = doc_text(&field.attrs);
-        let label = config.text.map(|t| t.value()).unwrap_or_default();
-        let secret = config.secret;
         let synced = config.synced;
-        described.push(quote! {
-            ::enshwick::config::Field::new(
-                #key,
-                ::enshwick::config::Stage::#stage,
-                &#defaults.#ident,
-            )
-            .with_range(#min, #max)
-            #choices
-            .with_doc(#plain, #label)
-            .with_secret(#secret)
-            .with_synced(#synced)
-        });
+        described.push(described_field(
+            &key, &stage, ident, config, field, &defaults,
+        ));
         staged.push((stage, synced, field));
     }
     let header = comment(&input.attrs);
     let header_text = doc_text(&input.attrs);
-    let values = stage_methods(&staged);
+    let values = stage_methods(&staged, &groups);
+    let (path, fields_of, groups_of) = (local("path"), local("fields"), local("groups"));
+    let config = quote!(::enshwick::config::Config);
+    let GroupTokens {
+        tables: group_tables,
+        schemas: group_schemas,
+        checks: group_checks,
+    } = group_tokens(&groups, &text, &path, &fields_of, &groups_of);
     Ok(quote! {
         impl ::enshwick::config::Config for #name {
             fn template() -> ::std::string::String {
-                let #defaults = <Self as ::core::default::Default>::default();
                 let mut #text = ::std::string::String::from(#header);
                 if !#text.is_empty() {
                     #text.push('\n');
                 }
+                #text.push_str(&<Self as #config>::__template_body(""));
+                #text
+            }
+
+            fn __template_body(#path: &str) -> ::std::string::String {
+                let #defaults = <Self as ::core::default::Default>::default();
+                let mut #text = ::std::string::String::new();
                 #(#entries)*
+                #(#group_tables)*
+                let _ = (&#defaults, #path);
                 #text
             }
 
             fn schema() -> ::enshwick::config::Schema {
                 let #defaults = <Self as ::core::default::Default>::default();
-                ::enshwick::config::Schema::new(
-                    #header_text,
-                    #title,
-                    ::std::vec![#(#described),*],
-                )
+                let mut #fields_of: ::std::vec::Vec<::enshwick::config::Field> =
+                    ::std::vec![#(#described),*];
+                let mut #groups_of: ::std::vec::Vec<::enshwick::config::Group> =
+                    ::std::vec::Vec::new();
+                #(#group_schemas)*
+                let _ = &#defaults;
+                ::enshwick::config::Schema::new(#header_text, #title, #fields_of)
+                    .with_groups(#groups_of)
             }
 
             fn validate(
@@ -354,7 +369,9 @@ fn expand_config(input: &DeriveInput) -> syn::Result<TokenStream> {
             ) -> ::core::result::Result<(), ::enshwick::config::ConfigError> {
                 let #schema = <Self as ::enshwick::config::Config>::schema();
                 #(#checks)*
+                #(#group_checks)*
                 #own_check
+                let _ = &#schema;
                 ::core::result::Result::Ok(())
             }
 
@@ -364,14 +381,127 @@ fn expand_config(input: &DeriveInput) -> syn::Result<TokenStream> {
     .into())
 }
 
-/// `values` and `merge_values` over the fields of each stage that has any; a
-/// `startup, sync` field counts at both.
-fn stage_methods(staged: &[(Ident, bool, &syn::Field)]) -> impl quote::ToTokens {
-    let (table, value, stage, values) = (
+/// The template's note above a field at `stage`, `synced` for
+/// `startup, sync`.
+fn template_note(stage: &Ident, synced: bool) -> &'static str {
+    if synced {
+        SYNCED_NOTE
+    } else if stage == "Startup" {
+        "# Takes effect when the world loads.\n"
+    } else if stage == "Restart" {
+        "# Takes effect when the game starts again.\n"
+    } else {
+        ""
+    }
+}
+
+/// The schema's `Field` for a plain field, its default read from the
+/// derive's local `defaults`.
+fn described_field(
+    key: &str,
+    stage: &Ident,
+    ident: &Ident,
+    config: FieldConfig,
+    field: &syn::Field,
+    defaults: &Ident,
+) -> proc_macro2::TokenStream {
+    let bound = |e: &Option<Expr>| {
+        e.as_ref().map_or_else(
+            || quote!(::core::option::Option::None),
+            |e| quote!(::core::option::Option::Some((#e) as f64)),
+        )
+    };
+    let (min, max) = (bound(&config.min), bound(&config.max));
+    let choices = config.choices.map(|c| quote!(.with_choices(&#c)));
+    let plain = doc_text(&field.attrs);
+    let label = config.text.map(|t| t.value()).unwrap_or_default();
+    let secret = config.secret;
+    let synced = config.synced;
+    quote! {
+        ::enshwick::config::Field::new(
+            #key,
+            ::enshwick::config::Stage::#stage,
+            &#defaults.#ident,
+        )
+        .with_range(#min, #max)
+        #choices
+        .with_doc(#plain, #label)
+        .with_secret(#secret)
+        .with_synced(#synced)
+    }
+}
+
+/// What `#[derive(Config)]` writes for its `group` fields.
+struct GroupTokens {
+    /// Each group's table in the template.
+    tables: Vec<proc_macro2::TokenStream>,
+    /// Each group's fields and groups in the schema.
+    schemas: Vec<proc_macro2::TokenStream>,
+    /// Each group's own check.
+    checks: Vec<proc_macro2::TokenStream>,
+}
+
+/// The template, schema and check parts of the `group` fields `groups`,
+/// over the derive's locals `text`, `path`, `fields_of` and `groups_of`.
+fn group_tokens(
+    groups: &[(&Ident, String, &syn::Field)],
+    text: &Ident,
+    path: &Ident,
+    fields_of: &Ident,
+    groups_of: &Ident,
+) -> GroupTokens {
+    let config = quote!(::enshwick::config::Config);
+    let tables = groups
+        .iter()
+        .map(|(_, key, field)| {
+            let ty = &field.ty;
+            let doc = comment(&field.attrs);
+            quote! {
+                #text.push_str(#doc);
+                #text.push_str(&::std::format!("[{}{}]\n", #path, #key));
+                #text.push_str(&<#ty as #config>::__template_body(
+                    &::std::format!("{}{}.", #path, #key),
+                ));
+            }
+        })
+        .collect();
+    let schemas = groups.iter().map(|(_, key, field)| {
+        let ty = &field.ty;
+        let doc = doc_text(&field.attrs);
+        quote! {
+            let inner = <#ty as #config>::schema();
+            let doc = if #doc.is_empty() { inner.doc.clone() } else { ::std::string::String::from(#doc) };
+            #groups_of.push(::enshwick::config::Group::new(#key, &doc));
+            #groups_of.extend(inner.groups.into_iter().map(|g| g.__in_group(#key)));
+            #fields_of.extend(inner.fields.into_iter().map(|f| f.__in_group(#key)));
+        }
+    }).collect();
+    let checks = groups
+        .iter()
+        .map(|(ident, _, field)| {
+            let ty = &field.ty;
+            quote!(<#ty as #config>::validate(&self.#ident)?;)
+        })
+        .collect();
+    GroupTokens {
+        tables,
+        schemas,
+        checks,
+    }
+}
+
+/// `values` and `merge_values` over the fields of each stage that has any,
+/// and over every group's own; a `startup, sync` field counts at both.
+fn stage_methods(
+    staged: &[(Ident, bool, &syn::Field)],
+    groups: &[(&Ident, String, &syn::Field)],
+) -> impl quote::ToTokens {
+    let (table, value, stage, values, any) = (
         local("table"),
         local("value"),
         local("stage"),
         local("values"),
+        local("any"),
     );
     let mut value_arms = Vec::new();
     let mut merge_arms = Vec::new();
@@ -394,33 +524,52 @@ fn stage_methods(staged: &[(Ident, bool, &syn::Field)]) -> impl quote::ToTokens 
             .collect();
         value_arms.push(quote! {
             ::enshwick::config::Stage::#variant => {
-                let mut #table = ::enshwick::config::__Values::default();
+                #any = true;
                 #(#table.put(#keys, &self.#idents);)*
-                ::core::option::Option::Some(#table.finish())
             }
         });
         merge_arms.push(quote! {
             ::enshwick::config::Stage::#variant => {
-                let #table = ::enshwick::config::__Values::parse(#values)?;
                 #(let #locals = #table.take::<#types>(#keys)?;)*
                 #(
                     if let ::core::option::Option::Some(#value) = #locals {
                         self.#idents = #value;
                     }
                 )*
-                ::core::result::Result::Ok(())
             }
         });
     }
+    let (group_values, group_merges) = group_stage_tokens(groups, &table, &value, &stage, &any);
+    let reads = !value_arms.is_empty() || !groups.is_empty();
+    let merge_body = if reads {
+        quote! {
+            let #table = ::enshwick::config::__Values::parse(#values)?;
+            match #stage {
+                #(#merge_arms)*
+                _ => {}
+            }
+            #(#group_merges)*
+            ::core::result::Result::Ok(())
+        }
+    } else {
+        quote! {
+            let _ = (#values, #stage);
+            ::core::result::Result::Ok(())
+        }
+    };
     quote! {
         fn values(
             &self,
             #stage: ::enshwick::config::Stage,
         ) -> ::core::option::Option<::std::string::String> {
+            let mut #table = ::enshwick::config::__Values::default();
+            let mut #any = false;
             match #stage {
                 #(#value_arms)*
-                _ => ::core::option::Option::None,
+                _ => {}
             }
+            #(#group_values)*
+            #any.then(|| #table.finish())
         }
 
         fn merge_values(
@@ -428,13 +577,43 @@ fn stage_methods(staged: &[(Ident, bool, &syn::Field)]) -> impl quote::ToTokens 
             #stage: ::enshwick::config::Stage,
             #values: &str,
         ) -> ::core::result::Result<(), ::enshwick::config::ConfigError> {
-            let _ = #values;
-            match #stage {
-                #(#merge_arms)*
-                _ => ::core::result::Result::Ok(()),
-            }
+            #merge_body
         }
     }
+}
+
+/// The parts of `values` and `merge_values` for the `group` fields
+/// `groups`, over the derive's locals.
+fn group_stage_tokens(
+    groups: &[(&Ident, String, &syn::Field)],
+    table: &Ident,
+    value: &Ident,
+    stage: &Ident,
+    any: &Ident,
+) -> (Vec<proc_macro2::TokenStream>, Vec<proc_macro2::TokenStream>) {
+    let config = quote!(::enshwick::config::Config);
+    let values = groups.iter().map(|(ident, key, field)| {
+        let ty = &field.ty;
+        quote! {
+            if let ::core::option::Option::Some(#value) = <#ty as #config>::values(&self.#ident, #stage) {
+                if #table.put_group(#key, &#value).is_ok() {
+                    #any = true;
+                }
+            }
+        }
+    }).collect();
+    let merges = groups
+        .iter()
+        .map(|(ident, key, field)| {
+            let ty = &field.ty;
+            quote! {
+                if let ::core::option::Option::Some(#value) = #table.group(#key) {
+                    <#ty as #config>::merge_values(&mut self.#ident, #stage, &#value)?;
+                }
+            }
+        })
+        .collect();
+    (values, merges)
 }
 
 /// Declares a hook from its body: the function stays, and a static `Hook`

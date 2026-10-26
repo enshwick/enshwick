@@ -29,7 +29,11 @@ use serde::{Deserialize, Serialize};
 ///   before the console or the Mods screen writes a value;
 /// - `text = "key"`, the text key of the field's translated label in the
 ///   mod's texts, `config.<field>` by default; its description is the key
-///   with `.doc` appended.
+///   with `.doc` appended;
+/// - `#[config(group)]` on a field whose type is a `Config` of its own: its
+///   settings are a table of the file, `[<field>]`, with dotted keys such as
+///   `<field>.<key>`, and the Mods screen shows them together. A group's
+///   fields take their own stages, ranges and texts.
 ///
 /// `#[config(validate = path)]` on the struct adds a check of its own, and
 /// `#[config(text = "key")]` names the text key of the whole set, `config`
@@ -115,6 +119,15 @@ use serde::{Deserialize, Serialize};
 pub trait Config: serde::de::DeserializeOwned + Default {
     /// The commented file written when the mod's settings are missing.
     fn template() -> String;
+
+    /// The template's entries without its heading, its tables under
+    /// `path`, for a group of another `Config`.
+    #[doc(hidden)]
+    #[must_use]
+    fn __template_body(path: &str) -> String {
+        let _ = path;
+        Self::template()
+    }
 
     /// What every field is, for the loader, the console and a settings menu.
     ///
@@ -591,6 +604,19 @@ impl Field {
         }
     }
 
+    /// The field inside the group `group`: its key and its default text key
+    /// prefixed with the group's.
+    #[doc(hidden)]
+    #[must_use]
+    pub fn __in_group(mut self, group: &str) -> Self {
+        let inner = format!("config.{}", self.key);
+        self.key = format!("{group}.{}", self.key);
+        if self.text == inner {
+            self.text = format!("config.{}", self.key);
+        }
+        self
+    }
+
     /// The field accepting numbers from `min` to `max`, each `None` for no
     /// bound.
     ///
@@ -802,9 +828,85 @@ pub struct Schema {
     pub doc: String,
     /// The key of the set's translated title in the mod's texts.
     pub text: String,
-    /// Every field, in file order.
+    /// Every field, in file order; a field of a group has a dotted key,
+    /// `<group>.<key>`.
     #[serde(default, rename = "field")]
     pub fields: Vec<Field>,
+    /// The groups, each a table in the settings file, in file order.
+    #[serde(default, rename = "group", skip_serializing_if = "Vec::is_empty")]
+    pub groups: Vec<Group>,
+}
+
+/// A group of settings: a table of the settings file, such as `[comfort]`,
+/// which the Mods screen shows together.
+///
+/// # Examples
+///
+/// See [`Config`].
+#[non_exhaustive]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Group {
+    /// The table's key; a dotted path for a group inside a group.
+    pub key: String,
+    /// Its documentation, in English: the field's doc comment.
+    pub doc: String,
+    /// The key of its translated title in the mod's texts.
+    pub text: String,
+}
+
+impl Group {
+    /// The group `key`, documented by `doc`, translated under
+    /// `config.<key>`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let group = enshwick::config::Group::new("comfort", "Comfort rules.");
+    /// assert_eq!(group.text, "config.comfort");
+    /// ```
+    #[must_use]
+    pub fn new(key: &str, doc: &str) -> Self {
+        Self {
+            key: key.to_owned(),
+            doc: doc.trim().to_owned(),
+            text: format!("config.{key}"),
+        }
+    }
+
+    /// The group inside the group `outer`.
+    #[doc(hidden)]
+    #[must_use]
+    pub fn __in_group(mut self, outer: &str) -> Self {
+        let inner = format!("config.{}", self.key);
+        self.key = format!("{outer}.{}", self.key);
+        if self.text == inner {
+            self.text = format!("config.{}", self.key);
+        }
+        self
+    }
+}
+
+/// The value at `key` of `settings`, a dotted key reaching into tables:
+/// `comfort.multiplier` is `multiplier` in `[comfort]`.
+///
+/// # Examples
+///
+/// ```
+/// let settings: toml::Table = toml::from_str("limit = 4\n[comfort]\nmultiplier = 2.0\n")?;
+/// let at = |key| enshwick::config::value_at(&settings, key).cloned();
+/// assert_eq!(at("comfort.multiplier"), Some(toml::Value::Float(2.0)));
+/// assert_eq!(at("limit"), Some(toml::Value::Integer(4)));
+/// assert_eq!(at("comfort.missing"), None);
+/// # Ok::<(), toml::de::Error>(())
+/// ```
+#[must_use]
+pub fn value_at<'a>(settings: &'a toml::Table, key: &str) -> Option<&'a toml::Value> {
+    let mut parts = key.split('.');
+    let mut value = settings.get(parts.next()?)?;
+    for part in parts {
+        value = value.as_table()?.get(part)?;
+    }
+    Some(value)
 }
 
 impl Schema {
@@ -819,7 +921,44 @@ impl Schema {
             doc: doc.trim().to_owned(),
             text: text.to_owned(),
             fields,
+            groups: Vec::new(),
         }
+    }
+
+    /// The schema with `groups`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::config::{Field, Group, Schema, Stage};
+    ///
+    /// let multiplier = Field::new("comfort.multiplier", Stage::Runtime, &1.0);
+    /// let schema = Schema::new("", "config", vec![multiplier])
+    ///     .with_groups(vec![Group::new("comfort", "Comfort rules.")]);
+    /// assert_eq!(schema.groups[0].key, "comfort");
+    /// ```
+    #[must_use]
+    pub fn with_groups(mut self, groups: Vec<Group>) -> Self {
+        self.groups = groups;
+        self
+    }
+
+    /// The group a field with key `key` belongs to, if any.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::config::{Group, Schema};
+    ///
+    /// let schema = Schema::new("", "config", vec![])
+    ///     .with_groups(vec![Group::new("comfort", "")]);
+    /// assert_eq!(schema.group_of("comfort.multiplier").map(|g| g.key.as_str()), Some("comfort"));
+    /// assert!(schema.group_of("limit").is_none());
+    /// ```
+    #[must_use]
+    pub fn group_of(&self, key: &str) -> Option<&Group> {
+        let (group, _) = key.rsplit_once('.')?;
+        self.groups.iter().find(|g| g.key == group)
     }
 
     /// The field with key `key`.
@@ -875,9 +1014,7 @@ impl Schema {
     /// ```
     pub fn check(&self, settings: &toml::Table) -> Result<(), ConfigError> {
         self.fields.iter().try_for_each(|field| {
-            settings
-                .get(&field.key)
-                .map_or(Ok(()), |value| field.check(value))
+            value_at(settings, &field.key).map_or(Ok(()), |value| field.check(value))
         })
     }
 }
@@ -950,6 +1087,28 @@ impl __Values {
         if let Ok(value) = toml::Value::try_from(value) {
             self.0.insert(key.to_owned(), value);
         }
+    }
+
+    /// Adds the values `text` of the group `key`, an inline table as
+    /// [`finish`](Self::finish) writes it.
+    ///
+    /// # Errors
+    ///
+    /// [`ConfigError::Parse`] when `text` is not one.
+    pub fn put_group(&mut self, key: &str, text: &str) -> Result<(), ConfigError> {
+        let group = Self::parse(text)?;
+        self.0.insert(key.to_owned(), toml::Value::Table(group.0));
+        Ok(())
+    }
+
+    /// The values of the group `key` as an inline table, `None` when it is
+    /// absent.
+    #[must_use]
+    pub fn group(&self, key: &str) -> Option<String> {
+        self.0
+            .get(key)
+            .and_then(toml::Value::as_table)
+            .map(|table| toml::Value::Table(table.clone()).to_string())
     }
 
     /// The values as an inline table, keys sorted.

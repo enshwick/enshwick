@@ -319,7 +319,7 @@ pub fn without_secrets(schema: &Schema, text: &str) -> String {
         return String::new();
     };
     for field in schema.fields.iter().filter(|f| f.secret) {
-        doc.remove(&field.key);
+        crate::worlds::remove_at(doc.as_table_mut(), &field.key);
     }
     doc.to_string()
 }
