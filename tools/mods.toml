@@ -16,10 +16,6 @@ package = "enshwick-build-camera"
 repository = "enshwick/mod-build-camera"
 
 [[mod]]
-package = "enshwick-building-materials"
-repository = "enshwick/mod-building-materials"
-
-[[mod]]
 package = "enshwick-flame-altar-count"
 repository = "enshwick/mod-flame-altar-count"
 
@@ -28,8 +24,8 @@ package = "enshwick-flame-altar-zones"
 repository = "enshwick/mod-flame-altar-zones"
 
 [[mod]]
-package = "enshwick-furniture-comfort"
-repository = "enshwick/mod-furniture-comfort"
+package = "enshwick-game-rates"
+repository = "enshwick/mod-game-rates"
 
 [[mod]]
 package = "enshwick-optimizer"
