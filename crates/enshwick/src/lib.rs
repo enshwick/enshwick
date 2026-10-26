@@ -292,8 +292,8 @@ pub mod __private {
 
     /// Each experience source with its catalogue id, for the loader's
     /// experience rates.
-    pub const EXPERIENCE_SOURCES: &[(crate::game_events::ExperienceSource, &str)] =
-        &crate::game_events::ExperienceSource::IDS;
+    pub const EXPERIENCE_SOURCES: &[(crate::game_events::ExperienceSourceType, &str)] =
+        &crate::game_events::ExperienceSourceType::IDS;
 
     #[must_use]
     pub const fn flags(join: &[bool], reload: &[bool]) -> ManifestFlags {
