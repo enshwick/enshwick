@@ -28,21 +28,23 @@ a Cargo subcommand that starts a mod, installs it and reads a built one.
 ## A new mod
 
 ```bash
-cargo enshwick new my-mod --side server
+cargo enshwick new you.my-mod --side server
 ```
 
-`new <id>` creates the crate in `<dir>/<id>`; `--dir` sets the folder (the
+`new <id>` creates the crate in `<dir>/<name>`; `--dir` sets the folder (the
 current one by default) and `--side` is `server` (the default), `client` or
-`both`. The id is 1 to 64 characters of `[a-z0-9-]`, starting with a letter, since
-it names the crate too. The crate holds:
+`both`. The id is `<author>.<name>`: your name or handle, a dot, and the
+mod's name, each of `[a-z0-9-]`, at most 64 characters in all. The author part
+keeps two mods of one name apart. The name starts with a letter, since it names
+the crate too. The crate holds:
 
-- `Cargo.toml`: a `cdylib` named after the id, `enshwick` from this
+- `Cargo.toml`: a `cdylib` named after the id's name, `enshwick` from this
   repository's git tag for the API version the tool was built with (from its
   `main` branch while the tool is a development build, before 1.0.0), `serde`,
   and a release profile with `panic = "unwind"`, which every hook needs to
   catch panics;
 - `src/lib.rs`: a settings type with one field, `enabled`, a mod type named
-  after the id (`my-mod` becomes `MyMod`), its manifest and
+  after the id's name (`my-mod` becomes `MyMod`), its manifest and
   `declare_mod!`;
 - `README.md` and `.gitignore`.
 
@@ -116,7 +118,7 @@ struct AltarCount;
 
 impl Mod for AltarCount {
     fn manifest() -> &'static enshwick::abi::Manifest {
-        enshwick::manifest!(id: "my-altar-count", side: BOTH, join: true)
+        enshwick::manifest!(id: "you.my-altar-count", side: BOTH, join: true)
     }
 
     fn init(load: &mut Load<'_>) -> Result<Self, Off> {
@@ -135,7 +137,7 @@ enshwick::declare_mod!(AltarCount);
 What each piece does:
 
 - `Settings` derives [`Config`](settings.md): the file
-  `mod-configs/my-altar-count.toml` is written from its doc comments and
+  `mod-configs/you.my-altar-count.toml` is written from its doc comments and
   `Default` on first start, and `load.config()` reads it.
 - `manifest!` names the mod and where it runs. `side: BOTH` and
   `join: true` because the client's interface asks the same limit, so
@@ -188,7 +190,7 @@ fn max_altars(next: Next<unsafe extern "system" fn(u64, u32) -> u8>, balancing: 
 
 impl Mod for AltarCount {
     fn manifest() -> &'static enshwick::abi::Manifest {
-        enshwick::manifest!(id: "my-altar-count", side: BOTH, join: true)
+        enshwick::manifest!(id: "you.my-altar-count", side: BOTH, join: true)
     }
 
     fn init(load: &mut Load<'_>) -> Result<Self, Off> {

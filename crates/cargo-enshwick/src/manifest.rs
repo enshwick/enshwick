@@ -147,14 +147,14 @@ mod tests {
 
     #[test]
     fn a_manifest_of_an_older_minor_is_copied_up_to_its_size() {
-        let mut old = *enshwick::manifest!(id: "old-mod", side: SERVER, version: "1.0.0");
+        let mut old = *enshwick::manifest!(id: "you.old-mod", side: SERVER, version: "1.0.0");
         old.header.size = u32::try_from(core::mem::offset_of!(Manifest, builds)).unwrap();
         // SAFETY: a valid manifest, as long as its header says.
         let copied = unsafe { copy(&raw const old) }.unwrap();
         assert!(copied.name.is_empty());
         assert_eq!(
             describe(&copied),
-            "id: old-mod
+            "id: you.old-mod
 version: 1.0.0
 side: server
 join check: no"
@@ -169,7 +169,7 @@ join check: no"
     #[test]
     fn a_manifest_reads_as_lines() {
         let manifest = enshwick::manifest!(
-            id: "survivors-per-altar",
+            id: "you.survivors-per-altar",
             side: BOTH,
             version: "0.2.0",
             name: "Survivors per Altar",
@@ -187,7 +187,7 @@ join check: no"
         );
         assert_eq!(
             describe(manifest),
-            "id: survivors-per-altar\nversion: 0.2.0\nname: Survivors per Altar\n\
+            "id: you.survivors-per-altar\nversion: 0.2.0\nname: Survivors per Altar\n\
              description: More survivors per altar\nauthors: themaiby, a friend\n\
              license: MIT\nhomepage: https://github.com/enshwick/enshwick\n\
              side: both\njoin check: yes\n\

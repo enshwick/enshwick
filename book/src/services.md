@@ -232,7 +232,7 @@ the user's manifest:
 
 ```rust
 let manifest = enshwick::manifest!(
-    id: "market-stalls",
+    id: "you.market-stalls",
     side: SERVER,
     requires: ["trading-post" => ">=0.1, <1.0"],
 );

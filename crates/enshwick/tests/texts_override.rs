@@ -10,7 +10,7 @@ mod tests {
 
     impl Mod for Texty {
         fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "texty", side: SERVER)
+            enshwick::manifest!(id: "you.texty", side: SERVER)
         }
 
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {

@@ -61,8 +61,14 @@ fn full(id: &str) -> Option<String> {
             && p.bytes()
                 .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-' || b == b'_')
     };
-    let (namespace, name) = id.split_once(':').unwrap_or(("fake", id));
-    (part(namespace) && part(name)).then(|| format!("{namespace}:{name}"))
+    let (namespace, name) = id.split_once(':').unwrap_or((super::MOD_ID, id));
+    (crate::abi::is_valid_former_id(namespace) && part(name)).then(|| format!("{namespace}:{name}"))
+}
+
+/// Whether the full id `id` is in the fake mod's namespace.
+fn is_own(id: &str) -> bool {
+    id.split_once(':')
+        .is_some_and(|(namespace, _)| namespace == super::MOD_ID)
 }
 
 fn index_of(stats: &mut FakeStats, id: &str) -> u32 {
@@ -112,7 +118,7 @@ pub(crate) extern "system" fn stat_open(
         let index = index_of(stats, &id);
         if let Some(def) = parsed {
             let kind = &mut stats.kinds[index as usize];
-            if kind.def.is_some() || !id.starts_with("fake:") {
+            if kind.def.is_some() || !is_own(&id) {
                 return Err(Status::REFUSED);
             }
             let text = def.text.clone().into_boxed_str();
@@ -470,7 +476,7 @@ pub(crate) extern "system" fn affix_open(
         let Some(parsed) = (unsafe { AffixDef::from_data(data, stat) }) else {
             return Err(Status::BAD_ARGS);
         };
-        if !id.starts_with("fake:") || stats.affixes.iter().any(|(known, _)| **known == *id) {
+        if !is_own(&id) || stats.affixes.iter().any(|(known, _)| **known == *id) {
             return Err(Status::REFUSED);
         }
         stats.affixes.push((id.clone().into_boxed_str(), parsed));

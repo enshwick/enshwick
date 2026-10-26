@@ -87,7 +87,7 @@ mod tests {
 
     impl enshwick::Mod for Hooks {
         fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "hooks", side: SERVER)
+            enshwick::manifest!(id: "you.hooks", side: SERVER)
         }
 
         fn init(load: &mut enshwick::Load<'_>) -> Result<Self, enshwick::Off> {
