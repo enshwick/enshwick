@@ -10,7 +10,7 @@ use crate::abi::InventoryResult;
 
 impl FakeHost {
     /// Plays a game build without inventory transactions: `inventory_open`
-    /// answers [`Status::MISSING`].
+    /// answers [`Status::MISSING`](crate::abi::Status::MISSING).
     ///
     /// # Examples
     ///
