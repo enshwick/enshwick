@@ -8,6 +8,10 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- `Rate::RecipeOutput(kind)` multiplies what the recipes of each
+  `RecipeKind` make, after every mod's own recipe patch;
+  `RecipeEdit::scale_output_by` scales by a fraction and
+  `RecipeKind::ALL` lists the kinds (#501).
 - `progress::Skill` and `Load::skill_node` give the node of a skill the
   platform names on the running game build (#494).
 - `game_events::EquipmentSlot`, the slot `EquipmentChanged` carries, and
