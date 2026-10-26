@@ -49,6 +49,7 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 | `Comfort` | the comfort each piece of furniture gives a base, after every mod's comfort filter, rounded |
 | `SkillPoints` | the skill points a character gains per level, rounded; points from knowledge stay |
 | `Loot` | how many items each stack of random loot holds: chests, corpses, animals and random pickups; rounded, at least 1 and at most the item's stack size |
+| `RecipeOutput(kind)` | how many items the recipes of each `RecipeKind` make, vanilla and mod recipes alike, after every mod's own recipe patch; rounded, at least 1 |
 
 The experience, workshop and resource drop rates multiply the server's own
 setting of the same name. Where `ResourceDrops` and `Loot` reach the same
@@ -71,8 +72,8 @@ of the product at once.
 
 ## Rates clients count
 
-Clients count `WorkshopSpeed` and `SkillPoints` too, for the time and the
-points their screens show, and the server checks every skill unlock against
+Clients count `WorkshopSpeed`, `SkillPoints` and `RecipeOutput` too, for
+the time, the points and the counts their screens show, and the server checks every skill unlock against
 its own count. Lowering `SkillPoints` mid-game leaves a character that spent
 more than its new total unable to unlock more skills until it resets its
 tree. Only a
@@ -80,6 +81,14 @@ mod with `join: true` may declare it, and `Rate::seen_by_clients` says which
 rates need it. Set such a rate from a `sync` setting: every player who joins
 then runs the mod with the server's factor, and a player without the mod
 does not join ([the join check](concepts/join-check.md)).
+
+## Recipe output
+
+The loader applies the `RecipeOutput` rates in its own patch of the recipe
+registry, after every mod's `modify_recipes` patch, so a mod that sets a
+recipe's count sees it multiplied. A dedicated server loads its items after
+it first builds the registry, so the loader builds the registry again when a
+world loads, and again whenever a mod changes a recipe output factor.
 
 ## Errors
 

@@ -304,6 +304,41 @@ mod tests {
     }
 
     #[test]
+    fn the_list_of_kinds_holds_every_kind_once() {
+        let mut listed = RecipeKind::ALL.to_vec();
+        let mut every = every_kind();
+        let code = |kind: &RecipeKind| crate::abi::RecipeKind::from(*kind).0;
+        listed.sort_by_key(code);
+        every.sort_by_key(code);
+        assert_eq!(listed, every);
+    }
+
+    #[test]
+    fn a_fractional_factor_rounds_each_output_and_keeps_one_at_least() {
+        let mut blob = Blob::new(&[0u8; 16]);
+        let recipe = blob.append(&[0; 0xa8], 8);
+        let mut output = vec![0u8; 24 * 2];
+        output[0x14..0x18].copy_from_slice(&10u32.to_le_bytes());
+        output[24 + 0x14..24 + 0x18].copy_from_slice(&1u32.to_le_bytes());
+        let output_at = blob.append(&output, 8);
+        assert!(blob.set_array(recipe + 0x30, output_at, 2));
+        assert!(blob.set_array(8, recipe, 1));
+        let counts = |factor: f32| {
+            let (built, _) =
+                modify_recipes_in(&LAYOUT, blob.bytes(), &|r| r.scale_output_by(factor)).unwrap();
+            let built = Blob::new(&built);
+            let (outputs, _) = built.array(recipe + 0x30).unwrap();
+            [
+                u32_at(built.bytes(), outputs + 0x14),
+                u32_at(built.bytes(), outputs + 24 + 0x14),
+            ]
+        };
+        assert_eq!(counts(1.5), [15, 2]);
+        assert_eq!(counts(0.0), [1, 1]);
+        assert_eq!(counts(1.0), [10, 1]);
+    }
+
+    #[test]
     fn every_kind_crosses_the_abi_and_an_unknown_code_reads_as_other() {
         let kinds = every_kind();
         for &kind in &kinds {
