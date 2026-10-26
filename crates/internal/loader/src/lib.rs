@@ -20,6 +20,10 @@ mod bases;
 mod buffs;
 pub mod builds;
 pub mod carry;
+#[cfg_attr(
+    all(not(windows), not(test)),
+    expect(dead_code, reason = "only the running game answers engine facts")
+)]
 mod catalogue;
 pub mod chains;
 #[cfg(windows)]
