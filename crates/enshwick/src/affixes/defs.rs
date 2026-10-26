@@ -67,6 +67,9 @@ impl ItemRarity {
 /// assert!(gear.contains(ItemCategoryMask::WEAPONS));
 /// assert!(gear.holds(2));
 /// assert!(!gear.holds(3));
+///
+/// const HELD: ItemCategoryMask = ItemCategoryMask::TOOLS.union(ItemCategoryMask::WEAPONS);
+/// assert!(HELD.contains(ItemCategoryMask::TOOLS | ItemCategoryMask::WEAPONS));
 /// ```
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub struct ItemCategoryMask(pub u32);
@@ -102,13 +105,24 @@ impl ItemCategoryMask {
     pub const fn holds(self, category: u8) -> bool {
         category < 32 && self.0 & (1 << category) != 0
     }
+
+    /// Every category of `self` and of `other`, as `|` gives, in a `const`
+    /// too.
+    ///
+    /// # Examples
+    ///
+    /// See [`ItemCategoryMask`].
+    #[must_use]
+    pub const fn union(self, other: Self) -> Self {
+        Self(self.0 | other.0)
+    }
 }
 
 impl core::ops::BitOr for ItemCategoryMask {
     type Output = Self;
 
     fn bitor(self, other: Self) -> Self {
-        Self(self.0 | other.0)
+        self.union(other)
     }
 }
 

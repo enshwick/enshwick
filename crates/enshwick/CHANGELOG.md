@@ -16,6 +16,9 @@ Each entry names the pull request that made the change.
   own names (#523).
 - `altars::base_limit` names the most altar zones and bases the game groups
   now, and the zones its own grouping takes (#529).
+- `ContainerKinds`, `ItemCategoryMask` and the event masks have a
+  `const fn union`, so a combined set can be a `const`; `|` gives the same
+  (#539).
 
 ### Changed
 
