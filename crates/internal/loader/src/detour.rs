@@ -327,7 +327,9 @@ fn write_all(prepared: &[&Pending], code: &[Bytes<'_>]) -> bool {
         let busy = !patched.is_empty()
             && threads
                 .iter()
-                // SAFETY: `suspend` above holds every thread `iter` yields.
+                // SAFETY: `suspend` just suspended every other thread of the
+                // process, `iter` yields each of them, and they stay suspended
+                // until `resume`.
                 .any(|thread| unsafe { in_flight(thread, &patched, &returns) });
         if !busy || tries == SETTLE_TRIES {
             break busy;
@@ -338,9 +340,9 @@ fn write_all(prepared: &[&Pending], code: &[Bytes<'_>]) -> bool {
     };
     let mut writable = true;
     for &(address, bytes) in &writes {
-        // SAFETY: the target's code pages, with every other thread suspended
-        // and kept off the patched bytes above; the old protection is
-        // restored below before any thread resumes.
+        // SAFETY: the target's code pages, with every other thread of the
+        // process suspended; the old protection is restored below before any
+        // of them resumes.
         let old = unsafe { pages::protect(address, bytes.len(), PAGE_EXECUTE_READWRITE) };
         writable &= old.is_some();
         protections.push((address, bytes.len(), old));
@@ -353,7 +355,8 @@ fn write_all(prepared: &[&Pending], code: &[Bytes<'_>]) -> bool {
             unsafe { (address as *mut u8).copy_from_nonoverlapping(bytes.as_ptr(), bytes.len()) };
         }
         for thread in threads.iter() {
-            // SAFETY: `suspend` above holds every thread `iter` yields, and
+            // SAFETY: every other thread of the process stays suspended from
+            // `suspend` until `resume`, `iter` yields each of them, and
             // `moved` pairs each moved instruction with its trampoline copy.
             unsafe { relocate(thread, &moved) };
         }
@@ -476,13 +479,14 @@ impl Stack {
     ///
     /// # Safety
     ///
-    /// - The thread that owns the stack stays suspended for the call, so its
-    ///   region stays committed and nothing writes it.
+    /// - Every thread of the process but the caller stays suspended for the
+    ///   call, as `Threads::suspend` leaves them, so the stack's region stays
+    ///   committed and no other thread writes it.
     unsafe fn any(self, mut test: impl FnMut(usize) -> bool) -> bool {
         (0..self.words).any(|word| {
             // SAFETY: `word` is below `words`, so its eight bytes lie in the
             // committed read-write region `at` found, which stays committed
-            // and unwritten while the caller keeps its thread suspended.
+            // and unwritten while every other thread stays suspended.
             test(unsafe { crate::memory::read(self.address(word), 0) })
         })
     }
@@ -491,20 +495,21 @@ impl Stack {
     ///
     /// # Safety
     ///
-    /// - The thread that owns the stack stays suspended for the call, so its
-    ///   region stays committed and nothing else reads or writes it.
+    /// - Every thread of the process but the caller stays suspended for the
+    ///   call, as `Threads::suspend` leaves them, so the stack's region stays
+    ///   committed and no other thread reads or writes it.
     /// - Every value `new` gives is one the thread may find in that word.
     unsafe fn rewrite(self, mut new: impl FnMut(usize) -> Option<usize>) {
         for word in 0..self.words {
             let at = self.address(word);
             // SAFETY: `word` is below `words`, so its eight bytes lie in the
-            // committed read-write region `at` found, unwritten while the
-            // caller keeps its thread suspended.
+            // committed read-write region `at` found, unwritten while every
+            // other thread stays suspended.
             let old: usize = unsafe { crate::memory::read(at, 0) };
             if let Some(value) = new(old) {
                 // SAFETY: the same eight bytes, writable and touched by no
-                // other thread while the owner stays suspended; the caller
-                // vouches for `value`.
+                // other thread while every other thread stays suspended; the
+                // caller vouches for `value`.
                 unsafe { crate::memory::write(at, 0, value) };
             }
         }
@@ -516,7 +521,8 @@ impl Stack {
 ///
 /// # Safety
 ///
-/// - `thread` is suspended for the call.
+/// - Every thread of the process but the caller, `thread` among them, stays
+///   suspended for the call, as `Threads::suspend` leaves them.
 unsafe fn in_flight(thread: HANDLE, patched: &[(usize, usize)], returns: &[usize]) -> bool {
     let Some(context) = control(thread) else {
         return false;
@@ -529,7 +535,8 @@ unsafe fn in_flight(thread: HANDLE, patched: &[(usize, usize)], returns: &[usize
         return false;
     };
     Stack::at(context.Rsp).is_some_and(|stack| {
-        // SAFETY: the caller keeps `thread`, the stack's owner, suspended.
+        // SAFETY: the caller keeps every other thread, the stack's owner
+        // among them, suspended for the call.
         unsafe {
             stack.any(|word| (low..=high).contains(&word) && returns.binary_search(&word).is_ok())
         }
@@ -541,7 +548,8 @@ unsafe fn in_flight(thread: HANDLE, patched: &[(usize, usize)], returns: &[usize
 ///
 /// # Safety
 ///
-/// - `thread` is suspended for the call.
+/// - Every thread of the process but the caller, `thread` among them, stays
+///   suspended for the call, as `Threads::suspend` leaves them.
 /// - Each moved address maps to the trampoline's copy of the same
 ///   instruction.
 unsafe fn relocate(thread: HANDLE, moved: &[(usize, usize)]) {
@@ -566,8 +574,9 @@ unsafe fn relocate(thread: HANDLE, moved: &[(usize, usize)]) {
         unsafe { SetThreadContext(thread, &raw const context) };
     }
     if let Some(stack) = Stack::at(context.Rsp) {
-        // SAFETY: the caller keeps `thread`, the stack's owner, suspended
-        // and vouches for the moved addresses. A word equal to a moved
+        // SAFETY: the caller keeps every other thread, the stack's owner
+        // among them, suspended for the call and vouches for the moved
+        // addresses. A word equal to a moved
         // address is a return address, or a stale copy of one: either way the
         // trampoline holds the same instruction.
         unsafe { stack.rewrite(find) };

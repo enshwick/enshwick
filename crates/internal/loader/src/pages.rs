@@ -165,6 +165,22 @@ mod tests {
         assert!(!region(MEM_COMMIT, PAGE_READWRITE | PAGE_GUARD).reads());
         assert!(!region(MEM_COMMIT, PAGE_NOACCESS).reads());
         assert!(!region(MEM_RESERVE, 0).reads());
+        assert!(!region(MEM_RESERVE, PAGE_READWRITE).reads());
+    }
+
+    #[test]
+    fn only_plain_committed_read_write_pages_count_as_a_stack() {
+        assert!(region(MEM_COMMIT, PAGE_READWRITE).is_read_write());
+        assert!(!region(MEM_COMMIT, PAGE_READWRITE | PAGE_GUARD).is_read_write());
+        assert!(!region(MEM_COMMIT, PAGE_EXECUTE_READWRITE).is_read_write());
+        assert!(!region(MEM_RESERVE, PAGE_READWRITE).is_read_write());
+    }
+
+    #[test]
+    fn only_unreserved_pages_are_free() {
+        assert!(region(MEM_FREE, 0).is_free());
+        assert!(!region(MEM_COMMIT, PAGE_READWRITE).is_free());
+        assert!(!region(MEM_RESERVE, 0).is_free());
     }
 
     #[test]
@@ -195,10 +211,10 @@ mod tests {
         // SAFETY: the page lies inside `page`, owned here, and nothing uses
         // it until its protection is restored below.
         let old = unsafe { protect(address, 1, PAGE_READONLY) };
-        assert_eq!(old, Some(PAGE_READWRITE));
         // SAFETY: the same page, owned here and unused while read-only, back
-        // to the protection it had.
+        // to read-write before any check can fail and free the box.
         let restored = unsafe { protect(address, 1, PAGE_READWRITE) };
+        assert_eq!(old, Some(PAGE_READWRITE));
         assert_eq!(restored, Some(PAGE_READONLY));
     }
 }
