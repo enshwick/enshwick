@@ -4,6 +4,62 @@ expression: shape
 ---
 {
   "$defs": {
+    "RecipeChangeEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "cost": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ValueEntry"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ingredients": {
+          "additionalProperties": {
+            "$ref": "#/$defs/ValueEntry"
+          },
+          "type": "object"
+        },
+        "output": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "output_count": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ValueEntry"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "recipes": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "time": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ValueEntry"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "type": "object"
+    },
     "RecipeEntry": {
       "additionalProperties": false,
       "properties": {
@@ -41,11 +97,44 @@ expression: shape
         "output"
       ],
       "type": "object"
+    },
+    "ScaleEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "times": {
+          "format": "double",
+          "type": "number"
+        }
+      },
+      "required": [
+        "times"
+      ],
+      "type": "object"
+    },
+    "ValueEntry": {
+      "anyOf": [
+        {
+          "format": "double",
+          "type": "number"
+        },
+        {
+          "$ref": "#/$defs/ScaleEntry"
+        }
+      ]
     }
   },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "properties": {
+    "change": {
+      "items": {
+        "$ref": "#/$defs/RecipeChangeEntry"
+      },
+      "type": [
+        "array",
+        "null"
+      ]
+    },
     "recipe": {
       "items": {
         "$ref": "#/$defs/RecipeEntry"

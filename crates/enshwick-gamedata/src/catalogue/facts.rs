@@ -503,6 +503,10 @@ pub const FACTS: &[(&str, Fact)] = &[
         offset("keen::RecipeInfo", "completionRequirementQuery"),
     ),
     (
+        "recipe.duration",
+        offset("keen::RecipeInfo", "craftingDuration"),
+    ),
+    (
         "recipe.required_props",
         offset("keen::RecipeInfo", "requiredProps"),
     ),

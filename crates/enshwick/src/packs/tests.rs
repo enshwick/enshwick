@@ -61,15 +61,15 @@ fn problems_name_their_file_line_and_column() {
 fn vanilla_content_is_named_by_its_debug_name() {
     let torch = Guid([1; 16]);
     let vanilla = crate::content::vanilla::tests::game(&[
-        (torch, "Torch"),
-        (Guid([5; 16]), "Forge"),
-        (Guid([7; 16]), "Prop"),
+        (torch, "Tool_Torch01"),
+        (Guid([5; 16]), "Prop_Production_T1_Forge"),
+        (Guid([7; 16]), "Prop_Decoration_T0_Storage_16"),
     ]);
-    let items = "[[item]]\nid = \"lantern\"\nlike = \"Torch\"\nname = \"lantern.name\"\n";
-    let workshops = "[[workshop]]\nid = \"forge\"\nlike = \"Forge\"\n\n\
+    let items = "[[item]]\nid = \"lantern\"\nlike = \"Tool_Torch01\"\nname = \"lantern.name\"\n";
+    let workshops = "[[workshop]]\nid = \"forge\"\nlike = \"Prop_Production_T1_Forge\"\n\n\
                      [[workshop]]\nid = \"bench\"\nlike = \"workbench\"\n";
-    let recipes = "[[recipe]]\nid = \"lantern.recipe\"\nlike = \"Torch\"\n\
-                   output = \"lantern\"\nworkshop = \"Forge\"\n";
+    let recipes = "[[recipe]]\nid = \"lantern.recipe\"\nlike = \"Tool_Torch01\"\n\
+                   output = \"lantern\"\nworkshop = \"Prop_Production_T1_Forge\"\n";
     let named = files(items)
         .with(WORKSHOPS_FILE, workshops)
         .with(RECIPES_FILE, recipes);
@@ -79,14 +79,14 @@ fn vanilla_content_is_named_by_its_debug_name() {
     assert_eq!(pack.workshops[1].like, stations::WORKBENCH);
     assert_eq!(pack.recipes[0].workshop, Some(Guid([10; 16])));
 
-    let wrong = files("[[item]]\nid = \"lantern\"\nlike = \"Torchh\"\n").with(
+    let wrong = files("[[item]]\nid = \"lantern\"\nlike = \"Tool_Torch1\"\n").with(
         WORKSHOPS_FILE,
-        "[[workshop]]\nid = \"forge\"\nlike = \"Prop\"\n",
+        "[[workshop]]\nid = \"forge\"\nlike = \"Prop_Decoration_T0_Storage_16\"\n",
     );
     let errors = Pack::parse_with("lights", &wrong, Some(&vanilla)).unwrap_err();
     let lines: Vec<String> = errors.list().iter().map(ToString::to_string).collect();
-    let unknown = "items.toml:1:1: no item \"Torchh\" in this pack, \
-                   and no vanilla item \"Torchh\"; near: Torch";
+    let unknown = "items.toml:1:1: no item \"Tool_Torch1\" in this pack, \
+                   and no vanilla item \"Tool_Torch1\"; near: Tool_Torch01";
     assert!(lines.iter().any(|l| l == unknown), "{lines:?}");
     assert!(
         lines
@@ -188,7 +188,7 @@ fn groups_differ_by_pack_and_are_never_a_mod_s() {
 fn vanilla_wood() -> (Vanilla, Guid) {
     let wood = Guid([1; 16]);
     (
-        crate::content::vanilla::tests::game(&[(wood, "Wood_Log")]),
+        crate::content::vanilla::tests::game(&[(wood, "Material_T1_Wood_Logs")]),
         wood,
     )
 }
@@ -196,7 +196,8 @@ fn vanilla_wood() -> (Vanilla, Guid) {
 #[test]
 fn an_item_change_sets_the_stack_size_of_every_item_it_names() {
     let (vanilla, wood) = vanilla_wood();
-    let items = format!("[[change]]\nitems = [\"Wood_Log\", \"{CHEST}\"]\nmax_stack = 999\n");
+    let items =
+        format!("[[change]]\nitems = [\"Material_T1_Wood_Logs\", \"{CHEST}\"]\nmax_stack = 999\n");
     let pack = Pack::parse_with("you.stacks", &files(&items), Some(&vanilla)).unwrap();
     let set = Value::Set(999.0);
     assert_eq!(
@@ -204,7 +205,7 @@ fn an_item_change_sets_the_stack_size_of_every_item_it_names() {
         [
             (
                 Change::new(wood, Field::MaxStack, set),
-                "items.toml:1 (Wood_Log)".to_owned()
+                "items.toml:1 (Material_T1_Wood_Logs)".to_owned()
             ),
             (
                 Change::new(Guid::parse(CHEST), Field::MaxStack, set),
@@ -277,9 +278,12 @@ fn a_change_that_picks_or_changes_nothing_is_a_problem() {
 #[test]
 fn a_misspelt_item_in_a_change_suggests_the_near_name() {
     let (vanilla, _) = vanilla_wood();
-    let items = "[[change]]\nitems = [\"Wood_Logg\"]\nmax_stack = 50\n";
+    let items = "[[change]]\nitems = [\"Material_T1_Wood_Logss\"]\nmax_stack = 50\n";
     let errors = Pack::parse_with("you.stacks", &files(items), Some(&vanilla)).unwrap_err();
-    assert!(errors.to_string().contains("near: Wood_Log"), "{errors}");
+    assert!(
+        errors.to_string().contains("near: Material_T1_Wood_Logs"),
+        "{errors}"
+    );
 }
 
 #[test]
@@ -287,4 +291,131 @@ fn a_pack_without_changes_reaches_players_only_through_its_content() {
     let pack = Pack::parse("you.stacks", &PackFiles::new()).unwrap();
     assert!(pack.changes().is_empty());
     assert!(!pack.reaches_players());
+}
+
+fn vanilla_torch() -> (Vanilla, Guid, Guid, Guid) {
+    let (torch, wood, recipe) = (Guid([1; 16]), Guid([2; 16]), Guid([3; 16]));
+    let vanilla = crate::content::vanilla::tests::game_with_recipes(
+        &[(torch, "Tool_Torch01"), (wood, "Material_T1_Wood_Logs")],
+        &[(recipe, "Tool_Torch01_T0_PK", torch)],
+    );
+    (vanilla, torch, wood, recipe)
+}
+
+fn recipes(text: &str) -> PackFiles {
+    PackFiles::new().with(RECIPES_FILE, text)
+}
+
+#[test]
+fn a_recipe_change_picks_recipes_by_name_and_by_what_they_make() {
+    let (vanilla, _, wood, recipe) = vanilla_torch();
+    let text = "[[change]]\nrecipes = [\"Tool_Torch01_T0_PK\"]\noutput_count = 3\n\n\
+                [[change]]\noutput = [\"Tool_Torch01\"]\ntime = { times = 0.5 }\n\
+                ingredients = { Material_T1_Wood_Logs = 0 }\n";
+    let pack = Pack::parse_with("you.torches", &recipes(text), Some(&vanilla)).unwrap();
+    let changes: Vec<(Change, &str)> = pack
+        .changes()
+        .iter()
+        .map(|(c, s)| (*c, s.as_str()))
+        .collect();
+    assert_eq!(
+        changes,
+        [
+            (
+                Change::new(recipe, Field::Output, Value::Set(3.0)),
+                "recipes.toml:1 (Tool_Torch01_T0_PK)"
+            ),
+            (
+                Change::new(recipe, Field::Time, Value::Times(0.5)),
+                "recipes.toml:5 (Tool_Torch01)"
+            ),
+            (
+                Change::ingredient(recipe, wood, Value::Set(0.0)),
+                "recipes.toml:5 (Tool_Torch01)"
+            ),
+        ]
+    );
+}
+
+#[test]
+fn a_recipe_change_without_the_game_s_data_takes_guids_only() {
+    let text = format!("[[change]]\nrecipes = [\"{CHEST}\"]\ncost = 2\n");
+    let pack = Pack::parse("you.torches", &recipes(&text)).unwrap();
+    assert_eq!(pack.changes()[0].0.field, Field::Cost);
+    let errors = Pack::parse(
+        "you.torches",
+        &recipes("[[change]]\noutput = [\"Tool_Torch01\"]\ncost = 2\n"),
+    )
+    .unwrap_err();
+    assert!(
+        errors.to_string().contains("the game's data is at hand"),
+        "{errors}"
+    );
+}
+
+#[test]
+fn a_recipe_change_naming_no_recipe_or_a_misspelt_one_is_a_problem() {
+    let (vanilla, ..) = vanilla_torch();
+    let errors = Pack::parse_with(
+        "you.torches",
+        &recipes("[[change]]\ncost = 2\n"),
+        Some(&vanilla),
+    )
+    .unwrap_err();
+    assert_eq!(
+        errors.to_string(),
+        "recipes.toml:1:1: change 1: names no recipe; give recipes or output"
+    );
+    let errors = Pack::parse_with(
+        "you.torches",
+        &recipes("[[change]]\nrecipes = [\"Tool_Torch01_T0_PKK\"]\ncost = 2\n"),
+        Some(&vanilla),
+    )
+    .unwrap_err();
+    assert!(
+        errors.to_string().contains("near: Tool_Torch01_T0_PK"),
+        "{errors}"
+    );
+    let errors = Pack::parse_with(
+        "you.torches",
+        &recipes("[[change]]\noutput = [\"Material_T1_Wood_Logs\"]\ncost = 2\n"),
+        Some(&vanilla),
+    )
+    .unwrap_err();
+    assert!(
+        errors
+            .to_string()
+            .contains("no vanilla recipe makes Material_T1_Wood_Logs"),
+        "{errors}"
+    );
+}
+
+#[test]
+fn one_value_of_one_recipe_changed_twice_names_both_lines() {
+    let (vanilla, ..) = vanilla_torch();
+    let text = "[[change]]\nrecipes = [\"Tool_Torch01_T0_PK\"]\ncost = 2\n\n\
+                [[change]]\noutput = [\"Tool_Torch01\"]\ncost = 3\n";
+    let errors = Pack::parse_with("you.torches", &recipes(text), Some(&vanilla)).unwrap_err();
+    assert_eq!(
+        errors.to_string(),
+        "recipes.toml:5:1: change 2: cost of Tool_Torch01 is changed at line 1 already"
+    );
+}
+
+#[test]
+fn a_recipe_a_mod_or_the_pack_adds_is_changed_where_it_is_defined() {
+    let (vanilla, ..) = vanilla_torch();
+    let text = format!(
+        "[[recipe]]\nid = \"lantern.recipe\"\nlike = \"{CHEST}\"\noutput = \"{CHEST}\"\n\n\
+         [[change]]\nrecipes = [\"lantern.recipe\", \"you.lockers:locker.recipe\"]\ncost = 2\n"
+    );
+    let errors = Pack::parse_with("you.torches", &recipes(&text), Some(&vanilla)).unwrap_err();
+    let lines: Vec<String> = errors.list().iter().map(ToString::to_string).collect();
+    assert_eq!(lines.len(), 2, "{lines:?}");
+    assert!(
+        lines
+            .iter()
+            .all(|l| l.contains("set its values where it is defined")),
+        "{lines:?}"
+    );
 }
