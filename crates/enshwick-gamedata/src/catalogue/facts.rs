@@ -663,6 +663,10 @@ pub const FACTS: &[(&str, Fact)] = &[
         "current_transform",
         Fact::Type("keen::ecs::CurrentTransform"),
     ),
+    (
+        "current_transform.transform",
+        offset("keen::ecs::CurrentTransform", "transform"),
+    ),
     ("used_item", Fact::Type("keen::ecs::UsedItem")),
     ("label", Fact::Type("keen::ecs::CustomPlayerString")),
     ("inventory_setup", Fact::Type("keen::ecs::InventorySetup")),

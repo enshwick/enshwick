@@ -433,6 +433,20 @@ impl Installed {
     pub fn saves(&self) -> usize {
         table::with(0, |s| s.saves)
     }
+
+    /// The voxel boxes the mod read on the game thread, `(min, size)`, in
+    /// order, whatever the read answered.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// assert!(loader.voxel_reads().is_empty());
+    /// ```
+    #[must_use]
+    pub fn voxel_reads(&self) -> Vec<([u32; 3], [u32; 3])> {
+        table::with(Vec::new(), |s| s.edits.voxel_reads.clone())
+    }
 }
 
 impl FakeHost {

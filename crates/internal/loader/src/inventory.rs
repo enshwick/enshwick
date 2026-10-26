@@ -209,6 +209,9 @@ struct Executor {
     item_flags: usize,
     item_category: usize,
     item_rarity: usize,
+    /// Where `ItemInfo` holds the placed template's GUID, on builds that
+    /// reflect it.
+    item_placed_entity: Option<usize>,
     /// The descriptor and the transaction, allocated once; one transaction
     /// runs at a time.
     scratch: usize,
@@ -463,6 +466,11 @@ fn build(loader: &Loader) -> Option<Executor> {
         item_flags: field("flags")?,
         item_category: field("category")?,
         item_rarity: field("rarity")?,
+        item_placed_entity: crate::catalogue::constant(
+            enshwick_gamedata::catalogue::ITEM_PLACED_ENTITY,
+            &loader.reflection,
+        )
+        .and_then(|offset| usize::try_from(offset).ok()),
         scratch: 0,
         check_world: loader.side != Side::SERVER,
         entity_world: constant(pinned::ecs::CONTEXT_ENTITY_WORLD)?,
@@ -690,6 +698,13 @@ pub(crate) fn item_info(loader: &Loader, item: u32) -> Result<ItemData, Status> 
         // SAFETY: the lookup returned the item's non-null live `ItemInfo`
         // (checked earlier), with `flags` at the reflected offset.
         flags: unsafe { enshwick::raw::read_at(info, executor.item_flags) },
+        placed_entity: executor.item_placed_entity.map_or([0; 16], |at| {
+            // SAFETY: the lookup returned the item's non-null live
+            // `ItemInfo` (checked earlier), whose `equipment.placedEntity`
+            // at the reflected offset is a 16-byte GUID held inline (server
+            // 399, client 426).
+            unsafe { enshwick::raw::read_at(info, at) }
+        }),
     })
 }
 

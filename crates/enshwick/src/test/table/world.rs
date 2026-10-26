@@ -200,6 +200,9 @@ pub(crate) extern "system" fn entities(
     capacity: u32,
     count: *mut u32,
 ) -> Status {
+    if !crate::test::table::on_game_thread() {
+        return Status::WRONG_THREAD;
+    }
     let found: Vec<EntityPlace> = with(Vec::new(), |s| {
         s.host
             .placed
@@ -616,6 +619,7 @@ pub(crate) extern "system" fn voxel_read(
         return Status::WRONG_THREAD;
     }
     let read = with(Err(Status::MISSING), |s| {
+        s.edits.voxel_reads.push((min, size));
         if crate::test::world::outside(s.host.extent, min, size) {
             return Err(Status::OUTSIDE_WORLD);
         }

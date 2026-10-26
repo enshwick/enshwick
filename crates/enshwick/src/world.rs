@@ -7,10 +7,12 @@
 //! game.
 
 mod build;
+mod capture;
 mod containers;
 mod entities;
 mod geometry;
 mod players;
+mod props;
 mod rename;
 mod stats;
 mod transactions;
@@ -25,8 +27,10 @@ use crate::game_events::{Field, Scalar};
 use crate::{Host, Load, Off};
 
 pub use build::{BuildRefusal, PlayerPermissions};
+pub use capture::{CAPTURE_TILES, Capture};
 pub use containers::ContainerKinds;
 pub use geometry::near;
+pub use props::{Prop, WorldTransform};
 pub use rename::Rename;
 pub use stats::{Meter, Progress, Skill, Vitals};
 pub use transactions::{Transaction, TransactionId, TransactionStatus};
@@ -385,12 +389,25 @@ struct Resolved {
     host: Host,
     transform: ComponentType,
     used_item: ComponentType,
+    /// Where a `CurrentTransform` holds its orientation, on builds that
+    /// reflect it and the template an item places, which tells props apart.
+    orientation: Option<usize>,
     label: Option<ComponentType>,
     stats: Option<stats::Stats>,
     containers: Option<containers::Containers>,
 }
 
 static RESOLVED: crate::state::ModLocal<Resolved> = crate::state::ModLocal::new();
+
+/// The offset of the orientation inside a `CurrentTransform`, when the
+/// loader resolves it and the template an item places, which the loader
+/// reads into item data from the same reflection.
+fn orientation_offset(load: &Load<'_>) -> Option<usize> {
+    load.constant(ids::ITEM_INFO_PLACED_ENTITY).ok()?;
+    let transform = load.constant(ids::CURRENT_TRANSFORM_TRANSFORM).ok()?;
+    let orientation = load.constant(ids::WORLD_TRANSFORM_ORIENTATION).ok()?;
+    usize::try_from(transform.checked_add(orientation)?).ok()
+}
 
 /// The component type named `name` on the host's build.
 fn type_named(host: Host, name: &str) -> Result<ComponentType, Off> {
@@ -412,6 +429,7 @@ impl World {
             host,
             transform: type_named(host, ids::CURRENT_TRANSFORM)?,
             used_item: type_named(host, ids::USED_ITEM)?,
+            orientation: orientation_offset(load),
             label: type_named(host, ids::LABEL).ok(),
             containers: containers::Containers::resolve(host),
             stats: stats::Stats::resolve(load, host)

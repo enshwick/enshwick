@@ -20,8 +20,26 @@ Each entry names the pull request that made the change.
 - `WorldError::OutsideWorld` (`Status::OUTSIDE_WORLD`): voxel reads, terrain
   edits and transactions past the world's edge or above 1,024 metres are
   refused, where the game would read air (#548).
+- `World::props_in` lists the props in a box, the things players placed
+  from items, each with its `ItemId` and `WorldTransform`, told apart from
+  the things a world comes with by the template their item places (#550).
+- `World::capture` takes a region of up to `CAPTURE_TILES` reads of 32
+  metres a side as a `Capture` of its voxels and props, counted from its
+  corner; `Capture::rotated` turns it by quarter turns about the vertical
+  and `Capture::translated` moves it (#550).
+- `ItemId`, the game's number for an item, and `WorldTransform`, a
+  position in metres with an orientation (#550).
+- `Capture`, `VoxelBox`, `Voxel`, `VoxelMaterial`, `VoxelPos`, `Entity`,
+  `ItemId`, `Prop` and `WorldTransform` implement serde's `Serialize` and
+  `Deserialize`; a `VoxelBox` read must hold one voxel per place and end
+  inside the world's coordinates (#550).
+- `ItemData::placed_entity`, the GUID of the template a player places from
+  the item, from `HostApi::item_info`; ABI minor 88 (#550).
 
 ### Changed
+
+- `World::entities` takes the world by value, as the other `World` calls
+  do (#550).
 
 - `Terrain::{add,dig,flatten}` write nothing and fail with
   `WorldError::NotLoaded` unless the whole area the edit can reach is
