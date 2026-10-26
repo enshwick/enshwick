@@ -2,12 +2,13 @@
 
 use std::collections::HashMap;
 
+use crate::content::Guid;
+use crate::content::changes::{Change, Entry, Field, Value};
+
 use super::entries::{ItemsFile, RecipesFile, ValueEntry};
 use super::files::PackError;
 use super::pack::Reader;
 use super::{ITEMS_FILE, RECIPES_FILE};
-use crate::content::Guid;
-use crate::content::changes::{Change, Entry, Field, Value};
 
 /// A field a recipe change sets, with its ingredient and the name the pack
 /// gave it, and the value.
@@ -66,10 +67,19 @@ pub(super) fn item_changes(
         let line = PackError::at(file, text, at, "").line;
         let e = entry.get_ref();
         let number = index + 1;
-        let fields: Vec<(Field, Value)> = [(Field::MaxStack, e.max_stack), (Field::Slots, e.slots)]
-            .into_iter()
-            .filter_map(|(field, v)| v.map(|v| (field, value(v))))
-            .collect();
+        let fields: Vec<(Field, Value)> = [
+            (Field::MaxStackSize, e.max_stack),
+            (Field::Slots, e.slots),
+            (Field::DamageMod, e.damage_mod),
+            (Field::SpeedMod, e.speed_mod),
+            (Field::Armor, e.armor),
+            (Field::BurnTime, e.burn_time),
+            (Field::EnergyOutput, e.energy_output),
+            (Field::ComfortAmount, e.comfort_amount),
+        ]
+        .into_iter()
+        .filter_map(|(field, v)| v.map(|v| (field, value(v))))
+        .collect();
         if e.items.is_empty() {
             reader.error(
                 file,
@@ -203,7 +213,7 @@ pub(super) fn recipe_changes(
         let mut fields: Vec<RecipeField> = [
             (Field::Output, e.output_count),
             (Field::Cost, e.cost),
-            (Field::Time, e.time),
+            (Field::CraftingDuration, e.time),
         ]
         .into_iter()
         .filter_map(|(field, v)| v.map(|v| (field, None, value(v))))

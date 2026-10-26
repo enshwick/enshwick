@@ -1,9 +1,9 @@
 //! Answers console lines on the server's game thread.
 
-use enshwick::ecs::Entity;
 use std::sync::atomic::Ordering;
 
 use enshwick::abi::{Header, PlayerInfo, Status};
+use enshwick::ecs::Entity;
 
 use crate::host::Loader;
 use crate::locks::Relock;

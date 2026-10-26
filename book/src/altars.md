@@ -93,18 +93,19 @@ before solving again.
 
 ## Altars per level and bases past 16
 
-`load.on_altar_limit(|flame_level| count)` decides how many altars each Flame
-level allows, on both sides; one mod at a time. The game groups only 16 zones
-into its 16 bases; `load.raise_base_limit()` lets it group 32, and refuses an
-altar that would start a 17th base with the game's own "too many altars". It
+`load.on_altar_limit(|limit| ...)` adds a filter to the chain that decides
+how many altars each Flame level allows, on both sides. Each filter, in load
+order, sees the level, the game's own count and the count so far, and sets
+`allowed`; the loader keeps the answer within the zones the game groups. The
+game groups only 16 zones into its 16 bases; `load.raise_base_limit()` lets
+it group 32, the loader's maximum, and refuses an altar that would start a
+17th base with the game's own "too many altars". It
 returns `false` on a game build whose code the platform does not know, where
 the game keeps 16. The code patches and the refusal of a 17th base go in
 together or not at all: when a patch or one of the loader's hooks cannot be
 armed, none of them is, the mod is turned off, and the game keeps 16.
-`altars::grouping()` tells how many zones and bases the last grouping found.
-`altars::VANILLA_ALTARS_PER_FLAME_LEVEL` and `altars::vanilla_altars(level)`
-give the game's own table, and `VANILLA_ALTAR_ZONES` and `RAISED_ALTAR_ZONES`
-the two zone limits.
+`altars::grouping()` tells how many zones and bases the last grouping found,
+and `altars::base_limit()` the most the game groups now.
 
 ## Building across zones
 

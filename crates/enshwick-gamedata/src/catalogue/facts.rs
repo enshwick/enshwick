@@ -8,23 +8,23 @@ use super::{Fact, enum_constant, offset};
 pub const FACTS: &[(&str, Fact)] = &[
     ("hit_event", Fact::Type("keen::ecs::HitEvent")),
     (
-        "hit_event.attacker",
+        "hit_event.root_source_id",
         offset("keen::ecs::BaseHitEvent", "rootSourceId"),
     ),
     (
-        "hit_event.target",
+        "hit_event.target_id",
         offset("keen::ecs::BaseHitEvent", "targetId"),
     ),
     (
-        "hit_event.source",
+        "hit_event.source_id",
         offset("keen::ecs::HitEvent", "sourceId"),
     ),
     (
-        "hit_event.root_target",
+        "hit_event.root_target_id",
         offset("keen::ecs::HitEvent", "rootTargetId"),
     ),
     (
-        "hit_event.weapon",
+        "hit_event.weapon_pide_id",
         offset("keen::ecs::HitEvent", "weaponPideId"),
     ),
     (
@@ -40,16 +40,19 @@ pub const FACTS: &[(&str, Fact)] = &[
         offset("keen::ecs::HitEvent", "damageTypes"),
     ),
     (
-        "hit_event.attack",
+        "hit_event.attack_category",
         offset("keen::ecs::HitEvent", "attackCategory"),
     ),
     (
         "hit_event.target_faction",
         offset("keen::ecs::HitEvent", "targetFaction"),
     ),
-    ("died_event", Fact::Type("keen::ecs::EntityDiedEvent")),
     (
-        "died_event.entity",
+        "entity_died_event",
+        Fact::Type("keen::ecs::EntityDiedEvent"),
+    ),
+    (
+        "entity_died_event.dead_entity_id",
         offset("keen::ecs::EntityDiedEvent", "deadEntityId"),
     ),
     ("hit_history", Fact::Type("keen::ecs::HitHistory")),
@@ -73,210 +76,216 @@ pub const FACTS: &[(&str, Fact)] = &[
         "experience_credit.last_player",
         offset("keen::ecs::ExperienceSource", "lastHitPlayerId"),
     ),
-    ("level_gained_event", Fact::Type("keen::ecs::LevelUpEvent")),
+    ("level_up_event", Fact::Type("keen::ecs::LevelUpEvent")),
     (
-        "level_gained_event.player",
+        "level_up_event.player_entity_id",
         offset("keen::ecs::LevelUpEvent", "playerEntityId"),
     ),
     (
-        "level_gained_event.level",
+        "level_up_event.level",
         offset("keen::ecs::LevelUpEvent", "level"),
     ),
+    ("xp_gained_event", Fact::Type("keen::ecs::XPGainedEvent")),
     (
-        "experience_gained_event",
-        Fact::Type("keen::ecs::XPGainedEvent"),
-    ),
-    (
-        "experience_gained_event.player",
+        "xp_gained_event.player_entity_id",
         offset("keen::ecs::XPGainedEvent", "playerEntityId"),
     ),
     (
-        "experience_gained_event.amount",
+        "xp_gained_event.amount",
         offset("keen::ecs::XPGainedEvent", "amount"),
     ),
     (
-        "experience_gained_event.source",
+        "xp_gained_event.source",
         offset("keen::ecs::XPGainedEvent", "source"),
     ),
     (
-        "craft_requested_event",
+        "craft_recipe_event",
         Fact::Type("keen::ecs::CraftRecipeEvent"),
     ),
     (
-        "craft_requested_event.player",
+        "craft_recipe_event.crafting_operator_id",
         offset("keen::ecs::CraftRecipeEvent", "craftingOperatorId"),
     ),
     (
-        "craft_requested_event.station",
+        "craft_recipe_event.crafting_station_id",
         offset("keen::ecs::CraftRecipeEvent", "craftingStationId"),
     ),
     (
-        "craft_requested_event.recipe",
+        "craft_recipe_event.recipe_id",
         offset("keen::ecs::CraftRecipeEvent", "recipeId"),
     ),
     (
-        "craft_requested_event.amount",
+        "craft_recipe_event.recipe_amount",
         offset("keen::ecs::CraftRecipeEvent", "recipeAmount"),
     ),
     (
-        "crafted_event",
+        "craft_recipe_success_event",
         Fact::Type("keen::ecs::CraftRecipeSuccessEvent"),
     ),
     (
-        "crafted_event.workshop",
+        "craft_recipe_success_event.workshop_id",
         offset("keen::ecs::CraftRecipeSuccessEvent", "workshopId"),
     ),
     (
-        "crafted_event.recipe",
+        "craft_recipe_success_event.recipe_id",
         offset("keen::ecs::CraftRecipeSuccessEvent", "recipeId"),
     ),
     (
-        "interacted_event",
+        "accept_offered_interaction_event",
         Fact::Type("keen::ecs::AcceptOfferedInteractionEvent"),
     ),
     (
-        "interacted_event.player",
+        "accept_offered_interaction_event.guest_entity_id",
         offset("keen::ecs::AcceptOfferedInteractionEvent", "guestEntityId"),
     ),
     (
-        "interacted_event.target",
+        "accept_offered_interaction_event.host_entity_id",
         offset("keen::ecs::AcceptOfferedInteractionEvent", "hostEntityId"),
     ),
     (
-        "interacted_event.offer",
+        "accept_offered_interaction_event.offer_id",
         offset("keen::ecs::AcceptOfferedInteractionEvent", "offerId"),
     ),
-    ("built_event", Fact::Type("keen::ecs::BuildingPlaceEvent")),
     (
-        "built_event.player",
+        "building_place_event",
+        Fact::Type("keen::ecs::BuildingPlaceEvent"),
+    ),
+    (
+        "building_place_event.owner_id",
         offset("keen::ecs::BuildingPlaceEvent", "ownerId"),
     ),
     (
-        "built_event.position",
+        "building_place_event.position",
         offset("keen::ecs::BuildingPlaceEvent", "position"),
     ),
     (
-        "built_event.volume_min",
+        "building_place_event.volume_min",
         offset("keen::ecs::BuildingPlaceEvent", "volumeMin"),
     ),
     (
-        "built_event.volume_max",
+        "building_place_event.volume_max",
         offset("keen::ecs::BuildingPlaceEvent", "volumeMax"),
     ),
     (
-        "built_event.material",
+        "building_place_event.material",
         offset("keen::ecs::BuildingPlaceEvent", "material"),
     ),
     (
-        "built_event.item",
+        "building_place_event.tracking_item_id",
         offset("keen::ecs::BuildingPlaceEvent", "trackingItemId"),
     ),
     (
-        "torn_down_event",
+        "building_tear_down_event",
         Fact::Type("keen::ecs::BuildingTearDownEvent"),
     ),
     (
-        "torn_down_event.player",
+        "building_tear_down_event.owner_id",
         offset("keen::ecs::BuildingTearDownEvent", "ownerId"),
     ),
     (
-        "torn_down_event.position",
+        "building_tear_down_event.position",
         offset("keen::ecs::BuildingTearDownEvent", "position"),
     ),
     (
-        "torn_down_event.volume_min",
+        "building_tear_down_event.volume_min",
         offset("keen::ecs::BuildingTearDownEvent", "volumeMin"),
     ),
     (
-        "torn_down_event.volume_max",
+        "building_tear_down_event.volume_max",
         offset("keen::ecs::BuildingTearDownEvent", "volumeMax"),
     ),
     (
-        "torn_down_event.material",
+        "building_tear_down_event.material",
         offset("keen::ecs::BuildingTearDownEvent", "material"),
     ),
     (
-        "picked_up_event",
+        "building_pick_up_event",
         Fact::Type("keen::ecs::BuildingPickUpEvent"),
     ),
     (
-        "picked_up_event.player",
+        "building_pick_up_event.owner_id",
         offset("keen::ecs::BuildingPickUpEvent", "ownerId"),
     ),
     (
-        "picked_up_event.position",
+        "building_pick_up_event.position",
         offset("keen::ecs::BuildingPickUpEvent", "position"),
     ),
     (
-        "picked_up_event.volume_min",
+        "building_pick_up_event.volume_min",
         offset("keen::ecs::BuildingPickUpEvent", "volumeMin"),
     ),
     (
-        "picked_up_event.volume_max",
+        "building_pick_up_event.volume_max",
         offset("keen::ecs::BuildingPickUpEvent", "volumeMax"),
     ),
     (
-        "picked_up_event.material",
+        "building_pick_up_event.material",
         offset("keen::ecs::BuildingPickUpEvent", "material"),
     ),
     (
-        "picked_up_event.entity",
+        "building_pick_up_event.picked_entity_id",
         offset("keen::ecs::BuildingPickUpEvent", "pickedEntityId"),
     ),
-    ("altar_used_event", Fact::Type("keen::ecs::FlameAltarEvent")),
     (
-        "altar_used_event.player",
+        "flame_altar_event",
+        Fact::Type("keen::ecs::FlameAltarEvent"),
+    ),
+    (
+        "flame_altar_event.player_entity_id",
         offset("keen::ecs::FlameAltarEvent", "playerEntityId"),
     ),
     (
-        "altar_used_event.altar",
+        "flame_altar_event.base_entity_id",
         offset("keen::ecs::FlameAltarEvent", "baseEntityId"),
     ),
     (
-        "altar_used_event.action",
+        "flame_altar_event.type",
         offset("keen::ecs::FlameAltarEvent", "type"),
     ),
     (
-        "loot_opened_event",
+        "loot_interaction_event",
         Fact::Type("keen::ecs::LootInteractionEvent"),
     ),
     (
-        "loot_opened_event.player",
+        "loot_interaction_event.guest_id",
         offset("keen::ecs::LootInteractionEvent", "guestId"),
     ),
     (
-        "loot_opened_event.container",
+        "loot_interaction_event.host_id",
         offset("keen::ecs::LootInteractionEvent", "hostId"),
     ),
     (
-        "loot_opened_event.take_all",
+        "loot_interaction_event.loot_all",
         offset("keen::ecs::LootInteractionEvent", "lootAll"),
     ),
     (
-        "equipment_changed_event",
+        "handle_equipment_slot_changed_event",
         Fact::Type("keen::ecs::HandleEquipmentSlotChangedEvent"),
     ),
     (
-        "equipment_changed_event.player",
+        "handle_equipment_slot_changed_event.player_entity_id",
         offset(
             "keen::ecs::HandleEquipmentSlotChangedEvent",
             "playerEntityId",
         ),
     ),
     (
-        "equipment_changed_event.slot",
+        "handle_equipment_slot_changed_event.equipment_slot",
         offset(
             "keen::ecs::HandleEquipmentSlotChangedEvent",
             "equipmentSlot",
         ),
     ),
-    ("revived_event", Fact::Type("keen::ecs::RevivedPlayerEvent")),
     (
-        "revived_event.player",
+        "revived_player_event",
+        Fact::Type("keen::ecs::RevivedPlayerEvent"),
+    ),
+    (
+        "revived_player_event.target_entity_id",
         offset("keen::ecs::RevivedPlayerEvent", "targetEntityId"),
     ),
     (
-        "revived_event.by",
+        "revived_player_event.source_entity_id",
         offset("keen::ecs::RevivedPlayerEvent", "sourceEntityId"),
     ),
     (
@@ -296,15 +305,15 @@ pub const FACTS: &[(&str, Fact)] = &[
         Fact::Type("keen::ecs::NpcCommandEvent"),
     ),
     (
-        "npc_command_event.kind",
+        "npc_command_event.type",
         offset("keen::ecs::NpcCommandEvent", "type"),
     ),
     (
-        "npc_command_event.npc",
+        "npc_command_event.npc_id",
         offset("keen::ecs::NpcCommandEvent", "npcId"),
     ),
     (
-        "npc_command_event.target",
+        "npc_command_event.target_transform",
         offset("keen::ecs::NpcCommandEvent", "targetTransform"),
     ),
     (
@@ -312,15 +321,15 @@ pub const FACTS: &[(&str, Fact)] = &[
         Fact::Type("keen::ecs::SetToggleStateEvent"),
     ),
     (
-        "set_toggle_state_event.sender",
+        "set_toggle_state_event.sender_id",
         offset("keen::ecs::SetToggleStateEvent", "senderId"),
     ),
     (
-        "set_toggle_state_event.signal",
+        "set_toggle_state_event.signal_id",
         offset("keen::ecs::SetToggleStateEvent", "signalId"),
     ),
     (
-        "set_toggle_state_event.state",
+        "set_toggle_state_event.new_state",
         offset("keen::ecs::SetToggleStateEvent", "newState"),
     ),
     (
@@ -328,20 +337,20 @@ pub const FACTS: &[(&str, Fact)] = &[
         Fact::Type("keen::ecs::AddThreatTargetEvent"),
     ),
     (
-        "add_threat_target_event.attacker",
+        "add_threat_target_event.attacker_id",
         offset("keen::ecs::AddThreatTargetEvent", "attackerId"),
     ),
     (
-        "add_threat_target_event.target",
+        "add_threat_target_event.target_id",
         offset("keen::ecs::AddThreatTargetEvent", "targetId"),
     ),
     (
-        "add_threat_target_event.threat",
+        "add_threat_target_event.threat_value",
         offset("keen::ecs::AddThreatTargetEvent", "threatValue"),
     ),
     ("ui_ping_event", Fact::Type("keen::ecs::UiPingEvent")),
     (
-        "ui_ping_event.sender",
+        "ui_ping_event.sender_entity_id",
         offset("keen::ecs::UiPingEvent", "senderEntityId"),
     ),
     (
@@ -383,6 +392,80 @@ pub const FACTS: &[(&str, Fact)] = &[
             ("keen::ItemInfo", "equipment"),
             ("keen::EquipmentSetup", "slot"),
         ]),
+    ),
+    (
+        "item_info.damage_mod",
+        Fact::Path(&[
+            ("keen::ItemInfo", "damageSetup"),
+            ("keen::ItemDamageSetup", "dmgMod"),
+        ]),
+    ),
+    (
+        "item_info.speed_mod",
+        Fact::Path(&[
+            ("keen::ItemInfo", "damageSetup"),
+            ("keen::ItemDamageSetup", "speedMod"),
+        ]),
+    ),
+    (
+        "item_info.damage_set",
+        Fact::Path(&[
+            ("keen::ItemInfo", "damageSetup"),
+            ("keen::ItemDamageSetup", "isSet"),
+        ]),
+    ),
+    (
+        "item_info.armor",
+        Fact::Path(&[
+            ("keen::ItemInfo", "armorSetup"),
+            ("keen::ItemArmorSetup", "distribution"),
+        ]),
+    ),
+    (
+        "item_info.armor_set",
+        Fact::Path(&[
+            ("keen::ItemInfo", "armorSetup"),
+            ("keen::ItemArmorSetup", "isSet"),
+        ]),
+    ),
+    (
+        "item_info.burn_time",
+        Fact::Path(&[
+            ("keen::ItemInfo", "fuelSetup"),
+            ("keen::ItemFuelData", "burnTime"),
+        ]),
+    ),
+    (
+        "item_info.energy_output",
+        Fact::Path(&[
+            ("keen::ItemInfo", "fuelSetup"),
+            ("keen::ItemFuelData", "energyOutput"),
+        ]),
+    ),
+    (
+        "item_info.fuel_set",
+        Fact::Path(&[
+            ("keen::ItemInfo", "fuelSetup"),
+            ("keen::ItemFuelData", "isSet"),
+        ]),
+    ),
+    (
+        "item_info.comfort_amount",
+        Fact::Path(&[
+            ("keen::ItemInfo", "comfortSetup"),
+            ("keen::ItemComfortSetup", "comfortAmount"),
+        ]),
+    ),
+    (
+        "item_info.comfort_set",
+        Fact::Path(&[
+            ("keen::ItemInfo", "comfortSetup"),
+            ("keen::ItemComfortSetup", "isSet"),
+        ]),
+    ),
+    (
+        "armor_distribution",
+        Fact::Type("keen::impact::ArmorDistribution"),
     ),
     ("item_slot_type", Fact::Type("keen::EquipmentSlotType")),
     ("item_stat", Fact::Type("keen::ImpactUiValue")),
@@ -1075,6 +1158,128 @@ pub const FACTS: &[(&str, Fact)] = &[
         "inventory_error.out_of_memory",
         enum_constant(INVENTORY_ERROR, "OutOfMemory"),
     ),
+    (
+        "game_settings_preset.default",
+        enum_constant(GAME_SETTINGS_PRESET, "Default"),
+    ),
+    (
+        "game_settings_preset.relaxed",
+        enum_constant(GAME_SETTINGS_PRESET, "Relaxed"),
+    ),
+    (
+        "game_settings_preset.hard",
+        enum_constant(GAME_SETTINGS_PRESET, "Hard"),
+    ),
+    (
+        "game_settings_preset.survival",
+        enum_constant(GAME_SETTINGS_PRESET, "Survival"),
+    ),
+    (
+        "game_settings_preset.custom",
+        enum_constant(GAME_SETTINGS_PRESET, "Custom"),
+    ),
+    (
+        "tombstone_mode.add_backpack_materials",
+        enum_constant(TOMBSTONE_MODE, "AddBackpackMaterials"),
+    ),
+    (
+        "tombstone_mode.everything",
+        enum_constant(TOMBSTONE_MODE, "Everything"),
+    ),
+    (
+        "tombstone_mode.no_tombstone",
+        enum_constant(TOMBSTONE_MODE, "NoTombstone"),
+    ),
+    (
+        "weather_frequency.disabled",
+        enum_constant(WEATHER_FREQUENCY, "Disabled"),
+    ),
+    (
+        "weather_frequency.rare",
+        enum_constant(WEATHER_FREQUENCY, "Rare"),
+    ),
+    (
+        "weather_frequency.normal",
+        enum_constant(WEATHER_FREQUENCY, "Normal"),
+    ),
+    (
+        "weather_frequency.often",
+        enum_constant(WEATHER_FREQUENCY, "Often"),
+    ),
+    (
+        "generic_difficulty.very_easy",
+        enum_constant(GENERIC_DIFFICULTY, "VeryEasy"),
+    ),
+    (
+        "generic_difficulty.easy",
+        enum_constant(GENERIC_DIFFICULTY, "Easy"),
+    ),
+    (
+        "generic_difficulty.normal",
+        enum_constant(GENERIC_DIFFICULTY, "Normal"),
+    ),
+    (
+        "generic_difficulty.hard",
+        enum_constant(GENERIC_DIFFICULTY, "Hard"),
+    ),
+    (
+        "generic_difficulty.very_hard",
+        enum_constant(GENERIC_DIFFICULTY, "VeryHard"),
+    ),
+    (
+        "random_spawner_amount.few",
+        enum_constant(RANDOM_SPAWNER_AMOUNT, "Few"),
+    ),
+    (
+        "random_spawner_amount.normal",
+        enum_constant(RANDOM_SPAWNER_AMOUNT, "Normal"),
+    ),
+    (
+        "random_spawner_amount.many",
+        enum_constant(RANDOM_SPAWNER_AMOUNT, "Many"),
+    ),
+    (
+        "random_spawner_amount.extreme",
+        enum_constant(RANDOM_SPAWNER_AMOUNT, "Extreme"),
+    ),
+    (
+        "random_spawner_amount.automatic",
+        enum_constant(RANDOM_SPAWNER_AMOUNT, "Automatic"),
+    ),
+    (
+        "aggro_pool_amount.few",
+        enum_constant(AGGRO_POOL_AMOUNT, "Few"),
+    ),
+    (
+        "aggro_pool_amount.normal",
+        enum_constant(AGGRO_POOL_AMOUNT, "Normal"),
+    ),
+    (
+        "aggro_pool_amount.many",
+        enum_constant(AGGRO_POOL_AMOUNT, "Many"),
+    ),
+    (
+        "aggro_pool_amount.extreme",
+        enum_constant(AGGRO_POOL_AMOUNT, "Extreme"),
+    ),
+    (
+        "taming_startle_repercussion.keep_progress",
+        enum_constant(TAMING_STARTLE_REPERCUSSION, "KeepProgress"),
+    ),
+    (
+        "taming_startle_repercussion.lose_some_progress",
+        enum_constant(TAMING_STARTLE_REPERCUSSION, "LoseSomeProgress"),
+    ),
+    (
+        "taming_startle_repercussion.lose_all_progress",
+        enum_constant(TAMING_STARTLE_REPERCUSSION, "LoseAllProgress"),
+    ),
+    ("curse_modifier.easy", enum_constant(CURSE_MODIFIER, "Easy")),
+    (
+        "curse_modifier.normal",
+        enum_constant(CURSE_MODIFIER, "Normal"),
+    ),
+    ("curse_modifier.hard", enum_constant(CURSE_MODIFIER, "Hard")),
 ];
 
 /// The server's game settings, one reflected struct.
@@ -1097,3 +1302,27 @@ const EQUIPMENT_SLOT: &str = "keen::EquipmentSlot";
 
 /// The error an inventory operation ends with.
 const INVENTORY_ERROR: &str = "keen::ErrorId";
+
+/// The preset a server's game settings came from.
+const GAME_SETTINGS_PRESET: &str = "keen::ecs::GameSettingsPreset";
+
+/// What a dead character leaves behind.
+const TOMBSTONE_MODE: &str = "keen::ecs::TombstoneMode";
+
+/// How often rain and storms come.
+const WEATHER_FREQUENCY: &str = "keen::ecs::WeatherFrequency";
+
+/// A difficulty from very easy to very hard.
+const GENERIC_DIFFICULTY: &str = "keen::ecs::GenericDifficulty";
+
+/// How many enemies random spawners bring.
+const RANDOM_SPAWNER_AMOUNT: &str = "keen::ecs::RandomSpawnerAmount";
+
+/// How many enemies attack at once.
+const AGGRO_POOL_AMOUNT: &str = "keen::ecs::AggroPoolAmount";
+
+/// What startling a tamed animal costs.
+const TAMING_STARTLE_REPERCUSSION: &str = "keen::ecs::TamingStartleRepercussion";
+
+/// How hard the shroud's curse hits.
+const CURSE_MODIFIER: &str = "keen::ecs::CurseModifier";

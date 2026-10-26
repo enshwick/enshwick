@@ -1,7 +1,8 @@
 //! Game rates: rates a build lacks, and the factor in force for each.
 
-use super::{FakeHost, Installed, table};
 use crate::rates::{Rate, combine};
+
+use super::{FakeHost, Installed, table};
 
 impl FakeHost {
     /// A build that lacks what `rate` needs: declaring it answers `Off`.

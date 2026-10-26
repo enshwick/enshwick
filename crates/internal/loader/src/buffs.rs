@@ -17,14 +17,14 @@
 //! the game's cleanse: the slot is marked, and `update_buffcontainer`
 //! destroys the buff in the next step.
 
-use crate::pinned::{self, Symbol};
-use enshwick::ecs::Entity;
 use std::sync::OnceLock;
 
 use enshwick::abi::{ActiveBuff, BuffRequest, BuffTypeInfo, Header, Status};
+use enshwick::ecs::Entity;
 
 use crate::host::Loader;
 use crate::memory::{read, write};
+use crate::pinned::{self, Symbol};
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[

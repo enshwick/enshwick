@@ -423,6 +423,7 @@ impl Installed {
     ///
     /// See [`crate`].
     pub unsafe fn ready(&self, ready: ReadyFn) {
+        table::with((), |s| s.base_limit.armed = true);
         // SAFETY: the caller guarantees `ready` is the `enshwick_mod_ready` of
         // a `declare_mod!` whose init succeeded on this fake.
         unsafe { ready(self.api(), self.handle) }

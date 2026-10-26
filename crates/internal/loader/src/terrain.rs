@@ -12,14 +12,14 @@
 //! steps, without the game's undo, so what a player's tool adds around them
 //! (permission, cost, loot, experience, feedback) is the mod's to decide.
 
-use crate::pinned;
-use crate::pinned::Symbol;
 use std::sync::OnceLock;
 
 use enshwick::abi::{Header, Status, TerrainEdit, TerrainMaterialInfo};
 
 use crate::host::Loader;
 use crate::memory::read;
+use crate::pinned;
+use crate::pinned::Symbol;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[

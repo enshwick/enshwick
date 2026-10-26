@@ -4,14 +4,14 @@
 //! of perks, buffs and gear change the adder by their own deltas, so the
 //! loader adds and takes back only its own.
 
-use crate::pinned;
-use crate::pinned::Constant;
-use enshwick::ecs::Entity;
 use std::sync::OnceLock;
 
+use enshwick::ecs::Entity;
 use enshwick::raw::{read_at, write_at};
 
 use crate::host::Loader;
+use crate::pinned;
+use crate::pinned::Constant;
 
 /// The pools with a maximum the loader raises.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

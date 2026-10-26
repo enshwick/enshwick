@@ -3,167 +3,133 @@
 
 use crate::engine_ids as ids;
 
-/// The damage types of a hit, a set the loader fills from the engine's
-/// damage type mask by the name of each bit.
-///
-/// # Examples
-///
-/// ```
-/// use enshwick::game_events::DamageTypes;
-///
-/// let types = DamageTypes::FIRE | DamageTypes::CUT;
-/// assert!(types.contains(DamageTypes::FIRE));
-/// assert!(!types.contains(DamageTypes::ICE));
-/// ```
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
-pub struct DamageTypes(u16);
+/// Declares a mask type over the bits of an engine mask, each bit a
+/// constant named after the engine's constant for it.
+macro_rules! mask {
+    (
+        $(#[$doc:meta])*
+        $name:ident($bits:ty) {
+            $($(#[$cdoc:meta])* $constant:ident = $bit:literal, $id:path;)*
+        }
+    ) => {
+        $(#[$doc])*
+        #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+        pub struct $name($bits);
 
-impl DamageTypes {
-    /// Physical cut.
-    pub const CUT: Self = Self(1);
-    /// Physical pierce.
-    pub const PIERCE: Self = Self(1 << 1);
-    /// Physical blunt.
-    pub const BLUNT: Self = Self(1 << 2);
-    /// Fire.
-    pub const FIRE: Self = Self(1 << 3);
-    /// Ice.
-    pub const ICE: Self = Self(1 << 4);
-    /// Shroud.
-    pub const SHROUD: Self = Self(1 << 5);
-    /// Lightning.
-    pub const LIGHTNING: Self = Self(1 << 6);
-    /// Healing.
-    pub const HEALING: Self = Self(1 << 7);
-    /// Poison.
-    pub const POISON: Self = Self(1 << 8);
-    /// Wood, against trees and wooden things.
-    pub const WOOD: Self = Self(1 << 9);
-    /// Stone, against rock.
-    pub const STONE: Self = Self(1 << 10);
-    /// Metal, against ore.
-    pub const METAL: Self = Self(1 << 11);
-    /// Explosion.
-    pub const EXPLOSION: Self = Self(1 << 12);
+        impl $name {
+            $($(#[$cdoc])* pub const $constant: Self = Self(1 << $bit);)*
 
-    /// Whether every bit of `other` is set.
+            /// Whether every bit of `other` is set.
+            ///
+            /// # Examples
+            ///
+            #[doc = concat!("See [`", stringify!($name), "`].")]
+            #[must_use]
+            pub const fn contains(self, other: Self) -> bool {
+                self.0 & other.0 == other.0
+            }
+
+            /// Each bit with the id of its engine constant.
+            pub(super) const IDS: [(Self, &'static str); [$(stringify!($constant)),*].len()] =
+                [$((Self::$constant, $id)),*];
+
+            /// Each constant's name with the id of its engine constant.
+            #[cfg(test)]
+            const NAMES: [(&'static str, &'static str); [$(stringify!($constant)),*].len()] =
+                [$((stringify!($constant), $id)),*];
+
+            /// The set of the API's bits `bits`.
+            pub(super) const fn from_bits(bits: $bits) -> Self {
+                Self(bits)
+            }
+
+            /// The API's bits of the set.
+            pub(super) const fn bits(self) -> $bits {
+                self.0
+            }
+        }
+
+        impl core::ops::BitOr for $name {
+            type Output = Self;
+
+            fn bitor(self, other: Self) -> Self {
+                Self(self.0 | other.0)
+            }
+        }
+    };
+}
+
+mask! {
+    /// The damage types of a hit, a set the loader fills from the engine's
+    /// damage type mask by the name of each bit.
     ///
     /// # Examples
     ///
-    /// See [`DamageTypes`].
-    #[must_use]
-    pub const fn contains(self, other: Self) -> bool {
-        self.0 & other.0 == other.0
-    }
-
-    /// Each type with the id of its engine bit.
-    pub(super) const IDS: [(Self, &'static str); 13] = [
-        (Self::CUT, ids::DAMAGE_TYPE_PHYSICAL_CUT),
-        (Self::PIERCE, ids::DAMAGE_TYPE_PHYSICAL_PIERCE),
-        (Self::BLUNT, ids::DAMAGE_TYPE_PHYSICAL_BLUNT),
-        (Self::FIRE, ids::DAMAGE_TYPE_MAGICAL_FIRE),
-        (Self::ICE, ids::DAMAGE_TYPE_MAGICAL_ICE),
-        (Self::SHROUD, ids::DAMAGE_TYPE_MAGICAL_FOG),
-        (Self::LIGHTNING, ids::DAMAGE_TYPE_MAGICAL_LIGHTNING),
-        (Self::HEALING, ids::DAMAGE_TYPE_HEALING),
-        (Self::POISON, ids::DAMAGE_TYPE_POISON),
-        (Self::WOOD, ids::DAMAGE_TYPE_WOOD),
-        (Self::STONE, ids::DAMAGE_TYPE_STONE),
-        (Self::METAL, ids::DAMAGE_TYPE_METAL),
-        (Self::EXPLOSION, ids::DAMAGE_TYPE_EXPLOSION),
-    ];
-}
-
-impl DamageTypes {
-    /// The set of the API's bits `bits`.
-    pub(super) const fn from_bits(bits: u16) -> Self {
-        Self(bits)
-    }
-
-    /// The API's bits of the set.
-    pub(super) const fn bits(self) -> u16 {
-        self.0
-    }
-}
-
-impl core::ops::BitOr for DamageTypes {
-    type Output = Self;
-
-    fn bitor(self, other: Self) -> Self {
-        Self(self.0 | other.0)
+    /// ```
+    /// use enshwick::game_events::DamageTypeMask;
+    ///
+    /// let types = DamageTypeMask::MAGICAL_FIRE | DamageTypeMask::PHYSICAL_CUT;
+    /// assert!(types.contains(DamageTypeMask::MAGICAL_FIRE));
+    /// assert!(!types.contains(DamageTypeMask::MAGICAL_ICE));
+    /// ```
+    DamageTypeMask(u16) {
+        /// Physical cut.
+        PHYSICAL_CUT = 0, ids::DAMAGE_TYPE_PHYSICAL_CUT;
+        /// Physical pierce.
+        PHYSICAL_PIERCE = 1, ids::DAMAGE_TYPE_PHYSICAL_PIERCE;
+        /// Physical blunt.
+        PHYSICAL_BLUNT = 2, ids::DAMAGE_TYPE_PHYSICAL_BLUNT;
+        /// Fire.
+        MAGICAL_FIRE = 3, ids::DAMAGE_TYPE_MAGICAL_FIRE;
+        /// Ice.
+        MAGICAL_ICE = 4, ids::DAMAGE_TYPE_MAGICAL_ICE;
+        /// The shroud's damage.
+        MAGICAL_FOG = 5, ids::DAMAGE_TYPE_MAGICAL_FOG;
+        /// Lightning.
+        MAGICAL_LIGHTNING = 6, ids::DAMAGE_TYPE_MAGICAL_LIGHTNING;
+        /// Healing.
+        HEALING = 7, ids::DAMAGE_TYPE_HEALING;
+        /// Poison.
+        POISON = 8, ids::DAMAGE_TYPE_POISON;
+        /// Wood, against trees and wooden things.
+        WOOD = 9, ids::DAMAGE_TYPE_WOOD;
+        /// Stone, against rock.
+        STONE = 10, ids::DAMAGE_TYPE_STONE;
+        /// Metal, against ore.
+        METAL = 11, ids::DAMAGE_TYPE_METAL;
+        /// Explosion.
+        EXPLOSION = 12, ids::DAMAGE_TYPE_EXPLOSION;
     }
 }
 
-/// The attack categories of a hit, a set the loader fills from the
-/// engine's attack category mask by the name of each bit.
-///
-/// # Examples
-///
-/// ```
-/// use enshwick::game_events::AttackCategories;
-///
-/// let categories = AttackCategories::MELEE | AttackCategories::AREA;
-/// assert!(categories.contains(AttackCategories::MELEE));
-/// assert!(!categories.contains(AttackCategories::RANGED));
-/// ```
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
-pub struct AttackCategories(u8);
-
-impl AttackCategories {
-    /// Melee.
-    pub const MELEE: Self = Self(1);
-    /// Ranged.
-    pub const RANGED: Self = Self(1 << 1);
-    /// Magic.
-    pub const MAGIC: Self = Self(1 << 2);
-    /// A tool, such as a pickaxe.
-    pub const TOOL: Self = Self(1 << 3);
-    /// Anything else.
-    pub const OTHER: Self = Self(1 << 4);
-    /// Area of effect.
-    pub const AREA: Self = Self(1 << 5);
-    /// A skill shot.
-    pub const SKILL_SHOT: Self = Self(1 << 6);
-
-    /// Whether every bit of `other` is set.
+mask! {
+    /// The attack categories of a hit, a set the loader fills from the
+    /// engine's attack category mask by the name of each bit.
     ///
     /// # Examples
     ///
-    /// See [`AttackCategories`].
-    #[must_use]
-    pub const fn contains(self, other: Self) -> bool {
-        self.0 & other.0 == other.0
-    }
-
-    /// Each category with the id of its engine bit.
-    pub(super) const IDS: [(Self, &'static str); 7] = [
-        (Self::MELEE, ids::ATTACK_CATEGORY_MELEE),
-        (Self::RANGED, ids::ATTACK_CATEGORY_RANGED),
-        (Self::MAGIC, ids::ATTACK_CATEGORY_MAGIC),
-        (Self::TOOL, ids::ATTACK_CATEGORY_TOOL),
-        (Self::OTHER, ids::ATTACK_CATEGORY_OTHER),
-        (Self::AREA, ids::ATTACK_CATEGORY_AO_E),
-        (Self::SKILL_SHOT, ids::ATTACK_CATEGORY_SKILL_SHOT),
-    ];
-}
-
-impl AttackCategories {
-    /// The set of the API's bits `bits`.
-    pub(super) const fn from_bits(bits: u8) -> Self {
-        Self(bits)
-    }
-
-    /// The API's bits of the set.
-    pub(super) const fn bits(self) -> u8 {
-        self.0
-    }
-}
-
-impl core::ops::BitOr for AttackCategories {
-    type Output = Self;
-
-    fn bitor(self, other: Self) -> Self {
-        Self(self.0 | other.0)
+    /// ```
+    /// use enshwick::game_events::AttackCategoryMask;
+    ///
+    /// let categories = AttackCategoryMask::MELEE | AttackCategoryMask::AOE;
+    /// assert!(categories.contains(AttackCategoryMask::MELEE));
+    /// assert!(!categories.contains(AttackCategoryMask::RANGED));
+    /// ```
+    AttackCategoryMask(u8) {
+        /// Melee.
+        MELEE = 0, ids::ATTACK_CATEGORY_MELEE;
+        /// Ranged.
+        RANGED = 1, ids::ATTACK_CATEGORY_RANGED;
+        /// Magic.
+        MAGIC = 2, ids::ATTACK_CATEGORY_MAGIC;
+        /// A tool, such as a pickaxe.
+        TOOL = 3, ids::ATTACK_CATEGORY_TOOL;
+        /// Anything else.
+        OTHER = 4, ids::ATTACK_CATEGORY_OTHER;
+        /// Area of effect.
+        AOE = 5, ids::ATTACK_CATEGORY_AO_E;
+        /// A skill shot.
+        SKILL_SHOT = 6, ids::ATTACK_CATEGORY_SKILL_SHOT;
     }
 }
 
@@ -172,10 +138,10 @@ impl core::ops::BitOr for AttackCategories {
 ///
 /// # Examples
 ///
-/// See [`ExperienceGained`](crate::game_events::ExperienceGained).
+/// See [`XpGainedEvent`](crate::game_events::XpGainedEvent).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[non_exhaustive]
-pub enum ExperienceSource {
+pub enum ExperienceSourceType {
     /// No source given.
     None,
     /// Exploring.
@@ -194,7 +160,7 @@ pub enum ExperienceSource {
     Other(u8),
 }
 
-impl ExperienceSource {
+impl ExperienceSourceType {
     /// Each source with the id of its engine constant.
     pub(crate) const IDS: [(Self, &'static str); 7] = [
         (Self::None, ids::EXPERIENCE_SOURCE_NONE),
@@ -215,10 +181,10 @@ impl ExperienceSource {
 ///
 /// # Examples
 ///
-/// See [`AltarUsed`](crate::game_events::AltarUsed).
+/// See [`FlameAltarEvent`](crate::game_events::FlameAltarEvent).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[non_exhaustive]
-pub enum AltarAction {
+pub enum FlameAltarActionType {
     /// Abandoned the base.
     Abandon,
     /// Reclaimed an abandoned base.
@@ -226,19 +192,19 @@ pub enum AltarAction {
     /// Removed the water.
     RemoveWater,
     /// Made it the preferred respawn altar.
-    SetSpawn,
+    SetAsPreferredSpawnAltar,
     /// A value this crate does not name, as the game gave it.
     Other(u8),
 }
 
-impl AltarAction {
+impl FlameAltarActionType {
     /// Each action with the id of its engine constant.
     pub(super) const IDS: [(Self, &'static str); 4] = [
         (Self::Abandon, ids::ALTAR_ACTION_ABANDON),
         (Self::Reclaim, ids::ALTAR_ACTION_RECLAIM),
         (Self::RemoveWater, ids::ALTAR_ACTION_REMOVE_WATER),
         (
-            Self::SetSpawn,
+            Self::SetAsPreferredSpawnAltar,
             ids::ALTAR_ACTION_SET_AS_PREFERRED_SPAWN_ALTAR,
         ),
     ];
@@ -249,7 +215,7 @@ impl AltarAction {
 ///
 /// # Examples
 ///
-/// See [`EquipmentChanged`](crate::game_events::EquipmentChanged).
+/// See [`HandleEquipmentSlotChangedEvent`](crate::game_events::HandleEquipmentSlotChangedEvent).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[non_exhaustive]
 pub enum EquipmentSlot {
@@ -353,8 +319,28 @@ mod tests {
     use crate::engine_enum::assert_named_after_engine;
 
     #[test]
-    fn slots_and_experience_sources_take_the_engine_s_names() {
+    fn every_value_and_bit_takes_the_engine_s_name() {
         assert_named_after_engine(&EquipmentSlot::IDS);
-        assert_named_after_engine(&ExperienceSource::IDS);
+        assert_named_after_engine(&ExperienceSourceType::IDS);
+        assert_named_after_engine(&FlameAltarActionType::IDS);
+        for names in [
+            DamageTypeMask::NAMES.as_slice(),
+            AttackCategoryMask::NAMES.as_slice(),
+        ] {
+            let named: Vec<_> = names
+                .iter()
+                .map(|&(name, id)| (Constant(name), id))
+                .collect();
+            assert_named_after_engine(&named);
+        }
+    }
+
+    /// A constant's name, shown as it is.
+    struct Constant(&'static str);
+
+    impl core::fmt::Debug for Constant {
+        fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+            f.write_str(self.0)
+        }
     }
 }

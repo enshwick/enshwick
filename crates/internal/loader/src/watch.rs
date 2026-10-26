@@ -4,7 +4,6 @@
 //! runs, each mod's settings of that world are watched too, since they are
 //! what the mod reads.
 
-use crate::mod_index::ModIndex;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::{Duration, SystemTime};
@@ -14,6 +13,7 @@ use enshwick::config::Stage;
 
 use crate::host::Loader;
 use crate::locks::Relock;
+use crate::mod_index::ModIndex;
 use crate::settings::{LOADER_ID, Settings};
 
 /// How often the files are looked at; a few stat calls each time.
@@ -133,18 +133,19 @@ pub(crate) fn start(loader: &'static Loader) {
         })
         .collect();
     // A pack's data files; the dedicated server applies what it can of a
-    // change at once.
-    let mut packs: Vec<(usize, PathBuf, Stamp)> = if loader.side == Side::SERVER {
-        crate::packs::watched(loader)
-            .into_iter()
-            .map(|(index, path)| {
-                let seen = stamp(&path);
-                (index, path, seen)
-            })
-            .collect()
-    } else {
-        Vec::new()
-    };
+    // change at once, and with `dev_reload` on the client too.
+    let mut packs: Vec<(usize, PathBuf, Stamp)> =
+        if loader.side == Side::SERVER || crate::reload::copies() {
+            crate::packs::watched(loader)
+                .into_iter()
+                .map(|(index, path)| {
+                    let seen = stamp(&path);
+                    (index, path, seen)
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
     let started = std::thread::Builder::new()
         .name("enshwick-settings".into())
         .spawn(move || {

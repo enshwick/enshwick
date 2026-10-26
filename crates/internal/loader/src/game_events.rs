@@ -11,9 +11,6 @@
 //! A client runs the same move for its own world as well as for a hosted
 //! game's server; only the server's entity world is followed.
 
-use crate::mod_index::ModIndex;
-use crate::pinned;
-use crate::pinned::Constant;
 use core::cell::RefCell;
 use core::ffi::c_void;
 use std::sync::atomic::Ordering;
@@ -26,6 +23,9 @@ use crate::chains::Next;
 use crate::fuse::Fuse;
 use crate::host::Loader;
 use crate::locks::Relock;
+use crate::mod_index::ModIndex;
+use crate::pinned;
+use crate::pinned::Constant;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[

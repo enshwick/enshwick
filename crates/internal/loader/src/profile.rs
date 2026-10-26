@@ -7,7 +7,6 @@
 //! the chain's. `enshwick profile` on the console and the status summary show
 //! the busiest mods since start or since `enshwick profile reset`.
 
-use crate::mod_index::ModIndex;
 use std::cell::Cell;
 use std::fmt::Write as _;
 use std::sync::OnceLock;
@@ -15,6 +14,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 use crate::chains::Counter;
+use crate::mod_index::ModIndex;
 
 /// What the loader calls a mod for.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

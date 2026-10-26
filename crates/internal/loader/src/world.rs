@@ -8,20 +8,20 @@
 //! game the built-in server's `GameServer` thread; each hosted game has its
 //! own server and thread, captured by the post-step link.
 
-use crate::pinned;
-use crate::pinned::{Constant, Symbol};
 use core::cell::Cell;
 use core::ffi::c_void;
-use enshwick::ecs::Entity;
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
 
 use arrayvec::ArrayVec;
 use enshwick::abi::{Header, HookFlags, PlayerInfo, Status};
+use enshwick::ecs::Entity;
 
 use crate::chains::Next;
 use crate::host::Loader;
 use crate::memory::read;
+use crate::pinned;
+use crate::pinned::{Constant, Symbol};
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[

@@ -2,10 +2,10 @@
 //! it, writes the JSON Schemas of its files for editors, and zips it for a
 //! release.
 
-use anyhow::Context as _;
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
 
+use anyhow::Context as _;
 use clap::Subcommand;
 use enshwick::content::vanilla::Vanilla;
 use enshwick::packs::{MANIFEST_FILE, Pack, PackFiles, PackManifest};
@@ -213,6 +213,43 @@ mod tests {
         let error = check(&dir, None).unwrap_err().to_string();
         assert!(error.starts_with("pack.toml:3:1: join = false"), "{error}");
         let _gone = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Every data pack among the examples, by folder.
+    fn example_packs() -> Vec<PathBuf> {
+        let examples = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples");
+        let mut packs: Vec<PathBuf> = std::fs::read_dir(examples)
+            .unwrap()
+            .filter_map(Result::ok)
+            .map(|entry| entry.path())
+            .filter(|dir| dir.join(MANIFEST_FILE).is_file())
+            .collect();
+        packs.sort();
+        packs
+    }
+
+    #[test]
+    fn every_example_pack_checks_clean_against_the_game_s_data_when_it_is_at_hand() {
+        let packs = example_packs();
+        assert!(!packs.is_empty());
+        let game = std::env::var_os("ENSHROUDED_DIR").map(PathBuf::from);
+        let vanilla = game.as_deref().map(|dir| vanilla(dir).unwrap());
+        for dir in packs {
+            match check(&dir, vanilla.as_ref()) {
+                Ok(_) => {}
+                // Without the game's data, only the game's names are left
+                // to check.
+                Err(error) if vanilla.is_none() => {
+                    let text = error.to_string();
+                    assert!(
+                        text.lines().all(|line| line.contains("the game's data")),
+                        "{}: {text}",
+                        dir.display()
+                    );
+                }
+                Err(error) => panic!("{}: {error}", dir.display()),
+            }
+        }
     }
 
     #[test]

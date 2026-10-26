@@ -39,6 +39,9 @@ const CHUNK: usize = 20;
 const CACHED: usize = 4;
 /// The zstd frame magic; a chunk without it is stored as is.
 const ZSTD: [u8; 4] = [0x28, 0xb5, 0x2f, 0xfd];
+/// The most a zstd block unpacks to; each block takes at least three bytes
+/// of header, which bounds what a packed chunk can unpack to.
+const ZSTD_BLOCK: usize = 128 * 1024;
 
 /// A resource's place in the unpacked resource bytes.
 #[derive(Clone, Copy, Debug)]
@@ -55,11 +58,58 @@ struct Chunk {
     len: u32,
 }
 
+/// Where an archive's resources and contents are read from.
+#[derive(Debug)]
+enum Store {
+    /// `<name>.kfc_resources` and `<name>_<container>.dat` in `dir`.
+    Files { dir: PathBuf, name: String },
+    /// Bytes held in memory: the resources and each container.
+    Bytes {
+        resources: Box<[u8]>,
+        containers: FxHashMap<u16, Box<[u8]>>,
+    },
+}
+
+/// A part of an archive besides its header.
+#[derive(Clone, Copy, Debug)]
+enum Part {
+    Resources,
+    Container(u16),
+}
+
+impl Store {
+    /// `len` bytes of `part` at `at`; `None` when they do not lie inside it.
+    fn read(&self, part: Part, at: u32, len: usize) -> Option<Vec<u8>> {
+        match self {
+            Self::Files { dir, name } => {
+                let path = match part {
+                    Part::Resources => dir.join(format!("{name}.kfc_resources")),
+                    Part::Container(container) => dir.join(format!("{name}_{container:03}.dat")),
+                };
+                let mut file = open_at(&path, at, len)?;
+                let mut data = zeroed(len)?;
+                file.read_exact(&mut data).ok()?;
+                Some(data)
+            }
+            Self::Bytes {
+                resources,
+                containers,
+            } => {
+                let bytes = match part {
+                    Part::Resources => resources,
+                    Part::Container(container) => containers.get(&container)?,
+                };
+                let at = usize::try_from(at).ok()?;
+                Some(bytes.get(at..at.checked_add(len)?)?.to_vec())
+            }
+        }
+    }
+}
+
 /// One archive of the game, opened.
 #[derive(Debug)]
 pub struct Archive {
-    dir: PathBuf,
-    name: String,
+    store: Store,
     header: Box<[u8]>,
     resources: FxHashMap<([u8; 16], u32, u32), Place>,
     chunks: Box<[Chunk]>,
@@ -112,10 +162,42 @@ impl Archive {
     #[must_use]
     pub fn open(dir: &Path, name: &str) -> Option<Self> {
         let header = std::fs::read(dir.join(format!("{name}.kfc"))).ok()?;
-        Self::from_header(dir, name, header.into_boxed_slice())
+        let store = Store::Files {
+            dir: dir.to_owned(),
+            name: name.to_owned(),
+        };
+        Self::from_header(store, header.into_boxed_slice())
     }
 
-    fn from_header(dir: &Path, name: &str, header: Box<[u8]>) -> Option<Self> {
+    /// An archive held in memory: the bytes of `<name>.kfc`, of
+    /// `<name>.kfc_resources` and of each `<name>_<container>.dat`, for tests
+    /// and tools that have the files' bytes rather than the files; `None` in
+    /// a format the loader does not read.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_gamedata::archive::Archive;
+    ///
+    /// assert!(Archive::from_bytes(b"KFC2".to_vec(), Vec::new(), []).is_none());
+    /// ```
+    #[must_use]
+    pub fn from_bytes(
+        header: Vec<u8>,
+        resources: Vec<u8>,
+        containers: impl IntoIterator<Item = (u16, Vec<u8>)>,
+    ) -> Option<Self> {
+        let store = Store::Bytes {
+            resources: resources.into_boxed_slice(),
+            containers: containers
+                .into_iter()
+                .map(|(container, bytes)| (container, bytes.into_boxed_slice()))
+                .collect(),
+        };
+        Self::from_header(store, header.into_boxed_slice())
+    }
+
+    fn from_header(store: Store, header: Box<[u8]>) -> Option<Self> {
         if word(&header, 0)? != MAGIC {
             return None;
         }
@@ -157,8 +239,7 @@ impl Archive {
             })
             .collect::<Option<Box<[Chunk]>>>()?;
         Some(Self {
-            dir: dir.to_owned(),
-            name: name.to_owned(),
+            store,
             header,
             resources,
             chunks,
@@ -171,12 +252,8 @@ impl Archive {
     #[must_use]
     pub fn content(&self, hash: &ContentHash) -> Option<Vec<u8>> {
         let (container, offset) = find_content(&self.header, hash)?;
-        let path = self.dir.join(format!("{}_{container:03}.dat", self.name));
         let len = usize::try_from(hash[0]).ok()?;
-        let mut file = open_at(&path, offset, len)?;
-        let mut data = zeroed(len)?;
-        file.read_exact(&mut data).ok()?;
-        Some(data)
+        self.store.read(Part::Container(container), offset, len)
     }
 
     /// The bytes of resource `key`, as the game reads them before it
@@ -186,8 +263,22 @@ impl Archive {
         let place = *self.resources.get(&(key.guid, key.type_hash, key.part))?;
         let (start, len) = (place.at, place.len);
         let end = start.checked_add(len)?;
+        // The chunks must cover the whole resource.
+        let covered: u64 = self
+            .chunks
+            .iter()
+            .map(|c| {
+                let from = start.max(c.at);
+                let to = end.min(c.at.saturating_add(c.len));
+                u64::from(to.saturating_sub(from))
+            })
+            .sum();
+        if covered != u64::from(len) {
+            return None;
+        }
+        // The bytes grow as the chunks unpack, never by the size the map
+        // claims, so a damaged size costs no memory.
         let mut out = Vec::new();
-        out.try_reserve_exact(usize::try_from(len).ok()?).ok()?;
         for (index, chunk) in self.chunks.iter().enumerate() {
             let chunk_end = chunk.at.saturating_add(chunk.len);
             if chunk_end <= start || chunk.at >= end {
@@ -227,13 +318,15 @@ impl Archive {
             return Some(Arc::clone(bytes));
         }
         let chunk = self.chunks.get(index)?;
-        let path = self.dir.join(format!("{}.kfc_resources", self.name));
         let packed_len = usize::try_from(chunk.packed_len).ok()?;
-        let mut file = open_at(&path, chunk.packed_at, packed_len)?;
-        let mut packed = zeroed(packed_len)?;
-        file.read_exact(&mut packed).ok()?;
+        let packed = self
+            .store
+            .read(Part::Resources, chunk.packed_at, packed_len)?;
         let len = usize::try_from(chunk.len).ok()?;
         let bytes: Arc<[u8]> = if packed.starts_with(&ZSTD) {
+            if len > packed_len.div_ceil(3).saturating_mul(ZSTD_BLOCK) {
+                return None;
+            }
             let mut unpacked = zeroed(len)?;
             let written = ruzstd::decoding::FrameDecoder::new()
                 .decode_all(&packed, &mut unpacked)
@@ -301,16 +394,10 @@ mod tests {
         put(h, field + 4, count);
     }
 
-    /// An archive in a temporary folder: two contents (the second
-    /// compressed) and two resources over two chunks, one packed with zstd
-    /// and one stored.
-    fn archive() -> (PathBuf, Archive) {
-        let dir = std::env::temp_dir().join(format!(
-            "enshwick-archive-{}-{:?}",
-            std::process::id(),
-            std::thread::current().id()
-        ));
-        std::fs::create_dir_all(&dir).unwrap();
+    /// The bytes of an archive's header, resources and container 0: two
+    /// contents (the second compressed) and two resources over two chunks,
+    /// one packed with zstd and one stored.
+    fn parts() -> (Vec<u8>, Vec<u8>, Vec<u8>) {
         let mut h = vec![0u8; 0x200];
         put(&mut h, 0, MAGIC);
         locate(&mut h, CONTENT_BUCKETS, 0x100, 1);
@@ -364,15 +451,62 @@ mod tests {
         ] {
             put(&mut h, at, value);
         }
-        std::fs::write(dir.join("game.kfc"), &h).unwrap();
-        std::fs::write(
-            dir.join("game.kfc_resources"),
-            [packed.as_slice(), second.as_slice()].concat(),
-        )
-        .unwrap();
-        std::fs::write(dir.join("game_000.dat"), [0, 0, 9, 8, 7, 6]).unwrap();
+        let resources = [packed.as_slice(), second.as_slice()].concat();
+        (h, resources, vec![0, 0, 9, 8, 7, 6])
+    }
+
+    /// The archive of [`parts`] in a temporary folder.
+    fn archive() -> (PathBuf, Archive) {
+        let dir = std::env::temp_dir().join(format!(
+            "enshwick-archive-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let (header, resources, container) = parts();
+        std::fs::write(dir.join("game.kfc"), header).unwrap();
+        std::fs::write(dir.join("game.kfc_resources"), resources).unwrap();
+        std::fs::write(dir.join("game_000.dat"), container).unwrap();
         let archive = Archive::open(&dir, "game").unwrap();
         (dir, archive)
+    }
+
+    fn key(guid: u8, part: u32) -> ResourceKey {
+        ResourceKey {
+            guid: [guid; 16],
+            type_hash: 0xabcd,
+            part,
+        }
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore = "unpacking archive chunks takes minutes under Miri")]
+    fn an_archive_in_memory_reads_as_its_files_do() {
+        let (header, resources, container) = parts();
+        let archive = Archive::from_bytes(header, resources, [(0, container)]).unwrap();
+        assert_eq!(archive.content(&[4, 1, 2, 3]), Some(vec![9, 8, 7, 6]));
+        assert_eq!(archive.content(&[20, 4, 5, 6]), None, "compressed");
+        assert_eq!(archive.resource(&key(7, 0)), Some(vec![6, 7, 8, 9]));
+        assert_eq!(archive.resource(&key(8, 0)), Some(vec![10, 11, 12]));
+        let (header, resources, _) = parts();
+        let without = Archive::from_bytes(header, resources, []).unwrap();
+        assert_eq!(without.content(&[4, 1, 2, 3]), None, "no container 0");
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore = "unpacking archive chunks takes minutes under Miri")]
+    fn sizes_the_chunks_cannot_hold_take_no_memory() {
+        let (mut header, resources, container) = parts();
+        // The first resource claims nearly 4 GiB from its offset.
+        put(&mut header, 0x194, u32::MAX - 6);
+        // The zstd chunk claims to unpack to 4 GiB.
+        let mut huge = header.clone();
+        put(&mut huge, 0x1b0, u32::MAX);
+        let archive =
+            Archive::from_bytes(header, resources.clone(), [(0, container.clone())]).unwrap();
+        assert_eq!(archive.resource(&key(7, 0)), None);
+        let archive = Archive::from_bytes(huge, resources, [(0, container)]).unwrap();
+        assert_eq!(archive.chunk(0), None);
     }
 
     #[test]
@@ -382,11 +516,6 @@ mod tests {
         assert_eq!(archive.content(&[4, 1, 2, 3]), Some(vec![9, 8, 7, 6]));
         assert_eq!(archive.content(&[20, 4, 5, 6]), None, "compressed");
         assert_eq!(archive.content(&[4, 1, 2, 4]), None);
-        let key = |guid, part| ResourceKey {
-            guid: [guid; 16],
-            type_hash: 0xabcd,
-            part,
-        };
         assert_eq!(archive.resource(&key(7, 0)), Some(vec![6, 7, 8, 9]));
         assert_eq!(archive.resource(&key(8, 0)), Some(vec![10, 11, 12]));
         assert_eq!(archive.resource(&key(8, 1)), None);
@@ -406,7 +535,7 @@ mod tests {
             if field == RESOURCE_KEYS {
                 put(&mut broken, RESOURCE_VALUES + 4, u32::MAX);
             }
-            assert!(Archive::from_header(&dir, "game", broken.into_boxed_slice()).is_none());
+            assert!(Archive::from_bytes(broken, Vec::new(), []).is_none());
         }
         // A bucket that claims every entry stops at the header's end.
         put(&mut h, 0x104, u32::MAX);
@@ -424,8 +553,8 @@ mod tests {
     fn another_format_does_not_open() {
         let mut header = vec![0u8; 0x100];
         header[..4].copy_from_slice(b"KFC2");
-        assert!(Archive::from_header(Path::new("."), "x", header.into_boxed_slice()).is_none());
-        assert!(Archive::from_header(Path::new("."), "x", Box::new([])).is_none());
+        assert!(Archive::from_bytes(header, Vec::new(), []).is_none());
+        assert!(Archive::from_bytes(Vec::new(), Vec::new(), []).is_none());
     }
 
     /// The installed client's archive, when `ENSHWICK_CLIENT_DIR` names its
@@ -462,7 +591,8 @@ mod tests {
         };
         enshwick::content::icons::tint(&mut rgba, tint);
         assert!(rgba.as_chunks::<4>().0.iter().any(|p| p[2] > p[0]), "bluer");
-        let hash = crate::catalogue::type_hash(enshwick::content::types::ITEM_REGISTRY.id());
+        let hash =
+            crate::catalogue::type_hash(enshwick::content::types::ITEM_REGISTRY_RESOURCE.id());
         let registry = enshwick::content::items::ITEM_REGISTRY.key_by_hash(hash.unwrap());
         let registry = archive.resource(&registry).unwrap();
         let workbench = enshwick::content::workshops::stations::WORKBENCH.item;

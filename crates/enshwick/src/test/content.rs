@@ -1,12 +1,13 @@
 //! Content: items, archives, resources, texts and what the mod serves.
 
-use super::FakeHost;
-use super::Installed;
-use super::table;
 use crate::abi::Header;
 use crate::abi::ItemData;
 use crate::abi::ResourceKey;
 use crate::abi::Status;
+
+use super::FakeHost;
+use super::Installed;
+use super::table;
 
 impl FakeHost {
     /// The static data of item `item`, for `item_info`.

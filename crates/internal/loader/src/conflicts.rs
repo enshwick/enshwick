@@ -4,7 +4,6 @@
 //! The report names who, in which order, and whether they chain or one holds
 //! it; the status summary and `enshwick conflicts` show it.
 
-use crate::mod_index::ModIndex;
 use std::borrow::Cow;
 use std::fmt::Write as _;
 use std::sync::Mutex;
@@ -12,6 +11,7 @@ use std::sync::Mutex;
 use enshwick::abi::Status;
 
 use crate::locks::Relock;
+use crate::mod_index::ModIndex;
 
 /// How the mods on one feature share it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

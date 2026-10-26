@@ -1,7 +1,7 @@
 use core::time::Duration;
 
 use crate::abi::StatModifierData;
-use crate::buffs::BuffId;
+use crate::buffs::BuffTypeId;
 use crate::item_data::ItemInstance;
 
 use super::defs::{Stat, StatDef, StatKey, StatType};
@@ -279,7 +279,7 @@ pub enum Origin {
     /// An item the entity wears.
     Item(ItemInstance),
     /// A buff the entity has.
-    Buff(BuffId),
+    Buff(BuffTypeId),
     /// A modifier a mod keeps on the entity: the mod's load-order index and
     /// the hash of its key.
     Mod {

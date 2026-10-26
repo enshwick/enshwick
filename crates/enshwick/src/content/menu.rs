@@ -7,11 +7,12 @@
 //! [`Load::derive_recipes`] and [`Load::add_workshop`] list what they add
 //! here on the client; the dedicated server has no UI bundle.
 
-use super::workshops::WorkshopId;
-use super::{Blob, EngineFacts, Guid, types};
 use crate::abi::Side;
 use crate::engine_ids as ids;
 use crate::{Load, Off};
+
+use super::workshops::WorkshopId;
+use super::{Blob, EngineFacts, Guid, types};
 
 /// The client's UI bundle resource, which holds the crafting menu.
 pub const UI_BUNDLE: Guid = Guid::parse("46e14df6-fb8f-4f66-9463-e23b9e19e48e");
@@ -129,7 +130,7 @@ pub struct MenuEntry {
 ///         after: Some(Guid::parse("45390726-8a83-4538-91a2-db2a633c8eac")),
 ///         workshop: None,
 ///     };
-///     let bundle = UI_BUNDLE.key(types::UI_BUNDLE)?;
+///     let bundle = UI_BUNDLE.key(types::FB_UI_BUNDLE)?;
 ///     load.serve(bundle, bundle, move |base| list_recipes(&layout, base, &[entry]))
 /// }
 /// ```
@@ -299,7 +300,7 @@ fn group_entries(layout: &MenuLayout, blob: &Blob, group: usize) -> Option<usize
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 ///     let layout = MenuLayout::resolve(load)?;
 ///     let bench = WorkshopId::new(Id::new("my-mod:bench.workshop").guid());
-///     let bundle = UI_BUNDLE.key(types::UI_BUNDLE)?;
+///     let bundle = UI_BUNDLE.key(types::FB_UI_BUNDLE)?;
 ///     load.serve(bundle, bundle, move |base| list_workshop(&layout, base, bench))
 /// }
 /// ```
@@ -359,8 +360,8 @@ pub(crate) fn serve(
     if load.host().build().side != Side::CLIENT {
         return Ok(());
     }
-    let resolved =
-        MenuLayout::resolve(load).and_then(|layout| Ok((layout, UI_BUNDLE.key(types::UI_BUNDLE)?)));
+    let resolved = MenuLayout::resolve(load)
+        .and_then(|layout| Ok((layout, UI_BUNDLE.key(types::FB_UI_BUNDLE)?)));
     let (layout, bundle) = match resolved {
         Ok(resolved) => resolved,
         Err(off) => {

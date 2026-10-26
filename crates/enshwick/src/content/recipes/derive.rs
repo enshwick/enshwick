@@ -21,7 +21,7 @@ pub(super) fn makes(layout: &RecipeLayout, registry: &Blob, at: usize, item: Gui
 
 /// The vanilla recipe registry from the game's archive.
 pub(super) fn vanilla_registry() -> Option<Vec<u8>> {
-    super::super::game_resource(RECIPE_REGISTRY.key(types::RECIPE_REGISTRY).ok()?)
+    super::super::game_resource(RECIPE_REGISTRY.key(types::RECIPE_REGISTRY_RESOURCE).ok()?)
 }
 
 /// The GUIDs of the recipes in `registry`.
@@ -299,7 +299,7 @@ pub fn derived_guid(base: Guid, salt: u32) -> Guid {
 ///
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 ///     let layout = RecipeLayout::resolve(load)?;
-///     let registry = RECIPE_REGISTRY.key(types::RECIPE_REGISTRY)?;
+///     let registry = RECIPE_REGISTRY.key(types::RECIPE_REGISTRY_RESOURCE)?;
 ///     load.serve(registry, registry, move |base| {
 ///         derive_recipes_in(&layout, base, 0x5afe, workshop_limit(), &|recipe| {
 ///             recipe.debug_name().starts_with("Block_").then_some(Derived {
@@ -508,7 +508,7 @@ impl RecipeEdit<'_> {
 ///
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 ///     let layout = RecipeLayout::resolve(load)?;
-///     let registry = RECIPE_REGISTRY.key(types::RECIPE_REGISTRY)?;
+///     let registry = RECIPE_REGISTRY.key(types::RECIPE_REGISTRY_RESOURCE)?;
 ///     load.serve(registry, registry, move |base| {
 ///         let (built, changed) = modify_recipes_in(&layout, base, &|recipe| recipe.scale_output(2))?;
 ///         enshwick::info!("{changed} recipes doubled");

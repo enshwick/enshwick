@@ -7,7 +7,7 @@ mod tests {
     use std::sync::{Mutex, OnceLock};
 
     use enshwick::abi::{BuffTypeInfo, Header, Status};
-    use enshwick::buffs::{Apply, BuffId, Buffs};
+    use enshwick::buffs::{Apply, BuffTypeId, Buffs};
     use enshwick::ecs::Entity;
     use enshwick::item_data::ItemInstance;
     use enshwick::stats::{
@@ -46,7 +46,7 @@ mod tests {
                 load.define_stat("luck", &StatDef::additive("x")).is_err(),
                 "defined twice"
             );
-            load.buff_modifiers(BuffId(BLESSED), &[Modifier::new(luck, Op::Add, 0.25)])?;
+            load.buff_modifiers(BuffTypeId(BLESSED), &[Modifier::new(luck, Op::Add, 0.25)])?;
             load.on_stats_changed(|change| {
                 CHANGES
                     .lock()
@@ -121,7 +121,9 @@ mod tests {
             duration: 60_000_000_000,
         };
         loader.set_buffs(&[blessed], &[player.0]);
-        buffs.apply(player, BuffId(BLESSED), Apply::new()).unwrap();
+        buffs
+            .apply(player, BuffTypeId(BLESSED), Apply::new())
+            .unwrap();
         let ring = ItemInstance {
             pide: Entity(900),
             item: 0x5e01,
@@ -152,7 +154,7 @@ mod tests {
             order.as_slice(),
             [
                 Origin::Item(_),
-                Origin::Buff(BuffId(BLESSED)),
+                Origin::Buff(BuffTypeId(BLESSED)),
                 Origin::Mod { .. }
             ]
         ));

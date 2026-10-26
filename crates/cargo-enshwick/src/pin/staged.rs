@@ -3,9 +3,10 @@
 //! when all of them are there do they move into place. A move that fails
 //! puts back what the earlier ones replaced.
 
-use anyhow::{anyhow, bail};
 use std::fs;
 use std::path::{Path, PathBuf};
+
+use anyhow::{anyhow, bail};
 
 /// One file to write: its new text, and what it held before, if it existed.
 #[derive(Debug)]

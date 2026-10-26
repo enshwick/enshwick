@@ -104,6 +104,13 @@ doc = false
 bench = false
 
 [[bin]]
+name = "archive"
+path = "fuzz_targets/archive.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
 name = "point_schemas"
 path = "fuzz_targets/point_schemas.rs"
 test = false

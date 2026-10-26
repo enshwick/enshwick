@@ -1,12 +1,13 @@
-use crate::locks::Relock;
 use std::sync::{Arc, Mutex, OnceLock};
 
 use enshwick::abi::{Level, MigrateFn, MigrationSet, MigrationStep, Status, Str};
 use rustc_hash::FxHashMap;
 
-use super::{MapError, Migration, Record, Step, Target, dry_run, follow_renames, run};
 use crate::host::Loader;
+use crate::locks::Relock;
 use crate::mod_index::ModIndex;
+
+use super::{MapError, Migration, Record, Step, Target, dry_run, follow_renames, run};
 
 /// A mod's migrations and its map.
 struct Registered {

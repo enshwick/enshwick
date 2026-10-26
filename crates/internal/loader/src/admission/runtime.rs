@@ -1,6 +1,5 @@
 //! The gate at work on a server: hellos, kicks and notes in the game.
 
-use crate::pinned;
 use std::collections::BTreeMap;
 use std::hash::BuildHasher as _;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -13,6 +12,7 @@ use crate::fuse::Fuse;
 use crate::host::Loader;
 use crate::join::Names;
 use crate::locks::Relock;
+use crate::pinned;
 
 use super::{Gate, Hello, Rules, Step};
 

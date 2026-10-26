@@ -7,6 +7,8 @@
 //! 17th base, which leaves that zone in no base. The cursor refuses an altar
 //! that would start a 17th base before it gets there.
 
+/// The altar zones the game's own grouping puts into bases.
+pub(crate) const VANILLA_ZONES: u32 = 16;
 /// The most bases the game holds.
 pub(crate) const MAX_BASES: u32 = 16;
 /// The most zones one base mask names.

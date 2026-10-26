@@ -2,11 +2,11 @@
 //! workshops within their limit.
 
 use crate::Off;
+use crate::engine_ids as ids;
 
 use super::super::workshops::WorkshopId;
 use super::super::{Blob, EngineFacts, Guid, Id};
 use super::derive::{makes, scaled_inputs};
-use crate::engine_ids as ids;
 
 /// The most recipes the game itself takes at one workshop; more ends the game
 /// with "`SmallDynamicArray` is out of elements" unless the loader lifts the
@@ -177,7 +177,7 @@ pub(super) fn fnv1a(bytes: &[u8]) -> u32 {
 ///     recipe: NewRecipe,
 /// ) -> Result<(), enshwick::Off> {
 ///     let layout = RecipeLayout::resolve(load)?;
-///     let registry = RECIPE_REGISTRY.key(types::RECIPE_REGISTRY)?;
+///     let registry = RECIPE_REGISTRY.key(types::RECIPE_REGISTRY_RESOURCE)?;
 ///     load.serve(registry, registry, move |base| {
 ///         add_recipe_to(&layout, base, &recipe, workshop_limit())
 ///     })

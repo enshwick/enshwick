@@ -73,6 +73,31 @@ pub const RECIPE_DURATION: &str = "recipe.duration";
 /// item's static data.
 pub const ITEM_PLACED_ENTITY: &str = "item_info.placed_entity";
 
+/// The id of a weapon's damage factor, an `f32`, in an item's static data.
+pub const ITEM_DAMAGE_MOD: &str = "item_info.damage_mod";
+/// The id of a weapon's attack speed factor, an `f32`.
+pub const ITEM_SPEED_MOD: &str = "item_info.speed_mod";
+/// The id of the flag that says an item deals damage.
+pub const ITEM_DAMAGE_SET: &str = "item_info.damage_set";
+/// The id of an item's armour values, `f32` each, as many as
+/// [`ARMOR_DISTRIBUTION`] holds.
+pub const ITEM_ARMOR: &str = "item_info.armor";
+/// The id of the flag that says an item gives armour.
+pub const ITEM_ARMOR_SET: &str = "item_info.armor_set";
+/// The id of how long an item burns as fuel, a `keen::Time` in nanoseconds.
+pub const ITEM_BURN_TIME: &str = "item_info.burn_time";
+/// The id of the energy an item gives as fuel, a `u32`.
+pub const ITEM_ENERGY_OUTPUT: &str = "item_info.energy_output";
+/// The id of the flag that says an item is fuel.
+pub const ITEM_FUEL_SET: &str = "item_info.fuel_set";
+/// The id of the comfort a placed item gives, a `u32`.
+pub const ITEM_COMFORT_AMOUNT: &str = "item_info.comfort_amount";
+/// The id of the flag that says an item gives comfort.
+pub const ITEM_COMFORT_SET: &str = "item_info.comfort_set";
+
+/// The id of the armour values' type, whose size counts them.
+pub const ARMOR_DISTRIBUTION: &str = "armor_distribution";
+
 /// The kind of the recipes that make an item, by the name of the constant
 /// of [`SLOT_TYPE`] the item's equipment slot holds; every other slot is
 /// [`RecipeKind::Other`]. A new kind is a row here.
@@ -331,6 +356,42 @@ mod tests {
     }
 
     #[test]
+    fn every_event_id_is_named_after_its_engine_type_and_field() {
+        let events: Vec<(&str, &str)> = FACTS
+            .iter()
+            .filter_map(|&(id, fact)| match fact {
+                Fact::Type(ty) if ty.ends_with("Event") => Some((id, ty)),
+                _ => None,
+            })
+            .collect();
+        for &(id, ty) in &events {
+            let (_, short) = ty.rsplit_once("::").unwrap();
+            assert_eq!(plain(id), plain(short), "{id}");
+        }
+        for &(id, fact) in FACTS {
+            let Some((event, suffix)) = id.split_once('.') else {
+                continue;
+            };
+            if let (true, Fact::Offset { field, .. }) =
+                (events.iter().any(|&(e, _)| e == event), fact)
+            {
+                assert_eq!(plain(suffix), plain(field), "{id}");
+            }
+        }
+    }
+
+    #[test]
+    fn every_game_settings_id_is_named_after_its_engine_field() {
+        for &(id, fact) in FACTS {
+            if let (Some(suffix), Fact::Offset { field, .. }) =
+                (id.strip_prefix("game_settings."), fact)
+            {
+                assert_eq!(plain(suffix), plain(field), "{id}");
+            }
+        }
+    }
+
+    #[test]
     fn an_enum_constant_is_neither_a_type_nor_an_offset() {
         let fact = fact("damage_type.magical_fire");
         assert!(matches!(fact, Some(Fact::Constant { .. })));
@@ -430,6 +491,40 @@ mod tests {
             values.sort_unstable();
             values.dedup();
             assert_eq!(values.len(), RECIPE_KINDS.len(), "{var}");
+        }
+    }
+
+    /// With both executables `ENSH_SERVER_EXE` and `ENSH_CLIENT_EXE` named
+    /// (skipped without them), every API name the game names itself stands
+    /// for a type, field or enum constant one of them reflects.
+    #[test]
+    fn every_api_game_name_is_reflected() {
+        let (Ok(server), Ok(client)) = (
+            std::env::var("ENSH_SERVER_EXE"),
+            std::env::var("ENSH_CLIENT_EXE"),
+        ) else {
+            return;
+        };
+        let bytes = [
+            std::fs::read(server).unwrap(),
+            std::fs::read(client).unwrap(),
+        ];
+        let images = bytes.each_ref().map(|bytes| {
+            crate::reflect::Image::parse(bytes, crate::reflect::Layout::File, None).unwrap()
+        });
+        let reflections = images.each_ref().map(Reflection::scan);
+        for row in crate::game_names::GAME_NAMES {
+            let found = reflections.iter().any(|reflection| {
+                reflection.type_info(row.game_type).is_ok_and(|info| {
+                    row.game_member.is_empty()
+                        || info.fields().iter().any(|f| f.name() == row.game_member)
+                        || info
+                            .enum_values()
+                            .iter()
+                            .any(|v| v.name() == row.game_member)
+                })
+            });
+            assert!(found, "{row:?}");
         }
     }
 

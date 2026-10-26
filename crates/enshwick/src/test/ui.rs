@@ -1,8 +1,9 @@
 //! The mod's interface: what it draws, its markers, dialogs and the player's input.
 
+use crate::abi::Header;
+
 use super::Installed;
 use super::table;
-use crate::abi::Header;
 
 #[expect(
     clippy::unused_self,

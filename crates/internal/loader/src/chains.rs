@@ -6,8 +6,9 @@
 //! Wiring writes only those slots, so turning a faulty mod off while the game
 //! runs never touches code.
 
-use crate::mod_index::ModIndex;
 use core::marker::PhantomData;
+
+use crate::mod_index::ModIndex;
 // The loom model in `model` swaps in loom's atomics, which
 // record every load and store for the model to permute.
 #[cfg(loom)]

@@ -1,12 +1,13 @@
 //! Inventory requests the mod submits and their outcomes.
 
-use super::FakeHost;
-use super::Installed;
-use super::table;
 use crate::abi::Header;
 use crate::abi::InventoryOp;
 use crate::abi::InventoryOpResult;
 use crate::abi::InventoryResult;
+
+use super::FakeHost;
+use super::Installed;
+use super::table;
 
 impl FakeHost {
     /// Plays a game build without inventory transactions: `inventory_open`

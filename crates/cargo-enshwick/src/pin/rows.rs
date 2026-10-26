@@ -5,9 +5,10 @@
 //! is the old row's text with values replaced: comments and layout carry
 //! over.
 
-use anyhow::{Context as _, anyhow, bail};
 use std::fmt::Write as _;
 use std::ops::Range;
+
+use anyhow::{Context as _, anyhow, bail};
 
 /// The game side a row is for.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

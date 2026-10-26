@@ -535,18 +535,53 @@ pub(crate) extern "system" fn experience_filter(
 }
 
 pub(crate) extern "system" fn altar_limit(
+    _me: ModHandle,
+    _callback: api_frame::AltarLimitFn,
+    _user: *mut core::ffi::c_void,
+) -> Status {
+    Status::REFUSED
+}
+
+pub(crate) extern "system" fn altar_limit_filter(
     me: ModHandle,
-    callback: api_frame::AltarLimitFn,
+    callback: api_frame::AltarLimitFilterFn,
     user: *mut core::ffi::c_void,
 ) -> Status {
-    entry("altar_limit", || match caller_index(me) {
+    entry("altar_limit_filter", || match caller_index(me) {
         Ok((loader, index)) => crate::conflicts::note(
-            "altar limit",
+            "altar limit filter",
             index,
-            crate::conflicts::Mode::Exclusive,
-            crate::bases::register_limit(loader, index, callback, user),
+            crate::conflicts::Mode::Chained,
+            crate::bases::add_limit(loader, index, callback, user),
         ),
         Err(status) => status,
+    })
+}
+
+pub(crate) extern "system" fn base_limit(
+    me: ModHandle,
+    out: *mut api_frame::BaseLimitInfo,
+) -> Status {
+    entry("base_limit", || {
+        if let Err(status) = caller(me) {
+            return status;
+        }
+        let (zones, bases) = crate::bases::base_limit();
+        // SAFETY: `HostApi::base_limit` has the mod pass `out` null or
+        // readable for its header and writable for the size it names, with no
+        // other thread touching it during the call.
+        unsafe {
+            put_headed(
+                out,
+                api_frame::BaseLimitInfo {
+                    header: api_frame::Header::of::<api_frame::BaseLimitInfo>(),
+                    zones,
+                    bases,
+                    vanilla_zones: crate::bases::VANILLA_ZONES,
+                    reserved: 0,
+                },
+            )
+        }
     })
 }
 

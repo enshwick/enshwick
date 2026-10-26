@@ -1,9 +1,10 @@
 //! Changes of vanilla recipes' values in the recipe registry, as the loader
 //! applies the merged changes of every mod.
 
-use super::RecipeLayout;
 use crate::content::changes::Field;
 use crate::content::{Blob, Guid};
+
+use super::RecipeLayout;
 
 /// Nanoseconds in a second: the game keeps a recipe's time in nanoseconds.
 const NANOS: f64 = 1e9;
@@ -79,7 +80,9 @@ pub fn change_recipes_in(
         }
         touched |= change_inputs(layout, &mut blob, at, guid, &keys, changes)?;
         if let Some(duration) = duration
-            && keys.iter().any(|(field, _)| *field == Field::Time)
+            && keys
+                .iter()
+                .any(|(field, _)| *field == Field::CraftingDuration)
         {
             touched |= change_time(&mut blob, at + duration, guid, changes)?;
         }
@@ -228,7 +231,7 @@ fn change_time(
         reason = "a recipe's time is at most a day, far below f64's whole range"
     )]
     let seconds = nanos as f64 / NANOS;
-    let Some(new) = changes.value(recipe, Field::Time, None, seconds) else {
+    let Some(new) = changes.value(recipe, Field::CraftingDuration, None, seconds) else {
         return Some(false);
     };
     #[expect(
@@ -414,9 +417,9 @@ mod tests {
 
     #[test]
     fn the_time_changes_in_seconds() {
-        let (blob, _) = apply(&[((Field::Time, None), Value::Times(0.5))]);
+        let (blob, _) = apply(&[((Field::CraftingDuration, None), Value::Times(0.5))]);
         assert_eq!(seconds(&blob), 30);
-        let (blob, _) = apply(&[((Field::Time, None), Value::Set(0.0))]);
+        let (blob, _) = apply(&[((Field::CraftingDuration, None), Value::Set(0.0))]);
         assert_eq!(seconds(&blob), 0);
     }
 }

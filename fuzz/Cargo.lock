@@ -99,7 +99,7 @@ dependencies = [
 
 [[package]]
 name = "cargo-enshwick"
-version = "1.0.0-alpha.4"
+version = "1.0.0-alpha.5"
 dependencies = [
  "anyhow",
  "clap",
@@ -272,7 +272,7 @@ checksum = "edd0f118536f44f5ccd48bcb8b111bdc3de888b58c74639dfb034a357d0f206d"
 
 [[package]]
 name = "enshwick"
-version = "1.0.0-alpha.4"
+version = "1.0.0-alpha.5"
 dependencies = [
  "bcdec_rs",
  "bytemuck",
@@ -308,7 +308,7 @@ dependencies = [
 
 [[package]]
 name = "enshwick-gamedata"
-version = "1.0.0-alpha.4"
+version = "1.0.0-alpha.5"
 dependencies = [
  "enshwick",
  "rustc-hash",
@@ -320,7 +320,7 @@ dependencies = [
 
 [[package]]
 name = "enshwick-loader"
-version = "1.0.0-alpha.4"
+version = "1.0.0-alpha.5"
 dependencies = [
  "arc-swap",
  "arrayvec",
@@ -343,7 +343,7 @@ dependencies = [
 
 [[package]]
 name = "enshwick-macros"
-version = "1.0.0-alpha.4"
+version = "1.0.0-alpha.5"
 dependencies = [
  "proc-macro2",
  "quote",

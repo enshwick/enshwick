@@ -63,7 +63,7 @@ fn vanilla_content_is_named_by_its_debug_name() {
     let vanilla = crate::content::vanilla::tests::game(&[
         (torch, "Tool_Torch01"),
         (Guid([5; 16]), "Prop_Production_T1_Forge"),
-        (Guid([7; 16]), "Prop_Decoration_T0_Storage_16"),
+        (Guid([7; 16]), "Prop_Storage_24_T1_Box"),
     ]);
     let items = "[[item]]\nid = \"lantern\"\nlike = \"Tool_Torch01\"\nname = \"lantern.name\"\n";
     let workshops = "[[workshop]]\nid = \"forge\"\nlike = \"Prop_Production_T1_Forge\"\n\n\
@@ -81,7 +81,7 @@ fn vanilla_content_is_named_by_its_debug_name() {
 
     let wrong = files("[[item]]\nid = \"lantern\"\nlike = \"Tool_Torch1\"\n").with(
         WORKSHOPS_FILE,
-        "[[workshop]]\nid = \"forge\"\nlike = \"Prop_Decoration_T0_Storage_16\"\n",
+        "[[workshop]]\nid = \"forge\"\nlike = \"Prop_Storage_24_T1_Box\"\n",
     );
     let errors = Pack::parse_with("lights", &wrong, Some(&vanilla)).unwrap_err();
     let lines: Vec<String> = errors.list().iter().map(ToString::to_string).collect();
@@ -204,11 +204,11 @@ fn an_item_change_sets_the_stack_size_of_every_item_it_names() {
         pack.changes(),
         [
             (
-                Change::new(wood, Field::MaxStack, set),
+                Change::new(wood, Field::MaxStackSize, set),
                 "items.toml:1 (Material_T1_Wood_Logs)".to_owned()
             ),
             (
-                Change::new(Guid::parse(CHEST), Field::MaxStack, set),
+                Change::new(Guid::parse(CHEST), Field::MaxStackSize, set),
                 "items.toml:1".to_owned()
             ),
         ]
@@ -271,7 +271,7 @@ fn a_change_that_picks_or_changes_nothing_is_a_problem() {
     .unwrap_err();
     assert_eq!(
         errors.to_string(),
-        "items.toml:1:1: change 1: changes nothing; give max_stack, slots"
+        "items.toml:1:1: change 1: changes nothing; give max_stack, slots, damage_mod, speed_mod, armor, burn_time, energy_output, comfort_amount"
     );
 }
 
@@ -326,7 +326,7 @@ fn a_recipe_change_picks_recipes_by_name_and_by_what_they_make() {
                 "recipes.toml:1 (Tool_Torch01_T0_PK)"
             ),
             (
-                Change::new(recipe, Field::Time, Value::Times(0.5)),
+                Change::new(recipe, Field::CraftingDuration, Value::Times(0.5)),
                 "recipes.toml:5 (Tool_Torch01)"
             ),
             (
@@ -444,14 +444,14 @@ fn a_chest_s_slots_change_in_pages_of_eight() {
 fn slots_go_only_to_a_container_and_never_shrink_it() {
     let chest = Guid([1; 16]);
     let vanilla =
-        crate::content::vanilla::tests::game_with_chest(chest, "Prop_Decoration_T0_Storage_16", 16);
-    let text = "[[change]]\nitems = [\"Prop_Decoration_T0_Storage_16\"]\nslots = 8\n";
+        crate::content::vanilla::tests::game_with_chest(chest, "Prop_Storage_24_T1_Box", 24);
+    let text = "[[change]]\nitems = [\"Prop_Storage_24_T1_Box\"]\nslots = 8\n";
     let errors = Pack::parse_with("you.chests", &files(text), Some(&vanilla)).unwrap_err();
     assert!(
         errors.to_string().ends_with("a container only grows"),
         "{errors}"
     );
-    let text = "[[change]]\nitems = [\"Prop_Decoration_T0_Storage_16\"]\nslots = { times = 0.5 }\n";
+    let text = "[[change]]\nitems = [\"Prop_Storage_24_T1_Box\"]\nslots = { times = 0.5 }\n";
     let errors = Pack::parse_with("you.chests", &files(text), Some(&vanilla)).unwrap_err();
     assert!(errors.to_string().contains("slots only grows"), "{errors}");
     let prop = Guid([7; 16]);
@@ -461,6 +461,25 @@ fn slots_go_only_to_a_container_and_never_shrink_it() {
         errors.to_string().contains("places no container"),
         "{errors}"
     );
-    let text = "[[change]]\nitems = [\"Prop_Decoration_T0_Storage_16\"]\nslots = 32\n";
+    let text = "[[change]]\nitems = [\"Prop_Storage_24_T1_Box\"]\nslots = 32\n";
     assert!(Pack::parse_with("you.chests", &files(text), Some(&vanilla)).is_ok());
+}
+
+#[test]
+fn item_stats_change_and_armor_only_scales() {
+    let items = format!(
+        "[[change]]\nitems = [\"{CHEST}\"]\ndamage_mod = {{ times = 1.5 }}\nburn_time = 600\ncomfort_amount = 3\n\n\
+         [[change]]\nitems = [\"{CHEST}\"]\narmor = 2\n"
+    );
+    let errors = Pack::parse("you.gear", &files(&items)).unwrap_err();
+    assert_eq!(
+        errors.to_string(),
+        "items.toml:7:1: change 2: armor takes only a factor: { times = x }"
+    );
+    let ok = format!(
+        "[[change]]\nitems = [\"{CHEST}\"]\ndamage_mod = {{ times = 1.5 }}\narmor = {{ times = 2 }}\n"
+    );
+    let pack = Pack::parse("you.gear", &files(&ok)).unwrap();
+    let fields: Vec<Field> = pack.changes().iter().map(|(c, _)| c.field).collect();
+    assert_eq!(fields, [Field::DamageMod, Field::Armor]);
 }

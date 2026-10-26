@@ -14,8 +14,6 @@
 //! them, and puts its own frames into its chat queue before the game sends
 //! it.
 
-use crate::pinned;
-use crate::pinned::{Constant, Symbol};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 
@@ -24,6 +22,8 @@ use enshwick::abi::{HookFlags, Status};
 use crate::chains::Next;
 use crate::host::Loader;
 use crate::locks::Relock;
+use crate::pinned;
+use crate::pinned::{Constant, Symbol};
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[

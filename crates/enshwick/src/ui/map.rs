@@ -1,7 +1,8 @@
 //! Markers on the client's map.
 
-use super::{Ui, UiError};
 use crate::abi::{Header, Status, Str, UiMarker};
+
+use super::{Ui, UiError};
 
 /// The most markers a mod shows at once.
 pub const MAX_MARKERS: usize = 256;

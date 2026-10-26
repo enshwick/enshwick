@@ -47,7 +47,7 @@ use crate::abi::{
     Header, StatChange as StatChangeData, StatModifierData, StatModify, StatRef, StatSource,
     Status, Str,
 };
-use crate::buffs::BuffId;
+use crate::buffs::BuffTypeId;
 use crate::content::items::StatFormat;
 use crate::ecs::Entity;
 use crate::item_data::{ItemData, ItemInstance, SetError};
@@ -328,7 +328,7 @@ impl Stats {
                         pide: Entity(s.id),
                         item: s.owner,
                     }),
-                    StatSource::BUFF => Origin::Buff(BuffId(s.id)),
+                    StatSource::BUFF => Origin::Buff(BuffTypeId(s.id)),
                     StatSource::ENTITY => Origin::Mod {
                         index: s.owner,
                         key: s.id,
@@ -495,15 +495,15 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::buffs::BuffId;
+    /// use enshwick::buffs::BuffTypeId;
     /// use enshwick::stats::{Modifier, Op, builtin};
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     let fire = load.open_stat(builtin::RESISTANCE_FIRE)?;
-    ///     load.buff_modifiers(BuffId(0x89cb_0b34), &[Modifier::new(fire, Op::Add, 0.2)])
+    ///     load.buff_modifiers(BuffTypeId(0x89cb_0b34), &[Modifier::new(fire, Op::Add, 0.2)])
     /// }
     /// ```
-    pub fn buff_modifiers(&mut self, buff: BuffId, modifiers: &[Modifier]) -> Result<(), Off> {
+    pub fn buff_modifiers(&mut self, buff: BuffTypeId, modifiers: &[Modifier]) -> Result<(), Off> {
         let host = self.host();
         let data: Vec<StatModifierData> = modifiers.iter().map(|m| m.to_data()).collect();
         let status = (host.api().stat_buff)(

@@ -15,6 +15,8 @@
 pub mod archive;
 pub mod catalogue;
 mod entries;
+#[cfg(test)]
+mod game_names;
 mod locks;
 mod parts;
 pub mod reflect;

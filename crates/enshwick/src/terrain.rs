@@ -48,22 +48,22 @@ pub const MAX_RADIUS: f32 = 16.0;
 ///
 /// ```
 /// fn dirt(terrain: &enshwick::terrain::Terrain, dirt_item: u32) -> Option<u8> {
-///     terrain.materials().iter().find(|m| m.item == dirt_item).map(|m| m.id)
+///     terrain.materials().iter().find(|m| m.terrain_item == dirt_item).map(|m| m.terrain_material)
 /// }
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[non_exhaustive]
-pub struct Material {
+pub struct TerrainTerraformingConfig {
     /// Its voxel id, 1 to 127.
-    pub id: u8,
+    pub terrain_material: u8,
     /// The item digging it yields, as an item id.
-    pub item: u32,
+    pub terrain_item: u32,
     /// How hard it is to dig: the game's hardness category from 0.
     pub hardness: u8,
     /// The health a voxel of it has against tools.
-    pub health: i32,
+    pub health_points: i32,
     /// Whether a player's tool can flatten it.
-    pub flattens: bool,
+    pub can_be_flattened: bool,
 }
 
 /// The shape of an edit.
@@ -115,9 +115,9 @@ impl Terrain {
     ///
     /// # Examples
     ///
-    /// See [`Material`].
+    /// See [`TerrainTerraformingConfig`].
     #[must_use]
-    pub fn materials(&self) -> Vec<Material> {
+    pub fn materials(&self) -> Vec<TerrainTerraformingConfig> {
         let blank = TerrainMaterialInfo {
             header: Header::of::<TerrainMaterialInfo>(),
             id: 0,
@@ -149,12 +149,12 @@ impl Terrain {
         }
         infos
             .iter()
-            .map(|info| Material {
-                id: info.id,
-                item: info.item,
+            .map(|info| TerrainTerraformingConfig {
+                terrain_material: info.id,
+                terrain_item: info.item,
                 hardness: info.hardness,
-                health: info.health,
-                flattens: info.flags & TerrainMaterialInfo::FLATTENS != 0,
+                health_points: info.health,
+                can_be_flattened: info.flags & TerrainMaterialInfo::FLATTENS != 0,
             })
             .collect()
     }

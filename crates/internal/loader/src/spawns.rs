@@ -7,13 +7,13 @@
 //! request hands out the new entity's id at once; the entity is in the
 //! world from the next step on.
 
-use crate::pinned;
-use crate::pinned::Symbol;
 use std::sync::OnceLock;
 
 use enshwick::abi::{SpawnRequest, Status};
 
 use crate::host::Loader;
+use crate::pinned;
+use crate::pinned::Symbol;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[

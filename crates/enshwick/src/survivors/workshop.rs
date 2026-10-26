@@ -1,7 +1,8 @@
 //! The game's workshop survivors: crafters, assistants and traders.
 
-use super::SurvivorId;
 use crate::content::Guid;
+
+use super::SurvivorId;
 
 /// A workshop survivor of the game, with its summoning staff and the
 /// template the staff places; listed in [`WORKSHOP_SURVIVORS`].

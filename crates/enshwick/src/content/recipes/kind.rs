@@ -6,6 +6,9 @@ use super::super::Guid;
 /// [`RecipeView::kind`](super::RecipeView::kind); the game may class more
 /// items in later builds.
 ///
+/// The name is enshwick's: the game has no recipe kind; it follows from the
+/// output item's equipment slot.
+///
 /// # Examples
 ///
 /// See [`RecipeView::kind`](super::RecipeView::kind).

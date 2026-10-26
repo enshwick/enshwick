@@ -6,7 +6,7 @@ mod tests {
 
     use enshwick::abi::{Status, TeleportRequest};
     use enshwick::ecs::Entity;
-    use enshwick::effects::{Effects, NpcOrder, Spawn, Teleport};
+    use enshwick::effects::{Effects, NpcCommandType, Spawn, Teleport};
     use enshwick::world::WorldError;
     use enshwick::{Load, Mod, Off};
 
@@ -42,17 +42,17 @@ mod tests {
             .constant("world_transform.scale", 40)
             .type_hash(npc, 1)
             .type_size(npc, 72)
-            .constant("npc_command_event.kind", 8)
-            .constant("npc_command_event.npc", 12)
-            .constant("npc_command_event.target", 16)
+            .constant("npc_command_event.type", 8)
+            .constant("npc_command_event.npc_id", 12)
+            .constant("npc_command_event.target_transform", 16)
             .type_hash(threat, 2)
             .type_size(threat, 24)
-            .constant("add_threat_target_event.attacker", 8)
-            .constant("add_threat_target_event.target", 12)
-            .constant("add_threat_target_event.threat", 16)
+            .constant("add_threat_target_event.attacker_id", 8)
+            .constant("add_threat_target_event.target_id", 12)
+            .constant("add_threat_target_event.threat_value", 16)
             .type_hash(ping, 3)
             .type_size(ping, 40)
-            .constant("ui_ping_event.sender", 8)
+            .constant("ui_ping_event.sender_entity_id", 8)
             .constant("ui_ping_event.position", 16)
             .template(5, [5; 16])
             .install();
@@ -62,7 +62,7 @@ mod tests {
         let effects = EFFECTS.get().unwrap();
 
         effects
-            .npc_command(42, NpcOrder::GoTo([1.0, 2.0, -3.0]))
+            .npc_command(42, NpcCommandType::GoToPosition([1.0, 2.0, -3.0]))
             .unwrap();
         effects.add_threat(Entity(5), Entity(6), 2.5).unwrap();
         effects.ping(Entity(6), [0.5, 0.0, 0.0]).unwrap();

@@ -1,10 +1,10 @@
 //! `cargo enshwick new --data`: a data pack folder that the loader runs as
 //! it is, with every file commented for the first change.
 
-use anyhow::{Context as _, bail};
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
+use anyhow::{Context as _, bail};
 use enshwick::i18n::Language;
 use enshwick::packs::{
     ITEMS_FILE, LOOT_FILE, MANIFEST_FILE, RECIPES_FILE, TEXTS_FILE, WORKSHOPS_FILE,

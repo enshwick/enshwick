@@ -16,9 +16,9 @@
 //!   only confirms the value. No pattern is guessed for a constant: a value
 //!   found in some code says nothing about what that code means.
 
-use anyhow::{Context as _, bail};
 use std::ops::Range;
 
+use anyhow::{Context as _, bail};
 use enshwick_gamedata::Locate;
 
 use super::exe::Exe;

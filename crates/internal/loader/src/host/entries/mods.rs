@@ -1,6 +1,5 @@
 //! Host functions about the mods: logs, faults, settings and what is loaded.
 
-use crate::mod_index::ModIndex;
 use std::sync::OnceLock;
 use std::sync::atomic::Ordering;
 
@@ -12,6 +11,7 @@ use crate::host::join::JOIN_MISSING;
 use crate::host::memory::{get_headed, put, text};
 use crate::host::{LOADER_HANDLE, ModRecord, calling, entry, loader};
 use crate::locks::Relock;
+use crate::mod_index::ModIndex;
 
 pub(crate) extern "system" fn fault(me: ModHandle, reason: Str) {
     entry("fault", || {

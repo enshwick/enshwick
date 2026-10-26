@@ -1,4 +1,4 @@
-abi 2.80
+abi 2.82
 ActionCall size 144 align 8
     header at 0 size 8
     kind at 8 size 4
@@ -50,6 +50,12 @@ AltarInfo size 856 align 8
     zone at 16 size 48
     levels at 64 size 768
     position at 832 size 24
+AltarLimit size 16 align 4
+    header at 0 size 8
+    flame_level at 8 size 4
+    vanilla at 12 size 1
+    allowed at 13 size 1
+    reserved at 14 size 2
 AltarZone size 32 align 8
     header at 0 size 8
     altar at 8 size 4
@@ -63,6 +69,12 @@ AltarZoneSize size 24 align 8
     reserved at 5 size 3
     grow at 8 size 8
     height at 16 size 8
+BaseLimitInfo size 24 align 4
+    header at 0 size 8
+    zones at 8 size 4
+    bases at 12 size 4
+    vanilla_zones at 16 size 4
+    reserved at 20 size 4
 BedCheck size 72 align 8
     header at 0 size 8
     survivor at 8 size 4
@@ -226,7 +238,7 @@ HookSpec size 32 align 8
     next at 16 size 8
     priority at 24 size 4
     flags at 28 size 4
-HostApi size 1240 align 8
+HostApi size 1256 align 8
     header at 0 size 8
     host_version at 8 size 16
     build at 24 size 8
@@ -381,6 +393,8 @@ HostApi size 1240 align 8
     task_workers at 1216 size 8
     altar_zone_filter at 1224 size 8
     altar_zones_changed at 1232 size 8
+    altar_limit_filter at 1240 size 8
+    base_limit at 1248 size 8
 Interaction size 56 align 8
     header at 0 size 8
     kind at 8 size 4

@@ -8,13 +8,13 @@ use enshwick_gamedata::reflect::{Image, Layout, Reflection};
 
 use crate::chains::Chains;
 use crate::host::{self, Loader};
+use crate::pe;
 use crate::resolve::{self, Candidate};
 use crate::{builds, log};
 
 use super::game::GAME_DIRS;
 use super::library::{Library, Run, libraries};
 use super::{initialise, read_frame, records};
-use crate::pe;
 
 /// Why a dry run could not start the loader.
 #[derive(Debug, thiserror::Error)]

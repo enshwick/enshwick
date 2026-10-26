@@ -6,11 +6,12 @@
 //! client's side of its menu) carry the id, and recipes name it.
 //! The workshop registry maps the id to a name and the station item.
 
+use crate::engine_ids as ids;
+use crate::{Load, Off};
+
 use super::items::{self, ItemLayout, NewItem};
 use super::recipes::NewRecipe;
 use super::{Blob, EngineFacts, Guid, Id, types};
-use crate::engine_ids as ids;
-use crate::{Load, Off};
 
 /// The game's workshop registry resource.
 pub const WORKSHOP_REGISTRY: Guid = Guid::parse("3baba1c2-bc82-4ab7-b20e-16dec28208af");
@@ -254,7 +255,7 @@ const REFERENCE: usize = 16;
 /// ) -> Result<(), enshwick::Off> {
 ///     let layout = WorkshopLayout::resolve(load)?;
 ///     let (template, like, workshop) = (new.template, new.like.template, new.workshop.guid());
-///     load.serve(template.key(types::TEMPLATE)?, like.key(types::TEMPLATE)?, move |base| {
+///     load.serve(template.key(types::TEMPLATE_RESOURCE)?, like.key(types::TEMPLATE_RESOURCE)?, move |base| {
 ///         clone_template(&layout, base, workshop)
 ///     })
 /// }
@@ -347,7 +348,7 @@ pub fn clone_station(
 ///     new: NewWorkshop,
 /// ) -> Result<(), enshwick::Off> {
 ///     let layout = WorkshopLayout::resolve(load)?;
-///     let collection = TEMPLATE_COLLECTION.key(types::TEMPLATE_COLLECTION)?;
+///     let collection = TEMPLATE_COLLECTION.key(types::TEMPLATE_COLLECTION_RESOURCE)?;
 ///     load.serve(collection, collection, move |base| list_template(&layout, base, new.template.guid()))
 /// }
 /// ```
@@ -384,7 +385,7 @@ pub fn list_template(
 ///     new: NewWorkshop,
 /// ) -> Result<(), enshwick::Off> {
 ///     let layout = WorkshopLayout::resolve(load)?;
-///     let registry = WORKSHOP_REGISTRY.key(types::WORKSHOP_REGISTRY)?;
+///     let registry = WORKSHOP_REGISTRY.key(types::WORKSHOP_REGISTRY_RESOURCE)?;
 ///     load.serve(registry, registry, move |base| list_workshop(&layout, base, &new))
 /// }
 /// ```
@@ -477,11 +478,11 @@ impl Load<'_> {
         let workshop = WorkshopId::new(new.workshop.guid());
         let (like, template) = (new.like, new.template);
         self.serve(
-            template.key(types::TEMPLATE)?,
-            like.template.key(types::TEMPLATE)?,
+            template.key(types::TEMPLATE_RESOURCE)?,
+            like.template.key(types::TEMPLATE_RESOURCE)?,
             move |base| clone_template(&layout, base, workshop.guid()),
         )?;
-        let collection = TEMPLATE_COLLECTION.key(types::TEMPLATE_COLLECTION)?;
+        let collection = TEMPLATE_COLLECTION.key(types::TEMPLATE_COLLECTION_RESOURCE)?;
         self.serve(collection, collection, move |base| {
             list_template(&layout, base, template.guid())
         })?;
@@ -492,12 +493,12 @@ impl Load<'_> {
             move |base| clone_station(&item_layout, &layout, base, &station),
         )?;
         let (item, debug_name) = (new.item.guid(), new.debug_name.clone());
-        let registry = items::ITEM_REGISTRY.key(types::ITEM_REGISTRY)?;
+        let registry = items::ITEM_REGISTRY.key(types::ITEM_REGISTRY_RESOURCE)?;
         self.serve(registry, registry, move |base| {
             items::list_item(&item_layout, base, item, &debug_name)
         })?;
         let recipe = new.station_recipe;
-        let registry = WORKSHOP_REGISTRY.key(types::WORKSHOP_REGISTRY)?;
+        let registry = WORKSHOP_REGISTRY.key(types::WORKSHOP_REGISTRY_RESOURCE)?;
         self.serve(registry, registry, move |base| {
             list_workshop(&layout, base, &new)
         })?;

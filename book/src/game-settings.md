@@ -19,7 +19,7 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
         let [Value::Toggle(on)] = request.args else {
             return Outcome::refused("On or off");
         };
-        match settings.change(|s| s.durability = *on) {
+        match settings.change(|s| s.enable_durability = *on) {
             Ok(_) => Outcome::done(format!("Durability {}", if *on { "on" } else { "off" })),
             Err(why) => Outcome::refused(format!("Unchanged: {why}")),
         }
@@ -29,7 +29,7 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 
 ## Reading
 
-`read()` returns the settings in force as a `Settings` and the `Preset` they
+`read()` returns the settings in force as a `Settings` and the `GameSettingsPreset` they
 came from, or `None` off the game thread and while no world runs. `Settings`
 has a field for each of the game's values: factors (1 is the game's normal),
 switches, the day and night lengths and hunger's time as `Duration`s, and
@@ -41,7 +41,7 @@ was.
 
 `change(|s| ...)` lets a closure edit the settings in force and applies them
 as the game's admin command does: the server's systems read them from the
-next step, every client gets them, and the preset becomes `Preset::Custom`.
+next step, every client gets them, and the preset becomes `GameSettingsPreset::Custom`.
 It returns the settings now in force, or a
 [`WorldError`](world.md#writing-components): `Refused` for a negative or not
 finite factor or a day or night length of zero, `WrongThread` off the game
@@ -73,7 +73,7 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let settings = load.game_settings()?;
     let actions = load.actions(enshwick::i18n::Texts::default())?;
     let lush = Action::new("lush", "Plants grow twice as fast in this world").admins();
-    actions.add(lush, move |_request| match settings.keep(|s| s.plant_growth = 2.0) {
+    actions.add(lush, move |_request| match settings.keep(|s| s.plant_growth_speed_factor = 2.0) {
         Ok(_) => Outcome::done("Kept for this world"),
         Err(why) => Outcome::refused(format!("Unchanged: {why}")),
     })

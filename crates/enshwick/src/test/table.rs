@@ -3,7 +3,7 @@
 use std::sync::{Mutex, MutexGuard};
 
 use crate::abi::{
-    ActiveBuff, AltarInfo, AltarLimitFn, AltarZoneFn, BedCheckFn, BuffTypeInfo, BuildCheckFn,
+    ActiveBuff, AltarInfo, AltarLimitFilterFn, AltarZoneFn, BedCheckFn, BuffTypeInfo, BuildCheckFn,
     ComfortFn, ConfigCheckFn, CraftCheckFn, DamageFilterFn, DaytimeInfo, Event, EventFn,
     ExperiencePassFn, GameEventFn, Header, HostApi, InteractionFn, InventoryResultFn,
     KnowledgeInfo, KnowledgeInputFn, Level, LoopWaitFn, MidHookFn, ModEventFn, NetMessageFn,
@@ -17,7 +17,7 @@ use super::{FakeHost, LinkedHook, ServedResource, SubmittedRequest};
 
 mod build;
 mod content;
-mod gameplay;
+pub(crate) mod gameplay;
 mod hooks;
 mod inventory;
 mod mods;
@@ -37,12 +37,13 @@ use content::{
     recipe_rule, resource_read, serve_resource,
 };
 use gameplay::{
-    account_knowledge, altar_limit, altar_zone_filter, altar_zones_changed, altar_zones_control,
-    altars, altars_open, apply_buff, base_zones, buff_types, buffs, build_filter, comfort_filter,
-    craft_filter, damage_filter, experience_filter, grant_knowledge, interaction_filter, knowledge,
-    knowledge_input_filter, quests, raise_base_limit, rate, remove_buff, revoke_knowledge,
-    set_altar_zones, set_rate, skill_override, summon_filter, summon_item, summoned,
-    survivor_bed_check, survivor_lookup, survivor_status, zone_check_filter,
+    account_knowledge, altar_limit, altar_limit_filter, altar_zone_filter, altar_zones_changed,
+    altar_zones_control, altars, altars_open, apply_buff, base_limit, base_zones, buff_types,
+    buffs, build_filter, comfort_filter, craft_filter, damage_filter, experience_filter,
+    grant_knowledge, interaction_filter, knowledge, knowledge_input_filter, quests,
+    raise_base_limit, rate, remove_buff, revoke_knowledge, set_altar_zones, set_rate,
+    skill_override, summon_filter, summon_item, summoned, survivor_bed_check, survivor_lookup,
+    survivor_status, zone_check_filter,
 };
 use hooks::{code_range, hook, hook_at, patch_code, workshop_recipes};
 use inventory::{inventory_open, inventory_submit, item_info};
@@ -231,8 +232,10 @@ pub(crate) struct State {
     /// What the mod asked of the engine's pacing places.
     pub(crate) pacing: Pacing,
     pub(crate) experience_filters: Vec<(ExperiencePassFn, usize)>,
-    pub(crate) altar_limit: Option<(AltarLimitFn, usize)>,
-    pub(crate) base_limit_raised: bool,
+    pub(crate) altar_limits: Vec<(AltarLimitFilterFn, usize)>,
+    /// Whether the mod raised the base limit, and whether the hooks are
+    /// armed, from which on the raised limit holds.
+    pub(crate) base_limit: BaseLimitState,
     pub(crate) grouping: Option<(u32, u32)>,
     /// The answer `run_console` last handed out, alive until the next call.
     run_out: Option<Box<str>>,
@@ -269,6 +272,15 @@ fn take_turn() -> MutexGuard<'static, ()> {
     let turn = TURN.relock();
     HOLDS_TURN.set(true);
     turn
+}
+
+/// Whether the mod raised the base limit, and whether the hooks are armed.
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct BaseLimitState {
+    /// The mod raised the limit.
+    pub(crate) raised: bool,
+    /// The mod's init returned and its hooks are armed.
+    pub(crate) armed: bool,
 }
 
 /// The mod's altar zone filters, and how often it asked for a new sizing.
@@ -386,8 +398,8 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         rates: Vec::new(),
         pacing: Pacing::default(),
         experience_filters: Vec::new(),
-        altar_limit: None,
-        base_limit_raised: false,
+        altar_limits: Vec::new(),
+        base_limit: BaseLimitState::default(),
         grouping: None,
         run_out: None,
         settings: Vec::new(),
@@ -609,4 +621,6 @@ pub(crate) static TABLE: HostApi = HostApi {
     task_workers: pacing::task_workers,
     altar_zone_filter,
     altar_zones_changed,
+    altar_limit_filter,
+    base_limit,
 };

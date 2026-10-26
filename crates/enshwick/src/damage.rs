@@ -17,13 +17,13 @@
 //! # Examples
 //!
 //! ```
-//! use enshwick::damage::{DamageCause, DamageType};
+//! use enshwick::damage::{DamageCause, DamageTypeNew};
 //!
 //! fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 //!     load.on_damage(|damage| match damage.cause() {
 //!         // Falls hurt half as much, fire twice as much.
 //!         DamageCause::Fall => damage.scale(0.5),
-//!         DamageCause::Hit => damage.scale_type(DamageType::Fire, 2.0),
+//!         DamageCause::Hit => damage.scale_type(DamageTypeNew::MagicalFire, 2.0),
 //!         _ => {}
 //!     })
 //! }
@@ -42,21 +42,21 @@ use crate::{Load, Off};
 /// See the [module](self).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[non_exhaustive]
-pub enum DamageType {
+pub enum DamageTypeNew {
     /// Blades.
-    Cut,
+    PhysicalCut,
     /// Arrows and spears.
-    Pierce,
+    PhysicalPierce,
     /// Clubs and hammers.
-    Blunt,
+    PhysicalBlunt,
     /// Fire.
-    Fire,
+    MagicalFire,
     /// Ice.
-    Ice,
+    MagicalIce,
     /// The shroud.
-    Shroud,
+    MagicalFog,
     /// Lightning.
-    Lightning,
+    MagicalLightning,
     /// Healing: what the hit heals, not what it hurts.
     Healing,
     /// Poison.
@@ -71,16 +71,16 @@ pub enum DamageType {
     Explosion,
 }
 
-impl DamageType {
+impl DamageTypeNew {
     /// Every type, in the game's order.
     pub const ALL: [Self; 13] = [
-        Self::Cut,
-        Self::Pierce,
-        Self::Blunt,
-        Self::Fire,
-        Self::Ice,
-        Self::Shroud,
-        Self::Lightning,
+        Self::PhysicalCut,
+        Self::PhysicalPierce,
+        Self::PhysicalBlunt,
+        Self::MagicalFire,
+        Self::MagicalIce,
+        Self::MagicalFog,
+        Self::MagicalLightning,
         Self::Healing,
         Self::Poison,
         Self::Wood,
@@ -95,6 +95,8 @@ impl DamageType {
 }
 
 /// What deals damage.
+///
+/// The name is enshwick's: the loader's hook points, not a game type.
 ///
 /// # Examples
 ///
@@ -255,18 +257,18 @@ impl Damage<'_> {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::damage::DamageType;
+    /// use enshwick::damage::DamageTypeNew;
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     // Fire never deals more than 50 at once.
     ///     load.on_damage(|damage| {
-    ///         let fire = damage.amount(DamageType::Fire);
-    ///         damage.set(DamageType::Fire, fire.min(50.0));
+    ///         let fire = damage.amount(DamageTypeNew::MagicalFire);
+    ///         damage.set(DamageTypeNew::MagicalFire, fire.min(50.0));
     ///     })
     /// }
     /// ```
     #[must_use]
-    pub const fn amount(&self, ty: DamageType) -> f32 {
+    pub const fn amount(&self, ty: DamageTypeNew) -> f32 {
         self.check.amounts[ty.index()]
     }
 
@@ -276,7 +278,7 @@ impl Damage<'_> {
     /// # Examples
     ///
     /// See [`Damage::amount`].
-    pub const fn set(&mut self, ty: DamageType, amount: f32) {
+    pub const fn set(&mut self, ty: DamageTypeNew, amount: f32) {
         if self.check.cause == DamageCheck::HIT {
             self.check.amounts[ty.index()] = amount;
         }
@@ -301,9 +303,9 @@ impl Damage<'_> {
     #[must_use]
     pub fn total(&self) -> f32 {
         if self.check.cause == DamageCheck::HIT {
-            DamageType::ALL
+            DamageTypeNew::ALL
                 .iter()
-                .filter(|&&ty| ty != DamageType::Healing)
+                .filter(|&&ty| ty != DamageTypeNew::Healing)
                 .map(|&ty| self.amount(ty))
                 .sum()
         } else {
@@ -319,8 +321,8 @@ impl Damage<'_> {
     /// See the [module](self).
     pub fn scale(&mut self, factor: f32) {
         if self.check.cause == DamageCheck::HIT {
-            for ty in DamageType::ALL {
-                if ty != DamageType::Healing {
+            for ty in DamageTypeNew::ALL {
+                if ty != DamageTypeNew::Healing {
                     self.check.amounts[ty.index()] *= factor;
                 }
             }
@@ -335,7 +337,7 @@ impl Damage<'_> {
     /// # Examples
     ///
     /// See the [module](self).
-    pub fn scale_type(&mut self, ty: DamageType, factor: f32) {
+    pub fn scale_type(&mut self, ty: DamageTypeNew, factor: f32) {
         if self.check.cause == DamageCheck::HIT {
             self.check.amounts[ty.index()] *= factor;
         }

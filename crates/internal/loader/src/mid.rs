@@ -12,13 +12,14 @@
 //! handler in running order, skipping mods that are off, so turning a mod off
 //! touches no code either.
 
-use crate::mod_index::ModIndex;
 use core::ffi::c_void;
 use std::sync::OnceLock;
 
 use enshwick::abi::{HookFlags, MidHookFn, Registers, Status};
 use rustc_hash::FxHashMap;
 use windows_sys::Win32::System::Memory::{MEM_COMMIT, MEM_RESERVE, PAGE_READWRITE, VirtualAlloc};
+
+use crate::mod_index::ModIndex;
 
 /// Bytes per stub: the code, `int3` padding, [`UPPER`] and the continuation.
 const STUB: usize = 2048;
@@ -48,10 +49,18 @@ const YMM: u32 = 32;
 /// Where a stub that may keep `zmm0`-`zmm31` keeps the mask registers.
 const MASKS: u32 = AREA + 32 * ZMM;
 /// The AVX state component: the upper halves of `ymm0`-`ymm15`.
+///
+/// The state components, as `xgetbv` reads them in use, also name the
+/// parts a `zmm` stub keeps, in `r12b` across the handlers.
 const AVX_STATE: u8 = 0b100;
-/// The AVX-512 state components: the mask registers, the upper halves of
-/// `zmm0`-`zmm15`, and `zmm16`-`zmm31`.
-const ZMM_STATE: u8 = 0b1110_0000;
+/// The mask registers.
+const MASK_STATE: u8 = 0b10_0000;
+/// The upper halves of `zmm0`-`zmm15`.
+const ZMM_HI256: u8 = 0b100_0000;
+/// `zmm16`-`zmm31`.
+const HI16_ZMM: u8 = 0b1000_0000;
+/// The AVX-512 state components.
+const ZMM_STATE: u8 = MASK_STATE | ZMM_HI256 | HI16_ZMM;
 
 /// How a stub keeps the vector registers of the hooked code across the
 /// handlers, chosen per processor when the stubs are written.
@@ -76,15 +85,16 @@ pub(crate) enum Vectors {
     /// processor whose SSE code slows down while the upper halves are in
     /// use, so the state stays clear for the code after the hook.
     YmmClean,
-    /// By value: an OR of every vector and mask register picks `xmm0`-`xmm5`,
-    /// `ymm0`-`ymm15`, or all of `zmm0`-`zmm31` and the mask registers. For
-    /// AVX-512 on a processor where 512-bit instructions cost no clock speed.
+    /// By value: ORs of the vector and mask registers pick, part by part,
+    /// `xmm0`-`xmm5`, `ymm0`-`ymm15` or `zmm0`-`zmm15`, then `zmm16`-`zmm31`
+    /// and the mask registers where they are not zero. For AVX-512 on a
+    /// processor where 512-bit instructions cost no clock speed.
     ZmmByValue {
         /// The width of the mask registers.
         masks: Masks,
     },
-    /// By the state in use, read with `xgetbv`: the same three paths for
-    /// AVX-512 on a processor where a 512-bit instruction lowers the clock.
+    /// By the state in use, read with `xgetbv`: the same parts for AVX-512
+    /// on a processor where a 512-bit instruction lowers the clock.
     ZmmInUse {
         /// The width of the mask registers.
         masks: Masks,
@@ -510,12 +520,16 @@ impl Code {
         }
     }
 
-    /// Zero in `zmm16`-`zmm31` and the mask registers.
-    fn zero_avx512(&mut self, masks: Masks) {
+    /// Zero in `zmm16`-`zmm31`.
+    fn zero_hi16(&mut self) {
         for n in 16..32 {
             // vpxord xmm<n>, xmm<n>, xmm<n>
             self.evex(1, 1, false, 0, 0xef, [n, n, n]);
         }
+    }
+
+    /// Zero in the mask registers.
+    fn zero_masks(&mut self, masks: Masks) {
         for k in 0..8 {
             // kxorq or kxorw k<k>, k<k>, k<k>
             let rest = (!k & 15) << 3 | 4;
@@ -532,10 +546,47 @@ impl Code {
         self.emit(&[0xc5, 0xf8, 0x77]);
     }
 
+    /// `test r12b, bits`.
+    fn test_path(&mut self, bits: u8) {
+        self.emit(&[0x41, 0xf6, 0xc4, bits]);
+    }
+
+    /// `test al, bits`.
+    fn test_used(&mut self, bits: u8) {
+        self.emit(&[0xa8, bits]);
+    }
+
+    /// `mov r12d, eax`.
+    fn path_from_eax(&mut self) {
+        self.emit(&[0x41, 0x89, 0xc4]);
+    }
+
     /// `test r12b, bits; jnz`: to the path the stub chose before.
     fn branch(&mut self, bits: u8) -> usize {
-        self.emit(&[0x41, 0xf6, 0xc4, bits]);
-        self.jump(&[0x0f, 0x85])
+        self.test_path(bits);
+        self.jnz()
+    }
+
+    /// `test r12b, bits; jz`: past a part the stub did not keep.
+    fn unless(&mut self, bits: u8) -> usize {
+        self.test_path(bits);
+        self.jz()
+    }
+
+    /// `test al, bits; jz`: past a part the handlers left unused.
+    fn unless_used(&mut self, bits: u8) -> usize {
+        self.test_used(bits);
+        self.jz()
+    }
+
+    /// `or r12b, bits`: a part to keep.
+    fn keep(&mut self, bits: u8) {
+        self.emit(&[0x41, 0x80, 0xcc, bits]);
+    }
+
+    /// `mov ecx, 1; xgetbv`: the state in use, in `eax`.
+    fn in_use(&mut self) {
+        self.emit(&[0xb9, 1, 0, 0, 0, 0x0f, 0x01, 0xd0]);
     }
 
     /// `jnz`.
@@ -543,14 +594,14 @@ impl Code {
         self.jump(&[0x0f, 0x85])
     }
 
+    /// `jz`.
+    fn jz(&mut self) -> usize {
+        self.jump(&[0x0f, 0x84])
+    }
+
     /// `jmp`.
     fn jmp(&mut self) -> usize {
         self.jump(&[0xe9])
-    }
-
-    /// `mov r12d, path`: the path the stub chose, for after the handlers.
-    fn choose(&mut self, path: u8) {
-        self.emit(&[0x41, 0xbc, path, 0, 0, 0]);
     }
 
     /// `xor r12d, r12d`.
@@ -701,8 +752,6 @@ fn keep_ymm_clean(code: &mut Code, call: impl Fn(&mut Code)) {
 
 /// The path that keeps `ymm0`-`ymm15`, in `r12d` across the handlers.
 const KEEP_YMM: u8 = 1;
-/// The path that keeps `zmm0`-`zmm31` and the mask registers.
-const KEEP_ZMM: u8 = 2;
 
 /// [`Vectors::ZmmByValue`].
 fn keep_zmm_by_value(code: &mut Code, masks: Masks, call: impl Fn(&mut Code)) {
@@ -718,102 +767,131 @@ fn keep_zmm_by_value(code: &mut Code, masks: Masks, call: impl Fn(&mut Code)) {
     }
     code.or3_zmm(1, 30, 31);
     code.or_zmm(0, 0, 15);
-    // Whether an upper half of ymm0-ymm15 is in use, then whether an upper
-    // half of zmm0-zmm15, zmm16-zmm31 or a mask register is.
+    // The parts that are not zero, as `xgetbv` names the parts in use: an
+    // upper half of ymm0-ymm15, of zmm0-zmm15, zmm16-zmm31, a mask register.
     code.clear_path();
     code.test_upper_ymm0();
-    code.path_if_nonzero();
+    let zero = code.jz();
+    code.keep(AVX_STATE);
+    code.bind(&[zero]);
     code.upper_zmm(0, 0);
-    code.or_zmm(1, 1, 0);
+    code.test_ymm0();
+    let zero = code.jz();
+    code.keep(ZMM_HI256);
+    code.bind(&[zero]);
     code.upper_zmm(0, 1);
     code.or_ymm(0, 1);
     code.test_ymm0();
-    let mut wide = vec![code.jnz()];
+    let zero = code.jz();
+    code.keep(HI16_ZMM);
+    code.bind(&[zero]);
+    let mut live = Vec::new();
     for k in (0..8).step_by(2) {
         code.test_masks(masks, k, k + 1);
-        wide.push(code.jnz());
+        live.push(code.jnz());
     }
-    let ymm = code.branch(KEEP_YMM);
-    for n in 2..6 {
-        code.xmm(STORE, n, slot(n, ZMM));
-    }
-    let mut calls = vec![code.jmp()];
-    code.bind(&[ymm]);
-    for n in 2..16 {
-        code.ymm(STORE, n, slot(n, ZMM));
-    }
-    calls.push(code.jmp());
-    code.bind(&wide);
-    code.choose(KEEP_ZMM);
-    for n in 2..32 {
-        code.zmm(STORE, n, slot(n, ZMM));
-    }
-    for k in 0..8 {
-        code.mask(masks, STORE, k, mask_slot(k));
-    }
-    code.bind(&calls);
-    code.vzeroupper();
+    let zero = code.jmp();
+    code.bind(&live);
+    code.keep(MASK_STATE);
+    code.bind(&[zero]);
+    keep_parts(code, masks, 2);
     call(code);
-    give_back_zmm(code, masks);
+    give_back_zmm(code, masks, false);
 }
 
 /// [`Vectors::ZmmInUse`].
 fn keep_zmm_in_use(code: &mut Code, masks: Masks, call: impl Fn(&mut Code)) {
     code.frame(mask_slot(8));
-    // mov ecx, 1; xgetbv; mov r12d, eax: the state in use.
-    code.emit(&[0xb9, 1, 0, 0, 0, 0x0f, 0x01, 0xd0, 0x41, 0x89, 0xc4]);
-    let wide = code.branch(ZMM_STATE);
+    // The parts in use.
+    code.in_use();
+    code.path_from_eax();
+    keep_parts(code, masks, 0);
+    call(code);
+    // What the handlers left in use: a part that stays unused stays zero, and
+    // zeroing it would mark it in use for every later hit.
+    code.in_use();
+    give_back_zmm(code, masks, true);
+}
+
+/// Stores the parts `r12b` names, `xmm<from>` up (the stub stored the
+/// registers below whole), and clears the upper halves for the handlers.
+///
+/// `zmm16`-`zmm31` and the mask registers are kept apart from `zmm0`-`zmm15`,
+/// so that live AVX-512 registers alone do not make the stub give back
+/// `zmm0`-`zmm15` with 512-bit loads, which mark their upper halves in use.
+fn keep_parts(code: &mut Code, masks: Masks, from: u8) {
+    let zmm = code.branch(ZMM_HI256);
     let ymm = code.branch(AVX_STATE);
-    code.clear_path();
-    for n in 0..6 {
+    for n in from..6 {
         code.xmm(STORE, n, slot(n, ZMM));
     }
-    let mut calls = vec![code.jmp()];
+    let mut rest = vec![code.jmp()];
     code.bind(&[ymm]);
-    code.choose(KEEP_YMM);
-    for n in 0..16 {
+    for n in from..16 {
         code.ymm(STORE, n, slot(n, ZMM));
     }
-    calls.push(code.jmp());
-    code.bind(&[wide]);
-    code.choose(KEEP_ZMM);
-    for n in 0..32 {
+    rest.push(code.jmp());
+    code.bind(&[zmm]);
+    for n in from..16 {
         code.zmm(STORE, n, slot(n, ZMM));
     }
+    code.bind(&rest);
+    let unused = code.unless(HI16_ZMM);
+    for n in 16..32 {
+        code.zmm(STORE, n, slot(n, ZMM));
+    }
+    code.bind(&[unused]);
+    let unused = code.unless(MASK_STATE);
     for k in 0..8 {
         code.mask(masks, STORE, k, mask_slot(k));
     }
-    code.bind(&calls);
+    code.bind(&[unused]);
     code.vzeroupper();
-    call(code);
-    give_back_zmm(code, masks);
 }
 
-/// Loads back what a `zmm` stub kept by the path in `r12d`; a part it did not
-/// keep was zero, so it is given back as zero.
-fn give_back_zmm(code: &mut Code, masks: Masks) {
-    let wide = code.branch(KEEP_ZMM);
-    let ymm = code.branch(KEEP_YMM);
+/// Loads back the parts [`keep_parts`] stored. A part it did not store was
+/// zero, so it is given back as zero: where `al` names it used after the
+/// handlers if `checked`, every time if not.
+fn give_back_zmm(code: &mut Code, masks: Masks, checked: bool) {
+    let zero = code.unless(HI16_ZMM);
+    for n in 16..32 {
+        code.zmm(LOAD, n, slot(n, ZMM));
+    }
+    let mut done = vec![code.jmp()];
+    code.bind(&[zero]);
+    if checked {
+        done.push(code.unless_used(HI16_ZMM));
+    }
+    code.zero_hi16();
+    code.bind(&done);
+    let zero = code.unless(MASK_STATE);
+    for k in 0..8 {
+        code.mask(masks, LOAD, k, mask_slot(k));
+    }
+    let mut done = vec![code.jmp()];
+    code.bind(&[zero]);
+    if checked {
+        done.push(code.unless_used(MASK_STATE));
+    }
+    code.zero_masks(masks);
+    code.bind(&done);
+    let zmm = code.branch(ZMM_HI256);
     code.vzeroupper();
+    let ymm = code.branch(AVX_STATE);
     for n in 0..6 {
         code.xmm(LOAD, n, slot(n, ZMM));
     }
-    let zero = code.jmp();
+    let mut end = vec![code.jmp()];
     code.bind(&[ymm]);
     for n in 0..16 {
         code.ymm(LOAD, n, slot(n, ZMM));
     }
-    code.bind(&[zero]);
-    code.zero_avx512(masks);
-    let end = code.jmp();
-    code.bind(&[wide]);
-    for n in 0..32 {
+    end.push(code.jmp());
+    code.bind(&[zmm]);
+    for n in 0..16 {
         code.zmm(LOAD, n, slot(n, ZMM));
     }
-    for k in 0..8 {
-        code.mask(masks, LOAD, k, mask_slot(k));
-    }
-    code.bind(&[end]);
+    code.bind(&end);
 }
 
 #[cfg(test)]

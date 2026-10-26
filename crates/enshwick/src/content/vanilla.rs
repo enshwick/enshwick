@@ -9,6 +9,9 @@
 use std::collections::BTreeMap;
 use std::sync::OnceLock;
 
+use crate::Off;
+use crate::abi::ResourceKey;
+
 use super::containers::{ContainerLayout, container_slots};
 use super::items::{ITEM_REGISTRY, ItemLayout};
 use super::recipes::{RECIPE_REGISTRY, RecipeLayout};
@@ -16,8 +19,6 @@ use super::workshops::{
     Station, WORKSHOP_REGISTRY, WorkshopId, WorkshopLayout, clone_template, stations,
 };
 use super::{Blob, EngineFacts, Guid, types};
-use crate::Off;
-use crate::abi::ResourceKey;
 
 /// Reads one resource of the game's archive.
 type Reader = Box<dyn Fn(ResourceKey) -> Option<Vec<u8>> + Send + Sync>;
@@ -157,9 +158,9 @@ impl Hashes {
     fn resolve(facts: &(impl EngineFacts + ?Sized)) -> Result<Self, Off> {
         Ok(Self {
             item: facts.hash(types::ITEM_INFO.id())?,
-            item_registry: facts.hash(types::ITEM_REGISTRY.id())?,
-            template: facts.hash(types::TEMPLATE.id())?,
-            workshop_registry: facts.hash(types::WORKSHOP_REGISTRY.id())?,
+            item_registry: facts.hash(types::ITEM_REGISTRY_RESOURCE.id())?,
+            template: facts.hash(types::TEMPLATE_RESOURCE.id())?,
+            workshop_registry: facts.hash(types::WORKSHOP_REGISTRY_RESOURCE.id())?,
         })
     }
 }
@@ -241,8 +242,8 @@ impl Vanilla {
     /// use enshwick::content::vanilla::Vanilla;
     ///
     /// if let Some(vanilla) = Vanilla::game() {
-    ///     let chest = vanilla.item("Prop_Decoration_T0_Storage_16")?;
-    ///     assert_eq!(vanilla.container_slots(chest)?, Some(16));
+    ///     let chest = vanilla.item("Prop_Storage_24_T1_Box")?;
+    ///     assert_eq!(vanilla.container_slots(chest)?, Some(24));
     /// }
     /// # Ok::<(), enshwick::content::vanilla::VanillaError>(())
     /// ```
@@ -272,7 +273,7 @@ impl Vanilla {
     fn with_recipe_facts(self, facts: &(impl EngineFacts + ?Sized)) -> Self {
         match (
             RecipeLayout::resolve(facts),
-            facts.hash(types::RECIPE_REGISTRY.id()),
+            facts.hash(types::RECIPE_REGISTRY_RESOURCE.id()),
         ) {
             (Ok(layout), Ok(hash)) => self.with_recipes(layout, hash),
             _ => self,
@@ -737,8 +738,8 @@ pub(crate) mod tests {
     #[test]
     fn a_chest_s_slots_are_read_from_the_template_it_places() {
         let chest = Guid([1; 16]);
-        let vanilla = game_with_chest(chest, "Prop_Decoration_T0_Storage_16", 16);
-        assert_eq!(vanilla.container_slots(chest), Ok(Some(16)));
+        let vanilla = game_with_chest(chest, "Prop_Storage_24_T1_Box", 24);
+        assert_eq!(vanilla.container_slots(chest), Ok(Some(24)));
         assert_eq!(vanilla.container_slots(Guid([7; 16])), Ok(None));
         assert_eq!(
             game(&[]).container_slots(chest),

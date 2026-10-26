@@ -83,7 +83,7 @@ drawn as a bar on the item's slot.
 
 ```rust
 use enshwick::content::{Guid, Id};
-use enshwick::content::items::{Meter, NewItem};
+use enshwick::content::items::{FuelSetup, NewItem};
 
 const STAFF: Id = Id::new("my-mod:charged-staff");
 const VANILLA_STAFF: Guid = Guid::parse("505ccfbc-440d-4d63-a3d6-d689d3d55e78");
@@ -92,13 +92,13 @@ const STAFF_ENTITY: Id = Id::new("my-mod:charged-staff.entity");
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     load.add_item(NewItem {
-        meter: Some(Meter { template: STAFF_ENTITY, max: 3, start: 3 }),
+        meter: Some(FuelSetup { template: STAFF_ENTITY, max_fuel_charges: 3, start: 3 }),
         ..NewItem::new(STAFF, VANILLA_STAFF)
     })
 }
 ```
 
-| `Meter` field | Meaning |
+| `FuelSetup` field | Meaning |
 | --- | --- |
 | `template` | The content id of the item entity's template, a clone of the water pouch's; saves hold its GUID. Items with the same meter may share one. |
 | `max` | The most it holds, 1 or more. |
@@ -124,7 +124,7 @@ game lists an armour's bonuses: each a [text tag](texts.md) and a number.
 
 ```rust
 use enshwick::content::{Guid, Id};
-use enshwick::content::items::{NewItem, Stat, StatFormat};
+use enshwick::content::items::{NewItem, ImpactUiValue, StatFormat};
 
 const RING: Id = Id::new("my-mod:lucky-ring");
 const VANILLA_RING: Guid = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");
@@ -134,7 +134,7 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let texts = load.texts("[en]\nluck = \"Luck\"\n")?;
     load.add_texts(&texts, &[("luck", LUCK)])?;
     load.add_item(NewItem {
-        stats: vec![Stat { label: LUCK.guid(), value: 5, format: StatFormat::Percent }],
+        stats: vec![ImpactUiValue { loca_id: LUCK.guid(), value: 5, value_format: StatFormat::Percent }],
         ..NewItem::new(RING, VANILLA_RING)
     })
 }

@@ -2,8 +2,9 @@ use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 
 use windows_sys::Win32::System::Memory::PAGE_EXECUTE_READWRITE;
 
-use super::*;
 use crate::detour::{self, Request};
+
+use super::*;
 
 type Unary = extern "system" fn(u32) -> u32;
 
@@ -281,6 +282,67 @@ fn clear_upper_halves_stay_clear_after_a_handler_using_avx() {
         }
         let hooked = hook_mark(upper_in_use, handler, vectors);
         assert_eq!(hooked(0), 0, "{name}");
+        assert_eq!(hooked(0), 0, "{name}, the second hit");
+    }
+}
+
+/// Holds `value` in `k1` and `zmm17` across the marked `nop`, the upper
+/// halves of `zmm0`-`zmm15` clear; then returns whether those are in use
+/// (the AVX state and the upper halves of `zmm0`-`zmm15`),
+/// together with the bits that changed in `k1` and in `xmm17`.
+#[unsafe(naked)]
+extern "system" fn upper_in_use_beside_avx512(value: u32) -> u32 {
+    core::arch::naked_asm!(
+        "mov r8d, ecx",
+        "kmovw k1, ecx",
+        "vpbroadcastd zmm17, ecx",
+        "vzeroupper",
+        ".byte 0x0f, 0x1f, 0x44, 0x00, 0x00",
+        "mov ecx, 1",
+        "xgetbv",
+        "and eax, 0x44",
+        "kmovw edx, k1",
+        "xor edx, r8d",
+        "or eax, edx",
+        "vmovd edx, xmm17",
+        "xor edx, r8d",
+        "or eax, edx",
+        "ret",
+        ".fill 64, 1, 0xcc",
+    )
+}
+
+extern "system" fn fill_upper_halves_and_avx512(_registers: *mut Registers, _context: usize) {
+    // SAFETY: the assembly writes `xmm4`, declared as an output, its upper
+    // half, `zmm17` and `k1`, which no code of this crate keeps live; it
+    // touches no memory.
+    unsafe {
+        core::arch::asm!(
+            "vcmptrueps ymm4, ymm4, ymm4",
+            "vpternlogd zmm17, zmm17, zmm17, 0xff",
+            "kxnorw k1, k1, k1",
+            out("xmm4") _,
+        );
+    }
+}
+
+#[test]
+fn clear_upper_halves_stay_clear_beside_live_avx512_registers_hit_after_hit() {
+    if !xgetbv_in_use() {
+        return;
+    }
+    let handler = (fill_upper_halves_and_avx512 as *const ()).addr();
+    for (name, vectors) in avx_kinds() {
+        if !matches!(
+            vectors,
+            Vectors::ZmmByValue { .. } | Vectors::ZmmInUse { .. }
+        ) {
+            continue;
+        }
+        let hooked = hook_mark(upper_in_use_beside_avx512, handler, vectors);
+        for hit in 0..3 {
+            assert_eq!(hooked(0x5a50), 0, "{name}, hit {hit}");
+        }
     }
 }
 
@@ -456,6 +518,12 @@ extern "system" fn encodings() {
         "vptest ymm0, ymm0",
         "kortestq k0, k1",
         "kortestw k6, k7",
+        "or r12b, 0x80",
+        "mov ecx, 1",
+        "xgetbv",
+        "test r12b, 0x20",
+        "test al, 0x80",
+        "mov r12d, eax",
         "vpxord xmm16, xmm16, xmm16",
         "vpxord xmm27, xmm27, xmm27",
         "kxorq k5, k5, k5",
@@ -492,16 +560,25 @@ fn the_stub_writes_instructions_as_the_assembler_does() {
     code.test_ymm0();
     code.test_masks(Masks::Quad, 0, 1);
     code.test_masks(Masks::Word, 6, 7);
+    code.keep(HI16_ZMM);
+    code.in_use();
+    code.test_path(MASK_STATE);
+    code.test_used(HI16_ZMM);
+    code.path_from_eax();
     let zero = code.bytes.len();
     let mut zeroing = Code::default();
-    zeroing.zero_avx512(Masks::Quad);
-    // vpxord of xmm16 and xmm27, kxorq of k5.
+    zeroing.zero_hi16();
+    // vpxord of xmm16 and xmm27.
     code.emit(&zeroing.bytes[..6]);
     code.emit(&zeroing.bytes[11 * 6..12 * 6]);
-    code.emit(&zeroing.bytes[16 * 6 + 5 * 5..16 * 6 + 6 * 5]);
+    let mut quads = Code::default();
+    quads.zero_masks(Masks::Quad);
+    // kxorq of k5.
+    code.emit(&quads.bytes[5 * 5..6 * 5]);
     let mut words = Code::default();
-    words.zero_avx512(Masks::Word);
-    code.emit(&words.bytes[16 * 6..16 * 6 + 4]);
+    words.zero_masks(Masks::Word);
+    // kxorw of k0.
+    code.emit(&words.bytes[..4]);
     code.emit(&[0xcc]);
     let start = (encodings as *const ()).addr();
     // SAFETY: `encodings` is a naked function of this module whose code

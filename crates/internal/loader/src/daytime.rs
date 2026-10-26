@@ -20,9 +20,6 @@
 //! what the game asks for by every mod's factor, and skips a call that would
 //! change nothing, so the version moves only when the speed does.
 
-use crate::mod_index::ModIndex;
-use crate::pinned;
-use crate::pinned::Symbol;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Mutex, OnceLock};
 
@@ -31,6 +28,9 @@ use enshwick::abi::{DaytimeInfo, Event, Header, HookFlags, Status};
 use crate::chains::Next;
 use crate::host::{Loader, is_off, take};
 use crate::locks::Relock;
+use crate::mod_index::ModIndex;
+use crate::pinned;
+use crate::pinned::Symbol;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[

@@ -6,14 +6,14 @@
 //! buffer, which the engine plays back after the systems of the next step,
 //! as it does for its own game-thread code.
 
-use crate::pinned;
-use crate::pinned::{Constant, Symbol};
-use enshwick::ecs::Entity;
 use std::sync::OnceLock;
 
 use enshwick::abi::{EntityPlace, Status};
+use enshwick::ecs::Entity;
 
 use crate::host::Loader;
+use crate::pinned;
+use crate::pinned::{Constant, Symbol};
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[

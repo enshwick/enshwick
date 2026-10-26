@@ -471,7 +471,7 @@ impl Pack {
     /// "#);
     /// let pack = Pack::parse("you.stacks", &files)?;
     /// let (change, source) = &pack.changes()[0];
-    /// assert_eq!((change.field, change.value), (Field::MaxStack, Value::Times(4.0)));
+    /// assert_eq!((change.field, change.value), (Field::MaxStackSize, Value::Times(4.0)));
     /// assert_eq!(source, "items.toml:2");
     /// # Ok::<(), enshwick::packs::ParsePackError>(())
     /// ```
@@ -530,6 +530,33 @@ impl Pack {
             && self.recipes == other.recipes
             && self.workshops == other.workshops
             && self.changes == other.changes
+            && self.texts == other.texts
+    }
+
+    /// Whether `other` adds the same content as this pack, its loot and its
+    /// changes of values aside: what a development reload takes without a
+    /// restart.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::packs::{Pack, PackFiles};
+    ///
+    /// let stacks = |size: u32| PackFiles::new().with("items.toml", format!(
+    ///     "[[change]]\nitems = [\"3f4093ae-75ed-4e5d-bd0b-784ba83b88f5\"]\nmax_stack = {size}\n"
+    /// ));
+    /// let before = Pack::parse("you.stacks", &stacks(100))?;
+    /// let after = Pack::parse("you.stacks", &stacks(500))?;
+    /// assert!(!before.same_content(&after));
+    /// assert!(before.same_beside_changes(&after));
+    /// # Ok::<(), enshwick::packs::ParsePackError>(())
+    /// ```
+    #[must_use]
+    pub fn same_beside_changes(&self, other: &Self) -> bool {
+        self.namespace == other.namespace
+            && self.items == other.items
+            && self.recipes == other.recipes
+            && self.workshops == other.workshops
             && self.texts == other.texts
     }
 
