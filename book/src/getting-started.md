@@ -150,7 +150,7 @@ What each piece does:
   reads an atomic, so the handler can change it under a running game.
 - `declare_mod!` exports the mod and adds `AltarCount::instance()`.
 
-[`enshwick-flame-altar-count`](https://github.com/enshwick/mod-flame-altar-count)
+[`enshwick-more-altars`](https://github.com/enshwick/mod-more-altars)
 is this mod in full: a table per Flame level swapped with `arc-swap`, the
 table as a join value, and more than 16 altars.
 
