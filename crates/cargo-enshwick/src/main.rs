@@ -31,10 +31,10 @@ struct Args {
 
 #[derive(Debug, Subcommand)]
 enum Command {
-    /// Creates a mod crate in `<dir>/<id>`.
+    /// Creates a mod crate in `<dir>/<name>`.
     New {
-        /// The mod id: 1 to 64 characters of `[a-z0-9-]`, starting with a
-        /// letter.
+        /// The mod id, `<author>.<name>`: each part of `[a-z0-9-]`, the name
+        /// starting with a letter; the name names the crate.
         id: String,
         /// Where the mod runs.
         #[arg(long, value_enum, default_value_t = Side::Server)]

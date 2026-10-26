@@ -45,7 +45,7 @@ mod tests {
             pub(crate) stall: Stall,
         }
 
-        #[enshwick::point(name = "probe:rent", mode = Override, output = u32)]
+        #[enshwick::point(name = "you.probe:rent", mode = Override, output = u32)]
         #[derive(Clone, Copy, Debug)]
         pub(crate) struct Rent {
             pub(crate) stall: Stall,
@@ -78,7 +78,7 @@ mod tests {
             pub(crate) stall: Stall,
         }
 
-        #[enshwick::point(name = "probe:rent", mode = Override, output = u32)]
+        #[enshwick::point(name = "you.probe:rent", mode = Override, output = u32)]
         #[derive(Clone, Copy, Debug)]
         pub(crate) struct Rent {
             pub(crate) stall: Stall,
@@ -140,7 +140,7 @@ mod tests {
             pub(crate) size: i16,
         }
 
-        #[enshwick::point(name = "probe:rent", mode = Override, output = u32)]
+        #[enshwick::point(name = "you.probe:rent", mode = Override, output = u32)]
         #[derive(Clone, Copy, Debug)]
         pub(crate) struct Rent {
             pub(crate) stall: Stall,
@@ -179,7 +179,7 @@ mod tests {
             pub(crate) size: u16,
         }
 
-        #[enshwick::point(name = "probe:rent", mode = Override, output = u32)]
+        #[enshwick::point(name = "you.probe:rent", mode = Override, output = u32)]
         #[derive(Clone, Copy, Debug)]
         pub(crate) struct Rent {
             pub(crate) stall: Stall,
@@ -218,7 +218,7 @@ mod tests {
 
     impl Mod for Market {
         fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "probe", side: SERVER)
+            enshwick::manifest!(id: "you.probe", side: SERVER)
         }
 
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {

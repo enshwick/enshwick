@@ -18,7 +18,7 @@ pub(crate) fn entries(list: &str) -> impl Iterator<Item = (&str, &str)> {
     list.split(',')
         .filter_map(|entry| entry.split_once('@'))
         .filter(|&(id, version)| {
-            enshwick::abi::is_valid_id(id)
+            enshwick::abi::is_valid_former_id(id)
                 && !version.is_empty()
                 && version.len() <= MAX_VERSION
                 && version

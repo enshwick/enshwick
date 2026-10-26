@@ -11,7 +11,7 @@ chapter is for reading logs and the rare call to the raw table. The exact types 
 | Constant | Value | Meaning |
 | --------------------------------------------------------------------------------------------------- | ----- | ----------------------------------------------- |
 | [`ABI_MAJOR`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/abi.rs) | 2 | A loader refuses a mod built for another major. |
-| [`ABI_MINOR`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/abi.rs) | 69 | A newer minor only appends. |
+| [`ABI_MINOR`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/abi.rs) | 70 | A newer minor only appends. |
 
 The ABI version is apart from Enshwick Loader's version (such as 0.2.0, see
 [Releasing mods](releasing.md#versions)): a platform release raises
@@ -95,7 +95,7 @@ builds:
 | Field          | What it holds                                                                                     | Since minor |
 | -------------- | ------------------------------------------------------------------------------------------------- | ----------- |
 | `header`       | Size and version of the struct                                                                    | 0           |
-| `id`           | `[a-z0-9-]`, 1 to 64 characters; names the settings file and data folder                          | 0           |
+| `id`           | `<author>.<name>`, each of `[a-z0-9-]`, at most 64 characters; names settings and data (minor 70) | 0           |
 | `version`      | SemVer                                                                                            | 0           |
 | `side`         | `SERVER` (1), `CLIENT` (2) or `BOTH` (3)                                                          | 0           |
 | `flags`        | `JOIN` (1): counts in the join check; `RELOAD` (2, minor 53): may be reloaded                     | 0           |

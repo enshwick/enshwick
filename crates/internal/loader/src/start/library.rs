@@ -105,13 +105,23 @@ pub(super) fn libraries(mods_dir: &Path) -> (Vec<Library>, Vec<Candidate>) {
         // SAFETY: the manifest is static data inside its loaded DLL.
         match unsafe { crate::manifest::parse(library.manifest) } {
             Ok(candidate) => {
+                if !enshwick::abi::is_valid_id(&candidate.id) {
+                    crate::log!(
+                        WARN,
+                        "{}: the id {} has no author; the next Enshwick refuses it, so update the mod",
+                        library.file,
+                        candidate.id
+                    );
+                }
                 changed |= list.note(&candidate.id, &library.file);
-                if list.is_off(&candidate.id) {
+                let off = std::iter::once(candidate.id.as_str())
+                    .chain(candidate.former_ids())
+                    .find(|id| list.is_off(id));
+                if let Some(off) = off {
                     crate::log!(
                         INFO,
-                        "{} skipped: {} is off in {}",
+                        "{} skipped: {off} is off in {}",
                         library.file,
-                        candidate.id,
                         modlist::LIST_PATH
                     );
                     unload(&library);

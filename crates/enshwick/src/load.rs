@@ -103,7 +103,7 @@ off_from!(
 ///
 /// impl enshwick::Mod for Quiet {
 ///     fn manifest() -> &'static enshwick::abi::Manifest {
-///         enshwick::manifest!(id: "quiet", side: SERVER)
+///         enshwick::manifest!(id: "you.quiet", side: SERVER)
 ///     }
 ///
 ///     fn init(_load: &mut enshwick::Load<'_>) -> Result<Self, enshwick::Off> {
