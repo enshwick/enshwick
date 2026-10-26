@@ -134,10 +134,10 @@ impl DataField {
     /// Since minor 81.
     pub const BURN_TIME: Self = Self(10);
     /// The energy an item gives as fuel; the entry is the item. Since
-    /// minor 82.
+    /// minor 81.
     pub const ENERGY_OUTPUT: Self = Self(11);
     /// The comfort a placed item gives; the entry is the item. Since
-    /// minor 82.
+    /// minor 81.
     pub const COMFORT_AMOUNT: Self = Self(12);
     /// The stack size random loot rolls for an item; the entry is the item.
     /// Since minor 82.
