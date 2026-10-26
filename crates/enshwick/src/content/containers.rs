@@ -134,10 +134,10 @@ pub fn resize_container(layout: &ContainerLayout, template: &[u8], slots: u8) ->
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
 
-    const LAYOUT: ContainerLayout = ContainerLayout {
+    pub(crate) const LAYOUT: ContainerLayout = ContainerLayout {
         components: 0,
         setup: 0xc24d_f82a,
         generic: 0x51,
@@ -147,7 +147,7 @@ mod tests {
 
     /// A template with an inventory setup of `slots`, its override, and an
     /// unrelated component.
-    fn chest(slots: u8) -> Vec<u8> {
+    pub(crate) fn chest(slots: u8) -> Vec<u8> {
         let mut blob = Blob::new(&[0u8; 8]);
         let list_at = blob.append(&[0u8; 3 * VARIANT], 4);
         let mut setup = vec![0u8; 0x54];

@@ -54,9 +54,10 @@ pub enum Field {
     /// How long a recipe takes, in seconds from 0 to 86400; the entry is a
     /// recipe.
     Time,
-    /// How many slots a container holds, 8 to 128 in steps of 8; the entry
-    /// is the item that places it. Containers placed before keep their
-    /// size, which the save holds.
+    /// How many slots a container holds, 8 to 128 in steps of 8 and never
+    /// fewer than it has; the entry is the item that places it, and the
+    /// change reaches every item that places the same container. Containers
+    /// placed before keep their size, which the save holds.
     Slots,
 }
 
@@ -167,6 +168,9 @@ impl Field {
                 field: self,
                 value: v,
             }),
+            Value::Times(f) if matches!(self, Self::Slots) && f < 1.0 => {
+                Err(ValueError::Shrinks { field: self })
+            }
             Value::Times(f) if !f.is_finite() || !(0.0..=MAX_FACTOR).contains(&f) => {
                 Err(ValueError::BadFactor { factor: f })
             }
@@ -330,6 +334,12 @@ pub enum ValueError {
     BadFactor {
         /// The factor asked for.
         factor: f64,
+    },
+    /// A factor below 1 for a field that only grows.
+    #[error("{field} only grows: a chest a player upgrades moves every item it holds")]
+    Shrinks {
+        /// The field.
+        field: Field,
     },
     /// A value between the field's steps.
     #[error("{field} {value} is not a multiple of {step}")]
@@ -619,7 +629,7 @@ mod tests {
         assert!(Field::Slots.check(Value::Set(136.0)).is_err());
         assert_eq!(Field::Slots.resolve(24.0, [Value::Times(1.5)]), 40.0);
         assert_eq!(Field::Slots.resolve(72.0, [Value::Times(2.0)]), 128.0);
-        assert_eq!(Field::Slots.resolve(16.0, [Value::Times(0.1)]), 8.0);
+        assert!(Field::Slots.check(Value::Times(0.5)).is_err());
     }
 
     #[test]

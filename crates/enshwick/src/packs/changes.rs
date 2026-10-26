@@ -23,6 +23,25 @@ fn source(file: &str, line: usize, name: &str) -> String {
     }
 }
 
+/// Whether the item `name` names, `item`, takes `slots`: an item that
+/// places a container, never made smaller, where the game's data is at
+/// hand; anything without it.
+fn container(reader: &Reader<'_>, item: Guid, name: &str, slots: Value) -> Result<(), String> {
+    let Some(vanilla) = reader.vanilla else {
+        return Ok(());
+    };
+    match vanilla.container_slots(item) {
+        Ok(None) => Err(format!("{name} places no container")),
+        Ok(Some(has)) => match slots {
+            Value::Set(v) if v < f64::from(has) => Err(format!(
+                "slots {v} are fewer than the {has} {name} holds, and a container only grows"
+            )),
+            _ => Ok(()),
+        },
+        Err(_) => Ok(()),
+    }
+}
+
 /// The value a pack entry gives.
 fn value(entry: ValueEntry) -> Value {
     match entry {
@@ -87,6 +106,12 @@ pub(super) fn item_changes(
                 continue;
             };
             for &(field, value) in &valid {
+                if field == Field::Slots
+                    && let Err(why) = container(reader, item, name, value)
+                {
+                    reader.error(file, text, at, format!("change {number}: {why}"));
+                    continue;
+                }
                 if let Some(&first) = seen.get(&(item, field)) {
                     reader.error(
                         file,

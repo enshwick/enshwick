@@ -13,7 +13,10 @@ use enshwick::content::recipes::{RECIPE_REGISTRY, RecipeChanges, RecipeLayout, c
 use enshwick::state::Hold;
 use rustc_hash::FxHashMap;
 
-use super::{Declared, HoldStep, Key, Merged, Raised, credited, hold_step, merge};
+use super::{
+    Declared, HoldStep, Key, Merged, Raised, credited, grown_slots, hold_step, merge,
+    template_slots,
+};
 use crate::host::Loader;
 use crate::locks::Relock;
 use crate::mod_index::ModIndex;
@@ -32,6 +35,9 @@ struct Sealed {
     merged: Merged,
     /// The names packs gave the changed entries.
     labels: FxHashMap<Guid, String>,
+    /// For each item with changed container slots, the place of its last
+    /// such change in load order.
+    slots_order: FxHashMap<Guid, usize>,
 }
 
 static CHANGES: Changes = Changes {
@@ -150,10 +156,17 @@ pub(crate) fn serve(
     )
     .and_then(|at| usize::try_from(at).ok());
     let items: Vec<Guid> = merged.entries(Entry::Item);
+    let slots_order: FxHashMap<Guid, usize> = declared
+        .iter()
+        .enumerate()
+        .filter(|(_, d)| d.change.field == Field::Slots)
+        .map(|(at, d)| (d.change.entry, at))
+        .collect();
     let _sealed = CHANGES.sealed.set(Sealed {
         loader,
         merged,
         labels,
+        slots_order,
     });
     let mut patches = Vec::new();
     match max_stack_at {
@@ -183,7 +196,7 @@ pub(crate) fn serve(
 }
 
 /// The loader's patches of the templates the items with changed container
-/// slots place, one per item.
+/// slots place: one per template, for every item that places it.
 fn container_patches(
     loader: &'static Loader,
 ) -> Vec<(ResourceKey, enshwick::abi::ResourcePatchFn, *mut c_void)> {
@@ -222,7 +235,7 @@ fn container_patches(
         );
         return Vec::new();
     };
-    let mut patches = Vec::new();
+    let mut templates: Vec<(Guid, Vec<Guid>)> = Vec::new();
     for item in items {
         let template = archive
             .resource(&item.key_by_hash(crate::catalogue::types::ITEM_INFO))
@@ -236,26 +249,40 @@ fn container_patches(
             );
             continue;
         };
-        let patch: &'static ContainerPatch = Box::leak(Box::new(ContainerPatch { item, layout }));
+        match templates.iter_mut().find(|(t, _)| *t == template) {
+            Some((_, items)) => items.push(item),
+            None => templates.push((template, vec![item])),
+        }
+    }
+    let mut patches = Vec::new();
+    for (template, mut items) in templates {
+        items.sort_by_key(|item| sealed.slots_order.get(item).copied().unwrap_or(0));
+        crate::log!(
+            INFO,
+            "container slots change on template {template}, which {} places, and so for every item that places it",
+            items
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
+        let patch: &'static ContainerPatch = Box::leak(Box::new(ContainerPatch { items, layout }));
         let key = template.key_by_hash(crate::catalogue::types::TEMPLATE);
         let user = core::ptr::from_ref(patch).cast_mut().cast::<c_void>();
         patches.push((key, build_container as enshwick::abi::ResourcePatchFn, user));
     }
-    if !patches.is_empty() {
-        crate::log!(INFO, "{} containers get changed slots", patches.len());
-    }
     patches
 }
 
-/// What the loader's patch of a container's template needs: the item that
-/// places it and the layout.
+/// What the loader's patch of a container's template needs: the changed
+/// items that place it, in load order, and the layout.
 struct ContainerPatch {
-    item: Guid,
+    items: Vec<Guid>,
     layout: ContainerLayout,
 }
 
 /// The loader's patch of a container's template: the base with the slots
-/// the changes of the mods still on give it.
+/// the changes of the mods still on give it, never fewer than it has.
 unsafe extern "system" fn build_container(
     base: *const u8,
     base_len: usize,
@@ -270,31 +297,7 @@ unsafe extern "system" fn build_container(
     // SAFETY: `ResourcePatchFn` hands `base_len` readable bytes at `base`,
     // unchanged for the call.
     unsafe { enshwick::raw::read_bytes_at(base, 0, &mut bytes) };
-    let built = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        let sealed = CHANGES.sealed.get()?;
-        let Some(old) = container_slots(&patch.layout, &bytes) else {
-            crate::log!(
-                WARN,
-                "container slots of {} are not changed: the template it places has no inventory of its own",
-                patch.item
-            );
-            return Some(bytes.clone());
-        };
-        let key = Key::new(patch.item, Field::Slots);
-        let Some(new) = sealed
-            .merged
-            .value(key, f64::from(old), |m| on(sealed.loader, m))
-        else {
-            return Some(bytes.clone());
-        };
-        #[expect(
-            clippy::cast_possible_truncation,
-            clippy::cast_sign_loss,
-            reason = "Field::resolve keeps slots whole and from 8 to 128"
-        )]
-        let new = new as u8;
-        resize_container(&patch.layout, &bytes, new)
-    }));
+    let built = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| resized(patch, &bytes)));
     let Ok(Some(built)) = built else {
         return Status::REFUSED;
     };
@@ -307,6 +310,62 @@ unsafe extern "system" fn build_container(
     // writable for the call.
     unsafe { out_len.write(built.len()) };
     Status::OK
+}
+
+/// The template `bytes` with the slots its changed items give it.
+fn resized(patch: &ContainerPatch, bytes: &[u8]) -> Option<Vec<u8>> {
+    let sealed = CHANGES.sealed.get()?;
+    let Some(old) = container_slots(&patch.layout, bytes) else {
+        crate::log!(
+            WARN,
+            "container slots of {} are not changed: the template has no inventory of its own",
+            patch
+                .items
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
+        return Some(bytes.to_vec());
+    };
+    let values: Vec<(Guid, f64)> = patch
+        .items
+        .iter()
+        .filter_map(|&item| {
+            let key = Key::new(item, Field::Slots);
+            let value = sealed
+                .merged
+                .value(key, f64::from(old), |m| on(sealed.loader, m))?;
+            Some((item, value))
+        })
+        .collect();
+    let (Some(new), disagree) = template_slots(&values) else {
+        return Some(bytes.to_vec());
+    };
+    if disagree {
+        let all = values
+            .iter()
+            .map(|(item, value)| format!("{item} {value}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        crate::log!(
+            WARN,
+            "items that place one container ask for different slots ({all}): the last in load order counts"
+        );
+    }
+    #[expect(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "Field::resolve keeps slots whole and from 8 to 128"
+    )]
+    let (new, lowered) = grown_slots(old, new as u8);
+    if lowered {
+        crate::log!(
+            WARN,
+            "container slots stay at {old}: a container never shrinks, as an upgraded chest moves every item it holds"
+        );
+    }
+    resize_container(&patch.layout, bytes, new)
 }
 
 /// The loader's patch of the recipe registry, when some mod changes a
@@ -456,6 +515,7 @@ fn changed_item(patch: &ItemPatch, bytes: &mut [u8]) {
         loader,
         merged,
         labels,
+        ..
     }) = CHANGES.sealed.get()
     else {
         return;
