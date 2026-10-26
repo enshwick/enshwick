@@ -1,7 +1,8 @@
 //! `cargo enshwick new`: a mod crate that builds and loads as it is.
 
-use anyhow::{Context as _, bail};
 use std::path::{Path, PathBuf};
+
+use anyhow::{Context as _, bail};
 
 use crate::Side;
 

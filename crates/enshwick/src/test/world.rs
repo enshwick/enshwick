@@ -1,9 +1,10 @@
 //! The world: components, entities, daytime, game settings, weather and terrain.
 
+use crate::abi::EntityPlace;
+
 use super::FakeHost;
 use super::Installed;
 use super::table;
-use crate::abi::EntityPlace;
 
 impl FakeHost {
     /// The component of type `type_hash` that `entity` has, holding a copy

@@ -8,7 +8,6 @@
 //! longer read as expected, that overlaps the bytes a hook replaces or whose
 //! hooks are not armed with it, turning its owner off.
 
-use crate::mod_index::ModIndex;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 
@@ -19,6 +18,7 @@ use rustc_hash::FxHashMap;
 use crate::chains::Next;
 use crate::host::Loader;
 use crate::locks::Relock;
+use crate::mod_index::ModIndex;
 
 /// The game's own number of recipes per workshop.
 const WORKSHOP_RECIPES: usize = 512;

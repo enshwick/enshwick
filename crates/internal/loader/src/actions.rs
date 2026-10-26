@@ -10,7 +10,6 @@
 //! reply reaches the player as one of the game's notices and on the screen
 //! that sent it.
 
-use crate::mod_index::ModIndex;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
@@ -19,6 +18,7 @@ use enshwick::actions::sheet::{self, Entry};
 
 use crate::host::Loader;
 use crate::locks::Relock;
+use crate::mod_index::ModIndex;
 use crate::remote::Message;
 
 /// How often the server looks for hints.

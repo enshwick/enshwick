@@ -15,15 +15,15 @@
 //! only entities that count their teleports, actors and characters, so the
 //! loader refuses any other.
 
-use crate::pinned;
-use crate::pinned::Symbol;
-use enshwick::ecs::Entity;
 use std::sync::OnceLock;
 
 use enshwick::abi::{Status, TeleportRequest};
+use enshwick::ecs::Entity;
 use rustc_hash::FxHashMap;
 
 use crate::host::Loader;
+use crate::pinned;
+use crate::pinned::Symbol;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[

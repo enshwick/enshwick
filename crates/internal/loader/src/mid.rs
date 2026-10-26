@@ -12,13 +12,14 @@
 //! handler in running order, skipping mods that are off, so turning a mod off
 //! touches no code either.
 
-use crate::mod_index::ModIndex;
 use core::ffi::c_void;
 use std::sync::OnceLock;
 
 use enshwick::abi::{HookFlags, MidHookFn, Registers, Status};
 use rustc_hash::FxHashMap;
 use windows_sys::Win32::System::Memory::{MEM_COMMIT, MEM_RESERVE, PAGE_READWRITE, VirtualAlloc};
+
+use crate::mod_index::ModIndex;
 
 /// Bytes per stub: the code, `int3` padding, [`UPPER`] and the continuation.
 const STUB: usize = 2048;

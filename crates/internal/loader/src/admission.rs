@@ -12,11 +12,12 @@
 //! hello names it and only while the host's key holds a player slot in the
 //! game.
 
-use crate::pinned;
 use std::collections::BTreeMap;
 use std::time::{Duration, Instant};
 
 use rustc_hash::FxHashMap;
+
+use crate::pinned;
 
 mod note;
 

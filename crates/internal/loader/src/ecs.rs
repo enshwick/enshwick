@@ -2,14 +2,14 @@
 //! the current row's entity, change marks, attribute reads, component reads
 //! and zone sizes.
 
-use crate::pinned;
-use crate::pinned::{Constant, Symbol};
-use enshwick::ecs::Entity;
 use std::sync::OnceLock;
 
+use enshwick::ecs::Entity;
 use enshwick::raw::{read_at, read_ptr_at, write_at};
 
 use crate::host::Loader;
+use crate::pinned;
+use crate::pinned::{Constant, Symbol};
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[

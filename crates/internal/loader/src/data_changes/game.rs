@@ -6,7 +6,6 @@ use core::ffi::c_void;
 use std::sync::{Arc, Mutex, OnceLock};
 
 use arc_swap::ArcSwap;
-
 use enshwick::abi::{Event, Level, Relation, ResourceKey, Status};
 use enshwick::content::Guid;
 use enshwick::content::changes::{Change, Entry, Field};
@@ -16,13 +15,14 @@ use enshwick::state::Hold;
 use enshwick_gamedata::catalogue;
 use rustc_hash::FxHashMap;
 
+use crate::host::Loader;
+use crate::locks::Relock;
+use crate::mod_index::ModIndex;
+
 use super::{
     Conflict, Declared, HoldStep, ItemOffsets, Key, Merged, Raised, credited, edit_item,
     grown_slots, hold_step, merge, template_slots,
 };
-use crate::host::Loader;
-use crate::locks::Relock;
-use crate::mod_index::ModIndex;
 
 /// The domain's state: changes as mods declare them, what the end of init
 /// sealed, and the stack sizes raised so far.

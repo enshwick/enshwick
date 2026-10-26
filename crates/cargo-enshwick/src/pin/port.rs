@@ -7,10 +7,11 @@
 //! one, inside a function, and at its start when the address is an entry.
 //! Anything else is reported, never guessed.
 
-use anyhow::anyhow;
 use std::cell::OnceCell;
 use std::fmt;
 use std::ops::Range;
+
+use anyhow::anyhow;
 
 use super::exe::Exe;
 use super::signature::{Masked, Pattern, Reference};

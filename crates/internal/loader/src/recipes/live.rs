@@ -1,7 +1,6 @@
 //! Disabled recipes in the running game: the rules in force, the lookup's
 //! filter, the screen's question, the messages to clients and the command.
 
-use crate::mod_index::ModIndex;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, LazyLock, Mutex, OnceLock};
@@ -18,6 +17,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use crate::catalogue::{Reflected, types};
 use crate::host::Loader;
 use crate::locks::Relock;
+use crate::mod_index::ModIndex;
 use crate::settings::LOADER_ID;
 use crate::texts;
 

@@ -20,7 +20,6 @@
 //! on the game thread, the loader takes the values it loaded with, then
 //! writes the kept fields over them; a forget puts the loaded values back.
 
-use crate::pinned;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -30,6 +29,7 @@ use enshwick::abi::{Event, Status};
 
 use crate::host::Loader;
 use crate::locks::Relock;
+use crate::pinned;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[

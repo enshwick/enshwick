@@ -11,9 +11,10 @@
 //! item keeps its vanilla icon anywhere else, the dedicated server
 //! included, where no icon shows anyway.
 
-use super::{Blob, Guid, Id, types};
 use crate::abi::HostApi;
 use crate::{Load, Off};
+
+use super::{Blob, Guid, Id, types};
 
 /// An item's own icon, for [`NewItem::icon`](super::items::NewItem::icon).
 ///

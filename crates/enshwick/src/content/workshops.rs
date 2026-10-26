@@ -6,11 +6,12 @@
 //! client's side of its menu) carry the id, and recipes name it.
 //! The workshop registry maps the id to a name and the station item.
 
+use crate::engine_ids as ids;
+use crate::{Load, Off};
+
 use super::items::{self, ItemLayout, NewItem};
 use super::recipes::NewRecipe;
 use super::{Blob, EngineFacts, Guid, Id, types};
-use crate::engine_ids as ids;
-use crate::{Load, Off};
 
 /// The game's workshop registry resource.
 pub const WORKSHOP_REGISTRY: Guid = Guid::parse("3baba1c2-bc82-4ab7-b20e-16dec28208af");

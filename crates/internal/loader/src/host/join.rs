@@ -1,6 +1,5 @@
 //! The mods a server's join needs, and the join values it applies to a client.
 
-use crate::mod_index::ModIndex;
 use std::collections::BTreeMap;
 use std::sync::Mutex;
 use std::sync::atomic::Ordering;
@@ -9,6 +8,7 @@ use enshwick::abi::{Event, Level, ManifestFlags};
 
 use crate::host::loader;
 use crate::locks::Relock;
+use crate::mod_index::ModIndex;
 
 /// The running join mods as the join check counts them, `(id, version)`:
 /// read each time, since a mod may turn off while the game runs.

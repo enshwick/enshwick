@@ -3,9 +3,10 @@
 
 use std::sync::Arc;
 
+use crate::{Load, Off};
+
 use super::menu;
 use super::types;
-use crate::{Load, Off};
 
 mod add;
 mod change;

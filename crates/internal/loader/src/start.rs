@@ -1,10 +1,10 @@
 //! The loader's start: identify the game, load the mods, arm their hooks.
 
-use crate::mod_index::ModIndex;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 
+use enshwick::abi::Side;
 use windows_sys::Win32::Foundation::HMODULE;
 use windows_sys::Win32::System::LibraryLoader::{
     GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
@@ -13,10 +13,10 @@ use windows_sys::Win32::System::LibraryLoader::{
 
 use crate::chains::Chains;
 use crate::host::{self, Loader, ModRecord};
+use crate::mod_index::ModIndex;
 use crate::modlist;
 use crate::patch::FrameSlot;
 use crate::resolve::{self, Candidate};
-use enshwick::abi::Side;
 
 mod arm;
 mod dry_run;

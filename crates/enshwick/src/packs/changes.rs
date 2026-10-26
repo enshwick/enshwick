@@ -2,12 +2,13 @@
 
 use std::collections::HashMap;
 
+use crate::content::Guid;
+use crate::content::changes::{Change, Entry, Field, Value};
+
 use super::entries::{ItemsFile, RecipesFile, ValueEntry};
 use super::files::PackError;
 use super::pack::Reader;
 use super::{ITEMS_FILE, RECIPES_FILE};
-use crate::content::Guid;
-use crate::content::changes::{Change, Entry, Field, Value};
 
 /// A field a recipe change sets, with its ingredient and the name the pack
 /// gave it, and the value.

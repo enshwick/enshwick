@@ -1,14 +1,15 @@
 //! Players and mods: sides, players, loaded mods, actions, chat, messages and services.
 
-use super::FakeHost;
-use super::Installed;
-use super::table;
 use crate::abi::Header;
 use crate::abi::ModInfo;
 use crate::abi::PlayerInfo;
 use crate::abi::RenameCall;
 use crate::abi::Side;
 use crate::abi::Str;
+
+use super::FakeHost;
+use super::Installed;
+use super::table;
 
 impl FakeHost {
     /// The side the game runs as.

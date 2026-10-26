@@ -9,6 +9,9 @@
 use std::collections::BTreeMap;
 use std::sync::OnceLock;
 
+use crate::Off;
+use crate::abi::ResourceKey;
+
 use super::containers::{ContainerLayout, container_slots};
 use super::items::{ITEM_REGISTRY, ItemLayout};
 use super::recipes::{RECIPE_REGISTRY, RecipeLayout};
@@ -16,8 +19,6 @@ use super::workshops::{
     Station, WORKSHOP_REGISTRY, WorkshopId, WorkshopLayout, clone_template, stations,
 };
 use super::{Blob, EngineFacts, Guid, types};
-use crate::Off;
-use crate::abi::ResourceKey;
 
 /// Reads one resource of the game's archive.
 type Reader = Box<dyn Fn(ResourceKey) -> Option<Vec<u8>> + Send + Sync>;

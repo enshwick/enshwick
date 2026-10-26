@@ -10,15 +10,15 @@
 //! Deaths no system records, such as freezing or an administrator's kill,
 //! raise nothing here.
 
-use crate::pinned;
-use enshwick::ecs::Entity;
 use std::sync::{Mutex, OnceLock};
 
 use enshwick::abi::{Event, Header, HookFlags, PlayerDeathData};
+use enshwick::ecs::Entity;
 
 use crate::chains::Next;
 use crate::host::Loader;
 use crate::locks::Relock;
+use crate::pinned;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[pinned::player::DEATH_SINK.id()];

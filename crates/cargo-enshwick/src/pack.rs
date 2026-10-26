@@ -2,10 +2,10 @@
 //! it, writes the JSON Schemas of its files for editors, and zips it for a
 //! release.
 
-use anyhow::Context as _;
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
 
+use anyhow::Context as _;
 use clap::Subcommand;
 use enshwick::content::vanilla::Vanilla;
 use enshwick::packs::{MANIFEST_FILE, Pack, PackFiles, PackManifest};

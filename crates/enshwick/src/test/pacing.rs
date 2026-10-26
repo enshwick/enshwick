@@ -1,8 +1,9 @@
 //! The engine's pacing places, as the loader would run the mod's handlers.
 
+use crate::abi::{Header, LoopWaitData};
+
 use super::Installed;
 use super::table;
-use crate::abi::{Header, LoopWaitData};
 
 #[expect(
     clippy::unused_self,

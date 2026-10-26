@@ -1,9 +1,10 @@
 //! Changes of vanilla recipes' values in the recipe registry, as the loader
 //! applies the merged changes of every mod.
 
-use super::RecipeLayout;
 use crate::content::changes::Field;
 use crate::content::{Blob, Guid};
+
+use super::RecipeLayout;
 
 /// Nanoseconds in a second: the game keeps a recipe's time in nanoseconds.
 const NANOS: f64 = 1e9;

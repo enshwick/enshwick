@@ -1,8 +1,9 @@
 //! `cargo enshwick install`: build the mod in release and copy it into the game.
 
-use anyhow::{Context as _, anyhow, bail};
 use std::path::{Path, PathBuf};
 use std::process::Command;
+
+use anyhow::{Context as _, anyhow, bail};
 
 /// What `cargo metadata` says about the workspace, as far as installing goes.
 #[derive(Debug, serde::Deserialize)]

@@ -11,7 +11,6 @@
 //! The layouts below are pinned for that build alone and no pattern finds
 //! them on another, so map markers stay off on a build without its own table.
 
-use crate::mod_index::ModIndex;
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
@@ -24,6 +23,7 @@ use crate::builds::Kind;
 use crate::chains::Next;
 use crate::host::Loader;
 use crate::locks::Relock;
+use crate::mod_index::ModIndex;
 
 use super::engine::{Buf, UiText};
 

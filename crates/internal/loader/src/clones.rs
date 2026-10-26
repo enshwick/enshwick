@@ -13,9 +13,9 @@ use std::path::Path;
 
 use enshwick::abi::ResourceKey;
 use enshwick::content::Guid;
+use rustc_hash::FxHashMap;
 
 use crate::catalogue::types;
-use rustc_hash::FxHashMap;
 
 /// The record file, under the `mod-data` folder.
 pub(crate) const FILE: &str = "enshwick/clones.toml";
