@@ -1,5 +1,7 @@
 //! The exports and the manifest a mod DLL gives the loader.
 
+mod unwind;
+
 /// Builds a mod's static [`Manifest`](crate::abi::Manifest).
 ///
 /// `id` is `[a-z0-9-]+` and names the DLL and the settings file; `side` is
@@ -173,6 +175,8 @@ macro_rules! manifest {
 /// [`abi::exports`](crate::abi::exports), each catching panics.
 ///
 /// Also adds `instance()` to the type, the mod's state once initialised.
+/// A mod built with `panic = "abort"` fails to compile: the loader turns a
+/// panicking mod off only while the panic unwinds.
 ///
 /// # Examples
 ///
@@ -196,6 +200,8 @@ macro_rules! manifest {
 #[macro_export]
 macro_rules! declare_mod {
     ($ty:ty) => {
+        $crate::__require_unwind!();
+
         static __ENSHWICK_INSTANCE: ::std::sync::OnceLock<$ty> = ::std::sync::OnceLock::new();
 
         impl $ty {
