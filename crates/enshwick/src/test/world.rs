@@ -520,7 +520,9 @@ pub(crate) struct FakeZones {
 
 impl FakeZones {
     /// The refusal of an edit of the box from `min` to `max` by a player
-    /// with the permission mask `permissions`, by the game's rule.
+    /// with the permission mask `permissions`, as the loader decides: the
+    /// game's terrain tool rule for the permissions, then the building area
+    /// and strict no-build tests Enshwick adds from the building cursor.
     pub(crate) fn refusal(&self, permissions: u8, min: [f64; 3], max: [f64; 3]) -> u32 {
         use crate::abi::{BuildRights, PlayerInfo};
         if permissions & PlayerInfo::CAN_EDIT_WORLD == 0 {

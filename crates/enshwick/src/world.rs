@@ -24,7 +24,7 @@ use crate::engine_ids as ids;
 use crate::game_events::{Field, Scalar};
 use crate::{Host, Load, Off};
 
-pub use build::{BuildRefusal, PlayerPermission};
+pub use build::{BuildRefusal, PlayerPermissions};
 pub use containers::ContainerKinds;
 pub use geometry::near;
 pub use rename::Rename;

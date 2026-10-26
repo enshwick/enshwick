@@ -1,13 +1,14 @@
-//! Whether a player may edit a box of the server's world, by the game's own
-//! rule for an edit without an item, as its terrain tool applies it.
+//! Whether a player may edit a box of the server's world.
 //!
-//! Every edit needs `CanEditWorld`; one whose box overlaps a building zone
-//! also needs `CanEditBase`. The permission byte is the player's entry in
+//! The permissions are the game's terrain tool rule: every edit needs
+//! `CanEditWorld`, and one whose box overlaps a building zone also needs
+//! `CanEditBase`. The permission byte is the player's entry in
 //! the server's permission table, a mask of the reflected
 //! `PlayerPermissions` bit indices; bases have no owner, so the bits are
 //! the player's alone. Past the permissions the loader adds two tests the
-//! building cursor runs: both corners inside the world's building area, and
-//! no strict no-build zone the world placed. The zone tests are the game's
+//! building cursor runs for items, in an order of the loader's own: both
+//! corners inside the world's building area, then no strict no-build zone
+//! the world placed. The zone tests are the game's
 //! own functions on its building-zone object, which the server keeps for
 //! the world's life (server 399, client 426).
 
@@ -94,12 +95,15 @@ pub(crate) trait Zones {
     fn touches_building_zone(&mut self) -> bool;
     /// Whether the point lies inside the world's building area.
     fn in_building_area(&mut self, point: [i64; 3]) -> bool;
-    /// Whether the box overlaps a strict no-build zone the world placed.
+    /// Whether the box overlaps a strict no-build zone the world placed, not a
+    /// creature.
     fn in_strict_no_build_zone(&mut self) -> bool;
 }
 
 /// The refusal of an edit by a player with the permission byte `mask`, or
-/// [`BuildRights::ALLOWED`], in the order the game tests.
+/// [`BuildRights::ALLOWED`]: the permissions in the terrain tool's order,
+/// then the building area and the strict no-build zones, in the loader's
+/// order.
 pub(crate) fn refusal(
     mask: u8,
     bits: Permissions,
@@ -152,10 +156,11 @@ mod game {
         ignored: u32,
     ) -> *mut u8;
 
-    /// The zone type of the no-build zones the world places; creatures add
-    /// moving zones of other types around themselves (server 399, client
-    /// 426).
-    const PLACED_ZONES: u8 = 1 << 0;
+    /// The zone types of the moving no-build zones creatures carry around
+    /// themselves: enemies 2, animals 3, NPCs 5 (server 399, client 426).
+    const CREATURE_ZONES: u8 = 1 << 2 | 1 << 3 | 1 << 5;
+    /// Every zone type but the creatures'.
+    const PLACED_ZONES: u8 = !CREATURE_ZONES;
     /// The test's bit for a strict no-build zone (server 399, client 426).
     const STRICT: u8 = 1 << 1;
 

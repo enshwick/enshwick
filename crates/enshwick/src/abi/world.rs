@@ -707,7 +707,7 @@ impl BuildRights {
     pub const ALLOWED: u32 = 0;
     /// The player lacks `CanEditWorld`, which every edit needs.
     pub const NO_CAN_EDIT_WORLD: u32 = 1;
-    /// The player lacks `CanEditBase`, and the box touches a building zone.
+    /// The player lacks `CanEditBase`, and the box overlaps a building zone.
     pub const NO_CAN_EDIT_BASE: u32 = 2;
     /// A corner of the box lies outside the world's building area.
     pub const OUTSIDE_BUILDING_ZONE: u32 = 3;

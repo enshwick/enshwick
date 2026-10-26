@@ -646,6 +646,9 @@ pub(crate) extern "system" fn build_rights(
     if !finite || (0..3).any(|a| request.max[a] < request.min[a]) {
         return Status::BAD_ARGS;
     }
+    if !crate::test::table::on_game_thread() {
+        return Status::WRONG_THREAD;
+    }
     let refusal = with(None, |s| {
         let permissions = s
             .host

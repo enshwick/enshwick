@@ -6,7 +6,7 @@ mod tests {
 
     use enshwick::abi::{Header, PlayerInfo, Status};
     use enshwick::ecs::Entity;
-    use enshwick::world::{BuildRefusal, Player, PlayerPermission, World, WorldError};
+    use enshwick::world::{BuildRefusal, Player, PlayerPermissions, World, WorldError};
     use enshwick::{Load, Mod, Off};
 
     static WORLD: OnceLock<World> = OnceLock::new();
@@ -88,7 +88,7 @@ mod tests {
         let _loader = installed();
         assert_eq!(
             can(GUEST, 50.0, 52.0),
-            Err(BuildRefusal::NoPermission(PlayerPermission::CanEditWorld))
+            Err(BuildRefusal::NoPermission(PlayerPermissions::CanEditWorld))
         );
     }
 
@@ -97,7 +97,7 @@ mod tests {
         let _loader = installed();
         assert_eq!(
             can(99, 50.0, 52.0),
-            Err(BuildRefusal::NoPermission(PlayerPermission::CanEditWorld))
+            Err(BuildRefusal::NoPermission(PlayerPermissions::CanEditWorld))
         );
     }
 
@@ -106,7 +106,7 @@ mod tests {
         let _loader = installed();
         assert_eq!(
             can(WORLDER, 38.0, 42.0),
-            Err(BuildRefusal::NoPermission(PlayerPermission::CanEditBase))
+            Err(BuildRefusal::NoPermission(PlayerPermissions::CanEditBase))
         );
         assert_eq!(can(BUILDER, 38.0, 42.0), Ok(()));
     }
@@ -127,7 +127,7 @@ mod tests {
         let _loader = installed();
         assert_eq!(
             can(BUILDER, 998.0, 1000.0),
-            Err(BuildRefusal::OutsideBuildingZone)
+            Err(BuildRefusal::CursorOutsideBuildingZone)
         );
     }
 
@@ -136,7 +136,7 @@ mod tests {
         let _loader = installed();
         assert_eq!(
             can(BUILDER, 105.0, 106.0),
-            Err(BuildRefusal::InsideStrictBuildInhibitorZone)
+            Err(BuildRefusal::CursorInsideStrictBuildInhibitorZone)
         );
         assert_eq!(can(BUILDER, 205.0, 206.0), Ok(()));
     }
@@ -147,7 +147,7 @@ mod tests {
         let world = WORLD.get().unwrap();
         assert_eq!(
             world.can_build(&player(WORLDER), [42.0, 30.0, 42.0], [38.0, 35.0, 38.0]),
-            Err(BuildRefusal::NoPermission(PlayerPermission::CanEditBase))
+            Err(BuildRefusal::NoPermission(PlayerPermissions::CanEditBase))
         );
     }
 
@@ -158,6 +158,20 @@ mod tests {
         assert_eq!(
             world.can_build(&player(BUILDER), [f64::NAN, 0.0, 0.0], [1.0; 3]),
             Err(BuildRefusal::Unchecked(WorldError::Refused))
+        );
+    }
+
+    #[test]
+    fn a_check_off_the_game_thread_is_refused_unchecked() {
+        let _loader = installed();
+        let world = *WORLD.get().unwrap();
+        let elsewhere =
+            std::thread::spawn(move || world.can_build(&player(BUILDER), [50.0; 3], [52.0; 3]))
+                .join()
+                .unwrap();
+        assert_eq!(
+            elsewhere,
+            Err(BuildRefusal::Unchecked(WorldError::WrongThread))
         );
     }
 }

@@ -358,4 +358,4 @@ marked "init only" are allowed during `enshwick_mod_init` only.
 | `voxel_read`             | Reads a box of up to 64³ voxels at full detail, decoded; server game thread, quiet moment only       | 84          |
 | `declare_change`         | Declares a change of a vanilla value whose value the mod sets later; init only                       | 85          |
 | `set_change`             | Puts the mod's value of a declared change in force, or takes it out; any thread                      | 85          |
-| `build_rights`           | Whether the server lets a player edit a box, by the game's rule; server game thread                  | 86          |
+| `build_rights`           | Whether the server lets a player edit a box; game thread, quiet moment only, refused inside a step   | 86          |

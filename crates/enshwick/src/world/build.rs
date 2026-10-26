@@ -4,15 +4,15 @@ use crate::abi::{BuildRights, Header};
 
 use super::{Player, World, WorldError};
 
-/// A permission the server grants a player through its user groups, named
-/// as the game's `PlayerPermissions`.
+/// A permission the server grants a player through its user groups, one bit
+/// of the game's `PlayerPermissions`.
 ///
 /// # Examples
 ///
 /// See [`BuildRefusal`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[non_exhaustive]
-pub enum PlayerPermission {
+pub enum PlayerPermissions {
     /// Edits inside a base: a Flame Altar's building zone.
     CanEditBase,
     /// Every edit of the world, inside a base or not.
@@ -20,14 +20,14 @@ pub enum PlayerPermission {
 }
 
 /// Why the server refuses a player's edit, from [`World::can_build`]; the
-/// variants carry the game's names for its building refusals.
+/// variants carry the names of the game's `CursorFlag` refusals.
 ///
 /// # Examples
 ///
 /// ```
-/// use enshwick::world::{BuildRefusal, PlayerPermission};
+/// use enshwick::world::{BuildRefusal, PlayerPermissions};
 ///
-/// let refusal = BuildRefusal::NoPermission(PlayerPermission::CanEditBase);
+/// let refusal = BuildRefusal::NoPermission(PlayerPermissions::CanEditBase);
 /// assert_eq!(refusal.to_string(), "the player lacks CanEditBase");
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
@@ -37,15 +37,14 @@ pub enum BuildRefusal {
     /// `CanEditBase` for one that reaches into a building zone. A player
     /// no longer in game has none.
     #[error("the player lacks {0:?}")]
-    NoPermission(PlayerPermission),
+    NoPermission(PlayerPermissions),
     /// A corner lies outside the world's building area, past the edge the
     /// game lets players build to.
     #[error("outside the world's building area")]
-    OutsideBuildingZone,
-    /// The box reaches into a strict no-build zone, such as one the game
-    /// keeps around a quest place.
+    CursorOutsideBuildingZone,
+    /// The box reaches into a strict no-build zone the world places.
     #[error("inside a strict no-build zone")]
-    InsideStrictBuildInhibitorZone,
+    CursorInsideStrictBuildInhibitorZone,
     /// The server could not check, so the edit is refused; enshwick's own
     /// refusal, not the game's.
     #[error("the server could not check: {0}")]
@@ -54,20 +53,21 @@ pub enum BuildRefusal {
 
 impl World {
     /// Whether the server lets `player` edit the box between the corners
-    /// `a` and `b` in metres, as the game decides for a terrain tool: a
-    /// mod that edits the world for a player asks first. The rule is the
-    /// game's for an edit without an item: `CanEditWorld` always,
-    /// `CanEditBase` inside a building zone, the world's building area and
-    /// strict no-build zones; an item's own rules, such as one that needs a
-    /// zone, are not part of it.
-    ///
-    /// On the server's game thread outside a step, or in a game event.
+    /// `a` and `b` in metres; a mod that edits the world for a player asks
+    /// first. The permissions are the game's terrain tool rule:
+    /// `CanEditWorld` always, `CanEditBase` where the box overlaps a
+    /// building zone. Enshwick adds two tests the game's building cursor
+    /// runs for items: both corners inside the world's building area, and
+    /// no strict no-build zone the world places. An item's other rules,
+    /// such as one that needs a zone, are not part of it.
     ///
     /// # Errors
     ///
-    /// The [`BuildRefusal`]; [`BuildRefusal::Unchecked`] off the game
-    /// thread, while no world is loaded, for a corner that is not finite
-    /// and on a game build without the checks.
+    /// The [`BuildRefusal`]; [`BuildRefusal::Unchecked`] off the server's
+    /// game thread, while no world is loaded, for a corner that is not
+    /// finite and on a game build without the checks. On the game thread
+    /// at a quiet moment only, outside a step or in a game event: refused
+    /// inside a step.
     ///
     /// # Examples
     ///
@@ -101,14 +101,14 @@ impl World {
         Err(match check.refusal {
             BuildRights::ALLOWED => return Ok(()),
             BuildRights::NO_CAN_EDIT_WORLD => {
-                BuildRefusal::NoPermission(PlayerPermission::CanEditWorld)
+                BuildRefusal::NoPermission(PlayerPermissions::CanEditWorld)
             }
             BuildRights::NO_CAN_EDIT_BASE => {
-                BuildRefusal::NoPermission(PlayerPermission::CanEditBase)
+                BuildRefusal::NoPermission(PlayerPermissions::CanEditBase)
             }
-            BuildRights::OUTSIDE_BUILDING_ZONE => BuildRefusal::OutsideBuildingZone,
+            BuildRights::OUTSIDE_BUILDING_ZONE => BuildRefusal::CursorOutsideBuildingZone,
             BuildRights::INSIDE_STRICT_BUILD_INHIBITOR_ZONE => {
-                BuildRefusal::InsideStrictBuildInhibitorZone
+                BuildRefusal::CursorInsideStrictBuildInhibitorZone
             }
             _ => BuildRefusal::Unchecked(WorldError::Refused),
         })

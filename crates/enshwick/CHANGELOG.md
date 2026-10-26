@@ -6,6 +6,14 @@ Each entry names the pull request that made the change.
 
 ## [Unreleased]
 
+### Added
+
+- `World::can_build` tells whether the server lets a player edit a box:
+  `CanEditWorld`, and `CanEditBase` inside a building zone, as the game's
+  terrain tools decide, plus two tests from the game's building cursor, the
+  world's building area and strict no-build zones; a refusal is a
+  `BuildRefusal` with the game's `CursorFlag` names (#547).
+
 ## [1.0.0-alpha.7] - 2026-10-26
 
 ### Added
@@ -29,10 +37,6 @@ Each entry names the pull request that made the change.
   from the start, so lowering a size or removing the mod that raised it
   never cuts a saved stack; while any size is kept it holds the game on a
   build it would leave vanilla (#544).
-- `World::can_build` tells whether the server lets a player edit a box, by
-  the game's own rule: `CanEditWorld`, `CanEditBase` inside a building zone,
-  the world's building area and strict no-build zones; a refusal is a
-  `BuildRefusal` with the game's names.
 
 ### Changed
 

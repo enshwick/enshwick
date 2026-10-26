@@ -259,29 +259,35 @@ one player refuses when it gets several.
 ## Build rights
 
 `world.can_build(&player, a, b)` tells whether the server lets a player edit
-the box between the corners `a` and `b`, in metres, by the game's own rule.
-A mod that digs, fills or pastes for a player asks before it changes the
-world; the server decides, so a client cannot talk its way past the check.
-The rule is the one the game's terrain tools follow:
+the box between the corners `a` and `b`, in metres. A mod that digs, fills or
+pastes for a player asks before it changes the world; the server decides, so
+a client cannot talk its way past the check. The permissions follow the
+game's terrain tools:
 
 - every edit needs the `CanEditWorld` permission;
 - an edit that reaches into a Flame Altar's building zone also needs
-  `CanEditBase`. A box that only shares a face with a zone stays outside it;
+  `CanEditBase`. A box that only shares a face with a zone stays outside it.
+
+Enshwick adds two tests the game's building cursor runs for items, which its
+terrain tools skip:
+
 - both corners lie inside the world's building area;
 - the box stays out of strict no-build zones the world places. Lenient ones
   and the zones creatures carry around them do not refuse an edit.
 
 Permissions are the server's user groups and hold in every base alike: bases
-have no owner. A player no longer in game has none. An item's own rules, such
-as one that needs a building zone, are not part of the check.
+have no owner. A player no longer in game has none. An item's other rules,
+such as one that needs a building zone, are not part of the check.
 
 `Err` carries a
 [`BuildRefusal`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/world/build.rs)
 named after the game's own answer: `NoPermission` with the missing
-`PlayerPermission`, `OutsideBuildingZone` or
-`InsideStrictBuildInhibitorZone`. When the server cannot tell, off the game
-thread, inside a step, before a world is loaded or on a game build without
-the checks, the answer is `Unchecked`, and the edit is refused.
+`PlayerPermissions` bit, `CursorOutsideBuildingZone` or
+`CursorInsideStrictBuildInhibitorZone`. The check runs on the server's game
+thread at a quiet moment only and is refused inside a step. When the server
+cannot tell, off the game thread, inside a step, before a world is loaded or
+on a game build without the checks, the answer is `Unchecked`, and the edit
+is refused.
 
 ```rust
 use enshwick::ecs::Entity;
