@@ -18,6 +18,7 @@ mods: 1 of 2 running
   you.trading-post 0.1.1 (off)
   off in mods/enshwick/mods.toml: you.my-mod
   not started: you.stalls is replaced by you.market-stalls; delete mods/stalls.dll
+  native mods in mods/, without Enshwick's API: fps-unlock.dll
 
 turned off:
   12:13:20Z you.trading-post: panic in an action

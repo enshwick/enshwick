@@ -4,6 +4,7 @@
 
 use crate::pinned;
 use crate::pinned::{Constant, Symbol};
+use enshwick::ecs::Entity;
 use std::sync::OnceLock;
 
 use enshwick::raw::{read_at, read_ptr_at, write_at};
@@ -427,10 +428,10 @@ impl Engine {
     /// # Safety
     ///
     /// - `ctx` is a live query context, used on its system's thread.
-    pub(crate) unsafe fn component(&self, ctx: *mut u64, kind: u16, entity: u32) -> *const u8 {
+    pub(crate) unsafe fn component(&self, ctx: *mut u64, kind: u16, entity: Entity) -> *const u8 {
         // SAFETY: the caller guarantees a live context on its system's
         // thread; `kind` lives on this stack for the call.
-        unsafe { (self.component_read)(ctx, &raw const kind, entity) }
+        unsafe { (self.component_read)(ctx, &raw const kind, entity.0) }
     }
 
     /// The full zone size of an altar at `level`, `None` when the balancing

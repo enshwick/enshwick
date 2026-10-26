@@ -12,7 +12,9 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use enshwick::abi::ResourceKey;
-use enshwick::content::{Guid, types};
+use enshwick::content::Guid;
+
+use crate::catalogue::types;
 use rustc_hash::FxHashMap;
 
 /// The record file, under the `mod-data` folder.
@@ -146,10 +148,16 @@ mod tests {
     #[test]
     fn clones_are_recorded_and_patches_are_not() {
         let mut clones = Clones::default();
-        let registry = BENCH.key(types::ITEM_REGISTRY);
+        let registry = BENCH.key_by_hash(types::ITEM_REGISTRY);
         let served = [
-            (CLONE.key(types::TEMPLATE), BENCH.key(types::TEMPLATE)),
-            (ITEM.key(types::ITEM_INFO), BENCH_ITEM.key(types::ITEM_INFO)),
+            (
+                CLONE.key_by_hash(types::TEMPLATE),
+                BENCH.key_by_hash(types::TEMPLATE),
+            ),
+            (
+                ITEM.key_by_hash(types::ITEM_INFO),
+                BENCH_ITEM.key_by_hash(types::ITEM_INFO),
+            ),
             (registry, registry),
         ];
         assert!(clones.add(served));
@@ -163,7 +171,10 @@ mod tests {
     #[test]
     fn the_record_round_trips_and_skips_what_is_not_a_guid() {
         let mut clones = Clones::default();
-        clones.add([(CLONE.key(types::TEMPLATE), BENCH.key(types::TEMPLATE))]);
+        clones.add([(
+            CLONE.key_by_hash(types::TEMPLATE),
+            BENCH.key_by_hash(types::TEMPLATE),
+        )]);
         clones
             .templates
             .insert("nonsense".into(), BENCH.to_string());
@@ -177,7 +188,10 @@ mod tests {
     #[test]
     fn a_removed_mod_leaves_its_clones_in_the_file() {
         let dir = std::env::temp_dir().join(format!("enshwick-clones-{}", std::process::id()));
-        let served = [(CLONE.key(types::TEMPLATE), BENCH.key(types::TEMPLATE))];
+        let served = [(
+            CLONE.key_by_hash(types::TEMPLATE),
+            BENCH.key_by_hash(types::TEMPLATE),
+        )];
         assert_eq!(update(&dir, served).len(), 1);
         let aliases = update(&dir, []);
         assert_eq!(aliases.get(&CLONE.0), Some(&BENCH.0));

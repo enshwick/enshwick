@@ -14,6 +14,7 @@ built by cargo-fuzz with the nightly compiler and AddressSanitizer.
 | `pattern` | a code pattern, run over code |
 | `table` | a build table, its patterns run over code |
 | `reflection` | a game image's headers and reflection data |
+| `mod_manifests` | mod manifests, resolved into a load order |
 | `settings_files` | the mod list, its lock, a settings schema, texts, a pack manifest |
 
 Targets that take several fields split their input at the byte `0xff`, which
