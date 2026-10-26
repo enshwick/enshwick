@@ -1,6 +1,8 @@
-//! Knowledge in the server's world: the values the game keeps for the world
-//! and for each player, which recipes, quests, journal pages, skill points
-//! and much more read; reading them, granting them, and the quests.
+//! Knowledge in the server's world.
+//!
+//! The values the game keeps for the world and for each player, which recipes,
+//! quests, journal pages, skill points and much more read; reading them,
+//! granting them, and the quests.
 //!
 //! Every knowledge id is either the world's, shared by every player, or
 //! each player's own, and is a bool, a counter or flags. A recipe's id is a

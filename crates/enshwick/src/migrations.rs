@@ -447,10 +447,11 @@ fn renames(list: &[Migration]) -> impl Iterator<Item = (Guid, Guid)> + '_ {
         .map(|s| (s.from_guid, s.to_guid))
 }
 
-/// The game id content saved as `id` has now: the id of the content the
-/// mod's migrations renamed `id`'s GUID to, else `id` itself. An item
-/// renamed with [`Migration::rename_content`] stays in old stacks under its
-/// old id, so compare item ids through this.
+/// The game id content saved as `id` has now: the id of the content the mod's
+/// migrations renamed `id`'s GUID to, else `id` itself.
+///
+/// An item renamed with [`Migration::rename_content`] stays in old stacks under
+/// its old id, so compare item ids through this.
 ///
 /// # Examples
 ///

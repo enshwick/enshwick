@@ -93,6 +93,9 @@ multiple_crate_versions = "allow"
 # Its fix, `assert_eq!(value, [] as [T; 0])`, reads worse than `is_empty()`,
 # and the test name already says what was expected.
 assert_is_empty = "allow"
+too_long_first_doc_paragraph = "deny"
+doc_link_code = "warn"
+doc_paragraphs_missing_punctuation = "warn"
 missing_errors_doc = "deny"
 missing_panics_doc = "deny"
 missing_safety_doc = "deny"

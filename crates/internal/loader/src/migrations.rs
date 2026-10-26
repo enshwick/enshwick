@@ -1,11 +1,13 @@
-//! Mod migrations: what a new version of a mod changes in what older
-//! versions left behind. The settings steps run on a mod's settings file
-//! when it registers its migrations; every step runs on a world's files when
-//! the world loads, before the mod reads the world's settings or opens its
-//! stores. `mod-data/enshwick/migrations.toml` records what ran, for the
-//! settings file and per world, so nothing runs twice; a world or settings
-//! file the mod has never seen starts current. Before changing anything the
-//! loader logs what it will do; in a dry run it only logs.
+//! Mod migrations: what a new version of a mod changes in what older versions
+//! left behind.
+//!
+//! The settings steps run on a mod's settings file when it registers its
+//! migrations; every step runs on a world's files when the world loads, before
+//! the mod reads the world's settings or opens its stores. `mod-
+//! data/enshwick/migrations.toml` records what ran, for the settings file and
+//! per world, so nothing runs twice; a world or settings file the mod has never
+//! seen starts current. Before changing anything the loader logs what it will
+//! do; in a dry run it only logs.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};

@@ -1,7 +1,8 @@
 //! The server's console: lines a mod runs on the server as an administrator
-//! with no character, such as each line of a dedicated server's command
-//! file. `enshwick ...` reaches the loader's own tools; any other first word
-//! names a mod, whose actions take the rest of the line.
+//! with no character, such as each line of a dedicated server's command file.
+//!
+//! `enshwick ...` reaches the loader's own tools; any other first word names a
+//! mod, whose actions take the rest of the line.
 //!
 //! Reading a line is pure logic here; the run module answers it.
 
