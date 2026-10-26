@@ -67,9 +67,11 @@ pub fn control(kind: u8) -> Vec<u8> {
     vec![kind, PROTOCOL]
 }
 
-/// A client's hello: the control kind and version, flags, the host number
-/// `nonce` (0 unless the client hosts the game), then the client's join
-/// mods, `id@version,...`, cut after the last whole entry that fits.
+/// A client's hello, which names the join mods it runs.
+///
+/// The control kind and version, flags, the host number `nonce` (0 unless
+/// the client hosts the game), then the mods, `id@version,...`, cut after
+/// the last whole entry that fits.
 ///
 /// # Examples
 ///
