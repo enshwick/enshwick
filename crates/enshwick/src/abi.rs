@@ -2221,8 +2221,8 @@ pub type ZoneCheckFn = unsafe extern "system" fn(check: *const ZoneCheck, user: 
 /// A game system asking which entity is a survivor, as
 /// [`HostApi::survivor_lookup`] hands it to the mod that answers.
 ///
-/// The game keeps one entity per survivor; a mod that keeps several, such as
-/// one per base, answers each asker with the one that suits it. Cells are
+/// The game keeps one entity per survivor; a mod that keeps several answers
+/// each asker with the one that suits it. Cells are
 /// whole 0.5 m cells.
 ///
 /// # Examples
