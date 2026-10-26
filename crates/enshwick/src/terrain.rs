@@ -7,7 +7,12 @@
 //! clients see it, and the save keeps it. Built pieces are never touched.
 //! A player's shovel and pickaxe also check where the player may build,
 //! take the cost and give the loot and experience; an edit here does none
-//! of that, so a mod decides what it needs.
+//! of that, so a mod decides what it needs. An edit here keeps no undo; a
+//! [`Transaction`](crate::world::Transaction) of the same edits does. An
+//! edit where the world is not loaded yet writes nothing and fails with
+//! [`WorldError::NotLoaded`], since the game would leave it floating there
+//! with no ground under it; the check starts loading the area, so the same
+//! edit works again a second or so later.
 //!
 //! Every call belongs on the server's game thread, from a game event, a
 //! [`Scheduler`](crate::schedule::Scheduler) task or an action; on a client,
@@ -185,13 +190,7 @@ impl Terrain {
         material: u8,
         shape: Shape,
     ) -> Result<f32, WorldError> {
-        self.edit(TerrainEdit {
-            kind: TerrainEdit::ADD,
-            shape: shape.raw(),
-            material: u32::from(material),
-            height,
-            ..self.request(position, radius)
-        })
+        self.edit(add_edit(position, radius, height, material, shape))
     }
 
     /// Digs out the terrain within `radius` of `position`, in metres, as a
@@ -203,8 +202,13 @@ impl Terrain {
     /// # Errors
     ///
     /// [`WorldError::Refused`] for a radius outside 0 to [`MAX_RADIUS`] or a
-    /// position below 0 on any axis, [`WorldError::WrongThread`] off the
-    /// game thread and [`WorldError::Missing`] while no world runs.
+    /// position below 0 on any axis, [`WorldError::OutsideWorld`] for an
+    /// edit reaching past the world's edge or above 1,024 metres,
+    /// [`WorldError::NotLoaded`] while part of what it can reach is not
+    /// loaded yet (it writes nothing, and starts loading it: try again in a
+    /// second or so),
+    /// [`WorldError::WrongThread`] off the game thread and
+    /// [`WorldError::Missing`] while no world runs.
     ///
     /// # Examples
     ///
@@ -216,18 +220,7 @@ impl Terrain {
         shape: Shape,
         protect: &[u8],
     ) -> Result<f32, WorldError> {
-        let mut bits = [0u8; 16];
-        for &id in protect {
-            if let Some(byte) = bits.get_mut(usize::from(id / 8)) {
-                *byte |= 1 << (id % 8);
-            }
-        }
-        self.edit(TerrainEdit {
-            kind: TerrainEdit::DIG,
-            shape: shape.raw(),
-            protect: bits,
-            ..self.request(position, radius)
-        })
+        self.edit(dig_edit(position, radius, shape, protect))
     }
 
     /// Flattens the ground within `radius` of `position`, in metres, to
@@ -254,12 +247,7 @@ impl Terrain {
         material: u8,
         shape: Shape,
     ) -> Result<bool, WorldError> {
-        let changed = self.edit(TerrainEdit {
-            kind: TerrainEdit::FLATTEN,
-            shape: shape.raw(),
-            material: u32::from(material),
-            ..self.request(position, radius)
-        })?;
+        let changed = self.edit(flatten_edit(position, radius, material, shape))?;
         Ok(changed > 0.0)
     }
 
@@ -283,25 +271,79 @@ impl Terrain {
         }
     }
 
-    fn request(&self, position: [f64; 3], radius: f32) -> TerrainEdit {
-        TerrainEdit {
-            header: Header::of::<TerrainEdit>(),
-            kind: 0,
-            shape: 0,
-            flags: if self.dry { TerrainEdit::DRY_RUN } else { 0 },
-            material: 0,
-            position: metres(position),
-            radius,
-            height: 0.0,
-            protect: [0; 16],
+    fn edit(&self, mut edit: TerrainEdit) -> Result<f32, WorldError> {
+        if self.dry {
+            edit.flags |= TerrainEdit::DRY_RUN;
         }
-    }
-
-    fn edit(&self, edit: TerrainEdit) -> Result<f32, WorldError> {
         let mut amount = 0.0f32;
         let status =
             (self.host.api().terrain_edit)(self.host.handle(), &raw const edit, &raw mut amount);
         WorldError::from_status(status).map(|()| amount)
+    }
+}
+
+/// The edit with nothing set but where and how far.
+fn request(position: [f64; 3], radius: f32, shape: Shape) -> TerrainEdit {
+    TerrainEdit {
+        header: Header::of::<TerrainEdit>(),
+        kind: 0,
+        shape: shape.raw(),
+        flags: 0,
+        material: 0,
+        position: metres(position),
+        radius,
+        height: 0.0,
+        protect: [0; 16],
+    }
+}
+
+/// The edit [`Terrain::add`] asks for.
+pub(crate) fn add_edit(
+    position: [f64; 3],
+    radius: f32,
+    height: f32,
+    material: u8,
+    shape: Shape,
+) -> TerrainEdit {
+    TerrainEdit {
+        kind: TerrainEdit::ADD,
+        material: u32::from(material),
+        height,
+        ..request(position, radius, shape)
+    }
+}
+
+/// The edit [`Terrain::dig`] asks for.
+pub(crate) fn dig_edit(
+    position: [f64; 3],
+    radius: f32,
+    shape: Shape,
+    protect: &[u8],
+) -> TerrainEdit {
+    let mut bits = [0u8; 16];
+    for &id in protect {
+        if let Some(byte) = bits.get_mut(usize::from(id / 8)) {
+            *byte |= 1 << (id % 8);
+        }
+    }
+    TerrainEdit {
+        kind: TerrainEdit::DIG,
+        protect: bits,
+        ..request(position, radius, shape)
+    }
+}
+
+/// The edit [`Terrain::flatten`] asks for.
+pub(crate) fn flatten_edit(
+    position: [f64; 3],
+    radius: f32,
+    material: u8,
+    shape: Shape,
+) -> TerrainEdit {
+    TerrainEdit {
+        kind: TerrainEdit::FLATTEN,
+        material: u32::from(material),
+        ..request(position, radius, shape)
     }
 }
 

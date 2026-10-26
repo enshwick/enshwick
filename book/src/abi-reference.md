@@ -128,17 +128,18 @@ The safe layer turns a failed status into an
 reason of the form `<what>: <why>`, such as
 `symbol quest.reward: missing on this game build`:
 
-| Code | Constant       | Meaning                                                                | `<why>` in the Off reason          |
-| ---- | -------------- | ---------------------------------------------------------------------- | ---------------------------------- |
-| 0    | `OK`           | Success                                                                |                                    |
-| 1    | `MISSING`      | What was asked for does not exist on this game build                   | `missing on this game build`       |
-| 2    | `AMBIGUOUS`    | More than one candidate answers a lookup                               | `ambiguous on this game build`     |
-| 3    | `REFUSED`      | Conflicts with another mod or with the loader's rules                  | `refused by the loader`            |
-| 4    | `BAD_ARGS`     | An argument is malformed                                               | `malformed`                        |
-| 5    | `TOO_LATE`     | Called in a phase where it is not allowed, such as a hook after arming | `asked for too late`               |
-| 6    | `FAULTED`      | The mod has faulted and is off                                         | `unavailable: the mod has faulted` |
-| 7    | `WRONG_THREAD` | Called from a thread the function does not serve                       | `called off the thread it serves`  |
-| 8    | `NOT_LOADED`   | The part of the world asked about is not loaded now; try again later   | `not loaded now`                   |
+| Code | Constant        | Meaning                                                                    | `<why>` in the Off reason          |
+| ---- | --------------- | -------------------------------------------------------------------------- | ---------------------------------- |
+| 0    | `OK`            | Success                                                                    |                                    |
+| 1    | `MISSING`       | What was asked for does not exist on this game build                       | `missing on this game build`       |
+| 2    | `AMBIGUOUS`     | More than one candidate answers a lookup                                   | `ambiguous on this game build`     |
+| 3    | `REFUSED`       | Conflicts with another mod or with the loader's rules                      | `refused by the loader`            |
+| 4    | `BAD_ARGS`      | An argument is malformed                                                   | `malformed`                        |
+| 5    | `TOO_LATE`      | Called in a phase where it is not allowed, such as a hook after arming     | `asked for too late`               |
+| 6    | `FAULTED`       | The mod has faulted and is off                                             | `unavailable: the mod has faulted` |
+| 7    | `WRONG_THREAD`  | Called from a thread the function does not serve                           | `called off the thread it serves`  |
+| 8    | `NOT_LOADED`    | The part of the world asked about is not loaded yet; try again in a second | `not loaded yet`                   |
+| 9    | `OUTSIDE_WORLD` | The box asked about leaves the world, past its edge or above its height    | `outside the world`                |
 
 `enshwick_mod_init` itself returns `OK`, `REFUSED` when `Mod::init` returned
 `Err(Off)`, or `FAULTED` when it panicked; the loader logs
@@ -359,3 +360,6 @@ marked "init only" are allowed during `enshwick_mod_init` only.
 | `declare_change`         | Declares a change of a vanilla value whose value the mod sets later; init only                       | 85          |
 | `set_change`             | Puts the mod's value of a declared change in force, or takes it out; any thread                      | 85          |
 | `build_rights`           | Whether the server lets a player edit a box; game thread, quiet moment only, refused inside a step   | 86          |
+| `transaction_commit`     | Queues terrain edits as one transaction written at quiet moments, with undo; any thread              | 87          |
+| `transaction_undo`       | Queues the undo of one of the mod's transactions, refused once its bricks changed; any thread        | 87          |
+| `transaction_status`     | Where one of the mod's transactions stands: queued, applied, undone, failed and why; any thread      | 87          |

@@ -210,6 +210,14 @@ fn editor(layout: &Layout) -> Result<(usize, usize, usize), Status> {
     Ok((editor, alloc, game))
 }
 
+/// The server's voxel editor and its voxel world's allocator, on the game
+/// thread at a quiet moment.
+pub(crate) fn editor_and_allocator(loader: &Loader) -> Result<(usize, usize), Status> {
+    let layout = layout(loader).ok_or(Status::MISSING)?;
+    let (editor, alloc, _) = editor(layout)?;
+    Ok((editor, alloc))
+}
+
 /// The terrain materials of the running game.
 pub(crate) fn materials(loader: &Loader) -> Result<Vec<TerrainMaterialInfo>, Status> {
     let layout = layout(loader).ok_or(Status::MISSING)?;
@@ -287,6 +295,10 @@ pub(crate) fn materials(loader: &Loader) -> Result<Vec<TerrainMaterialInfo>, Sta
 
 /// Runs a terrain edit; the amount it changed: volume added or removed in
 /// cubic metres, or 1 when a flatten changed anything.
+/// [`Status::OUTSIDE_WORLD`] when the box the edit can write leaves the
+/// world, [`Status::NOT_LOADED`] unless every column of bricks in it is
+/// loaded: the game's edit would otherwise load such a column holding only
+/// the edit.
 pub(crate) fn edit(loader: &Loader, request: &TerrainEdit) -> Result<f32, Status> {
     let layout = layout(loader).ok_or(Status::MISSING)?;
     let radius = request.radius;
@@ -300,6 +312,13 @@ pub(crate) fn edit(loader: &Loader, request: &TerrainEdit) -> Result<f32, Status
         return Err(Status::BAD_ARGS);
     }
     let (editor, alloc, _) = editor(layout)?;
+    let extent = crate::voxels::extent(loader)?;
+    let bricks = crate::transactions::cover::cover(request)
+        .filter(|bricks| bricks.inside(extent))
+        .ok_or(Status::OUTSIDE_WORLD)?;
+    for column in bricks.columns() {
+        crate::voxels::column_loaded(loader, column.min())?;
+    }
     let [x, y, z] = request.position;
     let site = Site {
         editor: core::ptr::with_exposed_provenance_mut(editor),

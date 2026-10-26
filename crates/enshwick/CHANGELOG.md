@@ -13,6 +13,20 @@ Each entry names the pull request that made the change.
   terrain tools decide, plus two tests from the game's building cursor, the
   world's building area and strict no-build zones; a refusal is a
   `BuildRefusal` with the game's `CursorFlag` names (#547).
+- `World::transaction` writes terrain edits as one transaction at the
+  server's quiet moments, 64 bricks a step, and `World::undo` puts every
+  brick it touched back, refusing when one has changed since;
+  `World::transaction_status` follows it (#548).
+- `WorldError::OutsideWorld` (`Status::OUTSIDE_WORLD`): voxel reads, terrain
+  edits and transactions past the world's edge or above 1,024 metres are
+  refused, where the game would read air (#548).
+
+### Changed
+
+- `Terrain::{add,dig,flatten}` write nothing and fail with
+  `WorldError::NotLoaded` unless the whole area the edit can reach is
+  loaded; the game would leave such an edit floating with no ground under
+  it (#548).
 
 ## [1.0.0-alpha.7] - 2026-10-26
 

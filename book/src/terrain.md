@@ -56,12 +56,119 @@ ground somewhere or how much an edit would take.
 
 Each call fails with a [`WorldError`](world.md#writing-components):
 `Refused` for a radius, height, position or material out of range,
-`WrongThread` off the game thread, `Missing` while no world runs.
+`OutsideWorld` for an edit that reaches past the world's edge or above
+1,024 metres, `NotLoaded` while part of what it can reach is not loaded,
+`WrongThread` off the game thread, `Missing` while no world runs. The
+server holds only some parts of the world in memory; an edit elsewhere
+writes nothing, since the game would leave it floating there with no
+ground under it. Asking starts loading the area, so the same edit works
+again a second or so later.
 
 A player's shovel and pickaxe also check where the player may build, take
 the cost, give the loot and experience and keep an undo; these edits do
 none of that, so a mod adds what it needs, for example with
-[altar zones](altars.md) and [inventory transactions](inventories.md).
+[altar zones](altars.md) and [inventory transactions](inventories.md). For
+an undo, write the edits as a transaction.
+
+## Transactions and undo
+
+`world.transaction()` starts a `Transaction`: edits of the world the loader
+writes as one and can take back as one. `terrain_add`, `terrain_dig` and
+`terrain_flatten` take the same arguments as the `Terrain` calls; `commit`
+hands the edits to the loader and returns a `TransactionId`. Any thread may
+commit.
+
+```rust
+use std::sync::Mutex;
+
+use enshwick::actions::{Action, Outcome};
+use enshwick::terrain::Shape;
+use enshwick::world::TransactionId;
+
+static LAST: Mutex<Option<TransactionId>> = Mutex::new(None);
+
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    let world = load.world()?;
+    let actions = load.actions(enshwick::i18n::Texts::default())?;
+    actions.add(Action::new("moat", "Dig a moat around you").admins(), move |request| {
+        let Some([x, y, z]) = world.position(request.player.entity) else {
+            return Outcome::refused("You are nowhere");
+        };
+        let moat = [[8.0, 0.0], [-8.0, 0.0], [0.0, 8.0], [0.0, -8.0]]
+            .into_iter()
+            .fold(world.transaction(), |moat, [dx, dz]| {
+                moat.terrain_dig([x + dx, y - 2.0, z + dz], 3.0, Shape::Square, &[])
+            });
+        match moat.commit() {
+            Ok(id) => {
+                *LAST.lock().unwrap_or_else(|e| e.into_inner()) = Some(id);
+                Outcome::done("Digging")
+            }
+            Err(why) => Outcome::refused(format!("{why}")),
+        }
+    })?;
+    actions.add(Action::new("unmoat", "Fill the last moat in").admins(), move |_| {
+        let last = LAST.lock().unwrap_or_else(|e| e.into_inner()).take();
+        match last.map(|id| world.undo(id)) {
+            Some(Ok(())) => Outcome::done("Filling"),
+            Some(Err(why)) => Outcome::refused(format!("{why}")),
+            None => Outcome::refused("No moat to fill"),
+        }
+    })
+}
+```
+
+The loader writes the edits in order on the server's game thread between
+steps, about 64 bricks of 8³ voxels (4 metres a side) a step, so a large
+transaction spreads over several steps instead of weighing on one; an edit
+is never split, and one larger than the budget takes a step of its own.
+On a dedicated server with no player, one transaction of eight digs of
+6 metres, 57,512 voxels, was written over 20 steps and undone over 19; a
+world step took 5.9 ms on average (18 ms for the slowest twentieth), and
+steps came every 51 ms against 48 ms idle.
+Before an edit writes, the loader keeps every brick it can touch, 1 KiB a
+brick. `world.transaction_status(id)` tells where a transaction stands:
+
+| Status | Meaning |
+| --- | --- |
+| `Pending` | queued, or written in part |
+| `Applied` | written whole; it can be undone |
+| `Undoing` | its undo is queued or written in part |
+| `Undone` | undone, or dropped before it wrote anything |
+| `Failed(why)` | stopped at an edit it could not write or read back; what it wrote stays and can be undone |
+| `Expired` | its undo data was dropped; it can no longer be undone |
+| `UndoRefused(why)` | the last undo stopped, keeping what it put back; ask again later |
+
+A transaction checks that its whole region lies inside the world and is
+loaded before it writes anything: if not, it fails with `OutsideWorld` or
+`NotLoaded`, and the world is as it was; the check starts loading the
+area, so the same transaction committed again a second or so later can
+pass. Once the loader has met the
+running world, a commit with an edit past its edge is refused at once
+with `OutsideWorld`. A region can still unload while a large transaction is under way;
+it then stops before the next edit, and an undo takes back what it wrote.
+
+`world.undo(id)` drops a queued transaction and takes back one written in
+whole or in part, putting every brick back as it was, newest edit first,
+again at 64 bricks a step. Clients see the undo, and the save keeps it, as
+any edit. Before it writes, the undo checks that every brick still holds
+what the transaction left there, and it checks each brick again right
+before writing it back. If a player, another mod or a later transaction
+has changed one, the undo stops there and the status turns `UndoRefused`
+with `Refused`: a check before the first write means nothing was written,
+a later one keeps what was put back so far. Part of the region not loaded
+refuses the undo before it writes; a column that unloads during the undo
+makes it wait, and after about 3,600 steps it stops with `NotLoaded`. An
+undo stopped this way may be asked again. Undo overlapping transactions
+newest first.
+
+The loader keeps up to 64 MiB of undo data, 65,536 bricks, over all
+transactions; past that, the oldest written transactions lose theirs and
+turn `Expired`. A transaction holds up to 1,024 edits and may touch no more
+bricks than the cap; a commit, or an undo, while queued work holds the
+cap is refused. The loader remembers the newest 4,096 transactions; the status of
+an older one is `None`. When the world ends, queued work fails with
+`Missing` and written transactions turn `Expired`.
 
 ## Reading voxels
 
@@ -104,9 +211,15 @@ game does not name it, so the name is enshwick's. A box is read in the
 order x, then y, then z; `VoxelBox::get` finds a voxel by its place and
 `iter` walks them all with their places.
 
-The server keeps only the parts of the world near players. A read of a box
-that is not wholly loaded fails with `NotLoaded`; the mod tries again when
-a player is near. Voxels past the world's edge read as air. An empty box,
+The server holds only some parts of the world in memory. A read of a box
+that is not wholly loaded fails with `NotLoaded` and starts loading it;
+about a second later the same read returns the real ground. Every read can
+pull an area into memory, so a mod reads where it needs to and never
+sweeps the world. A box past the world's edge, or above 1,024 metres,
+fails with `OutsideWorld`: the game itself reads such voxels as air, which
+a mod could not tell from real air. The edge is the game's own, read from
+the running world; the height is the loader's, above every place the game
+builds, since the game keeps none. An empty box,
 one larger than `READ_MAX` or one past 2³⁰ voxels on an axis is `Refused`.
 A read costs one lock and one copy for each 4-metre brick it touches.
 Reads, like edits, need a quiet moment: inside a step, from a filter or a

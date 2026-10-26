@@ -1,8 +1,8 @@
-//! The world: game events, entities, teleports, spawns, daytime, damage, knowledge, weather, terrain and voxels.
+//! The world: game events, entities, teleports, spawns, daytime, damage, knowledge, weather, terrain, voxels, build rights and transactions.
 
 use core::ffi::c_void;
 
-use crate::abi::{Header, Str};
+use crate::abi::{Header, Status, Str};
 
 /// A game event handed to a [`GameEventFn`], from the ECS event streams
 /// of the server's systems.
@@ -713,4 +713,117 @@ impl BuildRights {
     pub const OUTSIDE_BUILDING_ZONE: u32 = 3;
     /// The box reaches into a strict no-build zone.
     pub const INSIDE_STRICT_BUILD_INHIBITOR_ZONE: u32 = 4;
+}
+
+/// One change of a transaction, handed to
+/// [`HostApi::transaction_commit`](super::HostApi::transaction_commit) in an
+/// array: its kind names the record `data` points at.
+///
+/// Its layout is frozen: the commit reads an array of it with no entry
+/// size. A new kind of change gets a new kind, never a new field.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::abi::{Header, TerrainEdit, TransactionOp};
+///
+/// let dig = TerrainEdit {
+///     header: Header::of::<TerrainEdit>(),
+///     kind: TerrainEdit::DIG,
+///     shape: TerrainEdit::ROUND,
+///     flags: 0,
+///     material: 0,
+///     position: [100.0, 40.0, 100.0],
+///     radius: 3.0,
+///     height: 0.0,
+///     protect: [0; 16],
+/// };
+/// let op = TransactionOp { kind: TransactionOp::TERRAIN, reserved: 0, data: (&raw const dig).cast() };
+/// assert_eq!(op.kind, TransactionOp::TERRAIN);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, bytemuck::Zeroable)]
+pub struct TransactionOp {
+    /// [`TransactionOp::TERRAIN`]; the loader refuses a kind it does not
+    /// know.
+    pub kind: u32,
+    /// Zero; the loader refuses another value.
+    pub reserved: u32,
+    /// The change, borrowed for the call: a [`TerrainEdit`] for
+    /// [`TransactionOp::TERRAIN`], without [`TerrainEdit::DRY_RUN`].
+    pub data: *const c_void,
+}
+
+impl TransactionOp {
+    /// A terrain add, dig or flatten: `data` points at a [`TerrainEdit`].
+    pub const TERRAIN: u32 = 1;
+}
+
+/// Where a transaction stands, written by
+/// [`HostApi::transaction_status`](super::HostApi::transaction_status).
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::abi::{Header, Status, TransactionInfo};
+///
+/// let info = TransactionInfo {
+///     header: Header::of::<TransactionInfo>(),
+///     state: TransactionInfo::APPLIED,
+///     reason: Status::OK,
+///     ops: 2,
+///     applied: 2,
+///     bricks: 16,
+/// };
+/// assert_eq!(info.applied, info.ops);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, bytemuck::Zeroable)]
+pub struct TransactionInfo {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// One of the states below; a reader treats a state it does not know as
+    /// [`TransactionInfo::PENDING`].
+    pub state: u32,
+    /// Why it failed, or why its last undo was refused:
+    /// [`Status::NOT_LOADED`] for a part of the world not loaded,
+    /// [`Status::OUTSIDE_WORLD`] for a change that leaves the world,
+    /// [`Status::REFUSED`] for a region changed since, [`Status::MISSING`]
+    /// when the world ended or the build lacks a piece; [`Status::OK`]
+    /// otherwise.
+    pub reason: Status,
+    /// The changes it holds.
+    pub ops: u32,
+    /// The changes written to the world and not undone yet.
+    pub applied: u32,
+    /// The 8³-voxel bricks whose earlier state the loader keeps for its
+    /// undo, 1 KiB each.
+    pub bricks: u64,
+}
+
+impl_headed!(TransactionInfo);
+
+impl TransactionInfo {
+    /// Queued, or written in part: the loader spreads a large one over the
+    /// server's steps.
+    pub const PENDING: u32 = 0;
+    /// Written whole; it can be undone.
+    pub const APPLIED: u32 = 1;
+    /// An undo is queued or written in part.
+    pub const UNDOING: u32 = 2;
+    /// Undone, or dropped before it wrote anything.
+    pub const UNDONE: u32 = 3;
+    /// It stopped before or right after a change it could not write or
+    /// read back, for `reason`; the changes written stay and can be undone
+    /// while `bricks` is above 0. An undo never fails: it is refused.
+    pub const FAILED: u32 = 4;
+    /// Written whole, or with its undo refused, but the loader dropped what
+    /// its undo needs, to stay within its memory cap or because the world
+    /// ended; it can no longer be undone.
+    pub const EXPIRED: u32 = 5;
+    /// Its last undo stopped for `reason`: before writing anything, or at a
+    /// brick changed since or not loaded for the loader's wait limit, with
+    /// what it put back kept. The rest stays written and can be undone
+    /// again.
+    pub const UNDO_REFUSED: u32 = 6;
 }

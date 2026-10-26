@@ -1,4 +1,4 @@
-//! Host functions for the world: players, entities, chat, time, settings, weather, terrain, voxels and build rights.
+//! Host functions for the world: players, entities, chat, time, settings, weather, terrain, voxels, build rights and transactions.
 
 use enshwick::abi as api_frame;
 use enshwick::abi::{Level, ModHandle, Side, Status, Str};
@@ -667,6 +667,85 @@ pub(crate) extern "system" fn voxel_read(
             unsafe { slot.write(crate::voxels::decode(word)) };
         }
         Status::OK
+    })
+}
+
+pub(crate) extern "system" fn transaction_commit(
+    me: ModHandle,
+    ops: *const enshwick::abi::TransactionOp,
+    count: u32,
+    id: *mut u64,
+) -> Status {
+    use enshwick::abi::{TerrainEdit, TransactionOp};
+
+    entry("transaction_commit", || {
+        let count = count as usize;
+        if ops.is_null() || id.is_null() || count == 0 || count > crate::transactions::LIMITS.ops {
+            return Status::BAD_ARGS;
+        }
+        let (loader, owner) = match caller_index(me) {
+            Ok(caller) => caller,
+            Err(status) => return status,
+        };
+        let mut edits = Vec::with_capacity(count);
+        for i in 0..count {
+            // SAFETY: `ops` is non-null, checked above, and `i` is below
+            // `count`; `HostApi::transaction_commit` has the mod pass `count`
+            // ops at `ops`, so the offset stays inside that array.
+            let slot = unsafe { ops.add(i) };
+            // SAFETY: `slot` is inside the `count` ops the mod passes,
+            // borrowed for the call; an unaligned read needs no alignment.
+            let op = unsafe { slot.read_unaligned() };
+            if op.kind != TransactionOp::TERRAIN || op.reserved != 0 {
+                return Status::BAD_ARGS;
+            }
+            // SAFETY: `HostApi::transaction_commit` has the mod pass each
+            // terrain op's `data` null or pointing at a `TerrainEdit` with
+            // its header, borrowed for the call.
+            let edit = unsafe {
+                enshwick::abi::read_headed(op.data.cast::<TerrainEdit>(), size_of::<TerrainEdit>())
+            };
+            let Some(edit) = edit else {
+                return Status::BAD_ARGS;
+            };
+            edits.push(edit);
+        }
+        match crate::transactions::commit(loader, owner, &edits) {
+            // SAFETY: `id` is non-null, checked above; `HostApi::transaction_commit`
+            // has the mod pass it pointing at a writable, aligned `u64` that
+            // no other thread touches during the call.
+            Ok(next) => unsafe { put(id, next) },
+            Err(status) => status,
+        }
+    })
+}
+
+pub(crate) extern "system" fn transaction_status(
+    me: ModHandle,
+    id: u64,
+    out: *mut enshwick::abi::TransactionInfo,
+) -> Status {
+    entry("transaction_status", || {
+        let owner = match caller_index(me) {
+            Ok((_, owner)) => owner,
+            Err(status) => return status,
+        };
+        let Some(info) = crate::transactions::info(owner, id) else {
+            return Status::MISSING;
+        };
+        // SAFETY: `HostApi::transaction_status` has the mod pass `out` null
+        // or pointing at a writable `TransactionInfo` whose header names its
+        // size, untouched by other threads during the call.
+        unsafe { put_headed(out, info) }
+    })
+}
+
+pub(crate) extern "system" fn transaction_undo(me: ModHandle, id: u64) -> Status {
+    entry("transaction_undo", || {
+        match caller_index(me).and_then(|(_, owner)| crate::transactions::undo(owner, id)) {
+            Ok(()) => Status::OK,
+            Err(status) => status,
+        }
     })
 }
 

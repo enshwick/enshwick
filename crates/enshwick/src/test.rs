@@ -95,6 +95,7 @@ pub use hooks::LinkedHook;
 pub use inventory::SubmittedRequest;
 pub use settings::SettingsRefused;
 pub use ui::{Drawn, FakeMarker, Input, ShownDialog};
+pub use world::FakeTransaction;
 
 /// The modding book's chapter on tests, whose examples run as doctests here.
 #[cfg(doctest)]
@@ -227,6 +228,7 @@ pub struct FakeHost {
     missing_rates: HashSet<crate::abi::RateId>,
     voxels: Vec<world::VoxelGrid>,
     zones: world::FakeZones,
+    extent: Option<[u32; 3]>,
 }
 
 impl Default for FakeHost {
@@ -294,6 +296,7 @@ impl FakeHost {
             missing_rates: HashSet::new(),
             voxels: Vec::new(),
             zones: world::FakeZones::default(),
+            extent: None,
         }
     }
 

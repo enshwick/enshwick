@@ -1,6 +1,5 @@
-//! The server's world: components, templates, positions and players, component
-//! writes, entity queries, labels and rename filters, chat lines, notices,
-//! destroy requests, saves and build rights.
+//! The server's world: components, entities and players, their queries and
+//! writes, chat, saves, build rights and [`Transaction`]s.
 //!
 //! Most calls belong on the server's game thread, from a game event or a
 //! [`Scheduler`](crate::schedule::Scheduler) task, and each says what it does
@@ -14,6 +13,7 @@ mod geometry;
 mod players;
 mod rename;
 mod stats;
+mod transactions;
 mod vitals;
 
 use core::ffi::c_void;
@@ -29,6 +29,7 @@ pub use containers::ContainerKinds;
 pub use geometry::near;
 pub use rename::Rename;
 pub use stats::{Meter, Progress, Skill, Vitals};
+pub use transactions::{Transaction, TransactionId, TransactionStatus};
 
 /// A reflected ECS component type, resolved once at init.
 ///
@@ -295,10 +296,14 @@ pub enum WorldError {
     /// asked for its stamina.
     #[error("the entity lacks the component")]
     Lacks,
-    /// The part of the world asked about is not loaded now, far from every
-    /// player; try again when a player is near.
+    /// The part of the world asked about is not loaded yet; asking starts
+    /// loading it, so try again in a second or so.
     #[error("that part of the world is not loaded")]
     NotLoaded,
+    /// The box asked about leaves the world: past its edge across, or
+    /// above the height the loader takes.
+    #[error("outside the world")]
+    OutsideWorld,
 }
 
 impl WorldError {
@@ -310,6 +315,7 @@ impl WorldError {
             Status::OK => Ok(()),
             Status::WRONG_THREAD => Err(Self::WrongThread),
             Status::NOT_LOADED => Err(Self::NotLoaded),
+            Status::OUTSIDE_WORLD => Err(Self::OutsideWorld),
             Status::REFUSED | Status::BAD_ARGS => Err(Self::Refused),
             Status::MISSING => Err(missing),
             _ => Err(Self::Missing),

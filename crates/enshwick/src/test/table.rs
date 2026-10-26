@@ -63,7 +63,8 @@ use world::{
     hosting, keep_game_settings, notify, player, players, rename_filter, run_console, save_world,
     server_world, set_game_settings, set_label, set_time_of_day, set_time_speed, set_weather,
     spawn, status, teleport, terrain_edit, terrain_materials, time_of_day, time_speed_control,
-    voxel_read, weather_at, weather_fronts, world_key,
+    transaction_commit, transaction_status, transaction_undo, voxel_read, weather_at,
+    weather_fronts, world_key,
 };
 
 /// A submitted inventory request and where its result goes.
@@ -173,8 +174,8 @@ pub(crate) struct State {
     pub(crate) forecasts: Vec<(u32, i64)>,
     /// The terrain materials, once a world runs.
     pub(crate) terrain: Option<Vec<TerrainMaterialInfo>>,
-    /// The terrain edits the mod asked for.
-    pub(crate) terrain_edits: Vec<TerrainEdit>,
+    /// The terrain edits and transactions the mod asked for.
+    pub(crate) edits: WorldEdits,
     pub(crate) config_schema: Option<String>,
     /// Frame callbacks: callback and pointer.
     pub(crate) frames: Vec<(UiFrameFn, usize)>,
@@ -321,6 +322,15 @@ pub(crate) struct DataChanges {
     pub(crate) live: Vec<crate::test::content::LiveChange>,
 }
 
+/// The changes of the world the mod asked for, in order.
+#[derive(Default)]
+pub(crate) struct WorldEdits {
+    /// Direct terrain edits.
+    pub(crate) terrain: Vec<TerrainEdit>,
+    /// Committed transactions, oldest first.
+    pub(crate) transactions: Vec<crate::test::FakeTransaction>,
+}
+
 /// Waits for the table to be free, then answers from `host`.
 pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
     let turn = take_turn();
@@ -378,7 +388,7 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         weather: None,
         forecasts: Vec::new(),
         terrain: None,
-        terrain_edits: Vec::new(),
+        edits: WorldEdits::default(),
         config_schema: None,
         channels: Vec::new(),
         net_sent: Vec::new(),
@@ -645,4 +655,7 @@ pub(crate) static TABLE: HostApi = HostApi {
     declare_change,
     set_change,
     build_rights,
+    transaction_commit,
+    transaction_undo,
+    transaction_status,
 };

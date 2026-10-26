@@ -228,7 +228,95 @@ impl Installed {
     /// See [`Installed::set_terrain`].
     #[must_use]
     pub fn terrain_edits(&self) -> Vec<crate::abi::TerrainEdit> {
-        table::with(Vec::new(), |s| s.terrain_edits.clone())
+        table::with(Vec::new(), |s| s.edits.terrain.clone())
+    }
+
+    /// The transactions the mod committed, oldest first, as the loader
+    /// holds them: until [`Installed::run_transactions`] each stays
+    /// pending.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// assert!(loader.transactions().is_empty());
+    /// ```
+    #[must_use]
+    pub fn transactions(&self) -> Vec<FakeTransaction> {
+        table::with(Vec::new(), |s| s.edits.transactions.clone())
+    }
+
+    /// Runs the loader's next steps until every queued transaction and undo
+    /// is written: pending ones turn applied, undoing ones undone. The fake
+    /// keeps the bricks of each change's position ± radius as undo data,
+    /// where the loader keeps every brick the change can write.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// loader.run_transactions();
+    /// assert!(loader.transactions().is_empty());
+    /// ```
+    pub fn run_transactions(&self) {
+        use crate::abi::TransactionInfo;
+
+        table::with((), |s| {
+            for transaction in &mut s.edits.transactions {
+                let info = &mut transaction.info;
+                match info.state {
+                    TransactionInfo::PENDING => {
+                        info.state = TransactionInfo::APPLIED;
+                        info.applied = info.ops;
+                        info.bricks = transaction.terrain.iter().map(edit_bricks).sum();
+                    }
+                    TransactionInfo::UNDOING => {
+                        info.state = TransactionInfo::UNDONE;
+                        info.applied = 0;
+                        info.bricks = 0;
+                    }
+                    _ => {}
+                }
+            }
+        });
+    }
+
+    /// Makes the loader's next step meet `reason` for transaction `id`, as
+    /// the game would where the world is not loaded yet
+    /// ([`Status::NOT_LOADED`]) or
+    /// after a change in its region ([`Status::REFUSED`]): a pending one
+    /// fails before writing, an undo is refused and it stays applied.
+    ///
+    /// [`Status::NOT_LOADED`]: crate::abi::Status::NOT_LOADED
+    /// [`Status::REFUSED`]: crate::abi::Status::REFUSED
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// loader.fail_transaction(1, enshwick::abi::Status::NOT_LOADED);
+    /// assert!(loader.transactions().is_empty());
+    /// ```
+    pub fn fail_transaction(&self, id: u64, reason: crate::abi::Status) {
+        use crate::abi::TransactionInfo;
+
+        table::with((), |s| {
+            let Some(transaction) = s.edits.transactions.iter_mut().find(|t| t.id == id) else {
+                return;
+            };
+            let info = &mut transaction.info;
+            match info.state {
+                TransactionInfo::PENDING => {
+                    info.state = TransactionInfo::FAILED;
+                    info.reason = reason;
+                }
+                TransactionInfo::UNDOING => {
+                    info.state = TransactionInfo::UNDO_REFUSED;
+                    info.reason = reason;
+                }
+                _ => {}
+            }
+        });
     }
 
     /// The labels the mod set, as `(entity, text)`, in order.
@@ -351,9 +439,12 @@ impl FakeHost {
     /// Loaded voxels of the world: the box of `size` from `min`, its
     /// `voxels` x fastest, then y, then z. A read answers from the boxes,
     /// the last given first where they overlap, and finds a box it does not
-    /// cover wholly not loaded, as the loader does far from every player.
-    /// The fake has no world's edge: where the loader reads air past it,
-    /// the fake answers not loaded.
+    /// cover wholly not loaded, as the loader does where the world is not
+    /// loaded yet;
+    /// once the fake has boxes, a terrain edit whose position lies in none
+    /// is not loaded either.
+    /// Past the world's edge ([`FakeHost::world_extent`]) a read is outside
+    /// the world.
     ///
     /// # Panics
     ///
@@ -390,6 +481,75 @@ impl FakeHost {
         });
         self
     }
+}
+
+impl FakeHost {
+    /// The world's end on each axis, in voxels: a read of a box past it,
+    /// and an edit or a transaction's change whose position lies past it,
+    /// is outside the world, as the loader refuses them. The loader takes
+    /// the edge across from the game and its own height; the fake checks
+    /// an edit's position, where the loader checks every voxel the edit can
+    /// write. Without it, the fake has no edge.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new().world_extent([20_480, 2048, 20_480]).install();
+    /// # let _ = loader;
+    /// ```
+    #[must_use]
+    pub const fn world_extent(mut self, end: [u32; 3]) -> Self {
+        self.extent = Some(end);
+        self
+    }
+}
+
+/// Whether the box of `size` from `min` leaves a world ending at `end`.
+pub(crate) fn outside(end: Option<[u32; 3]>, min: [u32; 3], size: [u32; 3]) -> bool {
+    end.is_some_and(|end| {
+        (0..3).any(|axis| {
+            min[axis]
+                .checked_add(size[axis])
+                .is_none_or(|stop| stop > end[axis])
+        })
+    })
+}
+
+/// The 8³-voxel bricks of the box of the edit's position ± radius: the
+/// fake's count, where the loader counts every brick the edit can write.
+pub(crate) fn edit_bricks(edit: &crate::abi::TerrainEdit) -> u64 {
+    #[expect(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "a checked edit is finite and at 0 or more; `as` saturates"
+    )]
+    let brick = |metres: f32| ((f64::from(metres).max(0.0) * 2.0) as u64) / 8;
+    edit.position
+        .iter()
+        .map(|&at| brick(at + edit.radius) - brick(at - edit.radius) + 1)
+        .product()
+}
+
+/// Whether the edit's position lies past a world ending at `end`.
+pub(crate) fn edit_outside(end: Option<[u32; 3]>, edit: &crate::abi::TerrainEdit) -> bool {
+    end.is_some_and(|end| {
+        edit.position
+            .iter()
+            .zip(end)
+            .any(|(&metres, stop)| f64::from(metres) * 2.0 >= f64::from(stop))
+    })
+}
+
+/// Whether the edit's position lies in one of `grids`, when the fake has
+/// any: the loader checks every column of bricks the edit can write.
+pub(crate) fn edit_loaded(grids: &[VoxelGrid], edit: &crate::abi::TerrainEdit) -> bool {
+    #[expect(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "a checked edit's position is finite and at 0 or more; `as` saturates"
+    )]
+    let at = edit.position.map(|metres| (f64::from(metres) * 2.0) as u32);
+    grids.is_empty() || grids.iter().any(|grid| grid.get(at).is_some())
 }
 
 /// A box of loaded voxels the fake answers reads from.
@@ -434,6 +594,35 @@ impl VoxelGrid {
         }
         Some(voxels)
     }
+}
+
+/// A transaction as the fake loader holds it, from
+/// [`Installed::transactions`].
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::abi::TransactionInfo;
+///
+/// fn applied(loader: &enshwick::test::Installed) -> usize {
+///     loader
+///         .transactions()
+///         .iter()
+///         .filter(|t| t.info.state == TransactionInfo::APPLIED)
+///         .count()
+/// }
+/// ```
+#[derive(Clone, Debug)]
+#[non_exhaustive]
+pub struct FakeTransaction {
+    /// The id the mod got.
+    pub id: u64,
+    /// The mod that committed it.
+    pub owner: crate::abi::ModHandle,
+    /// Its terrain changes, in order.
+    pub terrain: Vec<crate::abi::TerrainEdit>,
+    /// Where it stands, as the mod reads it.
+    pub info: crate::abi::TransactionInfo,
 }
 
 impl FakeHost {

@@ -203,6 +203,11 @@ mod terrain;
 mod texts;
 #[cfg(windows)]
 mod textures;
+#[cfg_attr(
+    not(windows),
+    expect(dead_code, reason = "only the Windows build writes the game's voxels")
+)]
+mod transactions;
 #[cfg(windows)]
 mod ui;
 #[cfg(windows)]

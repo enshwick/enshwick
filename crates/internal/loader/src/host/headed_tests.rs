@@ -74,6 +74,7 @@ macro_rules! headed {
             TerrainEdit,
             TerrainMaterialInfo,
             TickData,
+            TransactionInfo,
             UiDialog,
             UiFrame,
             UiMarker,
