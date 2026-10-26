@@ -110,7 +110,7 @@ game's window has the focus and the HUD shows.
 
 ## Worked example
 
-[`enshwick-safes`](https://github.com/enshwick/mod-personal-safes)
+[`enshwick-personal-safes`](https://github.com/enshwick/mod-personal-safes)
 declares who may open a Safe as a list action with a hint: `.at` finds the
 Safe at hand, the player's own first, through the mod's own rules and its
 extension point; `on` names the players allowed there; a second action,

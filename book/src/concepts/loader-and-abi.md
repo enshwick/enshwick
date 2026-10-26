@@ -157,7 +157,11 @@ let manifest = enshwick::manifest!(
   (each world's settings and stores, a hold) to the new id, where the new id
   has no such file yet, and counts the migrations that ran under the old id as
   run. The old files stay, for a player who goes back. `migrations.toml`
-  records the copy under `[carried]`, so it happens once.
+  records the copy under `[carried]`, so it happens once. The mod may keep
+  its content, stats, item data, points, services and events under the old
+  id, `<old>:<name>`, so the ids and GUIDs saved worlds hold stay; a bare stat
+  or item-data name takes the first id under `was`. The console, the Mods
+  screen and other mods' links find the mod by an old id too.
 - `points` lists the [extension points](../extending.md#defining-a-point) the
   mod defines, by their input types. Their schemas go into the manifest and
   into the DLL's `.enshpt` section, where `cargo enshwick point` reads them
