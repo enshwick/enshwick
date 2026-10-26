@@ -29,6 +29,9 @@ game's files or saves.
 
 A mod can carry a pack too, see [Packs in a mod](#packs-in-a-mod).
 
+The repository's `examples/` folder holds three packs to start from:
+`you.bigger-stacks`, `you.faster-crafting` and `you.roomier-chests`.
+
 `cargo enshwick new --data you.bigger-stacks` starts a pack: the folder
 `you.bigger-stacks/` with every file above, each showing its first change
 commented out, the schema files that let an editor check them, and a README

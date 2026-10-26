@@ -1,0 +1,5 @@
+id = "you.faster-crafting"
+version = "0.1.0"
+name = "Faster crafting"
+description = "Bronze bars, fired bricks and flat bread take half the ingredients and half the time."
+license = "MIT"
