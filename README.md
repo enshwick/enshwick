@@ -36,7 +36,7 @@ they are never released.
 | [Survivors per altar](https://github.com/enshwick/mod-survivors-per-altar)  | a copy of each survivor at every altar, with beds of its own altar |
 | [Safes](mods/enshwick-safes)                                                | a craftable chest only the player who placed it can use            |
 | [Building materials x2](https://github.com/enshwick/mod-building-materials) | twice the output of block, roof, overgrowth and decor recipes      |
-| [Build camera](mods/enshwick-build-camera)                                  | the building fly mode for every player, without the skill          |
+| [Build camera](https://github.com/enshwick/mod-build-camera)                | the building fly mode for every player, without the skill          |
 | [Shared experience](mods/enshwick-shared-experience)                        | every character keeps up with the one furthest ahead in experience |
 | [Area loot](https://github.com/enshwick/mod-area-loot)                      | emptying one enemy corpse takes the loot of the others around it   |
 
