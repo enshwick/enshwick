@@ -1,4 +1,4 @@
-abi 2.72
+abi 2.73
 ActionCall size 144 align 8
     header at 0 size 8
     kind at 8 size 4
@@ -169,6 +169,11 @@ EventSpec size 40 align 8
     header at 0 size 8
     name at 8 size 16
     layout at 24 size 16
+EventTypeInfo size 32 align 8
+    header at 0 size 8
+    name at 8 size 16
+    hash at 24 size 4
+    size at 28 size 4
 ExperiencePass size 48 align 8
     header at 0 size 8
     rows at 8 size 8
@@ -202,7 +207,7 @@ HookSpec size 32 align 8
     next at 16 size 8
     priority at 24 size 4
     flags at 28 size 4
-HostApi size 1160 align 8
+HostApi size 1168 align 8
     header at 0 size 8
     host_version at 8 size 16
     build at 24 size 8
@@ -346,7 +351,8 @@ HostApi size 1160 align 8
     attach_point at 1128 size 8
     run_point at 1136 size 8
     actions at 1144 size 8
-    feature at 1152 size 8
+    event_types at 1152 size 8
+    feature at 1160 size 8
 Interaction size 56 align 8
     header at 0 size 8
     kind at 8 size 4

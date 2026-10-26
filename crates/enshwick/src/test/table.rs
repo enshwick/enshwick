@@ -56,11 +56,12 @@ use services::{
 };
 use ui::{ui_dialog, ui_frame, ui_hud, ui_markers, ui_widget};
 use world::{
-    actions, chat, component, component_write, destroy, emit, entities, entity_template, feature,
-    forget_game_settings, game_event, game_settings, hosting, keep_game_settings, notify, player,
-    players, rename_filter, run_console, save_world, server_world, set_game_settings, set_label,
-    set_time_of_day, set_time_speed, set_weather, spawn, status, teleport, terrain_edit,
-    terrain_materials, time_of_day, time_speed_control, weather_at, weather_fronts, world_key,
+    actions, chat, component, component_write, destroy, emit, entities, entity_template,
+    event_types, feature, forget_game_settings, game_event, game_settings, hosting,
+    keep_game_settings, notify, player, players, rename_filter, run_console, save_world,
+    server_world, set_game_settings, set_label, set_time_of_day, set_time_speed, set_weather,
+    spawn, status, teleport, terrain_edit, terrain_materials, time_of_day, time_speed_control,
+    weather_at, weather_fronts, world_key,
 };
 
 /// A submitted inventory request and where its result goes.
@@ -567,5 +568,6 @@ pub(crate) static TABLE: HostApi = HostApi {
     attach_point: super::points::attach_point,
     run_point: super::points::run_point,
     actions,
+    event_types,
     feature,
 };

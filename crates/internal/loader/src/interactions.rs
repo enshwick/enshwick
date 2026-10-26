@@ -5,9 +5,10 @@
 
 use crate::mod_index::ModIndex;
 use crate::pinned;
+use crate::registry::Registry;
 use core::ffi::c_void;
 use std::cell::RefCell;
-use std::sync::{Mutex, OnceLock};
+use std::sync::OnceLock;
 
 use arc_swap::ArcSwapOption;
 use enshwick::abi::{Header, HookFlags, Interaction, InteractionFn, Side, Status};
@@ -15,8 +16,7 @@ use enshwick::raw::{read_at, read_ptr_at, write_at};
 
 use crate::chains::Next;
 use crate::ecs::{Components, Engine};
-use crate::host::{Loader, Registered, take};
-use crate::locks::Relock;
+use crate::host::{Loader, Registered};
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
@@ -76,8 +76,7 @@ struct Layout {
 
 type Filter = Registered<InteractionFn>;
 
-static FILTERS: Mutex<Vec<Filter>> = Mutex::new(Vec::new());
-static SEALED: OnceLock<Box<[Filter]>> = OnceLock::new();
+static FILTERS: Registry<Filter> = Registry::new();
 static LOADED: OnceLock<(&'static Loader, Layout, Components)> = OnceLock::new();
 /// The players' character entities, read on the game thread now and then.
 static PLAYERS: ArcSwapOption<Vec<u32>> = ArcSwapOption::const_empty();
@@ -161,7 +160,7 @@ pub(crate) fn register(
     callback: InteractionFn,
     user: *mut c_void,
 ) -> Status {
-    if loader.delivery.get().is_some() || SEALED.get().is_some() {
+    if loader.delivery.get().is_some() || FILTERS.is_sealed() {
         return Status::TOO_LATE;
     }
     if layout(loader).is_none()
@@ -171,15 +170,13 @@ pub(crate) fn register(
         return Status::MISSING;
     }
     FILTERS
-        .relock()
-        .push(Registered::new(owner, callback, user));
-    Status::OK
+        .add(Registered::new(owner, callback, user))
+        .map_or(Status::TOO_LATE, |()| Status::OK)
 }
 
 pub(crate) fn link(loader: &'static Loader) {
-    let filters = take(&FILTERS);
+    let filters = FILTERS.seal();
     let wanted = !filters.is_empty();
-    let _first = SEALED.set(filters.into_boxed_slice());
     if !wanted {
         return;
     }
@@ -255,7 +252,7 @@ pub(crate) fn forget() {
 }
 
 fn allowed(call: &Interaction) -> bool {
-    let Some(filters) = SEALED.get() else {
+    let Some(filters) = FILTERS.sealed() else {
         return true;
     };
     filters.iter().filter(|f| f.live()).all(|f| {

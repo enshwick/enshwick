@@ -11,7 +11,7 @@
 pub const ABI_MAJOR: u16 = 2;
 
 /// The minor version of this interface. A newer minor only appends fields.
-pub const ABI_MINOR: u16 = 72;
+pub const ABI_MINOR: u16 = 73;
 
 /// Whether `id` is a valid mod id: `<author>.<name>`, each part of
 /// `[a-z0-9-]`, at most 64 characters in all.
@@ -676,8 +676,8 @@ const _: () = {
     assert!(size_of::<StatModify>() == 8 + 8 + 12 + 4 + 8);
     assert!(size_of::<StatChange>() == 8 + 24);
     assert!(core::mem::offset_of!(HostApi, language) == 24 + 127 * 8);
-    assert!(size_of::<HostApi>() == 24 + 142 * 8);
-    assert!(core::mem::offset_of!(HostApi, feature) == 24 + 141 * 8);
+    assert!(size_of::<HostApi>() == 24 + 143 * 8);
+    assert!(core::mem::offset_of!(HostApi, feature) == 24 + 142 * 8);
     assert!(core::mem::offset_of!(HostApi, recipe_rule) == 24 + 135 * 8);
     assert!(core::mem::offset_of!(HostApi, recipe_disabled) == 24 + 136 * 8);
     assert!(core::mem::offset_of!(HostApi, rebuild_resource) == 24 + 134 * 8);
@@ -748,6 +748,8 @@ const _: () = {
     assert!(core::mem::offset_of!(HostApi, status) == 24 + 39 * 8);
     assert!(core::mem::offset_of!(HostApi, run_console) == 24 + 40 * 8);
     assert!(core::mem::offset_of!(HostApi, actions) == 24 + 140 * 8);
+    assert!(core::mem::offset_of!(HostApi, event_types) == 24 + 141 * 8);
+    assert!(size_of::<EventTypeInfo>() == 8 + 16 + 4 + 4);
     assert!(size_of::<ActionCall>() == 8 + 8 + 96 + 16 + 16);
     assert!(core::mem::offset_of!(HostApi, altars_open) == 24 + 41 * 8);
     assert!(core::mem::offset_of!(HostApi, zone_check_filter) == 24 + 45 * 8);

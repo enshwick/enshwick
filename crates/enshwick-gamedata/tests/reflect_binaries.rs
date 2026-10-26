@@ -17,6 +17,21 @@ mod tests {
         assert_ne!(upgrade.entry(), 0);
         assert!(upgrade.writes().contains(&"TriggerShape"), "{upgrade:?}");
         assert!(reflection.system("add_buildzones_server").is_ok());
+        let events: Vec<&str> = reflection
+            .derived_from("keen::ecs::Event")
+            .map(enshwick_gamedata::reflect::TypeInfo::name)
+            .collect();
+        for event in [
+            "keen::ecs::HitEvent",
+            "keen::ecs::EntityDiedEvent",
+            "keen::ecs::RevivedPlayerEvent",
+        ] {
+            assert!(events.contains(&event), "{event}");
+        }
+        assert!(
+            events.iter().all(|name| !name.contains('<')),
+            "only structs derive: {events:?}"
+        );
     }
 
     fn with_binary(var: &str, check: impl FnOnce(&Image<'_>, &Reflection<'_>)) {
