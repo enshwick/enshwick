@@ -37,10 +37,9 @@ pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::voxel::UNDO_APPLY.id(),
 ];
 
-/// Bricks written a step, before-images and after-reads included: a step
-/// holds at least one whole change, however large. A first guess, to be
-/// tuned by the step time and the bytes sent to clients a live server
-/// shows.
+/// The bricks a step aims to write, before-images and after-reads
+/// included: a target, not a cap, since a step holds at least one whole
+/// change, however large.
 const BRICKS_PER_STEP: usize = 64;
 
 /// What the loader keeps: 1,024 changes in a transaction, 64 MiB of undo

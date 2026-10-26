@@ -278,12 +278,14 @@ impl World {
 
     /// Undoes transaction `id` of this mod: a queued one is dropped, one
     /// written in whole or in part gets every brick it touched back as it
-    /// was. The undo runs at the server's next quiet moments; it first checks
-    /// that every brick still holds what the transaction left there, and
-    /// writes nothing when one has changed since (a player's or another
-    /// edit), so undo transactions that overlap newest first. It checks each
-    /// brick again right before writing it back and stops at one changed
-    /// meanwhile. [`World::transaction_status`] tells how it went.
+    /// was. The undo runs at the server's next quiet moments. It first
+    /// checks that every brick still holds what the transaction left there:
+    /// a brick changed since (a player's or another edit) stops it before
+    /// it writes anything, so undo transactions that overlap newest first.
+    /// It checks each brick again right before writing it back: a brick
+    /// changed while it runs stops it at that brick, keeping the bricks
+    /// already put back, and the undo may be asked again once the change is
+    /// gone. [`World::transaction_status`] tells how it went.
     ///
     /// # Errors
     ///

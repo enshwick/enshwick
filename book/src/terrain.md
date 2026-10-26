@@ -60,9 +60,10 @@ Each call fails with a [`WorldError`](world.md#writing-components):
 1,024 metres, `NotLoaded` while part of what it can reach is not loaded,
 `WrongThread` off the game thread, `Missing` while no world runs. The
 server holds only some parts of the world in memory; an edit elsewhere
-writes nothing, since the game would leave it floating there with no
-ground under it. Asking starts loading the area, so the same edit works
-again a second or so later.
+writes nothing, since the game would compute it against air (a mound
+counted whole, a dig that removes nothing) and merge the result onto the
+ground once it loads. Asking starts loading the area, so the same edit
+works again a second or so later.
 
 A player's shovel and pickaxe also check where the player may build, take
 the cost, give the loot and experience and keep an undo; these edits do
@@ -119,9 +120,11 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 ```
 
 The loader writes the edits in order on the server's game thread between
-steps, about 64 bricks of 8³ voxels (4 metres a side) a step, so a large
-transaction spreads over several steps instead of weighing on one; an edit
-is never split, and one larger than the budget takes a step of its own.
+steps, aiming at 64 bricks of 8³ voxels (4 metres a side) a step, so a
+large transaction spreads over several steps instead of weighing on one.
+64 is a target, not a cap: an edit is never split, so one that touches
+more bricks runs whole in a step of its own, and a step may write 80 or
+100.
 On a dedicated server with no player, one transaction of eight digs of
 6 metres, 57,512 voxels, was written over 20 steps and undone over 19; a
 world step took 5.9 ms on average (18 ms for the slowest twentieth), and
@@ -154,9 +157,11 @@ again at 64 bricks a step. Clients see the undo, and the save keeps it, as
 any edit. Before it writes, the undo checks that every brick still holds
 what the transaction left there, and it checks each brick again right
 before writing it back. If a player, another mod or a later transaction
-has changed one, the undo stops there and the status turns `UndoRefused`
-with `Refused`: a check before the first write means nothing was written,
-a later one keeps what was put back so far. Part of the region not loaded
+has changed one, the undo stops and the status turns `UndoRefused` with
+`Refused`. Found before the first write, the conflict means nothing was
+written; found later, the undo stops at that brick and keeps the bricks it
+already put back. Either way it may be asked again once the conflict is
+gone. Part of the region not loaded
 refuses the undo before it writes; a column that unloads during the undo
 makes it wait, and after about 3,600 steps it stops with `NotLoaded`. An
 undo stopped this way may be asked again. Undo overlapping transactions

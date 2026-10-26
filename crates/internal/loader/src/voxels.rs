@@ -294,9 +294,10 @@ pub(crate) fn read(loader: &crate::host::Loader, request: &ReadBox) -> Result<Ve
 
 /// `Ok` when the column of bricks holding the voxel at `at` is loaded;
 /// [`Status::NOT_LOADED`] when not. The game keeps a column loaded or not
-/// as one, and its box read answers false for a column without data; an
-/// editor write there would make the column loaded holding only the edit,
-/// with nothing under it (server 399, server copy).
+/// as one, and its box read answers false for a column without data and
+/// starts loading it. An editor write there computes the edit against air
+/// and merges it onto the real ground when that arrives (server 399,
+/// server copy).
 #[cfg(windows)]
 pub(crate) fn column_loaded(loader: &crate::host::Loader, at: [u32; 3]) -> Result<(), Status> {
     read(loader, &ReadBox::new(at, [1; 3], 1)?).map(drop)
