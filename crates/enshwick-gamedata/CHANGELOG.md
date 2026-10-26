@@ -6,6 +6,13 @@ Each entry names the pull request that made the change.
 
 ## [Unreleased]
 
+## [1.0.0-alpha.6] - 2026-10-26
+
+### Added
+
+- The catalogue names the loot table types and fields that data pack loot
+  changes resolve (#523).
+
 ## [1.0.0-alpha.5] - 2026-10-26
 
 ### Added

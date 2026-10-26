@@ -6,6 +6,19 @@ Each entry names the pull request that made the change.
 
 ## [Unreleased]
 
+## [1.0.0-alpha.6] - 2026-10-26
+
+### Fixed
+
+- `cargo enshwick point` refuses a point schema whose names, types or
+  `repr` would leave their place in the generated definition, so another
+  mod's DLL cannot put code into the extending mod's crate (#512).
+
+### Added
+
+- A library target, `cargo_enshwick::points`, reads schemas from DLLs and
+  text and writes definitions, with a typed `SchemaError` (#512).
+
 ## [1.0.0-alpha.5] - 2026-10-26
 
 ### Added
