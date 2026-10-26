@@ -83,6 +83,12 @@ these Luau types:
 | an enum such as `Notice` | the variant's name, `"OnScreen"` |
 | `Duration` | seconds |
 
+The Luau API is not a second copy: it is read from descriptions kept beside
+the Rust items in `enshwick::script`. `#[derive(Script)]` describes a type,
+`#[script(<part>)]` the methods of an `impl` block a script may call, and the
+event tables describe each event, so a new event or a newly marked method
+reaches Luau and the definitions with no other change.
+
 A call that fails raises a Luau error with the call's name and the
 reason, such as `enshwick.world.broadcast: text: expected a string, got a
 number`. `pcall` catches it.
