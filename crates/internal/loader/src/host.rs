@@ -55,6 +55,19 @@ pub(crate) struct ModRecord {
 }
 
 impl ModRecord {
+    /// Its id, then the ids it had before a rename: every namespace its
+    /// content, stats, points, services and events may take.
+    pub(crate) fn names(&self) -> Vec<&str> {
+        std::iter::once(self.id.as_str())
+            .chain(self.former.iter().map(String::as_str))
+            .collect()
+    }
+
+    /// Whether `namespace` is its id or one it had before a rename.
+    pub(crate) fn owns(&self, namespace: &str) -> bool {
+        self.id == namespace || self.former.iter().any(|f| f == namespace)
+    }
+
     /// The name players read, or the id when the manifest names none.
     pub(crate) fn label(&self) -> String {
         self.meta.label(&self.id)
@@ -1410,7 +1423,7 @@ extern "system" fn define_event(
         if out.is_null() {
             return Status::BAD_ARGS;
         }
-        let defined = crate::services::registry().define(index, &record.id, name, fields);
+        let defined = crate::services::registry().define(index, &record.names(), name, fields);
         match defined {
             // SAFETY: `HostApi::define_event` has the mod pass `out` null or
             // pointing at a writable, aligned `u32` that no other thread
@@ -1548,7 +1561,7 @@ extern "system" fn define_point(
         if room.is_none_or(|room| (room as usize) < size_of::<api_frame::PointHandle>()) {
             return Status::BAD_ARGS;
         }
-        let defined = crate::points::registry().define(index, &record.id, declared);
+        let defined = crate::points::registry().define(index, &record.names(), declared);
         match defined {
             // SAFETY: `HostApi::define_point` has the mod pass `out` null or
             // pointing at its version of `PointHandle`, writable for the size
@@ -1675,7 +1688,7 @@ extern "system" fn declare_content(me: ModHandle, id: Str, out: *mut [u8; 16]) -
         let Some(id) = text(id) else {
             return Status::BAD_ARGS;
         };
-        match crate::ids::declare_content(&record.id, id) {
+        match crate::ids::declare_content(&record.names(), id) {
             // SAFETY: `HostApi::declare_content` has the mod pass `out` null or
             // pointing at a writable, aligned `[u8; 16]` that no other thread
             // touches during the call.

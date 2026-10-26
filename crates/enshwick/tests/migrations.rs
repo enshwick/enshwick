@@ -14,14 +14,14 @@ mod tests {
 
     const CHEST: Guid = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");
     const OLD_SAFE: Guid = Guid::parse("8a3f6e21-5c4b-4d7e-9f10-2b7c5e6a9d31");
-    const SAFE_ID: Id = Id::new("safes:safe");
+    const SAFE_ID: Id = Id::new("you.safes:safe");
     const SAFE: Guid = SAFE_ID.guid();
 
     struct Safes;
 
     impl Mod for Safes {
         fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "safes", side: SERVER)
+            enshwick::manifest!(id: "you.safes", side: SERVER)
         }
 
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
@@ -158,7 +158,7 @@ mod tests {
     #[test]
     fn the_item_s_id_is_declared_and_old_stacks_read_as_it() {
         let loader = start();
-        assert_eq!(loader.content_ids(), ["safes:safe"]);
+        assert_eq!(loader.content_ids(), ["you.safes:safe"]);
         assert_eq!(current_id(OLD_SAFE.id()), SAFE.id());
         assert_eq!(current_id(CHEST.id()), CHEST.id());
     }

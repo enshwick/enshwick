@@ -15,7 +15,7 @@ mod tests {
 
     impl Mod for Lanterns {
         fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "lanterns", side: BOTH)
+            enshwick::manifest!(id: "you.lanterns", side: BOTH)
         }
 
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
@@ -31,7 +31,7 @@ mod tests {
                     format!("[[recipe]]\nid = \"lantern.recipe\"\nlike = \"{CHEST}\"\noutput = \"lantern\"\ncost = 3\n"),
                 )
                 .with("texts.toml", "[en]\n\"lantern.name\" = \"Lantern\"\n[uk]\n\"lantern.name\" = \"Ліхтар\"\n");
-            load.add_pack(&Pack::parse("lanterns", &files)?)?;
+            load.add_pack(&Pack::parse("you.lanterns", &files)?)?;
             Ok(Self)
         }
     }
@@ -98,9 +98,9 @@ mod tests {
         assert_eq!(
             loader.content_ids(),
             [
-                "lanterns:text/lantern.name",
-                "lanterns:lantern",
-                "lanterns:lantern.recipe",
+                "you.lanterns:text/lantern.name",
+                "you.lanterns:lantern",
+                "you.lanterns:lantern.recipe",
             ]
         );
     }
@@ -109,7 +109,7 @@ mod tests {
     fn the_item_is_served_beside_the_vanilla_one() {
         let loader = start();
         let served: Vec<_> = loader.resources().iter().map(|r| (r.key, r.base)).collect();
-        let lantern = Guid::named("lanterns:lantern");
+        let lantern = Guid::named("you.lanterns:lantern");
         assert!(served.contains(&(
             lantern.key(types::ITEM_INFO),
             Guid::parse(CHEST).key(types::ITEM_INFO)
@@ -124,7 +124,7 @@ mod tests {
     #[test]
     fn the_name_has_its_texts_in_every_language() {
         let loader = start();
-        let tag = Guid::named("lanterns:text/lantern.name").id();
+        let tag = Guid::named("you.lanterns:text/lantern.name").id();
         let texts: Vec<String> = loader
             .texts()
             .into_iter()

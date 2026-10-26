@@ -24,7 +24,7 @@ mod tests {
 
     impl Mod for Writes {
         fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "writes", side: SERVER)
+            enshwick::manifest!(id: "you.writes", side: SERVER)
         }
 
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {

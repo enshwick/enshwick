@@ -1,5 +1,5 @@
 //! Example: publishes item prices as a typed service and sends
-//! `trading-post:sold` when a player sells an item with the `sell` action.
+//! `you.trading-post:sold` when a player sells an item with the `sell` action.
 
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -47,7 +47,7 @@ pub struct TradingPost;
 
 impl Mod for TradingPost {
     fn manifest() -> &'static enshwick::abi::Manifest {
-        enshwick::manifest!(id: "trading-post", side: SERVER)
+        enshwick::manifest!(id: "you.trading-post", side: SERVER)
     }
 
     fn init(load: &mut Load<'_>) -> Result<Self, Off> {
@@ -83,9 +83,12 @@ mod tests {
         // SAFETY: both functions are the exports of this crate's `declare_mod!(TradingPost)`.
         let status = unsafe { loader.start(super::enshwick_mod_init, super::enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
-        assert_eq!(loader.published(), [("trading-post:prices".to_owned(), 1)]);
-        assert_eq!(loader.defined_events(), ["trading-post:sold"]);
+        assert_eq!(
+            loader.published(),
+            [("you.trading-post:prices".to_owned(), 1)]
+        );
+        assert_eq!(loader.defined_events(), ["you.trading-post:sold"]);
         assert_eq!(super::sell(3).text(), "sold item 3 for 10 coins");
-        assert_eq!(loader.sent_events(), ["trading-post:sold"]);
+        assert_eq!(loader.sent_events(), ["you.trading-post:sold"]);
     }
 }

@@ -31,7 +31,7 @@ mod tests {
 
     impl Mod for Safes {
         fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "safes", side: SERVER)
+            enshwick::manifest!(id: "you.safes", side: SERVER)
         }
 
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {

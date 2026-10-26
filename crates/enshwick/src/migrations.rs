@@ -180,7 +180,7 @@ impl Migration {
     ///
     /// impl enshwick::Mod for Rates {
     ///     fn manifest() -> &'static enshwick::abi::Manifest {
-    ///         enshwick::manifest!(id: "rates", side: SERVER, replaces: ["comfort"])
+    ///         enshwick::manifest!(id: "you.rates", side: SERVER, replaces: ["comfort"])
     ///     }
     ///
     ///     fn init(load: &mut enshwick::Load<'_>) -> Result<Self, enshwick::Off> {
@@ -364,7 +364,7 @@ impl Migrations {
                     && step
                         .from
                         .split_once(':')
-                        .is_none_or(|(id, key)| !abi::is_valid_id(id) || key.is_empty())
+                        .is_none_or(|(id, key)| !abi::is_valid_former_id(id) || key.is_empty())
                 {
                     return Err(format!(
                         "migration {}: a setting is taken from <mod id>:<key>, not {}",

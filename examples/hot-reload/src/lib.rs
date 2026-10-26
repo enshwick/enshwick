@@ -30,7 +30,7 @@ pub struct HotReload {
 
 impl Mod for HotReload {
     fn manifest() -> &'static enshwick::abi::Manifest {
-        enshwick::manifest!(id: "hot-reload", side: SERVER, reload: true)
+        enshwick::manifest!(id: "you.hot-reload", side: SERVER, reload: true)
     }
 
     fn init(load: &mut Load<'_>) -> Result<Self, Off> {

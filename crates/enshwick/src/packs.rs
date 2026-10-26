@@ -11,7 +11,7 @@
 //! ([`PackManifest`]) and no DLL is a pack the loader runs on its own.
 //!
 //! Every name a pack defines lives in its namespace: `lantern` in the pack
-//! `lanterns` is the content id `lanterns:lantern`. A reference is a name of
+//! `you.lanterns` is the content id `you.lanterns:lantern`. A reference is a name of
 //! the pack, a full content id of another mod (`safes:safe`), or a vanilla
 //! GUID (`6943053a-32c1-4718-ae22-e61427ddf54d`).
 //!
@@ -28,8 +28,8 @@
 //! name = "lantern.name"
 //! "#)
 //!     .with("texts.toml", "[en]\n\"lantern.name\" = \"Lantern\"\n");
-//! let pack = Pack::parse("lanterns", &files)?;
-//! assert_eq!(pack.ids(), ["lanterns:lantern"]);
+//! let pack = Pack::parse("you.lanterns", &files)?;
+//! assert_eq!(pack.ids(), ["you.lanterns:lantern"]);
 //! # Ok::<(), enshwick::packs::ParsePackError>(())
 //! ```
 
@@ -82,7 +82,7 @@ pub const MAX_FILE: u64 = 4 << 20;
 /// use enshwick::packs::{Pack, PackFiles};
 ///
 /// let files = PackFiles::new().with("items.toml", "[[item]]\nid = \"lantern\"\n");
-/// let errors = Pack::parse("lanterns", &files).unwrap_err();
+/// let errors = Pack::parse("you.lanterns", &files).unwrap_err();
 /// assert_eq!(errors.list()[0].line, 1);
 /// assert!(errors.to_string().starts_with("items.toml:1:1: "), "{errors}");
 /// ```
@@ -338,14 +338,14 @@ pub enum PackSide {
 /// use enshwick::packs::{PackManifest, PackSide};
 ///
 /// let manifest = PackManifest::parse(r#"
-/// id = "lanterns"
+/// id = "you.lanterns"
 /// version = "1.0.0"
 /// name = "Lanterns"
 ///
 /// [requires]
 /// safes = ">=0.5, <1.0"
 /// "#)?;
-/// assert_eq!(manifest.id, "lanterns");
+/// assert_eq!(manifest.id, "you.lanterns");
 /// assert_eq!(manifest.side, PackSide::Both);
 /// assert!(manifest.join);
 /// assert_eq!(manifest.requires["safes"], ">=0.5, <1.0");
@@ -356,7 +356,7 @@ pub enum PackSide {
 #[serde(deny_unknown_fields)]
 #[non_exhaustive]
 pub struct PackManifest {
-    /// The pack id, 1 to 64 of `[a-z0-9-]`; it names the folder, the
+    /// The pack id, `<author>.<name>` like a mod's; it names the folder, the
     /// namespace of the pack's content and its texts override file.
     pub id: String,
     /// Its SemVer version.
@@ -406,17 +406,12 @@ impl PackManifest {
     pub fn parse(text: &str) -> Result<Self, PackError> {
         let manifest: Self =
             toml::from_str(text).map_err(|e| PackError::of(MANIFEST_FILE, text, &e))?;
-        let id_ok = (1..=64).contains(&manifest.id.len())
-            && manifest
-                .id
-                .bytes()
-                .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-');
-        if !id_ok {
+        if !crate::abi::is_valid_id(&manifest.id) {
             return Err(PackError::at(
                 MANIFEST_FILE,
                 text,
                 find(text, "id"),
-                "id is 1 to 64 of [a-z0-9-]",
+                "id is <author>.<name>, each of [a-z0-9-]",
             ));
         }
         Ok(manifest)
@@ -1091,7 +1086,7 @@ impl Pack {
     /// chance = 0.1
     /// from = "bosses"
     /// "#);
-    /// let pack = Pack::parse("lanterns", &files)?;
+    /// let pack = Pack::parse("you.lanterns", &files)?;
     /// assert_eq!(pack.drops().len(), 1);
     /// # Ok::<(), enshwick::packs::ParsePackError>(())
     /// ```
@@ -1111,8 +1106,8 @@ impl Pack {
     /// let loot = |chance: &str| PackFiles::new().with("loot.toml", format!(
     ///     "[[drop]]\nitems = [\"safes:safe\"]\nchance = {chance}\nfrom = \"bosses\"\n"
     /// ));
-    /// let before = Pack::parse("lanterns", &loot("0.1"))?;
-    /// let after = Pack::parse("lanterns", &loot("0.5"))?;
+    /// let before = Pack::parse("you.lanterns", &loot("0.1"))?;
+    /// let after = Pack::parse("you.lanterns", &loot("0.5"))?;
     /// assert!(before.same_content(&after));
     /// # Ok::<(), enshwick::packs::ParsePackError>(())
     /// ```
@@ -1439,7 +1434,7 @@ impl Load<'_> {
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     let files = PackFiles::new().with("items.toml", ITEMS);
-    ///     load.add_pack(&Pack::parse("my-mod", &files)?)
+    ///     load.add_pack(&Pack::parse("you.my-mod", &files)?)
     /// }
     /// ```
     pub fn add_pack(&mut self, pack: &Pack) -> Result<(), Off> {
@@ -1561,20 +1556,20 @@ mod tests {
     #[test]
     fn an_item_takes_the_pack_s_namespace() {
         let pack = Pack::parse(
-            "lanterns",
+            "you.lanterns",
             &files(&format!(
                 "[[item]]\nid = \"lantern\"\nlike = \"{CHEST}\"\nname = \"lantern.name\"\n"
             )),
         )
         .unwrap();
-        assert_eq!(pack.ids(), ["lanterns:lantern"]);
+        assert_eq!(pack.ids(), ["you.lanterns:lantern"]);
         assert_eq!(pack.items[0].like, Guid::parse(CHEST));
     }
 
     #[test]
     fn problems_name_their_file_line_and_column() {
         let errors = Pack::parse(
-            "lanterns",
+            "you.lanterns",
             &files(&format!(
                 "[[item]]\nid = \"lantern\"\nlike = \"{CHEST}\"\n\n[[item]]\nid = \"lantern\"\nlike = \"torch\"\nname = \"missing\"\n"
             )),
@@ -1649,7 +1644,7 @@ mod tests {
     #[test]
     fn an_unknown_field_is_a_problem_at_its_line() {
         let errors = Pack::parse(
-            "lanterns",
+            "you.lanterns",
             &files(&format!(
                 "[[item]]\nid = \"lantern\"\nlike = \"{CHEST}\"\ncolour = 3\n"
             )),
@@ -1672,19 +1667,19 @@ mod tests {
                 RECIPES_FILE,
                 format!("[[recipe]]\nid = \"lantern.recipe\"\nlike = \"{CHEST}\"\noutput = \"lantern\"\nworkshop = \"bench\"\n"),
             );
-        let pack = Pack::parse("lanterns", &files).unwrap();
+        let pack = Pack::parse("you.lanterns", &files).unwrap();
         let recipe = &pack.recipes[0];
-        assert_eq!(recipe.output, Guid::named("lanterns:lantern"));
+        assert_eq!(recipe.output, Guid::named("you.lanterns:lantern"));
         assert_eq!(
             recipe.workshop,
-            Some(Guid::named("lanterns:bench.workshop"))
+            Some(Guid::named("you.lanterns:bench.workshop"))
         );
         assert_eq!(
             pack.ids(),
             [
-                "lanterns:bench",
-                "lanterns:lantern",
-                "lanterns:lantern.recipe"
+                "you.lanterns:bench",
+                "you.lanterns:lantern",
+                "you.lanterns:lantern.recipe"
             ]
         );
     }

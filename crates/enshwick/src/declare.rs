@@ -4,7 +4,8 @@ mod unwind;
 
 /// Builds a mod's static [`Manifest`](crate::abi::Manifest).
 ///
-/// `id` is `[a-z0-9-]+` and names the DLL and the settings file; `side` is
+/// `id` is `<author>.<name>` (see [`is_valid_id`](crate::abi::is_valid_id))
+/// and names the settings file and data folder; `side` is
 /// `SERVER`, `CLIENT` or `BOTH`. Optional, in this order:
 ///
 /// - `version: "x.y.z"`, the crate's version when omitted;
@@ -39,7 +40,7 @@ mod unwind;
 ///
 /// ```
 /// let manifest = enshwick::manifest!(
-///     id: "survivors-per-altar",
+///     id: "you.survivors-per-altar",
 ///     side: BOTH,
 ///     name: "Survivors per Altar",
 ///     authors: ["themaiby"],
@@ -65,7 +66,7 @@ mod unwind;
 /// // Cargo.toml, alive for the process.
 /// assert_eq!(unsafe { manifest.license.as_str() }, Some("MIT"));
 ///
-/// let pinned = enshwick::manifest!(id: "safes", side: SERVER, version: "0.3.0");
+/// let pinned = enshwick::manifest!(id: "you.safes", side: SERVER, version: "0.3.0");
 /// // SAFETY: `manifest!` points the version at a string literal, alive for the process.
 /// assert_eq!(unsafe { pinned.version.as_str() }, Some("0.3.0"));
 /// ```
@@ -97,9 +98,9 @@ macro_rules! manifest {
         }),* $(,)?])?
         $(,)?
     ) => {{
-        const _: () = ::core::assert!($crate::abi::is_valid_id($id), "a mod id is [a-z0-9-]+");
-        $($(const _: () = ::core::assert!($crate::abi::is_valid_id($replaces), "a replaced mod id is [a-z0-9-]+");)*)?
-        $($(const _: () = ::core::assert!($crate::abi::is_valid_id($was), "a former mod id is [a-z0-9-]+");)*)?
+        const _: () = ::core::assert!($crate::abi::is_valid_id($id), "a mod id is <author>.<name>, each of [a-z0-9-]");
+        $($(const _: () = ::core::assert!($crate::abi::is_valid_former_id($replaces), "a replaced mod id is <author>.<name> or [a-z0-9-]+");)*)?
+        $($(const _: () = ::core::assert!($crate::abi::is_valid_former_id($was), "a former mod id is <author>.<name> or [a-z0-9-]+");)*)?
         static DEPENDENCIES: &[$crate::abi::Dependency] = &[
             $($($crate::abi::Dependency {
                 id: $crate::abi::Str::new($req),
@@ -198,7 +199,7 @@ macro_rules! manifest {
 ///
 /// impl enshwick::Mod for Quiet {
 ///     fn manifest() -> &'static enshwick::abi::Manifest {
-///         enshwick::manifest!(id: "quiet", side: SERVER)
+///         enshwick::manifest!(id: "you.quiet", side: SERVER)
 ///     }
 ///
 ///     fn init(_load: &mut enshwick::Load<'_>) -> Result<Self, enshwick::Off> {

@@ -39,7 +39,7 @@
 //!
 //! impl Mod for Bonus {
 //!     fn manifest() -> &'static enshwick::abi::Manifest {
-//!         enshwick::manifest!(id: "bonus", side: SERVER)
+//!         enshwick::manifest!(id: "you.bonus", side: SERVER)
 //!     }
 //!
 //!     fn init(load: &mut Load<'_>) -> Result<Self, Off> {
@@ -125,6 +125,16 @@ pub type InitFn = unsafe extern "system" fn(*const HostApi, ModHandle) -> Status
 /// A mod's `enshwick_mod_ready` export, as [`declare_mod!`](crate::declare_mod)
 /// writes it.
 pub type ReadyFn = unsafe extern "system" fn(*const HostApi, ModHandle);
+
+/// The id the fake loader gives the mod it runs: the namespace its stats,
+/// item data and services take.
+///
+/// # Examples
+///
+/// ```
+/// assert!(enshwick::abi::is_valid_id(enshwick::test::MOD_ID));
+/// ```
+pub const MOD_ID: &str = "test.fake";
 
 /// The address of `function`, to stand in for a game function's.
 ///

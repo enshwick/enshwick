@@ -14,7 +14,7 @@ mod tests {
 
     impl Mod for Shared {
         fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "shared", side: SERVER)
+            enshwick::manifest!(id: "you.shared", side: SERVER)
         }
 
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {

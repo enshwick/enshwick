@@ -15,5 +15,12 @@ publish = true
 rustc-hash.workspace = true
 thiserror.workspace = true
 
+[dev-dependencies]
+criterion.workspace = true
+
 [lints]
 workspace = true
+
+[[bench]]
+name = "reflection_scan"
+harness = false

@@ -14,7 +14,7 @@ mod tests {
 
     impl Mod for Reader {
         fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "reader", side: CLIENT)
+            enshwick::manifest!(id: "you.reader", side: CLIENT)
         }
 
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {

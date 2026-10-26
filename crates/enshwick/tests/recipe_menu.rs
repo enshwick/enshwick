@@ -16,22 +16,22 @@ mod tests {
     const CHEST_RECIPE: Guid = Guid::parse("45390726-8a83-4538-91a2-db2a633c8eac");
     const PLANK_RECIPE: Guid = Guid::parse("0b6c5a52-1df4-4a3b-bd0e-6c1f7e2a9c44");
     const CARPENTER: u32 = 3_185_407_206;
-    const SAFE_RECIPE: Id = Id::new("menu:safe.recipe");
-    const LOCKER_RECIPE: Id = Id::new("menu:locker.recipe");
-    const BENCH: Id = Id::new("menu:bench.workshop");
+    const SAFE_RECIPE: Id = Id::new("you.menu:safe.recipe");
+    const LOCKER_RECIPE: Id = Id::new("you.menu:locker.recipe");
+    const BENCH: Id = Id::new("you.menu:bench.workshop");
 
     struct Menu;
 
     impl Mod for Menu {
         fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "menu", side: BOTH)
+            enshwick::manifest!(id: "you.menu", side: BOTH)
         }
 
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             let bench = load.add_workshop(NewWorkshop {
                 like: stations::WORKBENCH,
-                item: Id::new("menu:bench"),
-                template: Id::new("menu:bench.template"),
+                item: Id::new("you.menu:bench"),
+                template: Id::new("you.menu:bench.template"),
                 workshop: BENCH,
                 name: None,
                 description: None,
@@ -41,7 +41,7 @@ mod tests {
             load.add_recipe(NewRecipe {
                 id: SAFE_RECIPE,
                 like: CHEST,
-                output: Guid::named("menu:safe"),
+                output: Guid::named("you.menu:safe"),
                 output_count: 1,
                 cost: 2,
                 workshop: None,
@@ -49,7 +49,7 @@ mod tests {
             load.add_recipe_with(move || NewRecipe {
                 id: LOCKER_RECIPE,
                 like: CHEST,
-                output: Guid::named("menu:locker"),
+                output: Guid::named("you.menu:locker"),
                 output_count: 1,
                 cost: 3,
                 workshop: Some(bench),

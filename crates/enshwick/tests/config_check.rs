@@ -30,7 +30,7 @@ mod tests {
 
     impl Mod for Altars {
         fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "altars", side: SERVER)
+            enshwick::manifest!(id: "you.altars", side: SERVER)
         }
 
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {

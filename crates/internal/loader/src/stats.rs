@@ -199,7 +199,7 @@ fn pending<R>(f: impl FnOnce(&mut Pending) -> R) -> Result<R, Status> {
     Ok(f(pending))
 }
 
-/// Whether `part` may be one side of an id: 1 to 64 of `[a-z0-9_-]`.
+/// Whether `part` may be the name side of an id: 1 to 64 of `[a-z0-9_-]`.
 fn is_part(part: &str) -> bool {
     (1..=64).contains(&part.len())
         && part
@@ -207,11 +207,13 @@ fn is_part(part: &str) -> bool {
             .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-' || b == b'_')
 }
 
-/// The full id of `id` asked for by mod `mod_id`, and its namespace.
-fn full_id(mod_id: &str, id: &str) -> Option<(String, bool)> {
+/// The full id of `id` asked for by the mod named `names` (its id first,
+/// then its former ids), and whether the namespace is the mod's own.
+fn full_id(names: &[&str], id: &str) -> Option<(String, bool)> {
+    let mod_id = names.first()?;
     let (namespace, name) = id.split_once(':').unwrap_or((mod_id, id));
-    (is_part(namespace) && is_part(name))
-        .then(|| (format!("{namespace}:{name}"), namespace == mod_id))
+    (enshwick::abi::is_valid_former_id(namespace) && is_part(name))
+        .then(|| (format!("{namespace}:{name}"), names.contains(&namespace)))
 }
 
 fn index_of(kinds: &mut Vec<Kind>, id: &str) -> usize {
@@ -254,7 +256,7 @@ pub(crate) fn open(
     def: Option<StatDef>,
 ) -> Result<StatRef, Status> {
     let record = loader.mods.get(owner).ok_or(Status::BAD_ARGS)?;
-    let (full, own) = full_id(&record.id, id).ok_or(Status::BAD_ARGS)?;
+    let (full, own) = full_id(&record.names(), id).ok_or(Status::BAD_ARGS)?;
     declare(loader, owner, Space::Stat, &full)?;
     pending(|p| {
         let index = index_of(&mut p.kinds, &full);
@@ -289,7 +291,7 @@ pub(crate) fn open_affix(
     data: &AffixDefData,
 ) -> Result<StatRef, Status> {
     let record = loader.mods.get(owner).ok_or(Status::BAD_ARGS)?;
-    let (full, own) = full_id(&record.id, id).ok_or(Status::BAD_ARGS)?;
+    let (full, own) = full_id(&record.names(), id).ok_or(Status::BAD_ARGS)?;
     if !own {
         return Err(Status::REFUSED);
     }
@@ -554,15 +556,12 @@ pub(crate) fn modify(loader: &Loader, owner: usize, request: &StatModify) -> Res
         if (saved || was_saved)
             && let Some(player) = player
         {
-            let mod_id = loader
-                .mods
-                .get(owner)
-                .map(|m| m.id.clone())
-                .unwrap_or_default();
+            let record = loader.mods.get(owner);
+            let mod_id = record.map(|m| m.id.clone()).unwrap_or_default();
             let stat_id = sealed.kinds[stat as usize].id.to_string();
             state.saved.retain(|s| {
                 !(s.player == player
-                    && s.owner == mod_id
+                    && record.is_some_and(|m| m.owns(&s.owner))
                     && s.key == request.key
                     && s.stat == stat_id)
             });
@@ -621,7 +620,7 @@ pub(crate) fn player_joined(loader: &Loader, player: &PlayerData) {
     with_state(|state| {
         let mut restored = Vec::new();
         for saved in state.saved.iter().filter(|s| s.player == player.key) {
-            let owner = loader.mods.iter().position(|m| m.id == saved.owner);
+            let owner = loader.mods.iter().position(|m| m.owns(&saved.owner));
             let stat = sealed.by_key.get(&key_of(&saved.stat).0).copied();
             if let (Some(owner), Some(stat)) = (owner, stat) {
                 restored.push(Held {
@@ -1128,14 +1127,17 @@ mod tests {
 
     #[test]
     fn ids_take_the_mod_s_namespace_and_say_whose_they_are() {
-        assert_eq!(full_id("rpg", "crit"), Some(("rpg:crit".into(), true)));
-        assert_eq!(full_id("rpg", "rpg:crit"), Some(("rpg:crit".into(), true)));
+        assert_eq!(full_id(&["rpg"], "crit"), Some(("rpg:crit".into(), true)));
         assert_eq!(
-            full_id("rpg", "enshwick:damage"),
+            full_id(&["rpg"], "rpg:crit"),
+            Some(("rpg:crit".into(), true))
+        );
+        assert_eq!(
+            full_id(&["rpg"], "enshwick:damage"),
             Some(("enshwick:damage".into(), false))
         );
-        assert_eq!(full_id("rpg", "Crit"), None);
-        assert_eq!(full_id("rpg", "a:b:c"), None);
+        assert_eq!(full_id(&["rpg"], "Crit"), None);
+        assert_eq!(full_id(&["rpg"], "a:b:c"), None);
     }
 
     #[test]

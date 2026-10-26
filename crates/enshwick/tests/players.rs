@@ -14,7 +14,7 @@ mod tests {
 
     impl Mod for Lookups {
         fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "lookups", side: SERVER)
+            enshwick::manifest!(id: "you.lookups", side: SERVER)
         }
 
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {

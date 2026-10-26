@@ -1,5 +1,5 @@
 //! Example: raises `trading-post`'s prices for rare items through its
-//! service, and counts the coins earned from its `trading-post:sold` event.
+//! service, and counts the coins earned from its `you.trading-post:sold` event.
 
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -24,9 +24,9 @@ pub struct MarketStalls;
 impl Mod for MarketStalls {
     fn manifest() -> &'static enshwick::abi::Manifest {
         enshwick::manifest!(
-            id: "market-stalls",
+            id: "you.market-stalls",
             side: SERVER,
-            requires: ["trading-post" => ">=0.1, <1.0"],
+            requires: ["you.trading-post" => ">=0.1, <1.0"],
         )
     }
 
