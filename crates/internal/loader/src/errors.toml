@@ -1,0 +1,147 @@
+# Every code the loader's messages carry, and the steps of "the game won't
+# start". The documentation site builds a page per code at /errors/<code>/,
+# with the code in lower case, and the decision tree from [[step]].
+#
+# An error: `code` (E, then four digits: 1 the game and its build, 2 mods,
+# 3 joining a server), carried by a loader message or reached by a step, `title` (what the player sees, as a short sentence),
+# `cause` (why it happens) and `fix` (what to do, in order). A step: `id`,
+# `question` (answered yes or no), and for each answer either the next step's
+# id or a code.
+
+[[error]]
+code = "E1001"
+title = "Enshwick started in a program that is not Enshrouded"
+cause = "Another program loaded the powrprof.dll from the game's folder, so nothing loads in it."
+fix = "Nothing to do for the game. Start Enshrouded or its dedicated server as usual."
+
+[[error]]
+code = "E1002"
+title = "Enshwick cannot read the game's files"
+cause = "The game's executable in memory does not look like the game Enshwick knows, so nothing loads."
+fix = "Verify the game files in Steam, then start the game again."
+
+[[error]]
+code = "E1003"
+title = "This game version is new to Enshwick"
+cause = "The game was updated and this Enshwick has no table for the new version, so the game runs without mods."
+fix = "Update Enshwick. Until a new Enshwick is out, play without mods or wait."
+
+[[error]]
+code = "E1004"
+title = "Enshwick's table does not match this game"
+cause = "The game files differ from the version Enshwick's table was made for, so nothing loads."
+fix = "Verify the game files in Steam. If that does not help, update Enshwick."
+
+[[error]]
+code = "E1005"
+title = "Some Enshwick features are off on this game version"
+cause = "This game version is new to Enshwick. Enshwick found most of what it needs, but the features and mods that need the rest stay off."
+fix = "Update Enshwick when a new version is out. The log names each feature that is off."
+
+[[error]]
+code = "E1006"
+title = "Windows' own powrprof.dll is missing"
+cause = "Enshwick passes the game's power settings calls on to Windows' powrprof.dll, which did not load."
+fix = "Under Proton, check that the launch options read WINEDLLOVERRIDES=\"powrprof=n,b\" %command%. On Windows, run the system file checker."
+
+[[error]]
+code = "E1007"
+title = "Enshwick's settings file has a mistake"
+cause = "mod-configs/enshwick.toml does not read, so Enshwick runs with its default settings."
+fix = "Fix the line the log names, or delete the file to get a fresh one on the next start."
+
+[[error]]
+code = "E1008"
+title = "Enshwick did not start"
+cause = "The game loaded Windows' powrprof.dll instead of Enshwick's, or mods/enshwick/enshwick.dll is missing."
+fix = "Extract Enshwick into the game's folder again. Under Proton, add WINEDLLOVERRIDES=\"powrprof=n,b\" %command% to the launch options."
+
+[[error]]
+code = "E1009"
+title = "Another mod replaced Enshwick's powrprof.dll"
+cause = "Some mods bring their own powrprof.dll, dinput8.dll, winmm.dll or dbghelp.dll. One of them took the place of Enshwick's."
+fix = "Move the other mod's file into mods/chain/, then put Enshwick's powrprof.dll back into the game's folder."
+
+[[error]]
+code = "E2001"
+title = "A mod is made for another Enshwick"
+cause = "The mod was built for a newer Enshwick, or for one that works in another way, so it does not start."
+fix = "Update Enshwick. If the mod is older than your Enshwick, update the mod."
+
+[[error]]
+code = "E2002"
+title = "A mod did not start because of another mod"
+cause = "The mod needs another mod that is missing, needs another version of it, or does not work beside a mod you have."
+fix = "Install or update the mod the log names, or remove one of the two that do not work together."
+
+[[error]]
+code = "E2003"
+title = "A mod turned itself off"
+cause = "The mod could not start on this game version or with these settings, or it failed while the game ran."
+fix = "Read the reason in the log or on the Mods screen. Update the mod, or report it with the Enshwick report attached."
+
+[[error]]
+code = "E2004"
+title = "A file in the mods folder is not a working mod"
+cause = "A DLL in mods/ could not be loaded, or it has only part of what an Enshwick mod needs."
+fix = "Download the mod again. If it is not an Enshwick mod, remove it from mods/."
+
+[[error]]
+code = "E2005"
+title = "The same mod is installed twice"
+cause = "Two files in mods/ are the same mod. Enshwick runs one and names the other."
+fix = "Delete the file the log names."
+
+[[error]]
+code = "E2006"
+title = "The mod list has a mistake"
+cause = "mods/enshwick/mods.toml does not read, so every mod is on."
+fix = "Fix the line the log names, or delete the file to get a fresh one on the next start."
+
+[[error]]
+code = "E2007"
+title = "A mod stopped the game to keep a world safe"
+cause = "A mod keeps data the game cannot open without it, and it does not run now, so the game stops before the world loads."
+fix = "Update Enshwick and the mod. To open the world anyway, at your own risk, delete the hold file the log names."
+
+[[error]]
+code = "E3001"
+title = "The server runs mods you lack"
+cause = "The server needs mods you do not have, or have in another version, so you do not join."
+fix = "Install the mods and versions the dialog lists, then join again."
+
+[[step]]
+id = "start"
+question = "Does the game start when you remove powrprof.dll from the game's folder?"
+yes = "loader-log"
+no = "not-enshwick"
+
+[[step]]
+id = "not-enshwick"
+question = "Does the game start after you verify its files in Steam?"
+yes = "loader-log"
+no = "E1002"
+
+[[step]]
+id = "loader-log"
+question = "With powrprof.dll back, is there a file logs/enshwick/loader.log beside the game?"
+yes = "game-stops"
+no = "other-proxy"
+
+[[step]]
+id = "other-proxy"
+question = "Did another mod come with its own powrprof.dll, dinput8.dll, winmm.dll or dbghelp.dll?"
+yes = "E1009"
+no = "E1008"
+
+[[step]]
+id = "game-stops"
+question = "Does the game close before the world loads, with \"holds this game\" in the log?"
+yes = "E2007"
+no = "mods-off"
+
+[[step]]
+id = "mods-off"
+question = "Does the log say the game version is unknown or new?"
+yes = "E1003"
+no = "E2003"

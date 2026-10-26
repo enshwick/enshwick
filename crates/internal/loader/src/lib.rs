@@ -50,6 +50,7 @@ mod ecs;
 mod emits;
 #[cfg(windows)]
 mod entities;
+pub mod errors;
 #[cfg(windows)]
 mod events;
 mod fuse;

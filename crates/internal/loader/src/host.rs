@@ -535,7 +535,11 @@ impl Loader {
         if record.off.swap(true, Ordering::AcqRel) {
             return;
         }
-        crate::log::write(Level::ERROR, &record.id, &format!("off: {reason}"));
+        crate::log::write(
+            Level::ERROR,
+            &record.id,
+            &format!("off: {reason} ({})", crate::errors::MOD_OFF),
+        );
         if record.pack {
             crate::packs::forget(&record.id);
         }
