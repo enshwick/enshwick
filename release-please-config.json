@@ -110,10 +110,6 @@
     "crates/enshwick-gamedata": {
       "package-name": "enshwick-gamedata",
       "component": "enshwick-gamedata"
-    },
-    "mods/enshwick-optimizer": {
-      "package-name": "enshwick-optimizer",
-      "component": "enshwick-optimizer"
     }
   }
 }

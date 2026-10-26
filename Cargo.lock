@@ -320,16 +320,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "enshwick-optimizer"
-version = "0.0.0-dev"
-dependencies = [
- "enshwick",
- "serde",
- "toml",
- "windows-sys",
-]
-
-[[package]]
 name = "enshwick-probe"
 version = "0.0.0-dev"
 dependencies = [

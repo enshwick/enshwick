@@ -45,7 +45,7 @@ they are never released.
 | Mod                                                        | What it does                                                              |
 | ---------------------------------------------------------- | ------------------------------------------------------------------------- |
 | [Admin tools](https://github.com/enshwick/mod-admin-tools) | administrator actions and a command file run on the server's console      |
-| [Optimizer](mods/enshwick-optimizer)                       | less CPU on Windows and under Wine and Proton, with a report and measures |
+| [Optimizer](https://github.com/enshwick/mod-optimizer)     | less CPU on Windows and under Wine and Proton, with a report and measures |
 
 ## Install
 
