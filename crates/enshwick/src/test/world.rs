@@ -435,3 +435,115 @@ impl VoxelGrid {
         Some(voxels)
     }
 }
+
+impl FakeHost {
+    /// A Flame Altar's building zone from `min` to `max` in metres, where
+    /// [`World::can_build`](crate::world::World::can_build) asks for
+    /// `CanEditBase`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new()
+    ///     .building_zone([0.0, 0.0, 0.0], [40.0, 40.0, 40.0])
+    ///     .install();
+    /// # let _ = loader;
+    /// ```
+    #[must_use]
+    pub fn building_zone(mut self, min: [f64; 3], max: [f64; 3]) -> Self {
+        self.zones.building.push(FakeBox { min, max });
+        self
+    }
+
+    /// A box of the world's building area; once one is given, a corner
+    /// outside every such box is refused, as past the world's edge.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new()
+    ///     .building_area([0.0, 0.0, 0.0], [4096.0, 1024.0, 4096.0])
+    ///     .install();
+    /// # let _ = loader;
+    /// ```
+    #[must_use]
+    pub fn building_area(mut self, min: [f64; 3], max: [f64; 3]) -> Self {
+        self.zones.area.push(FakeBox { min, max });
+        self
+    }
+
+    /// A no-build zone from `min` to `max` in metres; only a `strict` one
+    /// refuses an edit, as the game's own rule for an edit without an item.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new()
+    ///     .no_build_zone([10.0, 0.0, 10.0], [20.0, 10.0, 20.0], true)
+    ///     .install();
+    /// # let _ = loader;
+    /// ```
+    #[must_use]
+    pub fn no_build_zone(mut self, min: [f64; 3], max: [f64; 3], strict: bool) -> Self {
+        self.zones.no_build.push((FakeBox { min, max }, strict));
+        self
+    }
+}
+
+/// A box in metres.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct FakeBox {
+    min: [f64; 3],
+    max: [f64; 3],
+}
+
+impl FakeBox {
+    /// Whether the boxes overlap with some thickness on every axis: boxes
+    /// that share only a face do not.
+    fn overlaps(&self, min: [f64; 3], max: [f64; 3]) -> bool {
+        (0..3).all(|a| self.min[a] < max[a] && min[a] < self.max[a])
+    }
+
+    /// Whether `point` lies inside, the high faces excluded.
+    fn holds(&self, point: [f64; 3]) -> bool {
+        (0..3).all(|a| self.min[a] <= point[a] && point[a] < self.max[a])
+    }
+}
+
+/// The zones the fake answers build rights from.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct FakeZones {
+    building: Vec<FakeBox>,
+    area: Vec<FakeBox>,
+    no_build: Vec<(FakeBox, bool)>,
+}
+
+impl FakeZones {
+    /// The refusal of an edit of the box from `min` to `max` by a player
+    /// with the permission mask `permissions`, as the loader decides: the
+    /// game's terrain tool rule for the permissions, then the building area
+    /// and strict no-build tests Enshwick adds from the building cursor.
+    pub(crate) fn refusal(&self, permissions: u8, min: [f64; 3], max: [f64; 3]) -> u32 {
+        use crate::abi::{BuildRights, PlayerInfo};
+        if permissions & PlayerInfo::CAN_EDIT_WORLD == 0 {
+            return BuildRights::NO_CAN_EDIT_WORLD;
+        }
+        if permissions & PlayerInfo::CAN_EDIT_BASE == 0
+            && self.building.iter().any(|zone| zone.overlaps(min, max))
+        {
+            return BuildRights::NO_CAN_EDIT_BASE;
+        }
+        let in_area = |corner| self.area.is_empty() || self.area.iter().any(|b| b.holds(corner));
+        if !in_area(min) || !in_area(max) {
+            return BuildRights::OUTSIDE_BUILDING_ZONE;
+        }
+        if self
+            .no_build
+            .iter()
+            .any(|(zone, strict)| *strict && zone.overlaps(min, max))
+        {
+            return BuildRights::INSIDE_STRICT_BUILD_INHIBITOR_ZONE;
+        }
+        BuildRights::ALLOWED
+    }
+}

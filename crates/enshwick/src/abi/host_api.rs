@@ -6,14 +6,14 @@ use core::ffi::c_void;
 use crate::abi::{
     ActionFn, ActiveBuff, AffixDefData, AffixRoll, AltarInfo, AltarLimitFilterFn, AltarLimitFn,
     AltarZoneFn, AltarZoneSize, BaseLimitInfo, BedCheckFn, BuffRequest, BuffTypeInfo, BuildCheckFn,
-    BuildInfo, CallerFrame, ChangeId, ChangeOp, ComfortFn, ConfigCheckFn, CraftCheckFn,
-    DamageFilterFn, DataChange, DaytimeInfo, EntityDataFlags, EntityPlace, Event, EventFn,
-    EventSpec, EventTypeInfo, ExperiencePassFn, GameEventFn, Header, HookSpec, InteractionFn,
-    InventoryRequest, InventoryResultFn, ItemData, ItemLine, KnowledgeInfo, KnowledgeInputFn,
-    Level, LoopWaitFn, LoopWaitSites, MidHookSpec, MigrationSet, ModEventFn, ModHandle, ModInfo,
-    NetMessageFn, PlayerInfo, PointFn, PointHandle, PointLink, PointSpec, PointVerdict, RateId,
-    RecipeKind, RecipeRuleKind, RenameCallFn, ResourceKey, ResourcePatchFn, ServerWaitFn,
-    ServiceFound, ServiceSpec, SkillCheckFn, SpawnRequest, StatChangeFn, StatDefData,
+    BuildInfo, BuildRights, CallerFrame, ChangeId, ChangeOp, ComfortFn, ConfigCheckFn,
+    CraftCheckFn, DamageFilterFn, DataChange, DaytimeInfo, EntityDataFlags, EntityPlace, Event,
+    EventFn, EventSpec, EventTypeInfo, ExperiencePassFn, GameEventFn, Header, HookSpec,
+    InteractionFn, InventoryRequest, InventoryResultFn, ItemData, ItemLine, KnowledgeInfo,
+    KnowledgeInputFn, Level, LoopWaitFn, LoopWaitSites, MidHookSpec, MigrationSet, ModEventFn,
+    ModHandle, ModInfo, NetMessageFn, PlayerInfo, PointFn, PointHandle, PointLink, PointSpec,
+    PointVerdict, RateId, RecipeKind, RecipeRuleKind, RenameCallFn, ResourceKey, ResourcePatchFn,
+    ServerWaitFn, ServiceFound, ServiceSpec, SkillCheckFn, SpawnRequest, StatChangeFn, StatDefData,
     StatModifierData, StatModify, StatRef, StatSource, Status, StatusFn, Str, SummonFn,
     SurvivorLookupFn, SurvivorStatusFn, TeleportRequest, TerrainEdit, TerrainMaterialInfo,
     UiAnswerFn, UiDialog, UiFrameFn, UiMarker, UiWidget, Voxel, WeatherFront, ZoneCheckFn,
@@ -1196,4 +1196,18 @@ pub struct HostApi {
     /// call. Since minor 85.
     pub set_change:
         extern "system" fn(me: ModHandle, id: ChangeId, op: ChangeOp, value: f64) -> Status,
+    /// Fills `check.refusal` with whether the server lets the player whose
+    /// character is `check.player` edit the box from `check.min` to
+    /// `check.max`. The permissions follow the game's terrain tool:
+    /// `CanEditWorld` for every edit, `CanEditBase` where the box overlaps a
+    /// building zone. The loader adds two tests the building cursor runs for
+    /// items: both corners inside the world's building area, and no strict
+    /// no-build zone the world places. A player not in game has no
+    /// permissions. `check` is borrowed for the call. [`Status::BAD_ARGS`]
+    /// for a null `check`, an old header, a corner that is not finite or a
+    /// `max` below `min`; [`Status::MISSING`] while no world is loaded or on
+    /// a build without the checks. On the server's game thread at a quiet
+    /// moment only, outside a step or in a game event:
+    /// [`Status::WRONG_THREAD`] inside a step. Since minor 86.
+    pub build_rights: extern "system" fn(me: ModHandle, check: *mut BuildRights) -> Status,
 }

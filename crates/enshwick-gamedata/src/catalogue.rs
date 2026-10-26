@@ -103,6 +103,13 @@ pub const ITEM_COMFORT_AMOUNT: &str = "item_info.comfort_amount";
 /// The id of the flag that says an item gives comfort.
 pub const ITEM_COMFORT_SET: &str = "item_info.comfort_set";
 
+/// The id of the bit of a player's permission mask that lets the player
+/// edit a base.
+pub const PERMISSION_CAN_EDIT_BASE: &str = "player_permissions.can_edit_base";
+/// The id of the bit of a player's permission mask that lets the player
+/// edit the world outside every base.
+pub const PERMISSION_CAN_EDIT_WORLD: &str = "player_permissions.can_edit_world";
+
 /// The id of the random loot table's type, of which the game has one.
 pub const LOOT_RANDOM_TABLE: &str = "lootable_items";
 

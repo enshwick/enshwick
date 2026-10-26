@@ -70,6 +70,7 @@ use enshwick::knowledge::{KnowledgeType, Known};
 use enshwick::loot::{Container, InteractionOfferRuntime};
 use enshwick::terrain::TerrainTerraformingConfig;
 use enshwick::weather::WeatherPhenomenonEffect;
+use enshwick::world::{BuildRefusal, PlayerPermissions};
 
 /// Every API name the game names itself outside the catalogue's ids, which
 /// hold the typed events, their values and the game settings.
@@ -174,6 +175,12 @@ pub(crate) const GAME_NAMES: &[GameName] = &[
     constant!(NpcCommandType::GoToPosition => "keen::ecs::NpcCommandType"."GoToPosition"),
     field!(TimeOfDay, day_time_duration => "keen::ecs::GameSettings"."dayTimeDuration"),
     field!(TimeOfDay, night_time_duration => "keen::ecs::GameSettings"."nightTimeDuration"),
+    ty!(PlayerPermissions => "keen::PlayerPermissions"),
+    constant!(PlayerPermissions::CanEditBase => "keen::PlayerPermissions"."CanEditBase"),
+    constant!(PlayerPermissions::CanEditWorld => "keen::PlayerPermissions"."CanEditWorld"),
+    constant!(BuildRefusal::NoPermission => "keen::ecs::CursorFlag"."NoPermission"),
+    constant!(BuildRefusal::CursorOutsideBuildingZone => "keen::ecs::CursorFlag"."CursorOutsideBuildingZone"),
+    constant!(BuildRefusal::CursorInsideStrictBuildInhibitorZone => "keen::ecs::CursorFlag"."CursorInsideStrictBuildInhibitorZone"),
 ];
 
 #[cfg(test)]

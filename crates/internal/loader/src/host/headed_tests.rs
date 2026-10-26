@@ -29,6 +29,7 @@ macro_rules! headed {
             BuffTypeInfo,
             BuildCheck,
             BuildInfo,
+            BuildRights,
             BuildingData,
             ChunkData,
             Comfort,

@@ -58,9 +58,9 @@ use services::{
 };
 use ui::{ui_dialog, ui_frame, ui_hud, ui_markers, ui_widget};
 use world::{
-    actions, chat, component, component_write, destroy, emit, entities, entity_template,
-    event_types, feature, forget_game_settings, game_event, game_settings, hosting,
-    keep_game_settings, notify, player, players, rename_filter, run_console, save_world,
+    actions, build_rights, chat, component, component_write, destroy, emit, entities,
+    entity_template, event_types, feature, forget_game_settings, game_event, game_settings,
+    hosting, keep_game_settings, notify, player, players, rename_filter, run_console, save_world,
     server_world, set_game_settings, set_label, set_time_of_day, set_time_speed, set_weather,
     spawn, status, teleport, terrain_edit, terrain_materials, time_of_day, time_speed_control,
     voxel_read, weather_at, weather_fronts, world_key,
@@ -644,4 +644,5 @@ pub(crate) static TABLE: HostApi = HostApi {
     voxel_read,
     declare_change,
     set_change,
+    build_rights,
 };
