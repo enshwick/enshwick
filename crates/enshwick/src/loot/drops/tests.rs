@@ -49,6 +49,35 @@ fn filters_keep_their_kind_and_markers() {
 }
 
 #[test]
+fn a_single_roll_slot_holds_the_item_and_count_at_their_offsets() {
+    let slot = Slot::new(0, 4, 16).unwrap();
+    let (bytes, len) = slot.fill(0x0102_0304, 7);
+    assert_eq!(len, 16);
+    assert_eq!(bytes[..6], [4, 3, 2, 1, 7, 0]);
+    assert!(bytes[6..].iter().all(|&b| b == 0));
+    let moved = Slot::new(8, 2, 12).unwrap();
+    let (bytes, len) = moved.fill(9, 3);
+    assert_eq!((len, bytes[8], bytes[2]), (12, 9, 3));
+}
+
+#[test]
+fn a_single_roll_slot_that_cannot_hold_its_fields_is_refused() {
+    assert!(Slot::new(0, 4, 5).is_none(), "count past the end");
+    assert!(Slot::new(14, 4, 16).is_none(), "item past the end");
+    assert!(
+        Slot::new(0, 4, SLOT_MAX + 1).is_none(),
+        "larger than the buffer"
+    );
+    assert!(Slot::new(usize::MAX, 4, 16).is_none(), "overflow");
+    assert!(Slot::new(0, 2, 16).is_none(), "count inside the item id");
+    assert!(Slot::new(3, 2, 16).is_none(), "item id over the count");
+    assert!(
+        Slot::new(4, 2, 16).is_some(),
+        "count just before the item id"
+    );
+}
+
+#[test]
 fn invalid_drops_are_refused() {
     let from = Source::bosses();
     assert!(Drop::new(7, 0.5, from.clone()).check().is_ok());
