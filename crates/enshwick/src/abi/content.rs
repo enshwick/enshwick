@@ -2,7 +2,7 @@
 
 use core::ffi::c_void;
 
-use crate::abi::Status;
+use crate::abi::{Header, Status, Str};
 
 /// A game resource's key: its GUID in memory order, its type hash and part.
 ///
@@ -156,7 +156,7 @@ impl ChangeOp {
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
 pub struct DataChange {
     /// Size and version of this struct.
-    pub header: crate::abi::Header,
+    pub header: Header,
     /// The GUID of the vanilla entry, in memory order.
     pub entry: [u8; 16],
     /// The value changed.
@@ -167,7 +167,7 @@ pub struct DataChange {
     pub value: f64,
     /// Where the change comes from, such as `items.toml:12`, for the reports
     /// of conflicts; may be empty.
-    pub source: crate::abi::Str,
+    pub source: Str,
 }
 
 impl_headed!(DataChange);
