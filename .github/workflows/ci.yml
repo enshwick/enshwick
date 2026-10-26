@@ -39,9 +39,11 @@ jobs:
     with:
       semver: enshwick
       split: true
-      # The Windows lint runs on the owner's PC while it is online; the
-      # Windows tests stay under Wine until they pass natively.
+      # The Windows lint and tests run natively on the owner's PC while it is
+      # online; the tests run under Wine on the organization runners while
+      # it is offline.
       clippy-features: enshwick/test,xtask/compat
+      native-tests: true
     secrets:
       ENSHWICK_CI_CLIENT_ID: ${{ secrets.ENSHWICK_CI_CLIENT_ID }}
       ENSHWICK_CI_PRIVATE_KEY: ${{ secrets.ENSHWICK_CI_PRIVATE_KEY }}
