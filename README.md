@@ -31,7 +31,7 @@ they are never released.
 | Mod                                                                         | What it does                                                       |
 | --------------------------------------------------------------------------- | ------------------------------------------------------------------ |
 | [Flame altar zones](https://github.com/enshwick/mod-flame-altar-zones)      | touching altar zones grow together and can be built across         |
-| [Flame altar count](https://github.com/enshwick/mod-flame-altar-count)      | how many altars each Flame level allows, twice vanilla by default  |
+| [More Altars](https://github.com/enshwick/mod-more-altars)                  | how many altars each Flame level allows, twice vanilla by default  |
 | [Survivors per altar](https://github.com/enshwick/mod-survivors-per-altar)  | a copy of each survivor at every altar, with beds of its own altar |
 | [Safes](https://github.com/enshwick/mod-safes)                              | a craftable chest only the player who placed it can use            |
 | [Game Rates](https://github.com/enshwick/mod-game-rates)                    | building recipe output and furniture comfort, twice by default     |
@@ -62,6 +62,11 @@ they are never released.
    the main menu and in the pause menu lists the mods.
    `mod-configs/enshwick.recipes.toml` takes recipes out of the game, vanilla
    or a mod's ([Disabling recipes](book/src/content/disabled-recipes.md)).
+
+More Altars was called Flame altar count. After you extract a newer
+`enshwick.zip` over an older install, delete
+`mods/enshwick-flame-altar-count.dll`, the same mod under its old name.
+Enshwick runs only the newer file and names the old one in `loader.log`.
 
 Players and their server need the same versions of the mods that count in the
 join check, which each mod's page names; the server advertises them. A

@@ -28,6 +28,9 @@ use affected::{Package, Scope};
 
 const USAGE: &str = "usage: cargo xtask check [--all] [--windows] [--base <git ref>] | bundle [--out <dir>] [--local]";
 const WINDOWS_TARGET: &str = "x86_64-pc-windows-msvc";
+/// Turned on by name: most of the API crate's test targets need its fake
+/// loader, and without the feature cargo skips them without a word.
+const TEST_FEATURE: &str = "enshwick/test";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -273,7 +276,11 @@ fn check(scope: &Scope, packages: &[Package], full: bool) -> bool {
         say("checking the whole workspace");
     }
     // Off Windows the crates that build only for Windows stay out of host builds.
-    let mut workspace = vec!["--workspace".to_owned()];
+    let mut workspace = vec![
+        "--workspace".to_owned(),
+        "--features".to_owned(),
+        TEST_FEATURE.to_owned(),
+    ];
     if !on_windows {
         for package in packages.iter().filter(|p| p.windows_only) {
             workspace.extend(["--exclude".to_owned(), package.name.clone()]);
@@ -310,6 +317,8 @@ fn check(scope: &Scope, packages: &[Package], full: bool) -> bool {
             "--target",
             WINDOWS_TARGET,
             "--workspace",
+            "--features",
+            TEST_FEATURE,
             "--all-targets",
             "--",
             "-D",

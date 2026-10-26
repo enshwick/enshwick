@@ -100,7 +100,8 @@ let manifest = enshwick::manifest!(
     after: ["market-stalls"],
     recommends: ["caravans" => ">=0.3, <1.0"],
     breaks: ["old-market" => "<0.5"],
-    replaces: ["trade-post"],       // ids this mod had before a rename
+    replaces: ["barter"],           // a mod this one folds in
+    was: ["trade-post"],            // ids this mod had before a rename
     builds: [{
         side: SERVER,
         guid: "1c129660cd6efc4f9f0b21652d5ff2bf",
@@ -109,7 +110,7 @@ let manifest = enshwick::manifest!(
         constants: ["survivors.bed_id" => 0x48],
     }],
 );
-# assert_eq!(manifest.dependency_count, 5);
+# assert_eq!(manifest.dependency_count, 6);
 # assert_eq!(manifest.author_count, 1);
 ```
 
@@ -139,14 +140,22 @@ let manifest = enshwick::manifest!(
 - A dev build, version `0.0.0-dev`, meets every range of `requires` and
   `recommends`, and no range of `breaks` names it, as two dev builds join each
   other.
-- `replaces` names the ids this mod had before a rename. Players rarely delete
-  the old DLL, so without it both would run. While this mod is present, the
-  loader never starts a replaced mod: it unloads that DLL right after reading
-  its manifest and logs once
-  `<old> is replaced by <new>; delete mods/<file>`, which `enshwick` on the console and the
-  status summary repeat and the lock lists under `[[replaced]]`. Settings and
-  data stay where they are, so carry them over in the new mod if it needs
-  them.
+- `replaces` names mods this one takes the place of, such as mods it folds
+  in. Players rarely delete the old DLL, so without it both would run. While
+  this mod is present, the loader never starts a replaced mod: it unloads
+  that DLL right after reading its manifest and logs once
+  `<old> is replaced by <new>; delete mods/<file>`, which `enshwick` on the
+  console and the status summary repeat and the lock lists under
+  `[[replaced]]`. Their settings stay where they are; take the ones this mod
+  keeps with a [migration](../migrations.md#settings-from-another-mod).
+- `was` names the ids this mod had before a rename. It replaces them as
+  `replaces` does, a `requires` or an [extension point](../extending.md)
+  named by an old id finds this mod, and on the first start the loader copies
+  `mod-configs/<old>.toml`, its texts file and everything in `mod-data/<old>/`
+  (each world's settings and stores, a hold) to the new id, where the new id
+  has no such file yet, and counts the migrations that ran under the old id as
+  run. The old files stay, for a player who goes back. `migrations.toml`
+  records the copy under `[carried]`, so it happens once.
 - `builds` pins symbols and constants for game builds the loader's table does
   not cover, per side, by the build's GUID and age; see
   [Finding the game](../finding-the-game.md).
