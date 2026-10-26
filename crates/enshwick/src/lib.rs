@@ -82,6 +82,7 @@ pub mod daytime;
 mod declare;
 pub mod ecs;
 pub mod effects;
+mod engine_ids;
 pub mod entity_data;
 pub mod events;
 pub(crate) mod fresh;
@@ -281,6 +282,8 @@ pub mod __private {
 
     use crate::abi::{HostApi, Level, ManifestFlags, ModHandle, Status};
     use crate::{Host, Load, Mod};
+
+    pub use crate::engine_ids::ALL as ENGINE_IDS;
 
     #[must_use]
     pub const fn flags(join: &[bool], reload: &[bool]) -> ManifestFlags {
