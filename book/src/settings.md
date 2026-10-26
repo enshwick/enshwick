@@ -227,7 +227,7 @@ A file that does not parse turns the mod off at init with serde's message. Add
 being ignored. Add `#[serde(default)]` if a file written by an older version of
 the mod, without a newer key, should still load.
 
-[`enshwick-furniture-comfort`](https://github.com/enshwick/enshwick/tree/main/mods/enshwick-furniture-comfort)
+[`enshwick-furniture-comfort`](https://github.com/enshwick/mod-furniture-comfort)
 is the example above in full.
 
 ## Untyped settings
