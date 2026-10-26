@@ -3,6 +3,7 @@
 
 use enshwick::abi::Headed;
 
+use super::memory::{get_headed, get_headed_list, put_headed, put_headed_list};
 use super::*;
 
 /// The fill of a value's own bytes.
