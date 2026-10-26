@@ -302,7 +302,7 @@ count = { times = 2 }
 
 | Field | Meaning | Values |
 | --- | --- | --- |
-| `stack_size` | how many of the item random loot gives in one stack, at least and at most alike | 1 to 65535 |
+| `stack_size` | how many of the item random loot gives in one stack: the least, the largest and the largest the game scales to, each alike | 1 to 65535 |
 | `count` | how many of the item a container's fill table gives, at least and at most alike | 0 to 65535 |
 | `spawn_probability` | the chance a fill table gives the item | 0 to 1 |
 | `weight` | the item's weight among the ones a fill table picks from | 0 to 1000000 |

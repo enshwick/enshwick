@@ -78,8 +78,9 @@ pub enum Field {
     /// The comfort a placed item gives, 0 to 1000; the entry is an item
     /// that gives comfort.
     ComfortAmount,
-    /// The stack size random loot rolls for an item, at least and at most
-    /// alike, 1 to 65535; the entry is the item. Only the server rolls.
+    /// The stack size random loot rolls for an item, 1 to 65535: its least,
+    /// its largest and its largest when the roll scales it, each changed
+    /// alike; the entry is the item. Only the server rolls.
     StackSize,
     /// The count a container's fill table gives of an item, at least and at
     /// most alike, 0 to 65535; the entry is the item, in every table that

@@ -25,6 +25,8 @@ pub struct LootLayout {
     pub stack_min: usize,
     /// Its largest stack size, a `u16`.
     pub stack_max: usize,
+    /// Its largest stack size when the roll scales it, a `u16`.
+    pub stack_max_scaled: usize,
     /// Where a fill table's root group sits in it.
     pub root: usize,
     /// One group's size.
@@ -72,6 +74,7 @@ impl LootLayout {
             item_id: at(ids::LOOTABLE_ITEM_ITEM)?,
             stack_min: at(ids::LOOTABLE_ITEM_STACK_MIN)?,
             stack_max: at(ids::LOOTABLE_ITEM_STACK_MAX)?,
+            stack_max_scaled: at(ids::LOOTABLE_ITEM_STACK_MAX_SCALED)?,
             root: at(ids::LOOT_FILL_TABLE_ROOT)?,
             group: facts.size(ids::LOOT_FILL_GROUP)?,
             stacks: at(ids::LOOT_FILL_GROUP_STACKS)?,
@@ -102,7 +105,8 @@ fn whole<T: TryFrom<i64>>(value: f64) -> Option<T> {
 }
 
 /// The random loot table `table` with each item's stack sizes as `value`
-/// gives them, and how many items changed.
+/// gives them, and how many items changed: the least, the largest and the
+/// largest when the roll scales it, each from its own value.
 ///
 /// # Examples
 ///
@@ -127,7 +131,11 @@ pub fn change_random_loot(
     for at in (0..usize::try_from(count).ok()?).map(|i| start + i * layout.item) {
         let item = blob.read_u32(at + layout.item_id)?;
         let mut touched = false;
-        for field_at in [at + layout.stack_min, at + layout.stack_max] {
+        for field_at in [
+            at + layout.stack_min,
+            at + layout.stack_max,
+            at + layout.stack_max_scaled,
+        ] {
             let bytes = blob.bytes().get(field_at..field_at + 2)?;
             let old = u16::from_le_bytes(bytes.try_into().ok()?);
             if let Some(new) = value(item, Field::StackSize, f64::from(old)).and_then(whole::<u16>)
@@ -265,6 +273,7 @@ mod tests {
         item_id: 0,
         stack_min: 0x18,
         stack_max: 0x1a,
+        stack_max_scaled: 0x1c,
         root: 0,
         group: 0x24,
         stacks: 0x4,
@@ -288,11 +297,12 @@ mod tests {
     fn random_table() -> Vec<u8> {
         let mut blob = Blob::new(&[0u8; 0x50]);
         let mut items = Vec::new();
-        for (item, min, max) in [(WOOD, 2u16, 5u16), (STONE, 1, 3)] {
+        for (item, min, max, scaled) in [(WOOD, 2u16, 5u16, 20u16), (STONE, 1, 3, 3)] {
             let mut entry = vec![0u8; 0x24];
             entry[0..4].copy_from_slice(&item.to_le_bytes());
             entry[0x18..0x1a].copy_from_slice(&min.to_le_bytes());
             entry[0x1a..0x1c].copy_from_slice(&max.to_le_bytes());
+            entry[0x1c..0x1e].copy_from_slice(&scaled.to_le_bytes());
             items.extend_from_slice(&entry);
         }
         let at = blob.append(&items, 4);
@@ -330,8 +340,11 @@ mod tests {
         assert_eq!(changed, 1);
         let blob = Blob::new(&bytes);
         let (at, _) = blob.array(0x14).unwrap();
-        assert_eq!(bytes[at + 0x18..at + 0x1c], [4, 0, 10, 0]);
-        assert_eq!(bytes[at + 0x24 + 0x18..at + 0x24 + 0x1c], [1, 0, 3, 0]);
+        assert_eq!(bytes[at + 0x18..at + 0x1e], [4, 0, 10, 0, 40, 0]);
+        assert_eq!(
+            bytes[at + 0x24 + 0x18..at + 0x24 + 0x1e],
+            [1, 0, 3, 0, 3, 0]
+        );
     }
 
     #[test]

@@ -767,6 +767,10 @@ pub const FACTS: &[(&str, Fact)] = &[
         offset("keen::LootableItemInfo", "stackSizeMax"),
     ),
     (
+        "lootable_item.stack_max_scaled",
+        offset("keen::LootableItemInfo", "stackSizeMaxScaled"),
+    ),
+    (
         "loot_fill_table",
         Fact::Type("keen::ecs::DefaultInventoryResource"),
     ),

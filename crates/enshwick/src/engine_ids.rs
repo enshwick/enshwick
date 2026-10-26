@@ -248,6 +248,7 @@ ids! {
     LOOTABLE_ITEM_ITEM = "lootable_item.item";
     LOOTABLE_ITEM_STACK_MIN = "lootable_item.stack_min";
     LOOTABLE_ITEM_STACK_MAX = "lootable_item.stack_max";
+    LOOTABLE_ITEM_STACK_MAX_SCALED = "lootable_item.stack_max_scaled";
     #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
     LOOT_FILL_TABLE = "loot_fill_table";
     LOOT_FILL_TABLE_ROOT = "loot_fill_table.root";
