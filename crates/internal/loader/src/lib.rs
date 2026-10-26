@@ -38,6 +38,7 @@ mod content;
 mod crash;
 #[cfg(windows)]
 mod damage;
+pub mod data_changes;
 #[cfg(windows)]
 mod daytime;
 #[cfg(windows)]
@@ -158,6 +159,11 @@ pub mod remote;
 )]
 mod report;
 pub mod resolve;
+#[cfg_attr(
+    not(windows),
+    expect(dead_code, reason = "only the Windows build hands the game memory")
+)]
+mod retire;
 #[cfg(windows)]
 mod saves;
 #[cfg(windows)]

@@ -1,9 +1,11 @@
-//! A content pack through the fake loader: its items, texts and recipes
-//! added with the calls code uses, under the pack's content ids.
+//! A data pack through the fake loader: its items, texts and recipes
+//! added with the calls code uses, under the pack's content ids, and its
+//! changes of vanilla values declared.
 
 #[cfg(test)]
 mod tests {
     use enshwick::abi::Status;
+    use enshwick::content::changes::{Change, Field, Value};
     use enshwick::content::{Guid, types};
     use enshwick::packs::{Pack, PackFiles};
     use enshwick::test::FakeHost;
@@ -25,7 +27,7 @@ mod tests {
                 .with(
                     "items.toml",
                     format!(
-                        "[[item]]\nid = \"lantern\"\nlike = \"{CHEST}\"\nname = \"lantern.name\"\n"
+                        "[[item]]\nid = \"lantern\"\nlike = \"{CHEST}\"\nname = \"lantern.name\"\n\n[[change]]\nitems = [\"{CHEST}\"]\nmax_stack = 50\n"
                     ),
                 )
                 .with(
@@ -120,6 +122,18 @@ mod tests {
             Guid::parse(CHEST).key_by_hash(ITEM)
         )));
         assert!(served.iter().any(|(key, _)| key.type_hash == RECIPES));
+    }
+
+    #[test]
+    fn the_pack_s_changes_reach_the_loader_with_their_sources() {
+        let loader = start();
+        assert_eq!(
+            loader.changes(),
+            [(
+                Change::new(Guid::parse(CHEST), Field::MaxStack, Value::Set(50.0)),
+                "items.toml:6".to_owned()
+            )]
+        );
     }
 
     #[test]

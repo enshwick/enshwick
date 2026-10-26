@@ -614,7 +614,7 @@ pub mod __private {
         std::panic::catch_unwind(M::manifest).map_or(core::ptr::null(), core::ptr::from_ref)
     }
 
-    /// Runs `init` with a [`Load`] for the content pack `me`, as the loader
+    /// Runs `init` with a [`Load`] for the data pack `me`, as the loader
     /// does for a pack folder; the process's host stays as it is.
     ///
     /// # Safety
@@ -650,7 +650,7 @@ pub mod __private {
     }
 
     /// Makes the table `api` with the handle `me` this process's host, for
-    /// the loader's own copy of the API, which runs content packs.
+    /// the loader's own copy of the API, which runs data packs.
     ///
     /// # Safety
     ///

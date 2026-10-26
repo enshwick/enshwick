@@ -6,6 +6,8 @@ Each entry names the pull request that made the change.
 
 ## [Unreleased]
 
+## [1.0.0-alpha.4] - 2026-10-26
+
 ### Added
 
 - An engine catalogue that the loader and `cargo enshwick` share, resolving

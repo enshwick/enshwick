@@ -31,9 +31,9 @@ use build::{
     type_size,
 };
 use content::{
-    add_text, content_read, content_serve, entity_data_open, game_text, icons_ready, item_data_get,
-    item_data_open, item_data_set, rebuild_resource, recipe_disabled, recipe_kind, recipe_rule,
-    resource_read, serve_resource,
+    add_text, change_data, content_read, content_serve, entity_data_open, game_text, icons_ready,
+    item_data_get, item_data_open, item_data_set, rebuild_resource, recipe_disabled, recipe_kind,
+    recipe_rule, resource_read, serve_resource,
 };
 use gameplay::{
     account_knowledge, altar_limit, altar_zones_control, altars, altars_open, apply_buff,
@@ -89,6 +89,8 @@ pub(crate) struct State {
     /// Every rebuild of a served resource the mod asked for, at init and
     /// after.
     pub(crate) rebuilds: Vec<ResourceKey>,
+    /// The changes of vanilla values the mod declared, with their sources.
+    pub(crate) changes: Vec<(crate::content::changes::Change, String)>,
     /// The mod's recipe rules in force: kind and name.
     pub(crate) recipe_rules: Vec<(crate::abi::RecipeRuleKind, String)>,
     pub(crate) texts: Vec<(u32, u32, String)>,
@@ -279,6 +281,7 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         game_events: Vec::new(),
         served: Vec::new(),
         rebuilds: Vec::new(),
+        changes: Vec::new(),
         recipe_rules: Vec::new(),
         texts: Vec::new(),
         code_patches: Vec::new(),
@@ -576,4 +579,5 @@ pub(crate) static TABLE: HostApi = HostApi {
     feature,
     rate,
     set_rate,
+    change_data,
 };

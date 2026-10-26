@@ -109,29 +109,63 @@ pub(crate) fn add_text(id: u32, language: u32, text: &str) -> Status {
     Status::OK
 }
 
+/// UTF-8 text the loader hands the game as a text lookup's answer: its
+/// address and length.
+///
+/// The bytes stay readable at that address for as long as the game may keep
+/// the view; their maker says how. A view may outlive its text: a notice
+/// slot is written over in place while the game may still hold an older
+/// view of it, which then reads the slot's newer text (or a mix of the two
+/// cut short at the older length) but never freed memory.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct Handed {
+    at: *const u8,
+    len: usize,
+}
+
+impl Handed {
+    /// The view of `len` bytes at `at`.
+    pub(crate) const fn new(at: *const u8, len: usize) -> Self {
+        Self { at, len }
+    }
+
+    /// Where the text starts.
+    #[cfg(test)]
+    pub(crate) const fn at(self) -> *const u8 {
+        self.at
+    }
+
+    /// The view of a text that lives for the process.
+    pub(crate) const fn of(text: &'static str) -> Self {
+        Self::new(text.as_ptr(), text.len())
+    }
+}
+
 /// The text of `id` for `language`: its own, else any-language, else English.
-fn text_for(id: u32, language: u32) -> Option<&'static str> {
-    if let Some(text) = crate::notices::text(id).or_else(|| crate::ui::text(id)) {
+fn text_for(id: u32, language: u32) -> Option<Handed> {
+    if let Some(text) = crate::notices::text(id) {
         return Some(text);
+    }
+    if let Some(text) = crate::ui::text(id) {
+        return Some(Handed::of(text));
     }
     let texts = TEXTS.get()?.get(&id)?;
     let pick = |wanted: u32| texts.iter().find(|(l, _)| *l == wanted).map(|(_, t)| *t);
-    pick(language).or_else(|| pick(0)).or_else(|| pick(ENGLISH))
+    pick(language)
+        .or_else(|| pick(0))
+        .or_else(|| pick(ENGLISH))
+        .map(Handed::of)
 }
 
-/// Answers a text lookup with `text`, which lives for the process.
+/// Answers a text lookup with `text`.
 ///
 /// # Safety
 ///
 /// - `out` is null or the lookup's writable out record of three `u64`,
 ///   which nothing else touches during the call.
-unsafe fn answer(out: *mut [u64; 3], text: &'static str) -> *mut [u64; 3] {
+unsafe fn answer(out: *mut [u64; 3], text: Handed) -> *mut [u64; 3] {
     if !out.is_null() {
-        let record = [
-            0,
-            text.as_ptr().expose_provenance() as u64,
-            text.len() as u64,
-        ];
+        let record = [0, text.at.expose_provenance() as u64, text.len as u64];
         // SAFETY: `out` is non-null by the check before it, and the caller
         // guarantees the lookup's writable out record: error 0, the UTF-8
         // text and its length.
@@ -406,6 +440,7 @@ pub(crate) fn seal_and_link(loader: &'static Loader) {
     let standing = stand_ins.map_or(0, |(items, registry)| {
         serve_stand_ins(&mut served, items, registry)
     });
+    let changed = serve_changes(&mut served, crate::data_changes::serve(loader));
     let orphans = aliases
         .keys()
         .filter(|guid| !served.iter().any(|s| s.key.guid == **guid))
@@ -414,7 +449,7 @@ pub(crate) fn seal_and_link(loader: &'static Loader) {
     let _first = RENAMES.set(renames);
     if SERVED_LIST.set(served.into_boxed_slice()).is_err()
         || ALIASES.set(aliases).is_err()
-        || count + recorded + renames.len() + standing == 0
+        || count + recorded + renames.len() + standing + changed == 0
     {
         return;
     }
@@ -500,6 +535,38 @@ fn serve_stand_ins(
             state: Mutex::new(State::default()),
             rebuilding: Mutex::new(()),
         }),
+    }
+    count
+}
+
+/// Adds the loader's patches of changed vanilla values to `served`: first
+/// on a vanilla key, so mods patch the changed values; last on a mod's new
+/// resource, after the mod built it. How many keys.
+fn serve_changes(
+    served: &mut Vec<Served>,
+    patches: Vec<(ResourceKey, ResourcePatchFn, *mut c_void)>,
+) -> usize {
+    let count = patches.len();
+    for (key, apply, user) in patches {
+        let patch = Patch {
+            owner: ModIndex::LOADER,
+            apply,
+            user: user.expose_provenance(),
+        };
+        match served.iter_mut().find(|s| s.key == key) {
+            Some(entry) if crate::data_changes::goes_first(&key, &entry.base) => {
+                entry.patches.insert(0, patch);
+            }
+            Some(entry) => entry.patches.push(patch),
+            None => served.push(Served {
+                key,
+                base: key,
+                patches: vec![patch],
+                keeps_base: AtomicBool::new(false),
+                state: Mutex::new(State::default()),
+                rebuilding: Mutex::new(()),
+            }),
+        }
     }
     count
 }
@@ -941,7 +1008,8 @@ fn run_patches(
             if patch.owner == ModIndex::LOADER {
                 crate::log!(
                     WARN,
-                    "a stand-in for an item of a removed mod failed to build"
+                    "the loader's own patch of {} failed to build",
+                    key_name(&entry.key)
                 );
             } else if let Some(loader) = LOADED.get() {
                 loader.turn_off(
