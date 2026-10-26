@@ -17,7 +17,7 @@
 //! and a server that runs join mods disconnects it. A client never says
 //! hello to a game that names no Enshwick, whose chat would show the line.
 //!
-//! The frames and control messages are in the wire module. Each side keeps
+//! The frames and control messages are in [`wire`](crate::wire). Each side keeps
 //! a rate per peer and drops what is over it, counting the drops for the
 //! status summary.
 
@@ -343,7 +343,7 @@ fn take_frame(state: &mut State, key: u64, frame: Frame) -> Option<(u32, Vec<u8>
     let peer = if known {
         state.peers.get_mut(&key)?
     } else {
-        if frame.channel != CONTROL {
+        if frame.channel() != CONTROL {
             return None;
         }
         let room = state.greeting.len() < MAX_GREETING;
@@ -354,7 +354,7 @@ fn take_frame(state: &mut State, key: u64, frame: Frame) -> Option<(u32, Vec<u8>
         }
     };
     // A peer's message takes one from its rate; a stranger's every frame.
-    if (frame.index == 0 || !known) && !peer.admit() {
+    if (frame.index() == 0 || !known) && !peer.admit() {
         dropped();
         return None;
     }
@@ -453,26 +453,27 @@ pub(crate) fn client_received(text: &str) -> bool {
         dropped();
         return true;
     };
-    if frame.channel == CONTROL {
+    if frame.channel() == CONTROL {
         // Only the remote settings messages take more than one frame.
-        let single = frame.total == 1;
-        if single && frame.part == control(WELCOME) {
+        let single = frame.total() == 1;
+        if single && frame.part() == control(WELCOME) {
             let fresh = state(|s| s.peers.insert(NetMessage::SERVER, Peer::new()).is_none());
             if fresh {
                 crate::log!(INFO, "mod messages: the server answered");
                 crate::actions::joined();
             }
         } else if single
-            && let Some(records) = frame.part.strip_prefix(control(ITEM_DATA).as_slice())
+            && let Some(records) = frame.part().strip_prefix(control(ITEM_DATA).as_slice())
         {
             crate::item_data::received(records);
         } else if single
-            && let Some(rest) = frame.part.strip_prefix(control(NOTICE).as_slice())
+            && let Some(rest) = frame.part().strip_prefix(control(NOTICE).as_slice())
             && let Some((entity, text)) = rest.split_first_chunk::<4>()
             && let Ok(text) = core::str::from_utf8(text)
         {
             crate::notices::queue(u32::from_le_bytes(*entity), text);
-        } else if single && let Some(rest) = frame.part.strip_prefix(control(UI_DEMO).as_slice()) {
+        } else if single && let Some(rest) = frame.part().strip_prefix(control(UI_DEMO).as_slice())
+        {
             crate::ui::open_demo(demo_position(rest));
         } else {
             let whole = state(|s| {

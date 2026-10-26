@@ -28,7 +28,7 @@ pub(crate) struct Partial {
 ///
 /// let lines = frames(7, 1, b"data").ok_or("too long")?;
 /// let frame = parse(lines[0].strip_prefix(PREFIX).ok_or("no prefix")?).ok_or("unreadable")?;
-/// assert_eq!((frame.channel, frame.part.as_slice()), (7, &b"data"[..]));
+/// assert_eq!((frame.channel(), frame.total(), frame.part()), (7, 1, &b"data"[..]));
 /// # Ok::<(), &str>(())
 /// ```
 #[must_use]
@@ -59,23 +59,71 @@ pub fn frames(channel: u32, message: u16, data: &[u8]) -> Option<Vec<String>> {
     Some(lines)
 }
 
-/// A frame's header and part.
+/// A frame's header and part, as [`parse`] read it: the only way to one, so
+/// its index lies below its part count and its part fits one frame.
 ///
 /// # Examples
 ///
 /// See [`frames`].
 #[derive(Debug, PartialEq, Eq)]
 pub struct Frame {
+    channel: u32,
+    message: u16,
+    index: u8,
+    total: u8,
+    part: Vec<u8>,
+}
+
+impl Frame {
     /// The channel, [`CONTROL`](super::CONTROL) for the protocol's own.
-    pub channel: u32,
+    ///
+    /// # Examples
+    ///
+    /// See [`frames`].
+    #[must_use]
+    pub const fn channel(&self) -> u32 {
+        self.channel
+    }
+
     /// The message's id on its channel.
-    pub message: u16,
-    /// This part's index, below `total`.
-    pub index: u8,
+    ///
+    /// # Examples
+    ///
+    /// See [`frames`].
+    #[must_use]
+    pub const fn message(&self) -> u16 {
+        self.message
+    }
+
+    /// This part's index, below [`Frame::total`].
+    ///
+    /// # Examples
+    ///
+    /// See [`frames`].
+    #[must_use]
+    pub const fn index(&self) -> u8 {
+        self.index
+    }
+
     /// How many parts the message takes, from 1 to [`MAX_PARTS`].
-    pub total: u8,
+    ///
+    /// # Examples
+    ///
+    /// See [`frames`].
+    #[must_use]
+    pub const fn total(&self) -> u8 {
+        self.total
+    }
+
     /// This part's bytes, at most [`PART_BYTES`].
-    pub part: Vec<u8>,
+    ///
+    /// # Examples
+    ///
+    /// See [`frames`].
+    #[must_use]
+    pub fn part(&self) -> &[u8] {
+        &self.part
+    }
 }
 
 /// The frame a line carries, after the prefix; `None` for a line that is no
