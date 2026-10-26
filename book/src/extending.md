@@ -35,6 +35,23 @@ or points, rather than editing it. A definition older than the owner keeps
 working, since points grow by appending fields, and one that no longer matches
 the owner leaves the link inert with the reason in the log.
 
+### The schema
+
+The schema is TOML, the same for every language a definition is written in:
+
+| Table                                | Keys                                                                                                               |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------ |
+| top                                  | `schema` (the format, 1), `mod` (the owner's id), `version` (the owner's)                                          |
+| `[[point]]`                          | `name`, `mode` (`observe`, `advise`, `override`), `refusable`, `input`, `output`, `doc`, `layout`, `output_layout` |
+| `[[type]]`                           | `name`, `doc`, `kind` (`struct`, `newtype`, `values`, `enum`), `repr` for `values` and `enum`                      |
+| `[[type.field]]`                     | `name`, `doc`, `type`                                                                                              |
+| `[[type.value]]`, `[[type.variant]]` | `name`, `doc`, `value`                                                                                             |
+
+A type is a number (`u8` to `u64`, `i8` to `i64`, `f32`, `f64`), `bool`,
+`enshwick.entity`, `enshwick.guid`, or a `[[type]]` of the schema. `layout`
+lists each input field's layout hash and `output_layout` the answer's, as
+decimal text: a definition checks itself against them.
+
 ## Extending a point
 
 [`load.extend_point(order, link)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/points.rs)
