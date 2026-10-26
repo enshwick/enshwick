@@ -1,5 +1,6 @@
 //! The mods a server's join needs, and the join values it applies to a client.
 
+use crate::mod_index::ModIndex;
 use std::collections::BTreeMap;
 use std::sync::Mutex;
 use std::sync::atomic::Ordering;
@@ -230,6 +231,6 @@ pub(crate) fn turn_off_mod(id: &str, reason: &str) {
     if let Some(loader) = loader()
         && let Some(index) = loader.mods.iter().position(|m| m.id == id)
     {
-        loader.turn_off(index, reason);
+        loader.turn_off(ModIndex::new(index), reason);
     }
 }

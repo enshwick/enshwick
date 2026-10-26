@@ -1,5 +1,6 @@
 //! The loader's side of the API: its state and the `HostApi` table.
 
+use crate::mod_index::ModIndex;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
@@ -176,7 +177,7 @@ pub(crate) const LOADER_HANDLE: ModHandle = ModHandle(0);
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct Subscription {
     /// The subscribing mod's index.
-    pub(crate) owner: usize,
+    pub(crate) owner: ModIndex,
     /// The event.
     pub(crate) event: Event,
     /// The handler, inside the mod's DLL.
@@ -252,7 +253,7 @@ pub(crate) fn loader() -> Option<&'static Loader> {
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct Registered<F> {
     /// The owning mod's index.
-    pub(crate) owner: usize,
+    pub(crate) owner: ModIndex,
     /// The callback, inside the mod's DLL, which stays loaded.
     pub(crate) callback: F,
     /// The pointer the callback takes, as an address.
@@ -260,7 +261,7 @@ pub(crate) struct Registered<F> {
 }
 
 impl<F> Registered<F> {
-    pub(crate) fn new(owner: usize, callback: F, user: *mut core::ffi::c_void) -> Self {
+    pub(crate) fn new(owner: ModIndex, callback: F, user: *mut core::ffi::c_void) -> Self {
         Self {
             owner,
             callback,
@@ -285,12 +286,12 @@ pub(crate) fn take<T>(list: &Mutex<Vec<T>>) -> Vec<T> {
 }
 
 /// Whether the mod at index `owner` is off; the loader's own links never are.
-pub(crate) fn is_off(owner: usize) -> bool {
-    owner != crate::chains::LOADER
+pub(crate) fn is_off(owner: ModIndex) -> bool {
+    owner != ModIndex::LOADER
         && loader().is_none_or(|loader| {
             loader
                 .mods
-                .get(owner)
+                .get(owner.get())
                 .is_none_or(|m| m.off.load(Ordering::Acquire))
         })
 }
@@ -318,7 +319,7 @@ impl Loader {
         flags: HookFlags,
     ) -> Status {
         let link = Link {
-            owner: crate::chains::LOADER,
+            owner: ModIndex::LOADER,
             detour: Next::<F>::address_of(detour),
             next: next.slot(),
             priority: i32::MIN,
@@ -387,14 +388,14 @@ impl Loader {
             .or_else(|| mods.find(|(_, m)| m.owns(id)))
     }
 
-    fn record(&self, me: ModHandle) -> Option<(usize, &ModRecord)> {
-        let index = me.0.checked_sub(1)?;
-        self.mods.get(index).map(|record| (index, record))
+    fn record(&self, me: ModHandle) -> Option<(ModIndex, &ModRecord)> {
+        let index = ModIndex::from_handle(me)?;
+        self.mods.get(index.get()).map(|record| (index, record))
     }
 
     /// Turns a mod off: unlinks its hooks and logs why.
-    pub(crate) fn turn_off(&self, index: usize, reason: &str) {
-        let Some(record) = self.mods.get(index) else {
+    pub(crate) fn turn_off(&self, index: ModIndex, reason: &str) {
+        let Some(record) = self.mods.get(index.get()) else {
             return;
         };
         if record.off.swap(true, Ordering::AcqRel) {
@@ -411,11 +412,11 @@ impl Loader {
         crate::diag::turned_off(&record.id, reason);
         // A poisoned lock still holds the chains: the mod must be wired past.
         let chains = self.chains.relock();
-        let faulted = |owner: usize| {
-            owner != crate::chains::LOADER
+        let faulted = |owner: ModIndex| {
+            owner != ModIndex::LOADER
                 && self
                     .mods
-                    .get(owner)
+                    .get(owner.get())
                     .is_none_or(|m| m.off.load(Ordering::Acquire))
         };
         chains.rewire(faulted);
@@ -472,12 +473,12 @@ impl Loader {
         let late = late.as_ref().map_or(&[][..], |late| late.as_slice());
         for subscription in of_event(delivery, event).iter().chain(late).filter(|s| {
             s.event == event
-                && only.is_none_or(|only| only == s.owner)
+                && only.is_none_or(|only| only == s.owner.get())
                 && self
                     .mods
-                    .get(s.owner)
+                    .get(s.owner.get())
                     .is_some_and(|m| !m.off.load(Ordering::Acquire))
-                && s.generation == crate::reload::generation(s.owner)
+                && s.generation == crate::reload::generation(s.owner.get())
         }) {
             // SAFETY: the handler lives in the mod's DLL, which stays loaded;
             // the safe layer catches its panics.
@@ -741,7 +742,7 @@ fn entry_fault<R: Fallback>(name: &str) -> R {
 /// with [`Status::BAD_ARGS`] for a handle the loader never gave out and with
 /// [`Status::FAULTED`] for a mod that is off, the one answer every entry
 /// point gives a mod that is off.
-fn calling(me: ModHandle) -> Result<(&'static Loader, usize, &'static ModRecord), Status> {
+fn calling(me: ModHandle) -> Result<(&'static Loader, ModIndex, &'static ModRecord), Status> {
     let loader = loader().ok_or(Status::BAD_ARGS)?;
     let (index, record) = loader.record(me).ok_or(Status::BAD_ARGS)?;
     if record.off.load(Ordering::Acquire) {
@@ -760,14 +761,30 @@ fn caller(me: ModHandle) -> Result<&'static Loader, Status> {
 }
 
 /// [`calling`], for an entry point that needs the loader and the index.
-fn caller_index(me: ModHandle) -> Result<(&'static Loader, usize), Status> {
+fn caller_index(me: ModHandle) -> Result<(&'static Loader, ModIndex), Status> {
     calling(me).map(|(loader, index, _)| (loader, index))
 }
 
-/// Mod handles start at 1; 0 is no mod.
+/// The handle of the mod at `index`.
 #[must_use]
-pub(crate) fn handle(index: usize) -> ModHandle {
-    ModHandle(index + 1)
+pub(crate) fn handle(index: ModIndex) -> ModHandle {
+    index.handle()
+}
+
+impl core::ops::Index<ModIndex> for [ModRecord] {
+    type Output = ModRecord;
+
+    fn index(&self, index: ModIndex) -> &ModRecord {
+        &self[index.get()]
+    }
+}
+
+impl core::ops::Index<ModIndex> for Vec<ModRecord> {
+    type Output = ModRecord;
+
+    fn index(&self, index: ModIndex) -> &ModRecord {
+        &self[index.get()]
+    }
 }
 
 #[cfg(test)]
@@ -801,11 +818,11 @@ mod tests {
             generation: 0,
         };
         let mut sealed = vec![
-            made(2, Event::TICKED),
-            made(0, Event::WORLD_SAVED),
-            made(1, Event::TICKED),
-            made(0, Event::TICKED),
-            made(1, Event::SETTINGS_CHANGED),
+            made(ModIndex::new(2), Event::TICKED),
+            made(ModIndex::new(0), Event::WORLD_SAVED),
+            made(ModIndex::new(1), Event::TICKED),
+            made(ModIndex::new(0), Event::TICKED),
+            made(ModIndex::new(1), Event::SETTINGS_CHANGED),
         ];
         sealed.sort_by_key(|s| s.event.0);
         let owners = |event| {
@@ -814,9 +831,12 @@ mod tests {
                 .map(|s| s.owner)
                 .collect::<Vec<_>>()
         };
-        assert_eq!(owners(Event::TICKED), [2, 1, 0]);
-        assert_eq!(owners(Event::WORLD_SAVED), [0]);
-        assert_eq!(owners(Event::SETTINGS_CHANGED), [1]);
+        assert_eq!(
+            owners(Event::TICKED),
+            [ModIndex::new(2), ModIndex::new(1), ModIndex::new(0)]
+        );
+        assert_eq!(owners(Event::WORLD_SAVED), [ModIndex::new(0)]);
+        assert_eq!(owners(Event::SETTINGS_CHANGED), [ModIndex::new(1)]);
         assert!(owners(Event::SHUTDOWN_STARTED).is_empty());
     }
 

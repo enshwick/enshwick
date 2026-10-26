@@ -4,6 +4,7 @@
 //! runs, each mod's settings of that world are watched too, since they are
 //! what the mod reads.
 
+use crate::mod_index::ModIndex;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::{Duration, SystemTime};
@@ -72,7 +73,7 @@ struct Watched {
 
 /// A mod's settings file of the running world, `owner` its mod index.
 struct WorldWatched {
-    owner: usize,
+    owner: ModIndex,
     key: Option<String>,
     seen: Stamp,
 }
@@ -126,7 +127,7 @@ pub(crate) fn start(loader: &'static Loader) {
         .collect();
     let mut worlds: Vec<WorldWatched> = (0..loader.mods.len())
         .map(|owner| WorldWatched {
-            owner,
+            owner: ModIndex::new(owner),
             key: None,
             seen: None,
         })
@@ -166,12 +167,12 @@ pub(crate) fn start(loader: &'static Loader) {
                 let key = crate::worlds::current();
                 for file in &mut worlds {
                     let path = key.as_deref().and_then(|key| {
-                        let record = loader.mods.get(file.owner)?;
+                        let record = loader.mods.get(file.owner.get())?;
                         Some(crate::worlds::world_file(&loader.data_dir, &record.id, key))
                     });
                     let now = path.as_deref().and_then(stamp);
                     if file.changed(key.as_deref(), path.as_deref(), now) {
-                        changed(loader, Some(file.owner));
+                        changed(loader, Some(file.owner.get()));
                     }
                 }
                 let mut touched: Vec<usize> = Vec::new();
@@ -289,7 +290,7 @@ mod tests {
         let path = std::env::temp_dir().join(format!("enshwick-watch-{}", std::process::id()));
         let at = |len| Some((SystemTime::UNIX_EPOCH + Duration::from_secs(len), len));
         let mut file = WorldWatched {
-            owner: 0,
+            owner: ModIndex::new(0),
             key: None,
             seen: None,
         };

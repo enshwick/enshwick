@@ -6,14 +6,12 @@
 //! Wiring writes only those slots, so turning a faulty mod off while the game
 //! runs never touches code.
 
+use crate::mod_index::ModIndex;
 use core::marker::PhantomData;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 
 use enshwick::abi::{HookFlags, Status};
 use rustc_hash::FxHashMap;
-
-/// The owner of the loader's own links, which never turn off.
-pub const LOADER: usize = usize::MAX;
 
 /// The `next` slot of one of the loader's own links, typed by the function
 /// it hooks, so a link calls on with the hooked function's signature.
@@ -123,17 +121,17 @@ pub struct Refusal {
     /// The game function.
     pub target: u64,
     /// The mod that asked.
-    pub owner: usize,
+    pub owner: ModIndex,
     /// The mod that holds the target exclusively, or `None` for the asking
     /// mod's own second link.
-    pub holder: Option<usize>,
+    pub holder: Option<ModIndex>,
 }
 
 /// One mod's link on a target.
 #[derive(Debug)]
 pub struct Link {
     /// The owning mod's index.
-    pub owner: usize,
+    pub owner: ModIndex,
     /// The link's entry point.
     pub detour: usize,
     /// The link's `next` slot, a static inside the mod's DLL.
@@ -191,7 +189,7 @@ impl Chain {
 
     /// Points the head and every `next` slot past links whose owner is
     /// `faulted`, ending at the original.
-    pub fn wire(&self, faulted: impl Fn(usize) -> bool) {
+    pub fn wire(&self, faulted: impl Fn(ModIndex) -> bool) {
         let links = self.running_order();
         let original = match self.original_hop {
             Some(hop) => {
@@ -298,7 +296,7 @@ impl Chains {
     /// Takes every link of `owner` out of the chains, for a mod that is
     /// reloaded: its links must already be wired past, and no game thread
     /// may still run in them.
-    pub fn remove_owner(&mut self, owner: usize) {
+    pub fn remove_owner(&mut self, owner: ModIndex) {
         for chain in self.by_target.values_mut() {
             chain.links.retain(|l| l.owner != owner);
         }
@@ -338,7 +336,7 @@ impl Chains {
     }
 
     /// Rewires every chain past the links of faulted mods.
-    pub fn rewire(&self, faulted: impl Fn(usize) -> bool + Copy) {
+    pub fn rewire(&self, faulted: impl Fn(ModIndex) -> bool + Copy) {
         for chain in self.by_target.values() {
             if chain.head.is_some() {
                 chain.wire(faulted);
@@ -348,7 +346,7 @@ impl Chains {
 
     /// The mods linked on `target`.
     #[must_use]
-    pub fn owners(&self, target: u64) -> Vec<usize> {
+    pub fn owners(&self, target: u64) -> Vec<ModIndex> {
         self.by_target
             .get(&target)
             .map(|c| c.links.iter().map(|l| l.owner).collect())
@@ -385,7 +383,7 @@ mod tests {
         &SLOTS[NEXT_SLOT.fetch_add(1, Ordering::Relaxed)]
     }
 
-    fn link(owner: usize, detour: usize, priority: i32, flags: HookFlags) -> Link {
+    fn link(owner: ModIndex, detour: usize, priority: i32, flags: HookFlags) -> Link {
         Link {
             owner,
             detour,
@@ -403,21 +401,21 @@ mod tests {
     #[test]
     fn a_slot_joins_one_chain_only() {
         let mut chains = Chains::default();
-        let first = link(0, 0xa, 0, HookFlags::NONE);
+        let first = link(ModIndex::new(0), 0xa, 0, HookFlags::NONE);
         let next = first.next;
         assert_eq!(chains.add(0x10, first), Status::OK);
         let again = Link {
             next,
-            ..link(0, 0xa, 0, HookFlags::NONE)
+            ..link(ModIndex::new(0), 0xa, 0, HookFlags::NONE)
         };
         assert_eq!(chains.add(0x20, again), Status::REFUSED);
         let other = Link {
             next,
-            ..link(1, 0xb, 0, HookFlags::NONE)
+            ..link(ModIndex::new(1), 0xb, 0, HookFlags::NONE)
         };
         assert_eq!(chains.add(0x10, other), Status::REFUSED);
         assert_eq!(
-            chains.add(0x20, link(0, 0xa, 0, HookFlags::NONE)),
+            chains.add(0x20, link(ModIndex::new(0), 0xa, 0, HookFlags::NONE)),
             Status::OK
         );
     }
@@ -426,15 +424,15 @@ mod tests {
     fn links_run_by_priority_and_end_at_the_original() {
         let mut chains = Chains::default();
         assert_eq!(
-            chains.add(0x10, link(0, 0xa, 0, HookFlags::NONE)),
+            chains.add(0x10, link(ModIndex::new(0), 0xa, 0, HookFlags::NONE)),
             Status::OK
         );
         assert_eq!(
-            chains.add(0x10, link(1, 0xb, -5, HookFlags::NONE)),
+            chains.add(0x10, link(ModIndex::new(1), 0xb, -5, HookFlags::NONE)),
             Status::OK
         );
         assert_eq!(
-            chains.add(0x10, link(2, 0xc, 0, HookFlags::NONE)),
+            chains.add(0x10, link(ModIndex::new(2), 0xc, 0, HookFlags::NONE)),
             Status::OK
         );
         let head = slot();
@@ -450,7 +448,7 @@ mod tests {
         assert_eq!(value(chain.links[0].next), 0xc);
         assert_eq!(value(chain.links[2].next), 0xff);
 
-        chains.rewire(|owner| owner == 0);
+        chains.rewire(|owner| owner == ModIndex::new(0));
         assert_eq!(value(chain.links[1].next), 0xc);
         // The faulted link, if a call is still inside it, continues correctly.
         assert_eq!(value(chain.links[0].next), 0xc);
@@ -458,7 +456,7 @@ mod tests {
         chains.rewire(|_| true);
         assert_eq!(value(head), 0xff);
         assert_eq!(
-            chains.add(0x20, link(0, 0xd, 0, HookFlags::NONE)),
+            chains.add(0x20, link(ModIndex::new(0), 0xd, 0, HookFlags::NONE)),
             Status::TOO_LATE
         );
     }
@@ -467,11 +465,11 @@ mod tests {
     fn a_reloaded_mod_trades_its_links_on_armed_chains_only() {
         let mut chains = Chains::default();
         assert_eq!(
-            chains.add(0x10, link(0, 0xa, 0, HookFlags::NONE)),
+            chains.add(0x10, link(ModIndex::new(0), 0xa, 0, HookFlags::NONE)),
             Status::OK
         );
         assert_eq!(
-            chains.add(0x10, link(1, 0xb, 0, HookFlags::NONE)),
+            chains.add(0x10, link(ModIndex::new(1), 0xb, 0, HookFlags::NONE)),
             Status::OK
         );
         let head = slot();
@@ -480,57 +478,60 @@ mod tests {
             chain.original = 0xff;
         }
         chains.seal();
-        chains.rewire(|owner| owner == 1);
-        chains.remove_owner(1);
-        assert_eq!(chains.owners(0x10), [0]);
+        chains.rewire(|owner| owner == ModIndex::new(1));
+        chains.remove_owner(ModIndex::new(1));
+        assert_eq!(chains.owners(0x10), [ModIndex::new(0)]);
         assert_eq!(
-            chains.relink(0x20, link(1, 0xc, 0, HookFlags::NONE)),
+            chains.relink(0x20, link(ModIndex::new(1), 0xc, 0, HookFlags::NONE)),
             Status::TOO_LATE,
             "a new target needs a restart"
         );
         assert_eq!(
-            chains.relink(0x10, link(1, 0xc, 0, HookFlags::CALLER_FRAME)),
+            chains.relink(
+                0x10,
+                link(ModIndex::new(1), 0xc, 0, HookFlags::CALLER_FRAME)
+            ),
             Status::TOO_LATE,
             "the chain was armed without the caller frame"
         );
         assert_eq!(
-            chains.relink(0x10, link(1, 0xc, -1, HookFlags::NONE)),
+            chains.relink(0x10, link(ModIndex::new(1), 0xc, -1, HookFlags::NONE)),
             Status::OK
         );
         assert_eq!(
-            chains.relink(0x10, link(1, 0xd, 0, HookFlags::NONE)),
+            chains.relink(0x10, link(ModIndex::new(1), 0xd, 0, HookFlags::NONE)),
             Status::REFUSED
         );
         chains.rewire(|_| false);
         assert_eq!(value(head), 0xc);
-        assert_eq!(chains.owners(0x10), [0, 1]);
+        assert_eq!(chains.owners(0x10), [ModIndex::new(0), ModIndex::new(1)]);
     }
 
     #[test]
     fn exclusive_and_duplicate_links_are_refused() {
         let mut chains = Chains::default();
         assert_eq!(
-            chains.add(0x10, link(0, 0xa, 0, HookFlags::EXCLUSIVE)),
+            chains.add(0x10, link(ModIndex::new(0), 0xa, 0, HookFlags::EXCLUSIVE)),
             Status::OK
         );
         assert_eq!(
-            chains.add(0x10, link(1, 0xb, 0, HookFlags::NONE)),
+            chains.add(0x10, link(ModIndex::new(1), 0xb, 0, HookFlags::NONE)),
             Status::REFUSED
         );
         assert_eq!(
-            chains.add(0x20, link(1, 0xb, 0, HookFlags::NONE)),
+            chains.add(0x20, link(ModIndex::new(1), 0xb, 0, HookFlags::NONE)),
             Status::OK
         );
         assert_eq!(
-            chains.add(0x20, link(1, 0xc, 0, HookFlags::NONE)),
+            chains.add(0x20, link(ModIndex::new(1), 0xc, 0, HookFlags::NONE)),
             Status::REFUSED
         );
         assert_eq!(
-            chains.add(0x20, link(2, 0xc, 0, HookFlags::EXCLUSIVE)),
+            chains.add(0x20, link(ModIndex::new(2), 0xc, 0, HookFlags::EXCLUSIVE)),
             Status::REFUSED
         );
         assert_eq!(
-            chains.add(0, link(2, 0xc, 0, HookFlags::NONE)),
+            chains.add(0, link(ModIndex::new(2), 0xc, 0, HookFlags::NONE)),
             Status::BAD_ARGS
         );
         assert_eq!(chains.len(), 2);
@@ -539,18 +540,18 @@ mod tests {
             [
                 Refusal {
                     target: 0x10,
-                    owner: 1,
-                    holder: Some(0)
+                    owner: ModIndex::new(1),
+                    holder: Some(ModIndex::new(0))
                 },
                 Refusal {
                     target: 0x20,
-                    owner: 1,
+                    owner: ModIndex::new(1),
                     holder: None
                 },
                 Refusal {
                     target: 0x20,
-                    owner: 2,
-                    holder: Some(1)
+                    owner: ModIndex::new(2),
+                    holder: Some(ModIndex::new(1))
                 },
             ]
         );
@@ -564,7 +565,7 @@ mod tests {
             ticks: AtomicU64::new(0),
         };
         let mut chains = Chains::default();
-        let mut first = link(0, 0xa, 0, HookFlags::NONE);
+        let mut first = link(ModIndex::new(0), 0xa, 0, HookFlags::NONE);
         let first_slot = slot();
         first.hop = Some(Hop {
             entry: 0x1a,
@@ -573,7 +574,7 @@ mod tests {
         });
         assert_eq!(chains.add(0x30, first), Status::OK);
         assert_eq!(
-            chains.add(0x30, link(1, 0xb, 1, HookFlags::NONE)),
+            chains.add(0x30, link(ModIndex::new(1), 0xb, 1, HookFlags::NONE)),
             Status::OK
         );
         let (head, original_slot) = (slot(), slot());

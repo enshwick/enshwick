@@ -1,6 +1,7 @@
 //! Skill checks, comfort registrations and experience, each handed to the
 //! mods that asked for it.
 
+use crate::mod_index::ModIndex;
 use core::ffi::c_void;
 use std::cell::RefCell;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -141,7 +142,7 @@ fn too_late(loader: &Loader) -> bool {
 
 pub(crate) fn register_skill(
     loader: &Loader,
-    owner: usize,
+    owner: ModIndex,
     node: u32,
     callback: SkillCheckFn,
     user: *mut c_void,
@@ -160,7 +161,7 @@ pub(crate) fn register_skill(
 
 pub(crate) fn register_comfort(
     loader: &Loader,
-    owner: usize,
+    owner: ModIndex,
     callback: ComfortFn,
     user: *mut c_void,
 ) -> Status {
@@ -178,7 +179,7 @@ pub(crate) fn register_comfort(
 
 pub(crate) fn register_experience(
     loader: &Loader,
-    owner: usize,
+    owner: ModIndex,
     callback: ExperiencePassFn,
     user: *mut c_void,
 ) -> Status {
