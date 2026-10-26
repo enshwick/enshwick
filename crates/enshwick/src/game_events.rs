@@ -1,5 +1,6 @@
 //! Game events: the ECS events the server's systems raise, such as a hit,
-//! a death or a level gained, observed by reflected type.
+//! a death or a level gained, observed typed as a [`Kind`] or by reflected
+//! type.
 //!
 //! Every game event passes the event streams the engine moves at the
 //! start of each simulation step. The loader copies the ones a mod asked for
@@ -8,14 +9,15 @@
 //! [`World`](crate::world::World) reads work in the handler. On a client they
 //! come from the built-in server while it hosts a game.
 //!
-//! An event arrives as raw bytes in the engine's layout; [`Field`]s resolved
-//! by name read them for the running build.
+//! An event arrives as raw bytes in the engine's layout; a [`Kind`] reads
+//! them for the running build, as [`Field`]s resolved by name do at the low
+//! level.
 
 mod kinds;
 
 use core::marker::PhantomData;
 
-use crate::abi::{GameEventData, Str};
+use crate::abi::{EventTypeInfo, GameEventData, Str};
 use crate::ecs::Entity;
 use crate::{Load, Off};
 
@@ -28,85 +30,6 @@ pub use kinds::{
 mod sealed {
     pub trait Sealed {}
 }
-
-/// The reflected names of the game event types the server's systems raise,
-/// from the game's reflection data, for tools that name what they see; a
-/// build may lack some, which [`Load::event_type`] then refuses.
-///
-/// # Examples
-///
-/// ```
-/// use enshwick::game_events::EVENT_TYPE_NAMES;
-///
-/// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-///     let known = EVENT_TYPE_NAMES.iter().filter(|&&name| load.event_type(name).is_ok());
-///     enshwick::info!("{} game event types on this build", known.count());
-///     Ok(())
-/// }
-/// ```
-pub const EVENT_TYPE_NAMES: &[&str] = &[
-    "keen::ecs::HitEvent",
-    "keen::ecs::EntityDiedEvent",
-    "keen::ecs::LevelUpEvent",
-    "keen::ecs::XPGainedEvent",
-    "keen::ecs::CraftRecipeEvent",
-    "keen::ecs::CraftRecipeSuccessEvent",
-    "keen::ecs::AcceptOfferedInteractionEvent",
-    "keen::ecs::InteractionAcceptedEvent",
-    "keen::ecs::BuildingPlaceEvent",
-    "keen::ecs::BuildingPickUpEvent",
-    "keen::ecs::BuildingTearDownEvent",
-    "keen::ecs::FlameAltarEvent",
-    "keen::ecs::LootInteractionEvent",
-    "keen::ecs::HandleEquipmentSlotChangedEvent",
-    "keen::ecs::RevivedPlayerEvent",
-    "keen::ecs::OnDestroyNotifyEvent",
-    "keen::ecs::LoginEvent",
-    "keen::ecs::PickupEvent",
-    "keen::ecs::ParryEvent",
-    "keen::ecs::AllItemsRepairedEvent",
-    "keen::ecs::TransformedToLootEvent",
-    "keen::ecs::AppliedBuffEvent",
-    "keen::ecs::LogicEntityPlacedEvent",
-    "keen::ecs::ProhibitedHit",
-    "keen::ecs::PlayerSpawnInfoChangeEvent",
-    "keen::ecs::CookingEvent",
-    "keen::ecs::GameSettingsChangedEvent",
-    "keen::ecs::AccountActionEvent",
-    "keen::ecs::KillFaction",
-    "keen::ecs::NoiseEvent",
-    "keen::ecs::ResourceChangeEvent",
-    "keen::ecs::PuzzleCompletedEvent",
-    "keen::ecs::DestroyedWithoutSurfaceEvent",
-    "keen::ecs::NotifyEvent",
-    "keen::ecs::SetToggleStateEvent",
-    "keen::ecs::ToggleInteractionEvent",
-    "keen::ecs::NpcCommandEvent",
-    "keen::ecs::FootDown",
-    "keen::ecs::GenericEnemyEvent",
-    "keen::ecs::EnemyAttackStartedEvent",
-    "keen::ecs::CallForHelpEvent",
-    "keen::ecs::AddThreatTargetEvent",
-    "keen::ecs::RestoreEnemyHealthEvent",
-    "keen::ecs::SetEnemyVariableEvent",
-    "keen::ecs::StartGuardingEvent",
-    "keen::ecs::StopGuardingEvent",
-    "keen::ecs::UiWorldEvent",
-    "keen::ecs::UiPingEvent",
-    "keen::ecs::OpenHudScreenEvent",
-    "keen::ecs::KnowledgeGrantsExperienceEvent",
-    "keen::ecs::KnowledgeAnalyticsEvent",
-    "keen::ecs::TerraformingHitEvent",
-    "keen::ecs::ResourceCandidate",
-    "keen::ecs::HitCandidate",
-    "keen::ecs::CollisionEvent",
-    "keen::ecs::InventoryFull",
-    "keen::ecs::AreaDepositEvent",
-    "keen::ecs::ApplyPushBackEvent",
-    "keen::ecs::ActivateFactionPacifyEvent",
-    "keen::ecs::VisceralAttackExecutedEvent",
-    "keen::ecs::StartPlaySongEvent",
-];
 
 /// A reflected game event type, resolved once at init.
 ///
@@ -207,9 +130,8 @@ impl EventType {
     }
 
     /// The field `name` that this type inherits from its base type
-    /// `declared_in`, such as `rootSourceId` of `keen::ecs::BaseHitEvent` in
-    /// `keen::ecs::HitEvent`: reflection lists a field under the type that
-    /// declares it.
+    /// `declared_in`: reflection lists a field under the type that declares
+    /// it.
     ///
     /// # Errors
     ///
@@ -240,6 +162,59 @@ impl EventType {
                 self.name
             ))
         })
+    }
+}
+
+impl Load<'_> {
+    /// Every game event type of the running build, read from the game's
+    /// reflection, for tools that name what they see: the event types that
+    /// exist, not only those the server raises.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] when the loader cannot list them.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    ///     let types = load.event_types()?;
+    ///     enshwick::info!("{} game event types on this build", types.len());
+    ///     Ok(())
+    /// }
+    /// ```
+    pub fn event_types(&self) -> Result<Vec<EventType>, Off> {
+        let api = self.host().api();
+        let me = self.host().handle();
+        let mut count = 0;
+        let status = (api.event_types)(me, core::ptr::null_mut(), 0, &raw mut count);
+        crate::load::ok(status, (), || "event types".to_owned())?;
+        let empty = EventTypeInfo {
+            name: Str::new(""),
+            hash: 0,
+            size: 0,
+        };
+        let mut infos = vec![empty; usize::try_from(count).unwrap_or(0)];
+        let capacity = u32::try_from(infos.len()).unwrap_or(0);
+        let mut written = 0;
+        let status = (api.event_types)(me, infos.as_mut_ptr(), capacity, &raw mut written);
+        crate::load::ok(status, (), || "event types".to_owned())?;
+        infos.truncate(usize::try_from(written).unwrap_or(0));
+        Ok(infos
+            .iter()
+            .filter_map(|info| {
+                // SAFETY: every entry left after the truncation above was
+                // written by `HostApi::event_types`, whose names stay
+                // readable and unchanged for the rest of the process, so
+                // `'static` holds.
+                let name: &'static str = unsafe { info.name.as_str() }?;
+                Some(EventType {
+                    name,
+                    hash: info.hash,
+                    size: info.size,
+                })
+            })
+            .collect())
     }
 }
 
@@ -409,7 +384,7 @@ impl<'a> RawGameEvent<'a> {
     /// use enshwick::game_events::RawGameEvent;
     ///
     /// let bytes = [0u8; 16];
-    /// let event = RawGameEvent::new(0xd8ec_982a, &bytes);
+    /// let event = RawGameEvent::new(0x0042, &bytes);
     /// assert_eq!(event.bytes().len(), 16);
     /// ```
     #[must_use]

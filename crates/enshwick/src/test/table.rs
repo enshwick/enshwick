@@ -7,13 +7,14 @@ use std::sync::{Mutex, MutexGuard, PoisonError};
 use crate::abi::{
     ActiveBuff, AltarInfo, AltarLimitFn, AltarZoneSize, BedCheckFn, BuffRequest, BuffTypeInfo,
     BuildCheckFn, BuildInfo, CallerFrame, ComfortFn, ConfigCheckFn, CraftCheckFn, DamageFilterFn,
-    DaytimeInfo, EntityPlace, Event, EventFn, EventSpec, ExperiencePassFn, GameEventFn, Header,
-    HookSpec, HostApi, InteractionFn, InventoryRequest, InventoryResultFn, ItemData, KnowledgeInfo,
-    KnowledgeInputFn, Level, MidHookFn, MidHookSpec, MigrationSet, ModEventFn, ModHandle, ModInfo,
-    NetMessageFn, PlayerInfo, RenameCallFn, ResourceKey, ResourcePatchFn, ServiceFound,
-    ServiceSpec, Side, SkillCheckFn, SpawnRequest, Status, StatusFn, Str, SummonFn,
-    SurvivorLookupFn, SurvivorStatusFn, TeleportRequest, TerrainEdit, TerrainMaterialInfo,
-    UiAnswerFn, UiDialog, UiFrameFn, UiMarker, UiWidget, WeatherFront, ZoneCheckFn,
+    DaytimeInfo, EntityPlace, Event, EventFn, EventSpec, EventTypeInfo, ExperiencePassFn,
+    GameEventFn, Header, HookSpec, HostApi, InteractionFn, InventoryRequest, InventoryResultFn,
+    ItemData, KnowledgeInfo, KnowledgeInputFn, Level, MidHookFn, MidHookSpec, MigrationSet,
+    ModEventFn, ModHandle, ModInfo, NetMessageFn, PlayerInfo, RenameCallFn, ResourceKey,
+    ResourcePatchFn, ServiceFound, ServiceSpec, Side, SkillCheckFn, SpawnRequest, Status, StatusFn,
+    Str, SummonFn, SurvivorLookupFn, SurvivorStatusFn, TeleportRequest, TerrainEdit,
+    TerrainMaterialInfo, UiAnswerFn, UiDialog, UiFrameFn, UiMarker, UiWidget, WeatherFront,
+    ZoneCheckFn,
 };
 
 use super::{FakeHost, LinkedHook, ServedResource, SubmittedRequest};
@@ -1400,6 +1401,30 @@ extern "system" fn game_event(
     })
 }
 
+extern "system" fn event_types(
+    _me: ModHandle,
+    out: *mut EventTypeInfo,
+    capacity: u32,
+    count: *mut u32,
+) -> Status {
+    let found: Vec<EventTypeInfo> = with(Vec::new(), |s| {
+        s.host
+            .event_types
+            .iter()
+            .map(|&(name, hash, size)| EventTypeInfo {
+                name: Str::new(name),
+                hash,
+                size,
+            })
+            .collect()
+    });
+    for (i, info) in found.iter().take(capacity as usize).enumerate() {
+        // SAFETY: the safe layer passes room for `capacity` entries.
+        unsafe { out.wrapping_add(i).write(*info) };
+    }
+    put(count, u32::try_from(found.len()).unwrap_or(u32::MAX))
+}
+
 extern "system" fn entities(
     _me: ModHandle,
     type_hash: u32,
@@ -2547,4 +2572,5 @@ pub(crate) static TABLE: HostApi = HostApi {
     attach_point: super::points::attach_point,
     run_point: super::points::run_point,
     actions,
+    event_types,
 };

@@ -7,8 +7,8 @@ use std::sync::{Mutex, MutexGuard, OnceLock};
 
 use enshwick::abi as api_frame;
 use enshwick::abi::{
-    BuildInfo, Event, EventFn, Header, HookFlags, HookSpec, HostApi, Level, Manifest,
-    ManifestFlags, MidHookSpec, ModHandle, ModInfo, Side, Status, Str,
+    BuildInfo, Event, EventFn, EventTypeInfo, Header, HookFlags, HookSpec, HostApi, Level,
+    Manifest, ManifestFlags, MidHookSpec, ModHandle, ModInfo, Side, Status, Str,
 };
 use enshwick::mods::LOADER_FILE;
 use enshwick_reflect::{Fingerprint, Reflection};
@@ -822,6 +822,7 @@ pub(crate) static API: HostApi = HostApi {
     attach_point,
     run_point,
     actions,
+    event_types,
 };
 
 /// A slice from a pointer and a count, empty for a null pointer.
@@ -2494,6 +2495,49 @@ extern "system" fn actions(
             crate::log::write(Level::DEBUG, &record.id, "player actions");
         }
         status
+    })
+}
+
+extern "system" fn event_types(
+    me: ModHandle,
+    out: *mut EventTypeInfo,
+    capacity: u32,
+    count: *mut u32,
+) -> Status {
+    entry("event_types", || {
+        let Some(loader) = loader() else {
+            return Status::BAD_ARGS;
+        };
+        if loader.record(me).is_none() {
+            return Status::BAD_ARGS;
+        }
+        let types: Vec<EventTypeInfo> = crate::catalogue::event_types(&loader.reflection)
+            .map(|ty| EventTypeInfo {
+                name: Str::new(ty.name()),
+                hash: enshwick_reflect::fnv1a32(ty.name().as_bytes()),
+                size: ty.size(),
+            })
+            .collect();
+        let Ok(total) = u32::try_from(types.len()) else {
+            return Status::BAD_ARGS;
+        };
+        if !out.is_null() {
+            for (index, info) in types.iter().take(capacity as usize).enumerate() {
+                // SAFETY: `index` is below `capacity`, and
+                // `HostApi::event_types` has the mod pass a non-null `out`
+                // with room for `capacity` entries, so entry `index` lies
+                // inside it.
+                let entry = unsafe { out.add(index) };
+                // SAFETY: `entry` is inside the mod's list, which
+                // `HostApi::event_types` has aligned, writable and untouched
+                // by other threads during the call.
+                unsafe { entry.write(*info) };
+            }
+        }
+        // SAFETY: `HostApi::event_types` has the mod pass `count` null or
+        // pointing at a writable, aligned `u32` that no other thread touches
+        // during the call.
+        unsafe { put(count, total) }
     })
 }
 

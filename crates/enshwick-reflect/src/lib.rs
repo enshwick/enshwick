@@ -52,6 +52,7 @@ pub struct TypeInfo<'a> {
     name: &'a str,
     size: u32,
     align: u16,
+    base: Option<&'a str>,
     fields: Vec<Field<'a>>,
 }
 
@@ -94,6 +95,29 @@ impl<'a> TypeInfo<'a> {
     #[must_use]
     pub fn align(&self) -> u16 {
         self.align
+    }
+
+    /// The full name of the type this struct derives from, such as
+    /// `keen::ecs::GameEvent` for an event; `None` for a struct without a
+    /// base and for every type that is not a struct.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use enshwick_reflect::{Image, Layout, Reflection};
+    ///
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// let bytes = std::fs::read("enshrouded_server.exe")?;
+    /// let image = Image::parse(&bytes, Layout::File, None)?;
+    /// let reflection = Reflection::scan(&image);
+    /// let died = reflection.type_info("keen::ecs::EntityDiedEvent")?;
+    /// assert_eq!(died.base(), Some("keen::ecs::GameEvent"));
+    /// # Ok(())
+    /// # }
+    /// ```
+    #[must_use]
+    pub fn base(&self) -> Option<&'a str> {
+        self.base
     }
 
     /// The fields, in the engine's order.
@@ -271,8 +295,16 @@ pub enum LookupError {
 
 const DESCRIPTOR_SHORT_NAME: u64 = 0x40;
 const DESCRIPTOR_FULL_NAME: u64 = 0x60;
+/// The inner type: a struct's base, an array's element.
+const DESCRIPTOR_INNER: u64 = 0x78;
 const DESCRIPTOR_SIZE_ALIGN: u64 = 0x80;
 const DESCRIPTOR_FIELD_COUNT: u64 = 0x88;
+const DESCRIPTOR_KIND: u64 = 0x8c;
+/// The kind byte of a struct; arrays, strings and handles also carry an
+/// inner type, which is not a base.
+const KIND_STRUCT: u8 = 0x12;
+/// Bases deeper than this are taken for a loop in bad data.
+const MAX_BASES: usize = 32;
 /// Where a type descriptor holds its hash, whose low 32 bits are the
 /// FNV-1a hash of the type's full name and its ECS type hash. Every lookup
 /// by name checks it, so it holds on any build reflection reads.
@@ -410,6 +442,47 @@ impl<'a> Reflection<'a> {
         }
     }
 
+    /// Every type whose chain of bases reaches the type named `root`, in
+    /// no set order: every event type for `keen::ecs::Event`. Names more
+    /// than one type carries are left out, as lookups leave them.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use enshwick_reflect::{Image, Layout, Reflection};
+    ///
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// let bytes = std::fs::read("enshrouded_server.exe")?;
+    /// let image = Image::parse(&bytes, Layout::File, None)?;
+    /// let reflection = Reflection::scan(&image);
+    /// let events = reflection.derived_from("keen::ecs::Event");
+    /// assert!(events.map(|ty| ty.name()).any(|name| name == "keen::ecs::HitEvent"));
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn derived_from<'r>(
+        &'r self,
+        root: &'r str,
+    ) -> impl Iterator<Item = &'r TypeInfo<'a>> + 'r {
+        self.types
+            .values()
+            .filter_map(|found| match found.as_slice() {
+                [one] => Some(one),
+                _ => None,
+            })
+            .filter(move |info| {
+                let mut base = info.base;
+                for _ in 0..MAX_BASES {
+                    match base {
+                        Some(name) if name == root => return true,
+                        Some(name) => base = self.type_info(name).ok().and_then(TypeInfo::base),
+                        None => return false,
+                    }
+                }
+                false
+            })
+    }
+
     /// Every type name found, in no set order.
     ///
     /// # Examples
@@ -510,13 +583,26 @@ impl<'a> Reader<'_, 'a> {
         } else {
             Vec::new()
         };
+        let base = if self.image.read(at(DESCRIPTOR_KIND)?, 1)? == [KIND_STRUCT] {
+            self.type_name(self.image.u64(at(DESCRIPTOR_INNER)?)?)
+        } else {
+            None
+        };
         Some(TypeInfo {
             va,
             name,
             size,
             align,
+            base,
             fields,
         })
+    }
+
+    /// The full name of the descriptor whose short name slot `ptr` points
+    /// at, as field types and bases point.
+    fn type_name(&self, ptr: u64) -> Option<&'a str> {
+        let descriptor = ptr.checked_sub(DESCRIPTOR_SHORT_NAME)?;
+        self.slice(descriptor.checked_add(DESCRIPTOR_FULL_NAME)?)
     }
 
     fn fields(&self, table: u64, count: u32) -> Vec<Field<'a>> {
@@ -528,9 +614,7 @@ impl<'a> Reader<'_, 'a> {
                 let type_name = record
                     .checked_add(FIELD_TYPE)
                     .and_then(|at| self.image.u64(at))
-                    .and_then(|ptr| ptr.checked_sub(DESCRIPTOR_SHORT_NAME))
-                    .and_then(|descriptor| descriptor.checked_add(DESCRIPTOR_FULL_NAME))
-                    .and_then(|at| self.slice(at));
+                    .and_then(|ptr| self.type_name(ptr));
                 Some(Field {
                     name,
                     offset: self.image.u64(record.checked_add(FIELD_OFFSET)?)?,
@@ -760,6 +844,66 @@ mod tests {
         assert_eq!(info.fields().len(), 2);
         assert_eq!(reflection.field_offset(name, "rangeX"), Ok(4));
         assert_eq!(reflection.field_offset(name, "rangeZ"), Ok(12));
+    }
+
+    /// Writes a descriptor of `kind` named `name` at `at`, deriving from
+    /// or holding the descriptor at `inner`, with its strings at `strings`.
+    fn describe(fake: &mut Fake, at: u64, strings: u64, name: &str, kind: u8, inner: Option<u64>) {
+        fake.slice(at + DESCRIPTOR_SHORT_NAME, strings, name);
+        fake.slice(at + DESCRIPTOR_FULL_NAME, strings + 0x40, name);
+        fake.put(at + DESCRIPTOR_KIND, &[kind]);
+        fake.put(
+            at + DESCRIPTOR_HASH,
+            &fnv1a32(name.as_bytes()).to_le_bytes(),
+        );
+        if let Some(inner) = inner {
+            fake.put_u64(at + DESCRIPTOR_INNER, inner + DESCRIPTOR_SHORT_NAME);
+        }
+    }
+
+    #[test]
+    fn a_struct_names_its_base_and_types_derived_from_a_root_are_listed() {
+        let mut fake = Fake::new();
+        let at = |i: u64| rdata(0x100 * i);
+        let strings = |i: u64| rdata(0x800 + 0x80 * i);
+        let types = [
+            ("keen::ecs::Event", KIND_STRUCT, None),
+            ("keen::ecs::GameEvent", KIND_STRUCT, Some(at(1))),
+            ("keen::ecs::HitEvent", KIND_STRUCT, Some(at(2))),
+            (
+                "keen::StaticArray<keen::ecs::HitEvent,10>",
+                0x13,
+                Some(at(3)),
+            ),
+            ("keen::ecs::Health", KIND_STRUCT, None),
+        ];
+        for (i, (name, kind, inner)) in (1..).zip(types) {
+            describe(&mut fake, at(i), strings(i), name, kind, inner);
+        }
+
+        let image = Image::parse(&fake.bytes, Layout::File, None).unwrap();
+        let reflection = Reflection::scan(&image);
+        let hit = reflection.type_info("keen::ecs::HitEvent").unwrap();
+        assert_eq!(hit.base(), Some("keen::ecs::GameEvent"));
+        let array = reflection
+            .type_info("keen::StaticArray<keen::ecs::HitEvent,10>")
+            .unwrap();
+        assert_eq!(
+            array.base(),
+            None,
+            "an array holds its type, it does not derive"
+        );
+        assert_eq!(
+            reflection.type_info("keen::ecs::Event").unwrap().base(),
+            None
+        );
+        let mut derived: Vec<&str> = reflection
+            .derived_from("keen::ecs::Event")
+            .map(TypeInfo::name)
+            .collect();
+        derived.sort_unstable();
+        assert_eq!(derived, ["keen::ecs::GameEvent", "keen::ecs::HitEvent"]);
+        assert_eq!(reflection.derived_from("keen::ecs::Missing").count(), 0);
     }
 
     #[test]

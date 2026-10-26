@@ -11,7 +11,7 @@ chapter is for reading logs and the rare call to the raw table. The exact types 
 | Constant | Value | Meaning |
 | --------------------------------------------------------------------------------------------------- | ----- | ----------------------------------------------- |
 | [`ABI_MAJOR`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/abi.rs) | 2 | A loader refuses a mod built for another major. |
-| [`ABI_MINOR`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/abi.rs) | 67 | A newer minor only appends. |
+| [`ABI_MINOR`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/abi.rs) | 72 | A newer minor only appends. |
 
 The ABI version is apart from Enshwick Loader's version (such as 0.2.0, see
 [Releasing mods](releasing.md#versions)): a platform release raises
@@ -310,3 +310,4 @@ marked "init only" are allowed during `enshwick_mod_init` only.
 | `attach_point`           | Attaches a link to another mod's extension point, with its order; init only                          | 65          |
 | `run_point`              | Runs the live links of the mod's own extension point over its answer; any thread                     | 65          |
 | `actions`                | Registers the mod's player actions, asked for sheets, runs and hints; init only                      | 66          |
+| `event_types`            | Every game event type the running build reflects, with hash and size; any thread                     | 72          |
