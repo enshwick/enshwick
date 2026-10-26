@@ -172,7 +172,7 @@ impl core::ops::BitOr for AttackCategories {
 ///
 /// # Examples
 ///
-/// See [`ExperienceGained`].
+/// See [`ExperienceGained`](crate::game_events::ExperienceGained).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[non_exhaustive]
 pub enum ExperienceSource {
@@ -215,7 +215,7 @@ impl ExperienceSource {
 ///
 /// # Examples
 ///
-/// See [`AltarUsed`].
+/// See [`AltarUsed`](crate::game_events::AltarUsed).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[non_exhaustive]
 pub enum AltarAction {
@@ -249,7 +249,7 @@ impl AltarAction {
 ///
 /// # Examples
 ///
-/// See [`EquipmentChanged`].
+/// See [`EquipmentChanged`](crate::game_events::EquipmentChanged).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[non_exhaustive]
 pub enum EquipmentSlot {
