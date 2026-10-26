@@ -1,6 +1,7 @@
 //! The loader's side of the API: its state and the `HostApi` table.
 
 use crate::mod_index::ModIndex;
+use crate::pinned::{Constant, Symbol};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
@@ -297,13 +298,24 @@ pub(crate) fn is_off(owner: ModIndex) -> bool {
 }
 
 impl Loader {
-    /// The address of the build table's symbol `name` in the running game.
-    pub(crate) fn address(&self, name: &str) -> Option<u64> {
+    /// The address of the build table's symbol `id` in the running game.
+    pub(crate) fn address(&self, id: Symbol) -> Option<u64> {
+        self.address_by_name(id.id())
+    }
+
+    /// The build table's constant `id` as an offset or a size.
+    pub(crate) fn offset(&self, id: Constant) -> Option<usize> {
+        self.offset_by_name(id.id())
+    }
+
+    /// The address of the symbol `name`, an id put together at run time.
+    pub(crate) fn address_by_name(&self, name: &str) -> Option<u64> {
         self.build.symbol(name).map(|rva| self.base + rva)
     }
 
-    /// The build table's constant `name` as an offset or a size.
-    pub(crate) fn offset(&self, name: &str) -> Option<usize> {
+    /// The constant `name`, an id put together at run time, as an offset or
+    /// a size.
+    pub(crate) fn offset_by_name(&self, name: &str) -> Option<usize> {
         self.build
             .constant(name)
             .and_then(|value| usize::try_from(value).ok())
@@ -335,8 +347,9 @@ impl Loader {
     /// which holds only where it matches once with its bytes. False for a
     /// symbol the build lacks or whose pattern finds it through a
     /// displacement.
-    pub(crate) fn code_holds(&self, id: &str) -> bool {
-        let (Some(address), Some((pattern, at))) = (self.address(id), self.build.head(id)) else {
+    pub(crate) fn code_holds(&self, id: Symbol) -> bool {
+        let (Some(address), Some((pattern, at))) = (self.address(id), self.build.head(id.id()))
+        else {
             return false;
         };
         if self.build.kind == crate::builds::Kind::Fallback {

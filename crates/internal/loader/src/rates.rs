@@ -13,40 +13,27 @@ use enshwick::rates::{ExperienceGroup, Rate, combine, is_valid_factor};
 
 use crate::locks::Relock;
 use crate::mod_index::ModIndex;
-
-/// The kill experience formula: its rounded experience, combat factor in.
-pub(crate) const KILL: &str = "experience.kill";
-/// The experience factor the game picks by experience source.
-pub(crate) const SOURCE_FACTOR: &str = "experience.source_factor";
-/// The getter of how long timed workshops take per unit of time.
-pub(crate) const FACTORY_SPEED: &str = "settings.factory_speed";
-/// The getter of the resource drop stack factor.
-pub(crate) const RESOURCE_DROPS: &str = "settings.resource_drops";
-/// The getter of the skill points per level.
-pub(crate) const POINTS_PER_LEVEL: &str = "skill.points_per_level";
-/// The roll of one stack of random loot.
-pub(crate) const STACK_ROLL: &str = "loot.stack_roll";
-/// The comfort registration the loader's comfort link sits on.
-pub(crate) const COMFORT_REGISTER: &str = "comfort.base_register";
-/// The game's item lookup, for the stack sizes the loot rate holds to.
-pub(crate) const ITEM_INFO: &str = "item.info";
+use crate::pinned::{Symbol, comfort, experience, item, loot, settings, skill};
 
 /// For each rate, the build table symbols of the game functions whose
 /// answer the loader scales; the rate works where every one resolves.
-pub(crate) const LINKS: &[(RateId, &[&str])] = &[
-    (RateId::EXPERIENCE_COMBAT, &[SOURCE_FACTOR, KILL]),
-    (RateId::EXPERIENCE_MINING, &[SOURCE_FACTOR]),
-    (RateId::EXPERIENCE_EXPLORATION, &[SOURCE_FACTOR]),
-    (RateId::WORKSHOP_SPEED, &[FACTORY_SPEED]),
-    (RateId::RESOURCE_DROPS, &[RESOURCE_DROPS]),
-    (RateId::COMFORT, &[COMFORT_REGISTER]),
-    (RateId::SKILL_POINTS, &[POINTS_PER_LEVEL]),
-    (RateId::LOOT, &[STACK_ROLL, ITEM_INFO]),
+pub(crate) const LINKS: &[(RateId, &[Symbol])] = &[
+    (
+        RateId::EXPERIENCE_COMBAT,
+        &[experience::SOURCE_FACTOR, experience::KILL],
+    ),
+    (RateId::EXPERIENCE_MINING, &[experience::SOURCE_FACTOR]),
+    (RateId::EXPERIENCE_EXPLORATION, &[experience::SOURCE_FACTOR]),
+    (RateId::WORKSHOP_SPEED, &[settings::FACTORY_SPEED]),
+    (RateId::RESOURCE_DROPS, &[settings::RESOURCE_DROPS]),
+    (RateId::COMFORT, &[comfort::BASE_REGISTER]),
+    (RateId::SKILL_POINTS, &[skill::POINTS_PER_LEVEL]),
+    (RateId::LOOT, &[loot::STACK_ROLL, item::INFO]),
 ];
 
 /// The build table symbols `rate` links; empty for a rate the loader does
 /// not know.
-pub(crate) fn links(rate: RateId) -> &'static [&'static str] {
+pub(crate) fn links(rate: RateId) -> &'static [Symbol] {
     LINKS
         .iter()
         .find(|&&(id, _)| id == rate)

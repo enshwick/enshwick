@@ -11,20 +11,20 @@ use enshwick::abi::{HookFlags, RateId};
 use crate::chains::Next;
 use crate::fuse::Fuse;
 use crate::host::Loader;
+use crate::pinned::{self, Symbol};
 use crate::rates::{
-    FACTORY_SPEED, KILL, LINKS, POINTS_PER_LEVEL, RATES, RESOURCE_DROPS, SOURCE_FACTOR, STACK_ROLL,
-    experience_rate, scale_points, scale_stack, scale_whole, workshop_duration,
+    LINKS, RATES, experience_rate, scale_points, scale_stack, scale_whole, workshop_duration,
 };
 
 /// The build table ids this part of the loader names; the comfort rate
 /// shares the comfort link of [`crate::progress`].
 pub(crate) const TABLE_IDS: &[&str] = &[
-    KILL,
-    SOURCE_FACTOR,
-    FACTORY_SPEED,
-    RESOURCE_DROPS,
-    POINTS_PER_LEVEL,
-    STACK_ROLL,
+    pinned::experience::KILL.id(),
+    pinned::experience::SOURCE_FACTOR.id(),
+    pinned::loot::STACK_ROLL.id(),
+    pinned::settings::FACTORY_SPEED.id(),
+    pinned::settings::RESOURCE_DROPS.id(),
+    pinned::skill::POINTS_PER_LEVEL.id(),
 ];
 
 /// Where a rolled loot slot (`LootSlotInfo`, 16 bytes) keeps its item id
@@ -96,7 +96,7 @@ pub(crate) fn factor(rate: RateId) -> f32 {
 }
 
 /// Whether a rate some mod declared links `symbol`.
-pub(crate) fn wanted(symbol: &str) -> bool {
+pub(crate) fn wanted(symbol: Symbol) -> bool {
     LINKS
         .iter()
         .any(|&(rate, symbols)| symbols.contains(&symbol) && RATES.declared(rate))
@@ -112,42 +112,42 @@ pub(crate) fn link(loader: &'static Loader) {
         link_one(
             loader,
             "the resource drop rate",
-            RESOURCE_DROPS,
+            pinned::settings::RESOURCE_DROPS,
             &DROPS_NEXT,
             resource_drops as FactorFn,
         ),
         link_one(
             loader,
             "the workshop speed rate",
-            FACTORY_SPEED,
+            pinned::settings::FACTORY_SPEED,
             &FACTORY_NEXT,
             factory_speed as FactorFn,
         ),
         link_one(
             loader,
             "the experience rates",
-            SOURCE_FACTOR,
+            pinned::experience::SOURCE_FACTOR,
             &SOURCE_NEXT,
             source_factor as SourceFactorFn,
         ),
         link_one(
             loader,
             "the combat experience rate",
-            KILL,
+            pinned::experience::KILL,
             &KILL_NEXT,
             kill as KillFn,
         ),
         link_one(
             loader,
             "the skill point rate",
-            POINTS_PER_LEVEL,
+            pinned::skill::POINTS_PER_LEVEL,
             &POINTS_NEXT,
             skill_points as PointsFn,
         ),
         link_one(
             loader,
             "the loot rate",
-            STACK_ROLL,
+            pinned::loot::STACK_ROLL,
             &STACK_NEXT,
             stack_roll as StackRollFn,
         ),
@@ -165,7 +165,7 @@ pub(crate) fn link(loader: &'static Loader) {
 fn link_one<F: Copy>(
     loader: &Loader,
     feature: &str,
-    symbol: &str,
+    symbol: Symbol,
     next: &'static Next<F>,
     detour: F,
 ) -> bool {
@@ -288,7 +288,7 @@ mod tests {
                 assert!(
                     crate::table_ids::TABLE_IDS
                         .iter()
-                        .any(|(_, ids)| ids.contains(symbol)),
+                        .any(|(_, ids)| ids.contains(&symbol.id())),
                     "{rate:?}: {symbol}"
                 );
             }

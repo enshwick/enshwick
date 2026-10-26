@@ -825,7 +825,7 @@ pub(crate) extern "system" fn rate(me: ModHandle, rate: RateId) -> Status {
     entry("rate", || match calling(me) {
         Ok((loader, index, record)) => {
             let links = crate::rates::links(rate);
-            let available = links.iter().all(|symbol| loader.address(symbol).is_some())
+            let available = links.iter().all(|&symbol| loader.address(symbol).is_some())
                 // The loot rate reads stack sizes from the item registry,
                 // which the inventory link finds.
                 && (rate != RateId::LOOT || crate::inventory::open(loader).is_ok());

@@ -8,6 +8,7 @@
 //! for clients, the `Network*` and `Client*` components, are refused: the
 //! server's systems overwrite them from their source every step.
 
+use crate::pinned;
 use core::ffi::c_void;
 use std::sync::OnceLock;
 
@@ -17,7 +18,10 @@ use rustc_hash::FxHashSet;
 use crate::host::Loader;
 
 /// The build table ids this part of the loader names.
-pub(crate) const TABLE_IDS: &[&str] = &["ecs.change_tracker", "ecs.component_write"];
+pub(crate) const TABLE_IDS: &[&str] = &[
+    pinned::ecs::CHANGE_TRACKER.id(),
+    pinned::ecs::COMPONENT_WRITE.id(),
+];
 
 /// Name prefixes of the components the game derives for clients.
 const DERIVED: [&str; 2] = ["keen::ecs::Network", "keen::ecs::Client"];
@@ -44,12 +48,12 @@ static REFUSED: OnceLock<FxHashSet<u32>> = OnceLock::new();
 fn layout(loader: &Loader) -> Option<&'static Layout> {
     LAYOUT
         .get_or_init(|| {
-            let write = usize::try_from(loader.address("ecs.component_write")?).ok()?;
+            let write = usize::try_from(loader.address(pinned::ecs::COMPONENT_WRITE)?).ok()?;
             Some(Layout {
                 // SAFETY: the symbol is the game's write accessor with this
                 // signature on this build.
                 write: unsafe { core::mem::transmute::<usize, WriteFn>(write) },
-                tracker: loader.offset("ecs.change_tracker")?,
+                tracker: loader.offset(pinned::ecs::CHANGE_TRACKER)?,
             })
         })
         .as_ref()
