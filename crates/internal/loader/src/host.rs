@@ -42,7 +42,9 @@ use entries::gameplay::{
     stat_open, stat_sources, stat_value, stat_watch, stats_changed, summon_filter, summon_item,
     summoned, survivor_bed_check, survivor_lookup, survivor_status, zone_check_filter,
 };
-use entries::hooks::{code_range, hook, hook_at, patch_code, workshop_recipes};
+use entries::hooks::{
+    code_range, hook, hook_at, loop_wait, patch_code, server_wait, task_workers, workshop_recipes,
+};
 use entries::inventory::{inventory_open, inventory_submit, item_info};
 use entries::mods::{
     config_check, config_schema, fault, join_missing, language, log, migrate, mods, replaced,
@@ -754,6 +756,9 @@ pub(crate) static API: HostApi = HostApi {
     rate,
     set_rate,
     change_data,
+    loop_wait,
+    server_wait,
+    task_workers,
 };
 
 /// The loader and the calling mod, when the mod is on.

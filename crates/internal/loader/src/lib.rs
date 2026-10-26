@@ -117,6 +117,8 @@ mod notices;
 )]
 mod others;
 #[cfg(windows)]
+mod pacing;
+#[cfg(windows)]
 mod packs;
 #[cfg(windows)]
 mod pages;
