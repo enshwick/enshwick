@@ -15,12 +15,13 @@
 //! it.
 
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Mutex, OnceLock, PoisonError};
+use std::sync::{Mutex, OnceLock};
 
 use enshwick::abi::{HookFlags, Status};
 
 use crate::chains::Next;
 use crate::host::Loader;
+use crate::locks::Relock;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
@@ -145,7 +146,7 @@ pub(crate) fn send_frame(to: u64, line: &str) {
     if LOADED.get().is_none() || to == 0 {
         return;
     }
-    let mut outbox = OUTBOX.lock().unwrap_or_else(PoisonError::into_inner);
+    let mut outbox = OUTBOX.relock();
     if outbox.len() < MAX_WAITING {
         outbox.push(Line {
             to: To::Key(to),
@@ -168,7 +169,7 @@ fn cut(text: &str, max: usize) -> &str {
 /// a client would take for a frame of the server's: such a line may carry
 /// what a player typed.
 fn queue(to: To, text: &str) {
-    let mut outbox = OUTBOX.lock().unwrap_or_else(PoisonError::into_inner);
+    let mut outbox = OUTBOX.relock();
     for line in replied(text) {
         if outbox.len() >= MAX_WAITING {
             break;
@@ -487,10 +488,7 @@ fn client_frame(line: &[u8]) -> Option<&str> {
 
 /// Drops the lines waiting for a hosted game that stops.
 pub(crate) fn forget() {
-    OUTBOX
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .clear();
+    OUTBOX.relock().clear();
     WAITING.store(false, Ordering::Release);
 }
 
@@ -513,7 +511,7 @@ pub(crate) fn drain() {
         return;
     }
     let lines: Vec<Line> = {
-        let mut outbox = OUTBOX.lock().unwrap_or_else(PoisonError::into_inner);
+        let mut outbox = OUTBOX.relock();
         let count = outbox.len().min(LINES_PER_DRAIN);
         let lines = outbox.drain(..count).collect();
         WAITING.store(!outbox.is_empty(), Ordering::Release);

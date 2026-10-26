@@ -4,6 +4,7 @@ use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 
 use crate::Off;
+use crate::locks::Relock;
 
 /// Why a [`Store`], [`WorldStore`] or [`Hold`] could not read or write its
 /// file at run time.
@@ -339,10 +340,7 @@ impl<T> WorldStore<T> {
     /// Waits for the background write under way, if any; the guard keeps
     /// the next one from starting.
     fn wait_for_writes(&self) -> std::sync::MutexGuard<'_, Option<std::thread::JoinHandle<()>>> {
-        let mut writing = self
-            .writing
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut writing = self.writing.relock();
         if let Some(handle) = writing.take()
             && handle.join().is_err()
         {
@@ -352,9 +350,7 @@ impl<T> WorldStore<T> {
     }
 
     fn lock(&self) -> std::sync::MutexGuard<'_, WorldSlot<T>> {
-        self.slot
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
+        self.slot.relock()
     }
 }
 

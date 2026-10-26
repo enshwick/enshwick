@@ -8,6 +8,8 @@
 //! the zones gets `upgrade_building_range` replaced by vanilla's own loop on
 //! the same engine helpers, writing its sizes.
 
+use crate::locks::Relock;
+
 mod geometry;
 
 use core::ffi::c_void;
@@ -15,7 +17,7 @@ use std::cell::{Cell, RefCell};
 use std::collections::BTreeMap;
 use std::sync::TryLockError;
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex, OnceLock, PoisonError};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 use arc_swap::ArcSwapOption;
@@ -259,7 +261,7 @@ pub(crate) fn open(loader: &Loader, owner: usize) -> Status {
     if crate::ecs::engine(loader).is_none() {
         return Status::MISSING;
     }
-    let mut openers = OPENERS.lock().unwrap_or_else(PoisonError::into_inner);
+    let mut openers = OPENERS.relock();
     if !openers.contains(&owner) {
         openers.push(owner);
     }
@@ -281,17 +283,14 @@ pub(crate) fn control(loader: &Loader, owner: usize) -> Status {
 }
 
 pub(crate) fn opened(owner: usize) -> bool {
-    OPENERS
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .contains(&owner)
+    OPENERS.relock().contains(&owner)
 }
 
 pub(crate) fn set_sizes(owner: usize, sizes: &[AltarZoneSize]) -> Status {
     if CONTROLLER.load(Ordering::Acquire) != owner + 1 {
         return Status::REFUSED;
     }
-    let state = STATE.lock().unwrap_or_else(PoisonError::into_inner);
+    let state = STATE.relock();
     let mut targets = Targets::new();
     for size in sizes {
         let (Some(placed), Some(levels)) =
@@ -322,7 +321,7 @@ pub(crate) fn set_sizes(owner: usize, sizes: &[AltarZoneSize]) -> Status {
 }
 
 pub(crate) fn list() -> Vec<AltarInfo> {
-    let state = STATE.lock().unwrap_or_else(PoisonError::into_inner);
+    let state = STATE.relock();
     state
         .placed
         .iter()
@@ -382,7 +381,7 @@ pub(crate) fn after_step(loader: &Loader) {
 
 pub(crate) fn forget() {
     WORLD.fetch_add(1, Ordering::AcqRel);
-    let mut state = STATE.lock().unwrap_or_else(PoisonError::into_inner);
+    let mut state = STATE.relock();
     state.placed = Seen::new();
     state.levels = Seen::new();
     state.built = Seen::new();
@@ -396,8 +395,7 @@ pub(crate) fn register(owner: usize, callback: ZoneCheckFn, user: *mut c_void) -
         return Status::TOO_LATE;
     }
     FILTERS
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
+        .relock()
         .push(Registered::new(owner, callback, user));
     Status::OK
 }
@@ -478,7 +476,7 @@ pub(crate) fn link(loader: &'static Loader) {
 }
 
 fn link_seam(loader: &'static Loader) {
-    let filters = std::mem::take(&mut *FILTERS.lock().unwrap_or_else(PoisonError::into_inner));
+    let filters = std::mem::take(&mut *FILTERS.relock());
     let wanted = !filters.is_empty();
     let _first = SEALED.set(filters.into_boxed_slice());
     if !wanted {
@@ -615,7 +613,7 @@ fn merge(
         Err(TryLockError::WouldBlock) if placed.len() + built.len() + levels.len() < HELD_BACK => {
             return;
         }
-        Err(TryLockError::WouldBlock) => STATE.lock().unwrap_or_else(PoisonError::into_inner),
+        Err(TryLockError::WouldBlock) => STATE.relock(),
     };
     let now = now();
     let mut changed = false;

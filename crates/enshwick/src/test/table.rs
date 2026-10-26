@@ -1,6 +1,6 @@
 //! The loader's table, answering from the installed fake.
 
-use std::sync::{Mutex, MutexGuard, PoisonError};
+use std::sync::{Mutex, MutexGuard};
 
 use crate::abi::{
     ActiveBuff, AltarInfo, AltarLimitFn, AltarZoneSize, BedCheckFn, BuffTypeInfo, BuildCheckFn,
@@ -11,6 +11,7 @@ use crate::abi::{
     SurvivorLookupFn, SurvivorStatusFn, TeleportRequest, TerrainEdit, TerrainMaterialInfo,
     UiAnswerFn, UiFrameFn, WeatherFront, ZoneCheckFn,
 };
+use crate::locks::Relock;
 
 use super::{FakeHost, LinkedHook, ServedResource, SubmittedRequest};
 
@@ -235,7 +236,7 @@ static STATE: Mutex<Option<State>> = Mutex::new(None);
 static TURN: Mutex<()> = Mutex::new(());
 
 pub(crate) fn state() -> MutexGuard<'static, Option<State>> {
-    STATE.lock().unwrap_or_else(PoisonError::into_inner)
+    STATE.relock()
 }
 
 thread_local! {
@@ -254,7 +255,7 @@ fn take_turn() -> MutexGuard<'static, ()> {
         !HOLDS_TURN.get(),
         "a fake host is already installed in this thread; drop the first `Installed` before the next install"
     );
-    let turn = TURN.lock().unwrap_or_else(PoisonError::into_inner);
+    let turn = TURN.relock();
     HOLDS_TURN.set(true);
     turn
 }

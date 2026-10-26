@@ -355,6 +355,10 @@ pub fn needs(server: &str, client: Option<&Hello>) -> Vec<Need> {
 
 /// The session's own machine from the handle it holds, `raw`: 0 until the
 /// session hosts.
+#[cfg_attr(
+    all(not(windows), not(test)),
+    expect(dead_code, reason = "the gate kicks only in the game")
+)]
 fn own_machine(raw: u32) -> Option<u32> {
     (raw != 0).then_some(raw)
 }
@@ -362,6 +366,10 @@ fn own_machine(raw: u32) -> Option<u32> {
 /// The machine to kick for the player `key` among the live slots'
 /// `machines`, `(key, machine)`: never the host's, nor one the host's slot
 /// shares, nor the session's own `host_machine`; or why not.
+#[cfg_attr(
+    all(not(windows), not(test)),
+    expect(dead_code, reason = "the gate kicks only in the game")
+)]
 fn machine_to_kick(
     machines: &[(u64, u32)],
     key: u64,

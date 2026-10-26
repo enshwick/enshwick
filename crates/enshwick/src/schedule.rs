@@ -8,9 +8,11 @@
 //! panic in a task turns the mod off, as in any event handler.
 
 use std::ops::ControlFlow;
+use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Mutex, PoisonError};
 use std::time::{Duration, Instant};
+
+use crate::locks::Relock;
 
 /// A task: when it is due, its period when it repeats, and what it runs.
 struct Task {
@@ -159,11 +161,7 @@ impl Scheduler {
             period,
             run: Box::new(run),
         };
-        let mut tasks = self
-            .queue
-            .tasks
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner);
+        let mut tasks = self.queue.tasks.relock();
         self.queue.due_by(task.due);
         tasks.push(task);
     }
@@ -183,19 +181,9 @@ impl Scheduler {
 
     #[cold]
     fn run_due_at(self, now: Instant) {
-        let mut due = core::mem::take(
-            &mut *self
-                .queue
-                .spare
-                .lock()
-                .unwrap_or_else(PoisonError::into_inner),
-        );
+        let mut due = core::mem::take(&mut *self.queue.spare.relock());
         {
-            let mut tasks = self
-                .queue
-                .tasks
-                .lock()
-                .unwrap_or_else(PoisonError::into_inner);
+            let mut tasks = self.queue.tasks.relock();
             due.extend(tasks.extract_if(.., |task| task.due <= now));
             let next = tasks.iter().map(|task| task.due).min();
             self.queue.next_due.store(
@@ -215,21 +203,13 @@ impl Scheduler {
             _ => false,
         });
         {
-            let mut tasks = self
-                .queue
-                .tasks
-                .lock()
-                .unwrap_or_else(PoisonError::into_inner);
+            let mut tasks = self.queue.tasks.relock();
             for task in &due {
                 self.queue.due_by(task.due);
             }
             tasks.append(&mut due);
         }
-        *self
-            .queue
-            .spare
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner) = due;
+        *self.queue.spare.relock() = due;
     }
 }
 
@@ -276,7 +256,7 @@ mod tests {
         let (scheduler, _) = Scheduler::get();
         scheduler.every(Duration::ZERO, || ControlFlow::Continue(()));
         scheduler.run_due();
-        let lock = |m: &'static Mutex<Vec<Task>>| m.lock().unwrap_or_else(PoisonError::into_inner);
+        let lock = |m: &'static Mutex<Vec<Task>>| m.relock();
         let spare = lock(&scheduler.queue.spare).capacity();
         let tasks = lock(&scheduler.queue.tasks).capacity();
         assert!(spare >= 1);

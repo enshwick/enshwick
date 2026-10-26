@@ -25,14 +25,14 @@
 use core::ffi::c_void;
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Mutex, OnceLock, PoisonError};
+use std::sync::{Mutex, OnceLock};
 use std::time::Instant;
 
 use enshwick::abi::{Header, NetMessage, NetMessageFn, Status};
-
 use rustc_hash::FxHashMap;
 
 use crate::host::{Loader, Registered, take};
+use crate::locks::Relock;
 
 mod frame;
 mod peer;
@@ -120,7 +120,7 @@ static SERVER_RUNS_ENSHWICK: AtomicBool = AtomicBool::new(false);
 static DROPPED: AtomicU64 = AtomicU64::new(0);
 
 fn state<R>(f: impl FnOnce(&mut State) -> R) -> R {
-    let mut guard = STATE.lock().unwrap_or_else(PoisonError::into_inner);
+    let mut guard = STATE.relock();
     f(guard.get_or_insert_with(State::default))
 }
 
@@ -165,7 +165,7 @@ pub(crate) fn open(
         return Err(Status::BAD_ARGS);
     }
     let id = channel_id(&record.id, name);
-    let mut pending = PENDING.lock().unwrap_or_else(PoisonError::into_inner);
+    let mut pending = PENDING.relock();
     if pending.iter().any(|c| c.id == id) {
         return Err(Status::REFUSED);
     }
@@ -628,7 +628,7 @@ pub(crate) fn joining(runs_enshwick: bool) {
 /// Forgets every peer, when the client changes servers or a hosted game
 /// ends.
 pub(crate) fn forget() {
-    let mut guard = STATE.lock().unwrap_or_else(PoisonError::into_inner);
+    let mut guard = STATE.relock();
     *guard = None;
     WAITING.store(false, Ordering::Release);
     crate::item_data::forget_client();

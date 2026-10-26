@@ -1,9 +1,12 @@
 //! The running game's archive, opened once for the process; the reader is
 //! [`enshwick_gamedata::archive`].
 
+#[cfg(windows)]
 use std::path::Path;
 
-pub(crate) use enshwick_gamedata::archive::{Archive, ContentHash};
+pub(crate) use enshwick_gamedata::archive::Archive;
+#[cfg(windows)]
+pub(crate) use enshwick_gamedata::archive::ContentHash;
 
 /// The running game's archive, opened on first use; `None` when the loader
 /// is not installed or the archive does not read.
