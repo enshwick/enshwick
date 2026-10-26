@@ -325,8 +325,8 @@ fn allocate_near(target: usize) -> Option<usize> {
 }
 
 /// Writes every hook jump and code patch with the other threads suspended;
-/// false when any target could not be made writable, in which case none is
-/// written.
+/// false when any target could not be made writable, or a thread's context
+/// could not be read to check and move it, in which case none is written.
 ///
 /// A suspended thread may stand inside the bytes a hook replaces, or have
 /// called out of them, with a return address into them on its stack; both
@@ -353,11 +353,14 @@ fn write_all(prepared: &[&Pending], code: &[Bytes<'_>]) -> bool {
     let mut protections = Vec::with_capacity(writes.len());
     let mut threads = Threads::new();
     let mut tries = 0;
-    let unsettled = loop {
+    let (unsettled, blind) = loop {
         if !threads.suspend() {
             threads.resume();
             return false;
         }
+        // A thread whose context Windows does not hand over can be neither
+        // checked nor moved: the writes wait for it, then give up.
+        let blind = threads.iter().any(|thread| control(thread).is_none());
         let busy = !patched.is_empty()
             && threads
                 .iter()
@@ -365,13 +368,22 @@ fn write_all(prepared: &[&Pending], code: &[Bytes<'_>]) -> bool {
                 // process, `iter` yields each of them, and they stay suspended
                 // until `resume`.
                 .any(|thread| unsafe { in_flight(thread, &patched, &returns) });
-        if !busy || tries == SETTLE_TRIES {
-            break busy;
+        if !(busy || blind) || tries == SETTLE_TRIES {
+            break (busy, blind);
         }
         threads.resume();
         tries += 1;
         std::thread::sleep(SETTLE_WAIT);
     };
+    if blind {
+        threads.resume();
+        crate::log::write(
+            Level::WARN,
+            LOADER_ID,
+            "hooks not written: a thread's context could not be read to move it out of the code",
+        );
+        return false;
+    }
     let mut writable = true;
     for &(address, bytes) in &writes {
         // SAFETY: the target's code pages, with every other thread of the
@@ -480,7 +492,7 @@ pub(crate) struct ThreadContext(pub(crate) CONTEXT);
 
 impl ThreadContext {
     /// An empty context that asks for the control registers.
-    pub(crate) fn control() -> Self {
+    pub(crate) fn new() -> Self {
         Self(CONTEXT {
             ContextFlags: CONTEXT_CONTROL_AMD64,
             ..CONTEXT::default()
@@ -492,7 +504,7 @@ impl ThreadContext {
 /// context read for writing it back; `None` when Windows refuses to read
 /// it.
 fn control(thread: HANDLE) -> Option<ThreadContext> {
-    let mut context = ThreadContext::control();
+    let mut context = ThreadContext::new();
     // SAFETY: `GetThreadContext` writes at most one `CONTEXT` into
     // `context.0`, 16-byte aligned by its type, with `ContextFlags` set; a
     // handle without context rights fails the call.
@@ -619,7 +631,7 @@ unsafe fn relocate(thread: HANDLE, moved: &[(usize, usize)]) {
     };
     if let Some(new) = find(usize::try_from(held.0.Rip).unwrap_or(0)) {
         held.0.Rip = new as u64;
-        // SAFETY: the caller keeps `thread` suspended, `context` is the one
+        // SAFETY: the caller keeps `thread` suspended, `held.0` is the one
         // `control` read from it with only `Rip` changed, and the moved
         // address holds the same instruction in the trampoline.
         unsafe { SetThreadContext(thread, &raw const held.0) };

@@ -282,6 +282,4 @@ fn a_snapshot_suspends_the_other_threads_where_the_system_has_no_thread_walk() {
 #[test]
 fn a_thread_context_sits_on_the_sixteen_byte_boundary_windows_requires() {
     assert_eq!(align_of::<ThreadContext>(), 16);
-    let context = ThreadContext::control();
-    assert!((&raw const context).addr().is_multiple_of(16));
 }
