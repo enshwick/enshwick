@@ -8,7 +8,7 @@
 
 use crate::mod_index::ModIndex;
 use core::marker::PhantomData;
-// The loom model in `tests/loom_chains.rs` swaps in loom's atomics, which
+// The loom model in `model` swaps in loom's atomics, which
 // record every load and store for the model to permute.
 #[cfg(loom)]
 use loom::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
@@ -378,7 +378,10 @@ impl Chains {
     }
 }
 
-// Static std slots; the loom model has its own test.
+#[cfg(loom)]
+mod model;
+
+// Static std slots; the loom model has its own tests.
 #[cfg(not(loom))]
 #[cfg(test)]
 mod tests {

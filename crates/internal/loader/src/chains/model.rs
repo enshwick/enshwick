@@ -2,15 +2,13 @@
 //! chain while the loader rewires it past a faulted mod, or trades a
 //! reloaded mod's link, only ever follows a slot to a link or the original.
 //!
-//! Run with `RUSTFLAGS="--cfg loom" cargo test -p enshwick-loader --test loom_chains --release`.
-
-#![cfg(loom)]
+//! Run with `RUSTFLAGS="--cfg loom" cargo test -p enshwick-loader --lib chains::model --release`.
 
 #[cfg(test)]
 mod tests {
+    use crate::chains::{Chains, Link};
+    use crate::mod_index::ModIndex;
     use enshwick::abi::{HookFlags, Status};
-    use enshwick_loader::chains::{Chains, Link};
-    use enshwick_loader::mod_index::ModIndex;
     use loom::sync::atomic::{AtomicUsize, Ordering};
     use loom::thread;
 
