@@ -53,6 +53,31 @@ expression: shape
       },
       "type": "object"
     },
+    "ItemChangeEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "items": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "max_stack": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ValueEntry"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "items"
+      ],
+      "type": "object"
+    },
     "ItemEntry": {
       "additionalProperties": false,
       "properties": {
@@ -137,6 +162,19 @@ expression: shape
       ],
       "type": "object"
     },
+    "ScaleEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "times": {
+          "format": "double",
+          "type": "number"
+        }
+      },
+      "required": [
+        "times"
+      ],
+      "type": "object"
+    },
     "StatEntry": {
       "additionalProperties": false,
       "properties": {
@@ -156,11 +194,31 @@ expression: shape
         "value"
       ],
       "type": "object"
+    },
+    "ValueEntry": {
+      "anyOf": [
+        {
+          "format": "double",
+          "type": "number"
+        },
+        {
+          "$ref": "#/$defs/ScaleEntry"
+        }
+      ]
     }
   },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "properties": {
+    "change": {
+      "items": {
+        "$ref": "#/$defs/ItemChangeEntry"
+      },
+      "type": [
+        "array",
+        "null"
+      ]
+    },
     "item": {
       "items": {
         "$ref": "#/$defs/ItemEntry"

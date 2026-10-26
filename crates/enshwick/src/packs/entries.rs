@@ -118,6 +118,34 @@ pub(super) struct WorkshopEntry {
     pub(super) debug_name: Option<String>,
 }
 
+/// A new value: a number sets it, `{ times = x }` scales it.
+#[derive(Clone, Copy, Debug, PartialEq, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(untagged)]
+pub(super) enum ValueEntry {
+    Set(f64),
+    Scale(ScaleEntry),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(deny_unknown_fields)]
+pub(super) struct ScaleEntry {
+    /// The factor, from 0 to 100.
+    pub(super) times: f64,
+}
+
+/// A change of vanilla items' values.
+#[derive(Clone, Debug, PartialEq, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(deny_unknown_fields)]
+pub(super) struct ItemChangeEntry {
+    /// The items changed: debug names, GUIDs or content ids.
+    pub(super) items: Vec<String>,
+    /// How many of the item one inventory slot holds, 1 to 65535.
+    pub(super) max_stack: Option<ValueEntry>,
+}
+
 /// Where a drop comes from: one name or several.
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
@@ -149,6 +177,8 @@ pub(super) struct DropEntry {
 pub(super) struct ItemsFile {
     #[serde(default)]
     pub(super) item: Vec<Spanned<ItemEntry>>,
+    #[serde(default)]
+    pub(super) change: Vec<Spanned<ItemChangeEntry>>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -184,6 +214,7 @@ pub fn schemas() -> Vec<(&'static str, String)> {
     #[expect(dead_code, reason = "only its schema is read")]
     struct Items {
         item: Option<Vec<ItemEntry>>,
+        change: Option<Vec<ItemChangeEntry>>,
     }
     #[derive(schemars::JsonSchema)]
     #[schemars(deny_unknown_fields)]

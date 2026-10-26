@@ -1,5 +1,5 @@
-//! Content packs: items, recipes, workshops, loot and texts described in
-//! TOML files instead of code.
+//! Data packs: items, recipes, workshops, loot and texts described in
+//! TOML files instead of code, and changes of vanilla values.
 //!
 //! A pack is a set of files: `items.toml`, `recipes.toml`, `workshops.toml`,
 //! `loot.toml` and `texts.toml`, each optional, and the PNG icons the items
@@ -68,7 +68,8 @@ pub const MAX_FILE: u64 = 4 << 20;
 impl Load<'_> {
     /// Adds what `pack` describes, on the server and the client alike:
     /// its workshops, items, recipes, texts and loot, each through the call
-    /// code uses, beside vanilla content.
+    /// code uses, beside vanilla content, and declares its changes of
+    /// vanilla values with [`Load::change`].
     ///
     /// # Errors
     ///
@@ -177,6 +178,11 @@ impl Load<'_> {
                 ..NewItem::new(own, item.like)
             })?;
         }
+        self.add_pack_rest(pack)
+    }
+
+    /// Adds `pack`'s recipes, changes of values and loot.
+    fn add_pack_rest(&mut self, pack: &Pack) -> Result<(), Off> {
         for recipe in &pack.recipes {
             self.add_recipe(NewRecipe {
                 id: id(&recipe.id)?,
@@ -187,6 +193,9 @@ impl Load<'_> {
                 workshop: recipe.workshop.map(WorkshopId::new),
             })?;
         }
+        for (change, source) in &pack.changes {
+            self.change(change, source)?;
+        }
         let group = group(&pack.namespace);
         for drop in &pack.drops {
             self.add_loot_in(group, drop.clone())?;
@@ -195,6 +204,7 @@ impl Load<'_> {
     }
 }
 
+mod changes;
 mod entries;
 mod files;
 mod manifest;

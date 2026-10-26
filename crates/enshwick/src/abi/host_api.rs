@@ -6,12 +6,12 @@ use core::ffi::c_void;
 use crate::abi::{
     ActionFn, ActiveBuff, AffixDefData, AffixRoll, AltarInfo, AltarLimitFn, AltarZoneSize,
     BedCheckFn, BuffRequest, BuffTypeInfo, BuildCheckFn, BuildInfo, CallerFrame, ComfortFn,
-    ConfigCheckFn, CraftCheckFn, DamageFilterFn, DaytimeInfo, EntityDataFlags, EntityPlace, Event,
-    EventFn, EventSpec, EventTypeInfo, ExperiencePassFn, GameEventFn, Header, HookSpec,
-    InteractionFn, InventoryRequest, InventoryResultFn, ItemData, ItemLine, KnowledgeInfo,
-    KnowledgeInputFn, Level, MidHookSpec, MigrationSet, ModEventFn, ModHandle, ModInfo,
-    NetMessageFn, PlayerInfo, PointFn, PointHandle, PointLink, PointSpec, PointVerdict, RateId,
-    RecipeKind, RecipeRuleKind, RenameCallFn, ResourceKey, ResourcePatchFn, ServiceFound,
+    ConfigCheckFn, CraftCheckFn, DamageFilterFn, DataChange, DaytimeInfo, EntityDataFlags,
+    EntityPlace, Event, EventFn, EventSpec, EventTypeInfo, ExperiencePassFn, GameEventFn, Header,
+    HookSpec, InteractionFn, InventoryRequest, InventoryResultFn, ItemData, ItemLine,
+    KnowledgeInfo, KnowledgeInputFn, Level, MidHookSpec, MigrationSet, ModEventFn, ModHandle,
+    ModInfo, NetMessageFn, PlayerInfo, PointFn, PointHandle, PointLink, PointSpec, PointVerdict,
+    RateId, RecipeKind, RecipeRuleKind, RenameCallFn, ResourceKey, ResourcePatchFn, ServiceFound,
     ServiceSpec, SkillCheckFn, SpawnRequest, StatChangeFn, StatDefData, StatModifierData,
     StatModify, StatRef, StatSource, Status, StatusFn, Str, SummonFn, SurvivorLookupFn,
     SurvivorStatusFn, TeleportRequest, TerrainEdit, TerrainMaterialInfo, UiAnswerFn, UiDialog,
@@ -1066,4 +1066,13 @@ pub struct HostApi {
     /// thread; neither allocates nor locks once
     /// every mod is initialised. Since minor 75.
     pub set_rate: extern "system" fn(me: ModHandle, rate: RateId, factor: f32) -> Status,
+    /// Declares a change of a vanilla value. The loader merges the changes
+    /// of every mod once their `init` ran: a set in load order, the last
+    /// winning and the overridden one reported in both mods' logs and the
+    /// conflict report; then every factor, multiplied. It builds the changed
+    /// resource the first time the game reads it, on each side from its own
+    /// mods. [`Status::BAD_ARGS`] for a null `change`, an unknown field or
+    /// operation and a value outside the field's range; [`Status::MISSING`]
+    /// when the build does not reflect the field. Init only. Since minor 76.
+    pub change_data: extern "system" fn(me: ModHandle, change: *const DataChange) -> Status,
 }

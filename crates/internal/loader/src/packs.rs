@@ -1,4 +1,4 @@
-//! Content packs as mods: a folder `mods/<id>/` with a `pack.toml` and no
+//! Data packs as mods: a folder `mods/<id>/` with a `pack.toml` and no
 //! DLL. The loader gives each pack a record like a mod's, built from its
 //! manifest, so the mod list, the lock and the join check see
 //! it as they see a DLL, and runs it through the API's [`Load::add_pack`]
@@ -228,6 +228,15 @@ pub(crate) unsafe extern "system" fn init(api: *const HostApi, me: ModHandle) ->
             return Status::REFUSED;
         }
     };
+    let manifest = std::fs::read_to_string(dir.join(MANIFEST_FILE))
+        .ok()
+        .and_then(|text| PackManifest::parse(&text).ok().map(|m| (m, text)));
+    if let Some((manifest, text)) = manifest
+        && let Err(problem) = manifest.check(&text, &pack)
+    {
+        crate::log::write(Level::ERROR, &id, &problem.to_string());
+        return Status::REFUSED;
+    }
     // SAFETY: `api` is the loader's process-wide table, by this function's
     // `# Safety` contract, which is what `init_pack` asks for.
     let status = unsafe { enshwick::__private::init_pack(api, me, |load| load.add_pack(&pack)) };
@@ -236,9 +245,10 @@ pub(crate) unsafe extern "system" fn init(api: *const HostApi, me: ModHandle) ->
             Level::INFO,
             &id,
             &format!(
-                "content pack: {} ids, {} loot drops",
+                "data pack: {} ids, {} loot drops, {} changes",
                 pack.ids().len(),
-                pack.drops().len()
+                pack.drops().len(),
+                pack.changes().len()
             ),
         );
         with(|packs| {
@@ -300,16 +310,12 @@ pub(crate) fn changed(loader: &Loader, index: usize) {
             crate::log::write(
                 Level::WARN,
                 id,
-                "content pack not reloaded: fix the files above",
+                "data pack not reloaded: fix the files above",
             );
             return;
         }
         Err(why) => {
-            crate::log::write(
-                Level::WARN,
-                id,
-                &format!("content pack not reloaded: {why}"),
-            );
+            crate::log::write(Level::WARN, id, &format!("data pack not reloaded: {why}"));
             return;
         }
     };
@@ -323,14 +329,14 @@ pub(crate) fn changed(loader: &Loader, index: usize) {
         crate::log::write(
             Level::WARN,
             id,
-            "content pack changed beyond its loot: items, recipes, workshops and texts change at the next start",
+            "data pack changed beyond its loot: items, recipes, workshops, texts and changes of values change at the next start",
         );
     }
     match enshwick::packs::reload_loot(id, pack.drops().to_vec()) {
         Ok(()) => crate::log::write(
             Level::INFO,
             id,
-            &format!("content pack reloaded: {} loot drops", pack.drops().len()),
+            &format!("data pack reloaded: {} loot drops", pack.drops().len()),
         ),
         Err(why) => crate::log::write(Level::WARN, id, &format!("loot not reloaded: {why}")),
     }

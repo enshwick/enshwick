@@ -345,3 +345,4 @@ marked "init only" are allowed during `enshwick_mod_init` only.
 | `recipe_kind`            | The kind of the recipes that make an item, from its loaded static data; any thread                   | 73          |
 | `rate`                   | Declares a game rate the mod multiplies; init only                                                   | 75          |
 | `set_rate`               | Puts the mod's factor for a declared rate in force, 0 to 100; any thread                             | 75          |
+| `change_data`            | Declares a change of a vanilla value, which the loader merges with every mod's; init only            | 76          |

@@ -29,9 +29,9 @@ use entries::build::{
     type_hash, type_size,
 };
 use entries::content::{
-    add_text, content_read, content_serve, entity_data_open, game_text, icons_ready, item_data_get,
-    item_data_open, item_data_set, rebuild_resource, recipe_disabled, recipe_kind, recipe_rule,
-    resource_read, serve_resource,
+    add_text, change_data, content_read, content_serve, entity_data_open, game_text, icons_ready,
+    item_data_get, item_data_open, item_data_set, rebuild_resource, recipe_disabled, recipe_kind,
+    recipe_rule, resource_read, serve_resource,
 };
 use entries::gameplay::{
     account_knowledge, affix_info, affix_open, affix_roll, altar_limit, altar_zones_control,
@@ -100,7 +100,7 @@ pub(crate) struct ModRecord {
     pub(crate) check: OnceLock<(api_frame::ConfigCheckFn, usize)>,
     /// The texts the mod handed the loader, for its settings' labels.
     pub(crate) texts: Mutex<Option<enshwick::i18n::Texts>>,
-    /// Whether it is a content pack, a folder of data the loader runs.
+    /// Whether it is a data pack, a folder of data the loader runs.
     pub(crate) pack: bool,
     /// The features it reported on or off, in the order it named them.
     pub(crate) features: Mutex<Vec<crate::features::Feature>>,
@@ -193,7 +193,7 @@ impl Kept {
 }
 
 /// The handle of the loader itself, which its own copy of the API uses to
-/// log and read while it runs content packs.
+/// log and read while it runs data packs.
 pub(crate) const LOADER_HANDLE: ModHandle = ModHandle(0);
 
 /// A mod's handler for one event.
@@ -482,7 +482,9 @@ impl Loader {
         let item_data = matches!(
             event,
             Event::WORLD_LOADED | Event::WORLD_SAVED | Event::SHUTDOWN_STARTED
-        ) && (crate::item_data::wanted() || crate::stats::wanted());
+        ) && (crate::item_data::wanted()
+            || crate::stats::wanted()
+            || crate::data_changes::wanted(self));
         item_data
             || self
                 .delivery
@@ -504,6 +506,7 @@ impl Loader {
             crate::knowledge::changes::world_event(self, event);
             crate::item_data::world_event(self, event);
             crate::stats::world_event(self, event);
+            crate::data_changes::world_event(self, event);
         }
         let Some(delivery) = self.delivery.get() else {
             return;
@@ -733,6 +736,7 @@ pub(crate) static API: HostApi = HostApi {
     feature,
     rate,
     set_rate,
+    change_data,
 };
 
 /// The loader and the calling mod, when the mod is on.
