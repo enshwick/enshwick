@@ -245,11 +245,7 @@ pub(super) fn game(data_dir: &Path) -> Option<Game> {
             build.missing().join(", ")
         );
     }
-    for part in build.parts(crate::TABLE_IDS) {
-        if let Some(line) = crate::diag::part_line(&part) {
-            crate::log!(WARN, "loader feature {line}; the game runs it vanilla");
-        }
-    }
+    warn_lacking(build);
     Some(Game {
         side,
         base,
@@ -257,6 +253,19 @@ pub(super) fn game(data_dir: &Path) -> Option<Game> {
         build,
         reflection,
     })
+}
+
+/// Warns about each loader feature `build` serves only partly or not at all.
+fn warn_lacking(build: &builds::KnownBuild) {
+    for part in build.parts(crate::TABLE_IDS) {
+        if let Some(line) = crate::diag::part_line(&part) {
+            crate::log!(
+                WARN,
+                "loader feature {line}; the game runs it vanilla ({})",
+                errors::FEATURES_OFF
+            );
+        }
+    }
 }
 
 /// `bytes` as lowercase hex digits, for the log.

@@ -1,21 +1,85 @@
-//! Reading a pack's entries into what it adds, noting every problem.
-
 use std::collections::BTreeMap;
 
 use serde::Deserialize;
 
-use super::entries::{FormatEntry, FromEntry, ItemsFile, LootFile, RecipesFile, WorkshopsFile};
-use super::{
-    ITEMS_FILE, LOOT_FILE, PackError, PackFiles, PackIcon, PackItem, PackRecipe, PackWorkshop,
-    RECIPES_FILE, Ref, TEXTS_FILE, WORKSHOPS_FILE,
-};
-use crate::content::Guid;
+use crate::Off;
+use crate::content::changes::Change;
 use crate::content::icons::Tint;
 use crate::content::items::StatFormat;
 use crate::content::vanilla::Vanilla;
 use crate::content::workshops::{Station, WorkshopId, stations};
+use crate::content::{Guid, Id};
 use crate::i18n::Texts;
 use crate::loot::{Drop, Kinds, Source};
+
+use super::entries::{FormatEntry, FromEntry, ItemsFile, LootFile, RecipesFile, WorkshopsFile};
+use super::files::{PackError, PackFiles, ParsePackError};
+use super::{ITEMS_FILE, LOOT_FILE, RECIPES_FILE, TEXTS_FILE, WORKSHOPS_FILE};
+
+/// A reference in a pack, resolved.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum Ref {
+    /// A name the pack defines, as its full id.
+    Own,
+    /// Another mod's content id, or a vanilla GUID.
+    Elsewhere,
+}
+
+/// A pack item, ready to add.
+#[derive(Clone, Debug, PartialEq)]
+pub(super) struct PackItem {
+    pub(super) id: String,
+    pub(super) like: Guid,
+    pub(super) name: Option<String>,
+    pub(super) description: Option<String>,
+    pub(super) debug_name: String,
+    pub(super) meter: Option<(u16, u16)>,
+    pub(super) stats: Vec<(String, i32, StatFormat)>,
+    pub(super) icon: Option<PackIcon>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) enum PackIcon {
+    Tint { like: Guid, tint: Tint },
+    Png(Vec<u8>),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) struct PackRecipe {
+    pub(super) id: String,
+    pub(super) like: Guid,
+    pub(super) output: Guid,
+    pub(super) count: u32,
+    pub(super) cost: u32,
+    pub(super) workshop: Option<Guid>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) struct PackWorkshop {
+    pub(super) id: String,
+    pub(super) like: Station,
+    pub(super) name: Option<String>,
+    pub(super) description: Option<String>,
+    pub(super) cost: Option<u32>,
+    pub(super) debug_name: String,
+}
+
+/// A pack, read and checked: what [`Load::add_pack`](crate::Load::add_pack) adds.
+///
+/// # Examples
+///
+/// See the [module](crate::packs).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Pack {
+    pub(super) namespace: String,
+    pub(super) items: Vec<PackItem>,
+    pub(super) recipes: Vec<PackRecipe>,
+    pub(super) workshops: Vec<PackWorkshop>,
+    pub(super) drops: Vec<Drop>,
+    pub(super) changes: Vec<(Change, String)>,
+    pub(super) texts: String,
+    pub(super) hash: u32,
+}
 
 /// Collects a pack's problems as it is read.
 pub(super) struct Reader<'a> {
@@ -31,10 +95,7 @@ pub(super) struct Reader<'a> {
 impl Reader<'_> {
     /// The parsed `name`, or `T::default` when the pack lacks it; problems
     /// are noted.
-    pub(super) fn file<T: for<'de> Deserialize<'de> + Default>(
-        &mut self,
-        name: &str,
-    ) -> (T, String) {
+    fn file<T: for<'de> Deserialize<'de> + Default>(&mut self, name: &str) -> (T, String) {
         let text = match self.files.text(name) {
             Ok(Some(text)) => text.to_owned(),
             Ok(None) => return (T::default(), String::new()),
@@ -58,20 +119,13 @@ impl Reader<'_> {
     }
 
     /// The full id of the pack's own `name`: `<namespace>:<name>`.
-    pub(super) fn own(&self, name: &str) -> String {
+    fn own(&self, name: &str) -> String {
         format!("{}:{name}", self.namespace)
     }
 
     /// Notes that the pack defines `name` as a `what`; a problem when it
     /// is no valid name or is defined already.
-    pub(super) fn define(
-        &mut self,
-        file: &str,
-        text: &str,
-        at: usize,
-        name: &str,
-        what: &'static str,
-    ) {
+    fn define(&mut self, file: &str, text: &str, at: usize, name: &str, what: &'static str) {
         let full = self.own(name);
         if name.contains(':') || Guid::try_named(&full).is_none() {
             self.error(
@@ -145,7 +199,7 @@ impl Reader<'_> {
 
     /// The vanilla station `like` names: `workbench`, a station item's debug
     /// name or its GUID.
-    pub(super) fn station(
+    fn station(
         &mut self,
         file: &str,
         text: &str,
@@ -173,7 +227,7 @@ impl Reader<'_> {
     }
 
     /// A text key the pack's texts must hold.
-    pub(super) fn text_key(
+    fn text_key(
         &mut self,
         file: &str,
         text: &str,
@@ -227,6 +281,268 @@ pub(super) fn source_of(from: &FromEntry) -> Result<Source, String> {
                     .map(|k| Source::kinds(s.kinds.with(k)))
                     .ok_or_else(|| unknown(n))
             }),
+    }
+}
+
+impl Pack {
+    /// Reads and checks the pack `files` in the namespace `namespace`, the
+    /// id of the mod or pack that adds it, with the running game's vanilla
+    /// names ([`Vanilla::game`]) when there is a game.
+    ///
+    /// # Errors
+    ///
+    /// Every problem found, each with its file, line and column: a file
+    /// that is no TOML of its form, an unknown field, a name defined twice,
+    /// a reference to a name neither the pack nor the game has, or that
+    /// several vanilla items carry, a station that cannot be cloned, a text
+    /// key without text, an icon the pack lacks, a chance outside 0 to 1.
+    ///
+    /// # Examples
+    ///
+    /// See the [module](crate::packs).
+    pub fn parse(namespace: &str, files: &PackFiles) -> Result<Self, ParsePackError> {
+        Self::parse_with(namespace, files, Vanilla::game())
+    }
+
+    /// Reads and checks a pack as [`Pack::parse`] does, with the vanilla
+    /// names of `vanilla`; without it, a pack names vanilla content by GUID
+    /// only and clones only the workbench.
+    ///
+    /// # Errors
+    ///
+    /// As [`Pack::parse`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::packs::{Pack, PackFiles};
+    ///
+    /// let files = PackFiles::new().with("items.toml", "[[item]]\nid = \"torch\"\nlike = \"Torch\"\n");
+    /// let errors = Pack::parse_with("lights", &files, None).err().ok_or("parsed")?;
+    /// assert!(errors.to_string().contains("items.toml:1"));
+    /// # Ok::<(), &str>(())
+    /// ```
+    pub fn parse_with(
+        namespace: &str,
+        files: &PackFiles,
+        vanilla: Option<&Vanilla>,
+    ) -> Result<Self, ParsePackError> {
+        let mut reader = Reader {
+            namespace,
+            files,
+            errors: Vec::new(),
+            defined: BTreeMap::new(),
+            vanilla,
+        };
+        let texts_text = match files.text(TEXTS_FILE) {
+            Ok(text) => text.unwrap_or("").to_owned(),
+            Err(error) => {
+                reader.errors.push(error);
+                String::new()
+            }
+        };
+        let texts = match toml::from_str::<BTreeMap<String, BTreeMap<String, String>>>(&texts_text)
+        {
+            Err(error) => {
+                reader
+                    .errors
+                    .push(PackError::of(TEXTS_FILE, &texts_text, &error));
+                None
+            }
+            Ok(_) => match Texts::parse(&texts_text) {
+                Ok(texts) => Some(texts),
+                Err(off) => {
+                    reader.error(TEXTS_FILE, &texts_text, 0, off.to_string());
+                    None
+                }
+            },
+        };
+        let (items_file, items_text): (ItemsFile, String) = reader.file(ITEMS_FILE);
+        let (workshops_file, workshops_text): (WorkshopsFile, String) = reader.file(WORKSHOPS_FILE);
+        let (recipes_file, recipes_text): (RecipesFile, String) = reader.file(RECIPES_FILE);
+        let (loot_file, loot_text): (LootFile, String) = reader.file(LOOT_FILE);
+        for entry in &items_file.item {
+            let at = entry.span().start;
+            reader.define(ITEMS_FILE, &items_text, at, &entry.get_ref().id, "item");
+        }
+        for entry in &workshops_file.workshop {
+            let at = entry.span().start;
+            reader.define(
+                WORKSHOPS_FILE,
+                &workshops_text,
+                at,
+                &entry.get_ref().id,
+                "workshop",
+            );
+        }
+        for entry in &recipes_file.recipe {
+            let at = entry.span().start;
+            reader.define(
+                RECIPES_FILE,
+                &recipes_text,
+                at,
+                &entry.get_ref().id,
+                "recipe",
+            );
+        }
+        let mut pack = Self {
+            namespace: namespace.to_owned(),
+            items: Vec::new(),
+            recipes: Vec::new(),
+            workshops: Vec::new(),
+            drops: Vec::new(),
+            changes: Vec::new(),
+            texts: texts_text,
+            hash: files.hash(),
+        };
+        pack.items = items(&mut reader, &items_file, &items_text, texts.as_ref());
+        pack.workshops = workshops(
+            &mut reader,
+            &workshops_file,
+            &workshops_text,
+            texts.as_ref(),
+        );
+        pack.recipes = recipes(&mut reader, &recipes_file, &recipes_text);
+        pack.drops = drops(&mut reader, &loot_file, &loot_text, &pack.items);
+        pack.changes = super::changes::item_changes(&mut reader, &items_file, &items_text);
+        if reader.errors.is_empty() {
+            Ok(pack)
+        } else {
+            Err(ParsePackError(reader.errors))
+        }
+    }
+
+    /// The content ids the pack defines, in the order it adds them.
+    ///
+    /// # Examples
+    ///
+    /// See the [module](crate::packs).
+    #[must_use]
+    pub fn ids(&self) -> Vec<&str> {
+        self.workshops
+            .iter()
+            .map(|w| w.id.as_str())
+            .chain(self.items.iter().map(|i| i.id.as_str()))
+            .chain(self.recipes.iter().map(|r| r.id.as_str()))
+            .collect()
+    }
+
+    /// The pack's loot drops.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::packs::{Pack, PackFiles};
+    ///
+    /// let files = PackFiles::new().with("loot.toml", r#"
+    /// [[drop]]
+    /// items = ["you.lockers:locker"]
+    /// chance = 0.1
+    /// from = "bosses"
+    /// "#);
+    /// let pack = Pack::parse("you.lanterns", &files)?;
+    /// assert_eq!(pack.drops().len(), 1);
+    /// # Ok::<(), enshwick::packs::ParsePackError>(())
+    /// ```
+    #[must_use]
+    pub fn drops(&self) -> &[Drop] {
+        &self.drops
+    }
+
+    /// The pack's changes of vanilla values, each with its source: the file
+    /// and line, then the name the pack wrote unless it is a GUID, such as
+    /// `items.toml:12 (Wood_Log)`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::content::changes::{Field, Value};
+    /// use enshwick::packs::{Pack, PackFiles};
+    ///
+    /// let files = PackFiles::new().with("items.toml", r#"
+    /// [[change]]
+    /// items = ["6943053a-32c1-4718-ae22-e61427ddf54d"]
+    /// max_stack = { times = 4 }
+    /// "#);
+    /// let pack = Pack::parse("you.stacks", &files)?;
+    /// let (change, source) = &pack.changes()[0];
+    /// assert_eq!((change.field, change.value), (Field::MaxStack, Value::Times(4.0)));
+    /// assert_eq!(source, "items.toml:2");
+    /// # Ok::<(), enshwick::packs::ParsePackError>(())
+    /// ```
+    #[must_use]
+    pub fn changes(&self) -> &[(Change, String)] {
+        &self.changes
+    }
+
+    /// Whether the pack adds or changes anything players' games read: items,
+    /// workshops, recipes, texts or changes of values. Such a pack runs on
+    /// the server and every player alike, so it keeps `join` on.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::packs::{Pack, PackFiles};
+    ///
+    /// let loot = PackFiles::new().with("loot.toml", r#"
+    /// [[drop]]
+    /// items = ["you.lockers:locker"]
+    /// chance = 0.1
+    /// from = "bosses"
+    /// "#);
+    /// assert!(!Pack::parse("you.loot", &loot)?.reaches_players());
+    /// # Ok::<(), enshwick::packs::ParsePackError>(())
+    /// ```
+    #[must_use]
+    pub fn reaches_players(&self) -> bool {
+        !(self.items.is_empty()
+            && self.workshops.is_empty()
+            && self.recipes.is_empty()
+            && self.changes.is_empty()
+            && self.texts.trim().is_empty())
+    }
+
+    /// Whether `other` adds the same content as this pack, its loot aside:
+    /// what a running game can take without a restart.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::packs::{Pack, PackFiles};
+    ///
+    /// let loot = |chance: &str| PackFiles::new().with("loot.toml", format!(
+    ///     "[[drop]]\nitems = [\"you.lockers:locker\"]\nchance = {chance}\nfrom = \"bosses\"\n"
+    /// ));
+    /// let before = Pack::parse("you.lanterns", &loot("0.1"))?;
+    /// let after = Pack::parse("you.lanterns", &loot("0.5"))?;
+    /// assert!(before.same_content(&after));
+    /// # Ok::<(), enshwick::packs::ParsePackError>(())
+    /// ```
+    #[must_use]
+    pub fn same_content(&self, other: &Self) -> bool {
+        self.namespace == other.namespace
+            && self.items == other.items
+            && self.recipes == other.recipes
+            && self.workshops == other.workshops
+            && self.changes == other.changes
+            && self.texts == other.texts
+    }
+
+    /// The hash of the files the pack was read from, as
+    /// [`PackFiles::hash`] gives it.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::packs::{Pack, PackFiles};
+    ///
+    /// let files = PackFiles::new();
+    /// assert_eq!(Pack::parse("empty", &files)?.hash(), files.hash());
+    /// # Ok::<(), enshwick::packs::ParsePackError>(())
+    /// ```
+    #[must_use]
+    pub fn hash(&self) -> u32 {
+        self.hash
     }
 }
 
@@ -414,6 +730,7 @@ pub(super) fn recipes(
     }
     out
 }
+
 /// The checked drops of `loot`.
 pub(super) fn drops(
     reader: &mut Reader<'_>,
@@ -478,4 +795,32 @@ pub(super) fn drops(
         }
     }
     drops
+}
+
+/// A content id the pack built at run time; ids live for the process.
+pub(super) fn id(full: &str) -> Result<Id, Off> {
+    let name: &'static str = Box::leak(full.to_owned().into_boxed_str());
+    Id::try_new(name).ok_or_else(|| Off::new(format!("data pack: {full:?} is no content id")))
+}
+
+/// The group of a pack's drops, which a reload replaces.
+#[must_use]
+pub(crate) fn group(namespace: &str) -> u64 {
+    namespace
+        .bytes()
+        .fold(0xcbf2_9ce4_8422_2325_u64, |hash, b| {
+            (hash ^ u64::from(b)).wrapping_mul(0x0000_0100_0000_01b3)
+        })
+        | 1
+}
+
+/// Replaces the drops of the pack `namespace` with `drops`, as the loader
+/// does when a pack's `loot.toml` changes.
+///
+/// # Errors
+///
+/// Why they take a restart instead.
+#[doc(hidden)]
+pub fn reload_loot(namespace: &str, drops: Vec<Drop>) -> Result<(), String> {
+    crate::loot::replace_group(group(namespace), drops)
 }

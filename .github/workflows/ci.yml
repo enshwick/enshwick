@@ -25,9 +25,10 @@ on:
 permissions: {}
 
 concurrency:
-  # A push to main cancels the push before it, never the nightly run.
+  # Only a pull request's newer push cancels its older run: a run on main
+  # fills the caches pull requests start from and must finish.
   group: ci-${{ github.event_name }}-${{ github.head_ref || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   rust:

@@ -2,9 +2,10 @@
 
 use std::collections::HashMap;
 
+use super::ITEMS_FILE;
 use super::entries::{ItemsFile, ValueEntry};
-use super::read::Reader;
-use super::{ITEMS_FILE, PackError};
+use super::files::PackError;
+use super::pack::Reader;
 use crate::content::Guid;
 use crate::content::changes::{Change, Field, Value};
 

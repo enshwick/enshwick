@@ -105,6 +105,7 @@ pub mod pacing;
 pub mod packs;
 pub mod points;
 pub mod progress;
+pub mod rates;
 pub mod raw;
 #[cfg(doctest)]
 mod refused;
@@ -577,7 +578,8 @@ pub mod __private {
             core::ptr::null_mut(),
         );
         let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            M::init(&mut Load::new(host))
+            let joins = M::manifest().flags.contains(ManifestFlags::JOIN);
+            M::init(&mut Load::of(host, joins))
         }));
         match outcome {
             Ok(Ok(state)) => match slot.0.set(state) {

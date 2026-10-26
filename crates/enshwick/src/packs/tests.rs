@@ -1,8 +1,10 @@
-use super::*;
+use crate::content::Guid;
 use crate::content::changes::{Change, Field, Value};
 use crate::content::vanilla::Vanilla;
 use crate::content::workshops::stations;
 use crate::loot::Kinds;
+
+use super::*;
 
 const CHEST: &str = "6943053a-32c1-4718-ae22-e61427ddf54d";
 

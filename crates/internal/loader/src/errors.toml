@@ -105,6 +105,12 @@ cause = "A mod keeps data the game cannot open without it, and it does not run n
 fix = "Update Enshwick and the mod. To open the world anyway, at your own risk, delete the hold file the log names."
 
 [[error]]
+code = "E2008"
+title = "A file in mods/chain did not load"
+cause = "Enshwick starts every DLL in mods/chain/ before its own mods, and this one did not start."
+fix = "Download the other mod again. Under Proton, add the file's name to WINEDLLOVERRIDES as well."
+
+[[error]]
 code = "E3001"
 title = "The server runs mods you lack"
 cause = "The server needs mods you do not have, or have in another version, so you do not join."

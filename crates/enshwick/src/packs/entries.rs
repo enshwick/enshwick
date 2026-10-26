@@ -1,10 +1,5 @@
-//! The TOML forms of a pack's files, as serde reads them.
-
 use serde::Deserialize;
 use toml::Spanned;
-
-#[cfg(feature = "schema")]
-use super::{ITEMS_FILE, LOOT_FILE, MANIFEST_FILE, PackManifest, RECIPES_FILE, WORKSHOPS_FILE};
 
 /// The number format of a tooltip line.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Deserialize)]
@@ -211,6 +206,9 @@ pub(super) struct LootFile {
 #[cfg(feature = "schema")]
 #[must_use]
 pub fn schemas() -> Vec<(&'static str, String)> {
+    use super::manifest::PackManifest;
+    use super::{ITEMS_FILE, LOOT_FILE, MANIFEST_FILE, RECIPES_FILE, WORKSHOPS_FILE};
+
     #[derive(schemars::JsonSchema)]
     #[schemars(deny_unknown_fields)]
     #[expect(dead_code, reason = "only its schema is read")]

@@ -83,6 +83,12 @@ revision = 1
 "skill.fly_mode_gate_return" = { rva = 0xc_5725, pattern = "48 8B 95 ?? ?? ?? ?? 8B 0D ?? ?? ?? ?? E8 ?? ?? ?? ?? 84 C0 74 04 B3 01 EB 02 32 DB", at = 18 }
 "experience.need_for_level" = { rva = 0x93_4910, pattern = "4C 8B 4A ?? 44 8B D1 4D 85 C9 75 06 B8 01 00 00 00" }
 "experience.level_cap" = { rva = 0x93_6580, pattern = "48 8B 41 20 48 85 C0 75 06 B8 01 00 00 00 C3 8B 40 10" }
+"experience.source_factor" = { rva = 0x92_d380, pattern = "4C 8B 81 90 00 00 00 0F B6 C2 FF C8 83 F8 05 77 2A 48 8D 15 ?? ?? ?? ??" }
+"experience.kill" = { rva = 0x92_d290, pattern = "4C 8B 54 24 28 0F 28 E2 4D 8B 42 20 4D 85 C0 75 03 33 C0 C3 80 7A 04 00 74 04 8B 02 EB 02 8B C1" }
+"settings.factory_speed" = { rva = 0x92_d530, pattern = "48 8B 81 90 00 00 00 F3 0F 10 48 3C 0F 28 C1 0F 57 05 ?? ?? ?? ?? F3 0F" }
+"settings.resource_drops" = { rva = 0x93_7430, pattern = "48 8B 81 90 00 00 00 F3 0F 10 40 38 C3" }
+"skill.points_per_level" = { rva = 0x93_aab0, pattern = "48 8B 41 20 48 85 C0 75 06 B8 01 00 00 00 C3 8B 80 B4 00 00 00 C3" }
+"loot.stack_roll" = { rva = 0x16_6180, pattern = "48 89 5C 24 08 48 89 6C 24 10 48 89 74 24 18 57 41 54 41 55 41 56 41 57 48 83 EC 30 4D 8B 58 10" }
 "access.offer_test" = { rva = 0x9_f120, pattern = "48 8B C4 48 89 58 ?? 4C 89 40 ?? 55 56 57 41 54 41 55 41 56 41 57 48 8D A8 ?? ?? ?? ?? 48 81 EC 10 02 00 00 4C 8B 32" }
 "access.transfer" = { rva = 0x19_90a0, pattern = "40 55 53 56 41 54 41 57 48 8D AC 24 ?? ?? ?? ?? B8 40 73 00 00" }
 "access.sort" = { rva = 0x19_9ba0, pattern = "48 89 4C 24 ?? 55 53 57 41 56 48 8D AC 24 ?? ?? ?? ?? B8 88 81 00 00" }

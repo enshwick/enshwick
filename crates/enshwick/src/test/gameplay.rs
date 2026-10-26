@@ -540,8 +540,9 @@ impl Installed {
             .unwrap_or(SkillCheck::VANILLA)
     }
 
-    /// Runs the mod's comfort filters on `comfort` as the loader would; the
-    /// comfort registered.
+    /// Runs the mod's comfort filters on `comfort` as the loader would, then
+    /// its comfort rate ([`Rate::Comfort`](crate::rates::Rate::Comfort));
+    /// the comfort registered.
     ///
     /// # Examples
     ///
@@ -555,14 +556,17 @@ impl Installed {
     #[must_use]
     pub fn comfort(&self, comfort: &Comfort) -> i32 {
         let filters = table::with(Vec::new(), |s| s.comfort_filters.clone());
-        filters
+        let filtered = filters
             .iter()
             .fold(comfort.value, |value, &(callback, user)| {
                 let call = Comfort { value, ..*comfort };
                 let user = core::ptr::with_exposed_provenance_mut(user);
                 // SAFETY: a valid registration; `user` is the mod's pointer.
                 unsafe { callback(&raw const call, user) }
-            })
+            });
+        let factor = self.rate(crate::rates::Rate::Comfort).unwrap_or(1.0);
+        let scaled = crate::rates::scale_whole(i64::from(filtered), factor);
+        i32::try_from(scaled).unwrap_or(if scaled < 0 { i32::MIN } else { i32::MAX })
     }
 
     /// Runs the mod's experience filters on `rows` as the loader would, with

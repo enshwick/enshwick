@@ -343,4 +343,6 @@ marked "init only" are allowed during `enshwick_mod_init` only.
 | `actions`                | Registers the mod's player actions, asked for sheets, runs and hints; init only                      | 66          |
 | `event_types`            | Every game event type the running build reflects, with hash and size; any thread                     | 72          |
 | `recipe_kind`            | The kind of the recipes that make an item, from its loaded static data; any thread                   | 73          |
-| `change_data`            | Declares a change of a vanilla value, which the loader merges with every mod's; init only            | 75          |
+| `rate`                   | Declares a game rate the mod multiplies; init only                                                   | 75          |
+| `set_rate`               | Puts the mod's factor for a declared rate in force, 0 to 100; any thread                             | 75          |
+| `change_data`            | Declares a change of a vanilla value, which the loader merges with every mod's; init only            | 76          |

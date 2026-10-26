@@ -37,8 +37,8 @@ use entries::gameplay::{
     account_knowledge, affix_info, affix_open, affix_roll, altar_limit, altar_zones_control,
     altars, altars_open, apply_buff, base_zones, buff_types, buffs, build_filter, comfort_filter,
     craft_filter, damage_filter, experience_filter, grant_knowledge, interaction_filter,
-    item_lines, knowledge, knowledge_input_filter, quests, raise_base_limit, remove_buff,
-    revoke_knowledge, set_altar_zones, skill_override, stat_buff, stat_info, stat_modify,
+    item_lines, knowledge, knowledge_input_filter, quests, raise_base_limit, rate, remove_buff,
+    revoke_knowledge, set_altar_zones, set_rate, skill_override, stat_buff, stat_info, stat_modify,
     stat_open, stat_sources, stat_value, stat_watch, stats_changed, summon_filter, summon_item,
     summoned, survivor_bed_check, survivor_lookup, survivor_status, zone_check_filter,
 };
@@ -365,6 +365,36 @@ impl Loader {
             hop: None,
         };
         self.chains.relock().add(target, link)
+    }
+
+    /// Whether the code at symbol `id` is what the table expects: its
+    /// pattern matches where the symbol's code starts, on the build the
+    /// table was made for; a table carried over found it by that pattern,
+    /// which holds only where it matches once with its bytes. False for a
+    /// symbol the build lacks or whose pattern finds it through a
+    /// displacement.
+    pub(crate) fn code_holds(&self, id: Symbol) -> bool {
+        let (Some(address), Some((pattern, at))) = (self.address(id), self.build.head(id.id()))
+        else {
+            return false;
+        };
+        if self.build.kind == crate::builds::Kind::Fallback {
+            return true;
+        }
+        let Some(start) = address
+            .checked_sub(at)
+            .and_then(|a| usize::try_from(a).ok())
+        else {
+            return false;
+        };
+        let mut code = vec![0u8; pattern.len()];
+        // SAFETY: `start` is the table's `id` less the distance its pattern
+        // starts before it, code inside the game's image, which stays mapped
+        // and readable for the life of the process; a pattern spans code of
+        // the function it was made from, which the table checks against
+        // its build.
+        unsafe { crate::memory::read_bytes(start, 0, &mut code) };
+        pattern.matches(&code)
     }
 
     /// [`Loader::link`] for a feature, logging why it stays off: a target
@@ -704,6 +734,8 @@ pub(crate) static API: HostApi = HostApi {
     event_types,
     recipe_kind,
     feature,
+    rate,
+    set_rate,
     change_data,
 };
 
