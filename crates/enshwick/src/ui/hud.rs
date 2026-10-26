@@ -4,9 +4,11 @@ use core::ffi::c_void;
 use core::marker::PhantomData;
 use std::sync::Mutex;
 
-use super::{Label, client_only};
 use crate::abi::{Str, UiFrame, UiWidget};
+use crate::locks::Relock;
 use crate::{Host, Load, Off};
+
+use super::{Label, client_only};
 
 /// Where on the HUD a line or bar shows; items at one anchor stack in the
 /// order drawn.
@@ -135,9 +137,7 @@ where
         "panic in a HUD callback",
         || (),
         || {
-            let Ok(mut draw) = drawer.draw.lock() else {
-                return;
-            };
+            let mut draw = drawer.draw.relock();
             (draw)(&mut Hud {
                 host,
                 token: raw.token,

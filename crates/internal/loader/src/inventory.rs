@@ -21,7 +21,7 @@
 use core::ffi::c_void;
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::{Mutex, OnceLock, PoisonError};
+use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 use enshwick::abi::{
@@ -31,6 +31,7 @@ use enshwick::abi::{
 
 use crate::chains::LOADER;
 use crate::host::Loader;
+use crate::locks::Relock;
 use crate::memory::{read, read_ptr, write};
 use crate::mid::MidLink;
 
@@ -266,7 +267,7 @@ impl Queue {
     }
 
     fn push(&self, request: Request) {
-        let mut requests = self.requests.lock().unwrap_or_else(PoisonError::into_inner);
+        let mut requests = self.requests.relock();
         requests.push_back(request);
         self.pending.store(true, Ordering::Release);
     }
@@ -277,7 +278,7 @@ impl Queue {
         if !self.pending.load(Ordering::Acquire) {
             return None;
         }
-        let mut requests = self.requests.lock().unwrap_or_else(PoisonError::into_inner);
+        let mut requests = self.requests.relock();
         let request = requests.pop_front();
         self.pending.store(!requests.is_empty(), Ordering::Release);
         request
@@ -288,7 +289,7 @@ impl Queue {
         if !self.pending.load(Ordering::Acquire) {
             return Vec::new();
         }
-        let mut requests = self.requests.lock().unwrap_or_else(PoisonError::into_inner);
+        let mut requests = self.requests.relock();
         let mut gone = Vec::new();
         requests.retain_mut(|r| {
             let late = expired(r);
@@ -535,10 +536,7 @@ pub(crate) fn link(loader: &Loader) {
         priority: i32::MIN,
         flags: HookFlags::NONE,
     };
-    let status = loader
-        .mids
-        .lock()
-        .map_or(Status::REFUSED, |mut mids| mids.add(executor.site, link));
+    let status = loader.mids.relock().add(executor.site, link);
     if !status.is_ok() {
         crate::log!(
             WARN,
@@ -579,10 +577,7 @@ pub(crate) fn forget() {
 }
 
 fn finish(results: impl IntoIterator<Item = Finished>) {
-    FINISHED
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .extend(results);
+    FINISHED.relock().extend(results);
 }
 
 /// Queues a request of the mod `owner`.
@@ -723,7 +718,7 @@ pub(crate) fn deliver() {
         );
     }
     let finished = {
-        let mut finished = FINISHED.lock().unwrap_or_else(PoisonError::into_inner);
+        let mut finished = FINISHED.relock();
         if finished.is_empty() {
             return;
         }

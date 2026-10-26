@@ -3,7 +3,7 @@
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, LazyLock, Mutex, OnceLock, PoisonError};
+use std::sync::{Arc, LazyLock, Mutex, OnceLock};
 use std::time::SystemTime;
 
 use arc_swap::ArcSwap;
@@ -15,13 +15,15 @@ use enshwick::content::workshops::{WORKSHOP_REGISTRY, WorkshopLayout};
 use enshwick::content::{Blob, Guid, types};
 use rustc_hash::{FxHashMap, FxHashSet};
 
+use crate::host::Loader;
+use crate::locks::Relock;
+use crate::settings::LOADER_ID;
+use crate::texts;
+
 use super::{
     FILE, Index, Kind, Names, Rule, RuleFile, Source, TEMPLATE, WORLD_FILE, compose, describe,
     edit_file, find, parts, resolve,
 };
-use crate::host::Loader;
-use crate::settings::LOADER_ID;
-use crate::texts;
 
 /// The most ids one message to a client carries.
 const PER_MESSAGE: usize = 1400;
@@ -77,7 +79,7 @@ static LAYOUT: OnceLock<Option<RecipeLayout>> = OnceLock::new();
 static DIRTY: AtomicBool = AtomicBool::new(true);
 
 fn live<R>(work: impl FnOnce(&mut Live) -> R) -> R {
-    let mut guard = LIVE.lock().unwrap_or_else(PoisonError::into_inner);
+    let mut guard = LIVE.relock();
     work(guard.get_or_insert_with(Live::default))
 }
 

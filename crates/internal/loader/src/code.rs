@@ -9,7 +9,7 @@
 //! hooks are not armed with it, turning its owner off.
 
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Mutex, OnceLock, PoisonError};
+use std::sync::{Mutex, OnceLock};
 
 use enshwick::abi::{HookFlags, Status};
 use enshwick::code::Pattern;
@@ -17,6 +17,7 @@ use rustc_hash::FxHashMap;
 
 use crate::chains::{LOADER, Next};
 use crate::host::Loader;
+use crate::locks::Relock;
 
 /// The game's own number of recipes per workshop.
 const WORKSHOP_RECIPES: usize = 512;
@@ -152,7 +153,7 @@ pub(crate) fn register_all(patches: Vec<CodePatch>, text: (usize, usize)) -> Sta
     {
         return Status::BAD_ARGS;
     }
-    let mut pending = PENDING.lock().unwrap_or_else(PoisonError::into_inner);
+    let mut pending = PENDING.relock();
     let clash = patches.iter().enumerate().any(|(i, patch)| {
         pending
             .iter()
@@ -169,7 +170,7 @@ pub(crate) fn register_all(patches: Vec<CodePatch>, text: (usize, usize)) -> Sta
 /// Ends registration and hands over every patch.
 pub(crate) fn seal() -> Vec<CodePatch> {
     SEALED.store(true, Ordering::Release);
-    std::mem::take(&mut *PENDING.lock().unwrap_or_else(PoisonError::into_inner))
+    std::mem::take(&mut *PENDING.relock())
 }
 
 /// What arming does with each patch, given the bytes the hooks being armed

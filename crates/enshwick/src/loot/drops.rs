@@ -9,11 +9,12 @@
 //! item's place at its chance.
 
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex, PoisonError};
+use std::sync::{Arc, Mutex};
 
 use crate::ecs::{Components, Entity};
 use crate::fresh::Fresh;
 use crate::inventory::Fill;
+use crate::locks::Relock;
 use crate::raw::{read_at, read_ptr_at, write_at};
 use crate::{Load, Next, Off};
 
@@ -591,24 +592,13 @@ unsafe fn add_drops(res: *mut u8, txn: *mut u8, request: *const u8) {
     // and the caller guarantees they are the roll's live arguments on its
     // thread.
     let (roll, _) = unsafe { engine.roll(txn, request) };
-    for watcher in WATCHERS
-        .get_or_init(Mutex::default)
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .iter()
-    {
-        watcher
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .push(roll);
+    for watcher in WATCHERS.get_or_init(Mutex::default).relock().iter() {
+        watcher.relock().push(roll);
     }
     let Some(container) = roll.entity else {
         return;
     };
-    let drops = DROPS
-        .get_or_init(Mutex::default)
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner);
+    let drops = DROPS.get_or_init(Mutex::default).relock();
     let absent = [0u8; 16];
     for drop in drops
         .iter()
@@ -699,10 +689,7 @@ unsafe fn add_one(res: *mut u8, out: *mut u8) {
         boss: false,
         locked: false,
     };
-    let drops = DROPS
-        .get_or_init(Mutex::default)
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner);
+    let drops = DROPS.get_or_init(Mutex::default).relock();
     let Some((item, count, _)) = drops
         .iter()
         .map(|(_, d)| d)
@@ -745,8 +732,7 @@ pub(crate) fn watch_rolls(load: &mut Load<'_>) -> Result<Arc<Mutex<Vec<Roll>>>, 
     let queue = Arc::new(Mutex::new(Vec::new()));
     WATCHERS
         .get_or_init(Mutex::default)
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
+        .relock()
         .push(Arc::clone(&queue));
     Ok(queue)
 }
@@ -802,8 +788,7 @@ impl Load<'_> {
         }
         DROPS
             .get_or_init(Mutex::default)
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
+            .relock()
             .push((group, drop));
         Ok(())
     }
@@ -863,10 +848,7 @@ pub(crate) fn replace_group(group: u64, drops: Vec<Drop>) -> Result<(), String> 
             );
         }
     }
-    let mut all = DROPS
-        .get_or_init(Mutex::default)
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner);
+    let mut all = DROPS.get_or_init(Mutex::default).relock();
     all.retain(|(g, _)| *g != group);
     all.extend(drops.into_iter().map(|drop| (group, drop)));
     Ok(())

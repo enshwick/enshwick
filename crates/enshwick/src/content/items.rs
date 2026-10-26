@@ -1,11 +1,13 @@
 //! New items: an item cloned from a vanilla one, listed in the item registry,
 //! with its own name, tooltip lines and a meter each item keeps.
 
-use std::sync::{Mutex, PoisonError};
+use std::sync::Mutex;
+
+use crate::abi::ItemData;
+use crate::locks::Relock;
+use crate::{Load, Off};
 
 use super::{Blob, Guid, Id, types};
-use crate::abi::ItemData;
-use crate::{Load, Off};
 
 /// The meter templates the mod serves.
 static METERS: crate::fresh::Fresh<Mutex<Vec<Meter>>> = crate::fresh::Fresh::new();
@@ -712,10 +714,7 @@ impl Load<'_> {
         })?;
         if let Some(meter) = meter {
             // Items of one kind may share their template: serve it once.
-            let mut served = METERS
-                .get_or_init(Mutex::default)
-                .lock()
-                .unwrap_or_else(PoisonError::into_inner);
+            let mut served = METERS.get_or_init(Mutex::default).relock();
             match served.iter().find(|m| m.template == meter.template) {
                 Some(same) if *same == meter => return Ok(()),
                 Some(_) => {

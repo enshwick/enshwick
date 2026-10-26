@@ -6,13 +6,14 @@
 
 use core::ffi::c_void;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Mutex, OnceLock, PoisonError};
+use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 use enshwick::abi::{Side, Status, StatusFn, Str};
 
 use crate::diag::{HookStat, ModStatus, Summary};
 use crate::host::Loader;
+use crate::locks::Relock;
 use crate::settings::LOADER_ID;
 
 /// How often the writer looks at the clock and for requests.
@@ -40,14 +41,11 @@ pub(crate) fn mark_start() {
 
 /// Adds mod `owner`'s status source.
 pub(crate) fn register(owner: usize, callback: StatusFn, user: *mut c_void) -> Status {
-    SOURCES
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .push(Source {
-            owner,
-            callback,
-            user: user.expose_provenance(),
-        });
+    SOURCES.relock().push(Source {
+        owner,
+        callback,
+        user: user.expose_provenance(),
+    });
     Status::OK
 }
 
@@ -98,10 +96,7 @@ fn hook_name(loader: &Loader, target: u64) -> String {
 
 /// Takes the summary now.
 pub(crate) fn summary(loader: &Loader) -> Summary {
-    let sources = SOURCES
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .clone();
+    let sources = SOURCES.relock().clone();
     let mods = loader
         .mods
         .iter()
@@ -133,8 +128,9 @@ pub(crate) fn summary(loader: &Loader) -> Summary {
                 .map_or_else(|| "?".to_owned(), |m| m.id.clone())
         }
     };
-    let (targets, hooks) = match loader.chains.lock() {
-        Ok(chains) => {
+    let (targets, hooks) = {
+        let chains = loader.chains.relock();
+        {
             let targets = chains.iter().filter(|c| c.head.is_some()).count();
             let hooks = crate::diag::counting().then(|| {
                 crate::patch::counters()
@@ -150,7 +146,6 @@ pub(crate) fn summary(loader: &Loader) -> Summary {
             });
             (targets, hooks)
         }
-        Err(_) => (0, None),
     };
     Summary {
         version: env!("CARGO_PKG_VERSION").to_owned(),
@@ -272,7 +267,8 @@ fn chain_readings(
 /// Starts a new profile window now.
 pub(crate) fn reset_profile(loader: &Loader) {
     let mut hops = rustc_hash::FxHashMap::default();
-    if let Ok(chains) = loader.chains.lock() {
+    {
+        let chains = loader.chains.relock();
         for chain in chains.iter() {
             let all = chain
                 .links
@@ -287,7 +283,7 @@ pub(crate) fn reset_profile(loader: &Loader) {
             }
         }
     }
-    *BASELINE.lock().unwrap_or_else(PoisonError::into_inner) = Baseline {
+    *BASELINE.relock() = Baseline {
         at: Some(Instant::now()),
         hops,
         buckets: crate::profile::buckets(),
@@ -300,10 +296,10 @@ pub(crate) fn costs(loader: &Loader) -> Option<(Vec<crate::profile::Cost>, Durat
     if !crate::diag::counting() {
         return None;
     }
-    let base = BASELINE.lock().unwrap_or_else(PoisonError::into_inner);
-    let chains = match loader.chains.lock() {
-        Ok(chains) => chain_readings(loader, &chains, &base),
-        Err(_) => Vec::new(),
+    let base = BASELINE.relock();
+    let chains = {
+        let chains = loader.chains.relock();
+        chain_readings(loader, &chains, &base)
     };
     let name = |owner: usize| {
         if owner == crate::chains::LOADER {
@@ -362,8 +358,9 @@ pub(crate) fn conflicts(loader: &Loader) -> Vec<String> {
                 .map_or_else(|| "?".to_owned(), |m| m.id.clone())
         }
     };
-    let mut hooks: Vec<Hooked> = match loader.chains.lock() {
-        Ok(chains) => {
+    let mut hooks: Vec<Hooked> = {
+        let chains = loader.chains.relock();
+        {
             let mut hooks: Vec<Hooked> = chains
                 .iter()
                 .map(|chain| Hooked {
@@ -389,9 +386,9 @@ pub(crate) fn conflicts(loader: &Loader) -> Vec<String> {
             hooks.sort_by(|a, b| a.name.cmp(&b.name));
             hooks
         }
-        Err(_) => Vec::new(),
     };
-    if let Ok(mids) = loader.mids.lock() {
+    {
+        let mids = loader.mids.relock();
         for address in mids.addresses() {
             let owners = mids.owners(address);
             if owners.len() >= 2 {
