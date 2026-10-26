@@ -10,7 +10,7 @@
 //! use enshwick::content::Guid;
 //! use enshwick::content::changes::{Change, Field, Value};
 //!
-//! const WOOD: Guid = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");
+//! const WOOD: Guid = Guid::parse("3f4093ae-75ed-4e5d-bd0b-784ba83b88f5");
 //!
 //! fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 //!     load.change(&Change::new(WOOD, Field::MaxStack, Value::Set(999.0)), "my-mod")

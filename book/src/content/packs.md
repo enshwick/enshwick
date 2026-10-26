@@ -179,7 +179,7 @@ later pack [requires](#packtoml) the other, it overrides it on purpose and
 the line is information:
 
 ```text
-warn  [you.stacks] max_stack of 6943053a-32c1-4718-ae22-e61427ddf54d is 999 from you.stacks items.toml:2 (Material_T1_Wood_Logs), which overrides 500 from ann.bags items.toml:7 (Material_T1_Wood_Logs)
+warn  [you.stacks] max_stack of 3f4093ae-75ed-4e5d-bd0b-784ba83b88f5 is 999 from you.stacks items.toml:2 (Material_T1_Wood_Logs), which overrides 500 from ann.bags items.toml:7 (Material_T1_Wood_Logs)
 ```
 
 A Rust mod declares the same changes with
