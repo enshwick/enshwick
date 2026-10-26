@@ -579,7 +579,8 @@ fn player_at(layout: &Layout, slot: usize, index: usize, entity: u32, infos: usi
 /// hash field.
 pub(crate) fn type_hash(descriptor: u64) -> Option<u32> {
     let address =
-        usize::try_from(descriptor.checked_add(enshwick_reflect::DESCRIPTOR_HASH)?).ok()?;
+        usize::try_from(descriptor.checked_add(enshwick_gamedata::reflect::DESCRIPTOR_HASH)?)
+            .ok()?;
     // SAFETY: callers pass the address of a reflected type descriptor in the
     // game's image, which stays mapped and is not written after load;
     // `DESCRIPTOR_HASH` is the offset of its eight-byte hash field.

@@ -70,7 +70,10 @@ pub fn fingerprint(
     for (id, values) in synced {
         let _written = write!(text, "\nsync {id} {values}");
     }
-    format!("{:08x}", enshwick_reflect::fnv1a32(text.as_bytes()))
+    format!(
+        "{:08x}",
+        enshwick_gamedata::reflect::fnv1a32(text.as_bytes())
+    )
 }
 
 /// `value` cut into parts of at most [`RULE_LIMIT`] bytes, on character

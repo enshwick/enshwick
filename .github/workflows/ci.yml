@@ -36,6 +36,6 @@ jobs:
     permissions:
       contents: read
     with:
-      # The pure crates whose tests finish under Miri in seconds; the build
-      # tables' archive tests take more than ten minutes there.
-      miri: enshwick-reflect
+      # The pure crates whose tests finish under Miri in minutes; the tests
+      # that unpack the archive or parse every table skip themselves there.
+      miri: enshwick-gamedata
