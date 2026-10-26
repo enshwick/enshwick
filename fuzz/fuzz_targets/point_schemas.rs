@@ -115,6 +115,7 @@ fn written(text: &str) {
         let Ok(file) = parsed else {
             continue;
         };
+        check_attributes(&file.attrs);
         file.items.iter().for_each(check_item);
     }
 }
