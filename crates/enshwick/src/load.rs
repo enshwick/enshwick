@@ -931,7 +931,7 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// #[enshwick::service(name = "trading-post:prices")]
+    /// #[enshwick::service(name = "you.trading-post:prices")]
     /// pub struct Prices {
     ///     pub price: extern "system" fn(item: u32) -> u32,
     /// }
@@ -975,7 +975,7 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// #[enshwick::service(name = "trading-post:prices")]
+    /// #[enshwick::service(name = "you.trading-post:prices")]
     /// pub struct Prices {
     ///     pub price: extern "system" fn(item: u32) -> u32,
     /// }
@@ -999,7 +999,7 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// #[enshwick::service(name = "trading-post:prices")]
+    /// #[enshwick::service(name = "you.trading-post:prices")]
     /// pub struct Prices {
     ///     pub price: extern "system" fn(item: u32) -> u32,
     /// }
@@ -1089,7 +1089,7 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// #[enshwick::event(name = "trading-post:sold")]
+    /// #[enshwick::event(name = "you.trading-post:sold")]
     /// #[derive(Clone, Copy, Debug)]
     /// pub struct Sold {
     ///     pub item: u32,
