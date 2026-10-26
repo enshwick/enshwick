@@ -100,20 +100,45 @@ fn replace_path(text: &str, path: &str, with: &str) -> String {
     if needle.is_empty() {
         return text.to_owned();
     }
-    let haystack = fold_text(text);
+    let folded = fold_text(text);
     let mut out = String::with_capacity(text.len());
-    let mut at = 0;
-    while let Some(found) = haystack[at..].find(&needle) {
-        let start = at + found;
-        out.push_str(&text[at..start]);
-        out.push_str(with);
-        at = start + needle.len();
+    let (mut at, mut i) = (0, 0);
+    while i < folded.len() {
+        match match_at(folded.as_bytes(), i, needle.as_bytes()) {
+            Some(end) => {
+                out.push_str(&text[at..i]);
+                out.push_str(with);
+                (at, i) = (end, end);
+            }
+            None => i += 1,
+        }
     }
     out.push_str(&text[at..]);
     out
 }
 
-/// `text` folded for comparing paths: ASCII lower case and `/` as `\\`, its
+/// Where `needle` ends when it matches the folded `text` at `start`; each
+/// separator of `needle` matches a run of them, as a path printed with
+/// escaped backslashes has.
+fn match_at(text: &[u8], start: usize, needle: &[u8]) -> Option<usize> {
+    let mut at = start;
+    for &want in needle {
+        if want == b'\\' {
+            let run = text[at..].iter().take_while(|&&b| b == b'\\').count();
+            if run == 0 {
+                return None;
+            }
+            at += run;
+        } else if text.get(at) == Some(&want) {
+            at += 1;
+        } else {
+            return None;
+        }
+    }
+    Some(at)
+}
+
+/// `text` folded for comparing paths: ASCII lower case and `/` as `\`, its
 /// other characters kept, so its byte offsets are `text`'s.
 fn fold_text(text: &str) -> String {
     text.chars()
@@ -128,16 +153,20 @@ fn fold_text(text: &str) -> String {
 /// `/home/ann` or Wine's `Z:\home\ann`, as `<user>`.
 fn linux_users(text: &str) -> String {
     let folded = fold_text(text);
+    let bytes = folded.as_bytes();
     let mut out = String::with_capacity(text.len());
-    let mut at = 0;
-    while let Some(found) = folded[at..].find("\\home\\") {
-        let name = at + found + "\\home\\".len();
+    let (mut at, mut i) = (0, 0);
+    while i < bytes.len() {
+        let Some(name) = match_at(bytes, i, b"\\home\\") else {
+            i += 1;
+            continue;
+        };
         let end = folded[name..]
-            .find(|c: char| c == '\\' || c.is_whitespace() || c == '`')
+            .find(|c: char| c == '\\' || c.is_whitespace() || c == '`' || c == '"')
             .map_or(text.len(), |len| name + len);
         out.push_str(&text[at..name]);
         out.push_str("<user>");
-        at = end;
+        (at, i) = (end, end);
     }
     out.push_str(&text[at..]);
     out
@@ -292,6 +321,22 @@ mod tests {
         assert_eq!(
             redact(text, "C:\\nowhere", None),
             "Z:\\home\\<user>\\.local\\share\\Steam and /home/<user>/x and `/home/<user>`"
+        );
+    }
+
+    #[test]
+    fn a_path_printed_with_escaped_backslashes_shows_without_the_user_name() {
+        assert_eq!(
+            redact(
+                r"C:\\Users\\ann\\AppData\\x",
+                "D:\\Games",
+                Some("C:\\Users\\ann")
+            ),
+            r"%USERPROFILE%\\AppData\\x"
+        );
+        assert_eq!(
+            redact(r#""Z:\\home\\ann\\.steam\\x""#, "D:\\Games", None),
+            r#""Z:\\home\\<user>\\.steam\\x""#
         );
     }
 

@@ -118,7 +118,12 @@ pub(super) fn begin(stub_abi: u32, missing_forwards: u32) -> Option<PathBuf> {
             "{missing_forwards} powrprof.dll exports are missing on this system"
         );
     }
-    crate::report::write(&game_dir, stub_abi, None);
+    // On a thread of its own: the report waits for the log, which the start,
+    // holding the server's entry, does not.
+    let report_dir = game_dir.clone();
+    let _spawned = std::thread::Builder::new()
+        .name("enshwick-report".into())
+        .spawn(move || crate::report::write(&report_dir, stub_abi, None));
     Some(mods_dir)
 }
 

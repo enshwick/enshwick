@@ -36,12 +36,21 @@ const KEPT_RUNS: usize = 2;
 type Line = (Level, String, String);
 
 static LINES: OnceLock<SyncSender<Line>> = OnceLock::new();
-/// Lines the full channel could not take since the writer last said so.
-static DROPPED: AtomicU64 = AtomicU64::new(0);
-/// Lines sent to the writer, and lines it has kept among the latest, for
-/// [`settle`].
-static SENT: AtomicU64 = AtomicU64::new(0);
-static TAKEN: AtomicU64 = AtomicU64::new(0);
+/// What the channel to the writer has carried.
+struct Counts {
+    /// Lines the full channel could not take since the writer last said so.
+    dropped: AtomicU64,
+    /// Lines sent to the writer, for [`settle`].
+    sent: AtomicU64,
+    /// Lines the writer has kept among the latest, for [`settle`].
+    taken: AtomicU64,
+}
+
+static COUNTS: Counts = Counts {
+    dropped: AtomicU64::new(0),
+    sent: AtomicU64::new(0),
+    taken: AtomicU64::new(0),
+};
 /// The latest [`RECENT`] lines, oldest first.
 static RECENT_LINES: Mutex<VecDeque<Line>> = Mutex::new(VecDeque::new());
 static LEVELS: ArcSwapOption<Settings> = ArcSwapOption::const_empty();
@@ -92,7 +101,7 @@ pub fn open(dir: &Path) {
             let mut files: std::collections::HashMap<String, Option<std::fs::File>> =
                 std::collections::HashMap::new();
             for (level, source, line) in receive {
-                let dropped = DROPPED.swap(0, Ordering::Relaxed);
+                let dropped = COUNTS.dropped.swap(0, Ordering::Relaxed);
                 if dropped > 0 {
                     let note = format_line(
                         now(),
@@ -104,7 +113,7 @@ pub fn open(dir: &Path) {
                     keep((Level::WARN, LOADER_ID.to_owned(), note));
                 }
                 keep((level, source.clone(), line.clone()));
-                TAKEN.fetch_add(1, Ordering::Release);
+                COUNTS.taken.fetch_add(1, Ordering::Release);
                 let _all = all.write_all(line.as_bytes()).and_then(|()| all.flush());
                 let file = files.entry(source).or_insert_with_key(|source| {
                     let path = if source == LOADER_ID {
@@ -248,10 +257,10 @@ pub fn write(level: Level, source: &str, message: &str) {
     );
     match lines.try_send(line) {
         Ok(()) => {
-            SENT.fetch_add(1, Ordering::Relaxed);
+            COUNTS.sent.fetch_add(1, Ordering::Relaxed);
         }
         Err(TrySendError::Full(_)) => {
-            DROPPED.fetch_add(1, Ordering::Relaxed);
+            COUNTS.dropped.fetch_add(1, Ordering::Relaxed);
         }
         Err(TrySendError::Disconnected(_)) => {}
     }
@@ -261,9 +270,9 @@ pub fn write(level: Level, source: &str, message: &str) {
 /// latest, so [`recent`] holds them, or `longest` passes; whether it did.
 /// Never on a game thread: it sleeps.
 pub fn settle(longest: Duration) -> bool {
-    let sent = SENT.load(Ordering::Relaxed);
+    let sent = COUNTS.sent.load(Ordering::Relaxed);
     let started = Instant::now();
-    while TAKEN.load(Ordering::Acquire) < sent {
+    while COUNTS.taken.load(Ordering::Acquire) < sent {
         if started.elapsed() >= longest {
             return false;
         }
