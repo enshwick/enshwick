@@ -68,7 +68,7 @@ keeps its altar table in an `ArcSwap` and the cap in force in an `AtomicU8`.
 Work that can wait goes elsewhere: to a thread of the mod's own, started in
 `Mod::ready`, or to the server's game thread through the
 [scheduler](events.md). File writes in particular never happen in a hook.
-[`enshwick-shared-experience`](https://github.com/enshwick/enshwick/blob/main/mods/enshwick-shared-experience/src/lib.rs)
+[`enshwick-shared-experience`](https://github.com/enshwick/mod-shared-experience/blob/main/src/lib.rs)
 writes its save on a thread it spawns from the `WorldSaved` handler.
 
 ## Unsafe code
