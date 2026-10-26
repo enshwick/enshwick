@@ -209,7 +209,7 @@ macro_rules! manifest {
 #[macro_export]
 macro_rules! declare_mod {
     ($ty:ty) => {
-        static __ENSHWICK_INSTANCE: ::std::sync::OnceLock<$ty> = ::std::sync::OnceLock::new();
+        static __ENSHWICK_INSTANCE: $crate::__private::Slot<$ty> = $crate::__private::Slot::new();
 
         impl $ty {
             /// The mod's state, once the loader has initialised it.

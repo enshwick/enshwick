@@ -9,9 +9,10 @@
 //! item's place at its chance.
 
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex, OnceLock, PoisonError};
+use std::sync::{Arc, Mutex, PoisonError};
 
 use crate::ecs::{Components, Entity};
+use crate::fresh::Fresh;
 use crate::inventory::Fill;
 use crate::raw::read_at;
 use crate::{Load, Next, Off};
@@ -430,15 +431,18 @@ struct Engine {
     lock_item: usize,
 }
 
-static ENGINE: OnceLock<Engine> = OnceLock::new();
+static ENGINE: Fresh<Engine> = Fresh::new();
 /// Every drop, with the group it belongs to: 0 for a mod's own, a content
 /// pack's hash for the pack's, which a reload replaces whole.
-static DROPS: Mutex<Vec<(u64, Drop)>> = Mutex::new(Vec::new());
+static DROPS: Fresh<Mutex<Vec<(u64, Drop)>>> = Fresh::new();
 /// Whether the single-item roll is linked.
-static ONE_LINKED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+static ONE_LINKED: Fresh<std::sync::atomic::AtomicBool> = Fresh::new();
 /// The queues of the rolls watchers asked to hear of.
-static WATCHERS: Mutex<Vec<Arc<Mutex<Vec<Roll>>>>> = Mutex::new(Vec::new());
-static DICE: OnceLock<Dice> = OnceLock::new();
+static WATCHERS: Fresh<Mutex<Vec<Watcher>>> = Fresh::new();
+
+/// The rolls one watcher collects.
+type Watcher = Arc<Mutex<Vec<Roll>>>;
+static DICE: Fresh<Dice> = Fresh::new();
 
 fn dice() -> &'static Dice {
     DICE.get_or_init(|| {
@@ -561,6 +565,7 @@ fn add_drops(res: *mut u8, txn: *mut u8, request: *const u8) {
     // SAFETY: the live arguments of the roll, on its thread.
     let (roll, _) = unsafe { engine.roll(txn, request) };
     for watcher in WATCHERS
+        .get_or_init(Mutex::default)
         .lock()
         .unwrap_or_else(PoisonError::into_inner)
         .iter()
@@ -573,7 +578,10 @@ fn add_drops(res: *mut u8, txn: *mut u8, request: *const u8) {
     let Some(container) = roll.entity else {
         return;
     };
-    let drops = DROPS.lock().unwrap_or_else(PoisonError::into_inner);
+    let drops = DROPS
+        .get_or_init(Mutex::default)
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner);
     let absent = [0u8; 16];
     for drop in drops
         .iter()
@@ -647,7 +655,10 @@ fn add_one(res: *mut u8, out: *mut u8) {
         boss: false,
         locked: false,
     };
-    let drops = DROPS.lock().unwrap_or_else(PoisonError::into_inner);
+    let drops = DROPS
+        .get_or_init(Mutex::default)
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner);
     let Some((item, count, _)) = drops
         .iter()
         .map(|(_, d)| d)
@@ -686,6 +697,7 @@ pub(crate) fn watch_rolls(load: &mut Load<'_>) -> Result<Arc<Mutex<Vec<Roll>>>, 
     link_roll(load)?;
     let queue = Arc::new(Mutex::new(Vec::new()));
     WATCHERS
+        .get_or_init(Mutex::default)
         .lock()
         .unwrap_or_else(PoisonError::into_inner)
         .push(Arc::clone(&queue));
@@ -728,14 +740,21 @@ impl Load<'_> {
     pub(crate) fn add_loot_in(&mut self, group: u64, drop: Drop) -> Result<(), Off> {
         drop.check()?;
         link_roll(self)?;
-        if drop.from.kinds.contains(Kinds::DESTROYED) && !ONE_LINKED.load(Ordering::Acquire) {
+        if drop.from.kinds.contains(Kinds::DESTROYED)
+            && !ONE_LINKED
+                .get_or_init(Default::default)
+                .load(Ordering::Acquire)
+        {
             let roll_one = self.symbol("loot.roll_one")?;
             // SAFETY: the build table's `loot.roll_one` is the single roll
             // `ROLL_ONE` declares.
             unsafe { self.hook(&ROLL_ONE, roll_one) }?;
-            ONE_LINKED.store(true, Ordering::Release);
+            ONE_LINKED
+                .get_or_init(Default::default)
+                .store(true, Ordering::Release);
         }
         DROPS
+            .get_or_init(Mutex::default)
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .push((group, drop));
@@ -787,13 +806,20 @@ pub(crate) fn replace_group(group: u64, drops: Vec<Drop>) -> Result<(), String> 
         if ENGINE.get().is_none() {
             return Err("no loot was linked at start; it takes a restart".to_owned());
         }
-        if drop.from.kinds.contains(Kinds::DESTROYED) && !ONE_LINKED.load(Ordering::Acquire) {
+        if drop.from.kinds.contains(Kinds::DESTROYED)
+            && !ONE_LINKED
+                .get_or_init(Default::default)
+                .load(Ordering::Acquire)
+        {
             return Err(
                 "single-item rolls were not linked at start; they take a restart".to_owned(),
             );
         }
     }
-    let mut all = DROPS.lock().unwrap_or_else(PoisonError::into_inner);
+    let mut all = DROPS
+        .get_or_init(Mutex::default)
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner);
     all.retain(|(g, _)| *g != group);
     all.extend(drops.into_iter().map(|drop| (group, drop)));
     Ok(())
