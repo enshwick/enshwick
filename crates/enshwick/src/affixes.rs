@@ -565,10 +565,13 @@ impl RollRules {
     }
 }
 
-/// The affixes an item of the game's `ItemCategory` numbered `category`
-/// rolls from `pool` under `rules`, from `seed`: the count first, then each
-/// affix by weight among those that fit, are not taken and share no group
-/// with one taken, then its values. The pool's order does not matter.
+/// The affixes an item of the game's `ItemCategory` numbered `category` rolls
+/// from `pool` under `rules`, from `seed`.
+///
+/// The count comes first, then each affix by weight among those that fit, are
+/// not taken and share no group with one taken, then its values.
+///
+/// The pool's order does not matter.
 ///
 /// # Examples
 ///
@@ -630,8 +633,10 @@ pub fn roll(pool: &[Candidate<'_>], category: u8, rules: RollRules, seed: u64) -
 
 /// `stats` rolled anew from `pool` for an item of the game's `ItemCategory`
 /// numbered `category`, as [`roll`] rolls; `None` when `once` and it rolled
-/// before. An item no affix of the pool fits comes back as it was, not
-/// marked as rolled.
+/// before.
+///
+/// An item no affix of the pool fits comes back as it was, not marked as
+/// rolled.
 ///
 /// # Examples
 ///
@@ -668,8 +673,9 @@ pub fn reroll(
 
 /// What `stats` gives, a modifier per line, its own first and then each
 /// affix's: affixes by their place in `pool` plus one, stats by the index
-/// `stat` gives their key. Modifiers of unknown stats or affixes are left
-/// out.
+/// `stat` gives their key.
+///
+/// Modifiers of unknown stats or affixes are left out.
 ///
 /// # Examples
 ///

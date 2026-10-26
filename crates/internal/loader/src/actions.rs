@@ -10,6 +10,7 @@
 //! reply reaches the player as one of the game's notices and on the screen
 //! that sent it.
 
+use crate::mod_index::ModIndex;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
@@ -28,7 +29,7 @@ const RUN_GAP: Duration = Duration::from_millis(200);
 /// A mod's actions callback.
 #[derive(Clone, Copy)]
 struct Registered {
-    owner: usize,
+    owner: ModIndex,
     callback: ActionFn,
     user: usize,
 }
@@ -62,7 +63,7 @@ fn server_state<R>(f: impl FnOnce(&mut ServerState) -> R) -> R {
 /// Registers mod `owner`'s actions callback; a second one is refused unless
 /// the mod is initialised again.
 pub(crate) fn register(
-    owner: usize,
+    owner: ModIndex,
     callback: ActionFn,
     user: *mut core::ffi::c_void,
     again: bool,
@@ -93,7 +94,7 @@ fn running(loader: &Loader) -> Vec<Registered> {
         .filter(|r| {
             loader
                 .mods
-                .get(r.owner)
+                .get(r.owner.get())
                 .is_some_and(|m| !m.off.load(core::sync::atomic::Ordering::Acquire))
         })
         .collect()
@@ -137,14 +138,16 @@ fn ask(
 /// Runs the console line `rest` on the actions of mod `index`; the answer,
 /// or `None` when the mod is off or declared no actions.
 pub(crate) fn console(loader: &Loader, index: usize, rest: &str) -> Option<String> {
-    let registered = running(loader).into_iter().find(|r| r.owner == index)?;
+    let registered = running(loader)
+        .into_iter()
+        .find(|r| r.owner == ModIndex::new(index))?;
     let console = crate::console::the_console();
     let reply = ask(registered, ActionCall::CONSOLE, &console, 0, rest, "");
     Some(reply.get(1..).unwrap_or_default().to_owned())
 }
 
 /// The running mods that declared actions, by index.
-pub(crate) fn declaring(loader: &Loader) -> Vec<usize> {
+pub(crate) fn declaring(loader: &Loader) -> Vec<ModIndex> {
     running(loader).into_iter().map(|r| r.owner).collect()
 }
 
@@ -195,7 +198,7 @@ fn send_sheets(loader: &Loader, key: u64, language: u32) {
         .into_iter()
         .filter_map(|r| {
             let text = ask(r, ActionCall::SHEET, &player, language, "", "");
-            let record = loader.mods.get(r.owner)?;
+            let record = loader.mods.get(r.owner.get())?;
             (!text.is_empty()).then(|| {
                 let label = record.label();
                 let text = fitted(&record.id, &label, text);
@@ -258,7 +261,7 @@ pub(crate) fn run(loader: &Loader, key: u64, id: &str, action: &str, args: &str)
     };
     let Some(registered) = running(loader)
         .into_iter()
-        .find(|r| loader.mods.get(r.owner).is_some_and(|m| m.owns(id)))
+        .find(|r| loader.mods.get(r.owner.get()).is_some_and(|m| m.owns(id)))
     else {
         return;
     };
@@ -331,7 +334,7 @@ pub(crate) fn after_step(loader: &Loader) {
         let language = server_state(|s| s.clients.entry(key).or_default().language);
         let mut text = String::new();
         for r in &mods {
-            let Some(record) = loader.mods.get(r.owner) else {
+            let Some(record) = loader.mods.get(r.owner.get()) else {
                 continue;
             };
             let lines = ask(*r, ActionCall::HINTS, player, language, "", "");

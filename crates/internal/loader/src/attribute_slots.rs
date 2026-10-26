@@ -1,10 +1,11 @@
-//! The slots of attributes in their sets, read from the game's data. The
-//! game's attribute container lists every set's attributes in slot order,
-//! with their names, and the game looks slots up there at run time, so no
-//! code holds them (game build 1269579). The build tables name each slot
-//! they pin by its attribute; the loader reads the slot at start, so the
-//! slots hold on a build without a table; a pinned value that differs is
-//! logged, and the game's data holds.
+//! The slots of attributes in their sets, read from the game's data.
+//!
+//! The game's attribute container lists every set's attributes in slot order,
+//! with their names, and the game looks slots up there at run time, so no code
+//! holds them (game build 1269579). The build tables name each slot they pin by
+//! its attribute; the loader reads the slot at start, so the slots hold on a
+//! build without a table; a pinned value that differs is logged, and the game's
+//! data holds.
 
 use rustc_hash::FxHashMap;
 

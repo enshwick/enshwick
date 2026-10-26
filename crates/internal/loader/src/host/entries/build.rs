@@ -45,7 +45,7 @@ pub(crate) extern "system" fn symbol(me: ModHandle, name: Str, out: *mut u64) ->
             return Status::BAD_ARGS;
         };
         loader
-            .resolve_symbol(index, name)
+            .resolve_symbol(index.get(), name)
             .map_or(Status::MISSING, |address| {
                 crate::diag::name(address, name);
                 // SAFETY: `HostApi::symbol` has the mod pass `out` null or
@@ -140,7 +140,7 @@ pub(crate) extern "system" fn constant(me: ModHandle, name: Str, out: *mut u64) 
             return Status::BAD_ARGS;
         };
         loader
-            .resolve_constant(index, name)
+            .resolve_constant(index.get(), name)
             // SAFETY: `HostApi::constant` has the mod pass `out` null or
             // pointing at a writable, aligned `u64` that no other thread
             // touches during the call.

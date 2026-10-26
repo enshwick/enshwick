@@ -7,6 +7,8 @@
 //! request hands out the new entity's id at once; the entity is in the
 //! world from the next step on.
 
+use crate::pinned;
+use crate::pinned::Symbol;
 use std::sync::OnceLock;
 
 use enshwick::abi::{SpawnRequest, Status};
@@ -15,10 +17,10 @@ use crate::host::Loader;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
-    "ecs.command_buffers",
-    "ecs.spawn_request",
-    "world.entities",
-    "world.time",
+    pinned::ecs::COMMAND_BUFFERS.id(),
+    pinned::ecs::SPAWN_REQUEST.id(),
+    pinned::world::ENTITIES.id(),
+    pinned::world::TIME.id(),
 ];
 
 type SpawnFn = unsafe extern "system" fn(
@@ -99,12 +101,15 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
                     .ok()
                     .and_then(|v| usize::try_from(v).ok())
             };
-            let function = |name: &str| {
+            let function = |name: Symbol| {
                 loader
                     .address(name)
                     .and_then(|address| usize::try_from(address).ok())
             };
-            let (spawn, time) = (function("ecs.spawn_request")?, function("world.time")?);
+            let (spawn, time) = (
+                function(pinned::ecs::SPAWN_REQUEST)?,
+                function(pinned::world::TIME)?,
+            );
             Some(Layout {
                 // SAFETY: the build table's `ecs.spawn_request` is the address
                 // of the game function with the `SpawnFn` signature on this
@@ -113,8 +118,8 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
                 // SAFETY: the build table's `world.time` is the address of the
                 // game function with the `TimeFn` signature on this build.
                 time: unsafe { core::mem::transmute::<usize, TimeFn>(time) },
-                command_buffers: loader.offset("ecs.command_buffers")?,
-                world_entities: loader.offset("world.entities")?,
+                command_buffers: loader.offset(pinned::ecs::COMMAND_BUFFERS)?,
+                world_entities: loader.offset(pinned::world::ENTITIES)?,
                 transform: component("keen::ecs::CurrentTransform")?,
                 transform_orientation: offset("keen::WorldTransform", "orientation")?,
                 transform_scale: offset("keen::WorldTransform", "scale")?,

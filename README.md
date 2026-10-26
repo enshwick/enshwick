@@ -96,7 +96,7 @@ changed in the game, while hosting or on the screen that creates or starts a
 world: the world settings list every mod's settings under their last tab.
 On a dedicated server an administrator changes them from "Server settings"
 on the Mods screen, or with `enshwick config <mod> <key> <value>` in the
-[admin tools'](https://github.com/enshwick/mod-admin-tools) command file. Such a change applies at once, except where a mod's page says it
+server's command file, `mod-data/enshwick/commands.txt`. Such a change applies at once, except where a mod's page says it
 waits for the world to load again or for the game to start again. A hand
 edit of the running world's copy applies about a second after it is saved, as
 such a change does.

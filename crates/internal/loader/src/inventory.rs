@@ -18,6 +18,9 @@
 //! the hook skips contexts of any other world, and requests are refused
 //! while the client hosts nothing.
 
+use crate::mod_index::ModIndex;
+use crate::pinned;
+use crate::pinned::{Constant, Symbol};
 use core::ffi::c_void;
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -29,7 +32,6 @@ use enshwick::abi::{
     InventoryResultFn, ItemData, Registers, Side, Status,
 };
 
-use crate::chains::LOADER;
 use crate::host::Loader;
 use crate::locks::Relock;
 use crate::memory::{read, read_ptr, write};
@@ -37,66 +39,66 @@ use crate::mid::MidLink;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
-    "ecs.context_entity_world",
-    "ecs.row_entity",
-    "ecs.slot_root",
-    "inventory.actions_row",
-    "inventory.actor_flag",
-    "inventory.copy_100.desc",
-    "inventory.copy_100.view",
-    "inventory.copy_150.desc",
-    "inventory.copy_150.view",
-    "inventory.copy_198.desc",
-    "inventory.copy_198.view",
-    "inventory.copy_a8.desc",
-    "inventory.copy_a8.view",
-    "inventory.copy_discovered.desc",
-    "inventory.copy_discovered.view",
-    "inventory.copy_empty_state.desc",
-    "inventory.copy_empty_state.view",
-    "inventory.copy_equipment.desc",
-    "inventory.copy_equipment.view",
-    "inventory.copy_full_events.desc",
-    "inventory.copy_full_events.view",
-    "inventory.copy_item_registry.desc",
-    "inventory.copy_item_registry.view",
-    "inventory.copy_owners.desc",
-    "inventory.copy_owners.view",
-    "inventory.copy_pickup_events.desc",
-    "inventory.copy_pickup_events.view",
-    "inventory.copy_setup.desc",
-    "inventory.copy_setup.view",
-    "inventory.copy_slot_hints.desc",
-    "inventory.copy_slot_hints.view",
-    "inventory.copy_slots.desc",
-    "inventory.copy_slots.view",
-    "inventory.copy_transform.desc",
-    "inventory.copy_transform.view",
-    "inventory.desc_actor",
-    "inventory.desc_context",
-    "inventory.desc_other",
-    "inventory.desc_size",
-    "inventory.desc_zero",
-    "inventory.destroy_slot",
-    "inventory.give",
-    "inventory.move_all",
-    "inventory.move_amount",
-    "inventory.move_slot",
-    "inventory.resend",
-    "inventory.take",
-    "inventory.txn_commit",
-    "inventory.txn_drop",
-    "inventory.txn_init",
-    "inventory.txn_new",
-    "inventory.txn_rollback",
-    "inventory.txn_size",
-    "inventory.view_actors",
-    "inventory.view_fill",
-    "inventory.view_frame",
-    "inventory.view_item_registry",
-    "inventory.view_owners",
-    "inventory.view_replication",
-    "item.info",
+    pinned::ecs::CONTEXT_ENTITY_WORLD.id(),
+    pinned::ecs::ROW_ENTITY.id(),
+    pinned::ecs::SLOT_ROOT.id(),
+    pinned::inventory::ACTIONS_ROW.id(),
+    pinned::inventory::ACTOR_FLAG.id(),
+    pinned::inventory::COPY_100_DESC.id(),
+    pinned::inventory::COPY_100_VIEW.id(),
+    pinned::inventory::COPY_150_DESC.id(),
+    pinned::inventory::COPY_150_VIEW.id(),
+    pinned::inventory::COPY_198_DESC.id(),
+    pinned::inventory::COPY_198_VIEW.id(),
+    pinned::inventory::COPY_A8_DESC.id(),
+    pinned::inventory::COPY_A8_VIEW.id(),
+    pinned::inventory::COPY_DISCOVERED_DESC.id(),
+    pinned::inventory::COPY_DISCOVERED_VIEW.id(),
+    pinned::inventory::COPY_EMPTY_STATE_DESC.id(),
+    pinned::inventory::COPY_EMPTY_STATE_VIEW.id(),
+    pinned::inventory::COPY_EQUIPMENT_DESC.id(),
+    pinned::inventory::COPY_EQUIPMENT_VIEW.id(),
+    pinned::inventory::COPY_FULL_EVENTS_DESC.id(),
+    pinned::inventory::COPY_FULL_EVENTS_VIEW.id(),
+    pinned::inventory::COPY_ITEM_REGISTRY_DESC.id(),
+    pinned::inventory::COPY_ITEM_REGISTRY_VIEW.id(),
+    pinned::inventory::COPY_OWNERS_DESC.id(),
+    pinned::inventory::COPY_OWNERS_VIEW.id(),
+    pinned::inventory::COPY_PICKUP_EVENTS_DESC.id(),
+    pinned::inventory::COPY_PICKUP_EVENTS_VIEW.id(),
+    pinned::inventory::COPY_SETUP_DESC.id(),
+    pinned::inventory::COPY_SETUP_VIEW.id(),
+    pinned::inventory::COPY_SLOT_HINTS_DESC.id(),
+    pinned::inventory::COPY_SLOT_HINTS_VIEW.id(),
+    pinned::inventory::COPY_SLOTS_DESC.id(),
+    pinned::inventory::COPY_SLOTS_VIEW.id(),
+    pinned::inventory::COPY_TRANSFORM_DESC.id(),
+    pinned::inventory::COPY_TRANSFORM_VIEW.id(),
+    pinned::inventory::DESC_ACTOR.id(),
+    pinned::inventory::DESC_CONTEXT.id(),
+    pinned::inventory::DESC_OTHER.id(),
+    pinned::inventory::DESC_SIZE.id(),
+    pinned::inventory::DESC_ZERO.id(),
+    pinned::inventory::DESTROY_SLOT.id(),
+    pinned::inventory::GIVE.id(),
+    pinned::inventory::MOVE_ALL.id(),
+    pinned::inventory::MOVE_AMOUNT.id(),
+    pinned::inventory::MOVE_SLOT.id(),
+    pinned::inventory::RESEND.id(),
+    pinned::inventory::TAKE.id(),
+    pinned::inventory::TXN_COMMIT.id(),
+    pinned::inventory::TXN_DROP.id(),
+    pinned::inventory::TXN_INIT.id(),
+    pinned::inventory::TXN_NEW.id(),
+    pinned::inventory::TXN_ROLLBACK.id(),
+    pinned::inventory::TXN_SIZE.id(),
+    pinned::inventory::VIEW_ACTORS.id(),
+    pinned::inventory::VIEW_FILL.id(),
+    pinned::inventory::VIEW_FRAME.id(),
+    pinned::inventory::VIEW_ITEM_REGISTRY.id(),
+    pinned::inventory::VIEW_OWNERS.id(),
+    pinned::inventory::VIEW_REPLICATION.id(),
+    pinned::item::INFO.id(),
 ];
 
 /// The most operations one request may hold; the game's op log takes 0x200
@@ -219,7 +221,7 @@ struct Executor {
 /// A queued request.
 #[derive(Debug)]
 struct Request {
-    owner: usize,
+    owner: ModIndex,
     flags: u32,
     actor: u32,
     ops: Vec<InventoryOp>,
@@ -231,7 +233,7 @@ struct Request {
 /// A request's result, waiting for the game thread.
 #[derive(Debug)]
 struct Finished {
-    owner: usize,
+    owner: ModIndex,
     done: InventoryResultFn,
     user: usize,
     outcome: u32,
@@ -357,11 +359,11 @@ unsafe fn function<F: Copy>(address: u64) -> Option<F> {
 }
 
 fn build(loader: &Loader) -> Option<Executor> {
-    let symbol = |name: &str| loader.build.symbol(name).map(|rva| loader.base + rva);
-    let constant = |name: &str| {
+    let symbol = |name: Symbol| loader.build.symbol(name.id()).map(|rva| loader.base + rva);
+    let constant = |name: Constant| {
         loader
             .build
-            .constant(name)
+            .constant(name.id())
             .and_then(|v| usize::try_from(v).ok())
     };
     if loader.build.lacks_any("inventory.copy_") {
@@ -388,47 +390,47 @@ fn build(loader: &Loader) -> Option<Executor> {
             .ok()?;
         usize::try_from(offset).ok()
     };
-    let desc_size = constant("inventory.desc_size")?;
-    let txn_size = constant("inventory.txn_size")?;
+    let desc_size = constant(pinned::inventory::DESC_SIZE)?;
+    let txn_size = constant(pinned::inventory::TXN_SIZE)?;
     if copies.is_empty() || desc_size > DESC_AREA {
         return None;
     }
     // SAFETY: the build table pins `inventory.desc_zero` to this signature.
-    let desc_zero = unsafe { function(symbol("inventory.desc_zero")?) }?;
+    let desc_zero = unsafe { function(symbol(pinned::inventory::DESC_ZERO)?) }?;
     // SAFETY: the build table pins `inventory.txn_new` to this signature.
-    let txn_new = unsafe { function(symbol("inventory.txn_new")?) }?;
+    let txn_new = unsafe { function(symbol(pinned::inventory::TXN_NEW)?) }?;
     // SAFETY: the build table pins `inventory.txn_init` to this signature.
-    let txn_init = unsafe { function(symbol("inventory.txn_init")?) }?;
+    let txn_init = unsafe { function(symbol(pinned::inventory::TXN_INIT)?) }?;
     // SAFETY: the build table pins `inventory.txn_commit` to this signature.
-    let commit = unsafe { function(symbol("inventory.txn_commit")?) }?;
+    let commit = unsafe { function(symbol(pinned::inventory::TXN_COMMIT)?) }?;
     // SAFETY: the build table pins `inventory.txn_rollback` to this signature.
-    let rollback = unsafe { function(symbol("inventory.txn_rollback")?) }?;
+    let rollback = unsafe { function(symbol(pinned::inventory::TXN_ROLLBACK)?) }?;
     // SAFETY: the build table pins `inventory.txn_drop` to this signature.
-    let txn_drop = unsafe { function(symbol("inventory.txn_drop")?) }?;
+    let txn_drop = unsafe { function(symbol(pinned::inventory::TXN_DROP)?) }?;
     // SAFETY: the build table pins `inventory.give` to this signature.
-    let give = unsafe { function(symbol("inventory.give")?) }?;
+    let give = unsafe { function(symbol(pinned::inventory::GIVE)?) }?;
     // SAFETY: the build table pins `inventory.take` to this signature.
-    let take = unsafe { function(symbol("inventory.take")?) }?;
+    let take = unsafe { function(symbol(pinned::inventory::TAKE)?) }?;
     // SAFETY: the build table pins `inventory.destroy_slot` to this signature.
-    let destroy = unsafe { function(symbol("inventory.destroy_slot")?) }?;
+    let destroy = unsafe { function(symbol(pinned::inventory::DESTROY_SLOT)?) }?;
     // SAFETY: the build table pins `inventory.move_slot` to this signature.
-    let move_slot = unsafe { function(symbol("inventory.move_slot")?) }?;
+    let move_slot = unsafe { function(symbol(pinned::inventory::MOVE_SLOT)?) }?;
     // SAFETY: the build table pins `inventory.move_amount` to this signature.
-    let move_amount = unsafe { function(symbol("inventory.move_amount")?) }?;
+    let move_amount = unsafe { function(symbol(pinned::inventory::MOVE_AMOUNT)?) }?;
     // SAFETY: the build table pins `inventory.move_all` to this signature.
-    let move_all = unsafe { function(symbol("inventory.move_all")?) }?;
+    let move_all = unsafe { function(symbol(pinned::inventory::MOVE_ALL)?) }?;
     // SAFETY: the build table pins `inventory.resend` to this signature.
-    let resend = unsafe { function(symbol("inventory.resend")?) }?;
+    let resend = unsafe { function(symbol(pinned::inventory::RESEND)?) }?;
     // SAFETY: the build table pins `ecs.slot_root` to this signature.
-    let slot_root = unsafe { function(symbol("ecs.slot_root")?) }?;
+    let slot_root = unsafe { function(symbol(pinned::ecs::SLOT_ROOT)?) }?;
     // SAFETY: the build table pins `ecs.row_entity` to this signature.
-    let row_entity = unsafe { function(symbol("ecs.row_entity")?) }?;
+    let row_entity = unsafe { function(symbol(pinned::ecs::ROW_ENTITY)?) }?;
     // SAFETY: the build table pins `inventory.actor_flag` to this signature.
-    let actor_flag = unsafe { function(symbol("inventory.actor_flag")?) }?;
+    let actor_flag = unsafe { function(symbol(pinned::inventory::ACTOR_FLAG)?) }?;
     // SAFETY: the build table pins `item.info` to this signature.
-    let item_lookup = unsafe { function(symbol("item.info")?) }?;
+    let item_lookup = unsafe { function(symbol(pinned::item::INFO)?) }?;
     let executor = Executor {
-        site: symbol("inventory.actions_row")?,
+        site: symbol(pinned::inventory::ACTIONS_ROW)?,
         desc_zero,
         txn_new,
         txn_init,
@@ -446,15 +448,15 @@ fn build(loader: &Loader) -> Option<Executor> {
         row_entity,
         actor_flag,
         item_lookup,
-        view_frame: constant("inventory.view_frame")?,
-        view_owners: constant("inventory.view_owners")?,
-        view_actors: constant("inventory.view_actors")?,
-        view_replication: constant("inventory.view_replication")?,
-        view_item_registry: constant("inventory.view_item_registry")?,
+        view_frame: constant(pinned::inventory::VIEW_FRAME)?,
+        view_owners: constant(pinned::inventory::VIEW_OWNERS)?,
+        view_actors: constant(pinned::inventory::VIEW_ACTORS)?,
+        view_replication: constant(pinned::inventory::VIEW_REPLICATION)?,
+        view_item_registry: constant(pinned::inventory::VIEW_ITEM_REGISTRY)?,
         desc_size,
-        desc_context: constant("inventory.desc_context")?,
-        desc_actor: constant("inventory.desc_actor")?,
-        desc_other: constant("inventory.desc_other")?,
+        desc_context: constant(pinned::inventory::DESC_CONTEXT)?,
+        desc_actor: constant(pinned::inventory::DESC_ACTOR)?,
+        desc_other: constant(pinned::inventory::DESC_OTHER)?,
         copies,
         item_max_stack: field("maxStackSize")?,
         item_flags: field("flags")?,
@@ -462,7 +464,7 @@ fn build(loader: &Loader) -> Option<Executor> {
         item_rarity: field("rarity")?,
         scratch: 0,
         check_world: loader.side != Side::SERVER,
-        entity_world: constant("ecs.context_entity_world")?,
+        entity_world: constant(pinned::ecs::CONTEXT_ENTITY_WORLD)?,
     };
     checked(loader, executor, txn_size)
 }
@@ -470,8 +472,8 @@ fn build(loader: &Loader) -> Option<Executor> {
 /// `executor` with its scratch block, when the game code at the hook reads
 /// as the build table says.
 fn checked(loader: &Loader, executor: Executor, txn_size: usize) -> Option<Executor> {
-    if !code_matches(loader, "inventory.actions_row")
-        || !code_matches(loader, "inventory.view_fill")
+    if !code_matches(loader, pinned::inventory::ACTIONS_ROW)
+        || !code_matches(loader, pinned::inventory::VIEW_FILL)
     {
         crate::log!(
             WARN,
@@ -494,9 +496,9 @@ fn checked(loader: &Loader, executor: Executor, txn_size: usize) -> Option<Execu
 
 /// Whether the eight bytes at `symbol` are the build table's
 /// `<symbol>.bytes`.
-fn code_matches(loader: &Loader, symbol: &str) -> bool {
+fn code_matches(loader: &Loader, symbol: Symbol) -> bool {
     let bytes = loader.build.constant(&format!("{symbol}.bytes"));
-    let (Some(rva), Some(expected)) = (loader.build.symbol(symbol), bytes) else {
+    let (Some(rva), Some(expected)) = (loader.build.symbol(symbol.id()), bytes) else {
         return false;
     };
     let Ok(address) = usize::try_from(loader.base + rva) else {
@@ -530,7 +532,7 @@ pub(crate) fn link(loader: &Loader) {
         return;
     };
     let link = MidLink {
-        owner: LOADER,
+        owner: ModIndex::LOADER,
         handler: row,
         user: 0,
         priority: i32::MIN,
@@ -583,7 +585,7 @@ fn finish(results: impl IntoIterator<Item = Finished>) {
 /// Queues a request of the mod `owner`.
 pub(crate) fn submit(
     loader: &Loader,
-    owner: usize,
+    owner: ModIndex,
     request: &InventoryRequest,
     done: InventoryResultFn,
     user: *mut c_void,
@@ -1173,7 +1175,7 @@ mod tests {
 
     fn request(user: usize) -> Request {
         Request {
-            owner: 0,
+            owner: ModIndex::new(0),
             flags: 0,
             actor: 0,
             ops: Vec::new(),
@@ -1232,43 +1234,43 @@ mod tests {
     fn the_server_row_has_every_piece_the_executor_reads() {
         let server = crate::builds::embedded(Side::SERVER);
         let symbols = [
-            "inventory.actions_row",
-            "inventory.view_fill",
-            "inventory.skip_entity",
-            "inventory.desc_zero",
-            "inventory.actor_flag",
-            "inventory.txn_new",
-            "inventory.txn_init",
-            "inventory.txn_commit",
-            "inventory.txn_rollback",
-            "inventory.txn_drop",
-            "inventory.give",
-            "inventory.take",
-            "inventory.destroy_slot",
-            "inventory.move_slot",
-            "inventory.move_amount",
-            "inventory.move_all",
-            "inventory.resend",
-            "item.info",
-            "ecs.slot_root",
-            "ecs.row_entity",
+            pinned::inventory::ACTIONS_ROW,
+            pinned::inventory::VIEW_FILL,
+            Symbol::new("inventory.skip_entity"),
+            pinned::inventory::DESC_ZERO,
+            pinned::inventory::ACTOR_FLAG,
+            pinned::inventory::TXN_NEW,
+            pinned::inventory::TXN_INIT,
+            pinned::inventory::TXN_COMMIT,
+            pinned::inventory::TXN_ROLLBACK,
+            pinned::inventory::TXN_DROP,
+            pinned::inventory::GIVE,
+            pinned::inventory::TAKE,
+            pinned::inventory::DESTROY_SLOT,
+            pinned::inventory::MOVE_SLOT,
+            pinned::inventory::MOVE_AMOUNT,
+            pinned::inventory::MOVE_ALL,
+            pinned::inventory::RESEND,
+            pinned::item::INFO,
+            pinned::ecs::SLOT_ROOT,
+            pinned::ecs::ROW_ENTITY,
         ];
         for name in symbols {
-            assert!(server.symbol(name).is_some(), "{name}");
+            assert!(server.symbol(name.id()).is_some(), "{name}");
         }
         let constants = [
             "inventory.actions_row.bytes",
             "inventory.view_fill.bytes",
-            "inventory.view_frame",
-            "inventory.view_owners",
-            "inventory.view_actors",
-            "inventory.view_replication",
-            "inventory.view_item_registry",
-            "inventory.desc_size",
-            "inventory.desc_context",
-            "inventory.desc_actor",
-            "inventory.desc_other",
-            "inventory.txn_size",
+            pinned::inventory::VIEW_FRAME.id(),
+            pinned::inventory::VIEW_OWNERS.id(),
+            pinned::inventory::VIEW_ACTORS.id(),
+            pinned::inventory::VIEW_REPLICATION.id(),
+            pinned::inventory::VIEW_ITEM_REGISTRY.id(),
+            pinned::inventory::DESC_SIZE.id(),
+            pinned::inventory::DESC_CONTEXT.id(),
+            pinned::inventory::DESC_ACTOR.id(),
+            pinned::inventory::DESC_OTHER.id(),
+            pinned::inventory::TXN_SIZE.id(),
         ];
         for name in constants {
             assert!(server.constant(name).is_some(), "{name}");
@@ -1282,7 +1284,7 @@ mod tests {
             copies, 30,
             "a view and a descriptor offset for each of 15 fields"
         );
-        assert!(server.constant("inventory.desc_size").unwrap() <= DESC_AREA as u64);
+        assert!(server.constant(pinned::inventory::DESC_SIZE.id()).unwrap() <= DESC_AREA as u64);
     }
 
     #[test]

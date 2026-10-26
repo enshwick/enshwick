@@ -14,6 +14,9 @@
 //! the player joins.
 
 use crate::locks::Relock;
+use crate::mod_index::ModIndex;
+use crate::pinned;
+use enshwick::ecs::Entity;
 
 mod equipment;
 mod vitals;
@@ -32,25 +35,24 @@ use enshwick::affixes::{AffixDef, AffixKey, Candidate, Rarity, RollRules, lines_
 use enshwick::stats::{ItemStats, Op, Stat, StatDef, aggregate, builtin, key_of};
 use rustc_hash::{FxHashMap, FxHashSet};
 
-use crate::chains::LOADER;
 use crate::host::{Loader, Registered};
 use crate::ids::Space;
 use crate::settings::LOADER_ID;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
-    "attribute.health",
-    "attribute.health_adder_slot",
-    "attribute.health_max_slot",
-    "attribute.mana",
-    "attribute.mana_adder_slot",
-    "attribute.mana_max_slot",
-    "attribute.stamina",
-    "attribute.stamina_adder_slot",
-    "attribute.stamina_max_slot",
-    "ecs.attribute_count",
-    "ecs.level_data_offset",
-    "ecs.level_flags",
+    pinned::attribute::HEALTH.id(),
+    pinned::attribute::HEALTH_ADDER_SLOT.id(),
+    pinned::attribute::HEALTH_MAX_SLOT.id(),
+    pinned::attribute::MANA.id(),
+    pinned::attribute::MANA_ADDER_SLOT.id(),
+    pinned::attribute::MANA_MAX_SLOT.id(),
+    pinned::attribute::STAMINA.id(),
+    pinned::attribute::STAMINA_ADDER_SLOT.id(),
+    pinned::attribute::STAMINA_MAX_SLOT.id(),
+    pinned::ecs::ATTRIBUTE_COUNT.id(),
+    pinned::ecs::LEVEL_DATA_OFFSET.id(),
+    pinned::ecs::LEVEL_FLAGS.id(),
 ];
 
 /// Steps between two looks at what watched entities wear and have.
@@ -101,7 +103,7 @@ struct Pending {
 /// A modifier a mod keeps on an entity.
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct Held {
-    owner: usize,
+    owner: ModIndex,
     key: u32,
     stat: u32,
     op: u8,
@@ -192,7 +194,7 @@ fn pending<R>(f: impl FnOnce(&mut Pending) -> R) -> Result<R, Status> {
             let text = def.text.clone().into_boxed_str();
             fresh.kinds.push(Kind {
                 id: id.into(),
-                def: Some((def, text, LOADER)),
+                def: Some((def, text, (ModIndex::LOADER).get())),
             });
         }
         fresh
@@ -232,12 +234,12 @@ fn index_of(kinds: &mut Vec<Kind>, id: &str) -> usize {
 
 /// Records `full` in its space; a name whose key another has turns mod
 /// `owner` off with both named.
-fn declare(loader: &Loader, owner: usize, space: Space, full: &str) -> Result<(), Status> {
+fn declare(loader: &Loader, owner: ModIndex, space: Space, full: &str) -> Result<(), Status> {
     if SEALED.get().is_some() {
         return Err(Status::TOO_LATE);
     }
     let key = key_of(full).0;
-    let by = loader.mods.get(owner).map_or("?", |m| m.id.as_str());
+    let by = loader.mods.get(owner.get()).map_or("?", |m| m.id.as_str());
     let declared = crate::ids::with(|ids| {
         if space == Space::Stat {
             for (id, _) in builtin::ALL {
@@ -255,11 +257,11 @@ fn declare(loader: &Loader, owner: usize, space: Space, full: &str) -> Result<()
 /// Defines or opens kind `id` for mod `owner`. During init only.
 pub(crate) fn open(
     loader: &Loader,
-    owner: usize,
+    owner: ModIndex,
     id: &str,
     def: Option<StatDef>,
 ) -> Result<StatRef, Status> {
-    let record = loader.mods.get(owner).ok_or(Status::BAD_ARGS)?;
+    let record = loader.mods.get(owner.get()).ok_or(Status::BAD_ARGS)?;
     let (full, own) = full_id(&record.names(), id).ok_or(Status::BAD_ARGS)?;
     declare(loader, owner, Space::Stat, &full)?;
     pending(|p| {
@@ -270,7 +272,7 @@ pub(crate) fn open(
                 return Err(Status::REFUSED);
             }
             let text = def.text.clone().into_boxed_str();
-            kind.def = Some((def, text, owner));
+            kind.def = Some((def, text, owner.get()));
         }
         Ok(StatRef {
             index: u32::try_from(index).map_err(|_| Status::REFUSED)?,
@@ -290,11 +292,11 @@ pub(crate) fn buff(buff: u32, modifiers: &[StatModifierData]) -> Result<(), Stat
 /// Defines mod `owner`'s affix `id`. During init only.
 pub(crate) fn open_affix(
     loader: &Loader,
-    owner: usize,
+    owner: ModIndex,
     id: &str,
     data: &AffixDefData,
 ) -> Result<StatRef, Status> {
-    let record = loader.mods.get(owner).ok_or(Status::BAD_ARGS)?;
+    let record = loader.mods.get(owner.get()).ok_or(Status::BAD_ARGS)?;
     let (full, own) = full_id(&record.names(), id).ok_or(Status::BAD_ARGS)?;
     if !own {
         return Err(Status::REFUSED);
@@ -384,7 +386,7 @@ pub(crate) fn affix_info(affix: u32) -> Result<(Str, u8), Status> {
 
 /// Registers mod `owner`'s handler of changes. During init only.
 pub(crate) fn on_changed(
-    owner: usize,
+    owner: ModIndex,
     callback: StatChangeFn,
     user: *mut core::ffi::c_void,
 ) -> Result<(), Status> {
@@ -485,14 +487,14 @@ pub(crate) fn info(stat: u32) -> Result<(StatDefData, Str), Status> {
 }
 
 /// The value of kind `stat` on `entity`, from the snapshot; any thread.
-pub(crate) fn value(entity: u32, stat: u32) -> Result<f32, Status> {
+pub(crate) fn value(entity: Entity, stat: u32) -> Result<f32, Status> {
     let sealed = SEALED.get().ok_or(Status::MISSING)?;
     let index = usize::try_from(stat).map_err(|_| Status::BAD_ARGS)?;
     let default = *sealed.defaults.get(index).ok_or(Status::BAD_ARGS)?;
     let values = snapshot().load();
     Ok(values
         .values
-        .get(&entity)
+        .get(&entity.0)
         .and_then(|v| v.get(index))
         .copied()
         .unwrap_or(default))
@@ -509,7 +511,7 @@ fn with_state<R>(f: impl FnOnce(&mut State) -> R) -> R {
 }
 
 /// Sets or removes mod `owner`'s modifier.
-pub(crate) fn modify(loader: &Loader, owner: usize, request: &StatModify) -> Result<(), Status> {
+pub(crate) fn modify(loader: &Loader, owner: ModIndex, request: &StatModify) -> Result<(), Status> {
     let sealed = SEALED.get().ok_or(Status::MISSING)?;
     let stat = request.modifier.stat;
     if request.entity == 0 || usize::try_from(stat).map_or(true, |s| s >= sealed.kinds.len()) {
@@ -559,7 +561,7 @@ pub(crate) fn modify(loader: &Loader, owner: usize, request: &StatModify) -> Res
         if (saved || was_saved)
             && let Some(player) = player
         {
-            let record = loader.mods.get(owner);
+            let record = loader.mods.get(owner.get());
             let mod_id = record.map(|m| m.id.clone()).unwrap_or_default();
             let stat_id = sealed.kinds[stat as usize].id.to_string();
             state.saved.retain(|s| {
@@ -585,8 +587,8 @@ pub(crate) fn modify(loader: &Loader, owner: usize, request: &StatModify) -> Res
 }
 
 /// Watches or stops watching `entity` for a mod.
-pub(crate) fn watch(entity: u32, on: bool) -> Result<(), Status> {
-    if SEALED.get().is_none() || entity == 0 {
+pub(crate) fn watch(entity: Entity, on: bool) -> Result<(), Status> {
+    if SEALED.get().is_none() || entity == Entity(0) {
         return Err(Status::BAD_ARGS);
     }
     if !serves() {
@@ -594,10 +596,10 @@ pub(crate) fn watch(entity: u32, on: bool) -> Result<(), Status> {
     }
     with_state(|state| {
         if on {
-            let watched = state.watched.entry(entity).or_default();
+            let watched = state.watched.entry(entity.0).or_default();
             watched.asked = true;
             watched.dirty = true;
-        } else if let Some(watched) = state.watched.get_mut(&entity) {
+        } else if let Some(watched) = state.watched.get_mut(&entity.0) {
             watched.asked = false;
         }
     });
@@ -627,7 +629,7 @@ pub(crate) fn player_joined(loader: &Loader, player: &PlayerData) {
             let stat = sealed.by_key.get(&key_of(&saved.stat).0).copied();
             if let (Some(owner), Some(stat)) = (owner, stat) {
                 restored.push(Held {
-                    owner,
+                    owner: ModIndex::new(owner),
                     key: saved.key,
                     stat,
                     op: saved.op,
@@ -661,7 +663,12 @@ fn source(kind: u8, op: u8, stat: u32, value: f32, id: u32, owner: u32) -> StatS
 }
 
 /// What `entity` wears and has, in source order, with a hash of it.
-fn gather(loader: &Loader, sealed: &Sealed, entity: u32, held: &[Held]) -> (Vec<StatSource>, u64) {
+fn gather(
+    loader: &Loader,
+    sealed: &Sealed,
+    entity: Entity,
+    held: &[Held],
+) -> (Vec<StatSource>, u64) {
     let mut out = Vec::new();
     let mut hash = rustc_hash::FxHasher::default();
     let mut items = equipment::worn(loader, entity);
@@ -696,7 +703,7 @@ fn gather(loader: &Loader, sealed: &Sealed, entity: u32, held: &[Held]) -> (Vec<
             h.stat,
             h.value,
             h.key,
-            u32::try_from(h.owner).unwrap_or(u32::MAX),
+            u32::try_from(h.owner.get()).unwrap_or(u32::MAX),
         ));
     }
     (out, core::hash::Hasher::finish(&hash))
@@ -723,13 +730,17 @@ fn work_out(sealed: &Sealed, sources: &[StatSource]) -> Box<[f32]> {
 
 /// The modifiers toward `stat` (every stat for `u32::MAX`) on `entity`, in
 /// the order they apply; on the game thread.
-pub(crate) fn sources(loader: &Loader, entity: u32, stat: u32) -> Result<Vec<StatSource>, Status> {
+pub(crate) fn sources(
+    loader: &Loader,
+    entity: Entity,
+    stat: u32,
+) -> Result<Vec<StatSource>, Status> {
     let sealed = SEALED.get().ok_or(Status::MISSING)?;
     crate::world::server()?;
     let held = with_state(|state| {
         state
             .watched
-            .get(&entity)
+            .get(&entity.0)
             .map(|w| w.modifiers.clone())
             .unwrap_or_default()
     });
@@ -825,7 +836,7 @@ fn follow(loader: &Loader, state: &mut State, players: &[PlayerInfo]) -> bool {
             || w.dirty
             || w.applied.iter().any(|&points| points != 0)
             || w.modifiers.iter().any(|h| !h.saved);
-        keep && crate::world::template(loader, *entity).is_ok()
+        keep && crate::world::template(loader, Entity(*entity)).is_ok()
     });
     state.watched.len() != before
 }
@@ -869,7 +880,7 @@ fn take_values(
 
 /// Brings the points the loader added to `entity`'s maxima to its built-in
 /// maximum kinds' values.
-fn raise_maxima(loader: &Loader, sealed: &Sealed, entity: u32, watched: &mut Watched) {
+fn raise_maxima(loader: &Loader, sealed: &Sealed, entity: Entity, watched: &mut Watched) {
     let pools = [
         vitals::Pool::Health,
         vitals::Pool::Stamina,
@@ -929,7 +940,7 @@ pub(crate) fn after_step(loader: &Loader, step: u64) {
     let generation = ITEMS.load(Ordering::Relaxed);
     let mut results = Vec::new();
     for (entity, held, signature, dirty) in due {
-        let (list, seen) = gather(loader, sealed, entity, &held);
+        let (list, seen) = gather(loader, sealed, Entity(entity), &held);
         let seen = seen ^ generation.rotate_left(17);
         if dirty || seen != signature {
             results.push((entity, seen, work_out(sealed, &list)));
@@ -944,7 +955,7 @@ pub(crate) fn after_step(loader: &Loader, step: u64) {
         let moved = take_values(sealed, state, results, &mut changes);
         for entity in entities {
             if let Some(watched) = state.watched.get_mut(&entity) {
-                raise_maxima(loader, sealed, entity, watched);
+                raise_maxima(loader, sealed, Entity(entity), watched);
             }
         }
         (moved || forgot).then(|| publish(sealed, state))

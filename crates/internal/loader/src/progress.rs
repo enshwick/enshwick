@@ -1,6 +1,9 @@
 //! Skill checks, comfort registrations and experience, each handed to the
 //! mods that asked for it.
 
+use crate::mod_index::ModIndex;
+use crate::pinned;
+use crate::pinned::{Constant, Symbol};
 use core::ffi::c_void;
 use std::cell::RefCell;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -19,14 +22,14 @@ use crate::locks::Relock;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
-    "comfort.base_register",
-    "experience.gained",
-    "experience.level_cap",
-    "experience.need",
-    "experience.need_for_level",
-    "experience.progress",
-    "skill.fly_mode_gate_return",
-    "skill.node_unlocked",
+    pinned::comfort::BASE_REGISTER.id(),
+    pinned::experience::GAINED.id(),
+    pinned::experience::LEVEL_CAP.id(),
+    pinned::experience::NEED.id(),
+    pinned::experience::NEED_FOR_LEVEL.id(),
+    pinned::experience::PROGRESS.id(),
+    pinned::skill::FLY_MODE_GATE_RETURN.id(),
+    pinned::skill::NODE_UNLOCKED.id(),
 ];
 
 /// `player_level`'s iterator: context, `CurrentTransform`, then `Experience`,
@@ -104,7 +107,7 @@ type SystemFn = unsafe extern "system" fn(ctx: *mut u64);
 type NeedForFn = unsafe extern "system" fn(level: u32, balancing: u64) -> u32;
 type LevelCapFn = unsafe extern "system" fn(balancing: u64) -> u32;
 
-fn symbol(loader: &Loader, name: &str) -> Option<usize> {
+fn symbol(loader: &Loader, name: Symbol) -> Option<usize> {
     loader
         .address(name)
         .and_then(|address| usize::try_from(address).ok())
@@ -113,10 +116,10 @@ fn symbol(loader: &Loader, name: &str) -> Option<usize> {
 fn levels(loader: &Loader) -> Option<&'static Levels> {
     LEVELS
         .get_or_init(|| {
-            let hash = |name: &str| u32::try_from(loader.build.constant(name)?).ok();
+            let hash = |name: Constant| u32::try_from(loader.build.constant(name.id())?).ok();
             let (need_for, level_cap) = (
-                symbol(loader, "experience.need_for_level")?,
-                symbol(loader, "experience.level_cap")?,
+                symbol(loader, pinned::experience::NEED_FOR_LEVEL)?,
+                symbol(loader, pinned::experience::LEVEL_CAP)?,
             );
             Some(Levels {
                 // SAFETY: the table's `experience.need_for_level` is the
@@ -127,9 +130,9 @@ fn levels(loader: &Loader) -> Option<&'static Levels> {
                 // the game function with the `LevelCapFn` signature on this
                 // build, in the image, which stays mapped.
                 level_cap: unsafe { core::mem::transmute::<usize, LevelCapFn>(level_cap) },
-                gained: hash("experience.gained")?,
-                progress: hash("experience.progress")?,
-                need: hash("experience.need")?,
+                gained: hash(pinned::experience::GAINED)?,
+                progress: hash(pinned::experience::PROGRESS)?,
+                need: hash(pinned::experience::NEED)?,
             })
         })
         .as_ref()
@@ -141,7 +144,7 @@ fn too_late(loader: &Loader) -> bool {
 
 pub(crate) fn register_skill(
     loader: &Loader,
-    owner: usize,
+    owner: ModIndex,
     node: u32,
     callback: SkillCheckFn,
     user: *mut c_void,
@@ -149,7 +152,7 @@ pub(crate) fn register_skill(
     if too_late(loader) {
         return Status::TOO_LATE;
     }
-    if symbol(loader, "skill.node_unlocked").is_none() {
+    if symbol(loader, pinned::skill::NODE_UNLOCKED).is_none() {
         return Status::MISSING;
     }
     SKILLS
@@ -160,14 +163,14 @@ pub(crate) fn register_skill(
 
 pub(crate) fn register_comfort(
     loader: &Loader,
-    owner: usize,
+    owner: ModIndex,
     callback: ComfortFn,
     user: *mut c_void,
 ) -> Status {
     if too_late(loader) {
         return Status::TOO_LATE;
     }
-    if symbol(loader, "comfort.base_register").is_none() {
+    if symbol(loader, pinned::comfort::BASE_REGISTER).is_none() {
         return Status::MISSING;
     }
     COMFORT
@@ -178,7 +181,7 @@ pub(crate) fn register_comfort(
 
 pub(crate) fn register_experience(
     loader: &Loader,
-    owner: usize,
+    owner: ModIndex,
     callback: ExperiencePassFn,
     user: *mut c_void,
 ) -> Status {
@@ -208,7 +211,7 @@ pub(crate) fn link(loader: &'static Loader) {
     let _first = SEALED.set(sealed);
     let _first = LOADED.set(loader);
     FLY_MODE.store(
-        symbol(loader, "skill.fly_mode_gate_return").unwrap_or(0),
+        symbol(loader, pinned::skill::FLY_MODE_GATE_RETURN).unwrap_or(0),
         Ordering::Relaxed,
     );
     let player_level = match crate::ecs::components_match(loader, "player_level", &READS, &WRITES) {
@@ -227,7 +230,7 @@ pub(crate) fn link(loader: &'static Loader) {
     if wants[0]
         && loader.link_feature(
             "skill checks",
-            address("skill.node_unlocked"),
+            address(pinned::skill::NODE_UNLOCKED),
             &SKILL_NEXT,
             node_unlocked,
             HookFlags::CALLER_FRAME,
@@ -238,7 +241,7 @@ pub(crate) fn link(loader: &'static Loader) {
     if wants[1]
         && loader.link_feature(
             "comfort",
-            address("comfort.base_register"),
+            address(pinned::comfort::BASE_REGISTER),
             &COMFORT_NEXT,
             register,
             HookFlags::NONE,

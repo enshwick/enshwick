@@ -22,7 +22,9 @@
 //! [`MAX_PARTS`] frames. Each side keeps a rate per peer and drops what is
 //! over it, counting the drops for the status summary.
 
+use crate::mod_index::ModIndex;
 use core::ffi::c_void;
+use enshwick::ecs::Entity;
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
@@ -145,7 +147,7 @@ fn channel_id(id: &str, name: &str) -> u32 {
 /// Opens mod `owner`'s channel `name`; its id.
 pub(crate) fn open(
     loader: &Loader,
-    owner: usize,
+    owner: ModIndex,
     name: &str,
     callback: NetMessageFn,
     user: *mut c_void,
@@ -153,7 +155,7 @@ pub(crate) fn open(
     if CHANNELS.get().is_some() {
         return Err(Status::TOO_LATE);
     }
-    let record = loader.mods.get(owner).ok_or(Status::BAD_ARGS)?;
+    let record = loader.mods.get(owner.get()).ok_or(Status::BAD_ARGS)?;
     if !record
         .manifest
         .flags
@@ -234,12 +236,12 @@ fn control(kind: u8) -> Vec<u8> {
 
 /// Sends the client of the player with account key `key` a notice for the
 /// player's entity `entity`; the client shows `text`.
-pub(crate) fn notice(key: u64, entity: u32, text: &str) -> Result<(), Status> {
+pub(crate) fn notice(key: u64, entity: Entity, text: &str) -> Result<(), Status> {
     if !ready(key) {
         return Err(Status::MISSING);
     }
     let mut data = control(NOTICE);
-    data.extend_from_slice(&entity.to_le_bytes());
+    data.extend_from_slice(&entity.0.to_le_bytes());
     data.extend_from_slice(text.as_bytes());
     for line in control_frames(&data).ok_or(Status::BAD_ARGS)? {
         crate::chat::send_frame(key, &line);
@@ -571,7 +573,7 @@ pub(crate) fn client_received(text: &str) -> bool {
             && let Some((entity, text)) = rest.split_first_chunk::<4>()
             && let Ok(text) = core::str::from_utf8(text)
         {
-            crate::notices::queue(u32::from_le_bytes(*entity), text);
+            crate::notices::queue(Entity(u32::from_le_bytes(*entity)), text);
         } else if single && let Some(rest) = frame.part.strip_prefix(control(UI_DEMO).as_slice()) {
             crate::ui::open_demo(demo_position(rest));
         } else {
@@ -665,7 +667,7 @@ pub(crate) fn clients() -> Vec<u64> {
 /// key `peer`, or to every client that said hello for 0.
 pub(crate) fn send(
     loader: &Loader,
-    owner: usize,
+    owner: ModIndex,
     channel: u32,
     peer: u64,
     data: &[u8],

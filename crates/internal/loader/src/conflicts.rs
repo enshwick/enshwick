@@ -1,8 +1,10 @@
 //! Where mods meet: game functions several mods hook, features several mods
-//! filter or one mod holds, resources several mods patch. The report names
-//! who, in which order, and whether they chain or one holds it; the status
-//! summary and `enshwick conflicts` show it.
+//! filter or one mod holds, resources several mods patch.
+//!
+//! The report names who, in which order, and whether they chain or one holds
+//! it; the status summary and `enshwick conflicts` show it.
 
+use crate::mod_index::ModIndex;
 use std::borrow::Cow;
 use std::fmt::Write as _;
 use std::sync::Mutex;
@@ -40,7 +42,7 @@ pub struct Claim {
     /// The feature, such as `interaction filter` or `rename filter`.
     pub feature: Cow<'static, str>,
     /// The mod's index.
-    pub owner: usize,
+    pub owner: ModIndex,
     /// How the feature is shared.
     pub mode: Mode,
     /// Whether the loader granted it.
@@ -53,7 +55,7 @@ static CLAIMS: Mutex<Vec<Claim>> = Mutex::new(Vec::new());
 /// on; only grants and refusals count.
 pub fn note(
     feature: impl Into<Cow<'static, str>>,
-    owner: usize,
+    owner: ModIndex,
     mode: Mode,
     status: Status,
 ) -> Status {
@@ -105,7 +107,7 @@ pub fn report(
     hooks: &[Hooked],
     claims: &[Claim],
     resources: &[(String, Vec<String>)],
-    name: impl Fn(usize) -> String,
+    name: impl Fn(ModIndex) -> String,
 ) -> Vec<String> {
     let mut lines = Vec::new();
     for hook in hooks {
@@ -208,7 +210,7 @@ mod tests {
         }
     }
 
-    fn claim(feature: &'static str, owner: usize, mode: Mode, granted: bool) -> Claim {
+    fn claim(feature: &'static str, owner: ModIndex, mode: Mode, granted: bool) -> Claim {
         Claim {
             feature: feature.into(),
             owner,
@@ -217,8 +219,8 @@ mod tests {
         }
     }
 
-    fn names(index: usize) -> String {
-        ["you.trading-post", "you.market-stalls", "market"][index].to_owned()
+    fn names(index: ModIndex) -> String {
+        ["you.trading-post", "you.market-stalls", "market"][index.get()].to_owned()
     }
 
     #[test]
@@ -258,11 +260,11 @@ mod tests {
     #[test]
     fn shared_and_held_features_are_named() {
         let claims = [
-            claim("interaction filter", 0, Mode::Chained, true),
-            claim("interaction filter", 1, Mode::Chained, true),
-            claim("altar limit", 2, Mode::Exclusive, true),
-            claim("altar limit", 0, Mode::Exclusive, false),
-            claim("damage filter", 1, Mode::Chained, true),
+            claim("interaction filter", ModIndex::new(0), Mode::Chained, true),
+            claim("interaction filter", ModIndex::new(1), Mode::Chained, true),
+            claim("altar limit", ModIndex::new(2), Mode::Exclusive, true),
+            claim("altar limit", ModIndex::new(0), Mode::Exclusive, false),
+            claim("damage filter", ModIndex::new(1), Mode::Chained, true),
         ];
         let lines = report(&[], &claims, &[], names);
         assert_eq!(

@@ -3,6 +3,8 @@
 //! action, so nothing moves and nothing is lost; the filters see the server's
 //! world only.
 
+use crate::mod_index::ModIndex;
+use crate::pinned;
 use core::ffi::c_void;
 use std::cell::RefCell;
 use std::sync::{Mutex, OnceLock};
@@ -18,27 +20,27 @@ use crate::locks::Relock;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
-    "access.base_stock",
-    "access.base_stock_ui_return",
-    "access.consumed_deposit",
-    "access.consumed_upgrade",
-    "access.deposit_target",
-    "access.deposit_version",
-    "access.dismantle_method",
-    "access.object_id",
-    "access.object_kind",
-    "access.offer_test",
-    "access.sort",
-    "access.sort_target",
-    "access.state_input",
-    "access.state_owner_index",
-    "access.transfer",
-    "access.transfer_source",
-    "access.transfer_source_slot",
-    "access.transfer_target",
-    "access.transfer_target_slot",
-    "access.upgrade_target",
-    "access.upgrade_version",
+    pinned::access::BASE_STOCK.id(),
+    pinned::access::BASE_STOCK_UI_RETURN.id(),
+    pinned::access::CONSUMED_DEPOSIT.id(),
+    pinned::access::CONSUMED_UPGRADE.id(),
+    pinned::access::DEPOSIT_TARGET.id(),
+    pinned::access::DEPOSIT_VERSION.id(),
+    pinned::access::DISMANTLE_METHOD.id(),
+    pinned::access::OBJECT_ID.id(),
+    pinned::access::OBJECT_KIND.id(),
+    pinned::access::OFFER_TEST.id(),
+    pinned::access::SORT.id(),
+    pinned::access::SORT_TARGET.id(),
+    pinned::access::STATE_INPUT.id(),
+    pinned::access::STATE_OWNER_INDEX.id(),
+    pinned::access::TRANSFER.id(),
+    pinned::access::TRANSFER_SOURCE.id(),
+    pinned::access::TRANSFER_SOURCE_SLOT.id(),
+    pinned::access::TRANSFER_TARGET.id(),
+    pinned::access::TRANSFER_TARGET_SLOT.id(),
+    pinned::access::UPGRADE_TARGET.id(),
+    pinned::access::UPGRADE_VERSION.id(),
 ];
 
 /// The offer result the game writes when it does not offer an interaction.
@@ -139,7 +141,10 @@ fn layout(loader: &Loader) -> Option<Layout> {
         upgrade_version: size("upgrade_version")?,
         consumed_upgrade: size("consumed_upgrade")?,
         stock_ui_return: if loader.side == Side::CLIENT {
-            loader.base + loader.build.symbol("access.base_stock_ui_return")?
+            loader.base
+                + loader
+                    .build
+                    .symbol(pinned::access::BASE_STOCK_UI_RETURN.id())?
         } else {
             0
         },
@@ -152,7 +157,7 @@ fn layout(loader: &Loader) -> Option<Layout> {
 
 pub(crate) fn register(
     loader: &Loader,
-    owner: usize,
+    owner: ModIndex,
     callback: InteractionFn,
     user: *mut c_void,
 ) -> Status {
@@ -182,7 +187,7 @@ pub(crate) fn link(loader: &'static Loader) {
         return;
     };
     let _first = LOADED.set((loader, layout, components));
-    let at = |name: &str| loader.address(&format!("access.{name}"));
+    let at = |name: &str| loader.address_by_name(&format!("access.{name}"));
     let actions = loader
         .reflection
         .system("inventory_actions")

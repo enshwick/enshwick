@@ -17,6 +17,8 @@
 mod affected;
 mod book;
 mod bundle;
+#[cfg(feature = "compat")]
+mod compat;
 mod ranges;
 mod wine;
 
@@ -28,14 +30,18 @@ use std::time::Instant;
 
 use affected::{Package, Scope};
 
-const USAGE: &str = "usage: cargo xtask check [--all] [--windows] [--base <git ref>] | bundle [--out <dir>] [--local]";
+const USAGE: &str = "usage: cargo xtask check [--all] [--windows] [--base <git ref>] [--part host|windows-lint|windows-tests]... [--list-windows-tests] | bundle [--out <dir>] [--local] | compat <exe> [--mods <path>...] [--report <file>] [--patterns]";
 const WINDOWS_TARGET: &str = "x86_64-pc-windows-msvc";
 /// Turned on by name: most of the API crate's test targets need its fake
-/// loader, and without the feature cargo skips them without a word.
-const TEST_FEATURE: &str = "enshwick/test";
+/// loader, and without the feature cargo skips them without a word; the
+/// compat task is linted and tested with the rest.
+const TEST_FEATURE: &str = "enshwick/test,xtask/compat";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
+    if let Some(("compat", rest)) = args.split_first().map(|(task, rest)| (task.as_str(), rest)) {
+        return compat_task(rest);
+    }
     match run(&args) {
         Ok(true) => ExitCode::SUCCESS,
         Ok(false) => ExitCode::FAILURE,
@@ -56,16 +62,30 @@ fn run(args: &[String]) -> Result<bool, String> {
     }
     let mut all = false;
     let mut windows = false;
+    let mut list = false;
+    let mut parts = Vec::new();
     let mut base = "origin/main".to_owned();
     let mut rest = rest.iter();
     while let Some(arg) = rest.next() {
         match arg.as_str() {
             "--all" => all = true,
             "--windows" => windows = true,
+            "--list-windows-tests" => list = true,
             "--base" => base.clone_from(rest.next().ok_or(USAGE)?),
+            "--part" => parts.push(Part::parse(rest.next().ok_or(USAGE)?)?),
             _ => return Err(USAGE.to_owned()),
         }
     }
+    // No part named: every part, the Windows tests with `--all` or `--windows`.
+    let parts = if parts.is_empty() {
+        let mut every = vec![Part::Host, Part::WindowsLint];
+        if all || windows {
+            every.push(Part::WindowsTests);
+        }
+        every
+    } else {
+        parts
+    };
     let packages = packages()?;
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let mut problems: Vec<String> = ranges::check(&root, &packages)
@@ -77,11 +97,13 @@ fn run(args: &[String]) -> Result<bool, String> {
             .into_iter()
             .map(|problem| format!("book: {problem}")),
     );
-    for problem in &problems {
-        say(problem);
-    }
-    if !problems.is_empty() {
-        return Ok(false);
+    if parts.contains(&Part::Host) && !list {
+        for problem in &problems {
+            say(problem);
+        }
+        if !problems.is_empty() {
+            return Ok(false);
+        }
     }
     let scope = if all {
         Scope::All
@@ -91,10 +113,6 @@ fn run(args: &[String]) -> Result<bool, String> {
         say(&format!("no merge base with {base}; checking everything"));
         Scope::All
     };
-    let checked = check(&scope, &packages, all);
-    if !(checked && (all || windows)) {
-        return Ok(checked);
-    }
     let windows_tests: Vec<&str> = packages
         .iter()
         .filter(|p| p.windows_tests)
@@ -104,11 +122,46 @@ fn run(args: &[String]) -> Result<bool, String> {
         })
         .map(|p| p.name.as_str())
         .collect();
+    if list {
+        // One name a line, for CI to decide whether to set up Wine at all.
+        for name in &windows_tests {
+            let _shown = writeln!(std::io::stdout(), "{name}");
+        }
+        return Ok(true);
+    }
+    let checked = check(&scope, &packages, all, &parts);
+    if !(checked && parts.contains(&Part::WindowsTests)) {
+        return Ok(checked);
+    }
     if windows_tests.is_empty() {
         say("no package with Windows tests changed; no tests under Wine");
         return Ok(true);
     }
     Ok(wine::run(&windows_tests, windows))
+}
+
+/// A part of the check, so CI can run the parts as parallel jobs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Part {
+    /// fmt with `--all`, clippy, nextest, doctests, rustdoc and cargo-deny
+    /// for the host, and the repository's own checks.
+    Host,
+    /// clippy for the Windows target through cargo-xwin, off Windows.
+    WindowsLint,
+    /// The tests of the changed packages that run only on Windows, under
+    /// Wine off Windows.
+    WindowsTests,
+}
+
+impl Part {
+    fn parse(name: &str) -> Result<Self, String> {
+        match name {
+            "host" => Ok(Self::Host),
+            "windows-lint" => Ok(Self::WindowsLint),
+            "windows-tests" => Ok(Self::WindowsTests),
+            _ => Err(format!("unknown part {name}; {USAGE}")),
+        }
+    }
 }
 
 /// The workspace packages, from `cargo metadata`.
@@ -185,6 +238,48 @@ fn git(args: &[&str]) -> Option<String> {
         .status
         .success()
         .then(|| String::from_utf8_lossy(&output.stdout).into_owned())
+}
+
+/// `cargo xtask compat`: what works on a game build, from its executable.
+#[cfg(feature = "compat")]
+fn compat_task(args: &[String]) -> ExitCode {
+    match compat::main(args) {
+        Ok(true) => ExitCode::SUCCESS,
+        Ok(false) => ExitCode::from(compat::BROKEN),
+        Err(error) => {
+            let _shown = writeln!(std::io::stderr(), "error: {error}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+/// `cargo xtask compat` runs this tool again built with the loader, which
+/// plain `cargo xtask` leaves out to stay quick to build.
+#[cfg(not(feature = "compat"))]
+fn compat_task(args: &[String]) -> ExitCode {
+    let status = Command::new(cargo())
+        .args([
+            "run",
+            "--quiet",
+            "--package",
+            "xtask",
+            "--features",
+            "compat",
+            "--",
+            "compat",
+        ])
+        .args(args)
+        .status();
+    match status {
+        Ok(status) => status
+            .code()
+            .and_then(|code| u8::try_from(code).ok())
+            .map_or(ExitCode::FAILURE, ExitCode::from),
+        Err(error) => {
+            let _shown = writeln!(std::io::stderr(), "xtask: running cargo: {error}");
+            ExitCode::FAILURE
+        }
+    }
 }
 
 fn cargo() -> String {
@@ -268,7 +363,7 @@ fn say(text: &str) {
 /// the tests run are narrowed to the changed packages. Host steps run one
 /// after another (they share the build lock); the Windows lint runs beside
 /// them.
-fn check(scope: &Scope, packages: &[Package], full: bool) -> bool {
+fn check(scope: &Scope, packages: &[Package], full: bool, parts: &[Part]) -> bool {
     let on_windows = cfg!(windows);
     let host_ok =
         |name: &String| on_windows || packages.iter().any(|p| &p.name == name && !p.windows_only);
@@ -311,10 +406,11 @@ fn check(scope: &Scope, packages: &[Package], full: bool) -> bool {
     let host = |words: &[&str]| Step::new(words).then_owned(&workspace);
 
     let mut host_steps = Vec::new();
-    if full {
+    let run_host = parts.contains(&Part::Host);
+    if full && run_host {
         host_steps.push(Step::new(&["fmt", "--all", "--check"]));
     }
-    if code {
+    if code && run_host {
         host_steps.push(host(&["clippy", "--all-targets"]).then(&["--", "-D", "warnings"]));
         match &tests {
             Some(filter) if filter.is_empty() => {}
@@ -323,16 +419,16 @@ fn check(scope: &Scope, packages: &[Package], full: bool) -> bool {
             None => host_steps.push(host(&["nextest", "run", "--no-tests=pass"])),
         }
     }
-    if docs {
+    if docs && run_host {
         host_steps.push(host(&["test", "--doc"]));
     }
-    if full {
+    if full && run_host {
         host_steps.push(host(&["doc", "--no-deps"]).env("RUSTDOCFLAGS", "-D warnings"));
         host_steps.push(Step::new(&["deny", "check"]));
     }
     // Off Windows the whole workspace is also linted for Windows, where the
     // `cfg(windows)` code builds.
-    let windows = (!on_windows && code).then(|| {
+    let windows = (!on_windows && code && parts.contains(&Part::WindowsLint)).then(|| {
         Step::new(&[
             "xwin",
             "clippy",

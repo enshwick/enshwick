@@ -1,6 +1,8 @@
-//! Engine facts by an id of enshwick's own: the API asks for a type, a hash
-//! or a field offset by id, and the loader and the tools answer it from the
-//! game's reflection, so a game update that renames or moves something
+//! Engine facts by an id of enshwick's own, answered from the game's
+//! reflection.
+//!
+//! The API asks for a type, a hash or a field offset by id, and the loader
+//! and the tools answer it, so a game update that renames or moves something
 //! changes this table, not the mods.
 
 use crate::reflect::Reflection;

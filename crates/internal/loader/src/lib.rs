@@ -100,6 +100,7 @@ mod memory;
 #[cfg(windows)]
 mod mid;
 pub mod migrations;
+pub mod mod_index;
 pub mod modlist;
 #[cfg(windows)]
 mod module;
@@ -107,6 +108,11 @@ mod module;
 mod net;
 #[cfg(windows)]
 mod notices;
+#[cfg_attr(
+    all(not(windows), not(test)),
+    expect(dead_code, reason = "used by the start, which runs on Windows")
+)]
+mod others;
 #[cfg(windows)]
 mod packs;
 #[cfg(windows)]
@@ -118,6 +124,14 @@ mod patch;
     expect(dead_code, reason = "only the loader's start reads executables")
 )]
 mod pe;
+#[cfg_attr(
+    not(windows),
+    expect(
+        dead_code,
+        reason = "most ids name engine code only the Windows build reaches"
+    )
+)]
+mod pinned;
 #[cfg(windows)]
 mod points;
 #[cfg(target_arch = "x86_64")]

@@ -205,7 +205,8 @@ for the process; it is the description the loader's screens build on, and
 what the loader checks values against before it writes them.
 
 Players and administrators change settings on the Mods screen. The server's
-[console](chat.md#the-console), such as a mod's command file, reads and
+[console](chat.md#the-console), such as the server's
+[command file](chat.md#the-command-file), reads and
 changes them too:
 
 | Line                                  | Answer                                                                           |

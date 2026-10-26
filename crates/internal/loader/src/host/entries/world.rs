@@ -2,6 +2,7 @@
 
 use enshwick::abi as api_frame;
 use enshwick::abi::{Level, ModHandle, Side, Status, Str};
+use enshwick::ecs::Entity;
 
 use crate::host::memory::{put, put_headed, put_headed_list, text};
 use crate::host::{caller, caller_index, calling, entry, loader};
@@ -13,7 +14,9 @@ pub(crate) extern "system" fn component(
     out: *mut *const core::ffi::c_void,
 ) -> Status {
     entry("component", || {
-        match caller(me).and_then(|loader| crate::world::component(loader, entity, type_hash)) {
+        match caller(me)
+            .and_then(|loader| crate::world::component(loader, Entity(entity), type_hash))
+        {
             // SAFETY: `HostApi::component` has the mod pass `out` null or
             // pointing at a writable, aligned `c_void` that no other thread
             // touches during the call.
@@ -29,7 +32,7 @@ pub(crate) extern "system" fn entity_template(
     out: *mut [u8; 16],
 ) -> Status {
     entry("entity_template", || {
-        match caller(me).and_then(|loader| crate::world::template(loader, entity)) {
+        match caller(me).and_then(|loader| crate::world::template(loader, Entity(entity))) {
             // SAFETY: `HostApi::entity_template` has the mod pass `out` null or
             // pointing at a writable, aligned `[u8; 16]` that no other thread
             // touches during the call.
@@ -113,7 +116,7 @@ pub(crate) extern "system" fn set_label(me: ModHandle, entity: u32, label: Str) 
             return Status::BAD_ARGS;
         };
         match caller(me) {
-            Ok(loader) => crate::label::set(loader, entity, label),
+            Ok(loader) => crate::label::set(loader, Entity(entity), label),
             Err(status) => status,
         }
     })
@@ -149,7 +152,7 @@ pub(crate) extern "system" fn status(
             Err(status) => return status,
         };
         // A source added later would outlive a reload of the mod unseen.
-        if !crate::reload::in_init(index) {
+        if !crate::reload::in_init(index.get()) {
             return Status::TOO_LATE;
         }
         crate::status::register(index, callback, user)
@@ -166,10 +169,10 @@ pub(crate) extern "system" fn actions(
             Ok(found) => found,
             Err(status) => return status,
         };
-        if !crate::reload::in_init(index) {
+        if !crate::reload::in_init(index.get()) {
             return Status::TOO_LATE;
         }
-        let again = crate::reload::reinitialising(index);
+        let again = crate::reload::reinitialising(index.get());
         let status = crate::actions::register(index, callback, user, again);
         if status.is_ok() {
             crate::log::write(Level::DEBUG, &record.id, "player actions");
@@ -252,7 +255,7 @@ pub(crate) extern "system" fn entities(
 
 pub(crate) extern "system" fn destroy(me: ModHandle, entity: u32) -> Status {
     entry("destroy", || {
-        match caller(me).and_then(|loader| crate::entities::destroy(loader, entity)) {
+        match caller(me).and_then(|loader| crate::entities::destroy(loader, Entity(entity))) {
             Ok(()) => Status::OK,
             Err(status) => status,
         }

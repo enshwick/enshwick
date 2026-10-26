@@ -1,5 +1,6 @@
 //! Host functions for hooks and code patches.
 
+use crate::mod_index::ModIndex;
 use enshwick::abi::{HookSpec, MidHookSpec, ModHandle, Status};
 
 use crate::chains::Link;
@@ -25,7 +26,7 @@ pub(crate) extern "system" fn hook(me: ModHandle, spec: *const HookSpec) -> Stat
         // A pack's links are the API's own code in the loader, shared by
         // every pack: they stay when one pack turns off.
         let owner = if loader.mods[index].pack {
-            crate::chains::LOADER
+            ModIndex::LOADER
         } else {
             index
         };
@@ -38,7 +39,7 @@ pub(crate) extern "system" fn hook(me: ModHandle, spec: *const HookSpec) -> Stat
             hop: None,
         };
         let mut chains = loader.chains.relock();
-        if crate::reload::reinitialising(index) {
+        if crate::reload::reinitialising(index.get()) {
             chains.relink(spec.target, link)
         } else {
             chains.add(spec.target, link)

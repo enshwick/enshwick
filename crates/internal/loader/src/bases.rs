@@ -23,6 +23,9 @@
 //! the same patches and links serve both.
 
 use crate::locks::Relock;
+use crate::mod_index::ModIndex;
+use crate::pinned;
+use crate::pinned::Constant;
 
 mod limit;
 
@@ -41,14 +44,14 @@ use crate::host::Loader;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
-    "bases.count",
-    "bases.members",
-    "bases.stride",
-    "bases.zone_high",
-    "bases.zone_list",
-    "bases.zone_list_len",
-    "bases.zone_size",
-    "building.max_altars",
+    pinned::bases::COUNT.id(),
+    pinned::bases::MEMBERS.id(),
+    pinned::bases::STRIDE.id(),
+    pinned::bases::ZONE_HIGH.id(),
+    pinned::bases::ZONE_LIST.id(),
+    pinned::bases::ZONE_LIST_LEN.id(),
+    pinned::bases::ZONE_SIZE.id(),
+    pinned::building::MAX_ALTARS.id(),
 ];
 
 /// The grouping's first bytes.
@@ -118,19 +121,19 @@ struct Fields {
 
 impl Fields {
     fn read(loader: &Loader) -> Result<Self, String> {
-        let f = |id: &str| {
+        let f = |id: Constant| {
             loader
                 .offset(id)
                 .ok_or(format!("{id} is not in this build"))
         };
         Ok(Self {
-            count: f("bases.count")?,
-            stride: f("bases.stride")?,
-            members: f("bases.members")?,
-            zone_list: f("bases.zone_list")?,
-            zone_list_len: f("bases.zone_list_len")?,
-            zone_size: f("bases.zone_size")?,
-            zone_high: f("bases.zone_high")?,
+            count: f(pinned::bases::COUNT)?,
+            stride: f(pinned::bases::STRIDE)?,
+            members: f(pinned::bases::MEMBERS)?,
+            zone_list: f(pinned::bases::ZONE_LIST)?,
+            zone_list_len: f(pinned::bases::ZONE_LIST_LEN)?,
+            zone_size: f(pinned::bases::ZONE_SIZE)?,
+            zone_high: f(pinned::bases::ZONE_HIGH)?,
         })
     }
 }
@@ -151,7 +154,7 @@ struct Sites {
 
 #[derive(Debug, Clone, Copy)]
 struct Limit {
-    owner: usize,
+    owner: ModIndex,
     callback: AltarLimitFn,
     user: usize,
 }
@@ -197,14 +200,18 @@ fn too_late(loader: &Loader) -> bool {
 
 pub(crate) fn register_limit(
     loader: &Loader,
-    owner: usize,
+    owner: ModIndex,
     callback: AltarLimitFn,
     user: *mut c_void,
 ) -> Status {
     if too_late(loader) {
         return Status::TOO_LATE;
     }
-    if loader.build.symbol("building.max_altars").is_none() {
+    if loader
+        .build
+        .symbol(pinned::building::MAX_ALTARS.id())
+        .is_none()
+    {
         return Status::MISSING;
     }
     let mut held = LIMIT.relock();
@@ -221,7 +228,7 @@ pub(crate) fn register_limit(
 
 /// Finds every site and registers the patches as mod `owner`'s, all or
 /// none; a miss or a refusal leaves nothing registered.
-pub(crate) fn raise(loader: &Loader, owner: usize) -> Status {
+pub(crate) fn raise(loader: &Loader, owner: ModIndex) -> Status {
     if too_late(loader) {
         return Status::TOO_LATE;
     }
@@ -365,7 +372,7 @@ pub(crate) fn link(loader: &'static Loader) {
     let limit = LIMIT.relock().take();
     let _first = SEALED_LIMIT.set(limit);
     if limit.is_some()
-        && let Some(target) = loader.address("building.max_altars")
+        && let Some(target) = loader.address(pinned::building::MAX_ALTARS)
     {
         let status = loader.link(target, &MAX_ALTARS_NEXT, max_altars, HookFlags::NONE);
         if !status.is_ok() {

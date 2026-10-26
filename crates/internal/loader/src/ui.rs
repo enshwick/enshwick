@@ -10,6 +10,8 @@
 //! few frames, since the game may read them after the call.
 
 use crate::locks::Relock;
+use crate::mod_index::ModIndex;
+use crate::pinned;
 
 mod actions;
 mod demo;
@@ -39,129 +41,129 @@ use crate::host::{Loader, Registered};
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
-    "ui.action_bound",
-    "ui.action_extent",
-    "ui.action_new",
-    "ui.action_node",
-    "ui.action_query",
-    "ui.button",
-    "ui.button_align",
-    "ui.button_centered",
-    "ui.button_enabled",
-    "ui.button_extent",
-    "ui.button_padding_x",
-    "ui.button_padding_y",
-    "ui.button_scale",
-    "ui.button_size_mode",
-    "ui.button_sound",
-    "ui.context",
-    "ui.context_bundle",
-    "ui.context_host",
-    "ui.context_nav",
-    "ui.context_state",
-    "ui.dropdown",
-    "ui.dropdown_capacity",
-    "ui.dropdown_count",
-    "ui.dropdown_enabled",
-    "ui.dropdown_entry_text",
-    "ui.dropdown_extent",
-    "ui.dropdown_init",
-    "ui.entry_size",
-    "ui.entry_text",
-    "ui.entry_value",
-    "ui.frame_close",
-    "ui.frame_color",
-    "ui.frame_extent",
-    "ui.frame_from_node",
-    "ui.frame_node",
-    "ui.frame_open",
-    "ui.frame_stretch",
-    "ui.host_answer",
-    "ui.host_answered",
-    "ui.hud",
-    "ui.hud_visible",
-    "ui.label_align",
-    "ui.label_draw",
-    "ui.label_extent",
-    "ui.label_flags",
-    "ui.label_font_size",
-    "ui.label_new",
-    "ui.label_shown",
-    "ui.loca_id",
-    "ui.loca_text",
-    "ui.main_entry",
-    "ui.main_menu_site",
-    "ui.menu_entry_extent",
-    "ui.menu_entry_font",
-    "ui.menu_entry_text",
-    "ui.nav_axis",
-    "ui.nav_config",
-    "ui.nav_config_size",
-    "ui.nav_drop",
-    "ui.nav_end",
-    "ui.nav_extent",
-    "ui.nav_flags",
-    "ui.nav_init",
-    "ui.nav_input",
-    "ui.nav_input_kind",
-    "ui.nav_kind",
-    "ui.nav_layer",
-    "ui.nav_push",
-    "ui.nav_set",
-    "ui.nav_sound",
-    "ui.nav_wrap",
-    "ui.node_align",
-    "ui.node_height",
-    "ui.node_id",
-    "ui.node_id_get",
-    "ui.node_padding",
-    "ui.node_spacing",
-    "ui.node_stretch",
-    "ui.node_width",
-    "ui.panel",
-    "ui.panel_alpha",
-    "ui.panel_extent",
-    "ui.panel_kind",
-    "ui.pause_entry",
-    "ui.pause_menu_site",
-    "ui.popup",
-    "ui.popup_active",
-    "ui.popup_buttons",
-    "ui.popup_detail",
-    "ui.popup_detail_len",
-    "ui.popup_extent",
-    "ui.popup_message",
-    "ui.popup_title",
-    "ui.progress",
-    "ui.slider",
-    "ui.slider_bounded",
-    "ui.slider_discrete",
-    "ui.slider_format",
-    "ui.slider_init",
-    "ui.slider_max",
-    "ui.slider_min",
-    "ui.slider_on_release",
-    "ui.slider_read_only",
-    "ui.slider_steps",
-    "ui.slider_stop_capacity",
-    "ui.slider_stop_count",
-    "ui.slider_stops",
-    "ui.sound",
-    "ui.state_screen",
-    "ui.toggle",
-    "ui.toggle_count",
-    "ui.toggle_enabled",
-    "ui.toggle_explain",
-    "ui.toggle_explainer",
-    "ui.toggle_extent",
-    "ui.toggle_label",
-    "ui.view_read_only",
-    "ui.view_tab",
-    "ui.window_begin",
-    "ui.window_end",
-    "ui.window_extent",
-    "ui.window_node",
-    "ui.world_settings_site",
+    pinned::ui::ACTION_BOUND.id(),
+    pinned::ui::ACTION_EXTENT.id(),
+    pinned::ui::ACTION_NEW.id(),
+    pinned::ui::ACTION_NODE.id(),
+    pinned::ui::ACTION_QUERY.id(),
+    pinned::ui::BUTTON.id(),
+    pinned::ui::BUTTON_ALIGN.id(),
+    pinned::ui::BUTTON_CENTERED.id(),
+    pinned::ui::BUTTON_ENABLED.id(),
+    pinned::ui::BUTTON_EXTENT.id(),
+    pinned::ui::BUTTON_PADDING_X.id(),
+    pinned::ui::BUTTON_PADDING_Y.id(),
+    pinned::ui::BUTTON_SCALE.id(),
+    pinned::ui::BUTTON_SIZE_MODE.id(),
+    pinned::ui::BUTTON_SOUND.id(),
+    pinned::ui::CONTEXT.id(),
+    pinned::ui::CONTEXT_BUNDLE.id(),
+    pinned::ui::CONTEXT_HOST.id(),
+    pinned::ui::CONTEXT_NAV.id(),
+    pinned::ui::CONTEXT_STATE.id(),
+    pinned::ui::DROPDOWN.id(),
+    pinned::ui::DROPDOWN_CAPACITY.id(),
+    pinned::ui::DROPDOWN_COUNT.id(),
+    pinned::ui::DROPDOWN_ENABLED.id(),
+    pinned::ui::DROPDOWN_ENTRY_TEXT.id(),
+    pinned::ui::DROPDOWN_EXTENT.id(),
+    pinned::ui::DROPDOWN_INIT.id(),
+    pinned::ui::ENTRY_SIZE.id(),
+    pinned::ui::ENTRY_TEXT.id(),
+    pinned::ui::ENTRY_VALUE.id(),
+    pinned::ui::FRAME_CLOSE.id(),
+    pinned::ui::FRAME_COLOR.id(),
+    pinned::ui::FRAME_EXTENT.id(),
+    pinned::ui::FRAME_FROM_NODE.id(),
+    pinned::ui::FRAME_NODE.id(),
+    pinned::ui::FRAME_OPEN.id(),
+    pinned::ui::FRAME_STRETCH.id(),
+    pinned::ui::HOST_ANSWER.id(),
+    pinned::ui::HOST_ANSWERED.id(),
+    pinned::ui::HUD.id(),
+    pinned::ui::HUD_VISIBLE.id(),
+    pinned::ui::LABEL_ALIGN.id(),
+    pinned::ui::LABEL_DRAW.id(),
+    pinned::ui::LABEL_EXTENT.id(),
+    pinned::ui::LABEL_FLAGS.id(),
+    pinned::ui::LABEL_FONT_SIZE.id(),
+    pinned::ui::LABEL_NEW.id(),
+    pinned::ui::LABEL_SHOWN.id(),
+    pinned::ui::LOCA_ID.id(),
+    pinned::ui::LOCA_TEXT.id(),
+    pinned::ui::MAIN_ENTRY.id(),
+    pinned::ui::MAIN_MENU_SITE.id(),
+    pinned::ui::MENU_ENTRY_EXTENT.id(),
+    pinned::ui::MENU_ENTRY_FONT.id(),
+    pinned::ui::MENU_ENTRY_TEXT.id(),
+    pinned::ui::NAV_AXIS.id(),
+    pinned::ui::NAV_CONFIG.id(),
+    pinned::ui::NAV_CONFIG_SIZE.id(),
+    pinned::ui::NAV_DROP.id(),
+    pinned::ui::NAV_END.id(),
+    pinned::ui::NAV_EXTENT.id(),
+    pinned::ui::NAV_FLAGS.id(),
+    pinned::ui::NAV_INIT.id(),
+    pinned::ui::NAV_INPUT.id(),
+    pinned::ui::NAV_INPUT_KIND.id(),
+    pinned::ui::NAV_KIND.id(),
+    pinned::ui::NAV_LAYER.id(),
+    pinned::ui::NAV_PUSH.id(),
+    pinned::ui::NAV_SET.id(),
+    pinned::ui::NAV_SOUND.id(),
+    pinned::ui::NAV_WRAP.id(),
+    pinned::ui::NODE_ALIGN.id(),
+    pinned::ui::NODE_HEIGHT.id(),
+    pinned::ui::NODE_ID.id(),
+    pinned::ui::NODE_ID_GET.id(),
+    pinned::ui::NODE_PADDING.id(),
+    pinned::ui::NODE_SPACING.id(),
+    pinned::ui::NODE_STRETCH.id(),
+    pinned::ui::NODE_WIDTH.id(),
+    pinned::ui::PANEL.id(),
+    pinned::ui::PANEL_ALPHA.id(),
+    pinned::ui::PANEL_EXTENT.id(),
+    pinned::ui::PANEL_KIND.id(),
+    pinned::ui::PAUSE_ENTRY.id(),
+    pinned::ui::PAUSE_MENU_SITE.id(),
+    pinned::ui::POPUP.id(),
+    pinned::ui::POPUP_ACTIVE.id(),
+    pinned::ui::POPUP_BUTTONS.id(),
+    pinned::ui::POPUP_DETAIL.id(),
+    pinned::ui::POPUP_DETAIL_LEN.id(),
+    pinned::ui::POPUP_EXTENT.id(),
+    pinned::ui::POPUP_MESSAGE.id(),
+    pinned::ui::POPUP_TITLE.id(),
+    pinned::ui::PROGRESS.id(),
+    pinned::ui::SLIDER.id(),
+    pinned::ui::SLIDER_BOUNDED.id(),
+    pinned::ui::SLIDER_DISCRETE.id(),
+    pinned::ui::SLIDER_FORMAT.id(),
+    pinned::ui::SLIDER_INIT.id(),
+    pinned::ui::SLIDER_MAX.id(),
+    pinned::ui::SLIDER_MIN.id(),
+    pinned::ui::SLIDER_ON_RELEASE.id(),
+    pinned::ui::SLIDER_READ_ONLY.id(),
+    pinned::ui::SLIDER_STEPS.id(),
+    pinned::ui::SLIDER_STOP_CAPACITY.id(),
+    pinned::ui::SLIDER_STOP_COUNT.id(),
+    pinned::ui::SLIDER_STOPS.id(),
+    pinned::ui::SOUND.id(),
+    pinned::ui::STATE_SCREEN.id(),
+    pinned::ui::TOGGLE.id(),
+    pinned::ui::TOGGLE_COUNT.id(),
+    pinned::ui::TOGGLE_ENABLED.id(),
+    pinned::ui::TOGGLE_EXPLAIN.id(),
+    pinned::ui::TOGGLE_EXPLAINER.id(),
+    pinned::ui::TOGGLE_EXTENT.id(),
+    pinned::ui::TOGGLE_LABEL.id(),
+    pinned::ui::VIEW_READ_ONLY.id(),
+    pinned::ui::VIEW_TAB.id(),
+    pinned::ui::WINDOW_BEGIN.id(),
+    pinned::ui::WINDOW_END.id(),
+    pinned::ui::WINDOW_EXTENT.id(),
+    pinned::ui::WINDOW_NODE.id(),
+    pinned::ui::WORLD_SETTINGS_SITE.id(),
 ];
 
 // SAFETY: `PopupFn` is the signature of the game's `ui.popup`, and `link`
@@ -189,17 +191,17 @@ struct Frame {
 }
 
 impl Frame {
-    fn new(owner: usize, callback: UiFrameFn, user: *mut core::ffi::c_void) -> Self {
+    fn new(owner: ModIndex, callback: UiFrameFn, user: *mut core::ffi::c_void) -> Self {
         Self {
             registered: Registered::new(owner, callback, user),
-            generation: crate::reload::generation(owner),
+            generation: crate::reload::generation(owner.get()),
         }
     }
 
     /// Whether its mod runs, in the copy that registered it.
     fn current(&self) -> bool {
         self.registered.live()
-            && self.generation == crate::reload::generation(self.registered.owner)
+            && self.generation == crate::reload::generation(self.registered.owner.get())
     }
 }
 
@@ -242,7 +244,7 @@ const ARENA_BYTES: usize = 64 * 1024;
 #[derive(Clone, Copy)]
 struct Drawing {
     token: u64,
-    owner: usize,
+    owner: ModIndex,
     context: usize,
     window_open: bool,
     /// Drawing the HUD: items gather for their anchors.
@@ -321,7 +323,7 @@ fn thread_id() -> u32 {
 /// Registers a mod's frame callback; client only, during init.
 pub(crate) fn register_frame(
     loader: &Loader,
-    owner: usize,
+    owner: ModIndex,
     callback: UiFrameFn,
     user: *mut core::ffi::c_void,
 ) -> Status {
@@ -329,7 +331,7 @@ pub(crate) fn register_frame(
         return Status::MISSING;
     }
     if FRAMES.get().is_some() {
-        if !crate::reload::reinitialising(owner) {
+        if !crate::reload::reinitialising(owner.get()) {
             return Status::TOO_LATE;
         }
         add_late(&LATE_FRAMES, Frame::new(owner, callback, user));
@@ -342,7 +344,7 @@ pub(crate) fn register_frame(
 /// Registers a mod's HUD callback; client only, during init.
 pub(crate) fn register_hud(
     loader: &Loader,
-    owner: usize,
+    owner: ModIndex,
     callback: UiFrameFn,
     user: *mut core::ffi::c_void,
 ) -> Status {
@@ -350,7 +352,7 @@ pub(crate) fn register_hud(
         return Status::MISSING;
     }
     if HUDS.get().is_some() {
-        if !crate::reload::reinitialising(owner) {
+        if !crate::reload::reinitialising(owner.get()) {
             return Status::TOO_LATE;
         }
         add_late(&LATE_HUDS, Frame::new(owner, callback, user));
@@ -363,7 +365,7 @@ pub(crate) fn register_hud(
 /// Queues a mod's dialog; client only.
 pub(crate) fn mod_dialog(
     loader: &Loader,
-    owner: usize,
+    owner: ModIndex,
     raw: &UiDialog,
     callback: UiAnswerFn,
     user: *mut core::ffi::c_void,
@@ -755,7 +757,7 @@ fn frames(engine: &Engine, context: usize) {
 }
 
 /// Draws a mod's widget in its frame callback.
-pub(crate) fn widget(loader: &Loader, owner: usize, token: u64, raw: &mut UiWidget) -> Status {
+pub(crate) fn widget(loader: &Loader, owner: ModIndex, token: u64, raw: &mut UiWidget) -> Status {
     let Some(engine) = ENGINE.get() else {
         return Status::MISSING;
     };
@@ -909,7 +911,8 @@ fn draw(loader: &Loader, engine: &Engine, drawing: &mut Drawing, raw: &mut UiWid
             if drawing.window_open {
                 return Status::REFUSED;
             }
-            let (Some(record), Some(title)) = (loader.mods.get(drawing.owner), read(raw.detail))
+            let (Some(record), Some(title)) =
+                (loader.mods.get(drawing.owner.get()), read(raw.detail))
             else {
                 return Status::BAD_ARGS;
             };
@@ -1092,7 +1095,7 @@ mod tests {
     #[test]
     fn only_the_copy_that_registered_a_frame_draws_it() {
         extern "system" fn draw(_frame: *const UiFrame, _user: *mut core::ffi::c_void) {}
-        let owner = crate::chains::LOADER;
+        let owner = ModIndex::LOADER;
         let current = Frame::new(owner, draw, core::ptr::null_mut());
         let older = Frame {
             generation: current.generation + 1,

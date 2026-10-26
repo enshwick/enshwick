@@ -1,7 +1,8 @@
-//! The server's world: components, templates, positions and players,
-//! component writes, entity queries, labels and rename filters, chat lines,
-//! notices, destroy requests and saves. Most calls
-//! belong on the server's game thread, from a game event or a
+//! The server's world: components, templates, positions and players, component
+//! writes, entity queries, labels and rename filters, chat lines, notices,
+//! destroy requests and saves.
+//!
+//! Most calls belong on the server's game thread, from a game event or a
 //! [`Scheduler`](crate::schedule::Scheduler) task, and each says what it does
 //! elsewhere. On a client the server is the built-in one, while it hosts a
 //! game.

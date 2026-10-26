@@ -495,10 +495,12 @@ const fn digit(c: u8) -> u8 {
     }
 }
 
-/// A vanilla resource's bytes from the game's own archive, as the game
-/// reads them before it resolves their references: game data a mod builds
-/// on, such as an item's name tag or the template a station item places,
-/// read the same at init and later, on the server and the client.
+/// A vanilla resource's bytes from the game's own archive, as the game reads
+/// them before it resolves their references.
+///
+/// Game data a mod builds on, such as an item's name tag or the template a
+/// station item places, read the same at init and later, on the server and the
+/// client.
 ///
 /// `None` for a key the archive lacks. Each call reads the archive's files; keep what a mod reads
 /// more than once.
@@ -940,13 +942,15 @@ unsafe extern "system" fn build(
     Status::OK
 }
 
-/// Builds the resource `key`, which this mod serves and asked to rebuild
-/// with [`Load::allow_rebuild`], again from its base with the patches of
-/// every mod still on, from any thread, and writes the bytes that differ
-/// over the resource the game holds: for values a patch reads that changed
-/// after the first build, such as a server's join values. Nothing is done
-/// while the game has not built `key` yet, as its first build takes the
-/// values in force. Each rebuild keeps the patches' new bytes for the
+/// Builds the resource `key` again from its base with the patches of every mod
+/// still on, and writes the bytes that differ over the resource the game holds.
+///
+/// The mod serves `key` and asked to rebuild it with [`Load::allow_rebuild`];
+/// any thread may call this, for values a patch reads that changed after the
+/// first build, such as a server's join values.
+///
+/// Nothing is done while the game has not built `key` yet, as its first build
+/// takes the values in force. Each rebuild keeps the patches' new bytes for the
 /// process, so it is for rare changes.
 ///
 /// The game keeps reading the first build's bytes, so a rebuild must come

@@ -11,6 +11,9 @@
 //! A client runs the same move for its own world as well as for a hosted
 //! game's server; only the server's entity world is followed.
 
+use crate::mod_index::ModIndex;
+use crate::pinned;
+use crate::pinned::Constant;
 use core::cell::RefCell;
 use core::ffi::c_void;
 use std::sync::atomic::Ordering;
@@ -26,20 +29,20 @@ use crate::locks::Relock;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
-    "ecs.event_merge",
-    "ecs.event_record_align",
-    "ecs.event_record_header",
-    "ecs.event_record_size",
-    "ecs.event_stream_count",
-    "ecs.event_stream_size",
-    "ecs.event_stream_used",
-    "ecs.event_streams",
+    pinned::ecs::EVENT_MERGE.id(),
+    pinned::ecs::EVENT_RECORD_ALIGN.id(),
+    pinned::ecs::EVENT_RECORD_HEADER.id(),
+    pinned::ecs::EVENT_RECORD_SIZE.id(),
+    pinned::ecs::EVENT_STREAM_COUNT.id(),
+    pinned::ecs::EVENT_STREAM_SIZE.id(),
+    pinned::ecs::EVENT_STREAM_USED.id(),
+    pinned::ecs::EVENT_STREAMS.id(),
 ];
 
 /// A mod's handler for one event type, or for all with hash 0.
 #[derive(Debug, Clone, Copy)]
 struct Subscriber {
-    owner: usize,
+    owner: ModIndex,
     type_hash: u32,
     callback: GameEventFn,
     user: usize,
@@ -140,7 +143,7 @@ type MergeFn = unsafe extern "system" fn(entity_world: *mut u8);
 
 /// Registers mod `owner`'s handler for events of `type_hash`, 0 for all.
 pub(crate) fn register(
-    owner: usize,
+    owner: ModIndex,
     type_hash: u32,
     callback: GameEventFn,
     user: *mut c_void,
@@ -183,21 +186,21 @@ pub(crate) fn link(loader: &'static Loader) {
     {
         return;
     }
-    let constant = |name: &str| {
+    let constant = |name: Constant| {
         loader
             .build
-            .constant(name)
+            .constant(name.id())
             .and_then(|v| usize::try_from(v).ok())
     };
     let layout = (|| {
         Some(Layout {
-            streams: constant("ecs.event_streams")?,
-            stream_count: constant("ecs.event_stream_count")?,
-            stream_size: constant("ecs.event_stream_size")?,
-            stream_used: constant("ecs.event_stream_used")?,
-            record_size: constant("ecs.event_record_size")?,
-            record_header: constant("ecs.event_record_header")?,
-            record_align: constant("ecs.event_record_align")?.max(1),
+            streams: constant(pinned::ecs::EVENT_STREAMS)?,
+            stream_count: constant(pinned::ecs::EVENT_STREAM_COUNT)?,
+            stream_size: constant(pinned::ecs::EVENT_STREAM_SIZE)?,
+            stream_used: constant(pinned::ecs::EVENT_STREAM_USED)?,
+            record_size: constant(pinned::ecs::EVENT_RECORD_SIZE)?,
+            record_header: constant(pinned::ecs::EVENT_RECORD_HEADER)?,
+            record_align: constant(pinned::ecs::EVENT_RECORD_ALIGN)?.max(1),
         })
     })();
     let Some(layout) = layout else {
@@ -205,7 +208,7 @@ pub(crate) fn link(loader: &'static Loader) {
         return;
     };
     let _first = LOADED.set((loader, layout));
-    let target = loader.address("ecs.event_merge");
+    let target = loader.address(pinned::ecs::EVENT_MERGE);
     if loader.link_feature("game events", target, &MERGE_NEXT, merge, HookFlags::NONE) {
         crate::log!(INFO, "game events: {count} subscriptions");
     }
@@ -359,7 +362,7 @@ fn deliver(loader: &Loader) {
             (s.type_hash == 0 || s.type_hash == event.type_hash)
                 && loader
                     .mods
-                    .get(s.owner)
+                    .get(s.owner.get())
                     .is_some_and(|m| !m.off.load(Ordering::Acquire))
         }) {
             // SAFETY: `callback` is a `GameEventFn` the mod registered, in

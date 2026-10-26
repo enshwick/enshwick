@@ -1,13 +1,17 @@
 //! Mod DLLs: finding them in `mods/`, loading them and reading their exports.
 
+use std::os::windows::ffi::OsStrExt as _;
 use std::path::{Path, PathBuf};
 
 use enshwick::abi::{ABI_MAJOR, ABI_MINOR, HostApi, Manifest, ModHandle, Status, exports};
 use windows_sys::Win32::Foundation::{FreeLibrary, HMODULE};
-use windows_sys::Win32::System::LibraryLoader::{LOAD_WITH_ALTERED_SEARCH_PATH, LoadLibraryExW};
+use windows_sys::Win32::System::LibraryLoader::{
+    GetModuleHandleW, LOAD_WITH_ALTERED_SEARCH_PATH, LoadLibraryExW,
+};
 
 use crate::modlist;
 use crate::module::Export;
+use crate::others::{Origin, OtherDll};
 use crate::resolve::{self, Candidate};
 
 type AbiFn = extern "system" fn() -> u32;
@@ -54,6 +58,14 @@ pub(crate) struct Loaded {
 /// Loads the mod DLL at `path` for a dev reload; `None`, logged, when it is
 /// no mod of this ABI.
 pub(crate) fn load_copy(path: &Path) -> Option<Loaded> {
+    if crate::others::is_mod_file(path) == Some(false) {
+        crate::log!(
+            WARN,
+            "{} is no Enshwick mod any more; it is not loaded",
+            path.display()
+        );
+        return None;
+    }
     let library = load_from(path, None)?;
     Some(Loaded {
         module: library.module,
@@ -63,9 +75,13 @@ pub(crate) fn load_copy(path: &Path) -> Option<Loaded> {
     })
 }
 
-/// The mods in `mods/` with readable manifests that the mod list leaves on,
-/// and their manifests; the list gains the mods it lacked.
-pub(super) fn libraries(mods_dir: &Path) -> (Vec<Library>, Vec<Candidate>) {
+/// What `mods/` holds: the mods with readable manifests that the mod list
+/// leaves on, their manifests, and the DLLs that run without the API; the
+/// list gains the mods it lacked.
+pub(super) fn libraries(
+    mods_dir: &Path,
+    run: Run,
+) -> (Vec<Library>, Vec<Candidate>, Vec<OtherDll>) {
     let list_file = mods_dir
         .join(crate::settings::LOADER_ID)
         .join(modlist::LIST_FILE);
@@ -99,21 +115,17 @@ pub(super) fn libraries(mods_dir: &Path) -> (Vec<Library>, Vec<Candidate>) {
             init: crate::packs::init,
             ready: crate::packs::ready,
         });
-    for library in discover(mods_dir, &list).into_iter().chain(packs) {
+    let (found, mut others) = discover(mods_dir, &list, run);
+    if run == Run::Game {
+        others.extend(chained(mods_dir));
+    }
+    for library in found.into_iter().chain(packs) {
         // SAFETY: every manifest here is the copy `manifest::read` made for the process
         // or a pack's manifest built for the process, their strings and lists
         // readable and never written; a string `read` left in the DLL is read
         // while `discover` keeps it loaded.
         match unsafe { crate::manifest::parse(library.manifest) } {
             Ok(candidate) => {
-                if !enshwick::abi::is_valid_id(&candidate.id) {
-                    crate::log!(
-                        WARN,
-                        "{}: the id {} has no author; the next Enshwick refuses it, so update the mod",
-                        library.file,
-                        candidate.id
-                    );
-                }
                 changed |= list.note(&candidate.id, &library.file);
                 let off = std::iter::once(candidate.id.as_str())
                     .chain(candidate.former_ids())
@@ -151,7 +163,44 @@ pub(super) fn libraries(mods_dir: &Path) -> (Vec<Library>, Vec<Candidate>) {
     {
         crate::log!(WARN, "{} not written: {e}", modlist::LIST_PATH);
     }
-    (libraries, candidates)
+    (libraries, candidates, others)
+}
+
+/// The DLLs in `mods/chain/`, which the stub loads before the loader, and
+/// whether each is loaded.
+fn chained(mods_dir: &Path) -> Vec<OtherDll> {
+    let Some(game_dir) = mods_dir.parent() else {
+        return Vec::new();
+    };
+    dlls(&crate::others::chain_dir(game_dir))
+        .into_iter()
+        .filter_map(|path| {
+            let file = path.file_name()?.to_string_lossy().into_owned();
+            let wide: Vec<u16> = path.as_os_str().encode_wide().chain([0]).collect();
+            // SAFETY: a NUL-terminated path; a module of that path is looked
+            // up, never loaded.
+            let loaded = !unsafe { GetModuleHandleW(wide.as_ptr()) }.is_null();
+            Some(OtherDll {
+                file,
+                origin: Origin::Chain,
+                loaded,
+            })
+        })
+        .collect()
+}
+
+/// The `*.dll` files directly in `dir`, sorted; none when it is missing.
+fn dlls(dir: &Path) -> Vec<PathBuf> {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return Vec::new();
+    };
+    let mut files: Vec<PathBuf> = entries
+        .filter_map(Result::ok)
+        .map(|e| e.path())
+        .filter(|p| p.is_file() && p.extension().is_some_and(|e| e.eq_ignore_ascii_case("dll")))
+        .collect();
+    files.sort_by_cached_key(|path| path.file_name().map(std::ffi::OsStr::to_ascii_lowercase));
+    files
 }
 
 /// Keeps one file per mod id, the one [`resolve::duplicates`] chooses, and
@@ -214,19 +263,15 @@ pub(super) fn unload(library: &Library) {
     }
 }
 
-/// Loads every `mods/*.dll` that exports the Enshwick interface.
-fn discover(mods_dir: &Path, list: &modlist::ModList) -> Vec<Library> {
-    let Ok(entries) = std::fs::read_dir(mods_dir) else {
-        return Vec::new();
-    };
-    let mut files: Vec<PathBuf> = entries
-        .filter_map(Result::ok)
-        .map(|e| e.path())
-        .filter(|p| p.extension().is_some_and(|e| e.eq_ignore_ascii_case("dll")))
-        .collect();
-    files.sort();
-    files
-        .iter()
+/// Loads every `mods/*.dll` the mod list leaves on: the mods that export the
+/// Enshwick interface, and in a game the DLLs without it, told apart by
+/// their export tables before they load, which stay loaded and run on their
+/// own.
+fn discover(mods_dir: &Path, list: &modlist::ModList, run: Run) -> (Vec<Library>, Vec<OtherDll>) {
+    let mut mods = Vec::new();
+    let mut others = Vec::new();
+    let files = dlls(mods_dir)
+        .into_iter()
         .filter(|path| {
             let file = path
                 .file_name()
@@ -238,8 +283,55 @@ fn discover(mods_dir: &Path, list: &modlist::ModList) -> Vec<Library> {
             }
             !off
         })
-        .filter_map(|path| load(path))
-        .collect()
+        .collect::<Vec<_>>();
+    for path in files {
+        if crate::others::is_mod_file(&path) == Some(false) {
+            if run == Run::Game
+                && let Some(file) = load_native(&path)
+            {
+                others.push(OtherDll {
+                    file,
+                    origin: Origin::Mods,
+                    loaded: true,
+                });
+            }
+        } else if let Some(library) = load(&path) {
+            mods.push(library);
+        }
+    }
+    (mods, others)
+}
+
+/// Whether the loader starts a game or tries mods in a dry run, which loads
+/// no DLL without the Enshwick interface and finds no stub before it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum Run {
+    /// In the game, from the stub.
+    Game,
+    /// A dry run, in a process of its own.
+    Dry,
+}
+
+/// Loads the native mod at `path` from where it is and keeps it loaded; its
+/// file name, or `None`, logged, when it does not load.
+fn load_native(path: &Path) -> Option<String> {
+    let file = path.file_name()?.to_string_lossy().into_owned();
+    let wide: Vec<u16> = path.as_os_str().encode_wide().chain([0]).collect();
+    // SAFETY: `wide` is NUL-terminated; the DLL runs its `DllMain` as it
+    // would from any loader and stays loaded for the process.
+    let module = unsafe {
+        LoadLibraryExW(
+            wide.as_ptr(),
+            core::ptr::null_mut(),
+            LOAD_WITH_ALTERED_SEARCH_PATH,
+        )
+    };
+    if module.is_null() {
+        crate::log!(WARN, "{file} could not be loaded");
+        return None;
+    }
+    crate::log!(INFO, "{file} is no Enshwick mod; it runs on its own");
+    Some(file)
 }
 
 /// Loads the mod DLL at `path`, from a fresh copy with dev reload.

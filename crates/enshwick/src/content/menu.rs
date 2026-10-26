@@ -110,9 +110,11 @@ pub struct MenuEntry {
 }
 
 /// The UI bundle with each of `entries` listed in the crafting menu, right
-/// after the recipe it follows. A recipe with no place to go, or whose group
-/// already shows [`GROUP_ENTRIES`] recipes, is left out with a warning;
-/// `None` only when the bundle does not read with `layout`.
+/// after the recipe it follows.
+///
+/// A recipe with no place to go, or whose group already shows [`GROUP_ENTRIES`]
+/// recipes, is left out with a warning; `None` only when the bundle does not
+/// read with `layout`.
 ///
 /// # Examples
 ///
@@ -281,10 +283,11 @@ fn group_entries(layout: &MenuLayout, blob: &Blob, group: usize) -> Option<usize
     Some(total)
 }
 
-/// The UI bundle with a crafting menu for `workshop`: one group with one
-/// empty set, where recipes that name the workshop go. A workshop the menu
-/// already has keeps its tree; `None` when the bundle does not read with
-/// `layout`.
+/// The UI bundle with a crafting menu for `workshop`: one group with one empty
+/// set, where recipes that name the workshop go.
+///
+/// A workshop the menu already has keeps its tree; `None` when the bundle does
+/// not read with `layout`.
 ///
 /// # Examples
 ///

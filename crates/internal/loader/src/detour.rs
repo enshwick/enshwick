@@ -89,12 +89,47 @@ pub(crate) struct Pending {
 /// Blocks of near memory, each written once and then sealed.
 static BLOCKS: Mutex<Vec<(usize, usize)>> = Mutex::new(Vec::new());
 
+/// Why a target is left alone instead of hooked.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub(crate) enum PrepareError {
+    /// The relay pages could not be made executable.
+    #[error("relay pages not executable")]
+    RelayNotExecutable,
+    /// The target address is not in mapped code.
+    #[error("its address is not mapped code")]
+    NotMappedCode,
+    /// The target's first instructions do not decode.
+    #[error("its first instructions do not decode")]
+    Undecodable,
+    /// The function ends before the jump would.
+    #[error("the function is shorter than the jump")]
+    TooShort,
+    /// A branch leaves from inside the bytes the jump replaces.
+    #[error("control leaves within the bytes of the jump")]
+    ControlLeaves,
+    /// The first instructions cannot be re-encoded at the trampoline.
+    #[error("its first instructions cannot move: {0}")]
+    CannotMove(String),
+    /// The moved instructions do not fit the trampoline.
+    #[error("its first instructions grow too long to move")]
+    GrowsTooLong,
+    /// No relay lies within a 32-bit jump of the target.
+    #[error("no relay within reach")]
+    NoRelayInReach,
+    /// No free memory lies within a 32-bit jump of the target.
+    #[error("no free memory within reach of the target")]
+    NoMemoryInReach,
+    /// The jump would overwrite bytes another hook's jump takes.
+    #[error("its bytes overlap another hook's jump")]
+    OverlapsAnotherHook,
+}
+
 /// Prepares every request: relays and trampolines written and sealed, the
 /// targets untouched. Each result carries the trampoline that calls the
 /// original function, or why the target is left alone.
-pub(crate) fn prepare(requests: &[Request]) -> Vec<Result<Pending, String>> {
+pub(crate) fn prepare(requests: &[Request]) -> Vec<Result<Pending, PrepareError>> {
     let mut fresh: Vec<usize> = Vec::new();
-    let prepared: Vec<Result<Pending, String>> = requests
+    let prepared: Vec<Result<Pending, PrepareError>> = requests
         .iter()
         .map(|request| prepare_one(*request, &mut fresh))
         .collect();
@@ -105,7 +140,7 @@ pub(crate) fn prepare(requests: &[Request]) -> Vec<Result<Pending, String>> {
         if !sealed {
             return requests
                 .iter()
-                .map(|_| Err("relay pages not executable".to_owned()))
+                .map(|_| Err(PrepareError::RelayNotExecutable))
                 .collect();
         }
     }
@@ -153,9 +188,9 @@ fn hookable(address: usize, len: usize) -> bool {
     true
 }
 
-fn prepare_one(request: Request, fresh: &mut Vec<usize>) -> Result<Pending, String> {
+fn prepare_one(request: Request, fresh: &mut Vec<usize>) -> Result<Pending, PrepareError> {
     if !hookable(request.target, READ) {
-        return Err("its address is not mapped code".into());
+        return Err(PrepareError::NotMappedCode);
     }
     // SAFETY: `hookable` checked that `READ` bytes from the target lie in
     // committed, readable pages, the first of them code; the slice lives for
@@ -167,7 +202,7 @@ fn prepare_one(request: Request, fresh: &mut Vec<usize>) -> Result<Pending, Stri
     while stolen < PATCH {
         let instruction = decoder.decode();
         if instruction.is_invalid() {
-            return Err("its first instructions do not decode".into());
+            return Err(PrepareError::Undecodable);
         }
         // Bytes after a return or a jump away belong to other code, which
         // the jump must not overwrite.
@@ -175,7 +210,7 @@ fn prepare_one(request: Request, fresh: &mut Vec<usize>) -> Result<Pending, Stri
             FlowControl::Return | FlowControl::Interrupt | FlowControl::Exception
                 if !request.inside && stolen + instruction.len() < PATCH =>
             {
-                return Err("the function is shorter than the jump".into());
+                return Err(PrepareError::TooShort);
             }
             FlowControl::Return
             | FlowControl::Interrupt
@@ -184,7 +219,7 @@ fn prepare_one(request: Request, fresh: &mut Vec<usize>) -> Result<Pending, Stri
             | FlowControl::IndirectBranch
                 if stolen + instruction.len() < PATCH =>
             {
-                return Err("control leaves within the bytes of the jump".into());
+                return Err(PrepareError::ControlLeaves);
             }
             _ => {}
         }
@@ -199,10 +234,10 @@ fn prepare_one(request: Request, fresh: &mut Vec<usize>) -> Result<Pending, Stri
         block,
         BlockEncoderOptions::RETURN_NEW_INSTRUCTION_OFFSETS,
     )
-    .map_err(|e| format!("its first instructions cannot move: {e}"))?;
+    .map_err(|e| PrepareError::CannotMove(e.to_string()))?;
     let back = request.target + stolen;
     if FAR_JUMP + encoded.code_buffer.len() + FAR_JUMP > ENTRY {
-        return Err("its first instructions grow too long to move".into());
+        return Err(PrepareError::GrowsTooLong);
     }
     let mut bytes = Vec::with_capacity(ENTRY);
     bytes.extend_from_slice(&far_jump(request.detour));
@@ -221,7 +256,7 @@ fn prepare_one(request: Request, fresh: &mut Vec<usize>) -> Result<Pending, Stri
         })
         .collect();
     let distance = i32::try_from(relay.wrapping_sub(request.target + PATCH).cast_signed())
-        .map_err(|_| "no relay within reach".to_owned())?;
+        .map_err(|_| PrepareError::NoRelayInReach)?;
     let mut patch = [0xe9, 0, 0, 0, 0];
     patch[1..].copy_from_slice(&distance.to_le_bytes());
     Ok(Pending {
@@ -243,7 +278,7 @@ fn far_jump(destination: usize) -> [u8; FAR_JUMP] {
 
 /// `ENTRY` bytes within `rel32` reach of `target`, from a block allocated in
 /// this batch.
-fn near(target: usize, fresh: &mut Vec<usize>) -> Result<usize, String> {
+fn near(target: usize, fresh: &mut Vec<usize>) -> Result<usize, PrepareError> {
     let mut blocks = BLOCKS.relock();
     let reaches = |base: usize| base.abs_diff(target) < REACH;
     if let Some((base, used)) = blocks
@@ -254,7 +289,7 @@ fn near(target: usize, fresh: &mut Vec<usize>) -> Result<usize, String> {
         *used += ENTRY;
         return Ok(entry);
     }
-    let base = allocate_near(target).ok_or("no free memory within reach of the target")?;
+    let base = allocate_near(target).ok_or(PrepareError::NoMemoryInReach)?;
     fresh.push(base);
     blocks.push((base, ENTRY));
     Ok(base)
@@ -773,7 +808,7 @@ mod tests {
                 },
                 &mut Vec::new()
             ),
-            Err(why) if why.contains("not mapped")
+            Err(PrepareError::NotMappedCode)
         ));
     }
 
@@ -809,7 +844,7 @@ mod tests {
     }
 
     /// Hooks `target` to `plus_hundred`; the trampoline or why not.
-    fn hook(target: usize) -> Result<usize, String> {
+    fn hook(target: usize) -> Result<usize, PrepareError> {
         let pending = prepare(&[Request {
             target,
             detour: (plus_hundred as Unary as *const ()).addr(),
