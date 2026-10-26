@@ -6,6 +6,7 @@
 //! finds it again, and when the table is ported, the instruction is ported
 //! like any address and read on the new build.
 
+use anyhow::{Context as _, bail};
 use std::collections::HashMap;
 
 use enshwick_gamedata::{Locate, Table};
@@ -61,10 +62,10 @@ pub(crate) fn parse_pick(
     value: u64,
     symbol: bool,
     exe: &Exe<'_>,
-) -> Result<Anchor, String> {
+) -> anyhow::Result<Anchor> {
     let number = |t: &str| {
         let digits = t.trim().trim_start_matches("0x").replace('_', "");
-        u64::from_str_radix(&digits, 16).map_err(|_| format!("{t:?} is no hex RVA"))
+        u64::from_str_radix(&digits, 16).with_context(|| format!("{t:?} is no hex RVA"))
     };
     if text == "direct" {
         return Ok(Anchor::Own);
@@ -85,7 +86,7 @@ pub(crate) fn parse_pick(
     }
     let (text, plus) = match text.rfind(['+', '-']) {
         Some(at) => {
-            let n = i64::try_from(number(&text[at + 1..])?).map_err(|e| e.to_string())?;
+            let n = i64::try_from(number(&text[at + 1..])?)?;
             (&text[..at], if &text[at..=at] == "-" { -n } else { n })
         }
         None => (text, 0),
@@ -101,11 +102,11 @@ pub(crate) fn parse_pick(
         "imm" => Carrier::Immediate,
         "shl" => Carrier::Shift,
         "" => patterns::carrier_of(&insn, part)
-            .ok_or_else(|| format!("{site:#x} carries no {part:#x}"))?,
-        other => return Err(format!("an unknown kind {other:?}")),
+            .with_context(|| format!("{site:#x} carries no {part:#x}"))?,
+        other => bail!("an unknown kind {other:?}"),
     };
     if patterns::value_of(&insn, carrier) != Some(part) {
-        return Err(format!("{site:#x} does not carry {part:#x} there"));
+        bail!("{site:#x} does not carry {part:#x} there");
     }
     Ok(Anchor::Read(site, carrier, plus))
 }

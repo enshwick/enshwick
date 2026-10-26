@@ -31,7 +31,8 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 
 ## Kinds
 
-A stat kind has an id `<mod>:<name>`, each side 1 to 64 of `[a-z0-9_-]`,
+A stat kind has an id `<mod>:<name>`, the mod side a mod id and the name
+1 to 64 of `[a-z0-9_-]`,
 and a `StatDef`:
 
 | Field | Means |

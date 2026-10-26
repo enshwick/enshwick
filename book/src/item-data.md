@@ -54,7 +54,8 @@ loaded keeps its values.
   other. The value types must match; a value that does not decode as `T`
   reads as `None`.
 
-Each side of an id is 1 to 64 of `[a-z0-9_-]`. A value is encoded with
+The mod side of an id is a mod id; the name side is 1 to 64 of
+`[a-z0-9_-]`. A value is encoded with
 `postcard` and takes at most 512 bytes.
 
 ## Reads and writes

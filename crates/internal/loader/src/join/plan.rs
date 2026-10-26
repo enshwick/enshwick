@@ -18,7 +18,7 @@ pub(crate) fn entries(list: &str) -> impl Iterator<Item = (&str, &str)> {
     list.split(',')
         .filter_map(|entry| entry.split_once('@'))
         .filter(|&(id, version)| {
-            enshwick::abi::is_valid_id(id)
+            enshwick::abi::is_valid_former_id(id)
                 && !version.is_empty()
                 && version.len() <= MAX_VERSION
                 && version
@@ -39,7 +39,7 @@ pub(super) fn label(names: &Names, id: &str) -> String {
 /// ```
 /// use enshwick_loader::join::plan;
 ///
-/// let plan = plan("e5db5dca", "safes@1.0.0", Some(("989b6a71", "safes@2.0.0")), true);
+/// let plan = plan("e5db5dca", "you.trading-post@1.0.0", Some(("989b6a71", "you.trading-post@2.0.0")), true);
 /// assert!(!plan.joins());
 /// assert_eq!(plan.missing[0].yours.as_deref(), Some("1.0.0"));
 /// ```
@@ -77,8 +77,8 @@ impl Plan {
     /// ```
     /// use enshwick_loader::join::Plan;
     ///
-    /// let plan = Plan { turn_off: vec!["safes".to_owned()], ..Plan::default() };
-    /// assert_eq!(plan.turned_off(), ["safes"]);
+    /// let plan = Plan { turn_off: vec!["you.trading-post".to_owned()], ..Plan::default() };
+    /// assert_eq!(plan.turned_off(), ["you.trading-post"]);
     /// ```
     #[must_use]
     pub fn turned_off(&self) -> &[String] {
@@ -93,8 +93,8 @@ impl Plan {
     /// ```
     /// use enshwick_loader::join::{Names, Plan};
     ///
-    /// let plan = Plan { turn_off: vec!["safes".to_owned()], ..Plan::default() };
-    /// assert!(plan.note(&Names::new()).is_some_and(|note| note.ends_with("safes")));
+    /// let plan = Plan { turn_off: vec!["you.trading-post".to_owned()], ..Plan::default() };
+    /// assert!(plan.note(&Names::new()).is_some_and(|note| note.ends_with("you.trading-post")));
     /// assert_eq!(Plan::default().note(&Names::new()), None);
     /// ```
     #[must_use]
@@ -125,7 +125,7 @@ impl Plan {
 /// ```
 /// use enshwick_loader::join::plan;
 ///
-/// let plan = plan("e5db5dca", "safes@1.0.0,camera@1.0.0", Some(("989b6a71", "safes@1.0.0")), true);
+/// let plan = plan("e5db5dca", "you.trading-post@1.0.0,camera@1.0.0", Some(("989b6a71", "you.trading-post@1.0.0")), true);
 /// assert!(plan.joins());
 /// assert_eq!(plan.turned_off(), ["camera"]);
 /// ```
@@ -172,8 +172,8 @@ pub fn plan(ours: &str, ours_mods: &str, server: Option<(&str, &str)>, complete:
 /// ```
 /// use enshwick_loader::join::{Names, differences};
 ///
-/// let found = differences("safes@2.0.0", "safes@1.0.0", &Names::new());
-/// assert_eq!(found, [("safes".to_owned(), true, "safes: server 2.0.0, yours 1.0.0".to_owned())]);
+/// let found = differences("you.trading-post@2.0.0", "you.trading-post@1.0.0", &Names::new());
+/// assert_eq!(found, [("you.trading-post".to_owned(), true, "you.trading-post: server 2.0.0, yours 1.0.0".to_owned())]);
 /// ```
 #[must_use]
 pub fn differences(server: &str, ours: &str, names: &Names) -> Vec<(String, bool, String)> {
@@ -210,8 +210,8 @@ pub fn differences(server: &str, ours: &str, names: &Names) -> Vec<(String, bool
 /// ```
 /// use enshwick_loader::join::wanted;
 ///
-/// let wanted = wanted("safes@2.0.0,camera@1.0.0", "camera@1.0.0");
-/// assert_eq!(wanted, [("safes".to_owned(), "2.0.0".to_owned())]);
+/// let wanted = wanted("you.trading-post@2.0.0,camera@1.0.0", "camera@1.0.0");
+/// assert_eq!(wanted, [("you.trading-post".to_owned(), "2.0.0".to_owned())]);
 /// ```
 #[must_use]
 pub fn wanted(server: &str, ours: &str) -> Vec<(String, String)> {

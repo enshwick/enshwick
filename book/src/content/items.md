@@ -12,27 +12,27 @@ use enshwick::content::items::NewItem;
 /// The vanilla wooden chest.
 const CHEST: Guid = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");
 /// The new item.
-const SAFE: Id = Id::new("safes:safe");
+const LOCKER: Id = Id::new("you.lockers:locker");
 /// The tags of its name and description.
-const SAFE_NAME: Id = Id::new("safes:safe.name");
-const SAFE_DESCRIPTION: Id = Id::new("safes:safe.description");
+const LOCKER_NAME: Id = Id::new("you.lockers:locker.name");
+const LOCKER_DESCRIPTION: Id = Id::new("you.lockers:locker.description");
 
 const TEXTS: &str = r#"
 [en]
-"safe.name" = "Safe"
-"safe.description" = "A chest only its owner can open."
+"locker.name" = "Locker"
+"locker.description" = "A chest only its owner can open."
 "#;
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let texts = load.texts(TEXTS)?;
     load.add_texts(&texts, &[
-        ("safe.name", SAFE_NAME),
-        ("safe.description", SAFE_DESCRIPTION),
+        ("locker.name", LOCKER_NAME),
+        ("locker.description", LOCKER_DESCRIPTION),
     ])?;
     load.add_item(NewItem {
-        name: Some(SAFE_NAME.guid()),
-        description: Some(SAFE_DESCRIPTION.guid()),
-        ..NewItem::new(SAFE, CHEST)
+        name: Some(LOCKER_NAME.guid()),
+        description: Some(LOCKER_DESCRIPTION.guid()),
+        ..NewItem::new(LOCKER, CHEST)
     })
 }
 ```
@@ -222,5 +222,5 @@ meter's maximum is 0, or when the loader refuses one of its content ids. An
 item whose game id a vanilla item has turns the mod off when the game first
 reads the registry, with both items named in the mod's log. A meter on an item that has an entity already turns
 the mod off when the game reads the item.
-[`enshwick-safes`](https://github.com/enshwick/mod-safes)
+[`enshwick-safes`](https://github.com/enshwick/mod-personal-safes)
 adds its Safe this way.

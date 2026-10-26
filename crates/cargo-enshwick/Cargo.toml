@@ -12,6 +12,7 @@ repository.workspace = true
 publish = true
 
 [dependencies]
+anyhow.workspace = true
 clap = { workspace = true }
 enshwick = { workspace = true, features = ["schema"] }
 enshwick-gamedata.workspace = true
@@ -20,6 +21,7 @@ iced-x86.workspace = true
 memchr.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+toml.workspace = true
 toml_edit.workspace = true
 semver.workspace = true
 zip.workspace = true

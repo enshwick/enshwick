@@ -36,14 +36,14 @@ its file. The loader writes it on first start with every mod turned on, adds
 mods it finds later, and keeps everything else, comments included:
 
 ```toml
-[safes]
+[you.trading-post]
 enabled = false # off until the next release
-file = "enshwick-safes.dll"
+file = "trading_post.dll"
 ```
 
 A file whose entry says `enabled = false` is never loaded, so none of its code
-runs; `loader.log` says `enshwick-safes.dll skipped: off in
-mods/enshwick/mods.toml`. `links_off = ["safes:access"]` in an entry keeps the
+runs; `loader.log` says `trading_post.dll skipped: off in
+mods/enshwick/mods.toml`. `links_off = ["you.trading-post:price"]` in an entry keeps the
 mod on and only its link on that [extension point](../extending.md) off. Changes take effect at the next start. A list that
 is not valid TOML is left as it is and every mod loads, with a warning.
 `enshwick` on the [console](../chat.md#the-console) and the status summary name the mods that are off.
@@ -54,7 +54,7 @@ SHA-256, in load order, then under `[[replaced]]` the mods a present mod
 replaces (see `replaces` in [the manifest](#the-manifest)). Copying it with the DLLs sets up the same server
 again, and comparing two locks shows where two servers differ. What changed
 since the last start goes to `loader.log`, such as
-`since the last start: safes 0.3.0 -> 0.3.1`.
+`since the last start: you.trading-post 0.3.0 -> 0.3.1`.
 
 ## The ABI
 
@@ -86,7 +86,7 @@ Fields go in this order; only `id` and `side` are required:
 
 ```rust
 let manifest = enshwick::manifest!(
-    id: "trading-post",             // 1 to 64 of [a-z0-9-]
+    id: "you.trading-post",         // <author>.<name>, each of [a-z0-9-]
     side: BOTH,                     // SERVER, CLIENT or BOTH
     version: "0.2.0",               // the crate's version when left out
     name: "Trading post",           // what players read; the id when left out
@@ -114,9 +114,11 @@ let manifest = enshwick::manifest!(
 # assert_eq!(manifest.author_count, 1);
 ```
 
-- `id` names the mod in logs, its settings file `mod-configs/<id>.toml` and
-  its data folder `mod-data/<id>`. An invalid id fails the build; `enshwick`
-  is the loader's own and is refused.
+- `id` is `<author>.<name>`, each part of `[a-z0-9-]`, at most 64 characters
+  in all. It names the mod in logs, its settings file `mod-configs/<id>.toml`
+  and its data folder `mod-data/<id>`, and is the namespace of its content,
+  stats, points, services and events (`you.trading-post:prices`). An invalid
+  id fails the build; `enshwick` is the loader's own and is refused.
 - `side`: see [Sides and hosting](sides-and-hosting.md).
 - `version` is SemVer. Leave it out so the DLL reports the version you
   release; the loader names it in every message about the mod.
@@ -156,6 +158,10 @@ let manifest = enshwick::manifest!(
   has no such file yet, and counts the migrations that ran under the old id as
   run. The old files stay, for a player who goes back. `migrations.toml`
   records the copy under `[carried]`, so it happens once.
+- `points` lists the [extension points](../extending.md#defining-a-point) the
+  mod defines, by their input types. Their schemas go into the manifest and
+  into the DLL's `.enshpt` section, where `cargo enshwick point` reads them
+  to write other mods' definitions.
 - `builds` pins symbols and constants for game builds the loader's table does
   not cover, per side, by the build's GUID and age; see
   [Finding the game](../finding-the-game.md).
@@ -187,7 +193,7 @@ struct Quiet;
 
 impl enshwick::Mod for Quiet {
     fn manifest() -> &'static enshwick::abi::Manifest {
-        enshwick::manifest!(id: "quiet", side: SERVER)
+        enshwick::manifest!(id: "you.quiet", side: SERVER)
     }
 
     fn init(_load: &mut enshwick::Load<'_>) -> Result<Self, enshwick::Off> {

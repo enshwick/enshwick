@@ -18,7 +18,7 @@ mod tests {
 
     impl Mod for Raid {
         fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "raid", side: CLIENT)
+            enshwick::manifest!(id: "you.raid", side: CLIENT)
         }
 
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
@@ -72,7 +72,7 @@ mod tests {
         let ui = UI.get().unwrap();
         ui.set_markers(&[
             Marker::new([1.0, 2.0, -3.0])
-                .label("Safe")
+                .label("Locker")
                 .color(MarkerColor::Green),
             Marker::new([0.5, 0.0, 0.0]),
         ])
@@ -82,7 +82,7 @@ mod tests {
             [
                 FakeMarker {
                     position: [1 << 32, 2 << 32, -(3 << 32)],
-                    label: "Safe".into(),
+                    label: "Locker".into(),
                     color: UiMarker::GREEN
                 },
                 FakeMarker {

@@ -2,7 +2,8 @@
 
 /// Builds a mod's static [`Manifest`](crate::abi::Manifest).
 ///
-/// `id` is `[a-z0-9-]+` and names the DLL and the settings file; `side` is
+/// `id` is `<author>.<name>` (see [`is_valid_id`](crate::abi::is_valid_id))
+/// and names the settings file and data folder; `side` is
 /// `SERVER`, `CLIENT` or `BOTH`. Optional, in this order:
 ///
 /// - `version: "x.y.z"`, the crate's version when omitted;
@@ -27,6 +28,10 @@
 /// - `was: ["id", ...]`: ids this mod had before a rename; it replaces them,
 ///   answers requirements and points named by them, and on its first start
 ///   takes over their settings and data;
+/// - `points: [Type, ...]`: the [extension points](crate::points) the mod
+///   defines, each a [`#[point]`](macro@crate::point) input; their schemas
+///   go into the manifest, where `cargo enshwick point` reads them to write
+///   other mods' definitions;
 /// - `builds: [{ side, guid, age, symbols: ["id" => rva], constants: ["id" => value] }]`,
 ///   symbols and constants the mod pins itself for those game builds.
 ///
@@ -37,12 +42,12 @@
 ///
 /// ```
 /// let manifest = enshwick::manifest!(
-///     id: "survivors-per-altar",
+///     id: "you.market-stalls",
 ///     side: BOTH,
 ///     name: "Survivors per Altar",
 ///     authors: ["themaiby"],
 ///     join: true,
-///     requires: ["flame-altar-zones" => ">=0.1, <1.0"],
+///     requires: ["you.lockers" => ">=0.1, <1.0"],
 ///     breaks: ["old-survivors" => "<0.3"],
 ///     replaces: ["survivors"],
 ///     was: ["survivor-copies"],
@@ -62,7 +67,7 @@
 /// // SAFETY: as above; the license comes from this crate's Cargo.toml.
 /// assert_eq!(unsafe { manifest.license.as_str() }, Some("MIT"));
 ///
-/// let pinned = enshwick::manifest!(id: "safes", side: SERVER, version: "0.3.0");
+/// let pinned = enshwick::manifest!(id: "you.trading-post", side: SERVER, version: "0.3.0");
 /// // SAFETY: a static string.
 /// assert_eq!(unsafe { pinned.version.as_str() }, Some("0.3.0"));
 /// ```
@@ -85,6 +90,7 @@ macro_rules! manifest {
         $(, breaks: [$($breaks:literal => $breaks_range:literal),* $(,)?])?
         $(, replaces: [$($replaces:literal),* $(,)?])?
         $(, was: [$($was:literal),* $(,)?])?
+        $(, points: [$($point:ty),* $(,)?])?
         $(, builds: [$({
             side: $bside:ident,
             guid: $guid:literal,
@@ -94,9 +100,9 @@ macro_rules! manifest {
         }),* $(,)?])?
         $(,)?
     ) => {{
-        const _: () = ::core::assert!($crate::abi::is_valid_id($id), "a mod id is [a-z0-9-]+");
-        $($(const _: () = ::core::assert!($crate::abi::is_valid_id($replaces), "a replaced mod id is [a-z0-9-]+");)*)?
-        $($(const _: () = ::core::assert!($crate::abi::is_valid_id($was), "a former mod id is [a-z0-9-]+");)*)?
+        const _: () = ::core::assert!($crate::abi::is_valid_id($id), "a mod id is <author>.<name>, each of [a-z0-9-]");
+        $($(const _: () = ::core::assert!($crate::abi::is_valid_former_id($replaces), "a replaced mod id is <author>.<name> or [a-z0-9-]+");)*)?
+        $($(const _: () = ::core::assert!($crate::abi::is_valid_former_id($was), "a former mod id is <author>.<name> or [a-z0-9-]+");)*)?
         static DEPENDENCIES: &[$crate::abi::Dependency] = &[
             $($($crate::abi::Dependency {
                 id: $crate::abi::Str::new($req),
@@ -151,13 +157,23 @@ macro_rules! manifest {
                     as &[$crate::abi::Symbol]).len(),
             },)*)?
         ];
+        const VERSION: &str = $crate::__private::or_default(
+            &[$($version)?],
+            ::core::env!("CARGO_PKG_VERSION"),
+        );
+        const POINTS: &str = $crate::__private::point_schemas(
+            $crate::__private::concatcp!(
+                "schema = 1\nmod = \"", $id, "\"\nversion = \"", VERSION, "\"\n",
+                $($(<$point as $crate::points::Point>::SCHEMA,)*)?
+            ),
+        );
+        #[cfg_attr(windows, unsafe(link_section = ".enshpt"))]
+        #[used]
+        static POINT_SECTION: [u8; POINTS.len()] = $crate::__private::bytes(POINTS);
         static MANIFEST: $crate::abi::Manifest = $crate::abi::Manifest {
             header: $crate::abi::Header::of::<$crate::abi::Manifest>(),
             id: $crate::abi::Str::new($id),
-            version: $crate::abi::Str::new($crate::__private::or_default(
-                &[$($version)?],
-                ::core::env!("CARGO_PKG_VERSION"),
-            )),
+            version: $crate::abi::Str::new(VERSION),
             side: $crate::abi::Side::$side,
             flags: $crate::__private::flags(&[$($join)?], &[$($reload)?]),
             dependencies: DEPENDENCIES.as_ptr(),
@@ -176,6 +192,7 @@ macro_rules! manifest {
             homepage: $crate::abi::Str::new($crate::__private::first_text(
                 &[$($homepage,)? ::core::env!("CARGO_PKG_HOMEPAGE"), ::core::env!("CARGO_PKG_REPOSITORY")],
             )),
+            points: $crate::abi::Str::new(POINTS),
         };
         &MANIFEST
     }};
@@ -193,7 +210,7 @@ macro_rules! manifest {
 ///
 /// impl enshwick::Mod for Quiet {
 ///     fn manifest() -> &'static enshwick::abi::Manifest {
-///         enshwick::manifest!(id: "quiet", side: SERVER)
+///         enshwick::manifest!(id: "you.quiet", side: SERVER)
 ///     }
 ///
 ///     fn init(_load: &mut enshwick::Load<'_>) -> Result<Self, enshwick::Off> {

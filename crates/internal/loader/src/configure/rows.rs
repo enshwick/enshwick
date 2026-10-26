@@ -2,7 +2,7 @@
 //! the loader and the settings file: which game widget shows each setting,
 //! its value, whether the player may change it, and the TOML a change writes.
 
-use enshwick::config::{Field, Kind, Schema, Stage};
+use enshwick::config::{Field, Kind, Schema, Stage, value_at};
 use enshwick::i18n::{Language, Texts};
 
 /// The most stops a slider row gets; longer whole-number ranges slide
@@ -57,8 +57,11 @@ pub enum Lock {
 pub struct Row {
     /// The key in the settings file.
     pub key: String,
-    /// The label players read: the key in words.
+    /// The label players read: the key in words, after its group's title
+    /// for a setting in a group.
     pub label: String,
+    /// The key of the group the setting is in, if any.
+    pub group: Option<String>,
     /// The setting's documentation, in English.
     pub doc: String,
     /// How it shows, with its value.
@@ -189,11 +192,11 @@ pub fn rows(
         .iter()
         .map(|field| {
             let from_server =
-                field.follows_server() && server.is_some_and(|s| s.contains_key(&field.key));
+                field.follows_server() && server.is_some_and(|s| value_at(s, &field.key).is_some());
             let value = server
                 .filter(|_| from_server)
-                .and_then(|s| s.get(&field.key))
-                .or_else(|| table.get(&field.key))
+                .and_then(|s| value_at(s, &field.key))
+                .or_else(|| value_at(&table, &field.key))
                 .cloned()
                 .or_else(|| default(field))
                 .unwrap_or_else(|| toml::Value::String(String::new()));
@@ -205,11 +208,24 @@ pub fn rows(
             } else {
                 Lock::Open
             };
+            let group = schema.group_of(&field.key);
+            let own = field.key.rsplit('.').next().unwrap_or(&field.key);
+            let label = words
+                .and_then(|w| w.get(&field.text))
+                .unwrap_or_else(|| key_words(own));
+            let label = match group {
+                Some(group) => {
+                    let title = words
+                        .and_then(|w| w.get(&group.text))
+                        .unwrap_or_else(|| key_words(&group.key.replace('.', " ")));
+                    format!("{title}: {label}")
+                }
+                None => label,
+            };
             Row {
                 key: field.key.clone(),
-                label: words
-                    .and_then(|w| w.get(&field.text))
-                    .unwrap_or_else(|| key_words(&field.key)),
+                label,
+                group: group.map(|g| g.key.clone()),
                 doc: words
                     .and_then(|w| w.get(&format!("{}.doc", field.text)))
                     .unwrap_or_else(|| field.doc.clone()),
@@ -397,5 +413,24 @@ mod tests {
         assert!(schema.field("enabled").unwrap().check(&v["v"]).is_ok());
         assert_eq!(key_words("max_altars"), "Max altars");
         assert_eq!(key_words(""), "");
+    }
+
+    #[test]
+    fn a_grouped_setting_reads_its_table_and_names_its_group() {
+        let schema = Schema::new(
+            "",
+            "config",
+            vec![
+                Field::new("comfort.multiplier", Stage::Runtime, &1.0)
+                    .with_range(Some(0.0), Some(10.0)),
+            ],
+        )
+        .with_groups(vec![enshwick::config::Group::new("comfort", "")]);
+        let rows = rows(&schema, "[comfort]\nmultiplier = 2.5\n", None, None);
+        assert_eq!(rows[0].label, "Comfort: Multiplier");
+        assert_eq!(rows[0].group.as_deref(), Some("comfort"));
+        assert!(
+            matches!(rows[0].widget, Widget::Slider { value, .. } if (value - 2.5).abs() < 1e-6)
+        );
     }
 }

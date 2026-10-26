@@ -154,7 +154,7 @@ impl FakeHost {
     /// let loader = enshwick::test::FakeHost::new()
     ///     .join_missing(ModInfo {
     ///         header: Header::of::<ModInfo>(),
-    ///         id: Str::new("safes"),
+    ///         id: Str::new("you.trading-post"),
     ///         version: Str::new("0.2.0"),
     ///         side: Side::BOTH,
     ///         flags: ManifestFlags::JOIN,
@@ -189,10 +189,10 @@ impl FakeHost {
     ///
     /// let loader = enshwick::test::FakeHost::new()
     ///     .replaced(ModInfo {
-    ///         id: Str::new("proton-optimizer"),
+    ///         id: Str::new("you.stalls"),
     ///         version: Str::new("0.1.0"),
-    ///         file: Str::new("mods/enshwick_proton_optimizer.dll"),
-    ///         replaced_by: Str::new("optimizer"),
+    ///         file: Str::new("mods/stalls.dll"),
+    ///         replaced_by: Str::new("you.market-stalls"),
     ///         ..ModInfo::EMPTY
     ///     })
     ///     .install();
@@ -236,7 +236,7 @@ impl FakeHost {
     /// # Examples
     ///
     /// ```
-    /// #[enshwick::service(name = "trading-post:prices")]
+    /// #[enshwick::service(name = "you.trading-post:prices")]
     /// pub struct Prices {
     ///     pub price: extern "system" fn(item: u32) -> u32,
     /// }

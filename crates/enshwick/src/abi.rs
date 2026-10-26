@@ -14,22 +14,68 @@ use core::sync::atomic::{AtomicU32, AtomicUsize};
 pub const ABI_MAJOR: u16 = 2;
 
 /// The minor version of this interface. A newer minor only appends fields.
-pub const ABI_MINOR: u16 = 69;
+pub const ABI_MINOR: u16 = 71;
 
-/// Whether `id` is a valid mod id: 1 to 64 characters of `[a-z0-9-]`.
+/// Whether `id` is a valid mod id: `<author>.<name>`, each part of
+/// `[a-z0-9-]`, at most 64 characters in all.
 ///
-/// The id names the mod's DLL and settings file, so it stays portable.
+/// The author part keeps two authors' mods of one name apart; the id names
+/// the mod's settings file and data folder, so it stays portable.
 ///
 /// # Examples
 ///
 /// ```
 /// use enshwick::abi::is_valid_id;
 ///
-/// assert!(is_valid_id("flame-altar-zones"));
-/// assert!(!is_valid_id("Flame Altar Zones"));
+/// assert!(is_valid_id("you.trading-post"));
+/// assert!(!is_valid_id("trading-post"));
+/// assert!(!is_valid_id("you.trading.post"));
+/// assert!(!is_valid_id("You.Trading Post"));
 /// ```
 #[must_use]
 pub const fn is_valid_id(id: &str) -> bool {
+    let bytes = id.as_bytes();
+    if bytes.len() > 64 {
+        return false;
+    }
+    let mut dot = None;
+    let mut i = 0;
+    while i < bytes.len() {
+        let b = bytes[i];
+        if b == b'.' {
+            if dot.is_some() {
+                return false;
+            }
+            dot = Some(i);
+        } else if !(b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-') {
+            return false;
+        }
+        i += 1;
+    }
+    match dot {
+        Some(at) => at > 0 && at + 1 < bytes.len(),
+        None => false,
+    }
+}
+
+/// Whether `id` is an id a mod may have had: a valid id, or 1 to 64
+/// characters of `[a-z0-9-]`, the form ids had before they carried an
+/// author.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::abi::is_valid_former_id;
+///
+/// assert!(is_valid_former_id("trading-post"));
+/// assert!(is_valid_former_id("you.trading-post"));
+/// assert!(!is_valid_former_id("Trading Post"));
+/// ```
+#[must_use]
+pub const fn is_valid_former_id(id: &str) -> bool {
+    if is_valid_id(id) {
+        return true;
+    }
     let bytes = id.as_bytes();
     if bytes.is_empty() || bytes.len() > 64 {
         return false;
@@ -212,9 +258,9 @@ pub unsafe fn write_headed<T: Copy>(out: *mut T, value: T) -> bool {
 /// ```
 /// use enshwick::abi::Str;
 ///
-/// let id = Str::new("flame-altar-zones");
+/// let id = Str::new("you.lockers");
 /// // SAFETY: `id` borrows a `'static` string.
-/// assert_eq!(unsafe { id.as_str() }, Some("flame-altar-zones"));
+/// assert_eq!(unsafe { id.as_str() }, Some("you.lockers"));
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
@@ -1310,7 +1356,7 @@ impl Relation {
 /// use enshwick::abi::{Dependency, Relation, Str};
 ///
 /// let zones = Dependency {
-///     id: Str::new("flame-altar-zones"),
+///     id: Str::new("you.lockers"),
 ///     range: Str::new(">=0.1, <1.0"),
 ///     relation: Relation::REQUIRES,
 /// };
@@ -1374,7 +1420,7 @@ impl ManifestFlags {
 ///
 /// let manifest = Manifest {
 ///     header: Header::of::<Manifest>(),
-///     id: Str::new("flame-altar-count"),
+///     id: Str::new("you.lanterns"),
 ///     version: Str::new("0.1.0"),
 ///     side: Side::BOTH,
 ///     flags: ManifestFlags::JOIN,
@@ -1388,6 +1434,7 @@ impl ManifestFlags {
 ///     author_count: 0,
 ///     license: Str::new("MIT"),
 ///     homepage: Str::EMPTY,
+///     points: Str::EMPTY,
 /// };
 /// assert!(manifest.flags.contains(ManifestFlags::JOIN));
 /// ```
@@ -1396,7 +1443,7 @@ impl ManifestFlags {
 pub struct Manifest {
     /// Size and version of this struct.
     pub header: Header,
-    /// `[a-z0-9-]+`; names the DLL and the settings file.
+    /// `<author>.<name>`, see [`is_valid_id`]; names the settings file.
     pub id: Str,
     /// The mod's SemVer version.
     pub version: Str,
@@ -1427,6 +1474,11 @@ pub struct Manifest {
     /// Where players read about the mod, an `https://` address. Since minor
     /// 36.
     pub homepage: Str,
+    /// The schemas of the extension points the mod defines, as TOML that
+    /// `cargo enshwick point` reads; empty for none. The same text sits in
+    /// the DLL's `.enshpt` section, so a tool reads it without running the
+    /// mod. Since minor 71.
+    pub points: Str,
 }
 
 // SAFETY: a manifest is immutable static data; its pointers refer to statics.
@@ -1584,15 +1636,15 @@ impl CallerFrame {
 /// ```
 /// use enshwick::abi::{Header, ManifestFlags, ModInfo, Side, Str};
 ///
-/// let safes = ModInfo {
+/// let post = ModInfo {
 ///     header: Header::of::<ModInfo>(),
-///     id: Str::new("safes"),
+///     id: Str::new("you.trading-post"),
 ///     version: Str::new("0.1.0"),
 ///     side: Side::BOTH,
 ///     flags: ManifestFlags::JOIN,
 ///     off: 0,
-///     file: Str::new("mods/enshwick_safes.dll"),
-///     name: Str::new("Safes"),
+///     file: Str::new("mods/trading_post.dll"),
+///     name: Str::new("Trading Post"),
 ///     description: Str::EMPTY,
 ///     authors: core::ptr::null(),
 ///     author_count: 0,
@@ -1600,7 +1652,7 @@ impl CallerFrame {
 ///     homepage: Str::EMPTY,
 ///     replaced_by: Str::EMPTY,
 /// };
-/// assert_eq!(safes.off, 0);
+/// assert_eq!(post.off, 0);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
@@ -1619,7 +1671,7 @@ pub struct ModInfo {
     /// 1 when the mod is off: refused at init or faulted since.
     pub off: u8,
     /// The DLL's path relative to the game's folder, with `/` separators,
-    /// such as `mods/enshwick_safes.dll`.
+    /// such as `mods/trading_post.dll`.
     pub file: Str,
     /// The manifest's human metadata, as in [`Manifest`]; in
     /// [`HostApi::join_missing`], the name and homepage the server advertises
@@ -1648,8 +1700,8 @@ impl ModInfo {
     /// ```
     /// use enshwick::abi::{ModInfo, Str};
     ///
-    /// let safes = ModInfo { id: Str::new("safes"), ..ModInfo::EMPTY };
-    /// assert!(safes.version.is_empty());
+    /// let post = ModInfo { id: Str::new("you.trading-post"), ..ModInfo::EMPTY };
+    /// assert!(post.version.is_empty());
     /// ```
     pub const EMPTY: Self = Self {
         header: Header::of::<Self>(),
@@ -2169,8 +2221,8 @@ pub type ZoneCheckFn = unsafe extern "system" fn(check: *const ZoneCheck, user: 
 /// A game system asking which entity is a survivor, as
 /// [`HostApi::survivor_lookup`] hands it to the mod that answers.
 ///
-/// The game keeps one entity per survivor; a mod that keeps several, such as
-/// one per base, answers each asker with the one that suits it. Cells are
+/// The game keeps one entity per survivor; a mod that keeps several answers
+/// each asker with the one that suits it. Cells are
 /// whole 0.5 m cells.
 ///
 /// # Examples
@@ -3820,7 +3872,7 @@ impl UiWidget {
 /// let marker = UiMarker {
 ///     header: Header::of::<UiMarker>(),
 ///     position: [100 << 32, 40 << 32, -(20 << 32)],
-///     label: Str::new("Safe of Bob"),
+///     label: Str::new("Locker of Bob"),
 ///     color: UiMarker::GREEN,
 ///     reserved: 0,
 /// };
@@ -3871,7 +3923,7 @@ impl UiMarker {
 /// let dialog = UiDialog {
 ///     header: Header::of::<UiDialog>(),
 ///     title: Str::new("Enshwick"),
-///     message: Str::new("Open every safe in the world?"),
+///     message: Str::new("Open every locker in the world?"),
 ///     detail: Str::EMPTY,
 ///     buttons: 1 << UiDialog::OK | 1 << UiDialog::CANCEL,
 ///     flags: 0,
@@ -5153,7 +5205,7 @@ pub struct Layout {
 ///
 /// let spec = ServiceSpec {
 ///     header: Header::of::<ServiceSpec>(),
-///     name: Str::new("trading-post:prices"),
+///     name: Str::new("you.trading-post:prices"),
 ///     major: 1,
 ///     layout: Layout { fields: core::ptr::null(), count: 0, size: 0 },
 ///     table: core::ptr::null(),
@@ -5223,7 +5275,7 @@ impl ServiceFound {
 ///
 /// let spec = EventSpec {
 ///     header: Header::of::<EventSpec>(),
-///     name: Str::new("trading-post:sold"),
+///     name: Str::new("you.trading-post:sold"),
 ///     layout: Layout { fields: core::ptr::null(), count: 0, size: 0 },
 /// };
 /// assert_eq!(spec.layout.size, 0);
@@ -5307,7 +5359,7 @@ impl PointFlags {
 /// let empty = Layout { fields: core::ptr::null(), count: 0, size: 0 };
 /// let spec = PointSpec {
 ///     header: Header::of::<PointSpec>(),
-///     name: Str::new("safes:access"),
+///     name: Str::new("you.trading-post:price"),
 ///     mode: PointMode::OVERRIDE,
 ///     flags: PointFlags::REFUSE,
 ///     input: empty,
@@ -5628,7 +5680,8 @@ const _: () = {
     assert!(size_of::<AltarZoneSize>() == 24);
     assert!(size_of::<ZoneCheck>() == 8 + 16 + 48 + 8);
     assert!(core::mem::offset_of!(Manifest, name) == 80);
-    assert!(size_of::<Manifest>() == 80 + 16 * 4 + 16);
+    assert!(core::mem::offset_of!(Manifest, points) == 80 + 16 * 4 + 16);
+    assert!(size_of::<Manifest>() == 80 + 16 * 4 + 16 + 16);
     assert!(size_of::<ResourceKey>() == 24);
 };
 

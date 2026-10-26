@@ -5,13 +5,14 @@ the one tool of the repository.
 
 ```sh
 cargo install --git https://github.com/enshwick/enshwick cargo-enshwick
-cargo enshwick new my-mod --side server
+cargo enshwick new you.my-mod --side server
 cd my-mod
 cargo enshwick install --game "C:/Program Files (x86)/Steam/steamapps/common/Enshrouded"
 ```
 
-- `new <id>` creates a mod crate in `<dir>/<id>` (`--dir`, default the current
-  folder) for `--side server`, `client` or `both`. It builds and loads as it is:
+- `new <id>` creates a mod crate for the id `<author>.<name>` in
+  `<dir>/<name>` (`--dir`, default the current folder) for `--side server`,
+  `client` or `both`. It builds and loads as it is:
   settings in `mod-configs/<id>.toml`, a line in `logs/enshwick/mods/<id>.log`.
   Inside a Cargo workspace the crate joins it: its folder goes into the
   workspace's `members` unless a pattern there covers it, and the release
@@ -24,7 +25,13 @@ cargo enshwick install --game "C:/Program Files (x86)/Steam/steamapps/common/Ens
   in a workspace with several mods, `--package` names one.
 - `id <mod:name>...` prints the GUID and the game id of each
   [content id](https://github.com/enshwick/enshwick/blob/main/book/src/content.md#content-ids), as `Guid::named`
-  derives them: `cargo enshwick id safes:safe`.
+  derives them: `cargo enshwick id you.lanterns:lantern`.
+- `point <mod>:<point> --from <path> [--out <file>]` writes the Rust
+  definition of another mod's
+  [extension point](https://github.com/enshwick/enshwick/blob/main/book/src/extending.md#getting-a-points-definition)
+  from the schema its owner's build put into the owner's DLL, read without
+  running it. `--from` is the owner's DLL, a folder with it in it or in its
+  `mods/` (such as the game's), or a schema file the owner published.
 - `pack check <dir>` checks a [content pack](https://github.com/enshwick/enshwick/blob/main/book/src/content/packs.md)
   folder as the loader reads it, every problem with its file and line;
   `pack schema [dir]` writes the JSON Schema of each pack file for editors;
@@ -185,12 +192,11 @@ many entries as they do today.
 ### Game build watch
 
 [`game-build-watch.yml`](https://github.com/enshwick/enshwick/blob/main/.github/workflows/game-build-watch.yml) runs
-weekly, never on pull requests. It asks steamcmd for the public build id of
-the dedicated server. When no server table names it in `steam_build`, a
-Windows job downloads that server, runs `compat` on it with the mods of the latest
-platform release and opens an issue with the report. Game files stay on the
-runner. It stays off until the repository variable `GAME_BUILD_WATCH` is
-`true`.
+every hour on the organization's runners, never on pull requests. It reads
+the public Steam build ids of the dedicated server (app 2278520) and the
+client (app 1203620). For each build that no table names in `steam_build`,
+it opens one `game-update` issue; porting the table with `pin` is then a
+maintainer's pull request.
 
 ## More
 

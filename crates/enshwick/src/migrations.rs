@@ -180,7 +180,7 @@ impl Migration {
     ///
     /// impl enshwick::Mod for Rates {
     ///     fn manifest() -> &'static enshwick::abi::Manifest {
-    ///         enshwick::manifest!(id: "rates", side: SERVER, replaces: ["comfort"])
+    ///         enshwick::manifest!(id: "you.rates", side: SERVER, replaces: ["comfort"])
     ///     }
     ///
     ///     fn init(load: &mut enshwick::Load<'_>) -> Result<Self, enshwick::Off> {
@@ -272,15 +272,15 @@ impl Migration {
 /// use enshwick::content::{Guid, Id};
 /// use enshwick::migrations::Migrations;
 ///
-/// const OLD_SAFE: Guid = Guid::parse("8a3f6e21-5c4b-4d7e-9f10-2b7c5e6a9d31");
-/// const SAFE: Id = Id::new("safes:safe");
+/// const OLD_LOCKER: Guid = Guid::parse("8a3f6e21-5c4b-4d7e-9f10-2b7c5e6a9d31");
+/// const LOCKER: Id = Id::new("you.lockers:locker");
 ///
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 ///     load.migrate(
 ///         Migrations::new()
 ///             .add("2", |m| {
 ///                 m.rename_setting("cost", "cost_multiplier")
-///                     .rename_content(OLD_SAFE, SAFE.guid())
+///                     .rename_content(OLD_LOCKER, LOCKER.guid())
 ///             })
 ///             .add("3", |m| {
 ///                 m.map_setting("limit", |old| {
@@ -363,7 +363,7 @@ impl Migrations {
                     && step
                         .from
                         .split_once(':')
-                        .is_none_or(|(id, key)| !abi::is_valid_id(id) || key.is_empty())
+                        .is_none_or(|(id, key)| !abi::is_valid_former_id(id) || key.is_empty())
                 {
                     return Err(format!(
                         "migration {}: a setting is taken from <mod id>:<key>, not {}",
@@ -457,13 +457,13 @@ fn renames(list: &[Migration]) -> impl Iterator<Item = (Guid, Guid)> + '_ {
 /// use enshwick::content::{Guid, Id};
 /// use enshwick::migrations::{Migrations, current_id};
 ///
-/// const OLD_SAFE: Guid = Guid::parse("8a3f6e21-5c4b-4d7e-9f10-2b7c5e6a9d31");
-/// const SAFE: Id = Id::new("safes:safe");
+/// const OLD_LOCKER: Guid = Guid::parse("8a3f6e21-5c4b-4d7e-9f10-2b7c5e6a9d31");
+/// const LOCKER: Id = Id::new("you.lockers:locker");
 ///
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-///     load.migrate(Migrations::new().add("2", |m| m.rename_content(OLD_SAFE, SAFE.guid())))?;
-///     assert_eq!(current_id(OLD_SAFE.id()), SAFE.id());
-///     assert_eq!(current_id(SAFE.id()), SAFE.id());
+///     load.migrate(Migrations::new().add("2", |m| m.rename_content(OLD_LOCKER, LOCKER.guid())))?;
+///     assert_eq!(current_id(OLD_LOCKER.id()), LOCKER.id());
+///     assert_eq!(current_id(LOCKER.id()), LOCKER.id());
 ///     Ok(())
 /// }
 /// ```

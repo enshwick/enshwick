@@ -184,24 +184,22 @@ impl Registry {
         })
     }
 
-    /// Defines a mod event named after its definer `owner_id`, and returns
-    /// its id.
+    /// Defines a mod event named after its definer, whose names are its id
+    /// and then its former ids, and returns its id.
     ///
     /// # Errors
     ///
-    /// Why it is refused: a name outside the definer's id, or defined twice.
+    /// Why it is refused: a name outside the definer's names, or defined
+    /// twice.
     pub(crate) fn define(
         &mut self,
         owner: usize,
-        owner_id: &str,
+        names: &[&str],
         name: &str,
         fields: Fields,
     ) -> Result<u32, String> {
-        if name
-            .strip_prefix(owner_id)
-            .and_then(|rest| rest.strip_prefix(':'))
-            .is_none_or(str::is_empty)
-        {
+        if !crate::points::is_named_after(name, names) {
+            let owner_id = names.first().copied().unwrap_or_default();
             return Err(format!(
                 "event {name}: an event is named `{owner_id}:<what>`"
             ));
@@ -539,22 +537,22 @@ mod tests {
     fn events_are_named_after_their_definer() {
         let mut registry = Registry::default();
         assert_eq!(
-            registry.define(0, "trading-post", "trading-post:sold", fields(&["a"])),
+            registry.define(0, &["trading-post"], "trading-post:sold", fields(&["a"])),
             Ok(0)
         );
         assert!(
             registry
-                .define(0, "trading-post", "trading-postx:sold", fields(&["a"]))
+                .define(0, &["trading-post"], "trading-postx:sold", fields(&["a"]))
                 .is_err()
         );
         assert!(
             registry
-                .define(0, "trading-post", "trading-post:", fields(&["a"]))
+                .define(0, &["trading-post"], "trading-post:", fields(&["a"]))
                 .is_err()
         );
         assert!(
             registry
-                .define(0, "trading-post", "trading-post:sold", fields(&["a"]))
+                .define(0, &["trading-post"], "trading-post:sold", fields(&["a"]))
                 .is_err()
         );
     }
@@ -564,7 +562,12 @@ mod tests {
         let mut registry = Registry::default();
         assert!(
             registry
-                .define(0, "trading-post", "trading-post:sold", fields(&["a", "b"]))
+                .define(
+                    0,
+                    &["trading-post"],
+                    "trading-post:sold",
+                    fields(&["a", "b"])
+                )
                 .is_ok()
         );
         registry.subscribe(1, "trading-post:sold", fields(&["a"]), idle, 1);

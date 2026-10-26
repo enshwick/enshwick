@@ -29,15 +29,15 @@ bytes of the resource `base`:
 use enshwick::content::{Blob, Guid, Id, types};
 
 const CHEST: Guid = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");
-const SAFE_ID: Id = Id::new("my-mod:safe");
+const LOCKER_ID: Id = Id::new("my-mod:locker");
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    const SAFE: Guid = SAFE_ID.guid();
-    load.declare(SAFE_ID)?;
-    load.serve(SAFE.key(types::ITEM_INFO), CHEST.key(types::ITEM_INFO), |chest| {
+    const LOCKER: Guid = LOCKER_ID.guid();
+    load.declare(LOCKER_ID)?;
+    load.serve(LOCKER.key(types::ITEM_INFO), CHEST.key(types::ITEM_INFO), |chest| {
         let mut item = Blob::new(chest);
         // Offsets for illustration: a real mod reads them from reflection.
-        let written = item.write(0, &SAFE.id().to_le_bytes()) && item.write(4, &SAFE.0);
+        let written = item.write(0, &LOCKER.id().to_le_bytes()) && item.write(4, &LOCKER.0);
         written.then(|| item.into_bytes())
     })
 }
@@ -97,7 +97,7 @@ The rules:
 - the patches of a mod already turned off are skipped.
 
 The loader's log names each built resource and the mods that built it:
-`served resource <type>:<guid> built by safes, game-rates, <n> bytes`.
+`served resource <type>:<guid> built by you.lockers, you.lanterns, <n> bytes`.
 The [status summary](../logging.md) counts what mods serve, what was built
 and what failed.
 
@@ -148,7 +148,7 @@ assert_eq!(count, 3);
 assert_eq!(blob.read_u32(start + 8), Some(3));
 
 // A string for a new element: append the text, then point a header at it.
-let text = blob.append(b"Safe\0", 1);
+let text = blob.append(b"Locker\0", 1);
 let header = blob.append(&[0; 8], 4);
 assert!(blob.set_array(header, text, 4));
 assert_eq!(blob.array(header), Some((text, 4)));
@@ -196,11 +196,11 @@ name.
 use enshwick::content::Id;
 use enshwick::i18n::Language;
 
-const SAFE_NAME: Id = Id::new("my-mod:safe.name");
+const LOCKER_NAME: Id = Id::new("my-mod:locker.name");
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    let tag = load.declare(SAFE_NAME)?;
-    load.add_text(tag, Language::FALLBACK, "Safe")?;
+    let tag = load.declare(LOCKER_NAME)?;
+    load.add_text(tag, Language::FALLBACK, "Locker")?;
     load.add_text(tag, Language::DE_DE, "Tresor")
 }
 ```

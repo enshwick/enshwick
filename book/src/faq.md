@@ -19,7 +19,7 @@ file), at most 8 MiB each. Each line
 names its time (UTC), level and source:
 
 ```text
-01:02:03.004Z warn  [flame-altar-zones] merged 3 altars
+01:02:03.004Z warn  [you.lockers] merged 3 altars
 ```
 
 How much is kept is set in `mod-configs/enshwick.toml`, for all sources and
@@ -28,7 +28,7 @@ per mod id (`enshwick` is the loader); see
 
 ```toml
 log_level = "info"
-log_levels = { flame-altar-zones = "debug" }
+log_levels = { "you.lockers" = "debug" }
 ```
 
 ## What is in crash.log?
@@ -41,7 +41,7 @@ crash handler starts writing its crash dump, or when no handler is left, and
 the game's crash handling then runs as it would without Enshwick:
 
 ```text
-2026-10-21 23:45:18Z fault 0xc0000005 at 0x7ffb1a2b3c4d, blamed on safes: in its code (+0x3c4d in safes); reading 0x0
+2026-10-21 23:45:18Z fault 0xc0000005 at 0x7ffb1a2b3c4d, blamed on you.trading-post: in its code (+0x3c4d in you.trading-post); reading 0x0
 ```
 
 The parts are the time, the exception code, the address, and whom the fault
@@ -110,18 +110,18 @@ same verdicts without starting the game.
 
 These lines read `<file> skipped: <reason>`, or name the file alone:
 
-| Message                                                                                       | What it means                                                          |
-| --------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| `<file> is not an Enshwick mod`                                                               | The DLL lacks the four required exports of `declare_mod!`              |
-| `<file> could not be loaded`                                                                  | Windows could not load the DLL, such as a missing dependency           |
-| `<file> is built for ABI 2, the loader speaks 1`                                              | The mod was built for another ABI major                                |
-| `skipped: not for this side of the game`                                                      | A client-only mod on the dedicated server                              |
-| `old.dll skipped: safes 0.1.0 is also in safes.dll, which runs 0.2.0; old.dll can be deleted` | Two files hold one mod; the highest version runs, then the newest file |
-| `skipped: requires trading-post, which is not loaded`                                         | A required mod is absent or was skipped itself                         |
-| `skipped: requires trading-post ^0.2, found 0.1.3`                                            | A required mod is too old or too new                                   |
-| `skipped: does not work beside old-market 0.4.0; remove one of them`                          | The mod declares `breaks` on a loaded mod, and gives way               |
-| `skipped: in a dependency cycle`                                                              | Mods require each other in a circle                                    |
-| `skipped: the id "My Mod" is not [a-z0-9-]+`                                                  | The manifest's id is invalid; other manifest errors read the same way  |
+| Message                                                                                                         | What it means                                                          |
+| --------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| `<file> is not an Enshwick mod`                                                                                 | The DLL lacks the four required exports of `declare_mod!`              |
+| `<file> could not be loaded`                                                                                    | Windows could not load the DLL, such as a missing dependency           |
+| `<file> is built for ABI 2, the loader speaks 1`                                                                | The mod was built for another ABI major                                |
+| `skipped: not for this side of the game`                                                                        | A client-only mod on the dedicated server                              |
+| `old.dll skipped: you.trading-post 0.1.0 is also in trading_post.dll, which runs 0.2.0; old.dll can be deleted` | Two files hold one mod; the highest version runs, then the newest file |
+| `skipped: requires trading-post, which is not loaded`                                                           | A required mod is absent or was skipped itself                         |
+| `skipped: requires trading-post ^0.2, found 0.1.3`                                                              | A required mod is too old or too new                                   |
+| `skipped: does not work beside old-market 0.4.0; remove one of them`                                            | The mod declares `breaks` on a loaded mod, and gives way               |
+| `skipped: in a dependency cycle`                                                                                | Mods require each other in a circle                                    |
+| `skipped: the id "My Mod" is not <author>.<name>, each of [a-z0-9-]`                                            | The manifest's id is invalid; other manifest errors read the same way  |
 
 The client loads server mods too, since it runs the server's code while it
 hosts a game; see [Sides and hosting](concepts/sides-and-hosting.md).
@@ -198,7 +198,7 @@ them by where to get them:
 
 ```text
 From github.com/enshwick/enshwick:
-Safes 0.2.0, yours 0.1.0
+Trading Post 0.2.0, yours 0.1.0
 Ask the server's admin for:
 Survivors per altar 0.1.4
 ```

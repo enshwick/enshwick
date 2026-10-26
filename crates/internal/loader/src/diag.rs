@@ -495,20 +495,20 @@ mod tests {
             game: "1.0 server".into(),
             hosting: true,
             uptime: Duration::from_mins(123),
-            last_crash: Some("fault 0xc0000005, blamed on safes: in its code".into()),
+            last_crash: Some("fault 0xc0000005, blamed on you.trading-post: in its code".into()),
             at: 45_000,
             mods: vec![
                 ModStatus {
-                    id: "flame-altar-zones".into(),
+                    id: "you.lockers".into(),
                     name: "Flame Altar Zones".into(),
                     version: "0.1.4".into(),
                     credits: "by themaiby; MIT".into(),
-                    notes: vec!["recommends flame-altar-count, which is not loaded".into()],
+                    notes: vec!["recommends you.lanterns, which is not loaded".into()],
                     running: true,
                     lines: vec!["3 zones merged".into()],
                 },
                 ModStatus {
-                    id: "safes".into(),
+                    id: "you.trading-post".into(),
                     name: String::new(),
                     version: "0.1.1".into(),
                     credits: String::new(),
@@ -517,12 +517,12 @@ mod tests {
                     lines: Vec::new(),
                 },
             ],
-            disabled: vec!["probe".into()],
+            disabled: vec!["you.my-mod".into()],
             replaced: vec![
-                "proton-optimizer is replaced by optimizer; delete mods/enshwick_proton_optimizer.dll".into(),
+                "you.stalls is replaced by you.market-stalls; delete mods/stalls.dll".into(),
             ],
             turned_off: vec![TurnedOff {
-                id: "safes".into(),
+                id: "you.trading-post".into(),
                 reason: "panic in an action".into(),
                 at: 44_000,
             }],
@@ -549,7 +549,7 @@ mod tests {
                 },
                 HookStat {
                     name: "building.max_altars".into(),
-                    owners: vec!["flame-altar-count".into()],
+                    owners: vec!["you.lanterns".into()],
                     calls: 1_234_567,
                     samples: 4,
                     ticks: 9_000,
@@ -559,9 +559,11 @@ mod tests {
             tsc_hz: Some(3e9),
             costs: vec![
                 "per-mod costs over 2h 03m (since start), work per second of time:".into(),
-                "safes 0.20 ms/s: interaction filter 0.20 ms/s in 100 calls".into(),
+                "you.trading-post 0.20 ms/s: interaction filter 0.20 ms/s in 100 calls".into(),
             ],
-            conflicts: vec!["interaction filter: safes, survivors, chained".into()],
+            conflicts: vec![
+                "interaction filter: you.trading-post, you.market-stalls, chained".into(),
+            ],
             knowledge_guard: Some("watching; 3 requests it would refuse let through".into()),
         }
     }
@@ -572,18 +574,20 @@ mod tests {
         assert!(text.starts_with("Enshwick 0.1.5 status at 12:30:00Z\n"));
         assert!(text.contains("up 2h 03m"));
         assert!(text.contains(
-            "\nthe last session crashed: fault 0xc0000005, blamed on safes: in its code\n"
+            "\nthe last session crashed: fault 0xc0000005, blamed on you.trading-post: in its code\n"
         ));
         assert!(text.contains("mods: 1 of 2 running"));
         assert!(text.contains(
-            "  Flame Altar Zones (flame-altar-zones) 0.1.4\n    by themaiby; MIT\n    \
-             note: recommends flame-altar-count, which is not loaded\n    3 zones merged\n"
+            "  Flame Altar Zones (you.lockers) 0.1.4\n    by themaiby; MIT\n    \
+             note: recommends you.lanterns, which is not loaded\n    3 zones merged\n"
         ));
-        assert!(text.contains("  safes 0.1.1 (off)\n  off in mods/enshwick/mods.toml: probe\n"));
         assert!(text.contains(
-            "  not started: proton-optimizer is replaced by optimizer; delete mods/enshwick_proton_optimizer.dll\n"
+            "  you.trading-post 0.1.1 (off)\n  off in mods/enshwick/mods.toml: you.my-mod\n"
         ));
-        assert!(text.contains("12:13:20Z safes: panic in an action"));
+        assert!(text.contains(
+            "  not started: you.stalls is replaced by you.market-stalls; delete mods/stalls.dll\n"
+        ));
+        assert!(text.contains("12:13:20Z you.trading-post: panic in an action"));
         assert!(text.contains(
             "services and events:
   event trading-post:sold from trading-post 0.3.0 to market-stalls
@@ -597,12 +601,12 @@ knowledge guard: watching; 3 requests it would refuse"
         assert!(text.contains(
             "
 per-mod costs over 2h 03m (since start), work per second of time:
-  safes 0.20 ms/s"
+  you.trading-post 0.20 ms/s"
         ));
         assert!(text.contains(
             "
 conflicts:
-  interaction filter: safes, survivors, chained
+  interaction filter: you.trading-post, you.market-stalls, chained
 "
         ));
         assert!(text.contains("one in 256 timed"));
@@ -610,7 +614,7 @@ conflicts:
         let quiet = text.find("chat.post").unwrap();
         assert!(busy < quiet);
         // 9000 ticks over 4 calls at 3 GHz.
-        assert!(text.contains("750 ns  building.max_altars (flame-altar-count)"));
+        assert!(text.contains("750 ns  building.max_altars (you.lanterns)"));
     }
 
     #[test]
@@ -625,9 +629,9 @@ conflicts:
     fn the_chat_summary_is_short() {
         let short = summary().short();
         assert_eq!(short.lines().count(), 5);
-        assert!(short.contains("proton-optimizer is replaced by optimizer; delete"));
+        assert!(short.contains("you.stalls is replaced by you.market-stalls; delete"));
         assert!(short.starts_with("Enshwick 0.1.5, up 2h 03m, server running: 1 of 2 mods"));
-        assert!(short.contains("safes off: panic in an action"));
+        assert!(short.contains("you.trading-post off: panic in an action"));
         assert!(short.contains("busiest building.max_altars with 1.2M calls"));
     }
 

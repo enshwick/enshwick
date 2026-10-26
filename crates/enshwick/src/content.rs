@@ -30,6 +30,7 @@ pub mod workshops;
 /// ```
 #[repr(transparent)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Shape)]
+#[shape(api = "guid")]
 pub struct Guid(pub [u8; 16]);
 
 impl Guid {
@@ -144,8 +145,8 @@ impl Guid {
     /// ```
     /// use enshwick::content::Guid;
     ///
-    /// const SAFE: Guid = Guid::named("safes:safe");
-    /// assert_eq!(SAFE.to_string(), "f7eb124c-c132-5cf1-9c6c-e9e49ed3c896");
+    /// const LOCKER: Guid = Guid::named("you.lockers:locker");
+    /// assert_eq!(LOCKER.to_string(), "67842cb8-d551-542b-8765-fe1af9c28aca");
     /// ```
     #[must_use]
     pub const fn named(id: &str) -> Self {
@@ -160,8 +161,8 @@ impl Guid {
     /// ```
     /// use enshwick::content::Guid;
     ///
-    /// assert_eq!(Guid::try_named("safes:safe"), Some(Guid::named("safes:safe")));
-    /// assert_eq!(Guid::try_named("Safe"), None);
+    /// assert_eq!(Guid::try_named("you.lockers:locker"), Some(Guid::named("you.lockers:locker")));
+    /// assert_eq!(Guid::try_named("Locker"), None);
     /// ```
     #[must_use]
     pub const fn try_named(id: &str) -> Option<Self> {
@@ -215,18 +216,18 @@ const NAMESPACE_BYTES: [u8; 16] = [
 ];
 
 /// Whether `id` is a content id: `<mod>:<name>`, the mod side 1 to 64 of
-/// `[a-z0-9_-]`, the name 1 to 128 of `[a-z0-9_./-]`.
+/// `[a-z0-9_.-]`, the name 1 to 128 of `[a-z0-9_./-]`.
 ///
 /// # Examples
 ///
 /// ```
 /// use enshwick::content::is_id;
 ///
-/// assert!(is_id("safes:safe"));
-/// assert!(is_id("survivors-per-altar:staff/blacksmith.name"));
-/// assert!(!is_id("safe"));
-/// assert!(!is_id("Safes:safe"));
-/// assert!(!is_id("safes:safe:2"));
+/// assert!(is_id("you.lockers:locker"));
+/// assert!(is_id("you.market-stalls:stall/blacksmith.name"));
+/// assert!(!is_id("locker"));
+/// assert!(!is_id("Lockers:locker"));
+/// assert!(!is_id("you.lockers:locker:2"));
 /// ```
 #[must_use]
 pub const fn is_id(id: &str) -> bool {
@@ -242,8 +243,8 @@ pub const fn is_id(id: &str) -> bool {
             colon = Some(i);
         } else {
             let common = b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_' || b == b'-';
-            let in_name = colon.is_some() && (b == b'.' || b == b'/');
-            if !common && !in_name {
+            let in_name = colon.is_some() && b == b'/';
+            if !common && !in_name && b != b'.' {
                 return false;
             }
         }
@@ -272,10 +273,10 @@ pub const fn is_id(id: &str) -> bool {
 /// ```
 /// use enshwick::content::{Guid, Id};
 ///
-/// const SAFE: Id = Id::new("safes:safe");
-/// assert_eq!(SAFE.name(), "safes:safe");
-/// assert_eq!(SAFE.guid(), Guid::named("safes:safe"));
-/// assert_eq!(Guid::from(SAFE).id(), SAFE.id());
+/// const LOCKER: Id = Id::new("you.lockers:locker");
+/// assert_eq!(LOCKER.name(), "you.lockers:locker");
+/// assert_eq!(LOCKER.guid(), Guid::named("you.lockers:locker"));
+/// assert_eq!(Guid::from(LOCKER).id(), LOCKER.id());
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Id {
@@ -335,7 +336,7 @@ impl Id {
     /// # Examples
     ///
     /// ```
-    /// assert_eq!(enshwick::content::Id::new("safes:safe").namespace(), "safes");
+    /// assert_eq!(enshwick::content::Id::new("you.lockers:locker").namespace(), "you.lockers");
     /// ```
     #[must_use]
     pub fn namespace(self) -> &'static str {
@@ -371,8 +372,8 @@ impl Id {
     /// ```
     /// use enshwick::content::{Id, types};
     ///
-    /// let key = Id::new("safes:safe").key(types::ITEM_INFO);
-    /// assert_eq!(key.guid, Id::new("safes:safe").guid().0);
+    /// let key = Id::new("you.lockers:locker").key(types::ITEM_INFO);
+    /// assert_eq!(key.guid, Id::new("you.lockers:locker").guid().0);
     /// ```
     #[must_use]
     pub const fn key(self, type_hash: u32) -> ResourceKey {
@@ -814,11 +815,11 @@ impl Load<'_> {
     /// ```
     /// use enshwick::content::{Guid, Id};
     ///
-    /// const LANTERN: Id = Id::new("my-mod:lantern");
+    /// const LOCKER: Id = Id::new("my-mod:locker");
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    ///     let guid = load.declare(LANTERN)?;
-    ///     assert_eq!(guid, Guid::named("my-mod:lantern"));
+    ///     let guid = load.declare(LOCKER)?;
+    ///     assert_eq!(guid, Guid::named("my-mod:locker"));
     ///     Ok(())
     /// }
     /// ```
@@ -847,11 +848,11 @@ impl Load<'_> {
     /// use enshwick::content::Guid;
     /// use enshwick::i18n::Language;
     ///
-    /// const SAFE_NAME: Guid = Guid::parse("b7c1d2e3-4f50-4a61-8b72-c3d4e5f60718");
+    /// const LOCKER_NAME: Guid = Guid::parse("b7c1d2e3-4f50-4a61-8b72-c3d4e5f60718");
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    ///     load.add_text(SAFE_NAME, Language::FALLBACK, "Safe")?;
-    ///     load.add_text(SAFE_NAME, Language::UK_UA, "Сейф")
+    ///     load.add_text(LOCKER_NAME, Language::FALLBACK, "Locker")?;
+    ///     load.add_text(LOCKER_NAME, Language::UK_UA, "Шафка")
     /// }
     /// ```
     pub fn add_text(
@@ -885,13 +886,13 @@ impl Load<'_> {
     /// use enshwick::content::{Blob, Guid, types};
     ///
     /// const CHEST: Guid = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");
-    /// const SAFE: Guid = Guid::parse("5afe5afe-0000-4000-8000-000000000001");
+    /// const LOCKER: Guid = Guid::parse("5afe5afe-0000-4000-8000-000000000001");
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    ///     load.serve(SAFE.key(types::ITEM_INFO), CHEST.key(types::ITEM_INFO), |chest| {
+    ///     load.serve(LOCKER.key(types::ITEM_INFO), CHEST.key(types::ITEM_INFO), |chest| {
     ///         let mut item = Blob::new(chest);
-    ///         item.write(0, &SAFE.id().to_le_bytes());
-    ///         item.write(4, &SAFE.0);
+    ///         item.write(0, &LOCKER.id().to_le_bytes());
+    ///         item.write(4, &LOCKER.0);
     ///         Some(item.into_bytes())
     ///     })
     /// }

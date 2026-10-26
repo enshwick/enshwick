@@ -9,7 +9,7 @@ mod tests {
     use enshwick::points::{Decision, Order, Verdict};
     use enshwick::{Load, Mod, Off};
 
-    #[enshwick::point(name = "probe:limit", mode = Override, output = u32, refusable)]
+    #[enshwick::point(name = "you.my-mod:limit", mode = Override, output = u32, refusable)]
     #[derive(Clone, Copy, Debug)]
     pub(crate) struct Limit {
         pub(crate) level: u32,
@@ -17,7 +17,7 @@ mod tests {
 
     /// A newer owner's declaration, with a field the links do not know.
     mod newer {
-        #[enshwick::point(name = "probe:limit", mode = Override, output = u32, refusable)]
+        #[enshwick::point(name = "you.my-mod:limit", mode = Override, output = u32, refusable)]
         #[derive(Clone, Copy, Debug)]
         pub(crate) struct Limit {
             pub(crate) level: u32,
@@ -25,7 +25,7 @@ mod tests {
         }
     }
 
-    #[enshwick::point(name = "probe:seen", mode = Observe, output = u32)]
+    #[enshwick::point(name = "you.my-mod:seen", mode = Observe, output = u32)]
     #[derive(Clone, Copy, Debug)]
     pub(crate) struct Seen {
         pub(crate) level: u32,
@@ -39,9 +39,9 @@ mod tests {
     impl Mod for Extender {
         fn manifest() -> &'static enshwick::abi::Manifest {
             enshwick::manifest!(
-                id: "extender",
+                id: "you.extender",
                 side: SERVER,
-                recommends: ["probe" => ">=0.0.0-dev, <1.0"],
+                recommends: ["you.my-mod" => ">=0.0.0-dev, <1.0"],
             )
         }
 
@@ -77,7 +77,10 @@ mod tests {
     #[test]
     fn a_link_changes_and_refuses_the_answer() {
         let loader = started();
-        assert_eq!(loader.attached_points(), ["probe:limit", "probe:seen"]);
+        assert_eq!(
+            loader.attached_points(),
+            ["you.my-mod:limit", "you.my-mod:seen"]
+        );
         assert_eq!(
             loader.ask_point(&Limit { level: 2 }, 3),
             Decision::Changed(31)

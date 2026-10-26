@@ -5,7 +5,7 @@ files, with no code. It is a folder in `mods/` with a `pack.toml` and no DLL:
 
 ```text
 mods/
-  lanterns/
+  you.lanterns/
     pack.toml
     items.toml
     recipes.toml
@@ -28,7 +28,7 @@ A mod can carry a pack too, see [Packs in a mod](#packs-in-a-mod).
 ## `pack.toml`
 
 ```toml
-id = "lanterns"
+id = "you.lanterns"
 version = "1.0.0"
 name = "Lanterns"
 description = "Coloured lanterns, crafted at a bench of their own."
@@ -37,12 +37,12 @@ license = "MIT"
 homepage = "https://example.com/lanterns"
 
 [requires]
-safes = ">=0.5, <1.0"
+"you.trading-post" = ">=0.5, <1.0"
 ```
 
 | Field | Meaning |
 | --- | --- |
-| `id` | 1 to 64 of `[a-z0-9-]`, the folder's name; the namespace of the pack's content |
+| `id` | `<author>.<name>` like a mod id, the folder's name; the namespace of the pack's content |
 | `version` | the pack's SemVer version |
 | `name`, `description`, `authors`, `license`, `homepage` | what players read, as a mod's [manifest](../releasing.md) says it |
 | `side` | `both` (the default), `server` or `client` |
@@ -52,12 +52,12 @@ safes = ">=0.5, <1.0"
 ## Names and references
 
 Every name a pack defines lives in its namespace: the item `lantern` of the
-pack `lanterns` is the [content id](../content.md#content-ids)
-`lanterns:lantern`, with the GUID `Guid::named` derives. Names are 1 to 128
+pack `you.lanterns` is the [content id](../content.md#content-ids)
+`you.lockers:locker`, with the GUID `Guid::named` derives. Names are 1 to 128
 of `[a-z0-9_./-]` and unique across the pack's files. A reference is one of:
 
 - a name of the pack: `lantern`;
-- another mod's content id: `safes:safe`;
+- another mod's content id: `you.lockers:locker`;
 - a vanilla GUID: `6943053a-32c1-4718-ae22-e61427ddf54d`;
 - a vanilla item's debug name, as the game's item registry lists it:
   `Craftingstation_Workbench`. Where a recipe names a workshop, a crafting
@@ -71,10 +71,10 @@ the game lacks, or that several items carry, is a problem at its line, with
 the names that look like it:
 
 ```text
-error [lanterns] items.toml:7:1: no item "Torchh" in this pack, and no vanilla item "Torchh"; near: Torch
+error [you.lanterns] items.toml:7:1: no item "Torchh" in this pack, and no vanilla item "Torchh"; near: Torch
 ```
 
-`cargo enshwick id lanterns:lantern` prints a name's GUID and game id.
+`cargo enshwick id you.lockers:locker` prints a name's GUID and game id.
 
 ## `items.toml`
 
@@ -82,8 +82,8 @@ error [lanterns] items.toml:7:1: no item "Torchh" in this pack, and no vanilla i
 [[item]]
 id = "lantern"
 like = "6943053a-32c1-4718-ae22-e61427ddf54d"
-name = "lantern.name"
-description = "lantern.description"
+name = "locker.name"
+description = "locker.description"
 meter = { max = 3, start = 3 }
 stats = [{ label = "lantern.light", value = 5, format = "percent" }]
 icon = { tint = [255, 170, 60], amount = 60 }
@@ -168,10 +168,10 @@ lacks, chances outside 0 to 1. Each problem is a line
 in the pack's log with its file, line and column, and the pack stays off:
 
 ```text
-error [lanterns] items.toml:7:1: no item "torch" in this pack; name another mod's as <mod>:<name>, or a vanilla one by its GUID or, where the game's data is at hand, its debug name
+error [you.lanterns] items.toml:7:1: no item "torch" in this pack; name another mod's as <mod>:<name>, or a vanilla one by its GUID or, where the game's data is at hand, its debug name
 ```
 
-`cargo enshwick pack check mods/lanterns --game <game folder>` gives the
+`cargo enshwick pack check mods/you.lanterns --game <game folder>` gives the
 same lines before you ship, reading vanilla names from that game's data
 (`ENSHROUDED_DIR` when `--game` is left out). Without a game folder it
 checks everything else, and a debug name or a station other than the
@@ -189,8 +189,8 @@ registries at start, on the server and on every player's client, so a change
 to them waits for the next start, and the log says so:
 
 ```text
-info  [lanterns] content pack reloaded: 2 loot drops
-warn  [lanterns] content pack changed beyond its loot: items, recipes, workshops and texts change at the next start
+info  [you.lanterns] content pack reloaded: 2 loot drops
+warn  [you.lanterns] content pack changed beyond its loot: items, recipes, workshops and texts change at the next start
 ```
 
 Loot of a kind no pack or mod had at start, such as the first drop from
@@ -199,7 +199,7 @@ destroyed objects, also waits for a restart.
 ## Releases and the join check
 
 A pack is released like a mod: an archive `<component>.zip` holding the
-pack's files under `mods/<id>/`. `cargo enshwick pack zip mods/lanterns --out
+pack's files under `mods/<id>/`. `cargo enshwick pack zip mods/you.lanterns --out
 lanterns.zip` checks the pack and writes the archive; attach it to the
 release, as [Releasing mods](../releasing.md) describes.
 
@@ -221,13 +221,13 @@ const ITEMS: &str = r#"
 [[item]]
 id = "lantern"
 like = "6943053a-32c1-4718-ae22-e61427ddf54d"
-name = "lantern.name"
+name = "locker.name"
 "#;
-const TEXTS: &str = "[en]\n\"lantern.name\" = \"Lantern\"\n";
+const TEXTS: &str = "[en]\n\"locker.name\" = \"Locker\"\n";
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let files = PackFiles::new().with("items.toml", ITEMS).with("texts.toml", TEXTS);
-    load.add_pack(&Pack::parse("my-mod", &files)?)
+    load.add_pack(&Pack::parse("you.my-mod", &files)?)
 }
 ```
 

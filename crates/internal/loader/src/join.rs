@@ -49,8 +49,8 @@ pub use target::{
 /// use enshwick_loader::join::Names;
 ///
 /// let mut names = Names::new();
-/// names.insert("safes".to_owned(), "Safes".to_owned());
-/// assert_eq!(names["safes"], "Safes");
+/// names.insert("you.trading-post".to_owned(), "Trading Post".to_owned());
+/// assert_eq!(names["you.trading-post"], "Trading Post");
 /// ```
 pub type Names = BTreeMap<String, String>;
 

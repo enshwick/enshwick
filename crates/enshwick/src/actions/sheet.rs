@@ -34,7 +34,7 @@ pub struct Entry {
     pub hint: bool,
     /// Whether the player may run it now.
     pub offered: bool,
-    /// What it acts on, such as "your Safe at (2, 10, -4)", when offered;
+    /// What it acts on, such as "your locker at (2, 10, -4)", when offered;
     /// why not, when not.
     pub subject: String,
     /// Its arguments, for an action that is not a list.
@@ -272,11 +272,11 @@ mod tests {
             Entry {
                 id: "access".into(),
                 label: "Who may use it".into(),
-                help: "Let players use the Safe".into(),
+                help: "Let players use the locker".into(),
                 per_player: true,
                 hint: true,
                 offered: true,
-                subject: "Your Safe at (2, 10, -4)".into(),
+                subject: "Your locker at (2, 10, -4)".into(),
                 args: Vec::new(),
                 players: vec![
                     (7, "Ann".into(), true),
@@ -287,7 +287,7 @@ mod tests {
                 id: "give".into(),
                 label: "Give".into(),
                 offered: false,
-                subject: "No Safe in reach".into(),
+                subject: "No locker in reach".into(),
                 args: vec![
                     ArgView {
                         kind: ArgView::PLAYER,

@@ -103,15 +103,15 @@ mod tests {
     #[test]
     fn places_are_links_players_can_open() {
         assert_eq!(
-            place("https://github.com/someone/safes").as_deref(),
-            Some("https://github.com/someone/safes")
+            place("https://github.com/someone/trading-post").as_deref(),
+            Some("https://github.com/someone/trading-post")
         );
-        assert!(place("http://example.com/safes").is_some());
+        assert!(place("http://example.com/trading-post").is_some());
         for bad in [
             "",
             "https://",
             "ftp://example.com",
-            "github.com/someone/safes",
+            "github.com/someone/trading-post",
             "https://exa mple.com",
             "https://example.com/\nInstall",
         ] {
@@ -122,13 +122,13 @@ mod tests {
 
     #[test]
     fn a_note_names_enshwick_each_mod_its_version_and_where_to_get_it() {
-        let names = Names::from([("safes".to_owned(), "Safes".to_owned())]);
+        let names = Names::from([("you.trading-post".to_owned(), "Trading Post".to_owned())]);
         let pages = BTreeMap::from([(
-            "safes".to_owned(),
-            "https://github.com/someone/safes".to_owned(),
+            "you.trading-post".to_owned(),
+            "https://github.com/someone/trading-post".to_owned(),
         )]);
         let needs = [
-            need("safes", "0.3.0", Some("0.2.0")),
+            need("you.trading-post", "0.3.0", Some("0.2.0")),
             need("zones", "0.1.0", None),
         ];
         let text = note(&needs, false, &names, &pages, Some(Duration::from_secs(10)));
@@ -136,10 +136,10 @@ mod tests {
         assert_eq!(lines.len(), 5, "{text}");
         assert!(lines[1].contains(LOADER_PLACE), "{text}");
         assert!(
-            lines[2].contains("Safes 0.3.0")
-                && !lines[2].contains("(safes)")
+            lines[2].contains("Trading Post 0.3.0")
+                && !lines[2].contains("(you.trading-post)")
                 && lines[2].contains("0.2.0")
-                && lines[2].contains("https://github.com/someone/safes"),
+                && lines[2].contains("https://github.com/someone/trading-post"),
             "{text}"
         );
         assert!(

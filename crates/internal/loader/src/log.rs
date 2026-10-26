@@ -391,15 +391,7 @@ mod tests {
 
     #[test]
     fn a_line_names_its_time_level_and_source() {
-        let line = format_line(
-            3_723_004,
-            Level::WARN,
-            "flame-altar-zones",
-            "merged 3 altars",
-        );
-        assert_eq!(
-            line,
-            "01:02:03.004Z warn  [flame-altar-zones] merged 3 altars\n"
-        );
+        let line = format_line(3_723_004, Level::WARN, "you.lockers", "opened 3 lockers");
+        assert_eq!(line, "01:02:03.004Z warn  [you.lockers] opened 3 lockers\n");
     }
 }

@@ -118,7 +118,7 @@ static DESTROY_NEXT: Next<DestroyFn> = unsafe { Next::new() };
 /// `ecs::ItemState`'s type hash and the offset of its `itemId`.
 static ITEM_STATE: OnceLock<Option<(u32, usize)>> = OnceLock::new();
 
-/// Whether `part` may be one side of a kind id: 1 to 64 of `[a-z0-9_-]`.
+/// Whether `part` may be the name side of a kind id: 1 to 64 of `[a-z0-9_-]`.
 fn is_part(part: &str) -> bool {
     (1..=64).contains(&part.len())
         && part
@@ -130,7 +130,8 @@ fn is_part(part: &str) -> bool {
 /// own kind, `mod:name` any mod's.
 fn full_id(mod_id: &str, id: &str) -> Option<String> {
     let (namespace, name) = id.split_once(':').unwrap_or((mod_id, id));
-    (is_part(namespace) && is_part(name)).then(|| format!("{namespace}:{name}"))
+    (enshwick::abi::is_valid_former_id(namespace) && is_part(name))
+        .then(|| format!("{namespace}:{name}"))
 }
 
 /// Opens item kind `id` for mod `owner` and returns its index; the same id
@@ -745,16 +746,16 @@ mod tests {
     #[test]
     fn ids_take_the_mod_s_namespace_unless_they_name_one() {
         assert_eq!(
-            full_id("survivors", "charges").as_deref(),
-            Some("survivors:charges")
+            full_id("you.lanterns", "oil").as_deref(),
+            Some("you.lanterns:oil")
         );
         assert_eq!(
-            full_id("probe", "other:fire_damage").as_deref(),
+            full_id("you.lanterns", "other:fire_damage").as_deref(),
             Some("other:fire_damage")
         );
-        assert_eq!(full_id("probe", "Charges"), None);
-        assert_eq!(full_id("probe", "a:b:c"), None);
-        assert_eq!(full_id("probe", ":x"), None);
+        assert_eq!(full_id("you.lanterns", "Charges"), None);
+        assert_eq!(full_id("you.lanterns", "a:b:c"), None);
+        assert_eq!(full_id("you.lanterns", ":x"), None);
     }
 
     #[test]

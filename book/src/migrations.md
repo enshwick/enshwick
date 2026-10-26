@@ -17,9 +17,9 @@ list during `init`, before `load.config()`:
 use enshwick::content::{Guid, Id};
 use enshwick::migrations::Migrations;
 
-/// The GUID the Safe had before it got a content id.
-const OLD_SAFE: Guid = Guid::parse("8a3f6e21-5c4b-4d7e-9f10-2b7c5e6a9d31");
-const SAFE: Id = Id::new("safes:safe");
+/// The GUID the locker had before it got a content id.
+const OLD_LOCKER: Guid = Guid::parse("8a3f6e21-5c4b-4d7e-9f10-2b7c5e6a9d31");
+const LOCKER: Id = Id::new("you.lockers:locker");
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     load.migrate(
@@ -27,7 +27,7 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
             .add("2", |m| {
                 m.rename_setting("cost", "cost_multiplier")
                     .remove_setting("legacy")
-                    .rename_content(OLD_SAFE, SAFE.guid())
+                    .rename_content(OLD_LOCKER, LOCKER.guid())
             })
             .add("3", |m| {
                 m.map_setting("limit", |old| {
@@ -130,14 +130,14 @@ id as it is:
 use enshwick::content::{Guid, Id};
 use enshwick::migrations::current_id;
 
-const SAFE: Id = Id::new("safes:safe");
+const LOCKER: Id = Id::new("you.lockers:locker");
 
-fn is_safe(item: u32) -> bool {
-    current_id(item) == SAFE.id()
+fn is_locker(item: u32) -> bool {
+    current_id(item) == LOCKER.id()
 }
 
-assert!(is_safe(SAFE.id()));
-assert!(!is_safe(Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d").id()));
+assert!(is_locker(LOCKER.id()));
+assert!(!is_locker(Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d").id()));
 ```
 
 Moving a mod's items from hand-picked GUIDs to [content ids](content.md#content-ids)
@@ -148,7 +148,7 @@ is such a rename: keep each old GUID as the `from` of a `rename_content`.
 Before it changes anything the loader logs the plan under the mod's id:
 
 ```text
-info  [safes] migrations on world world0-d3a23c4a: safes 3: change setting limit, rename store owners to keepers, change store keepers
+info  [you.lockers] migrations on world world0-d3a23c4a: you.lockers 3: change setting limit, rename store owners to keepers, change store keepers
 ```
 
 With `migrations_dry_run = true` in `mod-configs/enshwick.toml` the loader
@@ -163,11 +163,11 @@ them on text, the way the loader runs them on files:
 ```rust,standalone_crate
 use enshwick::migrations::Migrations;
 
-struct Safes;
+struct Lockers;
 
-impl enshwick::Mod for Safes {
+impl enshwick::Mod for Lockers {
     fn manifest() -> &'static enshwick::abi::Manifest {
-        enshwick::manifest!(id: "safes", side: SERVER)
+        enshwick::manifest!(id: "you.lockers", side: SERVER)
     }
 
     fn init(load: &mut enshwick::Load<'_>) -> Result<Self, enshwick::Off> {
@@ -176,7 +176,7 @@ impl enshwick::Mod for Safes {
     }
 }
 
-enshwick::declare_mod!(Safes);
+enshwick::declare_mod!(Lockers);
 
 let loader = enshwick::test::FakeHost::new().install();
 // SAFETY: the exports of `declare_mod!` above.

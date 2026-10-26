@@ -6,6 +6,7 @@
 use proc_macro::TokenStream;
 use proc_macro2::Span;
 use quote::quote;
+use std::fmt::Write as _;
 use syn::ext::IdentExt as _;
 use syn::spanned::Spanned as _;
 use syn::{
@@ -28,7 +29,8 @@ use syn::{
 /// `..=b`; `choices = [..]`;
 /// `text = "key"`, the text key of the field's translated label; `secret`,
 /// a value never sent to a client and changed in the file only, so never
-/// with `sync`. The derive implements `schema`, `values`, `merge_values` and
+/// with `sync`; `group`, on a field that is a `Config` of its own, makes it
+/// a table of the file. The derive implements `schema`, `values`, `merge_values` and
 /// a `validate` that checks ranges and choices before the struct's own
 /// check.
 #[proc_macro_derive(Config, attributes(config))]
@@ -48,6 +50,8 @@ struct FieldConfig {
     secret: bool,
     /// `startup, sync`: a startup field a joined client takes from the server.
     synced: bool,
+    /// `group`: the field is a `Config` of its own, a table of the file.
+    group: bool,
 }
 
 /// The stages a field may name, as `enshwick::config::Stage` variants.
@@ -120,6 +124,9 @@ fn field_config(attrs: &[Attribute]) -> syn::Result<FieldConfig> {
                 }
                 config.text = Some(text_key(&meta)?);
                 Ok(())
+            } else if meta.path.is_ident("group") {
+                config.group = true;
+                Ok(())
             } else if meta.path.is_ident("secret") {
                 if config.secret {
                     return Err(meta.error("`secret` is given twice"));
@@ -128,10 +135,23 @@ fn field_config(attrs: &[Attribute]) -> syn::Result<FieldConfig> {
                 Ok(())
             } else {
                 Err(meta.error(
-                    "expected `startup`, `runtime`, `client`, `sync`, `restart`, `range = a..=b`, `choices = [..]`, `text = \"key\"` or `secret`",
+                    "expected `startup`, `runtime`, `client`, `sync`, `restart`, `range = a..=b`, `choices = [..]`, `text = \"key\"`, `secret` or `group`",
                 ))
             }
         })?;
+    }
+    let grouped_with_more = config.group
+        && (config.stage.is_some()
+            || config.min.is_some()
+            || config.max.is_some()
+            || config.choices.is_some()
+            || config.text.is_some()
+            || config.secret);
+    if grouped_with_more {
+        return Err(syn::Error::new(
+            Span::call_site(),
+            "a `group` field takes its stages, ranges and texts from its own fields",
+        ));
     }
     if let Some(stage) = config
         .stage
@@ -271,26 +291,24 @@ fn expand_config(input: &DeriveInput) -> syn::Result<TokenStream> {
     let mut described = Vec::new();
     let mut checks = Vec::new();
     let mut staged: Vec<(Ident, bool, &syn::Field)> = Vec::new();
+    let mut groups: Vec<(&Ident, String, &syn::Field)> = Vec::new();
     for field in &fields.named {
         let Some(ident) = field.ident.as_ref() else {
             continue;
         };
         same_keys_as_serde(&field.attrs)?;
         let config = field_config(&field.attrs)?;
+        if config.group {
+            groups.push((ident, ident.unraw().to_string(), field));
+            continue;
+        }
         let stage = config
             .stage
+            .clone()
             .unwrap_or_else(|| Ident::new("Runtime", Span::call_site()));
         let key = ident.unraw().to_string();
         let doc = comment(&field.attrs);
-        let note = if config.synced {
-            SYNCED_NOTE
-        } else if stage == "Startup" {
-            "# Takes effect when the world loads.\n"
-        } else if stage == "Restart" {
-            "# Takes effect when the game starts again.\n"
-        } else {
-            ""
-        };
+        let note = template_note(&stage, config.synced);
         entries.push(quote! {
             #text.push_str(#doc);
             #text.push_str(#note);
@@ -299,54 +317,52 @@ fn expand_config(input: &DeriveInput) -> syn::Result<TokenStream> {
         checks.push(quote! {
             ::enshwick::config::__check_field(&#schema, #key, &self.#ident)?;
         });
-        let bound = |e: &Option<Expr>| {
-            e.as_ref().map_or_else(
-                || quote!(::core::option::Option::None),
-                |e| quote!(::core::option::Option::Some((#e) as f64)),
-            )
-        };
-        let (min, max) = (bound(&config.min), bound(&config.max));
-        let choices = config.choices.map(|c| quote!(.with_choices(&#c)));
-        let plain = doc_text(&field.attrs);
-        let label = config.text.map(|t| t.value()).unwrap_or_default();
-        let secret = config.secret;
         let synced = config.synced;
-        described.push(quote! {
-            ::enshwick::config::Field::new(
-                #key,
-                ::enshwick::config::Stage::#stage,
-                &#defaults.#ident,
-            )
-            .with_range(#min, #max)
-            #choices
-            .with_doc(#plain, #label)
-            .with_secret(#secret)
-            .with_synced(#synced)
-        });
+        described.push(described_field(
+            &key, &stage, ident, config, field, &defaults,
+        ));
         staged.push((stage, synced, field));
     }
     let header = comment(&input.attrs);
     let header_text = doc_text(&input.attrs);
-    let values = stage_methods(&staged);
+    let values = stage_methods(&staged, &groups);
+    let (path, fields_of, groups_of) = (local("path"), local("fields"), local("groups"));
+    let config = quote!(::enshwick::config::Config);
+    let GroupTokens {
+        tables: group_tables,
+        schemas: group_schemas,
+        checks: group_checks,
+    } = group_tokens(&groups, &text, &path, &fields_of, &groups_of);
     Ok(quote! {
         impl ::enshwick::config::Config for #name {
             fn template() -> ::std::string::String {
-                let #defaults = <Self as ::core::default::Default>::default();
                 let mut #text = ::std::string::String::from(#header);
                 if !#text.is_empty() {
                     #text.push('\n');
                 }
+                #text.push_str(&<Self as #config>::__template_body(""));
+                #text
+            }
+
+            fn __template_body(#path: &str) -> ::std::string::String {
+                let #defaults = <Self as ::core::default::Default>::default();
+                let mut #text = ::std::string::String::new();
                 #(#entries)*
+                #(#group_tables)*
+                let _ = (&#defaults, #path);
                 #text
             }
 
             fn schema() -> ::enshwick::config::Schema {
                 let #defaults = <Self as ::core::default::Default>::default();
-                ::enshwick::config::Schema::new(
-                    #header_text,
-                    #title,
-                    ::std::vec![#(#described),*],
-                )
+                let mut #fields_of: ::std::vec::Vec<::enshwick::config::Field> =
+                    ::std::vec![#(#described),*];
+                let mut #groups_of: ::std::vec::Vec<::enshwick::config::Group> =
+                    ::std::vec::Vec::new();
+                #(#group_schemas)*
+                let _ = &#defaults;
+                ::enshwick::config::Schema::new(#header_text, #title, #fields_of)
+                    .with_groups(#groups_of)
             }
 
             fn validate(
@@ -354,7 +370,9 @@ fn expand_config(input: &DeriveInput) -> syn::Result<TokenStream> {
             ) -> ::core::result::Result<(), ::enshwick::config::ConfigError> {
                 let #schema = <Self as ::enshwick::config::Config>::schema();
                 #(#checks)*
+                #(#group_checks)*
                 #own_check
+                let _ = &#schema;
                 ::core::result::Result::Ok(())
             }
 
@@ -364,14 +382,127 @@ fn expand_config(input: &DeriveInput) -> syn::Result<TokenStream> {
     .into())
 }
 
-/// `values` and `merge_values` over the fields of each stage that has any; a
-/// `startup, sync` field counts at both.
-fn stage_methods(staged: &[(Ident, bool, &syn::Field)]) -> impl quote::ToTokens {
-    let (table, value, stage, values) = (
+/// The template's note above a field at `stage`, `synced` for
+/// `startup, sync`.
+fn template_note(stage: &Ident, synced: bool) -> &'static str {
+    if synced {
+        SYNCED_NOTE
+    } else if stage == "Startup" {
+        "# Takes effect when the world loads.\n"
+    } else if stage == "Restart" {
+        "# Takes effect when the game starts again.\n"
+    } else {
+        ""
+    }
+}
+
+/// The schema's `Field` for a plain field, its default read from the
+/// derive's local `defaults`.
+fn described_field(
+    key: &str,
+    stage: &Ident,
+    ident: &Ident,
+    config: FieldConfig,
+    field: &syn::Field,
+    defaults: &Ident,
+) -> proc_macro2::TokenStream {
+    let bound = |e: &Option<Expr>| {
+        e.as_ref().map_or_else(
+            || quote!(::core::option::Option::None),
+            |e| quote!(::core::option::Option::Some((#e) as f64)),
+        )
+    };
+    let (min, max) = (bound(&config.min), bound(&config.max));
+    let choices = config.choices.map(|c| quote!(.with_choices(&#c)));
+    let plain = doc_text(&field.attrs);
+    let label = config.text.map(|t| t.value()).unwrap_or_default();
+    let secret = config.secret;
+    let synced = config.synced;
+    quote! {
+        ::enshwick::config::Field::new(
+            #key,
+            ::enshwick::config::Stage::#stage,
+            &#defaults.#ident,
+        )
+        .with_range(#min, #max)
+        #choices
+        .with_doc(#plain, #label)
+        .with_secret(#secret)
+        .with_synced(#synced)
+    }
+}
+
+/// What `#[derive(Config)]` writes for its `group` fields.
+struct GroupTokens {
+    /// Each group's table in the template.
+    tables: Vec<proc_macro2::TokenStream>,
+    /// Each group's fields and groups in the schema.
+    schemas: Vec<proc_macro2::TokenStream>,
+    /// Each group's own check.
+    checks: Vec<proc_macro2::TokenStream>,
+}
+
+/// The template, schema and check parts of the `group` fields `groups`,
+/// over the derive's locals `text`, `path`, `fields_of` and `groups_of`.
+fn group_tokens(
+    groups: &[(&Ident, String, &syn::Field)],
+    text: &Ident,
+    path: &Ident,
+    fields_of: &Ident,
+    groups_of: &Ident,
+) -> GroupTokens {
+    let config = quote!(::enshwick::config::Config);
+    let tables = groups
+        .iter()
+        .map(|(_, key, field)| {
+            let ty = &field.ty;
+            let doc = comment(&field.attrs);
+            quote! {
+                #text.push_str(#doc);
+                #text.push_str(&::std::format!("[{}{}]\n", #path, #key));
+                #text.push_str(&<#ty as #config>::__template_body(
+                    &::std::format!("{}{}.", #path, #key),
+                ));
+            }
+        })
+        .collect();
+    let schemas = groups.iter().map(|(_, key, field)| {
+        let ty = &field.ty;
+        let doc = doc_text(&field.attrs);
+        quote! {
+            let inner = <#ty as #config>::schema();
+            let doc = if #doc.is_empty() { inner.doc.clone() } else { ::std::string::String::from(#doc) };
+            #groups_of.push(::enshwick::config::Group::new(#key, &doc));
+            #groups_of.extend(inner.groups.into_iter().map(|g| g.__in_group(#key)));
+            #fields_of.extend(inner.fields.into_iter().map(|f| f.__in_group(#key)));
+        }
+    }).collect();
+    let checks = groups
+        .iter()
+        .map(|(ident, _, field)| {
+            let ty = &field.ty;
+            quote!(<#ty as #config>::validate(&self.#ident)?;)
+        })
+        .collect();
+    GroupTokens {
+        tables,
+        schemas,
+        checks,
+    }
+}
+
+/// `values` and `merge_values` over the fields of each stage that has any,
+/// and over every group's own; a `startup, sync` field counts at both.
+fn stage_methods(
+    staged: &[(Ident, bool, &syn::Field)],
+    groups: &[(&Ident, String, &syn::Field)],
+) -> impl quote::ToTokens {
+    let (table, value, stage, values, any) = (
         local("table"),
         local("value"),
         local("stage"),
         local("values"),
+        local("any"),
     );
     let mut value_arms = Vec::new();
     let mut merge_arms = Vec::new();
@@ -394,33 +525,52 @@ fn stage_methods(staged: &[(Ident, bool, &syn::Field)]) -> impl quote::ToTokens 
             .collect();
         value_arms.push(quote! {
             ::enshwick::config::Stage::#variant => {
-                let mut #table = ::enshwick::config::__Values::default();
+                #any = true;
                 #(#table.put(#keys, &self.#idents);)*
-                ::core::option::Option::Some(#table.finish())
             }
         });
         merge_arms.push(quote! {
             ::enshwick::config::Stage::#variant => {
-                let #table = ::enshwick::config::__Values::parse(#values)?;
                 #(let #locals = #table.take::<#types>(#keys)?;)*
                 #(
                     if let ::core::option::Option::Some(#value) = #locals {
                         self.#idents = #value;
                     }
                 )*
-                ::core::result::Result::Ok(())
             }
         });
     }
+    let (group_values, group_merges) = group_stage_tokens(groups, &table, &value, &stage, &any);
+    let reads = !value_arms.is_empty() || !groups.is_empty();
+    let merge_body = if reads {
+        quote! {
+            let #table = ::enshwick::config::__Values::parse(#values)?;
+            match #stage {
+                #(#merge_arms)*
+                _ => {}
+            }
+            #(#group_merges)*
+            ::core::result::Result::Ok(())
+        }
+    } else {
+        quote! {
+            let _ = (#values, #stage);
+            ::core::result::Result::Ok(())
+        }
+    };
     quote! {
         fn values(
             &self,
             #stage: ::enshwick::config::Stage,
         ) -> ::core::option::Option<::std::string::String> {
+            let mut #table = ::enshwick::config::__Values::default();
+            let mut #any = false;
             match #stage {
                 #(#value_arms)*
-                _ => ::core::option::Option::None,
+                _ => {}
             }
+            #(#group_values)*
+            #any.then(|| #table.finish())
         }
 
         fn merge_values(
@@ -428,13 +578,43 @@ fn stage_methods(staged: &[(Ident, bool, &syn::Field)]) -> impl quote::ToTokens 
             #stage: ::enshwick::config::Stage,
             #values: &str,
         ) -> ::core::result::Result<(), ::enshwick::config::ConfigError> {
-            let _ = #values;
-            match #stage {
-                #(#merge_arms)*
-                _ => ::core::result::Result::Ok(()),
-            }
+            #merge_body
         }
     }
+}
+
+/// The parts of `values` and `merge_values` for the `group` fields
+/// `groups`, over the derive's locals.
+fn group_stage_tokens(
+    groups: &[(&Ident, String, &syn::Field)],
+    table: &Ident,
+    value: &Ident,
+    stage: &Ident,
+    any: &Ident,
+) -> (Vec<proc_macro2::TokenStream>, Vec<proc_macro2::TokenStream>) {
+    let config = quote!(::enshwick::config::Config);
+    let values = groups.iter().map(|(ident, key, field)| {
+        let ty = &field.ty;
+        quote! {
+            if let ::core::option::Option::Some(#value) = <#ty as #config>::values(&self.#ident, #stage) {
+                if #table.put_group(#key, &#value).is_ok() {
+                    #any = true;
+                }
+            }
+        }
+    }).collect();
+    let merges = groups
+        .iter()
+        .map(|(ident, key, field)| {
+            let ty = &field.ty;
+            quote! {
+                if let ::core::option::Option::Some(#value) = #table.group(#key) {
+                    <#ty as #config>::merge_values(&mut self.#ident, #stage, &#value)?;
+                }
+            }
+        })
+        .collect();
+    (values, merges)
 }
 
 /// Declares a hook from its body: the function stays, and a static `Hook`
@@ -669,6 +849,7 @@ pub fn point(args: TokenStream, item: TokenStream) -> TokenStream {
         }
         let output = output
             .ok_or_else(|| syn::Error::new_spanned(&ident, "name the answer: `output = <type>`"))?;
+        let schema = point_schema(&item, name.as_ref(), &mode, &output, refusable);
         let extra = quote! {
             const MODE: ::enshwick::points::Mode =
                 ::enshwick::points::Mode::#mode;
@@ -685,10 +866,77 @@ pub fn point(args: TokenStream, item: TokenStream) -> TokenStream {
                     ),
                 }];
             type Output = #output;
+            #schema
         };
         expand_declaration(&item, name, &extra, &quote!(points::Point))
     })();
     expanded.unwrap_or_else(|e| e.to_compile_error().into())
+}
+
+/// The `SCHEMA` of a point: its `[[point]]` table with the layout hashes,
+/// then the `[[type]]` tables of its input and answer; and a check that a
+/// schema can describe every field and the answer.
+fn point_schema(
+    item: &syn::ItemStruct,
+    name: Option<&syn::LitStr>,
+    mode: &Ident,
+    output: &Type,
+    refusable: bool,
+) -> proc_macro2::TokenStream {
+    let shape = quote!(::enshwick::Shape);
+    let point = quote!(::enshwick::points::Point);
+    let ident = &item.ident;
+    let input = ident.unraw().to_string();
+    let head = format!(
+        "[[point]]\nname = {}\nmode = \"{}\"\nrefusable = {refusable}\ninput = {}\ndoc = {}\noutput = \"",
+        toml_string(&name.map(syn::LitStr::value).unwrap_or_default()),
+        mode.to_string().to_lowercase(),
+        toml_string(&input),
+        toml_string(&doc_text(&item.attrs)),
+    );
+    let mut parts = vec![
+        quote!(#head, <#output as #shape>::SCHEMA_NAME, "\"\noutput_layout = \"", <#ident as #point>::OUTPUT[0].hash, "\"\nlayout = ["),
+    ];
+    let mut checks = vec![quote! {
+        assert!(
+            !<#output as #shape>::SCHEMA_NAME.is_empty(),
+            "a point schema cannot describe the answer's type: derive `Shape` for it",
+        );
+    }];
+    let mut fields = Vec::new();
+    let mut nested = Vec::new();
+    for (i, field) in item.fields.iter().enumerate() {
+        let Some(field_ident) = &field.ident else {
+            continue;
+        };
+        let ty = &field.ty;
+        let label = field_ident.unraw().to_string();
+        let separator = if i == 0 { "\"" } else { ", \"" };
+        parts.push(quote!(#separator, <#ident as #point>::LAYOUT[#i].hash, "\""));
+        let message =
+            format!("a point schema cannot describe the type of `{label}`: derive `Shape` for it");
+        checks.push(quote!(assert!(!<#ty as #shape>::SCHEMA_NAME.is_empty(), #message);));
+        let entry = format!(
+            "[[type.field]]\nname = {}\ndoc = {}\ntype = \"",
+            toml_string(&label),
+            toml_string(&doc_text(&field.attrs))
+        );
+        fields.push(quote!(#entry, <#ty as #shape>::SCHEMA_NAME, "\"\n"));
+        nested.push(quote!(<#ty as #shape>::SCHEMA_TYPES));
+    }
+    let table = format!(
+        "]\n[[type]]\nname = {}\ndoc = {}\nkind = \"struct\"\n",
+        toml_string(&input),
+        toml_string(&doc_text(&item.attrs))
+    );
+    quote! {
+        const SCHEMA: &'static str = {
+            const _: () = { #(#checks)* };
+            ::enshwick::__private::concatcp!(
+                #(#parts,)* #table, #(#fields,)* #(#nested,)* <#output as #shape>::SCHEMA_TYPES,
+            )
+        };
+    }
 }
 
 /// Implements `enshwick::Shape`: the structural hash the layout
@@ -714,10 +962,23 @@ const PRIMITIVE_REPRS: [&str; 10] = [
     "u8", "u16", "u32", "u64", "usize", "i8", "i16", "i32", "i64", "isize",
 ];
 
-/// The `repr`s and the `#[shape(values(..))]` constants of a type.
-fn shape_attributes(attrs: &[Attribute]) -> syn::Result<(Vec<String>, Vec<Ident>)> {
+/// What `#[derive(Shape)]` reads from a type's attributes.
+struct ShapeAttributes {
+    /// The `repr`s.
+    reprs: Vec<String>,
+    /// The constants `#[shape(values(..))]` names.
+    values: Vec<Ident>,
+    /// The name `#[shape(api = "..")]` gives a type of the API crate in a
+    /// point schema.
+    api: Option<String>,
+}
+
+/// The `repr`s, the `#[shape(values(..))]` constants and the
+/// `#[shape(api = "..")]` name of a type.
+fn shape_attributes(attrs: &[Attribute]) -> syn::Result<ShapeAttributes> {
     let mut reprs = Vec::new();
     let mut values = Vec::new();
+    let mut api = None;
     for attr in attrs {
         if attr.path().is_ident("repr") {
             attr.parse_nested_meta(|meta| {
@@ -736,13 +997,36 @@ fn shape_attributes(attrs: &[Attribute]) -> syn::Result<(Vec<String>, Vec<Ident>
                         values.push(value.path.require_ident()?.clone());
                         Ok(())
                     })
+                } else if meta.path.is_ident("api") {
+                    api = Some(meta.value()?.parse::<syn::LitStr>()?.value());
+                    Ok(())
                 } else {
-                    Err(meta.error("expected `values(<CONSTANT>, ...)`"))
+                    Err(meta.error("expected `values(<CONSTANT>, ...)` or `api = \"<name>\"`"))
                 }
             })?;
         }
     }
-    Ok((reprs, values))
+    Ok(ShapeAttributes { reprs, values, api })
+}
+
+/// `text` as a TOML basic string, quotes included.
+fn toml_string(text: &str) -> String {
+    let mut quoted = String::with_capacity(text.len() + 2);
+    quoted.push('"');
+    for c in text.chars() {
+        match c {
+            '"' => quoted.push_str("\\\""),
+            '\\' => quoted.push_str("\\\\"),
+            '\n' => quoted.push_str("\\n"),
+            '\t' => quoted.push_str("\\t"),
+            c if c.is_control() => {
+                let _written = write!(quoted, "\\u{:04X}", u32::from(c));
+            }
+            c => quoted.push(c),
+        }
+    }
+    quoted.push('"');
+    quoted
 }
 
 fn expand_shape(input: &DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
@@ -753,9 +1037,10 @@ fn expand_shape(input: &DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
             "a shape crosses DLLs and takes no generics",
         ));
     }
-    let (reprs, values) = shape_attributes(&input.attrs)?;
+    let ShapeAttributes { reprs, values, api } = shape_attributes(&input.attrs)?;
     let name = ident.unraw().to_string();
     let shape = quote!(::enshwick::Shape);
+    let schema = shape_schema(input, &name, &reprs, &values, api.as_deref());
     let parts = match &input.data {
         Data::Struct(data) => {
             if !reprs.iter().any(|r| r == "C" || r == "transparent") {
@@ -834,8 +1119,94 @@ fn expand_shape(input: &DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
                 .layout::<Self>()
                 #parts
                 .finish();
+            #schema
         }
     })
+}
+
+/// The `SCHEMA_NAME` and `SCHEMA_TYPES` of a derived [`Shape`]: the type's
+/// own `[[type]]` table, then those of the named types inside it. Called
+/// after `expand_shape` has checked the type.
+fn shape_schema(
+    input: &DeriveInput,
+    name: &str,
+    reprs: &[String],
+    values: &[Ident],
+    api: Option<&str>,
+) -> proc_macro2::TokenStream {
+    if let Some(api) = api {
+        let api = format!("enshwick.{api}");
+        return quote!(const SCHEMA_NAME: &'static str = #api;);
+    }
+    let shape = quote!(::enshwick::Shape);
+    let ident = &input.ident;
+    let head = format!(
+        "[[type]]\nname = {}\ndoc = {}\n",
+        toml_string(name),
+        toml_string(&doc_text(&input.attrs))
+    );
+    let mut parts = vec![quote!(#head)];
+    let mut nested = Vec::new();
+    match &input.data {
+        Data::Struct(data) => {
+            let newtype = matches!(&data.fields, Fields::Unnamed(f) if f.unnamed.len() == 1);
+            if newtype && !values.is_empty() {
+                let inner = &data.fields.iter().next().map(|f| f.ty.clone());
+                parts.push(
+                    quote!("kind = \"values\"\nrepr = \"", <#inner as #shape>::SCHEMA_NAME, "\"\n"),
+                );
+                for value in values {
+                    let label = format!(
+                        "[[type.value]]\nname = {}\nvalue = ",
+                        toml_string(&value.to_string())
+                    );
+                    parts.push(quote!(#label, #ident::#value.0, "\n"));
+                }
+            } else {
+                let kind = if newtype { "newtype" } else { "struct" };
+                parts.push(quote!(concat!("kind = \"", #kind, "\"\n")));
+                for (i, field) in data.fields.iter().enumerate() {
+                    let ty = &field.ty;
+                    let label = field
+                        .ident
+                        .as_ref()
+                        .map_or_else(|| i.to_string(), |f| f.unraw().to_string());
+                    let entry = format!(
+                        "[[type.field]]\nname = {}\ndoc = {}\ntype = \"",
+                        toml_string(&label),
+                        toml_string(&doc_text(&field.attrs))
+                    );
+                    parts.push(quote!(#entry, <#ty as #shape>::SCHEMA_NAME, "\"\n"));
+                    nested.push(quote!(<#ty as #shape>::SCHEMA_TYPES));
+                }
+            }
+        }
+        Data::Enum(data) => {
+            let repr = reprs
+                .iter()
+                .find(|r| PRIMITIVE_REPRS.contains(&r.as_str()))
+                .cloned()
+                .unwrap_or_default();
+            let kind = format!("kind = \"enum\"\nrepr = \"{repr}\"\n");
+            parts.push(quote!(#kind));
+            let repr = Ident::new(&repr, Span::call_site());
+            for variant in &data.variants {
+                let v = &variant.ident;
+                let entry = format!(
+                    "[[type.variant]]\nname = {}\ndoc = {}\nvalue = ",
+                    toml_string(&v.unraw().to_string()),
+                    toml_string(&doc_text(&variant.attrs))
+                );
+                parts.push(quote!(#entry, #ident::#v as #repr, "\n"));
+            }
+        }
+        Data::Union(_) => return quote!(),
+    }
+    quote! {
+        const SCHEMA_NAME: &'static str = #name;
+        const SCHEMA_TYPES: &'static str =
+            ::enshwick::__private::concatcp!(#(#parts,)* #(#nested,)*);
+    }
 }
 
 /// The struct as `repr(C)` with its layout trait: `major` is `Some` for a
@@ -855,6 +1226,22 @@ fn expand_layout(
     )
 }
 
+/// Whether `id` is a mod id, `<author>.<name>`, or an id a renamed mod had
+/// before ids carried an author, of `[a-z0-9-]`; at most 64 characters. The
+/// API's `abi::is_valid_former_id`, which this crate cannot depend on.
+fn is_mod_id(id: &str) -> bool {
+    let part = |p: &str| {
+        !p.is_empty()
+            && p.bytes()
+                .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+    };
+    id.len() <= 64
+        && match id.split_once('.') {
+            Some((author, name)) => part(author) && part(name),
+            None => part(id),
+        }
+}
+
 /// The struct as `repr(C)` with the declaration trait at
 /// `enshwick::<trait_path>`, named `<mod id>:<what>`, with
 /// `extra` items in the impl.
@@ -869,18 +1256,13 @@ fn expand_declaration(
         syn::Error::new_spanned(ident, "name the declaration: `name = \"<id>:<what>\"`")
     })?;
     let text = name.value();
-    let valid = text.split_once(':').is_some_and(|(id, what)| {
-        !id.is_empty()
-            && id.len() <= 64
-            && id
-                .bytes()
-                .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
-            && !what.is_empty()
-    });
+    let valid = text
+        .split_once(':')
+        .is_some_and(|(id, what)| is_mod_id(id) && !what.is_empty());
     if !valid {
         return Err(syn::Error::new_spanned(
             &name,
-            "the name is `<mod id>:<what>`, the mod id in `[a-z0-9-]`",
+            "the name is `<mod id>:<what>`, the mod id `<author>.<name>` or a former id, of `[a-z0-9-]`",
         ));
     }
     if !item.generics.params.is_empty() {

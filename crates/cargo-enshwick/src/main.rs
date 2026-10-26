@@ -1,6 +1,7 @@
 //! `cargo enshwick`: start an Enshwick mod, build it and install it into the game,
 //! and port the build rows to a new game build.
 
+use anyhow::Context as _;
 use std::io::Write as _;
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -13,6 +14,7 @@ mod manifest;
 mod new;
 mod pack;
 mod pin;
+mod point;
 
 /// Cargo runs a subcommand as `cargo-enshwick enshwick <args>`.
 #[derive(Debug, Parser)]
@@ -31,10 +33,10 @@ struct Args {
 
 #[derive(Debug, Subcommand)]
 enum Command {
-    /// Creates a mod crate in `<dir>/<id>`.
+    /// Creates a mod crate in `<dir>/<name>`.
     New {
-        /// The mod id: 1 to 64 characters of `[a-z0-9-]`, starting with a
-        /// letter.
+        /// The mod id, `<author>.<name>`: each part of `[a-z0-9-]`, the name
+        /// starting with a letter; the name names the crate.
         id: String,
         /// Where the mod runs.
         #[arg(long, value_enum, default_value_t = Side::Server)]
@@ -69,6 +71,19 @@ enum Command {
     /// Checks, describes and packages content packs.
     #[command(subcommand)]
     Pack(pack::Command),
+    /// Writes the Rust definition of another mod's extension point, read
+    /// from the owner's DLL without running it.
+    Point {
+        /// The point, `<mod id>:<point>`.
+        name: String,
+        /// The owner's DLL, a folder (such as the game's) with its DLL in it
+        /// or in its `mods/`, or a schema file (`.toml`) the owner published.
+        #[arg(long)]
+        from: PathBuf,
+        /// The file to write; the definition is printed when omitted.
+        #[arg(long)]
+        out: Option<PathBuf>,
+    },
     /// Prints the GUID and game id of each content id, `<mod>:<name>`.
     Id {
         /// The content ids.
@@ -87,12 +102,12 @@ enum Side {
 
 /// A line per content id: the id, its GUID and its game id in decimal and
 /// hex; an error naming the first malformed id.
-fn ids(names: &[String]) -> Result<String, String> {
-    let lines: Result<Vec<String>, String> = names
+fn ids(names: &[String]) -> anyhow::Result<String> {
+    let lines: anyhow::Result<Vec<String>> = names
         .iter()
         .map(|name| {
-            let guid = Guid::try_named(name).ok_or_else(|| {
-                format!("{name:?} is no content id: <mod>:<name>, the mod side 1 to 64 of [a-z0-9_-], the name 1 to 128 of [a-z0-9_./-]")
+            let guid = Guid::try_named(name).with_context(|| {
+                format!("{name:?} is no content id: <mod>:<name>, the mod side a mod id, the name 1 to 128 of [a-z0-9_./-]")
             })?;
             Ok(format!("{name}  {guid}  {id} {id:#010x}", id = guid.id()))
         })
@@ -108,7 +123,7 @@ fn main() -> ExitCode {
                 Ok(true) => ExitCode::SUCCESS,
                 Ok(false) => ExitCode::from(pin::NEEDS_HUMAN),
                 Err(error) => {
-                    let _shown = writeln!(std::io::stderr(), "error: {error}");
+                    let _shown = writeln!(std::io::stderr(), "error: {error:#}");
                     ExitCode::FAILURE
                 }
             };
@@ -118,8 +133,9 @@ fn main() -> ExitCode {
         Command::Manifest {
             dll,
             expect_version,
-        } => manifest::show(&dll, expect_version.as_deref()),
+        } => manifest::show(&dll, expect_version.as_deref()).map_err(anyhow::Error::msg),
         Command::Id { names } => ids(&names),
+        Command::Point { name, from, out } => point::run(&name, &from, out.as_deref()),
         Command::Pack(command) => pack::run(&command),
     };
     match outcome {
@@ -128,7 +144,7 @@ fn main() -> ExitCode {
             ExitCode::SUCCESS
         }
         Err(error) => {
-            let _shown = writeln!(std::io::stderr(), "error: {error}");
+            let _shown = writeln!(std::io::stderr(), "error: {error:#}");
             ExitCode::FAILURE
         }
     }
@@ -140,12 +156,12 @@ mod tests {
 
     #[test]
     fn an_id_prints_its_guid_and_game_id() {
-        let line = ids(&["safes:safe".to_owned()]).unwrap();
-        let guid = Guid::named("safes:safe");
+        let line = ids(&["you.lockers:locker".to_owned()]).unwrap();
+        let guid = Guid::named("you.lockers:locker");
         assert_eq!(
             line,
             format!(
-                "safes:safe  f7eb124c-c132-5cf1-9c6c-e9e49ed3c896  {0} {0:#010x}",
+                "you.lockers:locker  67842cb8-d551-542b-8765-fe1af9c28aca  {0} {0:#010x}",
                 guid.id()
             )
         );

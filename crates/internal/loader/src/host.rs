@@ -55,6 +55,19 @@ pub(crate) struct ModRecord {
 }
 
 impl ModRecord {
+    /// Its id, then the ids it had before a rename: every namespace its
+    /// content, stats, points, services and events may take.
+    pub(crate) fn names(&self) -> Vec<&str> {
+        std::iter::once(self.id.as_str())
+            .chain(self.former.iter().map(String::as_str))
+            .collect()
+    }
+
+    /// Whether `namespace` is its id or one it had before a rename.
+    pub(crate) fn owns(&self, namespace: &str) -> bool {
+        self.id == namespace || self.former.iter().any(|f| f == namespace)
+    }
+
     /// The name players read, or the id when the manifest names none.
     pub(crate) fn label(&self) -> String {
         self.meta.label(&self.id)
@@ -657,6 +670,7 @@ impl Loader {
             find(constants, name)
         });
         own.or_else(|| self.build.constant(name))
+            .or_else(|| crate::catalogue::constant(name, &self.reflection))
     }
 }
 
@@ -1014,7 +1028,10 @@ extern "system" fn field_offset(type_name: Str, field: Str, out: *mut u64) -> St
         else {
             return Status::BAD_ARGS;
         };
-        match loader.reflection.field_offset(type_name, field) {
+        match loader
+            .reflection
+            .field_offset(crate::catalogue::type_name(type_name), field)
+        {
             Ok(offset) => put(out, offset),
             Err(error) => lookup(&error),
         }
@@ -1026,7 +1043,10 @@ extern "system" fn type_size(type_name: Str, out: *mut u32) -> Status {
         let (Some(loader), Some(type_name)) = (loader(), text(type_name)) else {
             return Status::BAD_ARGS;
         };
-        match loader.reflection.type_info(type_name) {
+        match loader
+            .reflection
+            .type_info(crate::catalogue::type_name(type_name))
+        {
             Ok(info) => put(out, info.size()),
             Err(error) => lookup(&error),
         }
@@ -1317,7 +1337,7 @@ extern "system" fn define_event(
         if out.is_null() {
             return Status::BAD_ARGS;
         }
-        let defined = crate::services::registry().define(index, &record.id, name, fields);
+        let defined = crate::services::registry().define(index, &record.names(), name, fields);
         match defined {
             Ok(id) => put(out, id),
             Err(reason) => {
@@ -1439,7 +1459,7 @@ extern "system" fn define_point(
         if room.is_none_or(|room| (room as usize) < size_of::<api_frame::PointHandle>()) {
             return Status::BAD_ARGS;
         }
-        let defined = crate::points::registry().define(index, &record.id, declared);
+        let defined = crate::points::registry().define(index, &record.names(), declared);
         match defined {
             Ok((id, live)) => put_headed(
                 out,
@@ -1554,7 +1574,7 @@ extern "system" fn declare_content(me: ModHandle, id: Str, out: *mut [u8; 16]) -
         let Some(id) = text(id) else {
             return Status::BAD_ARGS;
         };
-        match crate::ids::declare_content(&record.id, id) {
+        match crate::ids::declare_content(&record.names(), id) {
             Ok(guid) => put(out, guid.0),
             Err(why) => {
                 loader.turn_off(index, &why);
@@ -1652,7 +1672,10 @@ extern "system" fn type_hash(type_name: Str, out: *mut u32) -> Status {
         let (Some(loader), Some(type_name)) = (loader(), text(type_name)) else {
             return Status::BAD_ARGS;
         };
-        match loader.reflection.type_info(type_name) {
+        match loader
+            .reflection
+            .type_info(crate::catalogue::type_name(type_name))
+        {
             Ok(info) => crate::world::type_hash(info.va()).map_or(Status::MISSING, |h| put(out, h)),
             Err(error) => lookup(&error),
         }

@@ -64,7 +64,7 @@ builds:
 | Field          | What it holds                                                                                     | Since minor |
 | -------------- | ------------------------------------------------------------------------------------------------- | ----------- |
 | `header`       | Size and version of the struct                                                                    | 0           |
-| `id`           | `[a-z0-9-]`, 1 to 64 characters; names the settings file and data folder                          | 0           |
+| `id`           | `<author>.<name>`, each of `[a-z0-9-]`, at most 64 characters; names settings and data (minor 70) | 0           |
 | `version`      | SemVer                                                                                            | 0           |
 | `side`         | `SERVER` (1), `CLIENT` (2) or `BOTH` (3)                                                          | 0           |
 | `flags`        | `JOIN` (1): counts in the join check; `RELOAD` (2, minor 53): may be reloaded                     | 0           |
@@ -75,6 +75,7 @@ builds:
 | `authors`      | `*const Str` and `author_count`: the authors' names                                               | 36          |
 | `license`      | An SPDX licence expression                                                                        | 36          |
 | `homepage`     | Where players read about the mod                                                                  | 36          |
+| `points`       | The schemas of the extension points the mod defines, as TOML; also in the `.enshpt` section       | 71          |
 
 Since minor 54 a dependency may also be `REPLACES` (4), a mod this one takes
 the place of, with an empty range. Since minor 69 it may be `WAS` (5), an id
