@@ -115,10 +115,6 @@
       "package-name": "enshwick-safes",
       "component": "enshwick-safes"
     },
-    "mods/enshwick-admin-tools": {
-      "package-name": "enshwick-admin-tools",
-      "component": "enshwick-admin-tools"
-    },
     "mods/enshwick-optimizer": {
       "package-name": "enshwick-optimizer",
       "component": "enshwick-optimizer"
