@@ -27,8 +27,8 @@ const problems = (message: string): string[] => {
       );
     }
 
-    // release-please reads a release pull request's notes back as HTML: a
-    // `<word>` in a changelog line hides the releases after it.
+    // Release notes are read as HTML: a `<word>` in a changelog line hides
+    // the text after it.
     if (/[<>]/u.test(header)) {
       found.push('the header has < or >, which break the release notes');
     }
