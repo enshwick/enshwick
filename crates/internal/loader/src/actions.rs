@@ -10,7 +10,6 @@
 //! reply reaches the player as one of the game's notices and on the screen
 //! that sent it.
 
-use std::collections::HashMap;
 use std::sync::{Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
@@ -45,7 +44,7 @@ struct Client {
 }
 
 struct ServerState {
-    clients: HashMap<u64, Client>,
+    clients: rustc_hash::FxHashMap<u64, Client>,
     next_hints: Option<Instant>,
 }
 
@@ -54,7 +53,7 @@ static SERVER: Mutex<Option<ServerState>> = Mutex::new(None);
 fn server_state<R>(f: impl FnOnce(&mut ServerState) -> R) -> R {
     let mut slot = SERVER.lock().unwrap_or_else(PoisonError::into_inner);
     f(slot.get_or_insert_with(|| ServerState {
-        clients: HashMap::new(),
+        clients: rustc_hash::FxHashMap::default(),
         next_hints: None,
     }))
 }

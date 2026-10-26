@@ -616,6 +616,11 @@ fn list(loader: &Loader, paint: &Painter<'_>, first: &mut usize) -> Listed {
             false,
         );
     }
+    let lacking = loader.build.lacking(crate::TABLE_IDS);
+    if !lacking.is_empty() {
+        let line = texts::fill("mods.features.off", &[("features", lacking)]);
+        paint.label(line.as_bytes(), UiWidget::STYLE_SECONDARY, true, false);
+    }
     *first = clamp_first(*first, mods.len(), MODS_PER_PAGE);
     for (index, record) in mods.iter().enumerate().skip(*first).take(MODS_PER_PAGE) {
         let heading = if record.off.load(Ordering::Acquire) {

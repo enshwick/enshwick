@@ -7,8 +7,8 @@ The loader comes in two parts:
 - `powrprof.dll`, the stub, in the folder of `enshrouded.exe` or
   `enshrouded_server.exe`. Windows loads it with the game. It forwards every
   export to the system's `powrprof.dll`, then, on a thread of its own, loads
-  the loader. Without
-  the loader the game runs vanilla.
+  the DLLs in `mods/chain/` and then the loader. Without the loader the game
+  runs vanilla.
 - `mods/enshwick/enshwick.dll`, the loader. It identifies the game build,
   loads the mods, initialises them, arms their hooks and answers their calls.
 
