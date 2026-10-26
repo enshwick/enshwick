@@ -54,6 +54,10 @@ pub enum Field {
     /// How long a recipe takes, in seconds from 0 to 86400; the entry is a
     /// recipe.
     Time,
+    /// How many slots a container holds, 8 to 128 in steps of 8; the entry
+    /// is the item that places it. Containers placed before keep their
+    /// size, which the save holds.
+    Slots,
 }
 
 impl Field {
@@ -64,6 +68,7 @@ impl Field {
         Self::Cost,
         Self::Ingredient,
         Self::Time,
+        Self::Slots,
     ];
 
     /// The name a data pack writes, such as `max_stack`.
@@ -83,6 +88,7 @@ impl Field {
             Self::Cost => "cost",
             Self::Ingredient => "ingredient",
             Self::Time => "time",
+            Self::Slots => "slots",
         }
     }
 
@@ -99,7 +105,7 @@ impl Field {
     #[must_use]
     pub const fn entry(self) -> Entry {
         match self {
-            Self::MaxStack => Entry::Item,
+            Self::MaxStack | Self::Slots => Entry::Item,
             Self::Output | Self::Cost | Self::Ingredient | Self::Time => Entry::Recipe,
         }
     }
@@ -110,13 +116,23 @@ impl Field {
             Self::MaxStack | Self::Output | Self::Cost => (1.0, 65535.0),
             Self::Ingredient => (0.0, 65535.0),
             Self::Time => (0.0, 86400.0),
+            Self::Slots => (8.0, 128.0),
+        }
+    }
+
+    /// The step the field's values come in: 8 for slots, which come in
+    /// pages of 8, else 1.
+    const fn step(self) -> f64 {
+        match self {
+            Self::Slots => 8.0,
+            _ => 1.0,
         }
     }
 
     /// Whether the field holds whole numbers only.
     const fn whole(self) -> bool {
         match self {
-            Self::MaxStack | Self::Output | Self::Cost | Self::Ingredient => true,
+            Self::MaxStack | Self::Output | Self::Cost | Self::Ingredient | Self::Slots => true,
             Self::Time => false,
         }
     }
@@ -140,6 +156,13 @@ impl Field {
                 low,
                 high,
             }),
+            Value::Set(v) if self.step() > 1.0 && (v / self.step()).fract() != 0.0 => {
+                Err(ValueError::NotInSteps {
+                    field: self,
+                    value: v,
+                    step: self.step(),
+                })
+            }
             Value::Set(v) if self.whole() && v.fract() != 0.0 => Err(ValueError::NotWhole {
                 field: self,
                 value: v,
@@ -176,7 +199,11 @@ impl Field {
         }
         let start = set.unwrap_or(base);
         let value = start * factor;
-        let value = if self.whole() { value.round() } else { value };
+        let value = if self.whole() {
+            (value / self.step()).round() * self.step()
+        } else {
+            value
+        };
         let (low, high) = self.range();
         let low = if self.whole() && start >= 1.0 && factor > 0.0 {
             low.max(1.0)
@@ -195,6 +222,7 @@ impl Field {
             Self::Cost => DataField::RECIPE_COST,
             Self::Ingredient => DataField::RECIPE_INGREDIENT,
             Self::Time => DataField::RECIPE_TIME,
+            Self::Slots => DataField::CONTAINER_SLOTS,
         }
     }
 
@@ -302,6 +330,16 @@ pub enum ValueError {
     BadFactor {
         /// The factor asked for.
         factor: f64,
+    },
+    /// A value between the field's steps.
+    #[error("{field} {value} is not a multiple of {step}")]
+    NotInSteps {
+        /// The field.
+        field: Field,
+        /// The value asked for.
+        value: f64,
+        /// The step.
+        step: f64,
     },
     /// An item for a field that names none, or none for one that does.
     #[error("{field} {}", if *named { "names no item" } else { "needs an item" })]
@@ -566,6 +604,22 @@ mod tests {
         assert_eq!(Field::Ingredient.resolve(3.0, [Value::Set(0.0)]), 0.0);
         assert_eq!(Field::Ingredient.resolve(3.0, [Value::Times(0.0)]), 0.0);
         assert_eq!(Field::Time.resolve(60.0, [Value::Times(0.25)]), 15.0);
+    }
+
+    #[test]
+    fn slots_come_in_pages_of_eight() {
+        assert!(Field::Slots.check(Value::Set(48.0)).is_ok());
+        assert_eq!(
+            Field::Slots
+                .check(Value::Set(50.0))
+                .unwrap_err()
+                .to_string(),
+            "slots 50 is not a multiple of 8"
+        );
+        assert!(Field::Slots.check(Value::Set(136.0)).is_err());
+        assert_eq!(Field::Slots.resolve(24.0, [Value::Times(1.5)]), 40.0);
+        assert_eq!(Field::Slots.resolve(72.0, [Value::Times(2.0)]), 128.0);
+        assert_eq!(Field::Slots.resolve(16.0, [Value::Times(0.1)]), 8.0);
     }
 
     #[test]

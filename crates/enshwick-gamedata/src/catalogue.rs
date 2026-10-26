@@ -69,6 +69,10 @@ pub const ITEM_MAX_STACK: &str = "item_info.max_stack";
 /// nanoseconds, in a recipe.
 pub const RECIPE_DURATION: &str = "recipe.duration";
 
+/// The id of the offset of the template an item places, a GUID, in an
+/// item's static data.
+pub const ITEM_PLACED_ENTITY: &str = "item_info.placed_entity";
+
 /// The kind of the recipes that make an item, by the name of the constant
 /// of [`SLOT_TYPE`] the item's equipment slot holds; every other slot is
 /// [`RecipeKind::Other`]. A new kind is a row here.

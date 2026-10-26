@@ -47,10 +47,9 @@ pub(super) fn item_changes(
         let line = PackError::at(file, text, at, "").line;
         let e = entry.get_ref();
         let number = index + 1;
-        let fields: Vec<(Field, Value)> = e
-            .max_stack
-            .map(|v| (Field::MaxStack, value(v)))
+        let fields: Vec<(Field, Value)> = [(Field::MaxStack, e.max_stack), (Field::Slots, e.slots)]
             .into_iter()
+            .filter_map(|(field, v)| v.map(|v| (field, value(v))))
             .collect();
         if e.items.is_empty() {
             reader.error(

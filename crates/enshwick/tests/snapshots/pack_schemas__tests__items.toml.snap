@@ -71,6 +71,16 @@ expression: shape
               "type": "null"
             }
           ]
+        },
+        "slots": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ValueEntry"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [
