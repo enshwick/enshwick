@@ -45,6 +45,10 @@ name = "pack_schemas"
 required-features = ["schema"]
 
 [[test]]
+name = "fake_second_install"
+required-features = ["test"]
+
+[[test]]
 name = "actions"
 required-features = ["test"]
 
