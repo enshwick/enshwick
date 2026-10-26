@@ -172,11 +172,13 @@ pub fn mods(loaded: &[Loaded<'_>]) -> String {
         .join("\n")
 }
 
-/// Makes mod `id` read its settings again: while the world `world` runs,
-/// its own copy, `mod-data/<id>/worlds/<world>/settings.toml`, which is in
-/// force over `mod-configs/<id>.toml`; that file otherwise. The file's
-/// modified time moves to now, and the loader's watcher raises the mod's
-/// settings change within a second. The reply.
+/// Makes mod `id` read its settings again; the reply.
+///
+/// While the world `world` runs, its own copy,
+/// `mod-data/<id>/worlds/<world>/settings.toml`, is in force over
+/// `mod-configs/<id>.toml`; that file otherwise. The file's modified time
+/// moves to now, and the loader's watcher raises the mod's settings change
+/// within a second.
 #[must_use]
 pub fn reload(game: &Path, id: &str, world: Option<&str>) -> String {
     let world_file = world
