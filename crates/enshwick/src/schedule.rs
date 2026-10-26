@@ -12,6 +12,7 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
+use crate::abi::ModHandle;
 use crate::locks::Relock;
 
 /// A task: when it is due, its period when it repeats, and what it runs.
@@ -58,7 +59,11 @@ impl Queue {
     }
 }
 
-static QUEUE: crate::fresh::Fresh<Queue> = crate::fresh::Fresh::new();
+/// Each mod's queue by its handle: a mod DLL holds one, the loader's own copy
+/// of this crate one per data pack or script it runs. Queues are kept for
+/// the process, so a task still running in one never loses it.
+static QUEUES: crate::fresh::Fresh<Mutex<Vec<(ModHandle, &'static Queue)>>> =
+    crate::fresh::Fresh::new();
 
 /// Puts work on the server's game thread; get it from
 /// [`Load::scheduler`](crate::Load::scheduler). Copy it anywhere, including
@@ -85,6 +90,17 @@ pub struct Scheduler {
     queue: &'static Queue,
 }
 
+impl crate::script::Bound for Scheduler {
+    const NAME: &'static str = "scheduler";
+    const DOC: &'static str =
+        "Work for the server's game thread: on the next step, after a delay, or repeatedly.";
+    const PARTS: &'static [&'static [crate::script::Function<Self>]] = &[Self::SCRIPT_TASKS];
+
+    fn resolve(load: &mut crate::Load<'_>) -> Result<Self, crate::Off> {
+        load.scheduler()
+    }
+}
+
 impl core::fmt::Debug for Scheduler {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("Scheduler")
@@ -96,12 +112,22 @@ impl core::fmt::Debug for Scheduler {
     }
 }
 
+#[crate::script(tasks)]
 impl Scheduler {
-    /// The mod's scheduler, and whether the caller is to subscribe the tick
-    /// that runs it: true once, and again after
+    /// The scheduler of the mod `me`, and whether the caller is to
+    /// subscribe the tick that runs it: true once, and again after
     /// [`Scheduler::unsubscribed`].
-    pub(crate) fn get() -> (Self, bool) {
-        let queue = QUEUE.get_or_init(Queue::new);
+    pub(crate) fn get(me: ModHandle) -> (Self, bool) {
+        let queue = {
+            let mut queues = QUEUES.get_or_init(|| Mutex::new(Vec::new())).relock();
+            if let Some(&(_, queue)) = queues.iter().find(|(handle, _)| *handle == me) {
+                queue
+            } else {
+                let queue: &'static Queue = Box::leak(Box::new(Queue::new()));
+                queues.push((me, queue));
+                queue
+            }
+        };
         let subscribe = !queue.ticking.swap(true, Ordering::AcqRel);
         (Self { queue }, subscribe)
     }
@@ -117,6 +143,7 @@ impl Scheduler {
     /// # Examples
     ///
     /// See [`Scheduler`].
+    #[script]
     pub fn next_tick(self, task: impl FnOnce() + Send + 'static) {
         self.after(Duration::ZERO, task);
     }
@@ -126,6 +153,7 @@ impl Scheduler {
     /// # Examples
     ///
     /// See [`Scheduler`].
+    #[script]
     pub fn after(self, delay: Duration, task: impl FnOnce() + Send + 'static) {
         let mut task = Some(task);
         self.push(delay, None, move || {
@@ -137,11 +165,13 @@ impl Scheduler {
     }
 
     /// Runs `task` about every `period`, the first time a period from now,
-    /// until it returns [`ControlFlow::Break`].
+    /// until it returns [`ControlFlow::Break`], which a script's task does by
+    /// returning `false`.
     ///
     /// # Examples
     ///
     /// See [`Scheduler`].
+    #[script]
     pub fn every(self, period: Duration, task: impl FnMut() -> ControlFlow<()> + Send + 'static) {
         self.push(period, Some(period), task);
     }
@@ -222,7 +252,7 @@ mod tests {
 
     #[test]
     fn tasks_run_when_due_and_repeat_until_they_stop() {
-        let (scheduler, _) = Scheduler::get();
+        let (scheduler, _) = Scheduler::get(ModHandle(1));
         let once = Arc::new(AtomicU32::new(0));
         let repeated = Arc::new(AtomicU32::new(0));
         let later = Arc::new(AtomicU32::new(0));
@@ -253,7 +283,7 @@ mod tests {
 
     #[test]
     fn runs_keep_their_buffers_between_steps() {
-        let (scheduler, _) = Scheduler::get();
+        let (scheduler, _) = Scheduler::get(ModHandle(1));
         scheduler.every(Duration::ZERO, || ControlFlow::Continue(()));
         scheduler.run_due();
         let lock = |m: &'static Mutex<Vec<Task>>| m.relock();
@@ -267,8 +297,19 @@ mod tests {
     }
 
     #[test]
+    fn each_mod_has_a_queue_of_its_own() {
+        let (first, subscribe_first) = Scheduler::get(ModHandle(7));
+        let (second, subscribe_second) = Scheduler::get(ModHandle(8));
+        assert!(subscribe_first && subscribe_second);
+        assert!(!core::ptr::eq(first.queue, second.queue));
+        let (again, subscribe_again) = Scheduler::get(ModHandle(7));
+        assert!(core::ptr::eq(first.queue, again.queue));
+        assert!(!subscribe_again);
+    }
+
+    #[test]
     fn a_delay_past_what_time_holds_never_runs() {
-        let (scheduler, _) = Scheduler::get();
+        let (scheduler, _) = Scheduler::get(ModHandle(1));
         scheduler.after(Duration::MAX, || unreachable!());
         scheduler.every(Duration::MAX, || unreachable!());
         scheduler.run_due();

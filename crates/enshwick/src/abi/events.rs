@@ -125,7 +125,7 @@ impl Event {
 /// assert_eq!(fell.cause, PlayerDeathData::FALL);
 /// ```
 #[repr(C)]
-#[derive(Clone, Copy, Debug, PartialEq, bytemuck::Zeroable)]
+#[derive(Clone, Copy, Debug, PartialEq, bytemuck::Zeroable, crate::Script)]
 pub struct PlayerDeathData {
     /// Size and version of this struct.
     pub header: Header,
@@ -179,7 +179,7 @@ impl PlayerDeathData {
 /// assert_eq!(learnt.value, 3);
 /// ```
 #[repr(C)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, bytemuck::Zeroable)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, bytemuck::Zeroable, crate::Script)]
 pub struct KnowledgeData {
     /// Size and version of this struct.
     pub header: Header,
@@ -204,7 +204,7 @@ impl_headed!(KnowledgeData);
 /// assert_eq!(done.entity, 2);
 /// ```
 #[repr(C)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, bytemuck::Zeroable)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, bytemuck::Zeroable, crate::Script)]
 pub struct QuestData {
     /// Size and version of this struct.
     pub header: Header,
@@ -307,7 +307,7 @@ pub type KnowledgeInputFn =
 /// assert_eq!(chunk.x * chunk.size, 256, "it starts 256 m east of the origin");
 /// ```
 #[repr(C)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, bytemuck::Zeroable)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, bytemuck::Zeroable, crate::Script)]
 pub struct ChunkData {
     /// Size and version of this struct.
     pub header: Header,
@@ -344,7 +344,7 @@ impl_headed!(ChunkData);
 /// assert_eq!(placed.kind, BuildingData::PLACED);
 /// ```
 #[repr(C)]
-#[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+#[derive(Clone, Copy, Debug, bytemuck::Zeroable, crate::Script)]
 pub struct BuildingData {
     /// Size and version of this struct.
     pub header: Header,
@@ -451,7 +451,7 @@ impl PlayerInfo {
 /// assert_eq!(tick.step, 1);
 /// ```
 #[repr(C)]
-#[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+#[derive(Clone, Copy, Debug, bytemuck::Zeroable, crate::Script)]
 pub struct TickData {
     /// Size and version of this struct.
     pub header: Header,
@@ -472,7 +472,7 @@ impl_headed!(TickData);
 /// assert_eq!(player.entity, 7);
 /// ```
 #[repr(C)]
-#[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+#[derive(Clone, Copy, Debug, bytemuck::Zeroable, crate::Script)]
 pub struct PlayerData {
     /// Size and version of this struct.
     pub header: Header,

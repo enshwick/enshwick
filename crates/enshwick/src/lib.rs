@@ -111,6 +111,7 @@ pub mod raw;
 #[cfg(doctest)]
 mod refused;
 pub mod schedule;
+pub mod script;
 pub mod services;
 pub mod shape;
 pub mod state;
@@ -128,6 +129,33 @@ pub mod weather;
 pub mod world;
 
 pub use enshwick_macros::Config;
+/// Describes a type for script languages through [`script::Typed`],
+/// [`script::IntoScript`] and, when every field is shown,
+/// [`script::FromScript`].
+///
+/// A struct with named fields is a record of its public fields; fields of
+/// type `Header` and fields named with a leading `_` or `reserved` are left
+/// out. A newtype is its inner
+/// type. An enum of unit variants is a choice of the variants' names. Doc
+/// comments become the script's documentation.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::script::{FromScript, IntoScript, Value};
+///
+/// /// A purchase at a stall.
+/// #[derive(Clone, Debug, PartialEq, enshwick::Script)]
+/// pub struct Sale {
+///     /// What it cost.
+///     pub price: u32,
+/// }
+///
+/// let value = Sale { price: 5 }.into_value();
+/// assert_eq!(Sale::from_value(value)?, Sale { price: 5 });
+/// # Ok::<(), enshwick::script::Error>(())
+/// ```
+pub use enshwick_macros::Script;
 /// Derives [`trait@Shape`] for a type that crosses between mods inside a
 /// [`#[service]`](macro@service), [`#[event]`](macro@event) or
 /// [`#[point]`](macro@point), so a change inside it refuses the link.
@@ -242,6 +270,20 @@ pub use enshwick_macros::hook;
 /// }
 /// ```
 pub use enshwick_macros::point;
+/// Exports the methods of an `impl` block marked `#[script]` to script
+/// languages: `#[script(<part>)]` adds the constant `SCRIPT_<PART>`, a list
+/// of [`script::Function`] a [`script::Bound`] type names in its parts.
+///
+/// A method takes `self` or `&self` and has a doc comment. Parameters and
+/// the return type implement [`script::FromScript`] and
+/// [`script::IntoScript`]; `&T` reads a `T`; an `impl Fn(A) -> R` parameter
+/// takes a script function, with `A: IntoScript` and `R: script::Answer`; a
+/// `Result` returns its `Ok` value and raises its `Err`'s message.
+///
+/// # Examples
+///
+/// See [`script::Function`].
+pub use enshwick_macros::script;
 /// Declares a service table other mods use: the struct becomes `repr(C)`
 /// and implements [`services::Service`] with a layout hash per field, which
 /// the loader checks when a mod asks for the service.
@@ -281,6 +323,9 @@ pub use shape::Shape;
 #[doc(hidden)]
 pub mod __private {
     pub use const_format::concatcp;
+
+    pub use crate::locks::Relock;
+    pub use crate::script::convert::{argument, record_fields};
 
     use std::sync::OnceLock;
     use std::sync::atomic::{AtomicU8, AtomicU64, Ordering};
