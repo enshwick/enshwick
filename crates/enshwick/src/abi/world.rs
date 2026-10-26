@@ -2,7 +2,7 @@
 
 use core::ffi::c_void;
 
-use crate::abi::Header;
+use crate::abi::{Header, Str};
 
 /// A game event handed to a [`GameEventFn`], from the ECS event streams
 /// of the server's systems.
@@ -15,7 +15,7 @@ use crate::abi::Header;
 /// let payload = [0u8; 16];
 /// let died = GameEventData {
 ///     header: Header::of::<GameEventData>(),
-///     type_hash: 0xd8ec_982a,
+///     type_hash: 0x0042,
 ///     size: 16,
 ///     data: payload.as_ptr(),
 /// };
@@ -35,6 +35,39 @@ pub struct GameEventData {
 }
 
 impl_headed!(GameEventData);
+
+/// One game event type of the running build, as [`HostApi::event_types`]
+/// writes it. `name` is the loader's, valid for the rest of the process.
+///
+/// [`HostApi::event_types`]: crate::abi::HostApi::event_types
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::abi::{EventTypeInfo, Header, Str};
+///
+/// let info = EventTypeInfo {
+///     header: Header::of::<EventTypeInfo>(),
+///     name: Str::new("you::Event"),
+///     hash: 1,
+///     size: 16,
+/// };
+/// assert_eq!(info.size, 16);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+pub struct EventTypeInfo {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// The reflected name.
+    pub name: Str,
+    /// The reflected type hash, which each event of the type carries.
+    pub hash: u32,
+    /// The bytes each event of the type carries.
+    pub size: u32,
+}
+
+impl_headed!(EventTypeInfo);
 
 /// A mod's handler for game events: the event and the pointer given at
 /// subscription. It must not unwind.

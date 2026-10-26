@@ -3,10 +3,11 @@
 use core::ffi::c_void;
 
 use crate::abi::{
-    DaytimeInfo, EntityPlace, GameEventFn, ModHandle, PlayerInfo, RenameCallFn, Side, SpawnRequest,
-    Status, StatusFn, Str, TeleportRequest, TerrainEdit, TerrainMaterialInfo, WeatherFront,
+    DaytimeInfo, EntityPlace, EventTypeInfo, GameEventFn, Header, ModHandle, PlayerInfo,
+    RenameCallFn, Side, SpawnRequest, Status, StatusFn, Str, TeleportRequest, TerrainEdit,
+    TerrainMaterialInfo, WeatherFront,
 };
-use crate::test::table::{found, put, text, with};
+use crate::test::table::{found, put, put_list, text, with};
 
 pub(crate) extern "system" fn component(
     _me: ModHandle,
@@ -154,6 +155,27 @@ pub(crate) extern "system" fn game_event(
             .push((type_hash, callback, user.expose_provenance()));
         Status::OK
     })
+}
+
+pub(crate) extern "system" fn event_types(
+    _me: ModHandle,
+    out: *mut EventTypeInfo,
+    capacity: u32,
+    count: *mut u32,
+) -> Status {
+    let found: Vec<EventTypeInfo> = with(Vec::new(), |s| {
+        s.host
+            .event_types
+            .iter()
+            .map(|&(name, hash, size)| EventTypeInfo {
+                header: Header::of::<EventTypeInfo>(),
+                name: Str::new(name),
+                hash,
+                size,
+            })
+            .collect()
+    });
+    put_list(&found, out, capacity, count)
 }
 
 pub(crate) extern "system" fn entities(

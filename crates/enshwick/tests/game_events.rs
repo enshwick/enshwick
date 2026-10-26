@@ -1,4 +1,5 @@
-//! Game events reach a mod's handlers by type, with fields read by name.
+//! Game events reach a mod's handlers by type, with fields read by name, and
+//! a mod lists every event type of the build.
 
 #[cfg(test)]
 mod tests {
@@ -8,11 +9,12 @@ mod tests {
     use enshwick::ecs::Entity;
     use enshwick::{Load, Mod, Off};
 
-    const DIED: u32 = 0xd8ec_982a;
-    const HIT: u32 = 0xcc0d_57e0;
+    const DIED: u32 = 0x0042;
+    const HIT: u32 = 0x0043;
 
     static DEAD: Mutex<Vec<Entity>> = Mutex::new(Vec::new());
     static EVERY: Mutex<Vec<u32>> = Mutex::new(Vec::new());
+    static LISTED: Mutex<Vec<(&str, u32, u32)>> = Mutex::new(Vec::new());
 
     struct Watcher;
 
@@ -22,6 +24,11 @@ mod tests {
         }
 
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
+            let listed = load.event_types()?;
+            *LISTED.lock().unwrap() = listed
+                .iter()
+                .map(|t| (t.name(), t.hash(), t.size()))
+                .collect();
             let died = load.event_type("keen::ecs::EntityDiedEvent")?;
             let dead = died.field::<Entity>(load, "deadEntityId")?;
             assert!(died.field::<u32>(load, "nope").is_err());
@@ -41,8 +48,8 @@ mod tests {
     #[test]
     fn handlers_get_their_type_and_every_handler_gets_all() {
         let loader = enshwick::test::FakeHost::new()
-            .type_hash("keen::ecs::EntityDiedEvent", DIED)
-            .type_size("keen::ecs::EntityDiedEvent", 16)
+            .event_type("keen::ecs::EntityDiedEvent", DIED, 16)
+            .event_type("keen::ecs::HitEvent", HIT, 248)
             .field_offset("keen::ecs::EntityDiedEvent", "deadEntityId", 8)
             .field_offset("keen::ecs::EntityDiedEvent", "late", 12)
             .install();
@@ -50,6 +57,15 @@ mod tests {
         let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
         assert_eq!(loader.game_event_types(), [DIED, 0]);
+        let mut listed = LISTED.lock().unwrap().clone();
+        listed.sort_unstable();
+        assert_eq!(
+            listed,
+            [
+                ("keen::ecs::EntityDiedEvent", DIED, 16),
+                ("keen::ecs::HitEvent", HIT, 248)
+            ]
+        );
 
         let mut died = [0u8; 16];
         died[8..12].copy_from_slice(&4096u32.to_le_bytes());

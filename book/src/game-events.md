@@ -25,31 +25,35 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 }
 ```
 
-| Kind | Engine type | Fields |
-| --- | --- | --- |
-| `Hit` | `HitEvent` | `attacker`, `source`, `target`, `root_target`, `weapon`, `health_change` (below 0 for damage), `stamina_change`, `damage_types`, `attack`, `target_faction` |
-| `Died` | `EntityDiedEvent` | `entity`, `killer` (the last hit's attacker), `killer_player` (the player credited with the kill) |
-| `LevelGained` | `LevelUpEvent` | `player`, `level` |
-| `ExperienceGained` | `XPGainedEvent` | `player`, `amount`, `source` (`Combat`, `Quest`, `Mining` and others) |
-| `CraftRequested` | `CraftRecipeEvent` | `player`, `station`, `recipe`, `amount` |
-| `Crafted` | `CraftRecipeSuccessEvent` | `workshop`, `recipe` |
-| `Interacted` | `AcceptOfferedInteractionEvent` | `player`, `target`, `offer` |
-| `Built`, `TornDown`, `PickedUp` | `BuildingPlaceEvent`, `BuildingTearDownEvent`, `BuildingPickUpEvent` | `block` (`player`, `position`, volume, `material`); `item` for `Built`, `entity` for `PickedUp` |
-| `AltarUsed` | `FlameAltarEvent` | `player`, `altar`, `action` (`Abandon`, `Reclaim`, `RemoveWater`, `SetSpawn`) |
-| `LootOpened` | `LootInteractionEvent` | `player`, `container`, `take_all` |
-| `EquipmentChanged` | `HandleEquipmentSlotChangedEvent` | `player`, `slot` |
-| `Revived` | `RevivedPlayerEvent` | `player`, `by` |
+| Kind | Fields |
+| --- | --- |
+| `Hit` | `attacker`, `source`, `target`, `root_target`, `weapon`, `health_change` (below 0 for damage), `stamina_change`, `damage_types`, `attack`, `target_faction` |
+| `Died` | `entity`, `killer` (the last hit's attacker), `killer_player` (the player credited with the kill) |
+| `LevelGained` | `player`, `level` |
+| `ExperienceGained` | `player`, `amount`, `source` (`Combat`, `Quest`, `Mining` and others) |
+| `CraftRequested` | `player`, `station`, `recipe`, `amount` |
+| `Crafted` | `workshop`, `recipe` |
+| `Interacted` | `player`, `target`, `offer` |
+| `Built`, `TornDown`, `PickedUp` | `block` (`player`, `position`, volume, `material`); `item` for `Built`, `entity` for `PickedUp` |
+| `AltarUsed` | `player`, `altar`, `action` (`Abandon`, `Reclaim`, `RemoveWater`, `SetSpawn`) |
+| `LootOpened` | `player`, `container`, `take_all` |
+| `EquipmentChanged` | `player`, `slot` |
+| `Revived` | `player`, `by` |
 
-Entities that may be missing are `Option`s. Kill credit comes from the dead
-entity's `HitHistory` and `ExperienceSource`, read while it is still in the
-world; an entity that kept no history has `None` there. Not all damage is a
+The loader maps each kind and its fields to the running build, so a game
+update that renames or moves them changes the loader, not your mod.
+
+Entities that may be missing are `Option`s. Kill credit comes from the hits
+the dead entity kept and the player the game credits, read while it is still
+in the world; an entity that kept no history has `None` there. Not all damage is a
 hit: falls and the shroud change health without one.
 
 ## Any event by name
 
-Every event type the game reflects can be observed. Resolve the type and the
-fields you read once, at init; each `Field` reads its value for the running
-build:
+Every event type the game reflects can be observed by its engine name. That
+is the low level: a game update that renames the type or a field turns the
+mod's subscription off until the mod follows. Resolve the type and the fields
+you read once, at init; each `Field` reads its value for the running build:
 
 ```rust
 use enshwick::ecs::Entity;
@@ -66,19 +70,34 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 ```
 
 - `field` reads a field the type declares; `inherited_field` one of a base
-  type, such as `rootSourceId` of `keen::ecs::BaseHitEvent` in
-  `keen::ecs::HitEvent`, since reflection lists a field under the type that
-  declares it.
+  type, since reflection lists a field under the type that declares it.
 - `event.get(field)` is `None` for a field of another type, and
   `event.read::<T>(offset)` reads what reflection does not name, such as an
   array element. `event.bytes()` is the whole event.
 - Field types are the integers, `f32`, `f64`, `bool` and `Entity`.
 
 `load.on_every_raw_game_event(|event| ...)` receives every event of every type,
-for finding out what the game raises; the
+for finding out what the game raises, and `load.event_types()` lists every
+event type the running build reflects, with its name, hash and size; the
 [probe](https://github.com/enshwick/devtools-mods/tree/main/enshwick-probe)
-uses it to count them, naming the types in `game_events::EVENT_TYPE_NAMES`.
-Each event is copied for the mod, so leave it to development builds.
+uses both to count events by name. Each event is copied for the mod, so leave
+it to development builds.
+
+```rust
+use std::collections::HashMap;
+
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    let names: HashMap<u32, &str> = load
+        .event_types()?
+        .into_iter()
+        .map(|ty| (ty.hash(), ty.name()))
+        .collect();
+    load.on_every_raw_game_event(move |event| {
+        let name = names.get(&event.type_hash()).copied().unwrap_or("unknown");
+        enshwick::debug!("{name}: {} bytes", event.bytes().len());
+    })
+}
+```
 
 ## When and where
 
@@ -102,5 +121,6 @@ come from the built-in server while it hosts a game, as server events do.
 
 [`FakeHost`](testing.md) records the types a mod asked for in
 `game_event_types()`, and `raise_game_event(type_hash, bytes)` hands an event
-to the mod's handlers. Give the fake the reflected names, sizes and offsets
-the mod resolves with `type_hash`, `type_size` and `field_offset`.
+to the mod's handlers. `event_type(name, hash, size)` gives the fake build an
+event type that `load.event_types()` lists and `load.event_type` resolves;
+give it the offsets the mod resolves with `field_offset`.

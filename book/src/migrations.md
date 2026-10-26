@@ -50,15 +50,15 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 - Keep every migration in the list forever. A player may skip versions, and
   each world runs the ones it has not seen.
 
-| Step                         | What it does                                                                             |
-| ---------------------------- | ---------------------------------------------------------------------------------------- |
-| `rename_setting(from, to)`   | moves a setting to a new key, value and comments kept; nothing when `to` is taken        |
-| `remove_setting(key)`        | removes a setting                                                                        |
-| `map_setting(key, f)`        | changes a setting's value: `f` takes the old `toml::Value` and returns the new one       |
-| `take_setting(mod, key, to)` | sets `to` from the setting `key` of another mod; see [below](#settings-from-another-mod) |
-| `rename_store(from, to)`     | moves a [world store](state.md#per-world-state) to a new name                            |
-| `map_store(name, f)`         | changes a world store: `f` edits its `toml::Table` in place                              |
-| `rename_content(from, to)`   | reads content saved under the GUID `from` as the content now under `to`                  |
+| Step                         | What it does                                                                                       |
+| ---------------------------- | -------------------------------------------------------------------------------------------------- |
+| `rename_setting(from, to)`   | moves a setting to a new key, into or out of a table with a dotted key; nothing when `to` is taken |
+| `remove_setting(key)`        | removes a setting                                                                                  |
+| `map_setting(key, f)`        | changes a setting's value: `f` takes the old `toml::Value` and returns the new one                 |
+| `take_setting(mod, key, to)` | sets `to` from the setting `key` of another mod; see [below](#settings-from-another-mod)           |
+| `rename_store(from, to)`     | moves a [world store](state.md#per-world-state) to a new name                                      |
+| `map_store(name, f)`         | changes a world store: `f` edits its `toml::Table` in place                                        |
+| `rename_content(from, to)`   | reads content saved under the GUID `from` as the content now under `to`                            |
 
 A step whose setting or store is missing does nothing. A map returns
 `Result<_, MigrationError>`; a `&str` or `String` turns into one with `?`, as

@@ -20,6 +20,7 @@
 
 use crate::mod_index::ModIndex;
 use crate::pinned;
+use crate::registry::Registry;
 use enshwick::ecs::Entity;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -94,9 +95,8 @@ struct Server {
 }
 
 /// Kinds while mods initialise.
-static PENDING: Mutex<Vec<Kind>> = Mutex::new(Vec::new());
 /// Kinds once sealed; the index is the kind.
-static KINDS: OnceLock<Box<[Kind]>> = OnceLock::new();
+static KINDS: Registry<Kind> = Registry::new();
 static SERVER: Mutex<Option<Server>> = Mutex::new(None);
 /// What a client got from its server.
 static CLIENT: Mutex<Option<Values>> = Mutex::new(None);
@@ -164,46 +164,45 @@ fn open_kind(
     scope: Scope,
     sent: bool,
 ) -> Result<u32, Status> {
-    if KINDS.get().is_some() {
-        return Err(Status::TOO_LATE);
-    }
     let record = loader.mods.get(owner.get()).ok_or(Status::BAD_ARGS)?;
     let full = full_id(record.home(), id).ok_or(Status::BAD_ARGS)?;
-    let mut pending = PENDING.relock();
-    let index = if let Some(index) = pending.iter().position(|k| k.id == full) {
-        let kind = &mut pending[index];
-        if kind.scope != scope {
-            crate::log::write(
-                enshwick::abi::Level::ERROR,
-                &record.id,
-                &format!("data kind {full} is opened for items and for entities"),
-            );
-            return Err(Status::REFUSED);
+    let index = KINDS.edit(|pending| {
+        if let Some(index) = pending.iter().position(|k| k.id == full) {
+            let kind = &mut pending[index];
+            if kind.scope != scope {
+                crate::log::write(
+                    enshwick::abi::Level::ERROR,
+                    &record.id,
+                    &format!("data kind {full} is opened for items and for entities"),
+                );
+                return Err(Status::REFUSED);
+            }
+            kind.sent |= sent;
+            Ok(index)
+        } else {
+            pending.push(Kind {
+                id: full,
+                scope,
+                sent,
+            });
+            Ok(pending.len() - 1)
         }
-        kind.sent |= sent;
-        index
-    } else {
-        pending.push(Kind {
-            id: full,
-            scope,
-            sent,
-        });
-        pending.len() - 1
-    };
+    })??;
     u32::try_from(index).map_err(|_| Status::REFUSED)
 }
 
 /// Opens the loader's own item kind `id` for a platform feature, before the
 /// kinds are sealed.
 pub(crate) fn open_platform(id: &str) {
-    let mut pending = PENDING.relock();
-    if !pending.iter().any(|k| k.id == id) {
-        pending.push(Kind {
-            id: id.to_owned(),
-            scope: Scope::Item,
-            sent: true,
-        });
-    }
+    let _open = KINDS.edit(|pending| {
+        if !pending.iter().any(|k| k.id == id) {
+            pending.push(Kind {
+                id: id.to_owned(),
+                scope: Scope::Item,
+                sent: true,
+            });
+        }
+    });
 }
 
 /// The value of the loader's own kind `id` on the item `pide` holding
@@ -226,7 +225,7 @@ pub(crate) fn get_platform(pide: u32, item: u32) -> Option<Box<[u8]>> {
 
 /// Seals the kinds; the store runs only when a mod opened one.
 pub(crate) fn seal() {
-    let kinds = std::mem::take(&mut *PENDING.relock());
+    let kinds = KINDS.seal();
     if !kinds.is_empty() {
         let names: Vec<String> = kinds
             .iter()
@@ -238,7 +237,6 @@ pub(crate) fn seal() {
             .collect();
         crate::log!(INFO, "mod data: kinds {}", names.join(", "));
     }
-    let _first = KINDS.set(kinds.into_boxed_slice());
 }
 
 /// Follows the game's destroy requests, when a mod keeps item data.
@@ -356,11 +354,11 @@ pub(crate) fn after_step() {
 /// Whether any mod keeps item data, which needs the world events and the
 /// clients' hello.
 pub(crate) fn wanted() -> bool {
-    KINDS.get().is_some_and(|k| !k.is_empty())
+    KINDS.sealed().is_some_and(|k| !k.is_empty())
 }
 
 fn kind(kind: u32) -> Option<&'static Kind> {
-    KINDS.get()?.get(usize::try_from(kind).ok()?)
+    KINDS.sealed()?.get(usize::try_from(kind).ok()?)
 }
 
 fn kind_id(kind: u32) -> Option<&'static str> {
@@ -368,7 +366,7 @@ fn kind_id(kind: u32) -> Option<&'static str> {
 }
 
 fn kind_of(id: &str) -> Option<u32> {
-    let index = KINDS.get()?.iter().position(|k| k.id == id)?;
+    let index = KINDS.sealed()?.iter().position(|k| k.id == id)?;
     u32::try_from(index).ok()
 }
 
@@ -801,14 +799,12 @@ mod tests {
 
     #[test]
     fn a_client_keeps_at_most_its_cap_of_a_server_s_records() {
-        let _sealed = KINDS.set(
-            vec![Kind {
-                id: "a:charges".into(),
-                scope: Scope::Item,
-                sent: true,
-            }]
-            .into_boxed_slice(),
-        );
+        let _added = KINDS.add(Kind {
+            id: "a:charges".into(),
+            scope: Scope::Item,
+            sent: true,
+        });
+        let _sealed = KINDS.seal();
         let mut values = Values::default();
         let mut bytes = Vec::new();
         for pide in 1..=u32::try_from(MAX_CLIENT_RECORDS).unwrap() {

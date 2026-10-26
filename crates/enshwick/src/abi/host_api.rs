@@ -7,15 +7,15 @@ use crate::abi::{
     ActionFn, ActiveBuff, AffixDefData, AffixRoll, AltarInfo, AltarLimitFn, AltarZoneSize,
     BedCheckFn, BuffRequest, BuffTypeInfo, BuildCheckFn, BuildInfo, CallerFrame, ComfortFn,
     ConfigCheckFn, CraftCheckFn, DamageFilterFn, DaytimeInfo, EntityDataFlags, EntityPlace, Event,
-    EventFn, EventSpec, ExperiencePassFn, GameEventFn, Header, HookSpec, InteractionFn,
-    InventoryRequest, InventoryResultFn, ItemData, ItemLine, KnowledgeInfo, KnowledgeInputFn,
-    Level, MidHookSpec, MigrationSet, ModEventFn, ModHandle, ModInfo, NetMessageFn, PlayerInfo,
-    PointFn, PointHandle, PointLink, PointSpec, PointVerdict, RateId, RecipeRuleKind, RenameCallFn,
-    ResourceKey, ResourcePatchFn, ServiceFound, ServiceSpec, SkillCheckFn, SpawnRequest,
-    StatChangeFn, StatDefData, StatModifierData, StatModify, StatRef, StatSource, Status, StatusFn,
-    Str, SummonFn, SurvivorLookupFn, SurvivorStatusFn, TeleportRequest, TerrainEdit,
-    TerrainMaterialInfo, UiAnswerFn, UiDialog, UiFrameFn, UiMarker, UiWidget, WeatherFront,
-    ZoneCheckFn,
+    EventFn, EventSpec, EventTypeInfo, ExperiencePassFn, GameEventFn, Header, HookSpec,
+    InteractionFn, InventoryRequest, InventoryResultFn, ItemData, ItemLine, KnowledgeInfo,
+    KnowledgeInputFn, Level, MidHookSpec, MigrationSet, ModEventFn, ModHandle, ModInfo,
+    NetMessageFn, PlayerInfo, PointFn, PointHandle, PointLink, PointSpec, PointVerdict, RateId,
+    RecipeRuleKind, RenameCallFn, ResourceKey, ResourcePatchFn, ServiceFound, ServiceSpec,
+    SkillCheckFn, SpawnRequest, StatChangeFn, StatDefData, StatModifierData, StatModify, StatRef,
+    StatSource, Status, StatusFn, Str, SummonFn, SurvivorLookupFn, SurvivorStatusFn,
+    TeleportRequest, TerrainEdit, TerrainMaterialInfo, UiAnswerFn, UiDialog, UiFrameFn, UiMarker,
+    UiWidget, WeatherFront, ZoneCheckFn,
 };
 
 /// The table of services the loader offers a mod.
@@ -1020,6 +1020,21 @@ pub struct HostApi {
     /// mod. Allowed during
     /// `enshwick_mod_init` only. Since minor 66.
     pub actions: extern "system" fn(me: ModHandle, callback: ActionFn, user: *mut c_void) -> Status,
+    /// Writes the first `capacity` of the running build's game event types
+    /// to `out`, null or room for `capacity` entries each as large as the
+    /// header of the first one says, and how many there are to `count`:
+    /// every reflected type that derives from the engine's event base, in no
+    /// set order. The names are the loader's, valid for the rest of the
+    /// process. A null `count` gives [`Status::BAD_ARGS`] after the entries
+    /// are written; a handle the loader never gave out gives
+    /// [`Status::BAD_ARGS`] and a mod that is off [`Status::FAULTED`], with
+    /// nothing written. Any thread. Since minor 72.
+    pub event_types: extern "system" fn(
+        me: ModHandle,
+        out: *mut EventTypeInfo,
+        capacity: u32,
+        count: *mut u32,
+    ) -> Status,
     /// Declares that the calling mod multiplies `rate`, so the loader arms
     /// what the rate needs; its factor is 1 until
     /// [`HostApi::set_rate`]. [`Status::MISSING`] on a build that lacks
@@ -1028,7 +1043,7 @@ pub struct HostApi {
     /// mod without [`ManifestFlags::JOIN`](super::ManifestFlags::JOIN). A second declaration of the same rate is
     /// [`Status::OK`]. [`Status::TOO_LATE`] after `enshwick_mod_init`,
     /// [`Status::FAULTED`] for a mod that is off. Allowed during
-    /// `enshwick_mod_init` only. Since minor 72.
+    /// `enshwick_mod_init` only. Since minor 73.
     pub rate: extern "system" fn(me: ModHandle, rate: RateId) -> Status,
     /// Puts `factor` in force as the calling mod's factor for `rate`: the
     /// game uses the product of every declaring mod's factor, held to 0 to
@@ -1036,6 +1051,6 @@ pub struct HostApi {
     /// a factor that is not finite or lies outside 0 to 100, or a rate the
     /// mod did not declare, [`Status::FAULTED`] for a mod that is off. Any
     /// thread; neither allocates nor locks once
-    /// every mod is initialised. Since minor 72.
+    /// every mod is initialised. Since minor 73.
     pub set_rate: extern "system" fn(me: ModHandle, rate: RateId, factor: f32) -> Status,
 }

@@ -1,10 +1,32 @@
 //! Events: the mod's subscriptions, raised loader and game events, mod events.
 
-use super::Installed;
 use super::table;
+use super::{FakeHost, Installed};
 use crate::abi::Event;
 use crate::abi::Header;
 use crate::events::Kind;
+
+impl FakeHost {
+    /// A game event type of the fake build: listed by
+    /// [`Load::event_types`](crate::Load::event_types) and resolved by
+    /// [`Load::event_type`](crate::Load::event_type) under `name`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new()
+    ///     .event_type("you::Rang", 0x0042, 16)
+    ///     .install();
+    /// # let _ = loader;
+    /// ```
+    #[must_use]
+    pub fn event_type(self, name: &str, hash: u32, size: u32) -> Self {
+        let mut host = self.type_hash(name, hash).type_size(name, size);
+        let name: &'static str = Box::leak(name.into());
+        host.event_types.push((name, hash, size));
+        host
+    }
+}
 
 #[expect(
     clippy::unused_self,
@@ -104,7 +126,7 @@ impl Installed {
     ///
     /// ```
     /// let loader = enshwick::test::FakeHost::new().install();
-    /// assert_eq!(loader.raise_game_event(0xd8ec_982a, &[0; 16]), 0);
+    /// assert_eq!(loader.raise_game_event(0x0042, &[0; 16]), 0);
     /// ```
     #[must_use = "the count says whether the mod handles the event"]
     pub fn raise_game_event(&self, type_hash: u32, bytes: &[u8]) -> usize {

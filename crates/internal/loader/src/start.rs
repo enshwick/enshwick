@@ -60,7 +60,7 @@ fn enforce_holds(loader: &Loader) {
         .mods
         .iter()
         .filter(|m| !m.off.load(Ordering::Acquire))
-        .map(|m| m.id.as_str())
+        .flat_map(ModRecord::names)
         .collect();
     crate::holds::enforce(&loader.data_dir, &running, false);
 }

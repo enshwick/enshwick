@@ -146,6 +146,7 @@ mod rate_links;
 )]
 mod rates;
 pub mod recipes;
+pub mod registry;
 #[cfg(windows)]
 mod reload;
 pub mod remote;
