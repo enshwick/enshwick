@@ -3,6 +3,7 @@
 
 use enshwick::abi::Headed;
 
+use super::memory::{get_headed, get_headed_list, put_headed, put_headed_list};
 use super::*;
 
 /// The fill of a value's own bytes.
@@ -92,14 +93,49 @@ macro_rules! each {
 /// the loader hands out its own static table and never copies a mod's.
 const NOT_HEADED: &str = "HostApi";
 
-/// The source of the ABI module.
-const ABI: &str = include_str!("../../../../enshwick/src/abi.rs");
+/// The source of the module `<dir>.rs` and of every file below `<dir>/`, read
+/// once for the process.
+fn module_source(dir: &str) -> String {
+    fn walk(dir: &std::path::Path, out: &mut Vec<PathBuf>) {
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            return;
+        };
+        for path in entries.filter_map(Result::ok).map(|entry| entry.path()) {
+            if path.is_dir() {
+                walk(&path, out);
+            } else if path.extension().is_some_and(|e| e == "rs") {
+                out.push(path);
+            }
+        }
+    }
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(dir);
+    let mut files = vec![dir.with_extension("rs")];
+    walk(&dir, &mut files);
+    files.sort();
+    files
+        .iter()
+        .map(|path| {
+            std::fs::read_to_string(path).unwrap_or_else(|e| panic!("{}: {e}", path.display()))
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// The source of the ABI module and its submodules.
+fn abi_source() -> &'static str {
+    static SOURCE: OnceLock<String> = OnceLock::new();
+    SOURCE.get_or_init(|| module_source("../../enshwick/src/abi"))
+}
+
 /// The source of the loader's entry points.
-const HOST: &str = include_str!("../host.rs");
+fn host_source() -> &'static str {
+    static SOURCE: OnceLock<String> = OnceLock::new();
+    SOURCE.get_or_init(|| module_source("src/host"))
+}
 
 /// The structs of `abi.rs` that implement [`Headed`].
 fn headed_in_abi() -> Vec<&'static str> {
-    let mut found: Vec<&str> = ABI
+    let mut found: Vec<&str> = abi_source()
         .split("\nimpl_headed!(")
         .skip(1)
         .filter_map(|rest| rest.split_once(')').map(|(name, _)| name))
@@ -110,7 +146,7 @@ fn headed_in_abi() -> Vec<&'static str> {
 
 /// The structs of `abi.rs` whose first field is a [`Header`].
 fn header_first_in_abi() -> Vec<&'static str> {
-    let mut found: Vec<&str> = ABI
+    let mut found: Vec<&str> = abi_source()
         .split("\npub struct ")
         .skip(1)
         .filter_map(|rest| {
@@ -295,7 +331,7 @@ fn every_entry_point_passes_headed_pointers_through_a_sized_helper() {
     ];
     let headed = headed_in_abi();
     let mut checked = 0;
-    for chunk in HOST.split("extern \"system\" fn ").skip(1) {
+    for chunk in host_source().split("extern \"system\" fn ").skip(1) {
         let Some((signature, body)) = chunk.split_once('{') else {
             continue;
         };
