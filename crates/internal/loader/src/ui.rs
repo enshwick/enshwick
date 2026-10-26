@@ -9,6 +9,9 @@
 //! shows. Texts a mod hands in are copied into a per-frame arena, kept for a
 //! few frames, since the game may read them after the call.
 
+use crate::locks::Relock;
+use crate::mod_index::ModIndex;
+
 mod actions;
 mod demo;
 mod dialog;
@@ -18,7 +21,7 @@ mod mods;
 
 use core::cell::{Cell, RefCell};
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
-use std::sync::{Mutex, OnceLock, PoisonError};
+use std::sync::{Mutex, OnceLock};
 
 use arc_swap::ArcSwapOption;
 
@@ -187,17 +190,17 @@ struct Frame {
 }
 
 impl Frame {
-    fn new(owner: usize, callback: UiFrameFn, user: *mut core::ffi::c_void) -> Self {
+    fn new(owner: ModIndex, callback: UiFrameFn, user: *mut core::ffi::c_void) -> Self {
         Self {
             registered: Registered::new(owner, callback, user),
-            generation: crate::reload::generation(owner),
+            generation: crate::reload::generation(owner.get()),
         }
     }
 
     /// Whether its mod runs, in the copy that registered it.
     fn current(&self) -> bool {
         self.registered.live()
-            && self.generation == crate::reload::generation(self.registered.owner)
+            && self.generation == crate::reload::generation(self.registered.owner.get())
     }
 }
 
@@ -240,7 +243,7 @@ const ARENA_BYTES: usize = 64 * 1024;
 #[derive(Clone, Copy)]
 struct Drawing {
     token: u64,
-    owner: usize,
+    owner: ModIndex,
     context: usize,
     window_open: bool,
     /// Drawing the HUD: items gather for their anchors.
@@ -319,7 +322,7 @@ fn thread_id() -> u32 {
 /// Registers a mod's frame callback; client only, during init.
 pub(crate) fn register_frame(
     loader: &Loader,
-    owner: usize,
+    owner: ModIndex,
     callback: UiFrameFn,
     user: *mut core::ffi::c_void,
 ) -> Status {
@@ -327,23 +330,20 @@ pub(crate) fn register_frame(
         return Status::MISSING;
     }
     if FRAMES.get().is_some() {
-        if !crate::reload::reinitialising(owner) {
+        if !crate::reload::reinitialising(owner.get()) {
             return Status::TOO_LATE;
         }
         add_late(&LATE_FRAMES, Frame::new(owner, callback, user));
         return Status::OK;
     }
-    PENDING
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .push(Frame::new(owner, callback, user));
+    PENDING.relock().push(Frame::new(owner, callback, user));
     Status::OK
 }
 
 /// Registers a mod's HUD callback; client only, during init.
 pub(crate) fn register_hud(
     loader: &Loader,
-    owner: usize,
+    owner: ModIndex,
     callback: UiFrameFn,
     user: *mut core::ffi::c_void,
 ) -> Status {
@@ -351,23 +351,20 @@ pub(crate) fn register_hud(
         return Status::MISSING;
     }
     if HUDS.get().is_some() {
-        if !crate::reload::reinitialising(owner) {
+        if !crate::reload::reinitialising(owner.get()) {
             return Status::TOO_LATE;
         }
         add_late(&LATE_HUDS, Frame::new(owner, callback, user));
         return Status::OK;
     }
-    PENDING_HUD
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .push(Frame::new(owner, callback, user));
+    PENDING_HUD.relock().push(Frame::new(owner, callback, user));
     Status::OK
 }
 
 /// Queues a mod's dialog; client only.
 pub(crate) fn mod_dialog(
     loader: &Loader,
-    owner: usize,
+    owner: ModIndex,
     raw: &UiDialog,
     callback: UiAnswerFn,
     user: *mut core::ffi::c_void,
@@ -759,7 +756,7 @@ fn frames(engine: &Engine, context: usize) {
 }
 
 /// Draws a mod's widget in its frame callback.
-pub(crate) fn widget(loader: &Loader, owner: usize, token: u64, raw: &mut UiWidget) -> Status {
+pub(crate) fn widget(loader: &Loader, owner: ModIndex, token: u64, raw: &mut UiWidget) -> Status {
     let Some(engine) = ENGINE.get() else {
         return Status::MISSING;
     };
@@ -913,7 +910,8 @@ fn draw(loader: &Loader, engine: &Engine, drawing: &mut Drawing, raw: &mut UiWid
             if drawing.window_open {
                 return Status::REFUSED;
             }
-            let (Some(record), Some(title)) = (loader.mods.get(drawing.owner), read(raw.detail))
+            let (Some(record), Some(title)) =
+                (loader.mods.get(drawing.owner.get()), read(raw.detail))
             else {
                 return Status::BAD_ARGS;
             };
@@ -1096,7 +1094,7 @@ mod tests {
     #[test]
     fn only_the_copy_that_registered_a_frame_draws_it() {
         extern "system" fn draw(_frame: *const UiFrame, _user: *mut core::ffi::c_void) {}
-        let owner = crate::chains::LOADER;
+        let owner = ModIndex::LOADER;
         let current = Frame::new(owner, draw, core::ptr::null_mut());
         let older = Frame {
             generation: current.generation + 1,

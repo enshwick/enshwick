@@ -15,7 +15,7 @@
 
 use core::ffi::c_void;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
-use std::sync::{Mutex, OnceLock, PoisonError};
+use std::sync::{Mutex, OnceLock};
 
 use enshwick::abi::{BuildingData, Event, Header, HookFlags, PlayerData, Side, TickData};
 use enshwick::raw::read_at;
@@ -23,6 +23,7 @@ use enshwick::raw::read_at;
 use crate::chains::Next;
 use crate::fuse::Fuse;
 use crate::host::Loader;
+use crate::locks::Relock;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
@@ -317,10 +318,7 @@ unsafe extern "system" fn step(server: *mut u8) {
 unsafe fn after_step(loader: &'static Loader, offsets: &Offsets, server: *mut u8) {
     // SAFETY: `GetCurrentThreadId` has no preconditions.
     let thread = unsafe { windows_sys::Win32::System::Threading::GetCurrentThreadId() };
-    let seen = SESSION
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .step(server.expose_provenance(), thread);
+    let seen = SESSION.relock().step(server.expose_provenance(), thread);
     match seen {
         Step::Ended => return,
         Step::New if loader.side == Side::CLIENT => {
@@ -338,7 +336,7 @@ unsafe fn after_step(loader: &'static Loader, offsets: &Offsets, server: *mut u8
         offsets.server_world,
         offsets.entities,
     );
-    let built = std::mem::take(&mut *BUILDING.lock().unwrap_or_else(PoisonError::into_inner));
+    let built = std::mem::take(&mut *BUILDING.relock());
     if !BUILDING_FUSE.is_off() {
         guarded(&BUILDING_FUSE, "the post-step link", || {
             for data in &built {
@@ -383,6 +381,7 @@ unsafe fn after_step(loader: &'static Loader, offsets: &Offsets, server: *mut u8
         loader.emit(Event::TICKED, None, (&raw const tick).cast::<c_void>())
     );
     part!("join admission", crate::admission::after_step(loader));
+    part!("console lines", crate::console::after_step(loader));
     part!("chat sending", crate::chat::drain());
     if server.is_null() {
         return;
@@ -428,10 +427,7 @@ fn end_session() {
     if let Some(loader) = crate::host::loader() {
         crate::worlds::unload(loader);
     }
-    SESSION
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .stop();
+    SESSION.relock().stop();
     crate::world::release();
     crate::altars::forget();
     crate::survivors::forget();
@@ -446,10 +442,7 @@ fn end_session() {
     crate::recipes::left();
     crate::admission::forget();
     forget_joined();
-    BUILDING
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .clear();
+    BUILDING.relock().clear();
     crate::log!(
         INFO,
         "the hosted game stopped; server mods rest until the next"
@@ -476,10 +469,7 @@ unsafe extern "system" fn set_state(entry: *mut u8, state: u8) {
         }
         STATE_RUN if old != STATE_RUN => {
             if loader.side == Side::CLIENT {
-                SESSION
-                    .lock()
-                    .unwrap_or_else(PoisonError::into_inner)
-                    .begin();
+                SESSION.relock().begin();
             }
             crate::worlds::load(loader);
             loader.emit(Event::WORLD_LOADED, None, core::ptr::null());
@@ -550,10 +540,7 @@ fn queue(data: BuildingData) {
         return;
     }
     guarded(&BUILDING_FUSE, "a building link", || {
-        BUILDING
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .push(data);
+        BUILDING.relock().push(data);
     });
 }
 

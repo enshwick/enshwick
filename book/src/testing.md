@@ -267,7 +267,7 @@ Every `install` starts a new mod life, as a fresh load of the DLL would in
 the game: the mod's `init` runs again, and the platform's own state starts
 empty. Under `cargo test` the tests of one binary share a process, and the
 fake serves one test at a time: `install` waits while another test holds an
-installed fake.
+installed fake, and panics when the same test still holds one.
 
 State a mod keeps in a `static` outside its own type survives into the next
 test, unless it lives in a `ModLocal`, which reads as empty again in every
@@ -290,17 +290,17 @@ The fake answers what you tell it; only the game says whether an engine
 fact holds on the running build. Run a dedicated server of your own, never
 one people play on, with a copy of a world:
 
-- [`enshwick-admin-tools`](https://github.com/enshwick/mod-admin-tools)
-  runs each line appended to its command file on the server's console, so a
-  mod's actions run without anyone joining;
+- the server's [command file](chat.md#the-command-file) runs each line
+  appended to it on the server's console, so a mod's actions run without
+  anyone joining;
 - [`enshwick-probe`](https://github.com/enshwick/devtools-mods/tree/main/enshwick-probe),
   a development mod that is never released, exercises the platform's world
   API and game events and logs each check as `PASS`, `FAIL` or `SKIP` to
-  `logs/enshwick/mods/probe.log`;
+  `logs/enshwick/mods/enshwick.probe.log`;
 - [`enshwick-research`](https://github.com/enshwick/devtools-mods/tree/main/enshwick-research),
   another development mod, logs what a running client hands its item
   tooltip and what a refused join leaves behind, to
-  `logs/enshwick/mods/research.log`.
+  `logs/enshwick/mods/enshwick.research.log`.
 
 What needs a player, such as hits, levels or a character's stats, waits for
 a client that joins the server or hosts the game.

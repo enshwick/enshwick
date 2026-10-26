@@ -80,6 +80,10 @@ settings menu names it:
 | `secret`         | A value such as a password: never sent to a client, and changed in the file only; never with `sync`                              |
 | `group`          | On a field that is a `Config` of its own: a table of the file; see [Groups](#groups)                                             |
 
+A number outside its range in the settings file, a list's element too, is
+held to the range when the file is read, with a warning naming the key and
+the value in the mod's log; the console and the Mods screen refuse it.
+
 A field takes one stage, or the pair `startup, sync`; any other two fail the
 build. On the struct,
 `#[config(text = "key")]` names the key of the set's title, `config` by
@@ -201,7 +205,8 @@ for the process; it is the description the loader's screens build on, and
 what the loader checks values against before it writes them.
 
 Players and administrators change settings on the Mods screen. The server's
-[console](chat.md#the-console), such as a mod's command file, reads and
+[console](chat.md#the-console), such as the server's
+[command file](chat.md#the-command-file), reads and
 changes them too:
 
 | Line                                  | Answer                                                                           |
@@ -221,7 +226,9 @@ menu's world settings, are where a world's settings are edited: under their
 last tab, every mod's world settings show as the game's own rows, built from
 the schema: a toggle for `bool`, a slider for a number with a range (in stops
 for whole numbers up to 32 values), a slider per element for a list of up to
-16 numbers with a range, a dropdown for `choices`, and the value with the
+16 numbers with a range (numbered from 1, or from the field's `first = n`,
+and labelled by the mod's text `<key>.element`, `{n}` standing for the
+number, such as `Flame level {n}`), a dropdown for `choices`, and the value with the
 file's name for the rest (text, longer lists, tables, numbers without a
 range). A list's length changes in the file. They are read-only where the game makes its own rows read-only, for a
 player who is no host; joined to another's game, the rows show the server's

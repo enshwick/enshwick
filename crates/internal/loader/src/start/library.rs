@@ -3,13 +3,14 @@
 use std::os::windows::ffi::OsStrExt as _;
 use std::path::{Path, PathBuf};
 
-use enshwick::abi::{ABI_MAJOR, HostApi, Manifest, ModHandle, Status, exports};
+use enshwick::abi::{ABI_MAJOR, ABI_MINOR, HostApi, Manifest, ModHandle, Status, exports};
 use windows_sys::Win32::Foundation::{FreeLibrary, HMODULE};
 use windows_sys::Win32::System::LibraryLoader::{
-    GetModuleHandleW, GetProcAddress, LOAD_WITH_ALTERED_SEARCH_PATH, LoadLibraryExW,
+    GetModuleHandleW, LOAD_WITH_ALTERED_SEARCH_PATH, LoadLibraryExW,
 };
 
 use crate::modlist;
+use crate::module::Export;
 use crate::others::{Origin, OtherDll};
 use crate::resolve::{self, Candidate};
 
@@ -20,8 +21,6 @@ type QueryFn = extern "system" fn() -> *const Manifest;
 pub(super) type InitFn = unsafe extern "system" fn(*const HostApi, ModHandle) -> Status;
 
 pub(super) type ReadyFn = unsafe extern "system" fn(*const HostApi, ModHandle);
-
-type Export = unsafe extern "system" fn() -> isize;
 
 /// A mod DLL with its exports, or a content pack with the loader's.
 pub(super) struct Library {
@@ -92,8 +91,9 @@ pub(super) fn libraries(
             Err(reason) => {
                 crate::log!(
                     WARN,
-                    "{} is not read, every mod is on: {reason}",
-                    modlist::LIST_PATH
+                    "{} is not read, every mod is on: {reason} ({})",
+                    modlist::LIST_PATH,
+                    crate::errors::BAD_MOD_LIST
                 );
                 (modlist::ModList::default(), false)
             }
@@ -151,7 +151,15 @@ pub(super) fn libraries(
                 candidates.push(candidate);
                 libraries.push(library);
             }
-            Err(reason) => crate::log!(WARN, "{} skipped: {reason}", library.file),
+            Err(reason) => {
+                let header = library.manifest.header;
+                let code = if header.abi_major != ABI_MAJOR || header.abi_minor > ABI_MINOR {
+                    crate::errors::OTHER_ABI
+                } else {
+                    crate::errors::BROKEN_DLL
+                };
+                crate::log!(WARN, "{} skipped: {reason} ({code})", library.file);
+            }
         }
     }
     let (libraries, candidates) = drop_duplicates(mods_dir, libraries, candidates);
@@ -229,13 +237,14 @@ fn drop_duplicates(
     for &(extra, runs) in &duplicates {
         crate::log!(
             WARN,
-            "{} skipped: {} {} is also in {}, which runs {}; {} can be deleted",
+            "{} skipped: {} {} is also in {}, which runs {}; {} can be deleted ({})",
             libraries[extra].file,
             candidates[extra].id,
             candidates[extra].version,
             libraries[runs].file,
             candidates[runs].version,
-            libraries[extra].file
+            libraries[extra].file,
+            crate::errors::DUPLICATE_MOD
         );
     }
     libraries
@@ -368,7 +377,11 @@ fn load_from(path: &Path, named: Option<&str>) -> Option<Library> {
         )
     };
     if module.is_null() {
-        crate::log!(WARN, "{file} could not be loaded");
+        crate::log!(
+            WARN,
+            "{file} could not be loaded ({})",
+            crate::errors::BROKEN_DLL
+        );
         return None;
     }
     let library = exports_of(module, &file);
@@ -384,18 +397,22 @@ fn load_from(path: &Path, named: Option<&str>) -> Option<Library> {
 /// The mod in the loaded `module`, named `file` in messages; `None`, logged,
 /// when it exports no Enshwick interface of this ABI.
 fn exports_of(module: HMODULE, file: &str) -> Option<Library> {
-    let find = |name: &str| {
-        let name = format!("{name}\0");
-        // SAFETY: `module` is loaded and `name` is NUL-terminated.
-        unsafe { GetProcAddress(module, name.as_ptr()) }
-    };
+    // SAFETY: `module` was loaded by `load_from`, which frees it only after
+    // this returns; the `Module` does not leave this function, and the
+    // exports it finds are called only while the library stays loaded.
+    let found = unsafe { crate::module::Module::from_handle(module) };
+    let find = |name: &str| found.export(name);
     let (Some(abi), Some(query), Some(init), Some(ready)) = (
         find(exports::ABI),
         find(exports::QUERY),
         find(exports::INIT),
         find(exports::READY),
     ) else {
-        crate::log!(WARN, "{file} is not an Enshwick mod");
+        crate::log!(
+            WARN,
+            "{file} is not an Enshwick mod ({})",
+            crate::errors::BROKEN_DLL
+        );
         return None;
     };
     // SAFETY: a mod's `ABI` export has the signature `enshwick::abi::exports`
@@ -413,8 +430,9 @@ fn exports_of(module: HMODULE, file: &str) -> Option<Library> {
     if abi() != u32::from(ABI_MAJOR) {
         crate::log!(
             WARN,
-            "{file} is built for ABI {}, the loader speaks {ABI_MAJOR}",
-            abi()
+            "{file} is built for ABI {}, the loader speaks {ABI_MAJOR} ({})",
+            abi(),
+            crate::errors::OTHER_ABI
         );
         return None;
     }

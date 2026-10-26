@@ -16,10 +16,9 @@ every mod is a DLL in the `mods/` folder beside it. Four things make it up:
 - **Mods**, grouped by purpose below.
 
 The crates under [`crates/internal`](crates/internal) (the loader DLL and the
-stub) are parts of the loader, not for mods; [`enshwick-macros`](crates/enshwick-macros),
-[`enshwick-reflect`](crates/enshwick-reflect) and
-[`enshwick-gamedata`](crates/enshwick-gamedata) (the macros, the reflection
-reader and the build tables) are published for `enshwick` and
+stub) are parts of the loader, not for mods; [`enshwick-macros`](crates/enshwick-macros)
+and [`enshwick-gamedata`](crates/enshwick-gamedata) (the macros, and the
+build tables with the reflection reader) are published for `enshwick` and
 `cargo enshwick` to build on.
 [`examples`](examples) holds small mods that show one part of the API each;
 they are never released.
@@ -97,7 +96,7 @@ changed in the game, while hosting or on the screen that creates or starts a
 world: the world settings list every mod's settings under their last tab.
 On a dedicated server an administrator changes them from "Server settings"
 on the Mods screen, or with `enshwick config <mod> <key> <value>` in the
-[admin tools'](https://github.com/enshwick/mod-admin-tools) command file. Such a change applies at once, except where a mod's page says it
+server's command file, `mod-data/enshwick/commands.txt`. Such a change applies at once, except where a mod's page says it
 waits for the world to load again or for the game to start again. A hand
 edit of the running world's copy applies about a second after it is saved, as
 such a change does.

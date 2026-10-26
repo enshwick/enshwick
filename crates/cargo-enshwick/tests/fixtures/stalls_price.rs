@@ -1,6 +1,7 @@
-//! The extension point `you.stalls:price` of you.stalls 1.2.0, written by
-//! `cargo enshwick point you.stalls:price`. Write it again for a newer you.stalls
-//! rather than edit it; the checks at the end hold it to the owner's
+//! The extension point `you.stalls:price` of you.stalls 1.2.0.
+//!
+//! Written by `cargo enshwick point you.stalls:price`. Write it again for a newer
+//! you.stalls rather than edit it; the checks at the end hold it to the owner's
 //! layout. Declare this module `pub`.
 
 /// A "fair" price, in coins.

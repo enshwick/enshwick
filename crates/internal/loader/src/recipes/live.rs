@@ -1,10 +1,10 @@
 //! Disabled recipes in the running game: the rules in force, the lookup's
 //! filter, the screen's question, the messages to clients and the command.
 
-use std::collections::HashMap;
+use crate::mod_index::ModIndex;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, LazyLock, Mutex, OnceLock, PoisonError};
+use std::sync::{Arc, LazyLock, Mutex, OnceLock};
 use std::time::SystemTime;
 
 use arc_swap::ArcSwap;
@@ -16,13 +16,15 @@ use enshwick::content::workshops::{WORKSHOP_REGISTRY, WorkshopLayout};
 use enshwick::content::{Blob, Guid, types};
 use rustc_hash::{FxHashMap, FxHashSet};
 
+use crate::host::Loader;
+use crate::locks::Relock;
+use crate::settings::LOADER_ID;
+use crate::texts;
+
 use super::{
     FILE, Index, Kind, Names, Rule, RuleFile, Source, TEMPLATE, WORLD_FILE, compose, describe,
     edit_file, find, parts, resolve,
 };
-use crate::host::Loader;
-use crate::settings::LOADER_ID;
-use crate::texts;
 
 /// The most ids one message to a client carries.
 const PER_MESSAGE: usize = 1400;
@@ -78,7 +80,7 @@ static LAYOUT: OnceLock<Option<RecipeLayout>> = OnceLock::new();
 static DIRTY: AtomicBool = AtomicBool::new(true);
 
 fn live<R>(work: impl FnOnce(&mut Live) -> R) -> R {
-    let mut guard = LIVE.lock().unwrap_or_else(PoisonError::into_inner);
+    let mut guard = LIVE.relock();
     work(guard.get_or_insert_with(Live::default))
 }
 
@@ -223,7 +225,7 @@ fn names(loader: &Loader) -> Arc<Names> {
 }
 
 /// The mods' content ids by the game id of their GUID.
-fn content_names() -> HashMap<u32, String> {
+fn content_names() -> FxHashMap<u32, String> {
     crate::ids::with(|ids| {
         ids.content()
             .into_iter()
@@ -392,7 +394,7 @@ pub(crate) fn registry_built(data: usize, len: usize) {
 }
 
 /// Mod `owner`'s rule: added, or taken back.
-pub(crate) fn rule(owner: usize, kind: RecipeRuleKind, name: &str, disable: bool) -> Status {
+pub(crate) fn rule(owner: ModIndex, kind: RecipeRuleKind, name: &str, disable: bool) -> Status {
     let Some(kind) = Kind::from_abi(kind) else {
         return Status::BAD_ARGS;
     };
@@ -405,9 +407,9 @@ pub(crate) fn rule(owner: usize, kind: RecipeRuleKind, name: &str, disable: bool
     }
     live(|l| {
         l.mods
-            .retain(|(o, k, n)| !(*o == owner && *k == kind && n == name));
+            .retain(|(o, k, n)| !(*o == owner.get() && *k == kind && n == name));
         if disable {
-            l.mods.push((owner, kind, name.to_owned()));
+            l.mods.push((owner.get(), kind, name.to_owned()));
         }
     });
     DIRTY.store(true, Ordering::Release);

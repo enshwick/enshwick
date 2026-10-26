@@ -4,14 +4,16 @@
 //! runs, each mod's settings of that world are watched too, since they are
 //! what the mod reads.
 
+use crate::mod_index::ModIndex;
 use std::path::{Path, PathBuf};
-use std::sync::{Mutex, PoisonError};
+use std::sync::Mutex;
 use std::time::{Duration, SystemTime};
 
 use enshwick::abi::{Event, Level, Side};
 use enshwick::config::Stage;
 
 use crate::host::Loader;
+use crate::locks::Relock;
 use crate::settings::{LOADER_ID, Settings};
 
 /// How often the files are looked at; a few stat calls each time.
@@ -28,11 +30,7 @@ static WRITTEN: Mutex<Vec<(PathBuf, Stamp)>> = Mutex::new(Vec::new());
 /// watcher does not raise it again.
 pub(crate) fn wrote(path: &Path) {
     let now = stamp(path);
-    note(
-        &mut WRITTEN.lock().unwrap_or_else(PoisonError::into_inner),
-        path,
-        now,
-    );
+    note(&mut WRITTEN.relock(), path, now);
 }
 
 /// Writes `path` with `write` and notes the write, holding the list of the
@@ -46,7 +44,7 @@ pub(crate) fn write_noted(
     path: &Path,
     write: impl FnOnce() -> std::io::Result<()>,
 ) -> std::io::Result<()> {
-    let mut written = WRITTEN.lock().unwrap_or_else(PoisonError::into_inner);
+    let mut written = WRITTEN.relock();
     write()?;
     note(&mut written, path, stamp(path));
     Ok(())
@@ -61,7 +59,7 @@ fn note(written: &mut Vec<(PathBuf, Stamp)>, path: &Path, now: Stamp) {
 
 /// Whether the loader wrote `path` as it looks now; forgets the write.
 fn ours(path: &Path, now: Stamp) -> bool {
-    let mut written = WRITTEN.lock().unwrap_or_else(PoisonError::into_inner);
+    let mut written = WRITTEN.relock();
     let found = written.iter().position(|(p, s)| p == path && *s == now);
     found.map(|at| written.swap_remove(at)).is_some()
 }
@@ -75,7 +73,7 @@ struct Watched {
 
 /// A mod's settings file of the running world, `owner` its mod index.
 struct WorldWatched {
-    owner: usize,
+    owner: ModIndex,
     key: Option<String>,
     seen: Stamp,
 }
@@ -129,7 +127,7 @@ pub(crate) fn start(loader: &'static Loader) {
         .collect();
     let mut worlds: Vec<WorldWatched> = (0..loader.mods.len())
         .map(|owner| WorldWatched {
-            owner,
+            owner: ModIndex::new(owner),
             key: None,
             seen: None,
         })
@@ -169,12 +167,12 @@ pub(crate) fn start(loader: &'static Loader) {
                 let key = crate::worlds::current();
                 for file in &mut worlds {
                     let path = key.as_deref().and_then(|key| {
-                        let record = loader.mods.get(file.owner)?;
+                        let record = loader.mods.get(file.owner.get())?;
                         Some(crate::worlds::world_file(&loader.data_dir, &record.id, key))
                     });
                     let now = path.as_deref().and_then(stamp);
                     if file.changed(key.as_deref(), path.as_deref(), now) {
-                        changed(loader, Some(file.owner));
+                        changed(loader, Some(file.owner.get()));
                     }
                 }
                 let mut touched: Vec<usize> = Vec::new();
@@ -206,9 +204,8 @@ fn note_shadowed(loader: &Loader, index: usize) {
     };
     let per_world = record
         .schema
-        .lock()
-        .ok()
-        .and_then(|schema| schema.clone())
+        .relock()
+        .clone()
         .is_some_and(|schema| schema.fields.iter().any(|f| f.stage != Stage::Client));
     if !per_world {
         return;
@@ -293,7 +290,7 @@ mod tests {
         let path = std::env::temp_dir().join(format!("enshwick-watch-{}", std::process::id()));
         let at = |len| Some((SystemTime::UNIX_EPOCH + Duration::from_secs(len), len));
         let mut file = WorldWatched {
-            owner: 0,
+            owner: ModIndex::new(0),
             key: None,
             seen: None,
         };
@@ -302,10 +299,7 @@ mod tests {
         assert!(!file.changed(Some("a"), Some(&path), at(1)), "untouched");
         assert!(file.changed(Some("a"), Some(&path), at(2)), "edited");
         // `enshwick config` writes it and raises the event itself.
-        WRITTEN
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .push((path.clone(), at(3)));
+        WRITTEN.relock().push((path.clone(), at(3)));
         assert!(
             !file.changed(Some("a"), Some(&path), at(3)),
             "the loader's own"

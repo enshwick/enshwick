@@ -8,15 +8,17 @@
 //! longer read as expected, that overlaps the bytes a hook replaces or whose
 //! hooks are not armed with it, turning its owner off.
 
+use crate::mod_index::ModIndex;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Mutex, OnceLock, PoisonError};
+use std::sync::{Mutex, OnceLock};
 
 use enshwick::abi::{HookFlags, Status};
 use enshwick::code::Pattern;
 use rustc_hash::FxHashMap;
 
-use crate::chains::{LOADER, Next};
+use crate::chains::Next;
 use crate::host::Loader;
+use crate::locks::Relock;
 
 /// The game's own number of recipes per workshop.
 const WORKSHOP_RECIPES: usize = 512;
@@ -40,8 +42,8 @@ const LOOKUP: &str = "48 89 5C 24 08 48 89 74 24 10 48 89 7C 24 18 83 BA 4C 01 0
 /// A patch of game code, registered during init.
 #[derive(Debug)]
 pub(crate) struct CodePatch {
-    /// The owning mod's index, or [`LOADER`].
-    pub(crate) owner: usize,
+    /// The owning mod's index, or [`ModIndex::LOADER`].
+    pub(crate) owner: ModIndex,
     /// The first byte.
     pub(crate) address: usize,
     /// What the bytes must read at arming.
@@ -152,7 +154,7 @@ pub(crate) fn register_all(patches: Vec<CodePatch>, text: (usize, usize)) -> Sta
     {
         return Status::BAD_ARGS;
     }
-    let mut pending = PENDING.lock().unwrap_or_else(PoisonError::into_inner);
+    let mut pending = PENDING.relock();
     let clash = patches.iter().enumerate().any(|(i, patch)| {
         pending
             .iter()
@@ -169,7 +171,7 @@ pub(crate) fn register_all(patches: Vec<CodePatch>, text: (usize, usize)) -> Sta
 /// Ends registration and hands over every patch.
 pub(crate) fn seal() -> Vec<CodePatch> {
     SEALED.store(true, Ordering::Release);
-    std::mem::take(&mut *PENDING.lock().unwrap_or_else(PoisonError::into_inner))
+    std::mem::take(&mut *PENDING.relock())
 }
 
 /// What arming does with each patch, given the bytes the hooks being armed
@@ -180,7 +182,7 @@ pub(crate) fn seal() -> Vec<CodePatch> {
 pub(crate) fn check(
     patches: &[CodePatch],
     hooked: &[(usize, usize)],
-    off: impl Fn(usize) -> bool,
+    off: impl Fn(ModIndex) -> bool,
     current: impl Fn(usize, usize) -> Option<Vec<u8>>,
 ) -> Vec<Verdict> {
     let mut verdicts: Vec<Verdict> = patches
@@ -210,7 +212,7 @@ pub(crate) fn check(
             }
         })
         .collect();
-    let skipped: Vec<usize> = patches
+    let skipped: Vec<ModIndex> = patches
         .iter()
         .zip(&verdicts)
         .filter(|(_, verdict)| matches!(verdict, Verdict::Skip(_)))
@@ -309,7 +311,7 @@ fn limit_patch(code: &[u8], start: usize) -> Result<CodePatch, String> {
         return Err(format!("the stop block reads {}", hex(expected)));
     }
     Ok(CodePatch {
-        owner: LOADER,
+        owner: ModIndex::LOADER,
         address: start + stop,
         expected: expected.into(),
         replacement: stop_replacement().into(),
@@ -551,7 +553,7 @@ static LOOKUP_FUSE: crate::fuse::Fuse = crate::fuse::Fuse::new("disabled recipes
 mod tests {
     use super::*;
 
-    fn patch(owner: usize, address: usize, expected: &[u8], replacement: &[u8]) -> CodePatch {
+    fn patch(owner: ModIndex, address: usize, expected: &[u8], replacement: &[u8]) -> CodePatch {
         CodePatch {
             owner,
             address,
@@ -579,9 +581,9 @@ mod tests {
             code.get(from..from + len).map(<[u8]>::to_vec)
         };
         let patches = [
-            patch(0, base + 2, &[0x08], &[0x10]),
-            patch(1, base + 3, &[0x74], &[0xeb]),
-            patch(2, base + 5, &[0xc3, 0x90], &[0x90, 0x90]),
+            patch(ModIndex::new(0), base + 2, &[0x08], &[0x10]),
+            patch(ModIndex::new(1), base + 3, &[0x74], &[0xeb]),
+            patch(ModIndex::new(2), base + 5, &[0xc3, 0x90], &[0x90, 0x90]),
         ];
         let verdicts = check(&patches, &[], |_| false, current);
         assert_eq!(verdicts[0], Verdict::Write);
@@ -598,9 +600,9 @@ mod tests {
             code.get(from..from + len).map(<[u8]>::to_vec)
         };
         let patches = [
-            patch(0, base + 2, &[0x08], &[0x10]),
-            patch(0, base + 3, &[0x74], &[0xeb]),
-            patch(1, base + 5, &[0xc3], &[0x90]),
+            patch(ModIndex::new(0), base + 2, &[0x08], &[0x10]),
+            patch(ModIndex::new(0), base + 3, &[0x74], &[0xeb]),
+            patch(ModIndex::new(1), base + 5, &[0xc3], &[0x90]),
         ];
         let verdicts = check(&patches, &[], |_| false, current);
         assert!(matches!(&verdicts[0], Verdict::Skip(why) if why.contains("another patch")));
@@ -617,10 +619,15 @@ mod tests {
             code.get(from..from + len).map(<[u8]>::to_vec)
         };
         let patches = [
-            patch(0, base + 4, &[0x90, 0x90], &[0xcc, 0xcc]),
-            patch(1, base + 12, &[0x90], &[0xcc]),
+            patch(ModIndex::new(0), base + 4, &[0x90, 0x90], &[0xcc, 0xcc]),
+            patch(ModIndex::new(1), base + 12, &[0x90], &[0xcc]),
         ];
-        let verdicts = check(&patches, &[(base, 5)], |owner| owner == 1, current);
+        let verdicts = check(
+            &patches,
+            &[(base, 5)],
+            |owner| owner == ModIndex::new(1),
+            current,
+        );
         assert!(matches!(&verdicts[0], Verdict::Skip(why) if why.contains("hook")));
         assert_eq!(verdicts[1], Verdict::Off);
     }
@@ -630,25 +637,31 @@ mod tests {
         let text = (0x1000, 0x100);
         // Each test owns its addresses: the registry is shared.
         assert_eq!(
-            register(patch(0, 0x1010, &[1, 2], &[3, 4]), text),
+            register(patch(ModIndex::new(0), 0x1010, &[1, 2], &[3, 4]), text),
             Status::OK
         );
         assert_eq!(
-            register(patch(1, 0x1011, &[2], &[5]), text),
+            register(patch(ModIndex::new(1), 0x1011, &[2], &[5]), text),
             Status::REFUSED
         );
-        assert_eq!(register(patch(1, 0x1012, &[9], &[5]), text), Status::OK);
         assert_eq!(
-            register(patch(1, 0x1020, &[1], &[]), text),
-            Status::BAD_ARGS
-        );
-        assert_eq!(register(patch(1, 0x1020, &[], &[]), text), Status::BAD_ARGS);
-        assert_eq!(
-            register(patch(1, 0x10ff, &[1, 2], &[3, 4]), text),
-            Status::BAD_ARGS
+            register(patch(ModIndex::new(1), 0x1012, &[9], &[5]), text),
+            Status::OK
         );
         assert_eq!(
-            register(patch(1, 0x0fff, &[1, 2], &[3, 4]), text),
+            register(patch(ModIndex::new(1), 0x1020, &[1], &[]), text),
+            Status::BAD_ARGS
+        );
+        assert_eq!(
+            register(patch(ModIndex::new(1), 0x1020, &[], &[]), text),
+            Status::BAD_ARGS
+        );
+        assert_eq!(
+            register(patch(ModIndex::new(1), 0x10ff, &[1, 2], &[3, 4]), text),
+            Status::BAD_ARGS
+        );
+        assert_eq!(
+            register(patch(ModIndex::new(1), 0x0fff, &[1, 2], &[3, 4]), text),
             Status::BAD_ARGS
         );
     }
@@ -666,7 +679,10 @@ mod tests {
             needs: Box::new([hook]),
             ..patch(owner, base + at, &[0x90], &[0xcc])
         };
-        let patches = [needing(0, 0), patch(0, base + 1, &[0x90], &[0xcc])];
+        let patches = [
+            needing(ModIndex::new(0), 0),
+            patch(ModIndex::new(0), base + 1, &[0x90], &[0xcc]),
+        ];
         let verdicts = check(&patches, &[], |_| false, current);
         assert!(matches!(&verdicts[0], Verdict::Skip(why) if why.contains("needs")));
         assert!(matches!(&verdicts[1], Verdict::Skip(why) if why.contains("another patch")));
@@ -680,8 +696,8 @@ mod tests {
         assert_eq!(
             register_all(
                 vec![
-                    patch(0, 0x2010, &[1], &[2]),
-                    patch(0, 0x2020, &[1, 2], &[3]),
+                    patch(ModIndex::new(0), 0x2010, &[1], &[2]),
+                    patch(ModIndex::new(0), 0x2020, &[1, 2], &[3]),
                 ],
                 text
             ),
@@ -689,13 +705,22 @@ mod tests {
         );
         assert_eq!(
             register_all(
-                vec![patch(0, 0x2010, &[1], &[2]), patch(0, 0x2010, &[1], &[3])],
+                vec![
+                    patch(ModIndex::new(0), 0x2010, &[1], &[2]),
+                    patch(ModIndex::new(0), 0x2010, &[1], &[3])
+                ],
                 text
             ),
             Status::REFUSED
         );
-        assert_eq!(register(patch(1, 0x2010, &[1], &[2]), text), Status::OK);
-        assert_eq!(register(patch(1, 0x2020, &[1], &[2]), text), Status::OK);
+        assert_eq!(
+            register(patch(ModIndex::new(1), 0x2010, &[1], &[2]), text),
+            Status::OK
+        );
+        assert_eq!(
+            register(patch(ModIndex::new(1), 0x2020, &[1], &[2]), text),
+            Status::OK
+        );
     }
 
     #[test]

@@ -173,11 +173,13 @@ fn slots(read: impl Fn(u64) -> Option<u64>, table: u64, code: &Range<u64>) -> Ve
         .collect()
 }
 
-/// Checks the pinned join against the game, reading eight bytes at an
-/// address with `read`, whose code section spans `code`: its first bytes
-/// must be the pinned ones and the provider's table must hold it in the
-/// pinned slot, or in exactly one slot when none is pinned. Returns the
-/// join to hook.
+/// Checks the pinned join against the game, reading eight bytes at an address
+/// with `read`, whose code section spans `code`.
+///
+/// Its first bytes must be the pinned ones and the provider's table must hold
+/// it in the pinned slot, or in exactly one slot when none is pinned.
+///
+/// Returns the join to hook.
 ///
 /// # Errors
 ///
@@ -424,8 +426,12 @@ mod tests {
             return;
         };
         let bytes = std::fs::read(path).unwrap();
-        let image =
-            enshwick_reflect::Image::parse(&bytes, enshwick_reflect::Layout::File, None).unwrap();
+        let image = enshwick_gamedata::reflect::Image::parse(
+            &bytes,
+            enshwick_gamedata::reflect::Layout::File,
+            None,
+        )
+        .unwrap();
         let tables = crate::builds::load();
         let fingerprint = image.fingerprint().unwrap();
         let table = enshwick_gamedata::exact(&tables, enshwick_gamedata::Side::Client, fingerprint)

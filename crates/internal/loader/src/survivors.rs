@@ -5,10 +5,11 @@
 //! answer. Callers are told apart by the return address the caller frame
 //! records; their frames hold the components of the entity they work on.
 
+use crate::mod_index::ModIndex;
 use core::ffi::c_void;
 use std::cell::{Cell, RefCell};
 use std::sync::atomic::{AtomicBool, AtomicU16, Ordering};
-use std::sync::{Mutex, OnceLock, PoisonError};
+use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 use enshwick::abi::{
@@ -16,12 +17,12 @@ use enshwick::abi::{
     SurvivorLookupFn, SurvivorStatusFn,
 };
 use enshwick::altars::cell_of_fixed;
-
 use enshwick::raw::{read_at, read_ptr_at, write_at};
 
 use crate::chains::Next;
 use crate::ecs::Engine;
 use crate::host::{Loader, Registered, take};
+use crate::locks::Relock;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
@@ -364,7 +365,7 @@ fn too_late(loader: &Loader) -> bool {
 /// Registers mod `owner`'s survivor lookup; one mod at a time.
 pub(crate) fn register_lookup(
     loader: &Loader,
-    owner: usize,
+    owner: ModIndex,
     callback: SurvivorLookupFn,
     user: *mut c_void,
 ) -> Status {
@@ -374,7 +375,7 @@ pub(crate) fn register_lookup(
     if layout(loader).is_none() || crate::ecs::engine(loader).is_none() {
         return Status::MISSING;
     }
-    let mut held = LOOKUP.lock().unwrap_or_else(PoisonError::into_inner);
+    let mut held = LOOKUP.relock();
     if held.is_some_and(|r| r.owner != owner) {
         return Status::REFUSED;
     }
@@ -384,7 +385,7 @@ pub(crate) fn register_lookup(
 
 pub(crate) fn register_bed_check(
     loader: &Loader,
-    owner: usize,
+    owner: ModIndex,
     callback: BedCheckFn,
     user: *mut c_void,
 ) -> Status {
@@ -395,15 +396,14 @@ pub(crate) fn register_bed_check(
         return Status::MISSING;
     }
     BED_CHECKS
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
+        .relock()
         .push(Registered::new(owner, callback, user));
     Status::OK
 }
 
 pub(crate) fn register_summon(
     loader: &Loader,
-    owner: usize,
+    owner: ModIndex,
     callback: SummonFn,
     user: *mut c_void,
 ) -> Status {
@@ -414,15 +414,14 @@ pub(crate) fn register_summon(
         return Status::MISSING;
     }
     SUMMONS
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
+        .relock()
         .push(Registered::new(owner, callback, user));
     Status::OK
 }
 
 pub(crate) fn register_summoned(
     loader: &Loader,
-    owner: usize,
+    owner: ModIndex,
     callback: SummonFn,
     user: *mut c_void,
 ) -> Status {
@@ -433,8 +432,7 @@ pub(crate) fn register_summoned(
         return Status::MISSING;
     }
     SUMMONED
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
+        .relock()
         .push(Registered::new(owner, callback, user));
     Status::OK
 }
@@ -446,17 +444,14 @@ pub(crate) fn register_item(loader: &Loader, item: u32, survivor: u32) -> Status
     if item_map(loader).is_none() || symbol(loader, "survivors.registry_load").is_none() {
         return Status::MISSING;
     }
-    ITEMS
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .push((item, survivor));
+    ITEMS.relock().push((item, survivor));
     Status::OK
 }
 
 /// Registers mod `owner`'s menu status merge; client only, one mod.
 pub(crate) fn register_status(
     loader: &Loader,
-    owner: usize,
+    owner: ModIndex,
     callback: SurvivorStatusFn,
     user: *mut c_void,
 ) -> Status {
@@ -467,7 +462,7 @@ pub(crate) fn register_status(
     {
         return Status::MISSING;
     }
-    let mut held = STATUS.lock().unwrap_or_else(PoisonError::into_inner);
+    let mut held = STATUS.relock();
     if held.is_some_and(|r| r.owner != owner) {
         return Status::REFUSED;
     }
@@ -483,7 +478,7 @@ fn menu_system(loader: &Loader) -> Option<u64> {
             .reflection
             .system("ui_npc_status")
             .ok()
-            .map(enshwick_reflect::System::entry),
+            .map(enshwick_gamedata::reflect::System::entry),
         Err(why) => {
             crate::log!(WARN, "survivor menu off: {why}");
             None
@@ -493,12 +488,12 @@ fn menu_system(loader: &Loader) -> Option<u64> {
 
 pub(crate) fn link(loader: &'static Loader) {
     let sealed = Sealed {
-        lookup: LOOKUP.lock().unwrap_or_else(PoisonError::into_inner).take(),
+        lookup: LOOKUP.relock().take(),
         bed_checks: take(&BED_CHECKS).into_boxed_slice(),
         summons: take(&SUMMONS).into_boxed_slice(),
         summoned: take(&SUMMONED).into_boxed_slice(),
         items: take(&ITEMS).into_boxed_slice(),
-        status: STATUS.lock().unwrap_or_else(PoisonError::into_inner).take(),
+        status: STATUS.relock().take(),
     };
     let (lookup, beds, summons, items, status) = (
         sealed.lookup.is_some(),
@@ -632,7 +627,7 @@ fn learn_types(loader: &Loader) {
 pub(crate) fn forget() {
     TRANSFORM_TYPE.store(u16::MAX, Ordering::Release);
     NPC_COMMON_TYPE.store(u16::MAX, Ordering::Release);
-    *MOVING.lock().unwrap_or_else(PoisonError::into_inner) = None;
+    *MOVING.relock() = None;
     MOVE_ACTIVE.store(false, Ordering::Release);
 }
 
@@ -800,8 +795,7 @@ unsafe fn resolve(
             cell_of_fixed(target),
         ))?;
         if answer != 0 {
-            *MOVING.lock().unwrap_or_else(PoisonError::into_inner) =
-                Some((survivor, answer, Instant::now()));
+            *MOVING.relock() = Some((survivor, answer, Instant::now()));
             MOVE_ACTIVE.store(true, Ordering::Release);
         }
         return Some(answer);
@@ -1013,7 +1007,7 @@ unsafe fn skip_move(ctx: *mut *mut u64) -> bool {
     let Some(layout) = layout(loader) else {
         return false;
     };
-    let mut moving = MOVING.lock().unwrap_or_else(PoisonError::into_inner);
+    let mut moving = MOVING.relock();
     let Some((survivor, target, at)) = *moving else {
         return false;
     };

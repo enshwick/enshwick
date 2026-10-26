@@ -13,12 +13,14 @@
 
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex, PoisonError};
+use std::sync::{Arc, Mutex};
 
 use enshwick::abi::{Status, UiAnswerFn, UiDialog};
 
-use super::engine::{self, Buf, DialogLayout, Engine, PopupFn};
 use crate::host::Registered;
+use crate::locks::Relock;
+
+use super::engine::{self, Buf, DialogLayout, Engine, PopupFn};
 
 /// Dialogs waiting at most.
 const MAX_WAITING: usize = 16;
@@ -146,13 +148,13 @@ const TAGS: [[u8; 16]; 2 * KEPT] = {
 };
 
 fn tag_id(index: usize) -> u32 {
-    enshwick_reflect::fnv1a32(&TAGS[index])
+    enshwick_gamedata::reflect::fnv1a32(&TAGS[index])
 }
 
 /// The text of a dialog text tag, by its id, while its dialog is kept.
 pub(crate) fn text(id: u32) -> Option<&'static str> {
     let index = (0..TAGS.len()).find(|&i| tag_id(i) == id)?;
-    let shown = SHOWN.lock().unwrap_or_else(PoisonError::into_inner);
+    let shown = SHOWN.relock();
     let texts = shown.iter().find(|s| s.slot == index / 2)?;
     if !texts.read.swap(true, Ordering::Relaxed) {
         crate::log!(INFO, "interface: the game reads dialog \"{}\"", texts.title);
@@ -176,7 +178,7 @@ pub(crate) fn queue(dialog: Pending) -> Status {
         system_box(dialog);
         return Status::OK;
     }
-    let mut waiting = WAITING.lock().unwrap_or_else(PoisonError::into_inner);
+    let mut waiting = WAITING.relock();
     if waiting.len() >= MAX_WAITING {
         return Status::REFUSED;
     }
@@ -211,7 +213,7 @@ pub(crate) fn show(
 pub(crate) fn armed(in_game: bool) {
     MODE.store(if in_game { IN_GAME } else { SYSTEM }, Ordering::Release);
     if !in_game {
-        let waiting = std::mem::take(&mut *WAITING.lock().unwrap_or_else(PoisonError::into_inner));
+        let waiting = std::mem::take(&mut *WAITING.relock());
         for dialog in waiting {
             system_box(dialog);
         }
@@ -283,10 +285,7 @@ pub(super) unsafe fn draw(engine: &Engine, next: PopupFn, context: usize) {
 }
 
 fn take_next(layout: &DialogLayout, active: usize) -> Option<Current> {
-    let dialog = WAITING
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .pop_front()?;
+    let dialog = WAITING.relock().pop_front()?;
     let slot = NEXT_SLOT.fetch_add(1, Ordering::Relaxed) % KEPT;
     let texts = Arc::new(Shown {
         slot,
@@ -297,7 +296,7 @@ fn take_next(layout: &DialogLayout, active: usize) -> Option<Current> {
     });
     crate::log!(INFO, "interface: dialog \"{}\" shows", texts.title);
     {
-        let mut shown = SHOWN.lock().unwrap_or_else(PoisonError::into_inner);
+        let mut shown = SHOWN.relock();
         shown.retain(|s| s.slot != slot);
         shown.push_back(Arc::clone(&texts));
     }

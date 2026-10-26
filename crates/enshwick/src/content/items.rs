@@ -1,11 +1,13 @@
 //! New items: an item cloned from a vanilla one, listed in the item registry,
 //! with its own name, tooltip lines and a meter each item keeps.
 
-use std::sync::{Mutex, PoisonError};
+use std::sync::Mutex;
+
+use crate::abi::ItemData;
+use crate::locks::Relock;
+use crate::{Load, Off};
 
 use super::{Blob, Guid, Id, types};
-use crate::abi::ItemData;
-use crate::{Load, Off};
 
 /// The meter templates the mod serves.
 static METERS: crate::fresh::Fresh<Mutex<Vec<Meter>>> = crate::fresh::Fresh::new();
@@ -418,14 +420,14 @@ const BLOB_STRING: usize = 8;
 /// A `BlobVariant`: type hash, offset from its second word, size.
 const VARIANT: usize = 12;
 
-/// `item`'s `ItemInfo` under `guid`, the item's own or one it was renamed
-/// from, made from the vanilla one in `like`: its id, object GUID, the tags
-/// it names, its meter and tooltip lines written in, the rest
-/// kept. `None` when `like` is too short for the layout, or when the item
-/// has a meter and `like` already has an entity of its own (a weapon's
-/// durability), which the meter's would replace. [`Load::add_item`] serves
-/// it; call it from a [`Load::serve`] builder of your own for an edit
-/// `add_item` does not make.
+/// `item`'s `ItemInfo` under `guid`, the item's own or one it was renamed from,
+/// made from the vanilla one in `like`: its id, object GUID, the tags it names,
+/// its meter and tooltip lines written in, the rest kept.
+///
+/// `None` when `like` is too short for the layout, or when the item has a meter
+/// and `like` already has an entity of its own (a weapon's durability), which
+/// the meter's would replace. [`Load::add_item`] serves it; call it from a
+/// [`Load::serve`] builder of your own for an edit `add_item` does not make.
 ///
 /// # Examples
 ///
@@ -570,8 +572,10 @@ pub fn list_meter_template(
 }
 
 /// The item registry with `guid` listed after the others, and its debug name
-/// beside it; `None` when the registry does not have the layout's arrays or
-/// lists another item with `guid`'s game id, which would stand for both.
+/// beside it.
+///
+/// `None` when the registry does not have the layout's arrays or lists another
+/// item with `guid`'s game id, which would stand for both.
 ///
 /// # Examples
 ///
@@ -712,10 +716,7 @@ impl Load<'_> {
         })?;
         if let Some(meter) = meter {
             // Items of one kind may share their template: serve it once.
-            let mut served = METERS
-                .get_or_init(Mutex::default)
-                .lock()
-                .unwrap_or_else(PoisonError::into_inner);
+            let mut served = METERS.get_or_init(Mutex::default).relock();
             match served.iter().find(|m| m.template == meter.template) {
                 Some(same) if *same == meter => return Ok(()),
                 Some(_) => {

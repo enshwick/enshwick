@@ -54,6 +54,7 @@ pub struct Lines {
 
 /// The fingerprint of a mod set: FNV-1a over the loader version, every
 /// `id@version` and every mod's join values, sorted, as eight hex digits.
+///
 /// Without join values it is the fingerprint older loaders compute.
 #[must_use]
 pub fn fingerprint(
@@ -70,7 +71,10 @@ pub fn fingerprint(
     for (id, values) in synced {
         let _written = write!(text, "\nsync {id} {values}");
     }
-    format!("{:08x}", enshwick_reflect::fnv1a32(text.as_bytes()))
+    format!(
+        "{:08x}",
+        enshwick_gamedata::reflect::fnv1a32(text.as_bytes())
+    )
 }
 
 /// `value` cut into parts of at most [`RULE_LIMIT`] bytes, on character
@@ -299,7 +303,7 @@ mod runtime {
     use std::path::Path;
     use std::time::{Duration, Instant};
 
-    use windows_sys::Win32::System::LibraryLoader::{GetModuleHandleW, GetProcAddress};
+    use crate::module::Export;
 
     type Interface = unsafe extern "C" fn() -> *mut c_void;
     /// Returns a C++ `bool`, read as its byte so no other value can make an
@@ -307,8 +311,6 @@ mod runtime {
     type LoggedOn = unsafe extern "C" fn(server: *mut c_void) -> u8;
     type SetName = unsafe extern "C" fn(server: *mut c_void, name: *const i8);
     type SetKeyValue = unsafe extern "C" fn(server: *mut c_void, key: *const i8, value: *const i8);
-
-    type Export = unsafe extern "system" fn() -> isize;
 
     const POLL: Duration = Duration::from_secs(2);
     const GIVE_UP: Duration = Duration::from_secs(300);
@@ -470,20 +472,8 @@ mod runtime {
 
     impl Api {
         fn load() -> Option<Self> {
-            let module_name: Vec<u16> = "steam_api64.dll".encode_utf16().chain([0]).collect();
-            // SAFETY: `module_name` is a live NUL-terminated UTF-16 string, and
-            // the call takes no reference on the module.
-            let module = unsafe { GetModuleHandleW(module_name.as_ptr()) };
-            if module.is_null() {
-                return None;
-            }
-            let get = |name: &str| {
-                let name = CString::new(name).ok()?;
-                // SAFETY: `module` is non-null, checked by the guard before it,
-                // and is `steam_api64.dll`, which the game keeps loaded for the
-                // process; `name` is a live NUL-terminated string.
-                unsafe { GetProcAddress(module, name.as_ptr().cast()) }
-            };
+            let module = crate::module::Module::loaded("steam_api64.dll")?;
+            let get = |name: &str| module.export(name);
             let interface = get("SteamAPI_SteamGameServer_v015")?;
             let logged_on = get("SteamAPI_ISteamGameServer_BLoggedOn")?;
             let set_name = get("SteamAPI_ISteamGameServer_SetServerName")?;

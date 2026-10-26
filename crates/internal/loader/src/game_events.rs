@@ -11,10 +11,11 @@
 //! A client runs the same move for its own world as well as for a hosted
 //! game's server; only the server's entity world is followed.
 
+use crate::mod_index::ModIndex;
 use core::cell::RefCell;
 use core::ffi::c_void;
 use std::sync::atomic::Ordering;
-use std::sync::{Mutex, OnceLock, PoisonError};
+use std::sync::{Mutex, OnceLock};
 
 use enshwick::abi::{GameEventData, GameEventFn, Header, HookFlags, Side, Status};
 use rustc_hash::FxHashSet;
@@ -22,6 +23,7 @@ use rustc_hash::FxHashSet;
 use crate::chains::Next;
 use crate::fuse::Fuse;
 use crate::host::Loader;
+use crate::locks::Relock;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
@@ -38,7 +40,7 @@ pub(crate) const TABLE_IDS: &[&str] = &[
 /// A mod's handler for one event type, or for all with hash 0.
 #[derive(Debug, Clone, Copy)]
 struct Subscriber {
-    owner: usize,
+    owner: ModIndex,
     type_hash: u32,
     callback: GameEventFn,
     user: usize,
@@ -139,7 +141,7 @@ type MergeFn = unsafe extern "system" fn(entity_world: *mut u8);
 
 /// Registers mod `owner`'s handler for events of `type_hash`, 0 for all.
 pub(crate) fn register(
-    owner: usize,
+    owner: ModIndex,
     type_hash: u32,
     callback: GameEventFn,
     user: *mut c_void,
@@ -147,21 +149,18 @@ pub(crate) fn register(
     if SEALED.get().is_some() {
         return Status::TOO_LATE;
     }
-    PENDING
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .push(Subscriber {
-            owner,
-            type_hash,
-            callback,
-            user: user.expose_provenance(),
-        });
+    PENDING.relock().push(Subscriber {
+        owner,
+        type_hash,
+        callback,
+        user: user.expose_provenance(),
+    });
     Status::OK
 }
 
 /// Seals the subscriptions and links the event move when a mod subscribed.
 pub(crate) fn link(loader: &'static Loader) {
-    let subscribers = std::mem::take(&mut *PENDING.lock().unwrap_or_else(PoisonError::into_inner));
+    let subscribers = std::mem::take(&mut *PENDING.relock());
     let equipment = crate::stats::wanted()
         .then(|| {
             let info = loader
@@ -361,7 +360,7 @@ fn deliver(loader: &Loader) {
             (s.type_hash == 0 || s.type_hash == event.type_hash)
                 && loader
                     .mods
-                    .get(s.owner)
+                    .get(s.owner.get())
                     .is_some_and(|m| !m.off.load(Ordering::Acquire))
         }) {
             // SAFETY: `callback` is a `GameEventFn` the mod registered, in

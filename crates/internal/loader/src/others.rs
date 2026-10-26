@@ -4,10 +4,11 @@
 
 use std::path::{Path, PathBuf};
 
-use enshwick_reflect::{Image, Layout};
+use enshwick_gamedata::reflect::{Image, Layout};
 
 /// The folder whose DLLs the stub loads before the loader, as messages name
 /// it.
+#[cfg(windows)]
 pub(crate) const CHAIN_DIR: &str = "mods/chain";
 
 /// Where the PE header starts, read from the DOS header.
@@ -31,6 +32,7 @@ pub(crate) fn chain_dir(game_dir: &Path) -> PathBuf {
 /// Whether the DLL at `path` exports the Enshwick interface, read from its
 /// export table without loading it; `None` when the file does not read as a
 /// 64-bit PE image.
+#[cfg(windows)]
 pub(crate) fn is_mod_file(path: &Path) -> Option<bool> {
     let bytes = std::fs::read(path).ok()?;
     exports(&bytes, enshwick::abi::exports::ABI)

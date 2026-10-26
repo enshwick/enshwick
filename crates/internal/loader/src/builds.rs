@@ -9,11 +9,12 @@
 //! its code pattern, and what it cannot find stays missing: the features and
 //! mods that need it turn off, the rest runs.
 
+use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use enshwick::abi::Side;
-use enshwick_gamedata::{self as tables, Part, Resolved, Table};
-use enshwick_reflect::Fingerprint;
+use enshwick_gamedata::reflect::Fingerprint;
+use enshwick_gamedata::{self as tables, Part, PartState, Resolved, Table};
 
 pub use enshwick_gamedata::Kind;
 
@@ -33,6 +34,8 @@ pub struct KnownBuild {
     /// Whether the table was made for this build.
     pub kind: Kind,
     table: Resolved,
+    /// The names of the parts [`Self::lacking`] found, once asked.
+    lacking: OnceLock<String>,
 }
 
 impl KnownBuild {
@@ -98,6 +101,20 @@ impl KnownBuild {
         self.table.parts(parts)
     }
 
+    /// The names of `parts` this build serves only partly or not at all,
+    /// comma separated; worked out on the first call, which names the parts
+    /// for every later one.
+    pub fn lacking(&self, parts: &[(&'static str, &[&'static str])]) -> &str {
+        self.lacking.get_or_init(|| {
+            self.parts(parts)
+                .iter()
+                .filter(|part| part.state() != PartState::Works)
+                .map(|part| part.name)
+                .collect::<Vec<_>>()
+                .join(", ")
+        })
+    }
+
     /// How many symbols and constants this build has.
     #[must_use]
     pub fn entries(&self) -> usize {
@@ -129,9 +146,11 @@ pub fn load() -> Vec<Table> {
         .collect()
 }
 
-/// The table for the running build among `tables`: its own when there is
-/// one; else, unless the settings turned it off, the newest table of its side
-/// carried over by patterns in `code` (the code section and its RVA).
+/// The table for the running build among `tables`.
+///
+/// Its own when there is one; else, unless the settings turned it off, the
+/// newest table of its side carried over by patterns in `code` (the code
+/// section and its RVA).
 #[must_use]
 pub fn select(
     tables: &[Table],
@@ -145,6 +164,7 @@ pub fn select(
             name: table.name().to_owned(),
             kind: Kind::Exact,
             table: table.resolve(),
+            lacking: OnceLock::new(),
         });
     }
     if !PATTERNS.load(Ordering::Acquire) {
@@ -157,6 +177,7 @@ pub fn select(
         name: table.name().to_owned(),
         kind: Kind::Fallback,
         table,
+        lacking: OnceLock::new(),
     })
 }
 
@@ -170,6 +191,7 @@ pub fn by_patterns(tables: &[Table], running: Side, code: (&[u8], u64)) -> Optio
         name: table.name().to_owned(),
         kind: Kind::Fallback,
         table,
+        lacking: OnceLock::new(),
     })
 }
 
@@ -188,12 +210,33 @@ pub fn embedded(running: Side) -> KnownBuild {
         name: table.name().to_owned(),
         kind: Kind::Exact,
         table: table.resolve(),
+        lacking: OnceLock::new(),
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(windows)]
+    #[test]
+    fn a_build_names_the_loader_features_it_lacks_once() {
+        assert_eq!(embedded(Side::SERVER).lacking(crate::TABLE_IDS), "");
+        let tables = load();
+        let unknown = Fingerprint::new([0xee; 16], 1);
+        let code = [0u8; 64];
+        let carried = select(&tables, Side::SERVER, unknown, Some((&code, 0x1000))).unwrap();
+        let lacking = carried.lacking(crate::TABLE_IDS);
+        assert!(
+            lacking.split(", ").any(|name| name == "altars"),
+            "{lacking}"
+        );
+        assert_eq!(
+            carried.lacking(&[]),
+            lacking,
+            "the first call names the parts"
+        );
+    }
 
     #[test]
     fn a_known_build_resolves_its_symbols() {
@@ -234,8 +277,12 @@ mod tests {
             return;
         };
         let bytes = std::fs::read(path).unwrap();
-        let image =
-            enshwick_reflect::Image::parse(&bytes, enshwick_reflect::Layout::File, None).unwrap();
+        let image = enshwick_gamedata::reflect::Image::parse(
+            &bytes,
+            enshwick_gamedata::reflect::Layout::File,
+            None,
+        )
+        .unwrap();
         let tables = load();
         let client =
             tables::exact(&tables, tables::Side::Client, image.fingerprint().unwrap()).unwrap();
@@ -253,7 +300,7 @@ mod tests {
             }
         }
         assert!(checked >= 42);
-        let reflection = enshwick_reflect::Reflection::scan(&image);
+        let reflection = enshwick_gamedata::reflect::Reflection::scan(&image);
         for (ty, field, offset) in [
             ("keen::FbUiBundle", "namedStyles", 0x10a0c),
             ("keen::FbUiBundle", "sounds", 0x12060),
@@ -286,8 +333,12 @@ mod tests {
             return;
         };
         let bytes = std::fs::read(path).unwrap();
-        let image =
-            enshwick_reflect::Image::parse(&bytes, enshwick_reflect::Layout::File, None).unwrap();
+        let image = enshwick_gamedata::reflect::Image::parse(
+            &bytes,
+            enshwick_gamedata::reflect::Layout::File,
+            None,
+        )
+        .unwrap();
         let text = image.section(".text").unwrap();
         let range = image.range(text);
         let code = image.read(range.start, range.end - range.start).unwrap();

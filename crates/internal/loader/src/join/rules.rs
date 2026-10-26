@@ -197,10 +197,12 @@ pub fn server_values<'a>(
         .collect()
 }
 
-/// The mods whose join values change on joining a server with `incoming`,
-/// from each mod's id (empty for a mod that does not join) and the server
-/// values it runs with now: the mod's index and the values it runs with
-/// next, `None` for its settings file's.
+/// The mods whose join values change on joining a server with `incoming`, from
+/// each mod's id (empty for a mod that does not join) and the server values it
+/// runs with now.
+///
+/// The mod's index and the values it runs with next, `None` for its settings
+/// file's.
 ///
 /// # Examples
 ///
