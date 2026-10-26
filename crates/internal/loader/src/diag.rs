@@ -10,11 +10,12 @@
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
 use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
-use std::sync::{Mutex, OnceLock, PoisonError};
+use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use enshwick_gamedata::{Part, PartState};
 
+use crate::locks::Relock;
 use crate::settings::Settings;
 
 /// With diagnostics timing on, one call in this many of each hooked
@@ -82,7 +83,7 @@ pub struct TurnedOff {
 
 /// Remembers that mod `id` was turned off for `reason`.
 pub fn turned_off(id: &str, reason: &str) {
-    let mut history = TURNED_OFF.lock().unwrap_or_else(PoisonError::into_inner);
+    let mut history = TURNED_OFF.relock();
     if history.len() == HISTORY {
         history.remove(0);
     }
@@ -96,18 +97,14 @@ pub fn turned_off(id: &str, reason: &str) {
 /// The mods turned off so far, oldest first.
 #[must_use]
 pub fn history() -> Vec<TurnedOff> {
-    TURNED_OFF
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .clone()
+    TURNED_OFF.relock().clone()
 }
 
 /// Remembers that `address` was found as `name`, a symbol or a system, so the
 /// summary can name a hooked function.
 pub fn name(address: u64, name: &str) {
     NAMES
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
+        .relock()
         .entry(address)
         .or_insert_with(|| name.to_owned());
 }
@@ -115,11 +112,7 @@ pub fn name(address: u64, name: &str) {
 /// The name `address` was first found under.
 #[must_use]
 pub fn name_of(address: u64) -> Option<String> {
-    NAMES
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .get(&address)
-        .cloned()
+    NAMES.relock().get(&address).cloned()
 }
 
 /// What became of the code patches: written, left out for a mod that is off,
@@ -743,6 +736,16 @@ conflicts:
         summary.hooks = None;
         assert!(summary.render().contains("set diagnostics = true"));
         assert!(!summary.short().contains("busiest"));
+    }
+
+    #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "the snapshots are held on the host; under Wine their paths do not resolve"
+    )]
+    fn the_status_report_reads_as_its_snapshot() {
+        insta::assert_snapshot!("status", summary().render());
+        insta::assert_snapshot!("status_short", summary().short());
     }
 
     #[test]

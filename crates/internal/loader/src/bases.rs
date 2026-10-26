@@ -22,11 +22,14 @@
 //! The client runs one grouping for its own world and the server it hosts, so
 //! the same patches and links serve both.
 
+use crate::locks::Relock;
+use crate::mod_index::ModIndex;
+
 mod limit;
 
 use core::ffi::c_void;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
-use std::sync::{Arc, Mutex, OnceLock, PoisonError};
+use std::sync::{Arc, Mutex, OnceLock};
 
 use arc_swap::ArcSwap;
 use enshwick::abi::{AltarLimitFn, HookFlags, Status};
@@ -149,7 +152,7 @@ struct Sites {
 
 #[derive(Debug, Clone, Copy)]
 struct Limit {
-    owner: usize,
+    owner: ModIndex,
     callback: AltarLimitFn,
     user: usize,
 }
@@ -195,7 +198,7 @@ fn too_late(loader: &Loader) -> bool {
 
 pub(crate) fn register_limit(
     loader: &Loader,
-    owner: usize,
+    owner: ModIndex,
     callback: AltarLimitFn,
     user: *mut c_void,
 ) -> Status {
@@ -205,7 +208,7 @@ pub(crate) fn register_limit(
     if loader.build.symbol("building.max_altars").is_none() {
         return Status::MISSING;
     }
-    let mut held = LIMIT.lock().unwrap_or_else(PoisonError::into_inner);
+    let mut held = LIMIT.relock();
     if held.is_some_and(|l| l.owner != owner) {
         return Status::REFUSED;
     }
@@ -219,7 +222,7 @@ pub(crate) fn register_limit(
 
 /// Finds every site and registers the patches as mod `owner`'s, all or
 /// none; a miss or a refusal leaves nothing registered.
-pub(crate) fn raise(loader: &Loader, owner: usize) -> Status {
+pub(crate) fn raise(loader: &Loader, owner: ModIndex) -> Status {
     if too_late(loader) {
         return Status::TOO_LATE;
     }
@@ -360,7 +363,7 @@ pub(crate) fn forget() {
 }
 
 pub(crate) fn link(loader: &'static Loader) {
-    let limit = LIMIT.lock().unwrap_or_else(PoisonError::into_inner).take();
+    let limit = LIMIT.relock().take();
     let _first = SEALED_LIMIT.set(limit);
     if limit.is_some()
         && let Some(target) = loader.address("building.max_altars")

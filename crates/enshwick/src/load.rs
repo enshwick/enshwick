@@ -7,6 +7,7 @@ use crate::abi::{Event, HookFlags, HostApi, MidHookSpec, Registers, Status, Str}
 use crate::config::{Config, ConfigError, Stage};
 use crate::hook::{FnPtr, Hook};
 use crate::host::Host;
+use crate::locks::Relock;
 use crate::services::{Emitter, ModEvent, Service};
 
 /// Why a mod turns itself off during initialisation; the loader logs the
@@ -1181,21 +1182,14 @@ type Kept = crate::fresh::Fresh<std::sync::Mutex<Option<String>>>;
 
 /// Notes `settings`' values at `stage` as the ones in force.
 fn keep<T: Config>(kept: &Kept, settings: &T, stage: Stage) {
-    *kept
-        .get_or_init(std::sync::Mutex::default)
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner) =
+    *kept.get_or_init(std::sync::Mutex::default).relock() =
         Some(settings.values(stage).unwrap_or_default());
 }
 
 /// Puts the values at `stage` in force back over `settings`, noting the
 /// changes that wait.
 fn hold<T: Config>(kept: &Kept, settings: &mut T, stage: Stage) {
-    let kept = kept
-        .get_or_init(std::sync::Mutex::default)
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner)
-        .clone();
+    let kept = kept.get_or_init(std::sync::Mutex::default).relock().clone();
     let (Some(kept), Some(now)) = (kept, settings.values(stage)) else {
         return;
     };
@@ -1271,8 +1265,14 @@ impl Load<'_> {
 /// the server even where `stages` held this side's.
 fn read_config<T: Config>(host: Host, stages: impl FnOnce(&mut T)) -> Result<T, Off> {
     let text = host.settings_text(&T::template())?;
-    let mut settings: T =
+    let mut table: toml::Table =
         toml::from_str(&text).map_err(|e| Off::new(format!("settings: {}", e.message())))?;
+    for held in T::schema().clamp(&mut table) {
+        crate::warn!("settings: {held}");
+    }
+    let mut settings: T = toml::Value::Table(table)
+        .try_into()
+        .map_err(|e: toml::de::Error| Off::new(format!("settings: {}", e.message())))?;
     settings
         .validate()
         .map_err(|why| Off::new(format!("settings: {why}")))?;

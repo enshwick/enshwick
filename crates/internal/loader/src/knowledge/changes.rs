@@ -18,13 +18,15 @@
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Mutex, OnceLock, PoisonError};
+use std::sync::{Mutex, OnceLock};
 
 use enshwick::abi::{Event, Header, KnowledgeData, KnowledgeInfo, Status};
 
-use super::{definition, layout, read, store};
 use crate::host::Loader;
+use crate::locks::Relock;
 use crate::memory::write;
+
+use super::{definition, layout, read, store};
 
 /// The queue's file in a world's folder.
 const FILE: &str = "knowledge.toml";
@@ -246,15 +248,12 @@ pub(crate) fn revoke(
             }
         }
     }
-    RAISED
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .push(KnowledgeData {
-            header: Header::of::<KnowledgeData>(),
-            entity: if player { entity } else { 0 },
-            id,
-            value: new,
-        });
+    RAISED.relock().push(KnowledgeData {
+        header: Header::of::<KnowledgeData>(),
+        entity: if player { entity } else { 0 },
+        id,
+        value: new,
+    });
     Ok(())
 }
 
@@ -403,7 +402,7 @@ pub(crate) fn for_account(
     if let Some(entity) = character_of(loader, key) {
         return apply(loader, entity, &change);
     }
-    let mut queue = QUEUE.lock().unwrap_or_else(PoisonError::into_inner);
+    let mut queue = QUEUE.relock();
     let world = queue.key.clone().ok_or(Status::MISSING)?;
     if queue.waiting.contains(&change) {
         return Ok(());
@@ -432,15 +431,12 @@ pub(crate) fn world_event(loader: &Loader, event: Event) {
                     waiting.len()
                 );
             }
-            *QUEUE.lock().unwrap_or_else(PoisonError::into_inner) = Queue { key, waiting };
+            *QUEUE.relock() = Queue { key, waiting };
         }
         Event::SHUTDOWN_STARTED => {
             WAITING.store(false, Ordering::Release);
-            *QUEUE.lock().unwrap_or_else(PoisonError::into_inner) = Queue::default();
-            RAISED
-                .lock()
-                .unwrap_or_else(PoisonError::into_inner)
-                .clear();
+            *QUEUE.relock() = Queue::default();
+            RAISED.relock().clear();
         }
         _ => {}
     }
@@ -449,7 +445,7 @@ pub(crate) fn world_event(loader: &Loader, event: Event) {
 /// After a step: raises the revokes of the step before and, now and then,
 /// applies what waits for accounts now in the game.
 pub(crate) fn after_step(loader: &Loader, step: u64) {
-    let raised = std::mem::take(&mut *RAISED.lock().unwrap_or_else(PoisonError::into_inner));
+    let raised = std::mem::take(&mut *RAISED.relock());
     for data in &raised {
         loader.emit(Event::KNOWLEDGE_CHANGED, None, (&raw const *data).cast());
     }
@@ -463,7 +459,7 @@ fn settle(loader: &Loader) {
     let Ok(players) = crate::world::players(loader) else {
         return;
     };
-    let mut queue = QUEUE.lock().unwrap_or_else(PoisonError::into_inner);
+    let mut queue = QUEUE.relock();
     let before = queue.waiting.len();
     queue.waiting.retain(|change| {
         let Ok(key) = u64::from_str_radix(&change.account, 16) else {

@@ -13,15 +13,17 @@
 //! resource the game holds. The game keeps reading the first build's
 //! address, so a rebuild must come out the same length.
 
+use crate::mod_index::ModIndex;
 use core::ffi::c_void;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::{Mutex, OnceLock, PoisonError};
+use std::sync::{Mutex, OnceLock};
 
 use enshwick::abi::{HookFlags, ResourceKey, ResourcePatchFn, Side, Status};
 use enshwick::raw::{read_at, write_at};
 
 use crate::chains::Next;
 use crate::host::Loader;
+use crate::locks::Relock;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
@@ -40,7 +42,7 @@ const RESIDENT: u64 = 0x1_0000_0000;
 
 /// One mod's patch of a served resource.
 struct Patch {
-    owner: usize,
+    owner: ModIndex,
     apply: ResourcePatchFn,
     user: usize,
 }
@@ -69,7 +71,7 @@ struct State {
     base: Option<Box<[u8]>>,
     /// The mods whose patches the first build applied: a rebuild runs the
     /// same, since the game holds what they added, even once a mod is off.
-    built_by: Vec<usize>,
+    built_by: Vec<ModIndex>,
 }
 
 /// Mod texts while mods initialise: tag id, language, text.
@@ -102,10 +104,7 @@ pub(crate) fn add_text(id: u32, language: u32, text: &str) -> Status {
     if TEXTS.get().is_some() {
         return Status::TOO_LATE;
     }
-    PENDING_TEXTS
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .push((id, language, text.to_owned()));
+    PENDING_TEXTS.relock().push((id, language, text.to_owned()));
     Status::OK
 }
 
@@ -191,8 +190,7 @@ unsafe extern "system" fn lookup_english(
 
 /// Seals the mod texts and links the client's text lookups when there are any.
 fn seal_texts(loader: &'static Loader) {
-    let pending =
-        std::mem::take(&mut *PENDING_TEXTS.lock().unwrap_or_else(PoisonError::into_inner));
+    let pending = std::mem::take(&mut *PENDING_TEXTS.relock());
     let count = pending.len();
     let mut texts: std::collections::HashMap<u32, Vec<(u32, &'static str)>> =
         std::collections::HashMap::new();
@@ -264,7 +262,7 @@ type KeyFn = unsafe extern "system" fn(out: *mut u8, database: *mut u8, handle: 
 /// Adds mod `owner`'s patch of `key`; refused after init and for a key another
 /// mod serves from a different base.
 pub(crate) fn register(
-    owner: usize,
+    owner: ModIndex,
     key: ResourceKey,
     base: ResourceKey,
     patch: ResourcePatchFn,
@@ -273,7 +271,7 @@ pub(crate) fn register(
     if SERVED_LIST.get().is_some() {
         return Status::TOO_LATE;
     }
-    let mut pending = PENDING.lock().unwrap_or_else(PoisonError::into_inner);
+    let mut pending = PENDING.relock();
     let patch = Patch {
         owner,
         apply: patch,
@@ -297,10 +295,10 @@ pub(crate) fn register(
 /// For mod `owner`, which serves `key`: during init, keeps its base when it
 /// is first built; afterwards, builds it again from that base and writes the
 /// bytes that differ over the resource the game holds.
-pub(crate) fn rebuild(owner: usize, key: ResourceKey) -> Status {
+pub(crate) fn rebuild(owner: ModIndex, key: ResourceKey) -> Status {
     let serves = |s: &Served| s.key == key && s.patches.iter().any(|p| p.owner == owner);
     let Some(list) = SERVED_LIST.get() else {
-        let pending = PENDING.lock().unwrap_or_else(PoisonError::into_inner);
+        let pending = PENDING.relock();
         return match pending.iter().find(|s| serves(s)) {
             Some(entry) => {
                 entry.keeps_base.store(true, Ordering::Relaxed);
@@ -312,14 +310,11 @@ pub(crate) fn rebuild(owner: usize, key: ResourceKey) -> Status {
     let Some(entry) = list.iter().find(|s| serves(s)) else {
         return Status::BAD_ARGS;
     };
-    let _one_at_a_time = entry
-        .rebuilding
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner);
+    let _one_at_a_time = entry.rebuilding.relock();
     // The game resolves the resource meanwhile: the patches run outside the
     // state's lock, on a copy of the base.
     let (data, len, base, built_by) = {
-        let state = entry.state.lock().unwrap_or_else(PoisonError::into_inner);
+        let state = entry.state.relock();
         let Some((data, len)) = state.built else {
             // The first build takes the values in force.
             return Status::OK;
@@ -387,12 +382,7 @@ pub(crate) fn seal_and_link(loader: &'static Loader) {
     LOADED.get_or_init(|| loader);
     let renames = crate::migrations::renamed(loader);
     let stand_ins = {
-        let keys: Vec<ResourceKey> = PENDING
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .iter()
-            .map(|s| s.key)
-            .collect();
+        let keys: Vec<ResourceKey> = PENDING.relock().iter().map(|s| s.key).collect();
         let recorded = crate::clones::items(&loader.data_dir);
         let orphans = crate::standins::orphans(&recorded, &keys, |guid| renames.contains_key(guid));
         crate::standins::served(loader, &orphans)
@@ -408,7 +398,7 @@ pub(crate) fn seal_and_link(loader: &'static Loader) {
     if !ids.is_empty() {
         crate::log!(DEBUG, "content ids: {ids}");
     }
-    let mut served = std::mem::take(&mut *PENDING.lock().unwrap_or_else(PoisonError::into_inner));
+    let mut served = std::mem::take(&mut *PENDING.relock());
     let count = served.len();
     let aliases = crate::clones::update(&loader.data_dir, served.iter().map(|s| (s.key, s.base)));
     let standing = stand_ins.map_or(0, |(items, registry)| {
@@ -480,7 +470,7 @@ fn serve_stand_ins(
 ) -> usize {
     fn patch(builder: crate::standins::Builder) -> Patch {
         Patch {
-            owner: crate::chains::LOADER,
+            owner: ModIndex::LOADER,
             apply: build_stand_in,
             user: Box::into_raw(Box::new(builder)).expose_provenance(),
         }
@@ -556,12 +546,12 @@ pub(crate) fn new_keys_of_type(type_hash: u32) -> Vec<ResourceKey> {
 
 /// Every served resource several mods patch: its key in words and the
 /// patching mods, in the order their patches run.
-pub(crate) fn shared() -> Vec<(String, Vec<usize>)> {
+pub(crate) fn shared() -> Vec<(String, Vec<ModIndex>)> {
     let served = SERVED_LIST.get().map_or(&[][..], |s| s);
     served
         .iter()
         .filter_map(|entry| {
-            let mut owners: Vec<usize> = Vec::new();
+            let mut owners: Vec<ModIndex> = Vec::new();
             for patch in &entry.patches {
                 if !owners.contains(&patch.owner) {
                     owners.push(patch.owner);
@@ -595,7 +585,7 @@ pub(crate) fn summary() -> crate::diag::Served {
     let served = SERVED_LIST.get().map_or(&[][..], |s| s);
     let (mut built, mut failed) = (0, 0);
     for entry in served {
-        let state = entry.state.lock().unwrap_or_else(PoisonError::into_inner);
+        let state = entry.state.relock();
         built += usize::from(state.built.is_some());
         failed += usize::from(state.failed);
     }
@@ -654,16 +644,10 @@ pub(crate) fn served_recipes() -> bool {
 
 /// Whether `served` holds `key` with a patch of a mod `on` names and a build
 /// that has not failed.
-fn serves(served: &[Served], key: &ResourceKey, on: impl Fn(usize) -> bool) -> bool {
-    served.iter().any(|s| {
-        s.key == *key
-            && s.patches.iter().any(|p| on(p.owner))
-            && !s
-                .state
-                .lock()
-                .unwrap_or_else(PoisonError::into_inner)
-                .failed
-    })
+fn serves(served: &[Served], key: &ResourceKey, on: impl Fn(ModIndex) -> bool) -> bool {
+    served
+        .iter()
+        .any(|s| s.key == *key && s.patches.iter().any(|p| on(p.owner)) && !s.state.relock().failed)
 }
 
 fn served(handle: u32) -> Option<&'static Served> {
@@ -674,11 +658,11 @@ fn served(handle: u32) -> Option<&'static Served> {
     SERVED_LIST.get()?.get(index)
 }
 
-fn mod_on(owner: usize) -> bool {
-    owner == crate::chains::LOADER
+fn mod_on(owner: ModIndex) -> bool {
+    owner == ModIndex::LOADER
         || LOADED
             .get()
-            .and_then(|loader| loader.mods.get(owner))
+            .and_then(|loader| loader.mods.get(owner.get()))
             .is_some_and(|m| !m.off.load(Ordering::Acquire))
 }
 
@@ -770,11 +754,7 @@ unsafe extern "system" fn open(
         // arguments pass unchanged.
         return unsafe { OPEN_NEXT.get()(out, database, key) };
     }
-    entry
-        .state
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .base_handle = base_handle;
+    entry.state.relock().base_handle = base_handle;
     let handle = u32::try_from(index + 1).unwrap_or(0) | SERVED;
     if !out.is_null() {
         // SAFETY: `out` is non-null by the check before it and is the open's
@@ -811,7 +791,7 @@ unsafe extern "system" fn resolve(
 
 /// The served resource, built from its base on first use.
 fn build(entry: &Served, database: *mut u8) -> Option<(usize, usize)> {
-    let mut state = entry.state.lock().unwrap_or_else(PoisonError::into_inner);
+    let mut state = entry.state.relock();
     if let Some(built) = state.built {
         return Some(built);
     }
@@ -854,10 +834,10 @@ fn build(entry: &Served, database: *mut u8) -> Option<(usize, usize)> {
         let by: Vec<&str> = applied
             .iter()
             .filter_map(|&owner| {
-                if owner == crate::chains::LOADER {
+                if owner == ModIndex::new((ModIndex::LOADER).get()) {
                     Some("the loader")
                 } else {
-                    loader.mods.get(owner).map(|m| m.id.as_str())
+                    loader.mods.get(owner.get()).map(|m| m.id.as_str())
                 }
             })
             .collect();
@@ -880,11 +860,11 @@ fn run_patches(
     entry: &Served,
     data: usize,
     len: usize,
-    only: Option<&[usize]>,
-) -> Option<(usize, usize, Vec<usize>)> {
+    only: Option<&[ModIndex]>,
+) -> Option<(usize, usize, Vec<ModIndex>)> {
     let (mut current, mut current_len) = (data, len);
     let mut applied = Vec::new();
-    let runs = |owner: usize| only.map_or_else(|| mod_on(owner), |only| only.contains(&owner));
+    let runs = |owner: ModIndex| only.map_or_else(|| mod_on(owner), |only| only.contains(&owner));
     for patch in entry.patches.iter().filter(|p| runs(p.owner)) {
         let (mut built, mut built_len) = (core::ptr::null::<u8>(), 0usize);
         // SAFETY: `patch.apply` is a live mod's or the loader's
@@ -900,13 +880,13 @@ fn run_patches(
                 &raw mut built_len,
             )
         };
-        let status = if patch.owner == crate::chains::LOADER {
+        let status = if patch.owner == ModIndex::LOADER {
             apply()
         } else {
             crate::profile::call(patch.owner, crate::profile::Feature::Resources, apply)
         };
         if status != Status::OK || built.is_null() {
-            if patch.owner == crate::chains::LOADER {
+            if patch.owner == ModIndex::LOADER {
                 crate::log!(
                     WARN,
                     "a stand-in for an item of a removed mod failed to build"
@@ -991,7 +971,7 @@ mod tests {
             base: key,
             patches: [3, 4]
                 .map(|owner| Patch {
-                    owner,
+                    owner: ModIndex::new(owner),
                     apply: add_one,
                     user: 0,
                 })
@@ -1004,8 +984,9 @@ mod tests {
         let at = base.as_ptr().expose_provenance();
         // No loader runs here, so every mod reads as off.
         assert!(run_patches(&entry, at, base.len(), None).is_none());
-        let (_, len, by) = run_patches(&entry, at, base.len(), Some(&[3, 4])).unwrap();
-        assert_eq!((len, by), (6, vec![3, 4]));
+        let both = [ModIndex::new(3), ModIndex::new(4)];
+        let (_, len, by) = run_patches(&entry, at, base.len(), Some(&both)).unwrap();
+        assert_eq!((len, by), (6, both.to_vec()));
     }
 
     unsafe extern "system" fn no_patch(
@@ -1025,7 +1006,7 @@ mod tests {
             patches: owners
                 .iter()
                 .map(|&owner| Patch {
-                    owner,
+                    owner: ModIndex::new(owner),
                     apply: no_patch,
                     user: 0,
                 })
@@ -1040,13 +1021,9 @@ mod tests {
     fn a_resource_counts_as_served_only_while_a_mod_is_on_and_it_built() {
         let key = recipe_registry();
         let served = [served_by(key, &[1, 2])];
-        assert!(serves(&served, &key, |owner| owner == 2));
+        assert!(serves(&served, &key, |owner| owner == ModIndex::new(2)));
         assert!(!serves(&served, &key, |_| false));
-        served[0]
-            .state
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .failed = true;
+        served[0].state.relock().failed = true;
         assert!(!serves(&served, &key, |_| true));
         let other = ResourceKey { part: 1, ..key };
         assert!(!serves(&[served_by(other, &[1])], &key, |_| true));

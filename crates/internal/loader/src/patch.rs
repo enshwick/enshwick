@@ -19,16 +19,15 @@
 //! less the next one's. Without diagnostics the thunks are the plain ones
 //! and count nothing.
 
+use crate::mod_index::ModIndex;
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use windows_sys::Win32::System::Diagnostics::Debug::{
-    FlushInstructionCache, IMAGE_RUNTIME_FUNCTION_ENTRY, RtlAddFunctionTable,
+    IMAGE_RUNTIME_FUNCTION_ENTRY, RtlAddFunctionTable,
 };
-use windows_sys::Win32::System::Memory::{
-    MEM_COMMIT, MEM_RESERVE, PAGE_EXECUTE_READ, PAGE_READWRITE, VirtualAlloc, VirtualProtect,
-};
-use windows_sys::Win32::System::Threading::{GetCurrentProcess, TlsAlloc, TlsGetValue};
+use windows_sys::Win32::System::Memory::{MEM_COMMIT, MEM_RESERVE, PAGE_READWRITE, VirtualAlloc};
+use windows_sys::Win32::System::Threading::{TlsAlloc, TlsGetValue};
 
 pub(crate) use crate::chains::Counter;
 use crate::chains::{Chains, Hop};
@@ -227,7 +226,7 @@ pub(crate) fn arm(
     chains: &mut Chains,
     mids: &Mids,
     frame: Option<FrameSlot>,
-    off: fn(usize) -> bool,
+    off: fn(ModIndex) -> bool,
     patches: &[CodePatch],
     counting: Count,
 ) -> Armed {
@@ -364,19 +363,11 @@ pub(crate) fn arm(
         let _first = ARMED_AT.set((rdtsc(), std::time::Instant::now()));
     }
 
-    let mut old = 0;
     // SAFETY: `block` and `code_len` are the code pages `reserve` gave this
-    // batch, and `old` is a live `u32` the call writes.
-    let sealed = unsafe { VirtualProtect(block.cast(), code_len, PAGE_EXECUTE_READ, &raw mut old) };
-    if sealed == 0 {
+    // batch, written in full; no thread runs them before `hook` links them.
+    if !unsafe { crate::pages::seal(block.expose_provenance(), code_len) } {
         return unarmed(chains, mids, patches, "thunk pages not executable");
     }
-    // SAFETY: `GetCurrentProcess` takes no arguments and returns a
-    // pseudo-handle that needs no closing.
-    let process = unsafe { GetCurrentProcess() };
-    // SAFETY: `process` is this process's pseudo-handle and the range is the
-    // batch's own code pages; the call only flushes the cache.
-    unsafe { FlushInstructionCache(process, block.cast(), code_len) };
 
     let code = hook(chains, mids, &thunks, off, patches, &mut failures);
     Armed { failures, code }
@@ -563,7 +554,7 @@ fn hook(
     chains: &mut Chains,
     mids: &Mids,
     thunks: &[(u64, *mut u8)],
-    off: fn(usize) -> bool,
+    off: fn(ModIndex) -> bool,
     patches: &[CodePatch],
     failures: &mut Vec<Failure>,
 ) -> Vec<Verdict> {
@@ -603,7 +594,7 @@ fn hook(
         let result = result.as_ref().map_err(Clone::clone).and_then(|hook| {
             let (start, len) = hook.span();
             if taken.iter().any(|&(s, l)| s < start + len && start < s + l) {
-                return Err("its bytes overlap another hook's jump".to_owned());
+                return Err(crate::detour::PrepareError::OverlapsAnotherHook);
             }
             taken.push((start, len));
             Ok(hook)
@@ -634,7 +625,7 @@ fn hook(
                 failures.push(Failure {
                     target,
                     inside: request.inside,
-                    reason,
+                    reason: reason.to_string(),
                 });
             }
         }
@@ -654,7 +645,7 @@ fn hook(
 
 /// The mods hooked on a target that failed, function or mid-function hook;
 /// never the loader.
-fn failed_owners(failures: &[Failure], chains: &Chains, mids: &Mids) -> Vec<usize> {
+fn failed_owners(failures: &[Failure], chains: &Chains, mids: &Mids) -> Vec<ModIndex> {
     failures
         .iter()
         .flat_map(|f| {
@@ -664,7 +655,7 @@ fn failed_owners(failures: &[Failure], chains: &Chains, mids: &Mids) -> Vec<usiz
                 chains.owners(f.target)
             }
         })
-        .filter(|&owner| owner != crate::chains::LOADER)
+        .filter(|&owner| owner != ModIndex::LOADER)
         .collect()
 }
 
@@ -674,7 +665,7 @@ fn write(
     chains: &mut Chains,
     mids: &Mids,
     ready: &[(u64, bool, &Pending)],
-    off: fn(usize) -> bool,
+    off: fn(ModIndex) -> bool,
     patches: &[CodePatch],
     failures: &mut Vec<Failure>,
 ) -> Vec<Verdict> {
@@ -682,7 +673,7 @@ fn write(
     let hooked: Vec<(usize, usize)> = hooks.iter().map(|h| h.span()).collect();
     // A mod whose hook failed is turned off: its patches stay out with it.
     let failed = failed_owners(failures, chains, mids);
-    let off_or_failed = |owner: usize| off(owner) || failed.contains(&owner);
+    let off_or_failed = |owner: ModIndex| off(owner) || failed.contains(&owner);
     let mut verdicts = crate::code::check(patches, &hooked, off_or_failed, crate::code::read);
     let writes: Vec<crate::detour::Bytes<'_>> = patches
         .iter()
@@ -1069,27 +1060,28 @@ mod tests {
 
     #[test]
     fn the_owners_of_a_failed_mid_function_hook_count_as_failed() {
-        use crate::chains::{LOADER, Link};
+        use crate::chains::Link;
         use crate::mid::MidLink;
+        use crate::mod_index::ModIndex;
         use enshwick::abi::{HookFlags, Registers};
 
         static NEXT: [AtomicUsize; 2] = [const { AtomicUsize::new(0) }; 2];
         extern "system" fn handler(_: *mut Registers, _: *mut core::ffi::c_void) {}
 
         let mut chains = Chains::default();
-        let link = |owner: usize| Link {
+        let link = |owner: ModIndex| Link {
             owner,
             detour: 0x1,
-            next: &NEXT[usize::from(owner == LOADER)],
+            next: &NEXT[usize::from(owner == ModIndex::LOADER)],
             priority: 0,
             flags: HookFlags::NONE,
             hop: None,
         };
-        let _ = chains.add(0x10, link(LOADER));
-        let _ = chains.add(0x10, link(2));
+        let _ = chains.add(0x10, link(ModIndex::LOADER));
+        let _ = chains.add(0x10, link(ModIndex::new(2)));
         let mut mids = Mids::default();
         let mid = MidLink {
-            owner: 1,
+            owner: ModIndex::new(1),
             handler,
             user: 0,
             priority: 0,
@@ -1097,7 +1089,10 @@ mod tests {
         };
         let _ = mids.add(0x20, mid);
         let failures = [Failure::chain(0x10, "x"), Failure::site(0x20, "y")];
-        assert_eq!(failed_owners(&failures, &chains, &mids), [2, 1]);
+        assert_eq!(
+            failed_owners(&failures, &chains, &mids),
+            [ModIndex::new(2), ModIndex::new(1)]
+        );
     }
 
     #[test]

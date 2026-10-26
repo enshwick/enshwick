@@ -189,7 +189,7 @@ On build 1269579 the patterns find every symbol of both tables, 271 of the
 server's 280 constants and 427 of the client's 436, and the game's data gives
 the other nine, the slots of attributes: on a build without a table every
 entry is found, and every loader feature and mod of this repository runs.
-`cargo run -p enshwick-compat -- --patterns <exe>` shows what the patterns alone find
+`cargo xtask compat --patterns <exe>` shows what the patterns alone find
 on any executable, and a test of the builds crate checks, when
 `ENSH_SERVER_EXE` and `ENSH_CLIENT_EXE` name the game's executables, that
 every pattern matches exactly once and yields its table's value.

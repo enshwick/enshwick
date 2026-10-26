@@ -19,14 +19,14 @@
 //! from unloading to unloaded once they are gone. The loader wraps it and
 //! reports the turns of the server's world after the step.
 
-use std::sync::{Mutex, OnceLock, PoisonError};
+use std::sync::{Mutex, OnceLock};
 
 use enshwick::abi::{ChunkData, Event, Header, HookFlags, Status, WeatherFront};
-
 use enshwick::raw::read_at;
 
 use crate::chains::Next;
 use crate::host::Loader;
+use crate::locks::Relock;
 use crate::memory::{read, write};
 
 /// The build table ids this part of the loader names.
@@ -690,10 +690,7 @@ unsafe fn record(event: Event, entities: *mut u8, chunk: *mut u8) {
         z: index / width,
         size: CHUNK_METRES,
     };
-    CHUNK_EVENTS
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .push((event, data));
+    CHUNK_EVENTS.relock().push((event, data));
 }
 
 /// Raises the chunk turns of the last step, on the game thread after it.
@@ -701,7 +698,7 @@ pub(crate) fn after_step(loader: &Loader) {
     if CHUNKS.get().is_none() {
         return;
     }
-    let events = std::mem::take(&mut *CHUNK_EVENTS.lock().unwrap_or_else(PoisonError::into_inner));
+    let events = std::mem::take(&mut *CHUNK_EVENTS.relock());
     for (event, data) in &events {
         loader.emit(*event, None, (&raw const *data).cast());
     }
@@ -709,8 +706,5 @@ pub(crate) fn after_step(loader: &Loader) {
 
 /// Drops the chunk turns of a hosted game that stopped.
 pub(crate) fn forget() {
-    CHUNK_EVENTS
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .clear();
+    CHUNK_EVENTS.relock().clear();
 }

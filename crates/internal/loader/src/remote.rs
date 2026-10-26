@@ -362,6 +362,10 @@ pub fn admit(
 }
 
 /// One [`Message::Sync`] per mod of `values`, its join values by mod id.
+#[cfg_attr(
+    all(not(windows), not(test)),
+    expect(dead_code, reason = "messages go out only in the game")
+)]
 fn sync_messages(values: std::collections::BTreeMap<String, String>) -> Vec<Message> {
     values
         .into_iter()
@@ -374,8 +378,8 @@ pub(crate) use live::{client, forget, heard, push_sync, server, sync_to};
 
 #[cfg(windows)]
 mod live {
-    use std::collections::HashMap;
-    use std::sync::{Mutex, PoisonError};
+    use crate::locks::Relock;
+    use std::sync::Mutex;
     use std::time::Instant;
 
     use enshwick::abi::PlayerInfo;
@@ -385,7 +389,7 @@ mod live {
     use crate::host::Loader;
 
     /// When each player last changed a setting.
-    static LAST_EDIT: Mutex<Option<HashMap<u64, Instant>>> = Mutex::new(None);
+    static LAST_EDIT: Mutex<Option<rustc_hash::FxHashMap<u64, Instant>>> = Mutex::new(None);
     /// What the client last heard from its server, for the Mods screen.
     static HEARD: Mutex<Heard> = Mutex::new(Heard::new());
 
@@ -416,12 +420,12 @@ mod live {
 
     /// Reads what the client last heard, under the lock.
     pub(crate) fn heard<R>(read: impl FnOnce(&Heard) -> R) -> R {
-        read(&HEARD.lock().unwrap_or_else(PoisonError::into_inner))
+        read(&HEARD.relock())
     }
 
     /// Forgets what was heard, as when the screen asks again.
     pub(crate) fn forget() {
-        let mut heard = HEARD.lock().unwrap_or_else(PoisonError::into_inner);
+        let mut heard = HEARD.relock();
         heard.mods = None;
         heard.settings = None;
         heard.result = None;
@@ -454,7 +458,7 @@ mod live {
                 schema,
                 text,
             } => {
-                let mut heard = HEARD.lock().unwrap_or_else(PoisonError::into_inner);
+                let mut heard = HEARD.relock();
                 if id.is_empty() {
                     heard.mods = Some(
                         text.lines()
@@ -468,7 +472,7 @@ mod live {
                 heard.news += 1;
             }
             Message::Result { ok, text } => {
-                let mut heard = HEARD.lock().unwrap_or_else(PoisonError::into_inner);
+                let mut heard = HEARD.relock();
                 heard.result = Some((ok, text));
                 heard.news += 1;
             }
@@ -511,8 +515,8 @@ mod live {
                 for record in loader
                     .mods
                     .iter()
-                    .filter(|m| m.schema.lock().is_ok_and(|s| s.is_some()))
-                    .filter(|m| admin || m.synced.lock().is_ok_and(|s| s.is_some()))
+                    .filter(|m| m.schema.relock().is_some())
+                    .filter(|m| admin || m.synced.relock().is_some())
                 {
                     text.push_str(&record.id);
                     text.push('\t');
@@ -558,10 +562,10 @@ mod live {
     /// Sends mod `id`'s settings to the client of `key`: the file without
     /// secrets for an administrator, the join values for anyone else.
     fn snapshot(loader: &Loader, key: u64, id: &str, admin: bool) {
-        let Some(record) = loader.mods.iter().find(|m| m.id == id) else {
+        let Some((_, record)) = loader.find_mod(id) else {
             return;
         };
-        let Some(schema) = record.schema.lock().ok().and_then(|s| s.clone()) else {
+        let Some(schema) = record.schema.relock().clone() else {
             return;
         };
         let text = if admin {
@@ -570,9 +574,8 @@ mod live {
         } else {
             record
                 .synced
-                .lock()
-                .ok()
-                .and_then(|s| s.clone())
+                .relock()
+                .clone()
                 .map(|values| values_text(&values))
                 .unwrap_or_default()
         };
@@ -618,21 +621,17 @@ mod live {
         admin: bool,
     ) -> Result<String, String> {
         let (index, record) = loader
-            .mods
-            .iter()
-            .enumerate()
-            .find(|(_, m)| m.id == id)
+            .find_mod(id)
             .ok_or_else(|| texts::fill("remote.unknown", &[("id", id)]))?;
         let schema = record
             .schema
-            .lock()
-            .ok()
-            .and_then(|s| s.clone())
+            .relock()
+            .clone()
             .ok_or_else(|| texts::fill("remote.no-schema", &[("id", id)]))?;
         let now = Instant::now();
         {
-            let mut last = LAST_EDIT.lock().unwrap_or_else(PoisonError::into_inner);
-            let last = last.get_or_insert_with(HashMap::new);
+            let mut last = LAST_EDIT.relock();
+            let last = last.get_or_insert_with(rustc_hash::FxHashMap::default);
             admit(&schema, setting, admin, last.get(&key).copied(), now)?;
             last.insert(key, now);
         }

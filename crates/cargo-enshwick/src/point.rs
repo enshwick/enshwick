@@ -11,7 +11,7 @@ use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context as _, anyhow};
-use enshwick_reflect::{Image, Layout};
+use enshwick_gamedata::reflect::{Image, Layout};
 use serde::Deserialize;
 
 /// The section of a mod DLL that holds its point schemas.
@@ -246,14 +246,32 @@ fn is_named(name: &str) -> bool {
 }
 
 /// `text` as doc comment lines at `indent`; `fallback` when it is empty.
+///
+/// The first sentence becomes a paragraph of its own, the summary rustdoc
+/// shows in lists.
 fn doc(code: &mut String, indent: &str, text: &str, fallback: &str) {
     let text = if text.trim().is_empty() {
         fallback
     } else {
         text
     };
-    for line in text.lines() {
-        let _ = writeln!(code, "{indent}/// {line}");
+    let (first, rest) = text.split_once("\n\n").unwrap_or((text, ""));
+    let (summary, more) = match first.split_once(". ") {
+        Some((summary, more)) => (format!("{summary}."), more.trim_start()),
+        None => (first.to_owned(), ""),
+    };
+    let paragraphs = [summary.as_str(), more, rest];
+    for (i, paragraph) in paragraphs.iter().filter(|p| !p.is_empty()).enumerate() {
+        if i > 0 {
+            let _ = writeln!(code, "{indent}///");
+        }
+        for line in paragraph.lines() {
+            if line.is_empty() {
+                let _ = writeln!(code, "{indent}///");
+            } else {
+                let _ = writeln!(code, "{indent}/// {line}");
+            }
+        }
     }
 }
 
@@ -306,9 +324,10 @@ pub(crate) fn rust(schema: &Schema, name: &str) -> anyhow::Result<String> {
     let mut code = String::new();
     let _ = writeln!(
         code,
-        "//! The extension point `{name}` of {} {}, written by\n\
-         //! `cargo enshwick point {name}`. Write it again for a newer {}\n\
-         //! rather than edit it; the checks at the end hold it to the owner's\n\
+        "//! The extension point `{name}` of {} {}.\n\
+         //!\n\
+         //! Written by `cargo enshwick point {name}`. Write it again for a newer\n\
+         //! {} rather than edit it; the checks at the end hold it to the owner's\n\
          //! layout. Declare this module `pub`.\n",
         schema.owner, schema.version, schema.owner
     );
@@ -475,6 +494,22 @@ mod tests {
             include_str!("../../../examples/haggling/src/price.rs"),
             "run cargo enshwick point you.trading-post:price again"
         );
+    }
+
+    #[test]
+    fn a_doc_keeps_its_first_sentence_as_a_paragraph_of_its_own() {
+        let mut code = String::new();
+        doc(&mut code, "    ", "The price. A refusal means no deal.", "");
+        assert_eq!(
+            code,
+            "    /// The price.\n    ///\n    /// A refusal means no deal.\n"
+        );
+        let mut code = String::new();
+        doc(&mut code, "", "Short.\n\nMore. And more.", "");
+        assert_eq!(code, "/// Short.\n///\n/// More. And more.\n");
+        let mut code = String::new();
+        doc(&mut code, "", "", "The input.");
+        assert_eq!(code, "/// The input.\n");
     }
 
     #[test]

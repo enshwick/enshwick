@@ -35,7 +35,7 @@
 //! ```
 
 use std::collections::{HashMap, HashSet};
-use std::sync::{Arc, Mutex, PoisonError};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use crate::abi::{
@@ -46,6 +46,7 @@ use crate::ecs::Entity;
 use crate::game_events::CraftRequested;
 use crate::inventory::Slot;
 use crate::item_data::ItemInstance;
+use crate::locks::Relock;
 use crate::loot::Source;
 use crate::stats::{ItemStats, Op, Stat, StatKey};
 use crate::{Host, Load, Off};
@@ -564,10 +565,13 @@ impl RollRules {
     }
 }
 
-/// The affixes an item of the game's `ItemCategory` numbered `category`
-/// rolls from `pool` under `rules`, from `seed`: the count first, then each
-/// affix by weight among those that fit, are not taken and share no group
-/// with one taken, then its values. The pool's order does not matter.
+/// The affixes an item of the game's `ItemCategory` numbered `category` rolls
+/// from `pool` under `rules`, from `seed`.
+///
+/// The count comes first, then each affix by weight among those that fit, are
+/// not taken and share no group with one taken, then its values.
+///
+/// The pool's order does not matter.
 ///
 /// # Examples
 ///
@@ -629,8 +633,10 @@ pub fn roll(pool: &[Candidate<'_>], category: u8, rules: RollRules, seed: u64) -
 
 /// `stats` rolled anew from `pool` for an item of the game's `ItemCategory`
 /// numbered `category`, as [`roll`] rolls; `None` when `once` and it rolled
-/// before. An item no affix of the pool fits comes back as it was, not
-/// marked as rolled.
+/// before.
+///
+/// An item no affix of the pool fits comes back as it was, not marked as
+/// rolled.
 ///
 /// # Examples
 ///
@@ -667,8 +673,9 @@ pub fn reroll(
 
 /// What `stats` gives, a modifier per line, its own first and then each
 /// affix's: affixes by their place in `pool` plus one, stats by the index
-/// `stat` gives their key. Modifiers of unknown stats or affixes are left
-/// out.
+/// `stat` gives their key.
+///
+/// Modifiers of unknown stats or affixes are left out.
 ///
 /// # Examples
 ///
@@ -1086,8 +1093,7 @@ impl Load<'_> {
         let rolled = crate::loot::watch_rolls(self)?;
         let scheduler = self.scheduler()?;
         scheduler.every(SWEEP, move || {
-            let containers: Vec<_> =
-                core::mem::take(&mut *rolled.lock().unwrap_or_else(PoisonError::into_inner));
+            let containers: Vec<_> = core::mem::take(&mut *rolled.relock());
             for roll in containers.iter().filter(|r| rule.from.matches(r)) {
                 let Some(container) = roll.entity else {
                     continue;
@@ -1135,14 +1141,13 @@ impl Load<'_> {
             let held: HashSet<ItemInstance> =
                 instances(&inventories.read().slots(craft.player)).collect();
             requests
-                .lock()
-                .unwrap_or_else(PoisonError::into_inner)
+                .relock()
                 .entry(craft.player)
                 .or_insert((Instant::now(), held));
         })?;
         scheduler.every(SWEEP, move || {
             let due: Vec<(Entity, HashSet<ItemInstance>)> = {
-                let mut pending = pending.lock().unwrap_or_else(PoisonError::into_inner);
+                let mut pending = pending.relock();
                 let now = Instant::now();
                 let ready: Vec<Entity> = pending
                     .iter()

@@ -19,19 +19,21 @@
 //! worker threads: clearing `al` there takes the path of a malformed action,
 //! which consumes the request without queueing it.
 
+use crate::mod_index::ModIndex;
 use core::ffi::c_void;
 use std::sync::atomic::{AtomicU8, AtomicU32, Ordering};
-use std::sync::{Mutex, OnceLock, PoisonError};
+use std::sync::{Mutex, OnceLock};
 
 use enshwick::abi::{
     Header, HookFlags, KnowledgeInfo, KnowledgeInput, KnowledgeInputFn, Registers, Status,
 };
 
-use super::{Layout, definition, layout, quest_set, read};
-use crate::chains::LOADER;
 use crate::host::{Loader, Registered, take};
+use crate::locks::Relock;
 use crate::mid::MidLink;
 use crate::settings::KnowledgeGuard;
+
+use super::{Layout, definition, layout, quest_set, read};
 
 /// What the guard does, from the loader's settings: one of the `MODE_`
 /// values.
@@ -92,7 +94,7 @@ pub(crate) fn status() -> Option<String> {
 /// Registers mod `owner`'s filter.
 pub(crate) fn register(
     loader: &Loader,
-    owner: usize,
+    owner: ModIndex,
     callback: KnowledgeInputFn,
     user: *mut c_void,
 ) -> Status {
@@ -103,8 +105,7 @@ pub(crate) fn register(
         return Status::MISSING;
     }
     FILTERS
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
+        .relock()
         .push(Registered::new(owner, callback, user));
     Status::OK
 }
@@ -149,16 +150,13 @@ pub(crate) fn link(loader: &Loader) {
     }
     let _first = SITE.set(site);
     let link = MidLink {
-        owner: LOADER,
+        owner: ModIndex::LOADER,
         handler: check,
         user: 0,
         priority: i32::MIN,
         flags: HookFlags::NONE,
     };
-    let status = loader
-        .mids
-        .lock()
-        .map_or(Status::REFUSED, |mut mids| mids.add(address, link));
+    let status = loader.mids.relock().add(address, link);
     if status.is_ok() {
         crate::log!(
             INFO,

@@ -15,17 +15,18 @@
 //! placement, which the building systems refuse to place and the client's
 //! cursor shows as not allowed.
 
+use crate::mod_index::ModIndex;
 use core::ffi::c_void;
-use std::sync::{Mutex, OnceLock, PoisonError};
+use std::sync::{Mutex, OnceLock};
 
 use enshwick::abi::{
     BuildCheck, BuildCheckFn, CraftCheck, CraftCheckFn, Header, HookFlags, Status,
 };
-
 use enshwick::raw::{read_at, read_ptr_at, write_at};
 
 use crate::chains::Next;
 use crate::host::{Loader, Registered, take};
+use crate::locks::Relock;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
@@ -76,7 +77,7 @@ struct BuildLayout {
 /// Registers mod `owner`'s craft filter.
 pub(crate) fn register_craft(
     loader: &Loader,
-    owner: usize,
+    owner: ModIndex,
     callback: CraftCheckFn,
     user: *mut c_void,
 ) -> Status {
@@ -87,8 +88,7 @@ pub(crate) fn register_craft(
         return Status::MISSING;
     }
     CRAFT_FILTERS
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
+        .relock()
         .push(Registered::new(owner, callback, user));
     Status::OK
 }
@@ -96,7 +96,7 @@ pub(crate) fn register_craft(
 /// Registers mod `owner`'s build filter.
 pub(crate) fn register_build(
     loader: &Loader,
-    owner: usize,
+    owner: ModIndex,
     callback: BuildCheckFn,
     user: *mut c_void,
 ) -> Status {
@@ -110,8 +110,7 @@ pub(crate) fn register_build(
         return Status::MISSING;
     }
     BUILD_FILTERS
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
+        .relock()
         .push(Registered::new(owner, callback, user));
     Status::OK
 }

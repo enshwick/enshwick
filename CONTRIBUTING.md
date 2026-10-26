@@ -8,9 +8,14 @@ and on Windows the MSVC build tools.
 
 ```bash
 bun install                                 # repository tools and the git hooks
+bun run lint:md                             # markdownlint on every document, as the hooks run it
 cargo install --locked cargo-nextest@0.9.149
 cargo nextest run --workspace
 ```
+
+markdownlint runs from `node_modules` at the version `bun.lock` pins. A
+plain `bunx markdownlint-cli2` before `bun install` fetches the newest
+release instead, whose formatter fails to load.
 
 The hooks check formatting, spelling, Markdown and commit messages before a
 commit, and again before a push, with cargo-deny when a manifest changed; none
@@ -18,8 +23,9 @@ of them compiles, so they take seconds. Before asking for review, run
 `cargo xtask check`: clippy and the doctests, and the tests of the packages the
 change touches and of the packages that depend on them. Off Windows it also
 lints the workspace for Windows through
-[cargo-xwin](https://github.com/rust-cross/cargo-xwin). The loader builds only
-for Windows: off Windows, `cargo xtask check --windows` runs its tests under Wine in Docker, in an image built from
+[cargo-xwin](https://github.com/rust-cross/cargo-xwin). Most of the loader runs
+only on Windows: off Windows its portable modules are tested on the host, and
+`cargo xtask check --windows` runs the rest of its tests under Wine in Docker, in an image built from
 [tools/wine/Dockerfile](tools/wine/Dockerfile) on first use, or under Wine
 directly on an amd64 Linux host that has it. On Apple silicon
 the container runs through Rosetta, which cannot run the tests of crashes,
@@ -29,8 +35,8 @@ rules the hooks enforce, and the ones they cannot, are in this file:
 
 - a change to a hot path names its numbers before and after, from the
   criterion benchmarks: `cargo bench -p enshwick --features test` for hook
-  dispatch and pattern scans, `-p enshwick-reflect` for reflection and
-  `-p enshwick-gamedata` for the archive; benchmarks that read the game set
+  dispatch and pattern scans, `-p enshwick-gamedata` for reflection and the
+  archive; benchmarks that read the game set
   `ENSH_SERVER_EXE` and `ENSH_CLIENT_EXE` to its executables and are skipped
   without them;
 
@@ -40,8 +46,8 @@ rules the hooks enforce, and the ones they cannot, are in this file:
   and becomes the squashed commit; the merge queue merges it once CI passes;
 - code follows the style of the code around it, unsafe code included;
 - what mod authors need to know goes into [the modding book](book/src/SUMMARY.md)
-  with the change; `bun run check:book` checks its structure, and its Rust
-  examples run with `cargo test --doc --workspace`.
+  with the change; `cargo xtask check` checks its structure, and its Rust
+  examples run as doctests.
 
 What a mod needs and another mod could use goes into `enshwick`, not into
 the mod: events, world reads, content such as items and recipes, texts. A mod

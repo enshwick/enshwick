@@ -7,15 +7,18 @@
 //! packages are already fresh, and nextest runs the tests of the changed
 //! packages and of every package that depends on them. Off Windows the
 //! workspace is also linted for Windows through `cargo xwin`, beside the host
-//! checks. `cargo xtask check --windows` also runs the tests of the crates
-//! that build only for Windows, under Wine off Windows. `cargo xtask check
+//! checks. `cargo xtask check --windows` also runs the Windows tests of the
+//! crates marked `windows-tests` or `windows-only`, under Wine off Windows. `cargo xtask check
 //! --all` runs the full suite, the Windows tests included when Docker runs.
 //!
 //! `cargo xtask bundle` writes the dev bundle testers unpack into the game
 //! folder ([`bundle`]).
 
 mod affected;
+mod book;
 mod bundle;
+#[cfg(feature = "compat")]
+mod compat;
 mod ranges;
 mod wine;
 
@@ -27,14 +30,18 @@ use std::time::Instant;
 
 use affected::{Package, Scope};
 
-const USAGE: &str = "usage: cargo xtask check [--all] [--windows] [--base <git ref>] | bundle [--out <dir>] [--local]";
+const USAGE: &str = "usage: cargo xtask check [--all] [--windows] [--base <git ref>] | bundle [--out <dir>] [--local] | compat <exe> [--mods <path>...] [--report <file>] [--patterns]";
 const WINDOWS_TARGET: &str = "x86_64-pc-windows-msvc";
 /// Turned on by name: most of the API crate's test targets need its fake
-/// loader, and without the feature cargo skips them without a word.
-const TEST_FEATURE: &str = "enshwick/test";
+/// loader, and without the feature cargo skips them without a word; the
+/// compat task is linted and tested with the rest.
+const TEST_FEATURE: &str = "enshwick/test,xtask/compat";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
+    if let Some(("compat", rest)) = args.split_first().map(|(task, rest)| (task.as_str(), rest)) {
+        return compat_task(rest);
+    }
     match run(&args) {
         Ok(true) => ExitCode::SUCCESS,
         Ok(false) => ExitCode::FAILURE,
@@ -67,9 +74,17 @@ fn run(args: &[String]) -> Result<bool, String> {
     }
     let packages = packages()?;
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let problems = ranges::check(&root, &packages);
+    let mut problems: Vec<String> = ranges::check(&root, &packages)
+        .into_iter()
+        .map(|problem| format!("manifest range: {problem}"))
+        .collect();
+    problems.extend(
+        book::check(&root)
+            .into_iter()
+            .map(|problem| format!("book: {problem}")),
+    );
     for problem in &problems {
-        say(&format!("manifest range: {problem}"));
+        say(problem);
     }
     if !problems.is_empty() {
         return Ok(false);
@@ -86,20 +101,20 @@ fn run(args: &[String]) -> Result<bool, String> {
     if !(checked && (all || windows)) {
         return Ok(checked);
     }
-    let windows_only: Vec<&str> = packages
+    let windows_tests: Vec<&str> = packages
         .iter()
-        .filter(|p| p.windows_only)
+        .filter(|p| p.windows_tests)
         .filter(|p| match &scope {
             Scope::All => true,
             Scope::Some { code, docs } => code.contains(&p.name) || docs.contains(&p.name),
         })
         .map(|p| p.name.as_str())
         .collect();
-    if windows_only.is_empty() {
-        say("no Windows-only package changed; no tests under Wine");
+    if windows_tests.is_empty() {
+        say("no package with Windows tests changed; no tests under Wine");
         return Ok(true);
     }
-    Ok(wine::run(&windows_only, windows))
+    Ok(wine::run(&windows_tests, windows))
 }
 
 /// The workspace packages, from `cargo metadata`.
@@ -148,6 +163,9 @@ fn packages() -> Result<Vec<Package>, String> {
                 deps,
                 windows_only: package["metadata"]["enshwick"]["windows-only"].as_bool()
                     == Some(true),
+                windows_tests: ["windows-tests", "windows-only"]
+                    .iter()
+                    .any(|key| package["metadata"]["enshwick"][key].as_bool() == Some(true)),
             }
         })
         .collect())
@@ -173,6 +191,48 @@ fn git(args: &[&str]) -> Option<String> {
         .status
         .success()
         .then(|| String::from_utf8_lossy(&output.stdout).into_owned())
+}
+
+/// `cargo xtask compat`: what works on a game build, from its executable.
+#[cfg(feature = "compat")]
+fn compat_task(args: &[String]) -> ExitCode {
+    match compat::main(args) {
+        Ok(true) => ExitCode::SUCCESS,
+        Ok(false) => ExitCode::from(compat::BROKEN),
+        Err(error) => {
+            let _shown = writeln!(std::io::stderr(), "error: {error}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+/// `cargo xtask compat` runs this tool again built with the loader, which
+/// plain `cargo xtask` leaves out to stay quick to build.
+#[cfg(not(feature = "compat"))]
+fn compat_task(args: &[String]) -> ExitCode {
+    let status = Command::new(cargo())
+        .args([
+            "run",
+            "--quiet",
+            "--package",
+            "xtask",
+            "--features",
+            "compat",
+            "--",
+            "compat",
+        ])
+        .args(args)
+        .status();
+    match status {
+        Ok(status) => status
+            .code()
+            .and_then(|code| u8::try_from(code).ok())
+            .map_or(ExitCode::FAILURE, ExitCode::from),
+        Err(error) => {
+            let _shown = writeln!(std::io::stderr(), "xtask: running cargo: {error}");
+            ExitCode::FAILURE
+        }
+    }
 }
 
 fn cargo() -> String {
@@ -263,13 +323,13 @@ fn check(scope: &Scope, packages: &[Package], full: bool) -> bool {
     let (code, docs, tests) = match scope {
         Scope::All => (true, true, None),
         Scope::Some { code, docs } => {
-            let host: Vec<&String> = code.iter().filter(|name| host_ok(name)).collect();
             if code.is_empty() && docs.is_empty() {
                 say("no package changed; nothing to check");
                 return true;
             }
             let names: Vec<&str> = code.iter().chain(docs).map(String::as_str).collect();
             say(&format!("checking {}", names.join(", ")));
+            let host: Vec<&String> = code.iter().filter(|name| host_ok(name)).collect();
             let filter = host
                 .iter()
                 .map(|name| format!("package({name})"))
@@ -285,12 +345,12 @@ fn check(scope: &Scope, packages: &[Package], full: bool) -> bool {
     if matches!(scope, Scope::All) {
         say("checking the whole workspace");
     }
-    // Off Windows the crates that build only for Windows stay out of host builds.
     let mut workspace = vec![
         "--workspace".to_owned(),
         "--features".to_owned(),
         TEST_FEATURE.to_owned(),
     ];
+    // Off Windows the crates that build only for Windows stay out of host builds.
     if !on_windows {
         for package in packages.iter().filter(|p| p.windows_only) {
             workspace.extend(["--exclude".to_owned(), package.name.clone()]);

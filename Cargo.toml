@@ -5,14 +5,12 @@ members = [
     "crates/enshwick",
     "crates/enshwick-gamedata",
     "crates/enshwick-macros",
-    "crates/enshwick-reflect",
     "crates/internal/*",
     "examples/hot-reload",
     "examples/market-stalls",
     "examples/haggling",
     "examples/trading-post",
     "examples/trading-post-api",
-    "tools/compat",
     "tools/xtask",
 ]
 
@@ -34,9 +32,8 @@ clap = { version = "4.6.7", default-features = false, features = ["std", "derive
 arrayvec = { version = "0.7.8", default-features = false, features = ["std"] }
 bytemuck = { version = "1.25.2", default-features = false, features = ["derive", "min_const_generics", "zeroable_atomics"] }
 base64 = { version = "0.23.1", default-features = false, features = ["alloc"] }
-enshwick = { path = "crates/enshwick", version = "1.0.0-alpha.2" }
-enshwick-gamedata = { path = "crates/enshwick-gamedata", version = "1.0.0-alpha.2" }
-enshwick-reflect = { path = "crates/enshwick-reflect", version = "1.0.0-alpha.2" }
+enshwick = { path = "crates/enshwick", version = "1.0.0-alpha.3" }
+enshwick-gamedata = { path = "crates/enshwick-gamedata", version = "1.0.0-alpha.3" }
 fastrand = { version = "2.5.0", default-features = false, features = ["std"] }
 insta = { version = "1.49.0", default-features = false }
 iced-x86 = { version = "1.21.0", default-features = false, features = ["std", "decoder", "block_encoder", "instr_info"] }
@@ -75,7 +72,7 @@ unit_bindings = "deny"
 redundant_lifetimes = "deny"
 trivial_numeric_casts = "deny"
 unused_qualifications = "deny"
-unexpected_cfgs = "deny"
+unexpected_cfgs = { level = "deny", check-cfg = ["cfg(kani)"] }
 
 [workspace.lints.rustdoc]
 broken_intra_doc_links = "deny"
@@ -96,6 +93,9 @@ multiple_crate_versions = "allow"
 # Its fix, `assert_eq!(value, [] as [T; 0])`, reads worse than `is_empty()`,
 # and the test name already says what was expected.
 assert_is_empty = "allow"
+too_long_first_doc_paragraph = "deny"
+doc_link_code = "warn"
+doc_paragraphs_missing_punctuation = "warn"
 missing_errors_doc = "deny"
 missing_panics_doc = "deny"
 missing_safety_doc = "deny"

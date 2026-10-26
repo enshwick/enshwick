@@ -5,12 +5,12 @@ pre-commit:
       glob:
         - '*.rs'
         - '**/*.rs'
-      run: cargo fmt --all --check
+      run: cargo fmt --all --check && cargo fmt --manifest-path fuzz/Cargo.toml --all --check
     markdown:
       glob: '*.md'
       exclude:
         - '**/CHANGELOG.md'
-      run: bunx markdownlint-cli2 --no-globs {staged_files}
+      run: bunx --no-install markdownlint-cli2 --no-globs {staged_files}
     typos:
       run: typos --force-exclude {staged_files}
 
@@ -23,7 +23,7 @@ commit-msg:
       run: >-
         head -n1 {1} | grep -qE '^(Merge |Revert "|fixup! |squash! |amend! )' ||
         { committed --commit-file {1} &&
-        ! head -n1 {1} | grep -E ': [A-Z]|[<>]'; }
+        ! head -n1 {1} | grep -E '^[a-z]+(\([^)]*\))?!?: [A-Z]|[<>]'; }
 
 # Nothing that compiles: the hook stays under ten seconds. The compiling
 # checks are `cargo xtask check` (what the branch touches) and
@@ -35,20 +35,24 @@ pre-push:
       glob:
         - '*.rs'
         - '**/*.rs'
-      run: cargo fmt --all --check
+      run: cargo fmt --all --check && cargo fmt --manifest-path fuzz/Cargo.toml --all --check
     markdown:
       glob: '*.md'
       exclude:
         - '**/CHANGELOG.md'
-      run: bunx markdownlint-cli2 --no-globs {push_files}
+      run: bunx --no-install markdownlint-cli2 --no-globs {push_files}
     typos:
       run: typos --force-exclude {push_files}
     commits:
-      # A repository's first push has no origin/main to compare with.
-      run: >-
-        ! git rev-parse -q --verify origin/main > /dev/null ||
-        { committed origin/main..HEAD &&
-        ! git log --no-merges --format=%s origin/main..HEAD | grep -E ': [A-Z]|[<>]'; }
+      # Each commit no remote has yet, merges left out: a merge of main
+      # into a branch carries git's own message.
+      run: |
+        for commit in $(git rev-list --no-merges HEAD --not --remotes); do
+          header=$(git log -1 --format=%s "$commit")
+          case "$header" in 'Revert "'* | 'fixup! '* | 'squash! '* | 'amend! '*) continue ;; esac
+          git log -1 --format=%B "$commit" | committed --commit-file - || exit 1
+          if printf '%s\n' "$header" | grep -E '^[a-z]+(\([^)]*\))?!?: [A-Z]|[<>]'; then exit 1; fi
+        done
     deny:
       glob:
         - 'Cargo.toml'

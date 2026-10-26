@@ -21,17 +21,20 @@
 //! its scroll area, from a hook after the tab's own rows: read-only where the
 //! view is, for a player who may not change the world.
 
+use crate::mod_index::ModIndex;
 use core::cell::RefCell;
 use std::sync::atomic::{AtomicU8, AtomicU64, Ordering};
 
 use enshwick::abi::{Registers, UiWidget};
 use enshwick::config::{Scope, Stage};
 
+use crate::configure::rows::{self, Lock, Row, Widget};
+use crate::host::Loader;
+use crate::locks::Relock;
+use crate::texts;
+
 use super::engine::{Engine, Window};
 use super::{ENGINE, Painter, copy};
-use crate::configure::rows::{self, Lock, Row, Widget};
-use crate::host::{Loader, relock};
-use crate::texts;
 
 /// Mods a list page shows.
 const MODS_PER_PAGE: usize = 4;
@@ -133,18 +136,13 @@ pub(super) fn link(loader: &Loader, engine: &Engine) {
             continue;
         }
         let link = crate::mid::MidLink {
-            owner: crate::chains::LOADER,
+            owner: ModIndex::LOADER,
             handler,
             user: 0,
             priority: i32::MIN,
             flags: enshwick::abi::HookFlags::NONE,
         };
-        let status = loader
-            .mids
-            .lock()
-            .map_or(enshwick::abi::Status::REFUSED, |mut mids| {
-                mids.add(site, link)
-            });
+        let status = loader.mids.relock().add(site, link);
         if !status.is_ok() {
             crate::log!(WARN, "{what} off: its hook was refused ({})", status.0);
         }
@@ -526,7 +524,7 @@ fn server_settings(
         {
             let texts = crate::host::loader()
                 .and_then(|loader| loader.mods.iter().find(|m| m.id == id))
-                .and_then(|m| m.texts.lock().ok().and_then(|t| t.clone()));
+                .and_then(|m| m.texts.relock().clone());
             let words = texts.as_ref().map(|texts| rows::Words {
                 texts,
                 language: crate::content::language(),
@@ -616,6 +614,11 @@ fn list(loader: &Loader, paint: &Painter<'_>, first: &mut usize) -> Listed {
             false,
         );
     }
+    let lacking = loader.build.lacking(crate::TABLE_IDS);
+    if !lacking.is_empty() {
+        let line = texts::fill("mods.features.off", &[("features", lacking)]);
+        paint.label(line.as_bytes(), UiWidget::STYLE_SECONDARY, true, false);
+    }
     *first = clamp_first(*first, mods.len(), MODS_PER_PAGE);
     for (index, record) in mods.iter().enumerate().skip(*first).take(MODS_PER_PAGE) {
         let heading = if record.off.load(Ordering::Acquire) {
@@ -637,7 +640,7 @@ fn list(loader: &Loader, paint: &Painter<'_>, first: &mut usize) -> Listed {
         if !credits.is_empty() {
             paint.label(credits.as_bytes(), UiWidget::STYLE_SECONDARY, true, false);
         }
-        for feature in relock(&record.features, "the mod's features").iter() {
+        for feature in record.features.relock().iter() {
             if let Some(reason) = &feature.off {
                 let line = texts::fill(
                     "mods.feature.off",
@@ -658,10 +661,11 @@ fn list(loader: &Loader, paint: &Painter<'_>, first: &mut usize) -> Listed {
         {
             done = Listed::Actions(Some(record.id.clone()));
         }
-        let world = record.schema.lock().is_ok_and(|s| {
-            s.as_ref()
-                .is_some_and(|s| s.fields.iter().any(|f| f.scope == Scope::World))
-        });
+        let world = record
+            .schema
+            .relock()
+            .as_ref()
+            .is_some_and(|s| s.fields.iter().any(|f| f.scope == Scope::World));
         if client_schema(record).is_some() {
             if paint.button(texts::text("mods.settings.yours").as_bytes(), true) {
                 done = Listed::Settings(index);
@@ -714,7 +718,7 @@ fn page_rows(loader: &Loader, index: usize) -> Vec<Row> {
     };
     let file = std::fs::read_to_string(loader.configs_dir.join(format!("{}.toml", record.id)))
         .unwrap_or_default();
-    let texts = record.texts.lock().ok().and_then(|t| t.clone());
+    let texts = record.texts.relock().clone();
     let words = texts.as_ref().map(|texts| rows::Words {
         texts,
         language: crate::content::language(),
@@ -725,7 +729,7 @@ fn page_rows(loader: &Loader, index: usize) -> Vec<Row> {
 /// The settings of `record` each player keeps, the ones the Mods screen
 /// edits; `None` when it has none.
 fn client_schema(record: &crate::host::ModRecord) -> Option<enshwick::config::Schema> {
-    let mut schema = record.schema.lock().ok().and_then(|s| s.clone())?;
+    let mut schema = record.schema.relock().clone()?;
     schema.fields.retain(|f| f.scope == Scope::User);
     (!schema.fields.is_empty()).then_some(schema)
 }
@@ -757,7 +761,7 @@ fn settings(
             false,
         );
     }
-    let schema = record.schema.lock().ok().and_then(|s| s.clone())?;
+    let schema = record.schema.relock().clone()?;
     let mut changed = None;
     *first = clamp_first(*first, rows.len(), ROWS_PER_PAGE);
     for row in rows.iter().skip(*first).take(ROWS_PER_PAGE) {
@@ -853,7 +857,7 @@ fn world_rows(loader: &Loader) -> Vec<(usize, String, enshwick::config::Schema, 
         .iter()
         .enumerate()
         .filter_map(|(index, record)| {
-            let mut schema = record.schema.lock().ok().and_then(|s| s.clone())?;
+            let mut schema = record.schema.relock().clone()?;
             schema.fields.retain(|f| f.scope == Scope::World);
             if schema.fields.is_empty() {
                 return None;
@@ -862,9 +866,8 @@ fn world_rows(loader: &Loader) -> Vec<(usize, String, enshwick::config::Schema, 
             let joined = joined_elsewhere();
             let server = record
                 .server_synced
-                .lock()
-                .ok()
-                .and_then(|s| s.clone())
+                .relock()
+                .clone()
                 .and_then(|values| server_table(&values));
             if joined {
                 schema.fields.retain(|f| f.stage == Stage::Sync);
@@ -873,7 +876,7 @@ fn world_rows(loader: &Loader) -> Vec<(usize, String, enshwick::config::Schema, 
                 }
             }
             let file = crate::worlds::show_text(loader, record);
-            let texts = record.texts.lock().ok().and_then(|t| t.clone());
+            let texts = record.texts.relock().clone();
             let words = texts.as_ref().map(|texts| rows::Words {
                 texts,
                 language: crate::content::language(),
