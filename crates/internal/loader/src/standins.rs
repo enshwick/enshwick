@@ -9,8 +9,9 @@
 
 use enshwick::abi::ResourceKey;
 use enshwick::content::items::{ItemLayout, NewItem, clone_item, list_item};
-use enshwick::content::{Guid, Id, types};
+use enshwick::content::{Guid, Id};
 
+use crate::catalogue::{Reflected, types};
 use crate::host::Loader;
 
 /// The tag of a stand-in's name.
@@ -46,39 +47,7 @@ pub(crate) fn orphans(
 
 /// The item layout of the running build, from its reflection.
 fn layout(loader: &Loader) -> Option<ItemLayout> {
-    let field = |ty: &str, name: &str| {
-        loader
-            .reflection
-            .field_offset(ty, name)
-            .ok()
-            .and_then(|o| usize::try_from(o).ok())
-    };
-    let item = |name: &str| field("keen::ItemInfo", name);
-    let value = |name: &str| field("keen::ImpactUiValue", name);
-    let size = loader
-        .reflection
-        .type_info("keen::ImpactUiValue")
-        .ok()
-        .and_then(|info| usize::try_from(info.size()).ok())?;
-    Some(ItemLayout {
-        id: item("itemId")?,
-        object: item("objectId")?,
-        name: item("name")?,
-        description: item("description")?,
-        flags: item("flags")?,
-        pid_entity: item("pidEntity")?,
-        ui_values: item("uiValues")?,
-        icon_image: item("iconImage")?,
-        ui_value: [
-            size,
-            value("locaId")?,
-            value("valueFormat")?,
-            value("value")?,
-            value("isSigned")?,
-        ],
-        refs: field("keen::ItemRegistryResource", "itemRefs")?,
-        names: field("keen::ItemRegistryResource", "dbgNames")?,
-    })
+    ItemLayout::resolve(&Reflected(&loader.reflection)).ok()
 }
 
 /// What the loader serves for `orphans`: each stand-in's `(key, base,
@@ -105,8 +74,8 @@ pub(crate) fn served(loader: &Loader, orphans: &[(Guid, Guid)]) -> Option<(Vec<S
             let build: Builder =
                 Box::new(move |base: &[u8]| clone_item(&layout, base, &stand_in, item));
             (
-                item.key(types::ITEM_INFO),
-                vanilla.key(types::ITEM_INFO),
+                item.key_by_hash(types::ITEM_INFO),
+                vanilla.key_by_hash(types::ITEM_INFO),
                 build,
             )
         })
@@ -141,9 +110,9 @@ mod tests {
     fn only_items_no_mod_serves_get_a_stand_in() {
         let recorded = [(ITEM, CHEST), (RENAMED, CHEST), (SERVED, CHEST)];
         let served = [
-            Guid(SERVED).key(types::ITEM_INFO),
+            Guid(SERVED).key_by_hash(types::ITEM_INFO),
             // Another type under the item's GUID does not count.
-            Guid(ITEM).key(types::TEMPLATE),
+            Guid(ITEM).key_by_hash(types::TEMPLATE),
         ];
         let orphans = orphans(&recorded, &served, |guid| *guid == RENAMED);
         assert_eq!(orphans, [(Guid(ITEM), Guid(CHEST))]);

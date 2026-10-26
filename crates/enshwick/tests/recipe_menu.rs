@@ -145,96 +145,106 @@ mod tests {
             .collect()
     }
 
+    const RECIPES: u32 = 1;
+    const BUNDLE: u32 = 2;
+
     fn host(side: Side, menu: bool) -> FakeHost {
         let mut host = FakeHost::new()
             .side(side)
-            .resource(RECIPE_REGISTRY.key(types::RECIPE_REGISTRY), registry());
-        for (ty, size) in [
-            ("keen::RecipeInfo", 0xa8),
-            ("keen::RecipeInputResource", 0x18),
-            ("keen::RecipeItemStackResource", 0x18),
-            ("keen::ImpactUiValue", 0x28),
-            ("keen::ecs::Crafting", 0x18),
-            ("keen::ecs::CraftingInteraction", 0x18),
-            ("keen::ecs::ClientCraftingInteraction", 0x8),
-            ("keen::WorkshopResource", 0x40),
-            ("keen::FbUiCraftingRecipeTree", 8),
-            ("keen::FbUiCraftingRecipeGroup", 0x38),
-            ("keen::FbUiCraftingRecipeSet", 0x28),
+            .resource(RECIPE_REGISTRY.key_by_hash(RECIPES), registry());
+        for (ty, hash) in [
+            (types::RECIPE_REGISTRY, RECIPES),
+            (types::UI_BUNDLE, BUNDLE),
+            (types::ITEM_INFO, 3),
+            (types::ITEM_REGISTRY, 4),
+            (types::TEMPLATE, 5),
+            (types::TEMPLATE_COLLECTION, 6),
+            (types::WORKSHOP_REGISTRY, 7),
         ] {
-            host = host.type_size(ty, size);
+            host = host.type_hash(ty.id(), hash);
         }
-        for (ty, field, at) in [
-            ("keen::RecipeRegistryResource", "recipes", 0),
-            ("keen::RecipeInfo", "recipeGuid", 0),
-            ("keen::RecipeInfo", "recipeId", 0x10),
-            ("keen::RecipeInfo", "workshopGuid", 0x14),
-            ("keen::RecipeInfo", "workshopId", 0x24),
-            ("keen::RecipeInfo", "input", 0x28),
-            ("keen::RecipeInfo", "output", 0x30),
-            ("keen::RecipeInfo", "requiredProps", 0x38),
-            ("keen::RecipeInfo", "debugName", 0x40),
-            ("keen::RecipeInfo", "completionRequirementQuery", 0x5c),
-            ("keen::RecipeItemStackResource", "item", 0x10),
-            ("keen::RecipeItemStackResource", "count", 0x14),
-            ("keen::ItemInfo", "itemId", 0),
-            ("keen::ItemInfo", "objectId", 4),
-            ("keen::ItemInfo", "name", 0x48),
-            ("keen::ItemInfo", "iconImage", 0x58),
-            ("keen::ItemInfo", "description", 0x68),
-            ("keen::ItemInfo", "flags", 0x78),
-            ("keen::ItemInfo", "pidEntity", 0x80),
-            ("keen::ItemInfo", "uiValues", 0x90),
-            ("keen::ItemInfo", "equipment", 0xa0),
-            ("keen::ImpactUiValue", "locaId", 0),
-            ("keen::ImpactUiValue", "valueFormat", 4),
-            ("keen::ImpactUiValue", "value", 8),
-            ("keen::ImpactUiValue", "isSigned", 0x24),
-            ("keen::ItemRegistryResource", "itemRefs", 0),
-            ("keen::ItemRegistryResource", "dbgNames", 0x38),
-            ("keen::EquipmentSetup", "placedEntity", 0x10),
-            ("keen::ecs::TemplateResource", "components", 0x10),
-            ("keen::ecs::Crafting", "workshop", 0),
-            ("keen::ecs::Crafting", "workshopId", 0x10),
-            ("keen::ecs::CraftingInteraction", "workshop", 0),
-            ("keen::ecs::CraftingInteraction", "workshopId", 0x10),
-            ("keen::ecs::ClientCraftingInteraction", "workshopId", 0),
-            ("keen::ecs::TemplateCollectionResource", "templates", 0),
-            ("keen::WorkshopRegistryResource", "workshops", 0),
-            ("keen::WorkshopResource", "workshopGuid", 0),
-            ("keen::WorkshopResource", "workshopId", 0x10),
-            ("keen::WorkshopResource", "name", 0x14),
-            ("keen::WorkshopResource", "item", 0x24),
-            ("keen::WorkshopResource", "itemRef", 0x34),
-            ("keen::WorkshopResource", "isNpc", 0x3c),
+        for (id, hash) in [
+            ("crafting", 8),
+            ("crafting_interaction", 9),
+            ("client_crafting_interaction", 10),
         ] {
-            host = host.field_offset(ty, field, at);
+            host = host.type_hash(id, hash);
+        }
+        for (id, size) in [
+            ("recipe", 0xa8),
+            ("recipe_ingredient", 0x18),
+            ("recipe_stack", 0x18),
+            ("item_stat", 0x28),
+            ("crafting", 0x18),
+            ("crafting_interaction", 0x18),
+            ("client_crafting_interaction", 0x8),
+            ("workshop", 0x40),
+            ("crafting_menu_tree", 8),
+            ("crafting_menu_group", 0x38),
+            ("crafting_menu_set", 0x28),
+        ] {
+            host = host.type_size(id, size);
+        }
+        for (id, at) in [
+            ("recipe_registry.recipes", 0),
+            ("recipe.guid", 0),
+            ("recipe.id", 0x10),
+            ("recipe.workshop_guid", 0x14),
+            ("recipe.workshop", 0x24),
+            ("recipe.input", 0x28),
+            ("recipe.output", 0x30),
+            ("recipe.required_props", 0x38),
+            ("recipe.debug_name", 0x40),
+            ("recipe.completion", 0x5c),
+            ("recipe_stack.item", 0x10),
+            ("recipe_stack.count", 0x14),
+            ("item_info.id", 0),
+            ("item_info.object", 4),
+            ("item_info.name", 0x48),
+            ("item_info.icon_image", 0x58),
+            ("item_info.description", 0x68),
+            ("item_info.flags", 0x78),
+            ("item_info.pid_entity", 0x80),
+            ("item_info.ui_values", 0x90),
+            ("item_info.placed_entity", 0xb0),
+            ("item_stat.label", 0),
+            ("item_stat.format", 4),
+            ("item_stat.value", 8),
+            ("item_stat.signed", 0x24),
+            ("item_registry.refs", 0),
+            ("item_registry.names", 0x38),
+            ("template.components", 0x10),
+            ("crafting.workshop", 0),
+            ("crafting.workshop_id", 0x10),
+            ("crafting_interaction.workshop", 0),
+            ("crafting_interaction.workshop_id", 0x10),
+            ("client_crafting_interaction.workshop_id", 0),
+            ("template_collection.templates", 0),
+            ("workshop_registry.workshops", 0),
+            ("workshop.guid", 0),
+            ("workshop.id", 0x10),
+            ("workshop.name", 0x14),
+            ("workshop.item", 0x24),
+            ("workshop.item_ref", 0x34),
+            ("workshop.npc", 0x3c),
+        ] {
+            host = host.constant(id, at);
         }
         if !menu {
             return host;
         }
-        for (ty, field, at) in [
-            ("keen::FbUiBundle", "menu", 0x30),
-            ("keen::FbUiMenu", "crafting", 0x8),
-            ("keen::FbUiCrafting", "recipes", 0x8),
-            ("keen::FbUiCraftingRecipeCollection", "workshops", 0),
-            ("keen::FbUiCraftingRecipeCollection", "trees", 8),
-            (
-                "keen::FbUiCraftingRecipeCollection",
-                "maxRecipeGroupCount",
-                0x10,
-            ),
-            (
-                "keen::FbUiCraftingRecipeCollection",
-                "maxRecipeSetCount",
-                0x14,
-            ),
-            ("keen::FbUiCraftingRecipeTree", "groups", 0),
-            ("keen::FbUiCraftingRecipeGroup", "groupId", 0),
-            ("keen::FbUiCraftingRecipeGroup", "sets", 0x30),
-            ("keen::FbUiCraftingRecipeSet", "entries", 0x20),
+        for (id, at) in [
+            ("ui_bundle.crafting_menu", 0x40),
+            ("crafting_menu.workshops", 0),
+            ("crafting_menu.trees", 8),
+            ("crafting_menu.max_groups", 0x10),
+            ("crafting_menu.max_sets", 0x14),
+            ("crafting_menu_tree.groups", 0),
+            ("crafting_menu_group.id", 0),
+            ("crafting_menu_group.sets", 0x30),
+            ("crafting_menu_set.entries", 0x20),
         ] {
-            host = host.field_offset(ty, field, at);
+            host = host.constant(id, at);
         }
         host
     }
@@ -256,7 +266,7 @@ mod tests {
     #[test]
     fn the_client_menu_lists_new_recipes_beside_the_ones_they_copy() {
         let loader = start(Side::CLIENT, true);
-        let key = UI_BUNDLE.key(types::UI_BUNDLE);
+        let key = UI_BUNDLE.key_by_hash(BUNDLE);
         let built = loader.build_resource(&key, &bundle()).unwrap();
         let bench = WorkshopId::new(BENCH.guid()).id();
         let plank = derived_guid(PLANK_RECIPE, fnv1a(b"menu")).id();
@@ -283,7 +293,7 @@ mod tests {
     #[test]
     fn derived_recipes_copy_only_the_game_s_own_recipes() {
         let loader = start(Side::CLIENT, true);
-        let key = RECIPE_REGISTRY.key(types::RECIPE_REGISTRY);
+        let key = RECIPE_REGISTRY.key_by_hash(RECIPES);
         let built = Blob::new(&loader.build_resource(&key, &registry()).unwrap());
         let (_, count) = built.array(0).unwrap();
         assert_eq!(count, 6, "two vanilla, the Safe, the locker, two copies");
@@ -293,8 +303,8 @@ mod tests {
     fn a_client_without_the_menu_s_reflection_still_adds_the_recipes() {
         let loader = start(Side::CLIENT, false);
         let served: Vec<_> = loader.resources().iter().map(|r| r.key).collect();
-        assert!(served.contains(&RECIPE_REGISTRY.key(types::RECIPE_REGISTRY)));
-        assert!(!served.contains(&UI_BUNDLE.key(types::UI_BUNDLE)));
+        assert!(served.contains(&RECIPE_REGISTRY.key_by_hash(RECIPES)));
+        assert!(!served.contains(&UI_BUNDLE.key_by_hash(BUNDLE)));
         assert!(
             loader
                 .logs()
@@ -309,7 +319,7 @@ mod tests {
     #[test]
     fn the_dedicated_server_serves_no_menu() {
         let loader = start(Side::SERVER, true);
-        let key = UI_BUNDLE.key(types::UI_BUNDLE);
+        let key = UI_BUNDLE.key_by_hash(BUNDLE);
         assert!(loader.resources().iter().all(|r| r.key != key));
         assert_eq!(loader.build_resource(&key, &bundle()), Err(Status::MISSING));
     }
