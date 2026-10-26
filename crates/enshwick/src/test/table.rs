@@ -271,7 +271,6 @@ fn take_turn() -> MutexGuard<'static, ()> {
     turn
 }
 
-/// Waits for the table to be free, then answers from `host`.
 /// The mod's altar zone filters, and how often it asked for a new sizing.
 #[derive(Debug, Default)]
 pub(crate) struct ZoneSizing {
@@ -292,6 +291,7 @@ pub(crate) struct Pacing {
     pub(crate) task_workers: Option<(u32, u32)>,
 }
 
+/// Waits for the table to be free, then answers from `host`.
 pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
     let turn = take_turn();
     *state() = Some(State {

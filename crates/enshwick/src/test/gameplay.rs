@@ -214,8 +214,9 @@ impl Installed {
     }
 
     /// Runs the mod's altar zone filters on one altar's vanilla zone of
-    /// `height` cells, as the loader would; the `grow` and `height` they
-    /// leave.
+    /// `height` cells, as the loader would, a `grow` below 0 counting as 0 and
+    /// a `height` below one cell keeping the one before; the `grow` and
+    /// `height` they leave.
     ///
     /// # Examples
     ///
@@ -235,8 +236,13 @@ impl Installed {
             height,
         };
         for (callback, user) in filters {
+            let before = zone;
             // SAFETY: a valid registration; `user` is the mod's pointer.
             unsafe { callback(&raw mut zone, core::ptr::with_exposed_provenance_mut(user)) };
+            zone.grow = zone.grow.max(0);
+            if zone.height <= 0 {
+                zone.height = before.height;
+            }
         }
         (zone.grow, zone.height)
     }

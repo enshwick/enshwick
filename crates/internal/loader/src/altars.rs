@@ -21,7 +21,7 @@ use core::ffi::c_void;
 use std::cell::{Cell, RefCell};
 use std::collections::BTreeMap;
 use std::sync::TryLockError;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
@@ -198,8 +198,20 @@ impl Fields {
 static OPENERS: Mutex<Vec<ModIndex>> = Mutex::new(Vec::new());
 /// The mods' altar zone filters, in load order.
 static SIZERS: Registry<Sizer> = Registry::new();
-/// Set when a mod asked for the zones to be sized again.
-static RESIZE: AtomicBool = AtomicBool::new(false);
+/// When the zones need sizing again.
+#[derive(Debug)]
+struct Sizing {
+    /// Set when a mod asked for the zones to be sized again.
+    asked: AtomicBool,
+    /// How many filters ran at the last sizing, so a filter whose mod goes
+    /// off takes its share back at the next step.
+    running: AtomicUsize,
+}
+
+static SIZING: Sizing = Sizing {
+    asked: AtomicBool::new(false),
+    running: AtomicUsize::new(0),
+};
 static TARGETS: ArcSwapOption<Targets> = ArcSwapOption::const_empty();
 static CHANGED: AtomicBool = AtomicBool::new(false);
 /// The server steps the post-step counted.
@@ -296,13 +308,15 @@ pub(crate) fn add_sizer(
 /// Has the zones sized again on the server's next step, for mod `owner`,
 /// which must have a filter.
 pub(crate) fn resize(owner: ModIndex) -> Status {
-    let has_filter = SIZERS
-        .sealed()
-        .is_some_and(|sizers| sizers.iter().any(|s| s.owner == owner));
+    let has_filter = |sizers: &[Sizer]| sizers.iter().any(|s| s.owner == owner);
+    let has_filter = match SIZERS.sealed() {
+        Some(sizers) => has_filter(sizers),
+        None => SIZERS.edit(|sizers| has_filter(sizers)).unwrap_or(false),
+    };
     if !has_filter {
         return Status::REFUSED;
     }
-    RESIZE.store(true, Ordering::Release);
+    SIZING.asked.store(true, Ordering::Release);
     Status::OK
 }
 
@@ -327,11 +341,45 @@ struct Vanilla {
     turn: (f64, f64),
 }
 
-/// Asks the filters for every altar's zone and keeps what differs from
-/// vanilla for the next range pass. The filters run without the state's
-/// lock, so they may read the altars.
+/// Runs `filters` in order on `zone`, each on what the last one left: a
+/// filter keeps the altar and level, cannot shrink the zone below vanilla
+/// width, and a height below one cell keeps the height before it. The
+/// result, or `None` when it is the vanilla zone.
+fn chain(
+    vanilla: AltarZone,
+    filters: impl Iterator<Item = (AltarZoneFn, *mut c_void)>,
+) -> Option<(i64, i64)> {
+    let mut zone = vanilla;
+    for (callback, user) in filters {
+        let before = zone;
+        // SAFETY: the mod's filter with its own pointer and a zone valid for
+        // the call; the safe layer catches its panics.
+        unsafe { callback(&raw mut zone, user) };
+        zone.header = before.header;
+        zone.altar = before.altar;
+        zone.level = before.level;
+        zone.reserved = before.reserved;
+        zone.grow = zone.grow.max(0);
+        if zone.height <= 0 {
+            zone.height = before.height;
+        }
+    }
+    ((zone.grow, zone.height) != (vanilla.grow, vanilla.height)).then_some((zone.grow, zone.height))
+}
+
+/// Asks the filters of the mods that run for every altar's zone; see
+/// [`size_zones_with`].
 fn size_zones() {
-    if running_sizers().next().is_none() {
+    let running: Vec<&Sizer> = running_sizers().collect();
+    SIZING.running.store(running.len(), Ordering::Release);
+    size_zones_with(&running);
+}
+
+/// Asks `sizers` for every altar's zone and keeps what differs from vanilla
+/// for the next range pass. The filters run without the state's lock, so
+/// they may read the altars.
+fn size_zones_with(sizers: &[&Sizer]) {
+    if sizers.is_empty() {
         TARGETS.store(None);
         return;
     }
@@ -364,23 +412,16 @@ fn size_zones() {
     };
     let mut targets = Targets::new();
     for altar in vanilla {
-        let mut zone = altar.zone;
-        for sizer in running_sizers() {
-            // SAFETY: the mod's filter with its own pointer and a zone valid
-            // for the call; the safe layer catches its panics.
-            unsafe { (sizer.callback)(&raw mut zone, sizer.user()) };
+        let filters = sizers.iter().map(|s| (s.callback, s.user()));
+        if let Some((grow, height)) = chain(altar.zone, filters) {
+            targets.insert(
+                altar.zone.altar,
+                (
+                    altar.levels,
+                    geometry::grown_range(altar.range, altar.turn, grow, height),
+                ),
+            );
         }
-        let height = altar.zone.height;
-        if zone.grow < 0 || zone.height <= 0 || (zone.grow, zone.height) == (0, height) {
-            continue;
-        }
-        targets.insert(
-            zone.altar,
-            (
-                altar.levels,
-                geometry::grown_range(altar.range, altar.turn, zone.grow, zone.height),
-            ),
-        );
     }
     TARGETS.store(Some(Arc::new(targets)));
 }
@@ -440,7 +481,8 @@ pub(crate) fn after_step(loader: &Loader) {
         }
     }
     let changed = CHANGED.swap(false, Ordering::AcqRel);
-    if changed | RESIZE.swap(false, Ordering::AcqRel) {
+    let gone = SIZING.running.load(Ordering::Acquire) != running_sizers().count();
+    if changed | SIZING.asked.swap(false, Ordering::AcqRel) | gone {
         size_zones();
     }
     if changed {
@@ -469,6 +511,7 @@ pub(crate) fn register(owner: ModIndex, callback: ZoneCheckFn, user: *mut c_void
 }
 
 pub(crate) fn link(loader: &'static Loader) {
+    let controlled = !SIZERS.seal().is_empty();
     link_seam(loader);
     if !WANTED.load(Ordering::Acquire) {
         return;
@@ -497,7 +540,6 @@ pub(crate) fn link(loader: &'static Loader) {
             return;
         }
     }
-    let controlled = !SIZERS.seal().is_empty();
     let upgrade_flags = if controlled {
         HookFlags::EXCLUSIVE
     } else {
@@ -1055,6 +1097,91 @@ unsafe fn check(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    unsafe extern "system" fn wider(zone: *mut AltarZone, _user: *mut c_void) {
+        // SAFETY: the loader's zone, writable for the call.
+        let zone = unsafe { &mut *zone };
+        zone.grow += 2;
+    }
+
+    unsafe extern "system" fn broken(zone: *mut AltarZone, _user: *mut c_void) {
+        // SAFETY: the loader's zone, writable for the call.
+        let zone = unsafe { &mut *zone };
+        zone.altar = 1;
+        zone.grow = -5;
+        zone.height = 0;
+    }
+
+    unsafe extern "system" fn lists(zone: *mut AltarZone, _user: *mut c_void) {
+        let _altars = list();
+        // SAFETY: the loader's zone, writable for the call.
+        let zone = unsafe { &mut *zone };
+        zone.height += 1;
+    }
+
+    fn vanilla() -> AltarZone {
+        AltarZone {
+            header: Header::of::<AltarZone>(),
+            altar: 4096,
+            level: 2,
+            reserved: [0; 3],
+            grow: 0,
+            height: 60,
+        }
+    }
+
+    #[test]
+    fn filters_chain_on_the_zone_so_far_and_vanilla_gives_no_target() {
+        let none = core::ptr::null_mut();
+        assert_eq!(chain(vanilla(), core::iter::empty()), None);
+        let twice: [(AltarZoneFn, *mut c_void); 2] = [(wider, none), (wider, none)];
+        assert_eq!(chain(vanilla(), twice.into_iter()), Some((4, 60)));
+    }
+
+    #[test]
+    fn a_filter_cannot_move_the_altar_or_shrink_the_zone_below_vanilla() {
+        let none = core::ptr::null_mut();
+        let filters: [(AltarZoneFn, *mut c_void); 2] = [(wider, none), (broken, none)];
+        assert_eq!(chain(vanilla(), filters.into_iter()), None);
+        let filters: [(AltarZoneFn, *mut c_void); 2] = [(broken, none), (wider, none)];
+        assert_eq!(chain(vanilla(), filters.into_iter()), Some((2, 60)));
+    }
+
+    #[test]
+    fn a_filter_may_read_the_altars_while_the_zones_are_sized() {
+        let now = When {
+            at: Instant::now(),
+            step: 0,
+        };
+        {
+            let mut state = STATE.relock();
+            let placed = Placed {
+                position: [0; 3],
+                orientation: [0.0, 0.0, 0.0, 1.0],
+            };
+            let _ = state.placed.merge([(4096, placed)], now);
+            let mut sizes = Sizes::new();
+            sizes.push([4.0, 30.0, 4.0]);
+            let _ = state.levels.merge([(4096, sizes)], now);
+        }
+        let sizer = Sizer::new(ModIndex::new(0), lists, core::ptr::null_mut());
+        let (done, finished) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            size_zones_with(&[&sizer]);
+            let _sent = done.send(());
+        });
+        assert!(
+            finished.recv_timeout(Duration::from_secs(10)).is_ok(),
+            "sizing deadlocked"
+        );
+        assert!(
+            TARGETS
+                .load()
+                .as_ref()
+                .is_some_and(|t| t.contains_key(&4096))
+        );
+        forget();
+    }
 
     #[test]
     fn entries_held_back_from_a_gone_world_never_reach_the_next() {

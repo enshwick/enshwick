@@ -499,9 +499,18 @@ where
     };
     // SAFETY: `user` is the leaked `F` this function was registered with.
     let filter = unsafe { &*user.cast::<F>() };
-    crate::host::guard("panic in an altar zone filter", || (), || filter(&mut zone));
-    raw.grow = zone.grow.max(0);
-    raw.height = zone.height;
+    let returned = crate::host::guard(
+        "panic in an altar zone filter",
+        || false,
+        || {
+            filter(&mut zone);
+            true
+        },
+    );
+    if returned {
+        raw.grow = zone.grow;
+        raw.height = zone.height;
+    }
 }
 
 /// The most zones a [`ZoneCheck`] carries; the engine keeps at most 255.

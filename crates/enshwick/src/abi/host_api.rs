@@ -1111,14 +1111,16 @@ pub struct HostApi {
     /// Calls `callback` with `user` for every altar of the server's world
     /// when the loader sizes the altar zones: after altars change and after
     /// [`HostApi::altar_zones_changed`]. Each filter, in load order, sees the
-    /// size so far, the vanilla one first, and may change it; it opens altars
-    /// too. On the server's game thread. Allowed during `enshwick_mod_init`
-    /// only. Since minor 78.
+    /// size so far, the vanilla one first, and may change it: a `grow` below
+    /// 0 counts as 0, a `height` below one cell keeps the height before it,
+    /// and the altar and level stay. It opens altars too, and may call the
+    /// host, such as [`HostApi::altars`]. On the server's game thread.
+    /// Allowed during `enshwick_mod_init` only. Since minor 78.
     pub altar_zone_filter:
         extern "system" fn(me: ModHandle, callback: AltarZoneFn, user: *mut c_void) -> Status,
     /// Asks the loader to size the altar zones again on the server's next
     /// step, as when a mod's settings change what its filter answers. Any
-    /// thread. [`Status::REFUSED`] for a mod without an altar zone filter.
-    /// Since minor 78.
+    /// thread, also during init. [`Status::REFUSED`] for a mod without an
+    /// altar zone filter. Since minor 78.
     pub altar_zones_changed: extern "system" fn(me: ModHandle) -> Status,
 }
