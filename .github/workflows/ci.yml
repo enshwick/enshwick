@@ -1,150 +1,23 @@
-# The checks of CONTRIBUTING.md. Until the first public release they run
-# locally (git hooks and the checks before a push); here only on demand.
+# The merge gate: `cargo xtask check` on the organization runners through the
+# shared workflow, the changed packages on a pull request and the full suite
+# nightly.
 name: ci
 
 on:
+  pull_request:
+  schedule:
+    - cron: "17 2 * * *"
   workflow_dispatch:
 
-permissions:
-  contents: read
+permissions: {}
 
 concurrency:
   group: ci-${{ github.head_ref || github.ref }}
-  # A release pull request keeps its run: release-please pushes it twice in a row,
-  # and a cancelled run would leave it blocked with no checks.
-  cancel-in-progress: ${{ !startsWith(github.head_ref, 'release-please--') }}
+  cancel-in-progress: true
 
 jobs:
-  checks:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      # v7.0.1
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-
-      # v2.2.0
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
-        with:
-          bun-version: 1.4.4
-
-      - name: Install
-        run: bun install --frozen-lockfile --ignore-scripts
-
-      - name: Pull request title
-        if: github.event_name == 'pull_request'
-        env:
-          TITLE: ${{ github.event.pull_request.title }}
-          BODY: ${{ github.event.pull_request.body }}
-        run: |
-          printf '%s\n\n%s\n' "$TITLE" "$BODY" > "$RUNNER_TEMP/message"
-          bun tools/check-commit-message.ts "$RUNNER_TEMP/message"
-
-      - name: Branch
-        if: github.event_name == 'pull_request'
-        env:
-          HEAD_REF: ${{ github.head_ref }}
-          BASE_REF: ${{ github.base_ref }}
-        run: |
-          case "$BASE_REF:$HEAD_REF" in
-            main:feature/*|main:fix/*|main:chore/*|main:release-please--*) ;;
-            *) echo "a pull request from '$HEAD_REF' into '$BASE_REF' does not follow the branch rules (CONTRIBUTING.md)"; exit 1 ;;
-          esac
-
-      - name: Commit messages
-        if: github.event_name == 'pull_request'
-        env:
-          BASE: ${{ github.event.pull_request.base.sha }}
-          HEAD: ${{ github.event.pull_request.head.sha }}
-        run: bun tools/check-commit-message.ts --range "$BASE..$HEAD"
-
-      - name: Markdown
-        if: ${{ !cancelled() }}
-        run: bun run lint:md
-
-      # v1.51.1
-      - name: Spelling
-        if: ${{ !cancelled() }}
-        uses: crate-ci/typos@7f9d0819ca1c008ade73f4b41fa9d258d48f605b # v1.51.1
-
-      # v2.1.1
-      - name: Supply chain
-        if: ${{ !cancelled() }}
-        uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
-
-  # Temporarily run by hand only, to keep pull requests fast while the git
-  # hooks run the same checks before every push.
-  linux:
-    # An edited title or description needs only the checks above.
-    if: github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    env:
-      MIRIFLAGS: -Zmiri-strict-provenance
-    steps:
-      # v7.0.1
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      # v2.9.2
-      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
-
-      # v2.87.29
-      - uses: taiki-e/install-action@1e29709c0ec63babbe8f266397a465f29a825f91 # v2.87.31
-        with:
-          tool: cargo-hack@0.6.45,cargo-machete@0.9.2
-
-      - name: Documentation
-        env:
-          RUSTDOCFLAGS: -D warnings
-        run: cargo doc --workspace --no-deps --locked
-
-      - name: Every feature
-        if: ${{ !cancelled() }}
-        run: cargo hack check --workspace --each-feature --no-dev-deps
-
-      - name: Unused dependencies
-        if: ${{ !cancelled() }}
-        run: cargo machete
-
-      - name: Miri
-        if: ${{ !cancelled() }}
-        run: |
-          rustup toolchain install nightly-2026-10-26 --profile minimal --component miri
-          cargo +nightly-2026-10-26 miri test --workspace --lib --locked
-
   rust:
-    if: github.event_name == 'workflow_dispatch'
-    runs-on: windows-latest
-    timeout-minutes: 30
-    defaults:
-      run:
-        shell: bash
-    steps:
-      # v7.0.1
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      # v2.9.2
-      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
-
-      # v2.87.29
-      - uses: taiki-e/install-action@1e29709c0ec63babbe8f266397a465f29a825f91 # v2.87.31
-        with:
-          tool: cargo-nextest@0.9.149
-
-      - name: Format
-        run: cargo fmt --all --check
-
-      - name: Clippy
-        run: cargo clippy --workspace --all-targets --locked -- -D warnings
-
-      - name: Tests
-        run: cargo nextest run --workspace --locked --no-tests=pass
-
-      - name: Doctests
-        run: cargo test --doc --workspace --locked
+    # main: the organization runners run only workflows from main.
+    uses: enshwick/.github/.github/workflows/rust-ci.yml@main # zizmor: ignore[unpinned-uses]
+    permissions:
+      contents: read
