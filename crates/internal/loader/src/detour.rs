@@ -1026,7 +1026,8 @@ mod tests {
     #[test]
     fn a_snapshot_suspends_the_other_threads_where_the_system_has_no_thread_walk() {
         assert!(stops_and_goes(|threads| {
-            // SAFETY: no preconditions.
+            // SAFETY: `GetCurrentThreadId` takes no arguments and only reads
+            // the calling thread's id.
             let me = unsafe { GetCurrentThreadId() };
             threads.suspend_listed(me, THREAD_SUSPEND_RESUME)
         }));
