@@ -45,13 +45,13 @@ holds the 16 general-purpose registers and `rflags`.
 A stub costs a few nanoseconds per pass on top of the handlers. How it keeps
 the vector registers is chosen per processor when the hooks are armed:
 
-| Processor                  | What the stub does                                                                                                                              |
-| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| no AVX                     | saves `xmm0`-`xmm5`; the calling convention keeps the rest                                                                                      |
-| AMD with AVX, no AVX-512   | saves `ymm0`-`ymm15`                                                                                                                            |
-| Intel with AVX, no AVX-512 | saves `ymm0`-`ymm15`; when their upper halves are zero, gives them back with `vzeroupper` so the SSE code after the hook keeps its speed        |
-| AMD with AVX-512           | ORs every vector and mask register together and saves `xmm0`-`xmm5`, `ymm0`-`ymm15` or all of `zmm0`-`zmm31` and the masks, by what is not zero |
-| Intel with AVX-512         | reads the state in use with `xgetbv` (a 512-bit OR would lower the clock) and saves the same three ways                                         |
+| Processor                  | What the stub does                                                                                                                                                                                            |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| no AVX                     | saves `xmm0`-`xmm5`; the calling convention keeps the rest                                                                                                                                                    |
+| AMD with AVX, no AVX-512   | saves `ymm0`-`ymm15`                                                                                                                                                                                          |
+| Intel with AVX, no AVX-512 | saves `ymm0`-`ymm15`; when their upper halves are zero, gives them back with `vzeroupper` so the SSE code after the hook keeps its speed                                                                      |
+| AMD with AVX-512           | ORs the vector and mask registers together and saves, by what is not zero, `xmm0`-`xmm5`, `ymm0`-`ymm15` or `zmm0`-`zmm15`, then `zmm16`-`zmm31` and the masks on their own                                   |
+| Intel with AVX-512         | reads the state in use with `xgetbv` (a 512-bit OR would lower the clock) and saves the same parts; reads it again after the handlers and zeroes `zmm16`-`zmm31` and the masks only where a handler used them |
 
 Per call of a hooked 3-instruction function with an empty handler, release
 build, Ryzen 9 9950X3D (`cargo test -p enshwick-loader --release --lib
