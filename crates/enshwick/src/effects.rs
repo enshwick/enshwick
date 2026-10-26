@@ -267,34 +267,34 @@ impl Effects {
             let ty = load.event_type(ids::NPC_COMMAND_EVENT)?;
             Ok::<_, Off>(NpcCommand {
                 ty,
-                kind: ty.field_by_id(load, ids::NPC_COMMAND_KIND)?,
-                npc: ty.field_by_id(load, ids::NPC_COMMAND_NPC)?,
-                target: transform(load.constant(ids::NPC_COMMAND_TARGET)?)?,
+                kind: ty.field_by_id(load, ids::NPC_COMMAND_EVENT_TYPE)?,
+                npc: ty.field_by_id(load, ids::NPC_COMMAND_EVENT_NPC_ID)?,
+                target: transform(load.constant(ids::NPC_COMMAND_EVENT_TARGET_TRANSFORM)?)?,
             })
         })();
         let toggle = (|| {
             let ty = load.event_type(ids::SET_TOGGLE_STATE_EVENT)?;
             Ok::<_, Off>(SetToggle {
                 ty,
-                sender: ty.field_by_id(load, ids::SET_TOGGLE_SENDER)?,
-                signal: ty.field_by_id(load, ids::SET_TOGGLE_SIGNAL)?,
-                state: ty.field_by_id(load, ids::SET_TOGGLE_STATE)?,
+                sender: ty.field_by_id(load, ids::SET_TOGGLE_STATE_EVENT_SENDER_ID)?,
+                signal: ty.field_by_id(load, ids::SET_TOGGLE_STATE_EVENT_SIGNAL_ID)?,
+                state: ty.field_by_id(load, ids::SET_TOGGLE_STATE_EVENT_NEW_STATE)?,
             })
         })();
         let threat = (|| {
             let ty = load.event_type(ids::ADD_THREAT_TARGET_EVENT)?;
             Ok::<_, Off>(AddThreat {
                 ty,
-                attacker: ty.field_by_id(load, ids::ADD_THREAT_ATTACKER)?,
-                target: ty.field_by_id(load, ids::ADD_THREAT_TARGET)?,
-                threat: ty.field_by_id(load, ids::ADD_THREAT_THREAT)?,
+                attacker: ty.field_by_id(load, ids::ADD_THREAT_TARGET_EVENT_ATTACKER_ID)?,
+                target: ty.field_by_id(load, ids::ADD_THREAT_TARGET_EVENT_TARGET_ID)?,
+                threat: ty.field_by_id(load, ids::ADD_THREAT_TARGET_EVENT_THREAT_VALUE)?,
             })
         })();
         let ping = (|| {
             let ty = load.event_type(ids::UI_PING_EVENT)?;
             Ok::<_, Off>(Ping {
                 ty,
-                sender: ty.field_by_id(load, ids::UI_PING_SENDER)?,
+                sender: ty.field_by_id(load, ids::UI_PING_EVENT_SENDER_ENTITY_ID)?,
                 position: load.constant(ids::UI_PING_POSITION)?,
             })
         })();

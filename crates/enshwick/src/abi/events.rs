@@ -148,7 +148,7 @@ pub struct PlayerDeathData {
     /// Zero.
     pub reserved: u16,
     /// For a hit, the attacker of the last hit the player took, from its
-    /// `HitHistory`, as [`crate::game_events::Died`] reads it; 0 for other
+    /// `HitHistory`, as [`crate::game_events::EntityDiedEvent`] reads it; 0 for other
     /// causes, or when the history names none. Since minor 62.
     pub killer_entity: u32,
     /// Zero.

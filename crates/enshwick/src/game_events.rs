@@ -23,8 +23,10 @@ use crate::ecs::Entity;
 use crate::{Load, Off};
 
 pub use kinds::{
-    AltarUsed, Block, Built, CraftRequested, Crafted, Died, EquipmentChanged, ExperienceGained,
-    Hit, Interacted, Kind, LevelGained, LootOpened, PickedUp, Revived, TornDown,
+    AcceptOfferedInteractionEvent, Block, BuildingPickUpEvent, BuildingPlaceEvent,
+    BuildingTearDownEvent, CraftRecipeEvent, CraftRecipeSuccessEvent, EntityDiedEvent,
+    FlameAltarEvent, HandleEquipmentSlotChangedEvent, HitEvent, Kind, LevelUpEvent,
+    LootInteractionEvent, RevivedPlayerEvent, XpGainedEvent,
 };
 pub use values::{
     AttackCategoryMask, DamageTypeMask, EquipmentSlot, ExperienceSourceType, FlameAltarActionType,
