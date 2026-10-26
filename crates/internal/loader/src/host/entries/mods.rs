@@ -1,5 +1,6 @@
 //! Host functions about the mods: logs, faults, settings and what is loaded.
 
+use crate::mod_index::ModIndex;
 use std::sync::OnceLock;
 use std::sync::atomic::Ordering;
 
@@ -63,7 +64,7 @@ pub(crate) extern "system" fn settings(me: ModHandle, defaults: Str, out: *mut S
                     );
                     defaults.to_owned()
                 } else {
-                    crate::migrations::settings_written(loader, index);
+                    crate::migrations::settings_written(loader, index.get());
                     std::fs::read_to_string(&path).unwrap_or_else(|_| defaults.to_owned())
                 }
             }
@@ -101,7 +102,7 @@ pub(crate) extern "system" fn migrate(
         // SAFETY: a mod passes null or its version of the set, and all of the
         // set, its migration function included, is required.
         match unsafe { get_headed(set, size_of::<api_frame::MigrationSet>()) } {
-            Some(set) => crate::migrations::register(loader, index, &set),
+            Some(set) => crate::migrations::register(loader, index.get(), &set),
             None => Status::BAD_ARGS,
         }
     })
@@ -352,7 +353,7 @@ pub(crate) extern "system" fn config_check(
     user: *mut core::ffi::c_void,
 ) -> Status {
     entry("config_check", || match calling(me) {
-        Ok((_, index, _)) if !crate::reload::in_init(index) => Status::TOO_LATE,
+        Ok((_, index, _)) if !crate::reload::in_init(index.get()) => Status::TOO_LATE,
         Ok((_, _, record)) => {
             if record
                 .check
@@ -381,13 +382,17 @@ pub(crate) fn check_settings(index: usize, text: &str) -> Result<(), String> {
     let mut why = Str::EMPTY;
     // SAFETY: the mod's check with its own pointer; the text lives for the
     // call, and the safe layer catches its panics.
-    let status = crate::profile::call(index, crate::profile::Feature::Events, || unsafe {
-        callback(
-            Str::new(text),
-            &raw mut why,
-            core::ptr::with_exposed_provenance_mut(user),
-        )
-    });
+    let status = crate::profile::call(
+        ModIndex::new(index),
+        crate::profile::Feature::Events,
+        || unsafe {
+            callback(
+                Str::new(text),
+                &raw mut why,
+                core::ptr::with_exposed_provenance_mut(user),
+            )
+        },
+    );
     if status.is_ok() {
         return Ok(());
     }

@@ -4,6 +4,7 @@
 //! window has four pages, the last one showing samples on the HUD and a
 //! marker on the map, and closes with its Close button.
 
+use crate::mod_index::ModIndex;
 use core::cell::RefCell;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -128,7 +129,7 @@ pub(super) unsafe fn draw(engine: &Engine, context: usize) {
         *HUD_SAMPLES.relock() = (demo.hud && !close).then_some(demo.smooth);
         if close {
             if demo.marker {
-                let _cleared = super::map::set(crate::chains::LOADER, &[]);
+                let _cleared = super::map::set(ModIndex::LOADER, &[]);
             }
             *slot = None;
             crate::log!(INFO, "interface: the demo closed");
@@ -273,7 +274,7 @@ fn hud_page(paint: &Painter<'_>, demo: &mut Demo) {
             reserved: 0,
         };
         let markers: &[_] = if on { &[marker] } else { &[] };
-        let _set = super::map::set(crate::chains::LOADER, markers);
+        let _set = super::map::set(ModIndex::LOADER, markers);
     }
 }
 

@@ -151,7 +151,7 @@ fn help(loader: &Loader) -> String {
     let mut lines = vec![texts::fill("enshwick.help", &[])];
     let with: Vec<&str> = crate::actions::declaring(loader)
         .into_iter()
-        .filter_map(|index| loader.mods.get(index).map(|m| m.id.as_str()))
+        .filter_map(|index| loader.mods.get(index.get()).map(|m| m.id.as_str()))
         .collect();
     lines.push(if with.is_empty() {
         texts::fill("enshwick.actions.none", &[])

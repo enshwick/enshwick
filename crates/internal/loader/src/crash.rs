@@ -15,6 +15,7 @@
 //! to the game's dump writer. The status thread puts the loader's filter
 //! back on top whenever another filter took its place.
 
+use crate::mod_index::ModIndex;
 use std::cell::UnsafeCell;
 use std::path::Path;
 use std::sync::OnceLock;
@@ -54,9 +55,6 @@ const NAME: usize = 64;
 /// The crash line's room.
 const LINE: usize = 768;
 
-/// The owner of the loader's own range.
-pub(crate) const LOADER: usize = usize::MAX;
-
 /// A module's address range and whom it belongs to, kept without
 /// allocation for the filter.
 #[derive(Clone, Copy, Debug)]
@@ -65,8 +63,8 @@ pub(crate) struct Range {
     pub start: usize,
     /// One past the last byte.
     pub end: usize,
-    /// The mod's index, [`LOADER`] for the loader.
-    pub owner: usize,
+    /// The mod's index, [`ModIndex::LOADER`] for the loader.
+    pub owner: ModIndex,
     name: [u8; NAME],
     len: usize,
 }
@@ -74,7 +72,7 @@ pub(crate) struct Range {
 impl Range {
     /// A range named `name`, cut at 64 bytes.
     #[must_use]
-    pub(crate) fn new(start: usize, end: usize, owner: usize, name: &str) -> Self {
+    pub(crate) fn new(start: usize, end: usize, owner: ModIndex, name: &str) -> Self {
         let mut bytes = [0; NAME];
         let len = name.len().min(NAME);
         bytes[..len].copy_from_slice(&name.as_bytes()[..len]);
@@ -128,16 +126,20 @@ pub(crate) fn blame(
     let range_of = |address: usize| ranges.iter().position(|r| r.holds(address));
     let at_range = range_of(at);
     if let Some(index) = at_range
-        && ranges[index].owner != LOADER
+        && ranges[index].owner != ModIndex::LOADER
     {
         return Blame::Code(index);
     }
     if let Some((owner, feature)) = callback {
-        return Blame::Callback(ranges.iter().position(|r| r.owner == owner), owner, feature);
+        return Blame::Callback(
+            ranges.iter().position(|r| r.owner == ModIndex::new(owner)),
+            owner,
+            feature,
+        );
     }
     let on_stack = frames.iter().enumerate().find_map(|(frame, &address)| {
         range_of(address)
-            .filter(|&i| ranges[i].owner != LOADER)
+            .filter(|&i| ranges[i].owner != ModIndex::LOADER)
             .map(|i| (i, frame))
     });
     if let Some((index, frame)) = on_stack {
@@ -585,7 +587,7 @@ pub(crate) fn install(modules: &[(usize, String, usize, usize)], logs_dir: &Path
     let _cleared = std::fs::write(&last_path, "");
     let ranges = modules
         .iter()
-        .map(|(owner, id, start, end)| Range::new(*start, *end, *owner, id))
+        .map(|(owner, id, start, end)| Range::new(*start, *end, ModIndex::new(*owner), id))
         .collect();
     let state = State {
         ranges,
@@ -1075,9 +1077,9 @@ mod tests {
 
     fn ranges() -> [Range; 3] {
         [
-            Range::new(0x1000, 0x2000, 0, "you.trading-post"),
-            Range::new(0x5000, 0x6000, 1, "you.market-stalls"),
-            Range::new(0x9000, 0xa000, LOADER, "enshwick"),
+            Range::new(0x1000, 0x2000, ModIndex::new(0), "you.trading-post"),
+            Range::new(0x5000, 0x6000, ModIndex::new(1), "you.market-stalls"),
+            Range::new(0x9000, 0xa000, ModIndex::LOADER, "enshwick"),
         ]
     }
 

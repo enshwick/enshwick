@@ -113,7 +113,7 @@ pub(crate) extern "system" fn service(
         let mut answer = api_frame::ServiceFound::EMPTY;
         let status = match found {
             Ok(found) => {
-                let (id, version) = crate::services::Names::name(loader, found.owner);
+                let (id, version) = crate::services::Names::name(loader, found.owner.get());
                 answer.table = core::ptr::with_exposed_provenance(found.table);
                 answer.fields = found.fields;
                 answer.owner = Str::new(keep(id));
@@ -388,7 +388,7 @@ pub(crate) extern "system" fn run_point(
             Ok((_, index)) => index,
             Err(status) => return status,
         };
-        match crate::points::run(index, point, input, value) {
+        match crate::points::run(index.get(), point, input, value) {
             // SAFETY: `HostApi::run_point` has the mod pass `verdict` null or
             // pointing at a writable, aligned `PointVerdict` that no other
             // thread touches during the call.
@@ -433,7 +433,7 @@ pub(crate) extern "system" fn send_event(
     data: *const core::ffi::c_void,
 ) -> Status {
     entry("send_event", || match caller_index(me) {
-        Ok((_, index)) => crate::services::send(index, event, data),
+        Ok((_, index)) => crate::services::send(index.get(), event, data),
         Err(status) => status,
     })
 }
@@ -457,10 +457,10 @@ pub(crate) extern "system" fn subscribe(
             event,
             callback,
             user: user.expose_provenance(),
-            generation: crate::reload::generation(index),
+            generation: crate::reload::generation(index.get()),
         };
         if loader.delivery.get().is_some() {
-            if crate::reload::reinitialising(index) {
+            if crate::reload::reinitialising(index.get()) {
                 mark_handled(event);
                 crate::reload::subscribe_late(subscription);
                 return Status::OK;

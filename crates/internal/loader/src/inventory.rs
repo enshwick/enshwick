@@ -18,6 +18,7 @@
 //! the hook skips contexts of any other world, and requests are refused
 //! while the client hosts nothing.
 
+use crate::mod_index::ModIndex;
 use core::ffi::c_void;
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -29,7 +30,6 @@ use enshwick::abi::{
     InventoryResultFn, ItemData, Registers, Side, Status,
 };
 
-use crate::chains::LOADER;
 use crate::host::Loader;
 use crate::locks::Relock;
 use crate::memory::{read, read_ptr, write};
@@ -219,7 +219,7 @@ struct Executor {
 /// A queued request.
 #[derive(Debug)]
 struct Request {
-    owner: usize,
+    owner: ModIndex,
     flags: u32,
     actor: u32,
     ops: Vec<InventoryOp>,
@@ -231,7 +231,7 @@ struct Request {
 /// A request's result, waiting for the game thread.
 #[derive(Debug)]
 struct Finished {
-    owner: usize,
+    owner: ModIndex,
     done: InventoryResultFn,
     user: usize,
     outcome: u32,
@@ -530,7 +530,7 @@ pub(crate) fn link(loader: &Loader) {
         return;
     };
     let link = MidLink {
-        owner: LOADER,
+        owner: ModIndex::LOADER,
         handler: row,
         user: 0,
         priority: i32::MIN,
@@ -583,7 +583,7 @@ fn finish(results: impl IntoIterator<Item = Finished>) {
 /// Queues a request of the mod `owner`.
 pub(crate) fn submit(
     loader: &Loader,
-    owner: usize,
+    owner: ModIndex,
     request: &InventoryRequest,
     done: InventoryResultFn,
     user: *mut c_void,
@@ -1173,7 +1173,7 @@ mod tests {
 
     fn request(user: usize) -> Request {
         Request {
-            owner: 0,
+            owner: ModIndex::new(0),
             flags: 0,
             actor: 0,
             ops: Vec::new(),
