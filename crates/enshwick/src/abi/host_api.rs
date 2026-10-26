@@ -10,7 +10,7 @@ use crate::abi::{
     EventFn, EventSpec, ExperiencePassFn, GameEventFn, Header, HookSpec, InteractionFn,
     InventoryRequest, InventoryResultFn, ItemData, ItemLine, KnowledgeInfo, KnowledgeInputFn,
     Level, MidHookSpec, MigrationSet, ModEventFn, ModHandle, ModInfo, NetMessageFn, PlayerInfo,
-    PointFn, PointHandle, PointLink, PointSpec, PointVerdict, RecipeRuleKind, RenameCallFn,
+    PointFn, PointHandle, PointLink, PointSpec, PointVerdict, RateId, RecipeRuleKind, RenameCallFn,
     ResourceKey, ResourcePatchFn, ServiceFound, ServiceSpec, SkillCheckFn, SpawnRequest,
     StatChangeFn, StatDefData, StatModifierData, StatModify, StatRef, StatSource, Status, StatusFn,
     Str, SummonFn, SurvivorLookupFn, SurvivorStatusFn, TeleportRequest, TerrainEdit,
@@ -1020,4 +1020,20 @@ pub struct HostApi {
     /// mod. Allowed during
     /// `enshwick_mod_init` only. Since minor 66.
     pub actions: extern "system" fn(me: ModHandle, callback: ActionFn, user: *mut c_void) -> Status,
+    /// Declares that the calling mod multiplies `rate`, so the loader arms
+    /// what the rate needs; its factor is 1 until
+    /// [`HostApi::set_rate`]. [`Status::MISSING`] on a build that lacks
+    /// what the rate needs, [`Status::BAD_ARGS`] for a rate this loader
+    /// does not know, [`Status::REFUSED`] for a rate clients count too in a
+    /// mod without [`ManifestFlags::JOIN`](super::ManifestFlags::JOIN). A second declaration of the same rate is
+    /// [`Status::OK`]. Allowed during `enshwick_mod_init` only. Since
+    /// minor 72.
+    pub rate: extern "system" fn(me: ModHandle, rate: RateId) -> Status,
+    /// Puts `factor` in force as the calling mod's factor for `rate`: the
+    /// game uses the product of every declaring mod's factor, held to 0 to
+    /// 100, from the next time it reads the rate. [`Status::BAD_ARGS`] for
+    /// a factor that is not finite or lies outside 0 to 100, or a rate the
+    /// mod did not declare. Any thread; neither allocates nor locks once
+    /// every mod is initialised. Since minor 72.
+    pub set_rate: extern "system" fn(me: ModHandle, rate: RateId, factor: f32) -> Status,
 }

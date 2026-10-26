@@ -1,4 +1,4 @@
-abi 2.71
+abi 2.72
 ActionCall size 144 align 8
     header at 0 size 8
     kind at 8 size 4
@@ -202,7 +202,7 @@ HookSpec size 32 align 8
     next at 16 size 8
     priority at 24 size 4
     flags at 28 size 4
-HostApi size 1152 align 8
+HostApi size 1168 align 8
     header at 0 size 8
     host_version at 8 size 16
     build at 24 size 8
@@ -346,6 +346,8 @@ HostApi size 1152 align 8
     attach_point at 1128 size 8
     run_point at 1136 size 8
     actions at 1144 size 8
+    rate at 1152 size 8
+    set_rate at 1160 size 8
 Interaction size 56 align 8
     header at 0 size 8
     kind at 8 size 4
@@ -539,6 +541,8 @@ QuestData size 16 align 4
     header at 0 size 8
     entity at 8 size 4
     quest at 12 size 4
+RateId size 4 align 4
+    0 at 0 size 4
 RecipeRuleKind size 4 align 4
     0 at 0 size 4
 Registers size 136 align 8

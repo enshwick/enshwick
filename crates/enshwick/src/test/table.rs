@@ -10,7 +10,7 @@ use crate::abi::{
     DaytimeInfo, EntityPlace, Event, EventFn, EventSpec, ExperiencePassFn, GameEventFn, Header,
     HookSpec, HostApi, InteractionFn, InventoryRequest, InventoryResultFn, ItemData, KnowledgeInfo,
     KnowledgeInputFn, Level, MidHookFn, MidHookSpec, MigrationSet, ModEventFn, ModHandle, ModInfo,
-    NetMessageFn, PlayerInfo, RenameCallFn, ResourceKey, ResourcePatchFn, ServiceFound,
+    NetMessageFn, PlayerInfo, RateId, RenameCallFn, ResourceKey, ResourcePatchFn, ServiceFound,
     ServiceSpec, Side, SkillCheckFn, SpawnRequest, Status, StatusFn, Str, SummonFn,
     SurvivorLookupFn, SurvivorStatusFn, TeleportRequest, TerrainEdit, TerrainMaterialInfo,
     UiAnswerFn, UiDialog, UiFrameFn, UiMarker, UiWidget, WeatherFront, ZoneCheckFn,
@@ -175,6 +175,8 @@ pub(crate) struct State {
     pub(crate) interaction_filters: Vec<(InteractionFn, usize)>,
     pub(crate) skills: Vec<(u32, SkillCheckFn, usize)>,
     pub(crate) comfort_filters: Vec<(ComfortFn, usize)>,
+    /// The rates the mod declared, with the factor it set for each.
+    pub(crate) rates: Vec<(RateId, f32)>,
     pub(crate) experience_filters: Vec<(ExperiencePassFn, usize)>,
     pub(crate) altar_limit: Option<(AltarLimitFn, usize)>,
     pub(crate) base_limit_raised: bool,
@@ -306,6 +308,7 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         interaction_filters: Vec::new(),
         skills: Vec::new(),
         comfort_filters: Vec::new(),
+        rates: Vec::new(),
         experience_filters: Vec::new(),
         altar_limit: None,
         base_limit_raised: false,
@@ -1363,6 +1366,36 @@ extern "system" fn comfort_filter(
     with(Status::MISSING, |s| {
         s.comfort_filters.push((callback, user.expose_provenance()));
         Status::OK
+    })
+}
+
+extern "system" fn rate(_me: ModHandle, rate: RateId) -> Status {
+    with(Status::MISSING, |s| {
+        if s.host.missing_rates.contains(&rate) {
+            return Status::MISSING;
+        }
+        if crate::rates::Rate::from_id(rate).is_none() {
+            return Status::BAD_ARGS;
+        }
+        if !s.rates.iter().any(|&(declared, _)| declared == rate) {
+            s.rates.push((rate, 1.0));
+        }
+        Status::OK
+    })
+}
+
+extern "system" fn set_rate(_me: ModHandle, rate: RateId, factor: f32) -> Status {
+    if !crate::rates::is_valid_factor(factor) {
+        return Status::BAD_ARGS;
+    }
+    with(Status::MISSING, |s| {
+        match s.rates.iter_mut().find(|(declared, _)| *declared == rate) {
+            Some((_, set)) => {
+                *set = factor;
+                Status::OK
+            }
+            None => Status::BAD_ARGS,
+        }
     })
 }
 
@@ -2570,4 +2603,6 @@ pub(crate) static TABLE: HostApi = HostApi {
     attach_point: super::points::attach_point,
     run_point: super::points::run_point,
     actions,
+    rate,
+    set_rate,
 };

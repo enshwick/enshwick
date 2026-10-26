@@ -120,6 +120,14 @@ name = "game_settings"
 required-features = ["test"]
 
 [[test]]
+name = "rates"
+required-features = ["test"]
+
+[[test]]
+name = "rates_join"
+required-features = ["test"]
+
+[[test]]
 name = "hud"
 required-features = ["test"]
 

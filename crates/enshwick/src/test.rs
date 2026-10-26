@@ -82,6 +82,7 @@ mod hooks;
 mod inventory;
 mod players;
 mod points;
+mod rates;
 mod settings;
 mod stats;
 mod table;
@@ -220,6 +221,7 @@ pub struct FakeHost {
     resources: HashMap<([u8; 16], u32, u32), Vec<u8>>,
     game_texts: HashMap<(u32, u32), &'static str>,
     disabled_recipes: HashSet<u32>,
+    missing_rates: HashSet<crate::abi::RateId>,
 }
 
 impl Default for FakeHost {
@@ -282,6 +284,7 @@ impl FakeHost {
             resources: HashMap::new(),
             game_texts: HashMap::new(),
             disabled_recipes: HashSet::new(),
+            missing_rates: HashSet::new(),
         }
     }
 

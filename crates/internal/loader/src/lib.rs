@@ -127,6 +127,13 @@ mod points;
 pub mod profile;
 #[cfg(windows)]
 mod progress;
+#[cfg(windows)]
+mod rate_links;
+#[cfg_attr(
+    all(not(windows), not(test)),
+    expect(dead_code, reason = "only the running game applies rates")
+)]
+mod rates;
 pub mod recipes;
 #[cfg(windows)]
 mod reload;
