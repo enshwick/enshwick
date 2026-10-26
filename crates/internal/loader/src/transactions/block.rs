@@ -102,11 +102,14 @@ impl EventLayout {
         event
     }
 
-    /// The `BuildingPlaceEvent` of `block` placed for `actor`, 0 for none;
-    /// `None` when a field passes the event's size.
+    /// The `BuildingPlaceEvent` of `block` placed for `actor`, 0 for none,
+    /// tracking its shape item with its material's feedback, as the game's
+    /// place does (server 399, client 426); `None` when a field passes the
+    /// event's size.
     pub(crate) fn place(self, block: &Block, actor: u32) -> Option<Vec<u8>> {
         let mut event = self.event(block.region, block.position, block.rotation, actor);
-        event.put(self.item?, &block.item.to_le_bytes());
+        event.put(self.material, &block.feedback.to_le_bytes());
+        event.put(self.item?, &block.shape.to_le_bytes());
         event.0
     }
 
@@ -123,8 +126,10 @@ impl EventLayout {
 /// rotation, as the game places it.
 #[derive(Clone, Debug)]
 pub(crate) struct Block {
-    /// The material's item.
-    pub(crate) item: u32,
+    /// The shape's item, which the place event tracks.
+    pub(crate) shape: u32,
+    /// The feedback the game gives the material, for the place event.
+    pub(crate) feedback: u32,
     /// The material's voxel id, from the item's `placeVoxelMaterialId`.
     pub(crate) material: u8,
     /// Where the block's middle lies, in metres.
@@ -143,7 +148,8 @@ impl Block {
     pub(crate) fn for_tests(region: Region, material: u8) -> Self {
         let (min, max) = region.metres();
         Self {
-            item: 0,
+            shape: 0,
+            feedback: 0,
             material,
             position: [0, 1, 2].map(|axis| f64::midpoint(min[axis], max[axis])),
             rotation: [0.0, 0.0, 0.0, 1.0],
@@ -204,15 +210,20 @@ mod tests {
     #[test]
     fn a_place_event_carries_the_block_its_box_item_and_owner() {
         let mut block = Block::for_tests(Region::new([196, 76, 196], [8, 8, 8]).unwrap(), 0x83);
-        block.item = 77;
+        block.shape = 66;
+        block.feedback = 5;
         let bytes = layout().place(&block, 7).unwrap();
         assert_eq!(bytes.len(), 0x48);
         assert_eq!(f32_at(&bytes, 0x8), 100.0);
         assert_eq!(f32_at(&bytes, 0x14 + 12), 1.0, "w of the rotation");
         assert_eq!(f32_at(&bytes, 0x24), 98.0);
         assert_eq!(f32_at(&bytes, 0x30 + 4), 42.0);
-        assert_eq!(u32_at(&bytes, 0x3c), 0);
-        assert_eq!((u32_at(&bytes, 0x40), u32_at(&bytes, 0x44)), (77, 7));
+        assert_eq!(u32_at(&bytes, 0x3c), 5, "the material's feedback");
+        assert_eq!(
+            (u32_at(&bytes, 0x40), u32_at(&bytes, 0x44)),
+            (66, 7),
+            "the shape tracks the block"
+        );
     }
 
     #[test]

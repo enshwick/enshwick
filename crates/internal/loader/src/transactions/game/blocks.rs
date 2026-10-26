@@ -14,6 +14,10 @@ use crate::transactions::paste::Region;
 /// 426).
 type LookupFn = unsafe extern "system" fn(registry: *mut u8, item: u32) -> *const u8;
 
+/// The game's lookup of the feedback (sound and effects) of a voxel
+/// material in the terraforming registry (server 399, client 426).
+type FeedbackFn = unsafe extern "system" fn(registry: *mut u8, material: u8) -> u32;
+
 /// Where and how a block sits, as the game's block builder reads it: the
 /// position in 32.32 fixed-point metres, then the rotation quaternion x, y,
 /// z, w (server 399, client 426).
@@ -143,13 +147,39 @@ pub(crate) fn resolve(loader: &Loader, request: &BlockPlace) -> Result<Block, St
     unsafe { builder(&raw mut game, item, &raw const at, 0) };
     let region = game.region()?;
     Ok(Block {
-        item: request.material,
+        shape: request.shape,
+        feedback: feedback(loader, holder, material),
         material,
         position: request.position,
         rotation: request.rotation,
         region,
         game,
     })
+}
+
+/// The feedback the game gives `material`, as its place op looks it up;
+/// 0, none, on a build without the lookup or before the registry loads.
+fn feedback(loader: &Loader, holder: usize, material: u8) -> u32 {
+    let Ok(function) = function(loader, pinned::building::MATERIAL_FEEDBACK) else {
+        return 0;
+    };
+    let Some(registry_at) = loader.offset(pinned::terrain::REGISTRY) else {
+        return 0;
+    };
+    // SAFETY: `holder` is the non-zero game-systems holder `resolve` read;
+    // its terraforming registry, set at load, sits at the table's
+    // `terrain.registry`.
+    let registry: usize = unsafe { read(holder, registry_at) };
+    if registry == 0 {
+        return 0;
+    }
+    // SAFETY: the table's `building.material_feedback` is the address of the
+    // game function with the `FeedbackFn` signature on this build, in the
+    // image, which stays mapped.
+    let lookup = unsafe { core::mem::transmute::<usize, FeedbackFn>(function) };
+    // SAFETY: `lookup` reads the non-zero terraforming registry (checked
+    // above), which the world keeps unchanged after load.
+    unsafe { lookup(core::ptr::with_exposed_provenance_mut(registry), material) }
 }
 
 /// A position in metres as the game's 32.32 fixed point; the caller keeps

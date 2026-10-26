@@ -40,10 +40,12 @@ pub(crate) use paste::{Erase, Paste};
 pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::building::BLOCK_BOX.id(),
     pinned::building::BLUEPRINT_LOOKUP.id(),
+    pinned::building::MATERIAL_FEEDBACK.id(),
     pinned::server::BLUEPRINT_REGISTRY.id(),
     pinned::server::PLAYER_INFOS.id(),
     pinned::voxel::WRITE_BLOCK.id(),
     pinned::terrain::ADD.id(),
+    pinned::terrain::REGISTRY.id(),
     pinned::terrain::DIG.id(),
     pinned::terrain::FLATTEN.id(),
     pinned::voxel::READ_BOX.id(),

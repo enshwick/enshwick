@@ -161,6 +161,9 @@ revision = 1
 "building.block_box" = { rva = 0x22_48a0, pattern = "48 8B C4 48 89 58 08 48 89 70 10 48 89 78 18 55 41 56 41 57 48 8D 68 A1 48 81 EC A0 00 00 00 41 0F 10 40 18 4C 8B F2 48" }
 # Called once from the place-block op; its body has a byte-identical twin.
 "building.blueprint_lookup" = { rva = 0x92_6df0, pattern = "41 8B D8 44 0F 29 48 88 44 0F 29 90 78 FF FF FF 44 0F 29 A8 68 FF FF FF 44 0F 29 B0 58 FF FF FF 44 0F 29 B8 48 FF FF FF E8 ?? ?? ?? ??", rel = 41 }
+# Called from the place-block op right after its block write; its body
+# has a byte-identical twin.
+"building.material_feedback" = { rva = 0x92_b7d0, pattern = "0F 28 44 24 60 48 89 44 24 20 C7 85 98 02 00 00 00 00 00 00 66 0F 7F 44 24 60 E8 ?? ?? ?? ?? 41 0F B6 96 54 04 00 00 48 8B 8E F8 00 00 00 E8 ?? ?? ?? ??", rel = 47 }
 
 # Engine offsets, sizes and values by symbolic id. A `pattern` holds
 # the code that uses the value, found once on a build without its own
