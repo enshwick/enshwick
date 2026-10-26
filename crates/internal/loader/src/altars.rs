@@ -311,7 +311,10 @@ pub(crate) fn resize(owner: ModIndex) -> Status {
     let has_filter = |sizers: &[Sizer]| sizers.iter().any(|s| s.owner == owner);
     let has_filter = match SIZERS.sealed() {
         Some(sizers) => has_filter(sizers),
-        None => SIZERS.edit(|sizers| has_filter(sizers)).unwrap_or(false),
+        // Sealed meanwhile: the sealed list has it.
+        None => SIZERS
+            .edit(|sizers| has_filter(sizers))
+            .unwrap_or_else(|_| SIZERS.sealed().is_some_and(has_filter)),
     };
     if !has_filter {
         return Status::REFUSED;
@@ -1098,6 +1101,10 @@ unsafe fn check(
 mod tests {
     use super::*;
 
+    /// Held by every test that touches the altar state, the targets or the
+    /// world counter, which the tests of this file share.
+    static SHARED: Mutex<()> = Mutex::new(());
+
     unsafe extern "system" fn wider(zone: *mut AltarZone, _user: *mut c_void) {
         // SAFETY: the loader's zone, writable for the call.
         let zone = unsafe { &mut *zone };
@@ -1149,6 +1156,7 @@ mod tests {
 
     #[test]
     fn a_filter_may_read_the_altars_while_the_zones_are_sized() {
+        let _shared = SHARED.relock();
         let now = When {
             at: Instant::now(),
             step: 0,
@@ -1185,6 +1193,7 @@ mod tests {
 
     #[test]
     fn entries_held_back_from_a_gone_world_never_reach_the_next() {
+        let _shared = SHARED.relock();
         drop_stale_buffers();
         BUILT.with_borrow_mut(|built| built.push((7, [1.0; 3])));
         drop_stale_buffers();
