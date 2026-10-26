@@ -78,6 +78,19 @@ pub enum Field {
     /// The comfort a placed item gives, 0 to 1000; the entry is an item
     /// that gives comfort.
     ComfortAmount,
+    /// The stack size random loot rolls for an item, at least and at most
+    /// alike, 1 to 65535; the entry is the item. Only the server rolls.
+    StackSize,
+    /// The count a container's fill table gives of an item, at least and at
+    /// most alike, 0 to 65535; the entry is the item, in every table that
+    /// lists it.
+    Count,
+    /// The chance a container's fill table gives an item, from 0 to 1; the
+    /// entry is the item.
+    SpawnProbability,
+    /// The weight of an item among the ones a fill table picks from, 0 to
+    /// 1000000; the entry is the item.
+    Weight,
 }
 
 impl Field {
@@ -95,6 +108,10 @@ impl Field {
         Self::BurnTime,
         Self::EnergyOutput,
         Self::ComfortAmount,
+        Self::StackSize,
+        Self::Count,
+        Self::SpawnProbability,
+        Self::Weight,
     ];
 
     /// The name a data pack writes, such as `max_stack`.
@@ -121,6 +138,10 @@ impl Field {
             Self::BurnTime => "burn_time",
             Self::EnergyOutput => "energy_output",
             Self::ComfortAmount => "comfort_amount",
+            Self::StackSize => "stack_size",
+            Self::Count => "count",
+            Self::SpawnProbability => "spawn_probability",
+            Self::Weight => "weight",
         }
     }
 
@@ -145,6 +166,7 @@ impl Field {
             | Self::BurnTime
             | Self::EnergyOutput
             | Self::ComfortAmount => Entry::Item,
+            Self::StackSize | Self::Count | Self::SpawnProbability | Self::Weight => Entry::Loot,
             Self::Output | Self::Cost | Self::Ingredient | Self::Time => Entry::Recipe,
         }
     }
@@ -152,13 +174,14 @@ impl Field {
     /// The smallest and the largest value the field holds.
     const fn range(self) -> (f64, f64) {
         match self {
-            Self::MaxStack | Self::Output | Self::Cost => (1.0, 65535.0),
-            Self::Ingredient => (0.0, 65535.0),
+            Self::MaxStack | Self::Output | Self::Cost | Self::StackSize => (1.0, 65535.0),
+            Self::Ingredient | Self::Count => (0.0, 65535.0),
             Self::Time | Self::BurnTime => (0.0, 86400.0),
             Self::Slots => (8.0, 128.0),
             Self::DamageMod => (0.0, 100.0),
             Self::SpeedMod => (0.0, 10.0),
-            Self::Armor | Self::EnergyOutput => (0.0, 1_000_000.0),
+            Self::Armor | Self::EnergyOutput | Self::Weight => (0.0, 1_000_000.0),
+            Self::SpawnProbability => (0.0, 1.0),
             Self::ComfortAmount => (0.0, 1000.0),
         }
     }
@@ -181,8 +204,16 @@ impl Field {
             | Self::Ingredient
             | Self::Slots
             | Self::EnergyOutput
-            | Self::ComfortAmount => true,
-            Self::Time | Self::DamageMod | Self::SpeedMod | Self::Armor | Self::BurnTime => false,
+            | Self::ComfortAmount
+            | Self::StackSize
+            | Self::Count => true,
+            Self::Time
+            | Self::DamageMod
+            | Self::SpeedMod
+            | Self::Armor
+            | Self::BurnTime
+            | Self::SpawnProbability
+            | Self::Weight => false,
         }
     }
 
@@ -284,6 +315,10 @@ impl Field {
             Self::BurnTime => DataField::BURN_TIME,
             Self::EnergyOutput => DataField::ENERGY_OUTPUT,
             Self::ComfortAmount => DataField::COMFORT_AMOUNT,
+            Self::StackSize => DataField::LOOT_STACK_SIZE,
+            Self::Count => DataField::LOOT_COUNT,
+            Self::SpawnProbability => DataField::LOOT_SPAWN_PROBABILITY,
+            Self::Weight => DataField::LOOT_WEIGHT,
         }
     }
 
@@ -323,6 +358,8 @@ pub enum Entry {
     Item,
     /// A recipe.
     Recipe,
+    /// An item in the game's loot, which only the server rolls.
+    Loot,
 }
 
 /// How a [`Change`] changes its value.

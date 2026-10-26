@@ -287,6 +287,29 @@ Each drop gives one of `items` at `chance` per roll, as
 one of the pack's own with a meter of the same maximum, and the range must not
 pass that maximum.
 
+`loot.toml` also changes how the game's own loot gives items that exist
+already, with a `[[change]]` table:
+
+```toml
+[[change]]
+items = ["Material_T1_Wood_Logs", "Material_T1_Resin"]
+stack_size = { times = 2 }
+count = { times = 2 }
+```
+
+| Field | Meaning | Values |
+| --- | --- | --- |
+| `stack_size` | how many of the item random loot gives in one stack, at least and at most alike | 1 to 65535 |
+| `count` | how many of the item a container's fill table gives, at least and at most alike | 0 to 65535 |
+| `spawn_probability` | the chance a fill table gives the item | 0 to 1 |
+| `weight` | the item's weight among the ones a fill table picks from | 0 to 1000000 |
+
+Random loot fills world chests, corpses and animals by the item's labels;
+fill tables are the fixed lists a container names. A change reaches every
+fill table that lists the item. Only the server rolls loot, so a pack of
+loot changes alone may run `side = "server"` and turn `join` off.
+[Game rates](../rates.md) multiply the counts a pack sets.
+
 ## `texts.toml`
 
 The pack's texts, in the form of a mod's [texts file](texts.md): a table per

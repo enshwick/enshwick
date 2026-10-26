@@ -15,6 +15,7 @@ pub mod changes;
 pub mod containers;
 pub mod icons;
 pub mod items;
+pub mod loot_tables;
 pub mod menu;
 pub mod recipes;
 pub mod vanilla;

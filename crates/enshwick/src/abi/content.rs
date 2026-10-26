@@ -134,11 +134,23 @@ impl DataField {
     /// Since minor 81.
     pub const BURN_TIME: Self = Self(10);
     /// The energy an item gives as fuel; the entry is the item. Since
-    /// minor 79.
+    /// minor 82.
     pub const ENERGY_OUTPUT: Self = Self(11);
     /// The comfort a placed item gives; the entry is the item. Since
-    /// minor 79.
+    /// minor 82.
     pub const COMFORT_AMOUNT: Self = Self(12);
+    /// The stack size random loot rolls for an item; the entry is the item.
+    /// Since minor 82.
+    pub const LOOT_STACK_SIZE: Self = Self(13);
+    /// The count fill tables give of an item; the entry is the item. Since
+    /// minor 82.
+    pub const LOOT_COUNT: Self = Self(14);
+    /// The chance fill tables give an item; the entry is the item. Since
+    /// minor 82.
+    pub const LOOT_SPAWN_PROBABILITY: Self = Self(15);
+    /// The weight of an item in fill tables; the entry is the item. Since
+    /// minor 82.
+    pub const LOOT_WEIGHT: Self = Self(16);
 }
 
 /// How a [`DataChange`] changes its value.
@@ -198,7 +210,7 @@ pub struct DataChange {
     /// of conflicts; may be empty.
     pub source: Str,
     /// The item the field names inside its entry, such as a recipe's
-    /// ingredient; all zero for none. Since minor 81.
+    /// ingredient; all zero for none. Since minor 79.
     pub item: [u8; 16],
 }
 

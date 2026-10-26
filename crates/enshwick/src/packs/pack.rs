@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use serde::Deserialize;
 
 use crate::Off;
-use crate::content::changes::Change;
+use crate::content::changes::{Change, Entry};
 use crate::content::icons::Tint;
 use crate::content::items::StatFormat;
 use crate::content::vanilla::Vanilla;
@@ -405,6 +405,11 @@ impl Pack {
         pack.recipes = recipes(&mut reader, &recipes_file, &recipes_text);
         pack.drops = drops(&mut reader, &loot_file, &loot_text, &pack.items);
         pack.changes = super::changes::item_changes(&mut reader, &items_file, &items_text);
+        pack.changes.extend(super::changes::loot_changes(
+            &mut reader,
+            &loot_file,
+            &loot_text,
+        ));
         pack.changes.extend(super::changes::recipe_changes(
             &mut reader,
             &recipes_file,
@@ -481,7 +486,7 @@ impl Pack {
     }
 
     /// Whether the pack adds or changes anything players' games read: items,
-    /// workshops, recipes, texts or changes of values. Such a pack runs on
+    /// workshops, recipes, texts or changes of values beside loot. Such a pack runs on
     /// the server and every player alike, so it keeps `join` on.
     ///
     /// # Examples
@@ -503,7 +508,10 @@ impl Pack {
         !(self.items.is_empty()
             && self.workshops.is_empty()
             && self.recipes.is_empty()
-            && self.changes.is_empty()
+            && self
+                .changes
+                .iter()
+                .all(|(change, _)| change.field.entry() == Entry::Loot)
             && self.texts.trim().is_empty())
     }
 
