@@ -1,4 +1,3 @@
-use crate::abi::EntityPlace;
 use crate::ecs::Entity;
 
 use super::{ComponentType, ContainerKinds, Placed, World, WorldError};
@@ -19,28 +18,12 @@ impl World {
     /// }
     /// ```
     #[must_use]
-    pub fn entities(&self, ty: ComponentType) -> Vec<Placed> {
-        let entities = self.0.host.api().entities;
-        let mut capacity = 1024u32;
-        loop {
-            let mut places = vec![EntityPlace::default(); capacity as usize];
-            let mut count = 0u32;
-            let status = entities(
-                self.0.host.handle(),
-                ty.0,
-                places.as_mut_ptr(),
-                capacity,
-                &raw mut count,
-            );
-            if !status.is_ok() {
-                return Vec::new();
-            }
-            if count <= capacity {
-                places.truncate(count as usize);
-                return places.iter().map(Placed::from_abi).collect();
-            }
-            capacity = count;
-        }
+    pub fn entities(self, ty: ComponentType) -> Vec<Placed> {
+        self.placed_with(ty.0)
+            .unwrap_or_default()
+            .iter()
+            .map(Placed::from_abi)
+            .collect()
     }
 
     /// The entities with a component of type `ty` within `radius` metres of

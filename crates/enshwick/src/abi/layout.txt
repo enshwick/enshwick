@@ -1,4 +1,4 @@
-abi 2.88
+abi 2.89
 ActionCall size 144 align 8
     header at 0 size 8
     kind at 8 size 4
@@ -452,13 +452,14 @@ InventoryResult size 24 align 8
     outcome at 8 size 4
     op_count at 12 size 4
     ops at 16 size 8
-ItemData size 20 align 4
+ItemData size 36 align 4
     header at 0 size 8
     id at 8 size 4
     max_stack at 12 size 2
     category at 14 size 1
     rarity at 15 size 1
     flags at 16 size 4
+    placed_entity at 20 size 16
 ItemLine size 16 align 4
     modifier at 0 size 12
     affix at 12 size 4

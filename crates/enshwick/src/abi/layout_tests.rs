@@ -99,7 +99,7 @@ shapes! {
         InventoryRequest { header, flags, actor, ops, op_count, reserved },
         InventoryOpResult { error, remaining },
         InventoryResult { header, outcome, op_count, ops },
-        ItemData { header, id, max_stack, category, rarity, flags },
+        ItemData { header, id, max_stack, category, rarity, flags, placed_entity },
         Bounds { min, max },
         AltarInfo { header, entity, level, tilted, level_count, reserved, zone, levels, position },
         AltarLimit { header, flame_level, vanilla, allowed, reserved },

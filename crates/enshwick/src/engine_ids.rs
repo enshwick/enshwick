@@ -215,6 +215,7 @@ ids! {
     CRAFTING_MENU_SET = "crafting_menu_set";
     CRAFTING_MENU_SET_ENTRIES = "crafting_menu_set.entries";
     CURRENT_TRANSFORM = "current_transform";
+    CURRENT_TRANSFORM_TRANSFORM = "current_transform.transform";
     USED_ITEM = "used_item";
     LABEL = "label";
     INVENTORY_SETUP = "inventory_setup";
@@ -420,4 +421,12 @@ ids! {
     PLAYER_PERMISSIONS_CAN_EDIT_BASE = "player_permissions.can_edit_base";
     #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
     PLAYER_PERMISSIONS_CAN_EDIT_WORLD = "player_permissions.can_edit_world";
+    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    TERRAFORMING_REGISTRY_BUILDING_CONFIGS = "terraforming_registry.building_configs";
+    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    BUILDING_TERRAFORMING_CONFIG = "building_terraforming_config";
+    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    BUILDING_TERRAFORMING_CONFIG_BUILDING_MATERIAL = "building_terraforming_config.building_material";
+    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    BUILDING_TERRAFORMING_CONFIG_HARDNESS = "building_terraforming_config.hardness";
 }

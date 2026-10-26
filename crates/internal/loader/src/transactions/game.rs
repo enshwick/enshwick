@@ -45,6 +45,8 @@ pub(crate) struct Game<'a> {
     undo_apply: UndoApplyFn,
     write_block: Option<blocks::WriteBlockFn>,
     events: blocks::Events,
+    /// The materials a block may write over, read at the step's first block.
+    replace: Option<[u8; super::block::MATERIALS]>,
 }
 
 impl<'a> Game<'a> {
@@ -74,6 +76,7 @@ impl<'a> Game<'a> {
                     core::mem::transmute::<usize, blocks::WriteBlockFn>(address)
                 }),
             events: blocks::Events::new(loader),
+            replace: None,
         })
     }
 }
@@ -92,11 +95,15 @@ impl Voxels for Game<'_> {
 
     fn place(&mut self, block: &Block, actor: u32) -> Result<(), Status> {
         let write = self.write_block.ok_or(Status::MISSING)?;
+        let replace = match self.replace {
+            Some(replace) => replace,
+            None => *self.replace.insert(blocks::replaceable(self.loader)?),
+        };
         // SAFETY: `write` is the table's `voxel.write_block`; `editor` and
         // `alloc` are the server's live voxel editor and allocator, checked
         // by `crate::terrain::editor_and_allocator` when this step began on
         // the game thread at a quiet moment.
-        unsafe { blocks::write(write, self.editor, self.alloc, block) };
+        unsafe { blocks::write(write, self.editor, self.alloc, &replace, block) };
         self.events.placed(self.loader, block, actor);
         Ok(())
     }

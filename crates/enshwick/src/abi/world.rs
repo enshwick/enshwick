@@ -757,13 +757,13 @@ impl TransactionOp {
     /// without [`TerrainEdit::DRY_RUN`].
     pub const TERRAIN: u32 = 1;
     /// Voxels written over a box: `data` points at a [`VoxelWrite`]. Since
-    /// minor 88.
+    /// minor 89.
     pub const VOXELS: u32 = 2;
     /// The building voxels of a box cleared to air: `data` points at a
-    /// [`VoxelRegion`]. Since minor 88.
+    /// [`VoxelRegion`]. Since minor 89.
     pub const ERASE: u32 = 3;
     /// A building block placed: `data` points at a [`BlockPlace`]. Since
-    /// minor 88.
+    /// minor 89.
     pub const BLOCK: u32 = 4;
 }
 
@@ -907,7 +907,7 @@ pub struct TransactionInfo {
     pub bricks: u64,
     /// When the server refused the player the transaction acts for, its
     /// reason, one of the [`BuildRights`] refusals; [`BuildRights::ALLOWED`]
-    /// otherwise. Since minor 88.
+    /// otherwise. Since minor 89.
     pub refusal: u32,
     /// Zero.
     pub reserved: u32,

@@ -9,7 +9,8 @@ mod tests {
     use enshwick::test::FakeChange;
     use enshwick::voxels::{Voxel, VoxelBox, VoxelMaterial, VoxelPos};
     use enshwick::world::{
-        BuildRefusal, Player, PlayerPermissions, TransactionStatus, Transform, World, WorldError,
+        BuildRefusal, Player, PlayerPermissions, TransactionStatus, World, WorldError,
+        WorldTransform,
     };
     use enshwick::{ItemId, Load, Mod, Off};
 
@@ -30,9 +31,9 @@ mod tests {
 
     enshwick::declare_mod!(Mason);
 
-    const SHAPE: ItemId = ItemId(10);
-    const STONE: ItemId = ItemId(20);
-    const DIRT: ItemId = ItemId(21);
+    const SHAPE: ItemId = ItemId::new(10);
+    const STONE: ItemId = ItemId::new(20);
+    const DIRT: ItemId = ItemId::new(21);
     const WORLDER: u32 = 2;
     const GUEST: u32 = 4;
 
@@ -71,7 +72,7 @@ mod tests {
             flags: 0,
             hardness: 3,
             reserved: 0,
-            item: DIRT.0,
+            item: DIRT.get(),
             health: 500,
         }]);
         (loader, *WORLD.get().unwrap())
@@ -85,10 +86,7 @@ mod tests {
     fn voxels_erases_and_blocks_reach_the_loader_in_order() {
         let (loader, world) = started();
         let wall = VoxelBox::new(VoxelPos::new(200, 80, 200), [2, 1, 1], vec![stone(); 2]).unwrap();
-        let at = Transform {
-            position: [100.0, 40.0, 100.0],
-            rotation: [0.0, 0.0, 0.0, 1.0],
-        };
+        let at = WorldTransform::at([100.0, 40.0, 100.0]);
         let id = world
             .transaction()
             .write_voxels(&wall)
@@ -115,7 +113,7 @@ mod tests {
                     (enshwick::abi::Voxel::BUILDING, 0x83)
                 );
                 assert_eq!((*erased, *erased_size), ([210, 80, 200], [4, 4, 4]));
-                assert_eq!((block.shape, block.material), (SHAPE.0, STONE.0));
+                assert_eq!((block.shape, block.material), (SHAPE.get(), STONE.get()));
                 assert_eq!(block.position, at.position);
             }
             other => panic!("{other:?}"),
@@ -131,11 +129,12 @@ mod tests {
     #[test]
     fn a_block_needs_a_known_shape_and_a_building_material() {
         let (loader, world) = started();
-        let at = Transform {
-            position: [100.0, 40.0, 100.0],
-            rotation: [0.0, 0.0, 0.0, 1.0],
-        };
-        for (shape, material) in [(ItemId(99), STONE), (SHAPE, DIRT), (SHAPE, ItemId(98))] {
+        let at = WorldTransform::at([100.0, 40.0, 100.0]);
+        for (shape, material) in [
+            (ItemId::new(99), STONE),
+            (SHAPE, DIRT),
+            (SHAPE, ItemId::new(98)),
+        ] {
             assert_eq!(
                 world
                     .transaction()
@@ -145,8 +144,8 @@ mod tests {
                 "{shape:?} of {material:?}"
             );
         }
-        let skewed = Transform {
-            rotation: [f32::NAN, 0.0, 0.0, 1.0],
+        let skewed = WorldTransform {
+            orientation: [f32::NAN, 0.0, 0.0, 1.0],
             ..at
         };
         assert_eq!(

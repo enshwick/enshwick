@@ -14,12 +14,12 @@ impl FakeHost {
     /// ```
     /// use enshwick::ItemId;
     ///
-    /// let loader = enshwick::test::FakeHost::new().blueprint(ItemId(10), [4, 4, 4]).install();
+    /// let loader = enshwick::test::FakeHost::new().blueprint(ItemId::new(10), [4, 4, 4]).install();
     /// # let _ = loader;
     /// ```
     #[must_use]
     pub fn blueprint(mut self, shape: ItemId, size: [u32; 3]) -> Self {
-        self.blueprints.insert(shape.0, size);
+        self.blueprints.insert(shape.get(), size);
         self
     }
 
@@ -33,12 +33,12 @@ impl FakeHost {
     /// ```
     /// use enshwick::ItemId;
     ///
-    /// let loader = enshwick::test::FakeHost::new().building_material(ItemId(20), 0x83).install();
+    /// let loader = enshwick::test::FakeHost::new().building_material(ItemId::new(20), 0x83).install();
     /// # let _ = loader;
     /// ```
     #[must_use]
     pub fn building_material(mut self, item: ItemId, material: u8) -> Self {
-        self.building_materials.insert(item.0, material);
+        self.building_materials.insert(item.get(), material);
         self
     }
 }

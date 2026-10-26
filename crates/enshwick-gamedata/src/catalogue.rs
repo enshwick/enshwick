@@ -144,6 +144,16 @@ pub const PERMISSION_CAN_EDIT_BASE: &str = "player_permissions.can_edit_base";
 /// edit the world outside every base.
 pub const PERMISSION_CAN_EDIT_WORLD: &str = "player_permissions.can_edit_world";
 
+/// The id of the terraforming registry resource's building configs, an
+/// array of [`BUILDING_TERRAFORMING_CONFIG`].
+pub const TERRAFORMING_BUILDING_CONFIGS: &str = "terraforming_registry.building_configs";
+/// The id of a building material's terraforming config.
+pub const BUILDING_TERRAFORMING_CONFIG: &str = "building_terraforming_config";
+/// The id of a building config's material, a `u8` counted from 0x80.
+pub const BUILDING_CONFIG_MATERIAL: &str = "building_terraforming_config.building_material";
+/// The id of a building config's hardness, a `u8`.
+pub const BUILDING_CONFIG_HARDNESS: &str = "building_terraforming_config.hardness";
+
 /// The id of the random loot table's type, of which the game has one.
 pub const LOOT_RANDOM_TABLE: &str = "lootable_items";
 

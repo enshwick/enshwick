@@ -40,6 +40,39 @@ impl GameBox {
     }
 }
 
+/// The materials a byte names.
+pub(crate) const MATERIALS: usize = 0x100;
+/// The first building voxel material; building configs number theirs from
+/// it, 0-based.
+const BUILDING_FIRST: usize = 0x80;
+/// The game's `Unbreakable` hardness: a material this hard or harder is
+/// never written over.
+const UNBREAKABLE: u8 = 5;
+
+/// The voxel materials a building block may write over, one byte each, as
+/// the game builds the table for an ordinary building shape (server 399,
+/// client 426): air; a terrain material whose config is softer than
+/// `Unbreakable`; a building material whose config is (its material
+/// stored 0-based from 0x80); nothing else. `terrain` and `building` hold
+/// each config's material and hardness.
+pub(crate) fn replace_table(terrain: &[(u8, u8)], building: &[(u8, u8)]) -> [u8; MATERIALS] {
+    let mut table = [0u8; MATERIALS];
+    table[0] = 1;
+    for &(material, hardness) in terrain {
+        if (1..BUILDING_FIRST).contains(&usize::from(material)) && hardness < UNBREAKABLE {
+            table[usize::from(material)] = 1;
+        }
+    }
+    for &(material, hardness) in building {
+        if let Some(slot) = table.get_mut(BUILDING_FIRST + usize::from(material))
+            && hardness < UNBREAKABLE
+        {
+            *slot = 1;
+        }
+    }
+    table
+}
+
 /// Where the game's place and tear-down events keep their fields, from
 /// reflection: the event's size and each field's offset; `item` only in
 /// the place event.
@@ -238,6 +271,19 @@ mod tests {
         assert_eq!(f32_at(&bytes, 0x8), 100.0);
         assert_eq!(f32_at(&bytes, 0x24 + 4), 38.0);
         assert_eq!(u32_at(&bytes, 0x40), 0);
+    }
+
+    #[test]
+    fn a_block_replaces_air_and_breakable_configured_materials_only() {
+        let table = replace_table(&[(2, 1), (9, 5)], &[(3, 0), (4, 5)]);
+        assert_eq!(table[0], 1, "air");
+        assert_eq!(table[2], 1, "a terrain material below Unbreakable");
+        assert_eq!(table[9], 0, "an Unbreakable terrain material");
+        assert_eq!(table[5], 0, "a terrain material without a config");
+        assert_eq!(table[0x83], 1, "building material 3, stored 0-based");
+        assert_eq!(table[0x84], 0, "an Unbreakable building material");
+        assert_eq!(table[0x90], 0, "a building material without a config");
+        assert_eq!(table.iter().map(|&may| usize::from(may)).sum::<usize>(), 3);
     }
 
     #[test]

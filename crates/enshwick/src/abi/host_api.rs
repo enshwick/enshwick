@@ -1266,7 +1266,7 @@ pub struct HostApi {
     /// [`TransactionInfo::refusal`]. The check runs at its first step on the
     /// server's game thread; a commit made there at a quiet moment checks
     /// at once and answers [`Status::REFUSED`]. [`Status::BAD_ARGS`] for an
-    /// `actor` of 0. Any thread. Since minor 88.
+    /// `actor` of 0. Any thread. Since minor 89.
     pub transaction_commit_for: extern "system" fn(
         me: ModHandle,
         actor: u32,

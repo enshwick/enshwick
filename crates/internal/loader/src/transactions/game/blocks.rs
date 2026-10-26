@@ -6,7 +6,7 @@ use enshwick_gamedata::catalogue;
 use crate::host::Loader;
 use crate::memory::read;
 use crate::pinned;
-use crate::transactions::block::{Block, EventLayout, GameBox};
+use crate::transactions::block::{Block, EventLayout, GameBox, MATERIALS, replace_table};
 use crate::transactions::paste::Region;
 
 /// The game's lookup of a shape's `VoxelBlueprintItem` by its item in a
@@ -59,8 +59,6 @@ pub(super) type WriteBlockFn = unsafe extern "system" fn(
     flag: u8,
 );
 
-/// The voxel materials a byte names.
-const MATERIALS: usize = 0x100;
 /// The first building voxel material.
 const BUILDING_FIRST: u8 = 0x80;
 /// Metres to the game's 32.32 fixed point.
@@ -215,23 +213,41 @@ fn building_material(loader: &Loader, item: u32) -> Result<u8, Status> {
     Ok(material)
 }
 
-/// Writes `block` through the game's block write, over any material.
+/// The materials a building block may write over in the running game, as
+/// the game's building tool decides for an ordinary building shape; on the
+/// game thread.
+pub(super) fn replaceable(loader: &Loader) -> Result<[u8; MATERIALS], Status> {
+    let terrain: Vec<(u8, u8)> = crate::terrain::materials(loader)?
+        .iter()
+        .map(|config| (config.id, config.hardness))
+        .collect();
+    let building = crate::terrain::building_configs(loader)?;
+    Ok(replace_table(&terrain, &building))
+}
+
+/// Writes `block` through the game's block write, over the materials
+/// `replace` allows.
 ///
 /// # Safety
 ///
 /// - `write` is the table's `voxel.write_block`.
 /// - `editor` and `alloc` are the server's live voxel editor and its
 ///   allocator, on the game thread at a quiet moment.
-pub(super) unsafe fn write(write: WriteBlockFn, editor: *mut u8, alloc: *mut u8, block: &Block) {
-    let anything = [1u8; MATERIALS];
+pub(super) unsafe fn write(
+    write: WriteBlockFn,
+    editor: *mut u8,
+    alloc: *mut u8,
+    replace: &[u8; MATERIALS],
+    block: &Block,
+) {
     let replace = Table {
-        entries: anything.as_ptr(),
+        entries: replace.as_ptr(),
         count: MATERIALS as u64,
     };
     let mut out = 0u32;
     // SAFETY: the caller guarantees `write`, `editor` and `alloc` on the game
-    // thread at a quiet moment; `replace` points at `MATERIALS` entries on
-    // this stack, `block.game` is the box the game's own builder made for
+    // thread at a quiet moment; `replace` points at `MATERIALS` entries
+    // borrowed for the call, `block.game` is the box the game's own builder made for
     // this block, whose data points into the blueprint registry the world
     // keeps until it ends, which ends the transaction first; no undo.
     unsafe {

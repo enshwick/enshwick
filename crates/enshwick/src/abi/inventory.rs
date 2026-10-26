@@ -197,6 +197,7 @@ pub type InventoryResultFn =
 ///     category: 2,
 ///     rarity: 0,
 ///     flags: ItemData::HAS_PIDE,
+///     placed_entity: [0; 16],
 /// };
 /// assert_ne!(sword.flags & ItemData::HAS_PIDE, 0);
 /// ```
@@ -216,6 +217,10 @@ pub struct ItemData {
     pub rarity: u8,
     /// `ItemInfo` flags: [`ItemData::HAS_PIDE`] and the others on this type.
     pub flags: u32,
+    /// The GUID of the template a player places from the item, its
+    /// `equipment.placedEntity`, in file order; all zero for an item that
+    /// places nothing. Since minor 88; zero before.
+    pub placed_entity: [u8; 16],
 }
 
 impl_headed!(ItemData);

@@ -33,8 +33,21 @@ type MarkChanged = unsafe extern "system" fn(
 /// ```
 #[repr(transparent)]
 #[derive(
-    Clone, Copy, Debug, Default, PartialEq, Eq, Hash, PartialOrd, Ord, crate::Shape, crate::Script,
+    Clone,
+    Copy,
+    Debug,
+    Default,
+    PartialEq,
+    Eq,
+    Hash,
+    PartialOrd,
+    Ord,
+    serde::Serialize,
+    serde::Deserialize,
+    crate::Shape,
+    crate::Script,
 )]
+#[serde(transparent)]
 #[shape(api = "entity")]
 pub struct Entity(pub u32);
 

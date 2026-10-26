@@ -239,7 +239,7 @@ marked "init only" are allowed during `enshwick_mod_init` only.
 | `join_missing`           | The server's join mods the last refused join found missing on this client                            | 10          |
 | `hook_at`                | Runs a handler before an instruction inside a game function; init only                               | 11          |
 | `inventory_open`         | Asks for inventory transactions and item data; init only; `MISSING` on a build that lacks them       | 12          |
-| `item_info`              | Writes an item's static data; any thread                                                             | 12          |
+| `item_info`              | Writes an item's static data, since minor 88 with the template it places; any thread                 | 12          |
 | `inventory_submit`       | Queues an inventory transaction, from any thread; the result comes on the game thread                | 12          |
 | `status`                 | Adds a source of lines for the loader's status summary                                               | 13          |
 | `run_console`            | Runs a console line as the server's console, an action's text form included; server game thread only | 13          |
@@ -363,4 +363,4 @@ marked "init only" are allowed during `enshwick_mod_init` only.
 | `transaction_commit`     | Queues terrain edits as one transaction written at quiet moments, with undo; any thread              | 87          |
 | `transaction_undo`       | Queues the undo of one of the mod's transactions, refused once its bricks changed; any thread        | 87          |
 | `transaction_status`     | Where one of the mod's transactions stands: queued, applied, undone, failed and why; any thread      | 87          |
-| `transaction_commit_for` | As `transaction_commit`, for a player whose rights the loader checks first; any thread               | 88          |
+| `transaction_commit_for` | As `transaction_commit`, for a player whose rights the loader checks first; any thread               | 89          |

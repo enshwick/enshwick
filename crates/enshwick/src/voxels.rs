@@ -69,7 +69,19 @@ const PER_METRE: f64 = 2.0;
 /// assert_eq!(at.to_metres(), [10.0, 4.0, 7.5]);
 /// # Ok::<(), &str>(())
 /// ```
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Default,
+    PartialEq,
+    Eq,
+    Hash,
+    PartialOrd,
+    Ord,
+    serde::Serialize,
+    serde::Deserialize,
+)]
 pub struct VoxelPos {
     x: u32,
     y: u32,
@@ -195,7 +207,9 @@ fn index(metres: f64) -> Option<u32> {
 /// }
 /// assert!(!is_ground(VoxelMaterial::Air));
 /// ```
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(
+    Clone, Copy, Debug, Default, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize,
+)]
 #[non_exhaustive]
 pub enum VoxelMaterial {
     /// Empty: no ground and no building.
@@ -223,7 +237,9 @@ pub enum VoxelMaterial {
 /// assert!(!rock.is_air());
 /// assert_eq!(rock.fill(), 255);
 /// ```
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(
+    Clone, Copy, Debug, Default, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize,
+)]
 pub struct Voxel {
     material: VoxelMaterial,
     fill: u8,
@@ -311,14 +327,98 @@ impl Voxel {
 ///     Ok(block.iter().filter(|(_, voxel)| !voxel.is_air()).count())
 /// }
 /// ```
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[serde(try_from = "Parts")]
 pub struct VoxelBox {
     min: VoxelPos,
     size: [u32; 3],
     voxels: Vec<Voxel>,
 }
 
+/// A [`VoxelBox`] as serde reads it, before its voxels are counted.
+#[derive(serde::Deserialize)]
+struct Parts {
+    min: VoxelPos,
+    size: [u32; 3],
+    voxels: Vec<Voxel>,
+}
+
+/// Why a [`VoxelBox`] read with serde was refused.
+#[derive(Debug, thiserror::Error)]
+#[error("a voxel box of {size:?} from {min:?} holding {held} voxels")]
+struct VoxelBoxError {
+    min: VoxelPos,
+    size: [u32; 3],
+    held: usize,
+}
+
+impl TryFrom<Parts> for VoxelBox {
+    type Error = VoxelBoxError;
+
+    fn try_from(parts: Parts) -> Result<Self, VoxelBoxError> {
+        let (min, size, held) = (parts.min, parts.size, parts.voxels.len());
+        Self::from_parts(min, size, parts.voxels).ok_or(VoxelBoxError { min, size, held })
+    }
+}
+
 impl VoxelBox {
+    /// The box of `size` from `min` holding `voxels`, x fastest, then y,
+    /// then z; `None` unless there is one voxel for each place and the box
+    /// ends below [`abi::Voxel::END`] on every axis.
+    pub(crate) fn from_parts(min: VoxelPos, size: [u32; 3], voxels: Vec<Voxel>) -> Option<Self> {
+        let within = (0..3).all(|axis| {
+            min.to_array()[axis]
+                .checked_add(size[axis])
+                .is_some_and(|end| end <= abi::Voxel::END)
+        });
+        let count = size
+            .iter()
+            .try_fold(1usize, |count, &axis| count.checked_mul(axis as usize))?;
+        (within && count == voxels.len()).then_some(Self { min, size, voxels })
+    }
+
+    /// The box turned a quarter turn about the vertical, keeping its
+    /// corner: the voxel at (x, y, z) from the corner moves to
+    /// (depth − 1 − z, y, x).
+    pub(crate) fn turned(&self) -> Self {
+        let [width, height, depth] = self.size.map(|axis| axis as usize);
+        let mut voxels = Vec::with_capacity(self.voxels.len());
+        for new_z in 0..width {
+            for y in 0..height {
+                for new_x in 0..depth {
+                    let (x, z) = (new_z, depth - 1 - new_x);
+                    voxels.push(self.voxels[x + width * (y + height * z)]);
+                }
+            }
+        }
+        let [width, height, depth] = self.size;
+        Self {
+            min: self.min,
+            size: [depth, height, width],
+            voxels,
+        }
+    }
+
+    /// The same voxels with the corner at `(0, 0, 0)`.
+    pub(crate) fn at_corner(self) -> Self {
+        Self {
+            min: VoxelPos::default(),
+            ..self
+        }
+    }
+
+    /// Copies `block`, which lies inside this box, into its place.
+    pub(crate) fn fill_from(&mut self, block: &Self) {
+        let [width, height, _] = self.size.map(|axis| axis as usize);
+        let [row, rows, _] = block.size.map(|axis| axis as usize);
+        let [x, y, z] =
+            [0, 1, 2].map(|axis| (block.min.to_array()[axis] - self.min.to_array()[axis]) as usize);
+        for (index, source) in block.voxels.chunks_exact(row).enumerate() {
+            let start = x + width * (y + index % rows + height * (z + index / rows));
+            self.voxels[start..start + row].copy_from_slice(source);
+        }
+    }
+
     /// Its lowest corner.
     ///
     /// # Examples
@@ -515,6 +615,11 @@ pub struct Voxels {
 }
 
 impl Voxels {
+    /// The reads through `host`.
+    pub(crate) const fn new(host: Host) -> Self {
+        Self { host }
+    }
+
     /// The voxels of the box of `size` voxels from `min`, its lowest corner.
     ///
     /// # Errors
@@ -615,6 +720,61 @@ mod tests {
             let voxel = Voxel::new(material, 0x40);
             assert_eq!(Voxel::from_abi(voxel.to_abi()), voxel);
         }
+    }
+
+    #[test]
+    fn serde_refuses_a_box_whose_count_or_end_is_wrong() {
+        let short = VoxelBox {
+            min: VoxelPos::new(0, 0, 0),
+            size: [2, 1, 1],
+            voxels: vec![Voxel::default()],
+        };
+        let bytes = postcard::to_allocvec(&short).unwrap();
+        assert!(postcard::from_bytes::<VoxelBox>(&bytes).is_err());
+
+        let past_the_end = VoxelBox {
+            min: VoxelPos::new(abi::Voxel::END - 1, 0, 0),
+            size: [2, 1, 1],
+            voxels: vec![Voxel::default(); 2],
+        };
+        let bytes = postcard::to_allocvec(&past_the_end).unwrap();
+        assert!(postcard::from_bytes::<VoxelBox>(&bytes).is_err());
+
+        let wrapping = VoxelBox {
+            min: VoxelPos::new(u32::MAX, 0, 0),
+            size: [2, 1, 1],
+            voxels: vec![Voxel::default(); 2],
+        };
+        let bytes = postcard::to_allocvec(&wrapping).unwrap();
+        assert!(postcard::from_bytes::<VoxelBox>(&bytes).is_err());
+
+        let fine = VoxelBox {
+            min: VoxelPos::new(abi::Voxel::END - 2, 0, 0),
+            size: [2, 1, 1],
+            voxels: vec![Voxel::default(); 2],
+        };
+        let bytes = postcard::to_allocvec(&fine).unwrap();
+        assert_eq!(postcard::from_bytes::<VoxelBox>(&bytes).unwrap(), fine);
+    }
+
+    #[test]
+    fn a_block_fills_its_place_row_by_row() {
+        let mut whole = VoxelBox {
+            min: VoxelPos::new(10, 10, 10),
+            size: [4, 3, 2],
+            voxels: vec![Voxel::default(); 24],
+        };
+        let rock = |i: u8| Voxel::new(VoxelMaterial::Terrain(i + 1), 255);
+        let block = VoxelBox {
+            min: VoxelPos::new(11, 11, 10),
+            size: [2, 2, 2],
+            voxels: (0..8).map(rock).collect(),
+        };
+        whole.fill_from(&block);
+        for (at, voxel) in &block {
+            assert_eq!(whole.get(at), Some(voxel), "{at:?}");
+        }
+        assert_eq!(whole.iter().filter(|(_, v)| !v.is_air()).count(), 8);
     }
 
     #[test]

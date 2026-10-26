@@ -8,7 +8,7 @@ use crate::terrain::{Shape, add_edit, dig_edit, flatten_edit};
 use crate::voxels::{VoxelBox, VoxelPos};
 use crate::{Host, ItemId};
 
-use super::{BuildRefusal, Player, Transform, World, WorldError};
+use super::{BuildRefusal, Player, World, WorldError, WorldTransform};
 
 /// The id of a committed [`Transaction`], for [`World::undo`] and
 /// [`World::transaction_status`]; valid while the server runs.
@@ -306,28 +306,33 @@ impl Transaction {
 
     /// Places a building block as a player's building tool does: the
     /// `VoxelBlueprintItem` of `shape` in the building material `material`
-    /// places, centred on `at`'s position and turned by its rotation, which
-    /// the game keeps in quarter turns. The game's `BuildingPlaceEvent`
-    /// tells its listeners. It takes no cost from anyone.
+    /// places, centred on `at`'s position and turned by its orientation,
+    /// which the game keeps in quarter turns. As a player's building tool
+    /// does, it writes over air and over ground and building voxels softer
+    /// than `Unbreakable`, and leaves the rest. The game's
+    /// `BuildingPlaceEvent` tells its listeners. It takes no cost from
+    /// anyone. [`Transaction::commit`] refuses a `shape` with no
+    /// `VoxelBlueprintItem` and a `material` whose `ChangeVoxelData` places
+    /// no building material.
     ///
     /// # Examples
     ///
     /// ```
     /// use enshwick::ItemId;
-    /// use enshwick::world::{Transform, World};
+    /// use enshwick::world::{World, WorldTransform};
     ///
     /// fn pillar(world: World, shape: ItemId, stone: ItemId, at: [f64; 3]) -> bool {
-    ///     let at = Transform { position: at, rotation: [0.0, 0.0, 0.0, 1.0] };
+    ///     let at = WorldTransform::at(at);
     ///     world.transaction().place_block(shape, stone, at).commit().is_ok()
     /// }
     /// ```
-    pub fn place_block(mut self, shape: ItemId, material: ItemId, at: Transform) -> Self {
+    pub fn place_block(mut self, shape: ItemId, material: ItemId, at: WorldTransform) -> Self {
         self.changes.push(Change::Block(BlockPlace {
             header: Header::of::<BlockPlace>(),
-            shape: shape.0,
-            material: material.0,
+            shape: shape.get(),
+            material: material.get(),
             position: at.position,
-            rotation: at.rotation,
+            rotation: at.orientation,
         }));
         self
     }
@@ -362,7 +367,10 @@ impl Transaction {
     /// # Errors
     ///
     /// [`WorldError::Refused`] for no changes, a change the loader refuses
-    /// (as [`Terrain`](crate::terrain::Terrain) does), more than the
+    /// (as [`Terrain`](crate::terrain::Terrain) does; a block whose shape
+    /// item has no `VoxelBlueprintItem` or whose material item places no
+    /// building material; voxels whose kind is not the one their material
+    /// names), more than the
     /// loader's cap of changes or bricks, or a full queue;
     /// [`WorldError::OutsideWorld`] for a change past the world's edge or
     /// above 1,024 metres, once the loader has met the world (before, the

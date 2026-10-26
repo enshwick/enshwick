@@ -162,6 +162,7 @@ impl Inventories {
             category: 0,
             rarity: 0,
             flags: 0,
+            placed_entity: [0; 16],
         };
         let status = (self.host.api().item_info)(self.host.handle(), item, &raw mut out);
         status.is_ok().then_some(ItemInfo {

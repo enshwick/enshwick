@@ -189,7 +189,7 @@ A transaction also writes voxels and building blocks, with the same undo:
 ```rust
 use enshwick::ItemId;
 use enshwick::voxels::{VoxelPos, Voxels};
-use enshwick::world::{Player, Transform, World};
+use enshwick::world::{Player, World, WorldTransform};
 
 fn copy_up(world: World, voxels: Voxels, from: VoxelPos) -> bool {
     let Ok(block) = voxels.read(from, [16, 16, 16]) else {
@@ -204,7 +204,7 @@ fn wall_for(world: World, player: &Player, shape: ItemId, stone: ItemId, at: [f6
     let [x, y, z] = at;
     (0..4)
         .fold(world.transaction_for(player), |wall, step| {
-            let at = Transform { position: [x + 2.0 * f64::from(step), y, z], rotation: [0.0, 0.0, 0.0, 1.0] };
+            let at = WorldTransform::at([x + 2.0 * f64::from(step), y, z]);
             wall.place_block(shape, stone, at)
         })
         .commit()
@@ -219,9 +219,10 @@ somewhere else. A voxel's kind must be the one its material names.
 `place_block` takes the shape's item, which has a `VoxelBlueprintItem`,
 and the material's item, whose `ChangeVoxelData` places a building
 material; anything else is refused at commit. The block is centred on the
-transform's position, and its rotation is kept in quarter turns, as the
-game keeps it. It overwrites whatever lies in its box and takes no cost
-from anyone. `place_block` raises the game's `BuildingPlaceEvent` and
+transform's position, and its orientation is kept in quarter turns, as the
+game keeps it. As a player's building tool does, it writes over air and
+over ground and building voxels softer than `Unbreakable`, and leaves the
+rest. It takes no cost from anyone. `place_block` raises the game's `BuildingPlaceEvent` and
 `erase_block` its `BuildingTearDownEvent`, so the game's listeners and
 other mods see the change. `write_voxels` raises no event.
 
@@ -294,3 +295,79 @@ hook, they fail with `WrongThread`.
 Every call works on the server's game thread, from a game event, a
 [scheduler](events.md#the-scheduler) task or an [action](actions.md); on a
 client, while it hosts a game.
+
+## Capturing a region
+
+`world.props_in(a, b)` lists the props whose position lies in the box
+between two corners in metres: the things players placed from items, such
+as chests, beds and torches. Each `Prop` has its entity, the `ItemId` it
+was placed from (its `UsedItem`) and a `WorldTransform` with its position
+in metres and its orientation, a quaternion x, y, z then w with y up.
+A prop is told apart by its template, the one its item places, so the
+notes and animals a world comes with are not props even where they carry
+an item. The call walks every entity with a `UsedItem`, so call it now and
+then, not every step. Before the game first ran its inventories, a box
+holding things to check fails with `Missing`.
+
+`world.capture(a, b)` takes the region between two voxels, both included,
+as plain data: a `Capture` with its voxels and its props, both counted from
+the region's lowest corner, its `origin`. It reads the voxels in tiles of
+up to 64 voxels, 32 metres, a side, counted from that corner, and takes at
+most `CAPTURE_TILES`, 16 tiles: such as a region of 128 by 128 metres and
+32 high, or a cube of 64 metres. A larger region is `Refused` before any
+read. A tile read took 2.4 to 3.1 milliseconds on a server copy under
+Rosetta and Wine, so a capture holds the game thread for at most about 50
+milliseconds. A mod captures a bigger region in parts, one per step or
+scheduler task, and keeps them together itself. `NotLoaded` and
+`OutsideWorld` come from the reads: a region not wholly loaded fails after
+every tile has started loading, so a second try a moment later finds it.
+
+```rust
+use std::ops::ControlFlow;
+use std::time::Duration;
+
+use enshwick::voxels::VoxelPos;
+use enshwick::world::{Capture, WorldError};
+
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    let world = load.world()?;
+    let corner = VoxelPos::new(7_200, 1_680, 2_880);
+    let far = VoxelPos::new(7_231, 1_699, 2_911);
+    let mut tries = 0;
+    load.scheduler()?.every(Duration::from_secs(1), move || {
+        tries += 1;
+        match world.capture(corner, far) {
+            Ok(shed) => {
+                let turned: Capture = shed.rotated(1);
+                let next_door = turned.translated([40, 0, 0]);
+                enshwick::info!(
+                    "{} props, {:?} voxels, to paste at {:?}",
+                    turned.props().len(),
+                    turned.size(),
+                    next_door.map(|capture| capture.origin()),
+                );
+                ControlFlow::Break(())
+            }
+            Err(WorldError::NotLoaded) if tries < 5 => ControlFlow::Continue(()),
+            Err(why) => {
+                enshwick::warn!("no capture: {why}");
+                ControlFlow::Break(())
+            }
+        }
+    });
+    Ok(())
+}
+```
+
+`rotated(quarter_turns)` turns a capture about the vertical, each quarter
+turn taking the +x side to +z as seen from above, with negative turns the
+other way. The region keeps its corner: a box 32 voxels wide and 20 deep
+turns into one 20 wide and 32 deep. Voxels move to their turned places and
+props turn their positions and orientations with them; a voxel holds no
+direction of its own, so nothing else changes. A turned orientation comes
+with w at or above zero, so four quarter turns give back the same numbers
+within rounding. `translated(by)` moves the
+origin by a number of voxels on each axis, and is `None` once the corner
+would leave the world's coordinates. Both are pure: they change only the
+capture, never the world. A `Capture` implements serde's `Serialize` and
+`Deserialize`, so a mod can keep it in any format serde writes.

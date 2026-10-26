@@ -11,7 +11,7 @@
 pub const ABI_MAJOR: u16 = 2;
 
 /// The minor version of this interface. A newer minor only appends fields.
-pub const ABI_MINOR: u16 = 88;
+pub const ABI_MINOR: u16 = 89;
 
 /// Whether `id` is a valid mod id: `<author>.<name>`, each part of
 /// `[a-z0-9-]`, at most 64 characters in all.
@@ -783,7 +783,7 @@ const _: () = {
     assert!(size_of::<InventoryRequest>() == 32);
     assert!(size_of::<InventoryOpResult>() == 8);
     assert!(size_of::<InventoryResult>() == 24);
-    assert!(size_of::<ItemData>() == 20);
+    assert!(size_of::<ItemData>() == 20 + 16);
     // Frozen: embedded in calls and written as an array.
     assert!(size_of::<PlayerInfo>() == 96);
     assert!(core::mem::offset_of!(PlayerInfo, name) == 26);

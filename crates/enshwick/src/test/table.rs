@@ -325,9 +325,12 @@ pub(crate) struct DataChanges {
     pub(crate) live: Vec<crate::test::content::LiveChange>,
 }
 
-/// The changes of the world the mod asked for, in order.
+/// The changes of the world the mod asked for, and its voxel reads, in
+/// order.
 #[derive(Default)]
 pub(crate) struct WorldEdits {
+    /// The voxel boxes the mod read on the game thread, `(min, size)`.
+    pub(crate) voxel_reads: Vec<([u32; 3], [u32; 3])>,
     /// Direct terrain edits.
     pub(crate) terrain: Vec<TerrainEdit>,
     /// Committed transactions, oldest first.

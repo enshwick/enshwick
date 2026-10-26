@@ -687,6 +687,10 @@ pub const FACTS: &[(&str, Fact)] = &[
         "current_transform",
         Fact::Type("keen::ecs::CurrentTransform"),
     ),
+    (
+        "current_transform.transform",
+        offset("keen::ecs::CurrentTransform", "transform"),
+    ),
     ("used_item", Fact::Type("keen::ecs::UsedItem")),
     ("label", Fact::Type("keen::ecs::CustomPlayerString")),
     ("inventory_setup", Fact::Type("keen::ecs::InventorySetup")),
@@ -1378,6 +1382,25 @@ pub const FACTS: &[(&str, Fact)] = &[
     (
         "player_permissions.can_edit_world",
         enum_constant(PLAYER_PERMISSIONS, "CanEditWorld"),
+    ),
+    (
+        "terraforming_registry.building_configs",
+        offset(
+            "keen::TerraformingEfficiencyRegistryResource",
+            "buildingConfigs",
+        ),
+    ),
+    (
+        "building_terraforming_config",
+        Fact::Type("keen::BuildingTerraformingConfig"),
+    ),
+    (
+        "building_terraforming_config.building_material",
+        offset("keen::BuildingTerraformingConfig", "buildingMaterial"),
+    ),
+    (
+        "building_terraforming_config.hardness",
+        offset("keen::BuildingTerraformingConfig", "hardness"),
     ),
 ];
 
