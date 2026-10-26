@@ -6,6 +6,7 @@
 //! elsewhere. On a client the server is the built-in one, while it hosts a
 //! game.
 
+mod geometry;
 mod rename;
 mod stats;
 
@@ -16,6 +17,7 @@ use crate::ecs::Entity;
 use crate::game_events::{Field, Scalar};
 use crate::{Host, Load, Off};
 
+pub use geometry::near;
 pub use rename::Rename;
 pub use stats::{Meter, Progress, Skill, Vitals};
 
