@@ -122,8 +122,10 @@ The loader writes the edits in order on the server's game thread between
 steps, about 64 bricks of 8³ voxels (4 metres a side) a step, so a large
 transaction spreads over several steps instead of weighing on one; an edit
 is never split, and one larger than the budget takes a step of its own.
-What a step of a given size costs the server is still being measured, and
-the budget may change with it.
+On a dedicated server with no player, one transaction of eight digs of
+6 metres, 57,512 voxels, was written over 20 steps and undone over 19; a
+world step took 5.9 ms on average (18 ms for the slowest twentieth), and
+steps came every 51 ms against 48 ms idle.
 Before an edit writes, the loader keeps every brick it can touch, 1 KiB a
 brick. `world.transaction_status(id)` tells where a transaction stands:
 

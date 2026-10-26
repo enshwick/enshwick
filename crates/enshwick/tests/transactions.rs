@@ -303,4 +303,22 @@ mod tests {
             (api.transaction_commit)(enshwick::abi::ModHandle(1), &raw const op, 1, &raw mut id);
         assert_eq!(status, Status::BAD_ARGS);
     }
+
+    #[test]
+    fn the_fake_refuses_an_undo_while_queued_work_holds_the_cap() {
+        let (loader, world) = started();
+        loader.set_terrain(&[rock()]);
+        let wide = |count: u32| {
+            (0..count).fold(world.transaction(), |transaction, i| {
+                let x = 40.0 + 40.0 * f64::from(i);
+                transaction.terrain_dig([x, 40.0, 40.0], 16.0, Shape::Round, &[])
+            })
+        };
+        let first = wide(50).commit().unwrap();
+        loader.run_transactions();
+        let _second = wide(50).commit().unwrap();
+        assert_eq!(world.undo(first), Err(WorldError::Refused));
+        loader.run_transactions();
+        world.undo(first).unwrap();
+    }
 }

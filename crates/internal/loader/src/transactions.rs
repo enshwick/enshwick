@@ -22,6 +22,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use enshwick::abi::{Status, TransactionInfo};
 
+use crate::fuse::Fuse;
 use crate::locks::Relock;
 use crate::mod_index::ModIndex;
 use crate::pinned;
@@ -58,12 +59,34 @@ struct Transactions {
     /// written only under the ledger's lock.
     busy: AtomicBool,
     ledger: Mutex<Ledger>,
+    /// Off after a pass panicked: no more passes, commits or undos.
+    fuse: Fuse,
 }
 
-static STATE: Transactions = Transactions {
-    busy: AtomicBool::new(false),
-    ledger: Mutex::new(Ledger::new(LIMITS)),
-};
+impl Transactions {
+    const fn new() -> Self {
+        Self {
+            busy: AtomicBool::new(false),
+            ledger: Mutex::new(Ledger::new(LIMITS)),
+            fuse: Fuse::new("world transactions"),
+        }
+    }
+}
+
+static STATE: Transactions = Transactions::new();
+
+/// Runs a step's `work` behind the feature's fuse. A panic turns the
+/// feature off and settles every transaction held, since its work in hand
+/// is lost: those in work fail, the rest expire.
+fn guarded(state: &Transactions, work: impl FnOnce()) {
+    if state.fuse.run("the post-step link", work).is_none() && state.fuse.is_off() {
+        let mut ledger = state.ledger.relock();
+        if ledger.busy() || ledger.kept() > 0 {
+            ledger.forget();
+        }
+        state.busy.store(false, Ordering::Release);
+    }
+}
 
 /// Queues `edits` as one transaction of `owner`. [`Status::MISSING`] while
 /// no world runs or on a build without the edits, the read or the undo
@@ -74,7 +97,7 @@ pub(crate) fn commit(
     owner: ModIndex,
     edits: &[enshwick::abi::TerrainEdit],
 ) -> Result<u64, Status> {
-    if !game::ready(loader) {
+    if STATE.fuse.is_off() || !game::ready(loader) {
         return Err(Status::MISSING);
     }
     let mut ledger = STATE.ledger.relock();
@@ -83,11 +106,19 @@ pub(crate) fn commit(
     Ok(id)
 }
 
-/// Queues the undo of transaction `id` of `owner`, as [`Ledger::undo`].
+/// Queues the undo of transaction `id` of `owner`, as [`Ledger::undo`];
+/// [`Status::MISSING`] once the feature is off.
 pub(crate) fn undo(owner: ModIndex, id: u64) -> Result<(), Status> {
-    let mut ledger = STATE.ledger.relock();
+    undo_in(&STATE, owner, id)
+}
+
+fn undo_in(state: &Transactions, owner: ModIndex, id: u64) -> Result<(), Status> {
+    if state.fuse.is_off() {
+        return Err(Status::MISSING);
+    }
+    let mut ledger = state.ledger.relock();
     ledger.undo(owner, id)?;
-    STATE.busy.store(ledger.busy(), Ordering::Release);
+    state.busy.store(ledger.busy(), Ordering::Release);
     Ok(())
 }
 
@@ -99,24 +130,27 @@ pub(crate) fn info(owner: ModIndex, id: u64) -> Option<TransactionInfo> {
 /// The ledger without waiting: `None` while another thread holds it.
 #[cfg(windows)]
 fn try_ledger() -> Option<std::sync::MutexGuard<'static, Ledger>> {
-    match STATE.ledger.try_lock() {
-        Ok(ledger) => Some(ledger),
-        Err(std::sync::TryLockError::Poisoned(poisoned)) => Some(poisoned.into_inner()),
-        Err(std::sync::TryLockError::WouldBlock) => None,
-    }
+    STATE.ledger.try_relock()
 }
 
-/// Writes the queued work of a step, on the game thread after the step.
-/// The game's edits and undo writes run with the ledger free, so other
-/// threads and the game's own callbacks may commit, undo and ask meanwhile;
-/// a step that finds the ledger taken skips its work until the next.
+/// Writes the queued work of a step, on the game thread after the step,
+/// behind the feature's fuse.
 #[cfg(windows)]
 pub(crate) fn after_step(loader: &crate::host::Loader) {
-    use ledger::Voxels;
-
     if !STATE.busy.load(Ordering::Acquire) {
         return;
     }
+    guarded(&STATE, || pass(loader));
+}
+
+/// The step's pass over the queue. The game's edits and undo writes run
+/// with the ledger free, so other threads and the game's own callbacks may
+/// commit, undo and ask meanwhile; a step that finds the ledger taken skips
+/// its work until the next.
+#[cfg(windows)]
+fn pass(loader: &crate::host::Loader) {
+    use ledger::Voxels;
+
     let Ok(mut world) = game::Game::new(loader) else {
         return;
     };
@@ -155,4 +189,48 @@ pub(crate) fn forget() {
     let mut ledger = STATE.ledger.relock();
     ledger.forget();
     STATE.busy.store(false, Ordering::Release);
+}
+
+#[cfg(test)]
+mod tests {
+    use enshwick::abi::{Header, TerrainEdit};
+
+    use super::*;
+
+    const ME: ModIndex = ModIndex::new(0);
+
+    fn dig() -> TerrainEdit {
+        TerrainEdit {
+            header: Header::of::<TerrainEdit>(),
+            kind: TerrainEdit::DIG,
+            shape: TerrainEdit::ROUND,
+            flags: 0,
+            material: 0,
+            position: [20.0; 3],
+            radius: 4.0,
+            height: 0.0,
+            protect: [0; 16],
+        }
+    }
+
+    #[test]
+    fn a_pass_that_panics_turns_transactions_off_and_settles_them() {
+        let state = Transactions::new();
+        let id = state.ledger.relock().commit(ME, &[dig()]).unwrap();
+        state.busy.store(true, Ordering::Release);
+
+        guarded(&state, || panic!("in a pass"));
+        assert!(state.fuse.is_off());
+        assert!(!state.busy.load(Ordering::Acquire));
+        let info = state.ledger.relock().info(ME, id).unwrap();
+        assert_eq!(
+            (info.state, info.reason),
+            (TransactionInfo::FAILED, Status::MISSING)
+        );
+        assert_eq!(undo_in(&state, ME, id), Err(Status::MISSING));
+
+        let mut ran = false;
+        guarded(&state, || ran = true);
+        assert!(!ran, "a turned-off feature runs no more passes");
+    }
 }

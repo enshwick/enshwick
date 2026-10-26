@@ -386,10 +386,7 @@ unsafe fn after_step(loader: &'static Loader, offsets: &Offsets, server: *mut u8
     part!("join admission", crate::admission::after_step(loader));
     part!("console lines", crate::console::after_step(loader));
     part!("chat sending", crate::chat::drain());
-    part!(
-        "world transactions",
-        crate::transactions::after_step(loader)
-    );
+    crate::transactions::after_step(loader);
     if server.is_null() {
         return;
     }

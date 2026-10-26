@@ -709,19 +709,7 @@ pub(crate) extern "system" fn transaction_commit(
         if bound > TRANSACTION_BRICKS_MAX {
             return Status::BAD_ARGS;
         }
-        let claimed: u64 = s
-            .edits
-            .transactions
-            .iter()
-            .map(|t| match t.info.state {
-                TransactionInfo::PENDING => {
-                    t.terrain.iter().map(crate::test::world::edit_bricks).sum()
-                }
-                TransactionInfo::UNDOING => t.info.bricks,
-                _ => 0,
-            })
-            .sum();
-        if claimed + bound > TRANSACTION_BRICKS_MAX {
+        if claimed(&s.edits.transactions) + bound > TRANSACTION_BRICKS_MAX {
             return Status::REFUSED;
         }
         let next = s.edits.transactions.last().map_or(1, |last| last.id + 1);
@@ -743,8 +731,22 @@ pub(crate) extern "system" fn transaction_commit(
     })
 }
 
+/// The bricks of undo data the transactions in work may come to hold, as
+/// the loader counts them.
+fn claimed(transactions: &[crate::test::FakeTransaction]) -> u64 {
+    transactions
+        .iter()
+        .map(|t| match t.info.state {
+            TransactionInfo::PENDING => t.terrain.iter().map(crate::test::world::edit_bricks).sum(),
+            TransactionInfo::UNDOING => t.info.bricks,
+            _ => 0,
+        })
+        .sum()
+}
+
 pub(crate) extern "system" fn transaction_undo(me: ModHandle, id: u64) -> Status {
     with(Status::REFUSED, |s| {
+        let claimed = claimed(&s.edits.transactions);
         let Some(transaction) = s
             .edits
             .transactions
@@ -757,10 +759,15 @@ pub(crate) extern "system" fn transaction_undo(me: ModHandle, id: u64) -> Status
         match info.state {
             TransactionInfo::PENDING if info.applied == 0 => info.state = TransactionInfo::UNDONE,
             TransactionInfo::UNDOING => {}
-            TransactionInfo::PENDING | TransactionInfo::APPLIED | TransactionInfo::UNDO_REFUSED => {
+            TransactionInfo::PENDING => info.state = TransactionInfo::UNDOING,
+            TransactionInfo::APPLIED | TransactionInfo::UNDO_REFUSED | TransactionInfo::FAILED
+                if info.bricks > 0 =>
+            {
+                if claimed + info.bricks > TRANSACTION_BRICKS_MAX {
+                    return Status::REFUSED;
+                }
                 info.state = TransactionInfo::UNDOING;
             }
-            TransactionInfo::FAILED if info.bricks > 0 => info.state = TransactionInfo::UNDOING,
             _ => return Status::REFUSED,
         }
         info.reason = Status::OK;
