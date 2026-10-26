@@ -47,7 +47,7 @@ type ListKey = (u32, u64, u64);
 #[derive(Debug, Default)]
 struct Lists {
     generation: u64,
-    lists: FxHashMap<ListKey, Option<&'static [u64]>>,
+    lists: FxHashMap<ListKey, Option<Arc<[u64]>>>,
 }
 
 /// What a recipe file looked like when last seen.
@@ -487,35 +487,19 @@ pub(crate) unsafe fn filter(workshop: u32, out: *mut [u64; 2]) {
         return;
     }
     let key = (workshop, address, len);
-    let lists = LISTS.load();
-    let known = if lists.generation == disabled.generation {
-        lists.lists.get(&key).copied()
-    } else {
-        None
-    };
-    let list = known.unwrap_or_else(|| {
+    let list = cached(key, disabled.generation, || {
         // SAFETY: the caller's contract makes the non-zero `address` (checked
         // earlier) the start of `len` readable recipe addresses, each 0 or a
         // live recipe, unchanged during the call; `layout.id` is the
         // reflected offset of a recipe's `u32` id.
-        let list = unsafe { filtered(address, len, layout.id, &disabled.ids) };
-        LISTS.rcu(|old| {
-            let mut lists = if old.generation == disabled.generation {
-                old.lists.clone()
-            } else {
-                FxHashMap::default()
-            };
-            lists.insert(key, list);
-            Lists {
-                generation: disabled.generation,
-                lists,
-            }
-        });
-        list
+        unsafe { filtered(address, len, layout.id, &disabled.ids) }
     });
     if let Some(list) = list {
         // SAFETY: the caller's contract makes `out` writable for a `[u64; 2]`
-        // span for the call; the leaked list it now names is never freed.
+        // span for the call. The list it now names stays in `LISTS` while its
+        // generation is current and is retired after, freed only once the
+        // world has stepped `retire::GRACE` times and `retire::MIN_AGE` has
+        // passed; the game's callers read it before they return.
         unsafe {
             enshwick::raw::write_at(
                 out.cast(),
@@ -526,8 +510,43 @@ pub(crate) unsafe fn filter(workshop: u32, out: *mut [u64; 2]) {
     }
 }
 
-/// The recipes of the `len` at `address` that are not disabled, kept for
-/// the process since the game reads what the lookup hands out; `None` when
+/// The filtered list of `key` in disable generation `generation`, made by
+/// `make` the first time it is asked for. A list handed out stays alive until
+/// the world has stepped past the caller that got it: it stays in
+/// [`LISTS`] while its generation is current, the lists of an older
+/// generation are retired, and a fresh list is retired too, in case another
+/// thread cached its own copy of it first.
+fn cached(
+    key: ListKey,
+    generation: u64,
+    make: impl FnOnce() -> Option<Arc<[u64]>>,
+) -> Option<Arc<[u64]>> {
+    let lists = LISTS.load();
+    if lists.generation == generation
+        && let Some(list) = lists.lists.get(&key)
+    {
+        return list.clone();
+    }
+    let list = make();
+    let replaced = LISTS.rcu(|old| {
+        let mut lists = if old.generation == generation {
+            old.lists.clone()
+        } else {
+            FxHashMap::default()
+        };
+        lists.entry(key).or_insert_with(|| list.clone());
+        Lists { generation, lists }
+    });
+    if replaced.generation != generation {
+        crate::retire::retire(replaced);
+    }
+    if let Some(list) = &list {
+        crate::retire::retire(Arc::clone(list));
+    }
+    list
+}
+
+/// The recipes of the `len` at `address` that are not disabled; `None` when
 /// none is disabled.
 ///
 /// # Safety
@@ -541,7 +560,7 @@ unsafe fn filtered(
     len: u64,
     id: usize,
     disabled: &FxHashSet<u32>,
-) -> Option<&'static [u64]> {
+) -> Option<Arc<[u64]>> {
     let len = usize::try_from(len).ok()?;
     let list = core::ptr::with_exposed_provenance::<u8>(usize::try_from(address).ok()?);
     let recipe_id = |recipe: u64| -> Option<u32> {
@@ -559,7 +578,7 @@ unsafe fn filtered(
             kept.push(recipe);
         }
     }
-    (kept.len() != len).then(|| &*Box::leak(kept.into_boxed_slice()))
+    (kept.len() != len).then(|| Arc::from(kept))
 }
 
 /// `enshwick recipes ...` on the server's console.
@@ -679,5 +698,30 @@ fn change(
             )
         }
         Err(why) => texts::fill("recipes.unwritten", &[("why", &why)]),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_list_is_made_once_per_generation_and_kept_until_the_next() {
+        // Generations far from any other test's.
+        let (first, next) = (u64::MAX - 10, u64::MAX - 9);
+        let key = (7, 0x1000, 3);
+        let made = cached(key, first, || Some(Arc::from([1_u64, 2])));
+        let again = cached(key, first, || panic!("made twice in one generation"));
+        assert!(Arc::ptr_eq(made.as_ref().unwrap(), again.as_ref().unwrap()));
+        let none = cached((7, 0x2000, 3), first, || None);
+        assert_eq!(none, None);
+        assert_eq!(cached((7, 0x2000, 3), first, || panic!("made twice")), None);
+        let renewed = cached(key, next, || Some(Arc::from([1_u64])));
+        assert_eq!(renewed.as_deref(), Some(&[1_u64][..]));
+        assert_eq!(
+            made.as_deref(),
+            Some(&[1_u64, 2][..]),
+            "the old list lives on"
+        );
     }
 }
