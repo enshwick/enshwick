@@ -497,6 +497,10 @@ impl Kind for CraftRecipeSuccessEvent {
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[non_exhaustive]
+#[expect(
+    clippy::struct_field_names,
+    reason = "the fields take the game's names, which all end in Id"
+)]
 pub struct AcceptOfferedInteractionEvent {
     /// The player's character.
     pub guest_entity_id: Entity,
@@ -619,7 +623,7 @@ impl BlockFields {
 /// use enshwick::game_events::BuildingPlaceEvent;
 ///
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-///     load.on_game::<BuildingPlaceEvent>(|built| enshwick::debug!("{:?} built at {:?}", built.block.player, built.block.position))
+///     load.on_game::<BuildingPlaceEvent>(|built| enshwick::debug!("{:?} built at {:?}", built.block.owner_id, built.block.position))
 /// }
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq)]
