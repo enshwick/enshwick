@@ -56,7 +56,9 @@ ground somewhere or how much an edit would take.
 
 Each call fails with a [`WorldError`](world.md#writing-components):
 `Refused` for a radius, height, position or material out of range,
-`WrongThread` off the game thread, `Missing` while no world runs.
+`OutsideWorld` for an edit that reaches past the world's edge or above
+1,024 metres, `WrongThread` off the game thread, `Missing` while no world
+runs.
 
 A player's shovel and pickaxe also check where the player may build, take
 the cost, give the loot and experience and keep an undo; these edits do
@@ -129,9 +131,11 @@ brick. `world.transaction_status(id)` tells where a transaction stands:
 | `Expired` | written whole, but its undo data was dropped |
 | `UndoRefused(why)` | the last undo wrote nothing; ask again later |
 
-A transaction checks that its whole region is loaded before it writes
-anything: if a part is not, it fails with `NotLoaded` and the world is as
-it was. A region can still unload while a large transaction is under way;
+A transaction checks that its whole region lies inside the world and is
+loaded before it writes anything: if not, it fails with `OutsideWorld` or
+`NotLoaded`, and the world is as it was. Once the loader has met the
+running world, a commit with an edit past its edge is refused at once
+with `OutsideWorld`. A region can still unload while a large transaction is under way;
 it then stops before the next edit, and an undo takes back what it wrote.
 
 `world.undo(id)` drops a queued transaction and takes back one written in
@@ -194,7 +198,11 @@ order x, then y, then z; `VoxelBox::get` finds a voxel by its place and
 
 The server keeps only the parts of the world near players. A read of a box
 that is not wholly loaded fails with `NotLoaded`; the mod tries again when
-a player is near. Voxels past the world's edge read as air. An empty box,
+a player is near. A box past the world's edge, or above 1,024 metres,
+fails with `OutsideWorld`: the game itself reads such voxels as air, which
+a mod could not tell from real air. The edge is the game's own, read from
+the running world; the height is the loader's, above every place the game
+builds, since the game keeps none. An empty box,
 one larger than `READ_MAX` or one past 2³⁰ voxels on an axis is `Refused`.
 A read costs one lock and one copy for each 4-metre brick it touches.
 Reads, like edits, need a quiet moment: inside a step, from a filter or a

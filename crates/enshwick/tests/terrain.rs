@@ -86,4 +86,27 @@ mod tests {
         assert_eq!(edits[1].protect[1], 1 << 1, "id 9 is bit 1 of byte 1");
         assert_eq!(edits[2].flags, TerrainEdit::DRY_RUN);
     }
+
+    #[test]
+    fn an_edit_past_the_world_s_edge_is_outside_the_world() {
+        let loader = enshwick::test::FakeHost::new()
+            .world_extent([200, 200, 200])
+            .install();
+        // SAFETY: both functions are the exports of this file's `declare_mod!(Digger)`.
+        let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+        assert_eq!(status, Status::OK);
+        loader.set_terrain(&[]);
+        let terrain = TERRAIN.get().unwrap();
+
+        assert!(
+            terrain
+                .dig([99.0, 10.0, 10.0], 1.0, Shape::Round, &[])
+                .is_ok()
+        );
+        assert_eq!(
+            terrain.dig([10.0, 100.0, 10.0], 1.0, Shape::Round, &[]),
+            Err(WorldError::OutsideWorld)
+        );
+        assert_eq!(loader.terrain_edits().len(), 1);
+    }
 }

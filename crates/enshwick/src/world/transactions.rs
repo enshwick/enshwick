@@ -60,6 +60,7 @@ pub enum TransactionStatus {
     Undone,
     /// It stopped before a change it could not write:
     /// [`WorldError::NotLoaded`] when part of the world was not loaded,
+    /// [`WorldError::OutsideWorld`] when a change leaves the world,
     /// [`WorldError::Missing`] when the world ended. The changes written
     /// before it stay, and [`World::undo`] can still take them back.
     Failed(WorldError),
@@ -227,8 +228,10 @@ impl Transaction {
     /// [`WorldError::Refused`] for no changes, a change the loader refuses
     /// (as [`Terrain`](crate::terrain::Terrain) does), more than the
     /// loader's cap of changes or bricks, or a full queue;
-    /// [`WorldError::Missing`] while no world runs or on a build without the
-    /// edits or the undo.
+    /// [`WorldError::OutsideWorld`] for a change past the world's edge or
+    /// above 1,024 metres, once the loader has met the world (before, the
+    /// transaction fails with it instead); [`WorldError::Missing`] while no
+    /// world runs or on a build without the edits or the undo.
     ///
     /// # Examples
     ///

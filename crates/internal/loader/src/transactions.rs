@@ -11,7 +11,7 @@
 //! undo write, which replicates and saves like any edit, newest first, and
 //! only while every brick still holds what the transaction left there.
 
-mod cover;
+pub(crate) mod cover;
 #[cfg(windows)]
 mod game;
 mod ledger;

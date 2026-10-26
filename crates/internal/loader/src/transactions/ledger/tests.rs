@@ -4,6 +4,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use super::{BRICK_VOXELS, Brick, Image, Ledger, Limits, Voxels};
 use crate::mod_index::ModIndex;
 use crate::transactions::cover;
+use crate::voxels::WorldExtent;
 
 const ME: ModIndex = ModIndex::new(0);
 const LIMITS: Limits = Limits {
@@ -20,9 +21,19 @@ struct World {
     unloaded: FxHashSet<[u32; 2]>,
     edits: u16,
     restores: usize,
+    /// Pages of 32 by 32 bricks along x and z.
+    pages: u32,
 }
 
 impl World {
+    /// A world of 40 by 40 pages: 10,240 voxels, 5,120 metres a side.
+    fn new() -> Self {
+        Self {
+            pages: 40,
+            ..Self::default()
+        }
+    }
+
     fn brick(&self, brick: Brick) -> [u16; BRICK_VOXELS] {
         self.bricks
             .get(&brick)
@@ -48,6 +59,10 @@ impl World {
 }
 
 impl Voxels for World {
+    fn extent(&mut self) -> Result<WorldExtent, Status> {
+        WorldExtent::from_grid(32 << 3 | 32 << 35, self.pages, self.pages).ok_or(Status::MISSING)
+    }
+
     fn loaded(&mut self, brick: Brick) -> Result<(), Status> {
         let [x, _, z] = brick.0;
         if self.unloaded.contains(&[x, z]) {
@@ -104,7 +119,7 @@ fn applied(ledger: &Ledger, id: u64) -> u32 {
 
 #[test]
 fn a_transaction_writes_its_changes_in_order_and_its_undo_puts_every_brick_back() {
-    let mut world = World::default();
+    let mut world = World::new();
     let mut ledger = Ledger::new(LIMITS);
     world.edit(&dig(30.0)).unwrap();
     let before = world.snapshot();
@@ -132,7 +147,7 @@ fn a_transaction_writes_its_changes_in_order_and_its_undo_puts_every_brick_back(
 
 #[test]
 fn the_budget_spreads_changes_over_steps_but_never_splits_one() {
-    let mut world = World::default();
+    let mut world = World::new();
     let mut ledger = Ledger::new(LIMITS);
     let id = ledger
         .commit(ME, &[dig(20.0), dig(40.0), dig(60.0)])
@@ -158,7 +173,7 @@ fn the_budget_spreads_changes_over_steps_but_never_splits_one() {
 
 #[test]
 fn a_transaction_over_an_unloaded_column_fails_before_writing_anything() {
-    let mut world = World::default();
+    let mut world = World::new();
     let mut ledger = Ledger::new(LIMITS);
     world.unload(Brick([8, 0, 8]));
     let id = ledger.commit(ME, &[dig(20.0), dig(40.0)]).unwrap();
@@ -175,7 +190,7 @@ fn a_transaction_over_an_unloaded_column_fails_before_writing_anything() {
 
 #[test]
 fn a_column_unloaded_between_steps_stops_the_transaction_where_it_is() {
-    let mut world = World::default();
+    let mut world = World::new();
     let mut ledger = Ledger::new(LIMITS);
     let id = ledger.commit(ME, &[dig(20.0), dig(40.0)]).unwrap();
     ledger.step(&mut world, 64);
@@ -195,7 +210,7 @@ fn a_column_unloaded_between_steps_stops_the_transaction_where_it_is() {
 
 #[test]
 fn an_undo_while_writing_takes_back_what_was_written_and_stops() {
-    let mut world = World::default();
+    let mut world = World::new();
     let mut ledger = Ledger::new(LIMITS);
     let id = ledger
         .commit(ME, &[dig(20.0), dig(40.0), dig(60.0)])
@@ -210,7 +225,7 @@ fn an_undo_while_writing_takes_back_what_was_written_and_stops() {
 
 #[test]
 fn an_undo_of_a_queued_transaction_drops_it() {
-    let mut world = World::default();
+    let mut world = World::new();
     let mut ledger = Ledger::new(LIMITS);
     let id = ledger.commit(ME, &[dig(20.0)]).unwrap();
     ledger.undo(ME, id).unwrap();
@@ -222,7 +237,7 @@ fn an_undo_of_a_queued_transaction_drops_it() {
 
 #[test]
 fn an_undo_is_refused_while_a_later_change_holds_its_bricks() {
-    let mut world = World::default();
+    let mut world = World::new();
     let mut ledger = Ledger::new(LIMITS);
     let first = ledger.commit(ME, &[dig(20.0)]).unwrap();
     let second = ledger.commit(ME, &[dig(22.0)]).unwrap();
@@ -247,7 +262,7 @@ fn an_undo_is_refused_while_a_later_change_holds_its_bricks() {
 
 #[test]
 fn an_undo_over_an_unloaded_column_is_refused_and_may_be_asked_again() {
-    let mut world = World::default();
+    let mut world = World::new();
     let mut ledger = Ledger::new(LIMITS);
     let id = ledger.commit(ME, &[dig(20.0)]).unwrap();
     ledger.step(&mut world, 1000);
@@ -267,7 +282,7 @@ fn an_undo_over_an_unloaded_column_is_refused_and_may_be_asked_again() {
 
 #[test]
 fn an_undo_begun_waits_for_a_column_that_unloads_and_then_finishes() {
-    let mut world = World::default();
+    let mut world = World::new();
     let mut ledger = Ledger::new(LIMITS);
     let id = ledger.commit(ME, &[dig(20.0)]).unwrap();
     ledger.step(&mut world, 1000);
@@ -284,7 +299,7 @@ fn an_undo_begun_waits_for_a_column_that_unloads_and_then_finishes() {
 
 #[test]
 fn the_oldest_undo_data_goes_first_once_the_cap_is_reached() {
-    let mut world = World::default();
+    let mut world = World::new();
     let mut ledger = Ledger::new(LIMITS);
     let ids: Vec<u64> = [20.0, 40.0, 60.0, 80.0, 100.0]
         .into_iter()
@@ -330,7 +345,7 @@ fn a_transaction_past_the_caps_is_refused_at_commit() {
 
 #[test]
 fn the_oldest_settled_transaction_is_forgotten_past_the_record_cap() {
-    let mut world = World::default();
+    let mut world = World::new();
     let mut ledger = Ledger::new(Limits {
         records: 2,
         ..LIMITS
@@ -352,7 +367,7 @@ fn the_oldest_settled_transaction_is_forgotten_past_the_record_cap() {
 
 #[test]
 fn a_mod_sees_and_undoes_only_its_own_transactions() {
-    let mut world = World::default();
+    let mut world = World::new();
     let mut ledger = Ledger::new(LIMITS);
     let id = ledger.commit(ME, &[dig(20.0)]).unwrap();
     ledger.step(&mut world, 1000);
@@ -364,7 +379,7 @@ fn a_mod_sees_and_undoes_only_its_own_transactions() {
 
 #[test]
 fn a_world_that_ends_fails_the_work_and_drops_the_undo_data() {
-    let mut world = World::default();
+    let mut world = World::new();
     let mut ledger = Ledger::new(LIMITS);
     let done = ledger.commit(ME, &[dig(20.0)]).unwrap();
     ledger.step(&mut world, 1000);
@@ -377,4 +392,48 @@ fn a_world_that_ends_fails_the_work_and_drops_the_undo_data() {
     );
     assert_eq!(ledger.kept(), 0);
     assert!(!ledger.busy());
+}
+
+/// A dig of radius 4 whose box ends past the far edge of the test world.
+fn past_the_edge() -> TerrainEdit {
+    TerrainEdit {
+        position: [5119.0, 20.0, 20.0],
+        ..dig(20.0)
+    }
+}
+
+#[test]
+fn a_transaction_leaving_the_world_fails_before_writing_anything() {
+    let mut world = World::new();
+    let mut ledger = Ledger::new(LIMITS);
+    let id = ledger.commit(ME, &[dig(20.0), past_the_edge()]).unwrap();
+    ledger.step(&mut world, 1000);
+    assert_eq!(
+        state(&ledger, id),
+        (TransactionInfo::FAILED, Status::OUTSIDE_WORLD)
+    );
+    assert_eq!(world.edits, 0);
+}
+
+#[test]
+fn once_the_extent_is_known_a_commit_leaving_the_world_is_refused() {
+    let mut world = World::new();
+    let mut ledger = Ledger::new(LIMITS);
+    let first = ledger.commit(ME, &[dig(20.0)]).unwrap();
+    ledger.step(&mut world, 1000);
+    assert_eq!(state(&ledger, first).0, TransactionInfo::APPLIED);
+    assert_eq!(
+        ledger.commit(ME, &[dig(20.0), past_the_edge()]),
+        Err(Status::OUTSIDE_WORLD)
+    );
+    let high = TerrainEdit {
+        position: [20.0, 1023.0, 20.0],
+        ..dig(20.0)
+    };
+    assert_eq!(ledger.commit(ME, &[high]), Err(Status::OUTSIDE_WORLD));
+    ledger.forget();
+    assert!(
+        ledger.commit(ME, &[past_the_edge()]).is_ok(),
+        "a new world's extent is not known until its first step"
+    );
 }

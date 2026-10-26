@@ -15,12 +15,15 @@ use rustc_hash::{FxHashMap, FxHashSet, FxHasher};
 
 use super::cover::{self, BRICK_VOXELS, Brick, Bricks};
 use crate::mod_index::ModIndex;
+use crate::voxels::WorldExtent;
 
 /// The voxels of a brick, x fastest, then y, then z.
 pub(crate) type Image = Box<[u16; BRICK_VOXELS]>;
 
 /// What the ledger needs of the world.
 pub(crate) trait Voxels {
+    /// The world's extent.
+    fn extent(&mut self) -> Result<WorldExtent, Status>;
     /// `Ok` when the column of bricks `brick` stands in is loaded;
     /// [`Status::NOT_LOADED`] when not.
     fn loaded(&mut self, brick: Brick) -> Result<(), Status>;
@@ -118,6 +121,8 @@ pub(crate) struct Ledger {
     records: VecDeque<Record>,
     /// Ids with work, in the order it runs.
     work: VecDeque<u64>,
+    /// The world's extent, as its last step with work found it.
+    extent: Option<WorldExtent>,
 }
 
 fn hash(image: &[u16; BRICK_VOXELS]) -> u64 {
@@ -133,6 +138,7 @@ impl Ledger {
             next: 1,
             records: VecDeque::new(),
             work: VecDeque::new(),
+            extent: None,
         }
     }
 
@@ -151,8 +157,10 @@ impl Ledger {
 
     /// Queues `edits` as one transaction of `owner`.
     /// [`Status::BAD_ARGS`] for none, an edit the loader refuses, more
-    /// changes or bricks than the limits; [`Status::REFUSED`] while the
-    /// queued transactions and those remembered leave no room.
+    /// changes or bricks than the limits; [`Status::OUTSIDE_WORLD`] for an
+    /// edit that leaves the world, once a step has found its extent;
+    /// [`Status::REFUSED`] while the queued transactions and those
+    /// remembered leave no room.
     pub(crate) fn commit(&mut self, owner: ModIndex, edits: &[TerrainEdit]) -> Result<u64, Status> {
         if edits.is_empty() || edits.len() > self.limits.ops {
             return Err(Status::BAD_ARGS);
@@ -166,6 +174,11 @@ impl Ledger {
                 })
             })
             .collect::<Result<Vec<_>, _>>()?;
+        if let Some(extent) = self.extent
+            && !ops.iter().all(|op| op.bricks.inside(extent))
+        {
+            return Err(Status::OUTSIDE_WORLD);
+        }
         let bound = ops.iter().map(|op| op.bricks.count()).sum::<usize>();
         if bound > self.limits.bricks {
             return Err(Status::BAD_ARGS);
@@ -273,12 +286,16 @@ impl Ledger {
             record.after.clear();
         }
         self.work.clear();
+        self.extent = None;
     }
 
     /// Runs the queued work for one step of the world, writing at most
     /// `budget` bricks unless a single change takes more, which then runs
     /// alone.
     pub(crate) fn step(&mut self, world: &mut impl Voxels, budget: usize) {
+        if let Ok(extent) = world.extent() {
+            self.extent = Some(extent);
+        }
         let mut spent = 0;
         for _ in 0..self.work.len() {
             let Some(id) = self.work.pop_front() else {
@@ -310,9 +327,15 @@ impl Ledger {
         budget: usize,
         spent: &mut usize,
     ) -> Job {
+        let extent = self.extent;
         let record = &mut self.records[index];
         if !record.started {
             record.started = true;
+            let inside = extent.map(|extent| record.ops.iter().all(|op| op.bricks.inside(extent)));
+            if inside != Some(true) {
+                record.fail(inside.map_or(Status::MISSING, |_| Status::OUTSIDE_WORLD));
+                return Job::Done;
+            }
             let mut columns = FxHashSet::default();
             let bricks = record.ops.iter().flat_map(|op| op.bricks.iter());
             for brick in bricks {

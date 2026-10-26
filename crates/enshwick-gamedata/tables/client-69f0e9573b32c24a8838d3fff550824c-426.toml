@@ -605,6 +605,16 @@ revision = 1
 "terrain.editor" = { value = 0x1778, pattern = "48 89 44 24 ?? E8 ?? ?? ?? ?? 48 8B 8F ?? ?? ?? ?? 0F 57 C0 48 89 4D ?? 48 8B C8", at = 13, size = 4 }
 # The voxel editor holds its voxel store here.
 "voxel.store" = { value = 0x1220, pattern = "48 8B 89 ?? ?? ?? ?? E9 ?? ?? ?? ?? CC CC CC CC 48 8D 41 30 C3 CC CC CC CC CC CC CC CC CC CC CC 4C 89 44 24 ?? 48 89 54", at = 3, size = 4 }
+# The voxel store numbers its levels coarse to fine; this is the finest,
+# half a metre a voxel.
+"voxel.finest_level" = { value = 6, pattern = "48 8B 44 24 30 48 89 47 08 8B CE B8 06 00 00 00 2B C6 41 D3 FF 44 89 7B FC FF C6 41 D3 FC 44 89", at = 12, size = 4 }
+# The voxel editor holds a column grid for each store level from here,
+# `voxel.grid_stride` bytes apart; a grid starts with its bricks per
+# page, packed, then its pages along x (the first grid's at
+# `voxel.grid_pages` from the editor) and along z.
+"voxel.grids" = { value = 0x40, pattern = "44 8B 6C 24 7C 4B 8D 0C A4 33 D2 C6 47 08 01 49 8B 6C CF 40 4D 8D 0C CF 41 8B 4C CF 48 44 8B E5 41 C1 EC 03 8B C3 41 F7", at = 19, size = 1 }
+"voxel.grid_pages" = { value = 0x48, pattern = "44 8B 6C 24 7C 4B 8D 0C A4 33 D2 C6 47 08 01 49 8B 6C CF 40 4D 8D 0C CF 41 8B 4C CF 48 44 8B E5 41 C1 EC 03 8B C3 41 F7", at = 28, size = 1 }
+"voxel.grid_stride" = { value = 0x28, pattern = "44 8B 6C 24 7C 4B 8D 0C A4 33 D2 C6 47 08 01 49 8B 6C CF 40 4D 8D 0C CF 41 8B 4C CF 48 44 8B E5 41 C1 EC 03 8B C3 41 F7" }
 "terrain.registry" = { value = 0x258, pattern = "0F 29 85 ?? ?? ?? ?? 49 8B 56 ?? E8 ?? ?? ?? ?? 48 89 87 ?? ?? ?? ?? 49 8B CF 4D 8B 86 ?? ?? ?? ?? 49 8B 56 ?? 49 81 C0 40 01 00 00", at = 19, size = 4 }
 "terrain.registry_resource" = { value = 0x38, pattern = "F2 0F 10 05 ?? ?? ?? ?? F2 0F 11 44 24 ?? 48 89 46 ?? E8 ?? ?? ?? ?? 48 85 ED", at = 17, size = 1 }
 # The client's own chat: the game client holds it here.

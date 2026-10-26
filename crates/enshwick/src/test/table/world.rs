@@ -579,6 +579,9 @@ pub(crate) extern "system" fn terrain_edit(
         if s.terrain.is_none() {
             return Status::MISSING;
         }
+        if crate::test::world::edit_outside(s.host.extent, &edit) {
+            return Status::OUTSIDE_WORLD;
+        }
         s.edits.terrain.push(edit);
         // SAFETY: `amount` is non-null, checked after the edit is read; the
         // safe layer passes it pointing at a writable, aligned `f32`.
@@ -609,11 +612,15 @@ pub(crate) extern "system" fn voxel_read(
     if !crate::test::table::on_game_thread() {
         return Status::WRONG_THREAD;
     }
-    let voxels = with(None, |s| {
-        crate::test::world::VoxelGrid::read(&s.host.voxels, min, size)
+    let read = with(Err(Status::MISSING), |s| {
+        if crate::test::world::outside(s.host.extent, min, size) {
+            return Err(Status::OUTSIDE_WORLD);
+        }
+        crate::test::world::VoxelGrid::read(&s.host.voxels, min, size).ok_or(Status::NOT_LOADED)
     });
-    let Some(voxels) = voxels else {
-        return Status::NOT_LOADED;
+    let voxels = match read {
+        Ok(voxels) => voxels,
+        Err(status) => return status,
     };
     for (i, voxel) in voxels.into_iter().enumerate() {
         // SAFETY: `out` is non-null, checked above, and `i` is below the
@@ -686,6 +693,12 @@ pub(crate) extern "system" fn transaction_commit(
     with(Status::MISSING, |s| {
         if s.terrain.is_none() {
             return Status::MISSING;
+        }
+        if terrain
+            .iter()
+            .any(|edit| crate::test::world::edit_outside(s.host.extent, edit))
+        {
+            return Status::OUTSIDE_WORLD;
         }
         let next = s.edits.transactions.last().map_or(1, |last| last.id + 1);
         let ops = u32::try_from(terrain.len()).unwrap_or(u32::MAX);

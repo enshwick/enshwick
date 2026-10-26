@@ -738,6 +738,7 @@ pub struct TransactionInfo {
     pub state: u32,
     /// Why it failed, or why its last undo was refused:
     /// [`Status::NOT_LOADED`] for a part of the world not loaded,
+    /// [`Status::OUTSIDE_WORLD`] for a change that leaves the world,
     /// [`Status::REFUSED`] for a region changed since, [`Status::MISSING`]
     /// when the world ended or the build lacks a piece; [`Status::OK`]
     /// otherwise.

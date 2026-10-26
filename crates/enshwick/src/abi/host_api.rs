@@ -608,8 +608,10 @@ pub struct HostApi {
     /// does, and writes the volume it changed in cubic metres (for a
     /// flatten, 1 when anything changed) to `amount`; clients see it and
     /// the save keeps it. Building voxels are left alone.
-    /// [`Status::BAD_ARGS`] for an edit out of range. On the server's game
-    /// thread only. Since minor 34.
+    /// [`Status::BAD_ARGS`] for an edit out of range;
+    /// [`Status::OUTSIDE_WORLD`] for one that reaches past the world's edge
+    /// or above the height the loader takes (since minor 86). On the
+    /// server's game thread only. Since minor 34.
     pub terrain_edit:
         extern "system" fn(me: ModHandle, edit: *const TerrainEdit, amount: *mut f32) -> Status,
     /// Hands the loader the mod's settings schema, `schema`, the TOML text
@@ -1151,10 +1153,11 @@ pub struct HostApi {
     /// `out`: x fastest, then y, then z, `size[0] * size[1] * size[2]`
     /// entries. `min` and `size` are borrowed for the call; `out` points at
     /// `capacity` writable entries, untouched unless the call returns
-    /// [`Status::OK`]. Voxels past the world's edge read as air.
-    /// [`Status::BAD_ARGS`] for a null pointer, an empty box, one past
-    /// [`Voxel::END`], more than [`Voxel::READ_MAX`] voxels or a `capacity`
-    /// below them; [`Status::NOT_LOADED`] while part of the box is not
+    /// [`Status::OK`]. [`Status::BAD_ARGS`] for a null pointer, an empty
+    /// box, one past [`Voxel::END`], more than [`Voxel::READ_MAX`] voxels or
+    /// a `capacity` below them; [`Status::OUTSIDE_WORLD`] for a box past
+    /// the world's edge or above the height the loader takes (since minor
+    /// 86); [`Status::NOT_LOADED`] while part of the box is not
     /// loaded, far from every player; [`Status::MISSING`] before a world
     /// runs or on a build without the read. On the server's game thread at
     /// a quiet moment only, as the world's writes: [`Status::WRONG_THREAD`]
@@ -1205,10 +1208,12 @@ pub struct HostApi {
     /// records they point at are borrowed for the call. [`Status::BAD_ARGS`]
     /// for a null pointer, no changes, a kind or record the loader refuses
     /// (as [`HostApi::terrain_edit`] does, and a dry run), or more than its
-    /// cap of changes or bricks; [`Status::REFUSED`] while the queue is
-    /// full; [`Status::MISSING`] while no world runs or on a build without
-    /// the edits, the voxel read or the undo write. Any thread. Since minor
-    /// 86.
+    /// cap of changes or bricks; [`Status::OUTSIDE_WORLD`] for a change that
+    /// leaves the world, once the loader knows its extent (a transaction
+    /// committed earlier fails with it before writing); [`Status::REFUSED`]
+    /// while the queue is full; [`Status::MISSING`] while no world runs or
+    /// on a build without the edits, the voxel read or the undo write. Any
+    /// thread. Since minor 86.
     pub transaction_commit: extern "system" fn(
         me: ModHandle,
         ops: *const TransactionOp,

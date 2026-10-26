@@ -438,8 +438,8 @@ impl FakeHost {
     /// `voxels` x fastest, then y, then z. A read answers from the boxes,
     /// the last given first where they overlap, and finds a box it does not
     /// cover wholly not loaded, as the loader does far from every player.
-    /// The fake has no world's edge: where the loader reads air past it,
-    /// the fake answers not loaded.
+    /// Past the world's edge ([`FakeHost::world_extent`]) a read is outside
+    /// the world.
     ///
     /// # Panics
     ///
@@ -476,6 +476,48 @@ impl FakeHost {
         });
         self
     }
+}
+
+impl FakeHost {
+    /// The world's end on each axis, in voxels: a read of a box past it,
+    /// and an edit or a transaction's change whose position lies past it,
+    /// is outside the world, as the loader refuses them. The loader takes
+    /// the edge across from the game and its own height; the fake checks
+    /// an edit's position, where the loader checks every voxel the edit can
+    /// write. Without it, the fake has no edge.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new().world_extent([20_480, 2048, 20_480]).install();
+    /// # let _ = loader;
+    /// ```
+    #[must_use]
+    pub const fn world_extent(mut self, end: [u32; 3]) -> Self {
+        self.extent = Some(end);
+        self
+    }
+}
+
+/// Whether the box of `size` from `min` leaves a world ending at `end`.
+pub(crate) fn outside(end: Option<[u32; 3]>, min: [u32; 3], size: [u32; 3]) -> bool {
+    end.is_some_and(|end| {
+        (0..3).any(|axis| {
+            min[axis]
+                .checked_add(size[axis])
+                .is_none_or(|stop| stop > end[axis])
+        })
+    })
+}
+
+/// Whether the edit's position lies past a world ending at `end`.
+pub(crate) fn edit_outside(end: Option<[u32; 3]>, edit: &crate::abi::TerrainEdit) -> bool {
+    end.is_some_and(|end| {
+        edit.position
+            .iter()
+            .zip(end)
+            .any(|(&metres, stop)| f64::from(metres) * 2.0 >= f64::from(stop))
+    })
 }
 
 /// A box of loaded voxels the fake answers reads from.

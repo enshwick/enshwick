@@ -218,4 +218,35 @@ mod tests {
         );
         assert!(world.transaction_status(accepted).is_some());
     }
+
+    #[test]
+    fn an_edit_past_the_world_s_edge_is_outside_the_world() {
+        let loader = enshwick::test::FakeHost::new()
+            .type_hash("current_transform", 1)
+            .type_hash("used_item", 2)
+            .world_extent([200, 200, 200])
+            .install();
+        // SAFETY: both functions are the exports of this file's `declare_mod!(Builder)`.
+        let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+        assert_eq!(status, Status::OK);
+        let world = *WORLD.get().unwrap();
+        loader.set_terrain(&[rock()]);
+
+        assert!(
+            world
+                .transaction()
+                .terrain_dig([99.0, 10.0, 10.0], 1.0, Shape::Round, &[])
+                .commit()
+                .is_ok()
+        );
+        assert_eq!(
+            world
+                .transaction()
+                .terrain_dig([10.0, 10.0, 10.0], 1.0, Shape::Round, &[])
+                .terrain_dig([100.0, 10.0, 10.0], 1.0, Shape::Round, &[])
+                .commit(),
+            Err(WorldError::OutsideWorld)
+        );
+        assert_eq!(loader.transactions().len(), 1, "nothing half-queued");
+    }
 }

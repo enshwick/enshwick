@@ -299,6 +299,10 @@ pub enum WorldError {
     /// player; try again when a player is near.
     #[error("that part of the world is not loaded")]
     NotLoaded,
+    /// The box asked about leaves the world: past its edge across, or
+    /// above the height the loader takes.
+    #[error("outside the world")]
+    OutsideWorld,
 }
 
 impl WorldError {
@@ -310,6 +314,7 @@ impl WorldError {
             Status::OK => Ok(()),
             Status::WRONG_THREAD => Err(Self::WrongThread),
             Status::NOT_LOADED => Err(Self::NotLoaded),
+            Status::OUTSIDE_WORLD => Err(Self::OutsideWorld),
             Status::REFUSED | Status::BAD_ARGS => Err(Self::Refused),
             Status::MISSING => Err(missing),
             _ => Err(Self::Missing),

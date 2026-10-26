@@ -23,6 +23,13 @@ Each entry names the pull request that made the change.
   from the start, so lowering a size or removing the mod that raised it
   never cuts a saved stack; while any size is kept it holds the game on a
   build it would leave vanilla (#544).
+- `World::transaction` writes terrain edits as one transaction at the
+  server's quiet moments, 64 bricks a step, and `World::undo` puts every
+  brick it touched back, refusing when one has changed since;
+  `World::transaction_status` follows it (#548).
+- `WorldError::OutsideWorld` (`Status::OUTSIDE_WORLD`): voxel reads, terrain
+  edits and transactions past the world's edge or above 1,024 metres are
+  refused, where the game would read air (#548).
 
 ## [1.0.0-alpha.6] - 2026-10-26
 

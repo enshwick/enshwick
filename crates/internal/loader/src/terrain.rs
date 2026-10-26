@@ -295,6 +295,8 @@ pub(crate) fn materials(loader: &Loader) -> Result<Vec<TerrainMaterialInfo>, Sta
 
 /// Runs a terrain edit; the amount it changed: volume added or removed in
 /// cubic metres, or 1 when a flatten changed anything.
+/// [`Status::OUTSIDE_WORLD`] when the box the edit can write leaves the
+/// world.
 pub(crate) fn edit(loader: &Loader, request: &TerrainEdit) -> Result<f32, Status> {
     let layout = layout(loader).ok_or(Status::MISSING)?;
     let radius = request.radius;
@@ -308,6 +310,10 @@ pub(crate) fn edit(loader: &Loader, request: &TerrainEdit) -> Result<f32, Status
         return Err(Status::BAD_ARGS);
     }
     let (editor, alloc, _) = editor(layout)?;
+    let extent = crate::voxels::extent(loader)?;
+    if !crate::transactions::cover::cover(request).is_some_and(|bricks| bricks.inside(extent)) {
+        return Err(Status::OUTSIDE_WORLD);
+    }
     let [x, y, z] = request.position;
     let site = Site {
         editor: core::ptr::with_exposed_provenance_mut(editor),

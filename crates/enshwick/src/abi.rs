@@ -472,6 +472,10 @@ impl Status {
     /// player or still streaming in; the same call may work later. A mod
     /// built before minor 84 reads it as an unknown failure. Since minor 84.
     pub const NOT_LOADED: Self = Self(8);
+    /// The box asked about leaves the world: past its edge across, or above
+    /// the height the loader takes. A mod built before minor 86 reads it as
+    /// an unknown failure. Since minor 86.
+    pub const OUTSIDE_WORLD: Self = Self(9);
 
     /// Whether this is [`Status::OK`].
     ///

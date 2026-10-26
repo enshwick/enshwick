@@ -198,8 +198,10 @@ impl Terrain {
     /// # Errors
     ///
     /// [`WorldError::Refused`] for a radius outside 0 to [`MAX_RADIUS`] or a
-    /// position below 0 on any axis, [`WorldError::WrongThread`] off the
-    /// game thread and [`WorldError::Missing`] while no world runs.
+    /// position below 0 on any axis, [`WorldError::OutsideWorld`] for an
+    /// edit reaching past the world's edge or above 1,024 metres,
+    /// [`WorldError::WrongThread`] off the game thread and
+    /// [`WorldError::Missing`] while no world runs.
     ///
     /// # Examples
     ///

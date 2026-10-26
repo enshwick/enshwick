@@ -62,6 +62,10 @@ impl<'a> Game<'a> {
 }
 
 impl Voxels for Game<'_> {
+    fn extent(&mut self) -> Result<crate::voxels::WorldExtent, Status> {
+        crate::voxels::extent(self.loader)
+    }
+
     fn loaded(&mut self, brick: Brick) -> Result<(), Status> {
         let corner = ReadBox::new(brick.min(), [1; 3], 1)?;
         crate::voxels::read(self.loader, &corner).map(drop)

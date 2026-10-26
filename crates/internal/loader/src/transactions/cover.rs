@@ -2,6 +2,8 @@
 
 use enshwick::abi::{Status, TerrainEdit, Voxel};
 
+use crate::voxels::WorldExtent;
+
 /// Voxels along a brick's side.
 pub(crate) const BRICK: u32 = 8;
 /// Voxels in a brick.
@@ -45,6 +47,13 @@ impl Bricks {
         (0..3)
             .map(|axis| (self.last[axis] - self.first[axis] + 1) as usize)
             .product()
+    }
+
+    /// Whether every brick lies inside the world.
+    pub(crate) fn inside(self, extent: WorldExtent) -> bool {
+        let min = self.first.map(|index| index * BRICK);
+        let size = [0, 1, 2].map(|axis| (self.last[axis] - self.first[axis] + 1) * BRICK);
+        extent.holds(min, size)
     }
 
     /// Every brick, x fastest, then y, then z.
@@ -95,7 +104,7 @@ pub(crate) fn check(edit: &TerrainEdit) -> Result<Bricks, Status> {
 /// - dig, round: `p ± r`; square: `p ± r√3`, the reach of its turned cube.
 ///
 /// `None` for a box past [`Voxel::END`].
-fn cover(edit: &TerrainEdit) -> Option<Bricks> {
+pub(crate) fn cover(edit: &TerrainEdit) -> Option<Bricks> {
     let r = f64::from(edit.radius);
     let (below, above, across) = match edit.kind {
         TerrainEdit::ADD => (r - 0.5, r, r),
