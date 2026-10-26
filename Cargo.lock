@@ -64,7 +64,7 @@ checksum = "72f5acc6cb2ba439de613abc23857ec3d78374d8ed5ac84e9d11336e87da8649"
 
 [[package]]
 name = "cargo-enshwick"
-version = "1.0.0-alpha.1"
+version = "1.0.0-alpha.2"
 dependencies = [
  "clap",
  "enshwick",
@@ -219,7 +219,7 @@ checksum = "edd0f118536f44f5ccd48bcb8b111bdc3de888b58c74639dfb034a357d0f206d"
 
 [[package]]
 name = "enshwick"
-version = "1.0.0-alpha.1"
+version = "1.0.0-alpha.2"
 dependencies = [
  "bcdec_rs",
  "const-sha1",
@@ -350,7 +350,7 @@ dependencies = [
 
 [[package]]
 name = "enshwick-gamedata"
-version = "1.0.0-alpha.1"
+version = "1.0.0-alpha.2"
 dependencies = [
  "enshwick",
  "enshwick-reflect",
@@ -363,7 +363,7 @@ dependencies = [
 
 [[package]]
 name = "enshwick-loader"
-version = "1.0.0-alpha.1"
+version = "1.0.0-alpha.2"
 dependencies = [
  "arc-swap",
  "arrayvec",
@@ -386,14 +386,14 @@ dependencies = [
 
 [[package]]
 name = "enshwick-loader-stub"
-version = "1.0.0-alpha.1"
+version = "1.0.0-alpha.2"
 dependencies = [
  "windows-sys",
 ]
 
 [[package]]
 name = "enshwick-macros"
-version = "1.0.0-alpha.1"
+version = "1.0.0-alpha.2"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -420,7 +420,7 @@ dependencies = [
 
 [[package]]
 name = "enshwick-reflect"
-version = "1.0.0-alpha.1"
+version = "1.0.0-alpha.2"
 dependencies = [
  "rustc-hash",
  "thiserror",
