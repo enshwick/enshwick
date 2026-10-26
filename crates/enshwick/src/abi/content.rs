@@ -123,6 +123,22 @@ impl DataField {
     /// How many slots the container an item places holds; the entry is the
     /// item. Since minor 80.
     pub const CONTAINER_SLOTS: Self = Self(6);
+    /// A weapon's damage factor; the entry is the item. Since minor 81.
+    pub const DAMAGE_MOD: Self = Self(7);
+    /// A weapon's attack speed factor; the entry is the item. Since minor 81.
+    pub const SPEED_MOD: Self = Self(8);
+    /// Every armour value of an item, scaled only; the entry is the item.
+    /// Since minor 81.
+    pub const ARMOR: Self = Self(9);
+    /// How long an item burns as fuel, in seconds; the entry is the item.
+    /// Since minor 81.
+    pub const BURN_TIME: Self = Self(10);
+    /// The energy an item gives as fuel; the entry is the item. Since
+    /// minor 79.
+    pub const ENERGY_OUTPUT: Self = Self(11);
+    /// The comfort a placed item gives; the entry is the item. Since
+    /// minor 79.
+    pub const COMFORT_AMOUNT: Self = Self(12);
 }
 
 /// How a [`DataChange`] changes its value.

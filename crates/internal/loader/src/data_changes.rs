@@ -327,6 +327,123 @@ pub fn replace_owner(declared: &[Declared], owner: ModIndex, new: Vec<Declared>)
     next
 }
 
+/// Where an item's changeable values sit in its static data, from the
+/// build's reflection; a value the build lacks is missing.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ItemOffsets {
+    /// The stack size, a `u16`.
+    pub max_stack: Option<usize>,
+    /// Each stat: its field, where its value sits and where the flag that
+    /// says the item has it sits.
+    pub stats: Vec<(Field, usize, usize)>,
+    /// How many armour values the armour field holds, `f32` each.
+    pub armor_count: usize,
+}
+
+/// What an item edit did: its stack size before and after, and the fields
+/// the item lacks, such as damage on an item that deals none.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ItemEdit {
+    /// The stack size before and after, when it changed.
+    pub stack: Option<(u16, u16)>,
+    /// The fields asked for that the item does not have.
+    pub lacking: Vec<Field>,
+}
+
+/// A value in force as the whole number of type `T` it holds, which
+/// `Field::resolve` keeps in range.
+fn whole<T: TryFrom<i64>>(value: f64) -> Option<T> {
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "Field::resolve keeps whole values inside their field's range"
+    )]
+    let value = value.round() as i64;
+    T::try_from(value).ok()
+}
+
+/// Writes into the item `bytes` the value `value` gives each of `fields`,
+/// from its value now; a stat whose flag is clear is left and named.
+pub fn edit_item(
+    bytes: &mut [u8],
+    offsets: &ItemOffsets,
+    fields: &[Field],
+    value: impl Fn(Field, f64) -> Option<f64>,
+) -> ItemEdit {
+    let mut edit = ItemEdit::default();
+    if fields.contains(&Field::MaxStackSize)
+        && let Some(at) = offsets.max_stack
+        && let Some(slot) = bytes.get_mut(at..at + 2)
+    {
+        let old = u16::from_le_bytes([slot[0], slot[1]]);
+        if let Some(new) = value(Field::MaxStackSize, f64::from(old)).and_then(whole::<u16>) {
+            slot.copy_from_slice(&new.to_le_bytes());
+            edit.stack = Some((old, new));
+        }
+    }
+    for &(field, at, set) in &offsets.stats {
+        if !fields.contains(&field) {
+            continue;
+        }
+        if bytes.get(set).is_none_or(|&flag| flag == 0) {
+            edit.lacking.push(field);
+            continue;
+        }
+        let count = if field == Field::Armor {
+            offsets.armor_count
+        } else {
+            1
+        };
+        for i in 0..count {
+            write_stat(bytes, field, at + i * 4, &value);
+        }
+    }
+    edit
+}
+
+/// Writes one stat value at `at` in its field's encoding.
+fn write_stat(
+    bytes: &mut [u8],
+    field: Field,
+    at: usize,
+    value: &impl Fn(Field, f64) -> Option<f64>,
+) {
+    match field {
+        Field::BurnTime => {
+            let Some(slot) = bytes.get_mut(at..at + 8) else {
+                return;
+            };
+            let nanos = i64::from_le_bytes(slot.try_into().unwrap_or_default());
+            #[expect(clippy::cast_precision_loss, reason = "a burn time is at most a day")]
+            let seconds = nanos as f64 / 1e9;
+            if let Some(new) = value(field, seconds).and_then(|s| whole::<i64>(s * 1e9)) {
+                slot.copy_from_slice(&new.to_le_bytes());
+            }
+        }
+        Field::EnergyOutput | Field::ComfortAmount => {
+            let Some(slot) = bytes.get_mut(at..at + 4) else {
+                return;
+            };
+            let old = u32::from_le_bytes(slot.try_into().unwrap_or_default());
+            if let Some(new) = value(field, f64::from(old)).and_then(whole::<u32>) {
+                slot.copy_from_slice(&new.to_le_bytes());
+            }
+        }
+        _ => {
+            let Some(slot) = bytes.get_mut(at..at + 4) else {
+                return;
+            };
+            let old = f32::from_le_bytes(slot.try_into().unwrap_or_default());
+            if let Some(new) = value(field, f64::from(old)) {
+                #[expect(
+                    clippy::cast_possible_truncation,
+                    reason = "a stat is an f32 in the game"
+                )]
+                slot.copy_from_slice(&(new as f32).to_le_bytes());
+            }
+        }
+    }
+}
+
 /// What happens to a mod's hold when a world loads on the side that keeps
 /// it.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -596,6 +713,80 @@ mod tests {
         assert_eq!(
             merged.value(Key::new(WOOD, Field::MaxStackSize), 20.0, |_| true),
             Some(300.0)
+        );
+    }
+
+    /// An item of 0x40 bytes: stack size 20 at 0, damage 1.5 at 8 with its
+    /// flag at 0x10, armour 2.0 and 4.0 at 0x14 with no flag set, burn time
+    /// 60 s at 0x20 with its flag at 0x28, comfort 2 at 0x30 with its flag
+    /// at 0x34.
+    fn item() -> (Vec<u8>, ItemOffsets) {
+        let mut bytes = vec![0u8; 0x40];
+        bytes[0..2].copy_from_slice(&20u16.to_le_bytes());
+        bytes[8..12].copy_from_slice(&1.5f32.to_le_bytes());
+        bytes[0x10] = 1;
+        bytes[0x14..0x18].copy_from_slice(&2.0f32.to_le_bytes());
+        bytes[0x18..0x1c].copy_from_slice(&4.0f32.to_le_bytes());
+        bytes[0x20..0x28].copy_from_slice(&60_000_000_000i64.to_le_bytes());
+        bytes[0x28] = 1;
+        bytes[0x30..0x34].copy_from_slice(&2u32.to_le_bytes());
+        bytes[0x34] = 1;
+        let offsets = ItemOffsets {
+            max_stack: Some(0),
+            stats: vec![
+                (Field::DamageMod, 8, 0x10),
+                (Field::Armor, 0x14, 0x1c),
+                (Field::BurnTime, 0x20, 0x28),
+                (Field::ComfortAmount, 0x30, 0x34),
+            ],
+            armor_count: 2,
+        };
+        (bytes, offsets)
+    }
+
+    #[test]
+    fn an_item_s_values_change_in_their_own_encodings() {
+        let (mut bytes, offsets) = item();
+        let fields = [
+            Field::MaxStackSize,
+            Field::DamageMod,
+            Field::BurnTime,
+            Field::ComfortAmount,
+        ];
+        let edit = edit_item(&mut bytes, &offsets, &fields, |field, base| {
+            Some(field.resolve(base, [Value::Times(2.0)]))
+        });
+        assert_eq!(edit.stack, Some((20, 40)));
+        assert!(edit.lacking.is_empty());
+        assert_eq!(f32::from_le_bytes(bytes[8..12].try_into().unwrap()), 3.0);
+        assert_eq!(
+            i64::from_le_bytes(bytes[0x20..0x28].try_into().unwrap()),
+            120_000_000_000
+        );
+        assert_eq!(u32::from_le_bytes(bytes[0x30..0x34].try_into().unwrap()), 4);
+    }
+
+    #[test]
+    fn a_stat_the_item_lacks_is_left_and_named() {
+        let (mut bytes, offsets) = item();
+        let before = bytes.clone();
+        let edit = edit_item(&mut bytes, &offsets, &[Field::Armor], |field, base| {
+            Some(field.resolve(base, [Value::Times(2.0)]))
+        });
+        assert_eq!(edit.lacking, [Field::Armor]);
+        assert_eq!(bytes, before);
+        bytes[0x1c] = 1;
+        let edit = edit_item(&mut bytes, &offsets, &[Field::Armor], |field, base| {
+            Some(field.resolve(base, [Value::Times(2.0)]))
+        });
+        assert!(edit.lacking.is_empty());
+        assert_eq!(
+            f32::from_le_bytes(bytes[0x14..0x18].try_into().unwrap()),
+            4.0
+        );
+        assert_eq!(
+            f32::from_le_bytes(bytes[0x18..0x1c].try_into().unwrap()),
+            8.0
         );
     }
 

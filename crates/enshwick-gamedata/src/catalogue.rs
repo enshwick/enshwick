@@ -73,6 +73,31 @@ pub const RECIPE_DURATION: &str = "recipe.duration";
 /// item's static data.
 pub const ITEM_PLACED_ENTITY: &str = "item_info.placed_entity";
 
+/// The id of a weapon's damage factor, an `f32`, in an item's static data.
+pub const ITEM_DAMAGE_MOD: &str = "item_info.damage_mod";
+/// The id of a weapon's attack speed factor, an `f32`.
+pub const ITEM_SPEED_MOD: &str = "item_info.speed_mod";
+/// The id of the flag that says an item deals damage.
+pub const ITEM_DAMAGE_SET: &str = "item_info.damage_set";
+/// The id of an item's armour values, `f32` each, as many as
+/// [`ARMOR_DISTRIBUTION`] holds.
+pub const ITEM_ARMOR: &str = "item_info.armor";
+/// The id of the flag that says an item gives armour.
+pub const ITEM_ARMOR_SET: &str = "item_info.armor_set";
+/// The id of how long an item burns as fuel, a `keen::Time` in nanoseconds.
+pub const ITEM_BURN_TIME: &str = "item_info.burn_time";
+/// The id of the energy an item gives as fuel, a `u32`.
+pub const ITEM_ENERGY_OUTPUT: &str = "item_info.energy_output";
+/// The id of the flag that says an item is fuel.
+pub const ITEM_FUEL_SET: &str = "item_info.fuel_set";
+/// The id of the comfort a placed item gives, a `u32`.
+pub const ITEM_COMFORT_AMOUNT: &str = "item_info.comfort_amount";
+/// The id of the flag that says an item gives comfort.
+pub const ITEM_COMFORT_SET: &str = "item_info.comfort_set";
+
+/// The id of the armour values' type, whose size counts them.
+pub const ARMOR_DISTRIBUTION: &str = "armor_distribution";
+
 /// The kind of the recipes that make an item, by the name of the constant
 /// of [`SLOT_TYPE`] the item's equipment slot holds; every other slot is
 /// [`RecipeKind::Other`]. A new kind is a row here.

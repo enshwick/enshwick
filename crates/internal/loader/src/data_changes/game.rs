@@ -13,11 +13,12 @@ use enshwick::content::changes::{Change, Entry, Field};
 use enshwick::content::containers::{ContainerLayout, container_slots, resize_container};
 use enshwick::content::recipes::{RECIPE_REGISTRY, RecipeChanges, RecipeLayout, change_recipes_in};
 use enshwick::state::Hold;
+use enshwick_gamedata::catalogue;
 use rustc_hash::FxHashMap;
 
 use super::{
-    Conflict, Declared, HoldStep, Key, Merged, Raised, credited, grown_slots, hold_step, merge,
-    template_slots,
+    Conflict, Declared, HoldStep, ItemOffsets, Key, Merged, Raised, credited, edit_item,
+    grown_slots, hold_step, merge, template_slots,
 };
 use crate::host::Loader;
 use crate::locks::Relock;
@@ -62,11 +63,11 @@ static CHANGES: Changes = Changes {
     raised: Mutex::new(None),
 };
 
-/// What the loader's patch of one item needs: the item and where its stack
-/// size sits.
+/// What the loader's patch of one item needs: the item and where its
+/// values sit.
 struct ItemPatch {
     item: Guid,
-    max_stack_at: usize,
+    offsets: &'static ItemOffsets,
 }
 
 /// Records mod `owner`'s `change` from `source`; refused once init is over.
@@ -159,18 +160,70 @@ fn report(loader: &Loader, conflicts: &[Conflict]) {
     }
 }
 
-/// The items whose stack size some change of `merged` changes.
-fn stacked(merged: &Merged) -> Vec<Guid> {
+/// The items whose own values some change of `merged` changes: every item
+/// field but the slots of the container it places.
+fn edited(merged: &Merged) -> Vec<Guid> {
     merged
         .entries(Entry::Item)
         .into_iter()
-        .filter(|item| {
-            merged
-                .keys(*item)
-                .iter()
-                .any(|k| k.field == Field::MaxStackSize)
-        })
+        .filter(|item| merged.keys(*item).iter().any(|k| k.field != Field::Slots))
         .collect()
+}
+
+/// Each stat with the catalogue ids of its value and of the flag that says
+/// an item has it.
+const STATS: [(Field, &str, &str); 6] = [
+    (
+        Field::DamageMod,
+        catalogue::ITEM_DAMAGE_MOD,
+        catalogue::ITEM_DAMAGE_SET,
+    ),
+    (
+        Field::SpeedMod,
+        catalogue::ITEM_SPEED_MOD,
+        catalogue::ITEM_DAMAGE_SET,
+    ),
+    (
+        Field::Armor,
+        catalogue::ITEM_ARMOR,
+        catalogue::ITEM_ARMOR_SET,
+    ),
+    (
+        Field::BurnTime,
+        catalogue::ITEM_BURN_TIME,
+        catalogue::ITEM_FUEL_SET,
+    ),
+    (
+        Field::EnergyOutput,
+        catalogue::ITEM_ENERGY_OUTPUT,
+        catalogue::ITEM_FUEL_SET,
+    ),
+    (
+        Field::ComfortAmount,
+        catalogue::ITEM_COMFORT_AMOUNT,
+        catalogue::ITEM_COMFORT_SET,
+    ),
+];
+
+/// Where an item's values sit on this build.
+fn item_offsets(loader: &Loader) -> ItemOffsets {
+    let at = |id: &str| {
+        catalogue::constant(id, &loader.reflection).and_then(|at| usize::try_from(at).ok())
+    };
+    let armor_count = loader
+        .reflection
+        .type_info(catalogue::type_name(catalogue::ARMOR_DISTRIBUTION))
+        .ok()
+        .and_then(|info| usize::try_from(info.size() / 4).ok())
+        .unwrap_or(0);
+    ItemOffsets {
+        max_stack: at(catalogue::ITEM_MAX_STACK),
+        stats: STATS
+            .iter()
+            .filter_map(|&(field, value, set)| Some((field, at(value)?, at(set)?)))
+            .collect(),
+        armor_count,
+    }
 }
 
 /// Merges every declared change, reports the overridden sets, and returns
@@ -186,12 +239,8 @@ pub(crate) fn serve(
         .iter()
         .filter_map(|d| label(&d.source).map(|l| (d.change.entry, l.to_owned())))
         .collect();
-    let max_stack_at = enshwick_gamedata::catalogue::constant(
-        enshwick_gamedata::catalogue::ITEM_MAX_STACK,
-        &loader.reflection,
-    )
-    .and_then(|at| usize::try_from(at).ok());
-    let items = stacked(&merged);
+    let offsets = item_offsets(loader);
+    let items = edited(&merged);
     let slots_order: FxHashMap<Guid, usize> = declared
         .iter()
         .enumerate()
@@ -208,24 +257,15 @@ pub(crate) fn serve(
         templates: OnceLock::new(),
     });
     let mut patches = Vec::new();
-    match max_stack_at {
-        Some(max_stack_at) => {
-            if !items.is_empty() {
-                crate::log!(INFO, "{} items get a changed stack size", items.len());
-            }
-            for item in items {
-                let patch: &'static ItemPatch =
-                    Box::leak(Box::new(ItemPatch { item, max_stack_at }));
-                let key = item.key_by_hash(crate::catalogue::types::ITEM_INFO);
-                let user = core::ptr::from_ref(patch).cast_mut().cast::<c_void>();
-                patches.push((key, build_item as enshwick::abi::ResourcePatchFn, user));
-            }
-        }
-        None if !items.is_empty() => crate::log!(
-            WARN,
-            "stack size changes are off: this build does not reflect the items' stack size"
-        ),
-        None => {}
+    if !items.is_empty() {
+        crate::log!(INFO, "{} items get changed values", items.len());
+    }
+    let offsets: &'static ItemOffsets = Box::leak(Box::new(offsets));
+    for item in items {
+        let patch: &'static ItemPatch = Box::leak(Box::new(ItemPatch { item, offsets }));
+        let key = item.key_by_hash(crate::catalogue::types::ITEM_INFO);
+        let user = core::ptr::from_ref(patch).cast_mut().cast::<c_void>();
+        patches.push((key, build_item as enshwick::abi::ResourcePatchFn, user));
     }
     if let Some(patch) = recipe_patch(loader) {
         patches.push(patch);
@@ -268,12 +308,12 @@ pub(crate) fn reload(owner: ModIndex, changes: Vec<(Change, String)>) -> Result<
             .collect(),
     );
     let (merged, conflicts) = merge(&next, |a, b| requires(loader, a, b));
-    if let Some(item) = stacked(&merged)
+    if let Some(item) = edited(&merged)
         .into_iter()
         .find(|item| !patched.contains(&item.key_by_hash(crate::catalogue::types::ITEM_INFO)))
     {
         return Err(format!(
-            "the stack size of {item} changes for the first time, which takes a restart"
+            "the values of {item} change for the first time, which takes a restart"
         ));
     }
     let recipes = RECIPE_REGISTRY.key_by_hash(crate::catalogue::types::RECIPE_REGISTRY);
@@ -331,12 +371,9 @@ fn container_patches(
     if items.is_empty() {
         return Vec::new();
     }
-    let facts = enshwick_gamedata::catalogue::Reflected(&loader.reflection);
-    let placed = enshwick_gamedata::catalogue::constant(
-        enshwick_gamedata::catalogue::ITEM_PLACED_ENTITY,
-        &loader.reflection,
-    )
-    .and_then(|at| usize::try_from(at).ok());
+    let facts = catalogue::Reflected(&loader.reflection);
+    let placed = catalogue::constant(catalogue::ITEM_PLACED_ENTITY, &loader.reflection)
+        .and_then(|at| usize::try_from(at).ok());
     let (Ok(layout), Some(placed), Some(archive)) = (
         ContainerLayout::resolve(&facts),
         placed,
@@ -496,7 +533,7 @@ fn recipe_patch(
     if recipes.is_empty() {
         return None;
     }
-    let facts = enshwick_gamedata::catalogue::Reflected(&loader.reflection);
+    let facts = catalogue::Reflected(&loader.reflection);
     let Ok(layout) = RecipeLayout::resolve(&facts) else {
         crate::log!(
             WARN,
@@ -504,11 +541,8 @@ fn recipe_patch(
         );
         return None;
     };
-    let duration = enshwick_gamedata::catalogue::constant(
-        enshwick_gamedata::catalogue::RECIPE_DURATION,
-        &loader.reflection,
-    )
-    .and_then(|at| usize::try_from(at).ok());
+    let duration = catalogue::constant(catalogue::RECIPE_DURATION, &loader.reflection)
+        .and_then(|at| usize::try_from(at).ok());
     crate::log!(INFO, "{} recipes get changed values", recipes.len());
     let patch: &'static RecipePatch = Box::leak(Box::new(RecipePatch { layout, duration }));
     let key = RECIPE_REGISTRY.key_by_hash(crate::catalogue::types::RECIPE_REGISTRY);
@@ -635,59 +669,48 @@ fn changed_item(patch: &ItemPatch, bytes: &mut [u8]) {
     };
     let (loader, labels) = (sealed.loader, &sealed.labels);
     let merged = sealed.merged();
-    let at = patch.max_stack_at;
-    let Some(field) = bytes.get_mut(at..at + 2) else {
-        crate::log!(WARN, "item {} is too short for its stack size", patch.item);
-        return;
-    };
-    let old = u16::from_le_bytes([field[0], field[1]]);
     let live = |m: ModIndex| on(loader, m);
-    let Some(new) = merged.value(
-        Key::new(patch.item, Field::MaxStackSize),
-        f64::from(old),
-        live,
-    ) else {
+    let fields: Vec<Field> = merged
+        .keys(patch.item)
+        .into_iter()
+        .map(|key| key.field)
+        .collect();
+    let edit = edit_item(bytes, patch.offsets, &fields, |field, base| {
+        merged.value(Key::new(patch.item, field), base, live)
+    });
+    for field in &edit.lacking {
+        crate::log!(
+            WARN,
+            "{field} of {} is not changed: the item has none",
+            patch.item
+        );
+    }
+    let Some((old, new)) = edit.stack.filter(|(old, new)| new > old) else {
         return;
     };
-    #[expect(
-        clippy::cast_possible_truncation,
-        clippy::cast_sign_loss,
-        reason = "Field::resolve keeps a stack size whole and from 1 to 65535"
-    )]
-    let new = new as u16;
-    field.copy_from_slice(&new.to_le_bytes());
-    if new > old {
-        let without = |m: ModIndex| {
-            merged
-                .value(
-                    Key::new(patch.item, Field::MaxStackSize),
-                    f64::from(old),
-                    |o| live(o) && o != m,
-                )
-                .unwrap_or(f64::from(old))
-        };
-        let owners = merged.owners(Key::new(patch.item, Field::MaxStackSize), live);
-        let label = labels
-            .get(&patch.item)
-            .cloned()
-            .unwrap_or_else(|| patch.item.to_string());
-        let mut raised = CHANGES.raised.relock();
-        let raised = raised.get_or_insert_with(FxHashMap::default);
-        let alone = |m: ModIndex| {
-            merged
-                .value(
-                    Key::new(patch.item, Field::MaxStackSize),
-                    f64::from(old),
-                    |o| live(o) && o == m,
-                )
-                .unwrap_or(f64::from(old))
-        };
-        for owner in credited(&owners, f64::from(old), f64::from(new), without, alone) {
-            raised
-                .entry(owner)
-                .and_modify(|r| r.note(patch.item))
-                .or_insert_with(|| Raised::new(patch.item, label.clone(), old, new));
-        }
+    let key = Key::new(patch.item, Field::MaxStackSize);
+    let without = |m: ModIndex| {
+        merged
+            .value(key, f64::from(old), |o| live(o) && o != m)
+            .unwrap_or(f64::from(old))
+    };
+    let alone = |m: ModIndex| {
+        merged
+            .value(key, f64::from(old), |o| live(o) && o == m)
+            .unwrap_or(f64::from(old))
+    };
+    let owners = merged.owners(key, live);
+    let label = labels
+        .get(&patch.item)
+        .cloned()
+        .unwrap_or_else(|| patch.item.to_string());
+    let mut raised = CHANGES.raised.relock();
+    let raised = raised.get_or_insert_with(FxHashMap::default);
+    for owner in credited(&owners, f64::from(old), f64::from(new), without, alone) {
+        raised
+            .entry(owner)
+            .and_modify(|r| r.note(patch.item))
+            .or_insert_with(|| Raised::new(patch.item, label.clone(), old, new));
     }
 }
 
@@ -718,21 +741,24 @@ pub(crate) fn world_event(loader: &Loader, event: Event) {
 
 /// Whether the running build reflects what `field` changes.
 pub(crate) fn reachable(loader: &Loader, field: Field) -> bool {
-    let constant =
-        |id: &str| enshwick_gamedata::catalogue::constant(id, &loader.reflection).is_some();
-    let recipes = || {
-        RecipeLayout::resolve(&enshwick_gamedata::catalogue::Reflected(&loader.reflection)).is_ok()
-    };
+    let constant = |id: &str| catalogue::constant(id, &loader.reflection).is_some();
+    let recipes = || RecipeLayout::resolve(&catalogue::Reflected(&loader.reflection)).is_ok();
     match field {
-        Field::MaxStackSize => constant(enshwick_gamedata::catalogue::ITEM_MAX_STACK),
+        Field::MaxStackSize => constant(catalogue::ITEM_MAX_STACK),
         Field::Output | Field::Cost | Field::Ingredient => recipes(),
-        Field::CraftingDuration => {
-            recipes() && constant(enshwick_gamedata::catalogue::RECIPE_DURATION)
+        Field::CraftingDuration => recipes() && constant(catalogue::RECIPE_DURATION),
+        Field::Armor => {
+            constant(catalogue::ITEM_ARMOR)
+                && constant(catalogue::ITEM_ARMOR_SET)
+                && item_offsets(loader).armor_count > 0
         }
+        field if STATS.iter().any(|(f, _, _)| *f == field) => STATS
+            .iter()
+            .filter(|(f, _, _)| *f == field)
+            .all(|&(_, value, set)| constant(value) && constant(set)),
         Field::Slots => {
-            ContainerLayout::resolve(&enshwick_gamedata::catalogue::Reflected(&loader.reflection))
-                .is_ok()
-                && constant(enshwick_gamedata::catalogue::ITEM_PLACED_ENTITY)
+            ContainerLayout::resolve(&catalogue::Reflected(&loader.reflection)).is_ok()
+                && constant(catalogue::ITEM_PLACED_ENTITY)
         }
         _ => false,
     }

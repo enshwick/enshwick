@@ -64,6 +64,7 @@
   - [Random loot](content/random-loot.md)
   - [Served resources](content/resources.md)
   - [Texts](content/texts.md)
+  - [A mod without Rust](content/a-mod-without-rust.md)
   - [Data packs](content/packs.md)
 - [Inventories](inventories.md)
 - [Item data](item-data.md)

@@ -393,6 +393,80 @@ pub const FACTS: &[(&str, Fact)] = &[
             ("keen::EquipmentSetup", "slot"),
         ]),
     ),
+    (
+        "item_info.damage_mod",
+        Fact::Path(&[
+            ("keen::ItemInfo", "damageSetup"),
+            ("keen::ItemDamageSetup", "dmgMod"),
+        ]),
+    ),
+    (
+        "item_info.speed_mod",
+        Fact::Path(&[
+            ("keen::ItemInfo", "damageSetup"),
+            ("keen::ItemDamageSetup", "speedMod"),
+        ]),
+    ),
+    (
+        "item_info.damage_set",
+        Fact::Path(&[
+            ("keen::ItemInfo", "damageSetup"),
+            ("keen::ItemDamageSetup", "isSet"),
+        ]),
+    ),
+    (
+        "item_info.armor",
+        Fact::Path(&[
+            ("keen::ItemInfo", "armorSetup"),
+            ("keen::ItemArmorSetup", "distribution"),
+        ]),
+    ),
+    (
+        "item_info.armor_set",
+        Fact::Path(&[
+            ("keen::ItemInfo", "armorSetup"),
+            ("keen::ItemArmorSetup", "isSet"),
+        ]),
+    ),
+    (
+        "item_info.burn_time",
+        Fact::Path(&[
+            ("keen::ItemInfo", "fuelSetup"),
+            ("keen::ItemFuelData", "burnTime"),
+        ]),
+    ),
+    (
+        "item_info.energy_output",
+        Fact::Path(&[
+            ("keen::ItemInfo", "fuelSetup"),
+            ("keen::ItemFuelData", "energyOutput"),
+        ]),
+    ),
+    (
+        "item_info.fuel_set",
+        Fact::Path(&[
+            ("keen::ItemInfo", "fuelSetup"),
+            ("keen::ItemFuelData", "isSet"),
+        ]),
+    ),
+    (
+        "item_info.comfort_amount",
+        Fact::Path(&[
+            ("keen::ItemInfo", "comfortSetup"),
+            ("keen::ItemComfortSetup", "comfortAmount"),
+        ]),
+    ),
+    (
+        "item_info.comfort_set",
+        Fact::Path(&[
+            ("keen::ItemInfo", "comfortSetup"),
+            ("keen::ItemComfortSetup", "isSet"),
+        ]),
+    ),
+    (
+        "armor_distribution",
+        Fact::Type("keen::impact::ArmorDistribution"),
+    ),
     ("item_slot_type", Fact::Type("keen::EquipmentSlotType")),
     ("item_stat", Fact::Type("keen::ImpactUiValue")),
     ("item_stat.label", offset("keen::ImpactUiValue", "locaId")),

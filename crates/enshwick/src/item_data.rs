@@ -16,7 +16,7 @@
 //! other. A value is encoded with `postcard`, at most [`MAX_VALUE`] bytes.
 //!
 //! A count the player should see on the item belongs in its
-//! [`Meter`](crate::content::items::Meter), which the game itself saves,
+//! [`FuelSetup`](crate::content::items::FuelSetup), which the game itself saves,
 //! sends and draws.
 //!
 //! # Examples

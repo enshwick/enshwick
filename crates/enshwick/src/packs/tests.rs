@@ -271,7 +271,7 @@ fn a_change_that_picks_or_changes_nothing_is_a_problem() {
     .unwrap_err();
     assert_eq!(
         errors.to_string(),
-        "items.toml:1:1: change 1: changes nothing; give max_stack, slots"
+        "items.toml:1:1: change 1: changes nothing; give max_stack, slots, damage_mod, speed_mod, armor, burn_time, energy_output, comfort_amount"
     );
 }
 
@@ -463,4 +463,23 @@ fn slots_go_only_to_a_container_and_never_shrink_it() {
     );
     let text = "[[change]]\nitems = [\"Prop_Storage_24_T1_Box\"]\nslots = 32\n";
     assert!(Pack::parse_with("you.chests", &files(text), Some(&vanilla)).is_ok());
+}
+
+#[test]
+fn item_stats_change_and_armor_only_scales() {
+    let items = format!(
+        "[[change]]\nitems = [\"{CHEST}\"]\ndamage_mod = {{ times = 1.5 }}\nburn_time = 600\ncomfort_amount = 3\n\n\
+         [[change]]\nitems = [\"{CHEST}\"]\narmor = 2\n"
+    );
+    let errors = Pack::parse("you.gear", &files(&items)).unwrap_err();
+    assert_eq!(
+        errors.to_string(),
+        "items.toml:7:1: change 2: armor takes only a factor: { times = x }"
+    );
+    let ok = format!(
+        "[[change]]\nitems = [\"{CHEST}\"]\ndamage_mod = {{ times = 1.5 }}\narmor = {{ times = 2 }}\n"
+    );
+    let pack = Pack::parse("you.gear", &files(&ok)).unwrap();
+    let fields: Vec<Field> = pack.changes().iter().map(|(c, _)| c.field).collect();
+    assert_eq!(fields, [Field::DamageMod, Field::Armor]);
 }

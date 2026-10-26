@@ -1,0 +1,8 @@
+[[change]]
+recipes = [
+    "Material_T3_Factory_BronzeBar_SM",
+    "Material_T2_Factory_Fired_Bricks",
+    "Food_T3_Flat_Bread",
+]
+cost = { times = 0.5 }
+time = { times = 0.5 }
