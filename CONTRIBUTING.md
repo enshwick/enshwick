@@ -40,8 +40,8 @@ rules the hooks enforce, and the ones they cannot, are in this file:
   and becomes the squashed commit; the merge queue merges it once CI passes;
 - code follows the style of the code around it, unsafe code included;
 - what mod authors need to know goes into [the modding book](book/src/SUMMARY.md)
-  with the change; `bun run check:book` checks its structure, and its Rust
-  examples run with `cargo test --doc --workspace`.
+  with the change; `cargo xtask check` checks its structure, and its Rust
+  examples run as doctests.
 
 What a mod needs and another mod could use goes into `enshwick`, not into
 the mod: events, world reads, content such as items and recipes, texts. A mod

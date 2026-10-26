@@ -1271,8 +1271,14 @@ impl Load<'_> {
 /// the server even where `stages` held this side's.
 fn read_config<T: Config>(host: Host, stages: impl FnOnce(&mut T)) -> Result<T, Off> {
     let text = host.settings_text(&T::template())?;
-    let mut settings: T =
+    let mut table: toml::Table =
         toml::from_str(&text).map_err(|e| Off::new(format!("settings: {}", e.message())))?;
+    for held in T::schema().clamp(&mut table) {
+        crate::warn!("settings: {held}");
+    }
+    let mut settings: T = toml::Value::Table(table)
+        .try_into()
+        .map_err(|e: toml::de::Error| Off::new(format!("settings: {}", e.message())))?;
     settings
         .validate()
         .map_err(|why| Off::new(format!("settings: {why}")))?;

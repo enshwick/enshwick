@@ -205,7 +205,9 @@ the mod and other mods can write their definitions from it. Every field's
 type and the answer's are numbers, `bool`, `enshwick::ecs::Entity`,
 `enshwick::content::Guid`, or types of the mod's own with
 [`#[derive(Shape)]`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/lib.rs);
-the doc comments of the point and its fields go into the schema too.
+the doc comments of the point and its fields go into the schema too, each up
+to its first heading, so an `# Examples` section, whose code compiles only in
+the owner, stays out of other mods' definitions.
 
 ```rust
 use std::sync::OnceLock;

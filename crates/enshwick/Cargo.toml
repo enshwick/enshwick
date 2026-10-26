@@ -22,6 +22,7 @@ zune-png.workspace = true
 fastrand.workspace = true
 memchr.workspace = true
 postcard.workspace = true
+rustc-hash.workspace = true
 schemars = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
 serde.workspace = true
@@ -32,6 +33,8 @@ toml.workspace = true
 [dev-dependencies]
 criterion.workspace = true
 insta.workspace = true
+libloading = "0.9.0"
+syn = { version = "3.0.9", default-features = false, features = ["full", "parsing"] }
 serde = { workspace = true, features = ["derive"] }
 
 [features]
@@ -46,6 +49,10 @@ required-features = ["schema"]
 
 [[test]]
 name = "fake_second_install"
+required-features = ["test"]
+
+[[test]]
+name = "old_mods"
 required-features = ["test"]
 
 [[test]]

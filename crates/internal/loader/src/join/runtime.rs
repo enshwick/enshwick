@@ -184,6 +184,16 @@ fn check(target: &super::Target) -> bool {
 /// client out, and tells the client's mods.
 #[cold]
 fn refused(missing: &[crate::admission::Need], reply: &[u8], names: &super::Names) {
+    let needed: Vec<String> = missing
+        .iter()
+        .map(|need| format!("{} {}", need.id, need.version))
+        .collect();
+    crate::log!(
+        WARN,
+        "the server runs join mods this game lacks: {}; the join is refused ({})",
+        needed.join(", "),
+        crate::errors::JOIN_MISSING
+    );
     let off = super::refusal::Off {
         by_player: crate::modlist::disabled().to_vec(),
         this_game: crate::host::join_mods_off(),
