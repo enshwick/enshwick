@@ -68,7 +68,7 @@ pub(super) fn item_changes(
         let e = entry.get_ref();
         let number = index + 1;
         let fields: Vec<(Field, Value)> = [
-            (Field::MaxStack, e.max_stack),
+            (Field::MaxStackSize, e.max_stack),
             (Field::Slots, e.slots),
             (Field::DamageMod, e.damage_mod),
             (Field::SpeedMod, e.speed_mod),
@@ -213,7 +213,7 @@ pub(super) fn recipe_changes(
         let mut fields: Vec<RecipeField> = [
             (Field::Output, e.output_count),
             (Field::Cost, e.cost),
-            (Field::Time, e.time),
+            (Field::CraftingDuration, e.time),
         ]
         .into_iter()
         .filter_map(|(field, v)| v.map(|v| (field, None, value(v))))

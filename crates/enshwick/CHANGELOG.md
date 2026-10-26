@@ -84,7 +84,8 @@ Each entry names the pull request that made the change.
 | `Settings::day_length` | `Settings::day_time_duration` |
 | `Settings::night_length` | `Settings::night_time_duration` |
 | `Settings::curse` | `Settings::curse_modifier` |
-- Typed game events and their fields take the game's reflected names; `Block`, `killer` and `killer_player` stay enshwick's (#518):
+- Typed game events and their fields take the game's reflected names;
+  `Block`, `killer` and `killer_player` stay enshwick's (#518):
 
 | Old | New |
 | --- | --- |
@@ -133,6 +134,45 @@ Each entry names the pull request that made the change.
 | `Revived::player` | `RevivedPlayerEvent::target_entity_id` |
 | `Revived::by` | `RevivedPlayerEvent::source_entity_id` |
 | `Block::player` | `Block::owner_id` |
+- The other types, fields and constants the game names take the game's
+  reflected names; the ones enshwick computes say so in their docs (#525):
+
+| Old | New |
+| --- | --- |
+| `damage::DamageType` | `damage::DamageTypeNew` |
+| `DamageType::Cut, Pierce, Blunt` | `DamageTypeNew::PhysicalCut, PhysicalPierce, PhysicalBlunt` |
+| `DamageType::Fire, Ice, Shroud, Lightning` | `DamageTypeNew::MagicalFire, MagicalIce, MagicalFog, MagicalLightning` |
+| `buffs::BuffKind` | `buffs::BuffSlotType` |
+| `BuffKind::Terrain` | `BuffSlotType::TerrainDebuff` |
+| `buffs::BuffId` | `buffs::BuffTypeId` |
+| `BuffType::id, kind, duration, saved, hidden` | `BuffType::buff_type_id, slot, default_life_time, is_saved, hide_in_ui` |
+| `Buff::id, entity, kind, duration` | `Buff::type_id, buff_entity_id, slot, life_time` |
+| `knowledge::KnowledgeKind` | `knowledge::KnowledgeType` |
+| `Known::kind, expected` | `Known::r#type, expected_flags` |
+| `weather::FrontKind` | `weather::WeatherPhenomenonEffect` |
+| `FrontKind::Clouds` | `WeatherPhenomenonEffect::None` |
+| `affixes::Rarity` | `affixes::ItemRarity` |
+| `affixes::Categories` | `affixes::ItemCategoryMask` |
+| `Categories::INSTRUMENTS, FISHING_RODS` | `ItemCategoryMask::INSTRUMENT, FISHING_ROD` |
+| `inventory::Category` | `inventory::InventoryCategory` |
+| `Category::UNKNOWN` | `InventoryCategory::INVALID` |
+| `ItemInfo::max_stack` | `ItemInfo::max_stack_size` |
+| `content::types::ITEM_REGISTRY, RECIPE_REGISTRY, WORKSHOP_REGISTRY` | `content::types::ITEM_REGISTRY_RESOURCE, RECIPE_REGISTRY_RESOURCE, WORKSHOP_REGISTRY_RESOURCE` |
+| `content::types::TEMPLATE, TEMPLATE_COLLECTION` | `content::types::TEMPLATE_RESOURCE, TEMPLATE_COLLECTION_RESOURCE` |
+| `content::types::UI_IMAGE, UI_BUNDLE` | `content::types::UI_TEXTURE_RESOURCE, FB_UI_BUNDLE` |
+| `content::items::Stat` | `content::items::ImpactUiValue` |
+| `Stat::label, format` | `ImpactUiValue::loca_id, value_format` |
+| `content::items::Meter` | `content::items::FuelSetup` |
+| `Meter::max` | `FuelSetup::max_fuel_charges` |
+| `changes::Field::MaxStack, Time` | `changes::Field::MaxStackSize, CraftingDuration` |
+| `terrain::Material` | `terrain::TerrainTerraformingConfig` |
+| `Material::id, item, health, flattens` | `TerrainTerraformingConfig::terrain_material, terrain_item, health_points, can_be_flattened` |
+| `loot::Offer` | `loot::InteractionOfferRuntime` |
+| `Offer::guest, accepted_at, disabled` | `InteractionOfferRuntime::guest_id, last_accept_time, is_disabled` |
+| `Container::empty` | `Container::is_empty` |
+| `effects::NpcOrder` | `effects::NpcCommandType` |
+| `NpcOrder::GoTo` | `NpcCommandType::GoToPosition` |
+| `TimeOfDay::day_length, night_length` | `TimeOfDay::day_time_duration, night_time_duration` |
 
 
 ### Removed

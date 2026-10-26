@@ -65,7 +65,7 @@ mod tests {
     }
 
     fn host() -> FakeHost {
-        let mut host = FakeHost::new().type_hash(types::RECIPE_REGISTRY.id(), RECIPES);
+        let mut host = FakeHost::new().type_hash(types::RECIPE_REGISTRY_RESOURCE.id(), RECIPES);
         for (id, size) in [
             ("recipe", 0xa8),
             ("recipe_ingredient", 0x18),

@@ -204,11 +204,11 @@ fn an_item_change_sets_the_stack_size_of_every_item_it_names() {
         pack.changes(),
         [
             (
-                Change::new(wood, Field::MaxStack, set),
+                Change::new(wood, Field::MaxStackSize, set),
                 "items.toml:1 (Material_T1_Wood_Logs)".to_owned()
             ),
             (
-                Change::new(Guid::parse(CHEST), Field::MaxStack, set),
+                Change::new(Guid::parse(CHEST), Field::MaxStackSize, set),
                 "items.toml:1".to_owned()
             ),
         ]
@@ -326,7 +326,7 @@ fn a_recipe_change_picks_recipes_by_name_and_by_what_they_make() {
                 "recipes.toml:1 (Tool_Torch01_T0_PK)"
             ),
             (
-                Change::new(recipe, Field::Time, Value::Times(0.5)),
+                Change::new(recipe, Field::CraftingDuration, Value::Times(0.5)),
                 "recipes.toml:5 (Tool_Torch01)"
             ),
             (

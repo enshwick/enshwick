@@ -67,7 +67,7 @@ use crate::{Host, Load, Off};
 /// See [`Known`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[non_exhaustive]
-pub enum KnowledgeKind {
+pub enum KnowledgeType {
     /// Set or not.
     Bool,
     /// A count.
@@ -97,12 +97,12 @@ pub enum Scope {
 /// # Examples
 ///
 /// ```
-/// use enshwick::knowledge::KnowledgeKind;
+/// use enshwick::knowledge::KnowledgeType;
 ///
 /// fn crafted(knowledge: &enshwick::knowledge::Knowledge, player: enshwick::ecs::Entity, recipe: u32) -> bool {
 ///     knowledge
 ///         .get(player, recipe)
-///         .is_some_and(|known| known.kind == KnowledgeKind::Flags && known.has_flag(1))
+///         .is_some_and(|known| known.r#type == KnowledgeType::Flags && known.has_flag(1))
 /// }
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -111,13 +111,13 @@ pub struct Known {
     /// The knowledge id.
     pub id: u32,
     /// What it is.
-    pub kind: KnowledgeKind,
+    pub r#type: KnowledgeType,
     /// Whose it is.
     pub scope: Scope,
     /// The value: 0 or 1, a count, or bits.
     pub value: u32,
     /// The bits the game expects of a flags value; 0 for any.
-    pub expected: u32,
+    pub expected_flags: u32,
 }
 
 impl Known {
@@ -145,14 +145,14 @@ impl Known {
     fn from_info(info: &KnowledgeInfo) -> Self {
         Self {
             id: info.id,
-            kind: kind_of(info.kind),
+            r#type: kind_of(info.kind),
             scope: if info.scope == KnowledgeInfo::WORLD {
                 Scope::World
             } else {
                 Scope::Player
             },
             value: info.value,
-            expected: info.flags,
+            expected_flags: info.flags,
         }
     }
 }
@@ -538,7 +538,7 @@ pub struct KnowledgeRequest {
     /// The knowledge id.
     pub id: u32,
     /// The kind the client names.
-    pub kind: KnowledgeKind,
+    pub kind: KnowledgeType,
     /// Whose the id is; `None` for an id the game does not know.
     pub scope: Option<Scope>,
     /// Ignored for a bool, added for a counter, the bit to set for flags.
@@ -581,12 +581,12 @@ where
     ))
 }
 
-const fn kind_of(raw: u8) -> KnowledgeKind {
+const fn kind_of(raw: u8) -> KnowledgeType {
     match raw {
-        KnowledgeInfo::BOOL => KnowledgeKind::Bool,
-        KnowledgeInfo::COUNTER => KnowledgeKind::Counter,
-        KnowledgeInfo::FLAGS => KnowledgeKind::Flags,
-        other => KnowledgeKind::Other(other),
+        KnowledgeInfo::BOOL => KnowledgeType::Bool,
+        KnowledgeInfo::COUNTER => KnowledgeType::Counter,
+        KnowledgeInfo::FLAGS => KnowledgeType::Flags,
+        other => KnowledgeType::Other(other),
     }
 }
 

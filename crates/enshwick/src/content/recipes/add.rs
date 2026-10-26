@@ -177,7 +177,7 @@ pub(super) fn fnv1a(bytes: &[u8]) -> u32 {
 ///     recipe: NewRecipe,
 /// ) -> Result<(), enshwick::Off> {
 ///     let layout = RecipeLayout::resolve(load)?;
-///     let registry = RECIPE_REGISTRY.key(types::RECIPE_REGISTRY)?;
+///     let registry = RECIPE_REGISTRY.key(types::RECIPE_REGISTRY_RESOURCE)?;
 ///     load.serve(registry, registry, move |base| {
 ///         add_recipe_to(&layout, base, &recipe, workshop_limit())
 ///     })

@@ -116,19 +116,19 @@ pub mod types {
     /// One item.
     pub const ITEM_INFO: ResourceType = ResourceType(ids::ITEM_INFO);
     /// The list of every item.
-    pub const ITEM_REGISTRY: ResourceType = ResourceType(ids::ITEM_REGISTRY);
+    pub const ITEM_REGISTRY_RESOURCE: ResourceType = ResourceType(ids::ITEM_REGISTRY);
     /// Every recipe.
-    pub const RECIPE_REGISTRY: ResourceType = ResourceType(ids::RECIPE_REGISTRY);
+    pub const RECIPE_REGISTRY_RESOURCE: ResourceType = ResourceType(ids::RECIPE_REGISTRY);
     /// What a placed object or creature is made of.
-    pub const TEMPLATE: ResourceType = ResourceType(ids::TEMPLATE);
+    pub const TEMPLATE_RESOURCE: ResourceType = ResourceType(ids::TEMPLATE);
     /// The list of every template.
-    pub const TEMPLATE_COLLECTION: ResourceType = ResourceType(ids::TEMPLATE_COLLECTION);
+    pub const TEMPLATE_COLLECTION_RESOURCE: ResourceType = ResourceType(ids::TEMPLATE_COLLECTION);
     /// Every workshop.
-    pub const WORKSHOP_REGISTRY: ResourceType = ResourceType(ids::WORKSHOP_REGISTRY);
+    pub const WORKSHOP_REGISTRY_RESOURCE: ResourceType = ResourceType(ids::WORKSHOP_REGISTRY);
     /// The client's UI image, such as an item icon.
-    pub const UI_IMAGE: ResourceType = ResourceType(ids::UI_IMAGE);
+    pub const UI_TEXTURE_RESOURCE: ResourceType = ResourceType(ids::UI_IMAGE);
     /// The client's UI data, the crafting menu among it.
-    pub const UI_BUNDLE: ResourceType = ResourceType(ids::UI_BUNDLE);
+    pub const FB_UI_BUNDLE: ResourceType = ResourceType(ids::UI_BUNDLE);
 }
 
 /// Answers engine facts by enshwick id: the running game through [`Load`]

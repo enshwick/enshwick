@@ -215,7 +215,7 @@ pub struct Summon {
     pub slot: SlotRef,
     /// The used item's own entity; `None` for an item without one.
     pub pide: Option<Entity>,
-    /// The used item's meter (see [`Meter`](crate::content::items::Meter))
+    /// The used item's meter (see [`FuelSetup`](crate::content::items::FuelSetup))
     /// as clients see it; `None` for an item without one.
     pub meter: Option<Bar>,
     /// In [`Load::on_summoned`]: whether the use took the item.

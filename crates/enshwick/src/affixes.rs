@@ -3,8 +3,8 @@
 //! they drop or are crafted and kept with the item.
 //!
 //! A mod defines its affixes with [`Load::define_affix`]: the [`Modifier`](crate::stats::Modifier)s'
-//! ranges, a weight against the other affixes, a [`Rarity`], the item
-//! [`Categories`] it rolls on and an optional group whose affixes never roll
+//! ranges, a weight against the other affixes, a [`ItemRarity`], the item
+//! [`ItemCategoryMask`] it rolls on and an optional group whose affixes never roll
 //! together. Every mod's affixes form one pool. [`Affixes::roll`] rolls an
 //! item from it on the server; [`Load::add_loot_affixes`] and
 //! [`Load::add_craft_affixes`] roll the items that drop from random loot or
@@ -18,7 +18,7 @@
 //! # Examples
 //!
 //! ```
-//! use enshwick::affixes::{AffixDef, AffixLoot, Categories, Range, Rarity};
+//! use enshwick::affixes::{AffixDef, AffixLoot, ItemCategoryMask, Range, ItemRarity};
 //! use enshwick::loot::Source;
 //! use enshwick::stats::{Op, builtin};
 //!
@@ -26,9 +26,9 @@
 //!     let health = load.open_stat(builtin::HEALTH_MAX)?;
 //!     load.define_affix(
 //!         "bear",
-//!         &AffixDef::new("affix.bear", Categories::EQUIPMENT)
+//!         &AffixDef::new("affix.bear", ItemCategoryMask::EQUIPMENT)
 //!             .with(Range::new(health, Op::Add, 10.0, 30.0).step(1.0))
-//!             .rarity(Rarity::Uncommon),
+//!             .rarity(ItemRarity::Uncommon),
 //!     )?;
 //!     load.add_loot_affixes(AffixLoot::new(Source::bosses(), 0.5).count(1, 2))
 //! }
@@ -59,7 +59,7 @@ pub struct AffixInfo {
     /// The text key that names it.
     pub text: String,
     /// How rare it is.
-    pub rarity: Rarity,
+    pub rarity: ItemRarity,
 }
 
 /// Why an item did not roll.
@@ -222,7 +222,7 @@ impl Affixes {
         let text = unsafe { text.as_str() }?.to_owned();
         Some(AffixInfo {
             text,
-            rarity: Rarity::from_raw(rarity)?,
+            rarity: ItemRarity::from_raw(rarity)?,
         })
     }
 }
@@ -275,14 +275,14 @@ impl AffixLoot {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::affixes::{AffixLoot, Rarity};
+    /// use enshwick::affixes::{AffixLoot, ItemRarity};
     /// use enshwick::loot::Source;
     ///
-    /// let rule = AffixLoot::new(Source::bosses(), 1.0).max_rarity(Rarity::Epic);
-    /// assert_eq!(rule.rules.max_rarity, Rarity::Epic);
+    /// let rule = AffixLoot::new(Source::bosses(), 1.0).max_rarity(ItemRarity::Epic);
+    /// assert_eq!(rule.rules.max_rarity, ItemRarity::Epic);
     /// ```
     #[must_use]
-    pub const fn max_rarity(mut self, rarity: Rarity) -> Self {
+    pub const fn max_rarity(mut self, rarity: ItemRarity) -> Self {
         self.rules.max_rarity = rarity;
         self
     }

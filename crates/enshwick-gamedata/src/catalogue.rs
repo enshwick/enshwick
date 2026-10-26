@@ -494,6 +494,40 @@ mod tests {
         }
     }
 
+    /// With both executables `ENSH_SERVER_EXE` and `ENSH_CLIENT_EXE` named
+    /// (skipped without them), every API name the game names itself stands
+    /// for a type, field or enum constant one of them reflects.
+    #[test]
+    fn every_api_game_name_is_reflected() {
+        let (Ok(server), Ok(client)) = (
+            std::env::var("ENSH_SERVER_EXE"),
+            std::env::var("ENSH_CLIENT_EXE"),
+        ) else {
+            return;
+        };
+        let bytes = [
+            std::fs::read(server).unwrap(),
+            std::fs::read(client).unwrap(),
+        ];
+        let images = bytes.each_ref().map(|bytes| {
+            crate::reflect::Image::parse(bytes, crate::reflect::Layout::File, None).unwrap()
+        });
+        let reflections = images.each_ref().map(Reflection::scan);
+        for row in crate::game_names::GAME_NAMES {
+            let found = reflections.iter().any(|reflection| {
+                reflection.type_info(row.game_type).is_ok_and(|info| {
+                    row.game_member.is_empty()
+                        || info.fields().iter().any(|f| f.name() == row.game_member)
+                        || info
+                            .enum_values()
+                            .iter()
+                            .any(|v| v.name() == row.game_member)
+                })
+            });
+            assert!(found, "{row:?}");
+        }
+    }
+
     /// With both executables `ENSH_SERVER_EXE` and `ENSH_CLIENT_EXE` name
     /// (skipped without them), every type and offset of the catalogue
     /// resolves in the reflection of at least one: the client alone has

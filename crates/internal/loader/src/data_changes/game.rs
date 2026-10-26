@@ -688,7 +688,7 @@ fn changed_item(patch: &ItemPatch, bytes: &mut [u8]) {
     let Some((old, new)) = edit.stack.filter(|(old, new)| new > old) else {
         return;
     };
-    let key = Key::new(patch.item, Field::MaxStack);
+    let key = Key::new(patch.item, Field::MaxStackSize);
     let without = |m: ModIndex| {
         merged
             .value(key, f64::from(old), |o| live(o) && o != m)
@@ -744,9 +744,9 @@ pub(crate) fn reachable(loader: &Loader, field: Field) -> bool {
     let constant = |id: &str| catalogue::constant(id, &loader.reflection).is_some();
     let recipes = || RecipeLayout::resolve(&catalogue::Reflected(&loader.reflection)).is_ok();
     match field {
-        Field::MaxStack => constant(catalogue::ITEM_MAX_STACK),
+        Field::MaxStackSize => constant(catalogue::ITEM_MAX_STACK),
         Field::Output | Field::Cost | Field::Ingredient => recipes(),
-        Field::Time => recipes() && constant(catalogue::RECIPE_DURATION),
+        Field::CraftingDuration => recipes() && constant(catalogue::RECIPE_DURATION),
         Field::Armor => {
             constant(catalogue::ITEM_ARMOR)
                 && constant(catalogue::ITEM_ARMOR_SET)

@@ -130,7 +130,7 @@ pub struct MenuEntry {
 ///         after: Some(Guid::parse("45390726-8a83-4538-91a2-db2a633c8eac")),
 ///         workshop: None,
 ///     };
-///     let bundle = UI_BUNDLE.key(types::UI_BUNDLE)?;
+///     let bundle = UI_BUNDLE.key(types::FB_UI_BUNDLE)?;
 ///     load.serve(bundle, bundle, move |base| list_recipes(&layout, base, &[entry]))
 /// }
 /// ```
@@ -300,7 +300,7 @@ fn group_entries(layout: &MenuLayout, blob: &Blob, group: usize) -> Option<usize
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 ///     let layout = MenuLayout::resolve(load)?;
 ///     let bench = WorkshopId::new(Id::new("my-mod:bench.workshop").guid());
-///     let bundle = UI_BUNDLE.key(types::UI_BUNDLE)?;
+///     let bundle = UI_BUNDLE.key(types::FB_UI_BUNDLE)?;
 ///     load.serve(bundle, bundle, move |base| list_workshop(&layout, base, bench))
 /// }
 /// ```
@@ -360,8 +360,8 @@ pub(crate) fn serve(
     if load.host().build().side != Side::CLIENT {
         return Ok(());
     }
-    let resolved =
-        MenuLayout::resolve(load).and_then(|layout| Ok((layout, UI_BUNDLE.key(types::UI_BUNDLE)?)));
+    let resolved = MenuLayout::resolve(load)
+        .and_then(|layout| Ok((layout, UI_BUNDLE.key(types::FB_UI_BUNDLE)?)));
     let (layout, bundle) = match resolved {
         Ok(resolved) => resolved,
         Err(off) => {

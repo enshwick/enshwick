@@ -52,8 +52,11 @@ mod tests {
         loader.set_terrain(&[rock]);
         let materials = terrain.materials();
         assert_eq!(materials.len(), 1);
-        assert_eq!((materials[0].id, materials[0].item), (9, 77));
-        assert!(!materials[0].flattens);
+        assert_eq!(
+            (materials[0].terrain_material, materials[0].terrain_item),
+            (9, 77)
+        );
+        assert!(!materials[0].can_be_flattened);
 
         terrain
             .add([10.0, 20.0, 30.0], 3.0, 1.5, 9, Shape::Round)

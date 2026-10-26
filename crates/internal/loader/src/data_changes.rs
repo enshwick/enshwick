@@ -370,12 +370,12 @@ pub fn edit_item(
     value: impl Fn(Field, f64) -> Option<f64>,
 ) -> ItemEdit {
     let mut edit = ItemEdit::default();
-    if fields.contains(&Field::MaxStack)
+    if fields.contains(&Field::MaxStackSize)
         && let Some(at) = offsets.max_stack
         && let Some(slot) = bytes.get_mut(at..at + 2)
     {
         let old = u16::from_le_bytes([slot[0], slot[1]]);
-        if let Some(new) = value(Field::MaxStack, f64::from(old)).and_then(whole::<u16>) {
+        if let Some(new) = value(Field::MaxStackSize, f64::from(old)).and_then(whole::<u16>) {
             slot.copy_from_slice(&new.to_le_bytes());
             edit.stack = Some((old, new));
         }
@@ -487,7 +487,7 @@ mod tests {
     fn declared(owner: usize, entry: Guid, value: Value, source: &str) -> Declared {
         Declared {
             owner: ModIndex::new(owner),
-            change: Change::new(entry, Field::MaxStack, value),
+            change: Change::new(entry, Field::MaxStackSize, value),
             source: source.to_owned(),
         }
     }
@@ -504,7 +504,7 @@ mod tests {
         ];
         let (merged, conflicts) = merge(&all, no_requires);
         assert_eq!(
-            merged.value(Key::new(WOOD, Field::MaxStack), 20.0, |_| true),
+            merged.value(Key::new(WOOD, Field::MaxStackSize), 20.0, |_| true),
             Some(500.0)
         );
         assert_eq!(conflicts.len(), 1);
@@ -526,7 +526,7 @@ mod tests {
         ];
         let (merged, conflicts) = merge(&all, no_requires);
         assert_eq!(
-            merged.value(Key::new(WOOD, Field::MaxStack), 20.0, |_| true),
+            merged.value(Key::new(WOOD, Field::MaxStackSize), 20.0, |_| true),
             Some(120.0)
         );
         assert!(conflicts.is_empty());
@@ -552,15 +552,15 @@ mod tests {
         let (merged, _) = merge(&all, no_requires);
         let on = |m: ModIndex| m != ModIndex::new(1);
         assert_eq!(
-            merged.value(Key::new(WOOD, Field::MaxStack), 20.0, on),
+            merged.value(Key::new(WOOD, Field::MaxStackSize), 20.0, on),
             Some(200.0)
         );
         assert_eq!(
-            merged.owners(Key::new(WOOD, Field::MaxStack), on),
+            merged.owners(Key::new(WOOD, Field::MaxStackSize), on),
             [ModIndex::new(0), ModIndex::new(2)]
         );
         assert_eq!(
-            merged.value(Key::new(WOOD, Field::MaxStack), 20.0, |_| false),
+            merged.value(Key::new(WOOD, Field::MaxStackSize), 20.0, |_| false),
             None
         );
     }
@@ -569,7 +569,7 @@ mod tests {
     fn an_entry_nobody_changes_has_no_value() {
         let (merged, _) = merge(&[declared(0, WOOD, Value::Set(5.0), "")], no_requires);
         assert_eq!(
-            merged.value(Key::new(STONE, Field::MaxStack), 20.0, |_| true),
+            merged.value(Key::new(STONE, Field::MaxStackSize), 20.0, |_| true),
             None
         );
         assert_eq!(
@@ -586,9 +586,9 @@ mod tests {
         ];
         let (merged, _) = merge(&all, no_requires);
         let new = merged
-            .value(Key::new(WOOD, Field::MaxStack), 20.0, |_| true)
+            .value(Key::new(WOOD, Field::MaxStackSize), 20.0, |_| true)
             .unwrap();
-        let owners = merged.owners(Key::new(WOOD, Field::MaxStack), |_| true);
+        let owners = merged.owners(Key::new(WOOD, Field::MaxStackSize), |_| true);
         let (without, alone) = sides(&merged);
         assert_eq!(
             credited(&owners, 20.0, new, without, alone),
@@ -599,12 +599,12 @@ mod tests {
     fn sides(merged: &Merged) -> (impl Fn(ModIndex) -> f64 + '_, impl Fn(ModIndex) -> f64 + '_) {
         let without = |m: ModIndex| {
             merged
-                .value(Key::new(WOOD, Field::MaxStack), 20.0, |o| o != m)
+                .value(Key::new(WOOD, Field::MaxStackSize), 20.0, |o| o != m)
                 .unwrap_or(20.0)
         };
         let alone = |m: ModIndex| {
             merged
-                .value(Key::new(WOOD, Field::MaxStack), 20.0, |o| o == m)
+                .value(Key::new(WOOD, Field::MaxStackSize), 20.0, |o| o == m)
                 .unwrap_or(20.0)
         };
         (without, alone)
@@ -619,9 +619,9 @@ mod tests {
             ];
             let (merged, _) = merge(&all, no_requires);
             let new = merged
-                .value(Key::new(WOOD, Field::MaxStack), 20.0, |_| true)
+                .value(Key::new(WOOD, Field::MaxStackSize), 20.0, |_| true)
                 .unwrap();
-            let owners = merged.owners(Key::new(WOOD, Field::MaxStack), |_| true);
+            let owners = merged.owners(Key::new(WOOD, Field::MaxStackSize), |_| true);
             let (without, alone) = sides(&merged);
             assert_eq!(
                 credited(&owners, 20.0, new, without, alone),
@@ -711,7 +711,7 @@ mod tests {
         assert_eq!(fresh.last().map(|d| d.source.as_str()), Some("d"));
         let (merged, _) = merge(&next, no_requires);
         assert_eq!(
-            merged.value(Key::new(WOOD, Field::MaxStack), 20.0, |_| true),
+            merged.value(Key::new(WOOD, Field::MaxStackSize), 20.0, |_| true),
             Some(300.0)
         );
     }
@@ -748,7 +748,7 @@ mod tests {
     fn an_item_s_values_change_in_their_own_encodings() {
         let (mut bytes, offsets) = item();
         let fields = [
-            Field::MaxStack,
+            Field::MaxStackSize,
             Field::DamageMod,
             Field::BurnTime,
             Field::ComfortAmount,
@@ -799,7 +799,7 @@ mod tests {
         let (merged, conflicts) = merge(&all, no_requires);
         assert!(conflicts.is_empty());
         assert_eq!(
-            merged.value(Key::new(WOOD, Field::MaxStack), 20.0, |_| true),
+            merged.value(Key::new(WOOD, Field::MaxStackSize), 20.0, |_| true),
             Some(200.0)
         );
     }

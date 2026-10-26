@@ -39,31 +39,33 @@ const ROW_WORDS: usize = 9;
 ///
 /// See [`Container`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct Offer {
+pub struct InteractionOfferRuntime {
     /// The entity that last opened or looted the container; `None` before
     /// anyone did.
-    pub guest: Option<Entity>,
+    pub guest_id: Option<Entity>,
     /// When, in the game's nanoseconds; changes with each interaction.
-    pub accepted_at: i64,
+    pub last_accept_time: i64,
     /// Whether the game offers no interaction now.
-    pub disabled: bool,
+    pub is_disabled: bool,
 }
 
 /// What a loot container is and holds, read in one go.
+///
+/// The name is enshwick's: several of the game's components read together.
 ///
 /// # Examples
 ///
 /// ```
 /// use enshwick::ecs::Entity;
-/// use enshwick::loot::{Container, Offer};
+/// use enshwick::loot::{Container, InteractionOfferRuntime};
 ///
 /// let corpse = Container {
 ///     entity: Entity(900),
 ///     position: [10.0, 2.0, -4.0],
-///     empty: false,
+///     is_empty: false,
 ///     expires: true,
 ///     area_loot: Some(true),
-///     offer: Some(Offer { guest: None, accepted_at: 0, disabled: false }),
+///     offer: Some(InteractionOfferRuntime { guest_id: None, last_accept_time: 0, is_disabled: false }),
 /// };
 /// assert!(corpse.is_enemy_loot());
 /// assert!(corpse.is_open());
@@ -75,7 +77,7 @@ pub struct Container {
     /// Where it stands, in metres; y is up.
     pub position: [f64; 3],
     /// Whether it holds nothing, as the game last recorded.
-    pub empty: bool,
+    pub is_empty: bool,
     /// Whether it despawns on its own after a while (`LifeTime`).
     pub expires: bool,
     /// Its `AreaLootOverride`: `Some(true)` when area loot may take it,
@@ -83,7 +85,7 @@ pub struct Container {
     /// one.
     pub area_loot: Option<bool>,
     /// Its interaction offer; `None` without one.
-    pub offer: Option<Offer>,
+    pub offer: Option<InteractionOfferRuntime>,
 }
 
 impl Container {
@@ -108,11 +110,11 @@ impl Container {
     #[must_use]
     pub const fn is_open(&self) -> bool {
         self.is_enemy_loot()
-            && !self.empty
+            && !self.is_empty
             && matches!(
                 self.offer,
-                Some(Offer {
-                    disabled: false,
+                Some(InteractionOfferRuntime {
+                    is_disabled: false,
                     ..
                 })
             )
@@ -273,7 +275,7 @@ impl Containers {
     ///     corpse: enshwick::ecs::Entity,
     /// ) -> bool {
     ///     // SAFETY: called from a system's hook with its context.
-    ///     unsafe { containers.container(ctx, corpse) }.is_some_and(|c| !c.empty)
+    ///     unsafe { containers.container(ctx, corpse) }.is_some_and(|c| !c.is_empty)
     /// }
     /// ```
     #[must_use]
@@ -295,23 +297,23 @@ impl Containers {
             // `exclude` byte sits at the reflected offset `exclude`.
             unsafe { read_at::<u8>(data, layout.exclude) == 0 }
         });
-        let offer = read(layout.offer).map(|data| Offer {
+        let offer = read(layout.offer).map(|data| InteractionOfferRuntime {
             // SAFETY: `data` is the entity's live InteractionOfferRuntime,
             // whose `lastAcceptData.guestId` u32 sits at the reflected offset
             // `accept_guest`.
-            guest: Entity::from_raw(unsafe { read_at(data, layout.accept_guest) }),
+            guest_id: Entity::from_raw(unsafe { read_at(data, layout.accept_guest) }),
             // SAFETY: `data` is the entity's live InteractionOfferRuntime,
             // whose `lastAcceptTime` i64 sits at the reflected offset
             // `accept_time`.
-            accepted_at: unsafe { read_at(data, layout.accept_time) },
+            last_accept_time: unsafe { read_at(data, layout.accept_time) },
             // SAFETY: `data` is the entity's live InteractionOfferRuntime,
             // whose `isDisabled` byte sits at the reflected offset `disabled`.
-            disabled: unsafe { read_at::<u8>(data, layout.disabled) } != 0,
+            is_disabled: unsafe { read_at::<u8>(data, layout.disabled) } != 0,
         });
         Some(Container {
             entity,
             position,
-            empty,
+            is_empty: empty,
             expires: read(layout.lifetime).is_some(),
             area_loot,
             offer,
@@ -404,7 +406,7 @@ impl LootPass<'_> {
     ///
     /// ```
     /// fn full(pass: &enshwick::loot::LootPass<'_>, e: enshwick::ecs::Entity) -> bool {
-    ///     pass.container(e).is_some_and(|c| !c.empty)
+    ///     pass.container(e).is_some_and(|c| !c.is_empty)
     /// }
     /// ```
     #[must_use]
@@ -494,7 +496,7 @@ impl Load<'_> {
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     load.on_loot_pass(|pass| {
     ///         let mut emptied = 0;
-    ///         pass.each(|container| emptied += usize::from(container.empty));
+    ///         pass.each(|container| emptied += usize::from(container.is_empty));
     ///         let _ = emptied;
     ///     })
     /// }
@@ -523,13 +525,13 @@ mod tests {
         Container {
             entity: Entity(900),
             position: [0.0; 3],
-            empty: false,
+            is_empty: false,
             expires: true,
             area_loot: Some(true),
-            offer: Some(Offer {
-                guest: None,
-                accepted_at: 0,
-                disabled: false,
+            offer: Some(InteractionOfferRuntime {
+                guest_id: None,
+                last_accept_time: 0,
+                is_disabled: false,
             }),
         }
     }
@@ -553,13 +555,13 @@ mod tests {
         };
         assert!(!quest.is_enemy_loot());
         let looted = Container {
-            empty: true,
+            is_empty: true,
             ..corpse()
         };
         assert!(looted.is_enemy_loot() && !looted.is_open());
         let closed = Container {
-            offer: Some(Offer {
-                disabled: true,
+            offer: Some(InteractionOfferRuntime {
+                is_disabled: true,
                 ..corpse().offer.unwrap()
             }),
             ..corpse()

@@ -11,13 +11,13 @@ use crate::{Load, Off};
 use super::{Blob, EngineFacts, Guid, Id, types};
 
 /// The meter templates the mod serves.
-static METERS: crate::fresh::Fresh<Mutex<Vec<Meter>>> = crate::fresh::Fresh::new();
+static METERS: crate::fresh::Fresh<Mutex<Vec<FuelSetup>>> = crate::fresh::Fresh::new();
 
 /// The game's item registry resource.
 pub const ITEM_REGISTRY: Guid = Guid::parse("3064d35d-7342-40ca-bdc9-aad58f83bf45");
 
 /// The template of the water pouch's own entity, `Pide_Fuel_Water_Pouch`:
-/// the base every [`Meter`] template is cloned from.
+/// the base every [`FuelSetup`] template is cloned from.
 pub const METER_TEMPLATE_BASE: Guid = Guid::parse("39246eb2-1b9f-4881-8c60-e0e4f5d956f8");
 
 /// The tag of a vanilla item's name, read from the game's archive with the
@@ -97,9 +97,9 @@ pub struct NewItem {
     pub debug_name: String,
     /// A count each item keeps, such as charges, which the game saves,
     /// sends to players and shows as a bar on the item.
-    pub meter: Option<Meter>,
+    pub meter: Option<FuelSetup>,
     /// Lines the item's tooltip shows after the vanilla item's.
-    pub stats: Vec<Stat>,
+    pub stats: Vec<ImpactUiValue>,
     /// An icon of its own; `None` keeps the vanilla item's. It shows on a
     /// client whose loader knows the build's texture code.
     pub icon: Option<super::icons::Icon>,
@@ -143,36 +143,37 @@ impl NewItem {
 ///
 /// ```
 /// use enshwick::content::Id;
-/// use enshwick::content::items::Meter;
+/// use enshwick::content::items::FuelSetup;
 ///
-/// let charges = Meter { template: Id::new("my-mod:charges"), max: 5, start: 3 };
-/// assert!(charges.start <= charges.max);
+/// let charges = FuelSetup { template: Id::new("my-mod:charges"), max_fuel_charges: 5, start: 3 };
+/// assert!(charges.start <= charges.max_fuel_charges);
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct Meter {
-    /// The id of the item's entity template.
+pub struct FuelSetup {
+    /// The id of the item's entity template; the name is enshwick's.
     pub template: Id,
     /// The most it holds, 1 or more.
-    pub max: u16,
-    /// What a new item holds when nothing sets its fill.
+    pub max_fuel_charges: u16,
+    /// What a new item holds when nothing sets its fill, a count where the
+    /// game keeps a percentage; the name is enshwick's.
     pub start: u16,
 }
 
-impl Meter {
+impl FuelSetup {
     /// The fill `start` stands for, as the game's template keeps it.
     ///
     /// # Examples
     ///
     /// ```
     /// use enshwick::content::Id;
-    /// use enshwick::content::items::Meter;
+    /// use enshwick::content::items::FuelSetup;
     ///
-    /// let meter = Meter { template: Id::new("my-mod:charges"), max: 4, start: 1 };
+    /// let meter = FuelSetup { template: Id::new("my-mod:charges"), max_fuel_charges: 4, start: 1 };
     /// assert!((meter.start_fill() - 0.25).abs() < f32::EPSILON);
     /// ```
     #[must_use]
     pub fn start_fill(self) -> f32 {
-        fill(self.start, self.max)
+        fill(self.start, self.max_fuel_charges)
     }
 }
 
@@ -203,30 +204,33 @@ pub fn fill(count: u16, max: u16) -> f32 {
 ///
 /// ```
 /// use enshwick::content::Guid;
-/// use enshwick::content::items::{Stat, StatFormat};
+/// use enshwick::content::items::{ImpactUiValue, StatFormat};
 ///
-/// let charges = Stat {
-///     label: Guid::parse("c8d2e3f4-5061-4b72-9c83-d4e5f6071829"),
+/// let charges = ImpactUiValue {
+///     loca_id: Guid::parse("c8d2e3f4-5061-4b72-9c83-d4e5f6071829"),
 ///     value: 3,
-///     format: StatFormat::Number,
+///     value_format: StatFormat::Number,
 /// };
 /// assert_eq!(charges.value, 3);
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct Stat {
+pub struct ImpactUiValue {
     /// The tag of the line's text, given text with [`Load::add_texts`].
-    pub label: Guid,
+    pub loca_id: Guid,
     /// The number.
     pub value: i32,
     /// How the number reads.
-    pub format: StatFormat,
+    pub value_format: StatFormat,
 }
 
-/// How a [`Stat`]'s number reads.
+/// How a [`ImpactUiValue`]'s number reads.
+///
+/// The name is enshwick's: the game's number format together with its signed
+/// flag.
 ///
 /// # Examples
 ///
-/// See [`Stat`].
+/// See [`ImpactUiValue`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[non_exhaustive]
 pub enum StatFormat {
@@ -323,7 +327,7 @@ impl ItemLayout {
     }
 }
 
-/// Where the fields a [`Meter`] template edit touches sit on the running
+/// Where the fields a [`FuelSetup`] template edit touches sit on the running
 /// build, resolved by the loader.
 ///
 /// # Examples
@@ -420,7 +424,7 @@ pub fn clone_item(layout: &ItemLayout, like: &[u8], item: &NewItem, guid: Guid) 
     }
     if let Some(meter) = item.meter {
         let flags = info.read_u32(layout.flags)?;
-        if flags & ItemData::HAS_PIDE != 0 || meter.max == 0 {
+        if flags & ItemData::HAS_PIDE != 0 || meter.max_fuel_charges == 0 {
             return None;
         }
         let flags = flags | ItemData::HAS_PIDE | ItemData::USES_FUEL;
@@ -435,12 +439,12 @@ pub fn clone_item(layout: &ItemLayout, like: &[u8], item: &NewItem, guid: Guid) 
         let mut rows = Vec::with_capacity(item.stats.len());
         for stat in &item.stats {
             let mut row = vec![0u8; size];
-            let (number_format, is_signed) = stat.format.game();
+            let (number_format, is_signed) = stat.value_format.game();
             let mut put = |at: usize, bytes: &[u8]| {
                 row.get_mut(at..at + bytes.len())
                     .map(|target| target.copy_from_slice(bytes))
             };
-            put(label, &stat.label.id().to_le_bytes())?;
+            put(label, &stat.loca_id.id().to_le_bytes())?;
             put(format, &[number_format])?;
             put(value, &stat.value.to_le_bytes())?;
             put(signed, &[u8::from(is_signed)])?;
@@ -451,7 +455,7 @@ pub fn clone_item(layout: &ItemLayout, like: &[u8], item: &NewItem, guid: Guid) 
     written.then(|| info.into_bytes())
 }
 
-/// A [`Meter`]'s entity template, cloned from the water pouch's in
+/// A [`FuelSetup`]'s entity template, cloned from the water pouch's in
 /// `template`: its fuel setup holds the meter's maximum and starting fill.
 /// `None` when the template has no fuel setup of the layout's size.
 ///
@@ -459,7 +463,7 @@ pub fn clone_item(layout: &ItemLayout, like: &[u8], item: &NewItem, guid: Guid) 
 ///
 /// ```
 /// use enshwick::content::{Blob, Guid};
-/// use enshwick::content::items::{Meter, MeterLayout, clone_meter_template};
+/// use enshwick::content::items::{FuelSetup, MeterLayout, clone_meter_template};
 ///
 /// let layout = MeterLayout {
 ///     components: 0, fuel_setup: [0x28, 0x20, 0x24], fuel_setup_type: 7, templates: 0,
@@ -470,7 +474,7 @@ pub fn clone_item(layout: &ItemLayout, like: &[u8], item: &NewItem, guid: Guid) 
 /// template.extend_from_slice(&8u32.to_le_bytes());
 /// template.extend_from_slice(&0x28u32.to_le_bytes());
 /// template.extend_from_slice(&[0; 0x28]);
-/// let meter = Meter { template: enshwick::content::Id::new("my-mod:charges"), max: 3, start: 3 };
+/// let meter = FuelSetup { template: enshwick::content::Id::new("my-mod:charges"), max_fuel_charges: 3, start: 3 };
 /// let clone = Blob::new(&clone_meter_template(&layout, &template, &meter).ok_or("no fuel setup")?);
 /// assert_eq!(clone.read_u32(20 + 0x20), Some(3));
 /// # Ok::<(), &str>(())
@@ -479,7 +483,7 @@ pub fn clone_item(layout: &ItemLayout, like: &[u8], item: &NewItem, guid: Guid) 
 pub fn clone_meter_template(
     layout: &MeterLayout,
     template: &[u8],
-    meter: &Meter,
+    meter: &FuelSetup,
 ) -> Option<Vec<u8>> {
     let mut blob = Blob::new(template);
     let (start, count) = blob.array(layout.components)?;
@@ -493,7 +497,7 @@ pub fn clone_meter_template(
         if size != expected {
             return None;
         }
-        let max = i32::from(meter.max);
+        let max = i32::from(meter.max_fuel_charges);
         let written = blob.write(data + max_at, &max.to_le_bytes())
             && blob.write(data + fill_at, &meter.start_fill().to_le_bytes());
         return written.then(|| blob.into_bytes());
@@ -549,7 +553,7 @@ pub fn list_meter_template(
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 ///     let layout = ItemLayout::resolve(load)?;
 ///     let staff = Guid::parse("8a3f6e21-5c4b-4d7e-9f10-2b7c5e6a9d31");
-///     let registry = ITEM_REGISTRY.key(types::ITEM_REGISTRY)?;
+///     let registry = ITEM_REGISTRY.key(types::ITEM_REGISTRY_RESOURCE)?;
 ///     load.serve(registry, registry, move |base| list_item(&layout, base, staff, "Staff"))
 /// }
 /// ```
@@ -604,7 +608,7 @@ pub fn list_item(
 impl Load<'_> {
     /// Adds an item to the game, on the server and the client alike: the
     /// item data cloned from a vanilla item, listed in the item registry
-    /// beside items other mods add, and with a [`Meter`] its entity
+    /// beside items other mods add, and with a [`FuelSetup`] its entity
     /// template, listed in the template collection. Players see it once a
     /// recipe, loot or an action gives it to them.
     ///
@@ -618,11 +622,11 @@ impl Load<'_> {
     ///
     /// ```
     /// use enshwick::content::{Guid, Id};
-    /// use enshwick::content::items::{Meter, NewItem};
+    /// use enshwick::content::items::{FuelSetup, NewItem};
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     load.add_item(NewItem {
-    ///         meter: Some(Meter { template: Id::new("my-mod:charges"), max: 3, start: 3 }),
+    ///         meter: Some(FuelSetup { template: Id::new("my-mod:charges"), max_fuel_charges: 3, start: 3 }),
     ///         ..NewItem::new(
     ///             Id::new("my-mod:charged-locker"),
     ///             Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d"),
@@ -646,7 +650,7 @@ impl Load<'_> {
     fn add_one_item(&mut self, item: NewItem, guid: Guid, debug_name: String) -> Result<(), Off> {
         let layout = ItemLayout::resolve(self)?;
         let meter = item.meter;
-        if meter.is_some_and(|m| m.max == 0) {
+        if meter.is_some_and(|m| m.max_fuel_charges == 0) {
             return Err(Off::new(format!(
                 "item {}: a meter holds at least 1",
                 item.debug_name
@@ -672,7 +676,7 @@ impl Load<'_> {
                 clone_item(&layout, base, &item, guid)
             },
         )?;
-        let registry = ITEM_REGISTRY.key(types::ITEM_REGISTRY)?;
+        let registry = ITEM_REGISTRY.key(types::ITEM_REGISTRY_RESOURCE)?;
         self.serve(registry, registry, move |base| {
             list_item(&layout, base, guid, &debug_name)
         })?;
@@ -692,12 +696,12 @@ impl Load<'_> {
             drop(served);
             let layout = MeterLayout::resolve(self)?;
             self.serve(
-                meter.template.key(types::TEMPLATE)?,
-                METER_TEMPLATE_BASE.key(types::TEMPLATE)?,
+                meter.template.key(types::TEMPLATE_RESOURCE)?,
+                METER_TEMPLATE_BASE.key(types::TEMPLATE_RESOURCE)?,
                 move |base| clone_meter_template(&layout, base, &meter),
             )?;
             let collection =
-                super::workshops::TEMPLATE_COLLECTION.key(types::TEMPLATE_COLLECTION)?;
+                super::workshops::TEMPLATE_COLLECTION.key(types::TEMPLATE_COLLECTION_RESOURCE)?;
             self.serve(collection, collection, move |base| {
                 list_meter_template(&layout, base, meter.template.guid())
             })?;
@@ -756,9 +760,9 @@ mod tests {
     fn a_meter_gives_the_item_an_entity_that_keeps_fuel() {
         let mut staff = vec![0u8; 0x98];
         staff[0x78..0x7c].copy_from_slice(&(1u32 << 8).to_le_bytes());
-        let meter = Meter {
+        let meter = FuelSetup {
             template: TEMPLATE_ID,
-            max: 3,
+            max_fuel_charges: 3,
             start: 3,
         };
         let item = NewItem {
@@ -789,15 +793,15 @@ mod tests {
         assert!(armour.set_array(0x90, first, 1));
         let item = NewItem {
             stats: vec![
-                Stat {
-                    label: NAME,
+                ImpactUiValue {
+                    loca_id: NAME,
                     value: 3,
-                    format: StatFormat::Number,
+                    value_format: StatFormat::Number,
                 },
-                Stat {
-                    label: CHEST,
+                ImpactUiValue {
+                    loca_id: CHEST,
                     value: -2,
-                    format: StatFormat::Signed,
+                    value_format: StatFormat::Signed,
                 },
             ],
             ..NewItem::new(NEW_ID, CHEST)
@@ -846,9 +850,9 @@ mod tests {
             template.extend_from_slice(&size.to_le_bytes());
         }
         template.extend_from_slice(&[0; 4 + 0x28]);
-        let meter = Meter {
+        let meter = FuelSetup {
             template: TEMPLATE_ID,
-            max: 5,
+            max_fuel_charges: 5,
             start: 2,
         };
         let clone = Blob::new(&clone_meter_template(&layout, &template, &meter).unwrap());

@@ -108,9 +108,9 @@ impl WeatherAt {
 /// See [`Front`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[non_exhaustive]
-pub enum FrontKind {
+pub enum WeatherPhenomenonEffect {
     /// Clouds without rain.
-    Clouds,
+    None,
     /// Rain, snow where it is cold.
     Rain,
     /// A blizzard.
@@ -124,10 +124,10 @@ pub enum FrontKind {
 /// # Examples
 ///
 /// ```
-/// use enshwick::weather::FrontKind;
+/// use enshwick::weather::WeatherPhenomenonEffect;
 ///
 /// fn storms(weather: &enshwick::weather::Weather) -> usize {
-///     weather.fronts().iter().filter(|front| front.kind == FrontKind::Blizzard).count()
+///     weather.fronts().iter().filter(|front| front.kind == WeatherPhenomenonEffect::Blizzard).count()
 /// }
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -136,7 +136,7 @@ pub struct Front {
     /// The weather layer it belongs to.
     pub layer: u32,
     /// What it brings.
-    pub kind: FrontKind,
+    pub kind: WeatherPhenomenonEffect,
     /// Where it is, in metres.
     pub position: [f64; 3],
     /// How far it reaches, in metres.
@@ -236,10 +236,10 @@ impl Weather {
             .map(|front| Front {
                 layer: front.layer,
                 kind: match front.effect {
-                    WeatherFront::NONE => FrontKind::Clouds,
-                    WeatherFront::RAIN => FrontKind::Rain,
-                    WeatherFront::BLIZZARD => FrontKind::Blizzard,
-                    other => FrontKind::Other(other),
+                    WeatherFront::NONE => WeatherPhenomenonEffect::None,
+                    WeatherFront::RAIN => WeatherPhenomenonEffect::Rain,
+                    WeatherFront::BLIZZARD => WeatherPhenomenonEffect::Blizzard,
+                    other => WeatherPhenomenonEffect::Other(other),
                 },
                 position: crate::ecs::metres(front.position),
                 radius: front.radius,

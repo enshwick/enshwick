@@ -10,7 +10,7 @@ and move it into handlers, tasks and actions.
 ```rust
 use core::time::Duration;
 use enshwick::actions::{Action, Arg, Outcome, Value};
-use enshwick::buffs::{Apply, BuffId};
+use enshwick::buffs::{Apply, BuffTypeId};
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let buffs = load.buffs();
@@ -19,7 +19,7 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
         match buffs.of(request.player.entity) {
             Ok(on) => Outcome::done(
                 on.iter()
-                    .map(|b| format!("{:#x} {:?}, {}s left", b.id.0, b.kind, b.remaining.as_secs()))
+                    .map(|b| format!("{:#x} {:?}, {}s left", b.type_id.0, b.slot, b.remaining.as_secs()))
                     .collect::<Vec<_>>()
                     .join("\n"),
             ),
@@ -34,19 +34,19 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
             return Outcome::refused("Name a buff");
         };
         let how = Apply::new().lasting(Duration::from_mins(5));
-        Outcome::done(format!("{:?}", buffs.apply(request.player.entity, BuffId(*id as u32), how)))
+        Outcome::done(format!("{:?}", buffs.apply(request.player.entity, BuffTypeId(*id as u32), how)))
     })
 }
 ```
 
 ## Types
 
-A buff type is named by its `BuffId`: the FNV-1a 32 hash of the type's GUID,
-as the game's content names it; `BuffId::from_guid(bytes)` makes one, and
-`BuffId::named("my-mod:warmth")` makes the id of a buff type a mod serves
+A buff type is named by its `BuffTypeId`: the FNV-1a 32 hash of the type's GUID,
+as the game's content names it; `BuffTypeId::from_guid(bytes)` makes one, and
+`BuffTypeId::named("my-mod:warmth")` makes the id of a buff type a mod serves
 under a [content id](content.md#content-ids).
 `types()` lists every type of the running game (274 on the 1.0 game) with
-its `BuffKind` (`Food`, `Buff`, `Debuff`, `Rested` or `Terrain`), its
+its `BuffSlotType` (`Food`, `Buff`, `Debuff`, `Rested` or `Terrain`), its
 default duration, whether the game saves it with a character, whether it
 shows, and the `LocaTag` of its name, which a client shows. The dedicated
 server has no texts of its own, so a mod that names buffs keeps its own

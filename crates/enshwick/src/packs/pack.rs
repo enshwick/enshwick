@@ -471,7 +471,7 @@ impl Pack {
     /// "#);
     /// let pack = Pack::parse("you.stacks", &files)?;
     /// let (change, source) = &pack.changes()[0];
-    /// assert_eq!((change.field, change.value), (Field::MaxStack, Value::Times(4.0)));
+    /// assert_eq!((change.field, change.value), (Field::MaxStackSize, Value::Times(4.0)));
     /// assert_eq!(source, "items.toml:2");
     /// # Ok::<(), enshwick::packs::ParsePackError>(())
     /// ```
