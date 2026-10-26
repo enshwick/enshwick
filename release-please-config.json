@@ -111,10 +111,6 @@
       "package-name": "enshwick-survivors-per-altar",
       "component": "enshwick-survivors-per-altar"
     },
-    "mods/enshwick-furniture-comfort": {
-      "package-name": "enshwick-furniture-comfort",
-      "component": "enshwick-furniture-comfort"
-    },
     "crates/enshwick-macros": {
       "package-name": "enshwick-macros",
       "component": "enshwick-macros"
