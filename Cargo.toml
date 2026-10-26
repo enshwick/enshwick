@@ -9,7 +9,7 @@ members = [
     "crates/internal/*",
     "examples/hot-reload",
     "examples/market-stalls",
-    "examples/safe-viewers",
+    "examples/haggling",
     "examples/trading-post",
     "examples/trading-post-api",
     "tools/compat",
@@ -28,6 +28,7 @@ publish = false
 arc-swap = { version = "1.9.3", default-features = false }
 criterion = { version = "0.8.2", default-features = false, features = ["cargo_bench_support"] }
 const-sha1 = { version = "0.3.0", default-features = false }
+const_format = { version = "0.2.37", default-features = false }
 clap = { version = "4.6.7", default-features = false, features = ["std", "derive", "help", "usage", "error-context", "env"] }
 arrayvec = { version = "0.7.8", default-features = false, features = ["std"] }
 bytemuck = { version = "1.25.2", default-features = false, features = ["derive", "min_const_generics", "zeroable_atomics"] }

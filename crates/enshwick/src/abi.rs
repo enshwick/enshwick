@@ -14,7 +14,7 @@ use core::sync::atomic::{AtomicU32, AtomicUsize};
 pub const ABI_MAJOR: u16 = 2;
 
 /// The minor version of this interface. A newer minor only appends fields.
-pub const ABI_MINOR: u16 = 70;
+pub const ABI_MINOR: u16 = 71;
 
 /// Whether `id` is a valid mod id: `<author>.<name>`, each part of
 /// `[a-z0-9-]`, at most 64 characters in all.
@@ -1507,6 +1507,7 @@ impl ManifestFlags {
 ///     author_count: 0,
 ///     license: Str::new("MIT"),
 ///     homepage: Str::EMPTY,
+///     points: Str::EMPTY,
 /// };
 /// assert!(manifest.flags.contains(ManifestFlags::JOIN));
 /// ```
@@ -1546,6 +1547,11 @@ pub struct Manifest {
     /// Where players read about the mod, an `https://` address. Since minor
     /// 36.
     pub homepage: Str,
+    /// The schemas of the extension points the mod defines, as TOML that
+    /// `cargo enshwick point` reads; empty for none. The same text sits in
+    /// the DLL's `.enshpt` section, so a tool reads it without running the
+    /// mod. Since minor 71.
+    pub points: Str,
 }
 
 impl_headed!(Manifest);
@@ -5356,7 +5362,7 @@ pub struct Layout {
 ///
 /// let spec = ServiceSpec {
 ///     header: Header::of::<ServiceSpec>(),
-///     name: Str::new("trading-post:prices"),
+///     name: Str::new("you.trading-post:prices"),
 ///     major: 1,
 ///     layout: Layout { fields: core::ptr::null(), count: 0, size: 0 },
 ///     table: core::ptr::null(),
@@ -5430,7 +5436,7 @@ impl ServiceFound {
 ///
 /// let spec = EventSpec {
 ///     header: Header::of::<EventSpec>(),
-///     name: Str::new("trading-post:sold"),
+///     name: Str::new("you.trading-post:sold"),
 ///     layout: Layout { fields: core::ptr::null(), count: 0, size: 0 },
 /// };
 /// assert_eq!(spec.layout.size, 0);
@@ -5843,7 +5849,8 @@ const _: () = {
     assert!(size_of::<AltarZoneSize>() == 24);
     assert!(size_of::<ZoneCheck>() == 8 + 16 + 48 + 8);
     assert!(core::mem::offset_of!(Manifest, name) == 80);
-    assert!(size_of::<Manifest>() == 80 + 16 * 4 + 16);
+    assert!(core::mem::offset_of!(Manifest, points) == 80 + 16 * 4 + 16);
+    assert!(size_of::<Manifest>() == 80 + 16 * 4 + 16 + 16);
     assert!(size_of::<ResourceKey>() == 24);
 };
 

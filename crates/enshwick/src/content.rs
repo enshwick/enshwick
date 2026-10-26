@@ -30,6 +30,7 @@ pub mod workshops;
 /// ```
 #[repr(transparent)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Shape)]
+#[shape(api = "guid")]
 pub struct Guid(pub [u8; 16]);
 
 impl Guid {

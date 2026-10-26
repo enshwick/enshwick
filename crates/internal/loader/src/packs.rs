@@ -95,6 +95,7 @@ fn manifest_of(manifest: &PackManifest) -> &'static Manifest {
         author_count,
         license: keep(&manifest.license),
         homepage: keep(&manifest.homepage),
+        points: Str::EMPTY,
     }))
 }
 

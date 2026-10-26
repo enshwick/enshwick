@@ -97,6 +97,7 @@ unsafe fn own(mut manifest: Manifest) -> Manifest {
     manifest.description = text(manifest.description);
     manifest.authors = list(manifest.authors, manifest.author_count, text);
     manifest.license = text(manifest.license);
+    manifest.points = text(manifest.points);
     manifest.homepage = text(manifest.homepage);
     manifest
 }
@@ -331,6 +332,7 @@ mod tests {
             author_count: 0,
             license: Str::EMPTY,
             homepage: Str::EMPTY,
+            points: Str::EMPTY,
         }
     }
 
