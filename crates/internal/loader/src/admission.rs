@@ -357,6 +357,12 @@ pub fn needs(server: &str, client: Option<&Hello>) -> Vec<Need> {
         .collect()
 }
 
+/// The session's own machine from the handle it holds, `raw`: 0 until the
+/// session hosts.
+fn own_machine(raw: u32) -> Option<u32> {
+    (raw != 0).then_some(raw)
+}
+
 /// The machine to kick for the player `key` among the live slots'
 /// `machines`, `(key, machine)`: never the host's, nor one the host's slot
 /// shares, nor the session's own `host_machine`; or why not.
@@ -579,7 +585,7 @@ mod runtime {
             ),
             Some(Kick {
                 host_machine: None, ..
-            }) => crate::log!(
+            }) if loader.side == Side::CLIENT => crate::log!(
                 WARN,
                 "join check: the session's own machine is not in this build; the host is known by its hello alone"
             ),
@@ -822,6 +828,7 @@ mod runtime {
             // it with the machine to kick; read on the game thread.
             unsafe { crate::world::read::<u32>(session, offset) }
         });
+        let host_machine = host_machine.and_then(super::own_machine);
         let machine = super::machine_to_kick(&machines, key, host, host_machine)?;
         // SAFETY: the game's kick with the server's session and the machine
         // of one of its player slots, on the game thread, as the server's
@@ -1174,6 +1181,14 @@ mod tests {
         assert!(machine_to_kick(&machines, 1, None, Some(10)).is_err());
         assert!(machine_to_kick(&machines, 2, Some(9), Some(20)).is_err());
         assert_eq!(machine_to_kick(&machines, 2, None, Some(10)), Ok(20));
+    }
+
+    #[test]
+    fn a_session_that_does_not_host_yet_refuses_no_kick() {
+        let machines = [(2, 0)];
+        assert_eq!(own_machine(0), None);
+        assert_eq!(own_machine(7), Some(7));
+        assert_eq!(machine_to_kick(&machines, 2, None, own_machine(0)), Ok(0));
     }
 
     #[test]
