@@ -31,6 +31,7 @@ use enshwick::config::{Scope, Stage};
 use crate::configure::rows::{self, Lock, Row, Widget};
 use crate::host::Loader;
 use crate::locks::Relock;
+use crate::others::Origin;
 use crate::texts;
 
 use super::engine::{Engine, Window};
@@ -664,6 +665,17 @@ fn list(loader: &Loader, paint: &Painter<'_>, first: &mut usize) -> Listed {
         } else if !world {
             let note = texts::fill("mods.settings.file", &[("id", &record.id)]);
             paint.label(note.as_bytes(), UiWidget::STYLE_SECONDARY, false, false);
+        }
+    }
+    for (origin, loaded, key) in [
+        (Origin::Mods, true, "mods.others.native"),
+        (Origin::Chain, true, "mods.others.chain"),
+        (Origin::Chain, false, "mods.others.chain-failed"),
+    ] {
+        let files = crate::others::files(&loader.others, origin, loaded);
+        if !files.is_empty() {
+            let line = texts::fill(key, &[("files", &files.join(", "))]);
+            paint.label(line.as_bytes(), UiWidget::STYLE_SECONDARY, true, false);
         }
     }
     pages(paint, first, mods.len(), MODS_PER_PAGE);

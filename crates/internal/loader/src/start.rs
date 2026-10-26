@@ -32,7 +32,7 @@ pub(crate) use library::load_copy;
 use arm::arm;
 use game::{begin, game, wait_for_window};
 use join_check::{link_join, names, pages};
-use library::{Library, libraries, unload};
+use library::{Library, Run, libraries, unload};
 use lock::write_lock;
 
 /// The client starts under Steam's DRM wrapper, which may check the game's code
@@ -41,6 +41,29 @@ use lock::write_lock;
 const CLIENT_ARM_DELAY: Duration = Duration::from_secs(15);
 static FRAME: OnceLock<Option<FrameSlot>> = OnceLock::new();
 static STARTED: AtomicBool = AtomicBool::new(false);
+
+/// Warns about each DLL of `mods/chain/` the stub did not load.
+fn warn_unloaded(others: &[crate::others::OtherDll]) {
+    for dll in others.iter().filter(|dll| !dll.loaded) {
+        crate::log!(
+            WARN,
+            "{}/{} did not load",
+            crate::others::CHAIN_DIR,
+            dll.file
+        );
+    }
+}
+
+/// Stops the game when a mod that holds a world is not running.
+fn enforce_holds(loader: &Loader) {
+    let running: Vec<&str> = loader
+        .mods
+        .iter()
+        .filter(|m| !m.off.load(Ordering::Acquire))
+        .map(|m| m.id.as_str())
+        .collect();
+    crate::holds::enforce(&loader.data_dir, &running, false);
+}
 
 /// Runs once, on the stub's thread.
 /// Seals what mods asked for and links the loader's own features; the
@@ -89,7 +112,8 @@ pub(crate) fn start(
     let Some(game) = game(&data_dir) else {
         return;
     };
-    let (libraries, candidates) = libraries(&mods_dir);
+    let (libraries, candidates, others) = libraries(&mods_dir, Run::Game);
+    warn_unloaded(&others);
     let lock_files: Vec<(String, String)> = libraries
         .iter()
         .zip(&candidates)
@@ -110,6 +134,7 @@ pub(crate) fn start(
         data_dir,
         mods_dir,
         mods: records(&libraries, &candidates, &plan),
+        others,
         chains: Mutex::new(Chains::default()),
         mids: Mutex::default(),
         caller_frame: read_frame,
@@ -150,13 +175,7 @@ pub(crate) fn start(
     arm(loader, frame);
     release_server(release, began);
     crate::ui::armed(loader);
-    let running: Vec<&str> = loader
-        .mods
-        .iter()
-        .filter(|m| !m.off.load(Ordering::Acquire))
-        .map(|m| m.id.as_str())
-        .collect();
-    crate::holds::enforce(&loader.data_dir, &running, false);
+    enforce_holds(loader);
     ready(loader, &order);
     watch_copies(loader, &order);
     write_lock(loader, lock_files);
