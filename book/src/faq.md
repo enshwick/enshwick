@@ -196,6 +196,10 @@ Put Enshwick's `powrprof.dll` back into the game's folder and move the other
 mod's file into `mods/chain/`. Enshwick starts every DLL there, in file name
 order, before its own mods.
 
+The status summary, `report.md` and the Mods screen list the DLLs in
+`mods/chain/` and other mods' `dbghelp.dll`, `dinput8.dll` or `winmm.dll`
+beside the game.
+
 Under Proton, add each moved file's name to the overrides as well, such as
 `WINEDLLOVERRIDES="powrprof,dinput8=n,b" %command%` for a moved `dinput8.dll`.
 

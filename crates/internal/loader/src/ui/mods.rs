@@ -670,6 +670,7 @@ fn list(loader: &Loader, paint: &Painter<'_>, first: &mut usize) -> Listed {
     for (origin, loaded, key) in [
         (Origin::Mods, true, "mods.others.native"),
         (Origin::Chain, true, "mods.others.chain"),
+        (Origin::Game, true, "mods.others.beside"),
         (Origin::Chain, false, "mods.others.chain-failed"),
     ] {
         let files = crate::others::files(&loader.others, origin, loaded);

@@ -56,7 +56,8 @@ written says how many were dropped.
 
 `report.md` gathers what an issue needs in one file: the loader version and
 the stub's contract, Windows or the Wine version with `WINEDLLOVERRIDES`, the
-status summary, the DLLs in `mods/` and `mods/chain/` with their sizes, and
+status summary, the DLLs in `mods/` and `mods/chain/` and other mods' proxies
+beside the game with their sizes, and
 the latest 200 warnings and errors of the loader and every mod. The loader
 writes it once its log opens, again when it cannot serve the game, and with
 every status summary, each time after the log has taken the lines before it.

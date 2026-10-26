@@ -118,6 +118,7 @@ pub(super) fn libraries(
     let (found, mut others) = discover(mods_dir, &list, run);
     if run == Run::Game {
         others.extend(chained(mods_dir));
+        others.extend(beside(mods_dir));
     }
     for library in found.into_iter().chain(packs) {
         // SAFETY: every manifest here is the copy `manifest::read` made for the process
@@ -183,6 +184,40 @@ fn chained(mods_dir: &Path) -> Vec<OtherDll> {
             Some(OtherDll {
                 file,
                 origin: Origin::Chain,
+                loaded,
+            })
+        })
+        .collect()
+}
+
+/// Other mods' proxies in the game's folder under a name of
+/// [`crate::others::PROXY_NAMES`], and whether each is loaded.
+fn beside(mods_dir: &Path) -> Vec<OtherDll> {
+    let Some(game_dir) = mods_dir.parent() else {
+        return Vec::new();
+    };
+    crate::others::PROXY_NAMES
+        .iter()
+        .map(|name| game_dir.join(name))
+        .filter(|path| path.is_file())
+        .filter_map(|path| {
+            let file = path.file_name()?.to_string_lossy().into_owned();
+            let wide: Vec<u16> = path.as_os_str().encode_wide().chain([0]).collect();
+            // SAFETY: a NUL-terminated path; a module of that path is looked
+            // up, never loaded.
+            let loaded = !unsafe { GetModuleHandleW(wide.as_ptr()) }.is_null();
+            crate::log!(
+                INFO,
+                "{file} beside the game is another mod's proxy{}",
+                if loaded {
+                    "; it runs"
+                } else {
+                    "; it is not loaded"
+                }
+            );
+            Some(OtherDll {
+                file,
+                origin: Origin::Game,
                 loaded,
             })
         })
