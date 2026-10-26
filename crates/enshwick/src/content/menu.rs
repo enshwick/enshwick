@@ -153,7 +153,7 @@ pub struct MenuEntry {
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 ///     let layout = MenuLayout::resolve(load)?;
 ///     let entry = MenuEntry {
-///         recipe: Id::new("my-mod:safe.recipe").guid(),
+///         recipe: Id::new("my-mod:locker.recipe").guid(),
 ///         after: Some(Guid::parse("45390726-8a83-4538-91a2-db2a633c8eac")),
 ///         workshop: None,
 ///     };
@@ -489,7 +489,7 @@ mod tests {
     }
 
     const CHEST: Guid = Guid::parse("45390726-8a83-4538-91a2-db2a633c8eac");
-    const SAFE: Guid = Guid::parse("8a3f6e21-5c4b-4d7e-9f10-2b7c5e6a9d31");
+    const LOCKER: Guid = Guid::parse("8a3f6e21-5c4b-4d7e-9f10-2b7c5e6a9d31");
     const VAULT: Guid = Guid::parse("0b6c5a52-1df4-4a3b-bd0e-6c1f7e2a9c44");
 
     fn bench() -> WorkshopId {
@@ -500,7 +500,7 @@ mod tests {
     fn a_new_recipe_goes_right_after_the_one_it_copies() {
         let base = bundle(&[(7, &[&[&[1, 2]]]), (9, &[&[&[3], &[4, CHEST.id(), 5]]])]);
         let entry = MenuEntry {
-            recipe: SAFE,
+            recipe: LOCKER,
             after: Some(CHEST),
             workshop: None,
         };
@@ -509,7 +509,7 @@ mod tests {
             read(&built),
             [
                 (7, vec![vec![vec![1, 2]]]),
-                (9, vec![vec![vec![3], vec![4, CHEST.id(), SAFE.id(), 5]]]),
+                (9, vec![vec![vec![3], vec![4, CHEST.id(), LOCKER.id(), 5]]]),
             ]
         );
     }
@@ -517,21 +517,21 @@ mod tests {
     #[test]
     fn recipes_of_several_mods_compose_in_order() {
         let base = bundle(&[(9, &[&[&[CHEST.id(), 5]]])]);
-        let safe = MenuEntry {
-            recipe: SAFE,
+        let locker = MenuEntry {
+            recipe: LOCKER,
             after: Some(CHEST),
             workshop: None,
         };
-        let first = list_recipes(&LAYOUT, &base, &[safe]).unwrap();
+        let first = list_recipes(&LAYOUT, &base, &[locker]).unwrap();
         let vault = MenuEntry {
             recipe: VAULT,
-            after: Some(SAFE),
+            after: Some(LOCKER),
             workshop: None,
         };
         let second = list_recipes(&LAYOUT, &first, &[vault]).unwrap();
         assert_eq!(
             read(&second),
-            [(9, vec![vec![vec![CHEST.id(), SAFE.id(), VAULT.id(), 5]]])]
+            [(9, vec![vec![vec![CHEST.id(), LOCKER.id(), VAULT.id(), 5]]])]
         );
     }
 
@@ -543,11 +543,11 @@ mod tests {
             after: Some(CHEST),
             workshop: None,
         };
-        let first = list_recipes(&LAYOUT, &base, &[after_chest(SAFE)]).unwrap();
+        let first = list_recipes(&LAYOUT, &base, &[after_chest(LOCKER)]).unwrap();
         let second = list_recipes(&LAYOUT, &first, &[after_chest(VAULT)]).unwrap();
         assert_eq!(
             read(&second),
-            [(9, vec![vec![vec![CHEST.id(), VAULT.id(), SAFE.id(), 5]]])]
+            [(9, vec![vec![vec![CHEST.id(), VAULT.id(), LOCKER.id(), 5]]])]
         );
     }
 
@@ -558,7 +558,7 @@ mod tests {
             (bench().id(), &[&[&[1, 2], &[3]], &[&[4]]]),
         ]);
         let entry = MenuEntry {
-            recipe: SAFE,
+            recipe: LOCKER,
             after: Some(CHEST),
             workshop: Some(bench()),
         };
@@ -567,7 +567,7 @@ mod tests {
             read(&built)[1],
             (
                 bench().id(),
-                vec![vec![vec![1, 2, SAFE.id()], vec![3]], vec![vec![4]]]
+                vec![vec![vec![1, 2, LOCKER.id()], vec![3]], vec![vec![4]]]
             )
         );
         assert_eq!(read(&built)[0], (9, vec![vec![vec![CHEST.id()]]]));
@@ -578,7 +578,7 @@ mod tests {
         let base = bundle(&[(9, &[&[&[1]]])]);
         let entries = [
             MenuEntry {
-                recipe: SAFE,
+                recipe: LOCKER,
                 after: Some(CHEST),
                 workshop: None,
             },
@@ -598,7 +598,7 @@ mod tests {
         let (left, right) = full.split_at(300);
         let base = bundle(&[(bench().id(), &[&[left, right]])]);
         let entry = MenuEntry {
-            recipe: SAFE,
+            recipe: LOCKER,
             after: Some(CHEST),
             workshop: Some(bench()),
         };
@@ -607,7 +607,7 @@ mod tests {
         let room = bundle(&[(bench().id(), &[&[left, &right[1..]]])]);
         let built = list_recipes(&LAYOUT, &room, &[entry]).unwrap();
         assert_eq!(read(&built)[0].1[0][0].len(), 301);
-        assert_eq!(read(&built)[0].1[0][0][300], SAFE.id());
+        assert_eq!(read(&built)[0].1[0][0][300], LOCKER.id());
     }
 
     #[test]
@@ -627,12 +627,15 @@ mod tests {
         assert_eq!(list_workshop(&LAYOUT, &built, bench()).unwrap(), built);
 
         let entry = MenuEntry {
-            recipe: SAFE,
+            recipe: LOCKER,
             after: Some(CHEST),
             workshop: Some(bench()),
         };
         let built = list_recipes(&LAYOUT, &built, &[entry]).unwrap();
-        assert_eq!(read(&built)[1], (bench().id(), vec![vec![vec![SAFE.id()]]]));
+        assert_eq!(
+            read(&built)[1],
+            (bench().id(), vec![vec![vec![LOCKER.id()]]])
+        );
         assert_eq!(read(&built)[0], (9, vec![vec![vec![CHEST.id()]]]));
     }
 
@@ -652,7 +655,7 @@ mod tests {
     #[test]
     fn a_bundle_that_does_not_read_builds_nothing() {
         let entry = MenuEntry {
-            recipe: SAFE,
+            recipe: LOCKER,
             after: Some(CHEST),
             workshop: None,
         };

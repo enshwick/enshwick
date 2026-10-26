@@ -42,12 +42,12 @@
 ///
 /// ```
 /// let manifest = enshwick::manifest!(
-///     id: "you.survivors-per-altar",
+///     id: "you.market-stalls",
 ///     side: BOTH,
 ///     name: "Survivors per Altar",
 ///     authors: ["themaiby"],
 ///     join: true,
-///     requires: ["flame-altar-zones" => ">=0.1, <1.0"],
+///     requires: ["you.lockers" => ">=0.1, <1.0"],
 ///     breaks: ["old-survivors" => "<0.3"],
 ///     replaces: ["survivors"],
 ///     was: ["survivor-copies"],
@@ -67,7 +67,7 @@
 /// // SAFETY: as above; the license comes from this crate's Cargo.toml.
 /// assert_eq!(unsafe { manifest.license.as_str() }, Some("MIT"));
 ///
-/// let pinned = enshwick::manifest!(id: "you.safes", side: SERVER, version: "0.3.0");
+/// let pinned = enshwick::manifest!(id: "you.trading-post", side: SERVER, version: "0.3.0");
 /// // SAFETY: a static string.
 /// assert_eq!(unsafe { pinned.version.as_str() }, Some("0.3.0"));
 /// ```

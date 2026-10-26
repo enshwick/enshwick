@@ -12,7 +12,7 @@
 //!
 //! Every name a pack defines lives in its namespace: `lantern` in the pack
 //! `you.lanterns` is the content id `you.lanterns:lantern`. A reference is a name of
-//! the pack, a full content id of another mod (`safes:safe`), or a vanilla
+//! the pack, a full content id of another mod (`you.lockers:locker`), or a vanilla
 //! GUID (`6943053a-32c1-4718-ae22-e61427ddf54d`).
 //!
 //! # Examples
@@ -343,12 +343,12 @@ pub enum PackSide {
 /// name = "Lanterns"
 ///
 /// [requires]
-/// safes = ">=0.5, <1.0"
+/// "you.trading-post" = ">=0.5, <1.0"
 /// "#)?;
 /// assert_eq!(manifest.id, "you.lanterns");
 /// assert_eq!(manifest.side, PackSide::Both);
 /// assert!(manifest.join);
-/// assert_eq!(manifest.requires["safes"], ">=0.5, <1.0");
+/// assert_eq!(manifest.requires["you.trading-post"], ">=0.5, <1.0");
 /// # Ok::<(), enshwick::packs::PackError>(())
 /// ```
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
@@ -1082,7 +1082,7 @@ impl Pack {
     ///
     /// let files = PackFiles::new().with("loot.toml", r#"
     /// [[drop]]
-    /// items = ["safes:safe"]
+    /// items = ["you.lockers:locker"]
     /// chance = 0.1
     /// from = "bosses"
     /// "#);
@@ -1104,7 +1104,7 @@ impl Pack {
     /// use enshwick::packs::{Pack, PackFiles};
     ///
     /// let loot = |chance: &str| PackFiles::new().with("loot.toml", format!(
-    ///     "[[drop]]\nitems = [\"safes:safe\"]\nchance = {chance}\nfrom = \"bosses\"\n"
+    ///     "[[drop]]\nitems = [\"you.lockers:locker\"]\nchance = {chance}\nfrom = \"bosses\"\n"
     /// ));
     /// let before = Pack::parse("you.lanterns", &loot("0.1"))?;
     /// let after = Pack::parse("you.lanterns", &loot("0.5"))?;

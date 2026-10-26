@@ -746,9 +746,9 @@ impl Load<'_> {
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     load.add_recipe(NewRecipe {
-    ///         id: Id::new("my-mod:safe.recipe"),
+    ///         id: Id::new("my-mod:locker.recipe"),
     ///         like: Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d"),
-    ///         output: Guid::named("my-mod:safe"),
+    ///         output: Guid::named("my-mod:locker"),
     ///         output_count: 1,
     ///         cost: 2,
     ///         workshop: None,
@@ -789,9 +789,9 @@ impl Load<'_> {
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     load.add_recipe_with(|| NewRecipe {
-    ///         id: Id::new("my-mod:safe.recipe"),
+    ///         id: Id::new("my-mod:locker.recipe"),
     ///         like: Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d"),
-    ///         output: Guid::named("my-mod:safe"),
+    ///         output: Guid::named("my-mod:locker"),
     ///         output_count: 1,
     ///         cost: COST.load(Ordering::Relaxed),
     ///         workshop: None,
@@ -960,7 +960,7 @@ pub fn rebuild_recipes() -> Result<(), Off> {
 /// use enshwick::content::{DebugName, Guid, Id};
 ///
 /// let by_guid = Name::from(Guid::parse("7fa62007-a38e-4790-8591-873055fc3f34"));
-/// let by_id = Name::from(Id::new("safes:safe.recipe"));
+/// let by_id = Name::from(Id::new("you.lockers:locker.recipe"));
 /// let by_debug = Name::from(DebugName("Tool_Torch01_T0_PK"));
 /// assert_ne!(by_guid, by_id);
 /// assert_ne!(by_id, by_debug);
@@ -1034,8 +1034,8 @@ impl<'a> RecipeRule<'a> {
     /// use enshwick::content::Id;
     /// use enshwick::content::recipes::{Name, RecipeRule};
     ///
-    /// const SAFE_RECIPE: Id = Id::new("safes:safe.recipe");
-    /// assert_eq!(RecipeRule::recipe(SAFE_RECIPE), RecipeRule::Recipe(Name::Content(SAFE_RECIPE)));
+    /// const LOCKER_RECIPE: Id = Id::new("you.lockers:locker.recipe");
+    /// assert_eq!(RecipeRule::recipe(LOCKER_RECIPE), RecipeRule::Recipe(Name::Content(LOCKER_RECIPE)));
     /// ```
     #[must_use]
     pub fn recipe(name: impl Into<Name<'a>>) -> Self {
@@ -1162,7 +1162,7 @@ pub fn enable(rule: RecipeRule<'_>) -> Result<(), Off> {
 ///
 /// let torch = Guid::parse("7fa62007-a38e-4790-8591-873055fc3f34");
 /// assert!(!is_disabled(torch));
-/// assert!(!is_disabled(Id::new("safes:safe.recipe")));
+/// assert!(!is_disabled(Id::new("you.lockers:locker.recipe")));
 /// ```
 #[must_use]
 pub fn is_disabled(recipe: impl Into<Guid>) -> bool {
@@ -1195,7 +1195,7 @@ mod tests {
         stack_count: 0x14,
     };
     const CHEST: Guid = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");
-    const SAFE: Guid = Guid::parse("8a3f6e21-5c4b-4d7e-9f10-2b7c5e6a9d31");
+    const LOCKER: Guid = Guid::parse("8a3f6e21-5c4b-4d7e-9f10-2b7c5e6a9d31");
     const RECIPE_ID: Id = Id::new("test:recipe");
     const RECIPE: Guid = RECIPE_ID.guid();
 
@@ -1222,7 +1222,7 @@ mod tests {
         let new = NewRecipe {
             id: RECIPE_ID,
             like: CHEST,
-            output: SAFE,
+            output: LOCKER,
             output_count: 1,
             cost: 2,
             workshop: None,
@@ -1238,8 +1238,8 @@ mod tests {
         let (inputs, _) = built.array(copy + 0x28).unwrap();
         assert_eq!(u32_at(built.bytes(), inputs + 0x14), 10);
         let (outputs, _) = built.array(copy + 0x30).unwrap();
-        assert_eq!(&built.bytes()[outputs..outputs + 16], &SAFE.0);
-        assert_eq!(u32_at(built.bytes(), outputs + 0x10), SAFE.id());
+        assert_eq!(&built.bytes()[outputs..outputs + 16], &LOCKER.0);
+        assert_eq!(u32_at(built.bytes(), outputs + 0x10), LOCKER.id());
         let (name, len) = built.array(copy + 0x78).unwrap();
         assert_eq!(&built.bytes()[name..name + len as usize], b"Chest");
         let (inputs, _) = built.array(recipes + 0x28).unwrap();
@@ -1304,7 +1304,7 @@ mod tests {
         let new = NewRecipe {
             id: RECIPE_ID,
             like: CHEST,
-            output: SAFE,
+            output: LOCKER,
             output_count: 1,
             cost: 1,
             workshop: Some(bench),
@@ -1406,7 +1406,7 @@ mod tests {
         let new = NewRecipe {
             id: RECIPE_ID,
             like: CHEST,
-            output: SAFE,
+            output: LOCKER,
             output_count: 1,
             cost: 1,
             workshop: None,

@@ -4,7 +4,7 @@ A server owner takes recipes out of the game, vanilla ones or a mod's, with
 a file and no mod: `mod-configs/enshwick.recipes.toml`. A disabled recipe
 leaves every crafting menu, by hand, at stations and at survivors, and the
 server refuses to craft it. Items that exist stay as they are, and
-administrators still hand them out with admin-tools' `give` action, which
+administrators still hand them out with a mod's `give` action, which
 makes items without a recipe. Mods disable recipes too, through
 [`recipes::disable`](#from-a-mod).
 
@@ -14,7 +14,7 @@ The loader writes the file on first start, with every list empty:
 
 ```toml
 [disable]
-recipes = ["Tool_Torch01_T0_PK", "safes:safe.recipe"]
+recipes = ["Tool_Torch01_T0_PK", "you.lockers:locker.recipe"]
 outputs = ["Tool_Torch01_T0"]
 workshops = ["hand", "NPC_Crafter_Blacksmith01"]
 
@@ -66,7 +66,7 @@ the recipes and the server's refusals follow. No restart is needed.
 
 ## Finding names and changing rules from the console
 
-The server's [console](../chat.md#the-console), such as admin-tools' command
+The server's [console](../chat.md#the-console), such as a mod's command
 file, finds names and changes the rules:
 
 | Line | Answer |
@@ -114,14 +114,14 @@ hand:
 use enshwick::content::recipes::{RecipeRule, disable, is_disabled};
 use enshwick::content::{DebugName, Id};
 
-const SAFE_RECIPE: Id = Id::new("safes:safe.recipe");
+const LOCKER_RECIPE: Id = Id::new("you.lockers:locker.recipe");
 
 fn init(_load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     // Torches come from the mod's own loot, not from crafting.
     disable(RecipeRule::output(DebugName("Tool_Torch01_T0")))?;
     disable(RecipeRule::workshop(DebugName("Craftingstation_Workbench")))?;
-    if !is_disabled(SAFE_RECIPE) {
-        enshwick::info!("safes are craftable");
+    if !is_disabled(LOCKER_RECIPE) {
+        enshwick::info!("lockers are craftable");
     }
     Ok(())
 }

@@ -1,6 +1,7 @@
 //! `cargo enshwick`: start an Enshwick mod, build it and install it into the game,
 //! and port the build rows to a new game build.
 
+use anyhow::Context as _;
 use std::io::Write as _;
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -101,11 +102,11 @@ enum Side {
 
 /// A line per content id: the id, its GUID and its game id in decimal and
 /// hex; an error naming the first malformed id.
-fn ids(names: &[String]) -> Result<String, String> {
-    let lines: Result<Vec<String>, String> = names
+fn ids(names: &[String]) -> anyhow::Result<String> {
+    let lines: anyhow::Result<Vec<String>> = names
         .iter()
         .map(|name| {
-            let guid = Guid::try_named(name).ok_or_else(|| {
+            let guid = Guid::try_named(name).with_context(|| {
                 format!("{name:?} is no content id: <mod>:<name>, the mod side a mod id, the name 1 to 128 of [a-z0-9_./-]")
             })?;
             Ok(format!("{name}  {guid}  {id} {id:#010x}", id = guid.id()))
@@ -122,7 +123,7 @@ fn main() -> ExitCode {
                 Ok(true) => ExitCode::SUCCESS,
                 Ok(false) => ExitCode::from(pin::NEEDS_HUMAN),
                 Err(error) => {
-                    let _shown = writeln!(std::io::stderr(), "error: {error}");
+                    let _shown = writeln!(std::io::stderr(), "error: {error:#}");
                     ExitCode::FAILURE
                 }
             };
@@ -132,7 +133,7 @@ fn main() -> ExitCode {
         Command::Manifest {
             dll,
             expect_version,
-        } => manifest::show(&dll, expect_version.as_deref()),
+        } => manifest::show(&dll, expect_version.as_deref()).map_err(anyhow::Error::msg),
         Command::Id { names } => ids(&names),
         Command::Point { name, from, out } => point::run(&name, &from, out.as_deref()),
         Command::Pack(command) => pack::run(&command),
@@ -143,7 +144,7 @@ fn main() -> ExitCode {
             ExitCode::SUCCESS
         }
         Err(error) => {
-            let _shown = writeln!(std::io::stderr(), "error: {error}");
+            let _shown = writeln!(std::io::stderr(), "error: {error:#}");
             ExitCode::FAILURE
         }
     }
@@ -155,12 +156,12 @@ mod tests {
 
     #[test]
     fn an_id_prints_its_guid_and_game_id() {
-        let line = ids(&["safes:safe".to_owned()]).unwrap();
-        let guid = Guid::named("safes:safe");
+        let line = ids(&["you.lockers:locker".to_owned()]).unwrap();
+        let guid = Guid::named("you.lockers:locker");
         assert_eq!(
             line,
             format!(
-                "safes:safe  f7eb124c-c132-5cf1-9c6c-e9e49ed3c896  {0} {0:#010x}",
+                "you.lockers:locker  67842cb8-d551-542b-8765-fe1af9c28aca  {0} {0:#010x}",
                 guid.id()
             )
         );

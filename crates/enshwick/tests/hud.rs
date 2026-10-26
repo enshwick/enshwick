@@ -72,7 +72,7 @@ mod tests {
         let ui = UI.get().unwrap();
         ui.set_markers(&[
             Marker::new([1.0, 2.0, -3.0])
-                .label("Safe")
+                .label("Locker")
                 .color(MarkerColor::Green),
             Marker::new([0.5, 0.0, 0.0]),
         ])
@@ -82,7 +82,7 @@ mod tests {
             [
                 FakeMarker {
                     position: [1 << 32, 2 << 32, -(3 << 32)],
-                    label: "Safe".into(),
+                    label: "Locker".into(),
                     color: UiMarker::GREEN
                 },
                 FakeMarker {
