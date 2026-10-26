@@ -9,7 +9,7 @@ mod tests {
 
     impl Mod for Picky {
         fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "picky", side: BOTH)
+            enshwick::manifest!(id: "you.picky", side: BOTH)
         }
 
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {

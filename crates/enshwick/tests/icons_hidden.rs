@@ -10,17 +10,17 @@ mod tests {
     use enshwick::test::FakeHost;
     use enshwick::{Load, Mod, Off};
 
-    const STAFF_ID: Id = Id::new("staffs:staff");
+    const STAFF_ID: Id = Id::new("you.staffs:staff");
     const STAFF: Guid = STAFF_ID.guid();
     const VANILLA: Guid = Guid::parse("505ccfbc-440d-4d63-a3d6-d689d3d55e78");
-    const ICON_ID: Id = Id::new("staffs:staff.icon");
+    const ICON_ID: Id = Id::new("you.staffs:staff.icon");
     const ICON: Guid = ICON_ID.guid();
 
     struct Staffs;
 
     impl Mod for Staffs {
         fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "staffs", side: BOTH)
+            enshwick::manifest!(id: "you.staffs", side: BOTH)
         }
 
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {

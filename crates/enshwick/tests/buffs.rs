@@ -18,7 +18,7 @@ mod tests {
 
     impl Mod for Blessing {
         fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "blessing", side: SERVER)
+            enshwick::manifest!(id: "you.blessing", side: SERVER)
         }
 
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {

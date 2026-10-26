@@ -28,7 +28,7 @@ mod tests {
 
     impl Mod for Loot {
         fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "fake", side: BOTH)
+            enshwick::manifest!(id: "test.fake", side: BOTH)
         }
 
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {

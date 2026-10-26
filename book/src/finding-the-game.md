@@ -69,7 +69,7 @@ A mod pins its own ids with `builds:` in [`manifest!`](getting-started.md):
 
 ```rust
 let manifest = enshwick::manifest!(
-    id: "my-mod",
+    id: "you.my-mod",
     side: BOTH,
     builds: [
         {

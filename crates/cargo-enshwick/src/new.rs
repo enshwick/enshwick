@@ -4,15 +4,17 @@ use std::path::{Path, PathBuf};
 
 use crate::Side;
 
-/// Creates the crate for mod `id` in `<dir>/<id>`; what was made, for the user.
+/// Creates the crate for mod `id`, `<author>.<name>`, in `<dir>/<name>`;
+/// what was made, for the user.
 ///
 /// Inside a Cargo workspace the crate joins it: its folder is added to the
 /// workspace's `members` unless a member pattern already covers it, and its
 /// release profile is left to the workspace root, the only place Cargo reads
 /// one. A folder the workspace excludes gets a workspace of its own.
 pub(crate) fn create(dir: &Path, id: &str, side: Side) -> Result<String, String> {
-    check_id(id)?;
-    let root = std::path::absolute(dir.join(id)).map_err(|e| format!("{}: {e}", dir.display()))?;
+    let name = crate_name(id)?;
+    let root =
+        std::path::absolute(dir.join(name)).map_err(|e| format!("{}: {e}", dir.display()))?;
     if root.exists() {
         return Err(format!("{} already exists", root.display()));
     }
@@ -174,20 +176,25 @@ fn part(pattern: &[u8], text: &[u8]) -> bool {
     }
 }
 
-/// Refuses an id no mod and no crate can take.
-fn check_id(id: &str) -> Result<(), String> {
-    // The id names the crate too, and a crate's name starts with a letter.
-    if !enshwick::abi::is_valid_id(id) || !id.starts_with(|c: char| c.is_ascii_lowercase()) {
-        return Err(format!(
-            "the id {id:?} is not 1 to 64 characters of [a-z0-9-] starting with a letter"
-        ));
+/// The crate's name for mod `id`: the id's name part, which must start with
+/// a letter, as a crate's name does; an id no mod can take is refused.
+fn crate_name(id: &str) -> Result<&str, String> {
+    match id.split_once('.') {
+        Some((_, name))
+            if enshwick::abi::is_valid_id(id)
+                && name.starts_with(|c: char| c.is_ascii_lowercase()) =>
+        {
+            Ok(name)
+        }
+        _ => Err(format!(
+            "the id {id:?} is not <author>.<name>, each of [a-z0-9-], the name starting with a letter"
+        )),
     }
-    Ok(())
 }
 
 /// The crate's files for mod `id`, relative to its root.
 fn files(id: &str, side: Side, place: &Place) -> Result<Vec<(PathBuf, String)>, String> {
-    check_id(id)?;
+    let name = crate_name(id)?;
     let side = match side {
         Side::Server => "SERVER",
         Side::Client => "CLIENT",
@@ -196,8 +203,9 @@ fn files(id: &str, side: Side, place: &Place) -> Result<Vec<(PathBuf, String)>, 
     let fill = |template: &str| {
         template
             .replace("{id}", id)
-            .replace("{type}", &type_name(id))
-            .replace("{name}", &display_name(id))
+            .replace("{crate}", name)
+            .replace("{type}", &type_name(name))
+            .replace("{name}", &display_name(name))
             .replace("{side}", side)
             .replace("{api}", enshwick::VERSION)
     };
@@ -214,7 +222,7 @@ fn files(id: &str, side: Side, place: &Place) -> Result<Vec<(PathBuf, String)>, 
     ])
 }
 
-/// `flame-altar-zones` as `Flame altar zones`, the name players read until
+/// `street-lanterns` as `Street lanterns`, the name players read until
 /// the author picks one.
 fn display_name(id: &str) -> String {
     let words = id.replace('-', " ");
@@ -224,7 +232,7 @@ fn display_name(id: &str) -> String {
     })
 }
 
-/// `flame-altar-zones` as `FlameAltarZones`; ids starting with a digit get `Mod`.
+/// `street-lanterns` as `StreetLanterns`; names starting with a digit get `Mod`.
 fn type_name(id: &str) -> String {
     let mut name: String = id
         .split('-')
@@ -243,7 +251,7 @@ fn type_name(id: &str) -> String {
 }
 
 const CARGO_TOML: &str = r#"[package]
-name = "{id}"
+name = "{crate}"
 version = "0.1.0"
 edition = "2024"
 # The loader shows these to players on the Mods screen and in the status
@@ -350,21 +358,22 @@ mod tests {
 
     #[test]
     fn ids_become_type_names() {
-        assert_eq!(type_name("flame-altar-zones"), "FlameAltarZones");
-        assert_eq!(type_name("safes"), "Safes");
+        assert_eq!(type_name("street-lanterns"), "StreetLanterns");
+        assert_eq!(type_name("lockers"), "Lockers");
         assert_eq!(type_name("2x-loot"), "Mod2xLoot");
     }
 
     #[test]
     fn an_id_that_cannot_name_a_crate_is_refused() {
-        assert!(files("2x-loot", Side::Server, &Place::Alone).is_err());
-        assert!(files("-loot", Side::Server, &Place::Alone).is_err());
-        assert!(files("loot-2x", Side::Server, &Place::Alone).is_ok());
+        assert!(files("you.2x-loot", Side::Server, &Place::Alone).is_err());
+        assert!(files("you.-loot", Side::Server, &Place::Alone).is_err());
+        assert!(files("you.loot-2x", Side::Server, &Place::Alone).is_ok());
+        assert!(files("lanterns", Side::Server, &Place::Alone).is_err());
     }
 
     #[test]
     fn the_files_name_the_mod_everywhere() {
-        let files = files("area-loot", Side::Both, &Place::Alone).unwrap();
+        let files = files("you.street-lanterns", Side::Both, &Place::Alone).unwrap();
         let text = |name: &str| {
             &files
                 .iter()
@@ -372,31 +381,34 @@ mod tests {
                 .unwrap()
                 .1
         };
-        assert!(text("Cargo.toml").contains("name = \"area-loot\""));
+        assert!(text("Cargo.toml").contains("name = \"street-lanterns\""));
         assert!(text("Cargo.toml").contains(&format!("enshwick = \"{}\"", enshwick::VERSION)));
-        assert!(text("src/lib.rs").contains("id: \"area-loot\",\n            side: BOTH,"));
+        assert!(
+            text("src/lib.rs").contains("id: \"you.street-lanterns\",\n            side: BOTH,")
+        );
         assert!(text("src/lib.rs").contains("// was: [\"old-id\"]"));
-        assert!(text("src/lib.rs").contains("declare_mod!(AreaLoot)"));
+        assert!(text("src/lib.rs").contains("declare_mod!(StreetLanterns)"));
         assert!(!files.iter().any(|(_, text)| text.contains("{type}")
             || text.contains("{id}")
+            || text.contains("{crate}")
             || text.contains("{name}")));
     }
 
     #[test]
     fn ids_become_names() {
-        assert_eq!(display_name("flame-altar-zones"), "Flame altar zones");
+        assert_eq!(display_name("street-lanterns"), "Street lanterns");
         assert_eq!(display_name("2x-loot"), "2x loot");
     }
 
     #[test]
     fn member_patterns_match_per_part() {
-        assert!(matches("mods/*", "mods/area-loot"));
-        assert!(matches("mods/*/", "mods/area-loot"));
-        assert!(matches("./mods/area-?oot", "mods/area-loot"));
-        assert!(matches("mods/area-loot", "mods/area-loot"));
-        assert!(!matches("mods/*", "mods/area-loot/inner"));
-        assert!(!matches("crates/*", "mods/area-loot"));
-        assert!(!matches("mods/a*z", "mods/area-loot"));
+        assert!(matches("mods/*", "mods/street-lanterns"));
+        assert!(matches("mods/*/", "mods/street-lanterns"));
+        assert!(matches("./mods/street-?anterns", "mods/street-lanterns"));
+        assert!(matches("mods/street-lanterns", "mods/street-lanterns"));
+        assert!(!matches("mods/*", "mods/street-lanterns/inner"));
+        assert!(!matches("crates/*", "mods/street-lanterns"));
+        assert!(!matches("mods/a*z", "mods/street-lanterns"));
     }
 
     /// A fresh folder for one test.
@@ -416,14 +428,14 @@ mod tests {
             "[workspace]\nresolver = \"3\"\n# kept\nmembers = [\"tools/x\"]\n",
         )
         .unwrap();
-        create(&dir.join("mods"), "area-loot", Side::Server).unwrap();
+        create(&dir.join("mods"), "you.street-lanterns", Side::Server).unwrap();
         let root = std::fs::read_to_string(&manifest).unwrap();
         assert!(root.contains("# kept"), "{root}");
         assert!(
-            root.contains("members = [\"tools/x\", \"mods/area-loot\"]"),
+            root.contains("members = [\"tools/x\", \"mods/street-lanterns\"]"),
             "{root}"
         );
-        let cargo = std::fs::read_to_string(dir.join("mods/area-loot/Cargo.toml")).unwrap();
+        let cargo = std::fs::read_to_string(dir.join("mods/street-lanterns/Cargo.toml")).unwrap();
         assert!(!cargo.contains("[profile.release]") && !cargo.contains("[workspace]"));
         std::fs::remove_dir_all(&dir).unwrap();
     }
@@ -434,8 +446,8 @@ mod tests {
         let manifest = dir.join("Cargo.toml");
         let text = "[workspace]\nmembers = [\"mods/*\"]\nexclude = [\"scratch\"]\n";
         std::fs::write(&manifest, text).unwrap();
-        create(&dir.join("mods"), "safes", Side::Server).unwrap();
-        create(&dir.join("scratch"), "probe", Side::Server).unwrap();
+        create(&dir.join("mods"), "you.lockers", Side::Server).unwrap();
+        create(&dir.join("scratch"), "you.probe", Side::Server).unwrap();
         assert_eq!(std::fs::read_to_string(&manifest).unwrap(), text);
         let probe = std::fs::read_to_string(dir.join("scratch/probe/Cargo.toml")).unwrap();
         assert!(probe.contains("[profile.release]") && probe.ends_with("\n[workspace]\n"));
@@ -448,7 +460,7 @@ mod tests {
         let manifest = dir.join("Cargo.toml");
         let text = "[workspace]\nmembers = []\nexclude = [\"./scratch/\"]\n";
         std::fs::write(&manifest, text).unwrap();
-        create(&dir.join("scratch"), "probe", Side::Server).unwrap();
+        create(&dir.join("scratch"), "you.probe", Side::Server).unwrap();
         assert_eq!(std::fs::read_to_string(&manifest).unwrap(), text);
         std::fs::remove_dir_all(&dir).unwrap();
     }
@@ -458,14 +470,14 @@ mod tests {
         let dir = scratch("bad-id");
         std::fs::create_dir_all(dir.join("Area Loot")).unwrap();
         let refused = create(&dir, "Area Loot", Side::Server).unwrap_err();
-        assert!(refused.contains("is not 1 to 64"), "{refused}");
+        assert!(refused.contains("is not <author>.<name>"), "{refused}");
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]
     fn a_crate_outside_any_workspace_keeps_its_profile() {
         let place = Place::Alone;
-        let files = files("safes", Side::Server, &place).unwrap();
+        let files = files("you.lockers", Side::Server, &place).unwrap();
         assert!(files[0].1.contains("[profile.release]\nlto = \"fat\""));
         assert!(!files[0].1.contains("[workspace]"));
     }
