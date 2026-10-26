@@ -22,7 +22,7 @@ Each entry names the pull request that made the change.
   with (`mod-data/enshwick/kept-stacks.toml`) and serves at least that size
   from the start, so lowering a size or removing the mod that raised it
   never cuts a saved stack; while any size is kept it holds the game on a
-  build it would leave vanilla.
+  build it would leave vanilla (#544).
 
 ## [1.0.0-alpha.6] - 2026-10-26
 
