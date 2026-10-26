@@ -20,13 +20,13 @@ jobs:
     timeout-minutes: 10
     steps:
       # v7.0.1
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
 
       # v2.2.0
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: 1.4.3
 
@@ -67,12 +67,12 @@ jobs:
       # v1.51.1
       - name: Spelling
         if: ${{ !cancelled() }}
-        uses: crate-ci/typos@7f9d0819ca1c008ade73f4b41fa9d258d48f605b
+        uses: crate-ci/typos@7f9d0819ca1c008ade73f4b41fa9d258d48f605b # v1.51.1
 
       # v2.1.1
       - name: Supply chain
         if: ${{ !cancelled() }}
-        uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25
+        uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
 
   # Temporarily run by hand only, to keep pull requests fast while the git
   # hooks run the same checks before every push.
@@ -85,15 +85,15 @@ jobs:
       MIRIFLAGS: -Zmiri-strict-provenance
     steps:
       # v7.0.1
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
       # v2.9.2
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
 
       # v2.87.29
-      - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283
+      - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2.87.29
         with:
           tool: cargo-hack@0.6.45,cargo-machete@0.9.2
 
@@ -125,15 +125,15 @@ jobs:
         shell: bash
     steps:
       # v7.0.1
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
       # v2.9.2
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
 
       # v2.87.29
-      - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283
+      - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2.87.29
         with:
           tool: cargo-nextest@0.9.148
 
