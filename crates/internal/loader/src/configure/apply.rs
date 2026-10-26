@@ -38,12 +38,12 @@ pub(crate) fn apply(
         .ok()
         .and_then(|s| s.clone())
         .ok_or_else(|| texts::fill("config.no-schema", &[("id", id)]))?;
-    if loader.side == enshwick::abi::Side::SERVER
-        && schema.field(key).is_some_and(|f| f.stage == Stage::Client)
+    let field = schema.field(super::element(key).0);
+    if loader.side == enshwick::abi::Side::SERVER && field.is_some_and(|f| f.stage == Stage::Client)
     {
         return Err(texts::fill("refused.client", &[("id", id), ("key", key)]));
     }
-    let stage = schema.field(key).map_or(Stage::Runtime, |f| f.stage);
+    let stage = field.map_or(Stage::Runtime, |f| f.stage);
     let destination = crate::worlds::destination(stage, crate::worlds::current().as_deref());
     let global_path = loader.configs_dir.join(format!("{id}.toml"));
     let global = std::fs::read_to_string(&global_path)
