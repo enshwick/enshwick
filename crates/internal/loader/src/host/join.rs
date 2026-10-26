@@ -7,6 +7,7 @@ use std::sync::atomic::Ordering;
 use enshwick::abi::{Event, Level, ManifestFlags};
 
 use crate::host::loader;
+use crate::locks::Relock;
 
 /// The running join mods as the join check counts them, `(id, version)`:
 /// read each time, since a mod may turn off while the game runs.
@@ -46,7 +47,7 @@ pub(crate) fn join_values() -> BTreeMap<String, String> {
         .mods
         .iter()
         .filter(|m| m.joins())
-        .filter_map(|m| Some((m.id.clone(), m.synced.lock().ok()?.clone()?)))
+        .filter_map(|m| Some((m.id.clone(), m.synced.relock().clone()?)))
         .collect()
 }
 
@@ -71,7 +72,8 @@ pub(crate) fn apply_server_value(id: &str, values: &str) {
         return;
     };
     let now = Some(values.to_owned());
-    if let Ok(mut held) = record.server_synced.lock() {
+    {
+        let mut held = record.server_synced.relock();
         if *held == now {
             return;
         }
@@ -114,7 +116,7 @@ pub(crate) fn apply_join_values(values: &BTreeMap<String, String>) {
         .mods
         .iter()
         .map(|m| {
-            let held = m.server_synced.lock().ok().and_then(|held| held.clone());
+            let held = m.server_synced.relock().clone();
             (
                 if m.joins() {
                     m.id.clone()
@@ -135,7 +137,8 @@ pub(crate) fn apply_join_values(values: &BTreeMap<String, String>) {
         let Some(record) = loader.mods.get(index) else {
             continue;
         };
-        if let Ok(mut held) = record.server_synced.lock() {
+        {
+            let mut held = record.server_synced.relock();
             held.clone_from(&now);
         }
         let line = match &now {
@@ -165,9 +168,7 @@ pub(crate) static KEPT: Mutex<Vec<&'static str>> = Mutex::new(Vec::new());
 
 /// `text` kept for the process; the same text is kept once.
 pub(crate) fn keep(text: &str) -> &'static str {
-    let Ok(mut kept) = KEPT.lock() else {
-        return "";
-    };
+    let mut kept = KEPT.relock();
     if let Some(&held) = kept.iter().find(|held| **held == text) {
         return held;
     }
@@ -217,7 +218,8 @@ pub(crate) fn report_join_missing(missing: &[Wanted]) {
             }
         })
         .collect();
-    if let Ok(mut held) = JOIN_MISSING.lock() {
+    {
+        let mut held = JOIN_MISSING.relock();
         *held = entries;
     }
     loader.emit(Event::JOIN_REFUSED, None, core::ptr::null());

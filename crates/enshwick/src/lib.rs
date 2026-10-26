@@ -96,6 +96,7 @@ pub mod inventory;
 pub mod item_data;
 pub mod knowledge;
 mod load;
+mod locks;
 pub mod loot;
 pub mod migrations;
 pub mod mods;

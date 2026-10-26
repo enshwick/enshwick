@@ -2,7 +2,7 @@
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Mutex, MutexGuard, OnceLock};
+use std::sync::{Mutex, OnceLock};
 
 use enshwick::abi as api_frame;
 use enshwick::abi::{
@@ -13,6 +13,7 @@ use enshwick_gamedata::reflect::{Fingerprint, Reflection};
 
 use crate::builds::KnownBuild;
 use crate::chains::{Chains, Link, Next};
+use crate::locks::Relock;
 use crate::mid::Mids;
 
 mod entries;
@@ -154,16 +155,16 @@ impl ModRecord {
 pub(crate) struct Kept(Mutex<Vec<Box<str>>>);
 
 impl Kept {
-    /// `text`, kept for good; `None` when the store is poisoned.
-    pub(crate) fn keep(&self, text: &str) -> Option<Str> {
-        let mut kept = self.0.lock().ok()?;
+    /// `text`, kept for good.
+    pub(crate) fn keep(&self, text: &str) -> Str {
+        let mut kept = self.0.relock();
         let at = kept.iter().position(|k| **k == *text).unwrap_or_else(|| {
             kept.push(text.into());
             kept.len() - 1
         });
         // The box's heap text never moves or drops while the store lives,
         // whatever the vector does with the boxes.
-        Some(Str::new(&kept[at]))
+        Str::new(&kept[at])
     }
 }
 
@@ -280,11 +281,7 @@ impl<F> Registered<F> {
 
 /// Takes what mods registered during init, for sealing.
 pub(crate) fn take<T>(list: &Mutex<Vec<T>>) -> Vec<T> {
-    std::mem::take(
-        &mut *list
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner),
-    )
+    std::mem::take(&mut *list.relock())
 }
 
 /// Whether the mod at index `owner` is off; the loader's own links never are.
@@ -328,7 +325,7 @@ impl Loader {
             flags,
             hop: None,
         };
-        relock(&self.chains, "the hook chains").add(target, link)
+        self.chains.relock().add(target, link)
     }
 
     /// [`Loader::link`] for a feature, logging why it stays off: a target
@@ -384,10 +381,7 @@ impl Loader {
         }
         crate::diag::turned_off(&record.id, reason);
         // A poisoned lock still holds the chains: the mod must be wired past.
-        let chains = self
-            .chains
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let chains = self.chains.relock();
         let faulted = |owner: usize| {
             owner != crate::chains::LOADER
                 && self
@@ -406,7 +400,7 @@ impl Loader {
     /// Ends subscribing: from now on events go to the subscriptions made so
     /// far, grouped by event in subscription order, so a raise walks its own.
     pub(crate) fn seal_subscriptions(&self) {
-        let mut made = std::mem::take(&mut *relock(&self.subscriptions, "the subscriptions"));
+        let mut made = std::mem::take(&mut *self.subscriptions.relock());
         made.sort_by_key(|s| s.event.0);
         for subscription in &made {
             mark_handled(subscription.event);
@@ -706,20 +700,6 @@ fn entry<R: Fallback>(name: &'static str, body: impl FnOnce() -> R) -> R {
         .unwrap_or_else(|_| entry_fault(name))
 }
 
-/// Locks `mutex`, taking its state over from a thread that panicked
-/// holding it: logged once, since the poison is cleared, and never a reason
-/// to give up on hooks.
-pub(crate) fn relock<'a, T>(mutex: &'a Mutex<T>, what: &str) -> MutexGuard<'a, T> {
-    mutex.lock().unwrap_or_else(|poisoned| {
-        crate::log!(
-            WARN,
-            "{what}: a thread panicked holding them; their state is kept"
-        );
-        mutex.clear_poison();
-        poisoned.into_inner()
-    })
-}
-
 #[cold]
 fn entry_fault<R: Fallback>(name: &str) -> R {
     crate::log!(ERROR, "{name}: the loader panicked; the call is refused");
@@ -836,19 +816,19 @@ mod tests {
         })
         .join();
         assert!(panicked.is_err() && mutex.is_poisoned());
-        relock(&mutex, "the test list").push(3);
+        mutex.relock().push(3);
         assert!(!mutex.is_poisoned());
-        assert_eq!(*relock(&mutex, "the test list"), [1, 2, 3]);
+        assert_eq!(*mutex.relock(), [1, 2, 3]);
     }
 
     #[test]
     fn a_kept_text_outlives_newer_ones_and_an_equal_text_is_kept_once() {
         let kept = Kept::default();
-        let first = kept.keep("limit = 1").unwrap();
+        let first = kept.keep("limit = 1");
         for n in 2..100 {
-            kept.keep(&format!("limit = {n}")).unwrap();
+            kept.keep(&format!("limit = {n}"));
         }
-        let again = kept.keep("limit = 1").unwrap();
+        let again = kept.keep("limit = 1");
         assert_eq!(read(first), Some("limit = 1"));
         assert_eq!(read(again), read(first));
         assert_eq!(kept.0.lock().unwrap().len(), 99);
@@ -857,13 +837,13 @@ mod tests {
     #[test]
     fn texts_kept_on_other_threads_leave_earlier_ones_readable() {
         let kept = std::sync::Arc::new(Kept::default());
-        let first = kept.keep("a = 0").unwrap();
+        let first = kept.keep("a = 0");
         let writers: Vec<_> = (0..4)
             .map(|t| {
                 let kept = std::sync::Arc::clone(&kept);
                 std::thread::spawn(move || {
                     for n in 0..200 {
-                        kept.keep(&format!("a = {t}{n}")).unwrap();
+                        kept.keep(&format!("a = {t}{n}"));
                     }
                 })
             })

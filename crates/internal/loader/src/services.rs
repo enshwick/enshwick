@@ -3,10 +3,12 @@
 //! field; once every mod is initialised it seals the events, and a sent
 //! event goes straight to its subscribers on the sending thread.
 
-use std::sync::{Mutex, OnceLock, PoisonError};
+use std::sync::{Mutex, OnceLock};
 
 use enshwick::abi::{ModEventFn, Status};
 use enshwick::services::{LayoutError, compare};
+
+use crate::locks::Relock;
 
 /// A layout as `(field name, hash)` per field.
 pub(crate) type Fields = Vec<(String, u64)>;
@@ -314,7 +316,7 @@ static SEALED: OnceLock<Box<[Slot]>> = OnceLock::new();
 
 /// The registry, for the entry points.
 pub(crate) fn registry() -> std::sync::MutexGuard<'static, Registry> {
-    REGISTRY.lock().unwrap_or_else(PoisonError::into_inner)
+    REGISTRY.relock()
 }
 
 /// Whether the events are sealed: subscribing and defining are over.

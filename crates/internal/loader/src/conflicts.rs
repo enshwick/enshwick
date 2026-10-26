@@ -5,9 +5,11 @@
 
 use std::borrow::Cow;
 use std::fmt::Write as _;
-use std::sync::{Mutex, PoisonError};
+use std::sync::Mutex;
 
 use enshwick::abi::Status;
+
+use crate::locks::Relock;
 
 /// How the mods on one feature share it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -56,15 +58,12 @@ pub fn note(
     status: Status,
 ) -> Status {
     if status.is_ok() || status == Status::REFUSED {
-        CLAIMS
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .push(Claim {
-                feature: feature.into(),
-                owner,
-                mode,
-                granted: status.is_ok(),
-            });
+        CLAIMS.relock().push(Claim {
+            feature: feature.into(),
+            owner,
+            mode,
+            granted: status.is_ok(),
+        });
     }
     status
 }
@@ -72,10 +71,7 @@ pub fn note(
 /// Every claim, in order.
 #[must_use]
 pub fn claims() -> Vec<Claim> {
-    CLAIMS
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .clone()
+    CLAIMS.relock().clone()
 }
 
 /// One link on a hooked function, for the report.

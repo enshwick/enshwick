@@ -48,6 +48,7 @@ use core::ops::RangeInclusive;
 use std::sync::Mutex;
 
 use crate::abi::{Header, Status, Str, UiDialog, UiFrame, UiWidget};
+use crate::locks::Relock;
 use crate::{Host, Load, Off};
 
 mod hud;
@@ -1002,9 +1003,7 @@ where
         "panic in a frame callback",
         || (),
         || {
-            let Ok(mut draw) = drawer.draw.lock() else {
-                return;
-            };
+            let mut draw = drawer.draw.relock();
             (draw)(&mut Frame {
                 host,
                 token: raw.token,

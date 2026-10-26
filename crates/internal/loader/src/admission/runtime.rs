@@ -3,15 +3,17 @@
 use std::collections::BTreeMap;
 use std::hash::BuildHasher as _;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Mutex, OnceLock, PoisonError};
+use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 use enshwick::abi::Side;
 
-use super::{Gate, HOST_MACHINE, Hello, KICK, Rules, SESSION, Step};
 use crate::fuse::Fuse;
 use crate::host::Loader;
 use crate::join::Names;
+use crate::locks::Relock;
+
+use super::{Gate, HOST_MACHINE, Hello, KICK, Rules, SESSION, Step};
 
 /// The game's kick of one machine from its session: the session, the
 /// machine's handle, and whether to ban it too. The server's own
@@ -152,7 +154,7 @@ fn server_mods() -> String {
 /// Runs `f` on the gate, made for `serving`'s side, and notes whether it
 /// follows anyone.
 fn with_gate<R>(serving: &Serving, f: impl FnOnce(&mut Gate) -> R) -> R {
-    let mut guard = STATE.gate.lock().unwrap_or_else(PoisonError::into_inner);
+    let mut guard = STATE.gate.relock();
     let gate = guard.get_or_insert_with(|| {
         if serving.side == Side::CLIENT {
             Gate::hosted()
@@ -167,7 +169,7 @@ fn with_gate<R>(serving: &Serving, f: impl FnOnce(&mut Gate) -> R) -> R {
 
 /// Forgets every player, when a hosted game ends.
 pub(crate) fn forget() {
-    *STATE.gate.lock().unwrap_or_else(PoisonError::into_inner) = None;
+    *STATE.gate.relock() = None;
     STATE.busy.store(false, Ordering::Release);
 }
 
