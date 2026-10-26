@@ -29,6 +29,17 @@ macro_rules! mask {
                 self.0 & other.0 == other.0
             }
 
+            /// Every bit of `self` and of `other`, as `|` gives, in a
+            /// `const` too.
+            ///
+            /// # Examples
+            ///
+            #[doc = concat!("See [`", stringify!($name), "`].")]
+            #[must_use]
+            pub const fn union(self, other: Self) -> Self {
+                Self(self.0 | other.0)
+            }
+
             /// Each bit with the id of its engine constant.
             pub(super) const IDS: [(Self, &'static str); [$(stringify!($constant)),*].len()] =
                 [$((Self::$constant, $id)),*];
@@ -53,7 +64,7 @@ macro_rules! mask {
             type Output = Self;
 
             fn bitor(self, other: Self) -> Self {
-                Self(self.0 | other.0)
+                self.union(other)
             }
         }
     };
@@ -71,6 +82,9 @@ mask! {
     /// let types = DamageTypeMask::MAGICAL_FIRE | DamageTypeMask::PHYSICAL_CUT;
     /// assert!(types.contains(DamageTypeMask::MAGICAL_FIRE));
     /// assert!(!types.contains(DamageTypeMask::MAGICAL_ICE));
+    ///
+    /// const COLD: DamageTypeMask = DamageTypeMask::MAGICAL_ICE.union(DamageTypeMask::PHYSICAL_CUT);
+    /// assert!(COLD.contains(DamageTypeMask::MAGICAL_ICE));
     /// ```
     DamageTypeMask(u16) {
         /// Physical cut.

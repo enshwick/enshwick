@@ -6,12 +6,38 @@ Each entry names the pull request that made the change.
 
 ## [Unreleased]
 
+## [1.0.0-alpha.6] - 2026-10-26
+
+### Added
+
+- `content::loot_tables` reads and changes the random loot table's stack
+  sizes and every stack of a fill table; a data pack's `loot.toml` changes
+  `stack_size`, `count`, `spawn_probability` and `weight` under the game's
+  own names (#523).
+- `altars::base_limit` names the most altar zones and bases the game groups
+  now, and the zones its own grouping takes (#529).
+- `ContainerKinds`, `ItemCategoryMask` and the event masks have a
+  `const fn union`, so a combined set can be a `const`; `|` gives the same
+  (#539).
+
 ### Changed
 
+- The altar limit is a chain any mod joins: `Load::on_altar_limit` takes a
+  filter that sees the Flame level, the game's own count and the count so
+  far in an `AltarLimit` and changes `allowed`, in load order. The loader
+  keeps every answer within the zones the game groups, and owns the
+  raised maximum of 32 zones in 16 bases; `Load::raise_base_limit` puts it
+  in force from `Mod::ready` on (#529).
 - `World` is one pointer to what the mod resolved once, instead of 320
   bytes: a copy is cheap, and passing it by value or moving it into a
   closure no longer trips `clippy::large_types_passed_by_value`. Its
   methods take `self`, so calls read the same (#536).
+
+### Removed
+
+- `VANILLA_ALTARS_PER_FLAME_LEVEL`, `vanilla_altars`, `VANILLA_ALTAR_ZONES`
+  and `RAISED_ALTAR_ZONES`: a filter reads the game's own count from
+  `AltarLimit::vanilla`, and `altars::base_limit` names the zones (#529).
 
 ## [1.0.0-alpha.5] - 2026-10-26
 
