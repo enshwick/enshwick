@@ -1,5 +1,6 @@
 [files]
-extend-exclude = ["CHANGELOG.md", "*.lock", "bun.lock", "*.exports", "texts.toml"]
+# Fuzz seeds are input bytes, not text.
+extend-exclude = ["CHANGELOG.md", "*.lock", "bun.lock", "*.exports", "texts.toml", "fuzz/corpus/"]
 
 [default.extend-words]
 # Engine and game names.

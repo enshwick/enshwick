@@ -30,8 +30,8 @@ use entries::build::{
 };
 use entries::content::{
     add_text, content_read, content_serve, entity_data_open, game_text, icons_ready, item_data_get,
-    item_data_open, item_data_set, rebuild_resource, recipe_disabled, recipe_rule, resource_read,
-    serve_resource,
+    item_data_open, item_data_set, rebuild_resource, recipe_disabled, recipe_kind, recipe_rule,
+    resource_read, serve_resource,
 };
 use entries::gameplay::{
     account_knowledge, affix_info, affix_open, affix_roll, altar_limit, altar_zones_control,
@@ -124,9 +124,29 @@ impl ModRecord {
         self.id == namespace || self.former.iter().any(|f| f == namespace)
     }
 
-    /// The name players read, or the id when the manifest names none.
+    /// The name players read, from the mod's texts in their language, else
+    /// from its manifest; empty when neither names it.
+    pub(crate) fn name(&self) -> String {
+        let texts = self.texts.lock().ok();
+        self.meta.name_in(
+            texts.as_ref().and_then(|t| t.as_ref()),
+            crate::content::language(),
+        )
+    }
+
+    /// The name players read, or the id when nothing names the mod.
     pub(crate) fn label(&self) -> String {
-        self.meta.label(&self.id)
+        enshwick::mods::label(&self.name(), &self.id)
+    }
+
+    /// What the mod does, from its texts in the player's language, else
+    /// from its manifest.
+    pub(crate) fn description(&self) -> String {
+        let texts = self.texts.lock().ok();
+        self.meta.description_in(
+            texts.as_ref().and_then(|t| t.as_ref()),
+            crate::content::language(),
+        )
     }
 
     /// Whether it takes part in the join check while it runs.
@@ -205,6 +225,8 @@ pub(crate) struct Loader {
     pub(crate) reflection: Reflection<'static>,
     /// The `mods` folder.
     pub(crate) mods_dir: PathBuf,
+    /// The contract of the stub that started the loader; 0 in a dry run.
+    pub(crate) stub: u32,
     /// The `mod-configs` folder.
     pub(crate) configs_dir: PathBuf,
     /// The `mod-data` folder.
@@ -675,6 +697,7 @@ pub(crate) static API: HostApi = HostApi {
     run_point,
     actions,
     event_types,
+    recipe_kind,
 };
 
 /// The loader and the calling mod, when the mod is on.
