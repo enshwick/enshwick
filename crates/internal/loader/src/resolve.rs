@@ -4,6 +4,7 @@
 //! cannot load is skipped with a reason; the others load regardless.
 
 use std::collections::BTreeMap;
+use std::time::SystemTime;
 
 use enshwick::abi::{Relation, Side};
 use semver::{Version, VersionReq};
@@ -56,6 +57,56 @@ pub const OTHER_SIDE: &str = "not for this side of the game";
 #[must_use]
 pub fn loads(mod_side: Side, process: Side) -> bool {
     mod_side.includes(process) || (process == Side::CLIENT && mod_side.includes(Side::SERVER))
+}
+
+/// A file in `mods/` that declares a mod, weighed by [`duplicates`] against
+/// other files that declare the same id.
+#[derive(Clone, Copy, Debug)]
+pub struct Installed<'a> {
+    /// The mod id its manifest declares.
+    pub id: &'a str,
+    /// The version its manifest declares.
+    pub version: &'a Version,
+    /// When the file last changed; `None`, when the system cannot tell,
+    /// counts as the oldest.
+    pub modified: Option<SystemTime>,
+    /// Its file name, as the log names it.
+    pub file: &'a str,
+}
+
+/// Chooses which of several files declaring one mod id runs, so a renamed DLL
+/// left beside its old name runs the newer build.
+///
+/// The highest version runs (build metadata aside), then the newest file, then
+/// the first by name. Returns each other copy's index with the index of the
+/// copy that runs instead, in the order of `files`.
+#[must_use]
+pub fn duplicates(files: &[Installed<'_>]) -> Vec<(usize, usize)> {
+    let outranks = |a: &Installed<'_>, b: &Installed<'_>| {
+        a.version
+            .cmp_precedence(b.version)
+            .then(a.modified.cmp(&b.modified))
+            .then(b.file.cmp(a.file))
+            .is_gt()
+    };
+    let mut runs: BTreeMap<&str, usize> = BTreeMap::new();
+    for (i, file) in files.iter().enumerate() {
+        runs.entry(file.id)
+            .and_modify(|best| {
+                if outranks(file, &files[*best]) {
+                    *best = i;
+                }
+            })
+            .or_insert(i);
+    }
+    files
+        .iter()
+        .enumerate()
+        .filter_map(|(i, file)| {
+            let best = *runs.get(file.id)?;
+            (best != i).then_some((i, best))
+        })
+        .collect()
 }
 
 /// Decides which `candidates` load on `side` and in what order.
@@ -255,6 +306,8 @@ pub fn notes(candidates: &[Candidate], plan: &Plan) -> Vec<(usize, String)> {
 
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
+
     use super::*;
 
     fn candidate(
@@ -530,5 +583,93 @@ mod tests {
                 (6, "in a dependency cycle".into())
             ]
         );
+    }
+
+    fn at(seconds: u64) -> SystemTime {
+        SystemTime::UNIX_EPOCH + Duration::from_secs(seconds)
+    }
+
+    fn installed<'a>(
+        id: &'a str,
+        version: &'a Version,
+        modified: SystemTime,
+        file: &'a str,
+    ) -> Installed<'a> {
+        Installed {
+            id,
+            version,
+            modified: Some(modified),
+            file,
+        }
+    }
+
+    #[test]
+    fn a_renamed_file_with_the_same_version_runs_when_it_is_newer() {
+        let dev: Version = "0.0.0-dev".parse().unwrap();
+        let files = [
+            installed(
+                "flame-altar-count",
+                &dev,
+                at(100),
+                "enshwick-flame-altar-count.dll",
+            ),
+            installed(
+                "flame-altar-count",
+                &dev,
+                at(200),
+                "enshwick-more-altars.dll",
+            ),
+        ];
+        assert_eq!(duplicates(&files), [(0, 1)]);
+    }
+
+    #[test]
+    fn the_highest_version_runs_whatever_the_file_times_and_names() {
+        let old: Version = "1.2.0".parse().unwrap();
+        let new: Version = "1.10.0".parse().unwrap();
+        let files = [
+            installed("a", &new, at(100), "z.dll"),
+            installed("a", &old, at(900), "a.dll"),
+        ];
+        assert_eq!(duplicates(&files), [(1, 0)]);
+    }
+
+    #[test]
+    fn equal_versions_and_times_run_the_first_file_by_name() {
+        let version: Version = "1.0.0+one".parse().unwrap();
+        let other: Version = "1.0.0+two".parse().unwrap();
+        let files = [
+            installed("a", &other, at(100), "b.dll"),
+            installed("a", &version, at(100), "a.dll"),
+        ];
+        assert_eq!(duplicates(&files), [(0, 1)]);
+    }
+
+    #[test]
+    fn a_file_of_unknown_age_counts_as_the_oldest() {
+        let version: Version = "1.0.0".parse().unwrap();
+        let files = [
+            Installed {
+                id: "a",
+                version: &version,
+                modified: None,
+                file: "a.dll",
+            },
+            installed("a", &version, at(1), "b.dll"),
+        ];
+        assert_eq!(duplicates(&files), [(0, 1)]);
+    }
+
+    #[test]
+    fn every_extra_copy_names_the_one_that_runs_and_other_ids_stay() {
+        let low: Version = "0.1.0".parse().unwrap();
+        let high: Version = "0.2.0".parse().unwrap();
+        let files = [
+            installed("a", &low, at(5), "a1.dll"),
+            installed("b", &low, at(5), "b.dll"),
+            installed("a", &high, at(1), "a2.dll"),
+            installed("a", &low, at(9), "a3.dll"),
+        ];
+        assert_eq!(duplicates(&files), [(0, 2), (3, 2)]);
     }
 }

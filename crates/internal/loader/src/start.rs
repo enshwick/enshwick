@@ -273,11 +273,7 @@ fn skip(libraries: &[Library], candidates: &[Candidate], plan: &resolve::Plan) {
         .iter()
         .map(|&(old, by)| {
             let library = &libraries[old];
-            if !library.module.is_null() {
-                // SAFETY: loaded by `discover` for its manifest; none of its
-                // code is in use, and the manifest was copied out.
-                unsafe { FreeLibrary(library.module) };
-            }
+            unload(library);
             let replaced = modlist::Replaced {
                 id: candidates[old].id.clone(),
                 version: candidates[old].version.to_string(),
@@ -730,10 +726,7 @@ fn libraries(mods_dir: &Path) -> (Vec<Library>, Vec<Candidate>) {
                         candidate.id,
                         modlist::LIST_PATH
                     );
-                    if !library.module.is_null() {
-                        // SAFETY: loaded by `discover`; none of its code is in use.
-                        unsafe { FreeLibrary(library.module) };
-                    }
+                    unload(&library);
                     continue;
                 }
                 candidates.push(candidate);
@@ -742,6 +735,7 @@ fn libraries(mods_dir: &Path) -> (Vec<Library>, Vec<Candidate>) {
             Err(reason) => crate::log!(WARN, "{} skipped: {reason}", library.file),
         }
     }
+    let (libraries, candidates) = drop_duplicates(mods_dir, libraries, candidates);
     modlist::set_disabled(list.off());
     modlist::set_links_off(list.links_off());
     if changed
@@ -751,6 +745,65 @@ fn libraries(mods_dir: &Path) -> (Vec<Library>, Vec<Candidate>) {
         crate::log!(WARN, "{} not written: {e}", modlist::LIST_PATH);
     }
     (libraries, candidates)
+}
+
+/// Keeps one file per mod id, the one [`resolve::duplicates`] chooses, and
+/// unloads the others, naming in the log each file that can be deleted.
+fn drop_duplicates(
+    mods_dir: &Path,
+    libraries: Vec<Library>,
+    candidates: Vec<Candidate>,
+) -> (Vec<Library>, Vec<Candidate>) {
+    let installed: Vec<resolve::Installed<'_>> = libraries
+        .iter()
+        .zip(&candidates)
+        .map(|(library, candidate)| resolve::Installed {
+            id: &candidate.id,
+            version: &candidate.version,
+            modified: std::fs::metadata(mods_dir.join(&library.file))
+                .and_then(|meta| meta.modified())
+                .ok(),
+            file: &library.file,
+        })
+        .collect();
+    let duplicates = resolve::duplicates(&installed);
+    if duplicates.is_empty() {
+        return (libraries, candidates);
+    }
+    for &(extra, runs) in &duplicates {
+        crate::log!(
+            WARN,
+            "{} skipped: {} {} is also in {}, which runs {}; {} can be deleted",
+            libraries[extra].file,
+            candidates[extra].id,
+            candidates[extra].version,
+            libraries[runs].file,
+            candidates[runs].version,
+            libraries[extra].file
+        );
+    }
+    libraries
+        .into_iter()
+        .zip(candidates)
+        .enumerate()
+        .filter_map(|(i, pair)| {
+            if !duplicates.iter().any(|&(extra, _)| extra == i) {
+                return Some(pair);
+            }
+            unload(&pair.0);
+            None
+        })
+        .unzip()
+}
+
+/// Unloads a mod DLL that `discover` loaded only for its manifest, so none of
+/// its code runs and its file can be deleted while the game runs.
+fn unload(library: &Library) {
+    if !library.module.is_null() {
+        // SAFETY: loaded by `discover`; none of its code is in use, and its
+        // manifest was parsed into an owned `Candidate` before this call.
+        unsafe { FreeLibrary(library.module) };
+    }
 }
 
 /// Writes `enshwick.lock` on a thread of its own: the loader and the mods
