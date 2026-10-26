@@ -11,11 +11,7 @@ use crate::host::{Loader, Subscription, caller, caller_index, calling, entry, ma
 
 impl crate::points::Mods for Loader {
     fn find(&self, id: &str) -> Option<usize> {
-        self.mods.iter().position(|m| m.id == id).or_else(|| {
-            self.mods
-                .iter()
-                .position(|m| m.former.iter().any(|old| old == id))
-        })
+        self.find_mod(id).map(|(index, _)| index)
     }
 }
 

@@ -557,7 +557,7 @@ mod live {
     /// Sends mod `id`'s settings to the client of `key`: the file without
     /// secrets for an administrator, the join values for anyone else.
     fn snapshot(loader: &Loader, key: u64, id: &str, admin: bool) {
-        let Some(record) = loader.mods.iter().find(|m| m.id == id) else {
+        let Some((_, record)) = loader.find_mod(id) else {
             return;
         };
         let Some(schema) = record.schema.lock().ok().and_then(|s| s.clone()) else {
@@ -617,10 +617,7 @@ mod live {
         admin: bool,
     ) -> Result<String, String> {
         let (index, record) = loader
-            .mods
-            .iter()
-            .enumerate()
-            .find(|(_, m)| m.id == id)
+            .find_mod(id)
             .ok_or_else(|| texts::fill("remote.unknown", &[("id", id)]))?;
         let schema = record
             .schema
