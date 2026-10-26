@@ -791,26 +791,21 @@ fn keep_zmm_in_use(code: &mut Code, masks: Masks, call: impl Fn(&mut Code)) {
 
 /// Loads back what a `zmm` stub kept by the path in `r12d`; a part it did not
 /// keep was zero, so it is given back as zero.
-///
-/// On the clear path `vzeroupper` comes after the EVEX writes that zero
-/// `zmm16`-`zmm31`: some processors count those writes as upper state in
-/// use, and only `vzeroupper` after them gives the code after the hook a
-/// clear state again.
 fn give_back_zmm(code: &mut Code, masks: Masks) {
     let wide = code.branch(KEEP_ZMM);
     let ymm = code.branch(KEEP_YMM);
-    code.zero_avx512(masks);
     code.vzeroupper();
     for n in 0..6 {
         code.xmm(LOAD, n, slot(n, ZMM));
     }
-    let clear = code.jmp();
+    let zero = code.jmp();
     code.bind(&[ymm]);
     for n in 0..16 {
         code.ymm(LOAD, n, slot(n, ZMM));
     }
+    code.bind(&[zero]);
     code.zero_avx512(masks);
-    let kept = code.jmp();
+    let end = code.jmp();
     code.bind(&[wide]);
     for n in 0..32 {
         code.zmm(LOAD, n, slot(n, ZMM));
@@ -818,7 +813,7 @@ fn give_back_zmm(code: &mut Code, masks: Masks) {
     for k in 0..8 {
         code.mask(masks, LOAD, k, mask_slot(k));
     }
-    code.bind(&[clear, kept]);
+    code.bind(&[end]);
 }
 
 #[cfg(test)]
