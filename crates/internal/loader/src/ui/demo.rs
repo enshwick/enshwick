@@ -5,10 +5,12 @@
 //! marker on the map, and closes with its Close button.
 
 use core::cell::RefCell;
+use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Mutex, PoisonError};
 
 use enshwick::abi::{UiDialog, UiWidget};
+
+use crate::locks::Relock;
 
 use super::Painter;
 use super::engine::{Engine, Window};
@@ -43,14 +45,14 @@ static ANSWER: Mutex<Option<&'static str>> = Mutex::new(None);
 
 /// Opens the demo at its next frame; `at` is where the administrator stood.
 pub(crate) fn open(at: Option<[i64; 3]>) {
-    *WHERE.lock().unwrap_or_else(PoisonError::into_inner) = at;
+    *WHERE.relock() = at;
     OPEN.store(true, Ordering::Release);
 }
 
 /// The HUD samples while they show, for the HUD's frame: a label at the top
 /// right, a bar under it, and a label at the bottom left.
 pub(super) fn hud_samples(items: &mut Vec<super::HudItem>) {
-    let Some(fill) = *HUD_SAMPLES.lock().unwrap_or_else(PoisonError::into_inner) else {
+    let Some(fill) = *HUD_SAMPLES.relock() else {
         return;
     };
     let label = |anchor: u32, words: &[u8], style: u32| super::HudItem {
@@ -117,14 +119,13 @@ pub(super) unsafe fn draw(engine: &Engine, context: usize) {
         let Some(demo) = slot.as_mut() else {
             return;
         };
-        if let Some(answer) = ANSWER.lock().unwrap_or_else(PoisonError::into_inner).take() {
+        if let Some(answer) = ANSWER.relock().take() {
             demo.answer = Some(answer);
         }
         // SAFETY: this function's `# Safety` gives the frame, its thread, its
         // `context` and no other open window, which `page` asks for.
         let close = unsafe { page(engine, context, demo) };
-        *HUD_SAMPLES.lock().unwrap_or_else(PoisonError::into_inner) =
-            (demo.hud && !close).then_some(demo.smooth);
+        *HUD_SAMPLES.relock() = (demo.hud && !close).then_some(demo.smooth);
         if close {
             if demo.marker {
                 let _cleared = super::map::set(crate::chains::LOADER, &[]);
@@ -248,7 +249,7 @@ fn hud_page(paint: &Painter<'_>, demo: &mut Demo) {
     if let Some(on) = paint.toggle(b"Show HUD samples", demo.hud, false) {
         demo.hud = on;
     }
-    let at = *WHERE.lock().unwrap_or_else(PoisonError::into_inner);
+    let at = *WHERE.relock();
     let Some(position) = at else {
         paint.label(
             b"The server sent no position for a marker.",
@@ -303,7 +304,7 @@ fn buttons_page(paint: &Painter<'_>, demo: &Demo) {
             |raw| {
                 let name = answer_name(raw);
                 crate::log!(INFO, "interface: the demo dialog was answered {name}");
-                *ANSWER.lock().unwrap_or_else(PoisonError::into_inner) = Some(name);
+                *ANSWER.relock() = Some(name);
             },
         );
     }

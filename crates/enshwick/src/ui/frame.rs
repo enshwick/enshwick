@@ -6,6 +6,7 @@ use std::sync::Mutex;
 
 use crate::Host;
 use crate::abi::{Str, UiFrame, UiWidget};
+use crate::locks::Relock;
 use crate::ui::{Button, Dropdown, Label, MAX_OPTIONS, Screen, Slider, Sound, Toggle};
 
 use super::widgets::read_only_flag;
@@ -259,9 +260,7 @@ where
         "panic in a frame callback",
         || (),
         || {
-            let Ok(mut draw) = drawer.draw.lock() else {
-                return;
-            };
+            let mut draw = drawer.draw.relock();
             (draw)(&mut Frame {
                 host,
                 token: raw.token,

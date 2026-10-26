@@ -11,11 +11,12 @@
 //! gets the text in chat instead.
 
 use std::sync::atomic::{AtomicPtr, AtomicUsize, Ordering};
-use std::sync::{Mutex, OnceLock, PoisonError};
+use std::sync::{Mutex, OnceLock};
 
 use enshwick::abi::Status;
 
 use crate::host::Loader;
+use crate::locks::Relock;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
@@ -131,7 +132,7 @@ pub(crate) fn text(id: u32) -> Option<&'static str> {
 
 /// `text`, kept for the process: the same address for the same text.
 fn intern(text: &str) -> &'static &'static str {
-    let mut interned = INTERNED.lock().unwrap_or_else(PoisonError::into_inner);
+    let mut interned = INTERNED.relock();
     let interned = interned.get_or_insert_with(rustc_hash::FxHashMap::default);
     if let Some(&kept) = interned.get(text) {
         return kept;
@@ -144,7 +145,7 @@ fn intern(text: &str) -> &'static &'static str {
 
 /// Queues a notice the server sent for the client's next step.
 pub(crate) fn queue(entity: u32, text: &str) {
-    let mut waiting = WAITING.lock().unwrap_or_else(PoisonError::into_inner);
+    let mut waiting = WAITING.relock();
     if waiting.len() < MAX_WAITING {
         waiting.push((entity, text.to_owned()));
     }
@@ -177,7 +178,7 @@ fn take_slot(text: &str) -> [u8; 16] {
 ///   event streams, so no system pushes into them during the call.
 pub(crate) unsafe fn raise(loader: &Loader, entity_world: usize) {
     let waiting = {
-        let mut waiting = WAITING.lock().unwrap_or_else(PoisonError::into_inner);
+        let mut waiting = WAITING.relock();
         if waiting.is_empty() {
             return;
         }

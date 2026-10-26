@@ -12,6 +12,7 @@
 
 pub mod archive;
 mod entries;
+mod locks;
 mod parts;
 pub mod reflect;
 mod resolve;

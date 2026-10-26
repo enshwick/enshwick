@@ -2,7 +2,7 @@
 
 use core::ffi::c_void;
 use core::sync::atomic::Ordering;
-use std::sync::{Mutex, MutexGuard, PoisonError};
+use std::sync::{Mutex, MutexGuard};
 
 use crate::abi::{
     ActiveBuff, AltarInfo, AltarLimitFn, AltarZoneSize, BedCheckFn, BuffRequest, BuffTypeInfo,
@@ -15,6 +15,7 @@ use crate::abi::{
     SurvivorLookupFn, SurvivorStatusFn, TeleportRequest, TerrainEdit, TerrainMaterialInfo,
     UiAnswerFn, UiDialog, UiFrameFn, UiMarker, UiWidget, WeatherFront, ZoneCheckFn,
 };
+use crate::locks::Relock;
 
 use super::{FakeHost, LinkedHook, ServedResource, SubmittedRequest};
 
@@ -191,7 +192,7 @@ static STATE: Mutex<Option<State>> = Mutex::new(None);
 static TURN: Mutex<()> = Mutex::new(());
 
 fn state() -> MutexGuard<'static, Option<State>> {
-    STATE.lock().unwrap_or_else(PoisonError::into_inner)
+    STATE.relock()
 }
 
 thread_local! {
@@ -210,7 +211,7 @@ fn take_turn() -> MutexGuard<'static, ()> {
         !HOLDS_TURN.get(),
         "a fake host is already installed in this thread; drop the first `Installed` before the next install"
     );
-    let turn = TURN.lock().unwrap_or_else(PoisonError::into_inner);
+    let turn = TURN.relock();
     HOLDS_TURN.set(true);
     turn
 }

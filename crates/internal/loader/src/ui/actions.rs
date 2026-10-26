@@ -8,17 +8,19 @@
 //! text chat cannot type into, an F key by default.
 
 use core::cell::RefCell;
+use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
-use std::sync::{Mutex, PoisonError};
 
 use enshwick::abi::UiWidget;
 use enshwick::actions::Value;
 use enshwick::actions::sheet::{ArgView, Entry, encode_args};
 
+use crate::actions::{Hint, ModSheet};
+use crate::locks::Relock;
+use crate::texts;
+
 use super::engine::{Engine, Window};
 use super::{HudItem, Painter, copy};
-use crate::actions::{Hint, ModSheet};
-use crate::texts;
 
 /// Players of a list a page shows.
 const PLAYERS_PER_PAGE: usize = 5;
@@ -61,11 +63,11 @@ pub(crate) fn configure(name: &str) {
         (DEFAULT_KEY, "F7".to_owned())
     });
     KEY.store(key, Ordering::Relaxed);
-    *KEY_NAME.lock().unwrap_or_else(PoisonError::into_inner) = shown;
+    *KEY_NAME.relock() = shown;
 }
 
 fn key_name() -> String {
-    let name = KEY_NAME.lock().unwrap_or_else(PoisonError::into_inner);
+    let name = KEY_NAME.relock();
     if name.is_empty() {
         "F7".to_owned()
     } else {
@@ -145,8 +147,7 @@ pub(super) fn hud(items: &mut Vec<HudItem>) {
 
 /// Opens the window at `hint`'s action.
 fn open(hint: &Hint) {
-    *OPEN.lock().unwrap_or_else(PoisonError::into_inner) =
-        Some((hint.id.clone(), hint.action.clone()));
+    *OPEN.relock() = Some((hint.id.clone(), hint.action.clone()));
 }
 
 /// The value a row holds for an argument.
@@ -526,7 +527,7 @@ thread_local! {
 /// - `context` is the non-zero context `Engine::context` read in this frame.
 /// - No other window is open.
 pub(super) unsafe fn draw(engine: &Engine, context: usize) {
-    if let Some((id, action)) = OPEN.lock().unwrap_or_else(PoisonError::into_inner).take() {
+    if let Some((id, action)) = OPEN.relock().take() {
         WINDOW.set(Some(Open {
             view: View::new(Some(id), Some(action)),
             window: Window::new(),

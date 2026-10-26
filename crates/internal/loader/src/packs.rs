@@ -8,7 +8,7 @@
 //! [`Load::add_pack`]: enshwick::Load::add_pack
 
 use std::path::{Path, PathBuf};
-use std::sync::{Mutex, PoisonError};
+use std::sync::Mutex;
 
 use enshwick::abi::{
     Dependency, Header, HostApi, Level, Manifest, ManifestFlags, ModHandle, Relation, Side, Status,
@@ -18,6 +18,7 @@ use enshwick::packs::{MANIFEST_FILE, Pack, PackFiles, PackManifest, PackSide};
 use rustc_hash::FxHashMap;
 
 use crate::host::Loader;
+use crate::locks::Relock;
 
 /// A pack folder found in `mods/`.
 pub(crate) struct Found {
@@ -38,7 +39,7 @@ struct Loaded {
 static PACKS: Mutex<Option<FxHashMap<String, Loaded>>> = Mutex::new(None);
 
 fn with<R>(f: impl FnOnce(&mut FxHashMap<String, Loaded>) -> R) -> R {
-    let mut packs = PACKS.lock().unwrap_or_else(PoisonError::into_inner);
+    let mut packs = PACKS.relock();
     f(packs.get_or_insert_with(FxHashMap::default))
 }
 

@@ -216,6 +216,7 @@ pub fn embedded(running: Side) -> KnownBuild {
 mod tests {
     use super::*;
 
+    #[cfg(windows)]
     #[test]
     fn a_build_names_the_loader_features_it_lacks_once() {
         assert_eq!(embedded(Side::SERVER).lacking(crate::TABLE_IDS), "");

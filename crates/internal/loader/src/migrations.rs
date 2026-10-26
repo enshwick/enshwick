@@ -607,7 +607,8 @@ pub(crate) use live::{register, renamed, settings_written, world_loaded};
 
 #[cfg(windows)]
 mod live {
-    use std::sync::{Arc, Mutex, OnceLock, PoisonError};
+    use crate::locks::Relock;
+    use std::sync::{Arc, Mutex, OnceLock};
 
     use enshwick::abi::{Level, MigrateFn, MigrationSet, MigrationStep, Status, Str};
     use rustc_hash::FxHashMap;
@@ -756,7 +757,7 @@ mod live {
         static REPORTED: std::sync::Once = std::sync::Once::new();
         let mut part = Record::default();
         {
-            let mut held = RECORD.lock().unwrap_or_else(PoisonError::into_inner);
+            let mut held = RECORD.relock();
             if held.is_none() {
                 match Record::read(&loader.data_dir) {
                     Ok(read) => *held = Some(read),
@@ -776,7 +777,7 @@ mod live {
             part.ran(world, id).clone_from(full.ran(world, id));
         }
         let result = f(&mut part);
-        let mut held = RECORD.lock().unwrap_or_else(PoisonError::into_inner);
+        let mut held = RECORD.relock();
         let full = held.as_mut()?;
         *full.ran(world, id) = std::mem::take(part.ran(world, id));
         if !dry_run()
@@ -812,7 +813,7 @@ mod live {
         let taken = |registered: &[Arc<Registered>]| {
             registered.iter().any(|r| r.owner == index) || RENAMES.get().is_some()
         };
-        if taken(&REGISTERED.lock().unwrap_or_else(PoisonError::into_inner)) {
+        if taken(&REGISTERED.relock()) {
             return Status::REFUSED;
         }
         let Some(map) = set.map else {
@@ -830,14 +831,11 @@ mod live {
             map,
             user: set.user.expose_provenance(),
         };
-        let born = BORN
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .contains(&index);
+        let born = BORN.relock().contains(&index);
         if !run_settings(loader, &reg, born) {
             return Status::REFUSED;
         }
-        let mut registered = REGISTERED.lock().unwrap_or_else(PoisonError::into_inner);
+        let mut registered = REGISTERED.relock();
         if taken(&registered) {
             return Status::REFUSED;
         }
@@ -876,8 +874,7 @@ mod live {
     /// and the mod reads its defaults.
     pub(crate) fn settings_written(loader: &Loader, index: usize) {
         let reg = REGISTERED
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
+            .relock()
             .iter()
             .find(|r| r.owner == index)
             .cloned();
@@ -885,10 +882,7 @@ mod live {
             Some(reg) => {
                 let _logged = run_settings(loader, &reg, true);
             }
-            None => BORN
-                .lock()
-                .unwrap_or_else(PoisonError::into_inner)
-                .push(index),
+            None => BORN.relock().push(index),
         }
     }
 
@@ -896,10 +890,7 @@ mod live {
     /// before the mods read its settings or open its stores. A mod whose
     /// migration fails is turned off.
     pub(crate) fn world_loaded(loader: &Loader, key: &str) {
-        let registered = REGISTERED
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .clone();
+        let registered = REGISTERED.relock().clone();
         for reg in &registered {
             let Some(record) = loader.mods.get(reg.owner) else {
                 continue;
@@ -933,7 +924,7 @@ mod live {
     /// first call, after every mod is initialised.
     pub(crate) fn renamed(loader: &Loader) -> &'static FxHashMap<[u8; 16], [u8; 16]> {
         RENAMES.get_or_init(|| {
-            let registered = REGISTERED.lock().unwrap_or_else(PoisonError::into_inner);
+            let registered = REGISTERED.relock();
             let direct: FxHashMap<[u8; 16], [u8; 16]> = registered
                 .iter()
                 .filter(|r| {

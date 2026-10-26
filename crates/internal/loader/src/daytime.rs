@@ -21,12 +21,13 @@
 //! change nothing, so the version moves only when the speed does.
 
 use std::sync::atomic::{AtomicU32, Ordering};
-use std::sync::{Mutex, OnceLock, PoisonError};
+use std::sync::{Mutex, OnceLock};
 
 use enshwick::abi::{DaytimeInfo, Event, Header, HookFlags, Status};
 
 use crate::chains::Next;
 use crate::host::{Loader, is_off, take};
+use crate::locks::Relock;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
@@ -274,7 +275,7 @@ pub(crate) fn register_speed(loader: &Loader, owner: usize) -> Status {
     if layout(loader).is_none() || loader.address("daytime.set_speed").is_none() {
         return Status::MISSING;
     }
-    let mut mods = SPEED_MODS.lock().unwrap_or_else(PoisonError::into_inner);
+    let mut mods = SPEED_MODS.relock();
     if !mods.contains(&owner) {
         mods.push(owner);
     }
