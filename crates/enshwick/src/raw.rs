@@ -82,7 +82,7 @@ pub unsafe fn read_at<T: AnyBitPattern>(base: *const u8, offset: usize) -> T {
 #[inline]
 #[must_use]
 pub unsafe fn read_ptr_at<T>(base: *const u8, offset: usize) -> *mut T {
-    // SAFETY: the caller guarantees eight readable bytes at `base + offset`
+    // SAFETY: the caller guarantees pointer-sized readable bytes at `base + offset`
     // with no concurrent writer; `read_unaligned` needs no alignment, and
     // every bit pattern is a valid raw pointer.
     unsafe { base.wrapping_add(offset).cast::<*mut T>().read_unaligned() }
@@ -138,13 +138,13 @@ pub unsafe fn write_at<T: NoUninit>(base: *mut u8, offset: usize, value: T) {
 /// ```
 #[inline]
 pub unsafe fn write_ptr_at<T>(base: *mut u8, offset: usize, value: *mut T) {
-    // SAFETY: the caller guarantees eight writable bytes at `base + offset`
+    // SAFETY: the caller guarantees pointer-sized writable bytes at `base + offset`
     // that nothing else touches; `write_unaligned` needs no alignment.
     unsafe {
         base.wrapping_add(offset)
             .cast::<*mut T>()
-            .write_unaligned(value)
-    };
+            .write_unaligned(value);
+    }
 }
 
 #[cfg(test)]
