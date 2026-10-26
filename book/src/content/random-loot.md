@@ -97,7 +97,7 @@ assert!(Source::kinds(Kinds::CORPSES).with_labels(&[9]).matches(&boss));
 
 ## A worked example: copy staffs
 
-[Survivors per altar](https://github.com/enshwick/enshwick/tree/main/mods/enshwick-survivors-per-altar)
+[Survivors per altar](https://github.com/enshwick/mod-survivors-per-altar)
 adds a copy staff per survivor with `add_item`, then puts them in loot with
 `Drop::one_of`: one chance for bosses and one for locked chests, both from
 its settings, and no drop when a chance is 0. When `copy_staffs` turns off

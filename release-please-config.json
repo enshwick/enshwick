@@ -107,10 +107,6 @@
       "package-name": "enshwick-flame-altar-zones",
       "component": "enshwick-flame-altar-zones"
     },
-    "mods/enshwick-survivors-per-altar": {
-      "package-name": "enshwick-survivors-per-altar",
-      "component": "enshwick-survivors-per-altar"
-    },
     "crates/enshwick-macros": {
       "package-name": "enshwick-macros",
       "component": "enshwick-macros"

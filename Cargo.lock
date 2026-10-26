@@ -439,15 +439,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "enshwick-survivors-per-altar"
-version = "0.0.0-dev"
-dependencies = [
- "enshwick",
- "serde",
- "toml",
-]
-
-[[package]]
 name = "equivalent"
 version = "1.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
