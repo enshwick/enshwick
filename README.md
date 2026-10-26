@@ -64,10 +64,10 @@ they are never released.
    `mod-configs/enshwick.recipes.toml` takes recipes out of the game, vanilla
    or a mod's ([Disabling recipes](book/src/content/disabled-recipes.md)).
 
-More Altars was called Flame altar count. Before you extract a newer
+More Altars was called Flame altar count. After you extract a newer
 `enshwick.zip` over an older install, delete
-`mods/enshwick-flame-altar-count.dll`: while it is there, Enshwick runs it and
-skips `mods/enshwick-more-altars.dll`.
+`mods/enshwick-flame-altar-count.dll`, the same mod under its old name.
+Enshwick runs only the newer file and names the old one in `loader.log`.
 
 Players and their server need the same versions of the mods that count in the
 join check, which each mod's page names; the server advertises them. A
