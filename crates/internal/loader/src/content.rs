@@ -253,6 +253,7 @@ pub(crate) fn seal_and_link(loader: &'static Loader) {
         serve_stand_ins(&mut served, items, registry)
     });
     let changed = serve_changes(&mut served, crate::data_changes::serve(loader));
+    let rated = serve_rates(&mut served, crate::rate_links::recipe_patch(loader));
     let orphans = aliases
         .keys()
         .filter(|guid| !served.iter().any(|s| s.key.guid == **guid))
@@ -261,11 +262,11 @@ pub(crate) fn seal_and_link(loader: &'static Loader) {
     let _first = RENAMES.set(renames);
     if SERVED_LIST.set(served.into_boxed_slice()).is_err()
         || ALIASES.set(aliases).is_err()
-        || count + recorded + renames.len() + standing + changed == 0
+        || count + recorded + renames.len() + standing + changed + rated == 0
     {
         return;
     }
-    if served_recipes() {
+    if mods_serve_recipes() {
         crate::code::lift_workshop_limit(loader);
     }
     let none = HookFlags::NONE;
@@ -351,6 +352,36 @@ fn serve_stand_ins(
     count
 }
 
+/// Adds the loader's patch for the recipe output rates to `served`, last on
+/// the recipe registry, after every mod's and every data change, and keeps
+/// the registry's base, since a changed factor rebuilds it; how many keys.
+fn serve_rates(served: &mut Vec<Served>, patch: Option<ResourcePatchFn>) -> usize {
+    let Some(apply) = patch else {
+        return 0;
+    };
+    let key = recipe_registry();
+    let patch = Patch {
+        owner: ModIndex::LOADER,
+        apply,
+        user: 0,
+    };
+    match served.iter_mut().find(|s| s.key == key) {
+        Some(entry) => {
+            entry.patches.push(patch);
+            entry.keeps_base.store(true, Ordering::Relaxed);
+        }
+        None => served.push(Served {
+            key,
+            base: key,
+            patches: vec![patch],
+            keeps_base: AtomicBool::new(true),
+            state: Mutex::new(State::default()),
+            rebuilding: Mutex::new(()),
+        }),
+    }
+    1
+}
+
 /// Adds the loader's patches of changed vanilla values to `served`: first
 /// on a vanilla key, so mods patch the changed values; last on a mod's new
 /// resource, after the mod built it. How many keys.
@@ -365,16 +396,22 @@ fn serve_changes(
             apply,
             user: user.expose_provenance(),
         };
+        // A development reload builds the changed resources again.
+        let keep = crate::reload::copies();
         match served.iter_mut().find(|s| s.key == key) {
             Some(entry) if crate::data_changes::goes_first(&key, &entry.base) => {
                 entry.patches.insert(0, patch);
+                entry.keeps_base.fetch_or(keep, Ordering::Relaxed);
             }
-            Some(entry) => entry.patches.push(patch),
+            Some(entry) => {
+                entry.patches.push(patch);
+                entry.keeps_base.fetch_or(keep, Ordering::Relaxed);
+            }
             None => served.push(Served {
                 key,
                 base: key,
                 patches: vec![patch],
-                keeps_base: AtomicBool::new(false),
+                keeps_base: AtomicBool::new(keep),
                 state: Mutex::new(State::default()),
                 rebuilding: Mutex::new(()),
             }),
@@ -511,7 +548,7 @@ fn find(key: &ResourceKey) -> Option<(usize, &'static Served)> {
 }
 
 /// The game's recipe registry.
-fn recipe_registry() -> ResourceKey {
+pub(crate) fn recipe_registry() -> ResourceKey {
     use enshwick::content::recipes::RECIPE_REGISTRY;
 
     use crate::catalogue::types;
@@ -524,6 +561,16 @@ pub(crate) fn served_recipes() -> bool {
     SERVED_LIST
         .get()
         .is_some_and(|served| serves(served, &recipe_registry(), mod_on))
+}
+
+/// Whether mods, not the loader's own changes of values alone, serve the
+/// recipe registry: only they add recipes past a workshop's vanilla count.
+fn mods_serve_recipes() -> bool {
+    SERVED_LIST.get().is_some_and(|served| {
+        serves(served, &recipe_registry(), |owner| {
+            !owner.is_loader() && mod_on(owner)
+        })
+    })
 }
 
 /// Whether `served` holds `key` with a patch of a mod `on` names and a build

@@ -104,10 +104,11 @@ pub(crate) extern "system" fn change_data(
             Err(status) => return status,
         };
         // SAFETY: `HostApi::change_data` has the mod pass null or a record
-        // with its header, valid for the call; an all-zero record is valid.
-        let Some(raw) =
-            (unsafe { api_frame::read_headed(change, size_of::<api_frame::DataChange>()) })
-        else {
+        // with its header, valid for the call; an all-zero record is valid,
+        // and `item` reads as zero for a record of a mod built before it.
+        let Some(raw) = (unsafe {
+            api_frame::read_headed(change, core::mem::offset_of!(api_frame::DataChange, item))
+        }) else {
             return Status::BAD_ARGS;
         };
         let Ok(Some(change)) = enshwick::content::changes::Change::from_abi(&raw) else {

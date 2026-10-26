@@ -325,8 +325,8 @@ fn allocate_near(target: usize) -> Option<usize> {
 }
 
 /// Writes every hook jump and code patch with the other threads suspended;
-/// false when any target could not be made writable, in which case none is
-/// written.
+/// false when any target could not be made writable, or a thread's context
+/// could not be read to check and move it, in which case none is written.
 ///
 /// A suspended thread may stand inside the bytes a hook replaces, or have
 /// called out of them, with a return address into them on its stack; both
@@ -353,11 +353,20 @@ fn write_all(prepared: &[&Pending], code: &[Bytes<'_>]) -> bool {
     let mut protections = Vec::with_capacity(writes.len());
     let mut threads = Threads::new();
     let mut tries = 0;
-    let unsettled = loop {
+    let checked = !moved.is_empty() || !patched.is_empty();
+    let (unsettled, blind) = loop {
         if !threads.suspend() {
             threads.resume();
             return false;
         }
+        // A thread whose context Windows does not hand over can be neither
+        // checked nor moved: the writes wait for it, then give up.
+        let blind = checked
+            .then(|| threads.iter().find(|&thread| control(thread).is_none()))
+            .flatten()
+            // SAFETY: `GetThreadId` only reads the id of a thread handle
+            // `suspend` opened with `THREAD_QUERY_LIMITED_INFORMATION`.
+            .map(|thread| unsafe { GetThreadId(thread) });
         let busy = !patched.is_empty()
             && threads
                 .iter()
@@ -365,13 +374,24 @@ fn write_all(prepared: &[&Pending], code: &[Bytes<'_>]) -> bool {
                 // process, `iter` yields each of them, and they stay suspended
                 // until `resume`.
                 .any(|thread| unsafe { in_flight(thread, &patched, &returns) });
-        if !busy || tries == SETTLE_TRIES {
-            break busy;
+        if !(busy || blind.is_some()) || tries == SETTLE_TRIES {
+            break (busy, blind);
         }
         threads.resume();
         tries += 1;
         std::thread::sleep(SETTLE_WAIT);
     };
+    if let Some(thread) = blind {
+        threads.resume();
+        crate::log::write(
+            Level::WARN,
+            LOADER_ID,
+            &format!(
+                "hooks not written: the context of thread {thread} could not be read to move it out of the code"
+            ),
+        );
+        return false;
+    }
     let mut writable = true;
     for &(address, bytes) in &writes {
         // SAFETY: the target's code pages, with every other thread of the
@@ -471,15 +491,32 @@ fn follows_call(start: usize, at: usize) -> bool {
     })
 }
 
+/// A thread's `CONTEXT` on the 16-byte boundary x64 Windows requires:
+/// `GetThreadContext` and `SetThreadContext` refuse a misaligned one, which
+/// the windows-sys type, aligned to 8, does not prevent; Wine does not check.
+#[repr(C, align(16))]
+#[derive(Clone, Copy)]
+pub(crate) struct ThreadContext(pub(crate) CONTEXT);
+
+impl ThreadContext {
+    /// An empty context that asks for the control registers.
+    pub(crate) fn new() -> Self {
+        Self(CONTEXT {
+            ContextFlags: CONTEXT_CONTROL_AMD64,
+            ..CONTEXT::default()
+        })
+    }
+}
+
 /// A suspended thread's stack pointer and instruction pointer, with the
-/// context read for writing it back.
-fn control(thread: HANDLE) -> Option<CONTEXT> {
-    let mut context: CONTEXT = unsafe_zeroed_context();
-    context.ContextFlags = CONTEXT_CONTROL_AMD64;
+/// context read for writing it back; `None` when Windows refuses to read
+/// it.
+fn control(thread: HANDLE) -> Option<ThreadContext> {
+    let mut context = ThreadContext::new();
     // SAFETY: `GetThreadContext` writes at most one `CONTEXT` into
-    // `context`, a local with `ContextFlags` set; a handle without context
-    // rights fails the call.
-    (unsafe { GetThreadContext(thread, &raw mut context) } != 0).then_some(context)
+    // `context.0`, 16-byte aligned by its type, with `ContextFlags` set; a
+    // handle without context rights fails the call.
+    (unsafe { GetThreadContext(thread, &raw mut context.0) } != 0).then_some(context)
 }
 
 /// The words on a suspended thread's stack, from its stack pointer up to
@@ -558,7 +595,7 @@ impl Stack {
 /// - Every thread of the process but the caller, `thread` among them, stays
 ///   suspended for the call, as `Threads::suspend` leaves them.
 unsafe fn in_flight(thread: HANDLE, patched: &[(usize, usize)], returns: &[usize]) -> bool {
-    let Some(context) = control(thread) else {
+    let Some(ThreadContext(context)) = control(thread) else {
         return false;
     };
     let rip = usize::try_from(context.Rip).unwrap_or(0);
@@ -597,17 +634,17 @@ unsafe fn relocate(thread: HANDLE, moved: &[(usize, usize)]) {
             .flatten()
             .map(|i| moved[i].1)
     };
-    let Some(mut context) = control(thread) else {
+    let Some(mut held) = control(thread) else {
         return;
     };
-    if let Some(new) = find(usize::try_from(context.Rip).unwrap_or(0)) {
-        context.Rip = new as u64;
-        // SAFETY: the caller keeps `thread` suspended, `context` is the one
+    if let Some(new) = find(usize::try_from(held.0.Rip).unwrap_or(0)) {
+        held.0.Rip = new as u64;
+        // SAFETY: the caller keeps `thread` suspended, `held.0` is the one
         // `control` read from it with only `Rip` changed, and the moved
         // address holds the same instruction in the trampoline.
-        unsafe { SetThreadContext(thread, &raw const context) };
+        unsafe { SetThreadContext(thread, &raw const held.0) };
     }
-    if let Some(stack) = Stack::at(context.Rsp) {
+    if let Some(stack) = Stack::at(held.0.Rsp) {
         // SAFETY: the caller keeps every other thread, the stack's owner
         // among them, suspended for the call and vouches for the moved
         // addresses. A word equal to a moved address is a return address, or
@@ -615,11 +652,6 @@ unsafe fn relocate(thread: HANDLE, moved: &[(usize, usize)]) {
         // instruction.
         unsafe { stack.rewrite(find) };
     }
-}
-
-fn unsafe_zeroed_context() -> CONTEXT {
-    // SAFETY: `CONTEXT` is plain data, valid when zeroed.
-    unsafe { core::mem::zeroed() }
 }
 
 #[link(name = "ntdll", kind = "raw-dylib")]

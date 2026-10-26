@@ -70,6 +70,7 @@ mod tests {
         "loot.roll_one",
         "loot.txn_context",
         "loot.txn_entity",
+        "skill.airborne_architect",
         "ui_image.content",
         "ui_image.flags",
         "ui_image.format",
@@ -120,8 +121,11 @@ mod tests {
         files
             .iter()
             .filter(|p| {
-                let name = p.to_string_lossy();
-                !name.ends_with("_tests.rs") && !name.ends_with("/tests.rs")
+                let name = p
+                    .file_name()
+                    .map(|n| n.to_string_lossy())
+                    .unwrap_or_default();
+                name != "tests.rs" && !name.ends_with("_tests.rs")
             })
             .map(|p: &PathBuf| {
                 let text = std::fs::read_to_string(p).unwrap();

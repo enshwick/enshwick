@@ -3,7 +3,9 @@
 //! manifest, so the mod list, the lock and the join check see
 //! it as they see a DLL, and runs it through the API's [`Load::add_pack`]
 //! during init. The dedicated server watches a pack's files and applies a
-//! changed `loot.toml` at once; other changes wait for a restart.
+//! changed `loot.toml` at once; with `dev_reload` on, the server and the
+//! client also take changed values at once; other changes wait for a
+//! restart.
 //!
 //! [`Load::add_pack`]: enshwick::Load::add_pack
 
@@ -19,6 +21,7 @@ use rustc_hash::FxHashMap;
 
 use crate::host::Loader;
 use crate::locks::Relock;
+use crate::mod_index::ModIndex;
 
 /// A pack folder found in `mods/`.
 pub(crate) struct Found {
@@ -296,7 +299,9 @@ pub(crate) fn changed(loader: &Loader, index: usize) {
     let Some(record) = loader.mods.get(index) else {
         return;
     };
-    if loader.side != Side::SERVER || record.off.load(std::sync::atomic::Ordering::Acquire) {
+    let dev = crate::reload::copies();
+    let server = loader.side == Side::SERVER;
+    if !(server || dev) || record.off.load(std::sync::atomic::Ordering::Acquire) {
         return;
     }
     let id = record.id.as_str();
@@ -319,28 +324,57 @@ pub(crate) fn changed(loader: &Loader, index: usize) {
             return;
         }
     };
-    let same = with(|packs| {
+    let (same, values) = with(|packs| {
         packs
             .get(id)
             .and_then(|p| p.pack.as_ref())
-            .is_some_and(|old| old.same_content(&pack))
+            .map_or((false, false), |old| {
+                (old.same_content(&pack), old.same_beside_changes(&pack))
+            })
     });
-    if !same {
+    let mut taken = same;
+    if !same && values && dev {
+        match crate::data_changes::reload(ModIndex::new(index), pack.changes().to_vec()) {
+            Ok(rebuilt) => {
+                crate::log::write(
+                    Level::INFO,
+                    id,
+                    &format!(
+                        "data pack reloaded: {} changes of values, {rebuilt} resources built again",
+                        pack.changes().len()
+                    ),
+                );
+                taken = true;
+            }
+            Err(why) => crate::log::write(
+                Level::WARN,
+                id,
+                &format!("changes of values not reloaded: {why}"),
+            ),
+        }
+    } else if !same {
+        let how = if values {
+            "changes of values change at the next start, or at once with dev_reload = true"
+        } else {
+            "items, recipes, workshops and texts change at the next start"
+        };
         crate::log::write(
             Level::WARN,
             id,
-            "data pack changed beyond its loot: items, recipes, workshops, texts and changes of values change at the next start",
+            &format!("data pack changed beyond its loot: {how}"),
         );
     }
-    match enshwick::packs::reload_loot(id, pack.drops().to_vec()) {
-        Ok(()) => crate::log::write(
-            Level::INFO,
-            id,
-            &format!("data pack reloaded: {} loot drops", pack.drops().len()),
-        ),
-        Err(why) => crate::log::write(Level::WARN, id, &format!("loot not reloaded: {why}")),
+    if server {
+        match enshwick::packs::reload_loot(id, pack.drops().to_vec()) {
+            Ok(()) => crate::log::write(
+                Level::INFO,
+                id,
+                &format!("data pack reloaded: {} loot drops", pack.drops().len()),
+            ),
+            Err(why) => crate::log::write(Level::WARN, id, &format!("loot not reloaded: {why}")),
+        }
     }
-    if same {
+    if taken {
         with(|packs| {
             if let Some(loaded) = packs.get_mut(id) {
                 loaded.pack = Some(pack);

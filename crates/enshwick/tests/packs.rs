@@ -12,6 +12,7 @@ mod tests {
     use enshwick::{Load, Mod, Off};
 
     const CHEST: &str = "6943053a-32c1-4718-ae22-e61427ddf54d";
+    const RECIPE: &str = "b2c1d2e3-4f50-4a61-8b72-c3d4e5f60718";
     const ITEM: u32 = 1;
     const RECIPES: u32 = 3;
 
@@ -32,7 +33,7 @@ mod tests {
                 )
                 .with(
                     "recipes.toml",
-                    format!("[[recipe]]\nid = \"lantern.recipe\"\nlike = \"{CHEST}\"\noutput = \"lantern\"\ncost = 3\n"),
+                    format!("[[recipe]]\nid = \"lantern.recipe\"\nlike = \"{CHEST}\"\noutput = \"lantern\"\ncost = 3\n\n[[change]]\nrecipes = [\"{RECIPE}\"]\ntime = 0\ningredients = {{ \"{CHEST}\" = 2 }}\n"),
                 )
                 .with("texts.toml", "[en]\n\"lantern.name\" = \"Lantern\"\n[uk]\n\"lantern.name\" = \"Ліхтар\"\n");
             load.add_pack(&Pack::parse("you.lanterns", &files)?)?;
@@ -129,10 +130,20 @@ mod tests {
         let loader = start();
         assert_eq!(
             loader.changes(),
-            [(
-                Change::new(Guid::parse(CHEST), Field::MaxStack, Value::Set(50.0)),
-                "items.toml:6".to_owned()
-            )]
+            [
+                (
+                    Change::new(Guid::parse(CHEST), Field::MaxStack, Value::Set(50.0)),
+                    "items.toml:6".to_owned()
+                ),
+                (
+                    Change::new(Guid::parse(RECIPE), Field::Time, Value::Set(0.0)),
+                    "recipes.toml:7".to_owned()
+                ),
+                (
+                    Change::ingredient(Guid::parse(RECIPE), Guid::parse(CHEST), Value::Set(2.0)),
+                    "recipes.toml:7".to_owned()
+                ),
+            ]
         );
     }
 

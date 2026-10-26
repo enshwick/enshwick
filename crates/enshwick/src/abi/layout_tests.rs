@@ -152,7 +152,7 @@ shapes! {
         RecipeKind { 0 },
         DataField { 0 },
         ChangeOp { 0 },
-        DataChange { header, entry, field, op, value, source },
+        DataChange { header, entry, field, op, value, source, item },
         EntityDataFlags { 0 },
         MigrationStep { kind, from, to, from_guid, to_guid },
         Migration { id, steps, count },

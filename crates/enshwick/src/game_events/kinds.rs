@@ -2,7 +2,11 @@
 //! running build, for [`Load::on_game`](crate::Load::on_game).
 
 use crate::ecs::Entity;
+use crate::engine_enum::{Bits, Values};
 use crate::engine_ids as ids;
+use crate::game_events::values::{
+    AttackCategoryMask, DamageTypeMask, EquipmentSlot, ExperienceSourceType, FlameAltarActionType,
+};
 use crate::game_events::{EventType, Field, RawGameEvent};
 use crate::raw::read_at;
 use crate::world::{ComponentType, World};
@@ -54,99 +58,6 @@ where
     })
 }
 
-/// Bits of the damage types of a hit, the engine's `DamageTypeNew` mask.
-///
-/// # Examples
-///
-/// ```
-/// use enshwick::game_events::DamageTypes;
-///
-/// let types = DamageTypes(DamageTypes::FIRE.0 | DamageTypes::CUT.0);
-/// assert!(types.contains(DamageTypes::FIRE));
-/// assert!(!types.contains(DamageTypes::ICE));
-/// ```
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
-pub struct DamageTypes(pub u16);
-
-impl DamageTypes {
-    /// Physical cut.
-    pub const CUT: Self = Self(1);
-    /// Physical pierce.
-    pub const PIERCE: Self = Self(1 << 1);
-    /// Physical blunt.
-    pub const BLUNT: Self = Self(1 << 2);
-    /// Fire.
-    pub const FIRE: Self = Self(1 << 3);
-    /// Ice.
-    pub const ICE: Self = Self(1 << 4);
-    /// Shroud.
-    pub const SHROUD: Self = Self(1 << 5);
-    /// Lightning.
-    pub const LIGHTNING: Self = Self(1 << 6);
-    /// Healing.
-    pub const HEALING: Self = Self(1 << 7);
-    /// Poison.
-    pub const POISON: Self = Self(1 << 8);
-    /// Wood, against trees and wooden things.
-    pub const WOOD: Self = Self(1 << 9);
-    /// Stone, against rock.
-    pub const STONE: Self = Self(1 << 10);
-    /// Metal, against ore.
-    pub const METAL: Self = Self(1 << 11);
-    /// Explosion.
-    pub const EXPLOSION: Self = Self(1 << 12);
-
-    /// Whether every bit of `other` is set.
-    ///
-    /// # Examples
-    ///
-    /// See [`DamageTypes`].
-    #[must_use]
-    pub const fn contains(self, other: Self) -> bool {
-        self.0 & other.0 == other.0
-    }
-}
-
-/// Bits of the attack categories of a hit, the engine's `AttackCategory`
-/// mask.
-///
-/// # Examples
-///
-/// ```
-/// use enshwick::game_events::AttackCategories;
-///
-/// assert!(AttackCategories(1).contains(AttackCategories::MELEE));
-/// ```
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
-pub struct AttackCategories(pub u8);
-
-impl AttackCategories {
-    /// Melee.
-    pub const MELEE: Self = Self(1);
-    /// Ranged.
-    pub const RANGED: Self = Self(1 << 1);
-    /// Magic.
-    pub const MAGIC: Self = Self(1 << 2);
-    /// A tool, such as a pickaxe.
-    pub const TOOL: Self = Self(1 << 3);
-    /// Anything else.
-    pub const OTHER: Self = Self(1 << 4);
-    /// Area of effect.
-    pub const AREA: Self = Self(1 << 5);
-    /// A skill shot.
-    pub const SKILL_SHOT: Self = Self(1 << 6);
-
-    /// Whether every bit of `other` is set.
-    ///
-    /// # Examples
-    ///
-    /// See [`AttackCategories`].
-    #[must_use]
-    pub const fn contains(self, other: Self) -> bool {
-        self.0 & other.0 == other.0
-    }
-}
-
 /// A hit the server resolved, damage or healing, written where health
 /// changes. Fall and shroud damage change health without a hit.
 ///
@@ -181,9 +92,9 @@ pub struct Hit {
     /// The change of the target's stamina.
     pub stamina_change: i32,
     /// The damage types.
-    pub damage_types: DamageTypes,
+    pub damage_types: DamageTypeMask,
     /// The attack categories.
-    pub attack: AttackCategories,
+    pub attack: AttackCategoryMask,
     /// The target's faction, the engine's `FactionType`.
     pub target_faction: u8,
 }
@@ -206,6 +117,11 @@ impl Kind for Hit {
         let damage: Field<u16> = ty.field_by_id(load, ids::HIT_DAMAGE_TYPES)?;
         let attack: Field<u8> = ty.field_by_id(load, ids::HIT_ATTACK)?;
         let faction: Field<u8> = ty.field_by_id(load, ids::HIT_TARGET_FACTION)?;
+        let damage_bits = Bits::resolve(load, DamageTypeMask::IDS.map(|(t, id)| (t.bits(), id)));
+        let attack_bits = Bits::resolve(
+            load,
+            AttackCategoryMask::IDS.map(|(c, id)| (u16::from(c.bits()), id)),
+        );
         on(
             load,
             ty,
@@ -218,8 +134,10 @@ impl Kind for Hit {
                     weapon: some(e.get(weapon)?),
                     health_change: e.get(health)?,
                     stamina_change: e.get(stamina)?,
-                    damage_types: DamageTypes(e.get(damage)?),
-                    attack: AttackCategories(e.get(attack)?),
+                    damage_types: DamageTypeMask::from_bits(damage_bits.map(e.get(damage)?)),
+                    attack: AttackCategoryMask::from_bits(
+                        u8::try_from(attack_bits.map(u16::from(e.get(attack)?))).ok()?,
+                    ),
                     target_faction: e.get(faction)?,
                 })
             },
@@ -328,7 +246,7 @@ impl Credit {
     /// The last player character that hit `entity`.
     fn killer_player(&self, entity: Entity) -> Option<Entity> {
         let source = self.world.component(entity, self.experience)?.cast::<u8>();
-        // SAFETY: `component` returned the entity's live ExperienceSource,
+        // SAFETY: `component` returned the entity's live ExperienceSourceType,
         // valid until the game thread moves on; `resolve` checked that the u32
         // at `lastHitPlayerId` lies inside its reflected size.
         some(Entity(unsafe { read_at(source, self.last_player) }))
@@ -405,68 +323,16 @@ impl Kind for LevelGained {
     }
 }
 
-/// Where experience came from, the engine's `ExperienceSourceType`.
-///
-/// # Examples
-///
-/// ```
-/// use enshwick::game_events::ExperienceSource;
-///
-/// assert_eq!(ExperienceSource::from_raw(4), ExperienceSource::Combat);
-/// assert_eq!(ExperienceSource::from_raw(40), ExperienceSource::Other(40));
-/// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-#[non_exhaustive]
-pub enum ExperienceSource {
-    /// No source given.
-    None,
-    /// Exploring.
-    Exploration,
-    /// Reading lore.
-    Lore,
-    /// A quest.
-    Quest,
-    /// A kill.
-    Combat,
-    /// Mining.
-    Mining,
-    /// A completed item set.
-    ItemSetCompleted,
-    /// A value this crate does not name.
-    Other(u8),
-}
-
-impl ExperienceSource {
-    /// The source the engine's value names.
-    ///
-    /// # Examples
-    ///
-    /// See [`ExperienceSource`].
-    #[must_use]
-    pub const fn from_raw(value: u8) -> Self {
-        match value {
-            0 => Self::None,
-            1 => Self::Exploration,
-            2 => Self::Lore,
-            3 => Self::Quest,
-            4 => Self::Combat,
-            5 => Self::Mining,
-            6 => Self::ItemSetCompleted,
-            other => Self::Other(other),
-        }
-    }
-}
-
 /// A character gained experience.
 ///
 /// # Examples
 ///
 /// ```
-/// use enshwick::game_events::{ExperienceGained, ExperienceSource};
+/// use enshwick::game_events::{ExperienceGained, ExperienceSourceType};
 ///
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 ///     load.on_game::<ExperienceGained>(|gained| {
-///         if gained.source == ExperienceSource::Combat {
+///         if gained.source == ExperienceSourceType::Combat {
 ///             enshwick::debug!("{} experience for a kill", gained.amount);
 ///         }
 ///     })
@@ -480,7 +346,7 @@ pub struct ExperienceGained {
     /// How much.
     pub amount: u32,
     /// Where from.
-    pub source: ExperienceSource,
+    pub source: ExperienceSourceType,
 }
 
 impl sealed::Sealed for ExperienceGained {}
@@ -494,6 +360,7 @@ impl Kind for ExperienceGained {
         let player: Field<Entity> = ty.field_by_id(load, ids::EXPERIENCE_GAINED_PLAYER)?;
         let amount: Field<u32> = ty.field_by_id(load, ids::EXPERIENCE_GAINED_AMOUNT)?;
         let source: Field<u8> = ty.field_by_id(load, ids::EXPERIENCE_GAINED_SOURCE)?;
+        let sources = Values::resolve(load, ExperienceSourceType::IDS);
         on(
             load,
             ty,
@@ -501,7 +368,12 @@ impl Kind for ExperienceGained {
                 Some(Self {
                     player: e.get(player)?,
                     amount: e.get(amount)?,
-                    source: ExperienceSource::from_raw(e.get(source)?),
+                    source: {
+                        let raw = e.get(source)?;
+                        sources
+                            .variant(u64::from(raw))
+                            .unwrap_or(ExperienceSourceType::Other(raw))
+                    },
                 })
             },
             handler,
@@ -889,48 +761,6 @@ impl Kind for PickedUp {
     }
 }
 
-/// What a player did at a Flame Altar, the engine's `FlameAltarActionType`.
-///
-/// # Examples
-///
-/// ```
-/// use enshwick::game_events::AltarAction;
-///
-/// assert_eq!(AltarAction::from_raw(1), AltarAction::Reclaim);
-/// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-#[non_exhaustive]
-pub enum AltarAction {
-    /// Abandoned the base.
-    Abandon,
-    /// Reclaimed an abandoned base.
-    Reclaim,
-    /// Removed the water.
-    RemoveWater,
-    /// Made it the preferred respawn altar.
-    SetSpawn,
-    /// A value this crate does not name.
-    Other(u8),
-}
-
-impl AltarAction {
-    /// The action the engine's value names.
-    ///
-    /// # Examples
-    ///
-    /// See [`AltarAction`].
-    #[must_use]
-    pub const fn from_raw(value: u8) -> Self {
-        match value {
-            0 => Self::Abandon,
-            1 => Self::Reclaim,
-            2 => Self::RemoveWater,
-            3 => Self::SetSpawn,
-            other => Self::Other(other),
-        }
-    }
-}
-
 /// A player acted at a Flame Altar.
 ///
 /// # Examples
@@ -950,7 +780,7 @@ pub struct AltarUsed {
     /// The altar's base entity.
     pub altar: Entity,
     /// What was done.
-    pub action: AltarAction,
+    pub action: FlameAltarActionType,
 }
 
 impl sealed::Sealed for AltarUsed {}
@@ -964,6 +794,7 @@ impl Kind for AltarUsed {
         let player: Field<Entity> = ty.field_by_id(load, ids::ALTAR_USED_PLAYER)?;
         let altar: Field<Entity> = ty.field_by_id(load, ids::ALTAR_USED_ALTAR)?;
         let kind: Field<u8> = ty.field_by_id(load, ids::ALTAR_USED_ACTION)?;
+        let actions = Values::resolve(load, FlameAltarActionType::IDS);
         on(
             load,
             ty,
@@ -971,7 +802,12 @@ impl Kind for AltarUsed {
                 Some(Self {
                     player: e.get(player)?,
                     altar: e.get(altar)?,
-                    action: AltarAction::from_raw(e.get(kind)?),
+                    action: {
+                        let raw = e.get(kind)?;
+                        actions
+                            .variant(u64::from(raw))
+                            .unwrap_or(FlameAltarActionType::Other(raw))
+                    },
                 })
             },
             handler,
@@ -1035,7 +871,7 @@ impl Kind for LootOpened {
 /// use enshwick::game_events::EquipmentChanged;
 ///
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-///     load.on_game::<EquipmentChanged>(|changed| enshwick::debug!("slot {} of {:?}", changed.slot, changed.player))
+///     load.on_game::<EquipmentChanged>(|changed| enshwick::debug!("{:?} of {:?}", changed.slot, changed.player))
 /// }
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1043,9 +879,8 @@ impl Kind for LootOpened {
 pub struct EquipmentChanged {
     /// The player's character.
     pub player: Entity,
-    /// The slot, the engine's `EquipmentSlot`: 5 to 9 armour from head to
-    /// feet, 10 and 11 rings, 12 the ranged weapon, 13 the shield.
-    pub slot: u8,
+    /// The slot.
+    pub slot: EquipmentSlot,
 }
 
 impl sealed::Sealed for EquipmentChanged {}
@@ -1058,13 +893,19 @@ impl Kind for EquipmentChanged {
         let ty = load.event_type(ids::EQUIPMENT_CHANGED_EVENT)?;
         let player: Field<Entity> = ty.field_by_id(load, ids::EQUIPMENT_CHANGED_PLAYER)?;
         let slot: Field<u8> = ty.field_by_id(load, ids::EQUIPMENT_CHANGED_SLOT)?;
+        let slots = Values::resolve(load, EquipmentSlot::IDS);
         on(
             load,
             ty,
             move |e| {
                 Some(Self {
                     player: e.get(player)?,
-                    slot: e.get(slot)?,
+                    slot: {
+                        let raw = e.get(slot)?;
+                        slots
+                            .variant(u64::from(raw))
+                            .unwrap_or(EquipmentSlot::Other(raw))
+                    },
                 })
             },
             handler,
