@@ -20,6 +20,7 @@
 
 use crate::mod_index::ModIndex;
 use crate::pinned;
+use enshwick::ecs::Entity;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
@@ -259,13 +260,13 @@ unsafe extern "system" fn destroy(buffer: *mut u8, requester: u32, entity: u32) 
     // the chain, which has the destroy request's signature.
     let queued = unsafe { DESTROY_NEXT.get()(buffer, requester, entity) };
     if queued != 0 && entity != 0 && KEPT.load(Ordering::Relaxed) {
-        note_destroyed(entity);
+        note_destroyed(Entity(entity));
     }
     queued
 }
 
 /// Notes that the game asked to destroy `entity`.
-fn note_destroyed(entity: u32) {
+fn note_destroyed(entity: Entity) {
     fill_destroyed(reserve_destroyed(), entity);
 }
 
@@ -275,9 +276,9 @@ fn reserve_destroyed() -> (usize, u64) {
     ((count & 0xffff_ffff) as usize, count >> 32)
 }
 
-fn fill_destroyed((at, round): (usize, u64), entity: u32) {
+fn fill_destroyed((at, round): (usize, u64), entity: Entity) {
     if let Some(slot) = DESTROYED.get(at) {
-        slot.store(round << 32 | u64::from(entity), Ordering::Release);
+        slot.store(round << 32 | u64::from(entity.0), Ordering::Release);
     }
 }
 
@@ -373,7 +374,7 @@ fn kind_of(id: &str) -> Option<u32> {
 
 /// The game id of `entity`'s template, on the server's game thread; `None`
 /// for an entity that is gone or off that thread.
-fn template_id(entity: u32) -> Option<u32> {
+fn template_id(entity: Entity) -> Option<u32> {
     let loader = crate::host::loader()?;
     let template = crate::world::template(loader, entity).ok()?;
     Some(enshwick::content::Guid(template).id())
@@ -398,7 +399,7 @@ pub(crate) fn get(kind: u32, pide: u32, item: u32) -> Result<Box<[u8]>, Status> 
             Scope::Item => item,
             // An entity in an area that is not loaded is not in the world's
             // map either: its value stays, unchecked.
-            Scope::Entity => match template_id(pide) {
+            Scope::Entity => match template_id(Entity(pide)) {
                 Some(now) => now,
                 None => return Ok(record.value.clone()),
             },
@@ -438,7 +439,7 @@ pub(crate) fn set(kind: u32, pide: u32, item: u32, value: &[u8]) -> Result<(), S
         Scope::Item => item,
         Scope::Entity => {
             crate::world::server().map_err(|_| Status::WRONG_THREAD)?;
-            match template_id(pide) {
+            match template_id(Entity(pide)) {
                 Some(template) => template,
                 None if value.is_empty() => 0,
                 None => return Err(Status::BAD_ARGS),
@@ -654,7 +655,7 @@ fn held(loader: &Loader, pide: u32) -> Option<u32> {
             .ok()?;
         Some((ty, usize::try_from(offset).ok()?))
     }))?;
-    let data = crate::world::component(loader, pide, ty).ok()?;
+    let data = crate::world::component(loader, Entity(pide), ty).ok()?;
     // SAFETY: `world::component` returned the entity's live `ItemState`, read
     // on the game thread that owns it; it holds its `u32` item id at the
     // reflected `itemId` offset.
@@ -708,7 +709,7 @@ fn save(loader: &Loader, prune: bool) {
             server.values.retain(|&(kind, pide), record| {
                 let now = match self::kind(kind).map(|k| k.scope) {
                     Some(Scope::Item) => held(loader, pide),
-                    Some(Scope::Entity) => template_id(pide),
+                    Some(Scope::Entity) => template_id(Entity(pide)),
                     None => return true,
                 };
                 // An entity the world does not hold may lie in an area that
@@ -770,8 +771,8 @@ mod tests {
         values.insert((0, 900), record(7));
         values.insert((1, 900), record(0));
         values.insert((0, 901), record(7));
-        note_destroyed(900);
-        note_destroyed(0);
+        note_destroyed(Entity(900));
+        note_destroyed(Entity(0));
         let destroyed = take_destroyed();
         assert!(take_destroyed().is_empty(), "each request is taken once");
         let mut gone = prune_destroyed(&mut values, &destroyed);
@@ -782,18 +783,18 @@ mod tests {
         assert!(values.contains_key(&(0, 901)));
         // Past the cap in one step, requests are left for the save.
         for entity in 1..=u32::try_from(DESTROYED_CAP).unwrap() + 10 {
-            note_destroyed(entity);
+            note_destroyed(Entity(entity));
         }
         let destroyed = take_destroyed();
         assert_eq!(destroyed.len(), DESTROYED_CAP);
         assert!(!destroyed.contains(&(u32::try_from(DESTROYED_CAP).unwrap() + 1)));
         // A request filled after its round was taken never reaches a later
         // one, where its slot is still being filled.
-        note_destroyed(1);
+        note_destroyed(Entity(1));
         let late = reserve_destroyed();
         assert_eq!(take_destroyed().into_iter().collect::<Vec<_>>(), [1]);
-        fill_destroyed(late, 5);
-        note_destroyed(2);
+        fill_destroyed(late, Entity(5));
+        note_destroyed(Entity(2));
         let _filling = reserve_destroyed();
         assert_eq!(take_destroyed().into_iter().collect::<Vec<_>>(), [2]);
     }

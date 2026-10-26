@@ -18,6 +18,7 @@
 //! destroys the buff in the next step.
 
 use crate::pinned::{self, Symbol};
+use enshwick::ecs::Entity;
 use std::sync::OnceLock;
 
 use enshwick::abi::{ActiveBuff, BuffRequest, BuffTypeInfo, Header, Status};
@@ -366,7 +367,7 @@ fn slots(layout: &Layout, container: usize) -> impl Iterator<Item = (usize, u16)
 }
 
 /// The buffs `entity` has.
-pub(crate) fn of(loader: &Loader, entity: u32) -> Result<Vec<ActiveBuff>, Status> {
+pub(crate) fn of(loader: &Loader, entity: Entity) -> Result<Vec<ActiveBuff>, Status> {
     let layout = layout(loader).ok_or(Status::MISSING)?;
     let (_, _, _, now) = server(layout)?;
     let container = crate::world::component(loader, entity, layout.container)?.expose_provenance();
@@ -385,7 +386,7 @@ pub(crate) fn of(loader: &Loader, entity: u32) -> Result<Vec<ActiveBuff>, Status
         if buff == 0 || cleansed != 0 {
             continue;
         }
-        let Ok(network) = crate::world::component(loader, buff, layout.network) else {
+        let Ok(network) = crate::world::component(loader, Entity(buff), layout.network) else {
             continue;
         };
         let network = network.expose_provenance();
@@ -420,7 +421,7 @@ pub(crate) fn of(loader: &Loader, entity: u32) -> Result<Vec<ActiveBuff>, Status
 
 /// The type ids of the buffs `entity` has; empty for an entity without
 /// buffs. On the game thread.
-pub(crate) fn type_ids(loader: &Loader, entity: u32) -> Vec<u32> {
+pub(crate) fn type_ids(loader: &Loader, entity: Entity) -> Vec<u32> {
     let Some(layout) = layout(loader) else {
         return Vec::new();
     };
@@ -465,8 +466,8 @@ pub(crate) fn apply(loader: &Loader, request: &BuffRequest) -> Result<(), Status
     } else {
         request.duration
     };
-    let container =
-        crate::world::component(loader, request.entity, layout.container)?.expose_provenance();
+    let container = crate::world::component(loader, Entity(request.entity), layout.container)?
+        .expose_provenance();
     for (slot, _) in slots(layout, container) {
         // SAFETY: `slot` is a slot of the entity's live `BuffContainer`, which
         // `crate::world::component` found on the game thread; the reflected
@@ -556,7 +557,7 @@ fn renew(
 }
 
 /// Cleanses every buff of type `id` from `entity`; whether it had one.
-pub(crate) fn remove(loader: &Loader, entity: u32, id: u32) -> Result<bool, Status> {
+pub(crate) fn remove(loader: &Loader, entity: Entity, id: u32) -> Result<bool, Status> {
     let layout = layout(loader).ok_or(Status::MISSING)?;
     server(layout)?;
     let container = crate::world::component(loader, entity, layout.container)?.expose_provenance();
@@ -577,7 +578,7 @@ pub(crate) fn remove(loader: &Loader, entity: u32, id: u32) -> Result<bool, Stat
         return Ok(false);
     }
     let container =
-        crate::writes::component_mut(loader, entity, layout.container)?.expose_provenance();
+        crate::writes::component_mut(loader, entity.0, layout.container)?.expose_provenance();
     // SAFETY: `cleanse` is the table's `buffs.cleanse`, called on the
     // entity's live container, which `component_mut` marked changed, on the
     // game thread at a quiet moment (checked by `server`).
