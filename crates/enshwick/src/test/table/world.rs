@@ -582,6 +582,9 @@ pub(crate) extern "system" fn terrain_edit(
         if crate::test::world::edit_outside(s.host.extent, &edit) {
             return Status::OUTSIDE_WORLD;
         }
+        if !crate::test::world::edit_loaded(&s.host.voxels, &edit) {
+            return Status::NOT_LOADED;
+        }
         s.edits.terrain.push(edit);
         // SAFETY: `amount` is non-null, checked after the edit is read; the
         // safe layer passes it pointing at a writable, aligned `f32`.

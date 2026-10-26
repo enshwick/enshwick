@@ -57,8 +57,11 @@ ground somewhere or how much an edit would take.
 Each call fails with a [`WorldError`](world.md#writing-components):
 `Refused` for a radius, height, position or material out of range,
 `OutsideWorld` for an edit that reaches past the world's edge or above
-1,024 metres, `WrongThread` off the game thread, `Missing` while no world
-runs.
+1,024 metres, `NotLoaded` while part of what it can reach is not loaded,
+`WrongThread` off the game thread, `Missing` while no world runs. The
+server keeps only the parts of the world near players; an edit elsewhere
+writes nothing, since the game would leave it floating there with no
+ground under it. Try again when a player is near.
 
 A player's shovel and pickaxe also check where the player may build, take
 the cost, give the loot and experience and keep an undo; these edits do

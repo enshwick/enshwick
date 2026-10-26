@@ -610,8 +610,10 @@ pub struct HostApi {
     /// the save keeps it. Building voxels are left alone.
     /// [`Status::BAD_ARGS`] for an edit out of range;
     /// [`Status::OUTSIDE_WORLD`] for one that reaches past the world's edge
-    /// or above the height the loader takes (since minor 87). On the
-    /// server's game thread only. Since minor 34.
+    /// or above the height the loader takes, [`Status::NOT_LOADED`] unless
+    /// every column of the box it can write is loaded, writing nothing
+    /// (both since minor 87). On the server's game thread only. Since minor
+    /// 34.
     pub terrain_edit:
         extern "system" fn(me: ModHandle, edit: *const TerrainEdit, amount: *mut f32) -> Status,
     /// Hands the loader the mod's settings schema, `schema`, the TOML text

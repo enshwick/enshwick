@@ -109,4 +109,29 @@ mod tests {
         );
         assert_eq!(loader.terrain_edits().len(), 1);
     }
+
+    #[test]
+    fn an_edit_where_the_world_is_not_loaded_writes_nothing() {
+        use enshwick::voxels::{Voxel, VoxelPos};
+
+        let loader = enshwick::test::FakeHost::new()
+            .voxels(
+                VoxelPos::new(0, 0, 0),
+                [16, 16, 16],
+                &[Voxel::default(); 4096],
+            )
+            .install();
+        // SAFETY: both functions are the exports of this file's `declare_mod!(Digger)`.
+        let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+        assert_eq!(status, Status::OK);
+        loader.set_terrain(&[]);
+        let terrain = TERRAIN.get().unwrap();
+
+        assert!(terrain.dig([4.0, 4.0, 4.0], 1.0, Shape::Round, &[]).is_ok());
+        assert_eq!(
+            terrain.dig([40.0, 4.0, 4.0], 1.0, Shape::Round, &[]),
+            Err(WorldError::NotLoaded)
+        );
+        assert_eq!(loader.terrain_edits().len(), 1);
+    }
 }

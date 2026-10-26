@@ -67,8 +67,7 @@ impl Voxels for Game<'_> {
     }
 
     fn loaded(&mut self, brick: Brick) -> Result<(), Status> {
-        let corner = ReadBox::new(brick.min(), [1; 3], 1)?;
-        crate::voxels::read(self.loader, &corner).map(drop)
+        crate::voxels::column_loaded(self.loader, brick.min())
     }
 
     fn read(&mut self, brick: Brick) -> Result<Image, Status> {

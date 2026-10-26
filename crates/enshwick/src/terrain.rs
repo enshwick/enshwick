@@ -8,7 +8,10 @@
 //! A player's shovel and pickaxe also check where the player may build,
 //! take the cost and give the loot and experience; an edit here does none
 //! of that, so a mod decides what it needs. An edit here keeps no undo; a
-//! [`Transaction`](crate::world::Transaction) of the same edits does.
+//! [`Transaction`](crate::world::Transaction) of the same edits does. An
+//! edit where the world is not loaded, far from every player, writes
+//! nothing and fails with [`WorldError::NotLoaded`]: the game would leave
+//! the edit floating there with no ground under it.
 //!
 //! Every call belongs on the server's game thread, from a game event, a
 //! [`Scheduler`](crate::schedule::Scheduler) task or an action; on a client,
@@ -200,6 +203,8 @@ impl Terrain {
     /// [`WorldError::Refused`] for a radius outside 0 to [`MAX_RADIUS`] or a
     /// position below 0 on any axis, [`WorldError::OutsideWorld`] for an
     /// edit reaching past the world's edge or above 1,024 metres,
+    /// [`WorldError::NotLoaded`] while part of what it can reach is not
+    /// loaded, far from every player (it writes nothing then),
     /// [`WorldError::WrongThread`] off the game thread and
     /// [`WorldError::Missing`] while no world runs.
     ///

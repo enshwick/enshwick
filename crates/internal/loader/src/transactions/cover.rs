@@ -56,6 +56,14 @@ impl Bricks {
         extent.holds(min, size)
     }
 
+    /// The lowest brick of every column of bricks, x fastest, then z: the
+    /// game keeps a column of bricks loaded or not as one.
+    pub(crate) fn columns(self) -> impl Iterator<Item = Brick> {
+        let [x0, y0, z0] = self.first;
+        let [x1, _, z1] = self.last;
+        (z0..=z1).flat_map(move |z| (x0..=x1).map(move |x| Brick([x, y0, z])))
+    }
+
     /// Every brick, x fastest, then y, then z.
     pub(crate) fn iter(self) -> impl Iterator<Item = Brick> {
         let [x0, y0, z0] = self.first;
@@ -214,6 +222,20 @@ mod tests {
         let bricks = check(&edit(TerrainEdit::DIG, TerrainEdit::ROUND, [0.0; 3], 3.0)).unwrap();
         assert_eq!(span(bricks), [[0, 0]; 3]);
         assert_eq!(bricks.iter().collect::<Vec<_>>(), [Brick([0; 3])]);
+    }
+
+    #[test]
+    fn columns_name_every_column_of_the_box_once() {
+        let bricks = Bricks {
+            first: [1, 2, 3],
+            last: [2, 5, 4],
+        };
+        let columns: Vec<[u32; 3]> = bricks.columns().map(|brick| brick.0).collect();
+        assert_eq!(columns, [[1, 2, 3], [2, 2, 3], [1, 2, 4], [2, 2, 4]]);
+        let mut seen: Vec<[u32; 2]> = bricks.iter().map(|b| [b.0[0], b.0[2]]).collect();
+        seen.sort_unstable();
+        seen.dedup();
+        assert_eq!(seen.len(), columns.len(), "every column of every brick");
     }
 
     #[test]

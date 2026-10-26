@@ -437,7 +437,9 @@ impl FakeHost {
     /// Loaded voxels of the world: the box of `size` from `min`, its
     /// `voxels` x fastest, then y, then z. A read answers from the boxes,
     /// the last given first where they overlap, and finds a box it does not
-    /// cover wholly not loaded, as the loader does far from every player.
+    /// cover wholly not loaded, as the loader does far from every player;
+    /// once the fake has boxes, a terrain edit whose position lies in none
+    /// is not loaded either.
     /// Past the world's edge ([`FakeHost::world_extent`]) a read is outside
     /// the world.
     ///
@@ -518,6 +520,18 @@ pub(crate) fn edit_outside(end: Option<[u32; 3]>, edit: &crate::abi::TerrainEdit
             .zip(end)
             .any(|(&metres, stop)| f64::from(metres) * 2.0 >= f64::from(stop))
     })
+}
+
+/// Whether the edit's position lies in one of `grids`, when the fake has
+/// any: the loader checks every column of bricks the edit can write.
+pub(crate) fn edit_loaded(grids: &[VoxelGrid], edit: &crate::abi::TerrainEdit) -> bool {
+    #[expect(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "a checked edit's position is finite and at 0 or more; `as` saturates"
+    )]
+    let at = edit.position.map(|metres| (f64::from(metres) * 2.0) as u32);
+    grids.is_empty() || grids.iter().any(|grid| grid.get(at).is_some())
 }
 
 /// A box of loaded voxels the fake answers reads from.

@@ -337,7 +337,7 @@ impl Ledger {
                 return Job::Done;
             }
             let mut columns = FxHashSet::default();
-            let bricks = record.ops.iter().flat_map(|op| op.bricks.iter());
+            let bricks = record.ops.iter().flat_map(|op| op.bricks.columns());
             for brick in bricks {
                 let [x, _, z] = brick.0;
                 if columns.insert([x, z])
