@@ -90,7 +90,9 @@ shows what a recipe is:
 - `guid()`, the recipe's GUID;
 - `debug_name()`, such as `Block_T2_Metal_Copper_CRAFTING`;
 - `output()`, the item it makes and how many, `None` for a recipe without
-  output.
+  output;
+- `kind()`, what that item is, from the game's own data
+  ([Recipe kinds](#recipe-kinds)).
 
 `choose` sees only the game's own recipes: recipes other mods add, and the
 copies of your own earlier calls, are never offered, since the crafting menu
@@ -110,11 +112,11 @@ and never change it: saves hold the copies' ids like any other.
 lets it change the recipe's counts in place, with no recipe added:
 
 ```rust
-use enshwick::content::recipes::RecipeEdit;
+use enshwick::content::recipes::{RecipeEdit, RecipeKind};
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     load.modify_recipes(|recipe: &mut RecipeEdit<'_>| {
-        if recipe.view().debug_name().starts_with("Block_") {
+        if recipe.view().kind() == Some(RecipeKind::BuildingBlock) {
             recipe.scale_output(2);
         }
     })
@@ -138,6 +140,41 @@ place ([Rebuilding](resources.md#rebuilding)). Like the other recipe
 patches, `modify` sees the registry as it reaches it, with what mods before
 it added or changed, and mods after it see its changes. The mod's log says
 `<n> recipes changed`.
+
+### Recipe kinds
+
+`RecipeView::kind()` says what the item a recipe makes is, as the game's
+own item data classes it: `RecipeKind::BuildingBlock`, `Roof`,
+`Overgrowth`, `Terrain`, or `Other` for everything else, furniture and
+decorations among them. Match it with a `_` arm: later versions may add
+kinds. Prefer it to a debug name prefix, which misses recipes whose names
+break the pattern.
+
+The loader learns an item's kind when the game loads the item, and
+answers `None` before that. A dedicated server builds its recipe registry
+before it loads the items, so the first build of a patch sees no kinds
+there. A mod that changes recipes by kind calls
+`content::recipes::rebuild_recipes()` on `events::WorldLoaded`, when the
+items are in, and the rebuild applies the kinds in place
+([Rebuilding](resources.md#rebuilding)):
+
+```rust
+use enshwick::content::recipes::{RecipeKind, rebuild_recipes};
+use enshwick::events::WorldLoaded;
+
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    load.modify_recipes(|recipe| {
+        if recipe.view().kind() == Some(RecipeKind::Roof) {
+            recipe.scale_output(2);
+        }
+    })?;
+    load.on::<WorldLoaded>(|()| {
+        if let Err(off) = rebuild_recipes() {
+            enshwick::warn!("roofs keep their counts: {off}");
+        }
+    })
+}
+```
 
 ## The crafting menu
 

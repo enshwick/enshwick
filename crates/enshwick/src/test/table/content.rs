@@ -81,6 +81,14 @@ pub(crate) extern "system" fn recipe_disabled(
     Status::OK
 }
 
+pub(crate) extern "system" fn recipe_kind(
+    _me: ModHandle,
+    item: u32,
+    out: *mut crate::abi::RecipeKind,
+) -> Status {
+    found(with(None, |s| s.host.recipe_kinds.get(&item).copied()), out)
+}
+
 pub(crate) extern "system" fn add_text(
     _me: ModHandle,
     id: u32,

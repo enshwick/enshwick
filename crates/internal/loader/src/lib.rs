@@ -79,6 +79,7 @@ mod interactions;
 mod inventory;
 #[cfg(windows)]
 mod item_data;
+pub mod item_kinds;
 pub mod join;
 #[cfg(windows)]
 mod knowledge;
