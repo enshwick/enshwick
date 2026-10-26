@@ -31,7 +31,7 @@ mod tests {
 
     impl Mod for Rpg {
         fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "fake", side: SERVER)
+            enshwick::manifest!(id: "test.fake", side: SERVER)
         }
 
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
@@ -89,7 +89,7 @@ mod tests {
         assert!(close(stats.value(player, luck), 0.0));
         let info = stats.info(fire).unwrap();
         assert_eq!(info.id, builtin::RESISTANCE_FIRE);
-        assert_eq!(stats.info(luck).unwrap().id, "fake:luck");
+        assert_eq!(stats.info(luck).unwrap().id, "test.fake:luck");
 
         stats
             .set(

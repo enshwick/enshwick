@@ -34,7 +34,7 @@ same version of it:
 # struct MyMod;
 # impl enshwick::Mod for MyMod {
 fn manifest() -> &'static enshwick::abi::Manifest {
-    enshwick::manifest!(id: "my-mod", side: BOTH, join: true)
+    enshwick::manifest!(id: "you.my-mod", side: BOTH, join: true)
 }
 #     fn init(_: &mut enshwick::Load<'_>) -> Result<Self, enshwick::Off> { Ok(Self) }
 # }

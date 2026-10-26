@@ -127,24 +127,23 @@ pub(crate) trait Mods: Names {
 }
 
 impl Registry {
-    /// Defines a point named after its definer `owner_id`, and returns its
-    /// id and the count of its live links.
+    /// Defines a point named after its definer, whose names are its id and
+    /// then its former ids, and returns its id and the count of its live
+    /// links.
     ///
     /// # Errors
     ///
-    /// Why it is refused: a name outside the definer's id, or defined twice.
+    /// Why it is refused: a name outside the definer's names, or defined
+    /// twice.
     pub(crate) fn define(
         &mut self,
         owner: usize,
-        owner_id: &str,
+        names: &[&str],
         declared: Declared,
     ) -> Result<(u32, &'static AtomicU32), String> {
         let name = &declared.name;
-        if name
-            .strip_prefix(owner_id)
-            .and_then(|rest| rest.strip_prefix(':'))
-            .is_none_or(str::is_empty)
-        {
+        if !is_named_after(name, names) {
+            let owner_id = names.first().copied().unwrap_or_default();
             return Err(format!(
                 "point {name}: a point is named `{owner_id}:<point>`"
             ));
@@ -303,6 +302,12 @@ fn chain(
             undid_whom: AtomicUsize::new(usize::MAX),
         })
         .collect()
+}
+
+/// Whether `name` is `<one of names>:<what>`.
+pub(crate) fn is_named_after(name: &str, names: &[&str]) -> bool {
+    name.split_once(':')
+        .is_some_and(|(id, what)| names.contains(&id) && !what.is_empty())
 }
 
 /// The point `point` under its owner's id now, when the owner had the id
@@ -851,7 +856,7 @@ mod tests {
     }
 
     fn defined(registry: &mut Registry) -> &'static AtomicU32 {
-        registry.define(0, "safes", access()).unwrap().1
+        registry.define(0, &["safes"], access()).unwrap().1
     }
 
     /// A mod renamed from `safes`, and a mod that links it by that id.
@@ -886,7 +891,7 @@ mod tests {
             name: "me.safes:access".to_owned(),
             ..access()
         };
-        registry.define(0, "me.safes", declared).unwrap();
+        registry.define(0, &["me.safes"], declared).unwrap();
         registry.attach(link(1, set(7))).unwrap();
         let (points, inert, _) = registry.seal(&Renamed, |_, _| false);
         assert!(inert.is_empty(), "{inert:?}");
@@ -896,18 +901,18 @@ mod tests {
     #[test]
     fn points_are_named_after_their_owner_once() {
         let mut registry = Registry::default();
-        assert!(registry.define(0, "safes", access()).is_ok());
-        assert!(registry.define(0, "safes", access()).is_err(), "twice");
+        assert!(registry.define(0, &["safes"], access()).is_ok());
+        assert!(registry.define(0, &["safes"], access()).is_err(), "twice");
         let foreign = Declared {
             name: "area-loot:eligible".to_owned(),
             ..access()
         };
-        assert!(registry.define(0, "safes", foreign).is_err());
+        assert!(registry.define(0, &["safes"], foreign).is_err());
         let empty = Declared {
             name: "safes:".to_owned(),
             ..access()
         };
-        assert!(registry.define(0, "safes", empty).is_err());
+        assert!(registry.define(0, &["safes"], empty).is_err());
         assert!(registry.attach(link(1, 0)).is_ok());
         assert!(registry.attach(link(1, 0)).is_err(), "a mod links once");
     }
@@ -970,7 +975,7 @@ mod tests {
             refuse: false,
             ..access()
         };
-        assert!(registry.define(0, "safes", plain.clone()).is_ok());
+        assert!(registry.define(0, &["safes"], plain.clone()).is_ok());
         let mut refuses = link(1, PointVerdict::REFUSE.0 as usize);
         refuses.declared = plain.clone();
         let mut sets = link(2, set(4));
@@ -989,7 +994,7 @@ mod tests {
             refuse: false,
             ..access()
         };
-        assert!(registry.define(0, "safes", observed.clone()).is_ok());
+        assert!(registry.define(0, &["safes"], observed.clone()).is_ok());
         let mut watcher = link(1, PointVerdict::REFUSE.0 as usize);
         watcher.declared = observed;
         assert!(registry.attach(watcher).is_ok());
@@ -1121,7 +1126,7 @@ mod tests {
         let mut off = loaded();
         off.0[0].2 = true;
         let mut registry = Registry::default();
-        assert!(registry.define(0, "safes", access()).is_ok());
+        assert!(registry.define(0, &["safes"], access()).is_ok());
         assert!(registry.attach(link(1, 0)).is_ok());
         let (points, inert, _) = registry.seal(&off, |_, _| false);
         assert!(points[0].links.is_empty());

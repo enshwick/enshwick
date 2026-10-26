@@ -59,7 +59,7 @@ mod tests {
 
     impl Mod for Tuning {
         fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "tuning", side: SERVER)
+            enshwick::manifest!(id: "you.tuning", side: SERVER)
         }
 
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
