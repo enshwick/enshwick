@@ -42,8 +42,16 @@ const CLIENT_ARM_DELAY: Duration = Duration::from_secs(15);
 static FRAME: OnceLock<Option<FrameSlot>> = OnceLock::new();
 static STARTED: AtomicBool = AtomicBool::new(false);
 
-/// Writes the player's report once the loader knows it cannot serve the game.
-fn no_game(mods_dir: &std::path::Path, stub: u32) -> Option<game::Game> {
+/// Writes the player's report once the loader knows it cannot serve the
+/// game, after the first report, so this one is the last.
+fn no_game(
+    mods_dir: &std::path::Path,
+    stub: u32,
+    first_report: Option<std::thread::JoinHandle<()>>,
+) -> Option<game::Game> {
+    if let Some(first) = first_report {
+        let _joined = first.join();
+    }
     if let Some(game_dir) = mods_dir.parent() {
         crate::report::write(game_dir, stub, None);
     }
@@ -100,11 +108,11 @@ pub(crate) fn start(
         return;
     }
     let began = std::time::Instant::now();
-    let Some(mods_dir) = begin(stub_abi, missing_forwards) else {
+    let Some((mods_dir, first_report)) = begin(stub_abi, missing_forwards) else {
         return;
     };
     let data_dir = mods_dir.with_file_name("mod-data");
-    let Some(game) = game(&data_dir).or_else(|| no_game(&mods_dir, stub_abi)) else {
+    let Some(game) = game(&data_dir).or_else(|| no_game(&mods_dir, stub_abi, first_report)) else {
         return;
     };
     let (libraries, candidates) = libraries(&mods_dir);
