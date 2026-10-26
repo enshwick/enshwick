@@ -76,6 +76,24 @@ pub(crate) extern "system" fn recipe_disabled(me: ModHandle, recipe: u32, out: *
     })
 }
 
+pub(crate) extern "system" fn recipe_kind(
+    me: ModHandle,
+    item: u32,
+    out: *mut api_frame::RecipeKind,
+) -> Status {
+    entry("recipe_kind", || {
+        if let Err(status) = caller(me) {
+            return status;
+        }
+        match crate::item_kinds::kind(item) {
+            // SAFETY: `HostApi::recipe_kind` has the mod pass `out` null or
+            // pointing at a writable, aligned `RecipeKind` for the call.
+            Some(kind) => unsafe { put(out, kind) },
+            None => Status::MISSING,
+        }
+    })
+}
+
 pub(crate) extern "system" fn add_text(me: ModHandle, id: u32, language: u32, text: Str) -> Status {
     entry("add_text", || {
         let Some(text) = self::text(text) else {

@@ -427,6 +427,92 @@ impl RecipeView<'_> {
         let made = self.blob.read_u32(outputs + self.layout.stack_count)?;
         Some((Guid(guid), made))
     }
+
+    /// What the item the recipe makes is, as the game classes it; `None`
+    /// until the game has loaded that item, and outside the game.
+    ///
+    /// A dedicated server builds its recipe registry before it loads the
+    /// items, so the first build of a recipe patch sees no kinds there: a
+    /// mod that changes recipes by kind calls [`rebuild_recipes`] on
+    /// [`WorldLoaded`](crate::events::WorldLoaded), and the rebuild applies
+    /// them.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::content::recipes::RecipeKind;
+    ///
+    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    ///     load.modify_recipes(|recipe| {
+    ///         if recipe.view().kind() == Some(RecipeKind::BuildingBlock) {
+    ///             recipe.scale_output(2);
+    ///         }
+    ///     })
+    /// }
+    /// ```
+    #[must_use]
+    pub fn kind(&self) -> Option<RecipeKind> {
+        let (item, _) = self.output()?;
+        RecipeKind::of(item)
+    }
+}
+
+/// What the item a recipe makes is, as the game classes it, from
+/// [`RecipeView::kind`]; the game may class more items in later builds.
+///
+/// # Examples
+///
+/// See [`RecipeView::kind`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum RecipeKind {
+    /// A building block, such as a wall or floor block.
+    BuildingBlock,
+    /// A roof block.
+    Roof,
+    /// An overgrowth material.
+    Overgrowth,
+    /// A terrain material.
+    Terrain,
+    /// Anything else: equipment, props, furniture and decorations among them.
+    Other,
+}
+
+impl RecipeKind {
+    /// The kind of the item `item`, as the loader answers it.
+    fn of(item: Guid) -> Option<Self> {
+        let host = crate::host()?;
+        let mut out = crate::abi::RecipeKind::OTHER;
+        (host.api().recipe_kind)(host.handle(), item.id(), &raw mut out)
+            .is_ok()
+            .then(|| out.into())
+    }
+}
+
+/// A kind code a newer loader may add reads as [`RecipeKind::Other`].
+impl From<crate::abi::RecipeKind> for RecipeKind {
+    fn from(kind: crate::abi::RecipeKind) -> Self {
+        use crate::abi::RecipeKind as Abi;
+        match kind {
+            Abi::BUILDING_BLOCK => Self::BuildingBlock,
+            Abi::ROOF => Self::Roof,
+            Abi::OVERGROWTH => Self::Overgrowth,
+            Abi::TERRAIN => Self::Terrain,
+            _ => Self::Other,
+        }
+    }
+}
+
+impl From<RecipeKind> for crate::abi::RecipeKind {
+    fn from(kind: RecipeKind) -> Self {
+        match kind {
+            RecipeKind::BuildingBlock => Self::BUILDING_BLOCK,
+            RecipeKind::Roof => Self::ROOF,
+            RecipeKind::Overgrowth => Self::OVERGROWTH,
+            RecipeKind::Terrain => Self::TERRAIN,
+            RecipeKind::Other => Self::OTHER,
+        }
+    }
 }
 
 /// How a derived recipe differs from the vanilla one it copies.
@@ -1174,6 +1260,40 @@ mod tests {
 
     fn u32_at(bytes: &[u8], at: usize) -> u32 {
         u32::from_le_bytes(bytes[at..at + 4].try_into().unwrap())
+    }
+
+    #[test]
+    fn every_kind_crosses_the_abi_and_an_unknown_code_reads_as_other() {
+        for kind in [
+            RecipeKind::BuildingBlock,
+            RecipeKind::Roof,
+            RecipeKind::Overgrowth,
+            RecipeKind::Terrain,
+            RecipeKind::Other,
+        ] {
+            assert_eq!(RecipeKind::from(crate::abi::RecipeKind::from(kind)), kind);
+        }
+        assert_eq!(
+            RecipeKind::from(crate::abi::RecipeKind(u32::MAX)),
+            RecipeKind::Other
+        );
+    }
+
+    #[test]
+    fn a_view_outside_the_game_has_no_kind() {
+        let mut blob = Blob::new(&[0u8; 16]);
+        let recipe = blob.append(&[0; 0xa8], 8);
+        let mut output = vec![0u8; 24];
+        output[..16].copy_from_slice(&CHEST.0);
+        let output_at = blob.append(&output, 8);
+        assert!(blob.set_array(recipe + 0x30, output_at, 1));
+        let view = RecipeView {
+            blob: &blob,
+            at: recipe,
+            layout: &LAYOUT,
+        };
+        assert_eq!(view.output().map(|(item, _)| item), Some(CHEST));
+        assert_eq!(view.kind(), None);
     }
 
     #[test]

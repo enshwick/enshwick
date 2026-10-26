@@ -17,6 +17,13 @@ mod tests {
         assert_ne!(upgrade.entry(), 0);
         assert!(upgrade.writes().contains(&"TriggerShape"), "{upgrade:?}");
         assert!(reflection.system("add_buildzones_server").is_ok());
+        let slot = "keen::EquipmentSlotType";
+        assert_eq!(reflection.enum_value(slot, "Invalid"), Ok(0));
+        assert_eq!(
+            reflection.enum_value(slot, "BlueprintMaterial_Roof"),
+            Ok(11)
+        );
+        assert!(reflection.type_info(slot).unwrap().enum_values().len() > 12);
     }
 
     fn with_binary(var: &str, check: impl FnOnce(&Image<'_>, &Reflection<'_>)) {

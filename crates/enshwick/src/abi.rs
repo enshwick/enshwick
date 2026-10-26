@@ -14,7 +14,7 @@ use core::sync::atomic::{AtomicU32, AtomicUsize};
 pub const ABI_MAJOR: u16 = 2;
 
 /// The minor version of this interface. A newer minor only appends fields.
-pub const ABI_MINOR: u16 = 71;
+pub const ABI_MINOR: u16 = 72;
 
 /// Whether `id` is a valid mod id: `<author>.<name>`, each part of
 /// `[a-z0-9-]`, at most 64 characters in all.
@@ -5146,6 +5146,12 @@ pub struct HostApi {
     /// mod. Allowed during
     /// `enshwick_mod_init` only. Since minor 66.
     pub actions: extern "system" fn(me: ModHandle, callback: ActionFn, user: *mut c_void) -> Status,
+    /// Writes to `out` the kind of the recipes that make the item `item`,
+    /// from the item's static data; [`Status::MISSING`] while the game has
+    /// not loaded the item, which on a dedicated server comes after its
+    /// recipe registry is first built, and while the loader serves no
+    /// resource. Any thread. Since minor 72.
+    pub recipe_kind: extern "system" fn(me: ModHandle, item: u32, out: *mut RecipeKind) -> Status,
 }
 
 /// What a recipe rule of [`HostApi::recipe_rule`] names.
@@ -5170,6 +5176,33 @@ impl RecipeRuleKind {
     /// Every recipe made at a workshop: `hand`, the debug name of the item
     /// the workshop belongs to, the workshop's content id or GUID.
     pub const WORKSHOP: Self = Self(2);
+}
+
+/// What the item a recipe makes is, from [`HostApi::recipe_kind`]; a later
+/// minor may add kinds, which a mod reads as [`RecipeKind::OTHER`].
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::abi::RecipeKind;
+///
+/// assert_ne!(RecipeKind::ROOF, RecipeKind::BUILDING_BLOCK);
+/// ```
+#[repr(transparent)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct RecipeKind(pub u32);
+
+impl RecipeKind {
+    /// None of the kinds below: equipment, props, materials and the rest.
+    pub const OTHER: Self = Self(0);
+    /// A building block.
+    pub const BUILDING_BLOCK: Self = Self(1);
+    /// A roof block.
+    pub const ROOF: Self = Self(2);
+    /// An overgrowth material.
+    pub const OVERGROWTH: Self = Self(3);
+    /// A terrain material.
+    pub const TERRAIN: Self = Self(4);
 }
 
 /// Flags of [`HostApi::entity_data_open`].
@@ -5732,7 +5765,9 @@ const _: () = {
     assert!(size_of::<StatModify>() == 8 + 8 + 12 + 4 + 8);
     assert!(size_of::<StatChange>() == 8 + 24);
     assert!(core::mem::offset_of!(HostApi, language) == 24 + 127 * 8);
-    assert!(size_of::<HostApi>() == 24 + 141 * 8);
+    assert!(size_of::<HostApi>() == 24 + 142 * 8);
+    assert!(core::mem::offset_of!(HostApi, recipe_kind) == 24 + 141 * 8);
+    assert!(size_of::<RecipeKind>() == 4);
     assert!(core::mem::offset_of!(HostApi, recipe_rule) == 24 + 135 * 8);
     assert!(core::mem::offset_of!(HostApi, recipe_disabled) == 24 + 136 * 8);
     assert!(core::mem::offset_of!(HostApi, rebuild_resource) == 24 + 134 * 8);

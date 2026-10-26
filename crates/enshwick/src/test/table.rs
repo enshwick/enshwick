@@ -773,6 +773,14 @@ extern "system" fn recipe_disabled(_me: ModHandle, recipe: u32, out: *mut u32) -
     Status::OK
 }
 
+extern "system" fn recipe_kind(
+    _me: ModHandle,
+    item: u32,
+    out: *mut crate::abi::RecipeKind,
+) -> Status {
+    found(with(None, |s| s.host.recipe_kinds.get(&item).copied()), out)
+}
+
 extern "system" fn add_text(_me: ModHandle, id: u32, language: u32, value: Str) -> Status {
     let value = text(value);
     with(Status::MISSING, |s| {
@@ -2547,4 +2555,5 @@ pub(crate) static TABLE: HostApi = HostApi {
     attach_point: super::points::attach_point,
     run_point: super::points::run_point,
     actions,
+    recipe_kind,
 };
