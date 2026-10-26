@@ -6,6 +6,12 @@ Each entry names the pull request that made the change.
 
 ## [Unreleased]
 
+## [1.0.0-alpha.5] - 2026-10-26
+
+### Added
+
+- `cargo enshwick new --data` starts a data pack (#495).
+
 ## [1.0.0-alpha.4] - 2026-10-26
 
 Released beside `enshwick` 1.0.0-alpha.4, with no changes of its own.
