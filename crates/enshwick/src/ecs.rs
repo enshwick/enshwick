@@ -32,7 +32,9 @@ type MarkChanged = unsafe extern "system" fn(
 /// assert_eq!(entity.0, 1210);
 /// ```
 #[repr(transparent)]
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, PartialOrd, Ord, crate::Shape)]
+#[derive(
+    Clone, Copy, Debug, Default, PartialEq, Eq, Hash, PartialOrd, Ord, crate::Shape, crate::Script,
+)]
 #[shape(api = "entity")]
 pub struct Entity(pub u32);
 

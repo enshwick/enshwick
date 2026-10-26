@@ -229,7 +229,7 @@ impl Load<'_> {
     ///
     /// See [`Scheduler`](crate::schedule::Scheduler).
     pub fn scheduler(&mut self) -> Result<crate::schedule::Scheduler, Off> {
-        let (scheduler, subscribe) = crate::schedule::Scheduler::get();
+        let (scheduler, subscribe) = crate::schedule::Scheduler::get(self.host.handle());
         if subscribe
             && let Err(off) = self.on::<crate::events::Ticked>(move |_| scheduler.run_due())
         {

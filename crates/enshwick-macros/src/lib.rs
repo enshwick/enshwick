@@ -381,6 +381,32 @@ pub fn derive_shape(input: TokenStream) -> TokenStream {
         .into()
 }
 
+/// Describes a type for script languages; examples are on `enshwick::Script`.
+///
+/// A struct with named fields is a record of its public fields (`header`
+/// and `_` fields left out), a newtype its inner type, an enum of unit
+/// variants a choice of names.
+#[proc_macro_derive(Script)]
+pub fn derive_script(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+    script::expand_derive(&input)
+        .unwrap_or_else(syn::Error::into_compile_error)
+        .into()
+}
+
+/// Exports the methods of an `impl` block marked `#[script]` to scripts.
+///
+/// `#[script(<part>)]` adds the constant `SCRIPT_<PART>` of `Function`s.
+/// Examples are on `enshwick::script`.
+#[proc_macro_attribute]
+pub fn script(args: TokenStream, item: TokenStream) -> TokenStream {
+    let part = parse_macro_input!(args as Ident);
+    let item = parse_macro_input!(item as syn::ItemImpl);
+    script::expand_impl(&part, item)
+        .unwrap_or_else(syn::Error::into_compile_error)
+        .into()
+}
+
 /// Whether `id` is a mod id, `<author>.<name>`, or an id a renamed mod had
 /// before ids carried an author, of `[a-z0-9-]`; at most 64 characters. The
 /// API's `abi::is_valid_former_id`, which this crate cannot depend on.
@@ -550,4 +576,5 @@ fn comment(attrs: &[Attribute]) -> String {
 }
 
 mod config;
+mod script;
 mod shape;
