@@ -22,6 +22,9 @@ jobs:
   bundle:
     permissions:
       contents: write
+      # The build provenance attestations of the archives.
+      id-token: write
+      attestations: write
     # From main: the runners take only enshwick/.github's workflows on main.
     uses: enshwick/.github/.github/workflows/dev-bundle.yml@main # zizmor: ignore[unpinned-uses]
     with:
