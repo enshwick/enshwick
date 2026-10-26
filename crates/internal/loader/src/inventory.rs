@@ -24,7 +24,7 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Mutex, OnceLock, PoisonError};
 use std::time::{Duration, Instant};
 
-use enshwick_loader_api::abi::{
+use enshwick::abi::{
     Header, HookFlags, InventoryOp, InventoryOpResult, InventoryRequest, InventoryResult,
     InventoryResultFn, ItemData, Registers, Side, Status,
 };

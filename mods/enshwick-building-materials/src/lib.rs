@@ -4,8 +4,8 @@
 
 use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
-use enshwick_loader_api::content::recipes::RecipeEdit;
-use enshwick_loader_api::{Load, Mod, Off};
+use enshwick::content::recipes::RecipeEdit;
+use enshwick::{Load, Mod, Off};
 
 /// The settings file of the mod this one replaces, carried over once.
 const OLD_SETTINGS: &str = "building-yield.toml";
@@ -20,7 +20,7 @@ static SCALED: [AtomicBool; 3] = [
 ];
 
 /// Building materials settings.
-#[derive(Debug, serde::Deserialize, serde::Serialize, enshwick_loader_api::Config)]
+#[derive(Debug, serde::Deserialize, serde::Serialize, enshwick::Config)]
 #[serde(default, deny_unknown_fields)]
 struct Settings {
     /// The vanilla recipes make their output times this, for the same cost.
@@ -59,7 +59,7 @@ impl Settings {
         {
             scaled.store(on, Ordering::Relaxed);
         }
-        enshwick_loader_api::info!(
+        enshwick::info!(
             "output x{}: blocks {}, overgrowth {}, decor {}",
             self.multiplier,
             self.blocks,
@@ -124,7 +124,7 @@ fn carried_over(template: &str, old: &str) -> Option<String> {
 /// Writes the mod's settings from the replaced mod's file, when the mod has
 /// none of its own yet and that file exists.
 fn carry_over_old_settings(load: &Load<'_>) -> Result<(), Off> {
-    use enshwick_loader_api::config::Config;
+    use enshwick::config::Config;
     // `<game>/mod-data/<id>` beside `<game>/mod-configs/`.
     let data = load.data_dir()?;
     let Some(configs) = data.parent().and_then(|d| d.parent()) else {
@@ -140,12 +140,12 @@ fn carry_over_old_settings(load: &Load<'_>) -> Result<(), Off> {
     }
     match carried_over(&Settings::template(), &old) {
         Some(text) => match std::fs::write(&new, text) {
-            Ok(()) => enshwick_loader_api::info!("settings carried over from {OLD_SETTINGS}"),
+            Ok(()) => enshwick::info!("settings carried over from {OLD_SETTINGS}"),
             Err(e) => {
-                enshwick_loader_api::warn!("settings not carried over from {OLD_SETTINGS}: {e}");
+                enshwick::warn!("settings not carried over from {OLD_SETTINGS}: {e}");
             }
         },
-        None => enshwick_loader_api::warn!("{OLD_SETTINGS} does not parse, the defaults apply"),
+        None => enshwick::warn!("{OLD_SETTINGS} does not parse, the defaults apply"),
     }
     Ok(())
 }
@@ -155,8 +155,8 @@ fn carry_over_old_settings(load: &Load<'_>) -> Result<(), Off> {
 pub struct BuildingMaterials;
 
 impl Mod for BuildingMaterials {
-    fn manifest() -> &'static enshwick_loader_api::abi::Manifest {
-        enshwick_loader_api::manifest!(
+    fn manifest() -> &'static enshwick::abi::Manifest {
+        enshwick::manifest!(
             id: "building-materials",
             side: BOTH,
             name: "Building materials",
@@ -174,9 +174,9 @@ impl Mod for BuildingMaterials {
         // game already holds.
         load.on_config_change(|settings: Settings| {
             settings.apply();
-            match enshwick_loader_api::content::recipes::rebuild_recipes() {
-                Ok(()) => enshwick_loader_api::info!("recipe counts follow the new values"),
-                Err(off) => enshwick_loader_api::warn!(
+            match enshwick::content::recipes::rebuild_recipes() {
+                Ok(()) => enshwick::info!("recipe counts follow the new values"),
+                Err(off) => enshwick::warn!(
                     "recipes already built keep their counts until the next start: {off}"
                 ),
             }
@@ -186,12 +186,12 @@ impl Mod for BuildingMaterials {
     }
 }
 
-enshwick_loader_api::declare_mod!(BuildingMaterials);
+enshwick::declare_mod!(BuildingMaterials);
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use enshwick_loader_api::config::Config;
+    use enshwick::config::Config;
 
     #[test]
     fn recipes_fall_in_their_categories() {
@@ -236,10 +236,10 @@ mod tests {
 
     #[test]
     fn a_joined_server_s_values_and_leaving_rebuild_the_recipes() {
-        use enshwick_loader_api::abi::Status;
-        use enshwick_loader_api::events::SettingsChanged;
+        use enshwick::abi::Status;
+        use enshwick::events::SettingsChanged;
 
-        let mut host = enshwick_loader_api::test::FakeHost::new()
+        let mut host = enshwick::test::FakeHost::new()
             .field_offset("keen::RecipeRegistryResource", "recipes", 8)
             .type_size("keen::RecipeInfo", 0xa8)
             .type_size("keen::RecipeInputResource", 48)
@@ -260,7 +260,7 @@ mod tests {
             host = host.field_offset("keen::RecipeInfo", field, at);
         }
         let loader = host
-            .side(enshwick_loader_api::abi::Side::CLIENT)
+            .side(enshwick::abi::Side::CLIENT)
             .settings("multiplier = 2\nblocks = true\novergrowth = true\ndecor = true\n")
             .install();
         // SAFETY: the exports of `declare_mod!` above.

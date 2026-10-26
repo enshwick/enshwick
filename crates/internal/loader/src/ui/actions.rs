@@ -11,9 +11,9 @@ use core::cell::RefCell;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Mutex, PoisonError};
 
-use enshwick_loader_api::abi::UiWidget;
-use enshwick_loader_api::actions::Value;
-use enshwick_loader_api::actions::sheet::{ArgView, Entry, encode_args};
+use enshwick::abi::UiWidget;
+use enshwick::actions::Value;
+use enshwick::actions::sheet::{ArgView, Entry, encode_args};
 
 use super::engine::{Engine, Window};
 use super::{HudItem, Painter, copy};

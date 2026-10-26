@@ -2,16 +2,16 @@
 
 A workshop is what a crafting station crafts at: recipes name a workshop,
 and a placed station opens the crafting menu of its workshop.
-[`Load::add_workshop`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/content/workshops.rs)
+[`Load::add_workshop`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content/workshops.rs)
 clones a vanilla station into a new one with a workshop of its own, and
 returns its
-[`WorkshopId`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/content/workshops.rs)
+[`WorkshopId`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content/workshops.rs)
 for your recipes.
 
 ```rust
-use enshwick_loader_api::content::Id;
-use enshwick_loader_api::content::recipes::Derived;
-use enshwick_loader_api::content::workshops::{NewWorkshop, StationRecipe, stations};
+use enshwick::content::Id;
+use enshwick::content::recipes::Derived;
+use enshwick::content::workshops::{NewWorkshop, StationRecipe, stations};
 
 const BENCH: Id = Id::new("my-mod:bulk-bench");
 const BENCH_TEMPLATE: Id = Id::new("my-mod:bulk-bench.template");
@@ -20,7 +20,7 @@ const BENCH_RECIPE: Id = Id::new("my-mod:bulk-bench.recipe");
 const BENCH_NAME: Id = Id::new("my-mod:bulk-bench.name");
 const BENCH_DESCRIPTION: Id = Id::new("my-mod:bulk-bench.description");
 
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let texts = load.texts(r#"
 [en]
 "bench.name" = "Bulk Workbench"
@@ -77,18 +77,18 @@ made at it.
 
 | Field | Meaning |
 | --- | --- |
-| `like` | The vanilla station cloned, a [`Station`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/content/workshops.rs): its item and the template the item places. |
+| `like` | The vanilla station cloned, a [`Station`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content/workshops.rs): its item and the template the item places. |
 | `item` | The new station item's content id. |
 | `template` | The new station's template's content id. |
 | `workshop` | The new workshop's content id. |
 | `name` | The tag of the station's name, which also names the workshop; `None` keeps the vanilla names. |
 | `description` | The tag of the station item's description; `None` keeps the vanilla one. |
-| `station_recipe` | How the station is crafted, a [`StationRecipe`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/content/workshops.rs) with the recipe's content id and a cost factor; `None` adds no recipe. |
+| `station_recipe` | How the station is crafted, a [`StationRecipe`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content/workshops.rs) with the recipe's content id and a cost factor; `None` adds no recipe. |
 | `debug_name` | The item's name in the registry's debug list. |
 
-[`stations::WORKBENCH`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/content/workshops.rs)
+[`stations::WORKBENCH`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content/workshops.rs)
 is the Workbench. Any other crafting station comes from the game's data:
-[`Vanilla::game()`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/content/vanilla.rs)
+[`Vanilla::game()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content/vanilla.rs)
 finds an item by its debug name and `station(item)` reads the template the
 item places, after checking that the workshop registry has a workshop of the
 item's own that is no survivor's and that the template has all three
@@ -96,10 +96,10 @@ crafting components. `workshop(item)` is the station's own workshop, for
 recipes made at the vanilla station.
 
 ```rust
-use enshwick_loader_api::Off;
-use enshwick_loader_api::content::vanilla::Vanilla;
+use enshwick::Off;
+use enshwick::content::vanilla::Vanilla;
 
-fn forge() -> Result<enshwick_loader_api::content::workshops::Station, Off> {
+fn forge() -> Result<enshwick::content::workshops::Station, Off> {
     let vanilla = Vanilla::game().ok_or_else(|| Off::new("no game data"))?;
     let item = vanilla.item("Prop_Production_T1_Forge")?;
     Ok(vanilla.station(item)?)
@@ -123,12 +123,12 @@ Send recipes to the workshop with its `WorkshopId`:
 
 A `WorkshopId` is only a GUID with the game's id beside it. `add_workshop`
 returns one, and
-[`WorkshopId::new`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/content/workshops.rs)
+[`WorkshopId::new`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content/workshops.rs)
 names any workshop, a vanilla one included:
 
 ```rust
-use enshwick_loader_api::content::Guid;
-use enshwick_loader_api::content::workshops::WorkshopId;
+use enshwick::content::Guid;
+use enshwick::content::workshops::WorkshopId;
 
 let workbench = WorkshopId::new(Guid::parse("965d3192-0287-49a2-ad51-a716139571a6"));
 assert_eq!(workbench.id(), 1_302_892_403);

@@ -5,10 +5,10 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 
-use enshwick_loader_api::damage::{Damage, DamageCause};
-use enshwick_loader_api::ecs::Entity;
-use enshwick_loader_api::world::World;
-use enshwick_loader_api::{Load, Off};
+use enshwick::damage::{Damage, DamageCause};
+use enshwick::ecs::Entity;
+use enshwick::world::World;
+use enshwick::{Load, Off};
 
 /// The most hits on or by a player logged one by one.
 const MOST_HIT_LINES: u32 = 200;
@@ -72,7 +72,7 @@ impl DamageSeen {
                 return;
             }
         }
-        enshwick_loader_api::info!(
+        enshwick::info!(
             "R10 damage {cause:?} to {}, from {}, {before} before the filter, {} after",
             who(target),
             source.map_or_else(|| "nothing".to_owned(), who),

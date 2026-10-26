@@ -7,8 +7,8 @@
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use enshwick_loader_api::game_settings::GameSettings;
-use enshwick_loader_api::{Load, Off};
+use enshwick::game_settings::GameSettings;
+use enshwick::{Load, Off};
 
 /// The bosses' health a run keeps.
 const KEPT: f32 = 1.25;
@@ -30,7 +30,7 @@ impl SettingsChecks {
             settings: load.game_settings()?,
             across_restart,
         };
-        load.on::<enshwick_loader_api::events::ShutdownStarted>(move |()| checks.shut_down())?;
+        load.on::<enshwick::events::ShutdownStarted>(move |()| checks.shut_down())?;
         Ok(checks)
     }
 
@@ -41,8 +41,8 @@ impl SettingsChecks {
             return;
         }
         match self.settings.forget_kept() {
-            Ok(()) => enshwick_loader_api::info!("kept game settings forgotten at shutdown"),
-            Err(why) => enshwick_loader_api::warn!("kept game settings stay: {why}"),
+            Ok(()) => enshwick::info!("kept game settings forgotten at shutdown"),
+            Err(why) => enshwick::warn!("kept game settings stay: {why}"),
         }
     }
 
@@ -50,33 +50,33 @@ impl SettingsChecks {
     /// and puts the settings back as they were.
     pub(crate) fn run(self) {
         let Some((before, preset)) = self.settings.read() else {
-            enshwick_loader_api::warn!("FAIL game settings: no reading");
+            enshwick::warn!("FAIL game settings: no reading");
             return;
         };
-        enshwick_loader_api::info!("PASS game settings read, preset {preset:?}: {before:?}");
+        enshwick::info!("PASS game settings read, preset {preset:?}: {before:?}");
         let wanted = before.perk_cost + 0.5;
         match self.settings.change(|s| s.perk_cost = wanted) {
             Ok(_) => match self.settings.read() {
                 Some((now, preset)) if (now.perk_cost - wanted).abs() < 1e-6 => {
-                    enshwick_loader_api::info!(
+                    enshwick::info!(
                         "PASS game settings change reads back perk cost {}, preset {preset:?}",
                         now.perk_cost
                     );
                 }
-                other => enshwick_loader_api::warn!("FAIL game settings change reads {other:?}"),
+                other => enshwick::warn!("FAIL game settings change reads {other:?}"),
             },
-            Err(why) => enshwick_loader_api::warn!("FAIL game settings change: {why}"),
+            Err(why) => enshwick::warn!("FAIL game settings change: {why}"),
         }
         match self
             .settings
             .change(|s| s.night_length = core::time::Duration::ZERO)
         {
-            Err(why) => enshwick_loader_api::info!("PASS a night of zero is refused: {why}"),
-            Ok(_) => enshwick_loader_api::warn!("FAIL a night of zero was taken"),
+            Err(why) => enshwick::info!("PASS a night of zero is refused: {why}"),
+            Ok(_) => enshwick::warn!("FAIL a night of zero was taken"),
         }
         match self.settings.change(|s| *s = before) {
-            Ok(_) => enshwick_loader_api::info!("PASS game settings put back"),
-            Err(why) => enshwick_loader_api::warn!("FAIL game settings put back: {why}"),
+            Ok(_) => enshwick::info!("PASS game settings put back"),
+            Err(why) => enshwick::warn!("FAIL game settings put back: {why}"),
         }
         self.kept(before.boss_health);
     }
@@ -90,28 +90,28 @@ impl SettingsChecks {
             return;
         }
         if (now - KEPT).abs() < 1e-6 {
-            enshwick_loader_api::info!(
-                "PASS a kept field came back with the world: boss health {now}"
-            );
+            enshwick::info!("PASS a kept field came back with the world: boss health {now}");
             match self.settings.forget_kept() {
                 Ok(()) => match self.settings.read() {
                     Some((after, _)) if (after.boss_health - KEPT).abs() > 1e-6 => {
-                        enshwick_loader_api::info!(
+                        enshwick::info!(
                             "PASS forgetting puts back boss health {}",
                             after.boss_health
                         );
                     }
-                    other => enshwick_loader_api::warn!("FAIL forgetting reads {other:?}"),
+                    other => enshwick::warn!("FAIL forgetting reads {other:?}"),
                 },
-                Err(why) => enshwick_loader_api::warn!("FAIL forgetting kept settings: {why}"),
+                Err(why) => enshwick::warn!("FAIL forgetting kept settings: {why}"),
             }
             return;
         }
         match self.settings.keep(|s| s.boss_health = KEPT) {
-            Ok(_) => enshwick_loader_api::info!(
-                "PASS boss health {KEPT} kept; the next start should bring it back"
-            ),
-            Err(why) => enshwick_loader_api::warn!("FAIL keeping a game setting: {why}"),
+            Ok(_) => {
+                enshwick::info!(
+                    "PASS boss health {KEPT} kept; the next start should bring it back"
+                );
+            }
+            Err(why) => enshwick::warn!("FAIL keeping a game setting: {why}"),
         }
     }
 
@@ -119,30 +119,30 @@ impl SettingsChecks {
     /// sees `before` return.
     fn kept_in_one_run(self, before: f32) {
         if let Err(why) = self.settings.keep(|s| s.boss_health = KEPT) {
-            enshwick_loader_api::warn!("FAIL keeping a game setting: {why}");
+            enshwick::warn!("FAIL keeping a game setting: {why}");
             return;
         }
         KEEPING.store(true, Ordering::Release);
         match self.settings.read() {
             Some((now, _)) if (now.boss_health - KEPT).abs() < 1e-6 => {
-                enshwick_loader_api::info!("PASS boss health {KEPT} kept and read back");
+                enshwick::info!("PASS boss health {KEPT} kept and read back");
             }
-            other => enshwick_loader_api::warn!("FAIL a kept field reads {other:?}"),
+            other => enshwick::warn!("FAIL a kept field reads {other:?}"),
         }
         match self.settings.forget_kept() {
             Ok(()) => {
                 KEEPING.store(false, Ordering::Release);
                 match self.settings.read() {
                     Some((after, _)) if (after.boss_health - before).abs() < 1e-6 => {
-                        enshwick_loader_api::info!(
+                        enshwick::info!(
                             "PASS forgetting puts back boss health {}",
                             after.boss_health
                         );
                     }
-                    other => enshwick_loader_api::warn!("FAIL forgetting reads {other:?}"),
+                    other => enshwick::warn!("FAIL forgetting reads {other:?}"),
                 }
             }
-            Err(why) => enshwick_loader_api::warn!("FAIL forgetting kept settings: {why}"),
+            Err(why) => enshwick::warn!("FAIL forgetting kept settings: {why}"),
         }
     }
 }

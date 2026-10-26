@@ -4,7 +4,7 @@ The game keeps one entity per survivor and asks for it from many of its
 systems: when a survivor sleeps, roams, gets a bed, or comes to a summoning
 staff. A mod that keeps several entities of one survivor, such as one per
 base, answers those questions itself through
-[`load.on_survivor_lookup`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/survivors.rs).
+[`load.on_survivor_lookup`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/survivors.rs).
 The platform tells the askers apart and reads what each works on; the mod
 sees a `Lookup` with the survivor, the game's own answer and a `Purpose`:
 
@@ -26,9 +26,9 @@ game's, the survivor's record stays on the game's own entity, and after a
 moment.
 
 ```rust
-use enshwick_loader_api::survivors::{Answer, Purpose};
+use enshwick::survivors::{Answer, Purpose};
 
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     load.on_survivor_lookup(|lookup| match lookup.purpose {
         // A staff always spawns a new entity instead of moving the old one.
         Purpose::Spawn { .. } => Answer::Nobody,
@@ -70,12 +70,12 @@ its id, its vanilla staff and the template the staff places;
 `WorkshopSurvivor::find("blacksmith")` picks one by its short name.
 
 ```rust
-use enshwick_loader_api::survivors::{SummonVerdict, WorkshopSurvivor};
+use enshwick::survivors::{SummonVerdict, WorkshopSurvivor};
 
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     const MY_STAFF: u32 = 0x5e01;
     let smith = WorkshopSurvivor::find("blacksmith")
-        .ok_or_else(|| enshwick_loader_api::Off::new("no blacksmith"))?;
+        .ok_or_else(|| enshwick::Off::new("no blacksmith"))?;
     load.add_summon_item(MY_STAFF, smith.id())?;
     // The last charge takes the staff; the others are spent after the use.
     load.on_summon(|summon| {

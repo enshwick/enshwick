@@ -6,11 +6,11 @@ dedicated server as `powrprof.dll`, and every mod is a DLL in the `mods/`
 folder beside it. This book is for people who write those mods.
 
 A mod is a Rust `cdylib` built against one crate,
-[`enshwick-loader-api`](https://github.com/themaiby/enshwick/tree/main/crates/enshwick-loader-api),
+[`enshwick`](https://github.com/enshwick/enshwick/tree/main/crates/enshwick),
 with one tool,
-[`cargo enshwick`](https://github.com/themaiby/enshwick/tree/main/crates/cargo-enshwick).
+[`cargo enshwick`](https://github.com/enshwick/enshwick/tree/main/crates/cargo-enshwick).
 The crates under
-[`crates/internal`](https://github.com/themaiby/enshwick/tree/main/crates/internal)
+[`crates/internal`](https://github.com/enshwick/enshwick/tree/main/crates/internal)
 are parts of the loader; a mod never depends on them. A mod names itself in
 a manifest, reads its settings, reacts to events, adds items and recipes,
 answers chat commands, and where the API has no call, links hooks into game
@@ -21,12 +21,12 @@ vanilla where the mod acted.
 Start with [Getting started](getting-started.md), then read
 [Concepts](concepts.md) once. The other chapters stand on their own; take the
 one you need. The API's rustdoc is the reference for every type and function
-(`cargo doc -p enshwick-loader-api --features test --open` builds it); this
+(`cargo doc -p enshwick --features test --open` builds it); this
 book says how they fit together, and its links to the API point at the source the rustdoc is built
 from.
 
 The mods in
-[`mods/`](https://github.com/themaiby/enshwick/tree/main/mods) are worked
+[`mods/`](https://github.com/enshwick/enshwick/tree/main/mods) are worked
 examples, and the chapters point at them where a mod does what the chapter
 describes.
 
@@ -40,6 +40,6 @@ cargo install --locked mdbook
 mdbook serve book
 ```
 
-Its Rust examples compile as doctests of `enshwick-loader-api`, so
+Its Rust examples compile as doctests of `enshwick`, so
 `cargo test --doc --workspace` checks them. `bun run lint:md` and `typos` check
 the text.

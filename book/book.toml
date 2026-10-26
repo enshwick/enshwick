@@ -8,5 +8,5 @@ src = "src"
 edition = "2024"
 
 [output.html]
-git-repository-url = "https://github.com/themaiby/enshwick"
-edit-url-template = "https://github.com/themaiby/enshwick/edit/main/book/{path}"
+git-repository-url = "https://github.com/enshwick/enshwick"
+edit-url-template = "https://github.com/enshwick/enshwick/edit/main/book/{path}"

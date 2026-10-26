@@ -12,8 +12,8 @@ use std::sync::OnceLock;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::time::Instant;
 
-use enshwick_loader_api::abi::Registers;
-use enshwick_loader_api::{Load, Off};
+use enshwick::abi::Registers;
+use enshwick::{Load, Off};
 
 use crate::memory;
 
@@ -192,7 +192,7 @@ pub(crate) fn link(load: &mut Load<'_>, interval_ms: u64, max_dumps: u32) -> Res
         let address = match load.symbol(site.symbol) {
             Ok(address) => address,
             Err(off) => {
-                enshwick_loader_api::warn!("R1 {} off: {off}", site.name);
+                enshwick::warn!("R1 {} off: {off}", site.name);
                 continue;
             }
         };
@@ -203,7 +203,7 @@ pub(crate) fn link(load: &mut Load<'_>, interval_ms: u64, max_dumps: u32) -> Res
             .checked_sub(start)
             .and_then(|offset| load.code().ok()?.get(offset..offset + site.expected.len()));
         if found != Some(&site.expected[..]) {
-            enshwick_loader_api::warn!(
+            enshwick::warn!(
                 "R1 {} off: its bytes at {at:#x} are {found:02x?}, not those of build 1269579",
                 site.name
             );
@@ -214,7 +214,7 @@ pub(crate) fn link(load: &mut Load<'_>, interval_ms: u64, max_dumps: u32) -> Res
         // instruction; the handler only reads the registers.
         match unsafe { load.hook_at(address, move |registers| seen(index, kind, registers)) } {
             Ok(()) => hooked += 1,
-            Err(off) => enshwick_loader_api::warn!("R1 {} off: {off}", site.name),
+            Err(off) => enshwick::warn!("R1 {} off: {off}", site.name),
         }
     }
     Ok(hooked)
@@ -384,11 +384,9 @@ fn seen(index: usize, kind: Kind, registers: &mut Registers) {
         .collect();
     let site = &SITES[index];
     let text = dump(&call, site, kind, shared.base, mark, number, &looked_for);
-    enshwick_loader_api::info!("{text}");
+    enshwick::info!("{text}");
     if number == shared.max_dumps {
-        enshwick_loader_api::info!(
-            "R1 {number} dumps since the last mark: no more until /research mark"
-        );
+        enshwick::info!("R1 {number} dumps since the last mark: no more until /research mark");
     }
 }
 
@@ -537,8 +535,8 @@ pub(crate) mod tests {
     }
 
     /// The client rows the manifest pins, by symbol.
-    pub(crate) fn pinned() -> Vec<(String, u64, enshwick_loader_api::abi::Fingerprint)> {
-        use enshwick_loader_api::Mod as _;
+    pub(crate) fn pinned() -> Vec<(String, u64, enshwick::abi::Fingerprint)> {
+        use enshwick::Mod as _;
 
         let manifest = crate::Research::manifest();
         // SAFETY: the manifest macro points at static rows of these counts.
@@ -546,7 +544,7 @@ pub(crate) mod tests {
         let mut pinned = Vec::new();
         for build in builds
             .iter()
-            .filter(|b| b.side == enshwick_loader_api::abi::Side::CLIENT)
+            .filter(|b| b.side == enshwick::abi::Side::CLIENT)
         {
             // SAFETY: as above.
             let symbols = unsafe { core::slice::from_raw_parts(build.symbols, build.symbol_count) };
@@ -560,13 +558,11 @@ pub(crate) mod tests {
     }
 
     /// The client rows the manifest pins for the build of `image`, by symbol.
-    pub(crate) fn pinned_in(image: &enshwick_loader_reflect::Image<'_>) -> Vec<(String, u64)> {
+    pub(crate) fn pinned_in(image: &enshwick_reflect::Image<'_>) -> Vec<(String, u64)> {
         let build = image.fingerprint();
         pinned()
             .into_iter()
-            .filter(|(_, _, f)| {
-                build == Some(enshwick_loader_reflect::Fingerprint::new(f.guid, f.age))
-            })
+            .filter(|(_, _, f)| build == Some(enshwick_reflect::Fingerprint::new(f.guid, f.age)))
             .map(|(name, rva, _)| (name, rva))
             .collect()
     }
@@ -600,11 +596,7 @@ pub(crate) mod tests {
         let Ok(bytes) = std::fs::read(path) else {
             return;
         };
-        let image = enshwick_loader_reflect::Image::parse(
-            &bytes,
-            enshwick_loader_reflect::Layout::File,
-            None,
-        );
+        let image = enshwick_reflect::Image::parse(&bytes, enshwick_reflect::Layout::File, None);
         let Ok(image) = image else {
             unreachable!("the client parses");
         };

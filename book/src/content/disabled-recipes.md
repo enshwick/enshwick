@@ -101,7 +101,7 @@ disabled recipe.
 
 ## From a mod
 
-[`recipes::disable`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/content/recipes.rs)
+[`recipes::disable`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content/recipes.rs)
 adds a rule of the mod's, in the forms of the file, at init or later, from
 any thread; `recipes::enable` takes the mod's own rule back, and
 `recipes::is_disabled` asks whether a recipe, by GUID or content id, is
@@ -110,17 +110,17 @@ content `Id` or `DebugName`, and `RecipeRule::Hand` stands for crafting by
 hand:
 
 ```rust
-use enshwick_loader_api::content::recipes::{RecipeRule, disable, is_disabled};
-use enshwick_loader_api::content::{DebugName, Id};
+use enshwick::content::recipes::{RecipeRule, disable, is_disabled};
+use enshwick::content::{DebugName, Id};
 
 const SAFE_RECIPE: Id = Id::new("safes:safe.recipe");
 
-fn init(_load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+fn init(_load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     // Torches come from the mod's own loot, not from crafting.
     disable(RecipeRule::output(DebugName("Tool_Torch01_T0")))?;
     disable(RecipeRule::workshop(DebugName("Craftingstation_Workbench")))?;
     if !is_disabled(SAFE_RECIPE) {
-        enshwick_loader_api::info!("safes are craftable");
+        enshwick::info!("safes are craftable");
     }
     Ok(())
 }

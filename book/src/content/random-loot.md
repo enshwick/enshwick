@@ -4,17 +4,17 @@
 roll, on top of the vanilla loot. The item is a vanilla one or one from
 [`add_item`](items.md); the game skips an item its registry does not hold.
 The API is in
-[`loot/drops.rs`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/loot/drops.rs).
+[`loot/drops.rs`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/loot/drops.rs).
 
 ```rust
-use enshwick_loader_api::content::Id;
-use enshwick_loader_api::loot::{Drop, Kinds, Source};
+use enshwick::content::Id;
+use enshwick::loot::{Drop, Kinds, Source};
 
 const STAFF: Id = Id::new("my-mod:staff");
 const RING: Id = Id::new("my-mod:ring");
 const AMULET: Id = Id::new("my-mod:amulet");
 
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     load.add_loot(Drop::new(STAFF.id(), 0.10, Source::bosses()))?;
     load.add_loot(Drop::new(STAFF.id(), 0.02, Source::locked_chests()))?;
     load.add_loot(
@@ -38,7 +38,7 @@ fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_
 
 ## A drop
 
-A [`Drop`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/loot/drops.rs)
+A [`Drop`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/loot/drops.rs)
 holds the items, the chance, the count and the source:
 
 - `Drop::new(item, chance, from)` gives one item, `item` being the game id
@@ -82,12 +82,12 @@ and `CONTAINERS` (corpses and chests); `with` joins two sets.
 
 A loot label id is the FNV-1a hash of an enemy or chest type's label
 collection GUID. `Source::matches` tells whether a
-[`Roll`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/loot/drops.rs)
+[`Roll`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/loot/drops.rs)
 comes from a source, which a unit test can check without the game:
 
 ```rust
-use enshwick_loader_api::ecs::Entity;
-use enshwick_loader_api::loot::{Kinds, Roll, Source};
+use enshwick::ecs::Entity;
+use enshwick::loot::{Kinds, Roll, Source};
 
 let boss = Roll { kind: Kinds::CORPSES, entity: Some(Entity(7)), node: 0, labels: 9, boss: true, locked: false };
 assert!(Source::bosses().matches(&boss));
@@ -97,7 +97,7 @@ assert!(Source::kinds(Kinds::CORPSES).with_labels(&[9]).matches(&boss));
 
 ## A worked example: copy staffs
 
-[Survivors per altar](https://github.com/themaiby/enshwick/tree/main/mods/enshwick-survivors-per-altar)
+[Survivors per altar](https://github.com/enshwick/enshwick/tree/main/mods/enshwick-survivors-per-altar)
 adds a copy staff per survivor with `add_item`, then puts them in loot with
 `Drop::one_of`: one chance for bosses and one for locked chests, both from
 its settings, and no drop when a chance is 0. When `copy_staffs` turns off

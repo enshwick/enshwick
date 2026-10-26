@@ -13,7 +13,7 @@
 //! it never allocates.
 
 use arrayvec::ArrayVec;
-use enshwick_loader_api::altars::{MAX_ZONES, ZoneCheck};
+use enshwick::altars::{MAX_ZONES, ZoneCheck};
 
 type Zone = ([i64; 3], [i64; 3]);
 

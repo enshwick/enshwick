@@ -4,9 +4,9 @@
 
 use core::fmt::Write as _;
 
-use enshwick_loader_api::ecs::Entity;
-use enshwick_loader_api::world::{ComponentType, World};
-use enshwick_loader_api::{Load, Off};
+use enshwick::ecs::Entity;
+use enshwick::world::{ComponentType, World};
+use enshwick::{Load, Off};
 
 /// Bytes read of a set whose size reflection does not give.
 const FALLBACK_SIZE: u32 = 0x40;
@@ -101,7 +101,7 @@ impl RawStats {
         }
         let vitals = self.world.vitals(entity);
         let _infallible = write!(text, "\n  the API reads {vitals:?}");
-        enshwick_loader_api::info!("{text}");
+        enshwick::info!("{text}");
         format!("{vitals:?}; the raw sets are in probe.log")
     }
 

@@ -5,7 +5,7 @@
 
 use std::collections::BTreeMap;
 
-use enshwick_loader_api::abi::{Relation, Side};
+use enshwick::abi::{Relation, Side};
 use semver::{Version, VersionReq};
 
 /// A mod's manifest, parsed.

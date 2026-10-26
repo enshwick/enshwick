@@ -102,7 +102,8 @@ Whatever those patterns do not find stays off: a loader feature logs
 `<feature> off: not in this build`, and a mod that needs a missing entry turns
 off with `symbol <id>: missing on this game build`. Everything else runs
 until a loader build with the new build's table replaces this one.
-`cargo enshwick compat <exe> --mods <dir>` shows the
+`cargo run -p enshwick-compat -- <exe> --mods <dir>`, in a checkout of the
+[platform repository](https://github.com/enshwick/enshwick), shows the
 same verdicts without starting the game.
 
 ### The mod was skipped
@@ -196,7 +197,7 @@ stays out and goes back to the menu, and one dialog, "Mods missing", lists
 them by where to get them:
 
 ```text
-From github.com/themaiby/enshwick:
+From github.com/enshwick/enshwick:
 Safes 0.2.0, yours 0.1.0
 Ask the server's admin for:
 Survivors per altar 0.1.4

@@ -11,11 +11,11 @@ use std::sync::atomic::{AtomicBool, AtomicU16, Ordering};
 use std::sync::{Mutex, OnceLock, PoisonError};
 use std::time::{Duration, Instant};
 
-use enshwick_loader_api::abi::{
+use enshwick::abi::{
     BedCheck, BedCheckFn, Header, HookFlags, Side, Status, Summon, SummonFn, SurvivorLookup,
     SurvivorLookupFn, SurvivorStatusFn,
 };
-use enshwick_loader_api::altars::cell_of_fixed;
+use enshwick::altars::cell_of_fixed;
 
 use crate::chains::Next;
 use crate::ecs::Engine;
@@ -462,7 +462,7 @@ fn menu_system(loader: &Loader) -> Option<u64> {
             .reflection
             .system("ui_npc_status")
             .ok()
-            .map(enshwick_loader_reflect::System::entry),
+            .map(enshwick_reflect::System::entry),
         Err(why) => {
             crate::log!(WARN, "survivor menu off: {why}");
             None
@@ -702,7 +702,7 @@ unsafe fn resolve(
     found: u32,
     survivor: u32,
     caller: u64,
-    frame: &enshwick_loader_api::abi::CallerFrame,
+    frame: &enshwick::abi::CallerFrame,
 ) -> Option<u32> {
     let c = &layout.callers;
     let o = &layout.offsets;
@@ -876,7 +876,7 @@ unsafe fn home(saved: u64, transform: u64) -> [i64; 3] {
         // SAFETY: the saved state starts with the spawn position in metres.
         let spawn: [f32; 3] = unsafe { read_at(saved, 0) };
         if spawn.iter().any(|&v| v.to_bits() != 0) {
-            return enshwick_loader_api::altars::cell_of_metres(spawn.map(f64::from));
+            return enshwick::altars::cell_of_metres(spawn.map(f64::from));
         }
     }
     if transform == 0 {
@@ -1304,7 +1304,7 @@ unsafe fn merge_statuses(ctx: *mut u64) {
             if guid.iter().all(|&b| b == 0) {
                 continue;
             }
-            let id = enshwick_loader_api::content::Guid(guid).id();
+            let id = enshwick::content::Guid(guid).id();
             let order = u32::try_from(rows.len()).unwrap_or(u32::MAX);
             rows.push((id, order, status));
         }
@@ -1325,7 +1325,7 @@ unsafe fn merge_statuses(ctx: *mut u64) {
                 crate::profile::call(merge.owner, crate::profile::Feature::Survivors, || unsafe {
                     (merge.callback)(id, bits.as_ptr(), bits.len(), user)
                 });
-            if answer & enshwick_loader_api::abi::SURVIVOR_STATUS_SET == 0 {
+            if answer & enshwick::abi::SURVIVOR_STATUS_SET == 0 {
                 continue;
             }
             // SAFETY: the play data's survivor record map.

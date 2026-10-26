@@ -21,10 +21,10 @@ use core::ffi::c_void;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock, PoisonError};
 
-use enshwick_loader_api::abi::{
+use enshwick::abi::{
     CommandCall, CommandCallFn, Header, HookFlags, Level, PlayerInfo, Status, Str,
 };
-use enshwick_loader_api::commands::{is_valid_name, parse_line};
+use enshwick::commands::{is_valid_name, parse_line};
 
 use crate::chains::Next;
 use crate::host::Loader;

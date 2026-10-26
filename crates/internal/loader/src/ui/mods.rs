@@ -24,8 +24,8 @@
 use core::cell::RefCell;
 use std::sync::atomic::{AtomicU8, AtomicU64, Ordering};
 
-use enshwick_loader_api::abi::{Registers, UiWidget};
-use enshwick_loader_api::config::{Scope, Stage};
+use enshwick::abi::{Registers, UiWidget};
+use enshwick::config::{Scope, Stage};
 
 use super::engine::{Engine, Window};
 use super::{ENGINE, Painter, copy};
@@ -86,7 +86,7 @@ enum Page {
         id: String,
         first: usize,
         rows: Vec<Row>,
-        schema: Option<enshwick_loader_api::config::Schema>,
+        schema: Option<enshwick::config::Schema>,
         news: u64,
     },
     /// The actions the server offers.
@@ -115,7 +115,7 @@ pub(super) fn link(loader: &Loader, engine: &Engine) {
     for (site, handler, what) in [
         (
             engine.main_menu_site,
-            main_menu as enshwick_loader_api::abi::MidHookFn,
+            main_menu as enshwick::abi::MidHookFn,
             "the main menu's Mods entry",
         ),
         (
@@ -137,12 +137,12 @@ pub(super) fn link(loader: &Loader, engine: &Engine) {
             handler,
             user: 0,
             priority: i32::MIN,
-            flags: enshwick_loader_api::abi::HookFlags::NONE,
+            flags: enshwick::abi::HookFlags::NONE,
         };
         let status = loader
             .mids
             .lock()
-            .map_or(enshwick_loader_api::abi::Status::REFUSED, |mut mids| {
+            .map_or(enshwick::abi::Status::REFUSED, |mut mids| {
                 mids.add(site, link)
             });
         if !status.is_ok() {
@@ -304,7 +304,7 @@ fn back(screen: &mut Screen) -> bool {
 /// Whether this client is joined to a server it does not host, which takes
 /// messages: whose settings an administrator may change from here.
 fn joined_elsewhere() -> bool {
-    crate::net::ready(enshwick_loader_api::abi::NetMessage::SERVER) && !crate::world::hosting()
+    crate::net::ready(enshwick::abi::NetMessage::SERVER) && !crate::world::hosting()
 }
 
 fn open_server_list(screen: &mut Screen) {
@@ -473,7 +473,7 @@ fn server_settings(
     id: &str,
     first: &mut usize,
     rows: &mut Vec<Row>,
-    schema: &mut Option<enshwick_loader_api::config::Schema>,
+    schema: &mut Option<enshwick::config::Schema>,
     news: &mut u64,
 ) -> Option<(String, bool)> {
     let (heard_news, result) = crate::remote::heard(|h| (h.news, h.result.clone()));
@@ -675,7 +675,7 @@ fn page_rows(loader: &Loader, index: usize) -> Vec<Row> {
 
 /// The settings of `record` each player keeps, the ones the Mods screen
 /// edits; `None` when it has none.
-fn client_schema(record: &crate::host::ModRecord) -> Option<enshwick_loader_api::config::Schema> {
+fn client_schema(record: &crate::host::ModRecord) -> Option<enshwick::config::Schema> {
     let mut schema = record.schema.lock().ok().and_then(|s| s.clone())?;
     schema.fields.retain(|f| f.scope == Scope::User);
     (!schema.fields.is_empty()).then_some(schema)
@@ -733,7 +733,7 @@ fn settings(
 fn draw_row(
     paint: &Painter<'_>,
     id: &str,
-    schema: &enshwick_loader_api::config::Schema,
+    schema: &enshwick::config::Schema,
     row: &Row,
 ) -> Option<String> {
     let mut label = row.label.clone();
@@ -788,7 +788,7 @@ struct WorldRows {
     /// The frame they last showed in.
     frame: u64,
     /// Each mod with settings: index, label, schema and rows.
-    mods: Vec<(usize, String, enshwick_loader_api::config::Schema, Vec<Row>)>,
+    mods: Vec<(usize, String, enshwick::config::Schema, Vec<Row>)>,
     /// The last change's outcome.
     message: Option<(String, bool)>,
 }
@@ -798,9 +798,7 @@ thread_local! {
 }
 
 /// Every mod's world rows: its settings but each player's own.
-fn world_rows(
-    loader: &Loader,
-) -> Vec<(usize, String, enshwick_loader_api::config::Schema, Vec<Row>)> {
+fn world_rows(loader: &Loader) -> Vec<(usize, String, enshwick::config::Schema, Vec<Row>)> {
     loader
         .mods
         .iter()

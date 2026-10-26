@@ -11,13 +11,11 @@ use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::{Arc, OnceLock};
 
 use arc_swap::ArcSwap;
-use enshwick_loader_api::abi::Side;
-use enshwick_loader_api::altars::{
-    RAISED_ALTAR_ZONES, VANILLA_ALTAR_ZONES, VANILLA_ALTARS_PER_FLAME_LEVEL,
-};
-use enshwick_loader_api::points::OwnedPoint;
-use enshwick_loader_api::points::flame_altar_count::AltarLimit;
-use enshwick_loader_api::{Load, Mod, Off};
+use enshwick::abi::Side;
+use enshwick::altars::{RAISED_ALTAR_ZONES, VANILLA_ALTAR_ZONES, VANILLA_ALTARS_PER_FLAME_LEVEL};
+use enshwick::points::OwnedPoint;
+use enshwick::points::flame_altar_count::AltarLimit;
+use enshwick::{Load, Mod, Off};
 
 /// The most altars with the base limit raised.
 const CAP: u8 = RAISED_ALTAR_ZONES;
@@ -43,7 +41,7 @@ fn limit(flame_level: u32, table: u8) -> u8 {
 }
 
 /// Flame Altar count settings.
-#[derive(Debug, serde::Deserialize, serde::Serialize, enshwick_loader_api::Config)]
+#[derive(Debug, serde::Deserialize, serde::Serialize, enshwick::Config)]
 #[serde(deny_unknown_fields)]
 struct Settings {
     /// Altars allowed at each Flame level, from level 0; levels past the end use
@@ -93,13 +91,13 @@ impl AltarTable {
             .iter()
             .any(|&n| n > u16::from(cap))
         {
-            enshwick_loader_api::warn!("altars above {cap} lowered to {cap}: {}", cap_reason(cap));
+            enshwick::warn!("altars above {cap} lowered to {cap}: {}", cap_reason(cap));
         }
         if settings.altars_per_flame_level.contains(&0) {
-            enshwick_loader_api::warn!("a level with 0 altars raised to 1: every level allows one");
+            enshwick::warn!("a level with 0 altars raised to 1: every level allows one");
         }
         let table = Self::new(&settings.altars_per_flame_level, cap);
-        enshwick_loader_api::info!("altars per Flame level: {:?}", table.table);
+        enshwick::info!("altars per Flame level: {:?}", table.table);
         table
     }
 
@@ -132,8 +130,8 @@ pub struct AltarCount {
 }
 
 impl Mod for AltarCount {
-    fn manifest() -> &'static enshwick_loader_api::abi::Manifest {
-        enshwick_loader_api::manifest!(
+    fn manifest() -> &'static enshwick::abi::Manifest {
+        enshwick::manifest!(
             id: "flame-altar-count",
             side: BOTH,
             name: "Flame altar count",
@@ -157,7 +155,7 @@ impl Mod for AltarCount {
                     "{reason}, and this build's grouping is not the one the platform knows"
                 )));
             }
-            enshwick_loader_api::warn!("the game keeps 16 altar zones in bases");
+            enshwick::warn!("the game keeps 16 altar zones in bases");
         }
         let table = AltarTable::from_settings(&settings);
         let _first = LIMIT.set(load.define_point()?);
@@ -179,11 +177,11 @@ impl Mod for AltarCount {
     }
 }
 
-enshwick_loader_api::declare_mod!(AltarCount);
+enshwick::declare_mod!(AltarCount);
 
 #[cfg(test)]
 mod tests {
-    use enshwick_loader_api::config::Config as _;
+    use enshwick::config::Config as _;
 
     use super::*;
 
@@ -231,12 +229,10 @@ mod tests {
 
     #[test]
     fn the_table_answers_the_limit_with_the_base_limit_raised() {
-        let loader = enshwick_loader_api::test::FakeHost::new()
-            .side(Side::CLIENT)
-            .install();
+        let loader = enshwick::test::FakeHost::new().side(Side::CLIENT).install();
         // SAFETY: the exports of `declare_mod!` above.
         let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
-        assert_eq!(status, enshwick_loader_api::abi::Status::OK);
+        assert_eq!(status, enshwick::abi::Status::OK);
         assert!(loader.base_limit_raised());
         assert_eq!(loader.altar_limit(1), Some(4));
         assert_eq!(loader.altar_limit(11), Some(32));
@@ -245,14 +241,12 @@ mod tests {
 
     #[test]
     fn other_mods_change_the_limit_within_the_cap() {
-        use enshwick_loader_api::points::Verdict;
+        use enshwick::points::Verdict;
 
-        let loader = enshwick_loader_api::test::FakeHost::new()
-            .side(Side::CLIENT)
-            .install();
+        let loader = enshwick::test::FakeHost::new().side(Side::CLIENT).install();
         // SAFETY: the exports of `declare_mod!` above.
         let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
-        assert_eq!(status, enshwick_loader_api::abi::Status::OK);
+        assert_eq!(status, enshwick::abi::Status::OK);
         assert_eq!(loader.defined_points(), ["flame-altar-count:limit"]);
         assert!(loader.extend_point(|limit: &AltarLimit, altars: &u8| {
             assert_eq!(limit.cap, CAP);

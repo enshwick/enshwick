@@ -1,15 +1,15 @@
 # Game settings
 
-[`load.game_settings()`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/game_settings.rs)
+[`load.game_settings()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/game_settings.rs)
 returns the server's
-[`GameSettings`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/game_settings.rs):
+[`GameSettings`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/game_settings.rs):
 the difficulty and gameplay values of its configuration (`gameSettings` in
 `enshrouded_server.json`) or of the host's world menu, read typed and changed
 while the world runs. It is `Copy`; get it during `init` and move it into
 handlers, tasks and commands.
 
 ```rust
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let settings = load.game_settings()?;
     load.add_command("durability", "turns item wear on or off: /durability on|off", move |_ctx, args| {
         let on = match args.first() {
@@ -62,7 +62,7 @@ every kept field of the world, any mod's, and puts back the values the world
 loaded with.
 
 ```rust
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let settings = load.game_settings()?;
     load.add_command("lush", "plants grow twice as fast in this world", move |_ctx, _args| {
         match settings.keep(|s| s.plant_growth = 2.0) {

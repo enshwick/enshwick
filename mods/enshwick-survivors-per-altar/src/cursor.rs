@@ -7,7 +7,7 @@
 //! otherwise; a client alone, which cannot tell the copies apart, always
 //! skips it, as the server does when copies exist.
 
-use enshwick_loader_api::survivors::Answer;
+use enshwick::survivors::Answer;
 
 /// The cursor's answer: `hosting` is whether this process runs a game server,
 /// always true on the dedicated server; `copies` how many copies of the

@@ -1,10 +1,10 @@
 # cargo-enshwick
 
-A Cargo subcommand for writing [Enshwick Loader](../../README.md) mods, and
+A Cargo subcommand for writing [Enshwick Loader](https://github.com/enshwick/enshwick) mods, and
 the one tool of the repository.
 
 ```sh
-cargo install --git https://github.com/themaiby/enshwick cargo-enshwick
+cargo install --git https://github.com/enshwick/enshwick cargo-enshwick
 cargo enshwick new my-mod --side server
 cd my-mod
 cargo enshwick install --game "C:/Program Files (x86)/Steam/steamapps/common/Enshrouded"
@@ -23,9 +23,9 @@ cargo enshwick install --game "C:/Program Files (x86)/Steam/steamapps/common/Ens
   `<game>/mods/<package>.dll`. The game folder is `--game` or `ENSHROUDED_DIR`;
   in a workspace with several mods, `--package` names one.
 - `id <mod:name>...` prints the GUID and the game id of each
-  [content id](../../book/src/content.md#content-ids), as `Guid::named`
+  [content id](https://github.com/enshwick/enshwick/blob/main/book/src/content.md#content-ids), as `Guid::named`
   derives them: `cargo enshwick id safes:safe`.
-- `pack check <dir>` checks a [content pack](../../book/src/content/packs.md)
+- `pack check <dir>` checks a [content pack](https://github.com/enshwick/enshwick/blob/main/book/src/content/packs.md)
   folder as the loader reads it, every problem with its file and line;
   `pack schema [dir]` writes the JSON Schema of each pack file for editors;
   `pack zip <dir> [--out <file>]` checks the pack and zips it for a release,
@@ -33,40 +33,6 @@ cargo enshwick install --game "C:/Program Files (x86)/Steam/steamapps/common/Ens
 - `pin --old <exe> --new <exe>` writes the loader's build table for a new game
   build and ports the mods' build rows, in an Enshwick checkout, for
   maintainers. See [below](#porting-build-rows-pin).
-- `compat <exe> [--mods <dir>]` reports which loader features and mods work on
-  a game build. See [below](#compatibility-report-compat).
-
-## Compatibility report (`compat`)
-
-`cargo enshwick compat` tells what works on a game build, from its
-executable, before anyone starts the game:
-
-```bash
-cargo enshwick compat server/enshrouded_server.exe --mods server/mods
-```
-
-- **Build table.** It takes the table the loader would take: the one made
-  for the build, checked against the executable (its systems against
-  reflection, each pattern and the expected bytes where the table pins
-  them), or the newest table of the same side carried over by patterns, with
-  the entries they miss. The slots of attributes come from the game's
-  archive beside the executable, as the loader reads them at start (a
-  Windows build of the tool).
-- **Loader features.** Each part of the loader with the table entries it
-  names, and which the build lacks: works, partly or off. Every part declares
-  its entries in a `TABLE_IDS` list beside its code, and the loader's tests
-  hold each list to the code and the tables. Needs a Windows build of the
-  tool.
-- **Mods.** With `--mods` (DLLs or folders of them) it runs the loader itself
-  on the executable, in a process of its own: the image mapped at its base,
-  the mods resolved and initialised as at a start, nothing hooked and no
-  mod's `ready` run. Each mod that turns off says why, as in its log.
-  Starting mods needs Windows.
-
-`--patterns` takes the table by patterns even when one is made for the build,
-to see what the patterns alone carry. `--report <file>` writes the Markdown report there. The
-exit code is 0 when everything works, 2 when something does not, and 1 on an
-error.
 
 ## Porting build rows (`pin`)
 
@@ -77,7 +43,7 @@ table, and whatever they miss stays off. This tool writes the table where it
 can prove each entry and lists the rest for a human. It never guesses.
 
 It reads the loader's tables, one TOML file per build in
-[`crates/internal/builds/tables`](../internal/builds/tables), and the
+[`crates/enshwick-gamedata/tables`](https://github.com/enshwick/enshwick/tree/main/crates/enshwick-gamedata/tables), and the
 `builds:` rows of every `manifest!` under `mods/`. It ports each table and row
 whose fingerprint is the old executable's. Each entry of the new table also
 gets the code pattern that finds it on a later build without a table, taken
@@ -88,7 +54,7 @@ the code that calls or addresses it; a constant's is the instruction picked
 as its use, with the operand that carries it left open to read. A constant
 read `via` a symbol is read again in that symbol's code, and a slot named by
 its `attribute` is kept as it is (see
-[Patterns of the loader's table](https://github.com/themaiby/enshwick/blob/main/book/src/finding-the-game.md#patterns-of-the-loaders-table)).
+[Patterns of the loader's table](https://github.com/enshwick/enshwick/blob/main/book/src/finding-the-game.md#patterns-of-the-loaders-table)).
 
 ### Workflow
 
@@ -211,14 +177,14 @@ the move, and the rewritten one must come out `missing`.
 `a_moved_field_is_read_on_the_new_build` moves three fields the table reads
 from code by 8 bytes: porting and the patterns alone must both give the new
 offsets. The same command works with `enshrouded.exe`. With `ENSH_SERVER_EXE`
-and `ENSH_CLIENT_EXE` set, `cargo nextest run -p enshwick-loader-builds`
+and `ENSH_CLIENT_EXE` set, `cargo nextest run -p enshwick-gamedata`
 checks that every pattern of each table matches exactly once on its own
 build and yields the table's value, and that the patterns cover at least as
 many entries as they do today.
 
 ### Game build watch
 
-[`game-build-watch.yml`](../../.github/workflows/game-build-watch.yml) runs
+[`game-build-watch.yml`](https://github.com/enshwick/enshwick/blob/main/.github/workflows/game-build-watch.yml) runs
 weekly, never on pull requests. It asks steamcmd for the public build id of
 the dedicated server. When no server table names it in `steam_build`, a
 Windows job downloads that server, runs `compat` on it with the mods of the latest
@@ -228,6 +194,6 @@ runner. It stays off until the repository variable `GAME_BUILD_WATCH` is
 
 ## More
 
-The [modding book](https://github.com/themaiby/enshwick/blob/main/book/src/SUMMARY.md) covers what goes into the mod.
+The [modding book](https://github.com/enshwick/enshwick/blob/main/book/src/SUMMARY.md) covers what goes into the mod.
 
-Licensed under [MIT](../../LICENSE).
+Licensed under [MIT](https://github.com/enshwick/enshwick/blob/main/LICENSE).

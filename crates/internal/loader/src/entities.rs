@@ -8,7 +8,7 @@
 
 use std::sync::OnceLock;
 
-use enshwick_loader_api::abi::{EntityPlace, Status};
+use enshwick::abi::{EntityPlace, Status};
 
 use crate::host::Loader;
 

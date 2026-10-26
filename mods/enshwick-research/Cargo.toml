@@ -6,7 +6,7 @@ keywords = ["enshrouded", "mod", "client", "research"]
 categories = ["game-development"]
 readme = "README.md"
 authors.workspace = true
-homepage = "https://github.com/themaiby/enshwick/tree/main/mods/enshwick-research"
+homepage = "https://github.com/enshwick/enshwick/tree/main/mods/enshwick-research"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -17,7 +17,7 @@ publish.workspace = true
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-enshwick-loader-api.workspace = true
+enshwick.workspace = true
 rustc-hash.workspace = true
 serde.workspace = true
 windows-sys = { workspace = true, features = [
@@ -30,7 +30,7 @@ windows-sys = { workspace = true, features = [
 ] }
 
 [dev-dependencies]
-enshwick-loader-reflect.workspace = true
+enshwick-reflect.workspace = true
 
 [lints]
 workspace = true

@@ -23,7 +23,7 @@
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Mutex, OnceLock, PoisonError};
 
-use enshwick_loader_api::abi::{DaytimeInfo, Event, Header, HookFlags, Status};
+use enshwick::abi::{DaytimeInfo, Event, Header, HookFlags, Status};
 
 use crate::chains::Next;
 use crate::host::{Loader, is_off, take};

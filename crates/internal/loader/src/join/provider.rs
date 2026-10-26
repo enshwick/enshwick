@@ -27,7 +27,7 @@ pub const MAX_SLOTS: usize = 64;
 /// # Examples
 ///
 /// ```
-/// use enshwick::join::provider::Error;
+/// use enshwick_loader::join::provider::Error;
 ///
 /// let error = Error::NotFound { join: 0x1_4108_9230 };
 /// assert!(error.to_string().contains("no slot"));
@@ -108,7 +108,7 @@ pub enum Error {
 /// # Examples
 ///
 /// ```
-/// use enshwick::join::provider::Pins;
+/// use enshwick_loader::join::provider::Pins;
 ///
 /// let pins = Pins { table: 0x1_41db_2f28, join: 0x1_4108_9230, slot: Some(16), bytes: None };
 /// assert_eq!(pins.slot, Some(16));
@@ -138,7 +138,7 @@ impl Pins {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::join::provider::{Error, Pins};
+    /// use enshwick_loader::join::provider::{Error, Pins};
     ///
     /// let none = Pins::from_table(|_| None, |_| None, 0x1_4000_0000);
     /// assert_eq!(none, Err(Error::Missing("net.provider_vtable")));
@@ -186,7 +186,7 @@ fn slots(read: impl Fn(u64) -> Option<u64>, table: u64, code: &Range<u64>) -> Ve
 /// # Examples
 ///
 /// ```
-/// use enshwick::join::provider::{Pins, verify};
+/// use enshwick_loader::join::provider::{Pins, verify};
 ///
 /// let (table, join, bytes) = (0x9000, 0x4000, 0x5340_u64);
 /// let read = |va| match va {
@@ -418,21 +418,13 @@ mod tests {
             return;
         };
         let bytes = std::fs::read(path).unwrap();
-        let image = enshwick_loader_reflect::Image::parse(
-            &bytes,
-            enshwick_loader_reflect::Layout::File,
-            None,
-        )
-        .unwrap();
+        let image =
+            enshwick_reflect::Image::parse(&bytes, enshwick_reflect::Layout::File, None).unwrap();
         let tables = crate::builds::load();
         let fingerprint = image.fingerprint().unwrap();
-        let table = enshwick_loader_builds::exact(
-            &tables,
-            enshwick_loader_builds::Side::Client,
-            fingerprint,
-        )
-        .unwrap()
-        .resolve();
+        let table = enshwick_gamedata::exact(&tables, enshwick_gamedata::Side::Client, fingerprint)
+            .unwrap()
+            .resolve();
         let base = image.base();
         let text = image.range(image.section(".text").unwrap());
         let read = |va| image.u64(va);
@@ -443,7 +435,7 @@ mod tests {
         let code = image.read(text.start, text.end - text.start).unwrap();
         for other in tables
             .iter()
-            .filter(|t| t.side() == enshwick_loader_builds::Side::Client)
+            .filter(|t| t.side() == enshwick_gamedata::Side::Client)
         {
             let carried = other.fall_back(code, text.start - base);
             let by_patterns =

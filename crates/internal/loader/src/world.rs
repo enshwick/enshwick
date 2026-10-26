@@ -14,7 +14,7 @@ use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
 
 use arrayvec::ArrayVec;
-use enshwick_loader_api::abi::{Header, HookFlags, PlayerInfo, Status};
+use enshwick::abi::{Header, HookFlags, PlayerInfo, Status};
 
 use crate::chains::Next;
 use crate::host::Loader;
@@ -502,7 +502,7 @@ fn player_at(layout: &Layout, slot: usize, index: usize, entity: u32, infos: usi
 /// hash field.
 pub(crate) fn type_hash(descriptor: u64) -> Option<u32> {
     let address =
-        usize::try_from(descriptor.checked_add(enshwick_loader_reflect::DESCRIPTOR_HASH)?).ok()?;
+        usize::try_from(descriptor.checked_add(enshwick_reflect::DESCRIPTOR_HASH)?).ok()?;
     // SAFETY: a type descriptor in the game's image, which stays mapped.
     let value: u64 = unsafe { read(address, 0) };
     #[expect(clippy::cast_possible_truncation, reason = "the hash is the low half")]

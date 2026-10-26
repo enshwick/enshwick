@@ -22,14 +22,12 @@ use std::sync::{Arc, Mutex, OnceLock, PoisonError};
 use std::time::{Duration, Instant};
 
 use arc_swap::ArcSwap;
-use enshwick_loader_api::abi::{
+use enshwick::abi::{
     AffixDefData, AffixRoll, Event, Header, ItemLine, PlayerData, PlayerInfo, StatChange,
     StatChangeFn, StatDefData, StatModifierData, StatModify, StatRef, StatSource, Status, Str,
 };
-use enshwick_loader_api::affixes::{
-    AffixDef, AffixKey, Candidate, Rarity, RollRules, lines_of, reroll,
-};
-use enshwick_loader_api::stats::{ItemStats, Op, Stat, StatDef, aggregate, builtin, key_of};
+use enshwick::affixes::{AffixDef, AffixKey, Candidate, Rarity, RollRules, lines_of, reroll};
+use enshwick::stats::{ItemStats, Op, Stat, StatDef, aggregate, builtin, key_of};
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::chains::LOADER;
@@ -462,7 +460,7 @@ pub(crate) fn seal() {
             sealed.kinds.len(),
             sealed.buffs.len()
         );
-        crate::item_data::open_platform(enshwick_loader_api::stats::ITEM_KIND);
+        crate::item_data::open_platform(enshwick::stats::ITEM_KIND);
     }
     let _first = SEALED.set(sealed);
 }

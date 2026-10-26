@@ -14,17 +14,17 @@ use std::sync::atomic::Ordering;
 use std::sync::{Mutex, OnceLock, PoisonError, RwLock};
 use std::time::{Duration, Instant};
 
-use enshwick_loader_api::abi::Side;
-use enshwick_loader_api::altars::Altars;
-use enshwick_loader_api::ecs::Entity;
-use enshwick_loader_api::events::{AltarsChanged, ShutdownStarted};
-use enshwick_loader_api::inventory::{Bar, Batch, Fill, Inventories, Op, SlotRef};
-use enshwick_loader_api::points::OwnedPoint;
-use enshwick_loader_api::points::survivors_per_altar::{ChargeCost, CopyLimit};
-use enshwick_loader_api::survivors::{
+use enshwick::abi::Side;
+use enshwick::altars::Altars;
+use enshwick::ecs::Entity;
+use enshwick::events::{AltarsChanged, ShutdownStarted};
+use enshwick::inventory::{Bar, Batch, Fill, Inventories, Op, SlotRef};
+use enshwick::points::OwnedPoint;
+use enshwick::points::survivors_per_altar::{ChargeCost, CopyLimit};
+use enshwick::survivors::{
     Answer, BedCheck, Lookup, Purpose, Summon, SummonVerdict, WorkshopSurvivor,
 };
-use enshwick_loader_api::{Load, Off};
+use enshwick::{Load, Off};
 
 use crate::Charges;
 use crate::copies::{Copies, CopyStaff, Verdict, Zone};
@@ -309,7 +309,7 @@ fn answer_reading(shared: &Shared, lookup: &Lookup) -> Answer {
     let found = lookup.vanilla.map_or(0, |e| e.0);
     match lookup.purpose {
         Purpose::Cursor => {
-            let hosting = enshwick_loader_api::host().is_some_and(|host| host.hosting());
+            let hosting = enshwick::host().is_some_and(|host| host.hosting());
             crate::cursor::answer(hosting, shared.copies.copy_count(npc))
         }
         Purpose::Uniqueness { .. } => Answer::Vanilla,
@@ -320,7 +320,7 @@ fn answer_reading(shared: &Shared, lookup: &Lookup) -> Answer {
             if let Some(copy) = shared.copies.for_spawn(npc, target, found) {
                 return Answer::Entity(Entity(copy));
             }
-            enshwick_loader_api::info!("survivor {npc:#010x}: a new copy at {target:?}");
+            enshwick::info!("survivor {npc:#010x}: a new copy at {target:?}");
             Answer::Nobody
         }
         _ if shared.copies.copy_count(npc) <= 1 => Answer::Vanilla,
@@ -334,7 +334,7 @@ fn answer_reading(shared: &Shared, lookup: &Lookup) -> Answer {
                 .copies
                 .altar_at(bed_at)
                 .and_then(|a| shared.copies.slot(npc, a));
-            enshwick_loader_api::info!(
+            enshwick::info!(
                 "survivor {npc:#010x}: staff gives bed {} to {}",
                 bed.0,
                 answer.unwrap_or(0)
@@ -385,9 +385,7 @@ fn file_copy(
         Verdict::Outside => {
             shared.outside.remove(&me);
             shared.copies.forget(me);
-            enshwick_loader_api::info!(
-                "survivor {npc:#010x}: copy {me} outside every zone removed"
-            );
+            enshwick::info!("survivor {npc:#010x}: copy {me} outside every zone removed");
             Answer::Entity(Entity(original))
         }
         Verdict::Keep => keep(found, me),
@@ -395,9 +393,7 @@ fn file_copy(
         Verdict::Remove if settling(shared, now) => keep(found, me),
         Verdict::Remove => {
             let holder = shared.copies.at(npc, home, original);
-            enshwick_loader_api::info!(
-                "survivor {npc:#010x}: copy {me} removed, {holder} keeps the slot"
-            );
+            enshwick::info!("survivor {npc:#010x}: copy {me} removed, {holder} keeps the slot");
             Answer::Entity(Entity(if holder == me { original } else { holder }))
         }
     }
@@ -436,15 +432,15 @@ fn keeps(shared: &Shared, check: &BedCheck) -> bool {
 }
 
 /// Spends `cost` charges of the copy staff `staff`, on the game thread.
-fn spend(world: &enshwick_loader_api::world::World, staff: Entity, cost: u16) {
+fn spend(world: &enshwick::world::World, staff: Entity, cost: u16) {
     match world.change_item_meter(staff, |c| (c - i32::from(cost)).max(0)) {
-        Ok(left) => enshwick_loader_api::info!(
+        Ok(left) => enshwick::info!(
             "copy staff {}: {} of {} charges left",
             staff.0,
             left.current,
             left.max
         ),
-        Err(why) => enshwick_loader_api::warn!("copy staff {}: no charge spent: {why}", staff.0),
+        Err(why) => enshwick::warn!("copy staff {}: no charge spent: {why}", staff.0),
     }
 }
 
@@ -462,7 +458,7 @@ fn renew_spent(inventories: &Inventories, slot: SlotRef, item: u32, charges: Cha
         fill: Fill::of(charges.full.saturating_sub(cost), charges.full),
     };
     inventories.submit(&Batch::new().with(renew), |outcome| {
-        enshwick_loader_api::info!("copy staff renewed after a use: {:?}", outcome.done);
+        enshwick::info!("copy staff renewed after a use: {:?}", outcome.done);
     });
 }
 
@@ -493,7 +489,7 @@ fn judge(shared: &Shared, summon: &Summon, staffs: Staffs) -> SummonVerdict {
         }
         if !crate::COPY_STAFFS.load(Ordering::Relaxed) || !crate::PER_ALTAR.load(Ordering::Relaxed)
         {
-            enshwick_loader_api::info!("copy staff of {}: refused, copy staffs are off", staff.key);
+            enshwick::info!("copy staff of {}: refused, copy staffs are off", staff.key);
             return SummonVerdict::Refuse;
         }
         let limit = |altars, copies| copy_limit(survivor, altars, copies);
@@ -503,7 +499,7 @@ fn judge(shared: &Shared, summon: &Summon, staffs: Staffs) -> SummonVerdict {
                 .copy_staff(survivor, summon.target, original, limit)
             {
                 CopyStaff::Refuse(why) => {
-                    enshwick_loader_api::info!(
+                    enshwick::info!(
                         "copy staff of {} at {:?}: refused, {why:?}",
                         staff.key,
                         summon.target
@@ -516,7 +512,7 @@ fn judge(shared: &Shared, summon: &Summon, staffs: Staffs) -> SummonVerdict {
         let cost = if places {
             let copies = shared.copies.entity_count(survivor, original);
             let Some(cost) = charge_cost(survivor, copies, summon.meter, charges.full) else {
-                enshwick_loader_api::info!(
+                enshwick::info!(
                     "copy staff of {} at {:?}: refused at survivors-per-altar:charge-cost",
                     staff.key,
                     summon.target
@@ -536,7 +532,7 @@ fn judge(shared: &Shared, summon: &Summon, staffs: Staffs) -> SummonVerdict {
             }));
         });
         let take = places && last_charge(summon.meter, charges.full, cost);
-        enshwick_loader_api::info!(
+        enshwick::info!(
             "copy staff of {} at {:?} with {:?} charges: {}",
             staff.key,
             summon.target,
@@ -588,7 +584,7 @@ fn judge_own_staff(
         });
     } else if vanilla && vanilla_staff_over_limit(&shared.copies, survivor, summon.target, original)
     {
-        enshwick_loader_api::info!(
+        enshwick::info!(
             "survivor {survivor:#010x}: its own staff at {:?} refused, one entity per altar",
             summon.target
         );

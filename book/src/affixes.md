@@ -5,15 +5,15 @@ within ranges, such as "Sturdy" giving 10 to 30 extra health. Single items
 roll affixes as they drop from random loot, come out of crafting, or when a
 mod asks; what an item rolled stays with it, and the entity that wears it
 gets the modifiers. The
-[`affixes`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/affixes.rs)
+[`affixes`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/affixes.rs)
 module holds the API.
 
 ```rust
-use enshwick_loader_api::affixes::{AffixCraft, AffixDef, AffixLoot, Categories, Range, Rarity, RollRules};
-use enshwick_loader_api::loot::Source;
-use enshwick_loader_api::stats::{Op, builtin};
+use enshwick::affixes::{AffixCraft, AffixDef, AffixLoot, Categories, Range, Rarity, RollRules};
+use enshwick::loot::Source;
+use enshwick::stats::{Op, builtin};
 
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let health = load.open_stat(builtin::HEALTH_MAX)?;
     let fire = load.open_stat(builtin::RESISTANCE_FIRE)?;
     load.define_affix(

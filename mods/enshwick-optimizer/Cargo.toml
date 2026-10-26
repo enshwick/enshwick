@@ -6,7 +6,7 @@ keywords = ["enshrouded", "mod", "wine", "proton", "performance"]
 categories = ["game-development"]
 readme = "README.md"
 authors.workspace = true
-homepage = "https://github.com/themaiby/enshwick/tree/main/mods/enshwick-optimizer"
+homepage = "https://github.com/enshwick/enshwick/tree/main/mods/enshwick-optimizer"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -17,7 +17,7 @@ publish.workspace = true
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-enshwick-loader-api.workspace = true
+enshwick.workspace = true
 serde.workspace = true
 windows-sys = { workspace = true, features = [
     "Win32_Foundation",
@@ -29,7 +29,7 @@ windows-sys = { workspace = true, features = [
 ] }
 
 [dev-dependencies]
-enshwick-loader-api = { workspace = true, features = ["test"] }
+enshwick = { workspace = true, features = ["test"] }
 toml.workspace = true
 
 [package.metadata.enshwick]

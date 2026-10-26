@@ -9,9 +9,9 @@ use std::fmt::Write as _;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Mutex, OnceLock, PoisonError};
 
-use enshwick_loader_api::abi::{Level, PointFn, PointMode, PointVerdict, Status};
-use enshwick_loader_api::points::{LinkPlace, order};
-use enshwick_loader_api::services::{LayoutError, compare};
+use enshwick::abi::{Level, PointFn, PointMode, PointVerdict, Status};
+use enshwick::points::{LinkPlace, order};
+use enshwick::services::{LayoutError, compare};
 
 use crate::services::{Fields, Names};
 
@@ -740,7 +740,7 @@ fn screen_lines(
 mod tests {
     use std::sync::atomic::{AtomicU32, Ordering};
 
-    use enshwick_loader_api::abi::{Level, PointMode, PointVerdict};
+    use enshwick::abi::{Level, PointMode, PointVerdict};
 
     use super::{Declared, Mods, Pending, Registry, Sealed};
     use crate::services::Names;

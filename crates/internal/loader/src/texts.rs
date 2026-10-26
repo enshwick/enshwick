@@ -6,7 +6,7 @@
 use std::path::Path;
 use std::sync::OnceLock;
 
-use enshwick_loader_api::i18n::{Language, Texts};
+use enshwick::i18n::{Language, Texts};
 
 /// The texts the loader ships.
 const EMBEDDED: &str = include_str!("texts.toml");

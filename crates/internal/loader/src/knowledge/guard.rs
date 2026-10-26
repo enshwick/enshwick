@@ -23,7 +23,7 @@ use core::ffi::c_void;
 use std::sync::atomic::{AtomicU8, AtomicU32, Ordering};
 use std::sync::{Mutex, OnceLock, PoisonError};
 
-use enshwick_loader_api::abi::{
+use enshwick::abi::{
     Header, HookFlags, KnowledgeInfo, KnowledgeInput, KnowledgeInputFn, Registers, Status,
 };
 

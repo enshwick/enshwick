@@ -1,5 +1,5 @@
 //! Which build table ids each part of the loader names, declared beside the
-//! code that names them, so `cargo enshwick compat` can tell which features
+//! code that names them, so `enshwick-compat` can tell which features
 //! a build lacks. Ids built at run time, such as `survivors.{name}`, only
 //! reach compat through these lists.
 
@@ -46,7 +46,7 @@ mod tests {
     use std::collections::BTreeSet;
     use std::path::{Path, PathBuf};
 
-    use enshwick_loader_builds::{self as tables, Table};
+    use enshwick_gamedata::{self as tables, Table};
 
     use super::TABLE_IDS;
 

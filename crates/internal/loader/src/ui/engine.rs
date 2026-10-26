@@ -1378,16 +1378,16 @@ mod tests {
     /// build whose label grew past them keeps the interface off.
     #[test]
     fn the_tables_layouts_fit_the_loader_s_buffers() {
-        let tables = enshwick_loader_builds::embedded()
+        let tables = enshwick_gamedata::embedded()
             .iter()
-            .map(|(_, text)| enshwick_loader_builds::Table::parse(text).unwrap());
-        for table in tables.filter(|t| t.side() == enshwick_loader_builds::Side::Client) {
+            .map(|(_, text)| enshwick_gamedata::Table::parse(text).unwrap());
+        for table in tables.filter(|t| t.side() == enshwick_gamedata::Side::Client) {
             let lookup = |id: &str| {
                 table
                     .constants()
                     .iter()
                     .find(|c| c.id() == id)
-                    .map(enshwick_loader_builds::Constant::value)
+                    .map(enshwick_gamedata::Constant::value)
             };
             let layout = Layout::read(&lookup).unwrap();
             assert_eq!(layout.nav, [0, 0x20, 0x24, 0x28, 0x30, 0x34, 0x48]);

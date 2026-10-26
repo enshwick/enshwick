@@ -4,14 +4,14 @@ Stats are named numbers on entities: extra health, a chance to crit, a
 damage factor, whether a character glows. Items, buffs and mods modify them;
 the server works the values out once per change, and any mod reads them for
 free. The
-[`stats`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/stats.rs)
+[`stats`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/stats.rs)
 module holds the API.
 
 ```rust
 use core::time::Duration;
-use enshwick_loader_api::stats::{Lasting, Modifier, Op, StatDef, builtin};
+use enshwick::stats::{Lasting, Modifier, Op, StatDef, builtin};
 
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     // A kind of this mod's own, `<mod>:luck`, from 0 to 1.
     let luck = load.define_stat("luck", &StatDef::additive("stat.luck").range(0.0, 1.0))?;
     // A built-in kind the platform applies to the game.
@@ -82,7 +82,7 @@ any value but 0. `aggregate(&def, modifiers)` is the same sum, for a mod's
 own use and its tests:
 
 ```rust
-use enshwick_loader_api::stats::{Op, StatDef, aggregate};
+use enshwick::stats::{Op, StatDef, aggregate};
 
 let health = StatDef::additive("stat.health").range(-100.0, 1000.0);
 // (0 + 50 + 30) * 1.5, raised to at least 100.
