@@ -6,8 +6,10 @@
 //! effect from the next step and every client gets it. Some values act on
 //! what comes next: enemy health and damage on enemies spawned after the
 //! change, food buffs on food eaten after it, the tombstone mode on the next
-//! death. A [`change`](GameSettings::change) lasts until the server stops;
-//! the configuration's values return with the next start.
+//! death. A [`change`](GameSettings::change) lasts until the server stops,
+//! unless the server saves its configuration first: a dedicated server
+//! writes its game settings back to its configuration file after a ban, an
+//! unban or an admin's settings change.
 //! [`keep`](GameSettings::keep) changes them the same way and keeps the
 //! fields it changed with the world: the loader applies them again each time
 //! that world loads, over what the configuration says, until
