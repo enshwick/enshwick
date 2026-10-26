@@ -168,8 +168,18 @@ pub fn get(id: &str, schema: &Schema, text: &str, key: &str) -> Result<String, S
     Ok(lines.join("\n"))
 }
 
+/// The setting a key names and the element of a list it names, if any:
+/// `per_level[2]` is element 2 of `per_level`.
+#[must_use]
+pub fn element(key: &str) -> (&str, Option<usize>) {
+    key.strip_suffix(']')
+        .and_then(|rest| rest.rsplit_once('['))
+        .and_then(|(base, index)| Some((base, Some(index.parse().ok()?))))
+        .unwrap_or((key, None))
+}
+
 fn field<'a>(id: &str, schema: &'a Schema, key: &str) -> Result<&'a Field, String> {
-    schema.field(key).ok_or_else(|| {
+    schema.field(element(key).0).ok_or_else(|| {
         let keys: Vec<&str> = schema.fields.iter().map(|f| f.key.as_str()).collect();
         texts::fill(
             "config.no-key",
@@ -250,16 +260,20 @@ pub fn set(
     if field.secret {
         return Err(texts::fill("remote.secret", &[("key", key)]));
     }
-    let new = typed(field, value)?;
     let mut doc: DocumentMut = text.parse().map_err(|e: toml_edit::TomlError| {
         texts::fill("refused.toml", &[("id", id), ("error", e.message())])
     })?;
-    if !crate::worlds::set_at(doc.as_table_mut(), key, new) {
-        return Err(texts::fill("refused.toml", &[("id", id), ("error", key)]));
-    }
-    let value = crate::worlds::value_at(doc.as_table(), key)
-        .map(|v| v.clone().decorated("", "").to_string())
-        .unwrap_or_default();
+    let value = if let (base, Some(index)) = element(key) {
+        set_element(&mut doc, field, base, index, value)?
+    } else {
+        let new = typed(field, value)?;
+        if !crate::worlds::set_at(doc.as_table_mut(), key, new) {
+            return Err(texts::fill("refused.toml", &[("id", id), ("error", key)]));
+        }
+        crate::worlds::value_at(doc.as_table(), key)
+            .map(|v| v.clone().decorated("", "").to_string())
+            .unwrap_or_default()
+    };
     Ok(Change {
         text: doc.to_string(),
         stage: field.stage,
@@ -267,6 +281,44 @@ pub fn set(
         value,
         destination: crate::worlds::Destination::Global,
     })
+}
+
+/// Sets element `index` of the list `base` in `doc` to `value`, checked as
+/// an element of `field`; the element as written.
+fn set_element(
+    doc: &mut DocumentMut,
+    field: &Field,
+    base: &str,
+    index: usize,
+    value: &str,
+) -> Result<String, String> {
+    let mut element = field.clone();
+    element.kind = field.element_kind();
+    let mut new = typed(&element, value)?;
+    let current = crate::worlds::value_at(doc.as_table(), base)
+        .cloned()
+        .or_else(|| field.default.parse::<toml_edit::Value>().ok());
+    let Some(toml_edit::Value::Array(mut items)) = current else {
+        return Err(no_element(field, index));
+    };
+    let Some(old) = items.get_mut(index) else {
+        return Err(no_element(field, index));
+    };
+    *new.decor_mut() = old.decor().clone();
+    *old = new;
+    let written = old.clone().decorated("", "").to_string();
+    if !crate::worlds::set_at(doc.as_table_mut(), base, toml_edit::Value::Array(items)) {
+        return Err(no_element(field, index));
+    }
+    Ok(written)
+}
+
+/// The reply when a list has no element `index`.
+fn no_element(field: &Field, index: usize) -> String {
+    texts::fill(
+        "config.no-element",
+        &[("key", &field.key), ("index", &index.to_string())],
+    )
 }
 
 /// The reply to a change of `id`'s `key`, on a game server or not.
@@ -454,5 +506,28 @@ mod tests {
         .unwrap();
         assert_eq!(change.text, "limit = 4\n\n[comfort]\nmultiplier = 2.5\n");
         assert_eq!(change.value, "2.5");
+    }
+
+    #[test]
+    fn an_element_of_a_list_is_set_in_place_and_checked_by_the_range() {
+        let schema = Schema::new(
+            "",
+            "config",
+            vec![
+                Field::new("per_level", Stage::Startup, &[2, 4, 8])
+                    .with_range(Some(1.0), Some(32.0)),
+            ],
+        );
+        let file = "# Altars.\nper_level = [2, 4, 8]\n";
+        let change = set("you.altars", &schema, file, "per_level[1]", "12").unwrap();
+        assert_eq!(change.text, "# Altars.\nper_level = [2, 12, 8]\n");
+        assert_eq!(change.value, "12");
+        assert!(set("you.altars", &schema, file, "per_level[1]", "40").is_err());
+        assert!(set("you.altars", &schema, file, "per_level[3]", "4").is_err());
+        let fresh = set("you.altars", &schema, "", "per_level[0]", "3").unwrap();
+        assert_eq!(fresh.text, "per_level = [3, 4, 8]\n");
+        assert_eq!(element("per_level[2]"), ("per_level", Some(2)));
+        assert_eq!(element("per_level"), ("per_level", None));
+        assert_eq!(element("odd[x]"), ("odd[x]", None));
     }
 }
