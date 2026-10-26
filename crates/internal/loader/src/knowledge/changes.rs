@@ -18,6 +18,7 @@
 
 use crate::pinned;
 use crate::pinned::{Constant, Symbol};
+use enshwick::ecs::Entity;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
@@ -135,14 +136,14 @@ fn loaded(parts: &Parts, game: usize, slot: usize) -> bool {
 
 /// Whether the save of the character `entity` has loaded; `false` on a
 /// build without the parts that tell.
-pub(crate) fn character_loaded(loader: &Loader, entity: u32) -> bool {
+pub(crate) fn character_loaded(loader: &Loader, entity: Entity) -> bool {
     let (Some(parts), Some(layout)) = (parts(loader), layout(loader)) else {
         return true;
     };
     let Ok((game, _)) = store(layout) else {
         return false;
     };
-    (entity as usize)
+    (entity.0 as usize)
         .checked_sub(1)
         .is_some_and(|slot| loaded(parts, game, slot))
 }
@@ -170,7 +171,7 @@ pub(crate) fn revoke(
         return Err(Status::BAD_ARGS);
     }
     let player = scope == KnowledgeInfo::PLAYER;
-    let current = super::value(loader, if player { entity } else { 0 }, id)?.value;
+    let current = super::value(loader, if player { Entity(entity) } else { Entity(0) }, id)?.value;
     let new = lowered(def_kind, current, value).ok_or(Status::BAD_ARGS)?;
     if new == current {
         return Ok(());
@@ -186,7 +187,7 @@ pub(crate) fn revoke(
     };
     let records = super::records(layout, state);
     if player {
-        let record = super::record(layout, state, entity)?;
+        let record = super::record(layout, state, Entity(entity))?;
         let slot = entity as usize - 1;
         if !loaded(parts, game, slot) {
             return Err(Status::REFUSED);
@@ -343,11 +344,11 @@ fn write_queue(loader: &Loader, key: &str, waiting: &[Waiting]) {
     }
 }
 
-fn apply(loader: &Loader, entity: u32, change: &Waiting) -> Result<(), Status> {
+fn apply(loader: &Loader, entity: Entity, change: &Waiting) -> Result<(), Status> {
     if change.revoke {
         revoke(
             loader,
-            entity,
+            entity.0,
             change.id,
             u32::from(change.kind),
             change.value,
@@ -355,7 +356,7 @@ fn apply(loader: &Loader, entity: u32, change: &Waiting) -> Result<(), Status> {
     } else {
         super::grant(
             loader,
-            entity,
+            entity.0,
             change.id,
             u32::from(change.kind),
             change.value,
@@ -371,7 +372,7 @@ fn character_of(loader: &Loader, key: u64) -> Option<u32> {
         .iter()
         .find(|p| p.key == key)
         .map(|p| p.entity)
-        .filter(|&entity| character_loaded(loader, entity))
+        .filter(|&entity| character_loaded(loader, Entity(entity)))
 }
 
 /// Applies a change of knowledge `id` for the account `key` now, when its
@@ -402,7 +403,7 @@ pub(crate) fn for_account(
         revoke: revoking,
     };
     if let Some(entity) = character_of(loader, key) {
-        return apply(loader, entity, &change);
+        return apply(loader, Entity(entity), &change);
     }
     let mut queue = QUEUE.relock();
     let world = queue.key.clone().ok_or(Status::MISSING)?;
@@ -470,10 +471,10 @@ fn settle(loader: &Loader) {
         let Some(player) = players.iter().find(|p| p.key == key) else {
             return true;
         };
-        if !character_loaded(loader, player.entity) {
+        if !character_loaded(loader, Entity(player.entity)) {
             return true;
         }
-        match apply(loader, player.entity, change) {
+        match apply(loader, Entity(player.entity), change) {
             Ok(()) => false,
             Err(status) if status == Status::REFUSED => true,
             Err(status) => {

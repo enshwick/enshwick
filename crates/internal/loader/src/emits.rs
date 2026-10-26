@@ -17,6 +17,7 @@
 
 use crate::pinned;
 use crate::pinned::Symbol;
+use enshwick::ecs::Entity;
 use std::sync::OnceLock;
 
 use enshwick::abi::{Status, TeleportRequest};
@@ -260,10 +261,10 @@ pub(crate) fn teleport(loader: &Loader, request: &TeleportRequest) -> Result<(),
     if request.entity == 0 {
         return Err(Status::BAD_ARGS);
     }
-    let current = crate::world::component(loader, request.entity, layout.transform)?;
+    let current = crate::world::component(loader, Entity(request.entity), layout.transform)?;
     // The game's teleport moves only what counts its teleports, actors and
     // characters; a prop would keep the component and stay.
-    if crate::world::component(loader, request.entity, layout.teleport_count).is_err() {
+    if crate::world::component(loader, Entity(request.entity), layout.teleport_count).is_err() {
         return Err(Status::REFUSED);
     }
     let orientation: [f32; 4] = if request.flags & TeleportRequest::ORIENTED == 0 {
