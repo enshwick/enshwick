@@ -57,12 +57,12 @@ A real mod keeps the texts in a file and embeds it with
 other fields with struct update syntax. `add_item` declares the item's id,
 its meter template's and its icon's.
 
-`add_item` serves two resources: the new item's `ItemInfo`, built from the
+`add_item` serves two resources: the new item's data, built from the
 vanilla one with the new id, GUID, name, description, meter and tooltip lines
 written in, and the item registry with the new GUID listed after the others;
 with a meter also the entity template and the template collection with it.
 With an icon it serves the icon's UI image too. Everything else in the
-`ItemInfo` is the vanilla item's, so a cloned chest places the same vanilla
+item data is the vanilla item's, so a cloned chest places the same vanilla
 chest.
 
 An item whose GUID changed keeps the stacks saved with the old one through a

@@ -154,10 +154,10 @@ Every method of `FakeHost` takes and returns the builder.
 | `handle(handle)`                      | The handle the mod receives; `ModHandle(1)` by default.                                               |
 | `symbol(name, address)`               | What `Load::symbol(name)` finds.                                                                      |
 | `system(name, address)`               | What `Load::system(name)` finds.                                                                      |
-| `constant(name, value)`               | What `Load::constant(name)` finds.                                                                    |
+| `constant(name, value)`               | What `Load::constant(name)` finds, an enshwick id's offset among them.                                |
 | `field_offset(type, field, offset)`   | What `Load::field_offset` finds.                                                                      |
-| `type_size(type, size)`               | What `Load::type_size` finds.                                                                         |
-| `type_hash(type, hash)`               | The ECS type hash of a component type.                                                                |
+| `type_size(type, size)`               | What `Load::type_size` finds, by reflected name or enshwick id.                                       |
+| `type_hash(type, hash)`               | The type hash of a component or resource type, by reflected name or enshwick id.                      |
 | `settings(text)`                      | The text of the mod's settings file.                                                                  |
 | `data_dir(path)`                      | The path `Load::data_dir` returns; `mod-data/test` by default. Nothing is created.                    |
 | `log_level(level)`                    | The most detailed level kept for the mod's lines.                                                     |

@@ -469,7 +469,8 @@ fn serve_stand_ins(
             rebuilding: Mutex::new(()),
         });
     }
-    let key = enshwick::content::items::ITEM_REGISTRY.key(enshwick::content::types::ITEM_REGISTRY);
+    let key =
+        enshwick::content::items::ITEM_REGISTRY.key_by_hash(crate::catalogue::types::ITEM_REGISTRY);
     match served.iter_mut().find(|s| s.key == key) {
         Some(listed) => listed.patches.push(patch(registry)),
         None => served.push(Served {
@@ -542,7 +543,7 @@ pub(crate) fn shared() -> Vec<(String, Vec<usize>)> {
 /// A resource key in words: the registries by name, others as type and
 /// GUID.
 fn key_name(key: &ResourceKey) -> String {
-    use enshwick::content::types;
+    use crate::catalogue::types;
     let kind = match key.type_hash {
         types::ITEM_REGISTRY => return "the item registry".to_owned(),
         types::RECIPE_REGISTRY => return "the recipe registry".to_owned(),
@@ -576,7 +577,7 @@ pub(crate) fn summary() -> crate::diag::Served {
 
 /// The vanilla template to read for `key`, a cloned template no mod serves.
 fn alias(key: &ResourceKey) -> Option<ResourceKey> {
-    if key.type_hash != enshwick::content::types::TEMPLATE {
+    if key.type_hash != crate::catalogue::types::TEMPLATE {
         return None;
     }
     let vanilla = ALIASES.get()?.get(&key.guid)?;
@@ -607,8 +608,10 @@ fn find(key: &ResourceKey) -> Option<(usize, &'static Served)> {
 
 /// The game's recipe registry.
 fn recipe_registry() -> ResourceKey {
-    use enshwick::content::{recipes::RECIPE_REGISTRY, types};
-    RECIPE_REGISTRY.key(types::RECIPE_REGISTRY)
+    use enshwick::content::recipes::RECIPE_REGISTRY;
+
+    use crate::catalogue::types;
+    RECIPE_REGISTRY.key_by_hash(types::RECIPE_REGISTRY)
 }
 
 /// Whether mods that are on serve the recipe registry and its build has

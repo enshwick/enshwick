@@ -3,8 +3,9 @@
 
 use std::sync::{Mutex, PoisonError};
 
-use super::{Blob, Guid, Id, types};
+use super::{Blob, EngineFacts, Guid, Id, types};
 use crate::abi::ItemData;
+use crate::engine_ids as ids;
 use crate::{Load, Off};
 
 /// The meter templates the mod serves.
@@ -17,13 +18,9 @@ pub const ITEM_REGISTRY: Guid = Guid::parse("3064d35d-7342-40ca-bdc9-aad58f83bf4
 /// the base every [`Meter`] template is cloned from.
 pub const METER_TEMPLATE_BASE: Guid = Guid::parse("39246eb2-1b9f-4881-8c60-e0e4f5d956f8");
 
-/// The type hash of `ecs::FuelSetup`, the component that holds a meter's
-/// maximum and starting fill in a template.
-const FUEL_SETUP: u32 = 0x139a_fbec;
-
 /// The tag of a vanilla item's name, read from the game's archive with the
-/// reflected `ItemInfo.name`; `None` for an item the archive lacks or a
-/// loader without the archive or the field.
+/// item's name field; `None` for an item the archive lacks or a loader
+/// without the archive or the field.
 ///
 /// # Examples
 ///
@@ -39,17 +36,8 @@ const FUEL_SETUP: u32 = 0x139a_fbec;
 #[must_use]
 pub fn vanilla_name_tag(item: Guid) -> Option<Guid> {
     let host = crate::host()?;
-    let mut offset = 0u64;
-    let status = (host.api().field_offset)(
-        crate::abi::Str::new("keen::ItemInfo"),
-        crate::abi::Str::new("name"),
-        &raw mut offset,
-    );
-    if !status.is_ok() {
-        return None;
-    }
-    let at = usize::try_from(offset).ok()?;
-    let info = host.game_resource(item.key(types::ITEM_INFO))?;
+    let at = host.offset(ids::ITEM_INFO_NAME).ok()?;
+    let info = host.game_resource(item.key_by_hash(host.hash(ids::ITEM_INFO).ok()?))?;
     Some(Guid(info.get(at..at.checked_add(16)?)?.try_into().ok()?))
 }
 
@@ -259,131 +247,105 @@ impl StatFormat {
     }
 }
 
-/// Where the fields an item edit touches sit, from the game's reflection.
+/// Where the fields an item edit touches sit on the running build, resolved
+/// by the loader.
 ///
 /// # Examples
 ///
 /// See [`ItemLayout::resolve`] and [`clone_item`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ItemLayout {
-    /// `ItemInfo.itemId`.
+    /// The item's game id.
     pub id: usize,
-    /// `ItemInfo.objectId`.
+    /// The item's GUID.
     pub object: usize,
-    /// `ItemInfo.name`.
+    /// The tag of its name.
     pub name: usize,
-    /// `ItemInfo.description`.
+    /// The tag of its description.
     pub description: usize,
-    /// `ItemInfo.flags`.
+    /// Its flags, such as [`ItemData::HAS_PIDE`].
     pub flags: usize,
-    /// `ItemInfo.pidEntity`, the template of each item's own entity.
+    /// The template of each item's own entity.
     pub pid_entity: usize,
-    /// `ItemInfo.uiValues`, the tooltip's lines.
+    /// The tooltip's lines.
     pub ui_values: usize,
-    /// `ItemInfo.iconImage`, the UI image of its icon.
+    /// The UI image of its icon.
     pub icon_image: usize,
-    /// `ImpactUiValue`: its size, then `locaId`, `valueFormat`, `value` and
-    /// `isSigned`.
+    /// One tooltip line: its size, then its label, number format, value and
+    /// "signed" flag.
     pub ui_value: [usize; 5],
-    /// `ItemRegistryResource.itemRefs`.
+    /// The item registry's references to every item.
     pub refs: usize,
-    /// `ItemRegistryResource.dbgNames`.
+    /// The item registry's debug names, beside the references.
     pub names: usize,
 }
 
 impl ItemLayout {
-    /// The layout on the running build.
+    /// The layout `facts` give: the running game's through [`Load`], a game
+    /// image's in a tool.
     ///
     /// # Errors
     ///
-    /// [`Off`] when a field is not reflected.
+    /// The first [`Off`] a fact returns, when the build lacks it.
     ///
     /// # Examples
     ///
     /// ```
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     let layout = enshwick::content::items::ItemLayout::resolve(load)?;
-    ///     enshwick::info!("ItemInfo.itemId at +{:#x}", layout.id);
+    ///     enshwick::info!("an item's id at +{:#x}", layout.id);
     ///     Ok(())
     /// }
     /// ```
-    pub fn resolve(load: &Load<'_>) -> Result<Self, Off> {
-        Self::with_lookup(
-            |ty, name| {
-                load.field_offset(ty, name)
-                    .map(|o| usize::try_from(o).unwrap_or(usize::MAX))
-            },
-            |ty| load.type_size(ty).map(|s| s as usize),
-        )
-    }
-
-    /// The layout of a game whose reflection `field` (a type's field offset)
-    /// and `size` (a type's size) read, for a tool that reads a game image
-    /// rather than running in the game.
-    ///
-    /// # Errors
-    ///
-    /// The first [`Off`] a lookup returns.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use enshwick::Off;
-    /// use enshwick::content::items::ItemLayout;
-    ///
-    /// let none = ItemLayout::with_lookup(|ty, f| Err(Off::new(format!("{ty}.{f}"))), |_| Ok(0));
-    /// assert!(none.is_err());
-    /// ```
-    pub fn with_lookup(
-        field: impl Fn(&str, &str) -> Result<usize, Off>,
-        size: impl Fn(&str) -> Result<usize, Off>,
-    ) -> Result<Self, Off> {
-        let item = |name: &str| field("keen::ItemInfo", name);
-        let value = |name: &str| field("keen::ImpactUiValue", name);
+    pub fn resolve(facts: &(impl EngineFacts + ?Sized)) -> Result<Self, Off> {
+        let at = |id: &str| facts.offset(id);
         Ok(Self {
-            id: item("itemId")?,
-            object: item("objectId")?,
-            name: item("name")?,
-            description: item("description")?,
-            flags: item("flags")?,
-            pid_entity: item("pidEntity")?,
-            ui_values: item("uiValues")?,
-            icon_image: item("iconImage")?,
+            id: at(ids::ITEM_INFO_ID)?,
+            object: at(ids::ITEM_INFO_OBJECT)?,
+            name: at(ids::ITEM_INFO_NAME)?,
+            description: at(ids::ITEM_INFO_DESCRIPTION)?,
+            flags: at(ids::ITEM_INFO_FLAGS)?,
+            pid_entity: at(ids::ITEM_INFO_PID_ENTITY)?,
+            ui_values: at(ids::ITEM_INFO_UI_VALUES)?,
+            icon_image: at(ids::ITEM_INFO_ICON_IMAGE)?,
             ui_value: [
-                size("keen::ImpactUiValue")?,
-                value("locaId")?,
-                value("valueFormat")?,
-                value("value")?,
-                value("isSigned")?,
+                facts.size(ids::ITEM_STAT)?,
+                at(ids::ITEM_STAT_LABEL)?,
+                at(ids::ITEM_STAT_FORMAT)?,
+                at(ids::ITEM_STAT_VALUE)?,
+                at(ids::ITEM_STAT_SIGNED)?,
             ],
-            refs: field("keen::ItemRegistryResource", "itemRefs")?,
-            names: field("keen::ItemRegistryResource", "dbgNames")?,
+            refs: at(ids::ITEM_REGISTRY_REFS)?,
+            names: at(ids::ITEM_REGISTRY_NAMES)?,
         })
     }
 }
 
-/// Where the fields a [`Meter`] template edit touches sit.
+/// Where the fields a [`Meter`] template edit touches sit on the running
+/// build, resolved by the loader.
 ///
 /// # Examples
 ///
 /// See [`clone_meter_template`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct MeterLayout {
-    /// `ecs::TemplateResource.components`.
+    /// A template's components.
     pub components: usize,
-    /// `ecs::FuelSetup`: its size, then `maxFuelCharges` and
-    /// `initialFuelPercentage`.
+    /// The component that holds a meter's maximum and starting fill: its
+    /// size, then where the maximum and the fill sit.
     pub fuel_setup: [usize; 3],
-    /// `ecs::TemplateCollectionResource.templates`.
+    /// The hash of that component's type.
+    pub fuel_setup_type: u32,
+    /// The template collection's list of templates.
     pub templates: usize,
 }
 
 impl MeterLayout {
-    /// The layout on the running build.
+    /// The layout `facts` give.
     ///
     /// # Errors
     ///
-    /// [`Off`] when a field is not reflected.
+    /// The first [`Off`] a fact returns, when the build lacks it.
     ///
     /// # Examples
     ///
@@ -394,19 +356,16 @@ impl MeterLayout {
     ///     Ok(())
     /// }
     /// ```
-    pub fn resolve(load: &Load<'_>) -> Result<Self, Off> {
-        let field = |ty: &str, name: &str| {
-            load.field_offset(ty, name)
-                .map(|o| usize::try_from(o).unwrap_or(usize::MAX))
-        };
+    pub fn resolve(facts: &(impl EngineFacts + ?Sized)) -> Result<Self, Off> {
         Ok(Self {
-            components: field("keen::ecs::TemplateResource", "components")?,
+            components: facts.offset(ids::TEMPLATE_COMPONENTS)?,
             fuel_setup: [
-                load.type_size("keen::ecs::FuelSetup")? as usize,
-                field("keen::ecs::FuelSetup", "maxFuelCharges")?,
-                field("keen::ecs::FuelSetup", "initialFuelPercentage")?,
+                facts.size(ids::FUEL_SETUP)?,
+                facts.offset(ids::FUEL_SETUP_MAX)?,
+                facts.offset(ids::FUEL_SETUP_START)?,
             ],
-            templates: field("keen::ecs::TemplateCollectionResource", "templates")?,
+            fuel_setup_type: facts.hash(ids::FUEL_SETUP)?,
+            templates: facts.offset(ids::TEMPLATE_COLLECTION_TEMPLATES)?,
         })
     }
 }
@@ -418,7 +377,7 @@ const BLOB_STRING: usize = 8;
 /// A `BlobVariant`: type hash, offset from its second word, size.
 const VARIANT: usize = 12;
 
-/// `item`'s `ItemInfo` under `guid`, the item's own or one it was renamed
+/// `item`'s item data under `guid`, the item's own or one it was renamed
 /// from, made from the vanilla one in `like`: its id, object GUID, the tags
 /// it names, its meter and tooltip lines written in, the rest
 /// kept. `None` when `like` is too short for the layout, or when the item
@@ -492,8 +451,8 @@ pub fn clone_item(layout: &ItemLayout, like: &[u8], item: &NewItem, guid: Guid) 
 }
 
 /// A [`Meter`]'s entity template, cloned from the water pouch's in
-/// `template`: its `FuelSetup` holds the meter's maximum and starting fill.
-/// `None` when the template has no `FuelSetup` of the reflected size.
+/// `template`: its fuel setup holds the meter's maximum and starting fill.
+/// `None` when the template has no fuel setup of the layout's size.
 ///
 /// # Examples
 ///
@@ -501,15 +460,17 @@ pub fn clone_item(layout: &ItemLayout, like: &[u8], item: &NewItem, guid: Guid) 
 /// use enshwick::content::{Blob, Guid};
 /// use enshwick::content::items::{Meter, MeterLayout, clone_meter_template};
 ///
-/// let layout = MeterLayout { components: 0, fuel_setup: [0x28, 0x20, 0x24], templates: 0 };
-/// // One component: a FuelSetup of 0x28 bytes right after its variant.
+/// let layout = MeterLayout {
+///     components: 0, fuel_setup: [0x28, 0x20, 0x24], fuel_setup_type: 7, templates: 0,
+/// };
+/// // One component: a fuel setup of 0x28 bytes right after its variant.
 /// let mut template = vec![8, 0, 0, 0, 1, 0, 0, 0];
-/// template.extend_from_slice(&0x139a_fbec_u32.to_le_bytes());
+/// template.extend_from_slice(&7u32.to_le_bytes());
 /// template.extend_from_slice(&8u32.to_le_bytes());
 /// template.extend_from_slice(&0x28u32.to_le_bytes());
 /// template.extend_from_slice(&[0; 0x28]);
 /// let meter = Meter { template: enshwick::content::Id::new("my-mod:charges"), max: 3, start: 3 };
-/// let clone = Blob::new(&clone_meter_template(&layout, &template, &meter).ok_or("no FuelSetup")?);
+/// let clone = Blob::new(&clone_meter_template(&layout, &template, &meter).ok_or("no fuel setup")?);
 /// assert_eq!(clone.read_u32(20 + 0x20), Some(3));
 /// # Ok::<(), &str>(())
 /// ```
@@ -523,7 +484,7 @@ pub fn clone_meter_template(
     let (start, count) = blob.array(layout.components)?;
     let [expected, max_at, fill_at] = layout.fuel_setup;
     for variant in (0..usize::try_from(count).ok()?).map(|i| start + i * VARIANT) {
-        if blob.read_u32(variant)? != FUEL_SETUP {
+        if blob.read_u32(variant)? != layout.fuel_setup_type {
             continue;
         }
         let data = (variant + 4).checked_add(usize::try_from(blob.read_u32(variant + 4)?).ok()?)?;
@@ -547,7 +508,9 @@ pub fn clone_meter_template(
 /// use enshwick::content::{Blob, Guid};
 /// use enshwick::content::items::{MeterLayout, list_meter_template};
 ///
-/// let layout = MeterLayout { components: 0, fuel_setup: [0x28, 0x20, 0x24], templates: 0 };
+/// let layout = MeterLayout {
+///     components: 0, fuel_setup: [0x28, 0x20, 0x24], fuel_setup_type: 7, templates: 0,
+/// };
 /// let collection = list_meter_template(&layout, &[0; 8], Guid([7; 16])).ok_or("no list")?;
 /// assert_eq!(Blob::new(&collection).array(0).map(|(_, n)| n), Some(1));
 /// # Ok::<(), &str>(())
@@ -579,11 +542,11 @@ pub fn list_meter_template(
 /// use enshwick::content::{Guid, types};
 /// use enshwick::content::items::{ITEM_REGISTRY, ItemLayout, list_item};
 ///
-/// /// Lists an item whose `ItemInfo` the mod serves itself.
+/// /// Lists an item whose item data the mod serves itself.
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 ///     let layout = ItemLayout::resolve(load)?;
 ///     let staff = Guid::parse("8a3f6e21-5c4b-4d7e-9f10-2b7c5e6a9d31");
-///     let registry = ITEM_REGISTRY.key(types::ITEM_REGISTRY);
+///     let registry = ITEM_REGISTRY.key(types::ITEM_REGISTRY)?;
 ///     load.serve(registry, registry, move |base| list_item(&layout, base, staff, "Staff"))
 /// }
 /// ```
@@ -636,8 +599,8 @@ pub fn list_item(
 }
 
 impl Load<'_> {
-    /// Adds an item to the game, on the server and the client alike: an
-    /// `ItemInfo` cloned from a vanilla item, listed in the item registry
+    /// Adds an item to the game, on the server and the client alike: the
+    /// item data cloned from a vanilla item, listed in the item registry
     /// beside items other mods add, and with a [`Meter`] its entity
     /// template, listed in the template collection. Players see it once a
     /// recipe, loot or an action gives it to them.
@@ -691,8 +654,8 @@ impl Load<'_> {
             self.add_icon(icon)?;
         }
         self.serve(
-            guid.key(types::ITEM_INFO),
-            like.key(types::ITEM_INFO),
+            guid.key(types::ITEM_INFO)?,
+            like.key(types::ITEM_INFO)?,
             move |base| {
                 // Naming an icon the client's UI does not know ends the
                 // game: only once the loader says it shows served ones.
@@ -706,7 +669,7 @@ impl Load<'_> {
                 clone_item(&layout, base, &item, guid)
             },
         )?;
-        let registry = ITEM_REGISTRY.key(types::ITEM_REGISTRY);
+        let registry = ITEM_REGISTRY.key(types::ITEM_REGISTRY)?;
         self.serve(registry, registry, move |base| {
             list_item(&layout, base, guid, &debug_name)
         })?;
@@ -729,11 +692,12 @@ impl Load<'_> {
             drop(served);
             let layout = MeterLayout::resolve(self)?;
             self.serve(
-                meter.template.key(types::TEMPLATE),
-                METER_TEMPLATE_BASE.key(types::TEMPLATE),
+                meter.template.key(types::TEMPLATE)?,
+                METER_TEMPLATE_BASE.key(types::TEMPLATE)?,
                 move |base| clone_meter_template(&layout, base, &meter),
             )?;
-            let collection = super::workshops::TEMPLATE_COLLECTION.key(types::TEMPLATE_COLLECTION);
+            let collection =
+                super::workshops::TEMPLATE_COLLECTION.key(types::TEMPLATE_COLLECTION)?;
             self.serve(collection, collection, move |base| {
                 list_meter_template(&layout, base, meter.template.guid())
             })?;
@@ -871,11 +835,12 @@ mod tests {
         let layout = MeterLayout {
             components: 0,
             fuel_setup: [0x28, 0x20, 0x24],
+            fuel_setup_type: 7,
             templates: 0,
         };
         let mut template = vec![8, 0, 0, 0, 2, 0, 0, 0];
-        // A first component of another type, then the FuelSetup.
-        for (hash, offset, size) in [(0x1234_u32, 20u32, 4u32), (FUEL_SETUP, 12, 0x28)] {
+        // A first component of another type, then the fuel setup.
+        for (hash, offset, size) in [(0x1234_u32, 20u32, 4u32), (7, 12, 0x28)] {
             template.extend_from_slice(&hash.to_le_bytes());
             template.extend_from_slice(&offset.to_le_bytes());
             template.extend_from_slice(&size.to_le_bytes());

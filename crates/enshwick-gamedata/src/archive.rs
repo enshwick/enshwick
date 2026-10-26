@@ -460,8 +460,8 @@ mod tests {
         };
         enshwick::content::icons::tint(&mut rgba, tint);
         assert!(rgba.as_chunks::<4>().0.iter().any(|p| p[2] > p[0]), "bluer");
-        let registry =
-            enshwick::content::items::ITEM_REGISTRY.key(enshwick::content::types::ITEM_REGISTRY);
+        let hash = crate::catalogue::type_hash(enshwick::content::types::ITEM_REGISTRY.id());
+        let registry = enshwick::content::items::ITEM_REGISTRY.key_by_hash(hash.unwrap());
         let registry = archive.resource(&registry).unwrap();
         let workbench = enshwick::content::workshops::stations::WORKBENCH.item;
         assert!(registry.windows(16).any(|w| w == workbench.0));

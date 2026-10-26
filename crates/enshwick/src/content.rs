@@ -8,7 +8,7 @@
 
 use core::ffi::c_void;
 
-use crate::abi::{ResourceKey, ResourcePatchFn, Status};
+use crate::abi::{ResourceKey, ResourcePatchFn, Status, Str};
 use crate::{Load, Off};
 
 pub mod icons;
@@ -112,18 +112,42 @@ impl Guid {
         hash
     }
 
-    /// The key of the resource of `type_hash` with this GUID, part 0.
+    /// The key of the resource of type `ty` with this GUID, part 0, with
+    /// the type's hash on the running build.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] outside the game or when the build lacks the type.
     ///
     /// # Examples
     ///
     /// ```
     /// use enshwick::content::{Guid, types};
     ///
-    /// let key = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d").key(types::ITEM_INFO);
-    /// assert_eq!(key.part, 0);
+    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    ///     let chest = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");
+    ///     assert_eq!(chest.key(types::ITEM_INFO)?.part, 0);
+    ///     Ok(())
+    /// }
+    /// ```
+    pub fn key(self, ty: ResourceType) -> Result<ResourceKey, Off> {
+        Ok(self.key_by_hash(ty.hash()?))
+    }
+
+    /// The key of the resource whose type has the hash `type_hash` with
+    /// this GUID, part 0: for a type [`types`] does not name, and for tools
+    /// that know the hash.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::content::Guid;
+    ///
+    /// let key = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d").key_by_hash(7);
+    /// assert_eq!((key.type_hash, key.part), (7, 0));
     /// ```
     #[must_use]
-    pub const fn key(self, type_hash: u32) -> ResourceKey {
+    pub const fn key_by_hash(self, type_hash: u32) -> ResourceKey {
         ResourceKey {
             guid: self.0,
             type_hash,
@@ -367,17 +391,38 @@ impl Id {
 
     /// [`Guid::key`] of its GUID.
     ///
+    /// # Errors
+    ///
+    /// As [`Guid::key`].
+    ///
     /// # Examples
     ///
     /// ```
     /// use enshwick::content::{Id, types};
     ///
-    /// let key = Id::new("safes:safe").key(types::ITEM_INFO);
-    /// assert_eq!(key.guid, Id::new("safes:safe").guid().0);
+    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    ///     let key = Id::new("my-mod:safe").key(types::ITEM_INFO)?;
+    ///     assert_eq!(key.guid, Id::new("my-mod:safe").guid().0);
+    ///     Ok(())
+    /// }
+    /// ```
+    pub fn key(self, ty: ResourceType) -> Result<ResourceKey, Off> {
+        self.guid.key(ty)
+    }
+
+    /// [`Guid::key_by_hash`] of its GUID.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::content::Id;
+    ///
+    /// let key = Id::new("my-mod:safe").key_by_hash(7);
+    /// assert_eq!(key.guid, Id::new("my-mod:safe").guid().0);
     /// ```
     #[must_use]
-    pub const fn key(self, type_hash: u32) -> ResourceKey {
-        self.guid.key(type_hash)
+    pub const fn key_by_hash(self, type_hash: u32) -> ResourceKey {
+        self.guid.key_by_hash(type_hash)
     }
 }
 
@@ -464,7 +509,8 @@ const fn digit(c: u8) -> u8 {
 /// use enshwick::content::{game_resource, types};
 /// use enshwick::content::workshops::stations;
 ///
-/// if let Some(item) = game_resource(stations::WORKBENCH.item.key(types::ITEM_INFO)) {
+/// let key = stations::WORKBENCH.item.key(types::ITEM_INFO);
+/// if let Some(item) = key.ok().and_then(game_resource) {
 ///     enshwick::info!("the Workbench item is {} bytes", item.len());
 /// }
 /// ```
@@ -484,7 +530,9 @@ impl crate::Host {
     ///
     /// if let Some(host) = enshwick::host() {
     ///     let chest = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");
-    ///     let _ = host.game_resource(chest.key(types::ITEM_INFO));
+    ///     if let Ok(key) = chest.key(types::ITEM_INFO) {
+    ///         let _ = host.game_resource(key);
+    ///     }
     /// }
     /// ```
     #[must_use]
@@ -514,24 +562,142 @@ impl crate::Host {
     }
 }
 
-/// Type hashes of resources mods commonly serve.
+/// A type of game resource by enshwick's name for it, such as
+/// [`types::ITEM_INFO`]; the loader maps it to the running build's type,
+/// whose hash resource keys carry.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::content::types;
+///
+/// assert_eq!(types::ITEM_INFO.id(), "item_info");
+/// assert!(types::ITEM_INFO.hash().is_err(), "outside the game");
+/// ```
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct ResourceType(&'static str);
+
+impl ResourceType {
+    /// Its enshwick id, which the loader's catalogue maps to the engine.
+    ///
+    /// # Examples
+    ///
+    /// See [`ResourceType`].
+    #[must_use]
+    pub const fn id(self) -> &'static str {
+        self.0
+    }
+
+    /// Its hash on the running build.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] outside the game or when the build lacks the type.
+    ///
+    /// # Examples
+    ///
+    /// See [`ResourceType`].
+    pub fn hash(self) -> Result<u32, Off> {
+        crate::host()
+            .ok_or_else(|| Off::new(format!("type {}: outside the game", self.0)))?
+            .hash(self.0)
+    }
+}
+
+/// Resource types mods commonly serve.
 pub mod types {
-    /// `ItemInfo`, one item.
-    pub const ITEM_INFO: u32 = 0xb5ce_8765;
-    /// `ItemRegistryResource`, the list of every item.
-    pub const ITEM_REGISTRY: u32 = 0x72ab_39b6;
-    /// `RecipeRegistryResource`, every recipe.
-    pub const RECIPE_REGISTRY: u32 = 0x5f53_82cf;
-    /// `ecs::TemplateResource`, what a placed object or creature is made of.
-    pub const TEMPLATE: u32 = 0x3976_8775;
-    /// `ecs::TemplateCollectionResource`, the list of every template.
-    pub const TEMPLATE_COLLECTION: u32 = 0xd80f_e371;
-    /// `WorkshopRegistryResource`, every workshop.
-    pub const WORKSHOP_REGISTRY: u32 = 0xa8ea_5924;
+    use super::ResourceType;
+    use crate::engine_ids as ids;
+
+    /// One item.
+    pub const ITEM_INFO: ResourceType = ResourceType(ids::ITEM_INFO);
+    /// The list of every item.
+    pub const ITEM_REGISTRY: ResourceType = ResourceType(ids::ITEM_REGISTRY);
+    /// Every recipe.
+    pub const RECIPE_REGISTRY: ResourceType = ResourceType(ids::RECIPE_REGISTRY);
+    /// What a placed object or creature is made of.
+    pub const TEMPLATE: ResourceType = ResourceType(ids::TEMPLATE);
+    /// The list of every template.
+    pub const TEMPLATE_COLLECTION: ResourceType = ResourceType(ids::TEMPLATE_COLLECTION);
+    /// Every workshop.
+    pub const WORKSHOP_REGISTRY: ResourceType = ResourceType(ids::WORKSHOP_REGISTRY);
     /// The client's UI image, such as an item icon.
-    pub const UI_IMAGE: u32 = super::icons::UI_IMAGE;
-    /// `FbUiBundle`, the client's UI data, the crafting menu among it.
-    pub const UI_BUNDLE: u32 = 0xfef9_18b8;
+    pub const UI_IMAGE: ResourceType = ResourceType(ids::UI_IMAGE);
+    /// The client's UI data, the crafting menu among it.
+    pub const UI_BUNDLE: ResourceType = ResourceType(ids::UI_BUNDLE);
+}
+
+/// Answers engine facts by enshwick id: the running game through [`Load`]
+/// and [`crate::Host`], a tool through the game's reflection; the content
+/// layouts resolve through it.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::content::EngineFacts;
+/// use enshwick::content::items::ItemLayout;
+///
+/// fn layout(facts: &impl EngineFacts) -> Result<ItemLayout, enshwick::Off> {
+///     ItemLayout::resolve(facts)
+/// }
+/// ```
+pub trait EngineFacts {
+    /// The byte offset the id names.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] when the build lacks it.
+    fn offset(&self, id: &str) -> Result<usize, Off>;
+
+    /// The size of the type the id names.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] when the build lacks it.
+    fn size(&self, id: &str) -> Result<usize, Off>;
+
+    /// The hash of the type the id names.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] when the build lacks it.
+    fn hash(&self, id: &str) -> Result<u32, Off>;
+}
+
+impl EngineFacts for crate::Host {
+    fn offset(&self, id: &str) -> Result<usize, Off> {
+        let mut out = 0u64;
+        let status = (self.api().constant)(self.handle(), Str::new(id), &raw mut out);
+        let offset = crate::load::ok(status, out, || format!("offset {id}"))?;
+        usize::try_from(offset).map_err(|_| Off::new(format!("offset {id} is out of range")))
+    }
+
+    fn size(&self, id: &str) -> Result<usize, Off> {
+        let mut out = 0u32;
+        let status = (self.api().type_size)(Str::new(id), &raw mut out);
+        let size = crate::load::ok(status, out, || format!("type {id}"))?;
+        usize::try_from(size).map_err(|_| Off::new(format!("type {id} is out of range")))
+    }
+
+    fn hash(&self, id: &str) -> Result<u32, Off> {
+        let mut out = 0u32;
+        let status = (self.api().type_hash)(Str::new(id), &raw mut out);
+        crate::load::ok(status, out, || format!("type {id}"))
+    }
+}
+
+impl EngineFacts for Load<'_> {
+    fn offset(&self, id: &str) -> Result<usize, Off> {
+        self.host().offset(id)
+    }
+
+    fn size(&self, id: &str) -> Result<usize, Off> {
+        self.host().size(id)
+    }
+
+    fn hash(&self, id: &str) -> Result<u32, Off> {
+        self.host().hash(id)
+    }
 }
 
 /// A resource blob being edited.
@@ -787,7 +953,7 @@ unsafe extern "system" fn build(
 /// const TABLE: Guid = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");
 ///
 /// fn settings_changed() {
-///     if let Err(off) = rebuild(TABLE.key(types::ITEM_INFO)) {
+///     if let Err(off) = TABLE.key(types::ITEM_INFO).and_then(rebuild) {
 ///         enshwick::warn!("the change applies at the next start: {off}");
 ///     }
 /// }
@@ -826,11 +992,7 @@ impl Load<'_> {
     pub fn declare(&mut self, id: Id) -> Result<Guid, Off> {
         let api = self.host().api();
         let mut out = [0u8; 16];
-        let status = (api.declare_content)(
-            self.host().handle(),
-            crate::abi::Str::new(id.name()),
-            &raw mut out,
-        );
+        let status = (api.declare_content)(self.host().handle(), Str::new(id.name()), &raw mut out);
         crate::load::ok(status, Guid(out), || format!("content id {id}"))
     }
 
@@ -862,12 +1024,7 @@ impl Load<'_> {
         text: &str,
     ) -> Result<(), Off> {
         let api = self.host().api();
-        let status = (api.add_text)(
-            self.host().handle(),
-            tag.id(),
-            language.0,
-            crate::abi::Str::new(text),
-        );
+        let status = (api.add_text)(self.host().handle(), tag.id(), language.0, Str::new(text));
         crate::load::ok(status, (), || "add text".to_owned())
     }
 
@@ -889,7 +1046,7 @@ impl Load<'_> {
     /// const SAFE: Guid = Guid::parse("5afe5afe-0000-4000-8000-000000000001");
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    ///     load.serve(SAFE.key(types::ITEM_INFO), CHEST.key(types::ITEM_INFO), |chest| {
+    ///     load.serve(SAFE.key(types::ITEM_INFO)?, CHEST.key(types::ITEM_INFO)?, |chest| {
     ///         let mut item = Blob::new(chest);
     ///         item.write(0, &SAFE.id().to_le_bytes());
     ///         item.write(4, &SAFE.0);
@@ -939,7 +1096,7 @@ impl Load<'_> {
     /// const CHEST: Guid = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    ///     let key = CHEST.key(types::ITEM_INFO);
+    ///     let key = CHEST.key(types::ITEM_INFO)?;
     ///     load.serve(key, key, |chest| Some(chest.to_vec()))?;
     ///     load.allow_rebuild(key)
     /// }

@@ -8,8 +8,9 @@
 //! here on the client; the dedicated server has no UI bundle.
 
 use super::workshops::WorkshopId;
-use super::{Blob, Guid, types};
+use super::{Blob, EngineFacts, Guid, types};
 use crate::abi::Side;
+use crate::engine_ids as ids;
 use crate::{Load, Off};
 
 /// The client's UI bundle resource, which holds the crafting menu.
@@ -19,47 +20,47 @@ pub const UI_BUNDLE: Guid = Guid::parse("46e14df6-fb8f-4f66-9463-e23b9e19e48e");
 /// together; the game drops the rest without a word.
 pub const GROUP_ENTRIES: usize = 512;
 
-/// Where the fields of the crafting menu sit, from the game's reflection.
+/// Where the fields of the crafting menu sit on the running build, resolved
+/// by the loader.
 ///
 /// # Examples
 ///
 /// See [`MenuLayout::resolve`] and [`list_recipes`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct MenuLayout {
-    /// `FbUiBundle.menu` + `FbUiMenu.crafting` + `FbUiCrafting.recipes`: the
-    /// recipe collection in the bundle.
+    /// The recipe collection inside the UI bundle.
     pub collection: usize,
-    /// `FbUiCraftingRecipeCollection.workshops`, the workshop of each tree.
+    /// The collection's workshop of each tree.
     pub workshops: usize,
-    /// `FbUiCraftingRecipeCollection.trees`.
+    /// The collection's trees, one per workshop.
     pub trees: usize,
-    /// `FbUiCraftingRecipeCollection.maxRecipeGroupCount`.
+    /// The collection's most groups in one tree.
     pub max_groups: usize,
-    /// `FbUiCraftingRecipeCollection.maxRecipeSetCount`.
+    /// The collection's most sets in one group.
     pub max_sets: usize,
-    /// `FbUiCraftingRecipeTree` size.
+    /// One tree's size.
     pub tree: usize,
-    /// `FbUiCraftingRecipeTree.groups`.
+    /// A tree's groups.
     pub groups: usize,
-    /// `FbUiCraftingRecipeGroup` size.
+    /// One group's size.
     pub group: usize,
-    /// `FbUiCraftingRecipeGroup.groupId`.
+    /// A group's id.
     pub group_id: usize,
-    /// `FbUiCraftingRecipeGroup.sets`.
+    /// A group's sets.
     pub sets: usize,
-    /// `FbUiCraftingRecipeSet` size.
+    /// One set's size.
     pub set: usize,
-    /// `FbUiCraftingRecipeSet.entries`, recipe ids.
+    /// A set's entries, recipe ids.
     pub entries: usize,
 }
 
 impl MenuLayout {
-    /// The layout on the running build; [`Off`] on the dedicated server,
-    /// which has no crafting menu.
+    /// The layout `facts` give; [`Off`] on the dedicated server, which has
+    /// no crafting menu.
     ///
     /// # Errors
     ///
-    /// [`Off`] when a field or type is not reflected.
+    /// The first [`Off`] a fact returns, when the build lacks it.
     ///
     /// # Examples
     ///
@@ -72,52 +73,21 @@ impl MenuLayout {
     ///     Ok(())
     /// }
     /// ```
-    pub fn resolve(load: &Load<'_>) -> Result<Self, Off> {
-        Self::with_lookup(
-            |ty, name| {
-                load.field_offset(ty, name)
-                    .map(|o| usize::try_from(o).unwrap_or(usize::MAX))
-            },
-            |ty| load.type_size(ty).map(|s| s as usize),
-        )
-    }
-
-    /// The layout of a game whose reflection `field` (a type's field offset)
-    /// and `size` (a type's size) read.
-    ///
-    /// # Errors
-    ///
-    /// The first [`Off`] a lookup returns.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use enshwick::Off;
-    /// use enshwick::content::menu::MenuLayout;
-    ///
-    /// let none = MenuLayout::with_lookup(|ty, f| Err(Off::new(format!("{ty}.{f}"))), |_| Ok(0));
-    /// assert!(none.is_err());
-    /// ```
-    pub fn with_lookup(
-        field: impl Fn(&str, &str) -> Result<usize, Off>,
-        size: impl Fn(&str) -> Result<usize, Off>,
-    ) -> Result<Self, Off> {
-        let collection = |name: &str| field("keen::FbUiCraftingRecipeCollection", name);
+    pub fn resolve(facts: &(impl EngineFacts + ?Sized)) -> Result<Self, Off> {
+        let at = |id: &str| facts.offset(id);
         Ok(Self {
-            collection: field("keen::FbUiBundle", "menu")?
-                + field("keen::FbUiMenu", "crafting")?
-                + field("keen::FbUiCrafting", "recipes")?,
-            workshops: collection("workshops")?,
-            trees: collection("trees")?,
-            max_groups: collection("maxRecipeGroupCount")?,
-            max_sets: collection("maxRecipeSetCount")?,
-            tree: size("keen::FbUiCraftingRecipeTree")?,
-            groups: field("keen::FbUiCraftingRecipeTree", "groups")?,
-            group: size("keen::FbUiCraftingRecipeGroup")?,
-            group_id: field("keen::FbUiCraftingRecipeGroup", "groupId")?,
-            sets: field("keen::FbUiCraftingRecipeGroup", "sets")?,
-            set: size("keen::FbUiCraftingRecipeSet")?,
-            entries: field("keen::FbUiCraftingRecipeSet", "entries")?,
+            collection: at(ids::UI_BUNDLE_CRAFTING_MENU)?,
+            workshops: at(ids::CRAFTING_MENU_WORKSHOPS)?,
+            trees: at(ids::CRAFTING_MENU_TREES)?,
+            max_groups: at(ids::CRAFTING_MENU_MAX_GROUPS)?,
+            max_sets: at(ids::CRAFTING_MENU_MAX_SETS)?,
+            tree: facts.size(ids::CRAFTING_MENU_TREE)?,
+            groups: at(ids::CRAFTING_MENU_TREE_GROUPS)?,
+            group: facts.size(ids::CRAFTING_MENU_GROUP)?,
+            group_id: at(ids::CRAFTING_MENU_GROUP_ID)?,
+            sets: at(ids::CRAFTING_MENU_GROUP_SETS)?,
+            set: facts.size(ids::CRAFTING_MENU_SET)?,
+            entries: at(ids::CRAFTING_MENU_SET_ENTRIES)?,
         })
     }
 }
@@ -157,7 +127,7 @@ pub struct MenuEntry {
 ///         after: Some(Guid::parse("45390726-8a83-4538-91a2-db2a633c8eac")),
 ///         workshop: None,
 ///     };
-///     let bundle = UI_BUNDLE.key(types::UI_BUNDLE);
+///     let bundle = UI_BUNDLE.key(types::UI_BUNDLE)?;
 ///     load.serve(bundle, bundle, move |base| list_recipes(&layout, base, &[entry]))
 /// }
 /// ```
@@ -326,7 +296,7 @@ fn group_entries(layout: &MenuLayout, blob: &Blob, group: usize) -> Option<usize
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 ///     let layout = MenuLayout::resolve(load)?;
 ///     let bench = WorkshopId::new(Id::new("my-mod:bench.workshop").guid());
-///     let bundle = UI_BUNDLE.key(types::UI_BUNDLE);
+///     let bundle = UI_BUNDLE.key(types::UI_BUNDLE)?;
 ///     load.serve(bundle, bundle, move |base| list_workshop(&layout, base, bench))
 /// }
 /// ```
@@ -386,14 +356,15 @@ pub(crate) fn serve(
     if load.host().build().side != Side::CLIENT {
         return Ok(());
     }
-    let layout = match MenuLayout::resolve(load) {
-        Ok(layout) => layout,
+    let resolved =
+        MenuLayout::resolve(load).and_then(|layout| Ok((layout, UI_BUNDLE.key(types::UI_BUNDLE)?)));
+    let (layout, bundle) = match resolved {
+        Ok(resolved) => resolved,
         Err(off) => {
             crate::warn_once!("new recipes stay out of the crafting menu: {off}");
             return Ok(());
         }
     };
-    let bundle = UI_BUNDLE.key(types::UI_BUNDLE);
     load.serve(bundle, bundle, move |base| {
         edit(&layout, base).or_else(|| {
             crate::warn!("new recipes stay out of the crafting menu: the UI bundle does not read");

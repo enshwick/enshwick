@@ -5,7 +5,8 @@ use std::sync::Arc;
 
 use super::menu::{self, MenuEntry};
 use super::workshops::WorkshopId;
-use super::{Blob, DebugName, Guid, Id, types};
+use super::{Blob, DebugName, EngineFacts, Guid, Id, types};
+use crate::engine_ids as ids;
 use crate::{Load, Off};
 
 /// The most recipes the game itself takes at one workshop; more ends the game
@@ -67,49 +68,52 @@ pub struct NewRecipe {
     pub workshop: Option<WorkshopId>,
 }
 
-/// Where the fields a recipe edit touches sit, from the game's reflection.
+/// Where the fields a recipe edit touches sit on the running build,
+/// resolved by the loader.
 ///
 /// # Examples
 ///
 /// See [`RecipeLayout::resolve`] and [`add_recipe_to`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct RecipeLayout {
-    /// `RecipeRegistryResource.recipes`.
+    /// The registry's list of recipes.
     pub recipes: usize,
-    /// `RecipeInfo` size.
+    /// One recipe's size.
     pub recipe: usize,
-    /// `RecipeInfo.recipeGuid`.
+    /// The recipe's GUID.
     pub guid: usize,
-    /// `RecipeInfo.recipeId`.
+    /// The recipe's game id.
     pub id: usize,
-    /// `RecipeInfo.workshopGuid`.
+    /// The GUID of the workshop it is made at.
     pub workshop_guid: usize,
-    /// `RecipeInfo.workshopId`.
+    /// The id of the workshop it is made at.
     pub workshop: usize,
-    /// `RecipeInfo.input`.
+    /// Its ingredients.
     pub input: usize,
-    /// `RecipeInfo.output`.
+    /// What it makes.
     pub output: usize,
-    /// `RecipeInfo.completionRequirementQuery`, whose flag id comes first.
+    /// What unlocks it, whose flag id comes first.
     pub completion: usize,
-    /// The array and string headers inside a `RecipeInfo`.
+    /// The array and string headers inside a recipe: ingredients, outputs,
+    /// required props and debug name.
     pub relative: [usize; 4],
-    /// `RecipeInputResource` size.
+    /// One ingredient's size.
     pub input_size: usize,
-    /// `RecipeItemStackResource` size.
+    /// One item stack's size.
     pub stack_size: usize,
-    /// `RecipeItemStackResource.item`.
+    /// An item stack's item.
     pub stack_item: usize,
-    /// `RecipeItemStackResource.count`.
+    /// An item stack's count.
     pub stack_count: usize,
 }
 
 impl RecipeLayout {
-    /// The layout on the running build.
+    /// The layout `facts` give: the running game's through [`Load`], a game
+    /// image's in the loader and in tools.
     ///
     /// # Errors
     ///
-    /// [`Off`] when a field or type is not reflected.
+    /// The first [`Off`] a fact returns, when the build lacks it.
     ///
     /// # Examples
     ///
@@ -120,59 +124,28 @@ impl RecipeLayout {
     ///     Ok(())
     /// }
     /// ```
-    pub fn resolve(load: &Load<'_>) -> Result<Self, Off> {
-        Self::with_lookup(
-            |ty, name| {
-                load.field_offset(ty, name)
-                    .map(|o| usize::try_from(o).unwrap_or(usize::MAX))
-            },
-            |ty| load.type_size(ty).map(|s| s as usize),
-        )
-    }
-
-    /// The layout of a game whose reflection `field` (a type's field offset)
-    /// and `size` (a type's size) read, for the loader and for tools that
-    /// read a game image rather than run in the game.
-    ///
-    /// # Errors
-    ///
-    /// The first [`Off`] a lookup returns.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use enshwick::Off;
-    /// use enshwick::content::recipes::RecipeLayout;
-    ///
-    /// let none = RecipeLayout::with_lookup(|ty, f| Err(Off::new(format!("{ty}.{f}"))), |_| Ok(0));
-    /// assert!(none.is_err());
-    /// ```
-    pub fn with_lookup(
-        field: impl Fn(&str, &str) -> Result<usize, Off>,
-        size: impl Fn(&str) -> Result<usize, Off>,
-    ) -> Result<Self, Off> {
-        let recipe = |name: &str| field("keen::RecipeInfo", name);
-        let stack = |name: &str| field("keen::RecipeItemStackResource", name);
+    pub fn resolve(facts: &(impl EngineFacts + ?Sized)) -> Result<Self, Off> {
+        let at = |id: &str| facts.offset(id);
         Ok(Self {
-            recipes: field("keen::RecipeRegistryResource", "recipes")?,
-            recipe: size("keen::RecipeInfo")?,
-            guid: recipe("recipeGuid")?,
-            id: recipe("recipeId")?,
-            workshop_guid: recipe("workshopGuid")?,
-            workshop: recipe("workshopId")?,
-            input: recipe("input")?,
-            output: recipe("output")?,
-            completion: recipe("completionRequirementQuery")?,
+            recipes: at(ids::RECIPE_REGISTRY_RECIPES)?,
+            recipe: facts.size(ids::RECIPE)?,
+            guid: at(ids::RECIPE_GUID)?,
+            id: at(ids::RECIPE_ID)?,
+            workshop_guid: at(ids::RECIPE_WORKSHOP_GUID)?,
+            workshop: at(ids::RECIPE_WORKSHOP)?,
+            input: at(ids::RECIPE_INPUT)?,
+            output: at(ids::RECIPE_OUTPUT)?,
+            completion: at(ids::RECIPE_COMPLETION)?,
             relative: [
-                recipe("input")?,
-                recipe("output")?,
-                recipe("requiredProps")?,
-                recipe("debugName")?,
+                at(ids::RECIPE_INPUT)?,
+                at(ids::RECIPE_OUTPUT)?,
+                at(ids::RECIPE_REQUIRED_PROPS)?,
+                at(ids::RECIPE_DEBUG_NAME)?,
             ],
-            input_size: size("keen::RecipeInputResource")?,
-            stack_size: size("keen::RecipeItemStackResource")?,
-            stack_item: stack("item")?,
-            stack_count: stack("count")?,
+            input_size: facts.size(ids::RECIPE_INGREDIENT)?,
+            stack_size: facts.size(ids::RECIPE_STACK)?,
+            stack_item: at(ids::RECIPE_STACK_ITEM)?,
+            stack_count: at(ids::RECIPE_STACK_COUNT)?,
         })
     }
 }
@@ -202,7 +175,7 @@ fn fnv1a(bytes: &[u8]) -> u32 {
 ///     recipe: NewRecipe,
 /// ) -> Result<(), enshwick::Off> {
 ///     let layout = RecipeLayout::resolve(load)?;
-///     let registry = RECIPE_REGISTRY.key(types::RECIPE_REGISTRY);
+///     let registry = RECIPE_REGISTRY.key(types::RECIPE_REGISTRY)?;
 ///     load.serve(registry, registry, move |base| {
 ///         add_recipe_to(&layout, base, &recipe, workshop_limit())
 ///     })
@@ -301,7 +274,7 @@ fn makes(layout: &RecipeLayout, registry: &Blob, at: usize, item: Guid) -> bool 
 
 /// The vanilla recipe registry from the game's archive.
 fn vanilla_registry() -> Option<Vec<u8>> {
-    super::game_resource(RECIPE_REGISTRY.key(types::RECIPE_REGISTRY))
+    super::game_resource(RECIPE_REGISTRY.key(types::RECIPE_REGISTRY).ok()?)
 }
 
 /// The GUIDs of the recipes in `registry`.
@@ -516,7 +489,7 @@ pub fn derived_guid(base: Guid, salt: u32) -> Guid {
 ///
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 ///     let layout = RecipeLayout::resolve(load)?;
-///     let registry = RECIPE_REGISTRY.key(types::RECIPE_REGISTRY);
+///     let registry = RECIPE_REGISTRY.key(types::RECIPE_REGISTRY)?;
 ///     load.serve(registry, registry, move |base| {
 ///         derive_recipes_in(&layout, base, 0x5afe, workshop_limit(), &|recipe| {
 ///             recipe.debug_name().starts_with("Block_").then_some(Derived {
@@ -694,7 +667,7 @@ impl RecipeEdit<'_> {
 ///
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 ///     let layout = RecipeLayout::resolve(load)?;
-///     let registry = RECIPE_REGISTRY.key(types::RECIPE_REGISTRY);
+///     let registry = RECIPE_REGISTRY.key(types::RECIPE_REGISTRY)?;
 ///     load.serve(registry, registry, move |base| {
 ///         let (built, changed) = modify_recipes_in(&layout, base, &|recipe| recipe.scale_output(2))?;
 ///         enshwick::info!("{changed} recipes doubled");
@@ -758,7 +731,7 @@ impl Load<'_> {
     pub fn add_recipe(&mut self, recipe: NewRecipe) -> Result<(), Off> {
         self.declare(recipe.id)?;
         let layout = RecipeLayout::resolve(self)?;
-        let registry = RECIPE_REGISTRY.key(types::RECIPE_REGISTRY);
+        let registry = RECIPE_REGISTRY.key(types::RECIPE_REGISTRY)?;
         self.serve(registry, registry, move |base| {
             add_recipe_to(&layout, base, &recipe, workshop_limit())
         })?;
@@ -805,7 +778,7 @@ impl Load<'_> {
         let id = recipe().id;
         self.declare(id)?;
         let layout = RecipeLayout::resolve(self)?;
-        let registry = RECIPE_REGISTRY.key(types::RECIPE_REGISTRY);
+        let registry = RECIPE_REGISTRY.key(types::RECIPE_REGISTRY)?;
         let recipe = Arc::new(recipe);
         let built = Arc::clone(&recipe);
         self.serve(registry, registry, move |base| {
@@ -851,7 +824,7 @@ impl Load<'_> {
     ) -> Result<(), Off> {
         let layout = RecipeLayout::resolve(self)?;
         let salt = fnv1a(salt.as_bytes());
-        let registry = RECIPE_REGISTRY.key(types::RECIPE_REGISTRY);
+        let registry = RECIPE_REGISTRY.key(types::RECIPE_REGISTRY)?;
         let choose = Arc::new(choose);
         let chosen = Arc::clone(&choose);
         self.serve(registry, registry, move |base| {
@@ -913,7 +886,7 @@ impl Load<'_> {
         modify: impl Fn(&mut RecipeEdit<'_>) + Send + Sync + 'static,
     ) -> Result<(), Off> {
         let layout = RecipeLayout::resolve(self)?;
-        let registry = RECIPE_REGISTRY.key(types::RECIPE_REGISTRY);
+        let registry = RECIPE_REGISTRY.key(types::RECIPE_REGISTRY)?;
         self.serve(registry, registry, move |base| {
             let (built, changed) = modify_recipes_in(&layout, base, &modify)?;
             crate::info!("{changed} recipes changed");
@@ -946,7 +919,7 @@ impl Load<'_> {
 /// }
 /// ```
 pub fn rebuild_recipes() -> Result<(), Off> {
-    crate::content::rebuild(RECIPE_REGISTRY.key(types::RECIPE_REGISTRY))
+    crate::content::rebuild(RECIPE_REGISTRY.key(types::RECIPE_REGISTRY)?)
 }
 
 /// A recipe, an item or a workshop item as a recipe rule names it: by GUID,

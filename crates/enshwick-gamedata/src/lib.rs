@@ -8,12 +8,15 @@
 //! newest table of the same side ([`newest`]) finds each entry by its pattern
 //! ([`Table::fall_back`]), and what no pattern finds stays missing. The
 //! game's own archive reads with [`archive::Archive`].
+//! The [`catalogue`] maps the ids the API asks engine facts by to the
+//! game's reflected types and fields.
 
 use std::collections::BTreeMap;
 
 use enshwick::code::Pattern;
 
 pub mod archive;
+pub mod catalogue;
 
 pub use enshwick_reflect::Fingerprint;
 

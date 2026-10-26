@@ -8,18 +8,18 @@ use std::sync::{Arc, LazyLock, Mutex, OnceLock, PoisonError};
 use std::time::SystemTime;
 
 use arc_swap::ArcSwap;
-use enshwick::Off;
 use enshwick::abi::{Level, RecipeRuleKind, Side, Status};
 use enshwick::content::items::{ITEM_REGISTRY, ItemLayout};
 use enshwick::content::recipes::{RECIPE_REGISTRY, RecipeLayout};
 use enshwick::content::workshops::{WORKSHOP_REGISTRY, WorkshopLayout};
-use enshwick::content::{Blob, Guid, types};
+use enshwick::content::{Blob, Guid};
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use super::{
     FILE, Index, Kind, Names, Rule, RuleFile, Source, TEMPLATE, WORLD_FILE, compose, describe,
     edit_file, find, parts, resolve,
 };
+use crate::catalogue::{Reflected, types};
 use crate::host::Loader;
 use crate::settings::LOADER_ID;
 use crate::texts;
@@ -82,26 +82,6 @@ fn live<R>(work: impl FnOnce(&mut Live) -> R) -> R {
     work(guard.get_or_insert_with(Live::default))
 }
 
-fn field(loader: &Loader) -> impl Fn(&str, &str) -> Result<usize, Off> + '_ {
-    |ty, name| {
-        loader
-            .reflection
-            .field_offset(ty, name)
-            .map_err(|e| Off::new(format!("{ty}.{name}: {e:?}")))
-            .and_then(|o| usize::try_from(o).map_err(|e| Off::new(e.to_string())))
-    }
-}
-
-fn size(loader: &Loader) -> impl Fn(&str) -> Result<usize, Off> + '_ {
-    |ty| {
-        loader
-            .reflection
-            .type_info(ty)
-            .map(|info| info.size() as usize)
-            .map_err(|e| Off::new(format!("{ty}: {e:?}")))
-    }
-}
-
 fn layout() -> Option<&'static RecipeLayout> {
     LAYOUT.get().and_then(Option::as_ref)
 }
@@ -109,7 +89,7 @@ fn layout() -> Option<&'static RecipeLayout> {
 /// Sets disabled recipes up: the layout, the server's recipe file when it
 /// is missing, and the lookup hook. Before arming.
 pub(crate) fn init(loader: &'static Loader) {
-    let resolved = RecipeLayout::with_lookup(field(loader), size(loader));
+    let resolved = RecipeLayout::resolve(&Reflected(&loader.reflection));
     if let Err(off) = &resolved {
         crate::log!(WARN, "disabled recipes off: {off}");
     }
@@ -184,7 +164,7 @@ fn ensure_index(loader: &Loader) -> Option<Arc<Index>> {
         return None;
     }
     let read = crate::archive::game()
-        .and_then(|archive| archive.resource(&RECIPE_REGISTRY.key(types::RECIPE_REGISTRY)))
+        .and_then(|archive| archive.resource(&RECIPE_REGISTRY.key_by_hash(types::RECIPE_REGISTRY)))
         .and_then(|registry| Index::read(layout()?, &registry))
         .map(|index| index.with_content(&content_names()));
     let Some(index) = read.map(Arc::new) else {
@@ -233,10 +213,10 @@ fn content_names() -> HashMap<u32, String> {
 }
 
 fn read_names(loader: &Loader) -> Option<Names> {
-    let items = ItemLayout::with_lookup(field(loader), size(loader)).ok()?;
-    let workshops = WorkshopLayout::with_lookup(field(loader), size(loader)).ok()?;
+    let items = ItemLayout::resolve(&Reflected(&loader.reflection)).ok()?;
+    let workshops = WorkshopLayout::resolve(&Reflected(&loader.reflection)).ok()?;
     let archive = crate::archive::game()?;
-    let registry = archive.resource(&ITEM_REGISTRY.key(types::ITEM_REGISTRY))?;
+    let registry = archive.resource(&ITEM_REGISTRY.key_by_hash(types::ITEM_REGISTRY))?;
     let blob = Blob::new(&registry);
     let (refs, count) = blob.array(items.refs)?;
     let (texts, texts_count) = blob.array(items.names)?;
@@ -254,7 +234,7 @@ fn read_names(loader: &Loader) -> Option<Names> {
         let name = registry.get(text..text + usize::try_from(len).ok()?)?;
         named.push((String::from_utf8_lossy(name).into_owned(), Guid(guid)));
     }
-    let registry = archive.resource(&WORKSHOP_REGISTRY.key(types::WORKSHOP_REGISTRY))?;
+    let registry = archive.resource(&WORKSHOP_REGISTRY.key_by_hash(types::WORKSHOP_REGISTRY))?;
     let blob = Blob::new(&registry);
     let (start, count) = blob.array(workshops.workshops)?;
     let stations = (0..usize::try_from(count).ok()?)

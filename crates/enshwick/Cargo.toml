@@ -175,6 +175,10 @@ name = "recipe_rules"
 required-features = ["test"]
 
 [[test]]
+name = "resource_types"
+required-features = ["test"]
+
+[[test]]
 name = "stat_kinds"
 required-features = ["test"]
 

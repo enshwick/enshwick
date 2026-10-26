@@ -5,7 +5,7 @@
 #[cfg(test)]
 mod tests {
     use enshwick::abi::Status;
-    use enshwick::content::icons::{Icon, Pixels, Tint, UI_IMAGE, formats};
+    use enshwick::content::icons::{Icon, Pixels, Tint, formats};
     use enshwick::content::items::NewItem;
     use enshwick::content::{Guid, Id, types};
     use enshwick::test::FakeHost;
@@ -16,6 +16,8 @@ mod tests {
     const VANILLA: Guid = Guid::parse("505ccfbc-440d-4d63-a3d6-d689d3d55e78");
     const ICON_ID: Id = Id::new("you.staffs:staff.icon");
     const ICON: Guid = ICON_ID.guid();
+    const ITEM: u32 = 1;
+    const IMAGE: u32 = 3;
     /// The vanilla icon's pixels: one BC1 block, all white, 4 by 4.
     const WHITE: [u8; 8] = [0xff, 0xff, 0x00, 0x00, 0, 0, 0, 0];
     const WHITE_HASH: [u32; 4] = [8, 1, 2, 3];
@@ -48,30 +50,34 @@ mod tests {
     /// The fake's reflection for an item edit, and with `layout` the UI
     /// image layout a client's table has.
     fn host(layout: bool) -> FakeHost {
-        let mut host = FakeHost::new().type_size("keen::ImpactUiValue", 0x28);
-        for (field, at) in [
-            ("itemId", 0),
-            ("objectId", 4),
-            ("name", 0x48),
-            ("iconImage", 0x58),
-            ("description", 0x68),
-            ("flags", 0x78),
-            ("pidEntity", 0x80),
-            ("uiValues", 0x90),
+        let mut host = FakeHost::new()
+            .type_hash(types::ITEM_INFO.id(), ITEM)
+            .type_hash(types::ITEM_REGISTRY.id(), 2)
+            .type_hash(types::UI_IMAGE.id(), IMAGE)
+            .type_size("item_stat", 0x28);
+        for (id, at) in [
+            ("item_info.id", 0),
+            ("item_info.object", 4),
+            ("item_info.name", 0x48),
+            ("item_info.icon_image", 0x58),
+            ("item_info.description", 0x68),
+            ("item_info.flags", 0x78),
+            ("item_info.pid_entity", 0x80),
+            ("item_info.ui_values", 0x90),
         ] {
-            host = host.field_offset("keen::ItemInfo", field, at);
+            host = host.constant(id, at);
         }
-        for (field, at) in [
-            ("locaId", 0),
-            ("valueFormat", 4),
-            ("value", 8),
-            ("isSigned", 0x24),
+        for (id, at) in [
+            ("item_stat.label", 0),
+            ("item_stat.format", 4),
+            ("item_stat.value", 8),
+            ("item_stat.signed", 0x24),
         ] {
-            host = host.field_offset("keen::ImpactUiValue", field, at);
+            host = host.constant(id, at);
         }
         host = host
-            .field_offset("keen::ItemRegistryResource", "itemRefs", 0)
-            .field_offset("keen::ItemRegistryResource", "dbgNames", 0x38);
+            .constant("item_registry.refs", 0)
+            .constant("item_registry.names", 0x38);
         if layout {
             for (name, at) in [
                 ("content", 0),
@@ -109,7 +115,7 @@ mod tests {
         let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK, "{:?}", loader.logs());
         let image = loader
-            .build_resource(&ICON.key(UI_IMAGE), &vanilla_image())
+            .build_resource(&ICON.key_by_hash(IMAGE), &vanilla_image())
             .unwrap();
         assert_eq!((image[0x31], image[0x32]), (formats::RGBA8, 1));
         let served = loader.served_content();
@@ -126,7 +132,7 @@ mod tests {
             "white turned blue"
         );
         let item = loader
-            .build_resource(&STAFF.key(types::ITEM_INFO), &[0u8; 0x98])
+            .build_resource(&STAFF.key_by_hash(ITEM), &[0u8; 0x98])
             .unwrap();
         assert_eq!(&item[0x58..0x68], &ICON.0);
     }
