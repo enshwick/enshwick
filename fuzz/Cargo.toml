@@ -18,10 +18,12 @@ path = "src/lib.rs"
 cargo-fuzz = true
 
 [dependencies]
+cargo-enshwick = { path = "../crates/cargo-enshwick" }
 enshwick = { path = "../crates/enshwick" }
 enshwick-gamedata = { path = "../crates/enshwick-gamedata" }
 enshwick-loader = { path = "../crates/internal/loader" }
 libfuzzer-sys = { version = "0.4.13", default-features = false, features = ["link_libfuzzer"] }
+syn = { version = "3.0.9", default-features = false, features = ["full", "parsing"] }
 toml = { version = "1.1.8", default-features = false, features = ["std", "parse"] }
 
 [[bin]]
@@ -104,6 +106,13 @@ bench = false
 [[bin]]
 name = "archive"
 path = "fuzz_targets/archive.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "point_schemas"
+path = "fuzz_targets/point_schemas.rs"
 test = false
 doc = false
 bench = false
