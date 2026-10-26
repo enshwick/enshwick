@@ -623,11 +623,12 @@ fn list(loader: &Loader, paint: &Painter<'_>, first: &mut usize) -> Listed {
             paint.label(note.as_bytes(), UiWidget::STYLE_SECONDARY, false, false);
         }
     }
-    for (origin, key) in [
-        (Origin::Mods, "mods.others.native"),
-        (Origin::Chain, "mods.others.chain"),
+    for (origin, loaded, key) in [
+        (Origin::Mods, true, "mods.others.native"),
+        (Origin::Chain, true, "mods.others.chain"),
+        (Origin::Chain, false, "mods.others.chain-failed"),
     ] {
-        let files = crate::others::loaded(&loader.others, origin);
+        let files = crate::others::files(&loader.others, origin, loaded);
         if !files.is_empty() {
             let line = texts::fill(key, &[("files", &files.join(", "))]);
             paint.label(line.as_bytes(), UiWidget::STYLE_SECONDARY, true, false);

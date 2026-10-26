@@ -12,7 +12,7 @@ use crate::resolve::{self, Candidate};
 use crate::{builds, log};
 
 use super::game::GAME_DIRS;
-use super::library::{Library, libraries};
+use super::library::{Library, Run, libraries};
 use super::pe;
 use super::{initialise, read_frame, records};
 
@@ -133,7 +133,7 @@ pub fn dry_run(exe: &Path, game_dir: &Path, patterns: bool) -> Result<DryRun, Dr
         std::fs::create_dir_all(&dir).map_err(io(&dir))?;
     }
     let data_dir = game_dir.join("mod-data");
-    let (libraries, candidates, others) = libraries(&mods_dir);
+    let (libraries, candidates, others) = libraries(&mods_dir, Run::Dry);
     let plan = resolve::resolve(&candidates, side);
     let loader = Loader {
         side,
