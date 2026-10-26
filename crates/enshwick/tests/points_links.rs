@@ -39,7 +39,7 @@ mod tests {
     impl Mod for Extender {
         fn manifest() -> &'static enshwick::abi::Manifest {
             enshwick::manifest!(
-                id: "extender",
+                id: "you.extender",
                 side: SERVER,
                 recommends: ["probe" => ">=0.0.0-dev, <1.0"],
             )

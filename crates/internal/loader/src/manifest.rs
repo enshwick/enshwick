@@ -5,6 +5,11 @@ use semver::{Version, VersionReq};
 
 use crate::resolve::{self, Candidate};
 
+/// The ABI minor from which a mod id must carry its author,
+/// `<author>.<name>`; an older mod's id without one still loads, with a
+/// warning, until every published mod is rebuilt.
+const AUTHOR_IDS: u16 = 70;
+
 /// Where the fields every manifest has end: an older minor lacks `builds`,
 /// which defaults to none.
 const REQUIRED: usize = core::mem::offset_of!(Manifest, builds);
@@ -113,11 +118,15 @@ pub unsafe fn parse(manifest: &Manifest) -> Result<Candidate, String> {
     }
     // SAFETY: the caller keeps the manifest's strings alive for the call.
     let id = unsafe { manifest.id.as_str() }.ok_or("the id is not UTF-8")?;
-    if !enshwick::abi::is_valid_id(id) {
-        return Err(format!("the id {id:?} is not [a-z0-9-]+"));
-    }
     if id == crate::settings::LOADER_ID {
         return Err(format!("the id {id:?} is the loader's own"));
+    }
+    let without_author =
+        manifest.header.abi_minor < AUTHOR_IDS && enshwick::abi::is_valid_former_id(id);
+    if !enshwick::abi::is_valid_id(id) && !without_author {
+        return Err(format!(
+            "the id {id:?} is not <author>.<name>, each of [a-z0-9-]"
+        ));
     }
     // SAFETY: as above.
     let version = unsafe { manifest.version.as_str() }.ok_or("the version is not UTF-8")?;
@@ -301,7 +310,7 @@ mod tests {
 
     #[test]
     fn metadata_is_read_and_cleaned() {
-        let mut m = manifest("safes", "0.1.0");
+        let mut m = manifest("you.safes", "0.1.0");
         m.name = Str::new("Safes");
         m.description = Str::new(" A chest only its owner opens ");
         m.authors = AUTHORS.as_ptr();
@@ -399,7 +408,7 @@ mod tests {
 
     #[test]
     fn a_manifest_shorter_than_every_minor_is_refused() {
-        let mut short = manifest("safes", "0.1.0");
+        let mut short = manifest("you.safes", "0.1.0");
         short.header.size =
             u32::try_from(core::mem::offset_of!(Manifest, dependency_count)).unwrap();
         // SAFETY: a valid manifest.
@@ -417,22 +426,22 @@ mod tests {
             appended: u64,
         }
         let mut newer = Newer {
-            manifest: manifest("safes", "0.1.0"),
+            manifest: manifest("you.safes", "0.1.0"),
             appended: 1,
         };
         newer.manifest.header.size = u32::try_from(size_of::<Newer>()).unwrap();
         // SAFETY: a valid manifest as long as its header says.
         let manifest = unsafe { read((&raw const newer).cast()) }.unwrap();
         // SAFETY: static data.
-        assert_eq!(unsafe { parse(manifest) }.unwrap().id, "safes");
+        assert_eq!(unsafe { parse(manifest) }.unwrap().id, "you.safes");
         assert_eq!(newer.appended, 1);
     }
 
     #[test]
     fn a_good_manifest_parses() {
         // SAFETY: static data.
-        let candidate = unsafe { parse(&manifest("survivors-per-altar", "0.1.2")) }.unwrap();
-        assert_eq!(candidate.id, "survivors-per-altar");
+        let candidate = unsafe { parse(&manifest("you.survivors-per-altar", "0.1.2")) }.unwrap();
+        assert_eq!(candidate.id, "you.survivors-per-altar");
         assert_eq!(candidate.version, Version::new(0, 1, 2));
         assert_eq!(
             candidate.dependencies[0].range,
@@ -444,14 +453,14 @@ mod tests {
     fn bad_manifests_say_why() {
         // SAFETY: static data.
         let id = unsafe { parse(&manifest("Bad Id", "0.1.0")) }.unwrap_err();
-        assert!(id.contains("not [a-z0-9-]+"), "{id}");
+        assert!(id.contains("not <author>.<name>"), "{id}");
         // SAFETY: static data.
-        let version = unsafe { parse(&manifest("ok", "one")) }.unwrap_err();
+        let version = unsafe { parse(&manifest("you.ok", "one")) }.unwrap_err();
         assert!(version.starts_with("version"), "{version}");
         // SAFETY: static data.
         let loader = unsafe { parse(&manifest("enshwick", "0.1.0")) }.unwrap_err();
         assert!(loader.contains("loader's own"), "{loader}");
-        let mut other = manifest("ok", "0.1.0");
+        let mut other = manifest("you.ok", "0.1.0");
         other.header.abi_major = ABI_MAJOR + 1;
         // SAFETY: static data.
         let major = unsafe { parse(&other) }.unwrap_err();
@@ -470,7 +479,7 @@ mod tests {
             range: Str::EMPTY,
             relation: Relation::REPLACES,
         }];
-        let mut renamed = manifest("survivors-per-altar", "0.2.0");
+        let mut renamed = manifest("you.survivors-per-altar", "0.2.0");
         renamed.dependencies = FORMER.as_ptr();
         // SAFETY: static data.
         let candidate = unsafe { parse(&renamed) }.unwrap();
@@ -482,13 +491,25 @@ mod tests {
     }
 
     #[test]
+    fn an_id_without_an_author_loads_only_from_an_older_minor() {
+        let mut old = manifest("lanterns", "0.1.0");
+        old.header.abi_minor = AUTHOR_IDS - 1;
+        // SAFETY: static data.
+        assert_eq!(unsafe { parse(&old) }.unwrap().id, "lanterns");
+        old.header.abi_minor = AUTHOR_IDS;
+        // SAFETY: static data.
+        let why = unsafe { parse(&old) }.unwrap_err();
+        assert!(why.contains("not <author>.<name>"), "{why}");
+    }
+
+    #[test]
     fn a_mod_of_a_newer_minor_is_refused_and_an_older_one_loads() {
-        let mut newer = manifest("ok", "0.1.0");
+        let mut newer = manifest("you.ok", "0.1.0");
         newer.header.abi_minor = ABI_MINOR + 1;
         // SAFETY: static data.
         let why = unsafe { parse(&newer) }.unwrap_err();
         assert!(why.contains("update Enshwick"), "{why}");
-        let mut older = manifest("ok", "0.1.0");
+        let mut older = manifest("you.ok", "0.1.0");
         older.header.abi_minor = ABI_MINOR - 1;
         // SAFETY: static data.
         assert!(unsafe { parse(&older) }.is_ok());

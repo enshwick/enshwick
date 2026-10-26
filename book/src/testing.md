@@ -54,7 +54,7 @@ fn reward(next: Next<extern "system" fn(u32) -> u32>, base: u32) -> u32 {
 
 impl Mod for Bonus {
     fn manifest() -> &'static enshwick::abi::Manifest {
-        enshwick::manifest!(id: "bonus", side: SERVER)
+        enshwick::manifest!(id: "you.bonus", side: SERVER)
     }
 
     fn init(load: &mut Load<'_>) -> Result<Self, Off> {
@@ -119,7 +119,7 @@ struct Picky;
 
 impl Mod for Picky {
     fn manifest() -> &'static enshwick::abi::Manifest {
-        enshwick::manifest!(id: "picky", side: SERVER)
+        enshwick::manifest!(id: "you.picky", side: SERVER)
     }
 
     fn init(load: &mut Load<'_>) -> Result<Self, Off> {
