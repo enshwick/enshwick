@@ -243,8 +243,8 @@ marked "init only" are allowed during `enshwick_mod_init` only.
 | `run_console`            | Runs a console line as the server's console, an action's text form included; server game thread only | 13          |
 | `altars_open`            | Asks the loader to follow the Flame Altars of the server's world; init only                          | 15          |
 | `altars`                 | The altars with their levels and zones; any thread; `REFUSED` for a mod that did not open them       | 15          |
-| `altar_zones_control`    | Makes the mod the one that sizes altar zones, one mod at a time; init only                           | 15          |
-| `set_altar_zones`        | Replaces the sizes the controlling mod gives altar zones; any thread                                 | 15          |
+| `altar_zones_control`    | Retired in 78: always `REFUSED`; see `altar_zone_filter`                                             | 15          |
+| `set_altar_zones`        | Retired in 78: always `REFUSED`; see `altar_zone_filter`                                             | 15          |
 | `zone_check_filter`      | Calls a filter when the game refuses a placement outside a single building zone; init only           | 15          |
 | `survivor_lookup`        | Answers the game's survivor lookups, one mod at a time; init only                                    | 16          |
 | `survivor_bed_check`     | Calls a filter after a survivor's own bed check kept its bed; init only                              | 16          |
@@ -346,3 +346,9 @@ marked "init only" are allowed during `enshwick_mod_init` only.
 | `rate`                   | Declares a game rate the mod multiplies; init only                                                   | 75          |
 | `set_rate`               | Puts the mod's factor for a declared rate in force, 0 to 100; any thread                             | 75          |
 | `change_data`            | Declares a change of a vanilla value, which the loader merges with every mod's; init only            | 76          |
+| `feature`                | Reports one of the mod's features on or off for the log, status summary and Mods screen              | 74          |
+| `loop_wait`              | Runs a handler before every wait of the engine's event loop; init only                               | 77          |
+| `server_wait`            | Runs a handler where the server loop picks its wait, which it may change; init only                  | 77          |
+| `task_workers`           | Caps the task groups' worker threads, the lowest cap winning; init only                              | 77          |
+| `altar_zone_filter`      | Adds a filter to the chain that sizes altar zones; init only                                         | 78          |
+| `altar_zones_changed`    | Has the altar zones sized again on the server's next step; any thread                                | 78          |

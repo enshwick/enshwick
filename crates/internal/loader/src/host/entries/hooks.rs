@@ -1,6 +1,7 @@
 //! Host functions for hooks and code patches.
 
 use crate::mod_index::ModIndex;
+use enshwick::abi as api_frame;
 use enshwick::abi::{HookSpec, MidHookSpec, ModHandle, Status};
 
 use crate::chains::Link;
@@ -127,4 +128,70 @@ pub(crate) extern "system" fn patch_code(
 
 pub(crate) extern "system" fn workshop_recipes() -> u32 {
     entry("workshop_recipes", crate::code::workshop_recipes)
+}
+
+pub(crate) extern "system" fn loop_wait(
+    me: ModHandle,
+    callback: api_frame::LoopWaitFn,
+    user: *mut core::ffi::c_void,
+    found: *mut api_frame::LoopWaitSites,
+) -> Status {
+    entry("loop_wait", || {
+        if found.is_null() {
+            return Status::BAD_ARGS;
+        }
+        let (loader, index, _) = match calling(me) {
+            Ok(called) => called,
+            Err(status) => return status,
+        };
+        let sites = crate::pacing::loop_wait(loader, index, callback, user);
+        // SAFETY: `HostApi::loop_wait` has the mod pass `found` null or
+        // pointing at a writable `LoopWaitSites` no other thread touches
+        // during the call.
+        unsafe { put(found, sites) }
+    })
+}
+
+pub(crate) extern "system" fn server_wait(
+    me: ModHandle,
+    callback: api_frame::ServerWaitFn,
+    user: *mut core::ffi::c_void,
+    found: *mut u32,
+) -> Status {
+    entry("server_wait", || {
+        if found.is_null() {
+            return Status::BAD_ARGS;
+        }
+        let (loader, index, _) = match calling(me) {
+            Ok(called) => called,
+            Err(status) => return status,
+        };
+        let hooked = crate::pacing::server_wait(loader, index, callback, user);
+        // SAFETY: `HostApi::server_wait` has the mod pass `found` null or
+        // pointing at a writable `u32` no other thread touches during the
+        // call.
+        unsafe { put(found, u32::from(hooked)) }
+    })
+}
+
+pub(crate) extern "system" fn task_workers(
+    me: ModHandle,
+    default: u32,
+    background: u32,
+    found: *mut u32,
+) -> Status {
+    entry("task_workers", || {
+        if found.is_null() {
+            return Status::BAD_ARGS;
+        }
+        let (loader, index, _) = match calling(me) {
+            Ok(called) => called,
+            Err(status) => return status,
+        };
+        let capped = crate::pacing::task_workers(loader, index, default, background);
+        // SAFETY: `HostApi::task_workers` has the mod pass `found` null or
+        // pointing at a writable `u32` no other thread touches during the
+        // call.
+        unsafe { put(found, u32::from(capped)) }
+    })
 }

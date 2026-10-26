@@ -29,6 +29,7 @@ pub(crate) mod label;
 pub(crate) mod loot;
 pub(crate) mod net;
 pub(crate) mod npc;
+pub(crate) mod pacing;
 pub(crate) mod player;
 pub(crate) mod resource;
 pub(crate) mod save;

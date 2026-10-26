@@ -34,15 +34,18 @@ use entries::content::{
     recipe_rule, resource_read, serve_resource,
 };
 use entries::gameplay::{
-    account_knowledge, affix_info, affix_open, affix_roll, altar_limit, altar_zones_control,
-    altars, altars_open, apply_buff, base_zones, buff_types, buffs, build_filter, comfort_filter,
-    craft_filter, damage_filter, experience_filter, grant_knowledge, interaction_filter,
-    item_lines, knowledge, knowledge_input_filter, quests, raise_base_limit, rate, remove_buff,
-    revoke_knowledge, set_altar_zones, set_rate, skill_override, stat_buff, stat_info, stat_modify,
-    stat_open, stat_sources, stat_value, stat_watch, stats_changed, summon_filter, summon_item,
-    summoned, survivor_bed_check, survivor_lookup, survivor_status, zone_check_filter,
+    account_knowledge, affix_info, affix_open, affix_roll, altar_limit, altar_zone_filter,
+    altar_zones_changed, altar_zones_control, altars, altars_open, apply_buff, base_zones,
+    buff_types, buffs, build_filter, comfort_filter, craft_filter, damage_filter,
+    experience_filter, grant_knowledge, interaction_filter, item_lines, knowledge,
+    knowledge_input_filter, quests, raise_base_limit, rate, remove_buff, revoke_knowledge,
+    set_altar_zones, set_rate, skill_override, stat_buff, stat_info, stat_modify, stat_open,
+    stat_sources, stat_value, stat_watch, stats_changed, summon_filter, summon_item, summoned,
+    survivor_bed_check, survivor_lookup, survivor_status, zone_check_filter,
 };
-use entries::hooks::{code_range, hook, hook_at, patch_code, workshop_recipes};
+use entries::hooks::{
+    code_range, hook, hook_at, loop_wait, patch_code, server_wait, task_workers, workshop_recipes,
+};
 use entries::inventory::{inventory_open, inventory_submit, item_info};
 use entries::mods::{
     config_check, config_schema, fault, join_missing, language, log, migrate, mods, replaced,
@@ -754,6 +757,11 @@ pub(crate) static API: HostApi = HostApi {
     rate,
     set_rate,
     change_data,
+    loop_wait,
+    server_wait,
+    task_workers,
+    altar_zone_filter,
+    altar_zones_changed,
 };
 
 /// The loader and the calling mod, when the mod is on.

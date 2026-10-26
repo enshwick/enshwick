@@ -4,18 +4,19 @@
 use core::ffi::c_void;
 
 use crate::abi::{
-    ActionFn, ActiveBuff, AffixDefData, AffixRoll, AltarInfo, AltarLimitFn, AltarZoneSize,
-    BedCheckFn, BuffRequest, BuffTypeInfo, BuildCheckFn, BuildInfo, CallerFrame, ComfortFn,
-    ConfigCheckFn, CraftCheckFn, DamageFilterFn, DataChange, DaytimeInfo, EntityDataFlags,
-    EntityPlace, Event, EventFn, EventSpec, EventTypeInfo, ExperiencePassFn, GameEventFn, Header,
-    HookSpec, InteractionFn, InventoryRequest, InventoryResultFn, ItemData, ItemLine,
-    KnowledgeInfo, KnowledgeInputFn, Level, MidHookSpec, MigrationSet, ModEventFn, ModHandle,
-    ModInfo, NetMessageFn, PlayerInfo, PointFn, PointHandle, PointLink, PointSpec, PointVerdict,
-    RateId, RecipeKind, RecipeRuleKind, RenameCallFn, ResourceKey, ResourcePatchFn, ServiceFound,
-    ServiceSpec, SkillCheckFn, SpawnRequest, StatChangeFn, StatDefData, StatModifierData,
-    StatModify, StatRef, StatSource, Status, StatusFn, Str, SummonFn, SurvivorLookupFn,
-    SurvivorStatusFn, TeleportRequest, TerrainEdit, TerrainMaterialInfo, UiAnswerFn, UiDialog,
-    UiFrameFn, UiMarker, UiWidget, WeatherFront, ZoneCheckFn,
+    ActionFn, ActiveBuff, AffixDefData, AffixRoll, AltarInfo, AltarLimitFn, AltarZoneFn,
+    AltarZoneSize, BedCheckFn, BuffRequest, BuffTypeInfo, BuildCheckFn, BuildInfo, CallerFrame,
+    ComfortFn, ConfigCheckFn, CraftCheckFn, DamageFilterFn, DataChange, DaytimeInfo,
+    EntityDataFlags, EntityPlace, Event, EventFn, EventSpec, EventTypeInfo, ExperiencePassFn,
+    GameEventFn, Header, HookSpec, InteractionFn, InventoryRequest, InventoryResultFn, ItemData,
+    ItemLine, KnowledgeInfo, KnowledgeInputFn, Level, LoopWaitFn, LoopWaitSites, MidHookSpec,
+    MigrationSet, ModEventFn, ModHandle, ModInfo, NetMessageFn, PlayerInfo, PointFn, PointHandle,
+    PointLink, PointSpec, PointVerdict, RateId, RecipeKind, RecipeRuleKind, RenameCallFn,
+    ResourceKey, ResourcePatchFn, ServerWaitFn, ServiceFound, ServiceSpec, SkillCheckFn,
+    SpawnRequest, StatChangeFn, StatDefData, StatModifierData, StatModify, StatRef, StatSource,
+    Status, StatusFn, Str, SummonFn, SurvivorLookupFn, SurvivorStatusFn, TeleportRequest,
+    TerrainEdit, TerrainMaterialInfo, UiAnswerFn, UiDialog, UiFrameFn, UiMarker, UiWidget,
+    WeatherFront, ZoneCheckFn,
 };
 
 /// The table of services the loader offers a mod.
@@ -266,15 +267,12 @@ pub struct HostApi {
         capacity: u32,
         count: *mut u32,
     ) -> Status,
-    /// Makes the mod the one that sizes altar zones, through
-    /// [`HostApi::set_altar_zones`]; it opens altars too. One mod at a time:
-    /// [`Status::REFUSED`] when another holds it. Allowed during
-    /// `enshwick_mod_init` only. Since minor 15.
+    /// Retired in minor 78, when altar zone sizes became a chain any mod
+    /// joins ([`HostApi::altar_zone_filter`]): always [`Status::REFUSED`].
+    /// The slot keeps the table's layout.
     pub altar_zones_control: extern "system" fn(me: ModHandle) -> Status,
-    /// Replaces the sizes the loader gives altar zones with the `count`
-    /// sizes at `sizes`; an altar without one keeps its vanilla size. Any
-    /// thread; the server's next zone pass writes them. [`Status::REFUSED`]
-    /// for a mod that does not control altar zones. Since minor 15.
+    /// Retired in minor 78 with [`HostApi::altar_zones_control`]: always
+    /// [`Status::REFUSED`]. The slot keeps the table's layout.
     pub set_altar_zones:
         extern "system" fn(me: ModHandle, sizes: *const AltarZoneSize, count: usize) -> Status,
     /// Calls `callback` with `user` when the game refuses a placement whose
@@ -1075,4 +1073,54 @@ pub struct HostApi {
     /// operation and a value outside the field's range; [`Status::MISSING`]
     /// when the build does not reflect the field. Init only. Since minor 76.
     pub change_data: extern "system" fn(me: ModHandle, change: *const DataChange) -> Status,
+    /// Calls `callback` with `user` before every wait of the engine's event
+    /// loop on its handles, on the thread that waits, and writes to `found`
+    /// which waits it hooked ([`LoopWaitSites`]); a wait this build lacks,
+    /// whose code is not what its table expects, or that the mod hooked
+    /// already is left out. [`Status::BAD_ARGS`] for a null `found`, before
+    /// anything is hooked. Handlers run in load order. Allowed during
+    /// `enshwick_mod_init` only. Since minor 77.
+    pub loop_wait: extern "system" fn(
+        me: ModHandle,
+        callback: LoopWaitFn,
+        user: *mut c_void,
+        found: *mut LoopWaitSites,
+    ) -> Status,
+    /// Calls `callback` with `user` once a pass where the server's game loop
+    /// has picked its wait before the next pass, in nanoseconds, which the
+    /// handler may change; writes 1 to `found` when the loader hooked the
+    /// place, else 0. [`Status::BAD_ARGS`] for a null `found`, before
+    /// anything is hooked. Handlers run in load order, each on the last one's wait. On
+    /// the game thread of the server loop. Allowed during `enshwick_mod_init`
+    /// only. Since minor 77.
+    pub server_wait: extern "system" fn(
+        me: ModHandle,
+        callback: ServerWaitFn,
+        user: *mut c_void,
+        found: *mut u32,
+    ) -> Status,
+    /// Caps the worker threads of the task system's default and background
+    /// groups as it starts, 0 leaving a group as the game sizes it; with
+    /// several mods the lowest cap wins. Writes 1 to `found` when a cap is
+    /// hooked and the task system starts after the hooks arm, which only the
+    /// dedicated server does, else 0. [`Status::BAD_ARGS`] for a null
+    /// `found`, before anything is hooked. Allowed during
+    /// `enshwick_mod_init` only. Since minor 77.
+    pub task_workers:
+        extern "system" fn(me: ModHandle, default: u32, background: u32, found: *mut u32) -> Status,
+    /// Calls `callback` with `user` for every altar of the server's world
+    /// when the loader sizes the altar zones: after altars change and after
+    /// [`HostApi::altar_zones_changed`]. Each filter, in load order, sees the
+    /// size so far, the vanilla one first, and may change it: a `grow` below
+    /// 0 counts as 0, a `height` below one cell keeps the height before it,
+    /// and the altar and level stay. It opens altars too, and may call the
+    /// host, such as [`HostApi::altars`]. On the server's game thread.
+    /// Allowed during `enshwick_mod_init` only. Since minor 78.
+    pub altar_zone_filter:
+        extern "system" fn(me: ModHandle, callback: AltarZoneFn, user: *mut c_void) -> Status,
+    /// Asks the loader to size the altar zones again on the server's next
+    /// step, as when a mod's settings change what its filter answers. Any
+    /// thread, also during init. [`Status::REFUSED`] for a mod without an
+    /// altar zone filter. Since minor 78.
+    pub altar_zones_changed: extern "system" fn(me: ModHandle) -> Status,
 }

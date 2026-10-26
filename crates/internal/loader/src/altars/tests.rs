@@ -1,7 +1,98 @@
 use super::*;
 
+/// Held by every test that touches the altar state, the targets or the
+/// world counter, which the tests of this file share.
+static SHARED: Mutex<()> = Mutex::new(());
+
+unsafe extern "system" fn wider(zone: *mut AltarZone, _user: *mut c_void) {
+    // SAFETY: the loader's zone, writable for the call.
+    let zone = unsafe { &mut *zone };
+    zone.grow += 2;
+}
+
+unsafe extern "system" fn broken(zone: *mut AltarZone, _user: *mut c_void) {
+    // SAFETY: the loader's zone, writable for the call.
+    let zone = unsafe { &mut *zone };
+    zone.altar = 1;
+    zone.grow = -5;
+    zone.height = 0;
+}
+
+unsafe extern "system" fn lists(zone: *mut AltarZone, _user: *mut c_void) {
+    let _altars = list();
+    // SAFETY: the loader's zone, writable for the call.
+    let zone = unsafe { &mut *zone };
+    zone.height += 1;
+}
+
+fn vanilla() -> AltarZone {
+    AltarZone {
+        header: Header::of::<AltarZone>(),
+        altar: 4096,
+        level: 2,
+        reserved: [0; 3],
+        grow: 0,
+        height: 60,
+    }
+}
+
+#[test]
+fn filters_chain_on_the_zone_so_far_and_vanilla_gives_no_target() {
+    let none = core::ptr::null_mut();
+    assert_eq!(chain(vanilla(), core::iter::empty()), None);
+    let twice: [(AltarZoneFn, *mut c_void); 2] = [(wider, none), (wider, none)];
+    assert_eq!(chain(vanilla(), twice.into_iter()), Some((4, 60)));
+}
+
+#[test]
+fn a_filter_cannot_move_the_altar_or_shrink_the_zone_below_vanilla() {
+    let none = core::ptr::null_mut();
+    let filters: [(AltarZoneFn, *mut c_void); 2] = [(wider, none), (broken, none)];
+    assert_eq!(chain(vanilla(), filters.into_iter()), None);
+    let filters: [(AltarZoneFn, *mut c_void); 2] = [(broken, none), (wider, none)];
+    assert_eq!(chain(vanilla(), filters.into_iter()), Some((2, 60)));
+}
+
+#[test]
+fn a_filter_may_read_the_altars_while_the_zones_are_sized() {
+    let _shared = SHARED.relock();
+    let now = When {
+        at: Instant::now(),
+        step: 0,
+    };
+    {
+        let mut state = STATE.relock();
+        let placed = Placed {
+            position: [0; 3],
+            orientation: [0.0, 0.0, 0.0, 1.0],
+        };
+        let _ = state.placed.merge([(4096, placed)], now);
+        let mut sizes = Sizes::new();
+        sizes.push([4.0, 30.0, 4.0]);
+        let _ = state.levels.merge([(4096, sizes)], now);
+    }
+    let sizer = Sizer::new(ModIndex::new(0), lists, core::ptr::null_mut());
+    let (done, finished) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        size_zones_with(&[&sizer]);
+        let _sent = done.send(());
+    });
+    assert!(
+        finished.recv_timeout(Duration::from_secs(10)).is_ok(),
+        "sizing deadlocked"
+    );
+    assert!(
+        TARGETS
+            .load()
+            .as_ref()
+            .is_some_and(|t| t.contains_key(&4096))
+    );
+    forget();
+}
+
 #[test]
 fn entries_held_back_from_a_gone_world_never_reach_the_next() {
+    let _shared = SHARED.relock();
     drop_stale_buffers();
     BUILT.with_borrow_mut(|built| built.push((7, [1.0; 3])));
     drop_stale_buffers();
