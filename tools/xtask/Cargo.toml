@@ -8,12 +8,24 @@ license.workspace = true
 repository.workspace = true
 publish.workspace = true
 
+[features]
+# `cargo xtask compat`: what works on a game build. It links the loader, so
+# plain `cargo xtask` builds without it and runs itself again with it.
+compat = ["dep:clap", "dep:enshwick", "dep:enshwick-gamedata", "dep:enshwick-loader", "dep:memchr"]
+
 [dependencies]
+clap = { workspace = true, optional = true }
+enshwick = { workspace = true, optional = true }
+enshwick-gamedata = { workspace = true, optional = true }
+memchr = { workspace = true, optional = true }
 semver.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 toml.workspace = true
 zip.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+enshwick-loader = { path = "../../crates/internal/loader", optional = true }
 
 [lints]
 workspace = true
