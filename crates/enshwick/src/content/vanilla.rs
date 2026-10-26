@@ -13,7 +13,8 @@ use super::items::{ITEM_REGISTRY, ItemLayout};
 use super::workshops::{
     Station, WORKSHOP_REGISTRY, WorkshopId, WorkshopLayout, clone_template, stations,
 };
-use super::{Blob, Guid, types};
+use super::{Blob, EngineFacts, Guid, types};
+use crate::Off;
 use crate::abi::ResourceKey;
 
 /// Reads one resource of the game's archive.
@@ -97,6 +98,7 @@ fn guid_list(items: &[Guid]) -> String {
 pub struct Vanilla {
     items: ItemLayout,
     workshops: WorkshopLayout,
+    hashes: Hashes,
     read: Reader,
     names: OnceLock<Option<Names>>,
 }
@@ -110,37 +112,74 @@ impl core::fmt::Debug for Vanilla {
     }
 }
 
+/// The hashes of the resource types vanilla content is read from.
+#[derive(Clone, Copy, Debug)]
+struct Hashes {
+    item: u32,
+    item_registry: u32,
+    template: u32,
+    workshop_registry: u32,
+}
+
+impl Hashes {
+    fn resolve(facts: &(impl EngineFacts + ?Sized)) -> Result<Self, Off> {
+        Ok(Self {
+            item: facts.hash(types::ITEM_INFO.id())?,
+            item_registry: facts.hash(types::ITEM_REGISTRY.id())?,
+            template: facts.hash(types::TEMPLATE.id())?,
+            workshop_registry: facts.hash(types::WORKSHOP_REGISTRY.id())?,
+        })
+    }
+}
+
 impl Vanilla {
     /// Vanilla content read through `read`, which returns a resource of the
-    /// game's archive by key, with the game's layouts.
+    /// game's archive by key, with the layouts and types `facts` give.
+    ///
+    /// # Errors
+    ///
+    /// The first [`Off`] a fact returns, when the build lacks it.
     ///
     /// # Examples
     ///
     /// ```
-    /// use enshwick::content::items::ItemLayout;
+    /// use enshwick::content::EngineFacts;
     /// use enshwick::content::vanilla::Vanilla;
-    /// use enshwick::content::workshops::WorkshopLayout;
     ///
-    /// fn offline(items: ItemLayout, workshops: WorkshopLayout) -> Vanilla {
-    ///     Vanilla::new(items, workshops, |_key| None)
+    /// fn offline(facts: &impl EngineFacts) -> Result<Vanilla, enshwick::Off> {
+    ///     Vanilla::new(facts, |_key| None)
     /// }
     /// ```
     pub fn new(
+        facts: &(impl EngineFacts + ?Sized),
+        read: impl Fn(ResourceKey) -> Option<Vec<u8>> + Send + Sync + 'static,
+    ) -> Result<Self, Off> {
+        Ok(Self::with_parts(
+            ItemLayout::resolve(facts)?,
+            WorkshopLayout::resolve(facts)?,
+            Hashes::resolve(facts)?,
+            read,
+        ))
+    }
+
+    fn with_parts(
         items: ItemLayout,
         workshops: WorkshopLayout,
+        hashes: Hashes,
         read: impl Fn(ResourceKey) -> Option<Vec<u8>> + Send + Sync + 'static,
     ) -> Self {
         Self {
             items,
             workshops,
+            hashes,
             read: Box::new(read),
             names: OnceLock::new(),
         }
     }
 
     /// The running game's vanilla content, read from its archive through
-    /// [`super::game_resource`]; `None` outside the game or when a layout is
-    /// not reflected.
+    /// [`super::game_resource`]; `None` outside the game or when the build
+    /// lacks a layout.
     ///
     /// # Examples
     ///
@@ -148,20 +187,14 @@ impl Vanilla {
     #[must_use]
     pub fn game() -> Option<&'static Self> {
         static GAME: crate::fresh::Fresh<Option<Vanilla>> = crate::fresh::Fresh::new();
-        GAME.get_or_init(|| {
-            let host = crate::host()?;
-            let load = crate::Load::new(host);
-            let items = ItemLayout::resolve(&load).ok()?;
-            let workshops = WorkshopLayout::resolve(&load).ok()?;
-            Some(Self::new(items, workshops, super::game_resource))
-        })
-        .as_ref()
+        GAME.get_or_init(|| Self::new(&crate::host()?, super::game_resource).ok())
+            .as_ref()
     }
 
     fn names(&self) -> Result<&Names, VanillaError> {
         self.names
             .get_or_init(|| {
-                let registry = (self.read)(ITEM_REGISTRY.key(types::ITEM_REGISTRY))?;
+                let registry = (self.read)(ITEM_REGISTRY.key_by_hash(self.hashes.item_registry))?;
                 registry_names(&self.items, &registry)
             })
             .as_ref()
@@ -213,16 +246,16 @@ impl Vanilla {
             return Ok(stations::WORKBENCH);
         }
         self.workshop_entry(item)?;
-        let info =
-            (self.read)(item.key(types::ITEM_INFO)).ok_or(VanillaError::Unreadable("item data"))?;
+        let info = (self.read)(item.key_by_hash(self.hashes.item))
+            .ok_or(VanillaError::Unreadable("item data"))?;
         let at = self.workshops.placed_entity;
         let template = info
             .get(at..at + 16)
             .and_then(|bytes| bytes.try_into().ok())
             .map(Guid)
             .ok_or(VanillaError::NotAStation(item))?;
-        let data =
-            (self.read)(template.key(types::TEMPLATE)).ok_or(VanillaError::NotAStation(item))?;
+        let data = (self.read)(template.key_by_hash(self.hashes.template))
+            .ok_or(VanillaError::NotAStation(item))?;
         clone_template(&self.workshops, &data, Guid([0xee; 16]))
             .map(|_| Station { item, template })
             .ok_or(VanillaError::NotAStation(item))
@@ -259,7 +292,7 @@ impl Vanilla {
     /// The workshop registry's entry for the station item `item`, when it is
     /// no survivor's.
     fn workshop_entry(&self, item: Guid) -> Result<Vec<u8>, VanillaError> {
-        let registry = (self.read)(WORKSHOP_REGISTRY.key(types::WORKSHOP_REGISTRY))
+        let registry = (self.read)(WORKSHOP_REGISTRY.key_by_hash(self.hashes.workshop_registry))
             .ok_or(VanillaError::Unreadable("workshop registry"))?;
         let layout = &self.workshops;
         let blob = Blob::new(&registry);
@@ -334,6 +367,13 @@ fn near(names: &Names, name: &str) -> Vec<String> {
 pub(crate) mod tests {
     use super::*;
 
+    const HASHES: Hashes = Hashes {
+        item: 1,
+        item_registry: 2,
+        template: 3,
+        workshop_registry: 4,
+    };
+
     /// The item layout of build 1269579, as far as the registry goes.
     pub(crate) const ITEMS: ItemLayout = ItemLayout {
         id: 0,
@@ -387,8 +427,7 @@ pub(crate) mod tests {
     /// A game with the items `named`, a forge station of its own workshop,
     /// a survivor's workshop and an item that places a plain template.
     pub(crate) fn game(named: &[(Guid, &str)]) -> Vanilla {
-        use super::super::workshops::components;
-        use super::super::workshops::tests::{LAYOUT, station};
+        use super::super::workshops::tests::{CLIENT, CRAFTING, INTERACTION, LAYOUT, station};
 
         let (forge, survivor, prop) = (Guid([5; 16]), Guid([6; 16]), Guid([7; 16]));
         let (template, plain, workshop) = (Guid([8; 16]), Guid([9; 16]), Guid([10; 16]));
@@ -408,24 +447,23 @@ pub(crate) mod tests {
             info[0x3c0..0x3d0].copy_from_slice(&template.0);
             info
         };
-        let (crafting, _) = station(&[
-            (components::CRAFTING, 20),
-            (components::CRAFTING_INTERACTION, 32),
-            (components::CLIENT_CRAFTING_INTERACTION, 16),
-        ]);
+        let (crafting, _) = station(&[(CRAFTING, 20), (INTERACTION, 32), (CLIENT, 16)]);
         let (other, _) = station(&[(0x1234_5678, 24)]);
         let mut data = std::collections::HashMap::new();
-        data.insert(ITEM_REGISTRY.key(types::ITEM_REGISTRY), registry(named));
         data.insert(
-            WORKSHOP_REGISTRY.key(types::WORKSHOP_REGISTRY),
+            ITEM_REGISTRY.key_by_hash(HASHES.item_registry),
+            registry(named),
+        );
+        data.insert(
+            WORKSHOP_REGISTRY.key_by_hash(HASHES.workshop_registry),
             workshops.into_bytes(),
         );
         for (item, places) in [(forge, template), (survivor, template), (prop, plain)] {
-            data.insert(item.key(types::ITEM_INFO), placing(places));
+            data.insert(item.key_by_hash(HASHES.item), placing(places));
         }
-        data.insert(template.key(types::TEMPLATE), crafting.into_bytes());
-        data.insert(plain.key(types::TEMPLATE), other.into_bytes());
-        Vanilla::new(ITEMS, LAYOUT, move |key| data.get(&key).cloned())
+        data.insert(template.key_by_hash(HASHES.template), crafting.into_bytes());
+        data.insert(plain.key_by_hash(HASHES.template), other.into_bytes());
+        Vanilla::with_parts(ITEMS, LAYOUT, HASHES, move |key| data.get(&key).cloned())
     }
 
     #[test]
@@ -447,7 +485,12 @@ pub(crate) mod tests {
             ambiguous.starts_with("2 vanilla items are named \"Twin\""),
             "{ambiguous}"
         );
-        let empty = Vanilla::new(ITEMS, super::super::workshops::tests::LAYOUT, |_| None);
+        let empty = Vanilla::with_parts(
+            ITEMS,
+            super::super::workshops::tests::LAYOUT,
+            HASHES,
+            |_| None,
+        );
         assert_eq!(
             empty.item("Torch"),
             Err(VanillaError::Unreadable("item registry"))

@@ -11,6 +11,7 @@
 //! raise nothing here.
 
 use crate::pinned;
+use enshwick::ecs::Entity;
 use std::sync::{Mutex, OnceLock};
 
 use enshwick::abi::{Event, Header, HookFlags, PlayerDeathData};
@@ -90,7 +91,7 @@ impl History {
     }
 
     /// The attacker of the last hit `entity` took; 0 for none.
-    fn killer(&self, loader: &Loader, entity: u32) -> u32 {
+    fn killer(&self, loader: &Loader, entity: Entity) -> u32 {
         let Ok(history) = crate::world::component(loader, entity, self.hash) else {
             return 0;
         };
@@ -251,7 +252,7 @@ pub(crate) fn after_step(loader: &Loader) {
             && death.entity != 0
             && let Some(history) = history
         {
-            death.killer_entity = history.killer(loader, death.entity);
+            death.killer_entity = history.killer(loader, Entity(death.entity));
         }
         loader.emit(Event::PLAYER_DIED, None, (&raw const death).cast());
     }

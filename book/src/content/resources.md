@@ -10,12 +10,12 @@ archive. Reach for it when the high-level calls do not cover what you need.
 A resource is named by a
 [`ResourceKey`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/abi.rs):
 a GUID, a type hash and a part.
-[`Guid::key(type_hash)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content.rs)
-makes the key of part 0, and
+[`Guid::key(ty)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content.rs)
+makes the key of part 0 with the hash the loader gives the type on the
+running build, and
 [`content::types`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content.rs)
-holds the type hashes mods commonly serve: `ITEM_INFO`, `ITEM_REGISTRY`,
-`RECIPE_REGISTRY`, `TEMPLATE`, `TEMPLATE_COLLECTION` and
-`WORKSHOP_REGISTRY`.
+names the resource types mods commonly serve, such as `ITEM_INFO` and
+`ITEM_REGISTRY`.
 
 `load.serve(key, base, builder)` serves `key`, built by `builder` from the
 bytes of the resource `base`:
@@ -34,7 +34,7 @@ const LOCKER_ID: Id = Id::new("my-mod:locker");
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     const LOCKER: Guid = LOCKER_ID.guid();
     load.declare(LOCKER_ID)?;
-    load.serve(LOCKER.key(types::ITEM_INFO), CHEST.key(types::ITEM_INFO), |chest| {
+    load.serve(LOCKER.key(types::ITEM_INFO)?, CHEST.key(types::ITEM_INFO)?, |chest| {
         let mut item = Blob::new(chest);
         // Offsets for illustration: a real mod reads them from reflection.
         let written = item.write(0, &LOCKER.id().to_le_bytes()) && item.write(4, &LOCKER.0);
@@ -43,10 +43,11 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 }
 ```
 
-Field offsets change between game builds; read them with
-`load.field_offset(type, field)` and `load.type_size(type)` during `init`,
-as [`ItemLayout::resolve`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content/items.rs)
-does, and move them into the builder. See
+Field offsets change between game builds; resolve a layout such as
+[`ItemLayout::resolve`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content/items.rs)
+during `init`, which asks the loader by enshwick's ids, and move it into
+the builder. For a field no layout names, `load.field_offset(type, field)`
+and `load.type_size(type)` read the game's reflection. See
 [Finding the game](../finding-the-game.md).
 
 ## When the builder runs
@@ -176,7 +177,8 @@ needs more than once.
 use enshwick::content::{Blob, game_resource, types};
 use enshwick::content::workshops::stations;
 
-if let Some(item) = game_resource(stations::WORKBENCH.item.key(types::ITEM_INFO)) {
+let key = stations::WORKBENCH.item.key(types::ITEM_INFO);
+if let Some(item) = key.ok().and_then(game_resource) {
     let item = Blob::new(&item);
     let _id = item.read_u32(0);
 }

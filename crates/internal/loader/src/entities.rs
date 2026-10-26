@@ -8,6 +8,7 @@
 
 use crate::pinned;
 use crate::pinned::{Constant, Symbol};
+use enshwick::ecs::Entity;
 use std::sync::OnceLock;
 
 use enshwick::abi::{EntityPlace, Status};
@@ -158,16 +159,16 @@ fn place(layout: &Layout, entry: &[u8]) -> EntityPlace {
 
 /// Asks the engine to destroy `entity` after the systems of the next step;
 /// players' characters and entities not in the world are refused.
-pub(crate) fn destroy(loader: &Loader, entity: u32) -> Result<(), Status> {
+pub(crate) fn destroy(loader: &Loader, entity: Entity) -> Result<(), Status> {
     let layout = layout(loader).ok_or(Status::MISSING)?;
     let world = entity_world()?;
-    if entity == 0 {
+    if entity == Entity(0) {
         return Err(Status::BAD_ARGS);
     }
     crate::world::template(loader, entity)?;
     if crate::world::players(loader)?
         .iter()
-        .any(|p| p.entity == entity)
+        .any(|p| p.entity == entity.0)
     {
         return Err(Status::REFUSED);
     }
@@ -181,7 +182,7 @@ pub(crate) fn destroy(loader: &Loader, entity: u32) -> Result<(), Status> {
     // SAFETY: `buffer` is the world's first command buffer, non-null by the
     // earlier check, used on the game thread between steps, where no system
     // writes it.
-    let queued = unsafe { (layout.destroy)(buffer, 0, entity) };
+    let queued = unsafe { (layout.destroy)(buffer, 0, entity.0) };
     if queued == 0 {
         return Err(Status::REFUSED);
     }

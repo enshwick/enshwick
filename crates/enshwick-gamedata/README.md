@@ -11,6 +11,10 @@ records the build's Steam build id (`steam_build`) and the game's own
 version number (`game_version`), each where it is known; several Steam
 builds can share one game version.
 
+The catalogue (`catalogue.rs`) maps the ids the API asks engine facts by,
+such as `item_info.name`, to the game's reflected types and fields, so a
+game update that moves a field changes this crate, not the mods.
+
 - The loader embeds every table of this folder, and reads no other: a table
   for a newer game build ships with the next loader build.
 - On a build without a table, the loader takes the newest table of the same

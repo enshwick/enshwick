@@ -25,6 +25,7 @@ use enshwick::abi::{HookFlags, Side, Status};
 use enshwick::raw::{read_at, read_bytes_at, read_ptr_at, write_at, write_ptr_at};
 use rustc_hash::FxHashMap;
 
+use crate::catalogue::types::UI_IMAGE;
 use crate::chains::Next;
 use crate::host::Loader;
 use crate::locks::Relock;
@@ -52,9 +53,6 @@ pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::textures::SIGNAL.id(),
 ];
 
-/// The type hash of the client's UI image resource, which items name in
-/// `iconImage` and the UI registry lists.
-pub(crate) const UI_IMAGE: u32 = 0xf9e8_6997;
 /// A served content hash's last word, so it never meets one of the game's
 /// by chance.
 const MARK: u32 = 0x4b57_4845;

@@ -2,6 +2,7 @@
 
 use enshwick::abi as api_frame;
 use enshwick::abi::{ModHandle, RateId, Status, Str};
+use enshwick::ecs::Entity;
 
 use crate::host::entries::mods::list;
 use crate::host::memory::{get_headed, put, put_headed, put_headed_list, put_list, text};
@@ -237,7 +238,7 @@ pub(crate) extern "system" fn stat_value(
         if let Err(status) = caller(me) {
             return status;
         }
-        match crate::stats::value(entity, stat) {
+        match crate::stats::value(Entity(entity), stat) {
             // SAFETY: `HostApi::stat_value` has the mod pass `out` null or
             // pointing at a writable, aligned `f32` that no other thread
             // touches during the call.
@@ -319,7 +320,7 @@ pub(crate) extern "system" fn stat_sources(
             Ok(loader) => loader,
             Err(status) => return status,
         };
-        match crate::stats::sources(loader, entity, stat) {
+        match crate::stats::sources(loader, Entity(entity), stat) {
             // SAFETY: `HostApi::stat_sources` has the mod pass `out` null or
             // pointing at `capacity` writable, aligned `StatSource`s, and
             // `count` null or pointing at a writable, aligned `u32`, neither
@@ -335,7 +336,7 @@ pub(crate) extern "system" fn stat_watch(me: ModHandle, entity: u32, watch: u8) 
         if let Err(status) = caller(me) {
             return status;
         }
-        match crate::stats::watch(entity, watch != 0) {
+        match crate::stats::watch(Entity(entity), watch != 0) {
             Ok(()) => Status::OK,
             Err(status) => status,
         }
@@ -675,7 +676,7 @@ pub(crate) extern "system" fn buffs(
     count: *mut u32,
 ) -> Status {
     entry("buffs", || {
-        match caller(me).and_then(|loader| crate::buffs::of(loader, entity)) {
+        match caller(me).and_then(|loader| crate::buffs::of(loader, Entity(entity))) {
             // SAFETY: `HostApi::buffs` has the mod pass `out` null or pointing
             // at `capacity` entries of its version of `ActiveBuff`, each
             // writable for the size the first entry's header states, and
@@ -713,7 +714,7 @@ pub(crate) extern "system" fn remove_buff(
     removed: *mut u8,
 ) -> Status {
     entry("remove_buff", || {
-        match caller(me).and_then(|loader| crate::buffs::remove(loader, entity, id)) {
+        match caller(me).and_then(|loader| crate::buffs::remove(loader, Entity(entity), id)) {
             // SAFETY: `HostApi::remove_buff` has the mod pass `removed` null or
             // pointing at a writable, aligned `u8` that no other thread touches
             // during the call.
@@ -730,7 +731,7 @@ pub(crate) extern "system" fn knowledge(
     out: *mut enshwick::abi::KnowledgeInfo,
 ) -> Status {
     entry("knowledge", || {
-        match caller(me).and_then(|loader| crate::knowledge::value(loader, entity, id)) {
+        match caller(me).and_then(|loader| crate::knowledge::value(loader, Entity(entity), id)) {
             // SAFETY: `HostApi::knowledge` has the mod pass `out` null or
             // pointing at its version of `KnowledgeInfo`, writable for the size
             // its header states, that no other thread touches during the call.
