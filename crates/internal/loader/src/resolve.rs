@@ -54,7 +54,13 @@ pub struct Plan {
     /// Skipped candidates that a present mod replaces: the replaced index
     /// and the replacing one.
     pub replaced: Vec<(usize, usize)>,
+    /// Skipped candidates whose work the loader took over ([`RETIRED`]).
+    pub retired: Vec<usize>,
 }
+
+/// Mods whose work the loader took over: never loaded, and reported as
+/// replaced by the loader so their files can be deleted.
+pub const RETIRED: &[&str] = &["enshwick.admin-tools", "admin-tools", "dev-tools"];
 
 /// Why a mod made for the other side of the game is skipped, which is
 /// expected rather than a fault: `enshwick.zip` carries client mods to
@@ -119,26 +125,16 @@ pub fn duplicates(files: &[Installed<'_>]) -> Vec<(usize, usize)> {
         .collect()
 }
 
-/// Decides which `candidates` load on `side` and in what order.
-#[must_use]
-pub fn resolve(candidates: &[Candidate], side: Side) -> Plan {
-    let mut skipped: BTreeMap<usize, String> = BTreeMap::new();
-    let mut by_id: BTreeMap<&str, usize> = BTreeMap::new();
-    for (i, candidate) in candidates.iter().enumerate() {
-        if !loads(candidate.side, side) {
-            skipped.insert(i, OTHER_SIDE.into());
-        } else if let Some(&first) = by_id.get(candidate.id.as_str()) {
-            skipped.insert(
-                i,
-                format!("a second copy of {}, after #{first}", candidate.id),
-            );
-        } else {
-            by_id.insert(&candidate.id, i);
-        }
-    }
-
-    // An old id gives way to every present mod that replaces it, whatever
-    // else is wrong with either; a mod never replaces the one it gave way to.
+/// The candidates present mods replace, `(old, by)` in order, each marked
+/// in `skipped`. An old id gives way to every present mod that replaces it,
+/// whatever else is wrong with either; a mod never replaces the one it gave
+/// way to, and the loader's [`RETIRED`] mods are taken already.
+fn replacements(
+    candidates: &[Candidate],
+    by_id: &BTreeMap<&str, usize>,
+    retired: &[usize],
+    skipped: &mut BTreeMap<usize, String>,
+) -> Vec<(usize, usize)> {
     let mut replaced: Vec<(usize, usize)> = Vec::new();
     for (i, candidate) in candidates.iter().enumerate() {
         if by_id.get(candidate.id.as_str()) != Some(&i) {
@@ -153,7 +149,10 @@ pub fn resolve(candidates: &[Candidate], side: Side) -> Plan {
                 .enumerate()
                 .filter(|(_, c)| c.id == dependency.id)
             {
-                if replaced.iter().any(|&(o, _)| o == old) || replaced.contains(&(i, old)) {
+                if retired.contains(&old)
+                    || replaced.iter().any(|&(o, _)| o == old)
+                    || replaced.contains(&(i, old))
+                {
                     continue;
                 }
                 skipped.insert(old, format!("replaced by {}", candidate.id));
@@ -162,6 +161,32 @@ pub fn resolve(candidates: &[Candidate], side: Side) -> Plan {
         }
     }
     replaced.sort_unstable();
+    replaced
+}
+
+/// Decides which `candidates` load on `side` and in what order.
+#[must_use]
+pub fn resolve(candidates: &[Candidate], side: Side) -> Plan {
+    let mut skipped: BTreeMap<usize, String> = BTreeMap::new();
+    let mut by_id: BTreeMap<&str, usize> = BTreeMap::new();
+    let mut retired = Vec::new();
+    for (i, candidate) in candidates.iter().enumerate() {
+        if RETIRED.contains(&candidate.id.as_str()) {
+            skipped.insert(i, format!("replaced by {}", crate::settings::LOADER_ID));
+            retired.push(i);
+        } else if !loads(candidate.side, side) {
+            skipped.insert(i, OTHER_SIDE.into());
+        } else if let Some(&first) = by_id.get(candidate.id.as_str()) {
+            skipped.insert(
+                i,
+                format!("a second copy of {}, after #{first}", candidate.id),
+            );
+        } else {
+            by_id.insert(&candidate.id, i);
+        }
+    }
+
+    let replaced = replacements(candidates, &by_id, &retired, &mut skipped);
 
     // A renamed mod answers for the ids it had.
     for (i, candidate) in candidates.iter().enumerate() {
@@ -229,6 +254,7 @@ pub fn resolve(candidates: &[Candidate], side: Side) -> Plan {
         order,
         skipped: skipped.into_iter().collect(),
         replaced,
+        retired,
     }
 }
 
@@ -356,6 +382,29 @@ mod tests {
                 })
                 .collect(),
         }
+    }
+
+    #[test]
+    fn a_mod_the_loader_took_over_never_loads_and_is_reported_replaced() {
+        let mut mods: Vec<Candidate> = RETIRED
+            .iter()
+            .map(|id| candidate(id, "0.1.0", Side::SERVER, &[]))
+            .collect();
+        mods.push(candidate(
+            "you.tools",
+            "0.1.0",
+            Side::SERVER,
+            &[(RETIRED[0], "", Relation::REPLACES)],
+        ));
+        let plan = resolve(&mods, Side::SERVER);
+        assert_eq!(plan.order, [RETIRED.len()]);
+        assert_eq!(plan.retired, (0..RETIRED.len()).collect::<Vec<_>>());
+        assert!(plan.replaced.is_empty(), "the loader replaced them first");
+        assert!(
+            plan.skipped
+                .iter()
+                .all(|(_, why)| *why == format!("replaced by {}", crate::settings::LOADER_ID))
+        );
     }
 
     #[test]

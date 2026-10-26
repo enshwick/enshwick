@@ -18,14 +18,10 @@ pub(crate) fn start(loader: &'static Loader) {
     let Some(game) = loader.data_dir.parent() else {
         return;
     };
-    let files: Vec<Watched> = command_files(&loader.data_dir, |id| {
-        loader
-            .find_mod(id)
-            .is_some_and(|(_, m)| !m.off.load(Ordering::Acquire))
-    })
-    .into_iter()
-    .map(Watched::new)
-    .collect();
+    let files: Vec<Watched> = command_files(&loader.data_dir)
+        .into_iter()
+        .map(Watched::new)
+        .collect();
     for file in &files {
         crate::log!(INFO, "the console reads {}", shown(game, file.path()));
     }
