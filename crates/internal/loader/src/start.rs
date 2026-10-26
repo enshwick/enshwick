@@ -182,8 +182,8 @@ pub(crate) fn start(
 
 /// Copies each loading mod's settings and data from the ids it had, once.
 fn carry_former_ids(
-    mods_dir: &Path,
-    data_dir: &Path,
+    mods_dir: &std::path::Path,
+    data_dir: &std::path::Path,
     candidates: &[Candidate],
     plan: &resolve::Plan,
 ) {
@@ -201,7 +201,7 @@ fn carry_former_ids(
         data: data_dir,
     };
     for line in crate::carry::carry_all(dirs, &mods, crate::migrations::dry_run()) {
-        log::write(line.level, &line.id, &line.text);
+        crate::log::write(line.level, &line.id, &line.text);
     }
 }
 
