@@ -1,0 +1,40 @@
+//! Build table ids under `knowledge.`.
+
+use super::{Constant, Symbol};
+
+pub(crate) const CONNECTION_CREATED: Constant = Constant::new("knowledge.connection_created");
+pub(crate) const CONNECTION_LOADED: Constant = Constant::new("knowledge.connection_loaded");
+pub(crate) const CONNECTION_SIZE: Constant = Constant::new("knowledge.connection_size");
+pub(crate) const DEFS: Constant = Constant::new("knowledge.defs");
+pub(crate) const DEFS_BLOB: Constant = Constant::new("knowledge.defs_blob");
+pub(crate) const INPUT_ACTION: Constant = Constant::new("knowledge.input_action");
+pub(crate) const INPUT_CHECK: Symbol = Symbol::new("knowledge.input_check");
+pub(crate) const JOURNAL: Constant = Constant::new("knowledge.journal");
+pub(crate) const JOURNAL_BLOB: Constant = Constant::new("knowledge.journal_blob");
+pub(crate) const JOURNAL_BLOB_GET: Symbol = Symbol::new("knowledge.journal_blob_get");
+pub(crate) const LOG_ENTRY_SIZE: Constant = Constant::new("knowledge.log_entry_size");
+pub(crate) const OBJECT: Constant = Constant::new("knowledge.object");
+pub(crate) const PLAYER_VALUE: Symbol = Symbol::new("knowledge.player_value");
+pub(crate) const PUSH: Symbol = Symbol::new("knowledge.push");
+pub(crate) const QUEUE: Constant = Constant::new("knowledge.queue");
+pub(crate) const RECORDS: Constant = Constant::new("knowledge.records");
+pub(crate) const RECORD_ACTIVE: Constant = Constant::new("knowledge.record_active");
+pub(crate) const RECORD_CHANGES: Constant = Constant::new("knowledge.record_changes");
+pub(crate) const RECORD_COUNT: Constant = Constant::new("knowledge.record_count");
+pub(crate) const RECORD_LOG: Constant = Constant::new("knowledge.record_log");
+pub(crate) const RECORD_LOG_COUNT: Constant = Constant::new("knowledge.record_log_count");
+pub(crate) const RECORD_SIZE: Constant = Constant::new("knowledge.record_size");
+pub(crate) const REPLICATION: Constant = Constant::new("knowledge.replication");
+pub(crate) const REQUEST_KIND: Constant = Constant::new("knowledge.request_kind");
+pub(crate) const REQUEST_TARGET: Constant = Constant::new("knowledge.request_target");
+pub(crate) const REQUEST_VALUE: Constant = Constant::new("knowledge.request_value");
+pub(crate) const RESEND_PLAYER: Constant = Constant::new("knowledge.resend_player");
+pub(crate) const RESEND_WORLD: Constant = Constant::new("knowledge.resend_world");
+pub(crate) const SET_VALUES: Symbol = Symbol::new("knowledge.set_values");
+pub(crate) const SET_WORLD: Symbol = Symbol::new("knowledge.set_world");
+pub(crate) const STATE: Constant = Constant::new("knowledge.state");
+pub(crate) const STEP: Constant = Constant::new("knowledge.step");
+pub(crate) const WORLD_LOG: Constant = Constant::new("knowledge.world_log");
+pub(crate) const WORLD_LOG_COUNT: Constant = Constant::new("knowledge.world_log_count");
+pub(crate) const WORLD_TOUCHED: Constant = Constant::new("knowledge.world_touched");
+pub(crate) const WORLD_VALUE: Symbol = Symbol::new("knowledge.world_value");

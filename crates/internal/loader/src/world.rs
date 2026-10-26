@@ -8,6 +8,8 @@
 //! game the built-in server's `GameServer` thread; each hosted game has its
 //! own server and thread, captured by the post-step link.
 
+use crate::pinned;
+use crate::pinned::{Constant, Symbol};
 use core::cell::Cell;
 use core::ffi::c_void;
 use std::sync::OnceLock;
@@ -22,30 +24,30 @@ use crate::memory::read;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
-    "ecs.component_read_raw",
-    "ecs.entity_map",
-    "ecs.entity_map_capacity",
-    "ecs.entity_records",
-    "ecs.entity_slot",
-    "ecs.record_template",
-    "ecs.registry_type_map",
-    "ecs.registry_type_map_fallback",
-    "ecs.type_index",
-    "server.permission_entry_size",
-    "server.permission_mask",
-    "server.permission_table",
-    "server.player_infos",
-    "server.player_slot_count",
-    "server.player_slot_entity",
-    "server.player_slot_key",
-    "server.player_slot_machine",
-    "server.player_slot_name",
-    "server.player_slot_size",
-    "server.player_slot_state",
-    "server.player_slots",
-    "server.world",
-    "world.entities",
-    "world.step",
+    pinned::ecs::COMPONENT_READ_RAW.id(),
+    pinned::ecs::ENTITY_MAP.id(),
+    pinned::ecs::ENTITY_MAP_CAPACITY.id(),
+    pinned::ecs::ENTITY_RECORDS.id(),
+    pinned::ecs::ENTITY_SLOT.id(),
+    pinned::ecs::RECORD_TEMPLATE.id(),
+    pinned::ecs::REGISTRY_TYPE_MAP.id(),
+    pinned::ecs::REGISTRY_TYPE_MAP_FALLBACK.id(),
+    pinned::ecs::TYPE_INDEX.id(),
+    pinned::server::PERMISSION_ENTRY_SIZE.id(),
+    pinned::server::PERMISSION_MASK.id(),
+    pinned::server::PERMISSION_TABLE.id(),
+    pinned::server::PLAYER_INFOS.id(),
+    pinned::server::PLAYER_SLOT_COUNT.id(),
+    pinned::server::PLAYER_SLOT_ENTITY.id(),
+    pinned::server::PLAYER_SLOT_KEY.id(),
+    pinned::server::PLAYER_SLOT_MACHINE.id(),
+    pinned::server::PLAYER_SLOT_NAME.id(),
+    pinned::server::PLAYER_SLOT_SIZE.id(),
+    pinned::server::PLAYER_SLOT_STATE.id(),
+    pinned::server::PLAYER_SLOTS.id(),
+    pinned::server::WORLD.id(),
+    pinned::world::ENTITIES.id(),
+    pinned::world::STEP.id(),
 ];
 
 /// The server object, seen by the post-step hook.
@@ -101,7 +103,7 @@ static WORLD_STEP_NEXT: Next<WorldStepFn> = unsafe { Next::new() };
 /// Links the world step, which runs every ECS system of a world, the
 /// server's on its game thread and on a client its own as well.
 pub(crate) fn link(loader: &'static Loader) {
-    let target = loader.address("world.step");
+    let target = loader.address(pinned::world::STEP);
     let linked = loader.link_feature(
         "world-step gate",
         target,
@@ -205,17 +207,17 @@ const MAX_NAME: usize = 0x100;
 fn layout(loader: &Loader) -> Option<&'static Layout> {
     LAYOUT
         .get_or_init(|| {
-            let symbol = |name: &str| loader.build.symbol(name).map(|rva| loader.base + rva);
-            let constant = |name: &str| {
+            let symbol = |name: Symbol| loader.build.symbol(name.id()).map(|rva| loader.base + rva);
+            let constant = |name: Constant| {
                 loader
                     .build
-                    .constant(name)
+                    .constant(name.id())
                     .and_then(|v| usize::try_from(v).ok())
             };
-            let function = |name: &str| symbol(name).and_then(|a| usize::try_from(a).ok());
-            let type_index = function("ecs.type_index")?;
-            let read_component = function("ecs.component_read_raw")?;
-            let entity_slot = function("ecs.entity_slot")?;
+            let function = |name: Symbol| symbol(name).and_then(|a| usize::try_from(a).ok());
+            let type_index = function(pinned::ecs::TYPE_INDEX)?;
+            let read_component = function(pinned::ecs::COMPONENT_READ_RAW)?;
+            let entity_slot = function(pinned::ecs::ENTITY_SLOT)?;
             // SAFETY: the table's `ecs.type_index` is the address of the game
             // function with the `TypeIndex` signature on this build, in the
             // image, which stays mapped.
@@ -233,28 +235,28 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
                 type_index,
                 read_component,
                 entity_slot,
-                server_world: constant("server.world")?,
-                entity_world: constant("world.entities")?,
+                server_world: constant(pinned::server::WORLD)?,
+                entity_world: constant(pinned::world::ENTITIES)?,
                 registry_maps: [
-                    constant("ecs.registry_type_map")?,
-                    constant("ecs.registry_type_map_fallback")?,
+                    constant(pinned::ecs::REGISTRY_TYPE_MAP)?,
+                    constant(pinned::ecs::REGISTRY_TYPE_MAP_FALLBACK)?,
                 ],
-                entity_map: constant("ecs.entity_map")?,
-                entity_capacity: constant("ecs.entity_map_capacity")?,
-                entity_records: constant("ecs.entity_records")?,
-                record_template: constant("ecs.record_template")?,
-                server_players: constant("server.player_infos")?,
-                permission_table: constant("server.permission_table")?,
-                permission_entry: constant("server.permission_entry_size")?,
-                permission_mask: constant("server.permission_mask")?,
-                slots: constant("server.player_slots")?,
-                slot_size: constant("server.player_slot_size")?,
-                slot_count: constant("server.player_slot_count")?,
-                slot_state: constant("server.player_slot_state")?,
-                slot_entity: constant("server.player_slot_entity")?,
-                slot_key: constant("server.player_slot_key")?,
-                slot_name: constant("server.player_slot_name")?,
-                slot_machine: constant("server.player_slot_machine")?,
+                entity_map: constant(pinned::ecs::ENTITY_MAP)?,
+                entity_capacity: constant(pinned::ecs::ENTITY_MAP_CAPACITY)?,
+                entity_records: constant(pinned::ecs::ENTITY_RECORDS)?,
+                record_template: constant(pinned::ecs::RECORD_TEMPLATE)?,
+                server_players: constant(pinned::server::PLAYER_INFOS)?,
+                permission_table: constant(pinned::server::PERMISSION_TABLE)?,
+                permission_entry: constant(pinned::server::PERMISSION_ENTRY_SIZE)?,
+                permission_mask: constant(pinned::server::PERMISSION_MASK)?,
+                slots: constant(pinned::server::PLAYER_SLOTS)?,
+                slot_size: constant(pinned::server::PLAYER_SLOT_SIZE)?,
+                slot_count: constant(pinned::server::PLAYER_SLOT_COUNT)?,
+                slot_state: constant(pinned::server::PLAYER_SLOT_STATE)?,
+                slot_entity: constant(pinned::server::PLAYER_SLOT_ENTITY)?,
+                slot_key: constant(pinned::server::PLAYER_SLOT_KEY)?,
+                slot_name: constant(pinned::server::PLAYER_SLOT_NAME)?,
+                slot_machine: constant(pinned::server::PLAYER_SLOT_MACHINE)?,
             })
         })
         .as_ref()

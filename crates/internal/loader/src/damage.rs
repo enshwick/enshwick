@@ -17,6 +17,7 @@
 //! allocation, no lock.
 
 use crate::mod_index::ModIndex;
+use crate::pinned::{self, Symbol};
 use core::ffi::c_void;
 use std::sync::{Mutex, OnceLock};
 
@@ -28,18 +29,18 @@ use crate::mid::MidLink;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
-    "damage.admin_kill",
-    "damage.drowning",
-    "damage.drowning_death",
-    "damage.faction_kill",
-    "damage.fall",
-    "damage.freezing",
-    "damage.hit",
-    "damage.hit_source",
-    "damage.hit_target",
-    "damage.hit_vector",
-    "damage.shroud",
-    "damage.shroud_death",
+    pinned::damage::ADMIN_KILL.id(),
+    pinned::damage::DROWNING.id(),
+    pinned::damage::DROWNING_DEATH.id(),
+    pinned::damage::FACTION_KILL.id(),
+    pinned::damage::FALL.id(),
+    pinned::damage::FREEZING.id(),
+    pinned::damage::HIT.id(),
+    pinned::damage::HIT_SOURCE.id(),
+    pinned::damage::HIT_TARGET.id(),
+    pinned::damage::HIT_VECTOR.id(),
+    pinned::damage::SHROUD.id(),
+    pinned::damage::SHROUD_DEATH.id(),
 ];
 
 /// Damage types in a hit's vector.
@@ -102,9 +103,9 @@ pub(crate) fn register(
 
 fn layout(loader: &Loader) -> Option<Layout> {
     Some(Layout {
-        vector: loader.offset("damage.hit_vector")?,
-        target: loader.offset("damage.hit_target")?,
-        source: loader.offset("damage.hit_source")?,
+        vector: loader.offset(pinned::damage::HIT_VECTOR)?,
+        target: loader.offset(pinned::damage::HIT_TARGET)?,
+        source: loader.offset(pinned::damage::HIT_SOURCE)?,
     })
 }
 
@@ -120,16 +121,28 @@ pub(crate) fn link(loader: &Loader) {
         return;
     };
     let _first = LAYOUT.set(layout);
-    let sites: [(&str, Site, MidFn); 9] = [
-        ("damage.hit", Site::Hit, hit),
-        ("damage.fall", Site::Fall, fall),
-        ("damage.shroud", Site::Shroud, shroud),
-        ("damage.shroud_death", Site::ShroudDeath, shroud_death),
-        ("damage.drowning", Site::Drowning, drowning),
-        ("damage.drowning_death", Site::DrowningDeath, drowning_death),
-        ("damage.freezing", Site::Freezing, freezing),
-        ("damage.admin_kill", Site::AdminKill, admin_kill),
-        ("damage.faction_kill", Site::FactionKill, faction_kill),
+    let sites: [(Symbol, Site, MidFn); 9] = [
+        (pinned::damage::HIT, Site::Hit, hit),
+        (pinned::damage::FALL, Site::Fall, fall),
+        (pinned::damage::SHROUD, Site::Shroud, shroud),
+        (
+            pinned::damage::SHROUD_DEATH,
+            Site::ShroudDeath,
+            shroud_death,
+        ),
+        (pinned::damage::DROWNING, Site::Drowning, drowning),
+        (
+            pinned::damage::DROWNING_DEATH,
+            Site::DrowningDeath,
+            drowning_death,
+        ),
+        (pinned::damage::FREEZING, Site::Freezing, freezing),
+        (pinned::damage::ADMIN_KILL, Site::AdminKill, admin_kill),
+        (
+            pinned::damage::FACTION_KILL,
+            Site::FactionKill,
+            faction_kill,
+        ),
     ];
     let mut linked = 0;
     for (name, site, handler) in sites {

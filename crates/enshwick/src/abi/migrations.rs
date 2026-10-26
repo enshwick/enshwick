@@ -82,11 +82,12 @@ pub struct Migration {
     pub count: u32,
 }
 
-/// Changes a value for a migration step: `migration` and `step` index the
-/// set, `input` is a TOML value ([`MigrationStep::MAP_SETTING`]) or a whole
-/// TOML file ([`MigrationStep::MAP_STORE`]), and the answer goes to `out`,
-/// valid until the next call; an error status with the reason in `out`
-/// fails the migration.
+/// Changes a value for a migration step.
+///
+/// `migration` and `step` index the set, `input` is a TOML value
+/// ([`MigrationStep::MAP_SETTING`]) or a whole TOML file
+/// ([`MigrationStep::MAP_STORE`]), and the answer goes to `out`, valid until
+/// the next call; an error status with the reason in `out` fails the migration.
 pub type MigrateFn = unsafe extern "system" fn(
     user: *mut c_void,
     migration: u32,

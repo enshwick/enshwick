@@ -19,6 +19,7 @@
 //! from unloading to unloaded once they are gone. The loader wraps it and
 //! reports the turns of the server's world after the step.
 
+use crate::pinned::{self, Symbol};
 use std::sync::{Mutex, OnceLock};
 
 use enshwick::abi::{ChunkData, Event, Header, HookFlags, Status, WeatherFront};
@@ -31,43 +32,43 @@ use crate::memory::{read, write};
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
-    "chunks.height",
-    "chunks.index",
-    "chunks.manager",
-    "chunks.step",
-    "chunks.width",
-    "server.player_infos",
-    "weather.clock",
-    "weather.entry_data",
-    "weather.entry_generation",
-    "weather.entry_size",
-    "weather.free",
-    "weather.generation",
-    "weather.instance_despawn",
-    "weather.instance_phenomenon",
-    "weather.instance_position",
-    "weather.instance_radius",
-    "weather.layer_count",
-    "weather.layers",
-    "weather.manager",
-    "weather.page_count",
-    "weather.page_entries",
-    "weather.page_entry_count",
-    "weather.page_mask",
-    "weather.page_shift",
-    "weather.page_size",
-    "weather.pages",
-    "weather.resource",
-    "weather.resource_lock",
-    "weather.resource_release",
-    "weather.sample",
-    "weather.slot_current",
-    "weather.slot_next",
-    "weather.slot_phenomenon",
-    "weather.slot_size",
-    "weather.slot_time",
-    "weather.spawn",
-    "weather.system",
+    pinned::chunks::HEIGHT.id(),
+    pinned::chunks::INDEX.id(),
+    pinned::chunks::MANAGER.id(),
+    pinned::chunks::STEP.id(),
+    pinned::chunks::WIDTH.id(),
+    pinned::server::PLAYER_INFOS.id(),
+    pinned::weather::CLOCK.id(),
+    pinned::weather::ENTRY_DATA.id(),
+    pinned::weather::ENTRY_GENERATION.id(),
+    pinned::weather::ENTRY_SIZE.id(),
+    pinned::weather::FREE.id(),
+    pinned::weather::GENERATION.id(),
+    pinned::weather::INSTANCE_DESPAWN.id(),
+    pinned::weather::INSTANCE_PHENOMENON.id(),
+    pinned::weather::INSTANCE_POSITION.id(),
+    pinned::weather::INSTANCE_RADIUS.id(),
+    pinned::weather::LAYER_COUNT.id(),
+    pinned::weather::LAYERS.id(),
+    pinned::weather::MANAGER.id(),
+    pinned::weather::PAGE_COUNT.id(),
+    pinned::weather::PAGE_ENTRIES.id(),
+    pinned::weather::PAGE_ENTRY_COUNT.id(),
+    pinned::weather::PAGE_MASK.id(),
+    pinned::weather::PAGE_SHIFT.id(),
+    pinned::weather::PAGE_SIZE.id(),
+    pinned::weather::PAGES.id(),
+    pinned::weather::RESOURCE.id(),
+    pinned::weather::RESOURCE_LOCK.id(),
+    pinned::weather::RESOURCE_RELEASE.id(),
+    pinned::weather::SAMPLE.id(),
+    pinned::weather::SLOT_CURRENT.id(),
+    pinned::weather::SLOT_NEXT.id(),
+    pinned::weather::SLOT_PHENOMENON.id(),
+    pinned::weather::SLOT_SIZE.id(),
+    pinned::weather::SLOT_TIME.id(),
+    pinned::weather::SPAWN.id(),
+    pinned::weather::SYSTEM.id(),
 ];
 
 /// The effect value that asks the game to choose.
@@ -166,7 +167,7 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
                     .ok()
                     .and_then(|info| usize::try_from(info.size()).ok())
             };
-            let function = |name: &str| {
+            let function = |name: Symbol| {
                 loader
                     .address(name)
                     .and_then(|address| usize::try_from(address).ok())
@@ -175,12 +176,12 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
             let layer = "keen::WeatherSystemLayerResource";
             let phenomenon = "keen::WeatherSystemPhenomenonResource";
             let (sample, clock, lock, release, free, spawn) = (
-                function("weather.sample")?,
-                function("weather.clock")?,
-                function("weather.resource_lock")?,
-                function("weather.resource_release")?,
-                function("weather.free")?,
-                function("weather.spawn")?,
+                function(pinned::weather::SAMPLE)?,
+                function(pinned::weather::CLOCK)?,
+                function(pinned::weather::RESOURCE_LOCK)?,
+                function(pinned::weather::RESOURCE_RELEASE)?,
+                function(pinned::weather::FREE)?,
+                function(pinned::weather::SPAWN)?,
             );
             Some(Layout {
                 // SAFETY: the build table's `weather.sample` is the game function with
@@ -201,32 +202,32 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
                 // SAFETY: the build table's `weather.spawn` is the game function with
                 // the `SpawnFn` signature on this build.
                 spawn: unsafe { core::mem::transmute::<usize, SpawnFn>(spawn) },
-                system: loader.offset("weather.system")?,
-                game: loader.offset("server.player_infos")?,
-                manager: loader.offset("weather.manager")?,
-                resource: loader.offset("weather.resource")?,
-                generation: loader.offset("weather.generation")?,
-                pages: loader.offset("weather.pages")?,
-                page_count: loader.offset("weather.page_count")?,
-                shift: loader.offset("weather.page_shift")?,
-                mask: loader.offset("weather.page_mask")?,
-                page_size: loader.offset("weather.page_size")?,
-                page_entries: loader.offset("weather.page_entries")?,
-                page_entry_count: loader.offset("weather.page_entry_count")?,
-                entry_size: loader.offset("weather.entry_size")?,
-                entry_generation: loader.offset("weather.entry_generation")?,
-                entry_data: loader.offset("weather.entry_data")?,
-                layers: loader.offset("weather.layers")?,
-                layer_count: loader.offset("weather.layer_count")?,
-                slot_size: loader.offset("weather.slot_size")?,
-                slot_time: loader.offset("weather.slot_time")?,
-                slot_phenomenon: loader.offset("weather.slot_phenomenon")?,
-                slot_current: loader.offset("weather.slot_current")?,
-                slot_next: loader.offset("weather.slot_next")?,
-                instance_phenomenon: loader.offset("weather.instance_phenomenon")?,
-                instance_position: loader.offset("weather.instance_position")?,
-                instance_radius: loader.offset("weather.instance_radius")?,
-                instance_despawn: loader.offset("weather.instance_despawn")?,
+                system: loader.offset(pinned::weather::SYSTEM)?,
+                game: loader.offset(pinned::server::PLAYER_INFOS)?,
+                manager: loader.offset(pinned::weather::MANAGER)?,
+                resource: loader.offset(pinned::weather::RESOURCE)?,
+                generation: loader.offset(pinned::weather::GENERATION)?,
+                pages: loader.offset(pinned::weather::PAGES)?,
+                page_count: loader.offset(pinned::weather::PAGE_COUNT)?,
+                shift: loader.offset(pinned::weather::PAGE_SHIFT)?,
+                mask: loader.offset(pinned::weather::PAGE_MASK)?,
+                page_size: loader.offset(pinned::weather::PAGE_SIZE)?,
+                page_entries: loader.offset(pinned::weather::PAGE_ENTRIES)?,
+                page_entry_count: loader.offset(pinned::weather::PAGE_ENTRY_COUNT)?,
+                entry_size: loader.offset(pinned::weather::ENTRY_SIZE)?,
+                entry_generation: loader.offset(pinned::weather::ENTRY_GENERATION)?,
+                entry_data: loader.offset(pinned::weather::ENTRY_DATA)?,
+                layers: loader.offset(pinned::weather::LAYERS)?,
+                layer_count: loader.offset(pinned::weather::LAYER_COUNT)?,
+                slot_size: loader.offset(pinned::weather::SLOT_SIZE)?,
+                slot_time: loader.offset(pinned::weather::SLOT_TIME)?,
+                slot_phenomenon: loader.offset(pinned::weather::SLOT_PHENOMENON)?,
+                slot_current: loader.offset(pinned::weather::SLOT_CURRENT)?,
+                slot_next: loader.offset(pinned::weather::SLOT_NEXT)?,
+                instance_phenomenon: loader.offset(pinned::weather::INSTANCE_PHENOMENON)?,
+                instance_position: loader.offset(pinned::weather::INSTANCE_POSITION)?,
+                instance_radius: loader.offset(pinned::weather::INSTANCE_RADIUS)?,
+                instance_despawn: loader.offset(pinned::weather::INSTANCE_DESPAWN)?,
                 resource_layers: field(resource, "layers")?,
                 resource_phenomena: field(resource, "phenomenons")?,
                 layer_size: size(layer)?,
@@ -593,10 +594,10 @@ pub(crate) fn link(loader: &'static Loader) {
     }
     let found = (|| {
         Some(ChunkLayout {
-            manager: loader.offset("chunks.manager")?,
-            width: loader.offset("chunks.width")?,
-            height: loader.offset("chunks.height")?,
-            index: loader.offset("chunks.index")?,
+            manager: loader.offset(pinned::chunks::MANAGER)?,
+            width: loader.offset(pinned::chunks::WIDTH)?,
+            height: loader.offset(pinned::chunks::HEIGHT)?,
+            index: loader.offset(pinned::chunks::INDEX)?,
         })
     })();
     let Some(chunks) = found else {
@@ -606,7 +607,7 @@ pub(crate) fn link(loader: &'static Loader) {
     let _first = CHUNKS.set(chunks);
     loader.link_feature(
         "chunk events",
-        loader.address("chunks.step"),
+        loader.address(pinned::chunks::STEP),
         &CHUNK_NEXT,
         chunk_step as ChunkFn,
         HookFlags::NONE,

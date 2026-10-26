@@ -1,6 +1,8 @@
-//! Players' interactions with entities: a mod's say before the game opens a
-//! chest, moves or sorts its items, lends its stock to crafting, lets a piece
-//! be dismantled, or flips its Quick Stash or upgrade switch.
+//! Players' interactions with entities.
+//!
+//! A mod's say before the game opens a chest, moves or sorts its items, lends
+//! its stock to crafting, lets a piece be dismantled, or flips its Quick Stash
+//! or upgrade switch.
 //!
 //! The platform asks the filters in the server's world only, on the thread of
 //! the system that checks the interaction, and turns a refusal into the

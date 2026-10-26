@@ -1,5 +1,6 @@
 //! The gate at work on a server: hellos, kicks and notes in the game.
 
+use crate::pinned;
 use std::collections::BTreeMap;
 use std::hash::BuildHasher as _;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -13,7 +14,7 @@ use crate::host::Loader;
 use crate::join::Names;
 use crate::locks::Relock;
 
-use super::{Gate, HOST_MACHINE, Hello, KICK, Rules, SESSION, Step};
+use super::{Gate, Hello, Rules, Step};
 
 /// The game's kick of one machine from its session: the session, the
 /// machine's handle, and whether to ban it too. The server's own
@@ -99,15 +100,15 @@ pub(crate) fn start(loader: &Loader, names: Names, pages: BTreeMap<String, Strin
         return;
     };
     let kick = loader
-        .address(KICK)
+        .address(pinned::session::KICK)
         .and_then(|address| usize::try_from(address).ok())
-        .zip(loader.offset(SESSION))
+        .zip(loader.offset(pinned::server::SESSION))
         .map(|(address, session)| Kick {
-            // SAFETY: the table's `KICK` address is the game's kick on this
+            // SAFETY: the table's `session.kick` address is the game's kick on this
             // build, whose signature `KickFn` states.
             call: unsafe { core::mem::transmute::<usize, KickFn>(address) },
             session,
-            host_machine: loader.offset(HOST_MACHINE),
+            host_machine: loader.offset(pinned::session::HOST_MACHINE),
         });
     match &kick {
         None => crate::log!(

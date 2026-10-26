@@ -16,6 +16,7 @@
 //! cursor shows as not allowed.
 
 use crate::mod_index::ModIndex;
+use crate::pinned;
 use core::ffi::c_void;
 use std::sync::{Mutex, OnceLock};
 
@@ -30,9 +31,9 @@ use crate::locks::Relock;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
-    "building.cursor_check",
-    "building.cursor_item_info",
-    "building.cursor_no_permission",
+    pinned::building::CURSOR_CHECK.id(),
+    pinned::building::CURSOR_ITEM_INFO.id(),
+    pinned::building::CURSOR_NO_PERMISSION.id(),
 ];
 
 static CRAFT_FILTERS: Mutex<Vec<Registered<CraftCheckFn>>> = Mutex::new(Vec::new());
@@ -104,7 +105,7 @@ pub(crate) fn register_build(
         return Status::TOO_LATE;
     }
     if build_layout(loader).is_none()
-        || loader.address("building.cursor_check").is_none()
+        || loader.address(pinned::building::CURSOR_CHECK).is_none()
         || crate::ecs::engine(loader).is_none()
     {
         return Status::MISSING;
@@ -137,9 +138,13 @@ fn craft_layout(loader: &Loader) -> Option<CraftLayout> {
 
 fn build_layout(loader: &Loader) -> Option<BuildLayout> {
     Some(BuildLayout {
-        item_info: loader.offset("building.cursor_item_info")?,
-        no_permission: u32::try_from(loader.build.constant("building.cursor_no_permission")?)
-            .ok()?,
+        item_info: loader.offset(pinned::building::CURSOR_ITEM_INFO)?,
+        no_permission: u32::try_from(
+            loader
+                .build
+                .constant(pinned::building::CURSOR_NO_PERMISSION.id())?,
+        )
+        .ok()?,
     })
 }
 
@@ -177,7 +182,7 @@ pub(crate) fn link(loader: &'static Loader) {
     let _first = BUILD.set(layout);
     loader.link_feature(
         "build filters",
-        loader.address("building.cursor_check"),
+        loader.address(pinned::building::CURSOR_CHECK),
         &CURSOR_NEXT,
         cursor as CursorFn,
         HookFlags::NONE,

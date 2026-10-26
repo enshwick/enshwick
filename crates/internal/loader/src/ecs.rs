@@ -2,6 +2,8 @@
 //! the current row's entity, change marks, attribute reads, component reads
 //! and zone sizes.
 
+use crate::pinned;
+use crate::pinned::{Constant, Symbol};
 use std::sync::OnceLock;
 
 use enshwick::raw::{read_at, read_ptr_at, write_at};
@@ -10,25 +12,25 @@ use crate::host::Loader;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
-    "altar.level_attribute",
-    "balancing.zone_size",
-    "ecs.attribute_find",
-    "ecs.attribute_slot",
-    "ecs.component_read",
-    "ecs.component_read_raw",
-    "ecs.context_entity_world",
-    "ecs.context_row",
-    "ecs.descriptor_entity_records",
-    "ecs.entity_record_size",
-    "ecs.iterator_init",
-    "ecs.iterator_next",
-    "ecs.level_data_offset",
-    "ecs.level_flags",
-    "ecs.mark_changed",
-    "ecs.registry_type_map",
-    "ecs.registry_type_map_fallback",
-    "ecs.slot_root",
-    "ecs.type_index",
+    pinned::altar::LEVEL_ATTRIBUTE.id(),
+    pinned::balancing::ZONE_SIZE.id(),
+    pinned::ecs::ATTRIBUTE_FIND.id(),
+    pinned::ecs::ATTRIBUTE_SLOT.id(),
+    pinned::ecs::COMPONENT_READ.id(),
+    pinned::ecs::COMPONENT_READ_RAW.id(),
+    pinned::ecs::CONTEXT_ENTITY_WORLD.id(),
+    pinned::ecs::CONTEXT_ROW.id(),
+    pinned::ecs::DESCRIPTOR_ENTITY_RECORDS.id(),
+    pinned::ecs::ENTITY_RECORD_SIZE.id(),
+    pinned::ecs::ITERATOR_INIT.id(),
+    pinned::ecs::ITERATOR_NEXT.id(),
+    pinned::ecs::LEVEL_DATA_OFFSET.id(),
+    pinned::ecs::LEVEL_FLAGS.id(),
+    pinned::ecs::MARK_CHANGED.id(),
+    pinned::ecs::REGISTRY_TYPE_MAP.id(),
+    pinned::ecs::REGISTRY_TYPE_MAP_FALLBACK.id(),
+    pinned::ecs::SLOT_ROOT.id(),
+    pinned::ecs::TYPE_INDEX.id(),
 ];
 
 static ENGINE: OnceLock<Engine> = OnceLock::new();
@@ -112,25 +114,25 @@ pub(crate) struct Engine {
 impl Engine {
     /// The helpers on this build, if the table has them all.
     pub(crate) fn resolve(loader: &Loader) -> Option<Self> {
-        let function = |name: &str| {
+        let function = |name: Symbol| {
             loader
                 .build
-                .symbol(name)
+                .symbol(name.id())
                 .and_then(|rva| usize::try_from(loader.base + rva).ok())
         };
-        let size = |name: &str| {
+        let size = |name: Constant| {
             loader
                 .build
-                .constant(name)
+                .constant(name.id())
                 .and_then(|v| usize::try_from(v).ok())
         };
         let (init, next, mark, find, zone_size, component_read) = (
-            function("ecs.iterator_init")?,
-            function("ecs.iterator_next")?,
-            function("ecs.mark_changed")?,
-            function("ecs.attribute_find")?,
-            function("balancing.zone_size")?,
-            function("ecs.component_read")?,
+            function(pinned::ecs::ITERATOR_INIT)?,
+            function(pinned::ecs::ITERATOR_NEXT)?,
+            function(pinned::ecs::MARK_CHANGED)?,
+            function(pinned::ecs::ATTRIBUTE_FIND)?,
+            function(pinned::balancing::ZONE_SIZE)?,
+            function(pinned::ecs::COMPONENT_READ)?,
         );
         Some(Self {
             // SAFETY: the build table's `ecs.iterator_init` is the game function with the
@@ -151,14 +153,17 @@ impl Engine {
             // SAFETY: the build table's `ecs.component_read` is the game function with the
             // `ComponentRead` signature on this build.
             component_read: unsafe { core::mem::transmute::<usize, ComponentRead>(component_read) },
-            context_row: size("ecs.context_row")?,
-            entity_records: size("ecs.descriptor_entity_records")?,
-            entity_record_size: size("ecs.entity_record_size")?,
-            entity_world: size("ecs.context_entity_world")?,
-            level_flags: size("ecs.level_flags")?,
-            level_data: size("ecs.level_data_offset")?,
-            attribute_slot: size("ecs.attribute_slot")?,
-            level_attribute: u32::try_from(loader.build.constant("altar.level_attribute")?).ok()?,
+            context_row: size(pinned::ecs::CONTEXT_ROW)?,
+            entity_records: size(pinned::ecs::DESCRIPTOR_ENTITY_RECORDS)?,
+            entity_record_size: size(pinned::ecs::ENTITY_RECORD_SIZE)?,
+            entity_world: size(pinned::ecs::CONTEXT_ENTITY_WORLD)?,
+            level_flags: size(pinned::ecs::LEVEL_FLAGS)?,
+            level_data: size(pinned::ecs::LEVEL_DATA_OFFSET)?,
+            attribute_slot: size(pinned::ecs::ATTRIBUTE_SLOT)?,
+            level_attribute: u32::try_from(
+                loader.build.constant(pinned::altar::LEVEL_ATTRIBUTE.id())?,
+            )
+            .ok()?,
         })
     }
 
@@ -496,22 +501,22 @@ pub(crate) struct Components {
 impl Components {
     /// The reads on this build, if the table has them all.
     pub(crate) fn resolve(loader: &Loader) -> Option<Self> {
-        let function = |name: &str| {
+        let function = |name: Symbol| {
             loader
                 .build
-                .symbol(name)
+                .symbol(name.id())
                 .and_then(|rva| usize::try_from(loader.base + rva).ok())
         };
-        let size = |name: &str| {
+        let size = |name: Constant| {
             loader
                 .build
-                .constant(name)
+                .constant(name.id())
                 .and_then(|v| usize::try_from(v).ok())
         };
         let (type_index, read, slot_root) = (
-            function("ecs.type_index")?,
-            function("ecs.component_read_raw")?,
-            function("ecs.slot_root")?,
+            function(pinned::ecs::TYPE_INDEX)?,
+            function(pinned::ecs::COMPONENT_READ_RAW)?,
+            function(pinned::ecs::SLOT_ROOT)?,
         );
         Some(Self {
             // SAFETY: the build table's `ecs.type_index` is the game function with the
@@ -523,10 +528,10 @@ impl Components {
             // SAFETY: the build table's `ecs.slot_root` is the game function with the
             // `SlotRoot` signature on this build.
             slot_root: unsafe { core::mem::transmute::<usize, SlotRoot>(slot_root) },
-            entity_world: size("ecs.context_entity_world")?,
+            entity_world: size(pinned::ecs::CONTEXT_ENTITY_WORLD)?,
             registry_maps: [
-                size("ecs.registry_type_map")?,
-                size("ecs.registry_type_map_fallback")?,
+                size(pinned::ecs::REGISTRY_TYPE_MAP)?,
+                size(pinned::ecs::REGISTRY_TYPE_MAP_FALLBACK)?,
             ],
         })
     }

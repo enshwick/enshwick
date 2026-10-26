@@ -18,6 +18,8 @@
 //! reads them after the step for the change events. A quest's id is a
 //! player's bool the game sets when it rewards the quest.
 
+use crate::pinned;
+use crate::pinned::{Constant, Symbol};
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
@@ -29,43 +31,43 @@ use crate::memory::read;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
-    "knowledge.connection_created",
-    "knowledge.connection_loaded",
-    "knowledge.connection_size",
-    "knowledge.defs",
-    "knowledge.defs_blob",
-    "knowledge.input_action",
-    "knowledge.input_check",
-    "knowledge.journal",
-    "knowledge.journal_blob",
-    "knowledge.journal_blob_get",
-    "knowledge.log_entry_size",
-    "knowledge.object",
-    "knowledge.player_value",
-    "knowledge.push",
-    "knowledge.queue",
-    "knowledge.record_active",
-    "knowledge.record_changes",
-    "knowledge.record_count",
-    "knowledge.record_log",
-    "knowledge.record_log_count",
-    "knowledge.record_size",
-    "knowledge.records",
-    "knowledge.replication",
-    "knowledge.request_kind",
-    "knowledge.request_target",
-    "knowledge.request_value",
-    "knowledge.resend_player",
-    "knowledge.resend_world",
-    "knowledge.set_values",
-    "knowledge.set_world",
-    "knowledge.state",
-    "knowledge.step",
-    "knowledge.world_log",
-    "knowledge.world_log_count",
-    "knowledge.world_touched",
-    "knowledge.world_value",
-    "server.player_infos",
+    pinned::knowledge::CONNECTION_CREATED.id(),
+    pinned::knowledge::CONNECTION_LOADED.id(),
+    pinned::knowledge::CONNECTION_SIZE.id(),
+    pinned::knowledge::DEFS.id(),
+    pinned::knowledge::DEFS_BLOB.id(),
+    pinned::knowledge::INPUT_ACTION.id(),
+    pinned::knowledge::INPUT_CHECK.id(),
+    pinned::knowledge::JOURNAL.id(),
+    pinned::knowledge::JOURNAL_BLOB.id(),
+    pinned::knowledge::JOURNAL_BLOB_GET.id(),
+    pinned::knowledge::LOG_ENTRY_SIZE.id(),
+    pinned::knowledge::OBJECT.id(),
+    pinned::knowledge::PLAYER_VALUE.id(),
+    pinned::knowledge::PUSH.id(),
+    pinned::knowledge::QUEUE.id(),
+    pinned::knowledge::RECORD_ACTIVE.id(),
+    pinned::knowledge::RECORD_CHANGES.id(),
+    pinned::knowledge::RECORD_COUNT.id(),
+    pinned::knowledge::RECORD_LOG.id(),
+    pinned::knowledge::RECORD_LOG_COUNT.id(),
+    pinned::knowledge::RECORD_SIZE.id(),
+    pinned::knowledge::RECORDS.id(),
+    pinned::knowledge::REPLICATION.id(),
+    pinned::knowledge::REQUEST_KIND.id(),
+    pinned::knowledge::REQUEST_TARGET.id(),
+    pinned::knowledge::REQUEST_VALUE.id(),
+    pinned::knowledge::RESEND_PLAYER.id(),
+    pinned::knowledge::RESEND_WORLD.id(),
+    pinned::knowledge::SET_VALUES.id(),
+    pinned::knowledge::SET_WORLD.id(),
+    pinned::knowledge::STATE.id(),
+    pinned::knowledge::STEP.id(),
+    pinned::knowledge::WORLD_LOG.id(),
+    pinned::knowledge::WORLD_LOG_COUNT.id(),
+    pinned::knowledge::WORLD_TOUCHED.id(),
+    pinned::knowledge::WORLD_VALUE.id(),
+    pinned::server::PLAYER_INFOS.id(),
 ];
 
 pub(crate) mod changes;
@@ -146,16 +148,16 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
                     .ok()
                     .and_then(|info| usize::try_from(info.size()).ok())
             };
-            let function = |name: &str| {
+            let function = |name: Symbol| {
                 loader
                     .address(name)
                     .and_then(|address| usize::try_from(address).ok())
             };
-            let offset = |name: &str| loader.offset(name);
+            let offset = |name: Constant| loader.offset(name);
             let (player_value, world_value, push) = (
-                function("knowledge.player_value")?,
-                function("knowledge.world_value")?,
-                function("knowledge.push")?,
+                function(pinned::knowledge::PLAYER_VALUE)?,
+                function(pinned::knowledge::WORLD_VALUE)?,
+                function(pinned::knowledge::PUSH)?,
             );
             let defs = "keen::GameKnowledgeResource";
             let def = "keen::KnowledgeObjectResource";
@@ -169,27 +171,27 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
                 // SAFETY: the build table's `knowledge.push` is the game function
                 // with the `PushFn` signature on this build.
                 push: unsafe { core::mem::transmute::<usize, PushFn>(push) },
-                game: offset("server.player_infos")?,
-                object: offset("knowledge.object")?,
-                state: offset("knowledge.state")?,
-                defs: offset("knowledge.defs")?,
-                defs_blob: offset("knowledge.defs_blob")?,
-                queue: offset("knowledge.queue")?,
-                records: offset("knowledge.records")?,
-                record_count: offset("knowledge.record_count")?,
-                record_size: offset("knowledge.record_size")?,
-                record_active: offset("knowledge.record_active")?,
-                step: offset("knowledge.step")?,
-                world_log: offset("knowledge.world_log")?,
-                world_log_count: offset("knowledge.world_log_count")?,
-                record_log: offset("knowledge.record_log")?,
-                record_log_count: offset("knowledge.record_log_count")?,
-                log_entry: offset("knowledge.log_entry_size")?,
-                request_kind: offset("knowledge.request_kind")?,
-                request_value: offset("knowledge.request_value")?,
-                request_target: offset("knowledge.request_target")?,
-                journal: offset("knowledge.journal")?,
-                journal_blob: offset("knowledge.journal_blob")?,
+                game: offset(pinned::server::PLAYER_INFOS)?,
+                object: offset(pinned::knowledge::OBJECT)?,
+                state: offset(pinned::knowledge::STATE)?,
+                defs: offset(pinned::knowledge::DEFS)?,
+                defs_blob: offset(pinned::knowledge::DEFS_BLOB)?,
+                queue: offset(pinned::knowledge::QUEUE)?,
+                records: offset(pinned::knowledge::RECORDS)?,
+                record_count: offset(pinned::knowledge::RECORD_COUNT)?,
+                record_size: offset(pinned::knowledge::RECORD_SIZE)?,
+                record_active: offset(pinned::knowledge::RECORD_ACTIVE)?,
+                step: offset(pinned::knowledge::STEP)?,
+                world_log: offset(pinned::knowledge::WORLD_LOG)?,
+                world_log_count: offset(pinned::knowledge::WORLD_LOG_COUNT)?,
+                record_log: offset(pinned::knowledge::RECORD_LOG)?,
+                record_log_count: offset(pinned::knowledge::RECORD_LOG_COUNT)?,
+                log_entry: offset(pinned::knowledge::LOG_ENTRY_SIZE)?,
+                request_kind: offset(pinned::knowledge::REQUEST_KIND)?,
+                request_value: offset(pinned::knowledge::REQUEST_VALUE)?,
+                request_target: offset(pinned::knowledge::REQUEST_TARGET)?,
+                journal: offset(pinned::knowledge::JOURNAL)?,
+                journal_blob: offset(pinned::knowledge::JOURNAL_BLOB)?,
                 world_map: field(defs, "worldKnowledge")?,
                 player_map: field(defs, "playerKnowledge")?,
                 world_def: size("keen::WorldKnowledgeObjectResource")?,
