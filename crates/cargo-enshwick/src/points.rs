@@ -23,7 +23,7 @@ const FORMAT: u32 = 1;
 /// Why a point schema does not read or does not make a definition.
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
-pub enum SchemaError {
+pub enum Error {
     /// The text is no TOML of a schema.
     #[error("the schema: {0}")]
     Toml(String),
@@ -180,7 +180,7 @@ impl Schema {
     ///
     /// # Errors
     ///
-    /// [`SchemaError`] when the text is no schema this tool reads, or a name,
+    /// [`Error`] when the text is no schema this tool reads, or a name,
     /// type or version in it is not one a definition may carry.
     ///
     /// # Examples
@@ -190,12 +190,12 @@ impl Schema {
     ///
     /// let schema = Schema::parse("schema = 1\nmod = \"you.stalls\"\nversion = \"1.0.0\"")?;
     /// assert_eq!(schema.owner(), "you.stalls");
-    /// # Ok::<(), cargo_enshwick::points::SchemaError>(())
+    /// # Ok::<(), cargo_enshwick::points::Error>(())
     /// ```
-    pub fn parse(text: &str) -> Result<Self, SchemaError> {
-        let schema: Self = toml::from_str(text).map_err(|e| SchemaError::Toml(e.to_string()))?;
+    pub fn parse(text: &str) -> Result<Self, Error> {
+        let schema: Self = toml::from_str(text).map_err(|e| Error::Toml(e.to_string()))?;
         if schema.format != FORMAT {
-            return Err(SchemaError::Format(schema.format));
+            return Err(Error::Format(schema.format));
         }
         schema.check()?;
         Ok(schema)
@@ -205,7 +205,7 @@ impl Schema {
     ///
     /// # Examples
     ///
-    /// See [`Schema::parse`].
+    /// See [`Schema::parse`], whose example reads it.
     #[must_use]
     pub fn owner(&self) -> &str {
         &self.owner
@@ -215,7 +215,13 @@ impl Schema {
     ///
     /// # Examples
     ///
-    /// See [`Schema::parse`].
+    /// ```
+    /// use cargo_enshwick::points::Schema;
+    ///
+    /// let schema = Schema::parse("schema = 1\nmod = \"you.stalls\"\nversion = \"1.0.0\"")?;
+    /// assert_eq!(schema.version(), "1.0.0");
+    /// # Ok::<(), cargo_enshwick::points::Error>(())
+    /// ```
     #[must_use]
     pub fn version(&self) -> &str {
         &self.version
@@ -225,14 +231,20 @@ impl Schema {
     ///
     /// # Examples
     ///
-    /// See [`Schema::parse`].
+    /// ```
+    /// use cargo_enshwick::points::Schema;
+    ///
+    /// let schema = Schema::parse("schema = 1\nmod = \"you.stalls\"\nversion = \"1.0.0\"")?;
+    /// assert_eq!(schema.points().count(), 0);
+    /// # Ok::<(), cargo_enshwick::points::Error>(())
+    /// ```
     pub fn points(&self) -> impl Iterator<Item = &str> {
         self.point.iter().map(|p| p.name.as_str())
     }
 
     /// Refuses every value that would leave its place in generated code.
-    fn check(&self) -> Result<(), SchemaError> {
-        let invalid = |what: &'static str, value: &str| SchemaError::Invalid {
+    fn check(&self) -> Result<(), Error> {
+        let invalid = |what: &'static str, value: &str| Error::Invalid {
             what,
             value: value.to_owned(),
         };
@@ -259,8 +271,12 @@ impl Schema {
             if !is_ident(&ty.name) {
                 return Err(invalid("type name", &ty.name));
             }
-            if matches!(ty.kind, Kind::Values | Kind::Enum) && !INTEGERS.contains(&ty.repr.as_str())
-            {
+            let reprs: &[&str] = match ty.kind {
+                Kind::Values => &INTEGERS,
+                Kind::Enum => &ENUM_REPRS,
+                Kind::Struct | Kind::Newtype => &[],
+            };
+            if !reprs.is_empty() && !reprs.contains(&ty.repr.as_str()) {
                 return Err(invalid("repr", &ty.repr));
             }
             for field in &ty.field {
@@ -281,8 +297,12 @@ impl Schema {
     }
 }
 
-/// The integer types a value type or an enum takes as its `repr`.
+/// The integer types a value type wraps.
 const INTEGERS: [&str; 8] = ["u8", "u16", "u32", "u64", "i8", "i16", "i32", "i64"];
+/// The `repr` an enum takes, as the macros allow for a shared enum.
+const ENUM_REPRS: [&str; 10] = [
+    "u8", "u16", "u32", "u64", "usize", "i8", "i16", "i32", "i64", "isize",
+];
 /// Every primitive a field may be.
 const PRIMITIVES: [&str; 11] = [
     "u8", "u16", "u32", "u64", "i8", "i16", "i32", "i64", "f32", "f64", "bool",
@@ -305,23 +325,18 @@ fn is_owner(id: &str) -> bool {
     enshwick::abi::is_valid_id(id) || enshwick::abi::is_valid_former_id(id)
 }
 
-/// Whether `name` is `<mod id>:<what>` with nothing a string literal must
-/// escape.
+/// Whether `name` is `<mod id>:<what>`, the rule `manifest!` holds a point's
+/// name to, with nothing that would break the comment line it appears on.
 fn is_point_name(name: &str) -> bool {
-    name.split_once(':').is_some_and(|(id, what)| {
-        is_owner(id)
-            && !what.is_empty()
-            && what
-                .bytes()
-                .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.'))
-    })
+    name.split_once(':')
+        .is_some_and(|(id, what)| is_owner(id) && !what.is_empty() && !what.chars().any(is_hidden))
 }
 
 /// The point schemas in the DLL `bytes`; `None` for a DLL without points.
 ///
 /// # Errors
 ///
-/// [`SchemaError`] when the bytes are no x64 DLL, or the section is no text.
+/// [`Error`] when the bytes are no x64 DLL, or the section is no text.
 ///
 /// # Examples
 ///
@@ -330,7 +345,7 @@ fn is_point_name(name: &str) -> bool {
 ///
 /// assert!(from_dll(b"MZ").is_err());
 /// ```
-pub fn from_dll(bytes: &[u8]) -> Result<Option<String>, SchemaError> {
+pub fn from_dll(bytes: &[u8]) -> Result<Option<String>, Error> {
     let image = Image::parse(bytes, Layout::File, None)?;
     let Some(section) = image.section(SECTION) else {
         return Ok(None);
@@ -338,9 +353,9 @@ pub fn from_dll(bytes: &[u8]) -> Result<Option<String>, SchemaError> {
     let range = image.range(section);
     let raw = image
         .read(range.start, range.end - range.start)
-        .ok_or(SchemaError::CutShort)?;
+        .ok_or(Error::CutShort)?;
     let end = raw.iter().rposition(|&b| b != 0).map_or(0, |at| at + 1);
-    let text = std::str::from_utf8(&raw[..end]).map_err(|_| SchemaError::NotText)?;
+    let text = std::str::from_utf8(&raw[..end]).map_err(|_| Error::NotText)?;
     Ok((!text.is_empty()).then(|| text.to_owned()))
 }
 
@@ -365,36 +380,62 @@ fn is_named(name: &str) -> bool {
 /// `text` as doc comment lines at `indent`; `fallback` when it is empty.
 ///
 /// The first sentence becomes a paragraph of its own, the summary rustdoc
-/// shows in lists. Control characters other than line breaks are dropped,
-/// since rustc refuses a bare carriage return in a doc comment.
+/// shows in lists. A schema's doc comes from another author, so it is made
+/// one line of prose: whitespace runs become one space, control and
+/// invisible formatting characters are dropped, and a paragraph that would
+/// open a code block, which rustdoc runs as a test, starts escaped.
 fn doc(code: &mut String, indent: &str, text: &str, fallback: &str) {
-    let text: String = text
-        .chars()
-        .filter(|&c| c == '\n' || !c.is_control())
-        .collect();
-    let text = if text.trim().is_empty() {
+    let text = prose(text);
+    let text = if text.is_empty() {
         fallback
     } else {
         text.as_str()
     };
-    let (first, rest) = text.split_once("\n\n").unwrap_or((text, ""));
-    let (summary, more) = match first.split_once(". ") {
+    let (summary, more) = match text.split_once(". ") {
         Some((summary, more)) => (format!("{summary}."), more.trim_start()),
-        None => (first.to_owned(), ""),
+        None => (text.to_owned(), ""),
     };
-    let paragraphs = [summary.as_str(), more, rest];
-    for (i, paragraph) in paragraphs.iter().filter(|p| !p.is_empty()).enumerate() {
+    for (i, paragraph) in [summary.as_str(), more]
+        .iter()
+        .filter(|p| !p.is_empty())
+        .enumerate()
+    {
         if i > 0 {
             let _ = writeln!(code, "{indent}///");
         }
-        for line in paragraph.lines() {
-            if line.is_empty() {
-                let _ = writeln!(code, "{indent}///");
-            } else {
-                let _ = writeln!(code, "{indent}/// {line}");
-            }
-        }
+        let escape = if paragraph.starts_with("```") || paragraph.starts_with("~~~") {
+            "\\"
+        } else {
+            ""
+        };
+        let _ = writeln!(code, "{indent}/// {escape}{paragraph}");
     }
+}
+
+/// `text` as one line of visible prose.
+fn prose(text: &str) -> String {
+    text.split(|c: char| c.is_whitespace() || is_hidden(c))
+        .filter(|word| !word.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// Whether `c` is a control character or one that changes how text around it
+/// shows without showing itself: bidirectional overrides, zero-width
+/// characters and the soft hyphen.
+fn is_hidden(c: char) -> bool {
+    c.is_control()
+        || matches!(
+            c,
+            '\u{ad}'
+                | '\u{61c}'
+                | '\u{180e}'
+                | '\u{200b}'..='\u{200f}'
+                | '\u{202a}'..='\u{202e}'
+                | '\u{2060}'..='\u{2064}'
+                | '\u{2066}'..='\u{2069}'
+                | '\u{feff}'
+        )
 }
 
 /// The Rust definition of the point `name` of `schema`, with every named
@@ -402,7 +443,7 @@ fn doc(code: &mut String, indent: &str, text: &str, fallback: &str) {
 ///
 /// # Errors
 ///
-/// [`SchemaError`] when the schema lacks the point or a type it names.
+/// [`Error`] when the schema lacks the point or a type it names.
 ///
 /// # Examples
 ///
@@ -411,21 +452,21 @@ fn doc(code: &mut String, indent: &str, text: &str, fallback: &str) {
 ///
 /// let schema = Schema::parse("schema = 1\nmod = \"you.stalls\"\nversion = \"1.0.0\"")?;
 /// assert!(rust(&schema, "you.stalls:price").is_err());
-/// # Ok::<(), cargo_enshwick::points::SchemaError>(())
+/// # Ok::<(), cargo_enshwick::points::Error>(())
 /// ```
-pub fn rust(schema: &Schema, name: &str) -> Result<String, SchemaError> {
+pub fn rust(schema: &Schema, name: &str) -> Result<String, Error> {
     let point = schema
         .point
         .iter()
         .find(|p| p.name == name)
-        .ok_or_else(|| SchemaError::NoPoint {
+        .ok_or_else(|| Error::NoPoint {
             owner: schema.owner.clone(),
             name: name.to_owned(),
         })?;
     let name = point.name.as_str();
     let input = find(schema, name, &point.input)?;
     if input.kind != Kind::Struct || input.field.len() != point.layout.len() {
-        return Err(SchemaError::BadInput(name.to_owned()));
+        return Err(Error::BadInput(name.to_owned()));
     }
     let reached = reached(schema, point, input)?;
 
@@ -434,7 +475,7 @@ pub fn rust(schema: &Schema, name: &str) -> Result<String, SchemaError> {
         "advise" => "Advise",
         "override" => "Override",
         other => {
-            return Err(SchemaError::UnknownMode {
+            return Err(Error::UnknownMode {
                 point: name.to_owned(),
                 mode: other.to_owned(),
             });
@@ -483,16 +524,12 @@ pub fn rust(schema: &Schema, name: &str) -> Result<String, SchemaError> {
 }
 
 /// The named type `type_name` the point `name` of `schema` reaches.
-fn find<'a>(
-    schema: &'a Schema,
-    name: &str,
-    type_name: &str,
-) -> Result<&'a TypeSchema, SchemaError> {
+fn find<'a>(schema: &'a Schema, name: &str, type_name: &str) -> Result<&'a TypeSchema, Error> {
     schema
         .types
         .iter()
         .find(|t| t.name == type_name)
-        .ok_or_else(|| SchemaError::NoType {
+        .ok_or_else(|| Error::NoType {
             point: name.to_owned(),
             ty: type_name.to_owned(),
         })
@@ -504,7 +541,7 @@ fn reached<'a>(
     schema: &'a Schema,
     point: &'a PointSchema,
     input: &'a TypeSchema,
-) -> Result<Vec<&'a TypeSchema>, SchemaError> {
+) -> Result<Vec<&'a TypeSchema>, Error> {
     let mut reached: Vec<&TypeSchema> = Vec::new();
     let mut pending: Vec<&str> = input
         .field
@@ -526,17 +563,11 @@ fn reached<'a>(
 
 /// The checks that hold the definition of `point` to the owner's layout
 /// hashes.
-fn layout_checks(
-    code: &mut String,
-    point: &PointSchema,
-    input: &TypeSchema,
-) -> Result<(), SchemaError> {
+fn layout_checks(code: &mut String, point: &PointSchema, input: &TypeSchema) -> Result<(), Error> {
     let name = point.name.as_str();
     code.push_str("\nconst _: () = {\n");
     for (i, hash) in point.layout.iter().enumerate() {
-        let hash: u64 = hash
-            .parse()
-            .map_err(|_| SchemaError::BadHash(name.to_owned()))?;
+        let hash: u64 = hash.parse().map_err(|_| Error::BadHash(name.to_owned()))?;
         let _ = writeln!(
             code,
             "    assert!(\n        <{} as enshwick::points::Point>::LAYOUT[{i}].hash == {},\n        \"`{}` differs from the owner's\",\n    );",
@@ -548,7 +579,7 @@ fn layout_checks(
     let output: u64 = point
         .output_layout
         .parse()
-        .map_err(|_| SchemaError::BadHash(name.to_owned()))?;
+        .map_err(|_| Error::BadHash(name.to_owned()))?;
     let _ = writeln!(
         code,
         "    assert!(\n        <{} as enshwick::points::Point>::OUTPUT[0].hash == {},\n        \"the answer differs from the owner's\",\n    );\n}};",
@@ -566,7 +597,7 @@ fn hex(hash: u64) -> String {
 }
 
 /// The Rust definition of the named type `named` of `owner`'s schema.
-fn named_type(code: &mut String, named: &TypeSchema, owner: &str) -> Result<(), SchemaError> {
+fn named_type(code: &mut String, named: &TypeSchema, owner: &str) -> Result<(), Error> {
     doc(code, "", &named.doc, &format!("A type of `{owner}`."));
     match named.kind {
         Kind::Struct => {
@@ -590,7 +621,7 @@ fn named_type(code: &mut String, named: &TypeSchema, owner: &str) -> Result<(), 
             let inner = named
                 .field
                 .first()
-                .ok_or_else(|| SchemaError::EmptyNewtype(named.name.clone()))?;
+                .ok_or_else(|| Error::EmptyNewtype(named.name.clone()))?;
             let _ = writeln!(
                 code,
                 "#[repr(transparent)]\n#[derive(Clone, Copy, Debug, enshwick::Shape)]\npub struct {}(pub {});",
@@ -678,11 +709,34 @@ mod tests {
             "    /// The price.\n    ///\n    /// A refusal means no deal.\n"
         );
         let mut code = String::new();
-        doc(&mut code, "", "Short.\n\nMore. And more.", "");
-        assert_eq!(code, "/// Short.\n///\n/// More. And more.\n");
-        let mut code = String::new();
         doc(&mut code, "", "", "The input.");
         assert_eq!(code, "/// The input.\n");
+    }
+
+    #[test]
+    fn a_doc_can_open_no_code_block_and_hides_nothing() {
+        let hostile = [
+            "The character.\n\n```\nstd::fs::write(\"x\", \"\").ok();\n```",
+            "The deal.\n\n    std::process::Command::new(\"true\").status().ok();",
+            "The deal. ~~~ std::fs::write(\"x\", \"\").ok();",
+            "The deal. ```rust",
+            "The \u{202e}deal\u{200b}.",
+        ];
+        for text in hostile {
+            let mut code = String::new();
+            doc(&mut code, "", text, "");
+            for line in code.lines() {
+                let body = line.strip_prefix("/// ").unwrap_or_default();
+                assert!(
+                    !body.starts_with([' '])
+                        && !body.starts_with("```")
+                        && !body.starts_with("~~~"),
+                    "{line}"
+                );
+                assert!(!body.chars().any(is_hidden), "{line:?}");
+            }
+            assert!(code.lines().count() <= 3, "{code}");
+        }
     }
 
     #[test]
@@ -695,7 +749,7 @@ mod tests {
             ("version = \"1.2.0\"", "version = \"1.2.0 }\""),
             (
                 "name = \"you.stalls:price\"",
-                "name = \"you.stalls:price\\\", evil = (\"",
+                "name = \"you.stalls:price\\nfn evil() {}\"",
             ),
             ("input = \"Price\"", "input = \"Price {}\""),
             ("output = \"u32\"", "output = \"u32> evil\""),
@@ -714,17 +768,29 @@ mod tests {
             assert!(SCHEMA.contains(good), "{good}");
             let text = SCHEMA.replacen(good, bad, 1);
             assert!(
-                matches!(Schema::parse(&text), Err(SchemaError::Invalid { .. })),
+                matches!(Schema::parse(&text), Err(Error::Invalid { .. })),
                 "{bad}"
             );
         }
     }
 
     #[test]
+    fn a_quote_in_a_point_name_stays_inside_its_string() {
+        let text = SCHEMA.replace("you.stalls:price", "you.stalls:price\\\", evil = (\\\"");
+        let schema = Schema::parse(&text).unwrap();
+        let name = schema.points().next().unwrap().to_owned();
+        let code = rust(&schema, &name).unwrap();
+        assert!(
+            code.contains(r#"name = "you.stalls:price\", evil = (\"""#),
+            "{code}"
+        );
+    }
+
+    #[test]
     fn control_characters_in_a_doc_are_dropped() {
         let mut code = String::new();
         doc(&mut code, "", "A price\rpub fn evil() {}\u{7}.", "");
-        assert_eq!(code, "/// A pricepub fn evil() {}.\n");
+        assert_eq!(code, "/// A price pub fn evil() {} .\n");
     }
 
     #[test]
