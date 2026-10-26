@@ -281,6 +281,66 @@ fn clear_upper_halves_stay_clear_after_a_handler_using_avx() {
         }
         let hooked = hook_mark(upper_in_use, handler, vectors);
         assert_eq!(hooked(0), 0, "{name}");
+        assert_eq!(hooked(0), 0, "{name}, the second hit");
+    }
+}
+
+/// Holds `value` in `k1` and `zmm17` across the marked `nop`, the upper
+/// halves of `zmm0`-`zmm15` clear; then returns whether those are in use,
+/// together with the bits that changed in `k1` and in `xmm17`.
+#[unsafe(naked)]
+extern "system" fn upper_in_use_beside_avx512(value: u32) -> u32 {
+    core::arch::naked_asm!(
+        "mov r8d, ecx",
+        "kmovw k1, ecx",
+        "vpbroadcastd zmm17, ecx",
+        "vzeroupper",
+        ".byte 0x0f, 0x1f, 0x44, 0x00, 0x00",
+        "mov ecx, 1",
+        "xgetbv",
+        "and eax, 4",
+        "kmovw edx, k1",
+        "xor edx, r8d",
+        "or eax, edx",
+        "vmovd edx, xmm17",
+        "xor edx, r8d",
+        "or eax, edx",
+        "ret",
+        ".fill 64, 1, 0xcc",
+    )
+}
+
+extern "system" fn fill_upper_halves_and_avx512(_registers: *mut Registers, _context: usize) {
+    // SAFETY: the assembly writes `xmm4`, declared as an output, its upper
+    // half, `zmm17` and `k1`, which no code of this crate keeps live; it
+    // touches no memory.
+    unsafe {
+        core::arch::asm!(
+            "vcmptrueps ymm4, ymm4, ymm4",
+            "vpternlogd zmm17, zmm17, zmm17, 0xff",
+            "kxnorw k1, k1, k1",
+            out("xmm4") _,
+        );
+    }
+}
+
+#[test]
+fn clear_upper_halves_stay_clear_beside_live_avx512_registers_hit_after_hit() {
+    if !xgetbv_in_use() {
+        return;
+    }
+    let handler = (fill_upper_halves_and_avx512 as *const ()).addr();
+    for (name, vectors) in avx_kinds() {
+        if !matches!(
+            vectors,
+            Vectors::ZmmByValue { .. } | Vectors::ZmmInUse { .. }
+        ) {
+            continue;
+        }
+        let hooked = hook_mark(upper_in_use_beside_avx512, handler, vectors);
+        for hit in 0..3 {
+            assert_eq!(hooked(0x5a50), 0, "{name}, hit {hit}");
+        }
     }
 }
 
