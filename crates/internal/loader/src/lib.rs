@@ -95,7 +95,7 @@ mod lobby;
 pub mod log;
 pub mod manifest;
 #[cfg_attr(
-    not(windows),
+    all(not(windows), not(test)),
     expect(dead_code, reason = "only the Windows build reads game memory")
 )]
 mod memory;
