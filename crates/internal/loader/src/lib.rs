@@ -114,7 +114,7 @@ mod spawns;
 mod standins;
 mod start;
 #[cfg(windows)]
-pub use start::{DryMod, DryRun, dry_run};
+pub use start::{DryMod, DryRun, DryRunError, dry_run};
 #[cfg(windows)]
 mod stats;
 #[cfg(windows)]

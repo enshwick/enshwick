@@ -556,7 +556,8 @@ fn verdict(m: &ModOutcome) -> (&'static str, String) {
 /// The hidden `run` step: the loader's dry run, printed as JSON.
 #[cfg(windows)]
 pub(crate) fn run_loader(args: &RunArgs) -> Result<(), String> {
-    let run = enshwick_loader::dry_run(&args.exe, &args.game, args.patterns)?;
+    let run = enshwick_loader::dry_run(&args.exe, &args.game, args.patterns)
+        .map_err(|e| e.to_string())?;
     let mods: Vec<ModOutcome> = run
         .mods
         .into_iter()
