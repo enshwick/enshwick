@@ -73,9 +73,10 @@ pub(crate) const fn decode(word: u16) -> Voxel {
 }
 
 /// The game's box read: `out` takes the buffer, `size` and `min` are in
-/// voxels of level of detail `detail`, and the low byte of the result is 0 when a brick of
-/// the box is not resident. It reads only `out.data`, `size` voxels of it,
-/// x fastest, then y (up), then z (server 399, client 426).
+/// voxels at level of detail `detail`, and the low byte of the result is 0
+/// when a brick of the box is not resident. It reads only `out.data`,
+/// `size` voxels of it, x fastest, then y (up), then z (server 399, client
+/// 426).
 #[cfg(windows)]
 type ReadBoxFn = unsafe extern "system" fn(
     out: *mut Words,
