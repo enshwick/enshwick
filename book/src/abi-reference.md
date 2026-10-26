@@ -255,8 +255,8 @@ marked "init only" are allowed during `enshwick_mod_init` only.
 | `skill_override`         | Answers the game's checks of one skill node; init only                                               | 18          |
 | `comfort_filter`         | Changes the comfort each provider registers in a base; init only                                     | 18          |
 | `experience_filter`      | Changes the characters' gained experience before the server applies it; init only                    | 18          |
-| `altar_limit`            | Decides how many altars each Flame level allows, one mod at a time; init only                        | 19          |
-| `raise_base_limit`       | Lets the game group 32 altar zones in its 16 bases; init only; `MISSING` on an unknown build         | 19          |
+| `altar_limit`            | Retired in 82: always `REFUSED`; see `altar_limit_filter`                                            | 19          |
+| `raise_base_limit`       | Lets the game group altar zones up to the loader's maximum; init only; `MISSING` on an unknown build | 19          |
 | `base_zones`             | The zones and bases of the last grouping, while the raised limit is in force                         | 19          |
 | `game_event`             | Calls a handler on every game event of a reflected type, or of all; init only                        | 20          |
 | `entities`               | The entities with a component and a place in the world; server game thread only                      | 21          |
@@ -352,3 +352,5 @@ marked "init only" are allowed during `enshwick_mod_init` only.
 | `task_workers`           | Caps the task groups' worker threads, the lowest cap winning; init only                              | 77          |
 | `altar_zone_filter`      | Adds a filter to the chain that sizes altar zones; init only                                         | 78          |
 | `altar_zones_changed`    | Has the altar zones sized again on the server's next step; any thread                                | 78          |
+| `altar_limit_filter`     | Adds a filter to the chain that decides how many altars a Flame level allows; init only              | 82          |
+| `base_limit`             | The most altar zones and bases the game groups now; any thread                                       | 82          |

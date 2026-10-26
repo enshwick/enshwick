@@ -22,7 +22,6 @@
 //! The client runs one grouping for its own world and the server it hosts, so
 //! the same patches and links serve both.
 
-use crate::locks::Relock;
 use crate::mod_index::ModIndex;
 use crate::pinned;
 use crate::pinned::Constant;
@@ -31,16 +30,17 @@ mod limit;
 
 use core::ffi::c_void;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, OnceLock};
 
 use arc_swap::ArcSwap;
-use enshwick::abi::{AltarLimitFn, HookFlags, Status};
+use enshwick::abi::{AltarLimit, AltarLimitFilterFn, HookFlags, Status};
 use enshwick::raw::{read_at, read_ptr_at, write_at};
 
-use self::limit::{Aabb, MAX_BASES, MAX_ZONES, Zone, Zones};
+use self::limit::{Aabb, MAX_BASES, MAX_ZONES, VANILLA_ZONES, Zone, Zones};
 use crate::chains::Next;
 use crate::code::{CodePatch, Verdict};
-use crate::host::Loader;
+use crate::host::{Loader, Registered};
+use crate::registry::Registry;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
@@ -152,16 +152,11 @@ struct Sites {
     patches: Box<[usize]>,
 }
 
-#[derive(Debug, Clone, Copy)]
-struct Limit {
-    owner: ModIndex,
-    callback: AltarLimitFn,
-    user: usize,
-}
+type LimitFilter = Registered<AltarLimitFilterFn>;
 
 static SITES: OnceLock<Sites> = OnceLock::new();
-static LIMIT: Mutex<Option<Limit>> = Mutex::new(None);
-static SEALED_LIMIT: OnceLock<Option<Limit>> = OnceLock::new();
+/// The mods' altar limit filters, in load order.
+static LIMITS: Registry<LimitFilter> = Registry::new();
 static ZONES: OnceLock<ArcSwap<Zones>> = OnceLock::new();
 /// How many zones the world has, `u32::MAX` before the first grouping.
 static ZONE_COUNT: AtomicU32 = AtomicU32::new(u32::MAX);
@@ -195,35 +190,35 @@ type CheckFn = unsafe extern "system" fn(
 type MaxAltarsFn = unsafe extern "system" fn(balancing: u64, flame_level: u32) -> u8;
 
 fn too_late(loader: &Loader) -> bool {
-    loader.delivery.get().is_some() || SEALED_LIMIT.get().is_some()
+    loader.delivery.get().is_some() || LIMITS.is_sealed()
 }
 
-pub(crate) fn register_limit(
+/// Adds mod `owner`'s altar limit filter; during init only.
+pub(crate) fn add_limit(
     loader: &Loader,
     owner: ModIndex,
-    callback: AltarLimitFn,
+    callback: AltarLimitFilterFn,
     user: *mut c_void,
 ) -> Status {
     if too_late(loader) {
         return Status::TOO_LATE;
     }
-    if loader
-        .build
-        .symbol(pinned::building::MAX_ALTARS.id())
-        .is_none()
-    {
+    if loader.address(pinned::building::MAX_ALTARS).is_none() {
         return Status::MISSING;
     }
-    let mut held = LIMIT.relock();
-    if held.is_some_and(|l| l.owner != owner) {
-        return Status::REFUSED;
+    LIMITS
+        .add(Registered::new(owner, callback, user))
+        .map_or(Status::TOO_LATE, |()| Status::OK)
+}
+
+/// The most altar zones and bases the game groups now: its own, or the
+/// raised maximum once the patches are in.
+pub(crate) fn base_limit() -> (u32, u32) {
+    if raised() {
+        (u32::try_from(MAX_ZONES).unwrap_or(u32::MAX), MAX_BASES)
+    } else {
+        (VANILLA_ZONES, MAX_BASES)
     }
-    *held = Some(Limit {
-        owner,
-        callback,
-        user: user.expose_provenance(),
-    });
-    Status::OK
 }
 
 /// Finds every site and registers the patches as mod `owner`'s, all or
@@ -369,9 +364,8 @@ pub(crate) fn forget() {
 }
 
 pub(crate) fn link(loader: &'static Loader) {
-    let limit = LIMIT.relock().take();
-    let _first = SEALED_LIMIT.set(limit);
-    if limit.is_some()
+    let limits = LIMITS.seal();
+    if !limits.is_empty()
         && let Some(target) = loader.address(pinned::building::MAX_ALTARS)
     {
         let status = loader.link(target, &MAX_ALTARS_NEXT, max_altars, HookFlags::NONE);
@@ -414,21 +408,49 @@ pub(crate) fn link(loader: &'static Loader) {
 static BASES_FUSE: crate::fuse::Fuse = crate::fuse::Fuse::new("more bases");
 
 unsafe extern "system" fn max_altars(balancing: u64, flame_level: u32) -> u8 {
-    if let Some(Some(limit)) = SEALED_LIMIT.get()
-        && !crate::host::is_off(limit.owner)
-    {
-        let user = core::ptr::with_exposed_provenance_mut(limit.user);
-        // SAFETY: the owner is not off, so the mod's DLL that holds the
-        // callback stays loaded; the callback gets the user pointer its mod
-        // registered.
-        return crate::profile::call(limit.owner, crate::profile::Feature::Altars, || unsafe {
-            (limit.callback)(flame_level, user)
-        });
-    }
     // SAFETY: this detour runs only as the `building.max_altars` link, so the
     // slot holds the next function of that signature; the game's arguments
     // pass unchanged.
-    unsafe { MAX_ALTARS_NEXT.get()(balancing, flame_level) }
+    let vanilla = unsafe { MAX_ALTARS_NEXT.get()(balancing, flame_level) };
+    let Some(limits) = LIMITS.sealed() else {
+        return vanilla;
+    };
+    let running = limits.iter().filter(|f| !crate::host::is_off(f.owner));
+    let (zones, _) = base_limit();
+    chain_limit(flame_level, vanilla, zones, running)
+}
+
+/// Runs `filters` in order on the limit of `flame_level`, where the game
+/// allows `vanilla`, each on the count the last one left; the answer is
+/// kept within `zones`.
+fn chain_limit<'a>(
+    flame_level: u32,
+    vanilla: u8,
+    zones: u32,
+    filters: impl Iterator<Item = &'a LimitFilter>,
+) -> u8 {
+    let vanilla_limit = AltarLimit {
+        header: enshwick::abi::Header::of::<AltarLimit>(),
+        flame_level,
+        vanilla,
+        allowed: vanilla,
+        reserved: [0; 2],
+    };
+    let mut limit = vanilla_limit;
+    for filter in filters {
+        // SAFETY: the owner is not off, so the mod's DLL that holds the
+        // filter stays loaded; the filter gets the user pointer its mod
+        // registered and a limit valid for the call, and the safe layer
+        // catches its panics.
+        crate::profile::call(filter.owner, crate::profile::Feature::Altars, || unsafe {
+            (filter.callback)(&raw mut limit, filter.user());
+        });
+        limit = AltarLimit {
+            allowed: limit.allowed,
+            ..vanilla_limit
+        };
+    }
+    limit.allowed.min(u8::try_from(zones).unwrap_or(u8::MAX))
 }
 
 unsafe extern "system" fn group(bases: *mut u8, world: *mut u8) {
@@ -607,5 +629,30 @@ unsafe fn refuse_17th(flags: *mut u32, ctx: *const u8, transform: *const i64, it
         // SAFETY: the caller guarantees the cursor's live u32 flags word,
         // which only the cursor's thread writes meanwhile.
         unsafe { write_at(flags.cast(), 0, refused) };
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    unsafe extern "system" fn twice(limit: *mut AltarLimit, _user: *mut c_void) {
+        // SAFETY: the loader's limit, writable for the call.
+        let limit = unsafe { &mut *limit };
+        limit.allowed = limit.allowed.saturating_mul(2);
+        limit.vanilla = 0;
+    }
+
+    #[test]
+    fn limit_filters_chain_on_the_count_so_far_within_the_zones() {
+        let filter = LimitFilter::new(ModIndex::new(0), twice, core::ptr::null_mut());
+        assert_eq!(chain_limit(3, 6, 16, core::iter::empty()), 6);
+        assert_eq!(chain_limit(3, 6, 32, [&filter].into_iter()), 12);
+        assert_eq!(
+            chain_limit(3, 6, 32, [&filter, &filter].into_iter()),
+            24,
+            "each filter sees the game's own count"
+        );
+        assert_eq!(chain_limit(3, 6, 16, [&filter, &filter].into_iter()), 16);
     }
 }

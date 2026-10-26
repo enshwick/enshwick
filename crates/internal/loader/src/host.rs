@@ -34,10 +34,10 @@ use entries::content::{
     recipe_rule, resource_read, serve_resource,
 };
 use entries::gameplay::{
-    account_knowledge, affix_info, affix_open, affix_roll, altar_limit, altar_zone_filter,
-    altar_zones_changed, altar_zones_control, altars, altars_open, apply_buff, base_zones,
-    buff_types, buffs, build_filter, comfort_filter, craft_filter, damage_filter,
-    experience_filter, grant_knowledge, interaction_filter, item_lines, knowledge,
+    account_knowledge, affix_info, affix_open, affix_roll, altar_limit, altar_limit_filter,
+    altar_zone_filter, altar_zones_changed, altar_zones_control, altars, altars_open, apply_buff,
+    base_limit, base_zones, buff_types, buffs, build_filter, comfort_filter, craft_filter,
+    damage_filter, experience_filter, grant_knowledge, interaction_filter, item_lines, knowledge,
     knowledge_input_filter, quests, raise_base_limit, rate, remove_buff, revoke_knowledge,
     set_altar_zones, set_rate, skill_override, stat_buff, stat_info, stat_modify, stat_open,
     stat_sources, stat_value, stat_watch, stats_changed, summon_filter, summon_item, summoned,
@@ -764,6 +764,8 @@ pub(crate) static API: HostApi = HostApi {
     task_workers,
     altar_zone_filter,
     altar_zones_changed,
+    altar_limit_filter,
+    base_limit,
 };
 
 /// The loader and the calling mod, when the mod is on.

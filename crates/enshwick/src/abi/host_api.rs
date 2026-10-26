@@ -4,9 +4,9 @@
 use core::ffi::c_void;
 
 use crate::abi::{
-    ActionFn, ActiveBuff, AffixDefData, AffixRoll, AltarInfo, AltarLimitFn, AltarZoneFn,
-    AltarZoneSize, BedCheckFn, BuffRequest, BuffTypeInfo, BuildCheckFn, BuildInfo, CallerFrame,
-    ComfortFn, ConfigCheckFn, CraftCheckFn, DamageFilterFn, DataChange, DaytimeInfo,
+    ActionFn, ActiveBuff, AffixDefData, AffixRoll, AltarInfo, AltarLimitFilterFn, AltarLimitFn,
+    AltarZoneFn, AltarZoneSize, BedCheckFn, BuffRequest, BuffTypeInfo, BuildCheckFn, BuildInfo,
+    CallerFrame, ComfortFn, ConfigCheckFn, CraftCheckFn, DamageFilterFn, DataChange, DaytimeInfo,
     EntityDataFlags, EntityPlace, Event, EventFn, EventSpec, EventTypeInfo, ExperiencePassFn,
     GameEventFn, Header, HookSpec, InteractionFn, InventoryRequest, InventoryResultFn, ItemData,
     ItemLine, KnowledgeInfo, KnowledgeInputFn, Level, LoopWaitFn, LoopWaitSites, MidHookSpec,
@@ -339,9 +339,9 @@ pub struct HostApi {
     /// only. Since minor 18.
     pub experience_filter:
         extern "system" fn(me: ModHandle, callback: ExperiencePassFn, user: *mut c_void) -> Status,
-    /// Makes `callback` with `user` decide how many altars each Flame level
-    /// allows, on both sides; one mod at a time. Allowed during
-    /// `enshwick_mod_init` only. Since minor 19.
+    /// Retired in minor 82, when the altar limit became a chain any mod
+    /// joins ([`HostApi::altar_limit_filter`]): always [`Status::REFUSED`].
+    /// The slot keeps the table's layout.
     pub altar_limit:
         extern "system" fn(me: ModHandle, callback: AltarLimitFn, user: *mut c_void) -> Status,
     /// Lets the game group 32 altar zones into its 16 bases instead of 16
@@ -1124,4 +1124,19 @@ pub struct HostApi {
     /// thread, also during init. [`Status::REFUSED`] for a mod without an
     /// altar zone filter. Since minor 78.
     pub altar_zones_changed: extern "system" fn(me: ModHandle) -> Status,
+    /// Calls `callback` with `user` when the game asks how many altars a
+    /// Flame level allows, on both sides. Each filter, in load order, sees
+    /// the game's own count and the count so far and may change it; the
+    /// loader keeps the answer within the zones the game can group
+    /// ([`HostApi::base_limit`]). Allowed during `enshwick_mod_init` only.
+    /// Since minor 82.
+    pub altar_limit_filter: extern "system" fn(
+        me: ModHandle,
+        callback: AltarLimitFilterFn,
+        user: *mut c_void,
+    ) -> Status,
+    /// Writes the most altar zones and bases the game groups now: its own
+    /// 16 and 16, or once [`HostApi::raise_base_limit`] is in force the
+    /// loader's maximum. Any thread. Since minor 82.
+    pub base_limit: extern "system" fn(me: ModHandle, zones: *mut u32, bases: *mut u32) -> Status,
 }

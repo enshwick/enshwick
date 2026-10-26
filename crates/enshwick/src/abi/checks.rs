@@ -214,6 +214,41 @@ impl_headed!(ExperiencePass);
 /// An experience filter: the pass and the pointer given at registration.
 pub type ExperiencePassFn = unsafe extern "system" fn(pass: *mut ExperiencePass, user: *mut c_void);
 
-/// A mod's altar limit: the Flame level and the pointer given at
-/// registration; returns how many altars that level allows.
+/// A mod's altar limit before minor 82: the Flame level and the pointer
+/// given at registration; returns how many altars that level allows. The
+/// retired [`HostApi::altar_limit`](super::HostApi::altar_limit) refuses it.
 pub type AltarLimitFn = unsafe extern "system" fn(flame_level: u32, user: *mut c_void) -> u8;
+
+/// How many altars a Flame level allows, as the loader asks every
+/// [`HostApi::altar_limit_filter`](super::HostApi::altar_limit_filter) in
+/// load order.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::abi::{AltarLimit, Header};
+///
+/// let limit = AltarLimit { header: Header::of::<AltarLimit>(), flame_level: 3, vanilla: 6, allowed: 6, reserved: [0; 2] };
+/// assert_eq!(limit.allowed, limit.vanilla);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+pub struct AltarLimit {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// The Flame level.
+    pub flame_level: u32,
+    /// The altars the game itself allows at that level.
+    pub vanilla: u8,
+    /// The altars allowed so far, as the filters before have left it; the
+    /// filter's answer.
+    pub allowed: u8,
+    /// Zero.
+    pub reserved: [u8; 2],
+}
+
+impl_headed!(AltarLimit);
+
+/// An altar limit filter: the limit so far, writable, and the pointer given
+/// at registration. It must not unwind.
+pub type AltarLimitFilterFn = unsafe extern "system" fn(limit: *mut AltarLimit, user: *mut c_void);

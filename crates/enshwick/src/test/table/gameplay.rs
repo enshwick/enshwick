@@ -3,10 +3,10 @@
 use core::ffi::c_void;
 
 use crate::abi::{
-    ActiveBuff, AltarInfo, AltarLimitFn, AltarZoneFn, AltarZoneSize, BedCheckFn, BuffRequest,
-    BuffTypeInfo, BuildCheckFn, ComfortFn, CraftCheckFn, DamageFilterFn, ExperiencePassFn, Header,
-    InteractionFn, KnowledgeInfo, KnowledgeInputFn, ModHandle, RateId, Side, SkillCheckFn, Status,
-    SummonFn, SurvivorLookupFn, SurvivorStatusFn, ZoneCheckFn,
+    ActiveBuff, AltarInfo, AltarLimitFilterFn, AltarLimitFn, AltarZoneFn, AltarZoneSize,
+    BedCheckFn, BuffRequest, BuffTypeInfo, BuildCheckFn, ComfortFn, CraftCheckFn, DamageFilterFn,
+    ExperiencePassFn, Header, InteractionFn, KnowledgeInfo, KnowledgeInputFn, ModHandle, RateId,
+    Side, SkillCheckFn, Status, SummonFn, SurvivorLookupFn, SurvivorStatusFn, ZoneCheckFn,
 };
 use crate::test::table::mods::list;
 use crate::test::table::{put, put_list, with};
@@ -196,16 +196,44 @@ pub(crate) extern "system" fn experience_filter(
 
 pub(crate) extern "system" fn altar_limit(
     _me: ModHandle,
-    callback: AltarLimitFn,
+    _callback: AltarLimitFn,
+    _user: *mut c_void,
+) -> Status {
+    Status::REFUSED
+}
+
+pub(crate) extern "system" fn altar_limit_filter(
+    _me: ModHandle,
+    callback: AltarLimitFilterFn,
     user: *mut c_void,
 ) -> Status {
     with(Status::MISSING, |s| {
-        if s.altar_limit.is_some() {
-            return Status::REFUSED;
-        }
-        s.altar_limit = Some((callback, user.expose_provenance()));
+        s.altar_limits.push((callback, user.expose_provenance()));
         Status::OK
     })
+}
+
+/// The zones and bases the fake's game groups: 16 and 16, 32 and 16 once
+/// the mod raised the limit, as the loader's.
+pub(crate) fn zones_and_bases() -> (u32, u32) {
+    if with(false, |s| s.base_limit_raised) {
+        (32, 16)
+    } else {
+        (16, 16)
+    }
+}
+
+pub(crate) extern "system" fn base_limit(
+    _me: ModHandle,
+    zones: *mut u32,
+    bases: *mut u32,
+) -> Status {
+    let (zone_count, base_count) = zones_and_bases();
+    let status = put(zones, zone_count);
+    if !status.is_ok() {
+        return status;
+    }
+    put(bases, base_count)
 }
 
 pub(crate) extern "system" fn raise_base_limit(_me: ModHandle) -> Status {
