@@ -470,8 +470,8 @@ impl LootPass<'_> {
 
 type PassHandler = Box<dyn Fn(&LootPass<'_>) + Send + Sync>;
 
-static PASS: std::sync::OnceLock<(Containers, crate::ecs::Worlds, PassHandler)> =
-    std::sync::OnceLock::new();
+static PASS: crate::fresh::Fresh<(Containers, crate::ecs::Worlds, PassHandler)> =
+    crate::fresh::Fresh::new();
 
 crate::detour! {
     static CHECK: unsafe extern "system" fn(ctx: *mut u64) = after_check;

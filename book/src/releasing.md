@@ -6,13 +6,12 @@ archives, and the page players are sent to when a server runs a mod they lack.
 
 ## Versions
 
-Enshwick Loader has one version, such as Enshwick Loader 0.2.0: the loader
+The platform's crates carry versions of their own: the loader
 (`enshwick-loader`), the `powrprof.dll` stub (`enshwick-loader-stub`),
-`enshwick` with its test fake and its macros
-(`enshwick-macros`), `enshwick-reflect`, the build tables
-(`enshwick-gamedata`) and `cargo-enshwick` always carry the same number
-and are released together. Mods have versions of their own, released apart from the
-platform and from each other.
+`enshwick` with its test fake, `enshwick-macros`, `enshwick-reflect`, the
+build tables (`enshwick-gamedata`) and `cargo-enshwick`. A new build table is
+a loader patch release and leaves the API's version alone. Mods have versions
+of their own too, released apart from the platform and from each other.
 
 Which loader a mod runs under is not read from that version but from the ABI
 version `enshwick` was built with (see
@@ -45,64 +44,34 @@ cargo enshwick manifest target/release/my_mod.dll --expect-version 0.3.0
 
 ## Releases in this repository
 
-Until the first public release, 1.0.0, this repository has no releases of
-its DLLs. The platform's crates carry prerelease versions, `1.0.0-alpha.N`,
-and reach crates.io through the
-[publish workflow](https://github.com/enshwick/enshwick/blob/main/.github/workflows/publish.yml),
-run by hand: `enshwick-macros`, `enshwick-reflect`, `enshwick`,
-`enshwick-gamedata` and `cargo-enshwick`, each after the crates it needs and
-only in a version crates.io does not have yet. A mod depends on
-`enshwick = "1.0.0-alpha.N"`. The mods here carry the version `0.0.0-dev`,
-and the
+Until the first public release, 1.0.0, this repository has no regular
+releases. The platform's crates carry prerelease versions, `1.0.0-alpha.N`,
+and a mod depends on `enshwick = "1.0.0-alpha.N"`.
+
+The
 [dev-build workflow](https://github.com/enshwick/enshwick/blob/main/.github/workflows/dev-build.yml),
 run by hand, builds the commit it runs on with `cargo xtask bundle` and
 replaces the files of the one prerelease tagged `dev`, whose tag moves to
 that commit. `enshwick.zip` there holds everything that goes into the game
-folder: each mod of `tools/mods.toml` comes from the `dev` prerelease of its
-own repository once that repository has one, and is built from this
-repository until then. `cargo xtask bundle` writes the same archives into
-`target/bundle` on any machine with `cargo-xwin`. Two development builds of one commit join each other; builds of
-different commits carry the same versions, so the join check does not tell
-them apart. The release workflow below runs by hand as well and makes 1.0.0
-the first version of every crate.
+folder, each mod of `tools/mods.toml` taken from the `dev` prerelease of its
+own repository. `cargo xtask bundle` writes the same archives into
+`target/bundle` on any machine with `cargo-xwin`. Two development builds of
+one commit join each other; builds of different commits carry the same
+versions, so the join check does not tell them apart.
 
-Mods in this repository follow
-[CONTRIBUTING.md](https://github.com/enshwick/enshwick/blob/main/CONTRIBUTING.md):
+Versions come from [release-plz](https://release-plz.dev), set up in
+[release-plz.toml](https://github.com/enshwick/enshwick/blob/main/release-plz.toml)
+and run by hand through the
+[release-plz workflow](https://github.com/enshwick/enshwick/blob/main/.github/workflows/release-plz.yml):
 
-- the crate is `mods/enshwick-<id>`, named `enshwick-<id>`;
-- the pull request title is a conventional commit, which becomes the squashed
-  commit and the changelog entry;
-- [release-please](https://github.com/googleapis/release-please) keeps one
-  release pull request for the workspace and, once it is merged, tags each
-  released crate `<component>-v<semver>`, the component being the crate name:
-  `enshwick-safes-v0.2.0`.
-
-The platform crates are linked (the `linked-versions` plugin, group
-`enshwick`): a change to any of them releases all of them at one version,
-each with its own tag, `enshwick-loader-v0.2.0`,
-`enshwick-v0.2.0` and so on. The tags keep what relies on them
-working: `cargo enshwick new` pins `enshwick-v<version>`. The
-loader's release is the platform release, titled
-`Enshwick Loader <version>` and kept as the repository's latest release. A platform
-release also bumps the patch version of every mod, since they all depend on
-`enshwick`.
-
-Before 1.0, a `feat` bumps the patch version and a breaking change the minor
-(see
-[release-please-config.json](https://github.com/enshwick/enshwick/blob/main/release-please-config.json)).
-
-The
-[release workflow](https://github.com/enshwick/enshwick/blob/main/.github/workflows/release-please.yml)
-then builds the workspace and attaches to each mod's release:
-
-| File          | What it holds                    |
-| ------------- | -------------------------------- |
-| `<crate>.zip` | `mods/<crate>.dll` and `LICENSE` |
-
-The platform release carries `enshwick-loader.zip` (the stub and the loader)
-and `enshwick.zip` (everything that goes next to the game). Before it uploads
-anything, the workflow checks with `cargo enshwick manifest --expect-version`
-that every released mod's DLL reports the version of its tag.
+1. `release-pr` reads the conventional commits since each crate's last
+   release, checks the public API with cargo-semver-checks, and opens or
+   updates one release pull request with the new versions and each crate's
+   `CHANGELOG.md`.
+2. Once that pull request merges, `release` tags each released crate
+   `<package>-v<version>`, such as `enshwick-v1.0.0-alpha.3`, makes its
+   GitHub release, and publishes the public crates to crates.io. The loader
+   and the stub are tagged only; they never go to crates.io.
 
 The loader's build tables (see [Finding the game](finding-the-game.md)) are
 compiled into the loader, so a table for a new game build ships with the next

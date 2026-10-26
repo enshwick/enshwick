@@ -29,7 +29,7 @@
 //! ```
 
 use std::sync::OnceLock;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 use crate::{Load, Off};
@@ -119,10 +119,8 @@ impl Default for StepClock {
 }
 
 /// The mod's clock, moved on by its [`Ticked`](crate::events::Ticked)
-/// subscription.
-static CLOCK: StepClock = StepClock::new();
-/// Whether the subscription is made.
-static TICKING: AtomicBool = AtomicBool::new(false);
+/// subscription once made.
+static CLOCK: crate::fresh::Fresh<StepClock> = crate::fresh::Fresh::new();
 
 impl Load<'_> {
     /// The mod's [`StepClock`], moved on by every server step: in the
@@ -137,13 +135,15 @@ impl Load<'_> {
     ///
     /// See the [module](self).
     pub fn step_clock(&mut self) -> Result<&'static StepClock, Off> {
-        if !TICKING.swap(true, Ordering::AcqRel)
-            && let Err(off) = self.on::<crate::events::Ticked>(|_| CLOCK.step(Instant::now()))
-        {
-            TICKING.store(false, Ordering::Release);
-            return Err(off);
+        if let Some(clock) = CLOCK.get() {
+            return Ok(clock);
         }
-        Ok(&CLOCK)
+        self.on::<crate::events::Ticked>(|_| {
+            if let Some(clock) = CLOCK.get() {
+                clock.step(Instant::now());
+            }
+        })?;
+        Ok(CLOCK.get_or_init(StepClock::new))
     }
 }
 

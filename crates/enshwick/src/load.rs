@@ -1166,15 +1166,19 @@ unsafe extern "system" fn deliver_mod_event<E: ModEvent, F: Fn(&E)>(
 /// The `startup` values in force, as an inline table: read in
 /// [`Load::config`] and again as each world loads; a change between waits
 /// for the next load.
-static STARTED: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+static STARTED: Kept = Kept::new();
 
 /// The `restart` values the mod read in [`Load::config`], as an inline
 /// table; later reads keep them until the game starts again.
-static RESTART: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+static RESTART: Kept = Kept::new();
+
+/// Settings values kept for one mod life.
+type Kept = crate::fresh::Fresh<std::sync::Mutex<Option<String>>>;
 
 /// Notes `settings`' values at `stage` as the ones in force.
-fn keep<T: Config>(kept: &std::sync::Mutex<Option<String>>, settings: &T, stage: Stage) {
+fn keep<T: Config>(kept: &Kept, settings: &T, stage: Stage) {
     *kept
+        .get_or_init(std::sync::Mutex::default)
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner) =
         Some(settings.values(stage).unwrap_or_default());
@@ -1182,8 +1186,9 @@ fn keep<T: Config>(kept: &std::sync::Mutex<Option<String>>, settings: &T, stage:
 
 /// Puts the values at `stage` in force back over `settings`, noting the
 /// changes that wait.
-fn hold<T: Config>(kept: &std::sync::Mutex<Option<String>>, settings: &mut T, stage: Stage) {
+fn hold<T: Config>(kept: &Kept, settings: &mut T, stage: Stage) {
     let kept = kept
+        .get_or_init(std::sync::Mutex::default)
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner)
         .clone();

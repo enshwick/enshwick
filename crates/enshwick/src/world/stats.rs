@@ -145,7 +145,7 @@ pub(crate) struct Stats {
 
 /// The unlocked skill nodes' component, and where it keeps their ids and
 /// their levels; kept apart, since [`World`] is copied by value.
-static SKILLS: std::sync::OnceLock<(ComponentType, usize, usize)> = std::sync::OnceLock::new();
+static SKILLS: crate::fresh::Fresh<(ComponentType, usize, usize)> = crate::fresh::Fresh::new();
 
 impl Stats {
     /// The stat reads for the running build.
