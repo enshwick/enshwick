@@ -291,6 +291,24 @@ pub fn credited(
         .collect()
 }
 
+/// The slots in force for a container template several changed items may
+/// place: each item's value in load order, the last winning. The second
+/// value says whether the items disagreed.
+#[must_use]
+pub fn template_slots(values: &[(Guid, f64)]) -> (Option<f64>, bool) {
+    let last = values.last().map(|(_, value)| *value);
+    let disagree = values.iter().any(|(_, value)| Some(*value) != last);
+    (last, disagree)
+}
+
+/// The slots a container takes from `old` toward `new`: never fewer than it
+/// has, since a chest a player upgrades moves every item it holds. The
+/// second value says whether `new` asked for fewer.
+#[must_use]
+pub const fn grown_slots(old: u8, new: u8) -> (u8, bool) {
+    if new < old { (old, true) } else { (new, false) }
+}
+
 /// What happens to a mod's hold when a world loads on the side that keeps
 /// it.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -512,6 +530,25 @@ mod tests {
         };
         assert!(goes_first(&key(1), &key(1)));
         assert!(!goes_first(&key(2), &key(1)));
+    }
+
+    #[test]
+    fn items_on_one_template_take_the_last_value_and_report_a_disagreement() {
+        assert_eq!(
+            template_slots(&[(WOOD, 48.0), (STONE, 48.0)]),
+            (Some(48.0), false)
+        );
+        assert_eq!(
+            template_slots(&[(WOOD, 48.0), (STONE, 64.0)]),
+            (Some(64.0), true)
+        );
+        assert_eq!(template_slots(&[]), (None, false));
+    }
+
+    #[test]
+    fn a_container_never_shrinks() {
+        assert_eq!(grown_slots(24, 48), (48, false));
+        assert_eq!(grown_slots(24, 16), (24, true));
     }
 
     #[test]

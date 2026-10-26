@@ -23,6 +23,25 @@ fn source(file: &str, line: usize, name: &str) -> String {
     }
 }
 
+/// Whether the item `name` names, `item`, takes `slots`: an item that
+/// places a container, never made smaller, where the game's data is at
+/// hand; anything without it.
+fn container(reader: &Reader<'_>, item: Guid, name: &str, slots: Value) -> Result<(), String> {
+    let Some(vanilla) = reader.vanilla else {
+        return Ok(());
+    };
+    match vanilla.container_slots(item) {
+        Ok(None) => Err(format!("{name} places no container")),
+        Ok(Some(has)) => match slots {
+            Value::Set(v) if v < f64::from(has) => Err(format!(
+                "slots {v} are fewer than the {has} {name} holds, and a container only grows"
+            )),
+            _ => Ok(()),
+        },
+        Err(_) => Ok(()),
+    }
+}
+
 /// The value a pack entry gives.
 fn value(entry: ValueEntry) -> Value {
     match entry {
@@ -47,10 +66,9 @@ pub(super) fn item_changes(
         let line = PackError::at(file, text, at, "").line;
         let e = entry.get_ref();
         let number = index + 1;
-        let fields: Vec<(Field, Value)> = e
-            .max_stack
-            .map(|v| (Field::MaxStack, value(v)))
+        let fields: Vec<(Field, Value)> = [(Field::MaxStack, e.max_stack), (Field::Slots, e.slots)]
             .into_iter()
+            .filter_map(|(field, v)| v.map(|v| (field, value(v))))
             .collect();
         if e.items.is_empty() {
             reader.error(
@@ -88,6 +106,12 @@ pub(super) fn item_changes(
                 continue;
             };
             for &(field, value) in &valid {
+                if field == Field::Slots
+                    && let Err(why) = container(reader, item, name, value)
+                {
+                    reader.error(file, text, at, format!("change {number}: {why}"));
+                    continue;
+                }
                 if let Some(&first) = seen.get(&(item, field)) {
                     reader.error(
                         file,

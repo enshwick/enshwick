@@ -127,10 +127,20 @@ sets the value; `{ times = x }` multiplies it, with `x` from 0 to 100.
 | Field | Meaning | Values |
 | --- | --- | --- |
 | `max_stack` | how many of the item one inventory slot holds | 1 to 65535 |
+| `slots` | how many slots the container the item places holds, never fewer than it has | 8 to 128, in steps of 8 |
 
 A change that names no item, changes nothing, gives a value out of range or
 changes one field of one item a second time is a problem at its line, like
 every other.
+
+`slots` changes the chests placed from then on, and chests upgraded to the
+item, since an upgrade places a new chest: a chest placed before keeps the
+size it was placed with, which the save holds. Removing the pack leaves every
+chest as it is. A container only grows, as an upgraded chest moves every item
+it holds; an item that places no container is a problem at its line. The
+change reaches every item that places the same container, and the log names
+them; when such items ask for different sizes, the last in load order counts
+and the log says so. The largest vanilla chest holds 72 slots.
 
 ### Recipes
 

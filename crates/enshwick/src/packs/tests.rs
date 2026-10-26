@@ -271,7 +271,7 @@ fn a_change_that_picks_or_changes_nothing_is_a_problem() {
     .unwrap_err();
     assert_eq!(
         errors.to_string(),
-        "items.toml:1:1: change 1: changes nothing; give max_stack"
+        "items.toml:1:1: change 1: changes nothing; give max_stack, slots"
     );
 }
 
@@ -418,4 +418,49 @@ fn a_recipe_a_mod_or_the_pack_adds_is_changed_where_it_is_defined() {
             .all(|l| l.contains("set its values where it is defined")),
         "{lines:?}"
     );
+}
+
+#[test]
+fn a_chest_s_slots_change_in_pages_of_eight() {
+    let items = format!(
+        "[[change]]\nitems = [\"{CHEST}\"]\nslots = 48\n\n[[change]]\nitems = [\"{CHEST}\"]\nslots = 50\n"
+    );
+    let errors = Pack::parse("you.chests", &files(&items)).unwrap_err();
+    assert_eq!(
+        errors.to_string(),
+        "items.toml:5:1: change 2: slots 50 is not a multiple of 8"
+    );
+    let pack = Pack::parse(
+        "you.chests",
+        &files(&format!(
+            "[[change]]\nitems = [\"{CHEST}\"]\nslots = {{ times = 2 }}\n"
+        )),
+    )
+    .unwrap();
+    assert_eq!(pack.changes()[0].0.field, Field::Slots);
+}
+
+#[test]
+fn slots_go_only_to_a_container_and_never_shrink_it() {
+    let chest = Guid([1; 16]);
+    let vanilla =
+        crate::content::vanilla::tests::game_with_chest(chest, "Prop_Decoration_T0_Storage_16", 16);
+    let text = "[[change]]\nitems = [\"Prop_Decoration_T0_Storage_16\"]\nslots = 8\n";
+    let errors = Pack::parse_with("you.chests", &files(text), Some(&vanilla)).unwrap_err();
+    assert!(
+        errors.to_string().ends_with("a container only grows"),
+        "{errors}"
+    );
+    let text = "[[change]]\nitems = [\"Prop_Decoration_T0_Storage_16\"]\nslots = { times = 0.5 }\n";
+    let errors = Pack::parse_with("you.chests", &files(text), Some(&vanilla)).unwrap_err();
+    assert!(errors.to_string().contains("slots only grows"), "{errors}");
+    let prop = Guid([7; 16]);
+    let text = format!("[[change]]\nitems = [\"{prop}\"]\nslots = 32\n");
+    let errors = Pack::parse_with("you.chests", &files(&text), Some(&vanilla)).unwrap_err();
+    assert!(
+        errors.to_string().contains("places no container"),
+        "{errors}"
+    );
+    let text = "[[change]]\nitems = [\"Prop_Decoration_T0_Storage_16\"]\nslots = 32\n";
+    assert!(Pack::parse_with("you.chests", &files(text), Some(&vanilla)).is_ok());
 }
