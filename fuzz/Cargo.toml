@@ -101,6 +101,13 @@ test = false
 doc = false
 bench = false
 
+[[bin]]
+name = "archive"
+path = "fuzz_targets/archive.rs"
+test = false
+doc = false
+bench = false
+
 [lints]
 workspace = true
 
