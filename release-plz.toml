@@ -56,9 +56,5 @@ name = "enshwick-example-trading-post-api"
 release = false
 
 [[package]]
-name = "enshwick-compat"
-release = false
-
-[[package]]
 name = "xtask"
 release = false

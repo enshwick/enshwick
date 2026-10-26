@@ -388,19 +388,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "enshwick-compat"
-version = "0.0.0"
-dependencies = [
- "clap",
- "enshwick",
- "enshwick-gamedata",
- "enshwick-loader",
- "memchr",
- "serde",
- "serde_json",
-]
-
-[[package]]
 name = "enshwick-example-haggling"
 version = "0.0.0-dev"
 dependencies = [
@@ -1229,6 +1216,11 @@ dependencies = [
 name = "xtask"
 version = "0.0.0"
 dependencies = [
+ "clap",
+ "enshwick",
+ "enshwick-gamedata",
+ "enshwick-loader",
+ "memchr",
  "semver",
  "serde",
  "serde_json",

@@ -102,7 +102,7 @@ Whatever those patterns do not find stays off: a loader feature logs
 `<feature> off: not in this build`, and a mod that needs a missing entry turns
 off with `symbol <id>: missing on this game build`. Everything else runs
 until a loader build with the new build's table replaces this one.
-`cargo run -p enshwick-compat -- <exe> --mods <dir>`, in a checkout of the
+`cargo xtask compat <exe> --mods <dir>`, in a checkout of the
 [platform repository](https://github.com/enshwick/enshwick), shows the
 same verdicts without starting the game.
 
