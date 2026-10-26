@@ -6,8 +6,14 @@ Each entry names the pull request that made the change.
 
 ## [Unreleased]
 
+## [1.0.0-alpha.4] - 2026-10-26
+
 ### Added
 
+- `rates`: a mod declares a `Rate` with `Load::rate` and sets its factor;
+  the loader scales experience by group, workshop speed, resource drops,
+  comfort, skill points per level and loot stacks by the product of every
+  mod's factor (#445).
 - `Load::event_types()` lists every game event type the running game build
   has (#461).
 - `RecipeView::kind()` and `RecipeKind` tell a building block, a roof,
