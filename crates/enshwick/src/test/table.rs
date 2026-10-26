@@ -3,13 +3,13 @@
 use std::sync::{Mutex, MutexGuard};
 
 use crate::abi::{
-    ActiveBuff, AltarInfo, AltarLimitFn, AltarZoneSize, BedCheckFn, BuffTypeInfo, BuildCheckFn,
+    ActiveBuff, AltarInfo, AltarLimitFn, AltarZoneFn, BedCheckFn, BuffTypeInfo, BuildCheckFn,
     ComfortFn, ConfigCheckFn, CraftCheckFn, DamageFilterFn, DaytimeInfo, Event, EventFn,
     ExperiencePassFn, GameEventFn, Header, HostApi, InteractionFn, InventoryResultFn,
-    KnowledgeInfo, KnowledgeInputFn, Level, MidHookFn, ModEventFn, NetMessageFn, RenameCallFn,
-    ResourceKey, ResourcePatchFn, SkillCheckFn, SpawnRequest, Status, StatusFn, Str, SummonFn,
-    SurvivorLookupFn, SurvivorStatusFn, TeleportRequest, TerrainEdit, TerrainMaterialInfo,
-    UiAnswerFn, UiFrameFn, WeatherFront, ZoneCheckFn,
+    KnowledgeInfo, KnowledgeInputFn, Level, LoopWaitFn, MidHookFn, ModEventFn, NetMessageFn,
+    RenameCallFn, ResourceKey, ResourcePatchFn, ServerWaitFn, SkillCheckFn, SpawnRequest, Status,
+    StatusFn, Str, SummonFn, SurvivorLookupFn, SurvivorStatusFn, TeleportRequest, TerrainEdit,
+    TerrainMaterialInfo, UiAnswerFn, UiFrameFn, WeatherFront, ZoneCheckFn,
 };
 use crate::locks::Relock;
 
@@ -22,6 +22,7 @@ mod hooks;
 mod inventory;
 mod mods;
 mod net;
+mod pacing;
 mod services;
 mod ui;
 mod world;
@@ -36,12 +37,12 @@ use content::{
     recipe_rule, resource_read, serve_resource,
 };
 use gameplay::{
-    account_knowledge, altar_limit, altar_zones_control, altars, altars_open, apply_buff,
-    base_zones, buff_types, buffs, build_filter, comfort_filter, craft_filter, damage_filter,
-    experience_filter, grant_knowledge, interaction_filter, knowledge, knowledge_input_filter,
-    quests, raise_base_limit, rate, remove_buff, revoke_knowledge, set_altar_zones, set_rate,
-    skill_override, summon_filter, summon_item, summoned, survivor_bed_check, survivor_lookup,
-    survivor_status, zone_check_filter,
+    account_knowledge, altar_limit, altar_zone_filter, altar_zones_changed, altar_zones_control,
+    altars, altars_open, apply_buff, base_zones, buff_types, buffs, build_filter, comfort_filter,
+    craft_filter, damage_filter, experience_filter, grant_knowledge, interaction_filter, knowledge,
+    knowledge_input_filter, quests, raise_base_limit, rate, remove_buff, revoke_knowledge,
+    set_altar_zones, set_rate, skill_override, summon_filter, summon_item, summoned,
+    survivor_bed_check, survivor_lookup, survivor_status, zone_check_filter,
 };
 use hooks::{code_range, hook, hook_at, patch_code, workshop_recipes};
 use inventory::{inventory_open, inventory_submit, item_info};
@@ -203,8 +204,8 @@ pub(crate) struct State {
     pub(crate) altars_opened: bool,
     /// Whether the mod sizes the altar zones.
     pub(crate) zone_control: bool,
-    /// The zone sizes the mod set last.
-    pub(crate) zone_sizes: Vec<AltarZoneSize>,
+    /// The mod's altar zone filters, and how often it asked for a new sizing.
+    pub(crate) zone_sizing: ZoneSizing,
     pub(crate) zone_filters: Vec<(ZoneCheckFn, usize)>,
     pub(crate) survivor_lookup: Option<(SurvivorLookupFn, usize)>,
     pub(crate) bed_checks: Vec<(BedCheckFn, usize)>,
@@ -227,6 +228,8 @@ pub(crate) struct State {
     pub(crate) comfort_filters: Vec<(ComfortFn, usize)>,
     /// The rates the mod declared, with the factor it set for each.
     pub(crate) rates: Vec<(crate::abi::RateId, f32)>,
+    /// What the mod asked of the engine's pacing places.
+    pub(crate) pacing: Pacing,
     pub(crate) experience_filters: Vec<(ExperiencePassFn, usize)>,
     pub(crate) altar_limit: Option<(AltarLimitFn, usize)>,
     pub(crate) base_limit_raised: bool,
@@ -266,6 +269,26 @@ fn take_turn() -> MutexGuard<'static, ()> {
     let turn = TURN.relock();
     HOLDS_TURN.set(true);
     turn
+}
+
+/// The mod's altar zone filters, and how often it asked for a new sizing.
+#[derive(Debug, Default)]
+pub(crate) struct ZoneSizing {
+    /// The filters and their pointers.
+    pub(crate) filters: Vec<(AltarZoneFn, usize)>,
+    /// How often the mod asked for the zones to be sized again.
+    pub(crate) resizes: usize,
+}
+
+/// What the mod asked of the engine's pacing places.
+#[derive(Debug, Default)]
+pub(crate) struct Pacing {
+    /// The loop wait handlers and their pointers.
+    pub(crate) loop_waits: Vec<(LoopWaitFn, usize)>,
+    /// The server wait handlers and their pointers.
+    pub(crate) server_waits: Vec<(ServerWaitFn, usize)>,
+    /// The lowest worker caps asked for, default and background.
+    pub(crate) task_workers: Option<(u32, u32)>,
 }
 
 /// Waits for the table to be free, then answers from `host`.
@@ -344,7 +367,7 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         altars: Vec::new(),
         altars_opened: false,
         zone_control: false,
-        zone_sizes: Vec::new(),
+        zone_sizing: ZoneSizing::default(),
         zone_filters: Vec::new(),
         survivor_lookup: None,
         bed_checks: Vec::new(),
@@ -361,6 +384,7 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         skills: Vec::new(),
         comfort_filters: Vec::new(),
         rates: Vec::new(),
+        pacing: Pacing::default(),
         experience_filters: Vec::new(),
         altar_limit: None,
         base_limit_raised: false,
@@ -580,4 +604,9 @@ pub(crate) static TABLE: HostApi = HostApi {
     rate,
     set_rate,
     change_data,
+    loop_wait: pacing::loop_wait,
+    server_wait: pacing::server_wait,
+    task_workers: pacing::task_workers,
+    altar_zone_filter,
+    altar_zones_changed,
 };

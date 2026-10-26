@@ -9,7 +9,7 @@ use crate::world::{ComponentType, World};
 use crate::{Host, Load, Off};
 
 use super::ops::{Batch, Op};
-use super::results::{Done, Outcome, Pending, Ticket, deliver};
+use super::results::{Done, OpError, OpErrors, Outcome, Pending, Ticket, deliver};
 use super::slots::{Bar, Category, Fill, ItemInfo, Slot, SlotRef};
 use super::{LINKS, MAX_DEPTH, MAX_OWNERS, SLOTS};
 
@@ -61,6 +61,7 @@ pub struct Inventories {
     components: Components,
     scheduler: Scheduler,
     layout: Layout,
+    errors: OpErrors,
 }
 
 impl Inventories {
@@ -104,6 +105,7 @@ impl Inventories {
             components,
             scheduler,
             layout,
+            errors: OpErrors::resolve(load, OpError::IDS),
         })
     }
 
@@ -195,6 +197,7 @@ impl Inventories {
         let pending = Pending {
             ticket: ticket.clone(),
             done: Box::new(done),
+            errors: self.errors,
         };
         if let Err(error) = batch.check() {
             self.later(pending, Done::Refused(error));

@@ -1,4 +1,4 @@
-abi 2.76
+abi 2.79
 ActionCall size 144 align 8
     header at 0 size 8
     kind at 8 size 4
@@ -50,6 +50,13 @@ AltarInfo size 856 align 8
     zone at 16 size 48
     levels at 64 size 768
     position at 832 size 24
+AltarZone size 32 align 8
+    header at 0 size 8
+    altar at 8 size 4
+    level at 12 size 1
+    reserved at 13 size 3
+    grow at 16 size 8
+    height at 24 size 8
 AltarZoneSize size 24 align 8
     altar at 0 size 4
     level at 4 size 1
@@ -146,13 +153,14 @@ DamageCheck size 80 align 4
     attacker at 20 size 4
     amounts at 24 size 52
     total at 76 size 4
-DataChange size 56 align 8
+DataChange size 72 align 8
     header at 0 size 8
     entry at 8 size 16
     field at 24 size 4
     op at 28 size 4
     value at 32 size 8
     source at 40 size 16
+    item at 56 size 16
 DataField size 4 align 4
     0 at 0 size 4
 DaytimeInfo size 56 align 8
@@ -218,7 +226,7 @@ HookSpec size 32 align 8
     next at 16 size 8
     priority at 24 size 4
     flags at 28 size 4
-HostApi size 1200 align 8
+HostApi size 1240 align 8
     header at 0 size 8
     host_version at 8 size 16
     build at 24 size 8
@@ -368,6 +376,11 @@ HostApi size 1200 align 8
     rate at 1176 size 8
     set_rate at 1184 size 8
     change_data at 1192 size 8
+    loop_wait at 1200 size 8
+    server_wait at 1208 size 8
+    task_workers at 1216 size 8
+    altar_zone_filter at 1224 size 8
+    altar_zones_changed at 1232 size 8
 Interaction size 56 align 8
     header at 0 size 8
     kind at 8 size 4
@@ -441,6 +454,13 @@ LayoutField size 24 align 8
     hash at 16 size 8
 Level size 1 align 1
     0 at 0 size 1
+LoopWaitData size 24 align 8
+    header at 0 size 8
+    ms at 8 size 4
+    reserved at 12 size 4
+    left_ns at 16 size 8
+LoopWaitSites size 4 align 4
+    0 at 0 size 4
 Manifest size 176 align 8
     header at 0 size 8
     id at 8 size 16

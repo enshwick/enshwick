@@ -1,4 +1,5 @@
 use crate::abi::{Header, InventoryOp, InventoryOpResult, InventoryRequest, InventoryResult};
+use crate::engine_enum::Values;
 
 use super::*;
 
@@ -172,17 +173,49 @@ fn outcomes_read_the_loaders_result() {
         op_count: 2,
         ops: ops.as_ptr(),
     };
+    let errors = Values::new([
+        (OpError::InvalidState, Some(0x15)),
+        (OpError::OutOfMemory, None),
+    ]);
     // SAFETY: `raw.ops` points at the two results of `ops`, alive here.
-    let outcome = unsafe { Outcome::from_raw(&raw) };
+    let outcome = unsafe { Outcome::from_raw(&raw, &errors) };
     assert_eq!(outcome.done, Done::RolledBack);
     assert!(!outcome.is_committed());
     assert_eq!(
         outcome.ops[1],
         OpResult {
-            error: OpResult::NO_ROOM,
+            error: Some(OpError::InvalidState),
             remaining: 4
         }
     );
+    assert!(outcome.ops[0].ok());
+    let other = [InventoryOpResult {
+        error: 0x27,
+        remaining: 0,
+    }];
+    let raw = InventoryResult {
+        op_count: 1,
+        ops: other.as_ptr(),
+        ..raw
+    };
+    // SAFETY: `raw.ops` points at the one result of `other`, alive here.
+    let outcome = unsafe { Outcome::from_raw(&raw, &errors) };
+    assert_eq!(
+        outcome.ops[0].error,
+        Some(OpError::Other(0x27)),
+        "a code whose constant the build lacks stays as the game gave it"
+    );
+    let skipped = [InventoryOpResult {
+        error: InventoryOpResult::NOT_RUN,
+        remaining: 0,
+    }];
+    let raw = InventoryResult {
+        ops: skipped.as_ptr(),
+        ..raw
+    };
+    // SAFETY: `raw.ops` points at the one result of `skipped`, alive here.
+    let outcome = unsafe { Outcome::from_raw(&raw, &errors) };
+    assert_eq!(outcome.ops[0].error, Some(OpError::NotRun));
     let empty = InventoryResult {
         outcome: InventoryResult::TIMED_OUT,
         op_count: 0,
@@ -190,6 +223,11 @@ fn outcomes_read_the_loaders_result() {
         ..raw
     };
     // SAFETY: `empty.ops` is null.
-    let outcome = unsafe { Outcome::from_raw(&empty) };
+    let outcome = unsafe { Outcome::from_raw(&empty, &errors) };
     assert_eq!(outcome, Outcome::not_run(Done::TimedOut));
+}
+
+#[test]
+fn op_errors_take_the_engine_s_names() {
+    crate::engine_enum::assert_named_after_engine(&OpError::IDS);
 }

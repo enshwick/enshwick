@@ -7,7 +7,6 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Mutex, OnceLock};
 
 use enshwick::abi::{RateId, Status};
-use enshwick::game_events::ExperienceSource;
 pub(crate) use enshwick::rates::scale_whole;
 use enshwick::rates::{ExperienceGroup, Rate, combine, is_valid_factor};
 
@@ -40,11 +39,20 @@ pub(crate) fn links(rate: RateId) -> &'static [Symbol] {
         .map_or(&[], |&(_, symbols)| symbols)
 }
 
-/// The rate the game's experience source `source` counts under; `None` for
-/// a source the game gives no factor.
-pub(crate) fn experience_rate(source: u8) -> Option<RateId> {
-    ExperienceGroup::of(ExperienceSource::from_raw(source))
-        .map(|group| Rate::Experience(group).id())
+/// The rate each of the game's experience source values counts under, by
+/// value; `None` for a source the game gives no factor. `value` answers the
+/// engine value of each source's catalogue id.
+pub(crate) fn experience_rates(value: impl Fn(&str) -> Option<u64>) -> [Option<RateId>; 256] {
+    let mut rates = [None; 256];
+    for &(source, id) in enshwick::__private::EXPERIENCE_SOURCES {
+        if let Some(slot) = value(id)
+            .and_then(|v| usize::try_from(v).ok())
+            .and_then(|at| rates.get_mut(at))
+        {
+            *slot = ExperienceGroup::of(source).map(|group| Rate::Experience(group).id());
+        }
+    }
+    rates
 }
 
 /// The slowest workshop speed a rate puts in force, so a workshop never
@@ -321,17 +329,20 @@ mod tests {
     }
 
     #[test]
-    fn every_experience_source_counts_under_its_rate() {
-        assert_eq!(experience_rate(4), Some(RateId::EXPERIENCE_COMBAT));
-        assert_eq!(experience_rate(5), Some(RateId::EXPERIENCE_MINING));
-        for source in [1, 2, 3, 6] {
-            assert_eq!(
-                experience_rate(source),
-                Some(RateId::EXPERIENCE_EXPLORATION)
-            );
-        }
-        assert_eq!(experience_rate(0), None);
-        assert_eq!(experience_rate(7), None);
+    fn every_experience_source_counts_under_its_rate_by_its_engine_value() {
+        let value = |id: &str| match id.rsplit_once('.').map(|(_, name)| name) {
+            Some("combat") => Some(40),
+            Some("mining") => Some(41),
+            Some("exploration" | "lore" | "quest" | "item_set_completed") => Some(50),
+            Some("none") => Some(0),
+            _ => None,
+        };
+        let rates = experience_rates(value);
+        assert_eq!(rates[40], Some(RateId::EXPERIENCE_COMBAT));
+        assert_eq!(rates[41], Some(RateId::EXPERIENCE_MINING));
+        assert_eq!(rates[50], Some(RateId::EXPERIENCE_EXPLORATION));
+        assert_eq!(rates[0], None, "no factor without a source");
+        assert_eq!(rates[4], None, "a value no source has");
     }
 
     #[test]

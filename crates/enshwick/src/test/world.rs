@@ -140,7 +140,7 @@ impl Installed {
         table::with(None, |s| s.clock_speed)
     }
 
-    /// Sets the game settings the fake reports, `keen::ecs::GameSettings`
+    /// Sets the game settings the fake reports, the engine's settings struct
     /// as bytes of its reflected size, and their preset; until then no
     /// world runs. A change the mod makes replaces them and makes the
     /// preset custom (4).
