@@ -7,7 +7,9 @@ mod tests {
     use std::sync::OnceLock;
 
     use enshwick::abi::{ItemData, Status};
-    use enshwick::affixes::{AffixDef, Affixes, Categories, Range, Rarity, RollError, RollRules};
+    use enshwick::affixes::{
+        AffixDef, Affixes, ItemCategoryMask, ItemRarity, Range, RollError, RollRules,
+    };
     use enshwick::ecs::Entity;
     use enshwick::item_data::ItemInstance;
     use enshwick::stats::{Op, Stat, StatDef, Stats};
@@ -36,12 +38,12 @@ mod tests {
                 load.define_stat("luck", &StatDef::additive("stat.luck").range(0.0, 10.0))?;
             load.define_affix(
                 "lucky",
-                &AffixDef::new("affix.lucky", Categories::EQUIPMENT)
+                &AffixDef::new("affix.lucky", ItemCategoryMask::EQUIPMENT)
                     .with(Range::new(luck, Op::Add, 1.0, 5.0).step(1.0))
-                    .rarity(Rarity::Rare),
+                    .rarity(ItemRarity::Rare),
             )?;
             assert!(
-                load.define_affix("lucky", &AffixDef::new("x", Categories::EQUIPMENT))
+                load.define_affix("lucky", &AffixDef::new("x", ItemCategoryMask::EQUIPMENT))
                     .is_err(),
                 "no modifiers"
             );
@@ -104,6 +106,6 @@ mod tests {
         assert_eq!(lines.len(), 1);
         let info = affixes.info(lines[0].affix.unwrap()).unwrap();
         assert_eq!(info.text, "affix.lucky");
-        assert_eq!(info.rarity, Rarity::Rare);
+        assert_eq!(info.rarity, ItemRarity::Rare);
     }
 }

@@ -157,9 +157,9 @@ impl Hashes {
     fn resolve(facts: &(impl EngineFacts + ?Sized)) -> Result<Self, Off> {
         Ok(Self {
             item: facts.hash(types::ITEM_INFO.id())?,
-            item_registry: facts.hash(types::ITEM_REGISTRY.id())?,
-            template: facts.hash(types::TEMPLATE.id())?,
-            workshop_registry: facts.hash(types::WORKSHOP_REGISTRY.id())?,
+            item_registry: facts.hash(types::ITEM_REGISTRY_RESOURCE.id())?,
+            template: facts.hash(types::TEMPLATE_RESOURCE.id())?,
+            workshop_registry: facts.hash(types::WORKSHOP_REGISTRY_RESOURCE.id())?,
         })
     }
 }
@@ -272,7 +272,7 @@ impl Vanilla {
     fn with_recipe_facts(self, facts: &(impl EngineFacts + ?Sized)) -> Self {
         match (
             RecipeLayout::resolve(facts),
-            facts.hash(types::RECIPE_REGISTRY.id()),
+            facts.hash(types::RECIPE_REGISTRY_RESOURCE.id()),
         ) {
             (Ok(layout), Ok(hash)) => self.with_recipes(layout, hash),
             _ => self,

@@ -54,10 +54,10 @@ pub const MAX_VALUE: usize = 512;
 ///
 /// ```
 /// use enshwick::ecs::Entity;
-/// use enshwick::inventory::{Category, Slot, SlotRef};
+/// use enshwick::inventory::{InventoryCategory, Slot, SlotRef};
 /// use enshwick::item_data::ItemInstance;
 ///
-/// let slot = Slot { at: SlotRef::new(Entity(41), 0), category: Category::GENERIC, item: 0x5e01, count: 1, pide: Some(Entity(900)) };
+/// let slot = Slot { at: SlotRef::new(Entity(41), 0), category: InventoryCategory::GENERIC, item: 0x5e01, count: 1, pide: Some(Entity(900)) };
 /// assert_eq!(ItemInstance::of(&slot), Some(ItemInstance { pide: Entity(900), item: 0x5e01 }));
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -269,13 +269,13 @@ impl Load<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::inventory::{Category, SlotRef};
+    use crate::inventory::{InventoryCategory, SlotRef};
 
     #[test]
     fn only_items_with_an_entity_are_instances() {
         let slot = |item, count, pide| Slot {
             at: SlotRef::new(Entity(41), 0),
-            category: Category::GENERIC,
+            category: InventoryCategory::GENERIC,
             item,
             count,
             pide: Entity::from_raw(pide),

@@ -14,7 +14,7 @@ mod tests {
     use enshwick::ecs::Entity;
     use enshwick::events::Ticked;
     use enshwick::inventory::{
-        Bar, Batch, BatchError, Category, Done, Fill, Inventories, Op, Outcome, SlotRef,
+        Bar, Batch, BatchError, Done, Fill, Inventories, InventoryCategory, Op, Outcome, SlotRef,
     };
     use enshwick::test::FakeHost;
 
@@ -122,7 +122,7 @@ mod tests {
         assert_eq!(slots[0].at, SlotRef::new(Entity(41), 0));
         assert_eq!(
             (slots[0].item, slots[0].pide, slots[0].category),
-            (SWORD, Some(Entity(900)), Category::GENERIC)
+            (SWORD, Some(Entity(900)), InventoryCategory::GENERIC)
         );
         assert_eq!(slots[9].at, SlotRef::new(Entity(43), 1));
         assert_eq!(slots.iter().filter(|s| !s.is_empty()).count(), 3);
@@ -143,7 +143,7 @@ mod tests {
         assert!(
             inventories
                 .item_info(SWORD)
-                .is_some_and(|i| i.has_pide() && i.max_stack == 1)
+                .is_some_and(|i| i.has_pide() && i.max_stack_size == 1)
         );
         assert!(inventories.item_info(COIN).is_none());
 

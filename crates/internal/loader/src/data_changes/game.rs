@@ -168,7 +168,7 @@ fn stacked(merged: &Merged) -> Vec<Guid> {
             merged
                 .keys(*item)
                 .iter()
-                .any(|k| k.field == Field::MaxStack)
+                .any(|k| k.field == Field::MaxStackSize)
         })
         .collect()
 }
@@ -642,8 +642,11 @@ fn changed_item(patch: &ItemPatch, bytes: &mut [u8]) {
     };
     let old = u16::from_le_bytes([field[0], field[1]]);
     let live = |m: ModIndex| on(loader, m);
-    let Some(new) = merged.value(Key::new(patch.item, Field::MaxStack), f64::from(old), live)
-    else {
+    let Some(new) = merged.value(
+        Key::new(patch.item, Field::MaxStackSize),
+        f64::from(old),
+        live,
+    ) else {
         return;
     };
     #[expect(
@@ -656,12 +659,14 @@ fn changed_item(patch: &ItemPatch, bytes: &mut [u8]) {
     if new > old {
         let without = |m: ModIndex| {
             merged
-                .value(Key::new(patch.item, Field::MaxStack), f64::from(old), |o| {
-                    live(o) && o != m
-                })
+                .value(
+                    Key::new(patch.item, Field::MaxStackSize),
+                    f64::from(old),
+                    |o| live(o) && o != m,
+                )
                 .unwrap_or(f64::from(old))
         };
-        let owners = merged.owners(Key::new(patch.item, Field::MaxStack), live);
+        let owners = merged.owners(Key::new(patch.item, Field::MaxStackSize), live);
         let label = labels
             .get(&patch.item)
             .cloned()
@@ -670,9 +675,11 @@ fn changed_item(patch: &ItemPatch, bytes: &mut [u8]) {
         let raised = raised.get_or_insert_with(FxHashMap::default);
         let alone = |m: ModIndex| {
             merged
-                .value(Key::new(patch.item, Field::MaxStack), f64::from(old), |o| {
-                    live(o) && o == m
-                })
+                .value(
+                    Key::new(patch.item, Field::MaxStackSize),
+                    f64::from(old),
+                    |o| live(o) && o == m,
+                )
                 .unwrap_or(f64::from(old))
         };
         for owner in credited(&owners, f64::from(old), f64::from(new), without, alone) {
@@ -717,9 +724,11 @@ pub(crate) fn reachable(loader: &Loader, field: Field) -> bool {
         RecipeLayout::resolve(&enshwick_gamedata::catalogue::Reflected(&loader.reflection)).is_ok()
     };
     match field {
-        Field::MaxStack => constant(enshwick_gamedata::catalogue::ITEM_MAX_STACK),
+        Field::MaxStackSize => constant(enshwick_gamedata::catalogue::ITEM_MAX_STACK),
         Field::Output | Field::Cost | Field::Ingredient => recipes(),
-        Field::Time => recipes() && constant(enshwick_gamedata::catalogue::RECIPE_DURATION),
+        Field::CraftingDuration => {
+            recipes() && constant(enshwick_gamedata::catalogue::RECIPE_DURATION)
+        }
         Field::Slots => {
             ContainerLayout::resolve(&enshwick_gamedata::catalogue::Reflected(&loader.reflection))
                 .is_ok()

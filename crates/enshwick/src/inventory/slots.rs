@@ -56,16 +56,16 @@ impl SlotRef {
 /// # Examples
 ///
 /// ```
-/// use enshwick::inventory::Category;
+/// use enshwick::inventory::InventoryCategory;
 ///
-/// assert_ne!(Category::GENERIC, Category::EQUIPMENT);
+/// assert_ne!(InventoryCategory::GENERIC, InventoryCategory::EQUIPMENT);
 /// ```
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
-pub struct Category(pub u8);
+pub struct InventoryCategory(pub u8);
 
-impl Category {
+impl InventoryCategory {
     /// Not known: a slot read alone.
-    pub const UNKNOWN: Self = Self(0);
+    pub const INVALID: Self = Self(0);
     /// Looks.
     pub const CUSTOMIZATION: Self = Self(1);
     /// Worn and held items.
@@ -84,9 +84,9 @@ impl Category {
 ///
 /// ```
 /// use enshwick::ecs::Entity;
-/// use enshwick::inventory::{Category, Slot, SlotRef};
+/// use enshwick::inventory::{InventoryCategory, Slot, SlotRef};
 ///
-/// let slot = Slot { at: SlotRef::new(Entity(9), 0), category: Category::GENERIC, item: 0, count: 0, pide: None };
+/// let slot = Slot { at: SlotRef::new(Entity(9), 0), category: InventoryCategory::GENERIC, item: 0, count: 0, pide: None };
 /// assert!(slot.is_empty());
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -94,7 +94,7 @@ pub struct Slot {
     /// Where the slot is.
     pub at: SlotRef,
     /// The sub-inventory's category.
-    pub category: Category,
+    pub category: InventoryCategory,
     /// The item id, 0 for none.
     pub item: u32,
     /// How many.
@@ -121,7 +121,7 @@ impl Slot {
 ///
 /// ```
 /// fn stackable(inventories: &enshwick::inventory::Inventories, item: u32) -> bool {
-///     inventories.item_info(item).is_some_and(|info| info.max_stack > 1 && !info.has_pide())
+///     inventories.item_info(item).is_some_and(|info| info.max_stack_size > 1 && !info.has_pide())
 /// }
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -129,7 +129,7 @@ pub struct ItemInfo {
     /// The item id.
     pub id: u32,
     /// How many fit one stack.
-    pub max_stack: u16,
+    pub max_stack_size: u16,
     /// `ItemInfo` flags, see [`ItemData`].
     pub flags: u32,
     /// The game's `ItemCategory`: 1 equipment (armour and rings), 2
@@ -172,6 +172,9 @@ impl ItemInfo {
 /// A value with its maximum on an item's own entity, as the item's slot
 /// shows it: its durability, or its meter (see
 /// [`Meter`](crate::content::items::Meter)).
+///
+/// The name is enshwick's: the game's durability or fuel value with its
+/// maximum.
 ///
 /// # Examples
 ///

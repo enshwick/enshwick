@@ -7,7 +7,7 @@ mod tests {
     use enshwick::abi::{Header, KnowledgeData, KnowledgeInfo, Status};
     use enshwick::ecs::Entity;
     use enshwick::events::KnowledgeChanged;
-    use enshwick::knowledge::{Grant, Knowledge, KnowledgeKind, Scope};
+    use enshwick::knowledge::{Grant, Knowledge, KnowledgeType, Scope};
     use enshwick::world::WorldError;
     use enshwick::{Load, Mod, Off};
 
@@ -58,8 +58,8 @@ mod tests {
 
         let known = knowledge.get(Entity(2), 0x1d).unwrap();
         assert_eq!(
-            (known.kind, known.scope),
-            (KnowledgeKind::Flags, Scope::Player)
+            (known.r#type, known.scope),
+            (KnowledgeType::Flags, Scope::Player)
         );
         assert!(known.has_flag(0) && !known.has_flag(1));
         assert_eq!(knowledge.get(Entity(3), 0x1d), None, "another player's");

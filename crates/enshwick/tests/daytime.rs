@@ -55,7 +55,7 @@ mod tests {
         assert!((now.hours - 7.0).abs() < 1e-4);
         assert!(now.is_day);
         assert!((now.night_starts - 18.0).abs() < 1e-4);
-        assert_eq!(now.day_length.as_secs(), 1800);
+        assert_eq!(now.day_time_duration.as_secs(), 1800);
 
         clock.set_hours(-2.5).unwrap();
         let now = clock.now().unwrap();

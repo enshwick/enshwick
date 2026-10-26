@@ -2,7 +2,7 @@
 //! buffs an entity has, giving one and removing one.
 //!
 //! A buff type is named by its id, the FNV-1a 32 hash of its GUID, the way
-//! the game's content names it; [`BuffId::from_guid`] makes one from a GUID
+//! the game's content names it; [`BuffTypeId::from_guid`] makes one from a GUID
 //! and [`Buffs::types`] lists every type of the running game. A buff given
 //! by a mod starts at once and lasts the time asked; one the entity has
 //! already is renewed. Clients see the change as the game's own, and the
@@ -17,7 +17,7 @@
 //! ```
 //! use enshwick::actions::{Action, Arg, Outcome, Value};
 //! use core::time::Duration;
-//! use enshwick::buffs::{Apply, BuffId};
+//! use enshwick::buffs::{Apply, BuffTypeId};
 //!
 //! fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 //!     let buffs = load.buffs();
@@ -30,7 +30,7 @@
 //!             return Outcome::refused("Name a buff");
 //!         };
 //!         let how = Apply::new().lasting(Duration::from_mins(1));
-//!         Outcome::done(format!("{:?}", buffs.apply(request.player.entity, BuffId(*id as u32), how)))
+//!         Outcome::done(format!("{:?}", buffs.apply(request.player.entity, BuffTypeId(*id as u32), how)))
 //!     })
 //! }
 //! ```
@@ -47,20 +47,20 @@ use crate::{Host, Load};
 /// # Examples
 ///
 /// ```
-/// use enshwick::buffs::BuffId;
+/// use enshwick::buffs::BuffTypeId;
 ///
-/// assert_eq!(BuffId::from_guid([0; 16]), BuffId::from_guid([0; 16]));
+/// assert_eq!(BuffTypeId::from_guid([0; 16]), BuffTypeId::from_guid([0; 16]));
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct BuffId(pub u32);
+pub struct BuffTypeId(pub u32);
 
-impl BuffId {
+impl BuffTypeId {
     /// The id of the buff type with GUID `guid`, its 16 bytes as the game
     /// stores them.
     ///
     /// # Examples
     ///
-    /// See [`BuffId`].
+    /// See [`BuffTypeId`].
     #[must_use]
     pub const fn from_guid(guid: [u8; 16]) -> Self {
         Self(crate::content::Guid(guid).id())
@@ -77,11 +77,11 @@ impl BuffId {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::buffs::BuffId;
+    /// use enshwick::buffs::BuffTypeId;
     /// use enshwick::content::Guid;
     ///
-    /// const WARMTH: BuffId = BuffId::named("my-mod:warmth");
-    /// assert_eq!(WARMTH, BuffId::from_guid(Guid::named("my-mod:warmth").0));
+    /// const WARMTH: BuffTypeId = BuffTypeId::named("my-mod:warmth");
+    /// assert_eq!(WARMTH, BuffTypeId::from_guid(Guid::named("my-mod:warmth").0));
     /// ```
     #[must_use]
     pub const fn named(id: &str) -> Self {
@@ -96,7 +96,7 @@ impl BuffId {
 /// See [`BuffType`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[non_exhaustive]
-pub enum BuffKind {
+pub enum BuffSlotType {
     /// A food buff.
     Food,
     /// A buff.
@@ -106,19 +106,19 @@ pub enum BuffKind {
     /// Rested.
     Rested,
     /// A debuff of the ground the entity stands in.
-    Terrain,
+    TerrainDebuff,
     /// A kind this API does not name.
     Other(u16),
 }
 
-impl BuffKind {
+impl BuffSlotType {
     const fn from_slot(slot: u16) -> Self {
         match slot {
             BuffTypeInfo::FOOD => Self::Food,
             BuffTypeInfo::BUFF => Self::Buff,
             BuffTypeInfo::DEBUFF => Self::Debuff,
             BuffTypeInfo::RESTED => Self::Rested,
-            BuffTypeInfo::TERRAIN => Self::Terrain,
+            BuffTypeInfo::TERRAIN => Self::TerrainDebuff,
             other => Self::Other(other),
         }
     }
@@ -129,25 +129,29 @@ impl BuffKind {
 /// # Examples
 ///
 /// ```
-/// use enshwick::buffs::BuffKind;
+/// use enshwick::buffs::BuffSlotType;
 ///
 /// fn food(buffs: &enshwick::buffs::Buffs) -> usize {
-///     buffs.types().iter().filter(|ty| ty.kind == BuffKind::Food).count()
+///     buffs.types().iter().filter(|ty| ty.slot == BuffSlotType::Food).count()
 /// }
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[non_exhaustive]
+#[expect(
+    clippy::struct_field_names,
+    reason = "the fields take the game's names, `buffTypeId` among them"
+)]
 pub struct BuffType {
     /// Its id.
-    pub id: BuffId,
+    pub buff_type_id: BuffTypeId,
     /// Where an entity holds it.
-    pub kind: BuffKind,
+    pub slot: BuffSlotType,
     /// How long it lasts by default, in game time.
-    pub duration: Duration,
+    pub default_life_time: Duration,
     /// Whether the game saves it with a character.
-    pub saved: bool,
+    pub is_saved: bool,
     /// Whether the game shows it nowhere.
-    pub hidden: bool,
+    pub hide_in_ui: bool,
     /// The `LocaTag` of its name, which a client shows.
     pub name: u32,
 }
@@ -159,23 +163,27 @@ pub struct BuffType {
 /// ```
 /// fn longest(buffs: &enshwick::buffs::Buffs, entity: enshwick::ecs::Entity) -> Option<u32> {
 ///     let on = buffs.of(entity).ok()?;
-///     on.iter().max_by_key(|buff| buff.remaining).map(|buff| buff.id.0)
+///     on.iter().max_by_key(|buff| buff.remaining).map(|buff| buff.type_id.0)
 /// }
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[non_exhaustive]
+#[expect(
+    clippy::struct_field_names,
+    reason = "the fields take the game's names, `buffEntityId` among them"
+)]
 pub struct Buff {
     /// Its type.
-    pub id: BuffId,
+    pub type_id: BuffTypeId,
     /// The buff's own entity, which carries its effect.
-    pub entity: Entity,
-    /// Where the entity holds it.
-    pub kind: BuffKind,
+    pub buff_entity_id: Entity,
+    /// Where the entity holds it, its type's slot.
+    pub slot: BuffSlotType,
     /// Its level, when it has one.
     pub level: Option<u32>,
     /// How long it lasts in all, in game time.
-    pub duration: Duration,
-    /// How long it has left, in game time.
+    pub life_time: Duration,
+    /// How long it has left, in game time; the name is enshwick's.
     pub remaining: Duration,
 }
 
@@ -274,11 +282,11 @@ impl Buffs {
             .unwrap_or_default()
             .iter()
             .map(|info| BuffType {
-                id: BuffId(info.id),
-                kind: BuffKind::from_slot(info.slot),
-                duration: nanos(info.duration),
-                saved: info.flags & BuffTypeInfo::SAVED != 0,
-                hidden: info.flags & BuffTypeInfo::HIDDEN != 0,
+                buff_type_id: BuffTypeId(info.id),
+                slot: BuffSlotType::from_slot(info.slot),
+                default_life_time: nanos(info.duration),
+                is_saved: info.flags & BuffTypeInfo::SAVED != 0,
+                hide_in_ui: info.flags & BuffTypeInfo::HIDDEN != 0,
                 name: info.name,
             })
             .collect()
@@ -311,11 +319,11 @@ impl Buffs {
         Ok(list(blank, fill)?
             .iter()
             .map(|buff| Buff {
-                id: BuffId(buff.id),
-                entity: Entity(buff.entity),
-                kind: BuffKind::from_slot(u16::try_from(buff.slot).unwrap_or(u16::MAX)),
+                type_id: BuffTypeId(buff.id),
+                buff_entity_id: Entity(buff.entity),
+                slot: BuffSlotType::from_slot(u16::try_from(buff.slot).unwrap_or(u16::MAX)),
                 level: (buff.level != 0).then_some(buff.level),
-                duration: nanos(buff.duration),
+                life_time: nanos(buff.duration),
                 remaining: nanos(buff.remaining),
             })
             .collect())
@@ -327,16 +335,16 @@ impl Buffs {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::buffs::BuffId;
+    /// use enshwick::buffs::BuffTypeId;
     ///
     /// fn starving(buffs: &enshwick::buffs::Buffs, player: enshwick::ecs::Entity) -> bool {
-    ///     buffs.has(player, BuffId(0x6ad7_cfc4))
+    ///     buffs.has(player, BuffTypeId(0x6ad7_cfc4))
     /// }
     /// ```
     #[must_use]
-    pub fn has(&self, entity: Entity, id: BuffId) -> bool {
+    pub fn has(&self, entity: Entity, id: BuffTypeId) -> bool {
         self.of(entity)
-            .is_ok_and(|on| on.iter().any(|buff| buff.id == id))
+            .is_ok_and(|on| on.iter().any(|buff| buff.type_id == id))
     }
 
     /// Gives `entity` a buff of type `id`, at once, as the game restores a
@@ -355,7 +363,7 @@ impl Buffs {
     /// # Examples
     ///
     /// See the [module](self).
-    pub fn apply(&self, entity: Entity, id: BuffId, how: Apply) -> Result<(), WorldError> {
+    pub fn apply(&self, entity: Entity, id: BuffTypeId, how: Apply) -> Result<(), WorldError> {
         let duration = how.duration.map_or(0, |duration| {
             i64::try_from(duration.as_nanos())
                 .unwrap_or(i64::MAX)
@@ -386,13 +394,13 @@ impl Buffs {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::buffs::BuffId;
+    /// use enshwick::buffs::BuffTypeId;
     ///
-    /// fn cure(buffs: &enshwick::buffs::Buffs, player: enshwick::ecs::Entity, poison: BuffId) -> bool {
+    /// fn cure(buffs: &enshwick::buffs::Buffs, player: enshwick::ecs::Entity, poison: BuffTypeId) -> bool {
     ///     buffs.remove(player, poison).unwrap_or(false)
     /// }
     /// ```
-    pub fn remove(&self, entity: Entity, id: BuffId) -> Result<bool, WorldError> {
+    pub fn remove(&self, entity: Entity, id: BuffTypeId) -> Result<bool, WorldError> {
         let mut removed = 0u8;
         WorldError::check(
             (self.host.api().remove_buff)(self.host.handle(), entity.0, id.0, &raw mut removed),
@@ -445,6 +453,6 @@ mod tests {
     #[test]
     fn a_guid_hashes_as_the_game_hashes_it() {
         // FNV-1a 32 of 16 zero bytes.
-        assert_eq!(BuffId::from_guid([0; 16]), BuffId(0x6969_1905));
+        assert_eq!(BuffTypeId::from_guid([0; 16]), BuffTypeId(0x6969_1905));
     }
 }

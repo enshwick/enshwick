@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use crate::abi::{ItemLine, StatModifierData};
 use crate::stats::{ItemStats, Op, StatKey};
 
-use super::defs::{AffixDef, AffixKey, Rarity};
+use super::defs::{AffixDef, AffixKey, ItemRarity};
 
 /// An affix an item rolled: its key and each modifier's value, in the order
 /// of the affix's ranges.
@@ -37,9 +37,9 @@ pub struct Candidate<'a> {
 /// # Examples
 ///
 /// ```
-/// use enshwick::affixes::{Rarity, RollRules};
+/// use enshwick::affixes::{ItemRarity, RollRules};
 ///
-/// let rules = RollRules::new(1, 3).max_rarity(Rarity::Rare);
+/// let rules = RollRules::new(1, 3).max_rarity(ItemRarity::Rare);
 /// assert_eq!((rules.min, rules.max), (1, 3));
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -50,7 +50,7 @@ pub struct RollRules {
     /// The most affixes.
     pub max: u8,
     /// The rarest an affix may be.
-    pub max_rarity: Rarity,
+    pub max_rarity: ItemRarity,
 }
 
 impl RollRules {
@@ -64,7 +64,7 @@ impl RollRules {
         Self {
             min,
             max,
-            max_rarity: Rarity::Legendary,
+            max_rarity: ItemRarity::Legendary,
         }
     }
 
@@ -74,7 +74,7 @@ impl RollRules {
     ///
     /// See [`RollRules`].
     #[must_use]
-    pub const fn max_rarity(mut self, rarity: Rarity) -> Self {
+    pub const fn max_rarity(mut self, rarity: ItemRarity) -> Self {
         self.max_rarity = rarity;
         self
     }
@@ -91,9 +91,9 @@ impl RollRules {
 /// # Examples
 ///
 /// ```
-/// use enshwick::affixes::{AffixDef, AffixKey, Candidate, Categories, RollRules, roll};
+/// use enshwick::affixes::{AffixDef, AffixKey, Candidate, ItemCategoryMask, RollRules, roll};
 ///
-/// let ring = AffixDef::new("ring", Categories::EQUIPMENT);
+/// let ring = AffixDef::new("ring", ItemCategoryMask::EQUIPMENT);
 /// let pool = [Candidate { key: AffixKey(1), def: &ring }];
 /// // An affix without ranges rolls no values.
 /// let first = roll(&pool, 1, RollRules::new(1, 1), 42);
@@ -156,10 +156,10 @@ pub fn roll(pool: &[Candidate<'_>], category: u8, rules: RollRules, seed: u64) -
 /// # Examples
 ///
 /// ```
-/// use enshwick::affixes::{AffixDef, AffixKey, Candidate, Categories, RollRules, reroll};
+/// use enshwick::affixes::{AffixDef, AffixKey, Candidate, ItemCategoryMask, RollRules, reroll};
 /// use enshwick::stats::ItemStats;
 ///
-/// let ring = AffixDef::new("ring", Categories::EQUIPMENT);
+/// let ring = AffixDef::new("ring", ItemCategoryMask::EQUIPMENT);
 /// let pool = [Candidate { key: AffixKey(1), def: &ring }];
 /// let rolled = reroll(&ItemStats::default(), &pool, 1, RollRules::new(1, 1), 7, true).unwrap();
 /// assert!(rolled.rolled);

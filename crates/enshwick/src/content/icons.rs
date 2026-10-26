@@ -413,8 +413,8 @@ impl Load<'_> {
         // no icons: the item keeps its vanilla one.
         let (Ok(layout), Ok(key), Ok(like)) = (
             ImageLayout::resolve(self),
-            icon.id.key(types::UI_IMAGE),
-            icon.like.key(types::UI_IMAGE),
+            icon.id.key(types::UI_TEXTURE_RESOURCE),
+            icon.like.key(types::UI_TEXTURE_RESOURCE),
         ) else {
             return Ok(());
         };

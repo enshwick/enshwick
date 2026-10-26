@@ -7,7 +7,7 @@ mod tests {
 
     use enshwick::abi::{ChunkData, Header, Status, WeatherFront};
     use enshwick::events::ChunkLoaded;
-    use enshwick::weather::{Forecast, FrontKind, Weather, WeatherState};
+    use enshwick::weather::{Forecast, Weather, WeatherPhenomenonEffect, WeatherState};
     use enshwick::world::WorldError;
     use enshwick::{Load, Mod, Off};
 
@@ -57,7 +57,7 @@ mod tests {
         );
         let fronts = weather.fronts();
         assert_eq!(fronts.len(), 1);
-        assert_eq!(fronts[0].kind, FrontKind::Blizzard);
+        assert_eq!(fronts[0].kind, WeatherPhenomenonEffect::Blizzard);
         assert!(
             (fronts[0].position[0] - 5.0).abs() < 1e-9
                 && (fronts[0].position[2] + 7.0).abs() < 1e-9

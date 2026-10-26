@@ -7,7 +7,7 @@ mod tests {
     use std::time::Duration;
 
     use enshwick::abi::{BuffTypeInfo, Header, Status};
-    use enshwick::buffs::{Apply, BuffId, BuffKind, Buffs};
+    use enshwick::buffs::{Apply, BuffSlotType, BuffTypeId, Buffs};
     use enshwick::ecs::Entity;
     use enshwick::world::WorldError;
     use enshwick::{Load, Mod, Off};
@@ -48,12 +48,12 @@ mod tests {
         loader.set_buffs(&[swift], &[2]);
         let types = buffs.types();
         assert_eq!(types.len(), 1);
-        assert_eq!(types[0].kind, BuffKind::Buff);
-        assert!(types[0].saved && !types[0].hidden);
-        assert_eq!(types[0].duration, Duration::from_mins(1));
+        assert_eq!(types[0].slot, BuffSlotType::Buff);
+        assert!(types[0].is_saved && !types[0].hide_in_ui);
+        assert_eq!(types[0].default_life_time, Duration::from_mins(1));
 
         let player = Entity(2);
-        buffs.apply(player, BuffId(7), Apply::new()).unwrap();
+        buffs.apply(player, BuffTypeId(7), Apply::new()).unwrap();
         let on = buffs.of(player).unwrap();
         assert_eq!(on.len(), 1);
         assert_eq!(on[0].remaining, Duration::from_mins(1), "the type's own");
@@ -61,27 +61,27 @@ mod tests {
         buffs
             .apply(
                 player,
-                BuffId(7),
+                BuffTypeId(7),
                 Apply::new().lasting(Duration::from_mins(5)),
             )
             .unwrap();
         let on = buffs.of(player).unwrap();
         assert_eq!(on.len(), 1, "renewed, not doubled");
-        assert_eq!(on[0].duration, Duration::from_mins(5));
-        assert!(buffs.has(player, BuffId(7)));
+        assert_eq!(on[0].life_time, Duration::from_mins(5));
+        assert!(buffs.has(player, BuffTypeId(7)));
 
         assert_eq!(
-            buffs.apply(player, BuffId(8), Apply::new()),
+            buffs.apply(player, BuffTypeId(8), Apply::new()),
             Err(WorldError::Refused),
             "unknown type"
         );
         assert_eq!(
-            buffs.apply(Entity(3), BuffId(7), Apply::new()),
+            buffs.apply(Entity(3), BuffTypeId(7), Apply::new()),
             Err(WorldError::Lacks)
         );
 
-        assert_eq!(buffs.remove(player, BuffId(7)), Ok(true));
-        assert_eq!(buffs.remove(player, BuffId(7)), Ok(false));
-        assert!(!buffs.has(player, BuffId(7)));
+        assert_eq!(buffs.remove(player, BuffTypeId(7)), Ok(true));
+        assert_eq!(buffs.remove(player, BuffTypeId(7)), Ok(false));
+        assert!(!buffs.has(player, BuffTypeId(7)));
     }
 }

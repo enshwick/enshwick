@@ -4,7 +4,7 @@
 #[cfg(test)]
 mod tests {
     use enshwick::abi::{DamageCheck, Header, Status};
-    use enshwick::damage::{DamageCause, DamageType};
+    use enshwick::damage::{DamageCause, DamageTypeNew};
     use enshwick::{Load, Mod, Off};
 
     struct Soft;
@@ -20,9 +20,9 @@ mod tests {
                 DamageCause::ShroudDeath => damage.cancel(),
                 DamageCause::Hit if damage.source() == Some(damage.target()) => damage.cancel(),
                 DamageCause::Hit => {
-                    damage.scale_type(DamageType::Fire, 2.0);
-                    let cut = damage.amount(DamageType::Cut);
-                    damage.set(DamageType::Cut, cut.min(10.0));
+                    damage.scale_type(DamageTypeNew::MagicalFire, 2.0);
+                    let cut = damage.amount(DamageTypeNew::PhysicalCut);
+                    damage.set(DamageTypeNew::PhysicalCut, cut.min(10.0));
                 }
                 _ => {}
             })?;

@@ -35,7 +35,7 @@
 
 use crate::content::Guid;
 use crate::content::icons::{Icon, Pixels};
-use crate::content::items::{Meter, NewItem, Stat};
+use crate::content::items::{FuelSetup, ImpactUiValue, NewItem};
 use crate::content::recipes::NewRecipe;
 use crate::content::workshops::{NewWorkshop, StationRecipe, WorkshopId};
 use crate::{Load, Off};
@@ -134,18 +134,18 @@ impl Load<'_> {
             let mut stats = Vec::new();
             for (label, value, format) in &item.stats {
                 let label = tag(self, &Some(label.clone()))?.unwrap_or(Guid([0; 16]));
-                stats.push(Stat {
-                    label,
+                stats.push(ImpactUiValue {
+                    loca_id: label,
                     value: *value,
-                    format: *format,
+                    value_format: *format,
                 });
             }
             let meter = item
                 .meter
-                .map(|(max, start)| -> Result<Meter, Off> {
-                    Ok(Meter {
+                .map(|(max, start)| -> Result<FuelSetup, Off> {
+                    Ok(FuelSetup {
                         template: id(&format!("{}.meter", item.id))?,
-                        max,
+                        max_fuel_charges: max,
                         start,
                     })
                 })

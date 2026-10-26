@@ -31,7 +31,7 @@ use enshwick::abi::{
     AffixDefData, AffixRoll, Event, Header, ItemLine, PlayerData, PlayerInfo, StatChange,
     StatChangeFn, StatDefData, StatModifierData, StatModify, StatRef, StatSource, Status, Str,
 };
-use enshwick::affixes::{AffixDef, AffixKey, Candidate, Rarity, RollRules, lines_of, reroll};
+use enshwick::affixes::{AffixDef, AffixKey, Candidate, ItemRarity, RollRules, lines_of, reroll};
 use enshwick::stats::{ItemStats, Op, Stat, StatDef, aggregate, builtin, key_of};
 use rustc_hash::{FxHashMap, FxHashSet};
 
@@ -350,7 +350,7 @@ pub(crate) fn roll(loader: &Loader, roll: &AffixRoll) -> Result<u32, Status> {
         .and_then(|bytes| postcard::from_bytes::<ItemStats>(&bytes).ok())
         .unwrap_or_default();
     let rules = RollRules::new(roll.min, roll.max)
-        .max_rarity(Rarity::from_raw(roll.max_rarity).unwrap_or(Rarity::Legendary));
+        .max_rarity(ItemRarity::from_raw(roll.max_rarity).unwrap_or(ItemRarity::Legendary));
     let once = roll.flags & AffixRoll::ONCE != 0;
     let next =
         reroll(&current, &pool(sealed), category, rules, roll.seed, once).ok_or(Status::REFUSED)?;

@@ -46,15 +46,15 @@ holds what one container is and holds, read in one go:
 | --- | --- |
 | `entity` | The container. |
 | `position` | Where it stands, in metres; y is up. |
-| `empty` | Whether it holds nothing, as the game last recorded. |
+| `is_empty` | Whether it holds nothing, as the game last recorded. |
 | `expires` | Whether it despawns on its own after a while (`LifeTime`). |
 | `area_loot` | Its `AreaLootOverride`: `Some(true)` when area loot may take it, `Some(false)` when excluded (items a player dropped), `None` without one. |
-| `offer` | Its interaction offer, an [`Offer`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/loot.rs); `None` without one. |
+| `offer` | Its interaction offer, an [`InteractionOfferRuntime`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/loot.rs); `None` without one. |
 
-An `Offer` names who last opened or looted the container (`guest`,
-`None` before anyone did), when (`accepted_at`, in the game's
-nanoseconds, changing with each interaction) and whether the game offers no
-interaction now (`disabled`).
+An `InteractionOfferRuntime` names who last opened or looted the container
+(`guest_id`, `None` before anyone did), when (`last_accept_time`, in the
+game's nanoseconds, changing with each interaction) and whether the game
+offers no interaction now (`is_disabled`).
 
 Two methods sort containers:
 
@@ -73,7 +73,7 @@ From inside any hooked system, with its context:
   gone;
 - `position(ctx, entity)` gives any entity's position in metres;
 - `is_player(ctx, entity)` tells whether an entity is a player character,
-  such as an offer's `guest`.
+  such as an offer's `guest_id`.
 
 [`near(center, at, radius, height)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/world/geometry.rs)
 tells whether `at` lies within `radius` metres of `center` across the
@@ -112,7 +112,7 @@ one such mod's
    panic in its own pass and turns itself off, so the game keeps running
    vanilla.
 3. A tracker remembers each container's state between steps. A container
-   that went empty after a player's interaction (the offer's `guest`, checked
+   that went empty after a player's interaction (the offer's `guest_id`, checked
    with `is_player`) starts a take.
 4. It gathers the containers around that are `is_open()` and `near` within
    the configured radius and height, and leaves out any that another player

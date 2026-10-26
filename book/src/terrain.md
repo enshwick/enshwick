@@ -17,7 +17,7 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let actions = load.actions(enshwick::i18n::Texts::default())?;
     actions.add(Action::new("level", "Flatten the ground around you").admins(), move |request| {
         let here = world.position(request.player.entity);
-        let (Some(here), Some(fill)) = (here, terrain.materials().first().map(|m| m.id)) else {
+        let (Some(here), Some(fill)) = (here, terrain.materials().first().map(|m| m.terrain_material)) else {
             return Outcome::refused("You are nowhere");
         };
         Outcome::done(format!("{:?}", terrain.flatten(here, 6.0, fill, Shape::Round)))

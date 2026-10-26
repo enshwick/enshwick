@@ -73,7 +73,7 @@ Both return a
 | --- | --- |
 | `slots(root)` | Every slot of the inventory `root`, virtual links followed, empty slots included, in the game's order; empty when `root` has no inventory. |
 | `count(root, item)` | How many of item id `item` the inventory holds. |
-| `slot(slot_ref)` | What one slot holds, with `Category::UNKNOWN`. |
+| `slot(slot_ref)` | What one slot holds, with `InventoryCategory::INVALID`. |
 | `root(slot_ref)` | The inventory a slot belongs to at the root, the chest or player; `None` when its sub-inventory has no owner. |
 | `durability(pide)` | An item entity's durability as clients see it: a `Bar` with `current` and `max`; `None` for an item without durability. |
 | `meter(pide)` | An item entity's [meter](content/items.md#meters), a `Bar`; `None` for an item without one. |
@@ -88,7 +88,7 @@ Item ids are [`Guid::id`](content/items.md#guids-and-item-ids) of the
 item's GUID.
 
 [`item_info(item)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/inventory.rs)
-gives an item's static data from any thread: `max_stack`, and flags with
+gives an item's static data from any thread: `max_stack_size`, and flags with
 `has_pide()`, `is_container()` and `is_blueprint()`. It returns `None` for
 an unknown item, and before the game first ran its inventory system, which
 needs a player online.

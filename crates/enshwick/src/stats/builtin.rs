@@ -169,7 +169,7 @@ pub const ALL: [(&str, Def); 21] = [
 /// assert_eq!(builtin::BY_DAMAGE_TYPE[3], Some((builtin::DAMAGE_FIRE, builtin::RESISTANCE_FIRE)));
 /// assert_eq!(builtin::BY_DAMAGE_TYPE[7], None);
 /// ```
-pub const BY_DAMAGE_TYPE: [Option<(&str, &str)>; crate::damage::DamageType::ALL.len()] = [
+pub const BY_DAMAGE_TYPE: [Option<(&str, &str)>; crate::damage::DamageTypeNew::ALL.len()] = [
     Some((DAMAGE_CUT, RESISTANCE_CUT)),
     Some((DAMAGE_PIERCE, RESISTANCE_PIERCE)),
     Some((DAMAGE_BLUNT, RESISTANCE_BLUNT)),

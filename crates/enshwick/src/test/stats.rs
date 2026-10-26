@@ -8,7 +8,7 @@ use crate::abi::{
     AffixDefData, AffixRoll, Header, ItemLine, ModHandle, StatChange, StatChangeFn, StatDefData,
     StatModifierData, StatModify, StatRef, StatSource, Status, Str,
 };
-use crate::affixes::{AffixDef, AffixKey, Candidate, Rarity, RollRules, lines_of, reroll};
+use crate::affixes::{AffixDef, AffixKey, Candidate, ItemRarity, RollRules, lines_of, reroll};
 use crate::item_data::ItemInstance;
 use crate::stats::{ItemStats, Op, Stat, StatDef, StatKey, aggregate, builtin, key_of};
 
@@ -525,7 +525,7 @@ pub(crate) extern "system" fn affix_roll(
     let next = with(Err(Status::MISSING), |s| {
         let category = s.host.items.get(&roll.item).map_or(0, |i| i.category);
         let rules = RollRules::new(roll.min, roll.max)
-            .max_rarity(Rarity::from_raw(roll.max_rarity).unwrap_or(Rarity::Legendary));
+            .max_rarity(ItemRarity::from_raw(roll.max_rarity).unwrap_or(ItemRarity::Legendary));
         let current = record(s, item);
         let once = roll.flags & AffixRoll::ONCE != 0;
         reroll(

@@ -22,7 +22,9 @@ mod tests {
 
         fn init(_load: &mut Load<'_>) -> Result<Self, Off> {
             let item = CHEST.key(types::ITEM_INFO)?;
-            let image = CHEST.key(types::UI_IMAGE).map_err(|off| off.to_string());
+            let image = CHEST
+                .key(types::UI_TEXTURE_RESOURCE)
+                .map_err(|off| off.to_string());
             let _first = KEYS.set((item, image));
             Ok(Self)
         }
@@ -41,6 +43,9 @@ mod tests {
         let (item, image) = KEYS.get().unwrap();
         assert_eq!(*item, CHEST.key_by_hash(0x1234));
         let missing = image.as_ref().unwrap_err();
-        assert!(missing.contains(types::UI_IMAGE.id()), "{missing}");
+        assert!(
+            missing.contains(types::UI_TEXTURE_RESOURCE.id()),
+            "{missing}"
+        );
     }
 }

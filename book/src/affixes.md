@@ -9,7 +9,7 @@ gets the modifiers. The
 module holds the API.
 
 ```rust
-use enshwick::affixes::{AffixCraft, AffixDef, AffixLoot, Categories, Range, Rarity, RollRules};
+use enshwick::affixes::{AffixCraft, AffixDef, AffixLoot, ItemCategoryMask, Range, ItemRarity, RollRules};
 use enshwick::loot::Source;
 use enshwick::stats::{Op, builtin};
 
@@ -18,14 +18,14 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let fire = load.open_stat(builtin::RESISTANCE_FIRE)?;
     load.define_affix(
         "sturdy",
-        &AffixDef::new("affix.sturdy", Categories::EQUIPMENT)
+        &AffixDef::new("affix.sturdy", ItemCategoryMask::EQUIPMENT)
             .with(Range::new(health, Op::Add, 10.0, 30.0).step(1.0)),
     )?;
     load.define_affix(
         "fireproof",
-        &AffixDef::new("affix.fireproof", Categories::EQUIPMENT)
+        &AffixDef::new("affix.fireproof", ItemCategoryMask::EQUIPMENT)
             .with(Range::new(fire, Op::Add, 0.05, 0.2).step(0.01))
-            .rarity(Rarity::Rare)
+            .rarity(ItemRarity::Rare)
             .weight(20)
             .group("element"),
     )?;

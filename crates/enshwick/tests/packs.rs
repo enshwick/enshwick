@@ -46,8 +46,8 @@ mod tests {
     fn host() -> FakeHost {
         let mut host = FakeHost::new()
             .type_hash(types::ITEM_INFO.id(), ITEM)
-            .type_hash(types::ITEM_REGISTRY.id(), 2)
-            .type_hash(types::RECIPE_REGISTRY.id(), RECIPES)
+            .type_hash(types::ITEM_REGISTRY_RESOURCE.id(), 2)
+            .type_hash(types::RECIPE_REGISTRY_RESOURCE.id(), RECIPES)
             .type_size("item_stat", 0x28)
             .type_size("recipe", 0xa8)
             .type_size("recipe_ingredient", 0x18)
@@ -132,11 +132,15 @@ mod tests {
             loader.changes(),
             [
                 (
-                    Change::new(Guid::parse(CHEST), Field::MaxStack, Value::Set(50.0)),
+                    Change::new(Guid::parse(CHEST), Field::MaxStackSize, Value::Set(50.0)),
                     "items.toml:6".to_owned()
                 ),
                 (
-                    Change::new(Guid::parse(RECIPE), Field::Time, Value::Set(0.0)),
+                    Change::new(
+                        Guid::parse(RECIPE),
+                        Field::CraftingDuration,
+                        Value::Set(0.0)
+                    ),
                     "recipes.toml:7".to_owned()
                 ),
                 (
