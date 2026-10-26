@@ -11,7 +11,7 @@
 pub const ABI_MAJOR: u16 = 2;
 
 /// The minor version of this interface. A newer minor only appends fields.
-pub const ABI_MINOR: u16 = 86;
+pub const ABI_MINOR: u16 = 87;
 
 /// Whether `id` is a valid mod id: `<author>.<name>`, each part of
 /// `[a-z0-9-]`, at most 64 characters in all.
@@ -473,8 +473,8 @@ impl Status {
     /// built before minor 84 reads it as an unknown failure. Since minor 84.
     pub const NOT_LOADED: Self = Self(8);
     /// The box asked about leaves the world: past its edge across, or above
-    /// the height the loader takes. A mod built before minor 86 reads it as
-    /// an unknown failure. Since minor 86.
+    /// the height the loader takes. A mod built before minor 87 reads it as
+    /// an unknown failure. Since minor 87.
     pub const OUTSIDE_WORLD: Self = Self(9);
 
     /// Whether this is [`Status::OK`].
@@ -688,10 +688,12 @@ const _: () = {
     assert!(size_of::<StatModify>() == 8 + 8 + 12 + 4 + 8);
     assert!(size_of::<StatChange>() == 8 + 24);
     assert!(core::mem::offset_of!(HostApi, language) == 24 + 127 * 8);
-    assert!(size_of::<HostApi>() == 24 + 160 * 8);
+    assert!(size_of::<HostApi>() == 24 + 161 * 8);
+    assert!(core::mem::offset_of!(HostApi, build_rights) == 24 + 157 * 8);
+    assert!(size_of::<BuildRights>() == 8 + 8 + 48);
     assert!(core::mem::offset_of!(HostApi, voxel_read) == 24 + 154 * 8);
-    assert!(core::mem::offset_of!(HostApi, transaction_commit) == 24 + 157 * 8);
-    assert!(core::mem::offset_of!(HostApi, transaction_status) == 24 + 159 * 8);
+    assert!(core::mem::offset_of!(HostApi, transaction_commit) == 24 + 158 * 8);
+    assert!(core::mem::offset_of!(HostApi, transaction_status) == 24 + 160 * 8);
     // Frozen: read as an array.
     assert!(size_of::<TransactionOp>() == 16);
     assert!(size_of::<TransactionInfo>() == 8 + 16 + 8);
