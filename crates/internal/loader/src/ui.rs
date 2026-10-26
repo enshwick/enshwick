@@ -22,7 +22,7 @@ use std::sync::{Mutex, OnceLock, PoisonError};
 
 use arc_swap::ArcSwapOption;
 
-use enshwick_loader_api::abi::{
+use enshwick::abi::{
     HookFlags, Side, Status, Str, UiAnswerFn, UiDialog, UiFrame, UiFrameFn, UiWidget,
 };
 
@@ -563,7 +563,7 @@ fn hud(engine: &Engine, context: usize) {
             hud: true,
         }));
         let frame = UiFrame {
-            header: enshwick_loader_api::abi::Header::of::<UiFrame>(),
+            header: enshwick::abi::Header::of::<UiFrame>(),
             token,
             screen: UiFrame::IN_GAME,
             reserved: 0,
@@ -685,7 +685,7 @@ fn frames(engine: &Engine, context: usize) {
             hud: false,
         }));
         let frame = UiFrame {
-            header: enshwick_loader_api::abi::Header::of::<UiFrame>(),
+            header: enshwick::abi::Header::of::<UiFrame>(),
             token,
             screen,
             reserved: 0,
@@ -802,7 +802,7 @@ impl<'a> Painter<'a> {
         index: u32,
         read_only: bool,
     ) -> Option<u32> {
-        let mut texts = [UiText::EMPTY; enshwick_loader_api::ui::MAX_OPTIONS];
+        let mut texts = [UiText::EMPTY; enshwick::ui::MAX_OPTIONS];
         for (slot, option) in texts.iter_mut().zip(options) {
             *slot = copy(&[option]);
         }
@@ -945,13 +945,13 @@ fn row(
             }
         }
         _ => {
-            let count = (raw.option_count as usize).min(enshwick_loader_api::ui::MAX_OPTIONS);
+            let count = (raw.option_count as usize).min(enshwick::ui::MAX_OPTIONS);
             if raw.options.is_null() || count == 0 {
                 return Status::BAD_ARGS;
             }
             // SAFETY: the mod passes `option_count` texts, valid for the call.
             let given = unsafe { core::slice::from_raw_parts(raw.options, count) };
-            let mut options = [UiText::EMPTY; enshwick_loader_api::ui::MAX_OPTIONS];
+            let mut options = [UiText::EMPTY; enshwick::ui::MAX_OPTIONS];
             for (slot, option) in options.iter_mut().zip(given) {
                 *slot = read(*option).map_or(UiText::EMPTY, |bytes| copy(&[bytes]));
             }

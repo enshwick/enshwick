@@ -13,7 +13,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::JoinHandle;
 use std::time::Duration;
 
-use enshwick_loader_api::{Host, Load, Mod, Off, events};
+use enshwick::{Host, Load, Mod, Off, events};
 
 /// What this copy of the mod says; change it to see a reload.
 pub const GREETING: &str = "hello from the first copy";
@@ -29,17 +29,17 @@ pub struct HotReload {
 }
 
 impl Mod for HotReload {
-    fn manifest() -> &'static enshwick_loader_api::abi::Manifest {
-        enshwick_loader_api::manifest!(id: "hot-reload", side: SERVER, reload: true)
+    fn manifest() -> &'static enshwick::abi::Manifest {
+        enshwick::manifest!(id: "hot-reload", side: SERVER, reload: true)
     }
 
     fn init(load: &mut Load<'_>) -> Result<Self, Off> {
-        load.on::<events::WorldSaved>(|()| enshwick_loader_api::info!("saved: {GREETING}"))?;
+        load.on::<events::WorldSaved>(|()| enshwick::info!("saved: {GREETING}"))?;
         Ok(Self::default())
     }
 
     fn ready(&'static self, _host: Host) {
-        enshwick_loader_api::info!("{GREETING}");
+        enshwick::info!("{GREETING}");
         let ticker = std::thread::Builder::new()
             .name("hot-reload-ticker".into())
             .spawn(move || {
@@ -49,7 +49,7 @@ impl Mod for HotReload {
                     waited += Duration::from_millis(100);
                     if waited >= TICK {
                         waited = Duration::ZERO;
-                        enshwick_loader_api::info!("tick: {GREETING}");
+                        enshwick::info!("tick: {GREETING}");
                     }
                 }
             });
@@ -64,18 +64,18 @@ impl Mod for HotReload {
         if let Some(ticker) = ticker
             && ticker.join().is_err()
         {
-            enshwick_loader_api::warn!("the ticker panicked");
+            enshwick::warn!("the ticker panicked");
         }
-        enshwick_loader_api::info!("shut down: {GREETING}");
+        enshwick::info!("shut down: {GREETING}");
     }
 }
 
-enshwick_loader_api::declare_mod!(HotReload);
+enshwick::declare_mod!(HotReload);
 
 #[cfg(test)]
 mod tests {
-    use enshwick_loader_api::abi::{ManifestFlags, Status};
-    use enshwick_loader_api::test::FakeHost;
+    use enshwick::abi::{ManifestFlags, Status};
+    use enshwick::test::FakeHost;
 
     use super::*;
 

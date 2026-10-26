@@ -6,11 +6,11 @@
 use std::ops::ControlFlow;
 use std::time::Duration;
 
-use enshwick_loader_api::ecs::Entity;
-use enshwick_loader_api::events::{PlayerJoined, WorldLoaded};
-use enshwick_loader_api::inventory::{Fill, Inventories};
-use enshwick_loader_api::world::World;
-use enshwick_loader_api::{Load, Off};
+use enshwick::ecs::Entity;
+use enshwick::events::{PlayerJoined, WorldLoaded};
+use enshwick::inventory::{Fill, Inventories};
+use enshwick::world::World;
+use enshwick::{Load, Off};
 
 /// How often containers are looked through for old staffs.
 const SWEEP: Duration = Duration::from_secs(60);
@@ -18,22 +18,19 @@ const SWEEP: Duration = Duration::from_secs(60);
 /// Renews the old copy staffs in `root`; logs what it asked for.
 fn renew(inventories: &Inventories, root: Entity, staffs: &[u32]) {
     let asked = inventories.renew(root, staffs, Fill::FULL, move |outcome| {
-        enshwick_loader_api::info!(
+        enshwick::info!(
             "old copy staffs in {} renewed with full charges: {:?}",
             root.0,
             outcome.done
         );
     });
     if asked.is_some() {
-        enshwick_loader_api::debug!("old copy staffs in {}: renewal asked", root.0);
+        enshwick::debug!("old copy staffs in {}: renewal asked", root.0);
     }
 }
 
 /// Every player and container of the world.
-fn holders(
-    world: &World,
-    containers: Option<enshwick_loader_api::world::ComponentType>,
-) -> Vec<Entity> {
+fn holders(world: &World, containers: Option<enshwick::world::ComponentType>) -> Vec<Entity> {
     let mut roots: Vec<Entity> = world.players().iter().map(|p| p.entity).collect();
     if let Some(ty) = containers {
         roots.extend(world.entities(ty).iter().map(|placed| placed.entity));

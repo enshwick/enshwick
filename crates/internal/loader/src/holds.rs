@@ -1,5 +1,5 @@
 //! Holds on the game: a mod that keeps a world the vanilla game cannot open
-//! safely sets one (`enshwick_loader_api::state::Hold`), and the loader stops the
+//! safely sets one (`enshwick::state::Hold`), and the loader stops the
 //! game before the world loads when that mod would not run.
 
 /// How long the log gets to write the reasons before the game stops.
@@ -26,11 +26,7 @@ pub fn unmet(
 /// Stops the game when a hold under `data_dir` is unmet; see [`unmet`].
 #[cfg(windows)]
 pub(crate) fn enforce(data_dir: &std::path::Path, running: &[&str], unknown_build: bool) {
-    let held = unmet(
-        enshwick_loader_api::state::holds(data_dir),
-        running,
-        unknown_build,
-    );
+    let held = unmet(enshwick::state::holds(data_dir), running, unknown_build);
     if held.is_empty() {
         return;
     }
@@ -45,7 +41,7 @@ pub(crate) fn enforce(data_dir: &std::path::Path, running: &[&str], unknown_buil
             "{id} holds this game ({reason}) and {why}: the game stops before the world loads; \
              update Enshwick and the mod, or delete mod-data/{id}/{} to open the world anyway, \
              at your own risk",
-            enshwick_loader_api::state::HOLD_FILE
+            enshwick::state::HOLD_FILE
         );
     }
     std::thread::sleep(LOG_GRACE);

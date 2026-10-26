@@ -64,13 +64,12 @@ checksum = "72f5acc6cb2ba439de613abc23857ec3d78374d8ed5ac84e9d11336e87da8649"
 
 [[package]]
 name = "cargo-enshwick"
-version = "0.0.0-dev"
+version = "1.0.0-alpha.1"
 dependencies = [
  "clap",
- "enshwick-loader",
- "enshwick-loader-api",
- "enshwick-loader-builds",
- "enshwick-loader-reflect",
+ "enshwick",
+ "enshwick-gamedata",
+ "enshwick-reflect",
  "iced-x86",
  "memchr",
  "semver",
@@ -219,142 +218,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "edd0f118536f44f5ccd48bcb8b111bdc3de888b58c74639dfb034a357d0f206d"
 
 [[package]]
-name = "enshwick-admin-tools"
-version = "0.0.0-dev"
-dependencies = [
- "enshwick-loader-api",
- "serde",
- "toml",
-]
-
-[[package]]
-name = "enshwick-area-loot"
-version = "0.0.0-dev"
-dependencies = [
- "enshwick-loader-api",
- "serde",
- "toml",
-]
-
-[[package]]
-name = "enshwick-build-camera"
-version = "0.0.0-dev"
-dependencies = [
- "enshwick-loader-api",
- "serde",
- "toml",
-]
-
-[[package]]
-name = "enshwick-building-materials"
-version = "0.0.0-dev"
-dependencies = [
- "enshwick-loader-api",
- "serde",
- "toml",
-]
-
-[[package]]
-name = "enshwick-example-hot-reload"
-version = "0.0.0-dev"
-dependencies = [
- "enshwick-loader-api",
-]
-
-[[package]]
-name = "enshwick-example-market-stalls"
-version = "0.0.0-dev"
-dependencies = [
- "enshwick-example-trading-post-api",
- "enshwick-loader-api",
-]
-
-[[package]]
-name = "enshwick-example-safe-viewers"
-version = "0.0.0-dev"
-dependencies = [
- "arc-swap",
- "enshwick-loader-api",
- "serde",
-]
-
-[[package]]
-name = "enshwick-example-trading-post"
-version = "0.0.0-dev"
-dependencies = [
- "enshwick-example-trading-post-api",
- "enshwick-loader-api",
-]
-
-[[package]]
-name = "enshwick-example-trading-post-api"
-version = "0.0.0-dev"
-dependencies = [
- "enshwick-loader-api",
-]
-
-[[package]]
-name = "enshwick-flame-altar-count"
-version = "0.0.0-dev"
-dependencies = [
- "arc-swap",
- "enshwick-loader-api",
- "serde",
- "toml",
-]
-
-[[package]]
-name = "enshwick-flame-altar-zones"
-version = "0.0.0-dev"
-dependencies = [
- "arrayvec",
- "enshwick-loader-api",
- "proptest",
- "serde",
- "thiserror",
- "toml",
-]
-
-[[package]]
-name = "enshwick-furniture-comfort"
-version = "0.0.0-dev"
-dependencies = [
- "enshwick-loader-api",
- "serde",
- "toml",
-]
-
-[[package]]
-name = "enshwick-loader"
-version = "0.0.0-dev"
-dependencies = [
- "arc-swap",
- "arrayvec",
- "base64",
- "enshwick-loader-api",
- "enshwick-loader-builds",
- "enshwick-loader-reflect",
- "iced-x86",
- "postcard",
- "rustc-hash",
- "ruzstd",
- "semver",
- "serde",
- "sha2",
- "strsim",
- "thiserror",
- "toml",
- "toml_edit",
- "windows-sys",
-]
-
-[[package]]
-name = "enshwick-loader-api"
-version = "0.0.0-dev"
+name = "enshwick"
+version = "1.0.0-alpha.1"
 dependencies = [
  "bcdec_rs",
  "const-sha1",
- "enshwick-loader-macros",
+ "enshwick-macros",
  "fastrand",
  "memchr",
  "postcard",
@@ -369,19 +238,171 @@ dependencies = [
 ]
 
 [[package]]
-name = "enshwick-loader-builds"
+name = "enshwick-admin-tools"
 version = "0.0.0-dev"
 dependencies = [
- "enshwick-loader-api",
- "enshwick-loader-reflect",
+ "enshwick",
+ "serde",
+ "toml",
+]
+
+[[package]]
+name = "enshwick-area-loot"
+version = "0.0.0-dev"
+dependencies = [
+ "enshwick",
+ "serde",
+ "toml",
+]
+
+[[package]]
+name = "enshwick-build-camera"
+version = "0.0.0-dev"
+dependencies = [
+ "enshwick",
+ "serde",
+ "toml",
+]
+
+[[package]]
+name = "enshwick-building-materials"
+version = "0.0.0-dev"
+dependencies = [
+ "enshwick",
+ "serde",
+ "toml",
+]
+
+[[package]]
+name = "enshwick-compat"
+version = "0.0.0"
+dependencies = [
+ "clap",
+ "enshwick",
+ "enshwick-gamedata",
+ "enshwick-loader",
+ "enshwick-reflect",
+ "memchr",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "enshwick-example-hot-reload"
+version = "0.0.0-dev"
+dependencies = [
+ "enshwick",
+]
+
+[[package]]
+name = "enshwick-example-market-stalls"
+version = "0.0.0-dev"
+dependencies = [
+ "enshwick",
+ "enshwick-example-trading-post-api",
+]
+
+[[package]]
+name = "enshwick-example-safe-viewers"
+version = "0.0.0-dev"
+dependencies = [
+ "arc-swap",
+ "enshwick",
+ "serde",
+]
+
+[[package]]
+name = "enshwick-example-trading-post"
+version = "0.0.0-dev"
+dependencies = [
+ "enshwick",
+ "enshwick-example-trading-post-api",
+]
+
+[[package]]
+name = "enshwick-example-trading-post-api"
+version = "0.0.0-dev"
+dependencies = [
+ "enshwick",
+]
+
+[[package]]
+name = "enshwick-flame-altar-count"
+version = "0.0.0-dev"
+dependencies = [
+ "arc-swap",
+ "enshwick",
+ "serde",
+ "toml",
+]
+
+[[package]]
+name = "enshwick-flame-altar-zones"
+version = "0.0.0-dev"
+dependencies = [
+ "arrayvec",
+ "enshwick",
+ "proptest",
  "serde",
  "thiserror",
  "toml",
 ]
 
 [[package]]
-name = "enshwick-loader-macros"
+name = "enshwick-furniture-comfort"
 version = "0.0.0-dev"
+dependencies = [
+ "enshwick",
+ "serde",
+ "toml",
+]
+
+[[package]]
+name = "enshwick-gamedata"
+version = "1.0.0-alpha.1"
+dependencies = [
+ "enshwick",
+ "enshwick-reflect",
+ "rustc-hash",
+ "ruzstd",
+ "serde",
+ "thiserror",
+ "toml",
+]
+
+[[package]]
+name = "enshwick-loader"
+version = "1.0.0-alpha.1"
+dependencies = [
+ "arc-swap",
+ "arrayvec",
+ "base64",
+ "enshwick",
+ "enshwick-gamedata",
+ "enshwick-reflect",
+ "iced-x86",
+ "postcard",
+ "rustc-hash",
+ "semver",
+ "serde",
+ "sha2",
+ "strsim",
+ "thiserror",
+ "toml",
+ "toml_edit",
+ "windows-sys",
+]
+
+[[package]]
+name = "enshwick-loader-stub"
+version = "1.0.0-alpha.1"
+dependencies = [
+ "windows-sys",
+]
+
+[[package]]
+name = "enshwick-macros"
+version = "1.0.0-alpha.1"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -389,25 +410,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "enshwick-loader-reflect"
-version = "0.0.0-dev"
-dependencies = [
- "rustc-hash",
- "thiserror",
-]
-
-[[package]]
-name = "enshwick-loader-stub"
-version = "0.0.0-dev"
-dependencies = [
- "windows-sys",
-]
-
-[[package]]
 name = "enshwick-optimizer"
 version = "0.0.0-dev"
 dependencies = [
- "enshwick-loader-api",
+ "enshwick",
  "serde",
  "toml",
  "windows-sys",
@@ -417,16 +423,24 @@ dependencies = [
 name = "enshwick-probe"
 version = "0.0.0-dev"
 dependencies = [
- "enshwick-loader-api",
+ "enshwick",
  "serde",
+]
+
+[[package]]
+name = "enshwick-reflect"
+version = "1.0.0-alpha.1"
+dependencies = [
+ "rustc-hash",
+ "thiserror",
 ]
 
 [[package]]
 name = "enshwick-research"
 version = "0.0.0-dev"
 dependencies = [
- "enshwick-loader-api",
- "enshwick-loader-reflect",
+ "enshwick",
+ "enshwick-reflect",
  "rustc-hash",
  "serde",
  "windows-sys",
@@ -437,7 +451,7 @@ name = "enshwick-safes"
 version = "0.0.0-dev"
 dependencies = [
  "arc-swap",
- "enshwick-loader-api",
+ "enshwick",
  "serde",
  "toml",
 ]
@@ -446,7 +460,7 @@ dependencies = [
 name = "enshwick-shared-experience"
 version = "0.0.0-dev"
 dependencies = [
- "enshwick-loader-api",
+ "enshwick",
  "serde",
  "toml",
 ]
@@ -455,7 +469,7 @@ dependencies = [
 name = "enshwick-survivors-per-altar"
 version = "0.0.0-dev"
 dependencies = [
- "enshwick-loader-api",
+ "enshwick",
  "serde",
  "toml",
 ]

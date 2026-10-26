@@ -13,7 +13,7 @@ pack() { (cd "$1" && 7z a -tzip "../$2" . > /dev/null); }
 mkdir -p all/mods/enshwick loader/mods/enshwick
 for dir in all loader; do
   cp target/release/powrprof.dll "$dir/"
-  cp target/release/enshwick.dll "$dir/mods/enshwick/"
+  cp target/release/enshwick_loader.dll "$dir/mods/enshwick/enshwick.dll"
   cp LICENSE "$dir/"
 done
 # Mods are the packages under mods/; other DLLs in target, such as proc

@@ -25,9 +25,9 @@
 
 use std::sync::OnceLock;
 
-use enshwick_loader_api::abi::Side;
-use enshwick_loader_api::pacing::TaskWorkers;
-use enshwick_loader_api::{Host, Load, Mod, Off, events};
+use enshwick::abi::Side;
+use enshwick::pacing::TaskWorkers;
+use enshwick::{Host, Load, Mod, Off, events};
 
 use crate::env::CpuLimit;
 use crate::platform::{Change, Platform, default_on};
@@ -64,7 +64,7 @@ impl Switch {
 }
 
 /// Optimizer settings.
-#[derive(Debug, serde::Deserialize, serde::Serialize, enshwick_loader_api::Config)]
+#[derive(Debug, serde::Deserialize, serde::Serialize, enshwick::Config)]
 #[serde(deny_unknown_fields)]
 pub struct Settings {
     /// Exact short waits in the engine's event loop: "auto" on the dedicated
@@ -161,7 +161,7 @@ fn running(found: &Found, settings: &Settings) -> String {
 /// Logs a change forced on where it was not measured to help.
 fn note_forced(change: Change, forced: bool, platform: Platform) {
     if forced && !default_on(change, platform) {
-        enshwick_loader_api::info!(
+        enshwick::info!(
             "{change}: forced on; off by default on a {platform}, where it was not measured to help"
         );
     }
@@ -176,15 +176,15 @@ fn apply(settings: &Settings) {
         .exact_waits
         .applies(default_on(Change::ExactWaits, found.platform));
     if exact && !found.linked.exact {
-        enshwick_loader_api::info!("exact waits: on at the next start");
+        enshwick::info!("exact waits: on at the next start");
     }
     waits::set_exact(exact && found.linked.exact);
     if settings.server_wait_cap_ms > 1 && !found.linked.server {
-        enshwick_loader_api::info!("server wait cap: from the next start");
+        enshwick::info!("server wait cap: from the next start");
     }
     waits::set_cap(settings.server_wait_cap_ms);
     let running = running(found, settings);
-    enshwick_loader_api::info!(
+    enshwick::info!(
         "{running}; measure mode {}",
         if settings.measure { "on" } else { "off" }
     );
@@ -209,8 +209,8 @@ fn status() -> String {
 pub struct Optimizer;
 
 impl Mod for Optimizer {
-    fn manifest() -> &'static enshwick_loader_api::abi::Manifest {
-        enshwick_loader_api::manifest!(
+    fn manifest() -> &'static enshwick::abi::Manifest {
+        enshwick::manifest!(
             id: "optimizer",
             side: BOTH,
             name: "Optimizer",
@@ -224,9 +224,9 @@ impl Mod for Optimizer {
         let wine = environment.is_wine();
         let platform = Platform::of(load.host().build().side == Side::SERVER, wine);
         let summary = environment.summary();
-        enshwick_loader_api::info!("environment: {summary}");
+        enshwick::info!("environment: {summary}");
         for advice in environment.advice() {
-            enshwick_loader_api::info!("advice: {advice}");
+            enshwick::info!("advice: {advice}");
         }
         if !wine {
             waits::tune_for_windows();
@@ -244,14 +244,14 @@ impl Mod for Optimizer {
         if let Some(cap) = workers
             && !load.cap_task_workers(TaskWorkers::at_most(cap))?
         {
-            enshwick_loader_api::info!(
+            enshwick::info!(
                 "task workers: only the dedicated server starts fewer; here the game picks"
             );
             workers = None;
         }
         let server_loop = settings.measure || settings.server_wait_cap_ms > 1;
         let linked = waits::link(load, exact, server_loop)?;
-        enshwick_loader_api::info!(
+        enshwick::info!(
             "hooked: exact waits {}, message wait {}, server loop wait {}, task workers {}",
             linked.exact,
             linked.message,
@@ -279,17 +279,17 @@ impl Mod for Optimizer {
             .name("enshwick-optimizer".into())
             .spawn(move || measure::run(wine));
         if let Err(e) = started {
-            enshwick_loader_api::warn!("measure mode does not run: {e}");
+            enshwick::warn!("measure mode does not run: {e}");
         }
     }
 }
 
-enshwick_loader_api::declare_mod!(Optimizer);
+enshwick::declare_mod!(Optimizer);
 
 #[cfg(test)]
 mod tests {
-    use enshwick_loader_api::abi::Status;
-    use enshwick_loader_api::config::Config as _;
+    use enshwick::abi::Status;
+    use enshwick::config::Config as _;
 
     use super::*;
 
@@ -377,7 +377,7 @@ mod tests {
         let base = code.as_ptr().addr() as u64;
         let wait = base + 0x40 + 22 + 10;
         let server = base + 0x40 + 22 + 34 + 0x10 + 35;
-        let loader = enshwick_loader_api::test::FakeHost::new()
+        let loader = enshwick::test::FakeHost::new()
             .code(code)
             .settings(
                 "exact_waits = \"on\"\ntask_workers = 0\nserver_wait_cap_ms = 4\nmeasure = true\n",
@@ -393,7 +393,7 @@ mod tests {
 
         // A zero wait with 0.3 ms left sleeps them and keeps the zero wait.
         let slept = waits::SLEEPS.load(core::sync::atomic::Ordering::Relaxed);
-        let mut registers = enshwick_loader_api::abi::Registers {
+        let mut registers = enshwick::abi::Registers {
             r9: 0,
             rbx: 300_000,
             ..Default::default()
@@ -407,7 +407,7 @@ mod tests {
             slept + 1
         );
         // A timed wait is left alone.
-        let mut registers = enshwick_loader_api::abi::Registers {
+        let mut registers = enshwick::abi::Registers {
             r9: 16,
             rbx: 16_600_000,
             ..Default::default()
@@ -420,23 +420,22 @@ mod tests {
 
         // Before any step the server wait stays vanilla; right after one it
         // grows to the cap; the idle wait never changes.
-        let mut registers = enshwick_loader_api::abi::Registers {
+        let mut registers = enshwick::abi::Registers {
             r9: 1_000_000,
             ..Default::default()
         };
         assert_eq!(loader.run_at(server, &mut registers), 1);
         assert_eq!(registers.r9, 1_000_000);
         assert_eq!(
-            loader.raise::<events::Ticked>(&enshwick_loader_api::abi::TickData {
-                header: enshwick_loader_api::abi::Header::of::<enshwick_loader_api::abi::TickData>(
-                ),
+            loader.raise::<events::Ticked>(&enshwick::abi::TickData {
+                header: enshwick::abi::Header::of::<enshwick::abi::TickData>(),
                 step: 1
             }),
             1
         );
         assert_eq!(loader.run_at(server, &mut registers), 1);
         assert_eq!(registers.r9, 4_000_000);
-        let mut registers = enshwick_loader_api::abi::Registers {
+        let mut registers = enshwick::abi::Registers {
             r9: 40_000_000,
             ..Default::default()
         };
@@ -448,13 +447,13 @@ mod tests {
             "exact_waits = \"off\"\ntask_workers = 0\nserver_wait_cap_ms = 1\nmeasure = true\n",
         );
         assert_eq!(loader.raise::<events::SettingsChanged>(&()), 1);
-        let mut registers = enshwick_loader_api::abi::Registers {
+        let mut registers = enshwick::abi::Registers {
             r9: 1_000_000,
             ..Default::default()
         };
         assert_eq!(loader.run_at(server, &mut registers), 1);
         assert_eq!(registers.r9, 1_000_000);
-        let mut registers = enshwick_loader_api::abi::Registers {
+        let mut registers = enshwick::abi::Registers {
             r9: 0,
             rbx: 300_000,
             ..Default::default()

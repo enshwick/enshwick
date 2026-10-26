@@ -16,7 +16,7 @@ use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, OnceLock, PoisonError};
 
 use arc_swap::ArcSwap;
-use enshwick_loader_api::abi::{HookFlags, Status, UiMarker};
+use enshwick::abi::{HookFlags, Status, UiMarker};
 use windows_sys::Win32::System::SystemInformation::GetTickCount64;
 
 use super::engine::{Buf, UiText};
@@ -180,7 +180,7 @@ pub(crate) fn link(loader: &Loader) {
         .reflection
         .system("replicate_map_markers_for_ui")
         .ok()
-        .map(enshwick_loader_reflect::System::entry);
+        .map(enshwick_reflect::System::entry);
     loader.link_feature(
         "map markers",
         target,

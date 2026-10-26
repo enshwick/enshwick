@@ -2,16 +2,16 @@
 
 The loader and a mod talk through a C ABI: `repr(C)` structs, integer enums,
 `extern "system"` functions, strings borrowed for the call, and no unwinding
-across the boundary. Mods normally use the safe layer of `enshwick-loader-api`; this
+across the boundary. Mods normally use the safe layer of `enshwick`; this
 chapter is for reading logs and the rare call to the raw table. The exact types and signatures are in the
-[`abi` module's rustdoc](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs).
+[`abi` module's rustdoc](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/abi.rs).
 
 ## Versions
 
-| Constant                                                                                            | Value | Meaning                                         |
+| Constant | Value | Meaning |
 | --------------------------------------------------------------------------------------------------- | ----- | ----------------------------------------------- |
-| [`ABI_MAJOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 2     | A loader refuses a mod built for another major. |
-| [`ABI_MINOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 67    | A newer minor only appends.                     |
+| [`ABI_MAJOR`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/abi.rs) | 2 | A loader refuses a mod built for another major. |
+| [`ABI_MINOR`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/abi.rs) | 67 | A newer minor only appends. |
 
 The ABI version is apart from Enshwick Loader's version (such as 0.2.0, see
 [Releasing mods](releasing.md#versions)): a platform release raises
@@ -27,21 +27,21 @@ The policy:
   mod always meets a loader that has every entry of the host table it knows,
   and the safe layer calls them without checks. Structs the other side may
   know an older version of start with a
-  [`Header`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs):
+  [`Header`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/abi.rs):
   the struct's size as its writer knew it and the writer's major and minor.
   Fields are only ever appended, and the loader reads and writes a mod's
   struct only as far as that mod's header says. `abi::read_headed` copies
   such a struct as far as its writer's header reaches and leaves the rest
   zero.
 
-A mod built against an older `enshwick-loader-api` loads under a newer loader:
+A mod built against an older `enshwick` loads under a newer loader:
 the loader reads the manifest fields the mod's header covers and takes the
 rest as empty, with no build rows and no names. A mod built against a
 newer one waits for a loader update.
 
 ## The exports of a mod
 
-[`declare_mod!`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/declare.rs)
+[`declare_mod!`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/declare.rs)
 writes five exports:
 
 | Export                  | Signature                                 | When the loader calls it                               |
@@ -57,8 +57,8 @@ and unloaded.
 
 ## The manifest
 
-[`Manifest`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs)
-is what [`manifest!`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/declare.rs)
+[`Manifest`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/abi.rs)
+is what [`manifest!`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/declare.rs)
 builds:
 
 | Field          | What it holds                                                                                     | Since minor |
@@ -88,9 +88,9 @@ dependency range that does not parse; the reason goes to `loader.log` as
 ## Status codes
 
 Every call that can fail returns a
-[`Status`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs).
+[`Status`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/abi.rs).
 The safe layer turns a failed status into an
-[`Off`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/load.rs)
+[`Off`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/load.rs)
 reason of the form `<what>: <why>`, such as
 `symbol quest.reward: missing on this game build`:
 
@@ -118,10 +118,10 @@ fault.
 ## Events
 
 A mod subscribes with
-[`Load::on`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/load.rs)
+[`Load::on`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/load.rs)
 and the types in
-[`events`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/events.rs),
-or with a raw [`Event`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs)
+[`events`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/events.rs),
+or with a raw [`Event`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/abi.rs)
 id through `Load::on_raw_event`. See [Events and the scheduler](events.md).
 
 | Id | Constant                  | Typed event             | Data              | Raised on       | Side   |
@@ -158,7 +158,7 @@ data lacks a field the event came with.
 
 ## The host table
 
-[`HostApi`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs)
+[`HostApi`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/abi.rs)
 is the table of functions the loader passes to `enshwick_mod_init`. Fields
 marked "init only" are allowed during `enshwick_mod_init` only.
 

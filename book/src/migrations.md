@@ -8,20 +8,20 @@ once per world and records it, as Factorio does with its saves.
 
 ## Declaring migrations
 
-[`load.migrate`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/migrations.rs)
+[`load.migrate`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/migrations.rs)
 takes a
-[`Migrations`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/migrations.rs)
+[`Migrations`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/migrations.rs)
 list during `init`, before `load.config()`:
 
 ```rust
-use enshwick_loader_api::content::{Guid, Id};
-use enshwick_loader_api::migrations::Migrations;
+use enshwick::content::{Guid, Id};
+use enshwick::migrations::Migrations;
 
 /// The GUID the Safe had before it got a content id.
 const OLD_SAFE: Guid = Guid::parse("8a3f6e21-5c4b-4d7e-9f10-2b7c5e6a9d31");
 const SAFE: Id = Id::new("safes:safe");
 
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     load.migrate(
         Migrations::new()
             .add("2", |m| {
@@ -95,13 +95,13 @@ line to run its migrations again.
 An item renamed with `rename_content` keeps its old stacks: the game holds
 them under the old item's game id, which the loader serves as a copy of the
 new item. Code that asks "is this my item" compares through
-[`migrations::current_id`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/migrations.rs),
+[`migrations::current_id`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/migrations.rs),
 which turns an old id into the id it was renamed to and leaves every other
 id as it is:
 
 ```rust
-use enshwick_loader_api::content::{Guid, Id};
-use enshwick_loader_api::migrations::current_id;
+use enshwick::content::{Guid, Id};
+use enshwick::migrations::current_id;
 
 const SAFE: Id = Id::new("safes:safe");
 
@@ -134,24 +134,24 @@ The [fake loader](testing.md) keeps the migrations the mod declared and runs
 them on text, the way the loader runs them on files:
 
 ```rust,standalone_crate
-use enshwick_loader_api::migrations::Migrations;
+use enshwick::migrations::Migrations;
 
 struct Safes;
 
-impl enshwick_loader_api::Mod for Safes {
-    fn manifest() -> &'static enshwick_loader_api::abi::Manifest {
-        enshwick_loader_api::manifest!(id: "safes", side: SERVER)
+impl enshwick::Mod for Safes {
+    fn manifest() -> &'static enshwick::abi::Manifest {
+        enshwick::manifest!(id: "safes", side: SERVER)
     }
 
-    fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<Self, enshwick_loader_api::Off> {
+    fn init(load: &mut enshwick::Load<'_>) -> Result<Self, enshwick::Off> {
         load.migrate(Migrations::new().add("2", |m| m.rename_setting("cost", "cost_multiplier")))?;
         Ok(Self)
     }
 }
 
-enshwick_loader_api::declare_mod!(Safes);
+enshwick::declare_mod!(Safes);
 
-let loader = enshwick_loader_api::test::FakeHost::new().install();
+let loader = enshwick::test::FakeHost::new().install();
 // SAFETY: the exports of `declare_mod!` above.
 let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
 assert!(status.is_ok());

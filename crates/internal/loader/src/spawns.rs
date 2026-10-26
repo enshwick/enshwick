@@ -9,7 +9,7 @@
 
 use std::sync::OnceLock;
 
-use enshwick_loader_api::abi::{SpawnRequest, Status};
+use enshwick::abi::{SpawnRequest, Status};
 
 use crate::host::Loader;
 

@@ -45,9 +45,7 @@ pub(crate) fn plan(
     if !turn_off.is_empty() {
         let lines: Vec<String> = turn_off
             .iter()
-            .map(|id| {
-                enshwick_loader_api::mods::label(names.get(id).map_or("", String::as_str), id)
-            })
+            .map(|id| enshwick::mods::label(names.get(id).map_or("", String::as_str), id))
             .collect();
         parts.push(format!(
             "The host of this game does not run these Enshwick mods, so they are off until you restart the game:\n\n{}",
@@ -74,7 +72,7 @@ mod runtime {
     use std::sync::OnceLock;
     use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
-    use enshwick_loader_api::abi::UiDialog;
+    use enshwick::abi::UiDialog;
     use windows_sys::Win32::System::LibraryLoader::{GetModuleHandleW, GetProcAddress};
 
     /// Steam's callback id of `LobbyEnter_t`: matchmaking callbacks start at

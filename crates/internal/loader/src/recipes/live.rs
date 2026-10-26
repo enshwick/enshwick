@@ -8,12 +8,12 @@ use std::sync::{Arc, LazyLock, Mutex, OnceLock, PoisonError};
 use std::time::SystemTime;
 
 use arc_swap::ArcSwap;
-use enshwick_loader_api::Off;
-use enshwick_loader_api::abi::{Level, PlayerInfo, RecipeRuleKind, Side, Status};
-use enshwick_loader_api::content::items::{ITEM_REGISTRY, ItemLayout};
-use enshwick_loader_api::content::recipes::{RECIPE_REGISTRY, RecipeLayout};
-use enshwick_loader_api::content::workshops::{WORKSHOP_REGISTRY, WorkshopLayout};
-use enshwick_loader_api::content::{Blob, Guid, types};
+use enshwick::Off;
+use enshwick::abi::{Level, PlayerInfo, RecipeRuleKind, Side, Status};
+use enshwick::content::items::{ITEM_REGISTRY, ItemLayout};
+use enshwick::content::recipes::{RECIPE_REGISTRY, RecipeLayout};
+use enshwick::content::workshops::{WORKSHOP_REGISTRY, WorkshopLayout};
+use enshwick::content::{Blob, Guid, types};
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use super::{

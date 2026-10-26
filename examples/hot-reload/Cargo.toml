@@ -16,10 +16,10 @@ publish.workspace = true
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-enshwick-loader-api.workspace = true
+enshwick.workspace = true
 
 [dev-dependencies]
-enshwick-loader-api = { workspace = true, features = ["test"] }
+enshwick = { workspace = true, features = ["test"] }
 
 [lints]
 workspace = true

@@ -40,7 +40,7 @@ const GLOBAL_FILES: &[&str] = &[
 const GLOBAL_DIRS: &[&str] = &[".cargo/", ".config/"];
 /// The book's chapters, compiled as doctests of the API crate.
 const BOOK_DIR: &str = "book/src/";
-const BOOK_HARNESS: &str = "enshwick-loader-api";
+const BOOK_HARNESS: &str = "enshwick";
 
 /// Sorts changed files (relative to the root, `/` separators) into a scope.
 pub(crate) fn scope(files: &[String], packages: &[Package]) -> Scope {
@@ -102,16 +102,12 @@ mod tests {
 
     fn workspace() -> Vec<Package> {
         vec![
-            package("macros", "crates/internal/macros", &[]),
-            package(
-                "enshwick-loader-api",
-                "crates/enshwick-loader-api",
-                &["macros"],
-            ),
-            package("loader", "crates/internal/loader", &["enshwick-loader-api"]),
-            package("safes", "mods/safes", &["enshwick-loader-api"]),
+            package("macros", "crates/enshwick-macros", &[]),
+            package("enshwick", "crates/enshwick", &["macros"]),
+            package("loader", "crates/internal/loader", &["enshwick"]),
+            package("safes", "mods/safes", &["enshwick"]),
             package("safes-viewer", "mods/safes-viewer", &["safes"]),
-            package("probe", "mods/probe", &["enshwick-loader-api"]),
+            package("probe", "mods/probe", &["enshwick"]),
         ]
     }
 
@@ -137,21 +133,13 @@ mod tests {
 
     #[test]
     fn an_api_change_reaches_every_package_built_on_it() {
-        let Scope::Some { code, .. } = scope(
-            &files(&["crates/enshwick-loader-api/src/abi.rs"]),
-            &workspace(),
-        ) else {
+        let Scope::Some { code, .. } = scope(&files(&["crates/enshwick/src/abi.rs"]), &workspace())
+        else {
             panic!("not all");
         };
         assert_eq!(
             code,
-            names(&[
-                "enshwick-loader-api",
-                "loader",
-                "safes",
-                "safes-viewer",
-                "probe"
-            ])
+            names(&["enshwick", "loader", "safes", "safes-viewer", "probe"])
         );
     }
 
@@ -174,7 +162,7 @@ mod tests {
             scope(&files(&["book/src/hooks.md"]), &workspace()),
             Scope::Some {
                 code: names(&[]),
-                docs: names(&["enshwick-loader-api"]),
+                docs: names(&["enshwick"]),
             }
         );
     }

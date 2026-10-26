@@ -17,9 +17,7 @@ use core::ffi::c_void;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock, PoisonError};
 
-use enshwick_loader_api::abi::{
-    BuildingData, Event, Header, HookFlags, PlayerData, Side, TickData,
-};
+use enshwick::abi::{BuildingData, Event, Header, HookFlags, PlayerData, Side, TickData};
 
 use crate::chains::Next;
 use crate::fuse::Fuse;

@@ -5,7 +5,7 @@
 
 use std::sync::{Mutex, PoisonError};
 
-use enshwick_loader_api::content::Guid;
+use enshwick::content::Guid;
 use rustc_hash::FxHashMap;
 
 /// What an id names; each kind has keys of its own.

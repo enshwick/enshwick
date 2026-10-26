@@ -2,8 +2,8 @@
 //! the loader and the settings file: which game widget shows each setting,
 //! its value, whether the player may change it, and the TOML a change writes.
 
-use enshwick_loader_api::config::{Field, Kind, Schema, Stage};
-use enshwick_loader_api::i18n::{Language, Texts};
+use enshwick::config::{Field, Kind, Schema, Stage};
+use enshwick::i18n::{Language, Texts};
 
 /// The most stops a slider row gets; longer whole-number ranges slide
 /// freely and round.

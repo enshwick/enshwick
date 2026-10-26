@@ -22,11 +22,11 @@ reads that reflection at start, so these lookups keep working after an update
 without anyone touching the mod:
 
 ```rust
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let system = load.system("upgrade_building_range")?;
     let range_x = load.field_offset("keen::ecs::TriggerShape", "rangeX")?;
     let size = load.type_size("keen::ecs::TriggerShape")?;
-    enshwick_loader_api::info!("system at {system:#x}, rangeX at +{range_x}, {size} bytes");
+    enshwick::info!("system at {system:#x}, rangeX at +{range_x}, {size} bytes");
     Ok(())
 }
 ```
@@ -41,10 +41,10 @@ Engine helpers that reflection does not describe are pinned per build under a
 symbolic id, such as `npc.lookup` or `ecs.context_row`:
 
 ```rust
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let lookup = load.symbol("npc.lookup")?;
     let row = load.constant("ecs.context_row")?;
-    enshwick_loader_api::info!("lookup at {lookup:#x}, row word at +{row}");
+    enshwick::info!("lookup at {lookup:#x}, row word at +{row}");
     Ok(())
 }
 ```
@@ -57,7 +57,7 @@ returns the value as it is.
 The loader's build tables hold what several mods share: the ECS iterator,
 component reads, chat, labels, inventories and so on. They are data, one TOML
 file per game build in
-[`crates/internal/builds/tables`](https://github.com/themaiby/enshwick/tree/main/crates/internal/builds/tables),
+[`crates/enshwick-gamedata/tables`](https://github.com/enshwick/enshwick/tree/main/crates/enshwick-gamedata/tables),
 as SKSE's Address Library is, embedded in the loader. A game update needs a
 loader build with the new build's table; until then the loader finds each
 entry of the newest table by its code pattern, and what no pattern finds stays
@@ -68,7 +68,7 @@ off. Ids a single mod uses go in that mod's rows.
 A mod pins its own ids with `builds:` in [`manifest!`](getting-started.md):
 
 ```rust
-let manifest = enshwick_loader_api::manifest!(
+let manifest = enshwick::manifest!(
     id: "my-mod",
     side: BOTH,
     builds: [
@@ -106,12 +106,12 @@ A row applies only when its side and both parts of its fingerprint match the
 running binary. Rows for other builds are ignored, so a mod can carry rows for
 several builds at once.
 
-[`enshwick-research`](https://github.com/themaiby/enshwick/blob/main/mods/enshwick-research/src/lib.rs)
+[`enshwick-research`](https://github.com/enshwick/enshwick/blob/main/mods/enshwick-research/src/lib.rs)
 pins the client functions it studies in a `CLIENT` row and two server
 functions in a `SERVER` row.
 
 When the game updates, the new build's table and rows come from
-[`cargo enshwick pin`](https://github.com/themaiby/enshwick/blob/main/crates/cargo-enshwick/README.md#porting-build-rows-pin):
+[`cargo enshwick pin`](https://github.com/enshwick/enshwick/blob/main/crates/cargo-enshwick/README.md#porting-build-rows-pin):
 given the old and the new executable, it finds every pinned symbol of the
 loader's table and of each mod's rows again, writes the new table file and
 puts the new rows next to the old ones. What it cannot place for sure it
@@ -139,7 +139,7 @@ changed does not.
   build". Only the mod that asked turns off; the others load.
 
 Find every address before registering anything, as
-[the loader's base limit](https://github.com/themaiby/enshwick/blob/main/crates/internal/loader/src/bases.rs)
+[the loader's base limit](https://github.com/enshwick/enshwick/blob/main/crates/internal/loader/src/bases.rs)
 does, so a miss leaves the game untouched rather than half changed.
 
 ## Patterns of the loader's table
@@ -189,7 +189,7 @@ On build 1269579 the patterns find every symbol of both tables, 271 of the
 server's 280 constants and 427 of the client's 436, and the game's data gives
 the other nine, the slots of attributes: on a build without a table every
 entry is found, and every loader feature and mod of this repository runs.
-`cargo enshwick compat --patterns <exe>` shows what the patterns alone find
+`cargo run -p enshwick-compat -- --patterns <exe>` shows what the patterns alone find
 on any executable, and a test of the builds crate checks, when
 `ENSH_SERVER_EXE` and `ENSH_CLIENT_EXE` name the game's executables, that
 every pattern matches exactly once and yields its table's value.
@@ -213,7 +213,7 @@ or, for a symbol, `ref:<rva>` of code that calls or addresses it. The tool
 checks that the operand holds the table's value, grows the smallest unique
 window around the instruction and writes it. Once written, the entry keeps
 its instruction: later runs and
-[`pin`](https://github.com/themaiby/enshwick/blob/main/crates/cargo-enshwick/README.md#porting-build-rows-pin)
+[`pin`](https://github.com/enshwick/enshwick/blob/main/crates/cargo-enshwick/README.md#porting-build-rows-pin)
 for a new build find it by the pattern, or port it, and read the value
 there. Constants without a pick get no pattern: a value seen in some code
 says nothing about what that code means.
@@ -225,9 +225,9 @@ and returns the absolute address of the one place it matches. It survives an
 update that leaves those bytes alone, without a new row.
 
 ```rust
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let site = load.find_code("B9 00 02 00 00 66 3B C1 0F 84 ?? ?? ?? ??")?;
-    enshwick_loader_api::info!("check at {site:#x}");
+    enshwick::info!("check at {site:#x}");
     Ok(())
 }
 ```
@@ -239,7 +239,7 @@ fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_
 - It must match exactly once. No match and more than one match both give `Off`,
   so a pattern never lands on the wrong place. Make it long enough to be unique.
 
-[`code::Pattern`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/code.rs)
+[`code::Pattern`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/code.rs)
 is the same parser and search, for use on any slice: `parse`, `matches`,
 `find_all` and `find_unique`. `load.code()` returns the game's code section as
 a `&[u8]` that starts at its absolute address, for a mod that reads the bytes
@@ -247,11 +247,11 @@ around a match during `init`; it borrows the `Load`, since arming writes into
 the code afterwards:
 
 ```rust
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let code = load.code()?;
-    let pattern = enshwick_loader_api::code::Pattern::parse("E8 ?? ?? ?? ?? 84 C0")?;
+    let pattern = enshwick::code::Pattern::parse("E8 ?? ?? ?? ?? 84 C0")?;
     let calls = pattern.find_all(code).count();
-    enshwick_loader_api::info!("{calls} calls followed by a test of al");
+    enshwick::info!("{calls} calls followed by a test of al");
     Ok(())
 }
 ```

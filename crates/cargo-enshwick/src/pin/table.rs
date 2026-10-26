@@ -4,7 +4,7 @@
 
 use std::collections::HashMap;
 
-use enshwick_loader_builds::Locate;
+use enshwick_gamedata::Locate;
 use toml_edit::{DocumentMut, Item, Table as TomlTable, Value};
 
 use super::anchor::{self, Anchor};
@@ -13,7 +13,7 @@ use super::patterns::{self, ConstantPattern, SymbolPattern};
 use super::rows::{Edit, Entry, Row, Side, hex};
 
 /// Where the tables live, relative to the repository.
-pub(crate) const DIR: &str = "crates/internal/builds/tables";
+pub(crate) const DIR: &str = "crates/enshwick-gamedata/tables";
 
 /// The table sections, in the order a row lists them.
 const SECTIONS: [&str; 3] = ["checks", "symbols", "constants"];
@@ -230,14 +230,13 @@ fn patterns_into(
     exe: &Exe<'_>,
     anchors: &HashMap<String, Anchor>,
 ) -> Result<Patterned, String> {
-    let present =
-        enshwick_loader_builds::Table::parse(&doc.to_string()).map_err(|e| e.to_string())?;
+    let present = enshwick_gamedata::Table::parse(&doc.to_string()).map_err(|e| e.to_string())?;
     let pinned = |id: &str| {
         present
             .symbols()
             .iter()
             .find(|s| s.id() == id)
-            .map(enshwick_loader_builds::Symbol::rva)
+            .map(enshwick_gamedata::Symbol::rva)
     };
     let mut anchors_here = anchor::of_table(&present, exe, pinned);
     anchors_here.extend(anchors.iter().map(|(id, a)| (id.clone(), a.clone())));
@@ -254,7 +253,7 @@ fn patterns_into(
         .collect();
     let symbols = values(doc, "symbols");
     let constants = values(doc, "constants");
-    let kept: HashMap<&str, &enshwick_loader_builds::Constant> = present
+    let kept: HashMap<&str, &enshwick_gamedata::Constant> = present
         .constants()
         .iter()
         .filter(|c| c.via().is_some() || c.attribute().is_some() || !c.carried())
@@ -358,7 +357,7 @@ fn constant_written(exe: &Exe<'_>, id: &str, value: u64, anchor: &Anchor) -> Wri
 /// via a symbol in its code at the symbol's address in `exe`.
 fn kept_written(
     exe: &Exe<'_>,
-    constant: &enshwick_loader_builds::Constant,
+    constant: &enshwick_gamedata::Constant,
     symbols: &[(String, u64)],
     pattern: Option<&String>,
 ) -> Written {
@@ -391,14 +390,14 @@ fn kept_written(
         operand: constant.operand().map(|o| (o.at(), o.size())),
         negative: constant
             .operand()
-            .is_some_and(enshwick_loader_builds::Operand::is_negative),
+            .is_some_and(enshwick_gamedata::Operand::is_negative),
         shift: constant
             .operand()
-            .is_some_and(enshwick_loader_builds::Operand::is_shift),
+            .is_some_and(enshwick_gamedata::Operand::is_shift),
     };
     let plus = constant
         .operand()
-        .map_or(0, enshwick_loader_builds::Operand::addend);
+        .map_or(0, enshwick_gamedata::Operand::addend);
     let written = constant_text(value, &pattern, plus);
     let within = constant.within().map_or_else(String::new, |n| {
         format!(", within = {}", spelled(u64::from(n)))

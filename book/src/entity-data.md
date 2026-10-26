@@ -5,19 +5,19 @@ who owns a placed chest, the nickname of a survivor, the day a gate was
 built. It works as [item data](item-data.md) does, for every entity instead
 of items alone: kinds with ids `<mod>:<name>`, a value type of the mod's
 choosing, values kept per world beside the game's save, never inside it.
-The [`entity_data`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/entity_data.rs)
+The [`entity_data`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/entity_data.rs)
 module reads and writes it.
 
 ```rust
-use enshwick_loader_api::ecs::Entity;
-use enshwick_loader_api::entity_data::Replication;
+use enshwick::ecs::Entity;
+use enshwick::entity_data::Replication;
 
 #[derive(serde::Serialize, serde::Deserialize)]
 struct Owner {
     player: u64,
 }
 
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     // `<this mod>:owner`, kept on the server alone.
     let owners = load.entity_data::<Owner>("owner", Replication::Server)?;
     let chest = Entity(4_200);

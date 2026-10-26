@@ -11,8 +11,8 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock, PoisonError};
 
-use enshwick_loader_api::abi::{HookFlags, Status};
-use enshwick_loader_api::code::Pattern;
+use enshwick::abi::{HookFlags, Status};
+use enshwick::code::Pattern;
 use rustc_hash::FxHashMap;
 
 use crate::chains::{LOADER, Next};

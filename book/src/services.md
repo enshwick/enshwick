@@ -13,7 +13,7 @@ their zones and bases, comes from the platform's API instead (see
 To let other mods change one of your mod's rules, define an extension point
 instead (see [Extending other mods](extending.md)).
 
-The [examples](https://github.com/themaiby/enshwick/tree/main/examples)
+The [examples](https://github.com/enshwick/enshwick/tree/main/examples)
 folder holds the two mods this chapter follows: `trading-post` publishes item
 prices and sends `trading-post:sold`, and `market-stalls` uses the prices and
 counts the coins from each sale.
@@ -25,7 +25,7 @@ here `trading-post-api`:
 
 ```rust
 /// Item prices, published by `trading-post`.
-#[enshwick_loader_api::service(name = "trading-post:prices", version = 1)]
+#[enshwick::service(name = "trading-post:prices", version = 1)]
 pub struct Prices {
     /// The price of `item` in coins, 0 for an item with no price.
     pub price: extern "system" fn(item: u32) -> u32,
@@ -34,7 +34,7 @@ pub struct Prices {
 }
 
 /// An item sold at the trading post.
-#[enshwick_loader_api::event(name = "trading-post:sold")]
+#[enshwick::event(name = "trading-post:sold")]
 #[derive(Clone, Copy, Debug)]
 pub struct Sold {
     pub item: u32,
@@ -42,7 +42,7 @@ pub struct Sold {
 }
 ```
 
-- [`#[service]`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/lib.rs)
+- [`#[service]`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/lib.rs)
   and `#[event]` make the struct `repr(C)` and give it a layout: a hash per
   field of its name, the shape of its type, its size, alignment and offset.
 - Name both after the publishing mod, as `<id>:<what>`, the form content
@@ -60,13 +60,13 @@ the other side allocated.
 
 ### Shapes
 
-A field's hash reaches into its type through [`Shape`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/shape.rs).
+A field's hash reaches into its type through [`Shape`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/shape.rs).
 Integers, floats, `bool` (with its two values), arrays, pointers, `Option`
 and `extern` function pointers have one already, as do the API's own types
 such as `Entity` and `Guid`. A type of the mod's own derives it:
 
 ```rust
-use enshwick_loader_api::Shape;
+use enshwick::Shape;
 
 #[derive(Clone, Copy, Debug, Shape)]
 #[repr(u8)]
@@ -85,7 +85,7 @@ impl Hours {
     pub const CLOSED: Self = Self(1);
 }
 
-#[enshwick_loader_api::event(name = "market:opened")]
+#[enshwick::event(name = "market:opened")]
 #[derive(Clone, Copy, Debug)]
 pub struct Opened {
     pub stall: Stall,
@@ -102,11 +102,11 @@ two mods that read the same bytes differently never link.
 
 ## Publishing
 
-[`load.publish(&TABLE)`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/load.rs)
+[`load.publish(&TABLE)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/load.rs)
 publishes a `'static` table during `init`:
 
 ```rust
-#[enshwick_loader_api::service(name = "trading-post:prices")]
+#[enshwick::service(name = "trading-post:prices")]
 pub struct Prices {
     pub price: extern "system" fn(item: u32) -> u32,
 }
@@ -117,7 +117,7 @@ extern "system" fn price(_item: u32) -> u32 {
 
 static PRICES: Prices = Prices { price };
 
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     load.publish(&PRICES)
 }
 ```
@@ -127,19 +127,19 @@ may publish several majors of a service side by side.
 
 ## Using a service
 
-[`load.service::<T>()`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/load.rs)
+[`load.service::<T>()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/load.rs)
 returns the table once the loader has checked that the published table
 starts with every field of `T`:
 
 ```rust
-#[enshwick_loader_api::service(name = "trading-post:prices")]
+#[enshwick::service(name = "trading-post:prices")]
 pub struct Prices {
     pub price: extern "system" fn(item: u32) -> u32,
 }
 
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let prices: &'static Prices = load.service()?;
-    enshwick_loader_api::info!("item 3 costs {}", (prices.price)(3));
+    enshwick::info!("item 3 costs {}", (prices.price)(3));
     Ok(())
 }
 ```
@@ -154,22 +154,22 @@ does not serve `T`.
 ## Mod events
 
 The definer defines its event during `init` and keeps the
-[`Emitter`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/services.rs)
+[`Emitter`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/services.rs)
 it gets back; sending calls every subscriber's handler on the sending
 thread, with no queue and no allocation:
 
 ```rust
-#[enshwick_loader_api::event(name = "trading-post:sold")]
+#[enshwick::event(name = "trading-post:sold")]
 #[derive(Clone, Copy, Debug)]
 pub struct Sold {
     pub item: u32,
     pub price: u32,
 }
 
-static SOLD: std::sync::OnceLock<enshwick_loader_api::services::Emitter<Sold>> =
+static SOLD: std::sync::OnceLock<enshwick::services::Emitter<Sold>> =
     std::sync::OnceLock::new();
 
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let _first = SOLD.set(load.define_event::<Sold>()?);
     Ok(())
 }
@@ -184,15 +184,15 @@ fn sell(item: u32, price: u32) {
 Other mods subscribe during `init`:
 
 ```rust
-#[enshwick_loader_api::event(name = "trading-post:sold")]
+#[enshwick::event(name = "trading-post:sold")]
 #[derive(Clone, Copy, Debug)]
 pub struct Sold {
     pub item: u32,
     pub price: u32,
 }
 
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
-    load.on_mod_event(|sold: &Sold| enshwick_loader_api::info!("sold {} for {}", sold.item, sold.price))
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    load.on_mod_event(|sold: &Sold| enshwick::info!("sold {} for {}", sold.item, sold.price))
 }
 ```
 
@@ -231,7 +231,7 @@ The publisher's `init` must run before the user's. Declare the publisher in
 the user's manifest:
 
 ```rust
-let manifest = enshwick_loader_api::manifest!(
+let manifest = enshwick::manifest!(
     id: "market-stalls",
     side: SERVER,
     requires: ["trading-post" => ">=0.1, <1.0"],

@@ -1,13 +1,13 @@
 # Items
 
-[`Load::add_item`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/content/items.rs)
+[`Load::add_item`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content/items.rs)
 adds an item to the game. The new item is a clone of a vanilla one: it looks
 and behaves like it, under a [content id](../content.md#content-ids) of its
 own, with its own name and description if you give them.
 
 ```rust
-use enshwick_loader_api::content::{Guid, Id};
-use enshwick_loader_api::content::items::NewItem;
+use enshwick::content::{Guid, Id};
+use enshwick::content::items::NewItem;
 
 /// The vanilla wooden chest.
 const CHEST: Guid = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");
@@ -23,7 +23,7 @@ const TEXTS: &str = r#"
 "safe.description" = "A chest only its owner can open."
 "#;
 
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let texts = load.texts(TEXTS)?;
     load.add_texts(&texts, &[
         ("safe.name", SAFE_NAME),
@@ -82,15 +82,15 @@ water: on the item's own entity, saved with the world, sent to players and
 drawn as a bar on the item's slot.
 
 ```rust
-use enshwick_loader_api::content::{Guid, Id};
-use enshwick_loader_api::content::items::{Meter, NewItem};
+use enshwick::content::{Guid, Id};
+use enshwick::content::items::{Meter, NewItem};
 
 const STAFF: Id = Id::new("my-mod:charged-staff");
 const VANILLA_STAFF: Guid = Guid::parse("505ccfbc-440d-4d63-a3d6-d689d3d55e78");
 /// The staff entity's template, fixed forever.
 const STAFF_ENTITY: Id = Id::new("my-mod:charged-staff.entity");
 
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     load.add_item(NewItem {
         meter: Some(Meter { template: STAFF_ENTITY, max: 3, start: 3 }),
         ..NewItem::new(STAFF, VANILLA_STAFF)
@@ -123,14 +123,14 @@ entity already, such as a weapon with durability, cannot take a meter:
 game lists an armour's bonuses: each a [text tag](texts.md) and a number.
 
 ```rust
-use enshwick_loader_api::content::{Guid, Id};
-use enshwick_loader_api::content::items::{NewItem, Stat, StatFormat};
+use enshwick::content::{Guid, Id};
+use enshwick::content::items::{NewItem, Stat, StatFormat};
 
 const RING: Id = Id::new("my-mod:lucky-ring");
 const VANILLA_RING: Guid = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");
 const LUCK: Id = Id::new("my-mod:lucky-ring.luck");
 
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let texts = load.texts("[en]\nluck = \"Luck\"\n")?;
     load.add_texts(&texts, &[("luck", LUCK)])?;
     load.add_item(NewItem {
@@ -148,7 +148,7 @@ of its own shows through its meter.
 
 The game's item icons are pictures it ships ready-made: UI images, named by
 GUID, whose pixels it reads from its archive. An
-[`Icon`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/content/icons.rs)
+[`Icon`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content/icons.rs)
 is a UI image the mod serves under a content id of its own, made when the
 client first shows it:
 
@@ -160,16 +160,16 @@ client first shows it:
   best square, such as 256 by 256.
 
 ```rust
-use enshwick_loader_api::content::{Guid, Id};
-use enshwick_loader_api::content::icons::{Icon, Pixels, Tint};
-use enshwick_loader_api::content::items::NewItem;
+use enshwick::content::{Guid, Id};
+use enshwick::content::icons::{Icon, Pixels, Tint};
+use enshwick::content::items::NewItem;
 
 /// The Blacksmith's summoning staff; its icon is a portrait.
 const VANILLA_STAFF: Guid = Guid::parse("505ccfbc-440d-4d63-a3d6-d689d3d55e78");
 const STAFF: Id = Id::new("my-mod:spectral-staff");
 const STAFF_ICON: Id = Id::new("my-mod:spectral-staff.icon");
 
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     load.add_item(NewItem {
         icon: Some(Icon {
             id: STAFF_ICON,
@@ -193,18 +193,18 @@ serves an icon alone, for an item a mod serves itself.
 
 ## GUIDs and item ids
 
-[`Guid::parse`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/code.rs)
+[`Guid::parse`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/code.rs)
 reads the textual form `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx` and stores the
 bytes in the order the game keeps them in memory. It is a `const fn`: in a
 constant, a malformed GUID fails the build.
 
 The game numbers items, recipes and workshops by a 32-bit id, which
-[`Guid::id`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/content.rs)
+[`Guid::id`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content.rs)
 computes from the GUID. The id is what an inventory slot holds and what the
 [inventory](../inventories.md) calls take:
 
 ```rust
-use enshwick_loader_api::content::Guid;
+use enshwick::content::Guid;
 
 const CHEST: Guid = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");
 assert_eq!(CHEST.id(), 1_302_084_846);
@@ -222,5 +222,5 @@ meter's maximum is 0, or when the loader refuses one of its content ids. An
 item whose game id a vanilla item has turns the mod off when the game first
 reads the registry, with both items named in the mod's log. A meter on an item that has an entity already turns
 the mod off when the game reads the item.
-[`enshwick-safes`](https://github.com/themaiby/enshwick/tree/main/mods/enshwick-safes)
+[`enshwick-safes`](https://github.com/enshwick/enshwick/tree/main/mods/enshwick-safes)
 adds its Safe this way.

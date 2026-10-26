@@ -16,8 +16,8 @@
 use std::path::Path;
 use std::sync::{Mutex, OnceLock, PoisonError};
 
-use enshwick_loader_api::abi::{HookFlags, Side, Status};
-use enshwick_loader_reflect::fnv1a32;
+use enshwick::abi::{HookFlags, Side, Status};
+use enshwick_reflect::fnv1a32;
 
 use crate::chains::Next;
 use crate::host::Loader;

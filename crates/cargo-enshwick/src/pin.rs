@@ -26,7 +26,7 @@ use std::fs;
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
 
-use enshwick_loader_reflect::Fingerprint;
+use enshwick_reflect::Fingerprint;
 
 use self::exe::Exe;
 use self::rows::{Row, guid_hex};
@@ -154,7 +154,7 @@ fn port_tables(
             }
         }
         let mut ported = row::port_row(&row, old, new);
-        let source = enshwick_loader_builds::Table::parse(&src)
+        let source = enshwick_gamedata::Table::parse(&src)
             .map_err(|e| format!("{}: {e}", path.display()))?;
         let anchors = row::port_anchors(&row, &mut ported, &source, old, new);
         row::confirm_by_patterns(&mut ported, &source, new);
@@ -568,7 +568,7 @@ mod tests {
     fn a_moved_field_is_read_on_the_new_build() {
         let (bytes, rows) = exe_and_rows();
         let (src, row) = rows.iter().find(|(_, r)| r.table == Table::Loader).unwrap();
-        let source = enshwick_loader_builds::Table::parse(src).unwrap();
+        let source = enshwick_gamedata::Table::parse(src).unwrap();
         let old = Exe::parse(&bytes).unwrap();
         let (code, code_rva) = old.text();
         let (text, _) = raw_section(&bytes, b".text");
@@ -579,7 +579,7 @@ mod tests {
                 continue;
             };
             if operand.size() != 4
-                || operand != enshwick_loader_builds::Operand::new(operand.at(), 4).unwrap()
+                || operand != enshwick_gamedata::Operand::new(operand.at(), 4).unwrap()
             {
                 continue;
             }
@@ -626,7 +626,7 @@ mod tests {
         for (src, row) in &rows {
             let mut result = row::port_row(row, &exe, &exe);
             if row.table == Table::Loader {
-                let source = enshwick_loader_builds::Table::parse(src).unwrap();
+                let source = enshwick_gamedata::Table::parse(src).unwrap();
                 row::port_anchors(row, &mut result, &source, &exe, &exe);
                 row::confirm_by_patterns(&mut result, &source, &exe);
             }

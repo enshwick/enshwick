@@ -1,6 +1,6 @@
 [package]
 name = "cargo-enshwick"
-version = "0.0.0-dev"
+version = "1.0.0-alpha.1"
 description = "Cargo subcommand for Enshwick mods: start a mod, build it, install it into the game and port build rows to a new game build"
 keywords = ["enshrouded", "modding", "cargo", "cli"]
 categories = ["development-tools::cargo-plugins", "game-development"]
@@ -9,13 +9,13 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-publish.workspace = true
+publish = true
 
 [dependencies]
 clap = { workspace = true }
-enshwick-loader-api = { workspace = true, features = ["schema"] }
-enshwick-loader-builds.workspace = true
-enshwick-loader-reflect.workspace = true
+enshwick = { workspace = true, features = ["schema"] }
+enshwick-gamedata.workspace = true
+enshwick-reflect.workspace = true
 iced-x86.workspace = true
 memchr.workspace = true
 serde.workspace = true
@@ -25,7 +25,6 @@ semver.workspace = true
 zip.workspace = true
 
 [target.'cfg(windows)'.dependencies]
-enshwick-loader = { path = "../internal/loader", version = "0.0.0-dev" }
 windows-sys = { workspace = true, features = ["Win32_Foundation", "Win32_System_LibraryLoader"] }
 
 [lints]

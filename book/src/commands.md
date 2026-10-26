@@ -13,13 +13,13 @@ and on a client while it hosts a game.
 
 ## Registering a command
 
-[`load.add_command(name, help, handler)`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/commands.rs)
+[`load.add_command(name, help, handler)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/commands.rs)
 registers `/name` with a line of help:
 
 ```rust
-use enshwick_loader_api::commands::Reply;
+use enshwick::commands::Reply;
 
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     load.add_command("players", "administrators: who is online", |ctx, args| {
         if !ctx.is_admin() {
             return Reply::from("Only administrators may do that.");
@@ -34,7 +34,7 @@ fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_
 
 - Register during `init`; the loader refuses commands after it.
 - A name is 1 to 32 characters of `[a-z0-9-]`
-  ([`commands::is_valid_name`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/commands.rs)).
+  ([`commands::is_valid_name`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/commands.rs)).
   A malformed name, `enshwick`, or a name another mod holds is refused:
   `load.add_command` returns `Err(Off)`.
 - The player may type the name in any case: `/Players` runs `/players`.
@@ -44,14 +44,14 @@ fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_
 The loader runs the handler on the server's game thread, where
 [world reads](world.md) work, with two arguments:
 
-- a [`CommandContext`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/commands.rs):
+- a [`CommandContext`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/commands.rs):
   `ctx.player`, the [`Player`](world.md#players) who typed it (`None` for the
   server's console), `ctx.character()`, that player's character, `ctx.name`,
   the command's name, and `ctx.is_admin()`, true for the console too;
 - the words after the name, split at whitespace, as `&[&str]`.
 
 The handler returns a
-[`Reply`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/commands.rs),
+[`Reply`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/commands.rs),
 built `From` a `String` or `&str`. Each line of it becomes a chat message to
 that player; empty lines are dropped and a reply keeps at most 16 lines.
 `Reply::none()` sends nothing.
@@ -59,7 +59,7 @@ that player; empty lines are dropped and a reply keeps at most 16 lines.
 Check permissions in the handler: every player can type every command.
 
 ```rust
-use enshwick_loader_api::commands::{CommandContext, Reply};
+use enshwick::commands::{CommandContext, Reply};
 
 fn kick_all(ctx: &CommandContext, _args: &[&str]) -> Reply {
     if !ctx.is_admin() {
@@ -95,7 +95,7 @@ loader's own messages between client and server. A `/` command no one has gets
 
 ## Running a command line
 
-[`commands::run(line)`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/commands.rs)
+[`commands::run(line)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/commands.rs)
 runs a command line as the server's console: an administrator without a
 character, whose handlers get `ctx.player` as `None`. Any mod's command and
 the loader's own work, and it returns the reply.
@@ -104,11 +104,11 @@ Call it on the server's game thread, from a scheduled task or a game event.
 Elsewhere it returns `RunError::NotOnGameThread`.
 
 ```rust
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let scheduler = load.scheduler()?;
-    scheduler.next_tick(|| match enshwick_loader_api::commands::run("/enshwick status") {
-        Ok(reply) => enshwick_loader_api::info!("{}", reply.text()),
-        Err(why) => enshwick_loader_api::warn!("not run: {why}"),
+    scheduler.next_tick(|| match enshwick::commands::run("/enshwick status") {
+        Ok(reply) => enshwick::info!("{}", reply.text()),
+        Err(why) => enshwick::warn!("not run: {why}"),
     });
     Ok(())
 }
@@ -118,16 +118,16 @@ A reply to the console is returned to the caller, not sent.
 
 ## Chat lines
 
-[`world.broadcast(text)`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/world.rs)
+[`world.broadcast(text)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/world.rs)
 sends a line to every player and
-[`world.tell(&player, text)`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/world.rs)
+[`world.tell(&player, text)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/world.rs)
 to one player. Call them from any thread: the line waits in a queue, and the
 server posts it after the next step. Each line of `text` becomes a message of
 its own. The queue holds at most 256 lines; more are dropped.
 
 ## Notices on screen
 
-[`world.notify(&player, text)`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/world.rs)
+[`world.notify(&player, text)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/world.rs)
 shows a line on the player's screen, as the game shows its own "can't do
 that" messages, and `world.notify_all(text)` on every player's. It returns
 how the line went: `Notice::OnScreen`, or `Notice::Chat` when the player's
@@ -135,9 +135,9 @@ client lacks Enshwick and gets the line in chat instead. Call it on the game
 thread. The game shows up to 255 bytes; keep it to a short line.
 
 ```rust
-use enshwick_loader_api::world::Notice;
+use enshwick::world::Notice;
 
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let world = load.world()?;
     load.add_command("ping-me", "shows a notice", move |ctx, _args| {
         let Some(player) = &ctx.player else {
@@ -159,10 +159,10 @@ at its next step.
 
 ## Worked examples
 
-- [`enshwick-admin-tools`](https://github.com/themaiby/enshwick/tree/main/mods/enshwick-admin-tools)
+- [`enshwick-admin-tools`](https://github.com/enshwick/enshwick/tree/main/mods/enshwick-admin-tools)
   registers `/admin` for administrators, answers with `broadcast` and `tell`,
   and runs each line appended to `mod-data/admin-tools/commands.txt` with
   `commands::run` from a scheduled task.
-- [`enshwick-safes`](https://github.com/themaiby/enshwick/tree/main/mods/enshwick-safes)
+- [`enshwick-safes`](https://github.com/enshwick/enshwick/tree/main/mods/enshwick-safes)
   declares who may open a Safe as [player actions](actions.md), which answer
   `/safe` too, and guards its labels with a rename filter.

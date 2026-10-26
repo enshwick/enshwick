@@ -6,9 +6,8 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use clap::{Parser, Subcommand, ValueEnum};
-use enshwick_loader_api::content::Guid;
+use enshwick::content::Guid;
 
-mod compat;
 mod install;
 mod manifest;
 mod new;
@@ -70,13 +69,6 @@ enum Command {
     /// Checks, describes and packages content packs.
     #[command(subcommand)]
     Pack(pack::Command),
-    /// Reports which loader features and mods work on a game build, from its
-    /// executable. Exits with 2 when something does not.
-    Compat(compat::Args),
-    /// Runs the loader for `compat` on a prepared game folder, in a process
-    /// of its own.
-    #[command(hide = true)]
-    CompatRun(compat::RunArgs),
     /// Prints the GUID and game id of each content id, `<mod>:<name>`.
     Id {
         /// The content ids.
@@ -115,25 +107,6 @@ fn main() -> ExitCode {
             return match pin::run(&args) {
                 Ok(true) => ExitCode::SUCCESS,
                 Ok(false) => ExitCode::from(pin::NEEDS_HUMAN),
-                Err(error) => {
-                    let _shown = writeln!(std::io::stderr(), "error: {error}");
-                    ExitCode::FAILURE
-                }
-            };
-        }
-        Command::Compat(args) => {
-            return match compat::run(&args) {
-                Ok(true) => ExitCode::SUCCESS,
-                Ok(false) => ExitCode::from(compat::BROKEN),
-                Err(error) => {
-                    let _shown = writeln!(std::io::stderr(), "error: {error}");
-                    ExitCode::FAILURE
-                }
-            };
-        }
-        Command::CompatRun(args) => {
-            return match compat::run_loader(&args) {
-                Ok(()) => ExitCode::SUCCESS,
                 Err(error) => {
                     let _shown = writeln!(std::io::stderr(), "error: {error}");
                     ExitCode::FAILURE

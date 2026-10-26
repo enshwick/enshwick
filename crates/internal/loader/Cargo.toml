@@ -1,6 +1,6 @@
 [package]
 name = "enshwick-loader"
-version = "0.0.0-dev"
+version = "1.0.0-alpha.1"
 description = "Internal, not for mods: the Enshwick Loader DLL that finds the game build, loads mods and links their hooks inside Enshrouded"
 keywords = ["enshrouded", "modding", "loader", "hooks"]
 categories = ["game-development"]
@@ -12,7 +12,7 @@ repository.workspace = true
 publish.workspace = true
 
 [lib]
-name = "enshwick"
+name = "enshwick_loader"
 crate-type = ["cdylib", "rlib"]
 # The loader is no library for users.
 doc = false
@@ -21,9 +21,9 @@ doc = false
 arc-swap.workspace = true
 arrayvec.workspace = true
 base64.workspace = true
-enshwick-loader-api.workspace = true
-enshwick-loader-builds.workspace = true
-enshwick-loader-reflect.workspace = true
+enshwick.workspace = true
+enshwick-gamedata.workspace = true
+enshwick-reflect.workspace = true
 postcard.workspace = true
 rustc-hash.workspace = true
 semver.workspace = true
@@ -33,7 +33,6 @@ strsim.workspace = true
 thiserror.workspace = true
 toml.workspace = true
 toml_edit.workspace = true
-ruzstd.workspace = true
 
 [target.'cfg(windows)'.dependencies]
 iced-x86.workspace = true

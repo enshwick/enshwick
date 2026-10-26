@@ -95,10 +95,10 @@ impl FrameSlot {
 
     /// The caller frame the thunk stored on this thread.
     #[must_use]
-    pub(crate) fn read(self) -> enshwick_loader_api::abi::CallerFrame {
+    pub(crate) fn read(self) -> enshwick::abi::CallerFrame {
         // SAFETY: each index was allocated by `allocate`.
         let value = |i: usize| unsafe { TlsGetValue(self.0[i]) }.addr() as u64;
-        enshwick_loader_api::abi::CallerFrame {
+        enshwick::abi::CallerFrame {
             rsp: value(0),
             rbx: value(1),
             rbp: value(2),
@@ -1001,7 +1001,7 @@ mod tests {
     fn the_owners_of_a_failed_mid_function_hook_count_as_failed() {
         use crate::chains::{LOADER, Link};
         use crate::mid::MidLink;
-        use enshwick_loader_api::abi::{HookFlags, Registers};
+        use enshwick::abi::{HookFlags, Registers};
 
         static NEXT: [AtomicUsize; 2] = [const { AtomicUsize::new(0) }; 2];
         unsafe extern "system" fn handler(_: *mut Registers, _: *mut core::ffi::c_void) {}

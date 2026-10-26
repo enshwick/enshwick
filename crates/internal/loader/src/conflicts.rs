@@ -7,7 +7,7 @@ use std::borrow::Cow;
 use std::fmt::Write as _;
 use std::sync::{Mutex, PoisonError};
 
-use enshwick_loader_api::abi::Status;
+use enshwick::abi::Status;
 
 /// How the mods on one feature share it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

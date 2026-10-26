@@ -417,10 +417,7 @@ pub fn note(
     }
     let nowhere = texts::fill("join.refused.nowhere", &[]);
     for need in needs.iter().take(MAX_NAMED) {
-        let name = enshwick_loader_api::mods::label(
-            names.get(&need.id).map_or("", String::as_str),
-            &need.id,
-        );
+        let name = enshwick::mods::label(names.get(&need.id).map_or("", String::as_str), &need.id);
         let place = pages
             .get(&need.id)
             .and_then(|line| place(line))
@@ -464,7 +461,7 @@ mod runtime {
     use std::sync::{Mutex, OnceLock, PoisonError};
     use std::time::{Duration, Instant};
 
-    use enshwick_loader_api::abi::Side;
+    use enshwick::abi::Side;
 
     use super::{Gate, Hello, KICK, Rules, SESSION, Step};
     use crate::fuse::Fuse;

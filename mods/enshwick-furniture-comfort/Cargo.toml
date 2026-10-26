@@ -6,7 +6,7 @@ keywords = ["enshrouded", "mod", "comfort"]
 categories = ["game-development"]
 readme = "README.md"
 authors.workspace = true
-homepage = "https://github.com/themaiby/enshwick/tree/main/mods/enshwick-furniture-comfort"
+homepage = "https://github.com/enshwick/enshwick/tree/main/mods/enshwick-furniture-comfort"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -17,7 +17,7 @@ publish.workspace = true
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-enshwick-loader-api.workspace = true
+enshwick.workspace = true
 serde.workspace = true
 
 [lints]

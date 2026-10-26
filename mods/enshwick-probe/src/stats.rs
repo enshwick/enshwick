@@ -4,11 +4,11 @@
 
 use std::time::Duration;
 
-use enshwick_loader_api::ecs::Entity;
-use enshwick_loader_api::schedule::Scheduler;
-use enshwick_loader_api::stats::{Lasting, Modifier, Op, Stat, StatDef, Stats, builtin};
-use enshwick_loader_api::world::{ComponentType, World};
-use enshwick_loader_api::{Load, Off};
+use enshwick::ecs::Entity;
+use enshwick::schedule::Scheduler;
+use enshwick::stats::{Lasting, Modifier, Op, Stat, StatDef, Stats, builtin};
+use enshwick::world::{ComponentType, World};
+use enshwick::{Load, Off};
 
 /// How long the probe waits for the values to follow.
 const SETTLE: Duration = Duration::from_secs(1);
@@ -34,7 +34,7 @@ impl StatChecks {
         let world = load.world()?;
         let luck = load.define_stat("luck", &StatDef::additive("probe.luck").range(0.0, 1.0))?;
         load.on_stats_changed(|change| {
-            enshwick_loader_api::info!(
+            enshwick::info!(
                 "stats: {:?} stat {} {} -> {}",
                 change.entity,
                 change.stat.index(),
@@ -56,9 +56,9 @@ impl StatChecks {
     pub(crate) fn run(self) {
         match self.stats.info(self.fire) {
             Some(info) if info.id == builtin::RESISTANCE_FIRE => {
-                enshwick_loader_api::info!("PASS stats: built-in kind {info:?}");
+                enshwick::info!("PASS stats: built-in kind {info:?}");
             }
-            other => enshwick_loader_api::warn!("FAIL stats: built-in kind reads {other:?}"),
+            other => enshwick::warn!("FAIL stats: built-in kind reads {other:?}"),
         }
         let Some(target) = self
             .world
@@ -67,7 +67,7 @@ impl StatChecks {
             .map(|p| p.entity)
             .find(|&e| self.world.vitals(e).is_some_and(|v| v.health.current > 1))
         else {
-            enshwick_loader_api::info!("SKIP stats: no living entity with health");
+            enshwick::info!("SKIP stats: no living entity with health");
             return;
         };
         let before = self.world.vitals(target).map(|v| v.health.max);
@@ -78,7 +78,7 @@ impl StatChecks {
         .into_iter()
         .try_for_each(|m| self.stats.set(target, KEY, m, Lasting::UntilRemoved));
         if let Err(why) = set {
-            enshwick_loader_api::warn!("FAIL stats: modifiers on {target:?}: {why}");
+            enshwick::warn!("FAIL stats: modifiers on {target:?}: {why}");
             return;
         }
         self.scheduler
@@ -88,36 +88,34 @@ impl StatChecks {
     fn raised(self, target: Entity, before: Option<i32>) {
         let luck = self.stats.value(target, self.luck);
         if (luck - 0.25).abs() < 1e-5 {
-            enshwick_loader_api::info!("PASS stats: luck of {target:?} reads {luck}");
+            enshwick::info!("PASS stats: luck of {target:?} reads {luck}");
         } else {
-            enshwick_loader_api::warn!("FAIL stats: luck of {target:?} reads {luck}");
+            enshwick::warn!("FAIL stats: luck of {target:?} reads {luck}");
         }
         let sources = self.stats.sources(target, None);
-        enshwick_loader_api::info!("stats: sources of {target:?}: {sources:?}");
+        enshwick::info!("stats: sources of {target:?}: {sources:?}");
         let after = self.world.vitals(target).map(|v| v.health.max);
         match (before, after) {
             (Some(b), Some(a)) if a == b + i32::from(EXTRA) => {
-                enshwick_loader_api::info!("PASS stats: maximum health of {target:?} {b} -> {a}");
+                enshwick::info!("PASS stats: maximum health of {target:?} {b} -> {a}");
             }
             other => {
-                enshwick_loader_api::warn!("FAIL stats: maximum health of {target:?}: {other:?}");
+                enshwick::warn!("FAIL stats: maximum health of {target:?}: {other:?}");
             }
         }
         let removed = [self.luck, self.health_max]
             .into_iter()
             .try_for_each(|stat| self.stats.remove(target, KEY, stat));
         if let Err(why) = removed {
-            enshwick_loader_api::warn!("FAIL stats: removal on {target:?}: {why}");
+            enshwick::warn!("FAIL stats: removal on {target:?}: {why}");
             return;
         }
         self.scheduler.after(SETTLE, move || {
             let back = self.world.vitals(target).map(|v| v.health.max);
             if back == before {
-                enshwick_loader_api::info!(
-                    "PASS stats: maximum health of {target:?} back to {back:?}"
-                );
+                enshwick::info!("PASS stats: maximum health of {target:?} back to {back:?}");
             } else {
-                enshwick_loader_api::warn!(
+                enshwick::warn!(
                     "FAIL stats: maximum health of {target:?} {back:?}, was {before:?}"
                 );
             }

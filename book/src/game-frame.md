@@ -12,7 +12,7 @@ In the common case a hook does not allocate, lock, format or log.
 
 - **No allocation.** No `Vec`, `String`, `Box` or `format!` per call. Use stack
   arrays, or a `thread_local!` value reused between calls, as
-  [`enshwick-survivors-per-altar`](https://github.com/themaiby/enshwick/blob/main/mods/enshwick-survivors-per-altar/src/policy.rs)
+  [`enshwick-survivors-per-altar`](https://github.com/enshwick/enshwick/blob/main/mods/enshwick-survivors-per-altar/src/policy.rs)
   does for its plan.
 - **No locks** on the fast path. A lock held by another thread stalls the
   frame; a lock the hook already holds, entered again through a nested hooked
@@ -28,11 +28,11 @@ Decide "not ours" in a few instructions, then forward to `Next`:
 ```rust
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use enshwick_loader_api::Next;
+use enshwick::Next;
 
 static ENABLED: AtomicBool = AtomicBool::new(true);
 
-enshwick_loader_api::detour! {
+enshwick::detour! {
     static NODE_UNLOCKED: unsafe extern "system" fn(node: u32, bits: *const u64) -> u8 = node_unlocked;
 }
 
@@ -60,7 +60,7 @@ or swapped whole:
   such as settings applied by `on_config_change`: readers load it without a
   lock, the writer stores a new one.
 
-[`enshwick-flame-altar-count`](https://github.com/themaiby/enshwick/blob/main/mods/enshwick-flame-altar-count/src/lib.rs)
+[`enshwick-flame-altar-count`](https://github.com/enshwick/enshwick/blob/main/mods/enshwick-flame-altar-count/src/lib.rs)
 keeps its altar table in an `ArcSwap` and the cap in force in an `AtomicU8`.
 
 ## Work that can wait
@@ -68,7 +68,7 @@ keeps its altar table in an `ArcSwap` and the cap in force in an `AtomicU8`.
 Work that can wait goes elsewhere: to a thread of the mod's own, started in
 `Mod::ready`, or to the server's game thread through the
 [scheduler](events.md). File writes in particular never happen in a hook.
-[`enshwick-shared-experience`](https://github.com/themaiby/enshwick/blob/main/mods/enshwick-shared-experience/src/lib.rs)
+[`enshwick-shared-experience`](https://github.com/enshwick/enshwick/blob/main/mods/enshwick-shared-experience/src/lib.rs)
 writes its save on a thread it spawns from the `WorldSaved` handler.
 
 ## Unsafe code
@@ -81,7 +81,7 @@ writes its save on a thread it spawns from the `WorldSaved` handler.
   reference into game memory:
 
 ```rust
-use enshwick_loader_api::raw::{read_at, write_at};
+use enshwick::raw::{read_at, write_at};
 
 let mut bytes = [1u8, 0, 0, 0, 2, 0];
 // SAFETY: a `u16` lies at offset 4.

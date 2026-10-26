@@ -1,6 +1,6 @@
 # Loot containers
 
-[`enshwick_loader_api::loot`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/loot.rs)
+[`enshwick::loot`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/loot.rs)
 reads the containers a dead enemy leaves, corpses and loot bags, and other
 containers that dissolve once emptied. It reads only; empty a container
 through [Inventories](../inventories.md). To put items into the loot a
@@ -9,16 +9,16 @@ container rolls, see [Random loot](random-loot.md).
 ## Each check of the containers
 
 The game checks every such container each step in one ECS system,
-[`loot::SYSTEM`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/loot.rs)
+[`loot::SYSTEM`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/loot.rs)
 (`destroy_inventory_on_loot`), on a worker thread.
-[`load.on_loot_pass`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/loot.rs)
+[`load.on_loot_pass`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/loot.rs)
 runs a handler after each run of it in the server's world, with a `LootPass`
 that walks that run's containers and reads any entity as one:
 
 ```rust
-use enshwick_loader_api::loot::near;
+use enshwick::loot::near;
 
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     load.on_loot_pass(|pass| {
         let spot = [0.0, 0.0, 0.0];
         let mut open = 0;
@@ -39,7 +39,7 @@ system's own hook; see [ECS inside systems](../ecs.md).
 
 ## Reading one container
 
-[`Container`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/loot.rs)
+[`Container`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/loot.rs)
 holds what one container is and holds, read in one go:
 
 | Field | Meaning |
@@ -49,7 +49,7 @@ holds what one container is and holds, read in one go:
 | `empty` | Whether it holds nothing, as the game last recorded. |
 | `expires` | Whether it despawns on its own after a while (`LifeTime`). |
 | `area_loot` | Its `AreaLootOverride`: `Some(true)` when area loot may take it, `Some(false)` when excluded (items a player dropped), `None` without one. |
-| `offer` | Its interaction offer, an [`Offer`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/loot.rs); `None` without one. |
+| `offer` | Its interaction offer, an [`Offer`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/loot.rs); `None` without one. |
 
 An `Offer` names who last opened or looted the container (`guest`,
 `None` before anyone did), when (`accepted_at`, in the game's
@@ -75,12 +75,12 @@ From inside any hooked system, with its context:
 - `is_player(ctx, entity)` tells whether an entity is a player character,
   such as an offer's `guest`.
 
-[`near(center, at, radius, height)`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/loot.rs)
+[`near(center, at, radius, height)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/loot.rs)
 tells whether `at` lies within `radius` metres of `center` across the
 ground and within `height` metres above or below it:
 
 ```rust
-use enshwick_loader_api::loot::near;
+use enshwick::loot::near;
 
 assert!(near([0.0, 0.0, 0.0], [6.0, 3.0, 8.0], 10.0, 4.0));
 assert!(!near([0.0, 0.0, 0.0], [6.0, 5.0, 8.0], 10.0, 4.0));
@@ -91,7 +91,7 @@ assert!(!near([0.0, 0.0, 0.0], [6.0, 5.0, 8.0], 10.0, 4.0));
 A client that hosts a game runs the system in the built-in server's world
 and in its own. `on_loot_pass` calls its handler for the server's world only,
 checked with
-[`Worlds::is_server(ctx)`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/ecs.rs),
+[`Worlds::is_server(ctx)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/ecs.rs),
 so the handler needs no check of its own. Entity ids of the two worlds are
 unrelated. See [Sides and hosting](../concepts/sides-and-hosting.md).
 
@@ -100,10 +100,10 @@ mods too, for the games it hosts.
 
 ## A worked example: area loot
 
-[`enshwick-area-loot`](https://github.com/themaiby/enshwick/tree/main/mods/enshwick-area-loot)
+[`enshwick-area-loot`](https://github.com/enshwick/enshwick/tree/main/mods/enshwick-area-loot)
 empties the loot around a container a player just emptied into the same
 player. Its
-[`take.rs`](https://github.com/themaiby/enshwick/blob/main/mods/enshwick-area-loot/src/take.rs)
+[`take.rs`](https://github.com/enshwick/enshwick/blob/main/mods/enshwick-area-loot/src/take.rs)
 puts the pieces of this chapter together:
 
 1. At `init` it resolves `Containers`, `Inventories` and `Worlds`, and hooks

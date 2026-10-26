@@ -4,7 +4,7 @@ Most of the game's simulation runs as ECS systems: functions that walk the rows
 of a query, one row per entity that has the components they ask for.
 `load.system(name)` finds a system's update function by its reflected name,
 and a [hook](hooks.md) on it receives the system's query context, `ctx`. The
-types in [`enshwick_loader_api::ecs`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/ecs.rs)
+types in [`enshwick::ecs`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/ecs.rs)
 work through that context, with the engine's own functions, pinned per build in
 the loader's table.
 
@@ -17,7 +17,7 @@ Resolve what you need once in `init` and keep it in a `OnceLock`:
 ```rust
 use std::sync::OnceLock;
 
-use enshwick_loader_api::ecs::{Attributes, Components, Ecs, Worlds};
+use enshwick::ecs::{Attributes, Components, Ecs, Worlds};
 
 struct Engine {
     ecs: Ecs,
@@ -28,7 +28,7 @@ struct Engine {
 
 static ENGINE: OnceLock<Engine> = OnceLock::new();
 
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let engine = Engine {
         ecs: Ecs::resolve(load)?,
         components: Components::resolve(load)?,
@@ -45,7 +45,7 @@ constants for the running build.
 
 ## Walking the query: `Ecs`
 
-[`Ecs`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/ecs.rs)
+[`Ecs`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/ecs.rs)
 walks the system's query with the engine's own iterator:
 
 - `query::<N>(ctx)` starts a walk; `next()` moves to the next row and returns
@@ -64,14 +64,14 @@ walks the system's query with the engine's own iterator:
   component.
 
 ```rust
-use enshwick_loader_api::Next;
+use enshwick::Next;
 # use std::sync::OnceLock;
-# static ECS: OnceLock<enshwick_loader_api::ecs::Ecs> = OnceLock::new();
+# static ECS: OnceLock<enshwick::ecs::Ecs> = OnceLock::new();
 
 /// The words of this system's iterator.
 const WORDS: usize = 5;
 
-enshwick_loader_api::detour! {
+enshwick::detour! {
     static SYSTEM: unsafe extern "system" fn(ctx: *mut u64) = system;
 }
 
@@ -98,7 +98,7 @@ fn system(next: Next<unsafe extern "system" fn(*mut u64)>, ctx: *mut u64) {
 
 ## Other entities: `Components`
 
-[`Components`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/ecs.rs)
+[`Components`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/ecs.rs)
 reads what any entity holds, from inside a running system:
 
 - `component(ctx, entity, hash)` returns a pointer to the entity's component of
@@ -111,15 +111,15 @@ The hash names the component type. Get it at init from
 `World::component_type`, by the type's reflected name:
 
 ```rust
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let world = load.world()?;
     let used_item = world.component_type(load, "keen::ecs::UsedItem")?.hash();
-    enshwick_loader_api::info!("UsedItem is {used_item:#010x}");
+    enshwick::info!("UsedItem is {used_item:#010x}");
     Ok(())
 }
 ```
 
-[`enshwick-safes`](https://github.com/themaiby/enshwick/blob/main/mods/enshwick-safes/src/lib.rs)
+[`enshwick-safes`](https://github.com/enshwick/enshwick/blob/main/mods/enshwick-safes/src/lib.rs)
 gets the `InventorySetup` type this way to find the world's Safes.
 
 ### Positions
@@ -129,7 +129,7 @@ the metre. `ecs::transform_position`, an `unsafe fn` over a raw component
 pointer, reads a `CurrentTransform` component in metres, and `ecs::metres` and `ecs::fixed` convert between the two:
 
 ```rust
-use enshwick_loader_api::ecs::{FIXED_PER_METRE, fixed, metres};
+use enshwick::ecs::{FIXED_PER_METRE, fixed, metres};
 
 let at = fixed([10.5, 2.0, -4.0]);
 assert_eq!(at[0], (10.5 * FIXED_PER_METRE) as i64);
@@ -140,7 +140,7 @@ assert_eq!(metres(at), [10.5, 2.0, -4.0]);
 
 Components such as `Level` and `Experience` hold attributes looked up by hash
 in the row's attribute registry.
-[`Attributes`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/ecs.rs)
+[`Attributes`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/ecs.rs)
 reads and writes them:
 
 - `value(registry, set, attribute)` reads one, or `None` when the set is not
@@ -154,14 +154,14 @@ the same row, both from the query's words. Mark the component changed with
 
 For experience, `Load::on_experience` does this work and hands the mod each
 character's row (see [Progress](progress.md)), as
-[`enshwick-shared-experience`](https://github.com/themaiby/enshwick/blob/main/mods/enshwick-shared-experience/src/lib.rs)
+[`enshwick-shared-experience`](https://github.com/enshwick/enshwick/blob/main/mods/enshwick-shared-experience/src/lib.rs)
 uses it.
 
 ## Which world: `Worlds`
 
 A client that hosts a game runs two worlds, its own and the built-in server's,
 and their systems share the same functions.
-[`Worlds`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/ecs.rs)
+[`Worlds`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/ecs.rs)
 tells them apart:
 
 - `is_server(ctx)` is true for a context of the server's world: always on the

@@ -3,8 +3,8 @@
 
 use std::sync::atomic::{AtomicU64, Ordering};
 
+use enshwick::{Load, Mod, Off};
 use enshwick_example_trading_post_api::{Prices, Sold};
-use enshwick_loader_api::{Load, Mod, Off};
 
 /// Items from this id on are rare.
 const RARE: u32 = 32;
@@ -22,8 +22,8 @@ pub fn earned() -> u64 {
 pub struct MarketStalls;
 
 impl Mod for MarketStalls {
-    fn manifest() -> &'static enshwick_loader_api::abi::Manifest {
-        enshwick_loader_api::manifest!(
+    fn manifest() -> &'static enshwick::abi::Manifest {
+        enshwick::manifest!(
             id: "market-stalls",
             side: SERVER,
             requires: ["trading-post" => ">=0.1, <1.0"],
@@ -38,7 +38,7 @@ impl Mod for MarketStalls {
         }
         load.on_mod_event(|sold: &Sold| {
             let total = EARNED.fetch_add(u64::from(sold.price), Ordering::Relaxed);
-            enshwick_loader_api::info!(
+            enshwick::info!(
                 "item {} sold for {}; {} coins earned",
                 sold.item,
                 sold.price,
@@ -49,14 +49,14 @@ impl Mod for MarketStalls {
     }
 }
 
-enshwick_loader_api::declare_mod!(MarketStalls);
+enshwick::declare_mod!(MarketStalls);
 
 #[cfg(test)]
 mod tests {
     use std::sync::atomic::{AtomicU32, Ordering};
 
+    use enshwick::abi::Status;
     use enshwick_example_trading_post_api::{Prices, Sold};
-    use enshwick_loader_api::abi::Status;
 
     static PRICE: AtomicU32 = AtomicU32::new(10);
 
@@ -72,9 +72,7 @@ mod tests {
 
     #[test]
     fn raises_rare_prices_and_counts_sales() {
-        let loader = enshwick_loader_api::test::FakeHost::new()
-            .service(&PRICES)
-            .install();
+        let loader = enshwick::test::FakeHost::new().service(&PRICES).install();
         // SAFETY: the exports of `declare_mod!` above.
         let status = unsafe { loader.start(super::enshwick_mod_init, super::enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
@@ -91,7 +89,7 @@ mod tests {
 
     #[test]
     fn without_trading_post_it_turns_off() {
-        let loader = enshwick_loader_api::test::FakeHost::new().install();
+        let loader = enshwick::test::FakeHost::new().install();
         // SAFETY: the exports of `declare_mod!` above.
         let status = unsafe { loader.start(super::enshwick_mod_init, super::enshwick_mod_ready) };
         assert_ne!(status, Status::OK);

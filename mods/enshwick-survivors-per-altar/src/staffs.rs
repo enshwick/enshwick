@@ -8,13 +8,13 @@
 //! charge as consuming, which makes the game take the staff in the same
 //! transaction as the spawn or move, and only when that works.
 
-use enshwick_loader_api::content::icons::{Icon, Pixels, Tint};
-use enshwick_loader_api::content::items::{Meter, NewItem, Stat, StatFormat};
-use enshwick_loader_api::content::{Guid, Id};
-use enshwick_loader_api::i18n::{Language, Texts};
-use enshwick_loader_api::migrations::Migrations;
-use enshwick_loader_api::survivors::WorkshopSurvivor;
-use enshwick_loader_api::{Load, Off};
+use enshwick::content::icons::{Icon, Pixels, Tint};
+use enshwick::content::items::{Meter, NewItem, Stat, StatFormat};
+use enshwick::content::{Guid, Id};
+use enshwick::i18n::{Language, Texts};
+use enshwick::migrations::Migrations;
+use enshwick::survivors::WorkshopSurvivor;
+use enshwick::{Load, Off};
 
 /// The mod's texts, per language.
 pub(crate) const TEXTS: &str = include_str!("texts.toml");
@@ -99,7 +99,7 @@ staffs! {
 /// The copy staff with the game id `item`, its own or the one it had
 /// before.
 pub(crate) fn copy_staff(item: u32) -> Option<&'static Staff> {
-    let item = enshwick_loader_api::migrations::current_id(item);
+    let item = enshwick::migrations::current_id(item);
     STAFFS.iter().find(|s| s.copy.id() == item)
 }
 
@@ -207,7 +207,7 @@ pub(crate) fn file(load: &mut Load<'_>) -> Result<(), Off> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use enshwick_loader_api::survivors::WORKSHOP_SURVIVORS;
+    use enshwick::survivors::WORKSHOP_SURVIVORS;
 
     #[test]
     fn every_staff_has_its_own_ids() {

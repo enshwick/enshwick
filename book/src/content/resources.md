@@ -1,18 +1,18 @@
 # Served resources
 
 Items, recipes and workshops are built on one lower-level call,
-[`Load::serve`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/content.rs).
+[`Load::serve`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content.rs).
 It serves any game resource, new or changed, as if it came from the game's
 archive. Reach for it when the high-level calls do not cover what you need.
 
 ## Keys and bases
 
 A resource is named by a
-[`ResourceKey`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs):
+[`ResourceKey`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/abi.rs):
 a GUID, a type hash and a part.
-[`Guid::key(type_hash)`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/content.rs)
+[`Guid::key(type_hash)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content.rs)
 makes the key of part 0, and
-[`content::types`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/content.rs)
+[`content::types`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content.rs)
 holds the type hashes mods commonly serve: `ITEM_INFO`, `ITEM_REGISTRY`,
 `RECIPE_REGISTRY`, `TEMPLATE`, `TEMPLATE_COLLECTION` and
 `WORKSHOP_REGISTRY`.
@@ -26,12 +26,12 @@ bytes of the resource `base`:
   registry with one more entry.
 
 ```rust
-use enshwick_loader_api::content::{Blob, Guid, Id, types};
+use enshwick::content::{Blob, Guid, Id, types};
 
 const CHEST: Guid = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");
 const SAFE_ID: Id = Id::new("my-mod:safe");
 
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     const SAFE: Guid = SAFE_ID.guid();
     load.declare(SAFE_ID)?;
     load.serve(SAFE.key(types::ITEM_INFO), CHEST.key(types::ITEM_INFO), |chest| {
@@ -45,7 +45,7 @@ fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_
 
 Field offsets change between game builds; read them with
 `load.field_offset(type, field)` and `load.type_size(type)` during `init`,
-as [`ItemLayout::resolve`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/content/items.rs)
+as [`ItemLayout::resolve`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content/items.rs)
 does, and move them into the builder. See
 [Finding the game](../finding-the-game.md).
 
@@ -106,7 +106,7 @@ and what failed.
 Game resources are blobs: plain data whose arrays and strings are offsets
 relative to the field that holds them. Growing an array in place would break
 every offset after it.
-[`content::Blob`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/content.rs)
+[`content::Blob`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content.rs)
 edits a blob safely, by moving a grown array to the end and correcting the
 offsets that move with it.
 
@@ -134,7 +134,7 @@ itself, then a 32-bit count.
   or `None` when its headers are empty or set later with `set_array`.
 
 ```rust
-use enshwick_loader_api::content::Blob;
+use enshwick::content::Blob;
 
 // A root with one array header at 0: two u32 elements right after it.
 let mut base = vec![8, 0, 0, 0, 2, 0, 0, 0];
@@ -155,17 +155,17 @@ assert_eq!(blob.array(header), Some((text, 4)));
 ```
 
 The API's own
-[`items.rs`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/content/items.rs),
-[`recipes.rs`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/content/recipes.rs)
+[`items.rs`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content/items.rs),
+[`recipes.rs`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content/recipes.rs)
 and
-[`workshops.rs`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/content/workshops.rs)
+[`workshops.rs`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content/workshops.rs)
 are worked examples: each builds its resources with `Blob` alone.
 
 ## Reading vanilla resources
 
 A builder sees only its own base. To read another vanilla resource, such as
 the template a station item places or an item's name tag,
-[`content::game_resource(key)`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/content.rs)
+[`content::game_resource(key)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content.rs)
 returns its bytes from the game's archive files, as the game reads them
 before it resolves their references, so `Blob` reads them the same way. It
 works during `init` and later, on any thread and on both sides, and never
@@ -173,8 +173,8 @@ touches the game's memory. Each call reads the archive, so keep what a mod
 needs more than once.
 
 ```rust
-use enshwick_loader_api::content::{Blob, game_resource, types};
-use enshwick_loader_api::content::workshops::stations;
+use enshwick::content::{Blob, game_resource, types};
+use enshwick::content::workshops::stations;
 
 if let Some(item) = game_resource(stations::WORKBENCH.item.key(types::ITEM_INFO)) {
     let item = Blob::new(&item);
@@ -184,21 +184,21 @@ if let Some(item) = game_resource(stations::WORKBENCH.item.key(types::ITEM_INFO)
 
 ## One text for one tag
 
-[`Load::add_text(tag, language, text)`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/content.rs)
+[`Load::add_text(tag, language, text)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content.rs)
 is the low-level text call: the client shows `text` wherever the game asks
 for the `LocaTag` `tag`, a declared [content id](../content.md#content-ids)'s
 GUID, in `language`, a
-[`Language`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/i18n.rs)
+[`Language`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/i18n.rs)
 number. A served item whose name field holds `tag` shows that text as its
 name.
 
 ```rust
-use enshwick_loader_api::content::Id;
-use enshwick_loader_api::i18n::Language;
+use enshwick::content::Id;
+use enshwick::i18n::Language;
 
 const SAFE_NAME: Id = Id::new("my-mod:safe.name");
 
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let tag = load.declare(SAFE_NAME)?;
     load.add_text(tag, Language::FALLBACK, "Safe")?;
     load.add_text(tag, Language::DE_DE, "Tresor")

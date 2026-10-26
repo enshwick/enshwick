@@ -5,8 +5,8 @@
 //! the changes waiting for the next world. `/config` and the Mods screen both change settings
 //! through here.
 
-use enshwick_loader_api::abi::Event;
-use enshwick_loader_api::config::Stage;
+use enshwick::abi::Event;
+use enshwick::config::Stage;
 
 use super::{Change, refused};
 use crate::host::Loader;
@@ -38,7 +38,7 @@ pub(crate) fn apply(
         .ok()
         .and_then(|s| s.clone())
         .ok_or_else(|| texts::fill("config.no-schema", &[("id", id)]))?;
-    if loader.side == enshwick_loader_api::abi::Side::SERVER
+    if loader.side == enshwick::abi::Side::SERVER
         && schema.field(key).is_some_and(|f| f.stage == Stage::Client)
     {
         return Err(texts::fill("refused.client", &[("id", id), ("key", key)]));

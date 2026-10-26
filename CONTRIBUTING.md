@@ -28,7 +28,7 @@ cannot, are in this file:
   with the change; `bun run check:book` checks its structure, and its Rust
   examples run with `cargo test --doc --workspace`.
 
-What a mod needs and another mod could use goes into `enshwick-loader-api`, not into
+What a mod needs and another mod could use goes into `enshwick`, not into
 the mod: events, world reads, content such as items and recipes, texts. A mod
 keeps only what is its own. The API covers common needs at a high level and
 always leaves the lower levels open (served resources, component reads,
