@@ -290,9 +290,9 @@ The fake answers what you tell it; only the game says whether an engine
 fact holds on the running build. Run a dedicated server of your own, never
 one people play on, with a copy of a world:
 
-- [`enshwick-admin-tools`](https://github.com/enshwick/mod-admin-tools)
-  runs each line appended to its command file on the server's console, so a
-  mod's actions run without anyone joining;
+- the server's [command file](chat.md#the-command-file) runs each line
+  appended to it on the server's console, so a mod's actions run without
+  anyone joining;
 - [`enshwick-probe`](https://github.com/enshwick/devtools-mods/tree/main/enshwick-probe),
   a development mod that is never released, exercises the platform's world
   API and game events and logs each check as `PASS`, `FAIL` or `SKIP` to

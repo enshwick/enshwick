@@ -1,0 +1,22 @@
+---
+source: crates/internal/loader/src/modlist.rs
+expression: lock.render()
+---
+# Written by Enshwick at every start: the mods that loaded. Copy it with the
+# DLLs to set up the same server again; do not edit it.
+
+loader = "0.4.0"
+loader_sha256 = "aa"
+game = "1.0 server (1269579)"
+
+[[mod]]
+id = "you.trading-post"
+version = "0.3.0"
+file = "enshwick-you.trading-post.dll"
+sha256 = "01"
+
+[[mod]]
+id = "you.lockers"
+version = "1.0.0"
+file = "enshwick-you.lockers.dll"
+sha256 = "02"

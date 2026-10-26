@@ -1,11 +1,13 @@
-//! Mod migrations: what a new version of a mod changes in what older
-//! versions left behind. The settings steps run on a mod's settings file
-//! when it registers its migrations; every step runs on a world's files when
-//! the world loads, before the mod reads the world's settings or opens its
-//! stores. `mod-data/enshwick/migrations.toml` records what ran, for the
-//! settings file and per world, so nothing runs twice; a world or settings
-//! file the mod has never seen starts current. Before changing anything the
-//! loader logs what it will do; in a dry run it only logs.
+//! Mod migrations: what a new version of a mod changes in what older versions
+//! left behind.
+//!
+//! The settings steps run on a mod's settings file when it registers its
+//! migrations; every step runs on a world's files when the world loads, before
+//! the mod reads the world's settings or opens its stores. `mod-
+//! data/enshwick/migrations.toml` records what ran, for the settings file and
+//! per world, so nothing runs twice; a world or settings file the mod has never
+//! seen starts current. Before changing anything the loader logs what it will
+//! do; in a dry run it only logs.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -615,10 +617,11 @@ mod live {
 
     use super::{Migration, Record, Step, Target, dry_run, follow_renames, run};
     use crate::host::Loader;
+    use crate::mod_index::ModIndex;
 
     /// A mod's migrations and its map.
     struct Registered {
-        owner: usize,
+        owner: ModIndex,
         list: Vec<Migration>,
         map: MigrateFn,
         user: usize,
@@ -811,7 +814,7 @@ mod live {
             return Status::BAD_ARGS;
         }
         let taken = |registered: &[Arc<Registered>]| {
-            registered.iter().any(|r| r.owner == index) || RENAMES.get().is_some()
+            registered.iter().any(|r| r.owner == ModIndex::new(index)) || RENAMES.get().is_some()
         };
         if taken(&REGISTERED.relock()) {
             return Status::REFUSED;
@@ -826,7 +829,7 @@ mod live {
             return Status::BAD_ARGS;
         };
         let reg = Registered {
-            owner: index,
+            owner: ModIndex::new(index),
             list,
             map,
             user: set.user.expose_provenance(),
@@ -846,7 +849,7 @@ mod live {
     /// Runs `reg`'s pending migrations on its mod's settings file; whether
     /// they ran without a failure.
     fn run_settings(loader: &Loader, reg: &Registered, born: bool) -> bool {
-        let Some(record) = loader.mods.get(reg.owner) else {
+        let Some(record) = loader.mods.get(reg.owner.get()) else {
             return false;
         };
         let path = loader.configs_dir.join(format!("{}.toml", record.id));
@@ -876,7 +879,7 @@ mod live {
         let reg = REGISTERED
             .relock()
             .iter()
-            .find(|r| r.owner == index)
+            .find(|r| r.owner == ModIndex::new(index))
             .cloned();
         match reg {
             Some(reg) => {
@@ -892,7 +895,7 @@ mod live {
     pub(crate) fn world_loaded(loader: &Loader, key: &str) {
         let registered = REGISTERED.relock().clone();
         for reg in &registered {
-            let Some(record) = loader.mods.get(reg.owner) else {
+            let Some(record) = loader.mods.get(reg.owner.get()) else {
                 continue;
             };
             if record.off.load(std::sync::atomic::Ordering::Acquire) {
@@ -930,7 +933,7 @@ mod live {
                 .filter(|r| {
                     loader
                         .mods
-                        .get(r.owner)
+                        .get(r.owner.get())
                         .is_some_and(|m| !m.off.load(std::sync::atomic::Ordering::Acquire))
                 })
                 .flat_map(|r| &r.list)

@@ -5,6 +5,7 @@
 //! answer. Callers are told apart by the return address the caller frame
 //! records; their frames hold the components of the entity they work on.
 
+use crate::mod_index::ModIndex;
 use core::ffi::c_void;
 use std::cell::{Cell, RefCell};
 use std::sync::atomic::{AtomicBool, AtomicU16, Ordering};
@@ -364,7 +365,7 @@ fn too_late(loader: &Loader) -> bool {
 /// Registers mod `owner`'s survivor lookup; one mod at a time.
 pub(crate) fn register_lookup(
     loader: &Loader,
-    owner: usize,
+    owner: ModIndex,
     callback: SurvivorLookupFn,
     user: *mut c_void,
 ) -> Status {
@@ -384,7 +385,7 @@ pub(crate) fn register_lookup(
 
 pub(crate) fn register_bed_check(
     loader: &Loader,
-    owner: usize,
+    owner: ModIndex,
     callback: BedCheckFn,
     user: *mut c_void,
 ) -> Status {
@@ -402,7 +403,7 @@ pub(crate) fn register_bed_check(
 
 pub(crate) fn register_summon(
     loader: &Loader,
-    owner: usize,
+    owner: ModIndex,
     callback: SummonFn,
     user: *mut c_void,
 ) -> Status {
@@ -420,7 +421,7 @@ pub(crate) fn register_summon(
 
 pub(crate) fn register_summoned(
     loader: &Loader,
-    owner: usize,
+    owner: ModIndex,
     callback: SummonFn,
     user: *mut c_void,
 ) -> Status {
@@ -450,7 +451,7 @@ pub(crate) fn register_item(loader: &Loader, item: u32, survivor: u32) -> Status
 /// Registers mod `owner`'s menu status merge; client only, one mod.
 pub(crate) fn register_status(
     loader: &Loader,
-    owner: usize,
+    owner: ModIndex,
     callback: SurvivorStatusFn,
     user: *mut c_void,
 ) -> Status {

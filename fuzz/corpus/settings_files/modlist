@@ -1,0 +1,5 @@
+# Mods
+
+[you.trading-post]
+enabled = false
+links_off = ["you.zones:claim"]

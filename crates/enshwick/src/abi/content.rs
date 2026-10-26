@@ -25,11 +25,13 @@ pub struct ResourceKey {
     pub part: u32,
 }
 
-/// Builds a served resource from its base: `base` is the base resource's
-/// bytes, valid for the call. On [`Status::OK`] the function writes a pointer
-/// and length of bytes that stay valid and writable for the life of the
-/// process: a rebuild ([`HostApi::rebuild_resource`](super::HostApi::rebuild_resource)) writes over the last
-/// patch's bytes.
+/// Builds a served resource from its base: `base` is the base resource's bytes,
+/// valid for the call.
+///
+/// On [`Status::OK`] the function writes a pointer and length of bytes that
+/// stay valid and writable for the life of the process: a rebuild
+/// ([`HostApi::rebuild_resource`](super::HostApi::rebuild_resource)) writes
+/// over the last patch's bytes.
 pub type ResourcePatchFn = unsafe extern "system" fn(
     base: *const u8,
     base_len: usize,

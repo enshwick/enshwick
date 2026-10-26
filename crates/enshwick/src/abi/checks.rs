@@ -5,9 +5,11 @@ use core::ffi::c_void;
 use crate::abi::Header;
 
 /// A player about to interact with an entity, as
-/// [`HostApi::interaction_filter`](super::HostApi::interaction_filter) hands it on: open it, move items in or out
-/// of it, sort it, craft or build from it, dismantle it, or flip its Quick
-/// Stash or upgrade switch.
+/// [`HostApi::interaction_filter`](super::HostApi::interaction_filter) hands it
+/// on.
+///
+/// Open it, move items in or out of it, sort it, craft or build from it,
+/// dismantle it, or flip its Quick Stash or upgrade switch.
 ///
 /// # Examples
 ///

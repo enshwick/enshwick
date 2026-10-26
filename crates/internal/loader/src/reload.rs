@@ -16,6 +16,7 @@
 //! hooked at start, and on a client a mod the server's join turned off.
 //! Those take a restart.
 
+use crate::mod_index::ModIndex;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
 use std::sync::{Mutex, OnceLock};
@@ -365,7 +366,7 @@ fn reload(loader: &'static Loader, mod_: &mut Watched) -> Result<String, String>
     }
     unlink(loader, index);
     shutdown(mod_.module);
-    loader.chains.relock().remove_owner(index);
+    loader.chains.relock().remove_owner(ModIndex::new(index));
     if let Some(calls) = CALLS.relock().get_mut(index) {
         calls.clear();
     }
@@ -381,19 +382,22 @@ fn reload(loader: &'static Loader, mod_: &mut Watched) -> Result<String, String>
         // SAFETY: `load_copy` typed `new.init` from the DLL's `init` export,
         // which `enshwick::abi::exports` declares with this signature; the
         // DLL stays loaded for the process, and `host::API` is a `static`.
-        unsafe { (new.init)(&raw const host::API, host::handle(index)) }
+        unsafe { (new.init)(&raw const host::API, host::handle(ModIndex::new(index))) }
     });
     REINIT.store(NONE, Ordering::Release);
     loader.chains.relock().rewire(host::is_off);
     if !status.is_ok() {
-        loader.turn_off(index, &format!("reload: init returned {}", status.0));
+        loader.turn_off(
+            ModIndex::new(index),
+            &format!("reload: init returned {}", status.0),
+        );
         return Err(format!("its init returned {}", status.0));
     }
     // SAFETY: `load_copy` typed `new.ready` from the DLL's `ready` export,
     // which `enshwick::abi::exports` declares with this signature; it runs
     // after `init` returned OK, checked by the guard before it, the DLL stays
     // loaded for the process, and `host::API` is a `static`.
-    unsafe { (new.ready)(&raw const host::API, host::handle(index)) };
+    unsafe { (new.ready)(&raw const host::API, host::handle(ModIndex::new(index))) };
     // SAFETY: `load_copy` returned the loader's copy of the manifest, whose
     // strings point into the new DLL's static data, loaded for the process.
     let version = unsafe { new.manifest.version.as_str() }.unwrap_or_default();
@@ -417,7 +421,7 @@ fn unlink(loader: &Loader, index: usize) {
     loader.chains.relock().rewire(host::is_off);
     if loader.side == enshwick::abi::Side::CLIENT {
         // The new copy sets its own markers; the old copy's go.
-        let _cleared = crate::ui::set_markers(index, &[]);
+        let _cleared = crate::ui::set_markers(ModIndex::new(index), &[]);
     }
     std::thread::sleep(GRACE);
 }

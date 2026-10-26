@@ -1,0 +1,40 @@
+---
+source: crates/internal/loader/src/diag.rs
+expression: summary().render()
+---
+Enshwick 0.1.5 status at 12:30:00Z
+game: 1.0 server; a game server runs here; up 2h 03m
+the last session crashed: fault 0xc0000005, blamed on you.trading-post: in its code
+
+loader features: 1 of 3 work on this build
+  weather off: missing weather.set, weather.get
+  altars partly off: missing altars.radius
+
+mods: 1 of 2 running
+  Flame Altar Zones (you.lockers) 0.1.4
+    by themaiby; MIT
+    note: recommends you.lanterns, which is not loaded
+    3 zones merged
+  you.trading-post 0.1.1 (off)
+  off in mods/enshwick/mods.toml: you.my-mod
+  not started: you.stalls is replaced by you.market-stalls; delete mods/stalls.dll
+
+turned off:
+  12:13:20Z you.trading-post: panic in an action
+
+services and events:
+  event trading-post:sold from trading-post 0.3.0 to market-stalls
+
+content: 4 resources served (4 built, 0 failed), 12 texts
+code patches: 1 written, 0 left out (mod off), 0 skipped
+knowledge guard: watching; 3 requests it would refuse let through
+hooks: 2 functions armed
+  calls since start, one in 256 timed:
+       1234567     750 ns  building.max_altars (you.lanterns)
+            10          -  chat.post (enshwick)
+
+per-mod costs over 2h 03m (since start), work per second of time:
+  you.trading-post 0.20 ms/s: interaction filter 0.20 ms/s in 100 calls
+
+conflicts:
+  interaction filter: you.trading-post, you.market-stalls, chained
