@@ -156,8 +156,9 @@ assert!(Rates::schema().field("comfort.multiplier").is_some());
 ```
 
 A mod that used to keep a setting at the top of the file moves it into a
-group with a [migration](migrations.md#settings-from-another-mod):
-`take_setting` takes a flat key of another mod into a dotted one.
+group with a [migration](migrations.md): `rename_setting("cost",
+"recipes.cost")`, and `take_setting` brings another mod's flat key into a
+dotted one.
 
 ## Settings per world
 
@@ -359,7 +360,7 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 ```
 
 A table too large for an atomic goes into an `ArcSwap` in the mod's state, as
-[`enshwick-more-altars`](https://github.com/enshwick/mod-more-altars/blob/main/src/lib.rs)
+[`enshwick-better-altars`](https://github.com/enshwick/mod-better-altars/blob/main/src/count.rs)
 does with its altar table.
 
 ## Join values
@@ -426,6 +427,6 @@ is, once its `on_config_change` handler has run, and pushed at the same moment
 to every joined player whose client runs Enshwick: their mod's
 `on_config_change` runs with the new values, without joining again.
 
-[`enshwick-more-altars`](https://github.com/enshwick/mod-more-altars)
+[`enshwick-better-altars`](https://github.com/enshwick/mod-better-altars)
 keeps its altar table as a join value: the client's building interface asks
 the same function as the server's check.

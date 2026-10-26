@@ -1,11 +1,11 @@
 //! Host functions for the game build: symbols, systems, layouts and constants.
 
 use enshwick::abi as api_frame;
-use enshwick::abi::{BuildInfo, Header, Level, ModHandle, Status, Str};
+use enshwick::abi::{BuildInfo, EventTypeInfo, Header, Level, ModHandle, Status, Str};
 
 use crate::host::join::keep;
-use crate::host::memory::{put, put_headed, text};
-use crate::host::{entry, loader};
+use crate::host::memory::{put, put_headed, put_headed_list, text};
+use crate::host::{caller, entry, loader};
 
 pub(crate) extern "system" fn build(out: *mut BuildInfo) {
     entry("build", || {
@@ -192,5 +192,35 @@ pub(crate) extern "system" fn type_hash(type_name: Str, out: *mut u32) -> Status
                 .map_or(Status::MISSING, |h| unsafe { put(out, h) }),
             Err(error) => lookup(&error),
         }
+    })
+}
+
+pub(crate) extern "system" fn event_types(
+    me: ModHandle,
+    out: *mut EventTypeInfo,
+    capacity: u32,
+    count: *mut u32,
+) -> Status {
+    entry("event_types", || {
+        let loader = match caller(me) {
+            Ok(loader) => loader,
+            Err(status) => return status,
+        };
+        let types: Vec<EventTypeInfo> = crate::catalogue::event_types(&loader.reflection)
+            .filter_map(|ty| {
+                Some(EventTypeInfo {
+                    header: Header::of::<EventTypeInfo>(),
+                    name: Str::new(ty.name()),
+                    hash: crate::world::type_hash(ty.va())?,
+                    size: ty.size(),
+                })
+            })
+            .collect();
+        // SAFETY: `HostApi::event_types` has the mod pass `out` null or
+        // pointing at `capacity` entries of its version of `EventTypeInfo`,
+        // each writable for the size the first entry's header states, and
+        // `count` null or pointing at a writable, aligned `u32`, neither
+        // touched by another thread during the call.
+        unsafe { put_headed_list(&types, out, capacity, count) }
     })
 }

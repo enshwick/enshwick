@@ -12,20 +12,16 @@ package = "enshwick-area-loot"
 repository = "enshwick/mod-area-loot"
 
 [[mod]]
+package = "enshwick-better-altars"
+repository = "enshwick/mod-better-altars"
+
+[[mod]]
 package = "enshwick-build-camera"
 repository = "enshwick/mod-build-camera"
 
 [[mod]]
-package = "enshwick-flame-altar-zones"
-repository = "enshwick/mod-flame-altar-zones"
-
-[[mod]]
 package = "enshwick-game-rates"
 repository = "enshwick/mod-game-rates"
-
-[[mod]]
-package = "enshwick-more-altars"
-repository = "enshwick/mod-more-altars"
 
 [[mod]]
 package = "enshwick-optimizer"
