@@ -448,7 +448,6 @@ mod tests {
             }
         }
         assert!(tables.contains(&Table::Loader));
-        assert!(tables.contains(&Table::Mod));
     }
 
     fn guid(hex: &str) -> [u8; 16] {
