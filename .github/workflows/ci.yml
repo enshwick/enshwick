@@ -26,11 +26,12 @@ concurrency:
 jobs:
   rust:
     # main: the organization runners run only workflows from main.
-    uses: enshwick/.github/.github/workflows/rust-ci.yml@main # zizmor: ignore[unpinned-uses]
+    uses: enshwick/.github/.github/workflows/rust-ci.yml@ci/parallel-hosted-lanes # zizmor: ignore[unpinned-uses]
     permissions:
       contents: read
     with:
       semver: enshwick
+      split: true
 
   nightly:
     if: github.event_name == 'schedule' || inputs.nightly

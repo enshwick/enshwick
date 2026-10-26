@@ -194,3 +194,4 @@ pub unsafe extern "system" fn enshwick_start(
     let release = (stub_abi >= 2).then_some(release);
     let _outcome = std::panic::catch_unwind(|| start::start(stub_abi, missing_forwards, release));
 }
+// trial: parallel hosted lanes
