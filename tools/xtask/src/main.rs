@@ -10,8 +10,12 @@
 //! checks. `cargo xtask check --windows` also runs the tests of the crates
 //! that build only for Windows, under Wine off Windows. `cargo xtask check
 //! --all` runs the full suite, the Windows tests included when Docker runs.
+//!
+//! `cargo xtask bundle` writes the dev bundle testers unpack into the game
+//! folder ([`bundle`]).
 
 mod affected;
+mod bundle;
 mod wine;
 
 use std::collections::BTreeSet;
@@ -22,7 +26,7 @@ use std::time::Instant;
 
 use affected::{Package, Scope};
 
-const USAGE: &str = "usage: cargo xtask check [--all] [--windows] [--base <git ref>]";
+const USAGE: &str = "usage: cargo xtask check [--all] [--windows] [--base <git ref>] | bundle [--out <dir>] [--local]";
 const WINDOWS_TARGET: &str = "x86_64-pc-windows-msvc";
 
 fn main() -> ExitCode {
@@ -39,11 +43,11 @@ fn main() -> ExitCode {
 
 fn run(args: &[String]) -> Result<bool, String> {
     let (task, rest) = args.split_first().ok_or(USAGE)?;
-    if task == "wine-run" {
-        return wine::run_one(rest);
-    }
-    if task != "check" {
-        return Err(USAGE.to_owned());
+    match task.as_str() {
+        "check" => {}
+        "bundle" => return bundle::run(rest),
+        "wine-run" => return wine::run_one(rest),
+        _ => return Err(USAGE.to_owned()),
     }
     let mut all = false;
     let mut windows = false;

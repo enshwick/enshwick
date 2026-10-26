@@ -1,65 +1,28 @@
 # A development build of the commit it runs on, until the first public
-# release, 1.0.0. It packs the same archives as a release (tools/pack.sh)
-# and puts them on the single prerelease `dev`, whose tag moves to the commit.
+# release, 1.0.0: `cargo xtask bundle` on the organization's runners, whose
+# archives replace the files of the single prerelease `dev`. enshwick.zip
+# there holds everything that goes into the game folder.
 name: dev-build
 
 on:
   workflow_dispatch:
+    inputs:
+      publish:
+        description: Replace the dev prerelease; off builds the archives only
+        type: boolean
+        default: true
 
-permissions:
-  contents: write
+permissions: {}
 
 concurrency:
   group: dev-build
   cancel-in-progress: false
 
 jobs:
-  build:
-    runs-on: windows-latest
-    timeout-minutes: 30
-    defaults:
-      run:
-        shell: bash
-    steps:
-      # v7.0.1
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: Build
-        run: cargo build --release --workspace --locked
-
-      - name: Archives
-        run: bash tools/pack.sh "$RUNNER_TEMP/mods.tsv"
-
-      - name: Publish
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          short=$(git rev-parse --short=7 HEAD)
-          title="Enshwick dev $short"
-          notes="Development build of $GITHUB_SHA: $(git log -1 --format=%s).
-
-          Until the first public release, 1.0.0, this prerelease is the only build to download; every run replaces it."
-          read -r -a assets <<< "enshwick.zip enshwick-loader.zip $(cut -f1 "$RUNNER_TEMP/mods.tsv" | sed 's/$/.zip/' | tr '\n' ' ')"
-          if gh release view dev --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
-            gh api -X PATCH "repos/$GITHUB_REPOSITORY/git/refs/tags/dev" -f sha="$GITHUB_SHA" -F force=true > /dev/null
-            gh release edit dev --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "$title" --notes "$notes" --prerelease --latest=false
-            gh release upload dev "${assets[@]}" --clobber --repo "$GITHUB_REPOSITORY"
-            # Files of an earlier build that this one no longer has, such as a
-            # renamed mod's archive, go.
-            gh release view dev --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' | tr -d '\r' |
-              while read -r name; do
-                case " ${assets[*]} " in
-                  *" $name "*) ;;
-                  *) gh release delete-asset dev "$name" --yes --repo "$GITHUB_REPOSITORY" ;;
-                esac
-              done
-          else
-            # A tag left without its release moves too; gh would build on it as it is.
-            if gh api "repos/$GITHUB_REPOSITORY/git/refs/tags/dev" > /dev/null 2>&1; then
-              gh api -X PATCH "repos/$GITHUB_REPOSITORY/git/refs/tags/dev" -f sha="$GITHUB_SHA" -F force=true > /dev/null
-            fi
-            gh release create dev "${assets[@]}" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
-              --title "$title" --notes "$notes" --prerelease --latest=false
-          fi
+  bundle:
+    permissions:
+      contents: write
+    # From main: the runners take only enshwick/.github's workflows on main.
+    uses: enshwick/.github/.github/workflows/dev-bundle.yml@main # zizmor: ignore[unpinned-uses]
+    with:
+      publish: ${{ inputs.publish }}
