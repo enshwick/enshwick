@@ -198,7 +198,7 @@ pub struct DataChange {
     /// of conflicts; may be empty.
     pub source: Str,
     /// The item the field names inside its entry, such as a recipe's
-    /// ingredient; all zero for none. Since minor 81.
+    /// ingredient; all zero for none. Since minor 79.
     pub item: [u8; 16],
 }
 
