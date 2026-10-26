@@ -707,6 +707,10 @@ conflicts:
     }
 
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "the snapshots are held on the host; under Wine their paths do not resolve"
+    )]
     fn the_status_report_reads_as_its_snapshot() {
         insta::assert_snapshot!("status", summary().render());
         insta::assert_snapshot!("status_short", summary().short());

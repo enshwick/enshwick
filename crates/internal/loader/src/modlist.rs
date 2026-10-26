@@ -436,6 +436,10 @@ id = \"you.stalls\""
     }
 
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "the snapshots are held on the host; under Wine their paths do not resolve"
+    )]
     fn the_list_and_the_lock_read_as_their_snapshots() {
         let mut list = ModList::default();
         list.note("you.trading-post", "trading_post.dll");
