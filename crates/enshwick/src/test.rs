@@ -8,14 +8,14 @@
 //! would. A linked hook's chain continues to its target address, so a target
 //! set to [`address`] of a plain function stands in for the game's original.
 //!
-//! # One mod per process
+//! # One mod life per install
 //!
-//! A mod initialises once per process, as in the game: its state and the
-//! table it talks to are process-wide. Write one test per mod life and run
-//! the tests with `cargo nextest`, which gives each test its own process.
-//! Under `cargo test` the tests of one binary share the process; the fake
-//! then serves one test at a time, and a second test waits until the first
-//! drops its [`Installed`].
+//! Every [`FakeHost::install`] starts a new mod life: the mod's `init` runs
+//! again and the platform's state starts empty. Under `cargo test` the tests
+//! of one binary share the process; the fake serves one test at a time, and
+//! a second test waits until the first drops its [`Installed`]. State a mod
+//! keeps in a `static` starts afresh only in a
+//! [`ModLocal`](crate::state::ModLocal).
 //!
 //! # Examples
 //!
@@ -320,6 +320,7 @@ impl FakeHost {
     pub fn install(self) -> Installed {
         let handle = self.handle;
         let turn = table::install(self);
+        crate::fresh::renew();
         Installed {
             handle,
             _turn: turn,

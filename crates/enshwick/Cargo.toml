@@ -47,6 +47,10 @@ name = "actions"
 required-features = ["test"]
 
 [[test]]
+name = "fake_per_test"
+required-features = ["test"]
+
+[[test]]
 name = "effects"
 required-features = ["test"]
 
