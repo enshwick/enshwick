@@ -473,6 +473,7 @@ dependencies = [
  "insta",
  "loom",
  "postcard",
+ "proptest",
  "rustc-hash",
  "semver",
  "serde",

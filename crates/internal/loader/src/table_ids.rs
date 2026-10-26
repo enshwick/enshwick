@@ -10,6 +10,7 @@ pub static TABLE_IDS: &[(&str, &[&str])] = &[
     ("bases", crate::bases::TABLE_IDS),
     ("buffs", crate::buffs::TABLE_IDS),
     ("chat", crate::chat::TABLE_IDS),
+    ("console", crate::console::TABLE_IDS),
     ("content", crate::content::TABLE_IDS),
     ("damage", crate::damage::TABLE_IDS),
     ("daytime", crate::daytime::TABLE_IDS),
