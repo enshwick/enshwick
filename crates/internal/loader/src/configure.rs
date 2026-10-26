@@ -51,7 +51,7 @@ fn current(text: &str, field: &Field) -> String {
     }
     text.parse::<toml::Table>()
         .ok()
-        .and_then(|table| table.get(&field.key).map(ToString::to_string))
+        .and_then(|table| enshwick::config::value_at(&table, &field.key).map(ToString::to_string))
         .unwrap_or_else(|| field.default.clone())
 }
 
@@ -250,22 +250,14 @@ pub fn set(
     if field.secret {
         return Err(texts::fill("remote.secret", &[("key", key)]));
     }
-    let mut new = typed(field, value)?;
+    let new = typed(field, value)?;
     let mut doc: DocumentMut = text.parse().map_err(|e: toml_edit::TomlError| {
         texts::fill("refused.toml", &[("id", id), ("error", e.message())])
     })?;
-    match doc.get_mut(key).and_then(toml_edit::Item::as_value_mut) {
-        Some(old) => {
-            *new.decor_mut() = old.decor().clone();
-            *old = new;
-        }
-        None => {
-            doc.insert(key, toml_edit::Item::Value(new));
-        }
+    if !crate::worlds::set_at(doc.as_table_mut(), key, new) {
+        return Err(texts::fill("refused.toml", &[("id", id), ("error", key)]));
     }
-    let value = doc
-        .get(key)
-        .and_then(toml_edit::Item::as_value)
+    let value = crate::worlds::value_at(doc.as_table(), key)
         .map(|v| v.clone().decorated("", "").to_string())
         .unwrap_or_default();
     Ok(Change {
@@ -443,5 +435,24 @@ mod tests {
             set("you.trading-post", &schema(), FILE, "limit", "40").unwrap_err(),
             "Not changed: limit takes 1 to 16."
         );
+    }
+
+    #[test]
+    fn a_grouped_setting_is_set_in_its_table() {
+        let schema = Schema::new(
+            "",
+            "config",
+            vec![Field::new("comfort.multiplier", Stage::Runtime, &1.0)],
+        );
+        let change = set(
+            "you.rates",
+            &schema,
+            "limit = 4\n",
+            "comfort.multiplier",
+            "2.5",
+        )
+        .unwrap();
+        assert_eq!(change.text, "limit = 4\n\n[comfort]\nmultiplier = 2.5\n");
+        assert_eq!(change.value, "2.5");
     }
 }
