@@ -61,6 +61,7 @@ chapters! {
     RandomLoot => "content/random-loot.md",
     Resources => "content/resources.md",
     Texts => "content/texts.md",
+    ModWithoutRust => "content/a-mod-without-rust.md",
     Packs => "content/packs.md",
     Inventories => "inventories.md",
     ItemData => "item-data.md",
