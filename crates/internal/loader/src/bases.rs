@@ -23,6 +23,7 @@
 //! the same patches and links serve both.
 
 use crate::locks::Relock;
+use crate::mod_index::ModIndex;
 
 mod limit;
 
@@ -151,7 +152,7 @@ struct Sites {
 
 #[derive(Debug, Clone, Copy)]
 struct Limit {
-    owner: usize,
+    owner: ModIndex,
     callback: AltarLimitFn,
     user: usize,
 }
@@ -197,7 +198,7 @@ fn too_late(loader: &Loader) -> bool {
 
 pub(crate) fn register_limit(
     loader: &Loader,
-    owner: usize,
+    owner: ModIndex,
     callback: AltarLimitFn,
     user: *mut c_void,
 ) -> Status {
@@ -221,7 +222,7 @@ pub(crate) fn register_limit(
 
 /// Finds every site and registers the patches as mod `owner`'s, all or
 /// none; a miss or a refusal leaves nothing registered.
-pub(crate) fn raise(loader: &Loader, owner: usize) -> Status {
+pub(crate) fn raise(loader: &Loader, owner: ModIndex) -> Status {
     if too_late(loader) {
         return Status::TOO_LATE;
     }

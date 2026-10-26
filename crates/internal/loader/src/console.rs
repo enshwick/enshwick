@@ -3,16 +3,90 @@
 //! file. `enshwick ...` reaches the loader's own tools; any other first word
 //! names a mod, whose actions take the rest of the line.
 //!
-//! Reading a line is pure logic here; the run module answers it.
+//! On a dedicated server the loader feeds it from the command file
+//! ([`file`]) and from the server's own console window or terminal
+//! ([`input`]). Reading a line is pure logic here; the run module answers it
+//! on the game thread, after the step.
+
+use std::path::{Path, PathBuf};
+use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use enshwick::abi::Level;
 
+use crate::locks::Relock;
 use crate::settings::LOADER_ID;
 
+pub mod file;
+pub mod input;
 #[cfg(windows)]
 mod run;
 #[cfg(windows)]
-pub(crate) use run::{run, the_console};
+pub(crate) use run::{after_step, run, start, the_console};
+
+/// Mods whose data folder held the command file before the loader read it,
+/// newest first; their file is read too while no running mod has that id.
+pub const FORMER_HOMES: &[&str] = &["enshwick.admin-tools", "admin-tools", "dev-tools"];
+
+/// The command files a server reads in `data_dir`: the loader's own, then
+/// each former home's that no running mod (`running`) still owns.
+#[must_use]
+pub fn command_files(data_dir: &Path, running: impl Fn(&str) -> bool) -> Vec<PathBuf> {
+    std::iter::once(LOADER_ID)
+        .chain(FORMER_HOMES.iter().copied().filter(|id| !running(id)))
+        .map(|id| data_dir.join(id).join(file::FILE))
+        .collect()
+}
+
+/// Where a console line came from.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Source {
+    /// A command file, as the log names it.
+    File(String),
+    /// The server's console window or terminal, which also reads the answer.
+    Input,
+}
+
+impl std::fmt::Display for Source {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::File(name) => f.write_str(name),
+            Self::Input => f.write_str("console"),
+        }
+    }
+}
+
+/// A console line waiting for the game thread, and where it came from.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Pending {
+    /// The line, trimmed.
+    pub line: String,
+    /// Where it came from.
+    pub source: Source,
+}
+
+/// Lines waiting for the game thread.
+static PENDING: Mutex<Vec<Pending>> = Mutex::new(Vec::new());
+/// Set while [`PENDING`] holds a line, so a step with none takes no lock.
+static WAITING: AtomicBool = AtomicBool::new(false);
+
+/// Queues `line` from `source` for the game thread.
+pub fn submit(line: String, source: Source) {
+    let mut pending = PENDING.relock();
+    pending.push(Pending { line, source });
+    WAITING.store(true, Ordering::Release);
+}
+
+/// The lines queued since the last call, oldest first.
+#[must_use]
+pub fn take() -> Vec<Pending> {
+    if !WAITING.load(Ordering::Acquire) {
+        return Vec::new();
+    }
+    let mut pending = PENDING.relock();
+    WAITING.store(false, Ordering::Release);
+    std::mem::take(&mut *pending)
+}
 
 /// The most log lines `enshwick log` shows.
 pub const MAX_LOG_LINES: usize = 16;
@@ -162,6 +236,28 @@ mod tests {
                 rest: ""
             }
         );
+    }
+
+    #[test]
+    fn a_server_reads_its_own_command_file_and_each_former_home_no_mod_runs() {
+        let data = Path::new("mod-data");
+        let files = command_files(data, |id| id == FORMER_HOMES[0]);
+        assert_eq!(files[0], data.join(LOADER_ID).join(file::FILE));
+        assert_eq!(files.len(), FORMER_HOMES.len());
+        assert!(!files.contains(&data.join(FORMER_HOMES[0]).join(file::FILE)));
+        let all = command_files(data, |_| false);
+        for home in FORMER_HOMES {
+            assert!(all.contains(&data.join(home).join(file::FILE)));
+        }
+    }
+
+    #[test]
+    fn queued_lines_come_out_once_in_order() {
+        submit("enshwick status".into(), Source::File("a".into()));
+        submit("enshwick help".into(), Source::Input);
+        let lines: Vec<String> = take().into_iter().map(|p| p.line).collect();
+        assert_eq!(lines, ["enshwick status", "enshwick help"]);
+        assert!(take().is_empty());
     }
 
     #[test]

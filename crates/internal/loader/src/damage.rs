@@ -16,13 +16,13 @@
 //! the game's worker threads, in parallel, so the filters run there too: no
 //! allocation, no lock.
 
+use crate::mod_index::ModIndex;
 use crate::registry::Registry;
 use core::ffi::c_void;
 use std::sync::OnceLock;
 
 use enshwick::abi::{DamageCheck, DamageFilterFn, Header, HookFlags, Registers, Status};
 
-use crate::chains::LOADER;
 use crate::host::{Loader, Registered};
 use crate::locks::Relock;
 use crate::mid::MidLink;
@@ -84,7 +84,7 @@ enum Site {
 /// Registers mod `owner`'s damage filter.
 pub(crate) fn register(
     loader: &Loader,
-    owner: usize,
+    owner: ModIndex,
     callback: DamageFilterFn,
     user: *mut c_void,
 ) -> Status {
@@ -136,7 +136,7 @@ pub(crate) fn link(loader: &Loader) {
             continue;
         };
         let link = MidLink {
-            owner: LOADER,
+            owner: ModIndex::LOADER,
             handler,
             user: 0,
             priority: i32::MIN,

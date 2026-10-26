@@ -1,5 +1,6 @@
 //! The loader's start: identify the game, load the mods, arm their hooks.
 
+use crate::mod_index::ModIndex;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
@@ -160,9 +161,20 @@ pub(crate) fn start(
     write_lock(loader, lock_files);
     crate::watch::start(loader);
     crate::status::start(loader);
-    if side == Side::SERVER
-        && let Some(game_dir) = loader.mods_dir.parent()
-    {
+    if side == Side::SERVER {
+        serve(loader);
+    }
+    crate::admission::start(
+        loader,
+        names(loader).into_iter().collect(),
+        pages(loader).into_iter().collect(),
+    );
+}
+
+/// Starts what only a dedicated server runs: the advertised join mods and
+/// the console's command file.
+fn serve(loader: &'static Loader) {
+    if let Some(game_dir) = loader.mods_dir.parent() {
         crate::advertise::start(
             game_dir,
             host::join_mods,
@@ -173,11 +185,7 @@ pub(crate) fn start(
             host::join_values,
         );
     }
-    crate::admission::start(
-        loader,
-        names(loader).into_iter().collect(),
-        pages(loader).into_iter().collect(),
-    );
+    crate::console::start(loader);
 }
 
 /// Copies each loading mod's settings and data from the ids it had, once.
@@ -342,7 +350,7 @@ fn attribute_crashes(loader: &Loader, order: &[&Library]) {
         && let Some((start, end)) = crate::crash::range_of(own)
     {
         modules.push((
-            crate::crash::LOADER,
+            (ModIndex::LOADER).get(),
             crate::settings::LOADER_ID.to_owned(),
             start,
             end,
@@ -365,12 +373,12 @@ fn initialise(loader: &Loader, order: &[&Library]) {
         // as `enshwick::abi::exports` documents, called with the static host
         // table and the mod's own handle.
         let status = crate::reload::initialising(index, || unsafe {
-            (library.init)(&raw const host::API, host::handle(index))
+            (library.init)(&raw const host::API, host::handle(ModIndex::new(index)))
         });
         if status.is_ok() {
             crate::log!(INFO, "{} {} initialised", record.id, record.version);
         } else {
-            loader.turn_off(index, &format!("init returned {}", status.0));
+            loader.turn_off(ModIndex::new(index), &format!("init returned {}", status.0));
         }
     }
 }
@@ -382,7 +390,7 @@ fn ready(loader: &Loader, order: &[&Library]) {
             // SAFETY: `library.ready` is the mod's `READY` export, typed
             // `ReadyFn` as `enshwick::abi::exports` documents, called with the
             // static host table after the mod's init succeeded.
-            unsafe { (library.ready)(&raw const host::API, host::handle(index)) };
+            unsafe { (library.ready)(&raw const host::API, host::handle(ModIndex::new(index))) };
         }
     }
     let running = loader

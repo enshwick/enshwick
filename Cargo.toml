@@ -11,7 +11,6 @@ members = [
     "examples/haggling",
     "examples/trading-post",
     "examples/trading-post-api",
-    "tools/compat",
     "tools/xtask",
 ]
 
@@ -73,7 +72,7 @@ unit_bindings = "deny"
 redundant_lifetimes = "deny"
 trivial_numeric_casts = "deny"
 unused_qualifications = "deny"
-unexpected_cfgs = "deny"
+unexpected_cfgs = { level = "deny", check-cfg = ["cfg(kani)"] }
 
 [workspace.lints.rustdoc]
 broken_intra_doc_links = "deny"

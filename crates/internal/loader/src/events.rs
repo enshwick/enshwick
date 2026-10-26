@@ -381,6 +381,7 @@ unsafe fn after_step(loader: &'static Loader, offsets: &Offsets, server: *mut u8
         loader.emit(Event::TICKED, None, (&raw const tick).cast::<c_void>())
     );
     part!("join admission", crate::admission::after_step(loader));
+    part!("console lines", crate::console::after_step(loader));
     part!("chat sending", crate::chat::drain());
     if server.is_null() {
         return;

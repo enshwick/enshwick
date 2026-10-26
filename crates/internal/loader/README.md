@@ -26,6 +26,6 @@ run, the mods turned off and why, what mods serve and patch, and
 with `diagnostics = true` the calls of every hooked function
 (`diagnostics_timing = true` times one call in 256 too). It is written every
 `status_minutes` (10 by default) and for `enshwick status` in the
-[admin tools'](https://github.com/enshwick/mod-admin-tools) command file.
+server's command file, `mod-data/enshwick/commands.txt`.
 
 Licensed under [MIT](../../../LICENSE).

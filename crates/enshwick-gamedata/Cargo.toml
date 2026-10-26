@@ -20,6 +20,7 @@ thiserror.workspace = true
 toml.workspace = true
 
 [dev-dependencies]
+proptest.workspace = true
 criterion.workspace = true
 
 [lints]

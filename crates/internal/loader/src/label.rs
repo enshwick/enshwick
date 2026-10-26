@@ -8,6 +8,7 @@
 //! rename, so the loader links the string swap and asks the mods' rename
 //! filters first when the call comes from the rename message.
 
+use crate::mod_index::ModIndex;
 use crate::registry::Registry;
 use core::ffi::c_void;
 use std::sync::OnceLock;
@@ -72,7 +73,7 @@ struct Layout {
 /// A mod's rename filter.
 #[derive(Debug, Clone, Copy)]
 struct Filter {
-    owner: usize,
+    owner: ModIndex,
     callback: RenameCallFn,
     user: usize,
 }
@@ -129,7 +130,7 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
 }
 
 /// Registers mod `owner`'s rename filter.
-pub(crate) fn register(owner: usize, callback: RenameCallFn, user: *mut c_void) -> Status {
+pub(crate) fn register(owner: ModIndex, callback: RenameCallFn, user: *mut c_void) -> Status {
     if FILTERS.is_sealed() {
         return Status::TOO_LATE;
     }
@@ -340,7 +341,7 @@ unsafe fn refused(text: *const [usize; 2]) -> bool {
         .filter(|f| {
             loader
                 .mods
-                .get(f.owner)
+                .get(f.owner.get())
                 .is_some_and(|m| !m.off.load(Ordering::Acquire))
         })
         .any(|f| {

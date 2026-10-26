@@ -11,6 +11,7 @@
 //! A client runs the same move for its own world as well as for a hosted
 //! game's server; only the server's entity world is followed.
 
+use crate::mod_index::ModIndex;
 use core::cell::RefCell;
 use core::ffi::c_void;
 use std::sync::atomic::Ordering;
@@ -39,7 +40,7 @@ pub(crate) const TABLE_IDS: &[&str] = &[
 /// A mod's handler for one event type, or for all with hash 0.
 #[derive(Debug, Clone, Copy)]
 struct Subscriber {
-    owner: usize,
+    owner: ModIndex,
     type_hash: u32,
     callback: GameEventFn,
     user: usize,
@@ -140,7 +141,7 @@ type MergeFn = unsafe extern "system" fn(entity_world: *mut u8);
 
 /// Registers mod `owner`'s handler for events of `type_hash`, 0 for all.
 pub(crate) fn register(
-    owner: usize,
+    owner: ModIndex,
     type_hash: u32,
     callback: GameEventFn,
     user: *mut c_void,
@@ -359,7 +360,7 @@ fn deliver(loader: &Loader) {
             (s.type_hash == 0 || s.type_hash == event.type_hash)
                 && loader
                     .mods
-                    .get(s.owner)
+                    .get(s.owner.get())
                     .is_some_and(|m| !m.off.load(Ordering::Acquire))
         }) {
             // SAFETY: `callback` is a `GameEventFn` the mod registered, in

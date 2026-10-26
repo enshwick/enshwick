@@ -3,6 +3,7 @@
 //! action, so nothing moves and nothing is lost; the filters see the server's
 //! world only.
 
+use crate::mod_index::ModIndex;
 use crate::registry::Registry;
 use core::ffi::c_void;
 use std::cell::RefCell;
@@ -151,7 +152,7 @@ fn layout(loader: &Loader) -> Option<Layout> {
 
 pub(crate) fn register(
     loader: &Loader,
-    owner: usize,
+    owner: ModIndex,
     callback: InteractionFn,
     user: *mut c_void,
 ) -> Status {

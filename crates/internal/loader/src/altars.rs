@@ -9,6 +9,7 @@
 //! the same engine helpers, writing its sizes.
 
 use crate::locks::Relock;
+use crate::mod_index::ModIndex;
 use crate::registry::Registry;
 
 mod geometry;
@@ -191,7 +192,7 @@ impl Fields {
         })
     }
 }
-static OPENERS: Mutex<Vec<usize>> = Mutex::new(Vec::new());
+static OPENERS: Mutex<Vec<ModIndex>> = Mutex::new(Vec::new());
 /// The index of the mod that controls the zones, plus one; 0 for none.
 static CONTROLLER: AtomicUsize = AtomicUsize::new(0);
 static TARGETS: ArcSwapOption<Targets> = ArcSwapOption::const_empty();
@@ -254,7 +255,7 @@ type SystemFn = unsafe extern "system" fn(ctx: *mut u64);
 type SeamFn = unsafe extern "system" fn(zones: *const u8, corners: *const i64, margin: f32) -> u8;
 
 /// Opens altars for mod `owner`; during init only.
-pub(crate) fn open(loader: &Loader, owner: usize) -> Status {
+pub(crate) fn open(loader: &Loader, owner: ModIndex) -> Status {
     if loader.delivery.get().is_some() {
         return Status::TOO_LATE;
     }
@@ -270,24 +271,24 @@ pub(crate) fn open(loader: &Loader, owner: usize) -> Status {
 }
 
 /// Makes mod `owner` the one that sizes altar zones; during init only.
-pub(crate) fn control(loader: &Loader, owner: usize) -> Status {
+pub(crate) fn control(loader: &Loader, owner: ModIndex) -> Status {
     let status = open(loader, owner);
     if !status.is_ok() {
         return status;
     }
-    match CONTROLLER.compare_exchange(0, owner + 1, Ordering::AcqRel, Ordering::Acquire) {
+    match CONTROLLER.compare_exchange(0, owner.handle().0, Ordering::AcqRel, Ordering::Acquire) {
         Ok(_) => Status::OK,
-        Err(held) if held == owner + 1 => Status::OK,
+        Err(held) if held == owner.handle().0 => Status::OK,
         Err(_) => Status::REFUSED,
     }
 }
 
-pub(crate) fn opened(owner: usize) -> bool {
+pub(crate) fn opened(owner: ModIndex) -> bool {
     OPENERS.relock().contains(&owner)
 }
 
-pub(crate) fn set_sizes(owner: usize, sizes: &[AltarZoneSize]) -> Status {
-    if CONTROLLER.load(Ordering::Acquire) != owner + 1 {
+pub(crate) fn set_sizes(owner: ModIndex, sizes: &[AltarZoneSize]) -> Status {
+    if CONTROLLER.load(Ordering::Acquire) != owner.handle().0 {
         return Status::REFUSED;
     }
     let state = STATE.relock();
@@ -390,7 +391,7 @@ pub(crate) fn forget() {
     CHANGED.store(true, Ordering::Release);
 }
 
-pub(crate) fn register(owner: usize, callback: ZoneCheckFn, user: *mut c_void) -> Status {
+pub(crate) fn register(owner: ModIndex, callback: ZoneCheckFn, user: *mut c_void) -> Status {
     if FILTERS.is_sealed() {
         return Status::TOO_LATE;
     }
@@ -564,7 +565,7 @@ unsafe extern "system" fn upgrade(ctx: *mut u64) {
         return;
     };
     let controller = CONTROLLER.load(Ordering::Acquire);
-    if controller != 0 && !crate::host::is_off(controller - 1) {
+    if controller != 0 && !crate::host::is_off(ModIndex::new(controller - 1)) {
         // SAFETY: `ctx` is the live context of `upgrade_building_range`, on
         // its thread, and vanilla has not run this tick.
         if std::panic::catch_unwind(|| unsafe { write_ranges(engine, ctx) }).is_ok() {

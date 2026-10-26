@@ -22,6 +22,7 @@
 //! [`MAX_PARTS`] frames. Each side keeps a rate per peer and drops what is
 //! over it, counting the drops for the status summary.
 
+use crate::mod_index::ModIndex;
 use crate::registry::Registry;
 use core::ffi::c_void;
 use std::collections::VecDeque;
@@ -145,7 +146,7 @@ fn channel_id(id: &str, name: &str) -> u32 {
 /// Opens mod `owner`'s channel `name`; its id.
 pub(crate) fn open(
     loader: &Loader,
-    owner: usize,
+    owner: ModIndex,
     name: &str,
     callback: NetMessageFn,
     user: *mut c_void,
@@ -153,7 +154,7 @@ pub(crate) fn open(
     if CHANNELS.is_sealed() {
         return Err(Status::TOO_LATE);
     }
-    let record = loader.mods.get(owner).ok_or(Status::BAD_ARGS)?;
+    let record = loader.mods.get(owner.get()).ok_or(Status::BAD_ARGS)?;
     if !record
         .manifest
         .flags
@@ -665,7 +666,7 @@ pub(crate) fn clients() -> Vec<u64> {
 /// key `peer`, or to every client that said hello for 0.
 pub(crate) fn send(
     loader: &Loader,
-    owner: usize,
+    owner: ModIndex,
     channel: u32,
     peer: u64,
     data: &[u8],

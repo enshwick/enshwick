@@ -21,6 +21,7 @@
 //! its scroll area, from a hook after the tab's own rows: read-only where the
 //! view is, for a player who may not change the world.
 
+use crate::mod_index::ModIndex;
 use core::cell::RefCell;
 use std::sync::atomic::{AtomicU8, AtomicU64, Ordering};
 
@@ -135,7 +136,7 @@ pub(super) fn link(loader: &Loader, engine: &Engine) {
             continue;
         }
         let link = crate::mid::MidLink {
-            owner: crate::chains::LOADER,
+            owner: ModIndex::LOADER,
             handler,
             user: 0,
             priority: i32::MIN,

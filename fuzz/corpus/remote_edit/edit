@@ -1,0 +1,13 @@
+# Safe settings.
+
+limit = 4 # four
+
+radius = 8.5
+
+language = "en"
+token = "x"
+
+[group]
+flag = true
+list = [1, 2]
+ÿgroup.list[1]ÿ5ÿ{ limit = 4, group = { flag = false } }
