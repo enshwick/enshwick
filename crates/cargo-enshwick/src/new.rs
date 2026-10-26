@@ -1,5 +1,6 @@
 //! `cargo enshwick new`: a mod crate that builds and loads as it is.
 
+use anyhow::{Context as _, bail};
 use std::path::{Path, PathBuf};
 
 use crate::Side;
@@ -11,12 +12,11 @@ use crate::Side;
 /// workspace's `members` unless a member pattern already covers it, and its
 /// release profile is left to the workspace root, the only place Cargo reads
 /// one. A folder the workspace excludes gets a workspace of its own.
-pub(crate) fn create(dir: &Path, id: &str, side: Side) -> Result<String, String> {
+pub(crate) fn create(dir: &Path, id: &str, side: Side) -> anyhow::Result<String> {
     let name = crate_name(id)?;
-    let root =
-        std::path::absolute(dir.join(name)).map_err(|e| format!("{}: {e}", dir.display()))?;
+    let root = std::path::absolute(dir.join(name)).with_context(|| dir.display().to_string())?;
     if root.exists() {
-        return Err(format!("{} already exists", root.display()));
+        bail!("{} already exists", root.display());
     }
     let plan = match enclosing_workspace(&root)? {
         Some(manifest) => plan_join(&manifest, &root)?,
@@ -30,14 +30,14 @@ pub(crate) fn create(dir: &Path, id: &str, side: Side) -> Result<String, String>
             .and_then(|()| std::fs::write(&path, text));
         if let Err(e) = written {
             let _gone = std::fs::remove_dir_all(&root);
-            return Err(format!("{}: {e}", path.display()));
+            bail!("{}: {e}", path.display());
         }
     }
     let joined = match &plan {
         Place::Join { manifest, text } => {
             if let Err(e) = std::fs::write(manifest, text) {
                 let _gone = std::fs::remove_dir_all(&root);
-                return Err(format!("{}: {e}", manifest.display()));
+                bail!("{}: {e}", manifest.display());
             }
             format!(
                 "; added to the members of {}, whose root holds the release profile",
@@ -71,7 +71,7 @@ enum Place {
 
 /// The `Cargo.toml` with a `[workspace]` table in the nearest folder above
 /// `root`, as Cargo looks for it.
-fn enclosing_workspace(root: &Path) -> Result<Option<PathBuf>, String> {
+fn enclosing_workspace(root: &Path) -> anyhow::Result<Option<PathBuf>> {
     for dir in root.ancestors().skip(1) {
         let manifest = dir.join("Cargo.toml");
         let Ok(text) = std::fs::read_to_string(&manifest) else {
@@ -79,7 +79,7 @@ fn enclosing_workspace(root: &Path) -> Result<Option<PathBuf>, String> {
         };
         let doc: toml_edit::DocumentMut = text
             .parse()
-            .map_err(|e| format!("{}: {e}", manifest.display()))?;
+            .with_context(|| manifest.display().to_string())?;
         if doc.contains_key("workspace") {
             return Ok(Some(manifest));
         }
@@ -88,14 +88,13 @@ fn enclosing_workspace(root: &Path) -> Result<Option<PathBuf>, String> {
 }
 
 /// How the crate at `root` fits the workspace whose manifest is `manifest`.
-fn plan_join(manifest: &Path, root: &Path) -> Result<Place, String> {
-    let text =
-        std::fs::read_to_string(manifest).map_err(|e| format!("{}: {e}", manifest.display()))?;
+fn plan_join(manifest: &Path, root: &Path) -> anyhow::Result<Place> {
+    let text = std::fs::read_to_string(manifest).with_context(|| manifest.display().to_string())?;
     let base = manifest.parent().unwrap_or(Path::new(""));
     let member = relative(base, root);
     let mut doc: toml_edit::DocumentMut = text
         .parse()
-        .map_err(|e| format!("{}: {e}", manifest.display()))?;
+        .with_context(|| manifest.display().to_string())?;
     let patterns = |key: &str| -> Vec<String> {
         doc.get("workspace")
             .and_then(|w| w.get(key))
@@ -120,12 +119,12 @@ fn plan_join(manifest: &Path, root: &Path) -> Result<Place, String> {
     }
     let workspace = doc["workspace"]
         .as_table_like_mut()
-        .ok_or_else(|| format!("{}: `workspace` is not a table", manifest.display()))?;
+        .with_context(|| format!("{}: `workspace` is not a table", manifest.display()))?;
     let members = workspace
         .entry("members")
         .or_insert(toml_edit::value(toml_edit::Array::new()))
         .as_array_mut()
-        .ok_or_else(|| {
+        .with_context(|| {
             format!(
                 "{}: `workspace.members` is not an array",
                 manifest.display()
@@ -178,7 +177,7 @@ fn part(pattern: &[u8], text: &[u8]) -> bool {
 
 /// The crate's name for mod `id`: the id's name part, which must start with
 /// a letter, as a crate's name does; an id no mod can take is refused.
-fn crate_name(id: &str) -> Result<&str, String> {
+fn crate_name(id: &str) -> anyhow::Result<&str> {
     match id.split_once('.') {
         Some((_, name))
             if enshwick::abi::is_valid_id(id)
@@ -186,14 +185,14 @@ fn crate_name(id: &str) -> Result<&str, String> {
         {
             Ok(name)
         }
-        _ => Err(format!(
+        _ => bail!(
             "the id {id:?} is not <author>.<name>, each of [a-z0-9-], the name starting with a letter"
-        )),
+        ),
     }
 }
 
 /// The crate's files for mod `id`, relative to its root.
-fn files(id: &str, side: Side, place: &Place) -> Result<Vec<(PathBuf, String)>, String> {
+fn files(id: &str, side: Side, place: &Place) -> anyhow::Result<Vec<(PathBuf, String)>> {
     let name = crate_name(id)?;
     let side = match side {
         Side::Server => "SERVER",
@@ -469,7 +468,9 @@ mod tests {
     fn a_bad_id_is_refused_before_the_folder_is_looked_at() {
         let dir = scratch("bad-id");
         std::fs::create_dir_all(dir.join("Area Loot")).unwrap();
-        let refused = create(&dir, "Area Loot", Side::Server).unwrap_err();
+        let refused = create(&dir, "Area Loot", Side::Server)
+            .unwrap_err()
+            .to_string();
         assert!(refused.contains("is not <author>.<name>"), "{refused}");
         std::fs::remove_dir_all(&dir).unwrap();
     }

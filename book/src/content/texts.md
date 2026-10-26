@@ -9,19 +9,19 @@ module reads it, and a server owner can add to it or change it.
 
 ```toml
 [en]
-"safe.name" = "Safe"
-"safe.description" = "A chest only its owner can open."
+"locker.name" = "Locker"
+"locker.description" = "A chest only its owner can open."
 
 [uk]
-"safe.name" = "Сейф"
+"locker.name" = "Шафка"
 
 [de]
-"safe.name" = "Tresor"
+"locker.name" = "Spind"
 ```
 
 - Each table is a language code:
   [`Language`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/i18n.rs)
-  lists the 35 the game knows, such as `en`, `en-us`, `de`, `uk`, `pt-br` or
+  lists every language the game knows, such as `en`, `en-us`, `de`, `uk`, `pt-br` or
   `zh-cn`. Codes ignore case; an unknown code is an error.
 - Keys are the mod's own names for its texts; values must be strings.
 - `en` is the fallback: a language without a text of its own for a key gets
@@ -34,24 +34,24 @@ with
 ```rust
 use enshwick::content::Id;
 
-const SAFE_NAME: Id = Id::new("safes:safe.name");
-const SAFE_DESCRIPTION: Id = Id::new("safes:safe.description");
+const LOCKER_NAME: Id = Id::new("you.lockers:locker.name");
+const LOCKER_DESCRIPTION: Id = Id::new("you.lockers:locker.description");
 
 // In a mod: const TEXTS: &str = include_str!("texts.toml");
 const TEXTS: &str = r#"
 [en]
-"safe.name" = "Safe"
-"safe.description" = "A chest only its owner can open."
+"locker.name" = "Locker"
+"locker.description" = "A chest only its owner can open."
 
 [uk]
-"safe.name" = "Сейф"
+"locker.name" = "Шафка"
 "#;
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let texts = load.texts(TEXTS)?;
     load.add_texts(&texts, &[
-        ("safe.name", SAFE_NAME),
-        ("safe.description", SAFE_DESCRIPTION),
+        ("locker.name", LOCKER_NAME),
+        ("locker.description", LOCKER_DESCRIPTION),
     ])
 }
 ```
@@ -88,6 +88,9 @@ also serves the mod's own strings, such as chat replies:
   replaced by its value in `args`, or the key itself when no language has a
   text for it, so a missing text shows rather than vanishes;
 - `translations(key)` lists every language with a text for the key;
+- `languages()` lists every language the file has a table for;
+- `untranslated()` lists each language and key where another language has
+  a text and this one lacks it;
 - `merge(other)` adds `other`'s texts over these;
 - `Texts::parse(toml)` reads a texts file without a `Load`, for tests.
 
@@ -103,6 +106,20 @@ assert_eq!(texts.get("greeting", Language::FALLBACK), Some("Hi"));
 assert_eq!(Language::from_code("pt-BR"), Some(Language::PT_BR));
 ```
 
+A test holds the file complete without naming its languages, so a new
+language is a new table and no change to the test:
+
+```rust
+use enshwick::i18n::Texts;
+
+// In a mod: const TEXTS: &str = include_str!("texts.toml");
+const TEXTS: &str = "[en]\ngreeting = \"Hello\"\n[uk]\ngreeting = \"Привіт\"\n";
+
+// The body of the mod's test `every_text_exists_in_all_languages`.
+let texts = Texts::parse(TEXTS).unwrap();
+assert_eq!(texts.untranslated(), []);
+```
+
 On a client,
 [`i18n::language()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/i18n.rs)
 is the language the player reads the game in, for the mod's own dialogs and
@@ -111,7 +128,7 @@ windows:
 ```rust
 use enshwick::i18n::{Texts, language};
 
-let texts = Texts::parse("[en]\nfound = \"{count} safes\"\n[uk]\nfound = \"Сейфів: {count}\"\n").unwrap();
+let texts = Texts::parse("[en]\nfound = \"{count} lockers\"\n[uk]\nfound = \"Шафок: {count}\"\n").unwrap();
 let line = texts.fill("found", language(), &[("count", "3")]);
 assert!(line.contains('3'));
 ```
@@ -119,7 +136,7 @@ assert!(line.contains('3'));
 The server does not know a player's language, and `language()` there is
 `Language::FALLBACK`; an [action](../actions.md)'s request carries the
 language the player's client reads.
-[`enshwick-safes`](https://github.com/enshwick/mod-safes)
+[`enshwick-safes`](https://github.com/enshwick/mod-personal-safes)
 names a Safe's owner on its label in one language from its settings, falling
 back to `Language::FALLBACK`.
 
@@ -172,7 +189,7 @@ without rebuilding it.
 
 The loader's own texts, the words of the Mods screen, the answers of the
 [console](../chat.md#the-console)'s tools, the reasons a settings change is refused and the
-name of an item whose mod is gone, ship in English and Ukrainian in
+name of an item whose mod is gone, ship in
 [`texts.toml`](https://github.com/enshwick/enshwick/blob/main/crates/internal/loader/src/texts.toml),
 and `mod-configs/enshwick.texts.toml` overrides them or adds a language the
 same way.

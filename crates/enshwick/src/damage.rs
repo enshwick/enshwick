@@ -123,6 +123,44 @@ pub enum DamageCause {
     Other(u32),
 }
 
+impl DamageCause {
+    /// Every cause this API names, without [`Other`](Self::Other): the set
+    /// a tally by cause iterates, so a newly named cause joins it.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::damage::DamageCause;
+    ///
+    /// assert!(DamageCause::NAMED.contains(&DamageCause::Fall));
+    /// ```
+    pub const NAMED: &[Self] = &[
+        Self::Hit,
+        Self::Fall,
+        Self::Shroud,
+        Self::ShroudDeath,
+        Self::Drowning,
+        Self::DrowningDeath,
+        Self::Freezing,
+        Self::AdminKill,
+    ];
+
+    /// The cause of the ABI's code, as [`DamageCheck`] numbers them.
+    const fn from_code(code: u32) -> Self {
+        match code {
+            DamageCheck::HIT => Self::Hit,
+            DamageCheck::FALL => Self::Fall,
+            DamageCheck::SHROUD => Self::Shroud,
+            DamageCheck::SHROUD_DEATH => Self::ShroudDeath,
+            DamageCheck::DROWNING => Self::Drowning,
+            DamageCheck::DROWNING_DEATH => Self::DrowningDeath,
+            DamageCheck::FREEZING => Self::Freezing,
+            DamageCheck::ADMIN_KILL => Self::AdminKill,
+            other => Self::Other(other),
+        }
+    }
+}
+
 /// Damage about to reach an entity's health, for a filter registered with
 /// [`Load::on_damage`] to see and change.
 ///
@@ -142,17 +180,7 @@ impl Damage<'_> {
     /// See the [module](self).
     #[must_use]
     pub const fn cause(&self) -> DamageCause {
-        match self.check.cause {
-            DamageCheck::HIT => DamageCause::Hit,
-            DamageCheck::FALL => DamageCause::Fall,
-            DamageCheck::SHROUD => DamageCause::Shroud,
-            DamageCheck::SHROUD_DEATH => DamageCause::ShroudDeath,
-            DamageCheck::DROWNING => DamageCause::Drowning,
-            DamageCheck::DROWNING_DEATH => DamageCause::DrowningDeath,
-            DamageCheck::FREEZING => DamageCause::Freezing,
-            DamageCheck::ADMIN_KILL => DamageCause::AdminKill,
-            other => DamageCause::Other(other),
-        }
+        DamageCause::from_code(self.check.cause)
     }
 
     /// The entity that takes it.
@@ -374,5 +402,19 @@ impl Load<'_> {
             |user| (host.api().damage_filter)(host.handle(), run_damage::<F>, user),
             "damage filter",
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn every_cause_the_api_names_is_in_named() {
+        let named: Vec<DamageCause> = (0..=u32::from(u8::MAX))
+            .map(DamageCause::from_code)
+            .filter(|cause| !matches!(cause, DamageCause::Other(_)))
+            .collect();
+        assert_eq!(named, DamageCause::NAMED);
     }
 }

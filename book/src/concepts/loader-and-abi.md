@@ -36,14 +36,14 @@ its file. The loader writes it on first start with every mod turned on, adds
 mods it finds later, and keeps everything else, comments included:
 
 ```toml
-[safes]
+[you.trading-post]
 enabled = false # off until the next release
-file = "enshwick-safes.dll"
+file = "trading_post.dll"
 ```
 
 A file whose entry says `enabled = false` is never loaded, so none of its code
-runs; `loader.log` says `enshwick-safes.dll skipped: off in
-mods/enshwick/mods.toml`. `links_off = ["safes:access"]` in an entry keeps the
+runs; `loader.log` says `trading_post.dll skipped: off in
+mods/enshwick/mods.toml`. `links_off = ["you.trading-post:price"]` in an entry keeps the
 mod on and only its link on that [extension point](../extending.md) off. Changes take effect at the next start. A list that
 is not valid TOML is left as it is and every mod loads, with a warning.
 `enshwick` on the [console](../chat.md#the-console) and the status summary name the mods that are off.
@@ -54,7 +54,7 @@ SHA-256, in load order, then under `[[replaced]]` the mods a present mod
 replaces (see `replaces` in [the manifest](#the-manifest)). Copying it with the DLLs sets up the same server
 again, and comparing two locks shows where two servers differ. What changed
 since the last start goes to `loader.log`, such as
-`since the last start: safes 0.3.0 -> 0.3.1`.
+`since the last start: you.trading-post 0.3.0 -> 0.3.1`.
 
 ## The ABI
 

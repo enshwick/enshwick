@@ -348,7 +348,7 @@ mod tests {
             vec![
                 Field::new("limit", Stage::Startup, &4)
                     .with_range(Some(1.0), Some(16.0))
-                    .with_doc("How many Safes a player may own.", ""),
+                    .with_doc("How many stalls a player may own.", ""),
                 Field::new("radius", Stage::Runtime, &8.5),
                 Field::new("language", Stage::Runtime, "en").with_choices(&["en", "uk"]),
                 Field::new("note", Stage::Client, "hi"),
@@ -364,17 +364,23 @@ mod tests {
     #[test]
     fn arguments_read_as_requests() {
         assert_eq!(parse(""), Request::Mods);
-        assert_eq!(parse(" safes "), Request::List("safes"));
-        assert_eq!(parse("safes limit"), Request::Get("safes", "limit"));
         assert_eq!(
-            parse("safes note hello there"),
-            Request::Set("safes", "note", "hello there")
+            parse(" you.trading-post "),
+            Request::List("you.trading-post")
+        );
+        assert_eq!(
+            parse("you.trading-post limit"),
+            Request::Get("you.trading-post", "limit")
+        );
+        assert_eq!(
+            parse("you.trading-post note hello there"),
+            Request::Set("you.trading-post", "note", "hello there")
         );
     }
 
     #[test]
     fn lists_and_gets_show_values_ranges_and_stages() {
-        let text = list("safes", &schema(), FILE);
+        let text = list("you.trading-post", &schema(), FILE);
         assert!(
             text.contains("limit = 4 (1 to 16; when the world loads)"),
             "{text}"
@@ -383,10 +389,10 @@ mod tests {
             text.contains("language = \"en\" (one of \"en\", \"uk\"; the world's, applied live)")
         );
         assert!(text.contains("note = \"hi\" (text in quotes; each player's own)"));
-        let one = get("safes", &schema(), FILE, "limit").unwrap();
-        assert!(one.starts_with("safes limit = 4 (default 4)\nHow many Safes"));
+        let one = get("you.trading-post", &schema(), FILE, "limit").unwrap();
+        assert!(one.starts_with("you.trading-post limit = 4 (default 4)\nHow many stalls"));
         assert!(
-            get("safes", &schema(), FILE, "nope")
+            get("you.trading-post", &schema(), FILE, "nope")
                 .unwrap_err()
                 .contains("it has limit")
         );
@@ -420,8 +426,8 @@ mod tests {
     #[test]
     fn a_secret_is_never_shown_or_changed_by_a_reply() {
         let file = format!("{FILE}token = \"hunter2\"\n");
-        let all = list("safes", &schema(), &file);
-        let one = get("safes", &schema(), &file, "token").unwrap();
+        let all = list("you.trading-post", &schema(), &file);
+        let one = get("you.trading-post", &schema(), &file, "token").unwrap();
         assert!(
             !all.contains("hunter2") && all.contains("token = (secret)"),
             "{all}"
@@ -430,17 +436,17 @@ mod tests {
             !one.contains("hunter2") && one.contains("(secret)"),
             "{one}"
         );
-        let shared = get("safes", &schema(), &file, "shared").unwrap();
+        let shared = get("you.trading-post", &schema(), &file, "shared").unwrap();
         assert!(!shared.contains("letmein"), "{shared}");
         assert_eq!(
-            set("safes", &schema(), &file, "token", "\"x\"").unwrap_err(),
+            set("you.trading-post", &schema(), &file, "token", "\"x\"").unwrap_err(),
             "token is changed in the server's file only."
         );
     }
 
     #[test]
     fn a_change_is_checked_and_keeps_the_comments() {
-        let change = set("safes", &schema(), FILE, "limit", "6").unwrap();
+        let change = set("you.trading-post", &schema(), FILE, "limit", "6").unwrap();
         assert_eq!(change.stage, Stage::Startup);
         assert!(
             change.text.contains("# How many.\nlimit = 6 # four\n"),
@@ -448,36 +454,37 @@ mod tests {
             change.text
         );
         assert_eq!(
-            changed("safes", "limit", &change),
-            "safes limit = 6: saved for this world; it takes effect when the world loads again."
+            changed("you.trading-post", "limit", &change),
+            "you.trading-post limit = 6: saved for this world; it takes effect when the world loads again."
         );
         assert!(
-            set("safes", &schema(), FILE, "limit", "40")
+            set("you.trading-post", &schema(), FILE, "limit", "40")
                 .unwrap_err()
                 .contains("1 to 16")
         );
-        assert!(set("safes", &schema(), FILE, "limit", "many").is_err());
+        assert!(set("you.trading-post", &schema(), FILE, "limit", "many").is_err());
         assert!(
-            set("safes", &schema(), FILE, "language", "de")
+            set("you.trading-post", &schema(), FILE, "language", "de")
                 .unwrap_err()
                 .contains("one of")
         );
-        let radius = set("safes", &schema(), FILE, "radius", "10").unwrap();
+        let radius = set("you.trading-post", &schema(), FILE, "radius", "10").unwrap();
         assert!(radius.text.contains("radius = 10.0"));
-        let words = set("safes", &schema(), FILE, "note", "hello there").unwrap();
+        let words = set("you.trading-post", &schema(), FILE, "note", "hello there").unwrap();
         assert!(
             words.text.ends_with("note = \"hello there\"\n"),
             "{}",
             words.text
         );
-        let broken = set("safes", &schema(), "limit = ", "limit", "2").unwrap_err();
+        let broken = set("you.trading-post", &schema(), "limit = ", "limit", "2").unwrap_err();
         assert!(
-            broken.starts_with("Not changed: mod-configs/safes.toml is not valid TOML: ")
+            broken
+                .starts_with("Not changed: mod-configs/you.trading-post.toml is not valid TOML: ")
                 && broken.len() > 55,
             "{broken}"
         );
         assert_eq!(
-            set("safes", &schema(), FILE, "limit", "40").unwrap_err(),
+            set("you.trading-post", &schema(), FILE, "limit", "40").unwrap_err(),
             "Not changed: limit takes 1 to 16."
         );
     }

@@ -1050,16 +1050,19 @@ mod tests {
         ];
         let pending = pending(&all, &["2".to_owned()]);
         assert_eq!(
-            plan("safes", &pending, false),
-            "safes 3: rename store x to y"
+            plan("you.trading-post", &pending, false),
+            "you.trading-post 3: rename store x to y"
         );
-        assert_eq!(plan("safes", &pending, true), "safes 3: nothing here");
+        assert_eq!(
+            plan("you.trading-post", &pending, true),
+            "you.trading-post 3: nothing here"
+        );
     }
 
     #[test]
     fn a_world_runs_its_pending_migrations_once() {
         let dir = scratch("world");
-        let world = dir.join("safes/worlds/w1");
+        let world = dir.join("you.trading-post/worlds/w1");
         std::fs::create_dir_all(&world).unwrap();
         std::fs::write(world.join("settings.toml"), "limit = 2\n").unwrap();
         std::fs::write(world.join("owners.toml"), "count = 1\n").unwrap();
@@ -1085,11 +1088,11 @@ mod tests {
             key: "w1",
             dir: &world,
         };
-        let line = run(&mut record, target, "safes", &all, &map, false).unwrap();
+        let line = run(&mut record, target, "you.trading-post", &all, &map, false).unwrap();
         assert_eq!(
             line.as_deref(),
             Some(
-                "safes 2: change setting limit; safes 3: rename store owners to keepers, change store keepers"
+                "you.trading-post 2: change setting limit; you.trading-post 3: rename store owners to keepers, change store keepers"
             )
         );
         assert_eq!(
@@ -1100,9 +1103,9 @@ mod tests {
             std::fs::read_to_string(world.join("keepers.toml")).unwrap(),
             "count = 5\n"
         );
-        assert_eq!(record.worlds["w1"]["safes"], ["2", "3"]);
+        assert_eq!(record.worlds["w1"]["you.trading-post"], ["2", "3"]);
         assert_eq!(
-            run(&mut record, target, "safes", &all, &map, false).unwrap(),
+            run(&mut record, target, "you.trading-post", &all, &map, false).unwrap(),
             None
         );
         assert_eq!(
@@ -1123,7 +1126,7 @@ mod tests {
     #[test]
     fn a_migration_that_fails_midway_changes_nothing() {
         let dir = scratch("midway");
-        let world = dir.join("safes/worlds/w1");
+        let world = dir.join("you.trading-post/worlds/w1");
         std::fs::create_dir_all(&world).unwrap();
         std::fs::write(
             world.join("settings.toml"),
@@ -1157,9 +1160,17 @@ mod tests {
             }
         };
         let mut record = Record::default();
-        let (_, reason) = run(&mut record, target, "safes", &all, &refuse, false).unwrap_err();
+        let (_, reason) = run(
+            &mut record,
+            target,
+            "you.trading-post",
+            &all,
+            &refuse,
+            false,
+        )
+        .unwrap_err();
         assert!(reason.contains("refused"), "{reason}");
-        assert!(record.worlds["w1"]["safes"].is_empty());
+        assert!(record.worlds["w1"]["you.trading-post"].is_empty());
         assert_eq!(
             std::fs::read_to_string(world.join("settings.toml")).unwrap(),
             "limit = 2
@@ -1174,7 +1185,7 @@ mod tests {
                 double(0, 0, input)
             }
         };
-        assert!(run(&mut record, target, "safes", &all, &take, false).is_ok());
+        assert!(run(&mut record, target, "you.trading-post", &all, &take, false).is_ok());
         assert_eq!(
             std::fs::read_to_string(world.join("settings.toml")).unwrap(),
             "limit = 4
@@ -1192,7 +1203,7 @@ mod tests {
     #[test]
     fn a_world_the_mod_never_saw_starts_current() {
         let dir = scratch("fresh");
-        let world = dir.join("safes/worlds/new");
+        let world = dir.join("you.trading-post/worlds/new");
         let all = [migration(
             "2",
             vec![step(MigrationStep::MAP_SETTING, "limit", "")],
@@ -1203,17 +1214,24 @@ mod tests {
             dir: &world,
         };
         assert_eq!(
-            run(&mut record, target, "safes", &all, &double, false),
+            run(
+                &mut record,
+                target,
+                "you.trading-post",
+                &all,
+                &double,
+                false
+            ),
             Ok(None)
         );
-        assert_eq!(record.worlds["new"]["safes"], ["2"]);
+        assert_eq!(record.worlds["new"]["you.trading-post"], ["2"]);
         let _gone = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn a_dry_run_changes_and_records_nothing() {
         let dir = scratch("dry");
-        let file = dir.join("safes.toml");
+        let file = dir.join("you.trading-post.toml");
         std::fs::write(&file, "limit = 2\n").unwrap();
         let all = [migration(
             "2",
@@ -1226,22 +1244,25 @@ mod tests {
                 path: &file,
                 born: false,
             },
-            "safes",
+            "you.trading-post",
             &all,
             &double,
             true,
         )
         .unwrap();
-        assert_eq!(line.as_deref(), Some("safes 2: change setting limit"));
+        assert_eq!(
+            line.as_deref(),
+            Some("you.trading-post 2: change setting limit")
+        );
         assert_eq!(std::fs::read_to_string(&file).unwrap(), "limit = 2\n");
-        assert!(record.settings["safes"].is_empty());
+        assert!(record.settings["you.trading-post"].is_empty());
         let _gone = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn a_failure_records_the_migrations_before_it() {
         let dir = scratch("fail");
-        let file = dir.join("safes.toml");
+        let file = dir.join("you.trading-post.toml");
         std::fs::write(&file, "a = 1\nlimit = \"x\"\n").unwrap();
         let all = [
             migration("2", vec![step(MigrationStep::RENAME_SETTING, "a", "b")]),
@@ -1254,14 +1275,14 @@ mod tests {
                 path: &file,
                 born: false,
             },
-            "safes",
+            "you.trading-post",
             &all,
             &double,
             false,
         )
         .unwrap_err();
         assert!(reason.starts_with("migration 3: setting limit"), "{reason}");
-        assert_eq!(record.settings["safes"], ["2"]);
+        assert_eq!(record.settings["you.trading-post"], ["2"]);
         assert_eq!(
             std::fs::read_to_string(&file).unwrap(),
             "b = 1\nlimit = \"x\"\n"

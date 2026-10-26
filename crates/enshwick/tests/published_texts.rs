@@ -20,7 +20,7 @@ mod tests {
             // As a pack's texts arrive after the mod's own.
             let _more = load.texts(
                 "[en]
-\"lantern.name\" = \"Lantern\"
+\"locker.name\" = \"Locker\"
 ",
             )?;
             Ok(Self)
@@ -37,6 +37,6 @@ mod tests {
         assert_eq!(status, Status::OK);
         let kept = Texts::parse(&loader.published_texts().unwrap()).unwrap();
         assert_eq!(kept.get("config.limit", Language::UK_UA), Some("Ліміт"));
-        assert_eq!(kept.get("lantern.name", Language::UK_UA), Some("Lantern"));
+        assert_eq!(kept.get("locker.name", Language::UK_UA), Some("Locker"));
     }
 }

@@ -89,13 +89,13 @@ translation exists.
 ```rust
 use enshwick::config::{Config, Stage};
 
-/// Safe settings.
+/// Locker settings.
 #[derive(serde::Deserialize, serde::Serialize, enshwick::Config)]
 struct Settings {
-    /// The Safe costs the wooden chest's ingredients times this.
+    /// The locker costs the wooden chest's ingredients times this.
     #[config(startup, range = 1..=100)]
     cost_multiplier: u32,
-    /// When the safe opens for administrators.
+    /// When the locker opens for administrators.
     #[config(choices = ["never", "always"])]
     admins: String,
 }
@@ -201,7 +201,7 @@ for the process; it is the description the loader's screens build on, and
 what the loader checks values against before it writes them.
 
 Players and administrators change settings on the Mods screen. The server's
-[console](chat.md#the-console), such as admin-tools' command file, reads and
+[console](chat.md#the-console), such as a mod's command file, reads and
 changes them too:
 
 | Line                                  | Answer                                                                           |

@@ -136,10 +136,10 @@ pub trait Config: serde::de::DeserializeOwned + Default {
     /// ```
     /// use enshwick::config::{Config, Stage};
     ///
-    /// /// Safe settings.
+    /// /// Locker settings.
     /// #[derive(Default, serde::Deserialize, serde::Serialize, enshwick::Config)]
     /// struct Settings {
-    ///     /// How many Safes one player may own.
+    ///     /// How many lockers one player may own.
     ///     #[config(startup, range = 1..=16)]
     ///     limit: u32,
     /// }
@@ -164,10 +164,10 @@ pub trait Config: serde::de::DeserializeOwned + Default {
     /// ```
     /// use enshwick::config::{Config, Stage};
     ///
-    /// /// Safe settings.
+    /// /// Locker settings.
     /// #[derive(Default, serde::Deserialize, serde::Serialize, enshwick::Config)]
     /// struct Settings {
-    ///     /// How many Safes one player may own.
+    ///     /// How many lockers one player may own.
     ///     #[config(startup)]
     ///     limit: u32,
     ///     /// The language of replies.
@@ -196,10 +196,10 @@ pub trait Config: serde::de::DeserializeOwned + Default {
     /// ```
     /// use enshwick::config::{Config, Stage};
     ///
-    /// /// Safe settings.
+    /// /// Locker settings.
     /// #[derive(Default, serde::Deserialize, serde::Serialize, enshwick::Config)]
     /// struct Settings {
-    ///     /// How many Safes one player may own.
+    ///     /// How many lockers one player may own.
     ///     #[config(startup)]
     ///     limit: u32,
     /// }
@@ -659,8 +659,8 @@ impl Field {
     /// ```
     /// use enshwick::config::{Field, Stage};
     ///
-    /// let field = Field::new("limit", Stage::Startup, &4).with_doc("How many.", "safes.limit");
-    /// assert_eq!((field.doc.as_str(), field.text.as_str()), ("How many.", "safes.limit"));
+    /// let field = Field::new("limit", Stage::Startup, &4).with_doc("How many.", "lockers.limit");
+    /// assert_eq!((field.doc.as_str(), field.text.as_str()), ("How many.", "lockers.limit"));
     /// ```
     #[must_use]
     pub fn with_doc(mut self, doc: &str, text: &str) -> Self {
@@ -856,7 +856,7 @@ const fn kind_name(kind: Kind) -> &'static str {
 /// ```
 /// use enshwick::config::{Field, Schema, Stage};
 ///
-/// let schema = Schema::new("Safe settings.", "config", vec![Field::new("limit", Stage::Startup, &4)]);
+/// let schema = Schema::new("Locker settings.", "config", vec![Field::new("limit", Stage::Startup, &4)]);
 /// assert_eq!(Schema::parse(&schema.to_text())?, schema);
 /// # Ok::<(), enshwick::config::ConfigError>(())
 /// ```
@@ -1286,7 +1286,7 @@ mod tests {
 
     /// Staged settings.
     #[derive(Debug, PartialEq, serde::Deserialize, serde::Serialize, crate::Config)]
-    #[config(text = "safes.config")]
+    #[config(text = "lockers.config")]
     struct Staged {
         /// How many, read when the world loads.
         #[config(startup, range = 1..=16)]
@@ -1295,7 +1295,7 @@ mod tests {
         #[config(restart)]
         workers: u8,
         /// The mode.
-        #[config(choices = ["auto", "on"], text = "safes.mode")]
+        #[config(choices = ["auto", "on"], text = "lockers.mode")]
         mode: String,
         /// This player's own.
         #[config(client, range = 0.0..)]
@@ -1362,7 +1362,7 @@ mod tests {
 
         let schema = Staged::schema();
         assert_eq!(schema.doc, "Staged settings.");
-        assert_eq!(schema.text, "safes.config");
+        assert_eq!(schema.text, "lockers.config");
         let limit = schema.field("limit").unwrap();
         assert_eq!(
             (limit.stage, limit.kind, limit.min, limit.max),
@@ -1376,7 +1376,7 @@ mod tests {
         let mode = schema.field("mode").unwrap();
         assert_eq!(mode.stage, Stage::Runtime);
         assert_eq!(mode.choices, ["\"auto\"", "\"on\""]);
-        assert_eq!(mode.text, "safes.mode");
+        assert_eq!(mode.text, "lockers.mode");
         let volume = schema.field("volume").unwrap();
         assert_eq!(
             (volume.stage, volume.min, volume.max),

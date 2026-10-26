@@ -192,12 +192,11 @@ many entries as they do today.
 ### Game build watch
 
 [`game-build-watch.yml`](https://github.com/enshwick/enshwick/blob/main/.github/workflows/game-build-watch.yml) runs
-weekly, never on pull requests. It asks steamcmd for the public build id of
-the dedicated server. When no server table names it in `steam_build`, a
-Windows job downloads that server, runs `compat` on it with the mods of the latest
-platform release and opens an issue with the report. Game files stay on the
-runner. It stays off until the repository variable `GAME_BUILD_WATCH` is
-`true`.
+every hour on the organization's runners, never on pull requests. It reads
+the public Steam build ids of the dedicated server (app 2278520) and the
+client (app 1203620). For each build that no table names in `steam_build`,
+it opens one `game-update` issue; porting the table with `pin` is then a
+maintainer's pull request.
 
 ## More
 

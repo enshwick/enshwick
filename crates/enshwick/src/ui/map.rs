@@ -56,10 +56,10 @@ impl MarkerColor {
 /// use enshwick::ui::{Marker, MarkerColor, Ui};
 ///
 /// fn mark(ui: Ui) {
-///     let safe = Marker::new([120.0, 41.5, -36.0])
-///         .label("Safe of Bob")
+///     let locker = Marker::new([120.0, 41.5, -36.0])
+///         .label("Locker of Bob")
 ///         .color(MarkerColor::Green);
-///     let _shown = ui.set_markers(&[safe]);
+///     let _shown = ui.set_markers(&[locker]);
 /// }
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq)]
