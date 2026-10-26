@@ -603,6 +603,22 @@ pub const FACTS: &[(&str, Fact)] = &[
         "inventory_setup.initialized",
         offset("keen::ecs::InventorySetup", "isInitialized"),
     ),
+    (
+        "inventory_setup.generic_slots",
+        offset("keen::ecs::InventorySetup", "genericSlotCount"),
+    ),
+    (
+        "inventory_setup.available_slots",
+        offset("keen::ecs::InventorySetup", "availableSlotCount"),
+    ),
+    (
+        "inventory_setup_overwrite",
+        Fact::Type("keen::ecs::InventorySetupOverwrite"),
+    ),
+    (
+        "inventory_setup_overwrite.generic_slots",
+        offset("keen::ecs::InventorySetupOverwrite", "genericSlotCount"),
+    ),
     ("inventory", Fact::Type("keen::ecs::Inventory")),
     ("item_stack", Fact::Type("keen::ItemStack")),
     ("item_stack.count", offset("keen::ItemStack", "data")),

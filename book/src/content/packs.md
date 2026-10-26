@@ -127,10 +127,20 @@ sets the value; `{ times = x }` multiplies it, with `x` from 0 to 100.
 | Field | Meaning | Values |
 | --- | --- | --- |
 | `max_stack` | how many of the item one inventory slot holds | 1 to 65535 |
+| `slots` | how many slots the container the item places holds, never fewer than it has | 8 to 128, in steps of 8 |
 
 A change that names no item, changes nothing, gives a value out of range or
 changes one field of one item a second time is a problem at its line, like
 every other.
+
+`slots` changes the chests placed from then on, and chests upgraded to the
+item, since an upgrade places a new chest: a chest placed before keeps the
+size it was placed with, which the save holds. Removing the pack leaves every
+chest as it is. A container only grows, as an upgraded chest moves every item
+it holds; an item that places no container is a problem at its line. The
+change reaches every item that places the same container, and the log names
+them; when such items ask for different sizes, the last in load order counts
+and the log says so. The largest vanilla chest holds 72 slots.
 
 ### Recipes
 
@@ -293,22 +303,42 @@ workbench is a problem that asks for the game's data. `cargo enshwick pack schem
 every file but `texts.toml`; name one at the top of a file, `#:schema ./items.schema.json`, and an
 editor with TOML support completes and checks fields as you type.
 
-## Changes while the server runs
+## Changes while the game runs
 
 The dedicated server watches a pack's files. When they change it reads them
 again and logs any problem with its line; with none, it applies the new
 `loot.toml` at once: chances, counts and items of drops change for the next
 roll. Items, recipes, workshops, texts and changes of values are built into
-the game's registries at start, on the server and on every player's client,
-so a change to them waits for the next start, and the log says so:
+the game's data at start, on the server and on every player's client, so a
+change to them waits for the next start, and the log says so:
 
 ```text
 info  [you.lanterns] data pack reloaded: 2 loot drops
-warn  [you.lanterns] data pack changed beyond its loot: items, recipes, workshops, texts and changes of values change at the next start
+warn  [you.lanterns] data pack changed beyond its loot: changes of values change at the next start, or at once with dev_reload = true
 ```
 
 Loot of a kind no pack or mod had at start, such as the first drop from
 destroyed objects, also waits for a restart.
+
+### While you make a pack
+
+With `dev_reload = true` in `mod-configs/enshwick.toml` (see [reloading a mod](../testing.md#reloading-a-mod-while-the-game-runs)),
+the server and the client both watch the packs' files, and a change that
+only moves values applies at once: stack sizes, recipe counts and times, and
+chest slots. The loader merges every pack's changes again, reports
+overridden values as at start, and builds each changed resource again in
+place:
+
+```text
+info  [you.stacks] data pack reloaded: 3 changes of values, 4 resources built again
+```
+
+Some changes still take a restart, and the log names them: the first change
+of an item or recipe that no change touched at start, and an ingredient taken
+out or added, which changes the recipe list's length. Chest slots apply to
+chests placed after the reload. On a server, players who joined before the
+change keep the old values until they join again, so reload on a test server
+of your own.
 
 ## Releases and the join check
 

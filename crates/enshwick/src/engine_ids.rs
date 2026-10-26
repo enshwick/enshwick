@@ -189,6 +189,10 @@ ids! {
     INVENTORY_SETUP_LINKS = "inventory_setup.links";
     INVENTORY_SETUP_CATEGORIES = "inventory_setup.categories";
     INVENTORY_SETUP_INITIALIZED = "inventory_setup.initialized";
+    INVENTORY_SETUP_GENERIC_SLOTS = "inventory_setup.generic_slots";
+    INVENTORY_SETUP_AVAILABLE_SLOTS = "inventory_setup.available_slots";
+    INVENTORY_SETUP_OVERWRITE = "inventory_setup_overwrite";
+    INVENTORY_SETUP_OVERWRITE_GENERIC_SLOTS = "inventory_setup_overwrite.generic_slots";
     INVENTORY = "inventory";
     ITEM_STACK = "item_stack";
     ITEM_STACK_COUNT = "item_stack.count";
