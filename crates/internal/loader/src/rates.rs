@@ -7,28 +7,40 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Mutex, OnceLock};
 
 use enshwick::abi::{RateId, Status};
+use enshwick::game_events::ExperienceSource;
 pub(crate) use enshwick::rates::scale_whole;
-use enshwick::rates::{Rate, combine, is_valid_factor};
+use enshwick::rates::{ExperienceGroup, Rate, combine, is_valid_factor};
 
 use crate::locks::Relock;
+
+/// The kill experience formula: its rounded experience, combat factor in.
+pub(crate) const KILL: &str = "experience.kill";
+/// The experience factor the game picks by experience source.
+pub(crate) const SOURCE_FACTOR: &str = "experience.source_factor";
+/// The getter of how long timed workshops take per unit of time.
+pub(crate) const FACTORY_SPEED: &str = "settings.factory_speed";
+/// The getter of the resource drop stack factor.
+pub(crate) const RESOURCE_DROPS: &str = "settings.resource_drops";
+/// The getter of the skill points per level.
+pub(crate) const POINTS_PER_LEVEL: &str = "skill.points_per_level";
+/// The roll of one stack of random loot.
+pub(crate) const STACK_ROLL: &str = "loot.stack_roll";
+/// The comfort registration the loader's comfort link sits on.
+pub(crate) const COMFORT_REGISTER: &str = "comfort.base_register";
+/// The game's item lookup, for the stack sizes the loot rate holds to.
+pub(crate) const ITEM_INFO: &str = "item.info";
 
 /// For each rate, the build table symbols of the game functions whose
 /// answer the loader scales; the rate works where every one resolves.
 pub(crate) const LINKS: &[(RateId, &[&str])] = &[
-    (
-        RateId::EXPERIENCE_COMBAT,
-        &["experience.source_factor", "experience.kill"],
-    ),
-    (RateId::EXPERIENCE_MINING, &["experience.source_factor"]),
-    (
-        RateId::EXPERIENCE_EXPLORATION,
-        &["experience.source_factor"],
-    ),
-    (RateId::WORKSHOP_SPEED, &["settings.factory_speed"]),
-    (RateId::RESOURCE_DROPS, &["settings.resource_drops"]),
-    (RateId::COMFORT, &["comfort.base_register"]),
-    (RateId::SKILL_POINTS, &["skill.points_per_level"]),
-    (RateId::LOOT, &["loot.stack_roll", "item.info"]),
+    (RateId::EXPERIENCE_COMBAT, &[SOURCE_FACTOR, KILL]),
+    (RateId::EXPERIENCE_MINING, &[SOURCE_FACTOR]),
+    (RateId::EXPERIENCE_EXPLORATION, &[SOURCE_FACTOR]),
+    (RateId::WORKSHOP_SPEED, &[FACTORY_SPEED]),
+    (RateId::RESOURCE_DROPS, &[RESOURCE_DROPS]),
+    (RateId::COMFORT, &[COMFORT_REGISTER]),
+    (RateId::SKILL_POINTS, &[POINTS_PER_LEVEL]),
+    (RateId::LOOT, &[STACK_ROLL, ITEM_INFO]),
 ];
 
 /// The build table symbols `rate` links; empty for a rate the loader does
@@ -40,17 +52,21 @@ pub(crate) fn links(rate: RateId) -> &'static [&'static str] {
         .map_or(&[], |&(_, symbols)| symbols)
 }
 
-/// The rate an experience source of the game counts under, by
-/// `keen::ExperienceSourceType` on server 399 and client 426: exploration,
-/// lore, quests and item sets share the exploration factor, as the game's
-/// own settings do.
+/// The rate the game's experience source `source` counts under; `None` for
+/// a source the game gives no factor.
 pub(crate) fn experience_rate(source: u8) -> Option<RateId> {
-    match source {
-        1..=3 | 6 => Some(RateId::EXPERIENCE_EXPLORATION),
-        4 => Some(RateId::EXPERIENCE_COMBAT),
-        5 => Some(RateId::EXPERIENCE_MINING),
-        _ => None,
-    }
+    ExperienceGroup::of(ExperienceSource::from_raw(source))
+        .map(|group| Rate::Experience(group).id())
+}
+
+/// The slowest workshop speed a rate puts in force, so a workshop never
+/// stops.
+pub(crate) const MIN_WORKSHOP_SPEED: f32 = 0.01;
+
+/// How long a timed workshop takes per unit of time at `speed`, from the
+/// game's own `duration`, which is the inverse of the game's speed setting.
+pub(crate) fn workshop_duration(duration: f32, speed: f32) -> f32 {
+    duration / speed.max(MIN_WORKSHOP_SPEED)
 }
 
 /// The skill points per level `points` times `factor`, by [`scale_whole`].
@@ -316,5 +332,17 @@ mod tests {
         assert_eq!(scale_stack(1, 0.0, 20), 1);
         assert_eq!(scale_stack(0, 5.0, 20), 0);
         assert_eq!(scale_stack(4, 2.0, 0), 1);
+    }
+
+    #[test]
+    fn a_faster_workshop_takes_less_time_and_never_stops() {
+        assert_eq!(workshop_duration(1.0, 2.0), 0.5);
+        assert_eq!(workshop_duration(0.5, 1.0), 0.5);
+        assert_eq!(workshop_duration(1.0, 0.0), 100.0);
+        assert_eq!(
+            workshop_duration(0.0, 4.0),
+            0.0,
+            "the game's own zero stays"
+        );
     }
 }

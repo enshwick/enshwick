@@ -53,7 +53,7 @@ impl Installed {
 #[cfg(test)]
 mod tests {
     use crate::abi::{HostApi, ModHandle, Status};
-    use crate::rates::{ExperienceSource, Rate};
+    use crate::rates::{ExperienceGroup, Rate};
     use crate::test::FakeHost;
     use crate::test::table::TABLE;
 
@@ -65,7 +65,7 @@ mod tests {
     fn a_declared_rate_starts_vanilla_and_takes_the_factor_set() {
         let loader = FakeHost::new().install();
         let api = api(&loader);
-        let rate = Rate::Experience(ExperienceSource::Mining);
+        let rate = Rate::Experience(ExperienceGroup::Mining);
         assert_eq!((api.rate)(ModHandle(1), rate.id()), Status::OK);
         assert_eq!(loader.rate(rate), Some(1.0));
         assert_eq!((api.set_rate)(ModHandle(1), rate.id(), 2.5), Status::OK);

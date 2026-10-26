@@ -159,6 +159,14 @@ revision = 1
 # as long as that code is found. `cargo enshwick pin --patterns` writes
 # them around the instructions a maintainer picks with `--from`.
 [constants]
+# The first 8 code bytes of each function game rates link,
+# little-endian, checked before the link patches it.
+"experience.kill.bytes" = "0xe228_0f28_2454_8b4c"
+"experience.source_factor.bytes" = 0x0f00_0000_9081_8b4c
+"loot.stack_roll.bytes" = 0x6c89_4808_245c_8948
+"settings.factory_speed.bytes" = "0xf300_0000_9081_8b48"
+"settings.resource_drops.bytes" = "0xf300_0000_9081_8b48"
+"skill.points_per_level.bytes" = 0x75c0_8548_2041_8b48
 "ecs.context_row" = { value = 0x8, pattern = "F2 0F 11 44 24 ?? E8 ?? ?? ?? ?? 48 8B 0F 8B 47 ?? 4C 8B 51 ?? 85 C0 74 10", at = 16, size = 1 }
 "ecs.descriptor_entity_records" = { value = 0x828, pattern = "74 10 8D 50 ?? 48 8B 81 ?? ?? ?? ?? 48 03 D2 8B 04 D0 49 8D 52 ??", at = 8, size = 4 }
 "ecs.entity_record_size" = { value = 0x10, pattern = "8D 50 ?? 48 8B 81 ?? ?? ?? ?? 48 03 D2 8B 04 D0 49 8D 52 ?? 89 44 24 ??" }

@@ -4,10 +4,10 @@
 #[cfg(test)]
 mod tests {
     use enshwick::abi::Status;
-    use enshwick::rates::{ExperienceSource, Rate, RateError};
+    use enshwick::rates::{ExperienceGroup, Rate, RateError};
     use enshwick::test::FakeHost;
 
-    const COMBAT: Rate = Rate::Experience(ExperienceSource::Combat);
+    const COMBAT: Rate = Rate::Experience(ExperienceGroup::Combat);
 
     struct Rates;
 
@@ -40,9 +40,6 @@ mod tests {
         assert_eq!(loader.rate(COMBAT), Some(3.0));
         assert_eq!(loader.rate(Rate::WorkshopSpeed), Some(2.0));
         assert_eq!(loader.rate(Rate::ResourceDrops), None);
-        assert_eq!(
-            loader.rate(Rate::Experience(ExperienceSource::Mining)),
-            None
-        );
+        assert_eq!(loader.rate(Rate::Experience(ExperienceGroup::Mining)), None);
     }
 }

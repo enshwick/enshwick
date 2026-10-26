@@ -25,7 +25,7 @@ mod tests {
     fn a_rate_clients_count_needs_a_mod_that_joins() {
         let loader = FakeHost::new().install();
         // SAFETY: `enshwick_mod_init` is the export of this file's `declare_mod!(Alone)`.
-        assert_ne!(unsafe { loader.init(enshwick_mod_init) }, Status::OK);
+        assert_eq!(unsafe { loader.init(enshwick_mod_init) }, Status::REFUSED);
         assert_eq!(loader.rate(Rate::WorkshopSpeed), None);
     }
 }

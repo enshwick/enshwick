@@ -8,9 +8,9 @@ it multiplies with `load.rate(rate)` during `init`. The call returns a
 vanilla, 2 doubles, 0 takes it all. Factors run from 0 to 100.
 
 ```rust
-use enshwick::rates::{ExperienceSource, Rate};
+use enshwick::rates::{ExperienceGroup, Rate};
 
-#[derive(Debug, Default, serde::Deserialize, serde::Serialize, enshwick::Config)]
+#[derive(Debug, serde::Deserialize, serde::Serialize, enshwick::Config)]
 #[serde(default)]
 struct Settings {
     /// Experience from defeated enemies, times this.
@@ -18,8 +18,14 @@ struct Settings {
     combat: f32,
 }
 
+impl Default for Settings {
+    fn default() -> Self {
+        Self { combat: 1.0 }
+    }
+}
+
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    let combat = load.rate(Rate::Experience(ExperienceSource::Combat))?;
+    let combat = load.rate(Rate::Experience(ExperienceGroup::Combat))?;
     let settings: Settings = load.config()?;
     combat.set(settings.combat)?;
     load.on_config_change(move |settings: Settings| {
@@ -45,11 +51,12 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 
 The experience, workshop and resource drop rates multiply the server's own
 setting of the same name. Where `ResourceDrops` and `Loot` reach the same
-roll, both apply. A rate
-applies where the world runs: on a dedicated server and on a client while it
-hosts a game. The loader scales what the game reads and never writes the
-settings, so the server's configuration and the host's world keep their own
-values.
+roll, both apply. The loader
+scales what the game's own functions answer in every process a mod declares
+a rate in, and never writes the game's settings, so the server's
+configuration and the host's world keep their own values. Experience,
+drops, comfort and loot are decided where the world runs: on a dedicated
+server, or on a client while it hosts a game.
 
 ## When several mods set a rate
 

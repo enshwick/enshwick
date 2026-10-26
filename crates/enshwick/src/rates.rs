@@ -1,21 +1,15 @@
 //! Game rates: multipliers on what the game hands out, such as experience
-//! and workshop speed, set by mods and combined by the loader.
-//!
-//! A mod declares each [`Rate`] it multiplies with [`Load::rate`] at init
-//! and sets its factor through the [`RateHandle`] whenever its settings
-//! change. The game uses the product of every declaring mod's factor,
-//! held to 0 to [`MAX_FACTOR`] ([`combine`]), so the order mods load in
-//! never changes the outcome, and a mod that turns off drops out of the
-//! product. Rates apply where the world runs: on the dedicated server and
-//! on a client while it hosts a game.
+//! and workshop speed. A mod declares each [`Rate`] with [`Load::rate`] at
+//! init and sets its factor through the [`RateHandle`]; the game uses the
+//! product of every declaring mod's factor ([`combine`]).
 //!
 //! # Examples
 //!
 //! ```
-//! use enshwick::rates::{ExperienceSource, Rate};
+//! use enshwick::rates::{ExperienceGroup, Rate};
 //!
 //! fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-//!     let combat = load.rate(Rate::Experience(ExperienceSource::Combat))?;
+//!     let combat = load.rate(Rate::Experience(ExperienceGroup::Combat))?;
 //!     combat.set(2.0)?;
 //!     Ok(())
 //! }
@@ -27,20 +21,48 @@ use crate::{Host, Load, Off};
 /// The largest factor a mod sets and the largest product in force.
 pub const MAX_FACTOR: f32 = 100.0;
 
-/// Where experience comes from, as the game's settings split it.
+/// The groups of experience sources the game's settings give one factor
+/// each, and so one rate each.
 ///
 /// # Examples
 ///
 /// See the [module](self).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[non_exhaustive]
-pub enum ExperienceSource {
+pub enum ExperienceGroup {
     /// Defeated enemies.
     Combat,
-    /// Mining and gathering.
+    /// Mining.
     Mining,
-    /// Exploration and quests.
+    /// Exploration, lore, quests and completed item sets.
     Exploration,
+}
+
+impl ExperienceGroup {
+    /// The group an experience source counts in; `None` for a source the
+    /// game gives no factor.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::game_events::ExperienceSource;
+    /// use enshwick::rates::ExperienceGroup;
+    ///
+    /// assert_eq!(ExperienceGroup::of(ExperienceSource::Quest), Some(ExperienceGroup::Exploration));
+    /// assert_eq!(ExperienceGroup::of(ExperienceSource::None), None);
+    /// ```
+    #[must_use]
+    pub const fn of(source: crate::game_events::ExperienceSource) -> Option<Self> {
+        use crate::game_events::ExperienceSource as Source;
+        match source {
+            Source::Combat => Some(Self::Combat),
+            Source::Mining => Some(Self::Mining),
+            Source::Exploration | Source::Lore | Source::Quest | Source::ItemSetCompleted => {
+                Some(Self::Exploration)
+            }
+            _ => None,
+        }
+    }
 }
 
 /// What a rate multiplies.
@@ -56,13 +78,14 @@ pub enum ExperienceSource {
 #[non_exhaustive]
 pub enum Rate {
     /// Experience from one source.
-    Experience(ExperienceSource),
-    /// How fast workshops produce: 2 halves the time an item takes.
+    Experience(ExperienceGroup),
+    /// How fast timed workshops produce: 2 halves the time an item takes,
+    /// and a factor below 0.01 counts as 0.01, so a workshop never stops.
     /// Clients count it too, for the time their screens show, so only a
     /// mod with `join: true` declares it and sets it from a synced setting:
     /// every player on a server then runs the mod with the server's factor.
     WorkshopSpeed,
-    /// How many resources a drop stacks.
+    /// How many resources a drop stacks, as the game's own setting does.
     ResourceDrops,
     /// The comfort each piece of furniture gives a base, rounded to a
     /// whole number; the server decides comfort.
@@ -83,9 +106,9 @@ pub enum Rate {
 impl Rate {
     /// Every rate, in the order of their ids.
     pub const ALL: &[Self] = &[
-        Self::Experience(ExperienceSource::Combat),
-        Self::Experience(ExperienceSource::Mining),
-        Self::Experience(ExperienceSource::Exploration),
+        Self::Experience(ExperienceGroup::Combat),
+        Self::Experience(ExperienceGroup::Mining),
+        Self::Experience(ExperienceGroup::Exploration),
         Self::WorkshopSpeed,
         Self::ResourceDrops,
         Self::Comfort,
@@ -106,9 +129,9 @@ impl Rate {
     #[must_use]
     pub const fn id(self) -> RateId {
         match self {
-            Self::Experience(ExperienceSource::Combat) => RateId::EXPERIENCE_COMBAT,
-            Self::Experience(ExperienceSource::Mining) => RateId::EXPERIENCE_MINING,
-            Self::Experience(ExperienceSource::Exploration) => RateId::EXPERIENCE_EXPLORATION,
+            Self::Experience(ExperienceGroup::Combat) => RateId::EXPERIENCE_COMBAT,
+            Self::Experience(ExperienceGroup::Mining) => RateId::EXPERIENCE_MINING,
+            Self::Experience(ExperienceGroup::Exploration) => RateId::EXPERIENCE_EXPLORATION,
             Self::WorkshopSpeed => RateId::WORKSHOP_SPEED,
             Self::ResourceDrops => RateId::RESOURCE_DROPS,
             Self::Comfort => RateId::COMFORT,
@@ -140,10 +163,10 @@ impl Rate {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::rates::{ExperienceSource, Rate};
+    /// use enshwick::rates::{ExperienceGroup, Rate};
     ///
     /// assert!(Rate::WorkshopSpeed.seen_by_clients() && Rate::SkillPoints.seen_by_clients());
-    /// assert!(!Rate::Experience(ExperienceSource::Combat).seen_by_clients());
+    /// assert!(!Rate::Experience(ExperienceGroup::Combat).seen_by_clients());
     /// ```
     #[must_use]
     pub const fn seen_by_clients(self) -> bool {
@@ -314,6 +337,31 @@ impl Load<'_> {
         match (host.api().rate)(host.handle(), rate.id()) {
             Status::OK => Ok(RateHandle { host, rate }),
             status => Err(Off::status(&format!("the rate {rate:?}"), status)),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use proptest::prelude::*;
+
+    use super::*;
+
+    proptest! {
+        #[test]
+        fn combine_is_the_same_in_any_order_and_stays_in_range(
+            factors in proptest::collection::vec(0.0f32..=MAX_FACTOR, 0..6),
+        ) {
+            let forward = combine(factors.iter().copied());
+            let backward = combine(factors.iter().rev().copied());
+            prop_assert_eq!(forward.to_bits(), backward.to_bits());
+            prop_assert!((0.0..=MAX_FACTOR).contains(&forward));
+        }
+
+        #[test]
+        fn scale_whole_never_flips_the_sign(value in any::<i64>(), factor in 0.0f32..=MAX_FACTOR) {
+            let scaled = scale_whole(value, factor);
+            prop_assert!(scaled == 0 || scaled.signum() == value.signum());
         }
     }
 }

@@ -1026,14 +1026,16 @@ pub struct HostApi {
     /// what the rate needs, [`Status::BAD_ARGS`] for a rate this loader
     /// does not know, [`Status::REFUSED`] for a rate clients count too in a
     /// mod without [`ManifestFlags::JOIN`](super::ManifestFlags::JOIN). A second declaration of the same rate is
-    /// [`Status::OK`]. Allowed during `enshwick_mod_init` only. Since
-    /// minor 72.
+    /// [`Status::OK`]. [`Status::TOO_LATE`] after `enshwick_mod_init`,
+    /// [`Status::FAULTED`] for a mod that is off. Allowed during
+    /// `enshwick_mod_init` only. Since minor 72.
     pub rate: extern "system" fn(me: ModHandle, rate: RateId) -> Status,
     /// Puts `factor` in force as the calling mod's factor for `rate`: the
     /// game uses the product of every declaring mod's factor, held to 0 to
     /// 100, from the next time it reads the rate. [`Status::BAD_ARGS`] for
     /// a factor that is not finite or lies outside 0 to 100, or a rate the
-    /// mod did not declare. Any thread; neither allocates nor locks once
+    /// mod did not declare, [`Status::FAULTED`] for a mod that is off. Any
+    /// thread; neither allocates nor locks once
     /// every mod is initialised. Since minor 72.
     pub set_rate: extern "system" fn(me: ModHandle, rate: RateId, factor: f32) -> Status,
 }
