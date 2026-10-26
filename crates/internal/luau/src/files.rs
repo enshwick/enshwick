@@ -20,7 +20,7 @@ pub const MAIN: &str = "main.luau";
 ///     .with("greet.luau", "return 1");
 /// assert_eq!(scripts.len(), 2);
 /// ```
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Scripts(BTreeMap<String, Arc<[u8]>>);
 
 impl Scripts {
@@ -65,6 +65,18 @@ impl Scripts {
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
+    }
+
+    /// Whether they hold a `main.luau`, which makes a pack a Luau mod.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// assert!(enshwick_luau::Scripts::new().with("main.luau", "").has_main());
+    /// ```
+    #[must_use]
+    pub fn has_main(&self) -> bool {
+        self.0.contains_key(MAIN)
     }
 
     pub(crate) fn get(&self, path: &str) -> Option<&Arc<[u8]>> {

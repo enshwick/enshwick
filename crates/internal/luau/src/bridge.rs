@@ -1,11 +1,9 @@
 //! Values between Luau and the API, shaped by the script [`Ty`] of each.
 
-use std::sync::Weak;
-
 use enshwick::script::{Callback, Error, Signature, Ty, Value};
 use mlua::{Lua, MultiValue, Value as LuaValue};
 
-use crate::run::Inner;
+use crate::run::Scope;
 
 /// What a Luau value is called in an error.
 fn kind(value: &LuaValue) -> &'static str {
@@ -28,7 +26,7 @@ fn expected(what: &str, value: &LuaValue) -> Error {
 /// The Luau value of `value`, a `ty`.
 pub(crate) fn to_lua(
     lua: &Lua,
-    inner: &Weak<Inner>,
+    scope: &Scope,
     value: Value,
     ty: &'static Ty,
 ) -> mlua::Result<LuaValue> {
@@ -46,24 +44,24 @@ pub(crate) fn to_lua(
         (Value::List(items), Ty::List(inner_ty)) => {
             let table = lua.create_table_with_capacity(items.len(), 0)?;
             for item in items {
-                table.raw_push(to_lua(lua, inner, item, inner_ty)?)?;
+                table.raw_push(to_lua(lua, scope, item, inner_ty)?)?;
             }
             LuaValue::Table(table)
         }
         (Value::Record(fields), Ty::Record(record)) => {
             let table = lua.create_table_with_capacity(0, fields.len())?;
             for (value, field) in fields.into_iter().zip(record.fields()) {
-                table.raw_set(field.name(), to_lua(lua, inner, value, field.ty())?)?;
+                table.raw_set(field.name(), to_lua(lua, scope, value, field.ty())?)?;
             }
             LuaValue::Table(table)
         }
-        (value, Ty::Optional(inner_ty)) => to_lua(lua, inner, value, inner_ty)?,
+        (value, Ty::Optional(inner_ty)) => to_lua(lua, scope, value, inner_ty)?,
         (Value::Function(callback), Ty::Function(signature)) => {
-            let inner = Weak::clone(inner);
+            let scope = scope.clone();
             LuaValue::Function(lua.create_function(move |lua, args: MultiValue| {
-                let values = arguments(lua, &inner, args, signature, "function")?;
+                let values = arguments(lua, &scope, args, signature, "function")?;
                 let answer = callback.call(values).map_err(mlua::Error::runtime)?;
-                to_lua(lua, &inner, answer, signature.ret())
+                to_lua(lua, &scope, answer, signature.ret())
             })?)
         }
         _ => LuaValue::Nil,
@@ -71,11 +69,7 @@ pub(crate) fn to_lua(
 }
 
 /// The API value of the Luau value `value`, which is to be a `ty`.
-pub(crate) fn from_lua(
-    inner: &Weak<Inner>,
-    value: LuaValue,
-    ty: &'static Ty,
-) -> Result<Value, Error> {
+pub(crate) fn from_lua(scope: &Scope, value: LuaValue, ty: &'static Ty) -> Result<Value, Error> {
     match ty {
         Ty::Nil => Ok(Value::Nil),
         Ty::Bool => match value {
@@ -105,7 +99,7 @@ pub(crate) fn from_lua(
         },
         Ty::Optional(inner_ty) => match value {
             LuaValue::Nil => Ok(Value::Nil),
-            value => from_lua(inner, value, inner_ty),
+            value => from_lua(scope, value, inner_ty),
         },
         Ty::List(inner_ty) => {
             let LuaValue::Table(table) = value else {
@@ -115,7 +109,7 @@ pub(crate) fn from_lua(
             for (i, item) in table.sequence_values::<LuaValue>().enumerate() {
                 let item = item.map_err(|e| Error::new(e.to_string()))?;
                 items.push(
-                    from_lua(inner, item, inner_ty)
+                    from_lua(scope, item, inner_ty)
                         .map_err(|e| Error::new(format!("[{}]: {e}", i + 1)))?,
                 );
             }
@@ -132,7 +126,7 @@ pub(crate) fn from_lua(
                     let value: LuaValue = table
                         .raw_get(field.name())
                         .map_err(|e| Error::new(e.to_string()))?;
-                    from_lua(inner, value, field.ty())
+                    from_lua(scope, value, field.ty())
                         .map_err(|e| Error::new(format!("{}: {e}", field.name())))
                 })
                 .collect::<Result<_, _>>()
@@ -142,11 +136,9 @@ pub(crate) fn from_lua(
             let LuaValue::Function(function) = value else {
                 return Err(expected("a function", &value));
             };
-            let runtime = inner
-                .upgrade()
-                .ok_or_else(|| Error::new("the mod has stopped"))?;
+            let scope = scope.clone();
             Ok(Value::Function(Callback::new(move |args| {
-                runtime.call_function(&function, args, signature)
+                scope.call_function(&function, args, signature)
             })))
         }
         _ => Err(Error::new("a type this runtime does not know")),
@@ -157,7 +149,7 @@ pub(crate) fn from_lua(
 /// parameter of `signature`.
 pub(crate) fn arguments(
     _lua: &Lua,
-    inner: &Weak<Inner>,
+    scope: &Scope,
     args: MultiValue,
     signature: &'static Signature,
     what: &str,
@@ -175,7 +167,7 @@ pub(crate) fn arguments(
         .iter()
         .map(|param| {
             let value = args.next().unwrap_or(LuaValue::Nil);
-            from_lua(inner, value, param.ty()).map_err(|e| {
+            from_lua(scope, value, param.ty()).map_err(|e| {
                 let name = if param.name().is_empty() {
                     "argument"
                 } else {

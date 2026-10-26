@@ -504,3 +504,70 @@ fn a_loot_change_stays_on_the_server() {
         "loot.toml:1:1: change 1: spawn_probability 2 is not from 0 to 1"
     );
 }
+
+/// A folder of its own under the system's temporary folder, removed when
+/// dropped.
+struct Folder(std::path::PathBuf);
+
+impl Folder {
+    fn new(name: &str) -> Self {
+        let dir = std::env::temp_dir().join(format!("enshwick-{name}-{}", std::process::id()));
+        let _gone = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        Self(dir)
+    }
+
+    fn write(&self, name: &str, text: &str) {
+        let path = self.0.join(name);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, text).unwrap();
+    }
+}
+
+impl Drop for Folder {
+    fn drop(&mut self) {
+        let _gone = std::fs::remove_dir_all(&self.0);
+    }
+}
+
+#[test]
+fn a_pack_folder_reads_its_scripts_but_not_their_definitions() {
+    let folder = Folder::new("scripts");
+    folder.write("pack.toml", "id = \"you.greeter\"\nversion = \"1.0.0\"\n");
+    folder.write("main.luau", "print('hi')");
+    folder.write("lib/greet.luau", "return 1");
+    folder.write("types/enshwick.d.luau", "declare enshwick: {}");
+    folder.write("notes.txt", "not a script");
+    let files = PackFiles::read_dir(&folder.0).unwrap();
+    let scripts: Vec<&str> = files.scripts().map(|(name, _)| name).collect();
+    assert_eq!(scripts, ["lib/greet.luau", "main.luau"]);
+    assert!(files.get("types/enshwick.d.luau").is_none());
+    assert!(files.get("notes.txt").is_none());
+}
+
+#[test]
+fn a_changed_script_changes_the_pack_s_hash() {
+    let folder = Folder::new("hash");
+    folder.write("pack.toml", "id = \"you.greeter\"\nversion = \"1.0.0\"\n");
+    folder.write("main.luau", "print('hi')");
+    let before = PackFiles::read_dir(&folder.0).unwrap().hash();
+    folder.write("main.luau", "print('hello')");
+    assert_ne!(PackFiles::read_dir(&folder.0).unwrap().hash(), before);
+}
+
+#[test]
+fn scripts_too_deep_or_too_many_are_refused() {
+    let folder = Folder::new("deep");
+    folder.write("a/b/c/d/e/deep.luau", "return 1");
+    let error = PackFiles::read_dir(&folder.0).unwrap_err();
+    assert!(error.to_string().contains("a/b/c/d/e"), "{error}");
+    let folder = Folder::new("many");
+    for i in 0..=MAX_SCRIPTS {
+        folder.write(&format!("s{i}.luau"), "return 1");
+    }
+    let error = PackFiles::read_dir(&folder.0).unwrap_err();
+    assert!(
+        error.to_string().contains(&MAX_SCRIPTS.to_string()),
+        "{error}"
+    );
+}

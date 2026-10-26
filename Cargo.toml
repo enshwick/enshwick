@@ -33,6 +33,7 @@ arrayvec = { version = "0.7.8", default-features = false, features = ["std"] }
 bytemuck = { version = "1.25.2", default-features = false, features = ["derive", "min_const_generics", "zeroable_atomics"] }
 base64 = { version = "0.23.1", default-features = false, features = ["alloc"] }
 enshwick = { path = "crates/enshwick", version = "=1.0.0-alpha.6" }
+enshwick-luau = { path = "crates/internal/luau" }
 enshwick-gamedata = { path = "crates/enshwick-gamedata", version = "=1.0.0-alpha.6" }
 fastrand = { version = "2.5.0", default-features = false, features = ["std"] }
 insta = { version = "1.49.0", default-features = false }

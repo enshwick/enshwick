@@ -34,16 +34,20 @@ struct Args {
 #[derive(Debug, Subcommand)]
 enum Command {
     /// Creates a mod crate in `<dir>/<name>`, or with `--data` a data pack
-    /// folder in `<dir>/<id>`.
+    /// folder and with `--luau` a Luau mod folder in `<dir>/<id>`.
     New {
         /// The mod id, `<author>.<name>`: each part of `[a-z0-9-]`, the name
         /// starting with a letter; the name names the crate.
         id: String,
         /// Creates a data pack, TOML files and no code, instead of a crate.
-        #[arg(long)]
+        #[arg(long, conflicts_with = "luau")]
         data: bool,
-        /// Where the mod runs; a mod runs on the server and a data pack on
-        /// both sides when left out.
+        /// Creates a Luau mod, a folder of scripts the loader runs, instead
+        /// of a crate.
+        #[arg(long)]
+        luau: bool,
+        /// Where the mod runs; a mod and a Luau mod run on the server and a
+        /// data pack on both sides when left out.
         #[arg(long, value_enum)]
         side: Option<Side>,
         /// The folder the crate is created in.
@@ -89,6 +93,13 @@ enum Command {
         #[arg(long)]
         out: Option<PathBuf>,
     },
+    /// Writes the Luau definitions of the API, which luau-lsp reads, for
+    /// the loader this tool was built with.
+    Luau {
+        /// The file to write; the definitions are printed when omitted.
+        #[arg(long)]
+        out: Option<PathBuf>,
+    },
     /// Prints the GUID and game id of each content id, `<mod>:<name>`.
     Id {
         /// The content ids.
@@ -120,6 +131,18 @@ fn ids(names: &[String]) -> anyhow::Result<String> {
     Ok(lines?.join("\n"))
 }
 
+/// Writes the Luau definitions to `out`, or returns them to print.
+fn luau_definitions(out: Option<&std::path::Path>) -> anyhow::Result<String> {
+    let text = cargo_enshwick::luau::definitions();
+    match out {
+        Some(path) => {
+            std::fs::write(path, text).with_context(|| path.display().to_string())?;
+            Ok(format!("wrote {}", path.display()))
+        }
+        None => Ok(text),
+    }
+}
+
 fn main() -> ExitCode {
     let Cargo::Enshwick(args) = Cargo::parse();
     let outcome = match args.command {
@@ -138,7 +161,15 @@ fn main() -> ExitCode {
             data: true,
             side,
             dir,
+            ..
         } => new::data::create(&dir, &id, side.unwrap_or(Side::Both)),
+        Command::New {
+            id,
+            luau: true,
+            side,
+            dir,
+            ..
+        } => new::luau::create(&dir, &id, side.unwrap_or(Side::Server)),
         Command::New { id, side, dir, .. } => new::create(&dir, &id, side.unwrap_or(Side::Server)),
         Command::Install { game, package } => install::install(&game, package.as_deref()),
         Command::Manifest {
@@ -148,6 +179,7 @@ fn main() -> ExitCode {
         Command::Id { names } => ids(&names),
         Command::Point { name, from, out } => point::run(&name, &from, out.as_deref()),
         Command::Pack(command) => pack::run(&command),
+        Command::Luau { out } => luau_definitions(out.as_deref()),
     };
     match outcome {
         Ok(done) => {

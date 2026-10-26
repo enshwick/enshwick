@@ -3,7 +3,7 @@ use std::path::Path;
 
 use crate::Off;
 
-use super::{FILES, MAX_FILE};
+use super::{DEFINITIONS_SUFFIX, FILES, MAX_FILE, MAX_SCRIPT_DEPTH, MAX_SCRIPTS, SCRIPT_EXTENSION};
 
 /// One problem in a pack: where it is and what is wrong.
 ///
@@ -92,6 +92,15 @@ pub enum ReadPackError {
         /// The file, as the pack names it.
         file: String,
     },
+    /// A script sits more than [`MAX_SCRIPT_DEPTH`] folders deep.
+    #[error("{file}: more than {MAX_SCRIPT_DEPTH} folders deep")]
+    TooDeep {
+        /// The script, as the pack names it.
+        file: String,
+    },
+    /// The pack holds more than [`MAX_SCRIPTS`] scripts.
+    #[error("more than {MAX_SCRIPTS} scripts")]
+    TooManyScripts,
 }
 
 /// The files of a pack: their names, such as `items.toml` or
@@ -133,13 +142,14 @@ impl PackFiles {
         self
     }
 
-    /// The pack files in the folder `dir`: the files of [`FILES`] it holds
-    /// and every PNG under `dir/icons`, each at most [`MAX_FILE`] bytes.
+    /// The pack files in the folder `dir`: the files of [`FILES`] it holds,
+    /// every PNG under `dir/icons` and every script in it and its folders
+    /// but definitions files, each at most [`MAX_FILE`] bytes.
     ///
     /// # Errors
     ///
-    /// [`ReadPackError`] naming the file that could not be read, or is
-    /// larger than [`MAX_FILE`].
+    /// [`ReadPackError`] naming the file that could not be read, is larger
+    /// than [`MAX_FILE`] or a script too deep, or for too many scripts.
     ///
     /// # Examples
     ///
@@ -184,7 +194,33 @@ impl PackFiles {
                 }
             }
         }
+        let mut scripts = Vec::new();
+        find_scripts(dir, "", 0, &mut scripts)?;
+        if scripts.len() > MAX_SCRIPTS {
+            return Err(ReadPackError::TooManyScripts);
+        }
+        for (path, name) in scripts {
+            read(&path, &name, &mut files)?;
+        }
         Ok(files)
+    }
+
+    /// Every script, by its name relative to the pack's folder, with its
+    /// bytes, sorted by name.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::packs::PackFiles;
+    ///
+    /// let files = PackFiles::new().with("main.luau", "print('hi')").with("items.toml", "");
+    /// assert_eq!(files.scripts().map(|(name, _)| name).collect::<Vec<_>>(), ["main.luau"]);
+    /// ```
+    pub fn scripts(&self) -> impl Iterator<Item = (&str, &[u8])> {
+        self.files
+            .iter()
+            .filter(|(name, _)| is_script(name))
+            .map(|(name, bytes)| (name.as_str(), bytes.as_slice()))
     }
 
     /// The bytes of the file `name`.
@@ -264,4 +300,46 @@ impl PackError {
         let offset = error.span().map_or(0, |span| span.start);
         Self::at(file, text, offset, error.message().trim_end())
     }
+}
+
+/// Whether the file `name` is a script.
+fn is_script(name: &str) -> bool {
+    name.rsplit_once('.')
+        .is_some_and(|(_, ext)| ext == SCRIPT_EXTENSION)
+        && !name.ends_with(DEFINITIONS_SUFFIX)
+}
+
+/// Adds every script under `dir`, named from `prefix`, `depth` folders below
+/// the pack's folder, to `found`; hidden files and folders are left out.
+fn find_scripts(
+    dir: &Path,
+    prefix: &str,
+    depth: usize,
+    found: &mut Vec<(std::path::PathBuf, String)>,
+) -> Result<(), ReadPackError> {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return Ok(());
+    };
+    for entry in entries.filter_map(Result::ok) {
+        let Some(file) = entry.file_name().to_str().map(str::to_owned) else {
+            continue;
+        };
+        if file.starts_with('.') {
+            continue;
+        }
+        let name = format!("{prefix}{file}");
+        let path = entry.path();
+        if path.is_dir() {
+            find_scripts(&path, &format!("{name}/"), depth + 1, found)?;
+        } else if is_script(&name) {
+            if depth > MAX_SCRIPT_DEPTH {
+                return Err(ReadPackError::TooDeep { file: name });
+            }
+            found.push((path, name));
+            if found.len() > MAX_SCRIPTS {
+                return Err(ReadPackError::TooManyScripts);
+            }
+        }
+    }
+    Ok(())
 }

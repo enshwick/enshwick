@@ -483,6 +483,7 @@ dependencies = [
  "criterion",
  "enshwick",
  "enshwick-gamedata",
+ "enshwick-luau",
  "iced-x86",
  "insta",
  "loom",
